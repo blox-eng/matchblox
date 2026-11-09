@@ -207,3 +207,15 @@ func TestCursorUsageIsOffUnlessAsked(t *testing.T) {
 		t.Fatalf("on: %v %v", c.Limits.CursorUsage, err)
 	}
 }
+
+// TestConfigMaxChainsDefault: a family has at most four chain stokers,
+// and [stoker] max_chains sets another cap.
+func TestConfigMaxChainsDefault(t *testing.T) {
+	if n := Default().Stoker.MaxChains; n != 4 {
+		t.Fatalf("default max_chains = %d", n)
+	}
+	c, err := Load(write(t, "[stoker]\nmax_chains = 2\n"))
+	if err != nil || c.Stoker.MaxChains != 2 {
+		t.Fatalf("max_chains = 2 gave %+v, %v", c.Stoker, err)
+	}
+}

@@ -183,6 +183,9 @@ func (m Model) asksTakeOver(k tea.KeyPressMsg) bool {
 		return false
 	}
 	s, onSession := m.selectedSession()
+	if _, head := m.headRow(s); onSession && head && bkey.Matches(k, m.keys.main.Open, m.keys.main.Into, m.keys.main.Jump) {
+		return false // the stoker's own pane or its sheet: no session is taken from it
+	}
 	on := func(a *action) bool { return a != nil && m.takeOverOn(m.actHost(a)) }
 	switch {
 	case bkey.Matches(k, m.keys.main.Into) && m.tab == tabStoker:

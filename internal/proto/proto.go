@@ -454,9 +454,11 @@ type (
 	StokerCard  = stoker.Card
 	StokerMiss  = stoker.Miss
 	StokerLapse = stoker.Lapse
-	StokerOrder = stoker.Order
-	StokerPlan  = stoker.PlanStep
-	StokerSaid  = stoker.Said
+	// StokerChainCard is a chain stoker's night on the host's morning card.
+	StokerChainCard = stoker.ChainCard
+	StokerOrder     = stoker.Order
+	StokerPlan      = stoker.PlanStep
+	StokerSaid      = stoker.Said
 	// StokerTrigger is a `matchblox stoker when` that has not fired.
 	StokerTrigger = stoker.Trigger
 	// StokerUnguard is a plan's session no merge guard watches.

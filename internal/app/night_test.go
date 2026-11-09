@@ -309,3 +309,15 @@ func TestALapseAfterMidnightHasNoWeekday(t *testing.T) {
 		t.Fatalf("%q", got)
 	}
 }
+
+// The morning card lists the night of each chain stoker under the host's.
+func TestMorningCardListsChains(t *testing.T) {
+	m, _ := loadedWith(t, 100, screensState(t))
+	since := time.Date(2026, 10, 10, 23, 10, 0, 0, time.Local)
+	c := proto.StokerCard{Night: true, Since: since, Ended: since.Add(8 * time.Hour), Watched: 3, Ready: 3, Of: 3,
+		Chains: []proto.StokerChainCard{{Name: "api-auth", Stoker: "s1", Card: proto.StokerCard{Night: true, Watched: 2, Compacted: 1, Ready: 1, Of: 2}}}}
+	out := ansi.Strip(strings.Join(m.scoreLines(c, "", 100), "\n"))
+	if !strings.Contains(out, "chain api-auth") || !strings.Contains(out, "ready 1/2 · 2 watched · 0 full · 1 compacted") {
+		t.Fatalf("the card:\n%s", out)
+	}
+}

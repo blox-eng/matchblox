@@ -130,6 +130,13 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	}
 	picked := m.view().index != nil && m.rowIndex() == sc.rows[i] && (m.tab != tabSessions || m.chose)
 	m.selectRow(sc.rows[i])
+	if s, ok := m.selectedSession(); ok && m.tab == tabSessions && !m.oneColumn(w) && m.onFuse(ms.X, sc.listW) {
+		// A phone's row tap opens its chat: there F stokes the chain.
+		if k, chained := m.chainKeyOf(s); chained && !m.headed(k) {
+			m.armed = ""
+			return m.startChain(k), nil
+		}
+	}
 	if m.tab == tabShips {
 		// A tap on the selected ship goes to its session, as Enter does.
 		m.armed, m.flash = "", ""

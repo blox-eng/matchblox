@@ -134,6 +134,12 @@ func TestScreens(t *testing.T) {
 		check(t, tabMorning(st), "stokermorning", size[0], size[1], []string{"c"})
 	}
 	check(t, sheetScreen(st, true), "sheetday", 104, 38, []string{"o"})
+	for _, size := range [][2]int{{44, 31}, {104, 38}} {
+		check(t, tabFamily(st, false), "stokerfamily", size[0], size[1], []string{"c", "down", "down"})
+	}
+	twoChains := tabFamily(st, false)
+	twoChains.Stokers[1].View.PaneUp = true
+	check(t, twoChains, "familydock", 104, 38, nil)
 	asks := screenMsg{Pane: paneNamed(st, "flint-auth"), At: demoAt, Text: askScreen}
 	for _, size := range [][2]int{{200, 50}, {132, 32}, {44, 31}} {
 		check(t, st, "chat", size[0], size[1], []string{"enter"}, asks)

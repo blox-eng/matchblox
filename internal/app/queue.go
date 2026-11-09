@@ -55,6 +55,9 @@ type paneRow struct {
 func (m Model) paneRows() []paneRow {
 	var rows []paneRow
 	for _, s := range m.snap.Sessions {
+		if _, head := m.headRow(s); head {
+			continue // the stoker's own pane is not the builder's
+		}
 		rows = append(rows, paneRow{s.Host, s.Pane, s.Target, s.Name, s.Cwd})
 	}
 	for _, p := range m.snap.IdlePanes {

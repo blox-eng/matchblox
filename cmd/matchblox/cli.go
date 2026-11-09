@@ -108,6 +108,8 @@ type sessionJSON struct {
 	Reason     string      `json:"reason"`
 	Held       bool        `json:"held"`
 	Stoker     bool        `json:"stoker"`
+	StokerID   string      `json:"stoker_id,omitempty"`
+	Chain      string      `json:"chain,omitempty"`
 	ContextPct float64     `json:"context_pct"`
 	PlanPct    *int        `json:"plan_pct"`
 	Account    string      `json:"account"`
@@ -202,12 +204,30 @@ func writeChildren(w io.Writer, kids []childJSON, indent string) error {
 	return nil
 }
 
+// chainStokerOf is the id and chain of the chain stoker whose agent s is.
+// Empty: s is not one (the host stoker has none).
+func chainStokerOf(doc state.Doc, s sample.Session) (id, chain string) {
+	sid, ok := stoker.IDOfSession(s.TmuxSession())
+	if !ok || sid == stoker.HostID {
+		return "", ""
+	}
+	for _, c := range doc.Stokers {
+		if c.ID == sid {
+			return sid, c.Chain
+		}
+	}
+	return sid, ""
+}
+
 func sessionRows(doc state.Doc) []sessionJSON {
 	rows := []sessionJSON{}
 	for _, s := range doc.Sessions {
 		r := sessionJSON{Name: s.Name, Pane: s.Pane, Target: s.Target, Repo: repoName(doc, s.Cwd), Status: s.Status, Word: stoker.Word(s),
 			Reason: doc.Reasons[s.Pane].Word, Held: heldBy(doc, s), Stoker: doc.StokerServer != "" && s.Server() == doc.StokerServer, ContextPct: s.ContextPct, Account: s.Account,
 			AccountDir: s.AccountDir, SigningIn: s.SigningIn, byHand: signsInByHand(doc, s)}
+		if r.Stoker {
+			r.StokerID, r.Chain = chainStokerOf(doc, s)
+		}
 		if s.Progress != nil {
 			r.PlanPct = &s.Progress.Pct
 		}
@@ -428,11 +448,7 @@ func stokerCmdAct(words []string, state, needs, rule string, stdin io.Reader, fr
 	var body any
 	switch words[0] {
 	case "quit":
-		if len(words) > 1 {
-			return a, errors.New("quit takes no words: matchblox stoker quit")
-		}
-		a.RecID = "stoker:quit"
-		return a, nil
+		return stokerQuitAct(words, "", from)
 	case "plan":
 		p, err := readPlan(stdin)
 		if err != nil {
@@ -462,10 +478,26 @@ func stokerCmdAct(words []string, state, needs, rule string, stdin io.Reader, fr
 	return a, nil
 }
 
+// stokerQuitAct is the act `matchblox stoker quit [--chain <who>]` asks
+// the service for: the host stoker's quit, or with --chain the quit of
+// the stoker of who's chain (any member's name, a pane or the chain's id;
+// a stoker id works too). The service finds the stoker.
+func stokerQuitAct(words []string, chain, from string) (proto.Act, error) {
+	a := proto.Act{RecID: "stoker:quit", Confirm: "y", From: from, Text: chain}
+	if len(words) > 1 {
+		return a, errors.New("quit takes no words: matchblox stoker quit [--chain <who>]")
+	}
+	return a, nil
+}
+
 // cliStoker runs `matchblox stoker plan|step|quit` and says what the
-// service did with it.
-func cliStoker(words []string, state, needs, rule string, stdin io.Reader, w io.Writer, path string) error {
-	a, err := stokerCmdAct(words, state, needs, rule, stdin, os.Getenv("TMUX_PANE"))
+// service did with it. chain is quit's --chain.
+func cliStoker(words []string, state, needs, rule, chain string, stdin io.Reader, w io.Writer, path string) error {
+	from := os.Getenv("TMUX_PANE")
+	a, err := stokerCmdAct(words, state, needs, rule, stdin, from)
+	if err == nil && words[0] == "quit" {
+		a, err = stokerQuitAct(words, chain, from)
+	}
 	if err != nil {
 		return err
 	}
@@ -476,7 +508,107 @@ func cliStoker(words []string, state, needs, rule string, stdin io.Reader, w io.
 	if err := reportResult(w, res); err != nil {
 		return err
 	}
-	_, err = fmt.Fprintln(w, stokerDone(words, state, rule))
+	done := stokerDone(words, state, rule)
+	if res.Note != "" {
+		done = res.Note
+	}
+	_, err = fmt.Fprintln(w, done)
+	return err
+}
+
+// stokerNewAct is the act `matchblox stoker new --chain <who> [--go …]
+// ["<order>"]` asks the service for: a stoker for one chain. Its gos are
+// the words of --go (merges, releases, deploys, kills); with none, it has
+// no go.
+func stokerNewAct(words []string, chain, goes, from string) (proto.Act, error) {
+	a := proto.Act{RecID: "stoker:new", Confirm: "y", From: from}
+	if chain == "" {
+		return a, errors.New(`stoker new needs its chain: matchblox stoker new --chain <who> ["<order>"]`)
+	}
+	grants, err := goesArg(goes)
+	if err != nil {
+		return a, err
+	}
+	if grants == nil {
+		grants = []string{}
+	}
+	b, err := json.Marshal(struct {
+		Chain  string   `json:"chain"`
+		Words  string   `json:"words"`
+		Grants []string `json:"grants"`
+	}{chain, strings.Join(words[1:], " "), grants})
+	if err != nil {
+		return a, err
+	}
+	a.Text = string(b)
+	return a, nil
+}
+
+// stokerOrderAct is the act `matchblox stoker order <chain> [--go …]
+// "<text>"` asks the service for: an order to a chain's stoker, which
+// starts one when the chain has none. With no --go it sends no goes: the
+// host stoker's order then gives its own, the person's none.
+func stokerOrderAct(words []string, goes, from string) (proto.Act, error) {
+	a := proto.Act{RecID: "stoker:order-chain", Confirm: "y", From: from}
+	if len(words) < 3 {
+		return a, errors.New(`stoker order needs its chain and its order: matchblox stoker order <chain> [--go …] "<text>"`)
+	}
+	grants, err := goesArg(goes)
+	if err != nil {
+		return a, err
+	}
+	b, err := json.Marshal(struct {
+		Chain  string   `json:"chain"`
+		Words  string   `json:"words"`
+		Grants []string `json:"grants,omitempty"`
+	}{words[1], strings.Join(words[2:], " "), grants})
+	if err != nil {
+		return a, err
+	}
+	a.Text = string(b)
+	return a, nil
+}
+
+// goesArg are the goes of --go (merges, releases, deploys, kills), each
+// once; nil for none.
+func goesArg(goes string) ([]string, error) {
+	var grants []string
+	for w := range strings.SplitSeq(goes, ",") {
+		if w = strings.TrimSpace(w); w == "" {
+			continue
+		}
+		g := strings.TrimSuffix(w, "s")
+		if !slices.Contains(stoker.Goes, g) {
+			return nil, fmt.Errorf("%q is no go: merges, releases, deploys or kills", w)
+		}
+		if !slices.Contains(grants, g) {
+			grants = append(grants, g)
+		}
+	}
+	return grants, nil
+}
+
+// cliStokerNew runs `matchblox stoker new` or `matchblox stoker order`
+// and says what the service did.
+func cliStokerNew(words []string, chain, goes string, w io.Writer, path string) error {
+	var a proto.Act
+	var err error
+	if words[0] == "order" {
+		a, err = stokerOrderAct(words, goes, os.Getenv("TMUX_PANE"))
+	} else {
+		a, err = stokerNewAct(words, chain, goes, os.Getenv("TMUX_PANE"))
+	}
+	if err != nil {
+		return err
+	}
+	res, err := doAct(path, a)
+	if err != nil {
+		return err
+	}
+	if err := reportResult(w, res); err != nil {
+		return err
+	}
+	_, err = fmt.Fprintln(w, res.Note)
 	return err
 }
 

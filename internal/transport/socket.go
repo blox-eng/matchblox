@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -111,15 +112,21 @@ func Dial(path string, timeout time.Duration) (Conn, error) {
 
 // Notify sends one message to the service and leaves, all within timeout:
 // it reads the service hello first, so the service has written it before
-// the message arrives. It never waits longer, so a hook never holds the
-// agent that runs it.
+// the message arrives. It then waits, still within timeout, until the
+// service closes: the service places the sender by its process, which must
+// still run. It never waits longer, so a hook never holds the agent that
+// runs it.
 func Notify(path string, timeout time.Duration, kind proto.Kind, body any) error {
-	nc, _, err := greet(path, timeout)
+	nc, r, err := greet(path, timeout)
 	if err != nil {
 		return err
 	}
 	defer nc.Close()
-	return proto.Encode(nc, kind, "", body)
+	if err := proto.Encode(nc, kind, "", body); err != nil {
+		return err
+	}
+	_, _ = io.Copy(io.Discard, r) // the message is sent: a deadline here is not an error
+	return nil
 }
 
 // Ask sends one message to the service and reads its one reply of the same

@@ -41,15 +41,16 @@ type wakeState struct {
 	last       time.Time
 }
 
-// wake tells the stoker agent what it may care about. It runs after each
-// sample while a run is on and the stoker has a pane with an agent at rest;
+// wake tells unit u's stoker agent what it may care about: a chain
+// unit's, of its chain's matches. It runs after each sample while a run is
+// on and the stoker has a pane with an agent at rest, its brief typed;
 // otherwise it sends nothing and the lines wait.
-func (s *Service) wake(ctx context.Context, now time.Time) {
-	if s.Stoker == nil || s.StokerServer == "" {
+func (s *Service) wake(ctx context.Context, u *stokerUnit, now time.Time) {
+	if u == nil || s.StokerServer == "" {
 		return
 	}
-	m := s.Stoker.Mode()
-	w := &s.wakes
+	m := u.store.Mode()
+	w := &u.wakes
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if !m.On {
@@ -63,6 +64,9 @@ func (s *Service) wake(ctx context.Context, now time.Time) {
 		why[pane] = r.Word
 	}
 	s.mu.Unlock()
+	if s.chainIDOf(u) != "" {
+		sessions = s.sessionsOf(u, sessions)
+	}
 	cur := stoker.Look(sessions, why, items, rep, accts, now, s.StokerServer)
 	resting := !m.Rests.IsZero()
 	if w.run.IsZero() || !w.run.Equal(m.Since) {
@@ -93,7 +97,10 @@ func (s *Service) wake(ctx context.Context, now time.Time) {
 		w.lines = w.lines[over:]
 	}
 
-	pane, err := s.stokerAgent()
+	if s.briefWaits(u) {
+		return
+	}
+	pane, err := s.stokerAgent(u)
 	if err != nil || s.stokable(pane, "") != nil {
 		return
 	}
@@ -124,7 +131,7 @@ func (s *Service) wake(ctx context.Context, now time.Time) {
 		// The lines stay on a failure and go again after the minute: the
 		// text may be half typed, so a retry never comes sooner.
 		w.last = now
-		if s.tell(ctx, pane, prefix, stoker.Coalesce(w.lines)) == nil {
+		if s.tell(ctx, u, pane, prefix, stoker.Coalesce(w.lines)) == nil {
 			w.lines, w.back = nil, false
 		}
 	}
@@ -150,13 +157,13 @@ func (w *wakeState) reset(run time.Time, seen stoker.Seen, shipsKnown bool) {
 // tell types the lines as one wake, or points the stoker at a file that
 // holds them when they are more than a line may be. The file is read, not
 // followed: it quotes what sessions said (Ruling AV).
-func (s *Service) tell(ctx context.Context, pane, prefix string, lines []string) error {
+func (s *Service) tell(ctx context.Context, u *stokerUnit, pane, prefix string, lines []string) error {
 	text := prefix + ": " + strings.Join(lines, "; ")
 	if utf8.RuneCountInString(text) <= panes.MaxAnswer {
 		return s.typeInto(ctx, pane, text)
 	}
-	path := filepath.Join(s.Stoker.Dir(), wakeName)
-	if err := os.MkdirAll(s.Stoker.Dir(), 0o700); err != nil {
+	path := filepath.Join(u.store.Dir(), wakeName)
+	if err := os.MkdirAll(u.store.Dir(), 0o700); err != nil {
 		return err
 	}
 	if err := os.WriteFile(path, []byte(prefix+": "+strings.Join(lines, "\n")+"\n"), 0o600); err != nil {

@@ -1,0 +1,38 @@
+ ▰ matchblox                                                        ● 6 wait for you  stoker · 2 chains
+ SESSIONS 7    ships 3    machine    git    history    panes    stoker
+────────────────────────────────────────────────────────────────────────────────────────────────────────
+ WAITS FOR YOU · 6                       │ spark-docs · done
+▌│ spark-docs        done       9m   88% │ ✻ team@example.com · Max · #4540 ●━●━●━●━●  live
+ ╿ ember-billing     done       4m   32% │
+ ╿ flint-auth        asks       2m   41% │
+ ╿ kindle-web        asks       1m   56% │
+ ╿ cinder-ci         done       0s   55% │
+ ╿ wick-mobile       done       0s    6% │
+ WORKING · 1                             │
+ ✦ hearth-api        busy            79% │
+ + start a new session                   │
+                                         │
+ 1 without an agent: shell:1.1 zsh       │
+                                         │
+ RECOMMENDATIONS · 7 · h hides           │
+ ▲ The week runs short: compact spark-do…│
+ ○ Clear spark-docs (%3)                 │
+ ○ Clear kindle-web (%5)                 │
+ ○ Clear cinder-ci (%6)                  │
+ ○ Clear flint-auth (%2)                 │
+ ○ Clear ember-billing (%8)              │
+ ○ Clear wick-mobile (%7)                │
+                                         │
+                                         │
+─────────────────────────────────────────│
+ USAGE                                   │
+ ✻ Claude        5h   ▰▰▰ 84%            │
+                 wk   ▰▰▱ 82%            │
+ · Google login  not measured            │
+ ❋ OpenAI        5h ▰▱▱ 40% · wk 12%     │
+─────────────────────────────────────────│
+ STOKER · 2 chains                    on │
+ watching 0 · 0 compacted · 0 waited · 0…│
+ no session full yet                     │
+────────────────────────────────────────────────────────────────────────────────────────────────────────
+ enter goes into spark-docs  x kill  r rename  z park  N new  p ships  f stoker  / find  sampled 0s ago

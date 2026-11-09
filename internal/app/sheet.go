@@ -25,6 +25,9 @@ const (
 // chip it is on: the go chips first, then the recipes.
 type sheet struct {
 	host           string // whose stoker the order goes to (R14)
+	chain          string // the start sheet of this chain's stoker ("": the host stoker's)
+	chainName      string
+	matches        int // the chain's matches on its host
 	night, restart bool
 	text           string
 	onChips        bool
@@ -106,7 +109,7 @@ func (m Model) sheetKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.sheetEnter()
 	}
 	if s.onChips {
-		n := len(goChips) + len(m.sheetView().Recipes)
+		n := len(goChips) + len(m.sheetRecipes())
 		switch {
 		case bkey.Matches(k, sk.Close, sk.Chips):
 			s.onChips = false
@@ -115,7 +118,7 @@ func (m Model) sheetKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		case bkey.Matches(k, sk.Right):
 			s.at = (s.at + 1) % n
 		case bkey.Matches(k, sk.Tick):
-			s.pick(m.sheetView().Recipes)
+			s.pick(m.sheetRecipes())
 		default:
 			// Any other key is the order's: the cursor goes back to it.
 			s.onChips = false
@@ -136,6 +139,15 @@ func (m Model) sheetKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	s.typeText(k.Text)
 	return m, nil
+}
+
+// sheetRecipes are the recipe chips of the sheet: a chain's start sheet
+// has the go chips alone.
+func (m Model) sheetRecipes() []string {
+	if m.sheet.chain != "" {
+		return nil
+	}
+	return m.sheetView().Recipes
 }
 
 // typeText adds text to the order, as long as the order may grow.
@@ -185,6 +197,9 @@ func (m Model) sheetEnter() (tea.Model, tea.Cmd) {
 		s.err = why
 		return m, nil
 	}
+	if s.chain != "" {
+		return m.sendChain()
+	}
 	if !m.noAgent() && !m.sheetView().Ready {
 		s.queued, s.err = true, ""
 		return m, m.startStoker()
@@ -210,22 +225,48 @@ func (m Model) sendOrder() (Model, tea.Cmd) {
 	s := *m.sheet
 	m.sheet = &s
 	s.queued = false
-	var goes []string // in the chips' order
-	for _, c := range goChips {
-		if slices.Contains(s.goes, c.go_) {
-			goes = append(goes, c.go_)
-		}
-	}
 	body, _ := json.Marshal(struct {
 		Words  string   `json:"words"`
 		Night  bool     `json:"night"`
 		Grants []string `json:"grants,omitempty"`
-	}{strings.TrimSpace(s.text), s.night, goes})
+	}{strings.TrimSpace(s.text), s.night, s.chipGoes()})
 	cmd := m.sendTo(s.host, proto.Act{RecID: "stoker:order", Which: "primary", Confirm: "y", Text: string(body)})
 	if m.noAgent() { // today's run starts at once: a refusal is a flash
 		m.sheet = nil
 		return m, cmd
 	}
+	s.act, s.err = fmt.Sprintf("a%d", m.acts), ""
+	return m, cmd
+}
+
+// chipGoes are the goes of the chips that are on, in the chips' order.
+func (s *sheet) chipGoes() []string {
+	goes := []string{}
+	for _, c := range goChips {
+		if slices.Contains(s.goes, c.go_) {
+			goes = append(goes, c.go_)
+		}
+	}
+	return goes
+}
+
+// sendChain sends the start sheet's run to its chain: stoker:new for a
+// chain with no stoker, else stoker:order-chain, which starts the run of
+// the one it has. The service refuses at night, at max_chains and a go
+// the person lacks: the refusal stays in the sheet.
+func (m Model) sendChain() (Model, tea.Cmd) {
+	s := *m.sheet
+	m.sheet = &s
+	body, _ := json.Marshal(struct {
+		Chain  string   `json:"chain"`
+		Words  string   `json:"words"`
+		Grants []string `json:"grants"`
+	}{s.chain, strings.TrimSpace(s.text), s.chipGoes()})
+	rec := "stoker:new"
+	if m.hasUnit(chainKey{s.host, s.chain}) {
+		rec = "stoker:order-chain"
+	}
+	cmd := m.sendTo(s.host, proto.Act{RecID: rec, Which: "primary", Confirm: "y", Text: string(body)})
 	s.act, s.err = fmt.Sprintf("a%d", m.acts), ""
 	return m, cmd
 }
@@ -258,7 +299,11 @@ func (m Model) sheetBox(bw int) (box, press []string, spans []span, goesAt int, 
 	add := func(l ...string) { lines = append(lines, l...) }
 	title := st.accent.Bold(true).Render("New order")
 	prompt := "How should I run?"
-	if s.night {
+	switch {
+	case s.chain != "":
+		title = st.accent.Bold(true).Render(ansi.Truncate(fmt.Sprintf("Stoke the chain %s (%d matches)?", s.chainName, s.matches), bw-5, "…"))
+		prompt = "How should I run this chain?"
+	case s.night:
 		title = st.stoker.Bold(true).Render("☾ Night")
 		prompt = "How should I run tonight?"
 	}
@@ -282,7 +327,7 @@ func (m Model) sheetBox(bw int) (box, press []string, spans []span, goesAt int, 
 	add("")
 	goesAt = len(lines) + 1 // the box's top line comes first
 	add(line)
-	if r := m.sheetView().Recipes; len(r) > 0 {
+	if r := m.sheetRecipes(); len(r) > 0 {
 		focus := -1
 		if s.onChips {
 			focus = s.at - len(goChips)
@@ -294,6 +339,7 @@ func (m Model) sheetBox(bw int) (box, press []string, spans []span, goesAt int, 
 		chipSpans[i].x1 += 2
 	}
 	switch v := m.sheetView(); {
+	case s.chain != "": // the service starts the chain's agent on Enter
 	case v.Agent == "":
 	case v.Missing != "":
 		// The agent cannot start: the door comes first, not after ⏎.
@@ -378,7 +424,7 @@ func (m Model) sheetFoot() []footPart {
 	st := m.st
 	sk, sep := m.keys.sheet, " ─ "
 	verb := "send"
-	if m.noAgent() {
+	if m.sheet.chain != "" || m.noAgent() {
 		verb = "start"
 	}
 	foot := []footPart{st.footFor(sk.Send, verb, sep)}

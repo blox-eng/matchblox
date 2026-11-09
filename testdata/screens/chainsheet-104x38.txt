@@ -1,0 +1,38 @@
+ ▰ matchblox                                                                           ● 1 wait for you
+ SESSIONS 5    ships    machine    git    history    panes    stoker
+────────────────────────────────────────────────────────────────────────────────────────────────────────
+ WAITS FOR YOU · 1 · chain of 3          │ kindle-web · asks
+▌╿╮ kindle-web       asks       1m   56% │ ✻ team@example.com · Max
+ ✦┤ hearth-api       busy            79% │
+ ╿╯ ember-billing    idle       3m   32% │
+ WORKING · 1                             │
+ ✦  flint-auth       busy            41% │
+ QUIET · 1                               │
+ │  spark-docs       idle       9m   88% │
+ + start a new session                   │
+                                         │
+ 1 without an agent: shell:1.1 zsh       │
+                     ╭─ Stoke the chain kindle-web (3 matches)? ──────────────────╮
+ RECOMMENDATIONS · 7 │ How should I run this chain?                               │
+ ▲ The week runs shor│                                                            │
+ ○ Clear spark-docs (│ › merge on green▏                                          │
+ ○ Clear kindle-web (│                                                            │
+ ○ Clear cinder-ci (%│ gos ✓ merges  ○ releases  ○ deploys  ○ kills  off asks you │
+ ○ Clear flint-auth (╰─ ⏎ start ─ tab chips ─ esc ────────────────────────────────╯
+ ○ Clear ember-billing (%8)              │
+ ○ Clear wick-mobile (%7)                │
+─────────────────────────────────────────│
+ USAGE                                   │
+ ✻ Claude        5h   ▰▰▰ 84%            │
+                 wk   ▰▰▱ 82%            │
+ · Google login  not measured            │
+ ❋ OpenAI        5h ▰▱▱ 40% · wk 12%     │
+─────────────────────────────────────────│
+ MACHINE                        16 cores │
+ cpu  ▁ 0%   load 6.2                    │
+ mem  ▰▰▰▱▱▱▱▱ 26 of 64 GB               │
+ disk ▰▰▰▰▰▰▱▱ 71% of 1 TB               │
+ runs 5 claude                           │
+                                         │
+────────────────────────────────────────────────────────────────────────────────────────────────────────
+ enter goes into kindle-web  x kill  r rename  z park  F stoke chain  N new  f stoker    sampled 0s ago

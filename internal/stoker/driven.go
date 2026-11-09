@@ -515,6 +515,11 @@ func Deny(dir, socket, pane string, gs []Guard) string {
 		}
 		return ""
 	}
+	return deny(d, socket, pane, gs)
+}
+
+// deny is Deny once driven.json is read.
+func deny(d Driven, socket, pane string, gs []Guard) string {
 	if d.StokerSocket != "" && socket == d.StokerSocket {
 		return DenyStokerPane
 	}
@@ -530,6 +535,61 @@ func Deny(dir, socket, pane string, gs []Guard) string {
 			return DenyNotKnown(who, short[0].N)
 		}
 		return DenyNoGo
+	}
+	return ""
+}
+
+// DenyFamily is the merge guard over the whole family: the host stoker's
+// state dir and the store of every chain stoker whose link does not say
+// it ended. If any member lost its
+// driven.json while its run is on, nothing passes in any pane. Else a pane
+// on the tmux server of any member is a stoker pane, and a pane passes only
+// if every member that lists it allows it. With no chain stoker it is Deny.
+// If the family cannot be listed, the host's answer stands, and a host that
+// allows becomes DenyLost.
+func DenyFamily(state, socket, pane string, gs []Guard) string {
+	if len(gs) == 0 {
+		return ""
+	}
+	ids, err := FamilyIDs(state)
+	if err != nil {
+		if why := Deny(state, socket, pane, gs); why != "" {
+			return why
+		}
+		return DenyLost
+	}
+	if len(ids) == 0 {
+		return Deny(state, socket, pane, gs)
+	}
+	var known []Driven
+	for _, id := range append([]string{HostID}, ids...) {
+		dir := FamilyDir(state, id)
+		if id != HostID {
+			if l, err := ReadLink(dir); err == nil && l.Ended {
+				if m, merr := ReadMode(dir); merr == nil && !m.On {
+					continue // it stopped for good: its run is off, and it drives nothing
+				}
+			}
+		}
+		d, err := ReadDriven(dir)
+		if err != nil {
+			m, merr := ReadMode(dir)
+			if (merr == nil && m.On) || (merr != nil && id != HostID) { // a chain stoker whose mode is unreadable counts as on
+				return DenyLost
+			}
+			continue
+		}
+		known = append(known, d)
+	}
+	for _, d := range known {
+		if d.StokerSocket != "" && socket == d.StokerSocket {
+			return DenyStokerPane
+		}
+	}
+	for _, d := range known {
+		if why := deny(d, socket, pane, gs); why != "" {
+			return why
+		}
 	}
 	return ""
 }

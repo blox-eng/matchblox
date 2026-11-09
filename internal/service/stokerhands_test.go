@@ -50,16 +50,16 @@ func TestStokerCannotHoldItself(t *testing.T) {
 
 func TestOnlyTheStokersSessionIsTheStoker(t *testing.T) {
 	s, _ := handsTest(t)
-	if !s.fromStoker(proto.Act{From: "%9@mbtest"}) {
+	if u, own := s.unitOf(proto.Act{From: "%9@mbtest"}); !own || u != s.hostUnit() {
 		t.Fatal("the stoker pane is not the stoker")
 	}
 	for _, from := range []string{"", "%1"} {
-		if s.fromStoker(proto.Act{From: from}) {
+		if _, own := s.unitOf(proto.Act{From: from}); own {
 			t.Fatalf("%q is the stoker", from)
 		}
 	}
 	s.StokerServer = ""
-	if s.fromStoker(proto.Act{From: "%9@mbtest"}) {
+	if _, own := s.unitOf(proto.Act{From: "%9@mbtest"}); own {
 		t.Fatal("no stoker configured, yet a stoker")
 	}
 }

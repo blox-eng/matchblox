@@ -701,7 +701,7 @@ func TestSwitchRefuses(t *testing.T) {
 
 	// A session the stoker drives does not switch another's agent.
 	h, hran := handsLife(t)
-	h.drive("%4")
+	h.drive(h.hostUnit(), "%4")
 	b, _ := json.Marshal(proto.SwitchAgent{Agent: "codex"})
 	res := h.act(t.Context(), proto.Act{RecID: "switch:%1", Confirm: "y", Text: string(b), From: "%4"})
 	if res.Err != "the stoker does not switch agents: the builder does" || len(*hran) != 0 {
@@ -726,7 +726,7 @@ func lifeStoker(t *testing.T, s *Service) {
 func TestSwitchTakesTheSeatFromTheStoker(t *testing.T) {
 	s, _ := switchTest(t)
 	lifeStoker(t, s)
-	s.drive("%1")
+	s.drive(s.hostUnit(), "%1")
 	if !s.agentsPane(proto.Act{From: "%1"}) {
 		t.Fatal("the stoker does not drive %1")
 	}

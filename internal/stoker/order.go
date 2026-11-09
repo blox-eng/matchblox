@@ -104,6 +104,34 @@ func CheckGrant(g string) error {
 	return fmt.Errorf("%q is no grant: merge, release, deploy, merge:#<n> or merge:@<session>", g)
 }
 
+// Given are the goes of asked that giver has too, each once. A merge in
+// giver covers one merge (merge:#<n>, merge:@<session>) in asked; one
+// merge in giver never covers every merge, so a merge in asked gets
+// giver's one merges only.
+func Given(asked, giver []string) []string {
+	var out []string
+	add := func(g string) {
+		if !slices.Contains(out, g) {
+			out = append(out, g)
+		}
+	}
+	for _, a := range asked {
+		switch {
+		case slices.Contains(giver, a):
+			add(a)
+		case oneMerge.MatchString(a) && slices.Contains(giver, "merge"):
+			add(a)
+		case a == "merge":
+			for _, g := range giver {
+				if oneMerge.MatchString(g) {
+					add(g)
+				}
+			}
+		}
+	}
+	return out
+}
+
 // Unguarded are the plan's sessions that run an agent with no merge guard
 // (agentOf names it: codex, opencode, cursor-agent), each with the goes the grants do not
 // give in full: one merge (merge:#n) still leaves every other merge open.
@@ -155,4 +183,30 @@ func NeedOf(g Guard, who string) string {
 		return "merge:@" + who
 	}
 	return g.What
+}
+
+// PlanDone counts the steps of o's plan whose last state in run is done.
+func PlanDone(o Order, run []Entry) int {
+	last := map[int]string{}
+	for _, e := range run {
+		if e.Logged() && e.Step > 0 && e.Rule == "" && !e.At.Before(o.Went) {
+			last[e.Step] = e.State
+		}
+	}
+	n := 0
+	for _, st := range o.Plan {
+		if last[st.N] == StepDone {
+			n++
+		}
+	}
+	return n
+}
+
+// PlanProgress is the steps done of all in the plan of the running order,
+// 0 and 0 with none.
+func (v View) PlanProgress() (done, all int) {
+	if o := v.Order; o != nil && o.State == OrderRunning {
+		return PlanDone(*o, v.Run), len(o.Plan)
+	}
+	return 0, 0
 }

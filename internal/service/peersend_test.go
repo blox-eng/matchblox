@@ -269,7 +269,7 @@ func TestPeerSendIsNoStokerStep(t *testing.T) {
 	}
 	*now = night0.Add(time.Minute)
 	peerSample(s, *now)
-	if err := s.updateDriven(func(d *stoker.Driven, _ []string) bool {
+	if err := s.updateDriven(s.hostUnit(), func(d *stoker.Driven, _ []string) bool {
 		d.Panes["%1"] = nil
 		d.Steps["%1"] = []string{"merge:#4"}
 		return true
@@ -287,7 +287,7 @@ func TestPeerSendIsNoStokerStep(t *testing.T) {
 	if m := s.Stoker.Mode(); !m.Touched.Equal(touched) {
 		t.Fatalf("the send touched the stoker: %v", m.Touched)
 	}
-	_ = s.updateDriven(func(d *stoker.Driven, _ []string) bool {
+	_ = s.updateDriven(s.hostUnit(), func(d *stoker.Driven, _ []string) bool {
 		if _, in := d.Panes["%3"]; in {
 			t.Error("the sender is driven")
 		}
