@@ -3,6 +3,6 @@
 ────────────────────────────────────────────────────────────────────────────────────────────────
 ────────────────────────────────────────────────────────────────────────────────────────────────
 ▌╿ flint-auth                                 asks       2m   41%  ▲ clear      #4545 ●━✕┄○┄○┄○
-   “The refresh flow works and the tests pass. One choice is yours before I wire the rotation.”
+   ? Should a refresh also rotate the token?
 ────────────────────────────────────────────────────────────────────────────────────────────────
  ⏎ go in  x kill  r rename  A switch  z park  N new  p ships  f stoker           sampled 0s ago

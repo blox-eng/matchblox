@@ -6,6 +6,7 @@
  ╿ ember-billing                done      4m   32%
 ───────────────────────────────────────────────────
 ▌╿ flint-auth                   asks      2m   41%
+   ? Should a refresh also rotate the token?
    “The refresh flow works and the tests pass. One
    choice is yours before I wire the rotation.”
    #4545 ●━✕┄○┄○┄○  conflicts with main
@@ -26,6 +27,5 @@
  ○ Clear kindle-web (%5)
  ○ Clear cinder-ci (%6)
  ○ Clear flint-auth (%2)
- ○ Clear ember-billing (%8)
 ───────────────────────────────────────────────────
  ⏎ go in  x kill  r rename  N new  full view v

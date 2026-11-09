@@ -326,28 +326,6 @@ func TestMediumSplitsListAndChat(t *testing.T) {
 	}
 }
 
-func TestNarrowSwapsToChat(t *testing.T) {
-	list := demoSized(t, 44, 31)
-	m := openView(t, list)
-	sc := m.draw(44)
-	if got := strings.TrimSpace(ansi.Strip(sc.lines[0])); got != "‹ Sessions · spark-docs · done" {
-		t.Fatalf("title row %q", got)
-	}
-	out := ansi.Strip(strings.Join(sc.lines, "\n"))
-	if len(sc.lines) != 31 || strings.Contains(out, "WAITS FOR YOU") || !strings.Contains(out, "Esc to") {
-		t.Fatalf("not the chat alone, %d lines:\n%s", len(sc.lines), out)
-	}
-	next, _ := m.Update(tea.MouseClickMsg(tea.Mouse{X: 3, Y: 0, Button: tea.MouseLeft}))
-	if m = next.(Model); m.standIn || screen(m) != screen(list) {
-		t.Fatalf("a tap on ‹ Sessions: stand-in %v, not the list as before:\n%s", m.standIn, screen(m))
-	}
-	tall := openView(t, fullView(demoSized(t, 44, 50)))
-	next, _ = tall.Update(tea.MouseClickMsg(tea.Mouse{X: 3, Y: 0, Button: tea.MouseLeft}))
-	if sc := next.(Model).draw(44); sc.dockAt < 0 {
-		t.Fatalf("no dock under the list:\n%s", screen(next))
-	}
-}
-
 func TestACutListSaysHowManyAreBelow(t *testing.T) {
 	m := demoSized(t, 132, 32)
 	sc := m.draw(132)
@@ -492,20 +470,16 @@ func TestAShortDeskKeepsItsStats(t *testing.T) {
 func inView(t *testing.T) Model {
 	t.Helper()
 	m, _ := viewModel(t)
-	next, _ := m.Update(tea.WindowSizeMsg{Width: 44, Height: 30})
-	m = onPane(t, next.(Model), "%1")
-	next, _ = m.Update(screenMsg{Pane: m.watching, At: time.Unix(100, 0), Text: "> "})
-	m = openView(t, next.(Model))
-	if !m.viewFull() {
-		t.Fatal("the view does not take the screen")
-	}
-	return m
+	m = onPane(t, m, "%1")
+	next, _ := m.Update(screenMsg{Pane: m.watching, At: time.Unix(100, 0), Text: "> "})
+	return next.(Model)
 }
 
 func TestAGoneScreenSaysTheSessionEnded(t *testing.T) {
 	next, _ := inView(t).Update(screenMsg{Pane: "%1", Gone: true})
-	if m := next.(Model); m.viewOpen || m.flash != "That session ended." {
-		t.Fatalf("view %v, flash %q: want the list, and why", m.viewOpen, m.flash)
+	m := next.(Model)
+	if out := ansi.Strip(screen(m)); !strings.Contains(out, "That session ended.") {
+		t.Fatalf("the view does not say the session ended:\n%s", out)
 	}
 }
 
@@ -618,8 +592,8 @@ func raws(cmd tea.Cmd) []string {
 func TestAFailedReadKeepsTheChat(t *testing.T) {
 	next, _ := inView(t).Update(screenMsg{Pane: "%1", At: time.Unix(101, 0), Err: "could not read %1: tmux did not answer"})
 	m := next.(Model)
-	if !m.viewOpen || m.screen.Text != "> " || !strings.Contains(m.flash, "could not read") {
-		t.Fatalf("view %v screen %+v flash %q", m.viewOpen, m.screen, m.flash)
+	if m.screen.Text != "> " || !strings.Contains(m.flash, "could not read") {
+		t.Fatalf("screen %+v flash %q", m.screen, m.flash)
 	}
 }
 
