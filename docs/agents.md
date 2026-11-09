@@ -264,11 +264,12 @@ record` on the row. On the command line, `matchblox switch` prints
 Ctrl-C switches now, from the evidence. `--no-refresh` skips the request.
 
 The capture says which record it carries: `written for this switch`, or
-`not refreshed: <reason>`. The reasons are busy, waits for you, out of usage,
-no turn end (Cursor and OpenCode), no verified transcript or record, the
-request did not reach the pane, it ended its turn without writing the
-record, the refresh timed out after 3:00, skipped with esc, and skipped with
-`--no-refresh`. A switch with `--anyway` on a busy or waiting agent does not
+`not refreshed: <reason>`. The reasons are `<name> works` or `<name> waits
+for you` (only with `--anyway`), `out of usage until <HH:MM>`, `<agent> gives
+no turn end` (Cursor, OpenCode, or Claude Code and Codex without a verified
+transcript), `no managed task record`, `skipped with --no-refresh`,
+`the request did not reach <name>: <why>`, `skipped with esc`, `the refresh
+timed out after 3:00`, and `it ended its turn without writing the record`. A switch with `--anyway` on a busy or waiting agent does not
 refresh, and neither does a start with **no task**. While the wait runs, other
 input to that pane is refused. The request in a transcript shows as
 `[matchblox refresh request]`; the agent's reply stays.

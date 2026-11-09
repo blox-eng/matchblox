@@ -104,7 +104,7 @@ func (s *Service) refreshList() []proto.Refresh {
 }
 
 // refreshLimit is how long a switch waits for the record, from the request.
-var refreshLimit = 3 * time.Minute
+var refreshLimit = proto.RefreshLimit
 
 // refreshPoll is how often the wait reads the session.
 var refreshPoll = 250 * time.Millisecond

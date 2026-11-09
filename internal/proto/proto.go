@@ -97,6 +97,9 @@ type State struct {
 	Refreshes []Refresh `json:"refreshes,omitempty"`
 }
 
+// RefreshLimit is how long a switch waits for an idle agent's task record.
+const RefreshLimit = 3 * time.Minute
+
 // Refresh is an idle agent's record refresh, before a switch, in Pane.
 type Refresh struct {
 	Pane  string    `json:"pane"`

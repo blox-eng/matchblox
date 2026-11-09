@@ -279,10 +279,6 @@ func newWait(o newOpts, home string) time.Duration {
 	return actWait
 }
 
-// recordLimit is the service's limit on the record refresh before a switch
-// (service.refreshLimit); the switch waits for it on top of its own work.
-const recordLimit = 3 * time.Minute
-
 // switchWait is how long matchblox switch waits for its result: a switch
 // starts agent on its last account, and a copy account may go on with its
 // copy, as at a start (newWait), and an idle agent may be writing its task
@@ -291,7 +287,7 @@ func switchWait(doc state.Doc, agent, home string) time.Duration {
 	if agent == "cursor" {
 		agent = sample.CursorAgent
 	}
-	return newWait(newOpts{agent: agent, account: doc.LastAccount[agent]}, home) + recordLimit
+	return newWait(newOpts{agent: agent, account: doc.LastAccount[agent]}, home) + proto.RefreshLimit
 }
 
 // newOutcome is reportResult for a new session: a start with notes on what
@@ -363,7 +359,7 @@ func cliSwitch(words []string, o switchOpts, w io.Writer, path string, jump func
 	home, _ := os.UserHomeDir()
 	interrupt := make(chan os.Signal, 1)
 	defer signal.Stop(interrupt)
-	watch := &actWatch{pane: strings.TrimPrefix(a.RecID, "switch:"), w: os.Stderr, interrupt: interrupt, arm: func() { signal.Notify(interrupt, os.Interrupt) }}
+	watch := &actWatch{pane: strings.TrimPrefix(a.RecID, "switch:"), w: os.Stderr, interrupt: interrupt, arm: func() { signal.Notify(interrupt, os.Interrupt) }, disarm: func() { signal.Stop(interrupt) }}
 	res, err := doActWatching(path, a, switchWait(doc, o.agent, home), watch)
 	if err == nil && res.Err != "" && !res.Refused {
 		return fmt.Errorf("switch %s: failed: %s", words[0], res.Err)

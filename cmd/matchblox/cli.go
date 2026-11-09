@@ -784,6 +784,7 @@ type actWatch struct {
 	w         io.Writer
 	interrupt <-chan os.Signal
 	arm       func()
+	disarm    func()
 }
 
 // doActWatching is doActFor that also watches the snapshots for watch's
@@ -800,13 +801,14 @@ func doActWatching(path string, a proto.Act, wait time.Duration, watch *actWatch
 		return proto.Result{}, errNotRunning
 	}
 	const id = "cli"
-	sent, told := false, false
+	sent, told, ended := false, false, false
 	if watch != nil {
 		done := make(chan struct{})
 		defer close(done)
 		go func() {
 			select {
 			case <-watch.interrupt:
+				watch.disarm()
 				_ = c.Send(proto.KindAct, "cli-now", proto.Act{RecID: proto.SwitchNowPrefix + watch.pane, From: a.From})
 			case <-done:
 			}
@@ -834,13 +836,18 @@ func doActWatching(path string, a proto.Act, wait time.Duration, watch *actWatch
 			}
 		case proto.KindSnapshot:
 			var st proto.State
-			if watch == nil || !sent || told || json.Unmarshal(env.Body, &st) != nil {
+			if watch == nil || !sent || ended || json.Unmarshal(env.Body, &st) != nil {
 				break
 			}
-			if i := slices.IndexFunc(st.Refreshes, func(r proto.Refresh) bool { return r.Pane == watch.pane }); i >= 0 {
+			i := slices.IndexFunc(st.Refreshes, func(r proto.Refresh) bool { return r.Pane == watch.pane })
+			switch {
+			case i >= 0 && !told:
 				told = true
 				watch.arm()
 				_, _ = fmt.Fprintf(watch.w, "%s writes its task record first; Ctrl-C switches now\n", st.Refreshes[i].Name)
+			case i < 0 && told:
+				ended = true
+				watch.disarm()
 			}
 		case proto.KindResult:
 			var res proto.Result

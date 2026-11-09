@@ -519,7 +519,7 @@ func TestSwitchWaitDerivesFromCopyLimit(t *testing.T) {
 	}
 	d := cliDoc()
 	d.LastAccount = map[string]string{"codex": "cp", "claude": "default"}
-	for agent, want := range map[string]time.Duration{"codex": accounts.CopyLimit.Time + actWait + recordLimit, "claude": actWait + recordLimit, "opencode": actWait + recordLimit} {
+	for agent, want := range map[string]time.Duration{"codex": accounts.CopyLimit.Time + actWait + proto.RefreshLimit, "claude": actWait + proto.RefreshLimit, "opencode": actWait + proto.RefreshLimit} {
 		if got := switchWait(d, agent, home); got != want {
 			t.Errorf("%s: %v, want %v", agent, got, want)
 		}
@@ -624,8 +624,8 @@ func TestSwitchTellsWhileTheRecordIsWrittenAndCtrlCSwitchesNow(t *testing.T) {
 	sock := refreshService(t, got)
 	var stderr lockedBuffer
 	interrupt := make(chan os.Signal, 2)
-	armed := 0
-	watch := &actWatch{pane: "%3", w: &stderr, interrupt: interrupt, arm: func() { armed++; interrupt <- os.Interrupt; interrupt <- os.Interrupt }}
+	armed, disarmed := 0, 0
+	watch := &actWatch{pane: "%3", w: &stderr, interrupt: interrupt, arm: func() { armed++; interrupt <- os.Interrupt; interrupt <- os.Interrupt }, disarm: func() { disarmed++ }}
 	a := proto.Act{RecID: "switch:%3", Confirm: "y", From: "%9"}
 	res, err := doActWatching(sock, a, 5*time.Second, watch)
 	if err != nil || len(res.Ran) != 1 || res.Ran[0][0] != "respawn-pane" {
@@ -634,8 +634,8 @@ func TestSwitchTellsWhileTheRecordIsWrittenAndCtrlCSwitchesNow(t *testing.T) {
 	if want := "api writes its task record first; Ctrl-C switches now\n"; stderr.String() != want {
 		t.Fatalf("stderr %q, want %q", stderr.String(), want)
 	}
-	if armed != 1 {
-		t.Fatalf("armed %d times", armed)
+	if armed != 1 || disarmed != 1 {
+		t.Fatalf("armed %d times, disarmed %d", armed, disarmed)
 	}
 	if n := proto.SwitchNowPrefix + "%3"; len(got) != 1 || (<-got) != (proto.Act{RecID: n, From: "%9"}) {
 		t.Fatalf("switchnow acts: %d", len(got))
@@ -645,7 +645,7 @@ func TestSwitchTellsWhileTheRecordIsWrittenAndCtrlCSwitchesNow(t *testing.T) {
 func TestSwitchWithNoRefreshSaysNothingToStderr(t *testing.T) {
 	sock := switchService(t, proto.Result{Ran: [][]string{{"respawn-pane"}}})
 	var stderr lockedBuffer
-	watch := &actWatch{pane: "%3", w: &stderr, interrupt: make(chan os.Signal), arm: func() { t.Error("armed without a refresh") }}
+	watch := &actWatch{pane: "%3", w: &stderr, interrupt: make(chan os.Signal), arm: func() { t.Error("armed without a refresh") }, disarm: func() {}}
 	if _, err := doActWatching(sock, proto.Act{RecID: "switch:%3", Confirm: "y"}, 5*time.Second, watch); err != nil || stderr.String() != "" {
 		t.Fatalf("%q %v", stderr.String(), err)
 	}
@@ -666,4 +666,54 @@ func (l *lockedBuffer) String() string {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return l.b.String()
+}
+
+// TestSwitchDisarmsWhenTheRecordWaitEnds: Ctrl-C keeps its default once the
+// refresh row is gone, so it never sends a switchnow the service refuses.
+func TestSwitchDisarmsWhenTheRecordWaitEnds(t *testing.T) {
+	sock := isolate(t)
+	l, err := transport.Listen(sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { l.Close() })
+	release := make(chan struct{})
+	go func() {
+		nc, err := l.Accept()
+		if err != nil {
+			return
+		}
+		c := transport.NewConn(nc)
+		defer c.Close()
+		_ = c.Send(proto.KindHello, "", proto.Hello{Version: proto.Version})
+		for {
+			env, err := c.Recv()
+			if err != nil {
+				return
+			}
+			if env.Kind != proto.KindAct {
+				continue
+			}
+			_ = c.Send(proto.KindSnapshot, "", proto.State{Doc: cliDoc(), Refreshes: []proto.Refresh{{Pane: "%3", Name: "api"}}})
+			_ = c.Send(proto.KindSnapshot, "", proto.State{Doc: cliDoc()})
+			<-release
+			_ = c.Send(proto.KindResult, env.ID, proto.Result{Ran: [][]string{{"respawn-pane"}}})
+		}
+	}()
+	disarmed := make(chan struct{})
+	watch := &actWatch{pane: "%3", w: io.Discard, interrupt: make(chan os.Signal), arm: func() {}, disarm: sync.OnceFunc(func() { close(disarmed) })}
+	done := make(chan error, 1)
+	go func() {
+		_, err := doActWatching(sock, proto.Act{RecID: "switch:%3", Confirm: "y"}, 5*time.Second, watch)
+		done <- err
+	}()
+	select {
+	case <-disarmed:
+	case <-time.After(3 * time.Second):
+		t.Fatal("not disarmed after the refresh row went")
+	}
+	close(release)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
 }
