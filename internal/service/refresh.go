@@ -16,9 +16,26 @@ import (
 
 // refreshRun is a record refresh in progress: the pane waits for its
 // agent's task record. skip is closed by the builder's early switch.
+// waiting is true until the wait ends, by any way; s.mu guards it.
 type refreshRun struct {
-	info proto.Refresh
-	skip chan struct{}
+	info    proto.Refresh
+	skip    chan struct{}
+	waiting bool
+}
+
+// switchNow ends the wait of the switch in pane, once. The mark outlives
+// the wait through the capture and the respawn, so a pane marked is not
+// always a pane that waits.
+func (s *Service) switchNow(pane string) proto.Result {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	r := s.refreshes[pane]
+	if r == nil || !r.waiting {
+		return proto.Result{Err: "no switch waits in " + pane}
+	}
+	r.waiting = false
+	close(r.skip)
+	return proto.Result{Ran: [][]string{{"switch now"}}}
 }
 
 // switching reports whether pane is in a record refresh. The guards ask it
@@ -47,8 +64,9 @@ func (s *Service) switchingErr(pane string, own *refreshRun) error {
 // nothing, when the pane is switching already.
 func (s *Service) startRefresh(x sample.Session, until time.Time) (*refreshRun, func()) {
 	r := &refreshRun{
-		info: proto.Refresh{Pane: x.Pane, Name: x.Name, Agent: x.Agent, Since: s.now(), Until: until},
-		skip: make(chan struct{}),
+		info:    proto.Refresh{Pane: x.Pane, Name: x.Name, Agent: x.Agent, Since: s.now(), Until: until},
+		skip:    make(chan struct{}),
+		waiting: true,
 	}
 	s.mu.Lock()
 	if s.refreshes[x.Pane] != nil {
@@ -133,6 +151,9 @@ func (s *Service) refreshRecord(ctx context.Context, x sample.Session, n proto.S
 		return "", refreshNotRun, release, errors.New("switching already")
 	}
 	defer func() {
+		s.mu.Lock()
+		run.waiting = false
+		s.mu.Unlock()
 		if err != nil {
 			done()
 		}

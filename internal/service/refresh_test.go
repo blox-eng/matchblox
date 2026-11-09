@@ -479,3 +479,37 @@ func TestAWrappedRequestStillGoes(t *testing.T) {
 	res := f.switchTo(t, t.Context(), proto.SwitchAgent{Handoff: proto.DefaultHandoff})
 	f.switched(t, res, "record written for this switch")
 }
+
+func switchNowAct(pane string) proto.Act {
+	return proto.Act{Console: true, RecID: proto.SwitchNowPrefix + pane}
+}
+
+func TestSwitchNowEndsTheWait(t *testing.T) {
+	f := refreshTest(t, nil)
+	refreshLimit = time.Minute
+	typed := make(chan struct{})
+	f.enter = func() { close(typed) }
+	var late proto.Result
+	f.s.MatchGit = func(context.Context, string, ...string) (string, error) {
+		late = f.s.act(t.Context(), switchNowAct("%1")) // the wait is over: the capture runs
+		return "", nil
+	}
+	got := make(chan proto.Result, 1)
+	go func() { got <- f.switchTo(t, t.Context(), proto.SwitchAgent{Handoff: proto.DefaultHandoff}) }()
+	<-typed
+	first := f.s.act(t.Context(), switchNowAct("%1"))
+	if first.Err != "" || len(first.Ran) != 1 || !slices.Equal(first.Ran[0], []string{"switch now"}) {
+		t.Errorf("first %+v", first)
+	}
+	second := f.s.act(t.Context(), switchNowAct("%1"))
+	if second.Err != "no switch waits in %1" {
+		t.Errorf("second %+v", second)
+	}
+	f.switched(t, <-got, "not refreshed: skipped with esc")
+	if late.Err != "no switch waits in %1" || late.Ran != nil {
+		t.Errorf("during the capture %+v", late)
+	}
+	if res := f.s.act(t.Context(), switchNowAct("%9")); res.Err != "no switch waits in %9" {
+		t.Errorf("idle pane %+v", res)
+	}
+}
