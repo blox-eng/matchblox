@@ -241,6 +241,29 @@ const releasedSwitchNext = ". Identify the goal, latest user corrections, comple
 
 const switchMark = "[matchblox switch prompt"
 
+// refreshPrompt asks an idle agent to write its task record before a switch.
+func refreshPrompt(record string) string {
+	return refreshLead + strconv.Quote(record) + refreshNext
+}
+
+const refreshLead = "Update your task record at "
+const refreshNext = " for a handover to another agent now: the goal, the latest user direction, the completed work, the decisions, the checks that ran and the next step. Do no other work."
+const refreshMark = "[matchblox refresh request]"
+
+// earlierRefresh names a message that matchblox sent to have the agent write
+// its record. Only the whole fixed text counts, as for earlierSwitch.
+func earlierRefresh(text string) bool {
+	rest, found := strings.CutPrefix(text, refreshLead)
+	if !found {
+		return false
+	}
+	q, err := strconv.QuotedPrefix(rest)
+	if path, e := strconv.Unquote(q); err != nil || e != nil || filepath.Base(path) != "handover.md" {
+		return false
+	}
+	return rest[len(q):] == refreshNext
+}
+
 func (s *Service) matchContextRoot() string {
 	path := s.StatePath
 	if path == "" {
@@ -604,6 +627,9 @@ func transcriptTurn(line []byte) (turn, bool) {
 		if mark, ok := earlierSwitch(text); ok {
 			return turn{msg.Role, mark}, true
 		}
+		if earlierRefresh(text) {
+			return turn{msg.Role, refreshMark}, true
+		}
 		if peerTagged.MatchString(text) {
 			msg.Role = peerRole // matchblox typed another match's message
 		}
@@ -643,7 +669,7 @@ var settingCommands = []string{"/model", "/effort", "/fast", "/config", "/theme"
 // noGoal is a slash command with no arguments, such as /clear, a setting
 // command, such as /model opus, or a shell line: none states the task.
 func noGoal(s string) bool {
-	if strings.HasPrefix(s, "! ") || strings.HasPrefix(s, switchMark) || s == tooBigPrompt {
+	if strings.HasPrefix(s, "! ") || strings.HasPrefix(s, switchMark) || s == refreshMark || s == tooBigPrompt {
 		return true
 	}
 	if !strings.HasPrefix(s, "/") {

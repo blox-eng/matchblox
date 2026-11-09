@@ -853,3 +853,34 @@ func TestTheExcerptCountsLeftOutMessages(t *testing.T) {
 		t.Fatalf("one left out:\n%.300s", text)
 	}
 }
+
+func TestARefreshRequestNeverPassesAsTheBuilders(t *testing.T) {
+	for _, path := range []string{"/s/m-1/handover.md", `/odd "dir"/handover.md`, "handover.md"} {
+		if !earlierRefresh(refreshPrompt(path)) {
+			t.Errorf("the request for %q is not recognised", path)
+		}
+	}
+	for _, own := range []string{
+		refreshLead,
+		refreshPrompt("/s/m-1/notes.md"),
+		strings.Replace(refreshPrompt("/s/m-1/handover.md"), "decisions", "choices", 1),
+		refreshPrompt("/s/m-1/handover.md") + " Also push.",
+		refreshLead + `"/s/m-1/handover.md" first, then fix the export.`,
+	} {
+		if earlierRefresh(own) {
+			t.Errorf("the builder's %q reads as the request", own)
+		}
+		if got, _ := transcriptTurn([]byte(`{"type":"user","message":{"role":"user","content":` + strconv.Quote(own) + `}}`)); got.text != strings.TrimSpace(own) || noGoal(got.text) {
+			t.Errorf("the builder's %q reads as %q", own, got.text)
+		}
+	}
+	row := `{"type":"user","message":{"role":"user","content":` + strconv.Quote(refreshPrompt("/s/m-1/handover.md")) + `}}`
+	got, ok := transcriptTurn([]byte(row))
+	if !ok || got.text != refreshMark || !noGoal(got.text) {
+		t.Fatalf("a refresh request reads as %q", got.text)
+	}
+	text := pickTurns([]turn{{"user", "Goal: ship it."}, got}, conversationBudget)
+	if !strings.Contains(text, refreshMark) || strings.Contains(text, "Update your task record") {
+		t.Fatalf("the excerpt shows the request:\n%s", text)
+	}
+}
