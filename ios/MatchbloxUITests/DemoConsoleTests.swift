@@ -266,22 +266,25 @@ final class DemoConsoleTests: XCTestCase {
         }
     }
 
-    /// On a phone the first tap on a row goes into its pane: the stand-in here (#352).
+    /// On a phone the first tap on a row goes into its pane: the stand-in here (#352). The stand-in
+    /// of an agent at a question shows its hint; any other shows where the keys go.
     @MainActor
     private func goInto(_ app: XCUIApplication, row text: String) {
-        tapRow(in: app, containing: text, until: "keys go to \(text)")
+        tapRow(in: app, containing: text, until: "keys go to \(text)", "type 2 to answer")
     }
 
-    /// Taps a row, and taps once more only when the first tap visibly did nothing in 6 seconds.
+    /// Taps a row, and taps once more only when the first tap visibly did nothing in 6 seconds:
+    /// the screen shows none of the texts in shown.
     @MainActor
-    private func tapRow(in app: XCUIApplication, containing text: String, until shown: String) {
+    private func tapRow(in app: XCUIApplication, containing text: String, until shown: String...) {
         let terminal = app.descendants(matching: .any)["demo-terminal"]
         waitUntilSteady(terminal)
         tapRow(in: app, containing: text)
-        let reacted = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", shown), object: terminal)
+        let format = shown.map { _ in "label CONTAINS %@" }.joined(separator: " OR ")
+        let reacted = XCTNSPredicateExpectation(predicate: NSPredicate(format: format, argumentArray: shown), object: terminal)
         if XCTWaiter().wait(for: [reacted], timeout: 6) != .completed {
             waitUntilSteady(terminal)
-            if !terminal.label.contains(shown) { tapRow(in: app, containing: text) }
+            if !shown.contains(where: { terminal.label.contains($0) }) { tapRow(in: app, containing: text) }
         }
     }
 
