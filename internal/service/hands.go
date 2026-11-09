@@ -15,7 +15,7 @@ import (
 )
 
 // paneActs are the acts that name a pane after the colon.
-var paneActs = []string{"message:", proto.PickPrefix, "answer:", "compact:", "hold:", "release:", "park:", "kill:", "rename:", "switch:", proto.KeysPrefix, proto.CommandPrefix}
+var paneActs = []string{"message:", proto.PickPrefix, "answer:", "compact:", "hold:", "release:", "park:", "kill:", "rename:", "switch:", proto.SwitchNowPrefix, proto.KeysPrefix, proto.CommandPrefix}
 
 // typedPane is the pane a message, an answer or a pick types into.
 func typedPane(recID string) string {

@@ -262,7 +262,7 @@ func (s *Service) dispatch(ctx context.Context, a proto.Act) proto.Result {
 		return s.rename(ctx, pane, a)
 	}
 	if pane, ok := strings.CutPrefix(a.RecID, proto.SwitchNowPrefix); ok {
-		return s.switchNow(pane)
+		return s.switchNow(pane, a)
 	}
 	if pane, ok := strings.CutPrefix(a.RecID, "switch:"); ok {
 		return s.switchAgent(ctx, pane, a)

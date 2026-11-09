@@ -513,3 +513,30 @@ func TestSwitchNowEndsTheWait(t *testing.T) {
 		t.Errorf("idle pane %+v", res)
 	}
 }
+
+func TestSwitchNowRefusesTheStokerAndItsPanes(t *testing.T) {
+	s, _ := handsLife(t)
+	s.drive("%4")
+	x, _ := s.sessionAt("%1")
+	run, done := s.startRefresh(x, time.Now().Add(time.Minute))
+	defer done()
+	for _, from := range []string{"", "%4"} {
+		a := switchNowAct("%1")
+		a.Console, a.From = false, from
+		if from == "" {
+			a = fromStokerAct("switchnow:%1", "")
+		}
+		res := s.act(t.Context(), a)
+		if res.Err != "the stoker does not switch agents: the builder does" {
+			t.Errorf("from %q: %+v", from, res)
+		}
+	}
+	select {
+	case <-run.skip:
+		t.Error("a refused act ended the wait")
+	default:
+	}
+	if res := s.act(t.Context(), proto.Act{RecID: "switchnow:%1", From: "%7"}); res.Err != "" {
+		t.Errorf("the builder's shell: %+v", res)
+	}
+}

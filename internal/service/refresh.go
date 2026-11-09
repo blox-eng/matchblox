@@ -26,7 +26,10 @@ type refreshRun struct {
 // switchNow ends the wait of the switch in pane, once. The mark outlives
 // the wait through the capture and the respawn, so a pane marked is not
 // always a pane that waits.
-func (s *Service) switchNow(pane string) proto.Result {
+func (s *Service) switchNow(pane string, a proto.Act) proto.Result {
+	if s.agentsPane(a) {
+		return refuseText("the stoker does not switch agents: the builder does")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	r := s.refreshes[pane]
