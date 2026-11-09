@@ -729,6 +729,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		st := proto.State(msg)
 		m.queue = st.Queue
 		toast := m.stokerNews(st.Stoker)
+		if joined := m.joinNews(st.Chains, st.Sessions); joined != "" {
+			toast = joined
+		}
 		m.stoker, m.stokerServer = st.Stoker, st.StokerServer
 		if !m.stokerClaims() {
 			m.dockSwitched = false

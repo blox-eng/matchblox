@@ -46,7 +46,7 @@ func fuseState(t *testing.T, chained ...[]string) proto.State {
 	st.Ships, st.Children = nil, nil
 	st.Chains = &state.ChainsView{}
 	for i, names := range chained {
-		c := chains.Chain{ID: "c" + string(rune('1'+i)), Repo: "/home/user/src/hearth"}
+		c := chains.Chain{ID: "c" + string(rune('1'+i)), Name: fuseTeams[i], Repo: "/home/user/src/hearth"}
 		for _, n := range names {
 			for _, s := range st.Sessions {
 				if s.Name == n {
@@ -58,6 +58,9 @@ func fuseState(t *testing.T, chained ...[]string) proto.State {
 	}
 	return st
 }
+
+// fuseTeams name the chains of fuseState, in order.
+var fuseTeams = []string{"hearth", "web", "docs"}
 
 // listLines are the lines of the Sessions list w wide, plain, each row cut
 // to n cells: the mark, the match, the fuse and the name. A group's label
@@ -552,5 +555,92 @@ func TestOpenedLinesStartWithTwoBlanks(t *testing.T) {
 	drain(cmd)
 	if len(*ran) != 1 || next.(Model).standIn {
 		t.Errorf("a tap on ⏎ go in ran %q, stand-in %v", *ran, next.(Model).standIn)
+	}
+}
+
+// TestSharedMatchDrawsInItsFirstTeam: kindle-web is in hearth and web; it
+// draws in hearth's fuse and says it is also in web, and web's other match
+// keeps a stub.
+func TestSharedMatchDrawsInItsFirstTeam(t *testing.T) {
+	m := fuseModel(t, 160, fuseState(t, mockupChain, []string{"kindle-web", "flint-auth"}), "")
+	got := listLines(m, 100, 20)
+	sameLines(t, got, []string{
+		" WAITS FOR YOU · 1 · chain of 3",
+		"▌╿─╮ kindle-web · al",
+		" ✦─┤ hearth-api",
+		" ╿─╯ ember-billing",
+		" WORKING · 1 · chain of 2",
+		" ✦─╴ flint-auth",
+	})
+	var b body
+	m.sessionRows(&b, 100)
+	if l := lineWith(b.lines, "kindle-web"); !strings.Contains(l, m.st.faint.Render(" · also in web")) {
+		t.Errorf("kindle-web does not say it is also in web: %q", l)
+	}
+	if l := ansi.Strip(lineWith(b.lines, "flint-auth")); !strings.Contains(l, "─╴ flint-auth") {
+		t.Errorf("web's other match has no stub: %q", l)
+	}
+	if l := ansi.Strip(lineWith(b.lines, "hearth-api")); strings.Contains(l, "also in") {
+		t.Errorf("a match in one team says also in: %q", l)
+	}
+}
+
+// TestSharedMatchRowSaysAlsoInOnlyWithRoom: on a phone with no room the
+// name stays whole and the suffix goes.
+func TestSharedMatchRowSaysAlsoInOnlyWithRoom(t *testing.T) {
+	m := fuseModel(t, 44, fuseState(t, mockupChain, []string{"kindle-web", "flint-auth"}), "")
+	var b body
+	m.sessionRows(&b, 44)
+	if l := ansi.Strip(lineWith(b.lines, "kindle-web")); strings.Contains(l, "also in") || !strings.Contains(l, "kindle-web") {
+		t.Errorf("no room: %q", l)
+	}
+}
+
+// joinModel is the console after a first state with hearth of two, then a
+// state where state has the given chains.
+func joinModel(t *testing.T, width int, next ...[]string) Model {
+	t.Helper()
+	var m tea.Model = New(Options{NoMotion: true, Conn: newFake(), Now: func() time.Time { return demoAt }})
+	m, _ = m.Update(tea.WindowSizeMsg{Width: width, Height: 30})
+	m, _ = m.Update(stateMsg(fuseState(t, mockupChain[:2])))
+	m, _ = m.Update(stateMsg(fuseState(t, next...)))
+	return m.(Model)
+}
+
+func TestJoinToastAndSpark(t *testing.T) {
+	if m := joinModel(t, 160, mockupChain); m.toast != "ember-billing joined hearth · u in its room takes it out" {
+		t.Fatalf("toast = %q", m.toast)
+	}
+}
+
+func TestJoinToastNarrow(t *testing.T) {
+	if m := joinModel(t, 40, mockupChain); m.toast != "ember-billing joined hearth · u: out" {
+		t.Fatalf("toast = %q", m.toast)
+	}
+}
+
+func TestNewTeamToast(t *testing.T) {
+	if m := joinModel(t, 160, mockupChain[:2], []string{"flint-auth", "spark-docs"}); m.toast != "web formed: flint-auth, spark-docs" {
+		t.Fatalf("toast = %q", m.toast)
+	}
+}
+
+func TestNoJoinNoToast(t *testing.T) {
+	if m := joinModel(t, 160, mockupChain[:2]); m.toast != "" {
+		t.Fatalf("toast = %q", m.toast)
+	}
+}
+
+func TestOutOfTeamAsks(t *testing.T) {
+	m := fuseModel(t, 160, fuseState(t, mockupChain), "")
+	var s sample.Session
+	for _, x := range m.snap.Sessions {
+		if x.Name == "ember-billing" {
+			s = x
+		}
+	}
+	a := m.outOfTeam(s, "hearth")
+	if a.label != "take ember-billing out of hearth" || a.rec != "chain:out:"+s.Pane+"@hearth" || !a.destructive {
+		t.Fatalf("%+v", a)
 	}
 }

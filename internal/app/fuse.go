@@ -84,8 +84,13 @@ func (m *Model) indexChains() {
 	present := map[chainKey]int{}
 	of := map[rowKey]chainKey{}
 	for _, s := range m.all.sessions {
-		if k, ok := has(s); ok && !m.isStoker(s) {
-			present[k]++
+		if m.isStoker(s) {
+			continue
+		}
+		for _, c := range m.teamsOf(s) { // a match in two teams is present in both
+			present[chainKey{s.Host, c.ID}]++
+		}
+		if k, ok := has(s); ok {
 			of[keyOf(s)] = k
 		}
 	}
@@ -107,6 +112,11 @@ func (m *Model) indexChains() {
 				ix.need[k] = g
 			}
 			ix.shown[k]++
+			for _, c := range m.teamsOf(s) { // shown under its first team, not hidden from the others
+				if o := (chainKey{s.Host, c.ID}); o != k && ix.present[o] > 1 {
+					ix.shown[o]++
+				}
+			}
 		}
 	}
 	m.chainIx = ix
@@ -377,4 +387,89 @@ func (m Model) sharingRepos(ss []sample.Session) map[rowKey]bool {
 		}
 	}
 	return out
+}
+
+// teamsOf are the teams s is in, in the order they formed: it draws in the
+// first one's fuse.
+func (m Model) teamsOf(s sample.Session) []chains.Chain {
+	cv := m.chainsOf(s.Host)
+	if cv == nil {
+		return nil
+	}
+	me := memberOf(s)
+	var out []chains.Chain
+	for _, c := range cv.Chains {
+		if slices.ContainsFunc(c.Members, me.Same) {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// alsoIn is what a row adds for each team after the one whose fuse it
+// draws in: " · also in web", or "".
+func (m Model) alsoIn(s sample.Session) string {
+	teams := m.teamsOf(s)
+	if len(teams) < 2 {
+		return ""
+	}
+	var names []string
+	for _, c := range teams[1:] {
+		names = append(names, c.Name)
+	}
+	return " · also in " + strings.Join(names, ", ")
+}
+
+// joinNews is the toast for a change of the teams from the console's last
+// view to next: a match that joined a team, or a team that formed. "" for
+// none, and on the first view.
+func (m Model) joinNews(next *state.ChainsView, sessions []sample.Session) string {
+	if next == nil || m.chains == nil && !m.have {
+		return ""
+	}
+	name := func(mb chains.Member) string {
+		for _, s := range sessions {
+			if memberOf(s).Same(mb) {
+				return s.Name
+			}
+		}
+		return mb.Pane
+	}
+	was := map[string]chains.Chain{}
+	if m.chains != nil {
+		for _, c := range m.chains.Chains {
+			was[c.ID] = c
+		}
+	}
+	for _, c := range next.Chains {
+		old, ok := was[c.ID]
+		if !ok {
+			var names []string
+			for _, mb := range c.Members {
+				names = append(names, name(mb))
+			}
+			return c.Name + " formed: " + strings.Join(names, ", ")
+		}
+		for _, mb := range c.Members {
+			if !slices.ContainsFunc(old.Members, mb.Same) {
+				out := " · u in its room takes it out"
+				if m.width < 50 {
+					out = " · u: out"
+				}
+				return name(mb) + " joined " + c.Name + out
+			}
+		}
+	}
+	return ""
+}
+
+// outOfTeam is the act that takes s out of team, from the console only:
+// it asks first, as the match did not ask to leave.
+func (m Model) outOfTeam(s sample.Session, team string) action {
+	return action{
+		label:       "take " + s.Name + " out of " + team,
+		rec:         proto.ChainPrefix + "out:" + s.Pane + "@" + team,
+		destructive: true,
+		host:        s.Host,
+	}
 }
