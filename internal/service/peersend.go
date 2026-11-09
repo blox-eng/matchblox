@@ -93,6 +93,10 @@ func (s *Service) peerSend(ctx context.Context, sender sample.Session, pane stri
 	if x.Agent == "opencode" {
 		return proto.Result{Err: x.Name + " runs OpenCode, which matchblox cannot type into safely. It sees the chain in `matchblox chain`."}
 	}
+	// Not into the inbox either: the agent would read it in its refresh turn.
+	if err := s.switchingErr(pane, nil); err != nil {
+		return proto.Result{Err: err.Error()}
+	}
 	now := s.now()
 	slot, err := s.peers.reserve(a.From, pane, x.Name, now)
 	if err != nil {

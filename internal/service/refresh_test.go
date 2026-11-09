@@ -415,3 +415,67 @@ func TestASecondRefreshOfAPaneIsRefused(t *testing.T) {
 		t.Fatalf("refreshes %+v", got)
 	}
 }
+
+// Only the refresh's own request passes the mark: a peer line sent during
+// the wait is refused, and the mark stays through the capture until the
+// respawn is done.
+func TestTheMarkHoldsFromTheRequestToTheRespawn(t *testing.T) {
+	f := refreshTest(t, nil)
+	chainUp(f.s, "%3", "%1")
+	peer := make(chan proto.Result, 1)
+	f.enter = func() {
+		go func() { // the request's typing holds the pane: this waits for it
+			peer <- f.s.act(t.Context(), peerAct("message:%1", "hello"))
+			f.write(t)
+			f.endTurn(false)
+		}()
+	}
+	var capture []string
+	f.s.MatchGit = func(context.Context, string, ...string) (string, error) {
+		if !f.s.switching("%1") {
+			capture = append(capture, "no mark")
+		}
+		if res := f.s.act(t.Context(), proto.Act{Console: true, RecID: "kill:%1", Confirm: "y"}); res.Err != "switching already" {
+			capture = append(capture, "kill: "+res.Err)
+		}
+		return "", nil
+	}
+	res := f.switchTo(t, t.Context(), proto.SwitchAgent{Handoff: proto.DefaultHandoff})
+	f.switched(t, res, "record written for this switch")
+	if got := <-peer; got.Err != "work switches agents now: send again after" {
+		t.Errorf("peer send during the wait: %+v", got)
+	}
+	if len(capture) != 0 {
+		t.Errorf("during the capture: %q", capture)
+	}
+	if f.s.switching("%1") || len(refreshes(f.s)) != 0 {
+		t.Error("the switch left its mark")
+	}
+	if got := f.typed(); len(got) != 1 {
+		t.Errorf("typed %q", got)
+	}
+}
+
+// A real prompt wraps the request: the draft read back is its first row
+// only, and that still lets the Enter go.
+func TestAWrappedRequestStillGoes(t *testing.T) {
+	f := refreshTest(t, nil)
+	f.enter = func() { f.write(t); f.endTurn(false) }
+	capture := f.s.Capture
+	f.s.Capture = func(ps []string) map[string]string {
+		out := capture(ps)
+		if sc, ok := out["%1"]; ok {
+			var rows []string
+			for line := range strings.Lines(sc) {
+				for len(line) > 80 {
+					rows, line = append(rows, line[:80]+"\n"), line[80:]
+				}
+				rows = append(rows, line)
+			}
+			out["%1"] = strings.Join(rows, "")
+		}
+		return out
+	}
+	res := f.switchTo(t, t.Context(), proto.SwitchAgent{Handoff: proto.DefaultHandoff})
+	f.switched(t, res, "record written for this switch")
+}

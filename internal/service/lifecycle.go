@@ -380,10 +380,11 @@ func (s *Service) switchAgent(ctx context.Context, pane string, a proto.Act) pro
 	}
 	// The refresh waits before the account is held: a wait of minutes would
 	// hold up every start on that account.
-	refresh, end, err := s.refreshRecord(ctx, x, n, word)
+	refresh, end, unmark, err := s.refreshRecord(ctx, x, n, word)
 	if err != nil {
 		return refuse(err)
 	}
+	defer unmark()
 	// The account is held before the hold moves: a switch it refuses
 	// leaves the seat as it was.
 	now, acct := s.switchAccount(n.Agent)

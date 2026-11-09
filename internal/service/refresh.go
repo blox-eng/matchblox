@@ -99,12 +99,16 @@ const (
 
 // refreshRecord asks x, the idle agent a switch replaces, to write its task
 // record, and waits for that turn to end, up to refreshLimit. The pane is
-// marked as switching for the wait. note is the capture's word on the
-// record: written for this switch, or not refreshed and why. It is "" for
-// a switch with no handoff, which captures nothing. err refuses the switch.
-func (s *Service) refreshRecord(ctx context.Context, x sample.Session, n proto.SwitchAgent, word string) (note string, end refreshEnd, err error) {
+// marked as switching from the request until release runs: the switch
+// keeps it through the capture and the respawn, so no stoker step or peer
+// line lands in that time. release is never nil. note is the capture's
+// word on the record: written for this switch, or not refreshed and why.
+// It is "" for a switch with no handoff, which captures nothing. err
+// refuses the switch, and then the mark is gone already.
+func (s *Service) refreshRecord(ctx context.Context, x sample.Session, n proto.SwitchAgent, word string) (note string, end refreshEnd, release func(), err error) {
+	release = func() {}
 	if n.Handoff == "" {
-		return "", refreshNotRun, nil
+		return "", refreshNotRun, release, nil
 	}
 	record := s.managedRecord(x)
 	why := ""
@@ -121,48 +125,54 @@ func (s *Service) refreshRecord(ctx context.Context, x sample.Session, n proto.S
 		why = "skipped with --no-refresh"
 	}
 	if why != "" {
-		return "not refreshed: " + why, refreshNotRun, nil
+		return "not refreshed: " + why, refreshNotRun, release, nil
 	}
 	sent := s.now()
-	run, release := s.startRefresh(x, sent.Add(refreshLimit))
+	run, done := s.startRefresh(x, sent.Add(refreshLimit))
 	if run == nil {
-		return "", refreshNotRun, errors.New("switching already")
+		return "", refreshNotRun, release, errors.New("switching already")
 	}
-	defer release()
+	defer func() {
+		if err != nil {
+			done()
+		}
+	}()
 	limit := time.NewTimer(refreshLimit)
 	defer limit.Stop()
 	before := modTime(record)
+	// The tag is the lead, not the whole request: a prompt narrower than the
+	// request wraps it, and its draft reads back as the first row only.
 	res, _, _, _ := s.typeLine(ctx, x, refreshPrompt(record), refreshLead, refreshLead, run)
 	if ctx.Err() != nil {
-		return "", refreshNotRun, ctx.Err()
+		return "", refreshNotRun, release, ctx.Err()
 	}
 	if res.Err != "" {
-		return "not refreshed: the request did not reach " + x.Name + ": " + strings.TrimSuffix(res.Err, peerRetry), refreshNotRun, nil
+		return "not refreshed: the request did not reach " + x.Name + ": " + strings.TrimSuffix(res.Err, peerRetry), refreshNotRun, done, nil
 	}
 	tick := time.NewTicker(refreshPoll)
 	defer tick.Stop()
 	for {
 		select {
 		case <-ctx.Done():
-			return "", refreshNotRun, ctx.Err()
+			return "", refreshNotRun, release, ctx.Err()
 		case <-run.skip:
-			return "not refreshed: skipped with esc", refreshCut, nil
+			return "not refreshed: skipped with esc", refreshCut, done, nil
 		case <-limit.C:
-			return "not refreshed: the refresh timed out after " + waitText(refreshLimit), refreshCut, nil
+			return "not refreshed: the refresh timed out after " + waitText(refreshLimit), refreshCut, done, nil
 		case <-tick.C:
 		}
 		cur, ok := s.sessionAt(x.Pane)
 		if !ok || cur.PID != x.PID || cur.Start != x.Start {
-			return "", refreshNotRun, errors.New("the session changed while this switch read it: switch again")
+			return "", refreshNotRun, release, errors.New("the session changed while this switch read it: switch again")
 		}
 		if cur.TurnEnded.After(sent) && cur.Resting() && !s.waitsOn(x.Pane, cur) {
 			break
 		}
 	}
 	if modTime(record).After(before) {
-		return "record written for this switch", refreshTurnEnded, nil
+		return "record written for this switch", refreshTurnEnded, done, nil
 	}
-	return "not refreshed: it ended its turn without writing the record", refreshTurnEnded, nil
+	return "not refreshed: it ended its turn without writing the record", refreshTurnEnded, done, nil
 }
 
 // managedRecord is the task record of x's match, in a bundle this service
