@@ -9,10 +9,12 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/blox-eng/matchblox/internal/keycmd"
 	"github.com/blox-eng/matchblox/internal/tmuxtest"
@@ -110,7 +112,7 @@ func TestHomeKeyArgvBindsPrefixMAsTheKey(t *testing.T) {
 	}
 	ifHome := []string{"if-shell", "-F", "#{==:#{pane_current_command},matchblox}",
 		`if-shell -F "#{pane_in_mode}" "send-keys -X cancel" ; send-keys -H 1b 5f 6d 61 74 63 68 62 6c 6f 78 1b 5c`,
-		`switch-client -t =matchblox ; run-shell -C -t =matchblox: "#{W:#{P:#{?#{==:#{pane_current_command},matchblox},select-window -t #{window_id} ; select-pane -t #{pane_id} ; ,}}}"`}
+		`if-shell -F "#{S:#{?#{==:#{session_name},matchblox},1,}}" { switch-client -t =matchblox ; run-shell -C -t =matchblox: "#{W:#{P:#{?#{==:#{pane_current_command},matchblox},select-window -t #{window_id} ; select-pane -t #{pane_id} ; ,}}}" } { display-message "No matchblox console here: run matchblox in a shell to open one" }`}
 	if want := append([]string{"bind-key", "-n", "User900"}, ifHome...); !slices.Equal(cmds[1], want) {
 		t.Errorf("the home key:\n got %q\nwant %q", cmds[1], want)
 	}
@@ -212,4 +214,70 @@ func TestViewerHookArgvTellsOnlyTheConsole(t *testing.T) {
 			}
 		}
 	}
+}
+
+// TestTheWayBackWithNoConsoleSaysHowToOpenOne: on a real tmux server with
+// no console's session, the home key says how to open one instead of
+// tmux's bare "can't find session" (#354). With the session there, it goes
+// there.
+func TestTheWayBackWithNoConsoleSaysHowToOpenOne(t *testing.T) {
+	tmux32(t)
+	if _, err := exec.LookPath("script"); err != nil {
+		t.Skip("script is not installed")
+	}
+	sock := tmuxtest.Server(t)
+	env := append(slices.DeleteFunc(os.Environ(), func(e string) bool {
+		return strings.HasPrefix(e, "TMUX=") || strings.HasPrefix(e, "TMUX_PANE=") || strings.HasPrefix(e, "TERM=")
+	}), "TERM=xterm-256color")
+	tmux := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command("tmux", append([]string{"-L", sock, "-f", os.DevNull}, args...)...) //nolint:gosec // the test's own server
+		cmd.Env = env
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("tmux %q: %v: %s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	tmux("new-session", "-d", "-s", "work", "-x", "80", "-y", "24")
+	t.Cleanup(func() { _ = exec.Command("tmux", "-L", sock, "kill-server").Run() }) //nolint:gosec // the test's own server
+	tmux(HomeKeyArgv()[1:]...)
+	path := tmux("display-message", "-p", "#{socket_path}")
+	args := []string{"-qc", "tmux -S " + path + " attach -t work", os.DevNull}
+	if runtime.GOOS == "darwin" {
+		args = []string{"-q", os.DevNull, "tmux", "-S", path, "attach", "-t", "work"}
+	}
+	client := exec.Command("script", args...)
+	client.Env = env
+	if _, err := client.StdinPipe(); err != nil { // an EOF would end the client
+		t.Fatal(err)
+	}
+	if err := client.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = client.Process.Kill(); _ = client.Wait() })
+	tty := ""
+	for deadline := time.Now().Add(5 * time.Second); tty == "" && time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
+		tty = tmux("list-clients", "-F", "#{client_tty}")
+	}
+	if tty == "" {
+		t.Fatal("no client attached")
+	}
+	until := func(what string, ok func() bool) {
+		t.Helper()
+		for deadline := time.Now().Add(3 * time.Second); !ok(); time.Sleep(50 * time.Millisecond) {
+			if time.Now().After(deadline) {
+				t.Fatal(what)
+			}
+		}
+	}
+	tmux("send-keys", "-K", "-c", tty, "User"+homeUserKey)
+	until("the home key with no console did not say how to open one:\n"+tmux("show-messages"), func() bool {
+		return strings.Contains(tmux("show-messages"), NoHome)
+	})
+	tmux("new-session", "-d", "-s", Home, "-x", "80", "-y", "24")
+	tmux("send-keys", "-K", "-c", tty, "User"+homeUserKey)
+	until("the home key did not go to the console's session", func() bool {
+		return tmux("display-message", "-p", "-c", tty, "#{session_name}") == Home
+	})
 }

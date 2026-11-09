@@ -6,6 +6,16 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **Enter no longer ends the console.** Going into an agent's pane gives
+  your terminal a tmux session of its own. Since 0.38.0, the option that
+  ends that session once you leave it landed on the console's own
+  `matchblox` session instead, so the console ended as you went in, and
+  each jump left a session behind. Every step now names the jump's own
+  session. `Ctrl+M` with no console says how to open one, not a bare tmux
+  error. ([#354](https://github.com/blox-eng/matchblox/issues/354))
+
 ## [0.38.0] - 2026-11-08
 
 ### Changed
