@@ -85,7 +85,8 @@ func TestWayBackParses(t *testing.T) {
 	out = regexp.MustCompile(` {2,}`).ReplaceAll(out, []byte(" "))
 	for _, want := range []string{
 		`bind-key -T prefix m if-shell -F "#{==:#{pane_current_command},matchblox}"`,
-		`"switch-client -t =matchblox"`,
+		`bind-key -T root MouseDown1Status if-shell -F "#{==:#{mouse_status_range},matchblox}"`,
+		"switch-client -t #{pane_id} ;",
 		"#[range=user|matchblox] ◂ matchblox #[norange]",
 		"status-left-length 40",
 	} {
@@ -100,24 +101,27 @@ func TestWayBackParses(t *testing.T) {
 
 // TestHomeKeyArgvBindsPrefixMAsTheKey: the home key and prefix m run one
 // command: on a pane that runs a console it hands the key on, elsewhere it
-// shows the home console.
+// shows a console. A tap on ◂ matchblox goes there too.
 func TestHomeKeyArgvBindsPrefixMAsTheKey(t *testing.T) {
 	argv := HomeKeyArgv()
 	var cmds [][]string
 	for part := range strings.SplitSeq(strings.Join(argv[1:], "\x00"), "\x00;\x00") {
 		cmds = append(cmds, strings.Split(part, "\x00"))
 	}
-	if len(cmds) != 3 {
+	if len(cmds) != 4 {
 		t.Fatalf("%d commands in %q", len(cmds), argv)
 	}
 	ifHome := []string{"if-shell", "-F", "#{==:#{pane_current_command},matchblox}",
 		`if-shell -F "#{pane_in_mode}" "send-keys -X cancel" ; send-keys -H 1b 5f 6d 61 74 63 68 62 6c 6f 78 1b 5c`,
-		`if-shell -F "#{S:#{?#{==:#{session_name},matchblox},1,}}" { switch-client -t =matchblox ; run-shell -C -t =matchblox: "#{W:#{P:#{?#{==:#{pane_current_command},matchblox},select-window -t #{window_id} ; select-pane -t #{pane_id} ; ,}}}" } { display-message "No matchblox console here: run matchblox in a shell to open one" }`}
+		`if-shell -F "#{S:#{?#{==:#{session_name},matchblox},1,}}" { switch-client -t =matchblox ; run-shell -C -t =matchblox: "#{W:#{P:#{?#{==:#{pane_current_command},matchblox},select-window -t #{window_id} ; select-pane -t #{pane_id} ; ,}}}" } { if-shell -F "#{S:#{W:#{P:#{?#{==:#{pane_current_command},matchblox},1,}}}}" { run-shell -C "#{S:#{W:#{P:#{?#{==:#{pane_current_command},matchblox},switch-client -t #{pane_id} ; ,}}}}" } { display-message "No matchblox console here: run matchblox in a shell to open one" } }`}
 	if want := append([]string{"bind-key", "-n", "User900"}, ifHome...); !slices.Equal(cmds[1], want) {
 		t.Errorf("the home key:\n got %q\nwant %q", cmds[1], want)
 	}
 	if want := append([]string{"bind-key", "m"}, ifHome...); !slices.Equal(cmds[2], want) {
 		t.Errorf("prefix m:\n got %q\nwant %q", cmds[2], want)
+	}
+	if want := []string{"bind-key", "-n", "MouseDown1Status", "if-shell", "-F", "#{==:#{mouse_status_range},matchblox}", ifHome[4], "select-window -t ="}; !slices.Equal(cmds[3], want) {
+		t.Errorf("the tap on ◂ matchblox:\n got %q\nwant %q", cmds[3], want)
 	}
 }
 
@@ -217,9 +221,9 @@ func TestViewerHookArgvTellsOnlyTheConsole(t *testing.T) {
 }
 
 // TestTheWayBackWithNoConsoleSaysHowToOpenOne: on a real tmux server with
-// no console's session, the home key says how to open one instead of
-// tmux's bare "can't find session" (#354). With the session there, it goes
-// there.
+// no console, the home key says how to open one instead of tmux's bare
+// "can't find session" (#354). A console run in place in another session
+// is found there. With the console's session there, it goes there.
 func TestTheWayBackWithNoConsoleSaysHowToOpenOne(t *testing.T) {
 	tmux32(t)
 	if _, err := exec.LookPath("script"); err != nil {
@@ -275,6 +279,27 @@ func TestTheWayBackWithNoConsoleSaysHowToOpenOne(t *testing.T) {
 	until("the home key with no console did not say how to open one:\n"+tmux("show-messages"), func() bool {
 		return strings.Contains(tmux("show-messages"), NoHome)
 	})
+	// A console run in place, in a pane of another session: tmux knows it
+	// by its command's name, so a link named matchblox stands in for it.
+	bin := filepath.Join(t.TempDir(), Home)
+	sleep, err := exec.LookPath("sleep")
+	if err != nil {
+		t.Skip("sleep is not installed")
+	}
+	if err := os.Symlink(sleep, bin); err != nil {
+		t.Fatal(err)
+	}
+	tmux("new-session", "-d", "-s", "side", "-x", "80", "-y", "24")
+	tmux("new-window", "-t", "side", bin+" 300")
+	inPlace := tmux("display-message", "-p", "-t", "side:1", "#{pane_id}")
+	until("the console in side never ran", func() bool {
+		return tmux("display-message", "-p", "-t", inPlace, "#{pane_current_command}") == Home
+	})
+	tmux("send-keys", "-K", "-c", tty, "User"+homeUserKey)
+	until("the home key did not go to the console run in place", func() bool {
+		return tmux("display-message", "-p", "-c", tty, "#{pane_id}") == inPlace
+	})
+	tmux("switch-client", "-c", tty, "-t", "=work")
 	tmux("new-session", "-d", "-s", Home, "-x", "80", "-y", "24")
 	tmux("send-keys", "-K", "-c", tty, "User"+homeUserKey)
 	until("the home key did not go to the console's session", func() bool {
