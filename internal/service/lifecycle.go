@@ -413,8 +413,8 @@ func (s *Service) switchAgent(ctx context.Context, pane string, a proto.Act) pro
 	}
 	// The capture takes time: a turn the latest state shows started during
 	// it still takes the second y, and a new session there is not the one
-	// the builder chose. A refresh the limit or esc cut short may still run
-	// its own turn.
+	// the builder chose. A refresh the limit or a switch now cut short may
+	// still run its own turn.
 	if cur, ok := s.sessionAt(pane); !ok || cur.PID != x.PID || cur.Start != x.Start {
 		_ = os.RemoveAll(bundle) // no match starts from it
 		return refuseText("the session changed while this switch read it: switch again")

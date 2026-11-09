@@ -347,8 +347,13 @@ func (m Model) waiting() bool {
 }
 
 // switchNow ends the record wait of this console's switch: the switch
-// goes ahead from the evidence.
+// goes ahead from the evidence. It sends once: the service refuses a
+// second.
 func (m *Model) switchNow() tea.Cmd {
+	if m.jumpAfter.now {
+		return nil
+	}
+	m.jumpAfter.now = true
 	return m.sendTo(cmp.Or(m.jumpAfter.host, m.opt.Host), proto.Act{RecID: proto.SwitchNowPrefix + m.jumpAfter.pane})
 }
 
@@ -377,6 +382,9 @@ func (m Model) waitRows(w int) (wait, keys string, spans []span, ok bool) {
 	d := max(m.now().Sub(r.Since), 0).Truncate(time.Second)
 	clock := fmt.Sprintf("%d:%02d", int(d.Minutes()), int(d.Seconds())%60)
 	wait = fit(" "+st.accent.Render("◐ ")+st.text.Render(r.Agent+" writes its task record ")+st.muted.Render(clock), w)
+	if m.jumpAfter.now {
+		return wait, fit(" "+st.muted.Render("switching now"), w), nil, true
+	}
 	esc := keyWord(back, st.accent, st.muted, " switches now")
 	return wait, fit(" "+esc, w), []span{{1, 1 + lipgloss.Width(esc), back.Keys()[0]}}, true
 }

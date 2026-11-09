@@ -113,6 +113,8 @@ func TestStartNotesAreTheSkipsOfARunAct(t *testing.T) {
 	}{
 		{Result{Skipped: []string{linked}}, []string{linked}},
 		{Result{Skipped: []string{shared, copied, CopyGoesOn}}, []string{shared, copied, CopyGoesOn}},
+		{Result{Skipped: []string{linked, RecordWritten}}, []string{linked, RecordWritten}},
+		{Result{Skipped: []string{NotRefreshed + "switched now"}}, []string{NotRefreshed + "switched now"}},
 		{Result{}, nil},
 		{Result{Skipped: []string{"guard stopped it"}}, nil},
 		{Result{Skipped: []string{linked, "guard stopped it"}}, nil},

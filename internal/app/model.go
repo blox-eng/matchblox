@@ -379,20 +379,20 @@ type Model struct {
 	chainIx     chainIndex      // worked out in refresh
 	repoMates   map[rowKey]bool // the listed sessions with a repo mate they are not chained with
 	reasons     map[string]proto.IdleReason
-	agents      []string                               // the agents a new session can start on the host
-	renames     map[string]string                      // the names sessions take at their next rest, by pane
-	accounts    map[string][]string                    // the accounts each agent can start on: default first
-	skipped     map[string][]accounts.Skip             // the folders the service did not list, per agent
-	lastAccount map[string]string                      // the account last started, per agent
-	signIns     map[string]string                      // how a new account's sign-in goes, by pane: "by hand" when matchblox gave up driving it
-	found       *proto.Found                           // the host's repositories and the scan's consent; nil: the service scans nothing
-	scanLater   bool                                   // the scan question was closed or answered at this console
-	scanAct     string                                 // the act of the box's yes, for its result
-	form        *form                                  // the open New session, Rename, Switch agent or scan folders form; nil none
-	jumpAfter   struct{ act, host, pane, done string } // a switch sent: the pane to jump to when it runs
-	startAfter  struct{ act, agent, done string }      // a start on a new account sent: its agent, the last once it runs, and what it says then
-	lastAgent   string                                 // the agent this console last started
-	keptAgent   string                                 // the agent last started, as the service keeps it
+	agents      []string                          // the agents a new session can start on the host
+	renames     map[string]string                 // the names sessions take at their next rest, by pane
+	accounts    map[string][]string               // the accounts each agent can start on: default first
+	skipped     map[string][]accounts.Skip        // the folders the service did not list, per agent
+	lastAccount map[string]string                 // the account last started, per agent
+	signIns     map[string]string                 // how a new account's sign-in goes, by pane: "by hand" when matchblox gave up driving it
+	found       *proto.Found                      // the host's repositories and the scan's consent; nil: the service scans nothing
+	scanLater   bool                              // the scan question was closed or answered at this console
+	scanAct     string                            // the act of the box's yes, for its result
+	form        *form                             // the open New session, Rename, Switch agent or scan folders form; nil none
+	jumpAfter   switchSent                        // a switch sent: the pane to jump to when it runs
+	startAfter  struct{ act, agent, done string } // a start on a new account sent: its agent, the last once it runs, and what it says then
+	lastAgent   string                            // the agent this console last started
+	keptAgent   string                            // the agent last started, as the service keeps it
 	paneSort    sortBy
 	picked      map[wtKey]bool // worktrees x removes
 	batch       *batch
@@ -1492,7 +1492,7 @@ func (m Model) confirm(a action) (tea.Model, tea.Cmd) {
 	cmd := m.sendTo(host, proto.Act{RecID: a.rec, Which: a.which, Confirm: confirm, Text: a.text})
 	m.startRec(a, "a"+strconv.Itoa(m.acts))
 	if pane, ok := strings.CutPrefix(a.rec, "switch:"); ok {
-		m.jumpAfter.act, m.jumpAfter.host, m.jumpAfter.pane, m.jumpAfter.done = "a"+strconv.Itoa(m.acts), a.host, pane, a.done
+		m.jumpAfter = switchSent{act: "a" + strconv.Itoa(m.acts), host: a.host, pane: pane, done: a.done}
 	}
 	if a.agent != "" {
 		m.startAfter.act, m.startAfter.agent, m.startAfter.done = "a"+strconv.Itoa(m.acts), a.agent, a.done
@@ -1522,11 +1522,18 @@ func (m Model) started(r proto.Result) (Model, bool) {
 	return m, true
 }
 
+// switchSent is a switch this console sent: the pane to jump to when it
+// runs, and whether esc sent its switch now.
+type switchSent struct {
+	act, host, pane, done string
+	now                   bool
+}
+
 // switched takes the result of a switch: one that ran jumps to its pane,
 // one that did not says why.
 func (m Model) switched(r proto.Result) (Model, tea.Cmd) {
 	j := m.jumpAfter
-	m.jumpAfter.act, m.jumpAfter.host, m.jumpAfter.pane, m.jumpAfter.done = "", "", "", ""
+	m.jumpAfter = switchSent{}
 	// A switch with notes on what its account shared or skipped ran.
 	notes, ran := proto.StartNotes(r)
 	switch {

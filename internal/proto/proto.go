@@ -93,7 +93,9 @@ type State struct {
 	Used *Used `json:"used,omitempty"`
 	// Clones are the clones the service runs, and the ones that ended
 	// in the last minute: in every snapshot while any is listed.
-	Clones    []Clone   `json:"clones,omitempty"`
+	Clones []Clone `json:"clones,omitempty"`
+	// Refreshes are the record waits before a switch: in every snapshot
+	// while any runs.
 	Refreshes []Refresh `json:"refreshes,omitempty"`
 }
 
@@ -341,8 +343,8 @@ type Names struct {
 	Accounts map[int]string `json:"accounts"`
 }
 
-// The notes of a start on an account that ran: each is one skip of its
-// Result, and the start ran all the same (StartNotes).
+// The notes of a start or a switch that ran: each is one skip of its
+// Result, and the act ran all the same (StartNotes).
 const (
 	// NotLinked starts the note of a like-default account whose new shared
 	// entries did not all link.
@@ -355,6 +357,12 @@ const (
 	NotCopied = "not copied: "
 	// CopyGoesOn is the note of a copy that has not ended.
 	CopyGoesOn = "the copy is not complete: it goes on at the next start"
+	// RecordWritten is the note of a switch whose agent wrote its task
+	// record for it.
+	RecordWritten = "record written for this switch"
+	// NotRefreshed starts the note of a switch that went on without a
+	// fresh task record, and why.
+	NotRefreshed = "not refreshed: "
 )
 
 // noteMax is how many entries Notes names before it counts the rest.
@@ -375,17 +383,30 @@ func Notes(prefix string, items []string) []string {
 
 // StartNotes are the skips of r when r has no error and every skip is a
 // note of a start on an account (NotLinked, StillShared, NotCopied,
-// CopyGoesOn): the act ran all the same.
+// CopyGoesOn) or of a switch's record (RecordWritten, NotRefreshed): the
+// act ran all the same.
 func StartNotes(r Result) ([]string, bool) {
 	if r.Err != "" || len(r.Skipped) == 0 {
 		return nil, false
 	}
 	for _, k := range r.Skipped {
-		if k != CopyGoesOn && !strings.HasPrefix(k, NotLinked) && !strings.HasPrefix(k, StillShared) && !strings.HasPrefix(k, NotCopied) {
+		if !isStartNote(k) {
 			return nil, false
 		}
 	}
 	return slices.Clone(r.Skipped), true
+}
+
+func isStartNote(k string) bool {
+	if k == CopyGoesOn || k == RecordWritten {
+		return true
+	}
+	for _, p := range []string{NotLinked, StillShared, NotCopied, NotRefreshed} {
+		if strings.HasPrefix(k, p) {
+			return true
+		}
+	}
+	return false
 }
 
 // News asks for the news of the match in Pane, at the hook Event.

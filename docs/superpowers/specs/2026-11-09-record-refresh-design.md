@@ -113,9 +113,10 @@ service-side build with the defaults below (2026-11-09).
   record section: "written for this switch" (the record's mtime is after
   the request), or "not refreshed: <reason>", with reasons such as busy,
   waits for you, out of usage until <time>, Cursor/OpenCode give no turn
-  end, the refresh timed out after 3:00, skipped with esc, skipped with
-  `--no-refresh`, the request did not reach the pane (and why), it ended its turn without
-  writing the record.
+  end, the refresh timed out after 3:00, switched now (esc or Ctrl-C: the
+  service cannot tell them apart), skipped with `--no-refresh`, the request
+  did not reach the pane (and why), it ended its turn without writing the
+  record.
 - **The excerpt.** Any refresh request matchblox ever sent is recognised
   by its exact shape (lead, a quoted path whose base is `handover.md`, the
   exact tail), as `earlierSwitch` recognises switch prompts in

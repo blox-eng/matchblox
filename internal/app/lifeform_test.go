@@ -2221,3 +2221,43 @@ func TestAnotherConsoleSeesTheWait(t *testing.T) {
 		}
 	}
 }
+
+func TestASwitchWithARefreshNoteJumps(t *testing.T) {
+	for _, note := range []string{proto.RecordWritten, proto.NotRefreshed + "switched now"} {
+		next, _ := switchState(t, lifeState())
+		var ran [][]string
+		m := next.(Model)
+		m.opt.Run = func(argv []string) error { ran = append(ran, argv); return nil }
+		next, _ = key(m, "A")
+		next, _ = key(next, "enter")
+		next, cmd := key(next, "y")
+		cmd()
+		act := next.(Model).jumpAfter.act
+		done, cmd := next.Update(resultMsg(proto.Result{ActID: act, Ran: [][]string{{"tmux"}}, Skipped: []string{note}}))
+		if want := "switched app-feature to codex; " + note; done.(Model).flash != want {
+			t.Fatalf("flash %q, want %q", done.(Model).flash, want)
+		}
+		c := cmd().(tea.BatchMsg)
+		c[len(c)-1]()
+		if len(ran) != 1 || strings.Join(ran[0], " ") != "tmux switch-client -t %1" {
+			t.Fatalf("%q: ran %v", note, ran)
+		}
+	}
+}
+
+func TestASecondEscDuringTheRecordWaitSendsNothing(t *testing.T) {
+	next, f := recordWait(t, 80)
+	next, cmd := key(next, "esc")
+	if cmd != nil {
+		cmd()
+	}
+	if s := screen(next); !strings.Contains(s, "switching now") || strings.Contains(s, "esc switches now") {
+		t.Fatalf("after esc:\n%s", s)
+	}
+	if _, cmd = key(next, "esc"); cmd != nil {
+		cmd()
+	}
+	if acts := f.acts(); len(acts) != 2 {
+		t.Fatalf("sent %+v", acts)
+	}
+}

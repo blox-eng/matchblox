@@ -435,6 +435,9 @@ func TestTheMarkHoldsFromTheRequestToTheRespawn(t *testing.T) {
 		if !f.s.switching("%1") {
 			capture = append(capture, "no mark")
 		}
+		if rs := refreshes(f.s); len(rs) != 0 {
+			capture = append(capture, fmt.Sprintf("published %+v", rs))
+		}
 		if res := f.s.act(t.Context(), proto.Act{Console: true, RecID: "kill:%1", Confirm: "y"}); res.Err != "switching already" {
 			capture = append(capture, "kill: "+res.Err)
 		}
@@ -490,13 +493,26 @@ func TestSwitchNowEndsTheWait(t *testing.T) {
 	typed := make(chan struct{})
 	f.enter = func() { close(typed) }
 	var late proto.Result
+	cl := &client{kick: make(chan struct{}, 1), screenKick: make(chan struct{}, 1)}
+	f.s.join(cl)
+	defer f.s.leave(cl)
+	kicked := false
 	f.s.MatchGit = func(context.Context, string, ...string) (string, error) {
+		select {
+		case <-cl.kick:
+			kicked = true
+		default:
+		}
 		late = f.s.act(t.Context(), switchNowAct("%1")) // the wait is over: the capture runs
 		return "", nil
 	}
 	got := make(chan proto.Result, 1)
 	go func() { got <- f.switchTo(t, t.Context(), proto.SwitchAgent{Handoff: proto.DefaultHandoff}) }()
 	<-typed
+	select {
+	case <-cl.kick:
+	default:
+	}
 	first := f.s.act(t.Context(), switchNowAct("%1"))
 	if first.Err != "" || len(first.Ran) != 1 || !slices.Equal(first.Ran[0], []string{"switch now"}) {
 		t.Errorf("first %+v", first)
@@ -505,7 +521,10 @@ func TestSwitchNowEndsTheWait(t *testing.T) {
 	if second.Err != "no switch waits in %1" {
 		t.Errorf("second %+v", second)
 	}
-	f.switched(t, <-got, "not refreshed: skipped with esc")
+	f.switched(t, <-got, "not refreshed: switched now")
+	if !kicked {
+		t.Error("no broadcast followed the end of the wait")
+	}
 	if late.Err != "no switch waits in %1" || late.Ran != nil {
 		t.Errorf("during the capture %+v", late)
 	}

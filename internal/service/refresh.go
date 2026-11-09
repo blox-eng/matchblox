@@ -92,12 +92,15 @@ func (s *Service) startRefresh(x sample.Session, until time.Time) (*refreshRun, 
 	}
 }
 
-// refreshList is the refreshes in progress, by pane, for the snapshot of
-// each console. s.mu is held.
+// refreshList is the record waits on now, by pane, for the snapshot of
+// each console. A run whose wait ended keeps its mark for the guards but
+// leaves the list. s.mu is held.
 func (s *Service) refreshList() []proto.Refresh {
 	var out []proto.Refresh
 	for _, r := range s.refreshes {
-		out = append(out, r.info)
+		if r.waiting {
+			out = append(out, r.info)
+		}
 	}
 	slices.SortFunc(out, func(a, b proto.Refresh) int { return strings.Compare(a.Pane, b.Pane) })
 	return out
@@ -115,7 +118,7 @@ type refreshEnd int
 const (
 	refreshNotRun    refreshEnd = iota // no request went
 	refreshTurnEnded                   // the request's turn ended: a turn after it is the builder's
-	refreshCut                         // the limit or esc ended the wait: the request's turn may still run
+	refreshCut                         // the limit or a switch now ended the wait: the request's turn may still run
 )
 
 // refreshRecord asks x, the idle agent a switch replaces, to write its task
@@ -146,7 +149,7 @@ func (s *Service) refreshRecord(ctx context.Context, x sample.Session, n proto.S
 		why = "skipped with --no-refresh"
 	}
 	if why != "" {
-		return "not refreshed: " + why, refreshNotRun, release, nil
+		return proto.NotRefreshed + why, refreshNotRun, release, nil
 	}
 	sent := s.now()
 	run, done := s.startRefresh(x, sent.Add(refreshLimit))
@@ -159,7 +162,9 @@ func (s *Service) refreshRecord(ctx context.Context, x sample.Session, n proto.S
 		s.mu.Unlock()
 		if err != nil {
 			done()
+			return
 		}
+		s.broadcast()
 	}()
 	limit := time.NewTimer(refreshLimit)
 	defer limit.Stop()
@@ -171,7 +176,7 @@ func (s *Service) refreshRecord(ctx context.Context, x sample.Session, n proto.S
 		return "", refreshNotRun, release, ctx.Err()
 	}
 	if res.Err != "" {
-		return "not refreshed: the request did not reach " + x.Name + ": " + strings.TrimSuffix(res.Err, peerRetry), refreshNotRun, done, nil
+		return proto.NotRefreshed + "the request did not reach " + x.Name + ": " + strings.TrimSuffix(res.Err, peerRetry), refreshNotRun, done, nil
 	}
 	tick := time.NewTicker(refreshPoll)
 	defer tick.Stop()
@@ -180,9 +185,9 @@ func (s *Service) refreshRecord(ctx context.Context, x sample.Session, n proto.S
 		case <-ctx.Done():
 			return "", refreshNotRun, release, ctx.Err()
 		case <-run.skip:
-			return "not refreshed: skipped with esc", refreshCut, done, nil
+			return proto.NotRefreshed + "switched now", refreshCut, done, nil
 		case <-limit.C:
-			return "not refreshed: the refresh timed out after " + waitText(refreshLimit), refreshCut, done, nil
+			return proto.NotRefreshed + "the refresh timed out after " + waitText(refreshLimit), refreshCut, done, nil
 		case <-tick.C:
 		}
 		cur, ok := s.sessionAt(x.Pane)
@@ -194,9 +199,9 @@ func (s *Service) refreshRecord(ctx context.Context, x sample.Session, n proto.S
 		}
 	}
 	if modTime(record).After(before) {
-		return "record written for this switch", refreshTurnEnded, done, nil
+		return proto.RecordWritten, refreshTurnEnded, done, nil
 	}
-	return "not refreshed: it ended its turn without writing the record", refreshTurnEnded, done, nil
+	return proto.NotRefreshed + "it ended its turn without writing the record", refreshTurnEnded, done, nil
 }
 
 // managedRecord is the task record of x's match, in a bundle this service

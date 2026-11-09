@@ -563,7 +563,7 @@ func TestSwitchWaitsForTheRefresh(t *testing.T) {
 }
 
 func TestSwitchPrintsTheRefreshNote(t *testing.T) {
-	for _, note := range []string{"record written for this switch", "not refreshed: the refresh timed out after 3:00"} {
+	for _, note := range []string{proto.RecordWritten, proto.NotRefreshed + "the refresh timed out after 3:00"} {
 		var buf bytes.Buffer
 		sock := switchService(t, proto.Result{Ran: [][]string{{"tmux", "respawn-pane"}}, Skipped: []string{note}})
 		if err := cliSwitch([]string{"api"}, switchOpts{agent: "codex"}, &buf, sock, nil); err != nil {
@@ -608,7 +608,7 @@ func refreshService(t *testing.T, got chan<- proto.Act) string {
 			if strings.HasPrefix(a.RecID, proto.SwitchNowPrefix) {
 				got <- a
 				_ = c.Send(proto.KindResult, env.ID, proto.Result{Ran: [][]string{{"switch now"}}})
-				_ = c.Send(proto.KindResult, switchID, proto.Result{ActID: switchID, Ran: [][]string{{"respawn-pane"}}, Skipped: []string{"not refreshed: skipped with Ctrl-C"}})
+				_ = c.Send(proto.KindResult, switchID, proto.Result{ActID: switchID, Ran: [][]string{{"respawn-pane"}}, Skipped: []string{proto.NotRefreshed + "switched now"}})
 				continue
 			}
 			switchID = env.ID
