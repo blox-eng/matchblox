@@ -35,57 +35,54 @@ type orderAsk struct {
 }
 
 // orderAct runs the builder's side of an order: give it.
-func (s *Service) orderAct(ctx context.Context, a proto.Act) proto.Result {
-	if s.Stoker == nil {
+func (s *Service) orderAct(ctx context.Context, u *stokerUnit, a proto.Act) proto.Result {
+	if u == nil {
 		return proto.Result{Err: "this service keeps no stoker"}
 	}
-	if s.fromStoker(a) {
+	if _, own := s.unitOf(a); own {
 		return proto.Result{Err: "the stoker does not give itself orders"}
 	}
-	if err := s.order(ctx, a.Text); err != nil {
+	if err := s.order(ctx, u, a.Text); err != nil {
 		return proto.Result{Err: err.Error()}
 	}
 	s.refreshStoker()
 	return proto.Result{}
 }
 
-// order takes the builder's words, and the run starts at once. With no
-// stoker agent (fixtures, or its command not on PATH) it turns today's
-// stoker on (or on for the night) and keeps the words. With one, it
-// writes the brief and points the stoker agent at it. A night that runs
+// order takes the builder's words for unit u, and the run starts at once.
+// With no stoker agent (fixtures, or its command not on PATH) it turns
+// today's stoker on (or on for the night) and keeps the words. With one,
+// it writes the brief and points the stoker agent at it. A night that runs
 // takes no new order.
-func (s *Service) order(ctx context.Context, text string) error {
+func (s *Service) order(ctx context.Context, u *stokerUnit, text string) error {
 	var ask orderAsk
 	if err := json.Unmarshal([]byte(text), &ask); err != nil {
 		return fmt.Errorf("the order does not read: %w", err)
 	}
-	var grants []string
-	for _, g := range ask.Grants {
-		if !slices.Contains(stoker.Goes, g) {
-			return fmt.Errorf("%q is no go: merge, release, deploy or kill", g)
-		}
-		if !slices.Contains(grants, g) {
-			grants = append(grants, g)
-		}
+	grants, err := goesOf(ask.Grants)
+	if err != nil {
+		return err
 	}
 	now := s.now()
-	if m := s.Stoker.Mode(); m.On && !m.Nightly && !ask.Night && m.Order != nil && m.Order.State == stoker.OrderRunning {
-		return s.dayOrder(ctx, strings.TrimSpace(ask.Words), grants, now)
+	if m := u.store.Mode(); m.On && !m.Nightly && !ask.Night && m.Order != nil && m.Order.State == stoker.OrderRunning {
+		return s.dayOrder(ctx, u, strings.TrimSpace(ask.Words), grants, now)
 	}
 	o := stoker.Order{Grants: grants, ID: "run-" + now.UTC().Format("20060102-150405.000000000"), Words: strings.TrimSpace(ask.Words), Night: ask.Night, At: now, Went: now, State: stoker.OrderRunning}
-	if m := s.Stoker.Mode(); m.On && m.Nightly {
+	if m := u.store.Mode(); m.On && m.Nightly {
 		return errors.New(sealed)
 	}
 	if s.agentOn() {
-		pane, err := s.stokerAgent()
+		pane, err := s.stokerAgent(u)
 		if err != nil {
 			return err
 		}
-		path := filepath.Join(s.Stoker.Dir(), briefName)
-		if err := os.MkdirAll(s.Stoker.Dir(), 0o700); err != nil {
+		path := filepath.Join(u.store.Dir(), briefName)
+		if err := os.MkdirAll(u.store.Dir(), 0o700); err != nil {
 			return err
 		}
-		if err := os.WriteFile(path, []byte(stoker.Brief(o, s.Ways, stoker.Hands, s.board(now))), 0o600); err != nil {
+		board := s.board(now)
+		board.Chains = s.chainRows(o.Night)
+		if err := os.WriteFile(path, []byte(stoker.Brief(o, s.Ways, stoker.Hands, board)), 0o600); err != nil {
 			return err
 		}
 		if err := s.typeInto(ctx, pane, "Read "+path+" and follow it."); err != nil {
@@ -93,7 +90,7 @@ func (s *Service) order(ctx context.Context, text string) error {
 		}
 	}
 	sessions, _ := s.seen()
-	return s.updateOrder(func(m stoker.Mode) (stoker.Mode, error) {
+	if err := s.updateOrder(u, func(m stoker.Mode) (stoker.Mode, error) {
 		if m.On && m.Nightly {
 			return m, errors.New(sealed)
 		}
@@ -107,7 +104,58 @@ func (s *Service) order(ctx context.Context, text string) error {
 		// the day's run ends the day's.
 		m.Order, m.Triggers, m.NextTrigger = &o, nil, 0
 		return m, err
-	})
+	}); err != nil {
+		return err
+	}
+	if o.Night && s.chainIDOf(u) == "" {
+		s.nightFamily(now)
+	}
+	return nil
+}
+
+// chainRows are the chains as the host stoker's brief lists them: each
+// with its stoker, that stoker's state and its plan. In a night that
+// starts, a stoker whose run is on is in it.
+func (s *Service) chainRows(night bool) []stoker.ChainRow {
+	s.mu.Lock()
+	cs := s.chainsLocked().Chains
+	names := make([]string, len(cs))
+	for i, c := range cs {
+		names[i] = chainName(c, s.cur.Sessions)
+	}
+	s.mu.Unlock()
+	var out []stoker.ChainRow
+	for i, c := range cs {
+		row := stoker.ChainRow{Name: names[i]}
+		if u := s.unitOfChain(c.ID); u != nil {
+			m := u.store.Mode()
+			row.StokerID, row.State = u.id, "off"
+			switch {
+			case m.On && (m.Nightly || night):
+				row.State = "night"
+			case m.On:
+				row.State = "on"
+			}
+			row.PlanDone, row.PlanAll = u.store.View().PlanProgress()
+		}
+		out = append(out, row)
+	}
+	return out
+}
+
+// goesOf are the goes an order asks for, each once, or the first word that
+// is no go.
+func goesOf(ask []string) ([]string, error) {
+	var grants []string
+	for _, g := range ask {
+		if !slices.Contains(stoker.Goes, g) {
+			return nil, fmt.Errorf("%q is no go: merge, release, deploy or kill", g)
+		}
+		if !slices.Contains(grants, g) {
+			grants = append(grants, g)
+		}
+	}
+	return grants, nil
 }
 
 // board is the machine now, for the brief's snapshot.
@@ -126,22 +174,31 @@ func (s *Service) board(now time.Time) stoker.Board {
 // than a line may be.
 const orderName = "stoker-order.md"
 
-// dayOrder is a new order to the day run that is on: one line to the
-// stoker agent, and the run goes on. Its goes become the chips'. The run
+// dayOrder is a new order to the day run that is on, or to a chain unit's
+// night run (only the host orders one at night): one line to the stoker
+// agent, and the run goes on. Its goes become the chips'. The run
 // is checked under the mode's lock right before the line is typed, and
 // the order lands under the same lock: the stoker never reads a new order
 // a run that ended meanwhile did not take.
-func (s *Service) dayOrder(ctx context.Context, words string, grants []string, now time.Time) error {
+func (s *Service) dayOrder(ctx context.Context, u *stokerUnit, words string, grants []string, now time.Time) error {
+	return s.sayOrder(ctx, u, words, stoker.NewOrder(words), grants, now)
+}
+
+// sayOrder is dayOrder with say as the line the stoker agent reads.
+func (s *Service) sayOrder(ctx context.Context, u *stokerUnit, words, say string, grants []string, now time.Time) error {
 	pane, line := "", ""
+	queue := s.briefWaits(u)
 	if s.agentOn() {
-		var err error
-		if pane, err = s.stokerAgent(); err != nil {
-			return err
+		if !queue {
+			var err error
+			if pane, err = s.stokerAgent(u); err != nil {
+				return err
+			}
 		}
-		line = stoker.NewOrder(words)
+		line = say
 		if utf8.RuneCountInString(line) > panes.MaxAnswer {
-			path := filepath.Join(s.Stoker.Dir(), orderName)
-			if err := os.MkdirAll(s.Stoker.Dir(), 0o700); err != nil {
+			path := filepath.Join(u.store.Dir(), orderName)
+			if err := os.MkdirAll(u.store.Dir(), 0o700); err != nil {
 				return err
 			}
 			if err := os.WriteFile(path, []byte(line+"\n"), 0o600); err != nil {
@@ -150,11 +207,14 @@ func (s *Service) dayOrder(ctx context.Context, words string, grants []string, n
 			line = "Read " + path + " and follow it."
 		}
 	}
-	return s.updateOrder(func(m stoker.Mode) (stoker.Mode, error) {
-		if !m.On || m.Nightly || m.Order == nil || m.Order.State != stoker.OrderRunning {
+	return s.updateOrder(u, func(m stoker.Mode) (stoker.Mode, error) {
+		if !m.On || m.Nightly && s.chainIDOf(u) == "" || m.Order == nil || m.Order.State != stoker.OrderRunning {
 			return m, errors.New("the run changed meanwhile: look at it again")
 		}
-		if pane != "" {
+		switch {
+		case queue && line != "":
+			s.queueBehindBrief(u, line, now)
+		case pane != "":
 			if err := s.typeInto(ctx, pane, line); err != nil {
 				return m, err
 			}
@@ -171,27 +231,227 @@ func (s *Service) dayOrder(ctx context.Context, words string, grants []string, n
 	})
 }
 
-// planAct takes the stoker agent's plan (stoker:plan), one step it logs
-// (stoker:step) or a trigger it sets or drops (stoker:when). Only the
-// stoker pane sends them.
-func (s *Service) planAct(verb string, a proto.Act) proto.Result {
-	if s.Stoker == nil {
+// briefWaits: chain unit u's brief is not typed yet, or was dropped. An
+// order then waits behind it.
+func (s *Service) briefWaits(u *stokerUnit) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(u.brief) > 0 || len(u.dropped) > 0
+}
+
+// queueBehindBrief queues line for unit u's agent, behind its brief: a
+// dropped queue is queued again first, and waits for the agent anew.
+func (s *Service) queueBehindBrief(u *stokerUnit, line string, now time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(u.brief) == 0 { // empty, or dropped: the agent gets its time anew
+		u.briefAt = now
+	}
+	u.brief = append(append(slices.Clone(u.dropped), u.brief...), line)
+	u.dropped = nil
+}
+
+// sessionGivesNoOrders refuses an order to a chain from an agent's pane
+// that is not the host stoker's.
+const sessionGivesNoOrders = "a session gives no orders: only the person and the host stoker do"
+
+// personPlaced: the act is the person's for sure. A console says so in its
+// hello; a shell is placed when the service found its terminal or pane by
+// the caller's pid. A caller with neither (setsid, nohup, cron) may be any
+// agent's.
+func personPlaced(a proto.Act) bool {
+	return a.Console || a.FromKnown && a.FromPlaced
+}
+
+// goesFromAShell refuses goes a shell gives: a pane with no agent sampled
+// yet is placed as the person's, so only a console gives a stoker its goes,
+// as only a console grants (stoker:grant).
+func goesFromAShell(a proto.Act, grants []string) string {
+	if a.Console || len(grants) == 0 {
+		return ""
+	}
+	return "goes are given at the console: drop --go here, and grant them on the STOKER tab"
+}
+
+// notThePersons refuses an act from an agent's pane, whatever its console
+// hello said.
+func (s *Service) notThePersons(a proto.Act) string {
+	if _, ok := s.sessionAt(a.From); ok {
+		return notTheBuilders
+	}
+	return ""
+}
+
+// sealedFamily refuses the person's order to a chain while a night runs.
+const sealedFamily = "the night is sealed: answer the stoker's prompts, or give the order in the morning"
+
+// chainOrderAsk is what stoker:order-chain sends: the chain (any member,
+// its name or its id), the order's words and its goes. No "grants" at all
+// (nil, not empty) gives the host's own goes when the host orders.
+type chainOrderAsk struct {
+	Chain  string   `json:"chain"`
+	Words  string   `json:"words"`
+	Grants []string `json:"grants"`
+}
+
+// chainOrderAct gives a chain an order (stoker:order-chain): the host
+// stoker's, from its own pane, or the person's, at a console or in a shell
+// of their own. No other agent's pane gives one.
+func (s *Service) chainOrderAct(ctx context.Context, a proto.Act) proto.Result {
+	giver := "person"
+	if u, stokerPane := s.unitOf(a); stokerPane {
+		switch {
+		case u == nil:
+			return proto.Result{Err: stokersOwn}
+		case u != s.hostUnit():
+			return proto.Result{Err: "a chain stoker gives no orders"}
+		}
+		giver = "host"
+	} else if _, agent := s.agentsUnit(a); agent {
+		return proto.Result{Err: sessionGivesNoOrders}
+	} else if why := s.notThePersons(a); why != "" {
+		return proto.Result{Err: why}
+	} else if !personPlaced(a) {
+		return proto.Result{Err: "not ordered: matchblox cannot tell who orders this. Order from a terminal, a tmux pane or the console."}
+	}
+	var ask chainOrderAsk
+	if err := json.Unmarshal([]byte(a.Text), &ask); err != nil {
+		return proto.Result{Err: "the order does not read: " + err.Error()}
+	}
+	if giver == "person" {
+		if why := goesFromAShell(a, ask.Grants); why != "" {
+			return proto.Result{Err: why}
+		}
+	}
+	return s.chainOrder(ctx, ask.Chain, ask.Words, ask.Grants, giver)
+}
+
+// chainOrder gives the chain of who an order, from giver ("person" or
+// "host"). A chain with no stoker gets one. A stoker whose run is on takes
+// it as a new order, and one whose run is off as a new run. The order's
+// goes replace the unit's. The person gives no order while a night runs;
+// the host does. The host's card says each order, and each refusal of its
+// own.
+func (s *Service) chainOrder(ctx context.Context, who, words string, grants []string, giver string) proto.Result {
+	host := s.hostUnit()
+	if host == nil {
 		return proto.Result{Err: "this service keeps no stoker"}
 	}
+	if m := host.store.Mode(); giver == "person" && m.On && m.Nightly {
+		return proto.Result{Err: sealedFamily}
+	}
+	words = strings.TrimSpace(words)
+	if grants == nil && giver == "host" {
+		grants = s.grantsOf(host)
+	}
+	name, err := s.giveChainOrder(ctx, who, words, grants, giver)
+	now := s.now()
+	if err != nil {
+		if giver == "host" {
+			e := familyLine(now, err.Error())
+			e.ID, e.State = "refused@"+now.UTC().Format(time.RFC3339Nano), stoker.StepFailed
+			_ = host.store.Append(e)
+			s.refreshStoker()
+		}
+		return proto.Result{Err: err.Error()}
+	}
+	e := familyLine(now, fmt.Sprintf("ordered chain %s: %s", name, words))
+	e.ID = "ordered@" + now.UTC().Format(time.RFC3339Nano) // not the start's line of the same moment
+	_ = host.store.Append(e)
+	s.refreshStoker()
+	return proto.Result{Note: fmt.Sprintf("ordered chain %s", name)}
+}
+
+// giveChainOrder routes an order to the stoker of who's chain, and names
+// the chain.
+func (s *Service) giveChainOrder(ctx context.Context, who, words string, grants []string, giver string) (string, error) {
+	_, grants, err := s.givenGoes(grants, giver)
+	if err != nil {
+		return "", err
+	}
+	c, _, _, ok := s.chainNamed(who)
+	var u *stokerUnit
+	if ok {
+		u = s.unitOfChain(c.ID)
+	}
+	if u != nil && words == "" {
+		return "", errors.New("an order needs words")
+	}
+	switch {
+	case u == nil:
+		if u, err = s.startChainStoker(ctx, who, words, grants, giver); err != nil {
+			return "", err
+		}
+	case !u.store.Mode().On:
+		err = s.rerunChain(ctx, u, words, grants, giver)
+	default:
+		err = s.orderUnit(ctx, u, words, grants, giver)
+	}
+	if err != nil {
+		return "", err
+	}
+	return s.chainNameOf(s.chainIDOf(u)), nil
+}
+
+// orderUnit is a new order to chain unit u, whose run is on: today's order
+// by day, then the order's giver and goes in its link. An agent that quit
+// starts again, and reads its brief before the order.
+func (s *Service) orderUnit(ctx context.Context, u *stokerUnit, words string, grants []string, giver string) error {
+	if err := s.rebrief(ctx, u); err != nil {
+		return err
+	}
+	if err := s.dayOrder(ctx, u, words, grants, s.now()); err != nil {
+		return err
+	}
+	return s.relink(u, grants, giver)
+}
+
+// rebrief starts chain unit u's agent again when it is gone, and queues
+// its brief's line first.
+func (s *Service) rebrief(ctx context.Context, u *stokerUnit) error {
+	if !s.agentOn() {
+		return nil
+	}
+	s.mu.Lock()
+	_, up := stokerIn(s.cur.Sessions, s.StokerServer, stoker.SessionName(u.id))
+	starting := !u.startedAt.IsZero()
+	s.mu.Unlock()
+	if up || starting {
+		return nil
+	}
+	if err := s.startStoker(ctx, u); err != nil {
+		return err
+	}
+	if !s.briefWaits(u) {
+		s.queueBehindBrief(u, briefLine(u), s.now())
+	}
+	return nil
+}
+
+// planAct takes the stoker agent's plan (stoker:plan), one step it logs
+// (stoker:step) or a trigger it sets or drops (stoker:when). Only the
+// stoker pane sends them, each to its own unit.
+func (s *Service) planAct(verb string, a proto.Act) proto.Result {
+	if s.hostUnit() == nil {
+		return proto.Result{Err: "this service keeps no stoker"}
+	}
+	u, own := s.unitOf(a)
 	var err error
 	switch {
-	case !s.fromStoker(a) && verb == "plan":
+	case !own && verb == "plan":
 		err = errors.New("only the stoker writes its plan")
-	case !s.fromStoker(a) && verb == "when":
+	case !own && verb == "when":
 		err = errors.New("only the stoker sets its triggers")
-	case !s.fromStoker(a):
+	case !own:
 		err = errors.New("only the stoker logs its steps")
+	case u == nil:
+		err = errors.New(stokersOwn)
 	case verb == "plan":
-		err = s.plan(a.Text)
+		err = s.plan(u, a.Text)
 	case verb == "when":
-		err = s.when(a.Text)
+		err = s.when(u, a.Text)
 	default:
-		err = s.step(a.Text)
+		err = s.step(u, a.Text)
 	}
 	if err != nil {
 		return proto.Result{Err: err.Error()}
@@ -200,15 +460,15 @@ func (s *Service) planAct(verb string, a proto.Act) proto.Result {
 	return proto.Result{}
 }
 
-// plan replaces the plan of the order that runs with the one the agent
+// plan replaces the plan of the order unit u runs with the one its agent
 // wrote. Nobody approves it; the goes it names are ignored, as the goes
 // are the builder's.
-func (s *Service) plan(text string) error {
+func (s *Service) plan(u *stokerUnit, text string) error {
 	var p stoker.PlanText
 	if err := json.Unmarshal([]byte(text), &p); err != nil {
 		return fmt.Errorf("the plan does not read: %w", err)
 	}
-	o := s.Stoker.Mode().Order
+	o := u.store.Mode().Order
 	switch {
 	case o == nil:
 		return errors.New("no order to plan: launch one first")
@@ -234,7 +494,7 @@ func (s *Service) plan(text string) error {
 			return fmt.Errorf("step %d: %w", st.N, err)
 		}
 	}
-	return s.updateOrder(func(m stoker.Mode) (stoker.Mode, error) {
+	return s.updateOrder(u, func(m stoker.Mode) (stoker.Mode, error) {
 		if m.Order == nil || m.Order.ID != o.ID || m.Order.State != stoker.OrderRunning {
 			return m, errors.New("the order changed meanwhile: read the brief again")
 		}
@@ -249,9 +509,9 @@ func (s *Service) plan(text string) error {
 	})
 }
 
-// step logs one step of the plan (or of a standing rule, step 0) to the
-// run, for the card.
-func (s *Service) step(text string) error {
+// step logs one step of the plan (or of a standing rule, step 0) to unit
+// u's run, for the card.
+func (s *Service) step(u *stokerUnit, text string) error {
 	var in stoker.Entry
 	if err := json.Unmarshal([]byte(text), &in); err != nil {
 		return fmt.Errorf("the step does not read: %w", err)
@@ -281,9 +541,9 @@ func (s *Service) step(text string) error {
 		if e.Rule = strings.TrimSpace(in.Rule); e.Rule == "" {
 			return errors.New("step 0 is a standing rule: name it with --rule")
 		}
-		return s.Stoker.Append(e)
+		return u.store.Append(e)
 	}
-	o := s.Stoker.Mode().Order
+	o := u.store.Mode().Order
 	i := -1
 	if o != nil {
 		i = slices.IndexFunc(o.Plan, func(st stoker.PlanStep) bool { return st.N == in.Step })
@@ -295,13 +555,14 @@ func (s *Service) step(text string) error {
 	if x, err := s.sessionNamed(o.Plan[i].Session); err == nil {
 		e.Session, e.Name, e.Pane = x.SessionID, x.Name, x.Pane
 	}
-	return s.Stoker.Append(e)
+	return u.store.Append(e)
 }
 
-// updateOrder writes the mode fn returns; fn's error leaves it as it is.
-func (s *Service) updateOrder(fn func(stoker.Mode) (stoker.Mode, error)) error {
+// updateOrder writes the mode fn returns to unit u; fn's error leaves it
+// as it is.
+func (s *Service) updateOrder(u *stokerUnit, fn func(stoker.Mode) (stoker.Mode, error)) error {
 	var refused error
-	_, err := s.Stoker.Update(func(m stoker.Mode) (stoker.Mode, bool) {
+	_, err := u.store.Update(func(m stoker.Mode) (stoker.Mode, bool) {
 		n, err := fn(m)
 		if err != nil {
 			refused = err
@@ -330,31 +591,45 @@ func (s *Service) start(m stoker.Mode, night bool, now time.Time, sessions []sam
 	return m, nil
 }
 
-// stokerAgent is the pane of the stoker agent, or why there is none to
-// type into yet.
-func (s *Service) stokerAgent() (string, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	x, ok := stokerIn(s.cur.Sessions, s.StokerServer)
-	switch {
-	case ok && s.startedAt.IsZero():
-		return x.Pane, nil
-	case ok && ready(x):
-		s.startedAt = time.Time{}
-		return x.Pane, nil
-	case !s.startedAt.IsZero():
-		// Never into a half-started agent: its first prompt may not take
-		// what is typed.
-		return "", errors.New("the stoker is starting: the order goes once it rests")
+// stokerAgent is the pane of unit u's stoker agent, or why there is none
+// to type into yet.
+func (s *Service) stokerAgent(u *stokerUnit) (string, error) {
+	pane, err := s.stokerPane(u)
+	if err != nil || pane != "" {
+		return pane, err
+	}
+	if s.chainIDOf(u) != "" {
+		name := s.chainNameOf(s.chainIDOf(u))
+		return "", fmt.Errorf("the stoker of chain %s is not running: matchblox stoker order %s \"<text>\" starts it", name, name)
 	}
 	return "", errors.New("the stoker is not running: f or n starts it")
 }
 
-// stokerIn is the agent session in the stoker's session of its tmux
-// server.
-func stokerIn(sessions []sample.Session, server string) (sample.Session, bool) {
+// stokerPane is stokerAgent under the service's lock: "" and no error is
+// an agent that is not running.
+func (s *Service) stokerPane(u *stokerUnit) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	x, ok := stokerIn(s.cur.Sessions, s.StokerServer, stoker.SessionName(u.id))
+	switch {
+	case ok && u.startedAt.IsZero():
+		return x.Pane, nil
+	case ok && ready(x):
+		u.startedAt = time.Time{}
+		return x.Pane, nil
+	case !u.startedAt.IsZero():
+		// Never into a half-started agent: its first prompt may not take
+		// what is typed.
+		return "", errors.New("the stoker is starting: the order goes once it rests")
+	}
+	return "", nil
+}
+
+// stokerIn is the agent session in a stoker's tmux session (session) of
+// its tmux server.
+func stokerIn(sessions []sample.Session, server, session string) (sample.Session, bool) {
 	for _, x := range sessions {
-		if server != "" && x.Server() == server && x.TmuxSession() == sample.StokerSession {
+		if server != "" && x.Server() == server && x.TmuxSession() == session {
 			return x, true
 		}
 	}
@@ -429,11 +704,11 @@ func (s *Service) recipes() []string {
 	return c.names
 }
 
-// stokerView is the stoker as the consoles draw it: the store's view, the
-// ways' recipes and whether an agent runs in the stoker's pane.
-func (s *Service) stokerView(sessions []sample.Session) *stoker.View {
-	v := s.Stoker.View()
+// stokerView is unit u as the consoles draw it: its store's view, the
+// ways' recipes and whether an agent runs in its pane.
+func (s *Service) stokerView(u *stokerUnit, sessions []sample.Session) *stoker.View {
+	v := u.store.View()
 	v.Recipes = s.recipes()
-	s.agentView(&v, sessions)
+	s.agentView(u, &v, sessions)
 	return &v
 }

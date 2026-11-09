@@ -219,7 +219,7 @@ func TestATriggerFiresOnlyWhatItTookOut(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
 	for range 3 {
 		*clock = clock.Add(time.Minute)
-		s.fire(t.Context(), *clock)
+		s.fire(t.Context(), s.hostUnit(), *clock)
 	}
 	if got := typed(*ran, "%1"); len(got) != 0 {
 		t.Fatalf("a trigger it could not take out fired: %q", got)
@@ -229,7 +229,7 @@ func TestATriggerFiresOnlyWhatItTookOut(t *testing.T) {
 	}
 	for range 2 {
 		*clock = clock.Add(time.Minute)
-		s.fire(t.Context(), *clock)
+		s.fire(t.Context(), s.hostUnit(), *clock)
 	}
 	if got := typed(*ran, "%1"); !slices.Equal(got, []string{"rebase on main"}) {
 		t.Fatalf("work was told %q", got)

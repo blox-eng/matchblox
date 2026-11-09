@@ -317,7 +317,7 @@ func (m Model) viewReserve(right int) int {
 }
 
 // viewTitle names the chat's session and its state.
-func (m Model) viewTitle(s sample.Session) string { return s.Name + " · " + m.wordOf(s) }
+func (m Model) viewTitle(s sample.Session) string { return m.titleOf(s) + " · " + m.wordOf(s) }
 
 // viewPane is the live view beside the list, w by h: its title over the
 // strip and the screen.
