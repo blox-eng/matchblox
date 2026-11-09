@@ -216,6 +216,9 @@ func (s *Service) kill(ctx context.Context, pane string, a proto.Act) proto.Resu
 	if a.Confirm != "y" {
 		return proto.Result{Err: "needs confirm"}
 	}
+	if s.switching(pane) {
+		return proto.Result{Err: "switching already"}
+	}
 	if s.fromStoker(proto.Act{From: pane}) {
 		return proto.Result{Err: "the stoker is not killed here: Q on the STOKER tab quits it"}
 	}
@@ -329,6 +332,9 @@ func (s *Service) askKill(from, pane string, x sample.Session) {
 func (s *Service) switchAgent(ctx context.Context, pane string, a proto.Act) proto.Result {
 	if a.Confirm != "y" {
 		return refuseText("needs confirm")
+	}
+	if s.switching(pane) {
+		return refuseText("switching already")
 	}
 	var n proto.SwitchAgent
 	if err := json.Unmarshal([]byte(a.Text), &n); err != nil {

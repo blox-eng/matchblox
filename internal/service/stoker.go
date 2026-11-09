@@ -178,6 +178,9 @@ func (s *Service) seen() ([]sample.Session, map[string]bool) {
 			waiting[it.Pane] = true
 		}
 	}
+	for pane := range s.refreshes {
+		waiting[pane] = true
+	}
 	return s.cur.Sessions, waiting
 }
 
@@ -212,6 +215,9 @@ func why(st stoker.Step, skipped []string) string {
 // no draft of the builder's. Before the Enter the draft must be the
 // step's own text.
 func (s *Service) stokable(pane, typed string) error {
+	if err := s.switchingErr(pane); err != nil {
+		return err
+	}
 	if it, ok := s.queued(pane); ok && stoker.Waits(it) {
 		return fmt.Errorf("the session in %s waits for you", pane)
 	}

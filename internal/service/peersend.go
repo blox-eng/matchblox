@@ -351,6 +351,9 @@ func (s *Service) sessionOf(m chains.Member) (sample.Session, bool) {
 // agent, held by nobody, no question or permission prompt, waiting for
 // nobody, at rest, and no draft in its prompt.
 func (s *Service) peerReady(pane string, x sample.Session) error {
+	if err := s.switchingErr(pane); err != nil {
+		return err
+	}
 	if err := s.messageable(pane, x.PID); err != nil {
 		return errors.New(err.Error() + peerRetry)
 	}

@@ -465,6 +465,9 @@ func (s *Service) sessionAt(pane string) (sample.Session, bool) {
 // nil when the agent pid is still the one in pane and it neither asks
 // with the question tool nor waits at a permission prompt.
 func (s *Service) messageable(pane string, pid int) error {
+	if err := s.switchingErr(pane); err != nil {
+		return err
+	}
 	x, ok := s.sessionAt(pane)
 	switch {
 	case !ok:

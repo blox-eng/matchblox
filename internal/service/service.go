@@ -259,7 +259,9 @@ type Service struct {
 	// sentAt is when a command or a compact last went to a pane, by pane:
 	// until restLatch after it, the pane is not at rest (latchRest).
 	sentAt map[string]time.Time
-	gen    uint64 // counts door writes, so an older sample keeps its hands off
+	// refreshes are the panes in a record refresh before a switch.
+	refreshes map[string]*refreshRun
+	gen       uint64 // counts door writes, so an older sample keeps its hands off
 	// panes holds a *sync.Mutex per pane: the keys of one act to a pane
 	// never interleave with another's.
 	panes sync.Map
@@ -977,6 +979,7 @@ func (s *Service) stateFor(cl *client) (proto.State, bool) {
 		st.Used, cl.usedGen = &u, s.usedGen
 	}
 	st.Clones = s.cloneList()
+	st.Refreshes = s.refreshList()
 	return st, true
 }
 
