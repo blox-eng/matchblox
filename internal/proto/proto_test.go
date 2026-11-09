@@ -138,3 +138,35 @@ func TestNotesNameFiveThenHowManyMore(t *testing.T) {
 		t.Fatalf("%q", got)
 	}
 }
+
+func TestSwitchAgentOmitsNoRefresh(t *testing.T) {
+	b, err := json.Marshal(SwitchAgent{Agent: "codex"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(b, []byte(`"no_refresh"`)) {
+		t.Fatalf("a switch that does not skip the refresh carries the key: %s", b)
+	}
+	b, err = json.Marshal(SwitchAgent{Agent: "codex", NoRefresh: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(b, []byte(`"no_refresh":true`)) {
+		t.Fatalf("a switch that skips the refresh lacks the key: %s", b)
+	}
+}
+
+func TestStateCarriesRefreshes(t *testing.T) {
+	want := State{Refreshes: []Refresh{{Pane: "%1"}}}
+	b, err := json.Marshal(want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got State
+	if err := json.Unmarshal(b, &got); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got.Refreshes, want.Refreshes) {
+		t.Fatalf("got %+v, want %+v", got.Refreshes, want.Refreshes)
+	}
+}

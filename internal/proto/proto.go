@@ -93,7 +93,17 @@ type State struct {
 	Used *Used `json:"used,omitempty"`
 	// Clones are the clones the service runs, and the ones that ended
 	// in the last minute: in every snapshot while any is listed.
-	Clones []Clone `json:"clones,omitempty"`
+	Clones    []Clone   `json:"clones,omitempty"`
+	Refreshes []Refresh `json:"refreshes,omitempty"`
+}
+
+// Refresh is an idle agent's record refresh, before a switch, in Pane.
+type Refresh struct {
+	Pane  string    `json:"pane"`
+	Name  string    `json:"name"`
+	Agent string    `json:"agent"`
+	Since time.Time `json:"since"`
+	Until time.Time `json:"until"`
 }
 
 type Event struct {
@@ -193,6 +203,10 @@ const (
 // PickPrefix starts an act that answers the question tool in the pane
 // after it; its text is the said.Answer.
 const PickPrefix = "pick:"
+
+// SwitchNowPrefix starts an act that switches the pane after it at once,
+// with no record refresh first.
+const SwitchNowPrefix = "switchnow:"
 
 // Screen is one capture of the watched pane. Gone: the pane is not there.
 type Screen struct {
@@ -521,6 +535,9 @@ type SwitchAgent struct {
 	// included). The service refuses the switch when it would pick another
 	// now. Empty, from an older client, takes whichever it picks.
 	Account string `json:"account,omitempty"`
+	// NoRefresh skips the record refresh before the switch. Empty, from an
+	// older client, keeps the refresh.
+	NoRefresh bool `json:"no_refresh,omitempty"`
 }
 
 // DefaultHandoff selects an evidence capture and the service's fixed switch
