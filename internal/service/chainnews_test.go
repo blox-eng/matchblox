@@ -498,7 +498,7 @@ func TestAPostedMessageBroadcasts(t *testing.T) {
 	s.mu.Lock()
 	c := s.Chains.TeamsOf(memberOf(newsSessions[0]))[0]
 	s.mu.Unlock()
-	s.postMessage(c.ID, newsSessions[1], "[from peer-send %1] hi", time.Now())
+	s.postMessage(c.ID, newsSessions[0], newsSessions[1], "[from peer-send %1] hi", time.Now())
 	select {
 	case <-cl.kick:
 	default:

@@ -247,6 +247,7 @@ func (s *Service) chainable(st *chains.Store, from, to sample.Session) (repo, wh
 // of the sample before, which name a match that is gone. Callers hold mu.
 func (s *Service) pruneChainsLocked(now time.Time, prev []sample.Session) error {
 	st := s.chainsLocked()
+	s.tellLostLocked(st, now)
 	if s.sampleMissedLocked() {
 		return nil // every match would look gone
 	}
@@ -479,4 +480,38 @@ func (s *Service) sessionOfLocked(m chains.Member) (sample.Session, bool) {
 		}
 	}
 	return sample.Session{}, false
+}
+
+// tellLostLocked tells the sender of each line lost since the last sample
+// why its match will not hear it: once for each match it sent to. Callers
+// hold mu.
+func (s *Service) tellLostLocked(st *chains.Store, now time.Time) {
+	type pair struct {
+		from, to chains.Member
+		why      string
+	}
+	var order []pair
+	count := map[pair]int{}
+	for _, l := range st.TakeLost() {
+		p := pair{l.Item.From, l.To, l.Why}
+		if count[p] == 0 {
+			order = append(order, p)
+		}
+		count[p]++
+	}
+	for _, p := range order {
+		name := p.to.Pane
+		if x, ok := s.sessionOfLocked(p.to); ok {
+			name = x.Name
+		}
+		text := didNotGet(name, "you are no longer chained")
+		if p.why == chains.LostFull {
+			lines := "1 line"
+			if n := count[p]; n > 1 {
+				lines = fmt.Sprintf("%d lines", n)
+			}
+			text = "[matchblox] " + lines + " to " + name + " dropped: its inbox is full"
+		}
+		st.Post(p.from, text, now)
+	}
 }

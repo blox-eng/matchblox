@@ -65,11 +65,28 @@ type Chain struct {
 	Spark   time.Time `json:"spark,omitzero"`
 }
 
-// Item is one piece of news in an inbox. seq is the order it was posted in.
+// Item is one piece of news in an inbox, or a line a match sent: From is
+// its sender, the zero Member for news. seq is the order it was posted in.
 type Item struct {
 	At   time.Time `json:"at"`
 	Text string    `json:"text"`
+	From Member    `json:"from,omitzero"`
 	seq  uint64
+}
+
+// Why a sent line was lost before its match heard it.
+const (
+	// LostFull: the inbox was full, and the line was its oldest.
+	LostFull = "full"
+	// LostUnchained: its match no longer shares a team with its sender.
+	LostUnchained = "unchained"
+)
+
+// Lost is a sent line its match will not hear: To is the match.
+type Lost struct {
+	To   Member
+	Item Item
+	Why  string
 }
 
 // Left is a member that dropped out of a chain.
@@ -94,6 +111,7 @@ type Store struct {
 
 	inbox   map[string][]Item
 	dropped map[string]int
+	lost    []Lost
 	posted  uint64
 	// renamed is the key each refreshed member had before, to its key now:
 	// news given back under an old name reaches the match.
@@ -164,6 +182,23 @@ func (s *Store) leaveAt(m Member, i int) {
 	if len(c.Members) < 2 {
 		s.Chains = slices.Delete(s.Chains, i, i+1)
 	}
+	k := m.key()
+	if len(s.inbox[k]) == 0 {
+		return
+	}
+	s.inbox[k] = slices.DeleteFunc(s.inbox[k], func(it Item) bool {
+		if it.From == (Member{}) {
+			return false
+		}
+		if _, shared := s.Shared(m, it.From); shared {
+			return false
+		}
+		s.lost = append(s.lost, Lost{To: m, Item: it, Why: LostUnchained})
+		return true
+	})
+	if len(s.inbox[k]) == 0 {
+		delete(s.inbox, k)
+	}
 }
 
 func (s *Store) newID(first Member) string {
@@ -183,6 +218,11 @@ func (s *Store) Leave(m Member) {
 // leave takes m out of every team, and drops its news: the ids of the
 // teams it was in.
 func (s *Store) leave(m Member) (ids []string) {
+	for _, it := range s.inbox[m.key()] {
+		if it.From != (Member{}) {
+			s.lost = append(s.lost, Lost{To: m, Item: it, Why: LostUnchained})
+		}
+	}
 	delete(s.inbox, m.key())
 	delete(s.dropped, m.key())
 	for i := len(s.Chains) - 1; i >= 0; i-- {
@@ -242,7 +282,7 @@ func (s *Store) Refresh(cur func(Member) (Member, bool)) (changed bool) {
 			items, dropped := s.inbox[old], s.dropped[old]
 			delete(s.inbox, old)
 			delete(s.dropped, old)
-			s.put(now, items, dropped, true)
+			s.put(n, now, items, dropped, true)
 			if s.renamed == nil {
 				s.renamed = map[string]string{}
 			}
@@ -345,14 +385,34 @@ func (s *Store) Spark(chainID string, now time.Time) {
 
 // Post puts news in to's inbox. Past InboxMax the oldest is dropped and counted.
 func (s *Store) Post(to Member, text string, now time.Time) {
-	s.posted++
-	s.put(to.key(), []Item{{At: now, Text: text, seq: s.posted}}, 0, false)
+	s.PostLine(to, Member{}, text, now)
 }
 
-// put adds items to the inbox of k, in the order they were posted when
-// back (given back after what came since), with dropped more dropped. Past
-// InboxMax the oldest go and are counted.
-func (s *Store) put(k string, items []Item, dropped int, back bool) {
+// PostLine puts a line from in to's inbox, as Post puts news.
+func (s *Store) PostLine(to, from Member, text string, now time.Time) {
+	s.posted++
+	s.put(to, to.key(), []Item{{At: now, Text: text, From: from, seq: s.posted}}, 0, false)
+}
+
+// TakeLost empties the sent lines lost since it last ran.
+func (s *Store) TakeLost() []Lost {
+	l := s.lost
+	s.lost = nil
+	return l
+}
+
+// InboxCount is how many items m's inbox holds, and if any were dropped
+// since m last took it.
+func (s *Store) InboxCount(m Member) (n int, full bool) {
+	k := m.key()
+	return len(s.inbox[k]), s.dropped[k] > 0
+}
+
+// put adds items to the inbox of k, to's key, in the order they were
+// posted when back (given back after what came since), with dropped more
+// dropped. Past InboxMax the oldest go and are counted, and each sent line
+// among them is lost.
+func (s *Store) put(to Member, k string, items []Item, dropped int, back bool) {
 	if s.inbox == nil {
 		s.inbox, s.dropped = map[string][]Item{}, map[string]int{}
 	}
@@ -361,6 +421,11 @@ func (s *Store) put(k string, items []Item, dropped int, back bool) {
 		slices.SortStableFunc(items, func(a, b Item) int { return cmp.Compare(a.seq, b.seq) })
 	}
 	if over := len(items) - InboxMax; over > 0 {
+		for _, it := range items[:over] {
+			if it.From != (Member{}) {
+				s.lost = append(s.lost, Lost{To: to, Item: it, Why: LostFull})
+			}
+		}
 		items = items[over:]
 		dropped += over
 	}
@@ -410,7 +475,7 @@ func (s *Store) GiveBack(m Member, t Taken) {
 	for seen := 0; s.renamed[k] != "" && seen < len(s.renamed); seen++ {
 		k = s.renamed[k]
 	}
-	s.put(k, t.Items, t.Dropped, true)
+	s.put(m, k, t.Items, t.Dropped, true)
 }
 
 // Load reads path. A missing file is an empty store.

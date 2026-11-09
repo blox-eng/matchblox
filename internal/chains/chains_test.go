@@ -388,3 +388,59 @@ func TestARenameGoesWithItsMatch(t *testing.T) {
 		t.Fatalf("renamed = %v", s.renamed)
 	}
 }
+
+func TestDroppedLineTellsItsSender(t *testing.T) {
+	var s Store
+	chainOf(t, &s, "a", "b")
+	s.PostLine(mem("b"), mem("a"), "line", t0)
+	for i := range InboxMax {
+		s.Post(mem("b"), strconv.Itoa(i), t0)
+	}
+	lost := s.TakeLost()
+	if len(lost) != 1 || !lost[0].To.Same(mem("b")) || !lost[0].Item.From.Same(mem("a")) || lost[0].Why != LostFull {
+		t.Fatalf("lost = %+v", lost)
+	}
+	if len(s.TakeLost()) != 0 {
+		t.Fatal("told twice")
+	}
+	s.Post(mem("b"), "news", t0) // news has no sender to tell
+	if lost := s.TakeLost(); len(lost) != 0 {
+		t.Fatalf("news lost = %+v", lost)
+	}
+}
+
+func TestInboxCountFull(t *testing.T) {
+	var s Store
+	for i := range InboxMax + 1 {
+		s.Post(mem("a"), strconv.Itoa(i), t0)
+	}
+	if n, full := s.InboxCount(mem("a")); n != InboxMax || !full {
+		t.Fatalf("count = %d %v", n, full)
+	}
+	s.Take(mem("a"))
+	if n, full := s.InboxCount(mem("a")); n != 0 || full {
+		t.Fatalf("after take = %d %v", n, full)
+	}
+}
+
+func TestLeavingDropsTheLinesOfSendersItNoLongerShares(t *testing.T) {
+	var s Store
+	chainOf(t, &s, "a", "b", "c")
+	s.Form(mem("b"), mem("d"), "web", "")
+	s.PostLine(mem("b"), mem("a"), "from a", t0)
+	s.PostLine(mem("b"), mem("d"), "from d", t0)
+	s.Post(mem("b"), "news", t0)
+	s.LeaveTeam(mem("b"), "a")
+	lost := s.TakeLost()
+	if len(lost) != 1 || !lost[0].Item.From.Same(mem("a")) || lost[0].Why != LostUnchained {
+		t.Fatalf("lost = %+v", lost)
+	}
+	if got := s.Take(mem("b")); len(got.Items) != 2 || !got.Items[0].From.Same(mem("d")) {
+		t.Fatalf("kept = %+v", got.Items)
+	}
+	s.PostLine(mem("b"), mem("d"), "again", t0)
+	s.Leave(mem("b"))
+	if lost := s.TakeLost(); len(lost) != 1 || !lost[0].Item.From.Same(mem("d")) || lost[0].Why != LostUnchained {
+		t.Fatalf("leave all lost = %+v", lost)
+	}
+}

@@ -86,11 +86,13 @@ func (s *Service) holdLocked(d delivery, held bool) {
 	}
 }
 
-// heard marks d's requests and notices as told.
+// heard marks d's notices as told, and tells the sender of each line in
+// it that its match got it.
 func (s *Service) heard(d delivery) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.holdLocked(d, false)
+	s.toldSendersLocked(d)
 	delete(s.cleared, d.cleared)
 	for p, b := range d.notices {
 		if s.noticed == nil {
@@ -185,4 +187,23 @@ func (s *Service) branchLocked(wt string) string {
 		}
 	}
 	return ""
+}
+
+// toldSendersLocked tells the sender of each line d took that its match
+// heard it, and sparks the team they share. Callers hold mu.
+func (s *Service) toldSendersLocked(d delivery) {
+	st, now := s.chainsLocked(), s.now()
+	name := d.me.Pane
+	if x, ok := s.sessionOfLocked(d.me); ok {
+		name = x.Name
+	}
+	for _, it := range d.taken.Items {
+		if it.From == (chains.Member{}) {
+			continue
+		}
+		st.Post(it.From, gotYourLine(name, "heard", now), now)
+		if c, ok := st.Shared(it.From, d.me); ok {
+			st.Spark(c.ID, now)
+		}
+	}
 }
