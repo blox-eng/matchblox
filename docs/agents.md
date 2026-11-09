@@ -178,14 +178,17 @@ and nothing is typed. The line carries the tag `[from <name> <pane>]`.
 
 A send works like an inbox: the mate's state never refuses it. A mate at
 rest with an empty prompt gets the line typed, and the sender hears `sent`.
-Any other mate keeps the line, and the sender hears why it waits:
-`queued for web-cart: it asks a question now. It hears the line at its next
-step.` A Codex mate gets the line typed at its next rest instead. A line
-waits as long as the mate's pane lives. A question, a permission prompt, a park, a draft, copy mode or work
-in progress delays a line; none refuses it. Once a line that waited lands,
-its sender hears, at its next step, `[matchblox] web-cart got your line
-(typed 14:02)` or `(heard 14:02)`. A line sent at once gets no second
-notice.
+That holds while the mate waits for your answer in plain text too: the line
+wakes it. Any other mate keeps the line, and the sender hears why it waits:
+`queued for web-cart: it asks a question now. It gets the line at its next
+rest.` A question menu or a permission prompt holds the line, as text typed
+there would answer it; so do a park, a draft, copy mode and work in
+progress. None refuses it. At the mate's next rest with an empty prompt
+the line is typed, one a sample; a Claude Code mate that takes a step first
+hears it then. A line waits as long as the mate's pane lives. Once a line
+that waited lands, its sender hears, at its next step, `[matchblox]
+web-cart got your line (typed 14:02)` or `(heard 14:02)`. A line sent at
+once gets no second notice.
 
 A mate keeps at most 20 items. When a full inbox drops a line, its sender
 hears `[matchblox] 1 line to web-cart dropped: its inbox is full`. When the

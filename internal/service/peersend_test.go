@@ -165,7 +165,7 @@ func TestPeerSendToAMateNotReadyQueues(t *testing.T) {
 		s, ran, _ := peerTest(t)
 		s.Capture = func([]string) map[string]string { return map[string]string{"%1": c.screen} }
 		res := s.act(t.Context(), peerAct("message:%1", "read file x"))
-		if want := "queued for work: " + c.why + ". It hears the line at its next step."; res.Err != "" || res.Note != want || len(*ran) != 0 {
+		if want := "queued for work: " + c.why + ". It gets the line at its next rest."; res.Err != "" || res.Note != want || len(*ran) != 0 {
 			t.Fatalf("%s: %+v, ran %q, want %q", name, res, *ran, want)
 		}
 		if got := workInbox(s); !slices.Equal(got, []string{"[from other %3] read file x"}) {
@@ -174,12 +174,65 @@ func TestPeerSendToAMateNotReadyQueues(t *testing.T) {
 	}
 }
 
-func TestPeerSendToASessionThatWaitsForYouQueues(t *testing.T) {
+// A mate at rest that waits for your answer in plain text still gets the
+// line typed: its prompt is empty, and the line wakes it.
+func TestPeerSendToASessionThatWaitsForYouTypes(t *testing.T) {
 	s, ran, _ := peerTest(t)
 	s.Hook(hooks.Event{Name: "Stop", SessionID: "s1", Pane: "%1", Asks: true, Message: "Drop the old table?", At: night0})
 	res := s.act(t.Context(), peerAct("message:%1", "read file x"))
-	if res.Note != "queued for work: it waits for you. It hears the line at its next step." || len(*ran) != 0 {
+	if res.Err != "" || res.Note != "sent" || len(typedLine(*ran)) != 1 {
 		t.Fatalf("%+v, ran %q", res, *ran)
+	}
+}
+
+// A Claude Code mate that was busy gets its waiting line typed at its next
+// rest, and the sender hears it was typed.
+func TestClaudeInboxLineIsTypedAtRest(t *testing.T) {
+	h := newSendHost(t, busyMate)
+	if res := h.send(t, "%2", "hi"); res.Note != "queued for mate: it is busy. It gets the line at its next rest." {
+		t.Fatalf("%+v", res)
+	}
+	h.s.deliverAtRest(night0)
+	if k := h.keys(); len(k) != 0 {
+		t.Fatalf("a busy mate got keys: %q", k)
+	}
+	h.publish(idleMate)
+	h.s.deliverAtRest(night0)
+	if got := typedLine(h.keys()); !slices.Equal(got, []string{"[from peer-send %1] hi"}) {
+		t.Fatalf("typed %q", got)
+	}
+	h.s.deliverAtRest(night0)
+	if got := typedLine(h.keys()); len(got) != 1 {
+		t.Fatalf("typed twice: %q", got)
+	}
+	h.s.mu.Lock()
+	defer h.s.mu.Unlock()
+	if items := h.s.Chains.Take(chains.Member{SessionID: "s2"}).Texts(); len(items) != 0 {
+		t.Fatalf("the typed line is still in the inbox: %q", items)
+	}
+	if want := "[matchblox] mate got your line (typed " + night0.Format("15:04") + ")"; !slices.Equal(h.s.Chains.Take(chains.Member{SessionID: "s1"}).Texts(), []string{want}) {
+		t.Fatalf("the sender did not hear %q", want)
+	}
+}
+
+// A question menu holds the line: typing would answer it. Once the question
+// is answered and the mate rests, the line is typed.
+func TestAQuestionHoldsTheLineUntilItIsAnswered(t *testing.T) {
+	h := newSendHost(t, idleMate)
+	h.screens["%2"] = "⏺ Should I drop the old table?\n\n> \n"
+	if res := h.send(t, "%2", "hi"); res.Note != "queued for mate: it asks a question now. It gets the line at its next rest." {
+		t.Fatalf("%+v", res)
+	}
+	h.s.deliverAtRest(night0)
+	if k := h.keys(); len(k) != 0 {
+		t.Fatalf("typed into a question: %q", k)
+	}
+	h.mu.Lock()
+	h.screens["%2"] = idleScreen
+	h.mu.Unlock()
+	h.s.deliverAtRest(night0)
+	if got := typedLine(h.keys()); !slices.Equal(got, []string{"[from peer-send %1] hi"}) {
+		t.Fatalf("typed %q", got)
 	}
 }
 
@@ -196,7 +249,7 @@ func TestPeerSendReadsThePaneAgainBeforeItTypes(t *testing.T) {
 		return map[string]string{"%1": "⏺ Done.\n────────\n> the builder types now\n────────\n"}
 	}
 	res := s.act(t.Context(), peerAct("message:%1", "read file x"))
-	if reads < 2 || res.Note != "queued for work: it has a draft in its prompt. It hears the line at its next step." || len(*ran) != 0 {
+	if reads < 2 || res.Note != "queued for work: it has a draft in its prompt. It gets the line at its next rest." || len(*ran) != 0 {
 		t.Fatalf("reads %d: %+v, ran %q", reads, res, *ran)
 	}
 }
@@ -219,7 +272,7 @@ func TestSendWhyForEachWait(t *testing.T) {
 		fake.SetScreen("%2", idleScreen)
 		h.s.Mux = fake
 		res := h.send(t, "%2", "hi")
-		if want := "queued for mate: " + c.why + ". It hears the line at its next step."; res.Note != want || res.Err != "" {
+		if want := "queued for mate: " + c.why + ". It gets the line at its next rest."; res.Note != want || res.Err != "" {
 			t.Errorf("%s: %+v, want %q", name, res, want)
 		}
 		if k := h.keys(); len(k) != 0 {
@@ -615,7 +668,7 @@ func TestSendToAnIdleMateTypesTheLine(t *testing.T) {
 func TestSendToABusyMateQueues(t *testing.T) {
 	h := newSendHost(t, busyMate)
 	res := h.send(t, "%2", "hi")
-	if res.Err != "" || res.Note != "queued for mate: it is busy. It hears the line at its next step." {
+	if res.Err != "" || res.Note != "queued for mate: it is busy. It gets the line at its next rest." {
 		t.Fatalf("%+v", res)
 	}
 	if k := h.keys(); len(k) != 0 {
@@ -707,7 +760,7 @@ func TestSendToOpenCodeIsKept(t *testing.T) {
 func TestTypingRefusedBeforeAKeyQueues(t *testing.T) {
 	h := newSendHost(t, idleMate)
 	h.inMode["%2"] = "1"
-	if res := h.send(t, "%2", "hi"); res.Note != "queued for mate: its pane is in copy mode. It hears the line at its next step." {
+	if res := h.send(t, "%2", "hi"); res.Note != "queued for mate: its pane is in copy mode. It gets the line at its next rest." {
 		t.Fatalf("%+v", res)
 	}
 	if k := h.keys(); len(k) != 0 {
@@ -724,7 +777,7 @@ func TestALineThatDoesNotShowIsCleared(t *testing.T) {
 	h := newSendHost(t, idleMate)
 	h.hidden["%2"] = true
 	res := h.send(t, "%2", "hi")
-	if res.Err != "" || res.Note != "queued for mate: its prompt did not show the line. It hears the line at its next step." {
+	if res.Err != "" || res.Note != "queued for mate: its prompt did not show the line. It gets the line at its next rest." {
 		t.Fatalf("%+v", res)
 	}
 	h.s.mu.Lock()

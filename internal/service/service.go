@@ -404,7 +404,7 @@ func New(cfg config.Config, smp *sample.Sampler, git GitSource) *Service {
 	s.PeerPane, s.TTYPane = s.paneOfPeer, s.paneOfTTY
 	s.Activity = sample.ClientActivity
 	s.alone = s.now()
-	s.Actions = actions.Runner{Check: actions.CheckGuard, Idle: s.idle, Resting: s.resting, Answerable: s.answerable, Messageable: s.messageable, Asking: s.asking, Menu: s.menu, Stokable: s.stokable}
+	s.Actions = actions.Runner{Check: actions.CheckGuard, Idle: s.idle, Resting: s.resting, Answerable: s.answerable, Messageable: s.messageable, Asking: s.asking, Menu: s.menu, Stokable: s.stokable, PeerStokable: s.peerStokable}
 	return s
 }
 

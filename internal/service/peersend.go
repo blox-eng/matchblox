@@ -22,7 +22,6 @@ import (
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/said"
 	"github.com/blox-eng/matchblox/internal/sample"
-	"github.com/blox-eng/matchblox/internal/stoker"
 )
 
 // The limits of peer sends: one send from a session to another in
@@ -111,7 +110,7 @@ func (s *Service) peerSend(ctx context.Context, sender sample.Session, pane stri
 	codex := x.Agent == "codex"
 	wait := func(why string) proto.Result {
 		if !codex {
-			return inbox("queued for " + x.Name + ": " + why + ". It hears the line at its next step.")
+			return inbox(queuedFor(x, why))
 		}
 		s.peers.queue(peerLine{from: memberOf(sender), to: memberOf(x), line: line, tag: tag, rec: rec})
 		s.spark(chainID, now)
@@ -156,9 +155,9 @@ func (s *Service) peerSend(ctx context.Context, sender sample.Session, pane stri
 	return proto.Result{Ran: res.Ran, Note: "sent"}
 }
 
-// queuedFor is what the sender of a line that waits for a Codex rest
-// hears: why it waits. A Claude Code line waits in the inbox instead, and
-// is heard at the match's next step.
+// queuedFor is what the sender of a line that waits hears: why it waits.
+// A Codex line waits for its rest; a Claude Code line waits in the inbox,
+// and is typed at its rest unless its next step hears it first.
 func queuedFor(x sample.Session, why string) string {
 	return "queued for " + x.Name + ": " + why + ". It gets the line at its next rest."
 }
@@ -241,6 +240,59 @@ func (s *Service) deliverAtRest(now time.Time) {
 			s.mu.Unlock()
 		}
 	}
+	s.typeInboxAtRest(now)
+}
+
+// typeInboxAtRest types the oldest line waiting in the inbox of each
+// Claude Code match that rests now, with an empty prompt: one line a pane
+// each sample. A line no key reached waits again; one typed that did not
+// show is dropped. Its sender hears what came of it.
+func (s *Service) typeInboxAtRest(now time.Time) {
+	s.mu.Lock()
+	var at []sample.Session
+	for _, x := range s.cur.Sessions {
+		if x.Agent == "claude" && !s.fromStoker(proto.Act{From: x.Pane}) && s.chainsLocked().HasLine(memberOf(x)) {
+			at = append(at, x)
+		}
+	}
+	s.mu.Unlock()
+	for _, x := range at {
+		if why, err := s.peerWait(x.Pane, x); err != nil || why != "" || !s.peers.claim(x.Pane) {
+			continue
+		}
+		s.mu.Lock()
+		st := s.chainsLocked()
+		it, ok := st.TakeLine(memberOf(x))
+		if ok {
+			if _, shared := st.Shared(it.From, memberOf(x)); !shared {
+				st.Lose(memberOf(x), it, chains.LostUnchained)
+				ok = false
+			}
+		}
+		s.mu.Unlock()
+		if !ok {
+			s.peers.unclaim(x.Pane)
+			continue
+		}
+		tag, _, _ := strings.Cut(it.Text, "] ")
+		res, typed, cleared, stuck := s.typeLine(context.Background(), x, it.Text, tag+"]")
+		s.peers.unclaim(x.Pane)
+		s.mu.Lock()
+		st = s.chainsLocked()
+		switch {
+		case !typed: // no key went: it waits for a later rest
+			st.GiveBack(memberOf(x), chains.Taken{Items: []chains.Item{it}})
+		case cleared: // never type and clear the same prompt each sample
+			st.Post(it.From, didNotGet(x.Name, "it did not show in its prompt"), now)
+		case stuck:
+			st.Post(it.From, didNotGet(x.Name, "matchblox could not clear it"), now)
+		case res.Err != "":
+			st.Post(it.From, didNotGet(x.Name, "its prompt would not take it"), now)
+		default:
+			st.Post(it.From, gotYourLine(x.Name, "typed", now), now)
+		}
+		s.mu.Unlock()
+	}
 }
 
 // typeLine types line and Enter into x's pane, which rests: never over a
@@ -259,7 +311,7 @@ func (s *Service) typeLine(ctx context.Context, x sample.Session, line, tag stri
 	case why != "":
 		return proto.Result{Err: why}, false, false, false
 	}
-	g := advice.Guard{PID: x.PID, StartTicks: x.Start, RestPane: pane, StokePane: pane, MessagePane: pane, MessagePID: x.PID}
+	g := advice.Guard{PID: x.PID, StartTicks: x.Start, RestPane: pane, StokePane: pane, MessagePane: pane, MessagePID: x.PID, PeerLine: true}
 	res = s.Actions.Do(ctx, peerStep(s.mux().Type(pane, line), g), "y")
 	if len(res.Ran) == 0 {
 		return refusedStep(res), false, false, false
@@ -391,13 +443,8 @@ func (s *Service) peerWait(pane string, x sample.Session) (why string, err error
 		}
 		return "it is parked", nil
 	}
-	if it, ok := s.queued(pane); ok {
-		switch {
-		case it.State == queue.StatePermission:
-			return "it shows a permission prompt", nil
-		case stoker.Waits(it):
-			return "it waits for you", nil
-		}
+	if it, ok := s.queued(pane); ok && it.State == queue.StatePermission {
+		return "it shows a permission prompt", nil
 	}
 	if !s.resting(pane) {
 		return "it is busy", nil
@@ -420,6 +467,17 @@ func (s *Service) peerWait(pane string, x sample.Session) (why string, err error
 		return "it has a draft in its prompt", nil
 	}
 	return "", nil
+}
+
+// peerStokable is the stoker's screen guard for a chain-mate's line, read
+// now: no menu, no question, no draft but the line's own. A session that
+// waits for you may take the line: it wakes it.
+func (s *Service) peerStokable(pane, typed string) error {
+	screen, ok := s.mux().Screens([]string{pane})[pane]
+	if !ok {
+		return fmt.Errorf("the pane %s cannot be read", pane)
+	}
+	return stokableScreen(pane, screen, typed)
 }
 
 // gotYourLine is what the sender of a line that waited hears once its

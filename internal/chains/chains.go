@@ -430,6 +430,27 @@ func (s *Store) Lose(to Member, it Item, why string) {
 	s.lost = append(s.lost, Lost{To: to, Item: it, Why: why})
 }
 
+// HasLine tells if m's inbox holds a line a match sent.
+func (s *Store) HasLine(m Member) bool {
+	return slices.ContainsFunc(s.inbox[m.key()], func(it Item) bool { return it.From != (Member{}) })
+}
+
+// TakeLine takes the oldest line a match sent from m's inbox, and leaves
+// its news.
+func (s *Store) TakeLine(m Member) (Item, bool) {
+	k := m.key()
+	i := slices.IndexFunc(s.inbox[k], func(it Item) bool { return it.From != (Member{}) })
+	if i < 0 {
+		return Item{}, false
+	}
+	it := s.inbox[k][i]
+	s.inbox[k] = slices.Delete(slices.Clone(s.inbox[k]), i, i+1)
+	if len(s.inbox[k]) == 0 {
+		delete(s.inbox, k)
+	}
+	return it, true
+}
+
 // TakeLost empties the sent lines lost since it last ran.
 func (s *Store) TakeLost() []Lost {
 	l := s.lost

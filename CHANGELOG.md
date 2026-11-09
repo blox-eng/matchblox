@@ -20,7 +20,9 @@ All notable changes to matchblox are in this file. The format follows
 
 - **A send to a busy mate waits in its inbox.** A question, a permission
   prompt, a park, a draft or copy mode no longer refuses a send: the line
-  waits, the sender hears why, and later hears when the mate got it. A line
+  waits, the sender hears why, and later hears when the mate got it. A mate
+  that waits for your answer in plain text still gets the line typed, and a
+  waiting line is typed at the mate's next rest. A line
   a full inbox drops tells its sender. A send to OpenCode is kept.
 - **A mate stays in its chain while its pane lives.** An agent that exits
   in a pane still open stays, not seen; it leaves when its pane closes.
