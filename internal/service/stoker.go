@@ -215,7 +215,13 @@ func why(st stoker.Step, skipped []string) string {
 // no draft of the builder's. Before the Enter the draft must be the
 // step's own text.
 func (s *Service) stokable(pane, typed string) error {
-	if err := s.switchingErr(pane); err != nil {
+	return s.stokableFor(pane, typed, nil)
+}
+
+// stokableFor is stokable, except that own, a refresh that types its own
+// request, passes the pane's switching mark.
+func (s *Service) stokableFor(pane, typed string, own *refreshRun) error {
+	if err := s.switchingErr(pane, own); err != nil {
 		return err
 	}
 	if it, ok := s.queued(pane); ok && stoker.Waits(it) {
