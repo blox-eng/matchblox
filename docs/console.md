@@ -320,10 +320,8 @@ account, the tokens and the background work.
   session the cursor is on: the split holds as the cursor moves. 16 is the
   question tool's tallest common menu from its question down. Short of either (a phone on its side
   with the keyboard up, a landscape screen of 60–82 columns), Sessions is
-  one column: the selected row opens in place, and a tap opens its view
-  full-screen, as on a phone. At a question or a permission prompt, a
-  screen with under 16 rows for the agent shows the opened row with its
-  question instead.
+  one column: the selected row opens in place, and a tap goes into its
+  pane, as on a phone.
 
 `Enter` and `Ctrl+O` go into the agent's pane (see below).
 Come back from a jump and the next agent that waits is already selected.
@@ -396,13 +394,8 @@ as they do in its own terminal.
   moves, the console closes or loses the service, or the service stops.
 
 On a narrow screen, and wherever Sessions is one column, a tap on a row
-opens its view over the whole screen. The title row reads `‹ Sessions ·
-<name> · <state>`, and the key line `enter goes into <name> · esc back`. A
-tap on the view goes into the pane. A tap on `‹ Sessions`, `Esc`, or the
-app's edge swipe, ⌘M or ctrl+M (the home gesture) goes back. Where a
-question has under 16 rows there, the list shows the row opened, with its
-question. If the pane is gone, the list shows again, and the key line says
-`That session ended.`
+goes into the agent's pane, as `Enter` does, so what you type reaches the
+agent. The app's edge swipe, ⌘M or ctrl+M (the home gesture) comes back.
 
 The iOS demo has no tmux: there `Enter` opens a stand-in for the pane, the
 view over the whole screen with every key going to the agent. At a question
