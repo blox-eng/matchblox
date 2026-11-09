@@ -613,6 +613,29 @@ func TestTheScreenDropsLinksAndOtherControls(t *testing.T) {
 	}
 }
 
+// Only colours reach the console's terminal from an agent's screen: any
+// other escape sequence (a cursor move, a screen clear, a mode, a reset),
+// a C1 control and any other C0 control goes, in both fits, its text stays.
+func TestOnlyColoursReachTheConsole(t *testing.T) {
+	text := "a\x1b[2Jb\x1b[10;10Hc\x1b[?1049hd\x1bce\x1b7f\u009b31mg\u009dh\x07i\x08j \x1b[38;5;1mred\x1b[m"
+	for name, out := range map[string]string{
+		"fitScreen":  strings.Join(fitScreen(text, 80, 5), "\n"),
+		"cropScreen": strings.Join(cropScreen(text, 80, 5), "\n"),
+	} {
+		if plain := ansi.Strip(out); plain != "abcdefghij red" {
+			t.Errorf("%s: text %q, want abcdefghij red (%q)", name, plain, out)
+		}
+		for _, bad := range []string{"\x1b[2J", "\x1b[10;10H", "\x1b[?1049h", "\x1bc", "\x1b7", "\u009b", "\u009d", "\x07", "\x08"} {
+			if strings.Contains(out, bad) {
+				t.Errorf("%s kept %q: %q", name, bad, out)
+			}
+		}
+		if !strings.Contains(out, "\x1b[38;5;1m") {
+			t.Errorf("%s lost the colour: %q", name, out)
+		}
+	}
+}
+
 // moveDown presses down once.
 func moveDown(m Model) Model {
 	next, cmd := key(m, "down")

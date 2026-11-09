@@ -37,8 +37,31 @@ var trailingBlank = regexp.MustCompile(`(?:\x1b\[[0-9;:]*m|[ \t])+$`)
 var sgr = regexp.MustCompile(`\x1b\[[0-9;:]*m`)
 
 // controlStrings is an OSC (a hyperlink, a title), or an APC, DCS, PM or SOS
-// string, up to its terminator: an agent's screen keeps none of them.
+// string, up to its terminator.
 var controlStrings = regexp.MustCompile(`\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[_P^X][^\x1b]*\x1b\\`)
+
+// escapes is any other escape sequence: a CSI, in its 7-bit or C1 form,
+// or ESC and the bytes that end it; else a lone ESC, a C1 control or a C0
+// control other than a tab or a new line.
+var escapes = regexp.MustCompile("(?:\x1b\\[|\u009b)[0-?]*[ -/]*[@-~]|\x1b[ -/]*[0-~]|[\x00-\x08\x0b-\x1f\x7f\u0080-\u009f]")
+
+// sgrOnly matches an SGR, a colour or a style: the one escape sequence an
+// agent's screen keeps.
+var sgrOnly = regexp.MustCompile(`^\x1b\[[0-9;:]*m$`)
+
+// onlyColours is an agent's screen with only its colours and styles: no
+// other escape sequence or control of the agent's reaches the console's
+// terminal, so the screen cannot move the cursor, clear the console, change
+// a mode, set a title or open a link there.
+func onlyColours(text string) string {
+	text = controlStrings.ReplaceAllString(strings.ReplaceAll(text, "\r", ""), "")
+	return escapes.ReplaceAllStringFunc(text, func(seq string) string {
+		if sgrOnly.MatchString(seq) {
+			return seq
+		}
+		return ""
+	})
+}
 
 // fitScreen fits a pane's text into w columns and the last h lines: a rule
 // is cut, other text wraps between words, and the blank lines at the end go.
@@ -48,9 +71,9 @@ func fitScreen(text string, w, h int) []string {
 	if w <= 0 || h <= 0 {
 		return nil
 	}
-	text = controlStrings.ReplaceAllString(text, "")
+	text = onlyColours(text)
 	var out []string
-	for _, line := range strings.Split(strings.ReplaceAll(text, "\r", ""), "\n") {
+	for _, line := range strings.Split(text, "\n") {
 		line = trimBlank(line)
 		if isRule(line) {
 			out = append(out, ansi.Truncate(line, w, ""))
@@ -100,8 +123,7 @@ func cropScreen(text string, w, h int) []string {
 	if w <= 0 || h <= 0 {
 		return nil
 	}
-	text = controlStrings.ReplaceAllString(strings.ReplaceAll(text, "\r", ""), "")
-	lines := strings.Split(text, "\n")
+	lines := strings.Split(onlyColours(text), "\n")
 	for i, l := range lines {
 		lines[i] = trimBlank(l)
 	}
