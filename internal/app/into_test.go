@@ -40,28 +40,18 @@ func TestEveryWayInJumps(t *testing.T) {
 	}
 }
 
-// A phone keeps the live view (owner, 2026-11-08): the first tap on a row
-// selects it and opens its view over the screen; a tap on the view, or
-// Enter, goes into its pane. A split screen shows the view beside the list,
-// and a second tap on the row goes in.
+// A tap goes in on a phone (owner, 2026-11-09, #352, replacing the phone's
+// live view of 2026-11-08): the owner taps a session to answer it, so the
+// first tap on its row goes into its pane, as Enter does, and every key then
+// reaches the agent. A split screen shows the view beside the list, and a
+// second tap on the row goes in.
 func TestATapOnARowJumps(t *testing.T) {
 	m, _ := loadedWith(t, 44, fixtureState())
 	ran := recordRuns(&m)
 	next, cmd := tap(m, 5, sessLine(t, m, "app-review"))
 	drain(cmd)
-	if s, _ := next.(Model).selectedSession(); s.Pane != "%2" || len(*ran) != 0 || !next.(Model).viewFull() {
-		t.Fatalf("44 wide: the first tap selected %q, ran %q, view %v", s.Pane, *ran, next.(Model).viewFull())
-	}
-	opened := next.(Model)
-	_, cmd = tap(opened, 5, 5)
-	drain(cmd)
-	if len(*ran) != 1 || strings.Join((*ran)[0], " ") != "tmux switch-client -t %2" {
-		t.Errorf("44 wide: a tap on the view ran %q", *ran)
-	}
-	_, cmd = key(opened, "enter")
-	drain(cmd)
-	if len(*ran) != 2 || strings.Join((*ran)[1], " ") != "tmux switch-client -t %2" {
-		t.Errorf("44 wide: enter in the view ran %q", *ran)
+	if nm := next.(Model); nm.viewOpen || len(*ran) != 1 || strings.Join((*ran)[0], " ") != "tmux switch-client -t %2" {
+		t.Fatalf("44 wide: the first tap ran %q, view open %v: want the jump at once", *ran, nm.viewOpen)
 	}
 
 	m, _ = loadedWith(t, 100, fixtureState())

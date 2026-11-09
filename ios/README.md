@@ -129,13 +129,13 @@ device before a release. `ws-1` is the host.
 16. Select a session in tmux and tap `A switch` under it. Switch agent
     opens; tap another agent, then `Enter`, then type `y`. The console
     jumps to the pane, where the new agent starts.
-17. On a host with a question waiting, tap that session once: its live view
-    fills the screen, read-only. Turn the phone to landscape, then back. The
-    view reopens at the question.
-18. On a real host, tap a row of the session list once. Its live view opens,
-    the tap clicks once and the view is not clicked through. The keyboard
-    rises on that tap. Tap the view: you are in the agent's own tmux pane,
-    and a desk attached to the same session stays where it was.
+17. On a host with a question waiting, tap that session once: you are in
+    its pane, at the question, and typing reaches the agent. Turn the phone
+    to landscape, then back. The pane still shows the question.
+18. On a real host, tap a row of the session list once. You are in the
+    agent's own tmux pane; the tap clicks once and the pane is not clicked
+    through. The keyboard rises on that tap. A desk attached to the same
+    session stays where it was.
 
 ### The demo
 
@@ -149,8 +149,8 @@ and again with two hosts.
    Tap it. The scan view finds its own code in under three seconds. It turns on
    no camera and asks for no permission. The app opens the console on the
    host `demo`.
-3. Tap the session at the top, flint-auth: its live view opens. Tap the view:
-   the stand-in for its pane says `type 2 to answer`. Raise the keyboard with
+3. Tap the session at the top, flint-auth: the stand-in for its pane says
+   `type 2 to answer`. Raise the keyboard with
    the belt's key and type `2`, or press `↓` then `⏎` on the belt. The agent
    works for a few seconds, then the sheet rises with
    `Your agents wait the same way.`, the line, `Copy`, `Send to my computer`,
@@ -207,8 +207,7 @@ is a second paired host.
 Use an iPhone held upright, with a Claude Code session that waits on a
 question.
 
-29. Tap the session, then tap its live view: you are in the agent's tmux
-    pane, with the agent's own menu at the bottom. `↓ ↓ ⏎` picks the third
+29. Tap the session: you are in the agent's tmux pane, with the agent's own menu at the bottom. `↓ ↓ ⏎` picks the third
     option.
 30. Each key of Steer (`◂ ↑ ↓ ⏎ Esc ^C ⇞ ⇟`) works on the first tap, with
     the keyboard up and with it down. `^C` reaches the agent as tmux sends

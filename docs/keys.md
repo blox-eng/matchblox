@@ -111,10 +111,9 @@ The right side of Sessions is the live view: the selected agent's own
 screen, read-only. Sessions splits 40/60 (the list at least 38 columns, at
 most 78) when the view gets at least 44 columns and the body has room for
 its title, its account line and 16 rows for an agent's menu. On a phone, in
-list only, or on a screen on its side with the keyboard up, a tap on a row
-opens the view over the whole screen. Where a question or a permission
-prompt has under 16 rows there, the list shows the row opened, with its
-question. A keyboard never changes the layout: the shape goes by the
+list only, or on a screen on its side with the keyboard up, there is no
+room beside the list: a tap on a row goes into the agent's pane, so what
+you type reaches the agent. A keyboard never changes the layout: the shape goes by the
 tallest height seen at the width. The view is the console's own host's:
 another host's row is list only.
 
@@ -123,7 +122,7 @@ line names the way in: `enter goes into <name>`.
 
 | Key | What it does |
 |---|---|
-| `Enter`, `a` or `→` | Goes into the selected agent's tmux pane (help `go in`). A tap on the view, or a second tap on the selected row, does it too. |
+| `Enter`, `a` or `→` | Goes into the selected agent's tmux pane (help `go in`). A tap on the view, a second tap on the selected row, or on one column the first tap, does it too. |
 | `Ctrl+O` | Goes into the selected agent's tmux pane, from every tab. |
 | `Esc` | Closes the view over a phone's screen. So does a tap on `‹ Sessions`, its title, or the app's edge swipe. |
 | `ctrl+a m` | In the iOS demo, which has no tmux, `Enter` opens a stand-in for the pane: the agent's screen over the whole screen, and every key goes to the agent. `ctrl+a`, then `m` within 1 s, goes back to Sessions, on the next agent that waits. |
@@ -186,8 +185,7 @@ On the chips:
 
 A tap selects a row. A swipe over the list moves the selection. A swipe
 over the live view scrolls it back (see [The live view](#the-live-view)). On a
-narrow screen, a tap on an agent opens its live view over the whole screen,
-and a tap on the view goes into its pane. Where the view sits beside the
+narrow screen, a tap on an agent goes into its pane. Where the view sits beside the
 list, a second tap on the selected agent, or a tap on the view, goes into
 its pane. On any other row the key line says `tap again: <command>`, and a
 second tap on the same row runs it. On Ships, a tap on the selected ship

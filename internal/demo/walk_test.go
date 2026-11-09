@@ -205,6 +205,14 @@ func (w *walker) press(keys ...string) {
 	}
 }
 
+// pressLast presses a key that ends the program: the end may come before
+// the write returns, and that is the key's answer, not a failure.
+func (w *walker) pressLast(key string) {
+	w.t.Helper()
+	w.steps = append(w.steps, key)
+	go func() { _, _ = w.term.in.Write([]byte(bytesOf(w.t, key))) }()
+}
+
 // send writes to the terminal. A program that ended reads no more, so it fails
 // here and not at the test's time limit. The steps it keeps name what ended it.
 func (w *walker) send(what, s string) {
@@ -548,7 +556,7 @@ func TestQAndCtrlCEnd(t *testing.T) {
 	newMachine(t)
 	for _, key := range quits {
 		w := startWalk(t, 44, 31)
-		w.press(key)
+		w.pressLast(key)
 		select {
 		case <-w.ended:
 		case <-time.After(5 * time.Second):
