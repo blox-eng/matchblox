@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -15,15 +16,22 @@ import (
 // stokerAct turns the stoker on ("on"), on until the morning ("night"),
 // off, or folds the steps the builder saw ("ack"). While it runs the
 // builder takes over ("rest"), keeps it on ("keep"), turns it back on
-// ("wake"), and each key keeps the rest ("touch"). None is destructive:
-// the stoker itself never ends, kills or removes anything.
-func (s *Service) stokerAct(verb string, now time.Time) proto.Result {
-	if s.Stoker == nil {
+// ("wake"), and each key keeps the rest ("touch"), on unit u. None is
+// destructive: the stoker itself never ends, kills or removes anything.
+// The host's night is the family's: it puts each chain unit whose run is
+// on into the night, and its end ends theirs.
+func (s *Service) stokerAct(u *stokerUnit, verb string, now time.Time) proto.Result {
+	if u == nil {
 		return proto.Result{Err: "this service keeps no stoker"}
+	}
+	var chains []stoker.ChainCard
+	if m := u.store.Mode(); verb == "off" && s.chainIDOf(u) == "" && m.On && m.Nightly {
+		s.endChainNights(now)
+		chains = s.nightCards(m.Since)
 	}
 	sessions, waiting := s.seen()
 	var refused string
-	_, err := s.Stoker.Update(func(m stoker.Mode) (stoker.Mode, bool) {
+	_, err := u.store.Update(func(m stoker.Mode) (stoker.Mode, bool) {
 		was := m.On
 		switch verb {
 		case "on":
@@ -38,7 +46,8 @@ func (s *Service) stokerAct(verb string, now time.Time) proto.Result {
 			if !was {
 				return m, false
 			}
-			m = m.Off(now).Score(sessions, waiting, s.full, s.Stoker.View().Run)
+			m = m.Off(now).Score(sessions, waiting, s.full, u.store.View().Run)
+			m.Card.Chains = chains
 		case "ack":
 			m = m.Ack(now)
 		case "rest", "keep", "wake", "touch":
@@ -71,42 +80,144 @@ func (s *Service) stokerAct(verb string, now time.Time) proto.Result {
 	if err != nil {
 		return proto.Result{Err: err.Error()}
 	}
+	if verb == "night" && s.chainIDOf(u) == "" {
+		s.nightFamily(now)
+	}
 	s.refreshStoker()
 	return proto.Result{}
 }
 
-// stoke runs after each sample: it ends a night at its morning, reads back
-// what the compacts it sent left, and sends the steps the plan finds. Each
-// step goes through the runner, so its idle guard is checked right before
-// the send.
+// chainUnits are the chain units of the family, by id.
+func (s *Service) chainUnits() []*stokerUnit {
+	s.fam.mu.Lock()
+	defer s.fam.mu.Unlock()
+	return slices.Clone(s.fam.chains)
+}
+
+// nightFamily puts each chain unit whose run is on into the night the host
+// stoker runs: it is sealed, and ends at night_ends.
+func (s *Service) nightFamily(now time.Time) {
+	for _, u := range s.chainUnits() {
+		_, _ = u.store.Update(func(m stoker.Mode) (stoker.Mode, bool) {
+			if !m.On || m.Nightly {
+				return m, false
+			}
+			n, err := m.Night(now, s.NightEnds)
+			return n, err == nil
+		})
+	}
+}
+
+// endChainNights ends the run of each chain unit that is on at at, as the
+// host's night ends, and scores its card. It tells if one ended.
+func (s *Service) endChainNights(at time.Time) bool {
+	sessions, waiting := s.seen()
+	ended := false
+	for _, u := range s.chainUnits() {
+		mine := s.sessionsOf(u, sessions)
+		_, _ = u.store.Update(func(m stoker.Mode) (stoker.Mode, bool) {
+			if !m.On {
+				return m, false
+			}
+			ended = true
+			return m.Off(at).Score(mine, waiting, s.full, u.store.View().Run), true
+		})
+	}
+	return ended
+}
+
+// nightCards are the cards of the chain units whose night ended in the
+// host's run that began at since, for its morning card.
+func (s *Service) nightCards(since time.Time) []stoker.ChainCard {
+	var out []stoker.ChainCard
+	for _, u := range s.chainUnits() {
+		if c := u.store.Mode().Card; c != nil && c.Night && !c.Ended.Before(since) {
+			out = append(out, stoker.ChainCard{Name: s.unitName(u), Stoker: u.id, Card: *c})
+		}
+	}
+	return out
+}
+
+// sessionsOf are the sessions whose match unit u owns: a chain unit's
+// chain members while its run is on, and every other one the host's.
+func (s *Service) sessionsOf(u *stokerUnit, sessions []sample.Session) []sample.Session {
+	var out []sample.Session
+	for _, x := range sessions {
+		if s.ownerOf(x) == u {
+			out = append(out, x)
+		}
+	}
+	return out
+}
+
+// stoke runs after each sample, for each unit of the family: it ends a
+// night at its morning, reads back what the compacts it sent left, and
+// sends the steps the plan finds on the matches the unit owns. Each step
+// goes through the runner, so its idle guard is checked right before the
+// send. A night ends for the whole family in one pass: the chain units
+// first, so the host's morning card lists their cards.
 func (s *Service) stoke(ctx context.Context, now time.Time) {
-	if s.Stoker == nil {
+	host := s.hostUnit()
+	if host == nil {
 		return
 	}
-	changed := false
 	sessions, waiting := s.seen()
+	changed := false
+	var chains []stoker.ChainCard
+	if m := host.store.Mode(); m.On && m.Nightly && !m.Until.IsZero() && !now.Before(m.Until) {
+		changed = s.endChainNights(m.Until)
+		chains = s.nightCards(m.Since)
+	}
+	fam := s.family()
+	for _, u := range fam {
+		if s.stokeUnit(ctx, u, now, sessions, waiting, chains) {
+			changed = true
+		}
+	}
+	if changed {
+		s.refreshStoker()
+	} else {
+		s.syncDriven() // a lost driven.json comes back
+	}
+	for _, u := range fam {
+		s.wake(ctx, u, now)
+	}
+}
+
+// stokeUnit is stoke for unit u; chains go on the host's morning card. It
+// tells if u's card changed.
+func (s *Service) stokeUnit(ctx context.Context, u *stokerUnit, now time.Time, sessions []sample.Session, waiting map[string]bool, chains []stoker.ChainCard) bool {
+	changed := false
+	mine := s.sessionsOf(u, sessions)
+	seen := sessions // the host reads the whole machine, as it always has
+	if s.chainIDOf(u) != "" {
+		seen = mine
+	}
 	s.mu.Lock()
 	alone := s.alone
 	s.mu.Unlock()
 	var typed time.Time // the builder's last key in tmux, read only during a rest
-	if !s.Stoker.Mode().Rests.IsZero() && s.Activity != nil {
+	if !u.store.Mode().Rests.IsZero() && s.Activity != nil {
 		typed = s.Activity()
 	}
 	// One update for all three, so an act in between is never undone (a
 	// write that fails is tried again at the next sample).
-	_, _ = s.Stoker.Update(func(m stoker.Mode) (stoker.Mode, bool) {
-		m, seen := m.Observe(sessions, waiting, s.full, now)
+	_, _ = u.store.Update(func(m stoker.Mode) (stoker.Mode, bool) {
+		m, saw := m.Observe(seen, waiting, s.full, now)
 		m = m.Touch(typed)
 		m, woke := m.Awake(now, alone)
 		m, ended := m.Expire(now)
 		if ended {
-			m = m.Score(sessions, waiting, s.full, s.Stoker.View().Run)
+			m = m.Score(seen, waiting, s.full, u.store.View().Run)
+			if s.chainIDOf(u) == "" && m.Card.Night {
+				m.Card.Chains = chains
+			}
 		}
-		changed = seen || woke || ended
+		changed = saw || woke || ended
 		return m, changed
 	})
 
-	for _, e := range s.Stoker.Pending(now) {
+	for _, e := range u.store.Pending(now) {
 		path := ""
 		for _, ss := range sessions {
 			if ss.SessionID == e.Session {
@@ -114,13 +225,13 @@ func (s *Service) stoke(ctx context.Context, now time.Time) {
 			}
 		}
 		if c, ok := sample.Compacted(path, e.At); ok && path != "" {
-			_ = s.Stoker.Append(stoker.Entry{ID: e.ID, Before: c.Before, After: c.After, Resume: c.Resume, Back: now})
+			_ = u.store.Append(stoker.Entry{ID: e.ID, Before: c.Before, After: c.After, Resume: c.Resume, Back: now})
 			changed = true
 		}
 	}
 
-	for _, st := range stoker.Plan(s.Stoker.Mode(), sessions, waiting, s.full, s.Stoker.Entries(), now, s.heldSessions()) {
-		if m := s.Stoker.Mode(); !m.On || !m.Rests.IsZero() {
+	for _, st := range stoker.Plan(u.store.Mode(), mine, waiting, s.full, u.store.Entries(), now, s.heldSessions()) {
+		if m := u.store.Mode(); !m.On || !m.Rests.IsZero() {
 			break // the builder took over or turned it off since the plan
 		}
 		// The builder confirmed when they turned the stoker on.
@@ -143,28 +254,23 @@ func (s *Service) stoke(ctx context.Context, now time.Time) {
 			e.Guard = why(st, res.Skipped)
 			e.Result = "typed, not sent: " + e.Guard
 		}
-		_ = s.Stoker.Append(e)
+		_ = u.store.Append(e)
 		changed = true
 	}
-	if s.fire(ctx, now) {
+	if s.fire(ctx, u, now) {
 		changed = true
 	}
-	if changed {
-		s.refreshStoker()
-	} else {
-		s.syncDriven() // a lost driven.json comes back
-	}
-	s.wake(ctx, now)
+	return changed
 }
 
-// touchStoker keeps a rest while the builder acts from a console.
+// touchStoker keeps each unit's rest while the builder acts from a
+// console.
 func (s *Service) touchStoker(now time.Time) {
-	if s.Stoker == nil {
-		return
+	for _, u := range s.family() {
+		_, _ = u.store.Update(func(m stoker.Mode) (stoker.Mode, bool) {
+			return m.Touch(now), !m.Rests.IsZero()
+		})
 	}
-	_, _ = s.Stoker.Update(func(m stoker.Mode) (stoker.Mode, bool) {
-		return m.Touch(now), !m.Rests.IsZero()
-	})
 }
 
 // seen are the sessions of the last sample and the panes the queue lists
@@ -181,13 +287,17 @@ func (s *Service) seen() ([]sample.Session, map[string]bool) {
 	return s.cur.Sessions, waiting
 }
 
-// refreshStoker sends the stoker view at once.
+// refreshStoker sends the host stoker's view at once.
 func (s *Service) refreshStoker() {
 	sessions, _ := s.seen()
-	v := s.stokerView(sessions)
+	var v *stoker.View
+	if u := s.hostUnit(); u != nil {
+		v = s.stokerView(u, sessions)
+	}
+	stokers := s.chainStokers(sessions)
 	s.syncDriven()
 	s.mu.Lock()
-	s.cur.Stoker = v
+	s.cur.Stoker, s.cur.Stokers = v, stokers
 	s.mu.Unlock()
 	s.broadcast()
 }

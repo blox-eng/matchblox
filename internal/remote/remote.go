@@ -126,25 +126,32 @@ func NavAllowed(argv []string) bool {
 	return false
 }
 
-// StokerPopup opens the stoker's own tmux session (on the server server,
-// tmux -L) in a popup over the console: the builder answers the stoker's
-// prompts there, and detaching (prefix d) closes it.
-func StokerPopup(server string) []string {
-	return []string{"tmux", "display-popup", "-E", "-w", "90%", "-h", "90%", "tmux -L " + server + " attach -t stoker"}
+// StokerPopup opens the host stoker's own tmux session (on the server
+// server, tmux -L) in a popup over the console: the builder answers the
+// stoker's prompts there, and detaching (prefix d) closes it.
+func StokerPopup(server string) []string { return StokerPopupOf(server, "stoker") }
+
+// StokerPopupOf is StokerPopup on the tmux session of any stoker of the
+// family: stoker, or stoker-<id> for a chain's.
+func StokerPopupOf(server, session string) []string {
+	return []string{"tmux", "display-popup", "-E", "-w", "90%", "-h", "90%", "tmux -L " + server + " attach -t " + session}
 }
 
-var serverRE = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+var (
+	serverRE  = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+	stokersRE = regexp.MustCompile(`^stoker(-s[1-9][0-9]*)?$`)
+)
 
-// PopupAllowed is what the console's popup may be: exactly StokerPopup of
-// a server name a shell reads as one word. display-popup runs its last
-// argument through a shell.
+// PopupAllowed is what the console's popup may be: exactly StokerPopupOf
+// a server name a shell reads as one word and a stoker's session.
+// display-popup runs its last argument through a shell.
 func PopupAllowed(argv []string) bool {
 	if len(argv) != 8 {
 		return false
 	}
 	rest, ok := strings.CutPrefix(argv[7], "tmux -L ")
-	server, ok2 := strings.CutSuffix(rest, " attach -t stoker")
-	return ok && ok2 && serverRE.MatchString(server) && slices.Equal(argv, StokerPopup(server))
+	server, session, ok2 := strings.Cut(rest, " attach -t ")
+	return ok && ok2 && serverRE.MatchString(server) && stokersRE.MatchString(session) && slices.Equal(argv, StokerPopupOf(server, session))
 }
 
 // PaneID is a tmux pane id such as %12.
