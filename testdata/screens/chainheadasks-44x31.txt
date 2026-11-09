@@ -5,7 +5,7 @@
    ─────────────────────────────────────────
 ▌╿╮ stoker   kindle-web · plan 2/5 · asks: …
   │ “merge #812 now?”
-  │                                  a chat
+  │                                 a go in
   │─────────────────────────────────────────
  ✦┤ hearth-api           busy           79%
  ╿╯ ember-billing        idle      3m   32%
@@ -28,4 +28,4 @@
  ○ Clear wick-mobile (%7)
 
 ────────────────────────────────────────────
- a chat  N new  f stoker  full view v
+ a go in  N new  f stoker  full view v

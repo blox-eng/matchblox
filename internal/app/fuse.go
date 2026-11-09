@@ -582,12 +582,14 @@ func (m Model) headVerb(s sample.Session, u state.ChainStoker) string {
 	return "stoke"
 }
 
-// headAct is a on the selected head row s: into the stoker's pane, else
-// the start sheet of its chain. A sealed night starts nothing.
+// headAct is a on the selected head row s: the stoker's pane in a popup,
+// else the start sheet of its chain. A sealed night starts nothing.
 func (m Model) headAct(s sample.Session, u state.ChainStoker) (tea.Model, tea.Cmd) {
 	switch {
 	case m.headPane(s, u):
-		return m.goIntoAsking(s.Host, s.Pane)
+		// The stoker's pane is on matchblox's own tmux server, which no
+		// switch-client reaches: it opens in a popup, as on the STOKER tab.
+		return m.openUnit(u)
 	case m.sealedNight(s.Host):
 		m.flash = sealedFamily
 		return m, nil

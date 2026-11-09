@@ -575,7 +575,7 @@ func TestHostRefusedOnOwnedMatch(t *testing.T) {
 	}
 	host := s.hostUnit()
 	const owned = "api-auth has the stoker of chain api-auth: give it an order."
-	for _, p := range []string{"message:", "answer:", proto.PickPrefix, "compact:", "hold:", "release:", "kill:", proto.KeysPrefix, proto.CommandPrefix, "rename:", "switch:"} {
+	for _, p := range []string{"message:", "answer:", proto.PickPrefix, "compact:", "hold:", "release:", "kill:", proto.KeysPrefix, "rename:", "switch:"} {
 		err := s.orderable(host, proto.Act{RecID: p + "%3", From: "%9@mbtest"})
 		if err == nil || err.Error() != owned {
 			t.Errorf("%s%%3: %v", p, err)

@@ -685,14 +685,23 @@ func pick(t *testing.T, m Model, pane string) Model {
 	return m
 }
 
+// wentInto presses k on m and says the tmux commands it ran.
+func wentInto(t *testing.T, m Model, k string) (Model, [][]string) {
+	t.Helper()
+	ran := recordRuns(&m)
+	next, cmd := key(m, k)
+	drain(cmd)
+	return next.(Model), *ran
+}
+
 // TestAOnHeadOpensStokerPane: a on the head of a run that is on opens the
-// stoker's own pane in the chat, as a does on any session.
+// stoker's own pane in a popup: it is on matchblox's tmux server (#346).
 func TestAOnHeadOpensStokerPane(t *testing.T) {
 	m, _ := headModel(t, 160, headState(t, runningPlan(), true))
 	m = pick(t, m, stokerPane)
-	next := sendKey(m, "a").(Model)
-	if s, _ := next.selectedSession(); !next.chatKeys || s.Pane != stokerPane || next.sheet != nil {
-		t.Fatalf("chat %v on %q, sheet %v", next.chatKeys, s.Pane, next.sheet)
+	next, _ := wentInto(t, m, "a")
+	if next.pending == nil || !strings.HasPrefix(next.pending.label, "open the stoker of chain ") || next.sheet != nil {
+		t.Fatalf("pending %+v, sheet %v", next.pending, next.sheet)
 	}
 }
 
@@ -708,22 +717,22 @@ func TestAOnHeadWithoutRunOpensSheet(t *testing.T) {
 			t.Fatalf("missing %q:\n%s", want, s)
 		}
 	}
-	if next.(Model).chatKeys || len(f.acts()) != 0 {
-		t.Fatalf("chat %v, acts %+v", next.(Model).chatKeys, f.acts())
+	if len(f.acts()) != 0 {
+		t.Fatalf("acts %+v", f.acts())
 	}
 }
 
 // TestAOnHeadAtNightOpensItsPane: a sealed night takes no order, so a on
-// the head shows its pane, to answer its prompts.
+// the head opens its pane, to answer its prompts.
 func TestAOnHeadAtNightOpensItsPane(t *testing.T) {
 	st := headState(t, proto.StokerView{PaneUp: true}, true)
 	host := proto.StokerView{}
 	host.On, host.Nightly, host.Until = true, true, demoAt.Add(8*time.Hour)
 	st.Stoker = &host
 	m, _ := headModel(t, 160, st)
-	next := sendKey(pick(t, m, stokerPane), "a").(Model)
-	if !next.chatKeys || next.sheet != nil {
-		t.Fatalf("chat %v, sheet %v", next.chatKeys, next.sheet)
+	next, _ := wentInto(t, pick(t, m, stokerPane), "a")
+	if next.pending == nil || !strings.HasPrefix(next.pending.label, "open the stoker of chain ") || next.sheet != nil {
+		t.Fatalf("pending %+v, sheet %v", next.pending, next.sheet)
 	}
 }
 
@@ -761,12 +770,13 @@ func TestAOnAPanelessHead(t *testing.T) {
 }
 
 // TestAOnAMemberStaysItsChat: a chain with no stoker keeps a on a member
-// for that member.
+// for that member: into its own pane.
 func TestAOnAMemberStaysItsChat(t *testing.T) {
 	m := fuseModel(t, 160, fuseState(t, mockupChain), "hearth-api")
-	next := sendKey(m, "a").(Model)
-	if s, _ := next.selectedSession(); !next.chatKeys || s.Name != "hearth-api" || next.sheet != nil {
-		t.Fatalf("chat %v on %q, sheet %v", next.chatKeys, s.Name, next.sheet)
+	pane := m.snap.Sessions[slices.IndexFunc(m.snap.Sessions, func(s sample.Session) bool { return s.Name == "hearth-api" })].Pane
+	next, ran := wentInto(t, m, "a")
+	if len(ran) != 1 || strings.Join(ran[0], " ") != "tmux switch-client -t "+pane || next.sheet != nil {
+		t.Fatalf("ran %q, sheet %v", ran, next.sheet)
 	}
 }
 
@@ -806,7 +816,7 @@ func tapFuse(t *testing.T, m Model, name string) Model {
 
 // TestTapOnBareFuseOpensSheet: a tap on the fuse of a chain with no head
 // opens its start sheet. On a chain with a head it is a row tap, and on a
-// phone it opens the row's chat, as any tap on the row does.
+// phone, with no fuse column, it is a row tap too.
 func TestTapOnBareFuseOpensSheet(t *testing.T) {
 	m := fuseModel(t, 160, fuseState(t, mockupChain), "")
 	if next := tapFuse(t, m, "hearth-api"); next.sheet == nil || next.sheet.chain != "c1" {
@@ -814,13 +824,13 @@ func TestTapOnBareFuseOpensSheet(t *testing.T) {
 	}
 	h, _ := headModel(t, 160, headState(t, runningPlan(), true))
 	next := tapFuse(t, h, "hearth-api")
-	if s, _ := next.selectedSession(); next.sheet != nil || next.chatKeys || s.Name != "hearth-api" {
-		t.Fatalf("a tap on a headed chain's fuse: sheet %v, chat %v, on %q", next.sheet, next.chatKeys, s.Name)
+	if s, _ := next.selectedSession(); next.sheet != nil || s.Name != "hearth-api" {
+		t.Fatalf("a tap on a headed chain's fuse: sheet %v, on %q", next.sheet, s.Name)
 	}
 	phone := fuseModel(t, 44, fuseState(t, mockupChain), "")
 	next = tapFuse(t, phone, "hearth-api")
-	if s, _ := next.selectedSession(); next.sheet != nil || !next.chatKeys || s.Name != "hearth-api" {
-		t.Fatalf("a phone's tap on the fuse: sheet %v, chat %v, on %q", next.sheet, next.chatKeys, s.Name)
+	if s, _ := next.selectedSession(); next.sheet != nil || s.Name != "hearth-api" {
+		t.Fatalf("a phone's tap on the fuse: sheet %v, on %q", next.sheet, s.Name)
 	}
 }
 

@@ -35,4 +35,4 @@
  runs 5 claude                           │
                                          │
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
- ⏎ chat  x kill  r rename  z park  F stoke chain  N new  p ships  f stoker  / find       sampled 0s ago
+ enter goes into kindle-web  x kill  r rename  z park  F stoke chain  N new  f stoker    sampled 0s ago

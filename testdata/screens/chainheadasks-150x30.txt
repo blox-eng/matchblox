@@ -27,4 +27,4 @@
                  wk   ▰▱▱▱▱▱▱▱ 12%  · Tue 09:00             │
                  lasts the week                             │
 ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ↑↓ move  a chat  N new  p ships  f stoker  / find  q quit  list only v                                                                sampled 0s ago
+ ↑↓ move  a go in  N new  p ships  f stoker  / find  q quit  list only v                                                               sampled 0s ago

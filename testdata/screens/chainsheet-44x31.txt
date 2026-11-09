@@ -6,7 +6,7 @@
 ▌╿╮ kindle-web           asks      1m   56%
   │ “Claude needs your permission to use
   │ Bash”
-  │                        A switch  ⏎ chat
+  │                       A switch  ⏎ go in
   │─────────────────────────────────────────
  ✦┤ hearth-api           busy           79%
  ╿╯ ember-billing        idle      3m   32%
@@ -28,4 +28,4 @@
 │ ✓ merges  ○ releases  ○ deploys  ○ kills │
 ╰─ ⏎ start ─ tab chips ─ esc ──────────────╯
 ────────────────────────────────────────────
- ⏎ chat  x kill  r rename  F stoke chain  N…
+ ⏎ go in  x kill  r rename  F stoke chain  …

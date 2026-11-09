@@ -441,11 +441,11 @@ the stoker's name and the steps of its plan that are done.
  ╿─╯ ember-billing
 ```
 
-- `a` on the head row opens the chat on the chain's stoker, as on any
-  session. Type an order in your own words, or answer its prompts. By
-  day, a later order goes in as `New order: <your words>` and goes onto
-  its card.
-- `a` on a member row still talks to that member. Answer one match
+- `a` or `Enter` on the head row opens the chain's stoker in a popup. It
+  runs on matchblox's own tmux server. Type an order in your own words, or
+  answer its prompts; prefix `d` closes the popup. By day, a later order
+  goes in as `New order: <your words>` and goes onto its card.
+- `a` on a member row goes into that member's pane. Answer one match
   yourself when you want to.
 - `F` on a member of a chain with no stoker opens the start sheet. On a
   desk, a tap on the fuse does the same. When the stoker's run is off,
