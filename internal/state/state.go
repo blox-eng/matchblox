@@ -83,8 +83,7 @@ type Doc struct {
 
 // ChainsView is what consoles and the CLI see of the chains.
 type ChainsView struct {
-	Chains   []chains.Chain   `json:"chains,omitempty"`
-	Requests []chains.Request `json:"requests,omitempty"`
+	Chains []chains.Chain `json:"chains,omitempty"`
 }
 
 // Focus is the session to open: its pane, or Gone when its number's

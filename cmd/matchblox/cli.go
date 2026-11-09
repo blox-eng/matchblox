@@ -937,17 +937,6 @@ func writeChain(w io.Writer, doc state.Doc, pane string, asJSON bool) error {
 			}
 			break
 		}
-		for _, r := range doc.Chains.Requests {
-			switch pane {
-			case r.To.Pane:
-				lines = append(lines, name(r.From)+" asks you")
-			case r.From.Pane:
-				lines = append(lines, "you asked "+name(r.To))
-			default:
-				continue
-			}
-			reqs = append(reqs, chainRequestJSON{name(r.From), name(r.To)})
-		}
 	}
 	if asJSON {
 		return json.NewEncoder(w).Encode(struct {

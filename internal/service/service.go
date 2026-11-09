@@ -288,13 +288,10 @@ type Service struct {
 	// typingActs are the acts that type into a pane now: Serve lets them
 	// finish before it returns.
 	typingActs inFlight
-	// noticed are the branches of each pair at its last notice; heardAsks
-	// the requests already told to their target. Under mu.
-	noticed   map[pair][2]string
-	heardAsks map[chains.Request]bool
-	// heldAsks and heldNotices are what a delivery holds until its hook
-	// says it heard it: no other hook is told them meanwhile. Under mu.
-	heldAsks    map[chains.Request]bool
+	// noticed are the branches of each pair at its last notice. Under mu.
+	noticed map[pair][2]string
+	// heldNotices are what a delivery holds until its hook says it heard
+	// it: no other hook is told them meanwhile. Under mu.
 	heldNotices map[pair]bool
 	// cleared are the session ids of chained matches that a /clear started
 	// afresh: each hears once who it is chained with. heldCleared are the

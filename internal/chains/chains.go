@@ -1,6 +1,7 @@
-// Package chains holds the matches that agreed to hear from each other: the
-// chains, the requests that wait for the other side, and an inbox of news for
-// each match. It is pure data; the service decides when to ask, prune and post.
+// Package chains holds the teams of matches that hear each other, and an
+// inbox of news for each match. A match may be in several teams; each team
+// hears only itself. It is pure data; the service decides when to join,
+// prune and post.
 package chains
 
 import (
@@ -17,11 +18,14 @@ import (
 	"time"
 )
 
-const (
-	// RequestTTL is how long a request waits for the other side.
-	RequestTTL = time.Hour
-	// InboxMax is how many items an inbox holds; the oldest go first.
-	InboxMax = 20
+// InboxMax is how many items an inbox holds; the oldest go first.
+const InboxMax = 20
+
+// The refusals of Form and Join.
+var (
+	ErrOff  = errors.New("a match that is off takes no chains")
+	ErrSelf = errors.New("a match cannot chain with itself")
+	ErrIn   = errors.New("already in the chain")
 )
 
 // Member is one match. A session id names it when both sides have one; else
@@ -48,21 +52,17 @@ func (m Member) key() string {
 	return fmt.Sprintf("%s/%d/%d", m.Pane, m.PID, m.Start)
 }
 
-// Chain is a set of matches on one host that hear from each other, in any
-// repo. Repo is the repo of the match that formed it, "" for none, and does
-// not follow later moves. Spark is when the chain last got news worth showing.
+// Chain is a team: matches on one host that all hear each other, in any
+// repo. Name is the name of the match that started it, kept when that match
+// leaves; "" in a store an older build saved, until the service names it.
+// Repo is the repo of the match that formed it, "" for none, and does not
+// follow later moves. Spark is when the chain last got news worth showing.
 type Chain struct {
 	ID      string    `json:"id"`
+	Name    string    `json:"name,omitempty"`
 	Repo    string    `json:"repo"`
 	Members []Member  `json:"members"`
 	Spark   time.Time `json:"spark,omitzero"`
-}
-
-// Request is one side's ask to chain; it waits for the other side to ask back.
-type Request struct {
-	From Member    `json:"from"`
-	To   Member    `json:"to"`
-	At   time.Time `json:"at"`
 }
 
 // Item is one piece of news in an inbox. seq is the order it was posted in.
@@ -88,10 +88,9 @@ type Move struct {
 // Store is every chain of a host. The exported fields are saved; the inboxes
 // live in memory only.
 type Store struct {
-	Chains   []Chain   `json:"chains,omitempty"`
-	Requests []Request `json:"requests,omitempty"`
-	Off      []Member  `json:"off,omitempty"`
-	Moves    []Move    `json:"moves,omitempty"`
+	Chains []Chain  `json:"chains,omitempty"`
+	Off    []Member `json:"off,omitempty"`
+	Moves  []Move   `json:"moves,omitempty"`
 
 	inbox   map[string][]Item
 	dropped map[string]int
@@ -105,69 +104,66 @@ func (s *Store) isOff(m Member) bool {
 	return slices.ContainsFunc(s.Off, m.Same)
 }
 
-func (s *Store) chainIndex(m Member) int {
-	return slices.IndexFunc(s.Chains, func(c Chain) bool {
-		return slices.ContainsFunc(c.Members, m.Same)
-	})
+func (s *Store) teamIndex(name string) int {
+	return slices.IndexFunc(s.Chains, func(c Chain) bool { return c.Name == name })
 }
 
-// side is m with the members of its chain.
-func (s *Store) side(m Member) []Member {
-	if i := s.chainIndex(m); i >= 0 {
-		return s.Chains[i].Members
+// Form makes a new team of a and b, named name, or name-2, name-3 when this
+// host has a team of that name already.
+func (s *Store) Form(a, b Member, name, repo string) (Chain, error) {
+	switch {
+	case a.Same(b):
+		return Chain{}, ErrSelf
+	case s.isOff(a) || s.isOff(b):
+		return Chain{}, ErrOff
 	}
-	return []Member{m}
+	c := Chain{ID: s.newID(a), Name: s.FreeName(name), Repo: repo, Members: []Member{a, b}}
+	s.Chains = append(s.Chains, c)
+	return c, nil
 }
 
-// Ask records that from wants to chain with to. When to (or its chain)
-// already asked from (or its chain), the chains of both sides become one and
-// formed is true.
-func (s *Store) Ask(from, to Member, repo string, now time.Time) (formed bool) {
-	if s.isOff(from) || s.isOff(to) || from.Same(to) {
+// FreeName is name, or name-2, name-3 when a team has it.
+func (s *Store) FreeName(name string) string {
+	free := name
+	for n := 2; s.teamIndex(free) >= 0; n++ {
+		free = name + "-" + strconv.Itoa(n)
+	}
+	return free
+}
+
+// Join adds m to the team named team. ErrIn comes with the team.
+func (s *Store) Join(m Member, team string) (Chain, error) {
+	i := s.teamIndex(team)
+	switch {
+	case i < 0:
+		return Chain{}, fmt.Errorf("no chain is named %s", team)
+	case slices.ContainsFunc(s.Chains[i].Members, m.Same):
+		return s.Chains[i], ErrIn
+	case s.isOff(m):
+		return Chain{}, ErrOff
+	}
+	c := &s.Chains[i]
+	c.Members = append(slices.Clone(c.Members), m)
+	return *c, nil
+}
+
+// LeaveTeam takes m out of the team named team; a team of one ends. It
+// tells if m was in it.
+func (s *Store) LeaveTeam(m Member, team string) bool {
+	i := s.teamIndex(team)
+	if i < 0 || !slices.ContainsFunc(s.Chains[i].Members, m.Same) {
 		return false
 	}
-	fromSide, toSide := s.side(from), s.side(to)
-	if slices.ContainsFunc(fromSide, to.Same) {
-		return false
-	}
-	answers := func(r Request) bool {
-		return slices.ContainsFunc(toSide, r.From.Same) && slices.ContainsFunc(fromSide, r.To.Same)
-	}
-	if !slices.ContainsFunc(s.Requests, answers) {
-		s.Requests = slices.DeleteFunc(s.Requests, func(r Request) bool { return r.From.Same(from) && r.To.Same(to) })
-		s.Requests = append(s.Requests, Request{From: from, To: to, At: now})
-		return false
-	}
-	s.Requests = slices.DeleteFunc(s.Requests, answers)
-	s.merge(from, to, repo)
+	s.leaveAt(m, i)
 	return true
 }
 
-func (s *Store) merge(a, b Member, repo string) {
-	members := slices.Clone(s.side(a))
-	for _, m := range s.side(b) {
-		if !slices.ContainsFunc(members, m.Same) {
-			members = append(members, m)
-		}
+func (s *Store) leaveAt(m Member, i int) {
+	c := &s.Chains[i]
+	c.Members = slices.DeleteFunc(slices.Clone(c.Members), m.Same)
+	if len(c.Members) < 2 {
+		s.Chains = slices.Delete(s.Chains, i, i+1)
 	}
-	ia, ib := s.chainIndex(a), s.chainIndex(b)
-	var c Chain
-	switch {
-	case ia >= 0:
-		c = s.Chains[ia]
-	case ib >= 0:
-		c = s.Chains[ib]
-	default:
-		c = Chain{ID: s.newID(a), Repo: repo}
-	}
-	c.Members = members
-	var kept []Chain
-	for i, o := range s.Chains {
-		if i != ia && i != ib {
-			kept = append(kept, o)
-		}
-	}
-	s.Chains = append(kept, c)
 }
 
 func (s *Store) newID(first Member) string {
@@ -179,27 +175,24 @@ func (s *Store) newID(first Member) string {
 	}
 }
 
-// Leave takes m out of its chain and drops its requests and news. A chain of
-// one ends.
+// Leave takes m out of every team and drops its news.
 func (s *Store) Leave(m Member) {
 	s.leave(m)
 }
 
-func (s *Store) leave(m Member) (chainID string, ok bool) {
-	s.Requests = slices.DeleteFunc(s.Requests, func(r Request) bool { return r.From.Same(m) || r.To.Same(m) })
+// leave takes m out of every team, and drops its news: the ids of the
+// teams it was in.
+func (s *Store) leave(m Member) (ids []string) {
 	delete(s.inbox, m.key())
 	delete(s.dropped, m.key())
-	i := s.chainIndex(m)
-	if i < 0 {
-		return "", false
+	for i := len(s.Chains) - 1; i >= 0; i-- {
+		if slices.ContainsFunc(s.Chains[i].Members, m.Same) {
+			ids = append(ids, s.Chains[i].ID)
+			s.leaveAt(m, i)
+		}
 	}
-	c := &s.Chains[i]
-	chainID = c.ID
-	c.Members = slices.DeleteFunc(slices.Clone(c.Members), m.Same)
-	if len(c.Members) < 2 {
-		s.Chains = slices.Delete(s.Chains, i, i+1)
-	}
-	return chainID, true
+	slices.Reverse(ids)
+	return ids
 }
 
 // SetOff makes m refuse chains (off leaves its chain too), or accept them again.
@@ -215,7 +208,7 @@ func (s *Store) SetOff(m Member, off bool) {
 }
 
 // Move records that a switch starts another agent in m's pane at now. A
-// match no chain, request, off mark or inbox names has no place to keep.
+// match no chain, off mark or inbox names has no place to keep.
 func (s *Store) Move(m Member, now time.Time) {
 	s.Stay(m)
 	if s.holds(m.key()) {
@@ -238,8 +231,7 @@ func (s *Store) Moving(m Member) (Move, bool) {
 }
 
 // Refresh rewrites each member that cur names otherwise now, as a match
-// whose session id changed, in the chains, the requests, the off list and
-// the inbox. It tells if any changed.
+// whose session id changed, in the chains, the off list and the inbox. It tells if any changed.
 func (s *Store) Refresh(cur func(Member) (Member, bool)) (changed bool) {
 	renew := func(m *Member) {
 		n, ok := cur(*m)
@@ -263,62 +255,80 @@ func (s *Store) Refresh(cur func(Member) (Member, bool)) (changed bool) {
 			renew(&s.Chains[i].Members[j])
 		}
 	}
-	for i := range s.Requests {
-		renew(&s.Requests[i].From)
-		renew(&s.Requests[i].To)
-	}
 	for i := range s.Off {
 		renew(&s.Off[i])
 	}
 	return changed
 }
 
-// Prune drops members that are gone, requests past RequestTTL or with a
-// side gone, the off marks of gone matches, chains of one, and the moves of
-// a match nothing names any more. live tells if a match is still here.
+// Prune drops members that are gone, from every team they are in, the off
+// marks of gone matches, teams of one, and the moves of a match nothing
+// names any more. live tells if a match is still here. left has one entry
+// for each team a gone member was in.
 func (s *Store) Prune(live func(Member) bool, now time.Time) (left []Left) {
-	for _, c := range slices.Clone(s.Chains) {
+	var gone []Member
+	for _, c := range s.Chains {
 		for _, m := range c.Members {
-			if live(m) {
-				continue
-			}
-			if id, in := s.leave(m); in {
-				left = append(left, Left{Who: m, Chain: id})
+			if !live(m) && !slices.ContainsFunc(gone, m.Same) {
+				gone = append(gone, m)
 			}
 		}
 	}
-	s.Requests = slices.DeleteFunc(s.Requests, func(r Request) bool {
-		return now.Sub(r.At) > RequestTTL || !live(r.From) || !live(r.To)
-	})
+	for _, m := range gone {
+		for _, id := range s.leave(m) {
+			left = append(left, Left{Who: m, Chain: id})
+		}
+	}
 	s.Off = slices.DeleteFunc(s.Off, func(m Member) bool { return !live(m) })
 	s.Moves = slices.DeleteFunc(s.Moves, func(mv Move) bool { return !s.holds(mv.From.key()) })
 	maps.DeleteFunc(s.renamed, func(_, now string) bool { return !s.holds(now) })
 	return left
 }
 
-// holds tells if any chain, request, off mark or inbox still names the key k.
+// holds tells if any chain, off mark or inbox still names the key k.
 func (s *Store) holds(k string) bool {
 	named := func(m Member) bool { return m.key() == k }
 	return slices.ContainsFunc(s.Chains, func(c Chain) bool { return slices.ContainsFunc(c.Members, named) }) ||
-		slices.ContainsFunc(s.Requests, func(r Request) bool { return named(r.From) || named(r.To) }) ||
 		slices.ContainsFunc(s.Off, named) || len(s.inbox[k]) > 0 || s.dropped[k] > 0
 }
 
-// ChainOf is the chain m is in.
-func (s *Store) ChainOf(m Member) (Chain, bool) {
-	i := s.chainIndex(m)
-	if i < 0 {
-		return Chain{}, false
+// TeamsOf are the teams m is in, in the order they formed.
+func (s *Store) TeamsOf(m Member) []Chain {
+	var out []Chain
+	for _, c := range s.Chains {
+		if slices.ContainsFunc(c.Members, m.Same) {
+			out = append(out, c)
+		}
 	}
-	return s.Chains[i], true
+	return out
 }
 
-// Mates are the other members of m's chain.
+// Team is the team named name.
+func (s *Store) Team(name string) (Chain, bool) {
+	if i := s.teamIndex(name); i >= 0 {
+		return s.Chains[i], true
+	}
+	return Chain{}, false
+}
+
+// Shared is the first team that holds both a and b.
+func (s *Store) Shared(a, b Member) (Chain, bool) {
+	for _, c := range s.TeamsOf(a) {
+		if slices.ContainsFunc(c.Members, b.Same) {
+			return c, true
+		}
+	}
+	return Chain{}, false
+}
+
+// Mates are the other members of every team m is in, each once.
 func (s *Store) Mates(m Member) []Member {
 	var out []Member
-	for _, o := range s.side(m) {
-		if !o.Same(m) {
-			out = append(out, o)
+	for _, c := range s.TeamsOf(m) {
+		for _, o := range c.Members {
+			if !o.Same(m) && !slices.ContainsFunc(out, o.Same) {
+				out = append(out, o)
+			}
 		}
 	}
 	return out

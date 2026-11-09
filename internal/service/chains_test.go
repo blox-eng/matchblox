@@ -52,36 +52,25 @@ func chainFrom(t *testing.T, s *Service, from, recID string) proto.Result {
 	return s.act(context.Background(), proto.Act{RecID: recID, From: from})
 }
 
-func TestChainActFormsAChainOnlyBothWays(t *testing.T) {
+func TestChainActFormsATeamAtOnce(t *testing.T) {
 	s := chainTest(t, filepath.Join(t.TempDir(), "chains.json"))
 	res := chainFrom(t, s, "%1", proto.ChainPrefix+"%2")
-	if res.Err != "" || res.Note != "asked two: the chain forms when it chains back" {
-		t.Fatalf("ask = %+v", res)
+	if res.Err != "" || res.Note != "joined one: 2 matches" {
+		t.Fatalf("chain = %+v", res)
 	}
 	doc := chainSample(s, chainSessions...)
-	if doc.Chains == nil || len(doc.Chains.Chains) != 0 || len(doc.Chains.Requests) != 1 {
-		t.Fatalf("after one side: %+v", doc.Chains)
+	if doc.Chains == nil || len(doc.Chains.Chains) != 1 {
+		t.Fatalf("after one command: %+v", doc.Chains)
 	}
-	res = chainFrom(t, s, "%2", proto.ChainPrefix+"%1")
-	if res.Err != "" || res.Note != "chained with one: 2 matches" {
-		t.Fatalf("ask back = %+v", res)
-	}
-	doc = chainSample(s, chainSessions...)
-	if doc.Chains == nil || len(doc.Chains.Chains) != 1 || len(doc.Chains.Requests) != 0 {
-		t.Fatalf("after both sides: %+v", doc.Chains)
-	}
-	if c := doc.Chains.Chains[0]; c.Repo != "/dev/app" || len(c.Members) != 2 {
+	if c := doc.Chains.Chains[0]; c.Name != "one" || c.Repo != "/dev/app" || len(c.Members) != 2 {
 		t.Fatalf("chain = %+v", c)
 	}
 }
 
 func TestChainActChainsAcrossRepos(t *testing.T) {
 	s := chainTest(t, filepath.Join(t.TempDir(), "chains.json"))
-	if res := chainFrom(t, s, "%1", proto.ChainPrefix+"%3"); res.Err != "" {
-		t.Fatalf("ask = %+v", res)
-	}
-	if res := chainFrom(t, s, "%3", proto.ChainPrefix+"%1"); res.Err != "" || res.Note != "chained with one: 2 matches" {
-		t.Fatalf("ask back = %+v", res)
+	if res := chainFrom(t, s, "%1", proto.ChainPrefix+"%3"); res.Err != "" || res.Note != "joined one: 2 matches" {
+		t.Fatalf("chain = %+v", res)
 	}
 	for range 3 { // the chain outlives the samples after it
 		doc := chainSample(s, chainSessions...)
@@ -91,22 +80,13 @@ func TestChainActChainsAcrossRepos(t *testing.T) {
 	}
 }
 
-func TestAnAskAcrossReposLastsItsTTL(t *testing.T) {
-	s := chainTest(t, filepath.Join(t.TempDir(), "chains.json"))
-	chainFrom(t, s, "%1", proto.ChainPrefix+"%3")
-	if doc := chainSample(s, chainSessions...); doc.Chains == nil || len(doc.Chains.Requests) != 1 {
-		t.Fatalf("a sample dropped the ask across repos: %+v", doc.Chains)
-	}
-}
-
 func TestChainActChainsASessionInNoRepo(t *testing.T) {
 	s := chainTest(t, filepath.Join(t.TempDir(), "chains.json"))
 	lost := sample.Session{Pane: "%4", PID: 104, SessionID: "s4", Name: "four", Cwd: "/tmp/x"}
 	sessions := append(slices.Clone(chainSessions), lost)
 	chainSample(s, sessions...)
-	chainFrom(t, s, "%1", proto.ChainPrefix+"%4")
-	if res := chainFrom(t, s, "%4", proto.ChainPrefix+"%1"); res.Err != "" || res.Note != "chained with one: 2 matches" {
-		t.Fatalf("ask back = %+v", res)
+	if res := chainFrom(t, s, "%1", proto.ChainPrefix+"%4"); res.Err != "" || res.Note != "joined one: 2 matches" {
+		t.Fatalf("chain = %+v", res)
 	}
 	if doc := chainSample(s, sessions...); doc.Chains == nil || len(doc.Chains.Chains) != 1 {
 		t.Fatalf("a sample dropped the no-repo match: %+v", doc.Chains)
@@ -116,7 +96,6 @@ func TestChainActChainsASessionInNoRepo(t *testing.T) {
 func TestChainsPruneBeforeTheFirstGitScan(t *testing.T) {
 	s := chainTest(t, filepath.Join(t.TempDir(), "chains.json"))
 	chainFrom(t, s, "%1", proto.ChainPrefix+"%2")
-	chainFrom(t, s, "%2", proto.ChainPrefix+"%1")
 	s.mu.Lock()
 	s.cur.Git = nil
 	s.mu.Unlock()
@@ -145,7 +124,6 @@ func TestChainActRefusesAGonePane(t *testing.T) {
 func TestChainActLeavesAndTurnsOff(t *testing.T) {
 	s := chainTest(t, filepath.Join(t.TempDir(), "chains.json"))
 	chainFrom(t, s, "%1", proto.ChainPrefix+"%2")
-	chainFrom(t, s, "%2", proto.ChainPrefix+"%1")
 	if res := chainFrom(t, s, "%1", proto.ChainPrefix+"-"); res.Note != "left the chain" {
 		t.Fatalf("leave = %+v", res)
 	}
@@ -156,7 +134,6 @@ func TestChainActLeavesAndTurnsOff(t *testing.T) {
 		t.Fatalf("off = %+v", res)
 	}
 	chainFrom(t, s, "%1", proto.ChainPrefix+"%2")
-	chainFrom(t, s, "%2", proto.ChainPrefix+"%1")
 	if doc := chainSample(s, chainSessions...); doc.Chains != nil && len(doc.Chains.Chains) > 0 {
 		t.Fatalf("an off match chained: %+v", doc.Chains)
 	}
@@ -169,7 +146,6 @@ func TestChainsSurviveARestart(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "chains.json")
 	s := chainTest(t, path)
 	chainFrom(t, s, "%1", proto.ChainPrefix+"%2")
-	chainFrom(t, s, "%2", proto.ChainPrefix+"%1")
 
 	again := chainTest(t, path)
 	doc := chainSample(again, chainSessions...)
@@ -199,7 +175,6 @@ func TestACorruptChainsFileStartsEmpty(t *testing.T) {
 func TestAGoneMemberIsPrunedOnSample(t *testing.T) {
 	s := chainTest(t, filepath.Join(t.TempDir(), "chains.json"))
 	chainFrom(t, s, "%1", proto.ChainPrefix+"%2")
-	chainFrom(t, s, "%2", proto.ChainPrefix+"%1")
 	if doc := chainSample(s, chainSessions[0], chainSessions[2]); doc.Chains != nil {
 		t.Fatalf("after %%2 went: %+v", doc.Chains)
 	}
@@ -208,7 +183,6 @@ func TestAGoneMemberIsPrunedOnSample(t *testing.T) {
 func TestAMatchThatMovesStaysChained(t *testing.T) {
 	s := chainTest(t, filepath.Join(t.TempDir(), "chains.json"))
 	chainFrom(t, s, "%1", proto.ChainPrefix+"%2")
-	chainFrom(t, s, "%2", proto.ChainPrefix+"%1")
 	moved := chainSessions[1]
 	moved.Cwd = "/dev/www"
 	doc := chainSample(s, chainSessions[0], moved, chainSessions[2])
@@ -227,7 +201,6 @@ func TestAFailedSampleKeepsTheChains(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "chains.json")
 	s := chainTest(t, path)
 	chainFrom(t, s, "%1", proto.ChainPrefix+"%2")
-	chainFrom(t, s, "%2", proto.ChainPrefix+"%1")
 	for _, why := range []string{"tmux: x", "proc: x"} {
 		var doc state.Doc
 		s.publish(sample.Snapshot{At: time.Now(), Errors: []string{why}}, func(d state.Doc) { doc = d })
@@ -251,7 +224,6 @@ func chainInbox(s *Service, x sample.Session) []string {
 func TestAMatchWithANewSessionIDStaysChained(t *testing.T) {
 	s := chainTest(t, filepath.Join(t.TempDir(), "chains.json"))
 	chainFrom(t, s, "%1", proto.ChainPrefix+"%2")
-	chainFrom(t, s, "%2", proto.ChainPrefix+"%1")
 	cleared := chainSessions[1]
 	cleared.SessionID = "s2-new"
 	doc := chainSample(s, chainSessions[0], cleared, chainSessions[2])
@@ -266,7 +238,6 @@ func TestAMatchWithANewSessionIDStaysChained(t *testing.T) {
 func TestAGoneMemberTellsItsMates(t *testing.T) {
 	s := chainTest(t, filepath.Join(t.TempDir(), "chains.json"))
 	chainFrom(t, s, "%1", proto.ChainPrefix+"%2")
-	chainFrom(t, s, "%2", proto.ChainPrefix+"%1")
 	chainSample(s, chainSessions[0], chainSessions[2])
 	if got := chainInbox(s, chainSessions[0]); !slices.Equal(got, []string{"two left the chain"}) {
 		t.Fatalf("one's inbox = %q", got)
@@ -306,8 +277,7 @@ func TestChainActRefusals(t *testing.T) {
 	}
 	chainFrom(t, s, "%2", proto.ChainPrefix+"on")
 	chainFrom(t, s, "%1", proto.ChainPrefix+"%2")
-	chainFrom(t, s, "%2", proto.ChainPrefix+"%1")
-	if res := chainFrom(t, s, "%1", proto.ChainPrefix+"%2"); res.Note != "already chained with two" || res.Err != "" {
+	if res := chainFrom(t, s, "%1", proto.ChainPrefix+"%2"); res.Note != "already in one" || res.Err != "" {
 		t.Errorf("again: %+v", res)
 	}
 	far := chainSessions[2]
@@ -341,7 +311,6 @@ func TestReadGitNeedsADirectory(t *testing.T) {
 func TestOffWhileTheSampleMissedFindsAClearedMatch(t *testing.T) {
 	s := chainTest(t, filepath.Join(t.TempDir(), "chains.json"))
 	chainFrom(t, s, "%1", proto.ChainPrefix+"%2")
-	chainFrom(t, s, "%2", proto.ChainPrefix+"%1")
 	cleared := slices.Clone(chainSessions)
 	cleared[1].SessionID = "s2-new"
 	s.publish(sample.Snapshot{At: time.Now(), Sessions: cleared, Errors: []string{"tmux: x"}}, func(state.Doc) {})

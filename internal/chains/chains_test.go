@@ -1,10 +1,12 @@
 package chains
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -13,12 +15,19 @@ var t0 = time.Date(2026, 11, 6, 12, 0, 0, 0, time.UTC)
 
 func mem(name string) Member { return Member{SessionID: name, Pane: "%" + name} }
 
-func chainOf(t *testing.T, s *Store, names ...string) {
+// chainOf makes one team of names, named after the first.
+func chainOf(t *testing.T, s *Store, names ...string) Chain {
 	t.Helper()
-	for _, n := range names[1:] {
-		s.Ask(mem(names[0]), mem(n), "r", t0)
-		s.Ask(mem(n), mem(names[0]), "r", t0)
+	c, err := s.Form(mem(names[0]), mem(names[1]), names[0], "r")
+	if err != nil {
+		t.Fatal(err)
 	}
+	for _, n := range names[2:] {
+		if c, err = s.Join(mem(n), c.Name); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return c
 }
 
 func names(ms []Member) map[string]bool {
@@ -29,85 +38,138 @@ func names(ms []Member) map[string]bool {
 	return out
 }
 
-func TestOneSideAloneFormsNoChain(t *testing.T) {
+func teamNames(cs []Chain) []string {
+	var out []string
+	for _, c := range cs {
+		out = append(out, c.Name)
+	}
+	return out
+}
+
+func TestFormNamesTheTeamAfterItsStarter(t *testing.T) {
 	var s Store
-	if s.Ask(mem("a"), mem("b"), "r", t0) {
-		t.Fatal("formed with one side")
+	c, err := s.Form(mem("a"), mem("b"), "hearth", "/r")
+	if err != nil || c.Name != "hearth" || c.Repo != "/r" || len(c.Members) != 2 {
+		t.Fatalf("%+v %v", c, err)
 	}
-	if _, ok := s.ChainOf(mem("a")); ok {
-		t.Fatal("a has a chain")
+	c2, err := s.Form(mem("c"), mem("d"), "hearth", "/r")
+	if err != nil || c2.Name != "hearth-2" {
+		t.Fatalf("clash: %+v %v", c2, err)
 	}
-	if len(s.Requests) != 1 {
-		t.Fatalf("requests = %d", len(s.Requests))
+	c3, _ := s.Form(mem("e"), mem("f"), "hearth", "/r")
+	if c3.Name != "hearth-3" {
+		t.Fatalf("second clash: %q", c3.Name)
 	}
 }
 
-func TestBothSidesFormAChain(t *testing.T) {
-	var s Store
-	s.Ask(mem("a"), mem("b"), "r", t0)
-	if !s.Ask(mem("b"), mem("a"), "r", t0) {
-		t.Fatal("not formed")
-	}
-	if len(s.Chains) != 1 || len(s.Requests) != 0 {
-		t.Fatalf("chains=%d requests=%d", len(s.Chains), len(s.Requests))
-	}
-	c, _ := s.ChainOf(mem("a"))
-	if got := names(c.Members); len(got) != 2 || !got["a"] || !got["b"] || c.Repo != "r" {
-		t.Fatalf("chain = %+v", c)
-	}
-}
-
-func TestAMemberOfTheChainCanAccept(t *testing.T) {
+func TestJoinAddsToOneTeamOnly(t *testing.T) {
 	var s Store
 	chainOf(t, &s, "a", "b")
-	s.Ask(mem("c"), mem("a"), "r", t0)
-	if !s.Ask(mem("b"), mem("c"), "r", t0) {
-		t.Fatal("not formed")
+	if _, err := s.Form(mem("b"), mem("c"), "web", ""); err != nil {
+		t.Fatal(err)
 	}
-	if len(s.Chains) != 1 || len(s.Chains[0].Members) != 3 || len(s.Requests) != 0 {
-		t.Fatalf("state = %+v", s)
+	if _, err := s.Join(mem("d"), "web"); err != nil {
+		t.Fatal(err)
+	}
+	if got := teamNames(s.TeamsOf(mem("b"))); !slices.Equal(got, []string{"a", "web"}) {
+		t.Fatalf("b teams = %q", got)
+	}
+	if got := names(s.Mates(mem("a"))); len(got) != 1 || !got["b"] {
+		t.Fatalf("a hears %v", got)
+	}
+	if got := names(s.Mates(mem("b"))); len(got) != 3 || !got["a"] || !got["c"] || !got["d"] {
+		t.Fatalf("b hears %v", got)
+	}
+	if c, ok := s.Shared(mem("b"), mem("d")); !ok || c.Name != "web" {
+		t.Fatalf("shared = %+v %v", c, ok)
+	}
+	if _, ok := s.Shared(mem("a"), mem("d")); ok {
+		t.Fatal("a and d share a team")
 	}
 }
 
-func TestTwoChainsMergeIntoOne(t *testing.T) {
+func TestJoinRefusesOffAndAlreadyIn(t *testing.T) {
 	var s Store
 	chainOf(t, &s, "a", "b")
-	chainOf(t, &s, "c", "d")
-	s.Ask(mem("a"), mem("c"), "r", t0)
-	s.Ask(mem("d"), mem("b"), "r", t0)
-	if len(s.Chains) != 1 || len(s.Chains[0].Members) != 4 {
+	if _, err := s.Join(mem("b"), "a"); !errors.Is(err, ErrIn) {
+		t.Fatalf("again: %v", err)
+	}
+	s.SetOff(mem("c"), true)
+	if _, err := s.Join(mem("c"), "a"); !errors.Is(err, ErrOff) {
+		t.Fatalf("off: %v", err)
+	}
+	if _, err := s.Join(mem("c"), "none"); err == nil {
+		t.Fatal("joined a team that is not there")
+	}
+}
+
+func TestFormRefusesOffSelf(t *testing.T) {
+	var s Store
+	if _, err := s.Form(mem("a"), mem("a"), "a", ""); !errors.Is(err, ErrSelf) {
+		t.Fatalf("self: %v", err)
+	}
+	s.SetOff(mem("b"), true)
+	if _, err := s.Form(mem("a"), mem("b"), "a", ""); !errors.Is(err, ErrOff) {
+		t.Fatalf("to off: %v", err)
+	}
+	if _, err := s.Form(mem("b"), mem("a"), "b", ""); !errors.Is(err, ErrOff) {
+		t.Fatalf("from off: %v", err)
+	}
+	if len(s.Chains) != 0 {
 		t.Fatalf("chains = %+v", s.Chains)
 	}
 }
 
-func TestARequestLapsesAfterAnHour(t *testing.T) {
+func TestLeaveTeamEndsATeamOfOne(t *testing.T) {
 	var s Store
-	s.Ask(mem("a"), mem("b"), "r", t0)
-	live := func(Member) bool { return true }
-	s.Prune(live, t0.Add(59*time.Minute))
-	if len(s.Requests) != 1 {
-		t.Fatal("lapsed early")
+	chainOf(t, &s, "h", "b")
+	if !s.LeaveTeam(mem("h"), "h") {
+		t.Fatal("not left")
 	}
-	s.Prune(live, t0.Add(61*time.Minute))
-	if len(s.Requests) != 0 {
-		t.Fatal("request stayed")
+	if _, ok := s.Team("h"); ok || len(s.Chains) != 0 {
+		t.Fatalf("chains = %+v", s.Chains)
+	}
+	if s.LeaveTeam(mem("h"), "h") {
+		t.Fatal("left twice")
 	}
 }
 
-func TestAGoneMatchLeaves(t *testing.T) {
+func TestNameStaysWhenTheStarterLeaves(t *testing.T) {
+	var s Store
+	chainOf(t, &s, "h", "b", "c")
+	s.LeaveTeam(mem("h"), "h")
+	c, ok := s.Team("h")
+	if got := names(c.Members); !ok || len(got) != 2 || !got["b"] || !got["c"] {
+		t.Fatalf("team = %+v %v", c, ok)
+	}
+}
+
+func TestLeaveLeavesEveryTeam(t *testing.T) {
 	var s Store
 	chainOf(t, &s, "a", "b", "c")
-	id := s.Chains[0].ID
-	left := s.Prune(func(m Member) bool { return m.SessionID != "c" }, t0)
-	if len(left) != 1 || left[0].Who.SessionID != "c" || left[0].Chain != id {
+	s.Form(mem("b"), mem("d"), "web", "")
+	s.Leave(mem("b"))
+	if len(s.TeamsOf(mem("b"))) != 0 {
+		t.Fatalf("b teams = %+v", s.TeamsOf(mem("b")))
+	}
+	if _, ok := s.Team("web"); ok {
+		t.Fatal("web of one stayed")
+	}
+}
+
+func TestPruneLeavesEveryTeam(t *testing.T) {
+	var s Store
+	a := chainOf(t, &s, "a", "b", "c")
+	s.Form(mem("b"), mem("d"), "web", "")
+	web, _ := s.Join(mem("e"), "web")
+	left := s.Prune(func(m Member) bool { return m.SessionID != "b" }, t0)
+	if len(left) != 2 || left[0].Chain != a.ID || left[1].Chain != web.ID {
 		t.Fatalf("left = %+v", left)
 	}
-	c, ok := s.ChainOf(mem("a"))
-	if !ok || len(c.Members) != 2 {
-		t.Fatalf("chain = %+v", c)
-	}
-	if _, ok := s.ChainOf(mem("c")); ok {
-		t.Fatal("c still chained")
+	for _, l := range left {
+		if l.Who.SessionID != "b" {
+			t.Fatalf("left = %+v", left)
+		}
 	}
 }
 
@@ -120,21 +182,40 @@ func TestAChainOfOneEnds(t *testing.T) {
 	}
 }
 
-func TestOffLeavesAndRefusesAsks(t *testing.T) {
+func TestOffLeavesAndRefusesJoins(t *testing.T) {
 	var s Store
 	chainOf(t, &s, "a", "b")
 	s.SetOff(mem("b"), true)
 	if len(s.Chains) != 0 {
 		t.Fatal("chain stayed")
 	}
-	s.Ask(mem("a"), mem("b"), "r", t0)
-	if s.Ask(mem("b"), mem("a"), "r", t0) || len(s.Requests) != 0 {
-		t.Fatal("off member chained")
+	if _, err := s.Form(mem("a"), mem("b"), "a", ""); !errors.Is(err, ErrOff) {
+		t.Fatalf("off member chained: %v", err)
 	}
 	s.SetOff(mem("b"), false)
-	s.Ask(mem("a"), mem("b"), "r", t0)
-	if !s.Ask(mem("b"), mem("a"), "r", t0) {
-		t.Fatal("on again, not formed")
+	if _, err := s.Form(mem("a"), mem("b"), "a", ""); err != nil {
+		t.Fatalf("on again: %v", err)
+	}
+}
+
+// TestLoadOldStoreNamesChains: a store an older build saved, with requests
+// and chains with no name, loads; its requests are gone.
+func TestLoadOldStoreNamesChains(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "chains.json")
+	old := `{"chains":[{"id":"%a#1","repo":"r","members":[{"session_id":"a","pane":"%a"},{"session_id":"b","pane":"%b"}]}],` +
+		`"requests":[{"from":{"session_id":"c"},"to":{"session_id":"a"},"at":"2026-11-06T12:00:00Z"}]}`
+	if err := os.WriteFile(path, []byte(old), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Load(path)
+	if err != nil || len(s.Chains) != 1 || s.Chains[0].Name != "" || len(s.Chains[0].Members) != 2 {
+		t.Fatalf("loaded = %+v, %v", s, err)
+	}
+	if err := s.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(path); strings.Contains(string(b), "requests") {
+		t.Fatalf("saved = %s", b)
 	}
 }
 
@@ -178,7 +259,6 @@ func TestGiveBackGoesFirst(t *testing.T) {
 func TestSaveAndLoad(t *testing.T) {
 	var s Store
 	chainOf(t, &s, "a", "b")
-	s.Ask(mem("c"), mem("a"), "r", t0)
 	s.SetOff(mem("d"), true)
 	s.Post(mem("a"), "news", t0)
 	path := filepath.Join(t.TempDir(), "state", "chains.json")
@@ -193,7 +273,7 @@ func TestSaveAndLoad(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got.Chains) != 1 || len(got.Requests) != 1 || len(got.Off) != 1 || len(got.Take(mem("a")).Items) != 0 {
+	if len(got.Chains) != 1 || got.Chains[0].Name != "a" || len(got.Off) != 1 || len(got.Take(mem("a")).Items) != 0 {
 		t.Fatalf("loaded = %+v", got)
 	}
 	empty, err := Load(filepath.Join(t.TempDir(), "none.json"))
@@ -214,12 +294,10 @@ func TestPruneDropsTheOffOfGoneMatches(t *testing.T) {
 }
 
 // TestRefreshKeepsAMatchWithANewSessionID: a match whose session id changed
-// (a cleared chat) stays in its chain, its requests, its off mark and its
-// inbox.
+// (a cleared chat) stays in its team, its off mark and its inbox.
 func TestRefreshKeepsAMatchWithANewSessionID(t *testing.T) {
 	var s Store
 	chainOf(t, &s, "a", "b")
-	s.Ask(mem("c"), mem("a"), "r", t0)
 	s.SetOff(mem("d"), true)
 	s.Post(mem("a"), "news", t0)
 	renew := func(m Member) (Member, bool) {
@@ -233,11 +311,8 @@ func TestRefreshKeepsAMatchWithANewSessionID(t *testing.T) {
 		t.Fatal("nothing changed")
 	}
 	a2 := Member{SessionID: "a2", Pane: "%a"}
-	if c, ok := s.ChainOf(a2); !ok || len(c.Members) != 2 {
+	if ts := s.TeamsOf(a2); len(ts) != 1 || len(ts[0].Members) != 2 {
 		t.Fatalf("chain = %+v", s.Chains)
-	}
-	if len(s.Requests) != 1 || s.Requests[0].To != a2 {
-		t.Fatalf("requests = %+v", s.Requests)
 	}
 	if len(s.Off) != 1 || s.Off[0].SessionID != "d2" {
 		t.Fatalf("off = %+v", s.Off)

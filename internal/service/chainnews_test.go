@@ -128,7 +128,7 @@ func TestAStopReachesTheMatesOnly(t *testing.T) {
 		t.Errorf("the source heard itself: %q", got)
 	}
 	s.mu.Lock()
-	c, _ := s.Chains.ChainOf(memberOf(newsSessions[0]))
+	c := s.Chains.TeamsOf(memberOf(newsSessions[0]))[0]
 	s.mu.Unlock()
 	if !c.Spark.IsZero() {
 		t.Errorf("a finish sparked: %v", c.Spark)
@@ -487,7 +487,7 @@ func TestAPostedMessageBroadcasts(t *testing.T) {
 	s.join(cl)
 	defer s.leave(cl)
 	s.mu.Lock()
-	c, _ := s.Chains.ChainOf(memberOf(newsSessions[0]))
+	c := s.Chains.TeamsOf(memberOf(newsSessions[0]))[0]
 	s.mu.Unlock()
 	s.postMessage(c.ID, newsSessions[1], "[from peer-send %1] hi", time.Now())
 	select {

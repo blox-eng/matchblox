@@ -65,17 +65,22 @@ func peerTest(t *testing.T) (*Service, *[][]string, *time.Time) {
 	return s, ran, &now
 }
 
-// chainUp chains the session in the first pane with the one in each other
-// pane, as if each pair had chained both ways.
+// chainUp makes one team of the sessions in panes, named after the first.
 func chainUp(s *Service, panes ...string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	st := s.chainsLocked()
 	first, _ := s.sessionAtLocked(panes[0])
-	for _, p := range panes[1:] {
+	second, _ := s.sessionAtLocked(panes[1])
+	c, err := st.Form(memberOf(first), memberOf(second), first.Name, "/src/app")
+	if err != nil {
+		panic(err)
+	}
+	for _, p := range panes[2:] {
 		x, _ := s.sessionAtLocked(p)
-		st.Ask(memberOf(first), memberOf(x), "/src/app", s.now())
-		st.Ask(memberOf(x), memberOf(first), "/src/app", s.now())
+		if _, err := st.Join(memberOf(x), c.Name); err != nil {
+			panic(err)
+		}
 	}
 }
 
@@ -507,7 +512,7 @@ func TestSendToAnIdleMateTypesTheLine(t *testing.T) {
 	}
 	h.s.mu.Lock()
 	defer h.s.mu.Unlock()
-	if c, _ := h.s.Chains.ChainOf(chains.Member{SessionID: "s1"}); !c.Spark.Equal(night0) {
+	if c := h.s.Chains.TeamsOf(chains.Member{SessionID: "s1"})[0]; !c.Spark.Equal(night0) {
 		t.Fatalf("the send did not spark the chain: %v", c.Spark)
 	}
 }
@@ -527,7 +532,7 @@ func TestSendToABusyMateQueues(t *testing.T) {
 	if len(items) != 1 || items[0] != "[from peer-send %1] hi" {
 		t.Fatalf("inbox %+v", items)
 	}
-	if c, _ := h.s.Chains.ChainOf(chains.Member{SessionID: "s1"}); !c.Spark.Equal(night0) {
+	if c := h.s.Chains.TeamsOf(chains.Member{SessionID: "s1"})[0]; !c.Spark.Equal(night0) {
 		t.Fatalf("the queued send did not spark the chain: %v", c.Spark)
 	}
 }

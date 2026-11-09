@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -55,7 +56,7 @@ func (s *Service) changeChains(arg, fromPane string) (res proto.Result, changed 
 	me := memberOf(from)
 	switch arg {
 	case "-":
-		if _, in := st.ChainOf(me); !in {
+		if len(st.TeamsOf(me)) == 0 {
 			return proto.Result{Note: "not in a chain"}, changed
 		}
 		st.Leave(me)
@@ -78,15 +79,20 @@ func (s *Service) changeChains(arg, fromPane string) (res proto.Result, changed 
 		if why != "" {
 			return refuseText(why), changed
 		}
-		if c, ok := st.ChainOf(me); ok && slices.ContainsFunc(c.Members, memberOf(to).Same) {
-			return proto.Result{Note: "already chained with " + to.Name}, changed
-		}
-		if st.Ask(me, memberOf(to), repo, s.now()) {
-			c, _ := st.ChainOf(me)
-			res.Note = fmt.Sprintf("chained with %s: %d matches", to.Name, len(c.Members))
+		var c chains.Chain
+		var err error
+		if teams := st.TeamsOf(memberOf(to)); len(teams) > 0 {
+			c, err = st.Join(me, teams[0].Name)
 		} else {
-			res.Note = "asked " + to.Name + ": the chain forms when it chains back"
+			c, err = st.Form(me, memberOf(to), from.Name, repo)
 		}
+		switch {
+		case errors.Is(err, chains.ErrIn):
+			return proto.Result{Note: "already in " + c.Name}, changed
+		case err != nil:
+			return refuseText(err.Error()), changed
+		}
+		res.Note = fmt.Sprintf("joined %s: %d matches", c.Name, len(c.Members))
 	}
 	s.cur.Chains = chainsView(st)
 	if err := s.saveChainsLocked(); err != nil {
@@ -115,7 +121,7 @@ func (s *Service) chainable(st *chains.Store, from, to sample.Session) (repo, wh
 }
 
 // pruneChainsLocked keeps up the members whose session id changed in their
-// pane, drops the members and asks the sessions no longer hold, tells the
+// pane, drops the members the sessions no longer hold, tells the
 // mates of a match that left, and saves on a change. prev are the sessions
 // of the sample before, which name a match that is gone. Callers hold mu.
 func (s *Service) pruneChainsLocked(now time.Time, prev []sample.Session) error {
@@ -124,7 +130,7 @@ func (s *Service) pruneChainsLocked(now time.Time, prev []sample.Session) error 
 		return nil // every match would look gone
 	}
 	refreshed := s.refreshChainsLocked(st)
-	before, asks, offs := slices.Clone(st.Chains), len(st.Requests), len(st.Off)
+	before, offs := slices.Clone(st.Chains), len(st.Off)
 	live := func(m chains.Member) bool {
 		_, ok := s.sessionOfLocked(m)
 		return ok || s.switchingLocked(st, m, now)
@@ -146,7 +152,7 @@ func (s *Service) pruneChainsLocked(now time.Time, prev []sample.Session) error 
 			}
 		}
 	}
-	if !refreshed && len(left) == 0 && len(st.Requests) == asks && len(st.Off) == offs {
+	if !refreshed && len(left) == 0 && len(st.Off) == offs {
 		return nil
 	}
 	return s.saveChainsLocked()
@@ -202,7 +208,7 @@ func (s *Service) moveChainsLocked(x sample.Session, on bool) error {
 // markClearedLocked marks n, a new chat in m's place, to be told its chain at
 // its next news. Callers hold mu.
 func (s *Service) markClearedLocked(st *chains.Store, m, n chains.Member) {
-	if _, chained := st.ChainOf(m); !chained || n.SessionID == m.SessionID {
+	if len(st.TeamsOf(m)) == 0 || n.SessionID == m.SessionID {
 		return
 	}
 	if s.cleared == nil {
@@ -291,12 +297,12 @@ func (s *Service) saveChainsLocked() error {
 }
 
 // chainsView copies what the doc shows, so a later change to the store does
-// not reach a doc already sent. Nil: no chain and no ask.
+// not reach a doc already sent. Nil: no chain.
 func chainsView(st *chains.Store) *state.ChainsView {
-	if len(st.Chains) == 0 && len(st.Requests) == 0 {
+	if len(st.Chains) == 0 {
 		return nil
 	}
-	v := &state.ChainsView{Chains: slices.Clone(st.Chains), Requests: slices.Clone(st.Requests)}
+	v := &state.ChainsView{Chains: slices.Clone(st.Chains)}
 	for i := range v.Chains {
 		v.Chains[i].Members = slices.Clone(v.Chains[i].Members)
 	}

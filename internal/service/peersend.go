@@ -316,11 +316,8 @@ func (s *Service) paneInMode(pane string) (bool, error) {
 func (s *Service) mateChain(from, to chains.Member) (string, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	c, ok := s.chainsLocked().ChainOf(from)
-	if !ok || !slices.ContainsFunc(c.Members, to.Same) {
-		return "", false
-	}
-	return c.ID, true
+	c, ok := s.chainsLocked().Shared(from, to)
+	return c.ID, ok
 }
 
 // postMessage puts a send's line in x's inbox and sparks the chain.

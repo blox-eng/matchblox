@@ -2066,18 +2066,16 @@ func TestAStaleSwitchRefusesEveryHandoff(t *testing.T) {
 	}
 }
 
-// switchChainTest is a switch test where work (%1) is chained with cx (%3)
-// and busy (%2) asks to chain with work, on a clock the test moves.
+// switchChainTest is a switch test where work (%1) is chained with cx (%3),
+// on a clock the test moves.
 func switchChainTest(t *testing.T) (*Service, *time.Time) {
 	t.Helper()
 	s, _ := switchTest(t)
 	clock := night0
 	s.Now = func() time.Time { return clock }
 	s.ChainsPath = filepath.Join(t.TempDir(), "chains.json")
-	for _, a := range [][2]string{{"%1", "%3"}, {"%3", "%1"}, {"%2", "%1"}} {
-		if res := chainFrom(t, s, a[0], proto.ChainPrefix+a[1]); res.Err != "" {
-			t.Fatalf("%s chains %s: %+v", a[0], a[1], res)
-		}
+	if res := chainFrom(t, s, "%1", proto.ChainPrefix+"%3"); res.Err != "" {
+		t.Fatalf("work chains cx: %+v", res)
 	}
 	return s, &clock
 }
@@ -2096,8 +2094,8 @@ func switchSample(s *Service, agent *sample.Session) state.Doc {
 }
 
 // TestASwitchKeepsTheChain: #333. A switch respawns the pane, so the new
-// agent has another pid, start and session id; the match keeps its chain,
-// the requests to it and its notices, with no new handshake.
+// agent has another pid, start and session id; the match keeps its chain
+// and its notices, with no new handshake.
 func TestASwitchKeepsTheChain(t *testing.T) {
 	s, clock := switchChainTest(t)
 	if res := s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: "codex"})); res.Err != "" {
@@ -2107,30 +2105,27 @@ func TestASwitchKeepsTheChain(t *testing.T) {
 		t.Fatalf("on disk: %+v %v", st, err)
 	}
 	*clock = clock.Add(time.Second)
-	if doc := switchSample(s, nil); doc.Chains == nil || len(doc.Chains.Chains) != 1 || len(doc.Chains.Requests) != 1 {
+	if doc := switchSample(s, nil); doc.Chains == nil || len(doc.Chains.Chains) != 1 {
 		t.Fatalf("while the pane starts the new agent: %+v", doc.Chains)
 	}
 	codex := sample.Session{Agent: "codex", PID: 201, Start: 9, Pane: "%1", Target: "app:1.1", Cwd: "/work/app", Name: "work", Status: "idle"}
 	*clock = clock.Add(10 * time.Minute) // no id read yet: a Codex chat before its first turn
-	if doc := switchSample(s, &codex); doc.Chains == nil || len(doc.Chains.Chains) != 1 || len(doc.Chains.Requests) != 1 {
+	if doc := switchSample(s, &codex); doc.Chains == nil || len(doc.Chains.Chains) != 1 {
 		t.Fatalf("before the new agent's id: %+v", doc.Chains)
 	}
 	codex.SessionID = "c1"
 	doc := switchSample(s, &codex)
-	if doc.Chains == nil || len(doc.Chains.Chains) != 1 || len(doc.Chains.Requests) != 1 {
+	if doc.Chains == nil || len(doc.Chains.Chains) != 1 {
 		t.Fatalf("after the switch: %+v", doc.Chains)
 	}
 	if c := doc.Chains.Chains[0]; len(c.Members) != 2 || !slices.ContainsFunc(c.Members, memberOf(codex).Same) {
 		t.Fatalf("chain = %+v", c)
 	}
-	if r := doc.Chains.Requests[0]; !r.To.Same(memberOf(codex)) {
-		t.Fatalf("request = %+v", r)
-	}
 	if got := chainInbox(s, lifeSnap(false).Sessions[2]); len(got) != 0 {
 		t.Fatalf("cx heard %q", got)
 	}
 	d := s.news(proto.News{Pane: "%1"})
-	if !strings.Contains(d.text, "you are chained with cx") || !strings.Contains(d.text, "busy asks to chain with you") {
+	if !strings.Contains(d.text, "you are chained with cx") {
 		t.Fatalf("the new agent heard %q", d.text)
 	}
 	s.mu.Lock()

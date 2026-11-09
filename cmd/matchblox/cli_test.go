@@ -784,11 +784,7 @@ func TestSessionsJSONNamesTheShipTheRowLeadsWith(t *testing.T) {
 func chainDoc() state.Doc {
 	d := cliDoc()
 	d.Chains = &state.ChainsView{
-		Chains: []chains.Chain{{ID: "c1", Repo: "o/r", Members: []chains.Member{{Pane: "%3"}, {Pane: "%4"}}}},
-		Requests: []chains.Request{
-			{From: chains.Member{Pane: "%5"}, To: chains.Member{Pane: "%3"}},
-			{From: chains.Member{Pane: "%3"}, To: chains.Member{Pane: "%9"}},
-		},
+		Chains: []chains.Chain{{ID: "c1", Name: "api", Repo: "o/r", Members: []chains.Member{{Pane: "%3"}, {Pane: "%4"}}}},
 	}
 	d.Sessions = append(d.Sessions, sample.Session{Pane: "%9", Name: "docs", Cwd: "/tmp/notes"})
 	d.Sessions[0].Cwd, d.Sessions[1].Cwd = "/dev/api/cmd", "/dev/web"
@@ -927,7 +923,7 @@ func TestChainListJSON(t *testing.T) {
 	if err := writeChain(&buf, chainDoc(), "%3", true); err != nil {
 		t.Fatal(err)
 	}
-	want := `{"chain":[{"name":"api","pane":"%3","repo":"api"},{"name":"web","pane":"%4","repo":"web"}],"requests":[{"from":"web","to":"api"},{"from":"api","to":"docs"}]}`
+	want := `{"chain":[{"name":"api","pane":"%3","repo":"api"},{"name":"web","pane":"%4","repo":"web"}],"requests":[]}`
 	if strings.TrimSpace(buf.String()) != want {
 		t.Fatalf("got %s", buf.String())
 	}
@@ -942,7 +938,7 @@ func TestChainListText(t *testing.T) {
 	if err := writeChain(&buf, chainDoc(), "%3", false); err != nil {
 		t.Fatal(err)
 	}
-	if want := "api %3 in api\nweb %4 in web\nweb asks you\nyou asked docs\n"; buf.String() != want {
+	if want := "api %3 in api\nweb %4 in web\n"; buf.String() != want {
 		t.Fatalf("got %q, want %q", buf.String(), want)
 	}
 	buf.Reset()
