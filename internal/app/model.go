@@ -435,6 +435,11 @@ type Model struct {
 	// clones are the clones the service runs and the ones that ended in
 	// the last minute (#176).
 	clones []proto.Clone
+	// refreshes are the record refreshes the home service waits for,
+	// each before its switch.
+	refreshes []proto.Refresh
+	// waitTicking: a tick of the record wait's clock is due.
+	waitTicking bool
 	// stopAfter are the clone:starts esc came before: each clone stops
 	// when the service takes its start. stopQuiet are the clone:stops
 	// with no answer yet, whose answer says nothing.
@@ -739,7 +744,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.wrepos, m.wfrom = m.whereRepos(m.opt.Host), from
 			m.wghost = m.ghostRepos()
 		}
-		m.clones = st.Clones
+		m.clones, m.refreshes = st.Clones, st.Refreshes
 		m.push = st.Push
 		var again, started tea.Cmd
 		if m.lost { // the clone acts' answers went with the connection
@@ -775,7 +780,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			news = m.say(toast)
 		}
 		m, order = m.queuedOrder(m.opt.Host)
-		return m, tea.Batch(m.recv(), m.animate(), news, order, focus, again, started)
+		tick := m.waitTick()
+		return m, tea.Batch(m.recv(), m.animate(), news, order, focus, again, started, tick)
 	case graphicsMsg:
 		return m.graphics(msg)
 	case graphicsTickMsg:
@@ -793,6 +799,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case animMsg:
 		m.animating = false
 		return m, m.animate()
+	case waitTickMsg:
+		m.waitTicking = false
+		tick := m.waitTick()
+		return m, tick
 	case toastMsg:
 		if msg.n == m.toasts {
 			m.toast = ""
@@ -1256,10 +1266,13 @@ func (m Model) pendingKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 // key is k on the tabs, with nothing on top.
 func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	mk := m.keys.main
+	if bkey.Matches(k, mk.Back) && m.waiting() {
+		return m, m.switchNow()
+	}
 	if m.chatKeys {
 		return m.chatKey(k)
 	}
-	mk := m.keys.main
 	m.flash = ""
 	switch {
 	case bkey.Matches(k, mk.Stoker):

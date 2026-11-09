@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -2140,5 +2141,83 @@ func TestSwitchExtrasTakeTheCLIsLimit(t *testing.T) {
 	var sw proto.SwitchAgent
 	if acts := f.acts(); len(acts) != 1 || json.Unmarshal([]byte(acts[0].Text), &sw) != nil || sw.Handoff != proto.Handoff(full) {
 		t.Fatalf("sent %+v", f.acts())
+	}
+}
+
+// recordWait is the console at w columns after y on a switch of %1, with
+// the service waiting for claude's task record since 42 seconds ago.
+func recordWait(t *testing.T, w int) (tea.Model, *fakeConn) {
+	t.Helper()
+	next, f := switchState(t, lifeState())
+	m, now := clocked(next.(Model))
+	next, _ = key(m, "A")
+	next, _ = key(next, "enter")
+	next, cmd := key(next, "y")
+	cmd()
+	next, _ = next.Update(tea.WindowSizeMsg{Width: w, Height: 30})
+	st := lifeState()
+	st.Queue = nil
+	st.Refreshes = []proto.Refresh{{Pane: "%1", Name: "api", Agent: "claude", Since: now.Add(-42 * time.Second), Until: now.Add(138 * time.Second)}}
+	next, _ = next.Update(stateMsg(st))
+	return next, f
+}
+
+func TestTheSwitchShowsTheRecordWait(t *testing.T) {
+	for _, w := range []int{80, 44} {
+		next, _ := recordWait(t, w)
+		s := screen(next)
+		for _, want := range []string{"◐ claude writes its task record 0:42", "esc switches now"} {
+			if !strings.Contains(s, want) {
+				t.Fatalf("width %d lacks %q:\n%s", w, want, s)
+			}
+		}
+		for i, line := range strings.Split(next.(Model).render(), "\n") {
+			if lw := lipgloss.Width(line); lw > w {
+				t.Fatalf("width %d: line %d is %d wide: %q", w, i, lw, line)
+			}
+		}
+	}
+}
+
+func TestEscDuringTheRecordWaitSwitchesNow(t *testing.T) {
+	next, f := recordWait(t, 80)
+	next, cmd := key(next, "esc")
+	if cmd != nil {
+		cmd()
+	}
+	acts := f.acts()
+	if len(acts) != 2 || acts[1] != (proto.Act{RecID: proto.SwitchNowPrefix + "%1"}) {
+		t.Fatalf("sent %+v", acts)
+	}
+	if nm := next.(Model); nm.form != nil || nm.pending != nil {
+		t.Fatalf("form %+v pending %+v", nm.form, nm.pending)
+	}
+	// With no refresh in the snapshot, esc keeps its meaning: it sends nothing.
+	next, f = switchState(t, lifeState())
+	next, _ = key(next, "A")
+	next, _ = key(next, "enter")
+	next, cmd = key(next, "y")
+	cmd()
+	if _, cmd = key(next, "esc"); cmd != nil {
+		cmd()
+	}
+	if acts := f.acts(); len(acts) != 1 || strings.Contains(screen(next), "esc switches now") {
+		t.Fatalf("sent %+v:\n%s", acts, screen(next))
+	}
+}
+
+func TestAnotherConsoleSeesTheWait(t *testing.T) {
+	st := lifeState()
+	st.Queue = nil
+	st.Refreshes = []proto.Refresh{{Pane: "%1", Name: "app-feature", Agent: "claude", Since: time.Now().Add(-42 * time.Second)}}
+	for _, w := range []int{100, 44} {
+		m, _ := loadedWith(t, w, st)
+		s := screen(m)
+		i := slices.IndexFunc(strings.Split(s, "\n"), func(l string) bool {
+			return strings.Contains(l, "app-feature") && strings.Contains(l, "writes its record")
+		})
+		if i < 0 || strings.Contains(s, "esc switches now") {
+			t.Fatalf("width %d: %%1's row lacks the wait:\n%s", w, s)
+		}
 	}
 }
