@@ -326,4 +326,7 @@ footer a { color: var(--muted); }
 @keyframes beckon { 50% { opacity: .5; } }
 @media (hover: hover) { .domino g:hover .head { transform: translateY(-3px); } }
 .box { gap: 18px; }
-.end .cmd { max-width: 640px; }
+footer nav { align-items: center; }
+footer .icon { display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; color: var(--muted); text-decoration: none; }
+footer .icon:hover { color: var(--fg); background: var(--hair-soft); }
+footer .icon svg { width: 18px; height: 18px; fill: currentColor; }
