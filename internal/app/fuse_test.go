@@ -644,3 +644,36 @@ func TestOutOfTeamAsks(t *testing.T) {
 		t.Fatalf("%+v", a)
 	}
 }
+
+// TestAClearIsNoJoin: a member renamed by a /clear (a new session id in
+// the same pane) is not a match that joined.
+func TestAClearIsNoJoin(t *testing.T) {
+	var m tea.Model = New(Options{NoMotion: true, Conn: newFake(), Now: func() time.Time { return demoAt }})
+	m, _ = m.Update(tea.WindowSizeMsg{Width: 160, Height: 30})
+	m, _ = m.Update(stateMsg(fuseState(t, mockupChain[:2])))
+	st := fuseState(t, mockupChain[:2])
+	for i := range st.Sessions {
+		if st.Sessions[i].Name == "hearth-api" {
+			st.Sessions[i].SessionID = "cleared"
+			st.Chains.Chains[0].Members[1] = memberOf(st.Sessions[i])
+		}
+	}
+	m, _ = m.Update(stateMsg(st))
+	if got := m.(Model).toast; got != "" {
+		t.Fatalf("toast = %q", got)
+	}
+}
+
+// TestASharedMatchFusesWithTheTeamItCanShow: kindle-web's first team has
+// no other match here, so it draws in web's fuse with flint-auth.
+func TestASharedMatchFusesWithTheTeamItCanShow(t *testing.T) {
+	st := fuseState(t, []string{"kindle-web"}, []string{"kindle-web", "flint-auth"})
+	st.Chains.Chains[0].Members = append(st.Chains.Chains[0].Members, chains.Member{SessionID: "gone", Pane: "%99"})
+	m := fuseModel(t, 160, st, "")
+	var b body
+	m.sessionRows(&b, 100)
+	k, f := ansi.Strip(lineWith(b.lines, "kindle-web")), ansi.Strip(lineWith(b.lines, "flint-auth"))
+	if !strings.Contains(k, "─╮ kindle-web") || !strings.Contains(f, "─╯ flint-auth") {
+		t.Fatalf("rows:\n%s\n%s", k, f)
+	}
+}

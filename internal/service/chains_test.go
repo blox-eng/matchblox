@@ -622,3 +622,18 @@ func TestChainsViewCarriesMates(t *testing.T) {
 		t.Fatalf("mates = %+v", doc.Chains.Mates)
 	}
 }
+
+// TestAnotherAgentInThePaneEndsTheMate: a pane that shows another agent is
+// not the mate's: the mate leaves, unless a switch started it there.
+func TestAnotherAgentInThePaneEndsTheMate(t *testing.T) {
+	s := chainTest(t, filepath.Join(t.TempDir(), "chains.json"))
+	mustChain(t, s, "%1", proto.ChainPrefix+"%2")
+	chainInbox(s, chainSessions[1])
+	newcomer := sample.Session{Pane: "%2", PID: 109, Start: 9, SessionID: "s9", Name: "newcomer", Agent: "claude", Cwd: "/dev/app"}
+	if doc := paneSample(s, time.Now(), []sample.Session{chainSessions[0], newcomer}, "%1", "%2"); doc.Chains != nil {
+		t.Fatalf("a ghost stayed: %+v", doc.Chains)
+	}
+	if got := chainInbox(s, chainSessions[0]); !slices.Equal(got, []string{"two left the chain"}) {
+		t.Fatalf("one heard %q", got)
+	}
+}

@@ -425,6 +425,11 @@ func (s *Store) PostLine(to, from Member, text string, now time.Time) {
 	s.put(to, to.key(), []Item{{At: now, Text: text, From: from, seq: s.posted}}, 0, false)
 }
 
+// Lose marks a line to that its match will not hear, for why.
+func (s *Store) Lose(to Member, it Item, why string) {
+	s.lost = append(s.lost, Lost{To: to, Item: it, Why: why})
+}
+
 // TakeLost empties the sent lines lost since it last ran.
 func (s *Store) TakeLost() []Lost {
 	l := s.lost

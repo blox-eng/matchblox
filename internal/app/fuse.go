@@ -52,37 +52,12 @@ type chainIndex struct {
 	rows    map[chainKey][]int  // the list rows of each chain, top down
 }
 
-// chainScan is the chain, as the chains name it, that a session is in.
-func (m Model) chainScan(s sample.Session, views map[string]*state.ChainsView) (chains.Chain, bool) {
-	cv, ok := views[s.Host]
-	if !ok {
-		cv = m.chainsOf(s.Host)
-		views[s.Host] = cv
-	}
-	if cv == nil {
-		return chains.Chain{}, false
-	}
-	me := memberOf(s)
-	for _, c := range cv.Chains {
-		if slices.ContainsFunc(c.Members, me.Same) {
-			return c, true
-		}
-	}
-	return chains.Chain{}, false
-}
-
 // indexChains works out which sessions are chained, and how needy their
 // chains are, from the sessions the host has and the ones listed. A chain
 // with one match present is no chain.
 func (m *Model) indexChains() {
 	ix := chainIndex{of: map[rowKey]chainKey{}}
-	views := map[string]*state.ChainsView{}
-	has := func(s sample.Session) (chainKey, bool) {
-		c, ok := m.chainScan(s, views)
-		return chainKey{s.Host, c.ID}, ok
-	}
 	present := map[chainKey]int{}
-	of := map[rowKey]chainKey{}
 	for _, s := range m.all.sessions {
 		if m.isStoker(s) {
 			continue
@@ -90,7 +65,24 @@ func (m *Model) indexChains() {
 		for _, c := range m.teamsOf(s) { // a match in two teams is present in both
 			present[chainKey{s.Host, c.ID}]++
 		}
-		if k, ok := has(s); ok {
+	}
+	// A match draws in the first of its teams that has another match here.
+	has := func(s sample.Session) (chainKey, bool) {
+		var first chainKey
+		for i, c := range m.teamsOf(s) {
+			k := chainKey{s.Host, c.ID}
+			if present[k] > 1 {
+				return k, true
+			}
+			if i == 0 {
+				first = k
+			}
+		}
+		return first, first.id != ""
+	}
+	of := map[rowKey]chainKey{}
+	for _, s := range m.all.sessions {
+		if k, ok := has(s); ok && !m.isStoker(s) {
 			of[keyOf(s)] = k
 		}
 	}
@@ -406,16 +398,22 @@ func (m Model) teamsOf(s sample.Session) []chains.Chain {
 	return out
 }
 
-// alsoIn is what a row adds for each team after the one whose fuse it
-// draws in: " · also in web", or "".
+// alsoIn is what a row adds for each team but the one whose fuse it draws
+// in: " · also in web", or "".
 func (m Model) alsoIn(s sample.Session) string {
 	teams := m.teamsOf(s)
 	if len(teams) < 2 {
 		return ""
 	}
+	drawn, ok := m.chainKeyOf(s)
+	if !ok {
+		drawn.id = teams[0].ID
+	}
 	var names []string
-	for _, c := range teams[1:] {
-		names = append(names, c.Name)
+	for _, c := range teams {
+		if c.ID != drawn.id {
+			names = append(names, c.Name)
+		}
 	}
 	return " · also in " + strings.Join(names, ", ")
 }
@@ -451,7 +449,8 @@ func (m Model) joinNews(next *state.ChainsView, sessions []sample.Session) strin
 			return c.Name + " formed: " + strings.Join(names, ", ")
 		}
 		for _, mb := range c.Members {
-			if !slices.ContainsFunc(old.Members, mb.Same) {
+			// a /clear or switch renames a member in its pane: no join
+			if !slices.ContainsFunc(old.Members, func(o chains.Member) bool { return o.Same(mb) || o.Pane == mb.Pane }) {
 				out := " · u in its room takes it out"
 				if m.width < 50 {
 					out = " · u: out"

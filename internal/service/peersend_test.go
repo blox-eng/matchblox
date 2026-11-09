@@ -165,7 +165,7 @@ func TestPeerSendToAMateNotReadyQueues(t *testing.T) {
 		s, ran, _ := peerTest(t)
 		s.Capture = func([]string) map[string]string { return map[string]string{"%1": c.screen} }
 		res := s.act(t.Context(), peerAct("message:%1", "read file x"))
-		if want := "queued for work: " + c.why + ". It gets the line at its next rest."; res.Err != "" || res.Note != want || len(*ran) != 0 {
+		if want := "queued for work: " + c.why + ". It hears the line at its next step."; res.Err != "" || res.Note != want || len(*ran) != 0 {
 			t.Fatalf("%s: %+v, ran %q, want %q", name, res, *ran, want)
 		}
 		if got := workInbox(s); !slices.Equal(got, []string{"[from other %3] read file x"}) {
@@ -178,7 +178,7 @@ func TestPeerSendToASessionThatWaitsForYouQueues(t *testing.T) {
 	s, ran, _ := peerTest(t)
 	s.Hook(hooks.Event{Name: "Stop", SessionID: "s1", Pane: "%1", Asks: true, Message: "Drop the old table?", At: night0})
 	res := s.act(t.Context(), peerAct("message:%1", "read file x"))
-	if res.Note != "queued for work: it waits for you. It gets the line at its next rest." || len(*ran) != 0 {
+	if res.Note != "queued for work: it waits for you. It hears the line at its next step." || len(*ran) != 0 {
 		t.Fatalf("%+v, ran %q", res, *ran)
 	}
 }
@@ -196,7 +196,7 @@ func TestPeerSendReadsThePaneAgainBeforeItTypes(t *testing.T) {
 		return map[string]string{"%1": "⏺ Done.\n────────\n> the builder types now\n────────\n"}
 	}
 	res := s.act(t.Context(), peerAct("message:%1", "read file x"))
-	if reads < 2 || res.Note != "queued for work: it has a draft in its prompt. It gets the line at its next rest." || len(*ran) != 0 {
+	if reads < 2 || res.Note != "queued for work: it has a draft in its prompt. It hears the line at its next step." || len(*ran) != 0 {
 		t.Fatalf("reads %d: %+v, ran %q", reads, res, *ran)
 	}
 }
@@ -219,7 +219,7 @@ func TestSendWhyForEachWait(t *testing.T) {
 		fake.SetScreen("%2", idleScreen)
 		h.s.Mux = fake
 		res := h.send(t, "%2", "hi")
-		if want := "queued for mate: " + c.why + ". It gets the line at its next rest."; res.Note != want || res.Err != "" {
+		if want := "queued for mate: " + c.why + ". It hears the line at its next step."; res.Note != want || res.Err != "" {
 			t.Errorf("%s: %+v, want %q", name, res, want)
 		}
 		if k := h.keys(); len(k) != 0 {
@@ -615,7 +615,7 @@ func TestSendToAnIdleMateTypesTheLine(t *testing.T) {
 func TestSendToABusyMateQueues(t *testing.T) {
 	h := newSendHost(t, busyMate)
 	res := h.send(t, "%2", "hi")
-	if res.Err != "" || res.Note != "queued for mate: it is busy. It gets the line at its next rest." {
+	if res.Err != "" || res.Note != "queued for mate: it is busy. It hears the line at its next step." {
 		t.Fatalf("%+v", res)
 	}
 	if k := h.keys(); len(k) != 0 {
@@ -707,7 +707,7 @@ func TestSendToOpenCodeIsKept(t *testing.T) {
 func TestTypingRefusedBeforeAKeyQueues(t *testing.T) {
 	h := newSendHost(t, idleMate)
 	h.inMode["%2"] = "1"
-	if res := h.send(t, "%2", "hi"); res.Note != "queued for mate: its pane is in copy mode. It gets the line at its next rest." {
+	if res := h.send(t, "%2", "hi"); res.Note != "queued for mate: its pane is in copy mode. It hears the line at its next step." {
 		t.Fatalf("%+v", res)
 	}
 	if k := h.keys(); len(k) != 0 {
@@ -724,7 +724,7 @@ func TestALineThatDoesNotShowIsCleared(t *testing.T) {
 	h := newSendHost(t, idleMate)
 	h.hidden["%2"] = true
 	res := h.send(t, "%2", "hi")
-	if res.Err != "" || res.Note != "queued for mate: its prompt did not show the line. It gets the line at its next rest." {
+	if res.Err != "" || res.Note != "queued for mate: its prompt did not show the line. It hears the line at its next step." {
 		t.Fatalf("%+v", res)
 	}
 	h.s.mu.Lock()
@@ -955,21 +955,64 @@ func TestAQueuedLineOutsideTheChainIsDropped(t *testing.T) {
 
 // A line that waited ten minutes is stale: it is dropped untyped, and the
 // sender hears so.
-func TestAQueuedLineGoesStale(t *testing.T) {
+// A line that waits is never refused for its wait: past ten minutes it
+// still lands at the mate's next rest.
+func TestAQueuedLineWaitsPastTenMinutes(t *testing.T) {
 	codex := sample.Session{Agent: "codex", Status: "busy", Busy: true}
 	h := newSendHost(t, codex)
 	h.send(t, "%2", "hi")
 	codex.Status, codex.Busy = "idle", false
 	h.publish(codex)
-	h.s.deliverAtRest(night0.Add(10 * time.Minute))
-	h.s.deliverAtRest(night0.Add(10 * time.Minute))
-	if k := h.keys(); len(k) != 0 {
-		t.Fatalf("ran %q", k)
+	h.s.deliverAtRest(night0.Add(time.Hour))
+	if got := typedLine(h.keys()); !slices.Equal(got, []string{"[from peer-send %1] hi"}) {
+		t.Fatalf("typed %q", got)
+	}
+}
+
+// A failed sample sees no sessions: the lines that wait for a Codex rest
+// stay. A mate truly gone drops them, and each sender hears it.
+func TestCodexLinesSurviveAFailedSampleAndTellWhenTheMateIsGone(t *testing.T) {
+	codex := sample.Session{Agent: "codex", Status: "busy", Busy: true}
+	h := newSendHost(t, codex)
+	h.send(t, "%2", "hi")
+	h.s.publish(sample.Snapshot{At: night0, Errors: []string{"tmux: no server"}}, func(state.Doc) {})
+	h.s.deliverAtRest(night0)
+	if !h.s.peers.waits(chains.Member{SessionID: "s2"}) {
+		t.Fatal("a failed sample dropped the waiting line")
+	}
+	h.s.publish(sample.Snapshot{At: night0, Sessions: []sample.Session{
+		{Agent: "claude", Pane: "%1", SessionID: "s1", Name: "peer-send", Status: "busy", Busy: true},
+	}}, func(state.Doc) {})
+	h.s.deliverAtRest(night0)
+	if h.s.peers.waits(chains.Member{SessionID: "s2"}) {
+		t.Fatal("a line waits for a mate that is gone")
 	}
 	h.s.mu.Lock()
 	defer h.s.mu.Unlock()
-	if items := h.s.Chains.Take(chains.Member{SessionID: "s1"}).Texts(); !slices.Equal(items, []string{"mate did not get your line: it waited 10 minutes and went stale"}) {
-		t.Fatalf("the sender's inbox: %q", items)
+	if got := h.s.Chains.Take(chains.Member{SessionID: "s1"}).Texts(); !slices.Contains(got, "mate did not get your line: it is gone") {
+		t.Fatalf("the sender heard %q", got)
+	}
+}
+
+// A line whose sender no longer shares a team with its mate is not heard:
+// the sender hears it did not go.
+func TestALineFromASenderThatLeftIsNotHeard(t *testing.T) {
+	h := newSendHost(t, busyMate)
+	h.send(t, "%2", "hi")
+	if res := h.s.act(t.Context(), proto.Act{RecID: proto.ChainPrefix + "-", From: "%1"}); res.Err != "" {
+		t.Fatalf("%+v", res)
+	}
+	d := h.s.news(proto.News{Pane: "%2"})
+	if strings.Contains(d.text, "[from peer-send %1] hi") {
+		t.Fatalf("mate heard %q", d.text)
+	}
+	h.s.heard(d)
+	h.publish(busyMate)
+	h.s.mu.Lock()
+	got := h.s.Chains.Take(chains.Member{SessionID: "s1"}).Texts()
+	h.s.mu.Unlock()
+	if !slices.Equal(got, []string{"mate did not get your line: you are no longer chained"}) {
+		t.Fatalf("sender heard %q", got)
 	}
 }
 

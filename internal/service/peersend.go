@@ -111,7 +111,7 @@ func (s *Service) peerSend(ctx context.Context, sender sample.Session, pane stri
 	codex := x.Agent == "codex"
 	wait := func(why string) proto.Result {
 		if !codex {
-			return inbox(queuedFor(x, why))
+			return inbox("queued for " + x.Name + ": " + why + ". It hears the line at its next step.")
 		}
 		s.peers.queue(peerLine{from: memberOf(sender), to: memberOf(x), line: line, tag: tag, rec: rec})
 		s.spark(chainID, now)
@@ -156,31 +156,44 @@ func (s *Service) peerSend(ctx context.Context, sender sample.Session, pane stri
 	return proto.Result{Ran: res.Ran, Note: "sent"}
 }
 
-// queuedFor is what the sender of a line that waits hears: why it waits.
+// queuedFor is what the sender of a line that waits for a Codex rest
+// hears: why it waits. A Claude Code line waits in the inbox instead, and
+// is heard at the match's next step.
 func queuedFor(x sample.Session, why string) string {
 	return "queued for " + x.Name + ": " + why + ". It gets the line at its next rest."
 }
 
-// peerTries is how many rests a waiting line gets to show in the prompt,
-// and peerStale how long it waits for one.
-const (
-	peerTries = 3
-	peerStale = 10 * time.Minute
-)
+// peerTries is how many rests a waiting line gets to show in the prompt.
+const peerTries = 3
 
 // deliverAtRest types the oldest line that waits for each Codex match that
 // rests now: one line a pane each sample. A line refused before any key
 // waits for a later rest, and so does one typed and cleared, up to
 // peerTries; then its sender hears it did not go. A line that may still be
-// in the prompt is dropped, so it is never typed twice; one for a match
-// that is gone is dropped too. So is one that waited peerStale, or whose
-// sender is no longer chained with its match or may no longer send, and
-// its sender hears why.
+// in the prompt is dropped, so it is never typed twice. A line waits
+// while its match's pane lives, however long; one for a match that left
+// its team, or whose sender is no longer chained with it or may no longer
+// send, is dropped, and its sender hears why. A sample that missed the
+// sessions changes nothing.
 func (s *Service) deliverAtRest(now time.Time) {
+	s.mu.Lock()
+	missed := s.sampleMissedLocked()
+	s.mu.Unlock()
+	if missed { // every mate would look gone
+		return
+	}
 	for _, l := range s.peers.firsts() {
 		x, ok := s.sessionOf(l.to)
 		if !ok {
-			s.peers.forget(l.to)
+			if _, chained := s.mateChain(l.from, l.to); chained {
+				continue // its pane lives: the line waits for its agent
+			}
+			gone := s.peers.forget(l.to)
+			s.mu.Lock()
+			for _, g := range gone {
+				s.chainsLocked().Post(g.from, didNotGet(g.rec.To, "it is gone"), now)
+			}
+			s.mu.Unlock()
 			continue
 		}
 		why := ""
@@ -188,8 +201,6 @@ func (s *Service) deliverAtRest(now time.Time) {
 			why = "you are no longer chained"
 		} else if s.ChainsSend == "off" {
 			why = "sends are off on this host"
-		} else if now.Sub(l.rec.At) >= peerStale {
-			why = fmt.Sprintf("it waited %d minutes and went stale", int(peerStale.Minutes()))
 		}
 		if why != "" {
 			s.peers.drop(l.n)
@@ -569,10 +580,17 @@ func (p *peerSends) drop(n uint64) {
 }
 
 // forget drops every line that waits for m.
-func (p *peerSends) forget(m chains.Member) {
+func (p *peerSends) forget(m chains.Member) (gone []peerLine) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.waiting = slices.DeleteFunc(p.waiting, func(l peerLine) bool { return l.to.Same(m) })
+	p.waiting = slices.DeleteFunc(p.waiting, func(l peerLine) bool {
+		if l.to.Same(m) {
+			gone = append(gone, l)
+			return true
+		}
+		return false
+	})
+	return gone
 }
 
 // check is nil when from may send to the pane to (the session toName) at

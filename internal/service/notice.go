@@ -43,6 +43,16 @@ func (s *Service) news(n proto.News) delivery {
 	}
 	st := s.chainsLocked()
 	d := delivery{me: memberOf(x), taken: st.Take(memberOf(x))}
+	d.taken.Items = slices.DeleteFunc(d.taken.Items, func(it chains.Item) bool {
+		if it.From == (chains.Member{}) {
+			return false
+		}
+		if _, shared := st.Shared(it.From, d.me); shared {
+			return false
+		}
+		st.Lose(d.me, it, chains.LostUnchained) // its sender left, or was taken out
+		return true
+	})
 	var blocks []string
 	if line := s.clearedLocked(st, x); line != "" {
 		d.cleared = x.SessionID

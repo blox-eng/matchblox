@@ -179,8 +179,9 @@ and nothing is typed. The line carries the tag `[from <name> <pane>]`.
 A send works like an inbox: the mate's state never refuses it. A mate at
 rest with an empty prompt gets the line typed, and the sender hears `sent`.
 Any other mate keeps the line, and the sender hears why it waits:
-`queued for web-cart: it asks a question now. It gets the line at its next
-rest.` A question, a permission prompt, a park, a draft, copy mode or work
+`queued for web-cart: it asks a question now. It hears the line at its next
+step.` A Codex mate gets the line typed at its next rest instead. A line
+waits as long as the mate's pane lives. A question, a permission prompt, a park, a draft, copy mode or work
 in progress delays a line; none refuses it. Once a line that waited lands,
 its sender hears, at its next step, `[matchblox] web-cart got your line
 (typed 14:02)` or `(heard 14:02)`. A line sent at once gets no second

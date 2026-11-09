@@ -239,7 +239,8 @@ func (s *Service) chainable(st *chains.Store, from, to sample.Session) (repo, wh
 
 // pruneChainsLocked keeps up the members whose session id changed in their
 // pane, keeps a member whose pane lives but shows no agent (unseen since its
-// first miss), drops a member whose pane is gone, tells the mates of a match
+// first miss), drops a member whose pane is gone or shows another agent that
+// no switch started, tells the mates of a match
 // that left, and saves on a change. prev are the sessions
 // of the sample before, which name a match that is gone. Callers hold mu.
 func (s *Service) pruneChainsLocked(now time.Time, prev []sample.Session) error {
@@ -270,6 +271,11 @@ func (s *Service) pruneChainsLocked(now time.Time, prev []sample.Session) error 
 		}
 		if !panes[m.Pane] {
 			return false
+		}
+		if _, other := s.sessionAtLocked(m.Pane); other {
+			if _, moving := st.Moving(m); !moving {
+				return false // another agent runs in its pane: it is not this match
+			}
 		}
 		st.MarkUnseen(m, now)
 		return true
