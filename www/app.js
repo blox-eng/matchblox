@@ -497,8 +497,8 @@ onReady(() => {
   play();
 });
 
-// Chain reaction: the matches catch one by one, go out in order, then catch
-// again at random while the section is in view. A tap lights the match under
+// Chain reaction: the matches catch one by one, go out in order, and the row
+// rests until the next strike or the next time it comes into view. A tap lights the match under
 // it, and the fire runs both ways from there; Enter lights the first.
 onReady(() => {
   const section = document.querySelector(".chain");
@@ -509,7 +509,6 @@ onReady(() => {
   const ns = "http://www.w3.org/2000/svg";
   const N = 28, STEP = 90;
   const X0 = 40, GAP = 920 / (N - 1);
-  const rand = (a, b) => a + Math.random() * (b - a);
   const items = [];
   for (let i = 0; i < N; i++) {
     const x = X0 + i * GAP;
@@ -538,15 +537,6 @@ onReady(() => {
     el.classList.add("smoking");
     later(() => el.classList.remove("smoking"), 3400);
   };
-  const flicker = () => {
-    const dark = items.filter((el) => !el.classList.contains("lit"));
-    if (dark.length) {
-      const el = dark[Math.floor(Math.random() * dark.length)];
-      light(el);
-      later(() => douse(el), rand(1600, 4200));
-    }
-    later(flicker, rand(180, 650));
-  };
   // Until the row is touched, the first match glows now and then, while the
   // row is on screen.
   let beckoning = !still(), inView = false;
@@ -571,7 +561,6 @@ onReady(() => {
       later(() => light(el), 300 + d);
       later(() => douse(el), lastLit + 900 + d);
     });
-    later(flicker, lastLit + 900 + (far + 1) * STEP + 400);
     return lastLit + 900 + far * STEP;
   };
 
