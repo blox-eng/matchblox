@@ -149,14 +149,15 @@ default, 0 for all); `--json` prints `name`, `pane`, `target`, `said`,
 
 ## Chain matches
 
-Two matches on one host can hear from each other once both chain, in one
-repo or across repos. Run in an
-agent's pane, `matchblox chain api` asks to chain with `api`, or accepts its
-ask; nothing is shared until the other side chains back. `matchblox chain`
-lists your chain and the asks to and from you (`--json` prints `chain` and
-`requests`). `matchblox unchain` leaves the chain. `matchblox chain --off`
-takes no chains and no notices; `--on` takes them again. See
-[chains](agents.md#chains) for what a match hears and what a chain grants.
+A chain is a team of matches on one host that all hear each other, in one
+repo or across repos. Run in an agent's pane, `matchblox chain api` joins
+the chain of `api` at once, or forms one with it; `matchblox chain hearth`
+joins the chain named hearth. A match may be in several chains, and each
+hears only itself. `matchblox chain` lists your chains (`--json` prints
+`chains`). `matchblox unchain [<chain>]` leaves your chain, or the one
+named; `--all` leaves every chain. `matchblox chain --off` takes no chains
+and no notices; `--on` takes them again. See [chains](agents.md#chains) for
+what a match hears and what a chain grants.
 
 Sessions draws each chain as a fuse, in a column between the match and the
 name. The rule: a chain stays together in the group of its neediest match.
@@ -178,8 +179,15 @@ before.
   `· 2 hidden`.
 - Child rows and the opened block on a phone carry `│` in the fuse column.
   A held match keeps its place in the chain.
-- When a chain-mate commits, changes branch or sends, a bright cell runs
-  down the fuse once. `--no-motion` shows no spark.
+- A match in two chains draws in the fuse of the chain that formed first.
+  Its row adds a faint `· also in web` while the name has room. The other
+  chain's fuse skips that row and counts the match as shown.
+- When a chain-mate joins, commits, changes branch or sends, a bright cell
+  runs down the fuse once. `--no-motion` shows no spark.
+- When a match joins a chain, the header shows `docs-bot joined hearth · u
+  in its room takes it out` for 2.5 seconds; under 50 columns, `docs-bot
+  joined hearth · u: out`. A new chain shows `hearth formed: hearth,
+  web-cart`. The toast shows with `--no-motion` too.
 - A session in one repo with another that it has not chained with shows a
   faint `· same repo · chain?` after its name, while the name has room. A
   chain with a match in another repo does not hide it.
