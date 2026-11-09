@@ -379,7 +379,13 @@ func TestStokerNewIsThePersons(t *testing.T) {
 		t.Fatalf("an unplaced caller started it: %q", *ran)
 	}
 	act.FromKnown, act.FromPlaced = true, true
-	mustAct(t, s, act) // the person's shell
+	if res := s.act(t.Context(), act); res.Err != goesFromAShell(act, []string{"merge"}) || res.Err == "" {
+		t.Fatalf("the person's shell gave goes: %q", res.Err)
+	}
+	if len(*ran) != 0 || s.unitOfChain("c1") != nil {
+		t.Fatalf("a shell's goes started it: %q", *ran)
+	}
+	mustAct(t, s, atConsole(act))
 	u := s.unitOfChain("c1")
 	if u == nil || u.link.Giver != "person" || !slices.Equal(u.link.Grants, []string{"merge"}) {
 		t.Fatalf("unit %+v", u)
@@ -1054,6 +1060,28 @@ func orderChain(t *testing.T, from, chain, words string, grants []string) proto.
 
 const hostPane = "%9@mbtest"
 
+// atConsole is a, sent from the person's console.
+func atConsole(a proto.Act) proto.Act {
+	a.Console = true
+	return a
+}
+
+// A shell's pane with no agent sampled yet is placed as the person's, so a
+// shell orders a chain but gives it no goes: an agent there would grant
+// itself merges.
+func TestAShellGivesAChainNoGoes(t *testing.T) {
+	s, u, _ := familyTest(t)
+	s.deliverBriefs(t.Context())
+	a := orderChain(t, "", "api-auth", "merge it", []string{"merge"})
+	if res := s.act(t.Context(), a); res.Err != "goes are given at the console: drop --go here, and grant them on the STOKER tab" {
+		t.Fatalf("a shell's goes: %q", res.Err)
+	}
+	if got := s.grantsOf(u); slices.Contains(got, "merge") {
+		t.Fatalf("the shell granted %q", got)
+	}
+	mustAct(t, s, orderChain(t, "", "api-auth", "carry on", nil))
+}
+
 func TestHostOrderStartsChainStoker(t *testing.T) {
 	s, _, _ := familySetup(t)
 	mustAct(t, s, orderAct(t, "go", false, "merge"))
@@ -1123,7 +1151,7 @@ func TestOrderReplacesUnitGoesInDriven(t *testing.T) {
 	s, u, _ := familyTest(t)
 	s.deliverBriefs(t.Context())
 	s.drive(u, "%3")
-	mustAct(t, s, orderChain(t, "", "api-auth", "release it", []string{"release", "merge"}))
+	mustAct(t, s, atConsole(orderChain(t, "", "api-auth", "release it", []string{"release", "merge"})))
 	if got := drivenGoes(t, u, "%3"); !slices.Equal(got, []string{"release", "merge"}) {
 		t.Fatalf("%%3 has %q", got)
 	}
@@ -1398,7 +1426,7 @@ func TestOrderToAUnitWithNoRunStartsOne(t *testing.T) {
 		t.Fatal(err)
 	}
 	*ran = nil
-	mustAct(t, s, orderChain(t, "", "api-auth", "again", []string{"merge"}))
+	mustAct(t, s, atConsole(orderChain(t, "", "api-auth", "again", []string{"merge"})))
 	if s.unitOfChain("c1") != u || s.unitByID("s2") != nil {
 		t.Fatal("the order made a second unit")
 	}

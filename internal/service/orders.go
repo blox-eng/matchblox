@@ -263,6 +263,16 @@ func personPlaced(a proto.Act) bool {
 	return a.Console || a.FromKnown && a.FromPlaced
 }
 
+// goesFromAShell refuses goes a shell gives: a pane with no agent sampled
+// yet is placed as the person's, so only a console gives a stoker its goes,
+// as only a console grants (stoker:grant).
+func goesFromAShell(a proto.Act, grants []string) string {
+	if a.Console || len(grants) == 0 {
+		return ""
+	}
+	return "goes are given at the console: drop --go here, and grant them on the STOKER tab"
+}
+
 // notThePersons refuses an act from an agent's pane, whatever its console
 // hello said.
 func (s *Service) notThePersons(a proto.Act) string {
@@ -307,6 +317,11 @@ func (s *Service) chainOrderAct(ctx context.Context, a proto.Act) proto.Result {
 	var ask chainOrderAsk
 	if err := json.Unmarshal([]byte(a.Text), &ask); err != nil {
 		return proto.Result{Err: "the order does not read: " + err.Error()}
+	}
+	if giver == "person" {
+		if why := goesFromAShell(a, ask.Grants); why != "" {
+			return proto.Result{Err: why}
+		}
 	}
 	return s.chainOrder(ctx, ask.Chain, ask.Words, ask.Grants, giver)
 }

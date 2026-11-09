@@ -883,6 +883,9 @@ func (s *Service) newChainAct(ctx context.Context, a proto.Act) proto.Result {
 	if err := json.Unmarshal([]byte(a.Text), &ask); err != nil {
 		return proto.Result{Err: "the start does not read: " + err.Error()}
 	}
+	if why := goesFromAShell(a, ask.Grants); why != "" {
+		return proto.Result{Err: why}
+	}
 	u, err := s.startChainStoker(ctx, ask.Chain, ask.Words, ask.Grants, "person")
 	if err != nil {
 		return proto.Result{Err: err.Error()}

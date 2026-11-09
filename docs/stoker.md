@@ -473,7 +473,7 @@ its own (`s1`, `s2`, …), not its chain's.
 From a shell, start one and give it orders:
 
 ```sh
-matchblox stoker new --chain api-auth --go merges "finish the login flow and merge it on green"
+matchblox stoker new --chain api-auth "finish the login flow and merge it on green"
 matchblox stoker order api-auth "add the docs page next"
 matchblox stoker quit --chain api-auth
 ```
@@ -484,9 +484,12 @@ matchblox stoker quit --chain api-auth
 - `matchblox stoker order <chain> "<text>"` gives the chain's stoker an
   order. If the chain has no stoker, it starts one. An order to a stoker
   that runs needs words: `an order needs words`.
-- `--go merges,releases,deploys,kills` gives the stoker those gos. From
-  your shell, with no `--go`, it has none. From the host stoker's pane,
-  with no `--go`, it has the host stoker's gos.
+- From your shell, a chain's stoker gets no go: `--go` there is refused
+  with `goes are given at the console: drop --go here, and grant them on
+  the STOKER tab`. A pane with no agent seen in it yet counts as yours, so
+  an agent there must not grant itself merges. Grant gos on the STOKER tab.
+- From the host stoker's pane, `--go merges,releases,deploys,kills` gives
+  the chain's stoker those gos; with no `--go`, it has the host stoker's.
 - `matchblox stoker quit --chain <who>` quits the stoker of that chain:
   its agent, its tmux session and its run. Its card gets its score, and
   `max_chains` counts it no more. When its agent is already gone and its

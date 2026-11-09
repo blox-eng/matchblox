@@ -406,8 +406,8 @@ Commands:
   matchblox stoker plan|step       the stoker agent's plan and steps, for its card
   matchblox stoker when …          a trigger matchblox fires itself (--ship n --stage s, or --rest who)
   matchblox stoker quit            end the stoker agent and its own tmux session (--chain <who>: the stoker of one chain)
-  matchblox stoker new --chain <who> ["<order>"]  start a stoker for one chain (--go merges,releases,deploys,kills)
-  matchblox stoker order <chain> "<text>"  give a chain's stoker an order, or start one (--go merges,releases,deploys,kills)
+  matchblox stoker new --chain <who> ["<order>"]  start a stoker for one chain (--go: from the host stoker only)
+  matchblox stoker order <chain> "<text>"  give a chain's stoker an order, or start one (--go: from the host stoker only)
 
 <who> is a pane (%3), a target (app:1.1) or a name.
 
