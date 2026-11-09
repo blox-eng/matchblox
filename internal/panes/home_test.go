@@ -246,6 +246,9 @@ func TestTheWayBackWithNoConsoleSaysHowToOpenOne(t *testing.T) {
 	tmux("new-session", "-d", "-s", "work", "-x", "80", "-y", "24")
 	t.Cleanup(func() { _ = exec.Command("tmux", "-L", sock, "kill-server").Run() }) //nolint:gosec // the test's own server
 	tmux(HomeKeyArgv()[1:]...)
+	// A key pressed while a message shows may only clear the message: the
+	// test's presses come far quicker than a person's.
+	tmux("set-option", "-g", "display-time", "50")
 	path := tmux("display-message", "-p", "#{socket_path}")
 	args := []string{"-qc", "tmux -S " + path + " attach -t work", os.DevNull}
 	if runtime.GOOS == "darwin" {
@@ -269,9 +272,12 @@ func TestTheWayBackWithNoConsoleSaysHowToOpenOne(t *testing.T) {
 	}
 	until := func(what string, ok func() bool) {
 		t.Helper()
-		for deadline := time.Now().Add(3 * time.Second); !ok(); time.Sleep(50 * time.Millisecond) {
+		for deadline := time.Now().Add(5 * time.Second); !ok(); time.Sleep(50 * time.Millisecond) {
 			if time.Now().After(deadline) {
-				t.Fatal(what)
+				t.Fatalf("%s\nclient: %s\npanes:\n%s\nmessages:\n%s", what,
+					tmux("display-message", "-p", "-c", tty, "#{session_name} #{pane_id} #{pane_current_command}"),
+					tmux("list-panes", "-a", "-F", "#{session_name} #{pane_id} #{pane_current_command}"),
+					tmux("show-messages"))
 			}
 		}
 	}
@@ -295,6 +301,7 @@ func TestTheWayBackWithNoConsoleSaysHowToOpenOne(t *testing.T) {
 	until("the console in side never ran", func() bool {
 		return tmux("display-message", "-p", "-t", inPlace, "#{pane_current_command}") == Home
 	})
+	time.Sleep(200 * time.Millisecond) // past the message's display-time
 	tmux("send-keys", "-K", "-c", tty, "User"+homeUserKey)
 	until("the home key did not go to the console run in place", func() bool {
 		return tmux("display-message", "-p", "-c", tty, "#{pane_id}") == inPlace
