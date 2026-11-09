@@ -191,6 +191,11 @@ command syntax remain unspecified. Do not advertise an unavailable tool.
 - 2026-11-08: A peer message (`[from <who> <pane>] …`) sits in a user row
   but is labelled as another match's and never fills the goal. Review
   found that `pickTurns` could take it as the builder's goal.
+- 2026-11-09: The builder's call: a switch of an idle Claude Code or Codex
+  agent first asks it to write its task record, and waits up to 3 minutes
+  (#336). The service runs the wait, so the console and `matchblox switch`
+  share it; esc and Ctrl-C send `switchnow`, and `--no-refresh` skips it. The
+  capture's refresh line says whether the record was written for the switch.
 
 ## Acceptance checks
 

@@ -773,6 +773,22 @@ const actWait = 30 * time.Second
 func doAct(path string, a proto.Act) (proto.Result, error) { return doActFor(path, a, actWait) }
 
 func doActFor(path string, a proto.Act, wait time.Duration) (proto.Result, error) {
+	return doActWatching(path, a, wait, nil)
+}
+
+// actWatch is what a switch watches while its act runs: the record refresh
+// of pane. When the snapshot shows it, w is told, arm is called, and an
+// interrupt sends switchnow once.
+type actWatch struct {
+	pane      string
+	w         io.Writer
+	interrupt <-chan os.Signal
+	arm       func()
+}
+
+// doActWatching is doActFor that also watches the snapshots for watch's
+// record refresh. A nil watch watches nothing.
+func doActWatching(path string, a proto.Act, wait time.Duration, watch *actWatch) (proto.Result, error) {
 	c, err := transport.Dial(path, time.Second)
 	if err != nil {
 		return proto.Result{}, errNotRunning
@@ -784,7 +800,18 @@ func doActFor(path string, a proto.Act, wait time.Duration) (proto.Result, error
 		return proto.Result{}, errNotRunning
 	}
 	const id = "cli"
-	sent := false
+	sent, told := false, false
+	if watch != nil {
+		done := make(chan struct{})
+		defer close(done)
+		go func() {
+			select {
+			case <-watch.interrupt:
+				_ = c.Send(proto.KindAct, "cli-now", proto.Act{RecID: proto.SwitchNowPrefix + watch.pane, From: a.From})
+			case <-done:
+			}
+		}()
+	}
 	for {
 		env, err := c.Recv()
 		if err != nil {
@@ -804,6 +831,16 @@ func doActFor(path string, a proto.Act, wait time.Duration) (proto.Result, error
 				if err := c.Send(proto.KindAct, id, a); err != nil {
 					return proto.Result{}, errNoResult // part of it may have gone
 				}
+			}
+		case proto.KindSnapshot:
+			var st proto.State
+			if watch == nil || !sent || told || json.Unmarshal(env.Body, &st) != nil {
+				break
+			}
+			if i := slices.IndexFunc(st.Refreshes, func(r proto.Refresh) bool { return r.Pane == watch.pane }); i >= 0 {
+				told = true
+				watch.arm()
+				_, _ = fmt.Fprintf(watch.w, "%s writes its task record first; Ctrl-C switches now\n", st.Refreshes[i].Name)
 			}
 		case proto.KindResult:
 			var res proto.Result

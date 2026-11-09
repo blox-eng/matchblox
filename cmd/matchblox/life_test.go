@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -518,7 +519,7 @@ func TestSwitchWaitDerivesFromCopyLimit(t *testing.T) {
 	}
 	d := cliDoc()
 	d.LastAccount = map[string]string{"codex": "cp", "claude": "default"}
-	for agent, want := range map[string]time.Duration{"codex": accounts.CopyLimit.Time + actWait, "claude": actWait, "opencode": actWait} {
+	for agent, want := range map[string]time.Duration{"codex": accounts.CopyLimit.Time + actWait + recordLimit, "claude": actWait + recordLimit, "opencode": actWait + recordLimit} {
 		if got := switchWait(d, agent, home); got != want {
 			t.Errorf("%s: %v, want %v", agent, got, want)
 		}
@@ -534,4 +535,135 @@ func TestCLINewStoppedAfterAStepSaysSo(t *testing.T) {
 	if want := "new: stopped after git worktree add: tmux: a guard stopped it"; err == nil || err.Error() != want {
 		t.Fatalf("%v, want %q", err, want)
 	}
+}
+
+func TestSwitchTakesNoRefresh(t *testing.T) {
+	a, err := switchAct(cliDoc(), []string{"api"}, switchOpts{agent: "codex", noRefresh: true}, "")
+	var sw proto.SwitchAgent
+	if err != nil || json.Unmarshal([]byte(a.Text), &sw) != nil || !sw.NoRefresh {
+		t.Fatalf("--no-refresh: %+v %v", a, err)
+	}
+	if a, _ = switchAct(cliDoc(), []string{"api"}, switchOpts{agent: "codex"}, ""); strings.Contains(a.Text, "no_refresh") {
+		t.Fatalf("a switch without --no-refresh asks to skip: %s", a.Text)
+	}
+
+	var buf bytes.Buffer
+	sock := switchService(t, proto.Result{Preview: "Goal: keep CSV."})
+	err = cliSwitch([]string{"api"}, switchOpts{agent: "codex", preview: true, noRefresh: true}, &buf, sock, nil)
+	if err != nil || buf.String() != "Goal: keep CSV.\n" {
+		t.Fatalf("--preview --no-refresh: %q %v", buf.String(), err)
+	}
+}
+
+func TestSwitchWaitsForTheRefresh(t *testing.T) {
+	home := t.TempDir()
+	if got, want := switchWait(cliDoc(), "codex", home), newWait(newOpts{agent: "codex"}, home)+3*time.Minute; got < want {
+		t.Fatalf("switch waits %v, want at least %v", got, want)
+	}
+}
+
+func TestSwitchPrintsTheRefreshNote(t *testing.T) {
+	for _, note := range []string{"record written for this switch", "not refreshed: the refresh timed out after 3:00"} {
+		var buf bytes.Buffer
+		sock := switchService(t, proto.Result{Ran: [][]string{{"tmux", "respawn-pane"}}, Skipped: []string{note}})
+		if err := cliSwitch([]string{"api"}, switchOpts{agent: "codex"}, &buf, sock, nil); err != nil {
+			t.Fatal(err)
+		}
+		if want := "switched api to codex\n" + note + "\n"; buf.String() != want {
+			t.Fatalf("%q, want %q", buf.String(), want)
+		}
+	}
+}
+
+// refreshService answers a switch with a snapshot that shows its record
+// refresh, then waits for the result until a switchnow act comes in.
+func refreshService(t *testing.T, got chan<- proto.Act) string {
+	t.Helper()
+	sock := isolate(t)
+	l, err := transport.Listen(sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { l.Close() })
+	go func() {
+		nc, err := l.Accept()
+		if err != nil {
+			return
+		}
+		c := transport.NewConn(nc)
+		defer c.Close()
+		_ = c.Send(proto.KindHello, "", proto.Hello{Version: proto.Version})
+		_ = c.Send(proto.KindSnapshot, "", proto.State{Doc: cliDoc()})
+		var switchID string
+		for {
+			env, err := c.Recv()
+			if err != nil {
+				return
+			}
+			if env.Kind != proto.KindAct {
+				continue
+			}
+			var a proto.Act
+			_ = json.Unmarshal(env.Body, &a)
+			if strings.HasPrefix(a.RecID, proto.SwitchNowPrefix) {
+				got <- a
+				_ = c.Send(proto.KindResult, env.ID, proto.Result{Ran: [][]string{{"switch now"}}})
+				_ = c.Send(proto.KindResult, switchID, proto.Result{ActID: switchID, Ran: [][]string{{"respawn-pane"}}, Skipped: []string{"not refreshed: skipped with Ctrl-C"}})
+				continue
+			}
+			switchID = env.ID
+			_ = c.Send(proto.KindSnapshot, "", proto.State{Doc: cliDoc(), Refreshes: []proto.Refresh{{Pane: "%3", Name: "api", Agent: "claude"}}})
+			_ = c.Send(proto.KindSnapshot, "", proto.State{Doc: cliDoc(), Refreshes: []proto.Refresh{{Pane: "%3", Name: "api", Agent: "claude"}}})
+		}
+	}()
+	return sock
+}
+
+func TestSwitchTellsWhileTheRecordIsWrittenAndCtrlCSwitchesNow(t *testing.T) {
+	got := make(chan proto.Act, 4)
+	sock := refreshService(t, got)
+	var stderr lockedBuffer
+	interrupt := make(chan os.Signal, 2)
+	armed := 0
+	watch := &actWatch{pane: "%3", w: &stderr, interrupt: interrupt, arm: func() { armed++; interrupt <- os.Interrupt; interrupt <- os.Interrupt }}
+	a := proto.Act{RecID: "switch:%3", Confirm: "y", From: "%9"}
+	res, err := doActWatching(sock, a, 5*time.Second, watch)
+	if err != nil || len(res.Ran) != 1 || res.Ran[0][0] != "respawn-pane" {
+		t.Fatalf("%+v %v", res, err)
+	}
+	if want := "api writes its task record first; Ctrl-C switches now\n"; stderr.String() != want {
+		t.Fatalf("stderr %q, want %q", stderr.String(), want)
+	}
+	if armed != 1 {
+		t.Fatalf("armed %d times", armed)
+	}
+	if n := proto.SwitchNowPrefix + "%3"; len(got) != 1 || (<-got) != (proto.Act{RecID: n, From: "%9"}) {
+		t.Fatalf("switchnow acts: %d", len(got))
+	}
+}
+
+func TestSwitchWithNoRefreshSaysNothingToStderr(t *testing.T) {
+	sock := switchService(t, proto.Result{Ran: [][]string{{"respawn-pane"}}})
+	var stderr lockedBuffer
+	watch := &actWatch{pane: "%3", w: &stderr, interrupt: make(chan os.Signal), arm: func() { t.Error("armed without a refresh") }}
+	if _, err := doActWatching(sock, proto.Act{RecID: "switch:%3", Confirm: "y"}, 5*time.Second, watch); err != nil || stderr.String() != "" {
+		t.Fatalf("%q %v", stderr.String(), err)
+	}
+}
+
+type lockedBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (l *lockedBuffer) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.Write(p)
+}
+
+func (l *lockedBuffer) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.String()
 }

@@ -100,17 +100,15 @@ service-side build with the defaults below (2026-11-09).
   switch goes ahead from the evidence at once. It does not cancel the
   switch. (A builder who wants no switch can still kill or let it finish;
   see "Left to the builder".)
-- **The console.** The confirm stays the switch only. After y, the form
-  shows the wait, for example:
+- **The console.** The confirm stays the switch only. After y, the wait
+  shows in the console's bottom rows, not inside the form, for example:
 
   ```
-  Switch agent  api → codex
-
-    ◐ claude writes its task record   0:42
-      esc switches now, from the evidence
+   ◐ claude writes its task record 0:42
+   esc switches now
   ```
 
-  It fits 44 columns.
+  Other consoles show `writes its record` on the row. It fits 44 columns.
 - **The capture says which record it carries.** One line in the task
   record section: "written for this switch" (the record's mtime is after
   the request), or "not refreshed: <reason>", with reasons such as busy,
