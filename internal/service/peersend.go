@@ -216,14 +216,14 @@ func (s *Service) typeLine(ctx context.Context, x sample.Session, line, tag stri
 	if err := s.peerReady(pane, x); err != nil {
 		return proto.Result{Err: err.Error()}, false, false, false
 	}
-	switch mode, err := s.paneInMode(pane); {
+	switch mode, err := s.mux().InMode(pane); {
 	case err != nil:
 		return proto.Result{Err: "not delivered: " + x.Name + "'s pane cannot be read: " + err.Error()}, false, false, false
 	case mode:
 		return proto.Result{Err: "not delivered: " + x.Name + "'s pane is in copy mode"}, false, false, false
 	}
 	g := advice.Guard{PID: x.PID, StartTicks: x.Start, RestPane: pane, StokePane: pane, MessagePane: pane, MessagePID: x.PID}
-	res = s.Actions.Do(ctx, peerStep(panes.Literal(pane, line), g), "y")
+	res = s.Actions.Do(ctx, peerStep(s.mux().Type(pane, line), g), "y")
 	if len(res.Ran) == 0 {
 		return refusedStep(res), false, false, false
 	}
@@ -232,12 +232,12 @@ func (s *Service) typeLine(ctx context.Context, x sample.Session, line, tag stri
 		return proto.Result{Ran: res.Ran, Err: "not delivered: " + x.Name + " did not show the line"}, true, cleared, !cleared
 	}
 	g.Typed = tag
-	enter := s.Actions.Do(ctx, peerStep(panes.Keys(pane, "Enter"), g), "y")
+	enter := s.Actions.Do(ctx, peerStep(s.mux().Keys(pane, "Enter"), g), "y")
 	res.Ran = append(res.Ran, enter.Ran...)
 	if len(enter.Ran) == 0 {
 		// The line stays the mate's draft unless it goes: clear it while it is
 		// still ours alone.
-		if screen, ok := s.Capture([]string{pane})[pane]; ok && strings.HasPrefix(said.Draft(screen), tag) {
+		if screen, ok := s.mux().Screens([]string{pane})[pane]; ok && strings.HasPrefix(said.Draft(screen), tag) {
 			cleared = s.clearLine(ctx, pane)
 			stuck = !cleared
 		}
@@ -276,7 +276,7 @@ func typedResult(res proto.Result) string {
 func (s *Service) showsLine(ctx context.Context, pane string) bool {
 	deadline := time.Now().Add(peerShowWait)
 	for {
-		if screen, ok := s.Capture([]string{pane})[pane]; ok && strings.HasPrefix(said.Draft(screen), "[from ") {
+		if screen, ok := s.mux().Screens([]string{pane})[pane]; ok && strings.HasPrefix(said.Draft(screen), "[from ") {
 			return true
 		}
 		if time.Now().After(deadline) {
@@ -293,23 +293,12 @@ func (s *Service) showsLine(ctx context.Context, pane string) bool {
 // clearLine empties the prompt line of pane, even after the act ends: a
 // typed line must not stay behind as a draft. It tells if the clear ran.
 func (s *Service) clearLine(ctx context.Context, pane string) bool {
-	res := s.Actions.Do(context.WithoutCancel(ctx), advice.Action{Label: "peer send", Steps: [][]string{panes.Keys(pane, "C-u")}, Destructive: true}, "y")
+	res := s.Actions.Do(context.WithoutCancel(ctx), advice.Action{Label: "peer send", Steps: [][]string{s.mux().Keys(pane, "C-u")}, Destructive: true}, "y")
 	if res.Err != "" {
 		fmt.Fprintln(os.Stderr, "matchblox: peer send: the line in", pane, "is not cleared:", res.Err)
 		return false
 	}
 	return true
-}
-
-// paneInMode tells if tmux shows pane in copy mode or another mode, where
-// keys move a cursor instead of reaching the agent.
-func (s *Service) paneInMode(pane string) (bool, error) {
-	tmux, id := sample.Tmux(pane)
-	out, err := s.tmuxOut(slices.Concat(tmux, []string{"display-message", "-p", "-t", id, "#{pane_in_mode}"}))
-	if err != nil {
-		return false, err
-	}
-	return strings.TrimSpace(out) != "0", nil
 }
 
 // mateChain is the id of the chain from and to are both in.
@@ -357,7 +346,7 @@ func (s *Service) peerReady(pane string, x sample.Session) error {
 	if !s.resting(pane) {
 		return errors.New(x.Name + " is not at rest" + peerRetry)
 	}
-	screen, ok := s.Capture([]string{pane})[pane]
+	screen, ok := s.mux().Screens([]string{pane})[pane]
 	if !ok {
 		return fmt.Errorf("the pane %s cannot be read%s", pane, peerRetry)
 	}

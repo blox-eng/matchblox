@@ -29,6 +29,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/hooks"
 	"github.com/blox-eng/matchblox/internal/idle"
 	"github.com/blox-eng/matchblox/internal/limits"
+	"github.com/blox-eng/matchblox/internal/mux"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/push"
 	"github.com/blox-eng/matchblox/internal/queue"
@@ -134,6 +135,9 @@ type Service struct {
 	// with its styles: the guard tells Claude Code's grey suggestion from a
 	// draft a person typed.
 	Capture func(panes []string) map[string]string
+	// Mux is the multiplexer chains and sends reach panes through. Nil:
+	// tmux, through TmuxOut and Capture.
+	Mux mux.Mux
 	// PaneMouse tells if the program in a pane reads the mouse in SGR form,
 	// and the pane's size. Nil: never.
 	PaneMouse func(pane string) (cols, rows int, ok bool)
