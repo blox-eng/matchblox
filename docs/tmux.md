@@ -36,7 +36,8 @@ tmux server when it starts in tmux, in any session, in place of the tmux key
 that marks a pane, and the way back that `matchblox setup` adds to your tmux
 config binds it too. On a pane that runs a console, in any session, you stay on the pane. On any other pane it goes to
 the session `matchblox` and the console's pane there, also from another
-window of that session. A `bind m` of your own wins again when you source
+window of that session. With no `matchblox` session, it says `No matchblox
+console here: run matchblox in a shell to open one`. A `bind m` of your own wins again when you source
 your config, until the console starts again. From a jump, prefix `m` goes
 back to the console and ends the jump.
 

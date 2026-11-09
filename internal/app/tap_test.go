@@ -53,9 +53,8 @@ func TestFocusOpensThePaneOfABurn(t *testing.T) {
 		t.Fatalf("selected %q on tab %d", s.Pane, nm.tab)
 	}
 	msgs := runFocus(t, cmd)
-	jump := []string{strings.Join(remote.AgentMarkArgv("%1", "claude"), " "), strings.Join(remote.FocusArgv("/dev/ttys004", "%1"), " ")}
-	if !slices.Equal(ran, jump) || asks < 3 {
-		t.Fatalf("ran %q after %d asks, want %q", ran, asks, jump)
+	if len(ran) != 2 || ran[0] != strings.Join(remote.AgentMarkArgv("%1", "claude"), " ") || !isFocus(strings.Fields(ran[1]), "/dev/ttys004", "%1") || asks < 3 {
+		t.Fatalf("ran %q after %d asks, want the mark, then the focus of /dev/ttys004 on %%1", ran, asks)
 	}
 	signal := slices.Index(msgs, tea.Msg(tea.RawMsg{Msg: logos.Passthrough(keycmd.PaneSignal("claude", "%1"))}))
 	moved := slices.IndexFunc(msgs, func(msg tea.Msg) bool { r, ok := msg.(ranMsg); return ok && r.jumped == "%1" })
