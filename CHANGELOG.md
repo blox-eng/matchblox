@@ -6,12 +6,34 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **A family of stokers.** A chain can have a stoker of its own. You talk to
+  the chain, and its stoker answers: `Enter` on the head row of its fuse opens
+  its stoker's pane, or `matchblox stoker order <chain> "<text>"`. `F` on a
+  member, or `matchblox stoker new --chain <who>`, starts one. A chain stoker
+  drives the matches of its chain only, and its gos are never more than its
+  giver's. Only the console or the host stoker gives gos: a shell's `--go` is
+  refused, so an agent in a pane matchblox has not seen yet cannot grant
+  itself merges. At
+  night the host stoker heads the family and gives each chain stoker its
+  orders. The STOKER tab lists every stoker, and `[stoker] max_chains` (4)
+  caps how many run at once.
+  ([#304](https://github.com/blox-eng/matchblox/issues/304))
+
 ### Changed
 
 - **On the phone, a tap on a session goes into it.** The first tap goes into
   the agent's pane, as `Enter` does, so what you type reaches the agent. It
   no longer opens a read-only view first.
   ([#352](https://github.com/blox-eng/matchblox/issues/352))
+
+### Fixed
+
+- **A hook's event is not lost while the service is busy.** The hook stays
+  until the service has read the pane of its process. Before this fix, a
+  slow service read the pane after the hook had ended and dropped the event.
+  ([#304](https://github.com/blox-eng/matchblox/issues/304))
 
 ## [0.38.1] - 2026-11-09
 

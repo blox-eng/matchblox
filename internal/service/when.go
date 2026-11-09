@@ -22,15 +22,15 @@ type whenAsk struct {
 	Drop string `json:"drop,omitempty"`
 }
 
-// when sets a trigger for the run on, or drops one. The sessions it names
-// are read now: the pane of each is what it fires on and acts on.
-func (s *Service) when(text string) error {
+// when sets a trigger for unit u's run on, or drops one. The sessions it
+// names are read now: the pane of each is what it fires on and acts on.
+func (s *Service) when(u *stokerUnit, text string) error {
 	var ask whenAsk
 	if err := json.Unmarshal([]byte(text), &ask); err != nil {
 		return fmt.Errorf("the trigger does not read: %w", err)
 	}
 	if ask.Drop != "" {
-		return s.updateOrder(func(m stoker.Mode) (stoker.Mode, error) {
+		return s.updateOrder(u, func(m stoker.Mode) (stoker.Mode, error) {
 			i := slices.IndexFunc(m.Triggers, func(t stoker.Trigger) bool { return t.ID == ask.Drop })
 			if i < 0 {
 				return m, fmt.Errorf("no trigger %s: `matchblox stoker when --list` lists them", ask.Drop)
@@ -68,7 +68,7 @@ func (s *Service) when(text string) error {
 		return err
 	}
 	t.Who, t.Pane, t.At = x.Name, x.Pane, s.now()
-	return s.updateOrder(func(m stoker.Mode) (stoker.Mode, error) {
+	return s.updateOrder(u, func(m stoker.Mode) (stoker.Mode, error) {
 		if !m.On {
 			return m, errors.New("the stoker is off: no run")
 		}
@@ -79,14 +79,14 @@ func (s *Service) when(text string) error {
 	})
 }
 
-// fire runs the triggers whose event happened, each once, with the hands
-// and guards of the stoker's own acts. Each logs a step to the card and is
-// told to the stoker at its next wake. While the builder took over, the
+// fire runs unit u's triggers whose event happened, each once, with the
+// hands and guards of the stoker's own acts. Each logs a step to the card
+// and is told to the stoker at its next wake. While the builder took over, the
 // triggers wait. A trigger is taken out of the run's own list under its
 // lock before it runs, so only what was taken out fires, and nothing when
 // the write fails.
-func (s *Service) fire(ctx context.Context, now time.Time) bool {
-	if m := s.Stoker.Mode(); !m.On || len(m.Triggers) == 0 {
+func (s *Service) fire(ctx context.Context, u *stokerUnit, now time.Time) bool {
+	if m := u.store.Mode(); !m.On || len(m.Triggers) == 0 {
 		return false
 	}
 	sessions, waiting := s.seen()
@@ -94,7 +94,7 @@ func (s *Service) fire(ctx context.Context, now time.Time) bool {
 	rep := s.cur.Ships
 	s.mu.Unlock()
 	var due []stoker.Trigger
-	err := s.updateOrder(func(m stoker.Mode) (stoker.Mode, error) {
+	err := s.updateOrder(u, func(m stoker.Mode) (stoker.Mode, error) {
 		due = nil
 		if !m.On || !m.Rests.IsZero() {
 			return m, errNoneDue
@@ -117,7 +117,7 @@ func (s *Service) fire(ctx context.Context, now time.Time) bool {
 		return false
 	}
 	for _, t := range due {
-		res := s.runTrigger(ctx, t)
+		res := s.runTrigger(ctx, u, t)
 		e := stoker.Entry{
 			ID: "when@" + now.UTC().Format(time.RFC3339Nano) + "/" + t.ID, At: now, Name: t.Who, Pane: t.Pane,
 			Rule: stoker.RuleWhen, State: stoker.StepDone, Argv: res.Ran, Text: "when " + t.Event() + " → " + t.Done(),
@@ -131,8 +131,8 @@ func (s *Service) fire(ctx context.Context, now time.Time) bool {
 			e.Text = "when " + t.Event() + " → " + t.Action() + " failed: " + why
 			line = "when " + t.Event() + ": failed: " + t.Action() + ": " + why
 		}
-		_ = s.Stoker.Append(e)
-		s.wakes.add(line)
+		_ = u.store.Append(e)
+		u.wakes.add(line)
 	}
 	return true
 }
@@ -142,8 +142,8 @@ var errNoneDue = errors.New("no trigger is due")
 
 // runTrigger runs a trigger's hand as an act from the stoker's own pane:
 // the same refusals, counts and marks as if the stoker ran it.
-func (s *Service) runTrigger(ctx context.Context, t stoker.Trigger) proto.Result {
-	pane, err := s.stokerAgent()
+func (s *Service) runTrigger(ctx context.Context, u *stokerUnit, t stoker.Trigger) proto.Result {
+	pane, err := s.stokerAgent(u)
 	if err != nil {
 		return proto.Result{Err: err.Error()}
 	}

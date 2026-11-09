@@ -138,7 +138,7 @@ func TestTheStokersServerIsItsOwn(t *testing.T) {
 	t.Setenv("MATCHBLOX_HOME", "1")
 	server := tmuxtest.Server(t)
 	s := &Service{StokerServer: server, StokerAgent: "sleep 600"}
-	if err := actions.Exec(t.Context(), s.startArgv()); err != nil {
+	if err := actions.Exec(t.Context(), s.startArgv(s.hostUnit())); err != nil {
 		t.Fatal(err)
 	}
 	tmux := func(args ...string) string {
@@ -157,7 +157,7 @@ func TestTheStokersServerIsItsOwn(t *testing.T) {
 			t.Errorf("the agent's environment has %s", v)
 		}
 	}
-	if err := actions.Exec(t.Context(), s.stokerSessionArgv("kill-session")); err != nil {
+	if err := actions.Exec(t.Context(), s.stokerSessionArgv(s.hostUnit(), "kill-session")); err != nil {
 		t.Fatal(err)
 	}
 	if err := exec.Command("tmux", "-L", server, "list-sessions").Run(); err == nil { //nolint:gosec // a test's own socket
@@ -238,7 +238,7 @@ func TestAnAgentNotOnPathIsADoor(t *testing.T) {
 // denied there never asks the builder's go for their own %9.
 func TestPaneIDsOfTwoServersAreNotOne(t *testing.T) {
 	s, _, _ := guardedRun(t)
-	s.drive("%9") // the builder's %9, driven by the stoker
+	s.drive(s.hostUnit(), "%9") // the builder's %9, driven by the stoker
 	s.PeerPane = func(pid int) string { return map[int]string{4242: "%9@mbtest", 900: "%9"}[pid] }
 	sock := s.stokerSocket()
 	before := len(s.Stoker.Entries())
@@ -255,7 +255,9 @@ func TestPaneIDsOfTwoServersAreNotOne(t *testing.T) {
 	}
 	// The caller's identity: a CLI in the stoker's %9 is the stoker; one
 	// in the builder's %9 is not.
-	if !s.fromStoker(proto.Act{From: s.PeerPane(4242)}) || s.fromStoker(proto.Act{From: s.PeerPane(900)}) {
+	_, stokers := s.unitOf(proto.Act{From: s.PeerPane(4242)})
+	_, builders := s.unitOf(proto.Act{From: s.PeerPane(900)})
+	if !stokers || builders {
 		t.Fatal("the peer's pane did not tell the two servers apart")
 	}
 }

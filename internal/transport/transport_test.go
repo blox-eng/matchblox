@@ -358,3 +358,53 @@ func TestAskHeardSaysItHeard(t *testing.T) {
 		}
 	}
 }
+
+// Notify stays until the service closes, so the service can still read
+// the sender's process: a hook that left at once was dropped as from no
+// pane when the service was slow. A service that never closes holds it
+// no longer than its timeout, and the message still counts as sent.
+func TestNotifyWaitsForTheServiceWithinItsTimeout(t *testing.T) {
+	path := filepath.Join(shortDir(t), "run", "s.sock")
+	l, err := Listen(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	const work = 50 * time.Millisecond
+	stuck := make(chan struct{})
+	defer close(stuck)
+	go func() {
+		for closes := true; ; closes = false {
+			nc, err := l.Accept()
+			if err != nil {
+				return
+			}
+			go func(c Conn, closes bool) {
+				defer c.Close()
+				_ = c.Send(proto.KindHello, "", proto.Hello{Version: proto.Version})
+				if _, err := c.Recv(); err != nil {
+					return
+				}
+				if !closes {
+					<-stuck
+					return
+				}
+				time.Sleep(work)
+			}(NewConn(nc), closes)
+		}
+	}()
+	start := time.Now()
+	if err := Notify(path, time.Second, proto.KindHook, struct{}{}); err != nil {
+		t.Fatal(err)
+	}
+	if took := time.Since(start); took < work {
+		t.Fatalf("Notify left after %v, before the service closed", took)
+	}
+	start = time.Now()
+	if err := Notify(path, 30*time.Millisecond, proto.KindHook, struct{}{}); err != nil {
+		t.Fatalf("a sent message to a service that never closes: %v", err)
+	}
+	if took := time.Since(start); took > 500*time.Millisecond {
+		t.Fatalf("Notify held %v past its 30ms", took)
+	}
+}

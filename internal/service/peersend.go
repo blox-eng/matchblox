@@ -54,7 +54,7 @@ func isSend(a proto.Act) (string, bool) {
 // not the stoker's.
 func (s *Service) peerAct(a proto.Act) (string, bool) {
 	pane, ok := isSend(a)
-	if !ok || !a.FromKnown || s.fromStoker(a) {
+	if _, own := s.unitOf(a); !ok || !a.FromKnown || own {
 		return "", false
 	}
 	return pane, true
@@ -76,9 +76,10 @@ func (s *Service) peerSend(ctx context.Context, sender sample.Session, pane stri
 	if err := checkPeerText(a.Text); err != nil {
 		return proto.Result{Err: err.Error()}
 	}
+	_, own := s.unitOf(proto.Act{From: pane})
 	switch {
-	case s.fromStoker(proto.Act{From: pane}):
-		return proto.Result{Err: "no agent acts on the stoker's own session"}
+	case own:
+		return proto.Result{Err: stokersOwn}
 	case pane == a.From:
 		return proto.Result{Err: "a session does not send to itself"}
 	}
