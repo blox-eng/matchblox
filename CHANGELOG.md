@@ -21,19 +21,21 @@ All notable changes to matchblox are in this file. The format follows
   caps how many run at once.
   ([#304](https://github.com/blox-eng/matchblox/issues/304))
 
-### Changed
-
-- **On the phone, a tap on a session goes into it.** The first tap goes into
-  the agent's pane, as `Enter` does, so what you type reaches the agent. It
-  no longer opens a read-only view first.
-  ([#352](https://github.com/blox-eng/matchblox/issues/352))
-
 ### Fixed
 
 - **A hook's event is not lost while the service is busy.** The hook stays
   until the service has read the pane of its process. Before this fix, a
   slow service read the pane after the hook had ended and dropped the event.
   ([#304](https://github.com/blox-eng/matchblox/issues/304))
+
+## [0.38.2] - 2026-11-09
+
+### Changed
+
+- **On the phone, a tap on a session goes into it.** The first tap goes into
+  the agent's pane, as `Enter` does, so what you type reaches the agent. It
+  no longer opens a read-only view first.
+  ([#352](https://github.com/blox-eng/matchblox/issues/352))
 
 ## [0.38.1] - 2026-11-09
 
@@ -1347,7 +1349,8 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.38.1...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.38.2...HEAD
+[0.38.2]: https://github.com/blox-eng/matchblox/compare/v0.38.1...v0.38.2
 [0.38.1]: https://github.com/blox-eng/matchblox/compare/v0.38.0...v0.38.1
 [0.38.0]: https://github.com/blox-eng/matchblox/compare/v0.37.0...v0.38.0
 [0.37.0]: https://github.com/blox-eng/matchblox/compare/v0.36.0...v0.37.0
