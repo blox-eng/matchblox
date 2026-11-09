@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -528,5 +529,96 @@ func TestOldStoreTeamsGetNames(t *testing.T) {
 	doc := chainSample(s, chainSessions...)
 	if doc.Chains == nil || len(doc.Chains.Chains) != 1 || doc.Chains.Chains[0].Name != "two" {
 		t.Fatalf("chains = %+v", doc.Chains)
+	}
+}
+
+// paneSample publishes sessions with the tmux panes listed in panes.
+func paneSample(s *Service, at time.Time, sessions []sample.Session, panes ...string) state.Doc {
+	snap := sample.Snapshot{At: at, Sessions: sessions}
+	for _, p := range panes {
+		snap.Panes = append(snap.Panes, sample.Pane{ID: p})
+	}
+	var doc state.Doc
+	s.publish(snap, func(d state.Doc) { doc = d })
+	s.headRun.wait()
+	return doc
+}
+
+func TestEmptyPaneKeepsTheMateUnseen(t *testing.T) {
+	s := chainTest(t, filepath.Join(t.TempDir(), "chains.json"))
+	clock := night0
+	s.Now = func() time.Time { return clock }
+	mustChain(t, s, "%1", proto.ChainPrefix+"%2")
+	clock = clock.Add(time.Minute)
+	doc := paneSample(s, clock, chainSessions[:1:1], "%1", "%2") // two's agent is gone; its pane lives
+	if doc.Chains == nil || len(doc.Chains.Chains) != 1 {
+		t.Fatalf("two left while its pane lives: %+v", doc.Chains)
+	}
+	first := clock
+	clock = clock.Add(11 * time.Minute)
+	doc = paneSample(s, clock, chainSessions[:1:1], "%1", "%2")
+	i := slices.IndexFunc(doc.Chains.Mates, func(v state.MateView) bool { return v.Member.Pane == "%2" })
+	if i < 0 || !doc.Chains.Mates[i].Unseen.Equal(first) {
+		t.Fatalf("mates = %+v", doc.Chains.Mates)
+	}
+	if got := chainInbox(s, chainSessions[0]); len(got) != 0 {
+		t.Fatalf("one heard %q", got)
+	}
+}
+
+func TestClosedPaneLeaves(t *testing.T) {
+	s := chainTest(t, filepath.Join(t.TempDir(), "chains.json"))
+	mustChain(t, s, "%1", proto.ChainPrefix+"%2")
+	chainInbox(s, chainSessions[1])
+	if doc := paneSample(s, time.Now(), chainSessions[:1:1], "%1"); doc.Chains != nil {
+		t.Fatalf("a closed pane stayed: %+v", doc.Chains)
+	}
+	if got := chainInbox(s, chainSessions[0]); !slices.Equal(got, []string{"two left the chain"}) {
+		t.Fatalf("one heard %q", got)
+	}
+}
+
+func TestSampleMissKeepsTeamsAndTimes(t *testing.T) {
+	s := chainTest(t, filepath.Join(t.TempDir(), "chains.json"))
+	mustChain(t, s, "%1", proto.ChainPrefix+"%2")
+	s.publish(sample.Snapshot{At: time.Now(), Sessions: chainSessions[:1:1], Errors: []string{"tmux: no server"}}, func(state.Doc) {})
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.Chains.Chains) != 1 || len(s.Chains.Unseen) != 0 {
+		t.Fatalf("a missed sample changed the chains: %+v %v", s.Chains.Chains, s.Chains.Unseen)
+	}
+}
+
+func TestSeenAgainClearsUnseen(t *testing.T) {
+	s := chainTest(t, filepath.Join(t.TempDir(), "chains.json"))
+	mustChain(t, s, "%1", proto.ChainPrefix+"%2")
+	paneSample(s, time.Now(), chainSessions[:1:1], "%1", "%2")
+	doc := paneSample(s, time.Now(), chainSessions[:2:2], "%1", "%2")
+	for _, v := range doc.Chains.Mates {
+		if !v.Unseen.IsZero() {
+			t.Fatalf("seen again, still unseen: %+v", v)
+		}
+	}
+}
+
+func TestChainsViewCarriesMates(t *testing.T) {
+	s := chainTest(t, filepath.Join(t.TempDir(), "chains.json"))
+	mustChain(t, s, "%1", proto.ChainPrefix+"%2")
+	chainInbox(s, chainSessions[1])
+	s.mu.Lock()
+	for i := range 3 {
+		s.Chains.Post(memberOf(chainSessions[1]), fmt.Sprint(i), time.Now())
+	}
+	for i := range 21 {
+		s.Chains.Post(memberOf(chainSessions[0]), fmt.Sprint(i), time.Now())
+	}
+	s.mu.Unlock()
+	doc := chainSample(s, chainSessions...)
+	got := map[string]state.MateView{}
+	for _, v := range doc.Chains.Mates {
+		got[v.Member.Pane] = v
+	}
+	if len(doc.Chains.Mates) != 2 || got["%2"].Inbox != 3 || got["%2"].Full || got["%1"].Inbox != 20 || !got["%1"].Full {
+		t.Fatalf("mates = %+v", doc.Chains.Mates)
 	}
 }

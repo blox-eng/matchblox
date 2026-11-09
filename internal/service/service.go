@@ -301,6 +301,9 @@ type Service struct {
 	// afresh: each hears once who it is chained with. heldCleared are the
 	// ones a delivery holds.
 	cleared, heldCleared map[string]bool
+	// mateNames is the last name of the chained match in each live pane,
+	// for the news that it left once its session is gone. Under mu.
+	mateNames map[string]string
 	// found goes to each console when foundGen passes the one it has.
 	found     gitscan.Found
 	foundGen  uint64

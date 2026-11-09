@@ -18,10 +18,6 @@ import (
 
 const chainNeedsMatch = "chain needs a match: run it from an agent's pane"
 
-// switchGrace is how long a switched match keeps its chain while its pane
-// shows no agent; past it, it keeps it while an agent runs there.
-const switchGrace = 2 * time.Minute
-
 // memberOf is the only way to make a Member: a hand-made one that lacks the
 // session id would be Same as the session yet keep another inbox.
 func memberOf(x sample.Session) chains.Member {
@@ -242,8 +238,9 @@ func (s *Service) chainable(st *chains.Store, from, to sample.Session) (repo, wh
 }
 
 // pruneChainsLocked keeps up the members whose session id changed in their
-// pane, drops the members the sessions no longer hold, tells the
-// mates of a match that left, and saves on a change. prev are the sessions
+// pane, keeps a member whose pane lives but shows no agent (unseen since its
+// first miss), drops a member whose pane is gone, tells the mates of a match
+// that left, and saves on a change. prev are the sessions
 // of the sample before, which name a match that is gone. Callers hold mu.
 func (s *Service) pruneChainsLocked(now time.Time, prev []sample.Session) error {
 	st := s.chainsLocked()
@@ -252,12 +249,33 @@ func (s *Service) pruneChainsLocked(now time.Time, prev []sample.Session) error 
 		return nil // every match would look gone
 	}
 	refreshed := s.refreshChainsLocked(st)
-	before, offs := slices.Clone(st.Chains), len(st.Off)
+	before, offs, unseen := slices.Clone(st.Chains), len(st.Off), maps.Clone(st.Unseen)
+	panes := map[string]bool{}
+	for _, p := range s.cur.Panes {
+		panes[p.ID] = true
+	}
+	if s.mateNames == nil {
+		s.mateNames = map[string]string{}
+	}
+	for _, x := range slices.Concat(prev, s.cur.Sessions) {
+		if len(st.TeamsOf(memberOf(x))) > 0 {
+			s.mateNames[x.Pane] = x.Name
+		}
+	}
 	live := func(m chains.Member) bool {
-		_, ok := s.sessionOfLocked(m)
-		return ok || s.switchingLocked(st, m, now)
+		if x, ok := s.sessionOfLocked(m); ok {
+			st.MarkSeen(m)
+			s.mateNames[m.Pane] = x.Name
+			return true
+		}
+		if !panes[m.Pane] {
+			return false
+		}
+		st.MarkUnseen(m, now)
+		return true
 	}
 	left := st.Prune(live, now)
+	defer maps.DeleteFunc(s.mateNames, func(pane, _ string) bool { return !panes[pane] })
 	maps.DeleteFunc(s.cleared, func(id string, _ bool) bool {
 		return !slices.ContainsFunc(s.cur.Sessions, func(x sample.Session) bool { return x.SessionID == id })
 	})
@@ -274,7 +292,7 @@ func (s *Service) pruneChainsLocked(now time.Time, prev []sample.Session) error 
 			}
 		}
 	}
-	if !refreshed && len(left) == 0 && len(st.Off) == offs {
+	if !refreshed && len(left) == 0 && len(st.Off) == offs && maps.Equal(st.Unseen, unseen) {
 		return nil
 	}
 	return s.saveChainsLocked()
@@ -375,21 +393,6 @@ func (s *Service) switchedToLocked(st *chains.Store, m chains.Member) (sample.Se
 	return x, true
 }
 
-// switchingLocked tells if m keeps its place for the agent a switch starts
-// in its pane: the switch is under switchGrace old, or an agent other than
-// m runs there. Callers hold mu.
-func (s *Service) switchingLocked(st *chains.Store, m chains.Member, now time.Time) bool {
-	mv, ok := st.Moving(m)
-	if !ok {
-		return false
-	}
-	if now.Sub(mv.At) < switchGrace {
-		return true
-	}
-	x, ok := s.sessionAtLocked(m.Pane)
-	return ok && (x.PID != m.PID || x.Start != m.Start)
-}
-
 // leftText is the news of l: the match is gone. Callers hold mu.
 func (s *Service) leftText(l chains.Left, prev []sample.Session) string {
 	name := l.Who.Pane
@@ -397,6 +400,8 @@ func (s *Service) leftText(l chains.Left, prev []sample.Session) string {
 		name = x.Name
 	} else if i := slices.IndexFunc(prev, func(x sample.Session) bool { return memberOf(x).Same(l.Who) }); i >= 0 {
 		name = prev[i].Name
+	} else if n, ok := s.mateNames[l.Who.Pane]; ok {
+		name = n
 	}
 	return name + " left the chain"
 }
@@ -450,6 +455,15 @@ func chainsView(st *chains.Store) *state.ChainsView {
 	v := &state.ChainsView{Chains: slices.Clone(st.Chains)}
 	for i := range v.Chains {
 		v.Chains[i].Members = slices.Clone(v.Chains[i].Members)
+		for _, m := range v.Chains[i].Members {
+			if slices.ContainsFunc(v.Mates, func(o state.MateView) bool { return o.Member.Same(m) }) {
+				continue
+			}
+			mv := state.MateView{Member: m}
+			mv.Inbox, mv.Full = st.InboxCount(m)
+			mv.Unseen, _ = st.UnseenSince(m)
+			v.Mates = append(v.Mates, mv)
+		}
 	}
 	return v
 }

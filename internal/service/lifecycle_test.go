@@ -2137,16 +2137,25 @@ func TestASwitchKeepsTheChain(t *testing.T) {
 	}
 }
 
-// TestASwitchWithNoNewAgentLeavesTheChain: a pane with no agent after the
-// grace is a match that is gone.
-func TestASwitchWithNoNewAgentLeavesTheChain(t *testing.T) {
+// TestASwitchWithNoNewAgentStaysWhileItsPaneLives: a pane with no agent
+// after a switch keeps its match, unseen; once the pane closes, the match
+// is gone.
+func TestASwitchWithNoNewAgentStaysWhileItsPaneLives(t *testing.T) {
 	s, clock := switchChainTest(t)
 	if res := s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: "codex"})); res.Err != "" {
 		t.Fatal(res.Err)
 	}
-	*clock = clock.Add(switchGrace)
-	if doc := switchSample(s, nil); doc.Chains != nil {
-		t.Fatalf("after the grace with no agent: %+v", doc.Chains)
+	*clock = clock.Add(time.Hour)
+	if doc := switchSample(s, nil); doc.Chains == nil || len(doc.Chains.Chains) != 1 {
+		t.Fatalf("an hour on, its pane alive: %+v", doc.Chains)
+	}
+	snap := lifeSnap(false)
+	snap.Sessions = slices.Clone(snap.Sessions[1:])
+	snap.Panes = slices.DeleteFunc(slices.Clone(snap.Panes), func(p sample.Pane) bool { return p.ID == "%1" })
+	var doc state.Doc
+	s.publish(snap, func(d state.Doc) { doc = d })
+	if doc.Chains != nil {
+		t.Fatalf("its pane closed, it stayed: %+v", doc.Chains)
 	}
 	if got := chainInbox(s, lifeSnap(false).Sessions[2]); !slices.Equal(got, []string{"work left the chain"}) {
 		t.Fatalf("cx heard %q", got)

@@ -444,3 +444,32 @@ func TestLeavingDropsTheLinesOfSendersItNoLongerShares(t *testing.T) {
 		t.Fatalf("leave all lost = %+v", lost)
 	}
 }
+
+func TestUnseenKeepsTheFirstMiss(t *testing.T) {
+	var s Store
+	chainOf(t, &s, "a", "b")
+	s.MarkUnseen(mem("b"), t0)
+	s.MarkUnseen(mem("b"), t0.Add(time.Minute))
+	if at, ok := s.UnseenSince(mem("b")); !ok || !at.Equal(t0) {
+		t.Fatalf("unseen = %v %v", at, ok)
+	}
+	s.MarkSeen(mem("b"))
+	if _, ok := s.UnseenSince(mem("b")); ok {
+		t.Fatal("seen again, still unseen")
+	}
+}
+
+func TestUnseenFollowsARenameAndGoesWithItsMatch(t *testing.T) {
+	var s Store
+	chainOf(t, &s, "a", "b")
+	s.MarkUnseen(mem("a"), t0)
+	a2 := Member{SessionID: "a2", Pane: "%a"}
+	s.Refresh(func(m Member) (Member, bool) { return a2, m.SessionID == "a" })
+	if at, ok := s.UnseenSince(a2); !ok || !at.Equal(t0) {
+		t.Fatalf("after rename = %v %v", at, ok)
+	}
+	s.Prune(func(m Member) bool { return m.SessionID == "b" }, t0)
+	if len(s.Unseen) != 0 {
+		t.Fatalf("unseen = %v", s.Unseen)
+	}
+}

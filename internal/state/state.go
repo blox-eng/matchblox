@@ -76,14 +76,26 @@ type Doc struct {
 	// found), how the sign-in of a new account goes: "by hand" when
 	// matchblox gave up driving it.
 	SignIns map[string]string `json:"sign_ins,omitempty"`
-	// Chains are the chains of this host and the asks that wait for the
-	// other side. Nil: none.
+	// Chains are the teams of this host and their members. Nil: none.
 	Chains *ChainsView `json:"chains,omitempty"`
 }
 
 // ChainsView is what consoles and the CLI see of the chains.
 type ChainsView struct {
 	Chains []chains.Chain `json:"chains,omitempty"`
+	// Mates is each member of any team once: its inbox and when it was
+	// first missed while its pane lives.
+	Mates []MateView `json:"mates,omitempty"`
+}
+
+// MateView is what the room shows of one member: Inbox items wait, Full
+// when some were dropped, and Unseen when its pane lives but shows no agent
+// (zero: seen).
+type MateView struct {
+	Member chains.Member `json:"member"`
+	Inbox  int           `json:"inbox,omitempty"`
+	Full   bool          `json:"full,omitempty"`
+	Unseen time.Time     `json:"unseen,omitzero"`
 }
 
 // Focus is the session to open: its pane, or Gone when its number's

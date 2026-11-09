@@ -108,6 +108,9 @@ type Store struct {
 	Chains []Chain  `json:"chains,omitempty"`
 	Off    []Member `json:"off,omitempty"`
 	Moves  []Move   `json:"moves,omitempty"`
+	// Unseen is when each member whose pane lives but shows no agent was
+	// first missed, by its key.
+	Unseen map[string]time.Time `json:"unseen,omitempty"`
 
 	inbox   map[string][]Item
 	dropped map[string]int
@@ -283,6 +286,10 @@ func (s *Store) Refresh(cur func(Member) (Member, bool)) (changed bool) {
 			delete(s.inbox, old)
 			delete(s.dropped, old)
 			s.put(n, now, items, dropped, true)
+			if at, ok := s.Unseen[old]; ok {
+				delete(s.Unseen, old)
+				s.Unseen[now] = at
+			}
 			if s.renamed == nil {
 				s.renamed = map[string]string{}
 			}
@@ -322,6 +329,7 @@ func (s *Store) Prune(live func(Member) bool, now time.Time) (left []Left) {
 	s.Off = slices.DeleteFunc(s.Off, func(m Member) bool { return !live(m) })
 	s.Moves = slices.DeleteFunc(s.Moves, func(mv Move) bool { return !s.holds(mv.From.key()) })
 	maps.DeleteFunc(s.renamed, func(_, now string) bool { return !s.holds(now) })
+	maps.DeleteFunc(s.Unseen, func(k string, _ time.Time) bool { return !s.holds(k) })
 	return left
 }
 
@@ -330,6 +338,29 @@ func (s *Store) holds(k string) bool {
 	named := func(m Member) bool { return m.key() == k }
 	return slices.ContainsFunc(s.Chains, func(c Chain) bool { return slices.ContainsFunc(c.Members, named) }) ||
 		slices.ContainsFunc(s.Off, named) || len(s.inbox[k]) > 0 || s.dropped[k] > 0
+}
+
+// MarkUnseen notes that m's pane lives but shows no agent at now; the
+// first miss stays.
+func (s *Store) MarkUnseen(m Member, now time.Time) {
+	if _, ok := s.Unseen[m.key()]; ok {
+		return
+	}
+	if s.Unseen == nil {
+		s.Unseen = map[string]time.Time{}
+	}
+	s.Unseen[m.key()] = now
+}
+
+// MarkSeen notes that m shows again.
+func (s *Store) MarkSeen(m Member) {
+	delete(s.Unseen, m.key())
+}
+
+// UnseenSince is when m was first missed, while its pane lives.
+func (s *Store) UnseenSince(m Member) (time.Time, bool) {
+	at, ok := s.Unseen[m.key()]
+	return at, ok
 }
 
 // TeamsOf are the teams m is in, in the order they formed.
