@@ -11,8 +11,9 @@ import (
 )
 
 // The landing page tells one matchbox story: Strike, the box, the chain,
-// the night, the pocket, Strike one (docs/superpowers/specs/
-// 2026-11-07-landing-one-story-design.md).
+// the night, the pocket (docs/superpowers/specs/
+// 2026-11-07-landing-one-story-design.md). The install line is in the hero
+// only, and the footer holds the links.
 
 func landingPage(t *testing.T) []byte {
 	t.Helper()
@@ -49,7 +50,7 @@ func TestTheLandingTellsOneStory(t *testing.T) {
 		ids = append(ids, string(m[1]))
 	}
 	// install-h is the hero's visually hidden heading over the install line.
-	want := "install-h box-h chain-h stoker-h pocket-h strike-h"
+	want := "install-h box-h chain-h stoker-h pocket-h"
 	if got := strings.Join(ids, " "); got != want {
 		t.Errorf("the h2 ids run %q, want %q", got, want)
 	}
@@ -144,5 +145,36 @@ func TestOpenTheBoxShowsItsHeading(t *testing.T) {
 	if !bytes.Contains(page, []byte(`href="#console"`)) ||
 		!bytes.Contains(page, []byte(`<section class="agents box" id="console" aria-labelledby="box-h">`)) {
 		t.Error(`"Open the box" must point at the section that holds "Every agent, one box"`)
+	}
+}
+
+// The chain strikes once and rests: no timer lights a match again after the
+// run, so the row is still unless the visitor strikes it or scrolls back.
+func TestTheChainRestsAfterItsRun(t *testing.T) {
+	js, err := os.ReadFile("../../www/app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(js, []byte("later(flicker")) || bytes.Contains(js, []byte("const flicker")) {
+		t.Error("app.js relights the chain at random after its run")
+	}
+}
+
+// The top bar holds the brand and the light switch; GitHub and Discord sit in
+// the footer, once.
+func TestTheProjectLinksAreInTheFooter(t *testing.T) {
+	page := string(landingPage(t))
+	header := page[strings.Index(page, "<header"):strings.Index(page, "</header>")]
+	footer := page[strings.Index(page, "<footer"):strings.Index(page, "</footer>")]
+	for _, link := range []string{"https://github.com/blox-eng/matchblox\"", "https://discord.gg/tYxBUpGfX3\""} {
+		if strings.Contains(header, link) {
+			t.Errorf("the top bar links %s", link)
+		}
+		if n := strings.Count(footer, link); n != 1 {
+			t.Errorf("the footer links %s %d times, want once", link, n)
+		}
+	}
+	if n := strings.Count(page, "curl -fsSL https://matchblox.sh | sh"); n != 2 { // the tab's data-cmd and the shown line
+		t.Errorf("the install command shows %d times, want 2 (the hero only)", n)
 	}
 }
