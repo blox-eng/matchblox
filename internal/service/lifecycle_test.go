@@ -2077,6 +2077,7 @@ func switchChainTest(t *testing.T) (*Service, *time.Time) {
 	if res := chainFrom(t, s, "%1", proto.ChainPrefix+"%3"); res.Err != "" {
 		t.Fatalf("work chains cx: %+v", res)
 	}
+	chainInbox(s, lifeSnap(false).Sessions[2]) // cx heard work join
 	return s, &clock
 }
 

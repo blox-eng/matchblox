@@ -94,11 +94,20 @@ func newsTest(t *testing.T, sessions []sample.Session, chained ...string) (*Serv
 	s.cur.Git = &git
 	s.mu.Unlock()
 	chainSample(s, sessions...)
-	for i := 1; i < len(chained); i++ {
-		pane := chained[i]
-		chainFrom(t, s, chained[0], proto.ChainPrefix+pane)
-		chainFrom(t, s, pane, proto.ChainPrefix+chained[0])
+	for i := 1; i < len(chained); i++ { // each joins the first's team
+		if res := chainFrom(t, s, chained[i], proto.ChainPrefix+chained[0]); res.Err != "" {
+			t.Fatalf("%s chains %s: %+v", chained[i], chained[0], res)
+		}
 	}
+	s.mu.Lock()
+	st := s.chainsLocked()
+	for _, x := range sessions { // the join's news and spark are not what a test reads
+		st.Take(memberOf(x))
+	}
+	for i := range st.Chains {
+		st.Chains[i].Spark = time.Time{}
+	}
+	s.mu.Unlock()
 	chainSample(s, sessions...) // the first HEAD read of each chained worktree
 	return s, g
 }
@@ -220,7 +229,7 @@ func TestTheFirstHeadReadPostsNothing(t *testing.T) {
 		t.Errorf("an unchained host read git %d times", g.calls-calls)
 	}
 	chainFrom(t, s, "%1", proto.ChainPrefix+"%2")
-	chainFrom(t, s, "%2", proto.ChainPrefix+"%1")
+	inbox(s, newsSessions[1]) // two heard one join
 	g.set("/dev/matchblox-299", "c2", "peer-send")
 	chainSample(s, newsSessions...)
 	if got := inbox(s, newsSessions[1]); len(got) != 0 {
@@ -380,8 +389,8 @@ func TestACommitCountsEveryFileAndKeepsGitsWarningsOut(t *testing.T) {
 	s.mu.Unlock()
 	chainSample(s, sessions...)
 	chainFrom(t, s, "%1", proto.ChainPrefix+"%2")
-	chainFrom(t, s, "%2", proto.ChainPrefix+"%1")
 	chainSample(s, sessions...)
+	inbox(s, sessions[1]) // two heard one join
 	for _, f := range []string{"ä.go", "b.go"} {
 		if err := os.WriteFile(filepath.Join(repo, f), []byte("x\n"), 0o600); err != nil {
 			t.Fatal(err)

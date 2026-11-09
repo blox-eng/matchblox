@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -55,7 +56,7 @@ func chainFrom(t *testing.T, s *Service, from, recID string) proto.Result {
 func TestChainActFormsATeamAtOnce(t *testing.T) {
 	s := chainTest(t, filepath.Join(t.TempDir(), "chains.json"))
 	res := chainFrom(t, s, "%1", proto.ChainPrefix+"%2")
-	if res.Err != "" || res.Note != "joined one: 2 matches" {
+	if res.Err != "" || res.Note != "joined one: 2 matches. To leave it, run: matchblox unchain one" {
 		t.Fatalf("chain = %+v", res)
 	}
 	doc := chainSample(s, chainSessions...)
@@ -69,7 +70,7 @@ func TestChainActFormsATeamAtOnce(t *testing.T) {
 
 func TestChainActChainsAcrossRepos(t *testing.T) {
 	s := chainTest(t, filepath.Join(t.TempDir(), "chains.json"))
-	if res := chainFrom(t, s, "%1", proto.ChainPrefix+"%3"); res.Err != "" || res.Note != "joined one: 2 matches" {
+	if res := chainFrom(t, s, "%1", proto.ChainPrefix+"%3"); res.Err != "" || res.Note != "joined one: 2 matches. To leave it, run: matchblox unchain one" {
 		t.Fatalf("chain = %+v", res)
 	}
 	for range 3 { // the chain outlives the samples after it
@@ -85,7 +86,7 @@ func TestChainActChainsASessionInNoRepo(t *testing.T) {
 	lost := sample.Session{Pane: "%4", PID: 104, SessionID: "s4", Name: "four", Cwd: "/tmp/x"}
 	sessions := append(slices.Clone(chainSessions), lost)
 	chainSample(s, sessions...)
-	if res := chainFrom(t, s, "%1", proto.ChainPrefix+"%4"); res.Err != "" || res.Note != "joined one: 2 matches" {
+	if res := chainFrom(t, s, "%1", proto.ChainPrefix+"%4"); res.Err != "" || res.Note != "joined one: 2 matches. To leave it, run: matchblox unchain one" {
 		t.Fatalf("chain = %+v", res)
 	}
 	if doc := chainSample(s, sessions...); doc.Chains == nil || len(doc.Chains.Chains) != 1 {
@@ -124,7 +125,7 @@ func TestChainActRefusesAGonePane(t *testing.T) {
 func TestChainActLeavesAndTurnsOff(t *testing.T) {
 	s := chainTest(t, filepath.Join(t.TempDir(), "chains.json"))
 	chainFrom(t, s, "%1", proto.ChainPrefix+"%2")
-	if res := chainFrom(t, s, "%1", proto.ChainPrefix+"-"); res.Note != "left the chain" {
+	if res := chainFrom(t, s, "%1", proto.ChainPrefix+"-"); res.Note != "left one" {
 		t.Fatalf("leave = %+v", res)
 	}
 	if doc := chainSample(s, chainSessions...); doc.Chains != nil {
@@ -272,7 +273,7 @@ func TestChainActRefusals(t *testing.T) {
 		t.Errorf("itself: %+v", res)
 	}
 	chainFrom(t, s, "%2", proto.ChainPrefix+"off")
-	if res := chainFrom(t, s, "%1", proto.ChainPrefix+"%2"); res.Err != "two is off: it takes no chains" {
+	if res := chainFrom(t, s, "%1", proto.ChainPrefix+"%2"); res.Err != "two is off: it takes no chains. It can run: matchblox chain --on" {
 		t.Errorf("off: %+v", res)
 	}
 	chainFrom(t, s, "%2", proto.ChainPrefix+"on")
@@ -328,5 +329,204 @@ func TestOffWhileTheSampleMissedFindsAClearedMatch(t *testing.T) {
 	}
 	if res := chainFrom(t, s, "%2", proto.ChainPrefix+"-"); res.Err != "" || res.Note != "not in a chain" {
 		t.Fatalf("leave = %+v", res)
+	}
+}
+
+// fourSessions are chainSessions and four in www.
+var fourSessions = append(slices.Clone(chainSessions),
+	sample.Session{Pane: "%4", PID: 104, Start: 4, SessionID: "s4", Name: "four", Agent: "cursor", Cwd: "/dev/www"})
+
+func teamTest(t *testing.T) *Service {
+	t.Helper()
+	s := chainTest(t, filepath.Join(t.TempDir(), "chains.json"))
+	chainSample(s, fourSessions...)
+	return s
+}
+
+func mustChain(t *testing.T, s *Service, from, recID string) proto.Result {
+	t.Helper()
+	res := chainFrom(t, s, from, recID)
+	if res.Err != "" {
+		t.Fatalf("%s %s: %+v", from, recID, res)
+	}
+	return res
+}
+
+func TestChainJoinsTheOnlyTeamOfWho(t *testing.T) {
+	s := teamTest(t)
+	mustChain(t, s, "%2", proto.ChainPrefix+"%3") // team "two": two, three
+	res := mustChain(t, s, "%1", proto.ChainPrefix+"%3")
+	if res.Note != "joined two: 3 matches. To leave it, run: matchblox unchain two" {
+		t.Fatalf("join = %+v", res)
+	}
+	if got := chainInbox(s, fourSessions[1]); !slices.Contains(got, "[matchblox] one joined the chain") {
+		t.Fatalf("two heard %q", got)
+	}
+	if got := chainInbox(s, fourSessions[2]); !slices.Contains(got, "[matchblox] one joined the chain (in app)") {
+		t.Fatalf("three heard %q", got)
+	}
+	if got := chainInbox(s, fourSessions[0]); len(got) != 0 {
+		t.Fatalf("the joiner heard %q", got)
+	}
+	s.mu.Lock()
+	spark := s.Chains.Chains[0].Spark
+	s.mu.Unlock()
+	if spark.IsZero() {
+		t.Fatal("a join did not spark")
+	}
+}
+
+func TestChainFormsATeamNamedAfterTheCaller(t *testing.T) {
+	s := teamTest(t)
+	res := mustChain(t, s, "%1", proto.ChainPrefix+"%3")
+	if res.Note != "joined one: 2 matches. To leave it, run: matchblox unchain one" {
+		t.Fatalf("form = %+v", res)
+	}
+}
+
+func TestChainRefusesWhoInTwoTeams(t *testing.T) {
+	s := teamTest(t)
+	mustChain(t, s, "%1", proto.ChainPrefix+"%2") // one: one, two
+	mustChain(t, s, "%3", proto.ChainPrefix+"%4") // three: three, four
+	mustChain(t, s, "%2", proto.ChainPrefix+"@three")
+	res := chainFrom(t, s, "%4", proto.ChainPrefix+"%2")
+	if want := "two is in 2 chains. Run one:\n  matchblox chain one\n  matchblox chain three"; res.Err != want {
+		t.Fatalf("err = %q, want %q", res.Err, want)
+	}
+}
+
+func TestChainByTeamName(t *testing.T) {
+	s := teamTest(t)
+	mustChain(t, s, "%1", proto.ChainPrefix+"%2")
+	if res := mustChain(t, s, "%4", proto.ChainPrefix+"@one"); res.Note != "joined one: 3 matches. To leave it, run: matchblox unchain one" {
+		t.Fatalf("join = %+v", res)
+	}
+	if res := chainFrom(t, s, "%4", proto.ChainPrefix+"@none"); res.Err != "no chain is named none" {
+		t.Fatalf("no team = %+v", res)
+	}
+}
+
+func TestChainRefusesOff(t *testing.T) {
+	s := teamTest(t)
+	mustChain(t, s, "%2", proto.ChainPrefix+"off")
+	if res := chainFrom(t, s, "%1", proto.ChainPrefix+"%2"); res.Err != "two is off: it takes no chains. It can run: matchblox chain --on" {
+		t.Fatalf("to off = %q", res.Err)
+	}
+	if res := chainFrom(t, s, "%2", proto.ChainPrefix+"%1"); res.Err != "two is off: it takes no chains. It can run: matchblox chain --on" {
+		t.Fatalf("from off = %q", res.Err)
+	}
+	mustChain(t, s, "%1", proto.ChainPrefix+"%3")
+	if res := chainFrom(t, s, "%2", proto.ChainPrefix+"@one"); res.Err != "two is off: it takes no chains. It can run: matchblox chain --on" {
+		t.Fatalf("off by name = %q", res.Err)
+	}
+}
+
+func TestBareUnchainInTwoTeamsRefuses(t *testing.T) {
+	s := teamTest(t)
+	mustChain(t, s, "%1", proto.ChainPrefix+"%2") // one
+	mustChain(t, s, "%3", proto.ChainPrefix+"%4") // three
+	mustChain(t, s, "%1", proto.ChainPrefix+"@three")
+	want := "you are in one and three. Run one:\n  matchblox unchain one\n  matchblox unchain three\n  matchblox unchain --all"
+	if res := chainFrom(t, s, "%1", proto.ChainPrefix+"-"); res.Err != want {
+		t.Fatalf("err = %q, want %q", res.Err, want)
+	}
+	s.mu.Lock()
+	_, err := s.Chains.Form(memberOf(fourSessions[0]), memberOf(fourSessions[3]), "web", "")
+	s.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res := chainFrom(t, s, "%1", proto.ChainPrefix+"-"); !strings.HasPrefix(res.Err, "you are in one, three and web. Run one:\n") {
+		t.Fatalf("three teams = %q", res.Err)
+	}
+}
+
+func TestUnchainTeamAndAll(t *testing.T) {
+	s := teamTest(t)
+	mustChain(t, s, "%1", proto.ChainPrefix+"%2")
+	mustChain(t, s, "%3", proto.ChainPrefix+"%4")
+	mustChain(t, s, "%1", proto.ChainPrefix+"@three")
+	if res := mustChain(t, s, "%1", proto.ChainPrefix+"-@one"); res.Note != "left one" {
+		t.Fatalf("leave = %+v", res)
+	}
+	mustChain(t, s, "%1", proto.ChainPrefix+"%2") // one again, with two
+	if res := mustChain(t, s, "%1", proto.ChainPrefix+"-*"); res.Note != "left three and one" {
+		t.Fatalf("leave all = %+v", res)
+	}
+	if res := chainFrom(t, s, "%1", proto.ChainPrefix+"-@three"); res.Note != "not in three" {
+		t.Fatalf("leave again = %+v", res)
+	}
+}
+
+func TestBareUnchainLeavesTheOnlyTeam(t *testing.T) {
+	s := teamTest(t)
+	mustChain(t, s, "%1", proto.ChainPrefix+"%2")
+	if res := mustChain(t, s, "%1", proto.ChainPrefix+"-"); res.Note != "left one" {
+		t.Fatalf("leave = %+v", res)
+	}
+}
+
+func TestOwnerTakesAMatchOut(t *testing.T) {
+	s := teamTest(t)
+	mustChain(t, s, "%1", proto.ChainPrefix+"%2")
+	mustChain(t, s, "%4", proto.ChainPrefix+"@one")
+	chainInbox(s, fourSessions[3])
+	res := s.act(context.Background(), proto.Act{RecID: proto.ChainPrefix + "out:%4@one", Console: true})
+	if res.Err != "" || res.Note != "took four out of one" {
+		t.Fatalf("out = %+v", res)
+	}
+	if got := chainInbox(s, fourSessions[3]); !slices.Equal(got, []string{"[matchblox] the owner took you out of one"}) {
+		t.Fatalf("four heard %q", got)
+	}
+	s.mu.Lock()
+	c, _ := s.Chains.Team("one")
+	s.mu.Unlock()
+	if len(c.Members) != 2 {
+		t.Fatalf("team = %+v", c)
+	}
+}
+
+func TestAnAgentCannotTakeAnotherOut(t *testing.T) {
+	s := teamTest(t)
+	mustChain(t, s, "%1", proto.ChainPrefix+"%2")
+	for _, a := range []proto.Act{
+		{RecID: proto.ChainPrefix + "out:%2@one", From: "%1"},
+		{RecID: proto.ChainPrefix + "out:%2@one", From: "%1", Console: true},
+	} {
+		if res := s.act(context.Background(), a); res.Err == "" {
+			t.Fatalf("%+v took a match out: %+v", a, res)
+		}
+	}
+	s.mu.Lock()
+	c, _ := s.Chains.Team("one")
+	s.mu.Unlock()
+	if len(c.Members) != 2 {
+		t.Fatalf("team = %+v", c)
+	}
+}
+
+func TestStokerJoinsNoChain(t *testing.T) {
+	s := teamTest(t)
+	s.StokerServer = "mbstoker"
+	stoker := sample.Session{Pane: sample.OnServer("%7", "mbstoker"), PID: 107, Start: 7, SessionID: "s7", Name: "stoker", Agent: "claude", Cwd: "/dev/app"}
+	chainSample(s, append(slices.Clone(fourSessions), stoker)...)
+	if res := chainFrom(t, s, "%1", proto.ChainPrefix+stoker.Pane); res.Err != "the stoker joins no chain" {
+		t.Fatalf("to the stoker = %+v", res)
+	}
+	if res := chainFrom(t, s, stoker.Pane, proto.ChainPrefix+"%1"); res.Err != "the stoker joins no chain" {
+		t.Fatalf("from the stoker = %+v", res)
+	}
+}
+
+func TestOldStoreTeamsGetNames(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "chains.json")
+	old := `{"chains":[{"id":"%2#1","repo":"/dev/app","members":[{"session_id":"s9","pane":"%9"},{"session_id":"s2","pane":"%2"},{"session_id":"s1","pane":"%1"}]}]}`
+	if err := os.WriteFile(path, []byte(old), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s := chainTest(t, path)
+	doc := chainSample(s, chainSessions...)
+	if doc.Chains == nil || len(doc.Chains.Chains) != 1 || doc.Chains.Chains[0].Name != "two" {
+		t.Fatalf("chains = %+v", doc.Chains)
 	}
 }
