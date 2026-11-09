@@ -78,12 +78,20 @@ type Left struct {
 	Chain string
 }
 
+// Move is a switch that starts another agent in From's pane: the new agent
+// takes From's place when it shows there.
+type Move struct {
+	From Member    `json:"from"`
+	At   time.Time `json:"at"`
+}
+
 // Store is every chain of a host. The exported fields are saved; the inboxes
 // live in memory only.
 type Store struct {
 	Chains   []Chain   `json:"chains,omitempty"`
 	Requests []Request `json:"requests,omitempty"`
 	Off      []Member  `json:"off,omitempty"`
+	Moves    []Move    `json:"moves,omitempty"`
 
 	inbox   map[string][]Item
 	dropped map[string]int
@@ -206,6 +214,29 @@ func (s *Store) SetOff(m Member, off bool) {
 	}
 }
 
+// Move records that a switch starts another agent in m's pane at now. A
+// match no chain, request, off mark or inbox names has no place to keep.
+func (s *Store) Move(m Member, now time.Time) {
+	s.Stay(m)
+	if s.holds(m.key()) {
+		s.Moves = append(s.Moves, Move{From: m, At: now})
+	}
+}
+
+// Stay drops the move of m: its switch did not happen.
+func (s *Store) Stay(m Member) {
+	s.Moves = slices.DeleteFunc(s.Moves, func(mv Move) bool { return mv.From.Same(m) })
+}
+
+// Moving is the move of m that waits for its new agent.
+func (s *Store) Moving(m Member) (Move, bool) {
+	i := slices.IndexFunc(s.Moves, func(mv Move) bool { return mv.From.Same(m) })
+	if i < 0 {
+		return Move{}, false
+	}
+	return s.Moves[i], true
+}
+
 // Refresh rewrites each member that cur names otherwise now, as a match
 // whose session id changed, in the chains, the requests, the off list and
 // the inbox. It tells if any changed.
@@ -243,8 +274,8 @@ func (s *Store) Refresh(cur func(Member) (Member, bool)) (changed bool) {
 }
 
 // Prune drops members that are gone, requests past RequestTTL or with a
-// side gone, the off marks of gone matches, and chains of one. live tells
-// if a match is still here.
+// side gone, the off marks of gone matches, chains of one, and the moves of
+// a match nothing names any more. live tells if a match is still here.
 func (s *Store) Prune(live func(Member) bool, now time.Time) (left []Left) {
 	for _, c := range slices.Clone(s.Chains) {
 		for _, m := range c.Members {
@@ -260,6 +291,7 @@ func (s *Store) Prune(live func(Member) bool, now time.Time) (left []Left) {
 		return now.Sub(r.At) > RequestTTL || !live(r.From) || !live(r.To)
 	})
 	s.Off = slices.DeleteFunc(s.Off, func(m Member) bool { return !live(m) })
+	s.Moves = slices.DeleteFunc(s.Moves, func(mv Move) bool { return !s.holds(mv.From.key()) })
 	maps.DeleteFunc(s.renamed, func(_, now string) bool { return !s.holds(now) })
 	return left
 }

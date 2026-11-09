@@ -17,6 +17,10 @@ import (
 
 const chainNeedsMatch = "chain needs a match: run it from an agent's pane"
 
+// switchGrace is how long a switched match keeps its chain while its pane
+// shows no agent; past it, it keeps it while an agent runs there.
+const switchGrace = 2 * time.Minute
+
 // memberOf is the only way to make a Member: a hand-made one that lacks the
 // session id would be Same as the session yet keep another inbox.
 func memberOf(x sample.Session) chains.Member {
@@ -123,7 +127,7 @@ func (s *Service) pruneChainsLocked(now time.Time, prev []sample.Session) error 
 	before, asks, offs := slices.Clone(st.Chains), len(st.Requests), len(st.Off)
 	live := func(m chains.Member) bool {
 		_, ok := s.sessionOfLocked(m)
-		return ok
+		return ok || s.switchingLocked(st, m, now)
 	}
 	left := st.Prune(live, now)
 	maps.DeleteFunc(s.cleared, func(id string, _ bool) bool {
@@ -156,23 +160,83 @@ func (s *Service) pruneChainsLocked(now time.Time, prev []sample.Session) error 
 // wrongly. Callers hold mu.
 func (s *Service) refreshChainsLocked(st *chains.Store) bool {
 	return st.Refresh(func(m chains.Member) (chains.Member, bool) {
+		if x, ok := s.switchedToLocked(st, m); ok {
+			s.markClearedLocked(st, m, memberOf(x))
+			return memberOf(x), true
+		}
 		for _, x := range s.cur.Sessions {
 			if x.Pane != "" && x.Pane == m.Pane && x.PID == m.PID && x.Start == m.Start {
 				n := memberOf(x)
 				if n.SessionID == "" {
 					n.SessionID = m.SessionID
 				}
-				if _, chained := st.ChainOf(m); chained && m.SessionID != "" && n.SessionID != m.SessionID {
-					if s.cleared == nil {
-						s.cleared = map[string]bool{}
-					}
-					s.cleared[n.SessionID] = true
+				if m.SessionID != "" {
+					s.markClearedLocked(st, m, n)
 				}
 				return n, true
 			}
 		}
 		return chains.Member{}, false
 	})
+}
+
+// moveChainsLocked records that a switch starts another agent in x's pane,
+// or, with on false, that it did not, and saves on a change. Callers hold mu.
+func (s *Service) moveChainsLocked(x sample.Session, on bool) error {
+	st, m := s.chainsLocked(), memberOf(x)
+	_, moving := st.Moving(m)
+	switch {
+	case on:
+		st.Move(m, s.now())
+		if _, now := st.Moving(m); !now && !moving {
+			return nil
+		}
+	case moving:
+		st.Stay(m)
+	default:
+		return nil
+	}
+	return s.saveChainsLocked()
+}
+
+// markClearedLocked marks n, a new chat in m's place, to be told its chain at
+// its next news. Callers hold mu.
+func (s *Service) markClearedLocked(st *chains.Store, m, n chains.Member) {
+	if _, chained := st.ChainOf(m); !chained || n.SessionID == m.SessionID {
+		return
+	}
+	if s.cleared == nil {
+		s.cleared = map[string]bool{}
+	}
+	s.cleared[n.SessionID] = true
+}
+
+// switchedToLocked is the agent a switch started in m's pane, once its
+// session id shows there. Callers hold mu.
+func (s *Service) switchedToLocked(st *chains.Store, m chains.Member) (sample.Session, bool) {
+	if _, ok := st.Moving(m); !ok {
+		return sample.Session{}, false
+	}
+	x, ok := s.sessionAtLocked(m.Pane)
+	if !ok || x.SessionID == "" || x.PID == m.PID && x.Start == m.Start {
+		return sample.Session{}, false
+	}
+	return x, true
+}
+
+// switchingLocked tells if m keeps its place for the agent a switch starts
+// in its pane: the switch is under switchGrace old, or an agent other than
+// m runs there. Callers hold mu.
+func (s *Service) switchingLocked(st *chains.Store, m chains.Member, now time.Time) bool {
+	mv, ok := st.Moving(m)
+	if !ok {
+		return false
+	}
+	if now.Sub(mv.At) < switchGrace {
+		return true
+	}
+	x, ok := s.sessionAtLocked(m.Pane)
+	return ok && (x.PID != m.PID || x.Start != m.Start)
 }
 
 // leftText is the news of l: the match is gone. Callers hold mu.

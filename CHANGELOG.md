@@ -6,6 +6,13 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **A switch keeps the chain.** `matchblox switch` starts the new agent in
+  the match's place in its chain, with the asks to it and its news. The new
+  agent hears who it is chained with, and no mate has to chain back again.
+  ([#333](https://github.com/blox-eng/matchblox/issues/333))
+
 ## [0.38.1] - 2026-11-09
 
 ### Fixed

@@ -132,7 +132,10 @@ it moves to another repo. It leaves when it is gone, when it runs
 
 A `/clear` starts a new conversation in the same pane, and the chain keeps
 it. Its next step starts with one line: `[matchblox] you are chained with
-api, docs. To leave, run: matchblox unchain`.
+api, docs. To leave, run: matchblox unchain`. A `matchblox switch` keeps the
+chain too: the new agent takes the match's place, its asks and its news, and
+hears the same line. If no agent shows in the pane within 2 minutes of the
+switch, and none runs there later, the match leaves its chain.
 
 Chain-mates hear each other's commits, branch changes, finishes, waits for
 the person and messages. The hook prints what is new under
