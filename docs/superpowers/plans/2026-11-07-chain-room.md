@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-11-07-chain-room-design.md`. Read it whole before any task. Its section names are cited as "spec § …".
 
-**Base:** one branch, one PR: `design/chain-room` (the spec, this plan and Task 1 are on it now). After PR #312 (#304) merges, rebase it onto `main`, then do Tasks 2–15 on it. This plan uses #304's names. matchbloxrelease commits the landing page onto this branch (Task 15).
+**Base (updated 2026-11-08):** after #312 and #346 (#334, ⏎ goes into the agent's pane) merge, rebase onto `main`. #346 removes the chat's keys; the room uses its read-only live view (design review D7-A). One branch, one PR: `design/chain-room` (the spec, this plan and Task 1 are on it now). After PR #312 (#304) merges, rebase it onto `main`, then do Tasks 2–15 on it. This plan uses #304's names. matchbloxrelease commits the landing page onto this branch (Task 15).
 
 ## Global Constraints
 
@@ -206,6 +206,30 @@ tmux binding (eng review D2-A, owner 2026-11-08): `FlipKeysArgv` builds on `goHo
 - [ ] **Step 3: Implement.** Keep `room.from` per console client (the console is one client), so no service state changes. On iOS, the belt's two buttons send `FlipAPC("")` and `NextAPC("")`, which the console reads as "from the selected session". They are 44 × 44 pt, with VoiceOver labels `Flip to the stoker` and `Next match`, and a `.light` haptic (Task 11's `Haptics.flip()`).
 - [ ] **Step 4:** Run the same command, then `cd ios && make test` (it runs the MatchbloxKit tests) and `make build`. Expected: PASS.
 - [ ] **Step 5: Commit.** `feat: Option-s flips between a session and its chain's room`
+
+### Task 7b: Fallback keys and the back ladder
+
+**Files:**
+- Modify: `internal/panes/home.go` (prefix `s`, prefix `n`; tmux's choose-tree to prefix `S`), `internal/remote/jump.go` (the `User900` and status-tap way back), `internal/app/` (the title `matchblox · top`; the back steps), `ios/Matchblox/ConsoleView.swift` / `ConsoleTerminalView.swift` (a title of `matchblox · top` plus ◂ pops to `HostsView`)
+- Test: `internal/panes/home_test.go`, `internal/remote/jump_test.go`, `internal/app/back_test.go`, MatchbloxKit (`BackLadder` value type)
+
+**Interfaces:**
+- Produces: `const TopTitle = "matchblox · top"` (package `panes`); `func (m Model) backStep() (Model, tea.Cmd)`.
+
+- [ ] **Step 1: Write the failing tests:**
+  - `TestPrefixSFlipsAndPrefixNWalks`: argv equality.
+  - `TestChooseTreeMovesToPrefixCapitalS`.
+  - `TestBackStepsOneLevelPerPress`: an agent pane → its team's room; chat keys → room; room → list; the title is `matchblox · top` only on the chain list.
+  - `TestJumpBackLeavesOnlyAtTheTop`: the jump table's `User900` is `if -F "#{==:#{pane_title},matchblox · top}" <back> "send-keys -H <home APC>"`, and the status tap the same.
+  - `TestJumpBackLeavesWhenTheRemoteConsoleIsGone`: a pane whose title is not a console's (ssh ended, a shell) leaves at once, so there is never a dead end.
+  - Swift: `testBackAtTopOpensHosts`, `testBackElsewhereSendsHome`.
+- [ ] **Step 2:** Run `go test ./internal/panes/ ./internal/remote/ ./internal/app/ -run 'TestPrefix|TestChooseTree|TestBack|TestJumpBack'` and `cd ios && make test`. Expected: FAIL.
+- [ ] **Step 3: Implement.**
+  - The console sets the title on each screen change: `matchblox · top` on the chain list, `matchblox` elsewhere.
+  - `docs/keys.md` gains the fallbacks and the Option-as-Meta setting for Terminal.app and iTerm2.
+  - Task 2's key check adds terminals (Terminal.app, iTerm2, Ghostty, kitty) and records each one's Option behaviour.
+- [ ] **Step 4:** Run the same commands. Expected: PASS.
+- [ ] **Step 5: Commit.** `feat: prefix s flips anywhere, and the back key steps back one level, then to the hosts`
 
 ### Task 8: The states
 
@@ -447,17 +471,73 @@ console, in the room --M-s--> switch the client back to room.from[tty]  (gone: "
 - The service sets `@matchblox_match` only when a pane joins or leaves, never on each sample.
 - `roomRows` is worked out in `refresh`, beside `chainIx`, not in `View`.
 
+## Design review decisions on the plan (2026-11-08)
+
+These override the task text above and the eng corrections where they differ.
+
+- **D3-A + the back ladder (owner):** see Task 7b.
+- **D4-A / D7-A (owner): the room follows #346.**
+  - The right side is the selected match's read-only live view. ⏎, `a` or a tap goes into the match's own pane.
+  - Task 4's chat beside the room and Task 5's "opens the chat" become "goes into its pane", through #346's jump (the act `⏎` uses in Sessions after #346).
+  - Tests: `TestEnterOnAMatchGoesIntoItsPane`, `TestRoomShowsTheSelectedMatchLive`.
+  - Drop `TestFlipFromARoomChatGoesToTheTalkLine`: no chat takes keys.
+- **D5-A (owner): the status-line target.** Task 7 adds a status-left range `≋ <team>` on panes marked `@matchblox_match` that are in a team. A click or a tap sends the flip, as `MouseDown1Status` does for `◂ matchblox`. Tests: `TestStatusShowsTheTeamOnATeamPane`, `TestStatusShowsNothingOnALoosePane`, `TestStatusTapFlips`.
+- **D6-A (owner): the card quotes the newest order.** Task 5. Test: `TestCardQuotesTheNewestOrderAfterASend`, which checks `muted` before the next step and `fg` after it.
+- **Corrections (no behavior change):**
+  - `TestRoomHasOneAccent` counts the room's body only. The header's `● N wait for you` and the open tab keep their §6 accent.
+  - The chain list's loading and peer-out-of-reach state tests move from Task 8 to Task 13, where the list exists.
+  - Task 10 adds `TestBuzzTapOpensTheRoom`.
+  - Task 6 checks `o` against `keys.go` (`TestOIsFreeOnSessions`) and shows `o room` on a loose session's row.
+- **D8-A (owner): every haptic has a signal, for the whole host.**
+  - The console also sends `feel=given` and `feel=refused` after a go's result; the phone plays `.success` and `.error`.
+  - `needs` and `done` cover every match on the host the app shows.
+  - **Delivery:** the console sends to each client that is not on the console's own pane. It writes the APC straight to that client's tty (`#{client_tty}`, which `tmuxLastClient` reads), because the client is showing an agent's pane and the console's output does not reach it. Prove this first in Task 11 Step 2b, on a real tmux server: the bytes reach the app's terminal stream and tmux draws nothing. If tmux redraws over them or drops them, use the push path (`ContentState`) for `needs`/`done` and keep the APC only for the console's own pane.
+  - Tests: `TestFeelReachesAClientInAnAgentPane` (home_linux_test style), `TestFeelGivenAndRefused`, `testCursorSwipeTicks`.
+- **Code names after #346:** the room uses `view*` (`liveview.go`, `viewPlacement`, `keys.view`), not `chat*`. The view's key line says `enter goes into <name>`.
+- **D9-A (owner): key bar.**
+  - Task 7 adds catalog keys `⇄` (flip, sends the user-key `FlipAPC("")`) and `⤳` (next) to `KeyCatalog` in `BeltLayouts.swift`, in the `steer` and `commands` layouts and the editor's list.
+  - A stored `Mine` without `⇄` gets it appended once, shown with the note `⇄ flips to the stoker`.
+  - Keys are belt cells; there is no fixed 44 pt size.
+  - Tests: `testSteerAndCommandsOfferFlipAndNext`, `testAnOldSavedBarGetsFlipOnce`, `testFlipAppendsOnlyOnce`.
+- **D10-A (owner):** the room's 40-column key line is `⏎ go in  y give  ] next  ? keys`. `TestRoomGoldenPhone` uses the spec's new frame.
+- **D11-A (owner):** `SHIPS` and `GIT` are inline labels, uppercase in `faint`. Task 12 adds to DESIGN.md §6 Regions: "a one-line strip takes its label inline".
+- **D12-A (owner):** the room keeps the §6 header (`▰ ws-1  ● 1  ≋ 2`), with the title row `‹ chains · ≋ hearth` under it. Task 12 adds the title row to §6.
+
+## Design Review Completion Summary (the plan, 2026-11-09)
+
+Full 7-pass re-review of the plan, on the owner's choice (D1). Outside voice: a Claude design subagent (11 findings). Codex is unavailable here.
+
+| Pass | Before | After | What remains |
+|---|---|---|---|
+| Step 0 | 8/10 | — | — |
+| 1 Information architecture | 7 | 10 | none (D5, D6, D7) |
+| 2 States | 8 | 10 | none (D8) |
+| 3 Journey | 6 | 10 | none (D3 + the back ladder, D4) |
+| 4 Specific, not generic | 9 | 10 | none (D12) |
+| 5 Design system | 8 | 10 | none (D11, the accent test scope) |
+| 6 Phone and access | 7 | 10 | the Option key behaviour per terminal is checked in Task 2 |
+
+Overall: 6 → 10, the lowest pass in each case. All 12 decisions are the owner's (D1–D12). The owner also added a requirement: the back ladder, ending at the host list.
+
+**Pass 7, unresolved:** none. One litmus answer stays NO by intent: the need line and the asking match row both show the ask. The need line carries the question and the row carries the state word.
+
+**Not in scope:**
+- a chat that takes keys in the room (#346 removed it)
+- a history of orders
+- motion
+
 ## GSTACK REVIEW REPORT
 
 | Review | Trigger | Why | Runs | Status | Findings |
 |--------|---------|-----|------|--------|----------|
 | CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
-| Outside Review | Claude subagent (Codex unavailable: its sandbox cannot start) | Independent 2nd opinion | 1 | completed (native) | 12 findings, 12 applied as corrections |
+| Outside Review | Claude subagents (Codex unavailable: its sandbox cannot start) | Independent 2nd opinion | 2 | completed (native) | eng: 12 applied; design: 11, all decided or applied |
 | Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | issues_open, all mapped | 8 issues, 0 critical gaps |
-| Design Review | `/plan-design-review` | UI/UX gaps | 1 (on the spec) | issues_found, fixed | score: 3/10 → 9/10, 22 decisions |
+| Design Review | `/plan-design-review` | UI/UX gaps | 2 | issues_found, resolved | spec: 3/10 → 9/10, 22 decisions; plan: 6/10 → 10/10, 12 decisions |
 | DX Review | `/plan-devex-review` | Developer experience gaps | 0 | — | — |
 
-- **OUTSIDE COVERAGE:** Codex, eng phase, unavailable (its sandbox cannot start here). A Claude subagent ran in its place: 12 findings, all checked against the code and applied.
-- **VERDICT:** Eng review done; every finding is mapped into a task. The owner decided D1 (one PR), D2 (the flip key passes through) and D3 (the console sends the haptic signal). Ready to build after #312 merges.
+- **OUTSIDE COVERAGE:** Codex unavailable in both phases (its sandbox cannot start here). A Claude subagent ran in its place each time, and every one of its findings was checked against the code.
+- **VERDICT:** Eng and Design are cleared. The build waits for #312 and #346 to merge, then rebases.
 
 NO UNRESOLVED DECISIONS
+

@@ -129,13 +129,18 @@ the owner's rule. B keeps both worlds; C hides the state. A removes the most.
 
 ### The room
 
-**Layout** (review 2026-11-07, issue 1A): the room keeps #261's chat. On
-Wide and Medium the room takes the left 40% and the selected match's live
-chat the rest, as Sessions does today (DESIGN.md §6 Chat): the same frame
-title, keys hand-off and guards. On Narrow, ⏎ on a match replaces the screen
-with its chat, titled `‹ hearth · ember-billing · asks`; `‹`, the edge swipe
-or the home key goes back to the room. With no match selected (the cursor on
-the stoker's card), the right side shows the stoker's recent steps.
+**Layout** (issue 1A, reopened as design review D7-A, owner 2026-11-08,
+to fit #334 / PR #346, where ⏎ goes into the agent's own pane): on Wide and
+Medium the room takes the left 40%, and the selected match's live view
+(read-only; the wheel scrolls it back, as Sessions after #346) takes the
+rest. ⏎, `a` or a tap on a match goes into that match's own tmux pane,
+moving only the screen that asked. From there ⌥s or prefix s comes back to
+the room. On Narrow the room fills the screen and ⏎ goes into the pane. With
+the cursor on the stoker's card, the right side shows the stoker's recent
+steps. The room has no chat that takes keys.
+
+**Building on #346:** this design needs #346 merged first. The plan rebases
+onto it.
 
 The room's regions, from top to bottom (see the mockup's option A):
 
@@ -154,11 +159,13 @@ The room's regions, from top to bottom (see the mockup's option A):
    2026-11-07). A mate the sampler cannot see stays in `faint` with `not seen ·
    Nm`; the team never hides. A match in another team too adds `· also in
    <team>`. ⏎ or `a` on a match opens its live chat (see Layout).
-3. **ships.** The chain's PRs only, one line: live, checks, waits for merge.
-4. **git.** The chain's worktrees only, one line: count, merged, safe to
+3. **SHIPS** (an inline label, D11-A). The chain's PRs only, one line: live, checks, waits for merge.
+4. **GIT** (an inline label). The chain's worktrees only, one line: count, merged, safe to
    remove.
 5. **The talk line.** `› tell <chain>'s stoker…`. ⏎ sends the line to the
-   chain's stoker.
+   chain's stoker. Then the card quotes those newest words at once, in
+   `muted`, until the stoker's next step takes them, then in `fg` (design
+   review D6-A, owner 2026-11-08). The room keeps no history.
 
 **The cursor and the keys** (review call). The cursor moves over the room's
 rows: the need line, the card's steps, the matches, ships, git and the talk
@@ -211,13 +218,38 @@ make plain that this stoker is shared.
   (my call).
 - In the console: ⌥s on a chain's row opens its room. In a room, ⌥s goes
   back to the session the owner came from; with none stored, it starts typing
-  on the talk line (review call: never a dead end).
+  on the talk line (review call: never a dead end). No chat in the room takes
+  keys (D7), so ⌥s has this one meaning there (D4, owner 2026-11-08).
+- **The way to find it** (design review D5-A, owner 2026-11-08): on a pane in
+  a team, tmux's status line shows `≋ hearth` after `◂ matchblox`. A click or
+  a tap on it flips, as the home target goes home.
 - Where ⌥s lands (review call): on the need line when one waits, else on the
   talk line, typing.
 - Key check, first task of the build (review call): read the key maps of
   Claude Code, Codex and OpenCode, and readline's defaults, for M-s and M-n.
   A key any of them uses is replaced by the nearest free Option key, on desk
   and phone alike, and the spec and DESIGN.md say which.
+
+### The keys on a Mac, and the way back
+
+- **Fallback keys** (owner, 2026-11-08, design review D3-A): prefix `s` flips
+  and prefix `n` walks the matches, everywhere, the way prefix `m` goes home.
+  ⌥s and ⌥n work where the terminal sends Option as Meta (Ghostty, kitty,
+  iTerm2 set so). Terminal.app and iTerm2's default profile type `ß` and a
+  dead `˜` instead; `docs/keys.md` says how to set Option as Meta. tmux's
+  own prefix `s` (choose-tree) moves to prefix `S`.
+- **The back ladder** (owner, 2026-11-08): ◂, ⌘M, ctrl+M (the home APC) and
+  prefix `m` go back one step per press:
+  1. an agent's pane → the console, on the room of that pane's team (else
+     the chain list);
+  2. a chat that has the keys → the keys go back to the room;
+  3. a room → the chain list;
+  4. the chain list of a host you jumped to → back to the console you came
+     from, on its host list; on the phone, the app's Hosts screen.
+  The console tells tmux and the app it is at the top through its terminal
+  title, `matchblox · top` (tmux reads it as `#{pane_title}`; the app's
+  terminal view gets it as the title). Only at the top does the next press
+  leave the host. Today a press leaves at once.
 
 ### Waking a stoker
 
@@ -258,9 +290,10 @@ make plain that this stoker is shared.
   (‹ or esc). These frames are the target (review call):
 
 ```
- ‹ chains   ≋ hearth           ● 1
- ╿ ember-billing asks: force-push?
+ ▰ ws-1                  ● 1  ≋ 2
+ ‹ chains · ≋ hearth
  ──────────────────────────────────
+ ╿ ember-billing asks: force-push?
  ≋ "merge on green, rebase behind"
    ✓ merge #4551 when green
    ▸ rebase ember-billing  y gives
@@ -268,11 +301,15 @@ make plain that this stoker is shared.
  ● hearth-api      done
  ╿ ember-billing   asks
  ✦ kindle-web      busy · 41%
- ships #4551 live · #4552 waits
- git   2 worktrees · 1 safe
+ SHIPS #4551 live · #4552 waits
+ GIT   2 worktrees · 1 safe
  › tell hearth's stoker…
- ⏎ chat  y give  a chat  ? keys
+ ⏎ go in  y give  ] next  ? keys
 ```
+
+(Design review 2026-11-08: the §6 header stays in the room (D12-A); a
+one-line strip takes its label inline, uppercase in `faint` (D11-A); the key
+line has no duplicate (D10-A).)
 
 ```
  ▰ matchblox            ● 1  ≋ 2
@@ -285,6 +322,10 @@ make plain that this stoker is shared.
  ⏎ room  ] next  ? keys
 ```
 
+- The key bar (design review D9-A, owner 2026-11-08): two catalog keys,
+  `⇄` flip and `⤳` next, sized as every belt key. They are in the steer and
+  commands layouts and in the editor. A saved custom bar gets `⇄` appended
+  once, with the one-time note `⇄ flips to the stoker`.
 - Touch targets (review call): every tappable row is a full terminal row on
   a cell of at least 44 pt on the phone's font size; the key bar's flip and
   next buttons are 44 × 44 pt with VoiceOver labels `Flip to the stoker`
