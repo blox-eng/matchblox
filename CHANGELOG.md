@@ -6,6 +6,13 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **On the phone, a tap on a session goes into it.** The first tap goes into
+  the agent's pane, as `Enter` does, so what you type reaches the agent. It
+  no longer opens a read-only view first.
+  ([#352](https://github.com/blox-eng/matchblox/issues/352))
+
 ## [0.38.1] - 2026-11-09
 
 ### Fixed
