@@ -299,7 +299,7 @@ func run(args []string) error {
 		}
 		var binds [][]string
 		if os.Getenv("TMUX") != "" { // a console in place too: its hint names prefix m
-			binds = append(binds, panes.HomeKeyArgv())
+			binds = append(binds, panes.HomeKeyArgv(), panes.FlipKeysArgv())
 		}
 		if os.Getenv(panes.HomeEnv) == "1" {
 			binds = append(binds, panes.SizeArgv(), panes.CommandKeysArgv(), panes.MarkKeyArgv(), panes.ViewerHookArgv())
@@ -809,6 +809,7 @@ func newService(cfg config.Config, root string) *service.Service {
 	}
 	s.Actions.Run = func(argv []string) error { return actions.Exec(context.Background(), argv) }
 	s.StokerServer = sample.StokerServer
+	s.MarkMatches = true
 	s.StatePath = state.Path()
 	s.Spool = spoolPath()
 	s.AlertHook = cfg.Hooks.Alert

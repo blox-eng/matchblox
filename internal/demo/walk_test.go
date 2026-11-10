@@ -181,7 +181,7 @@ func startWalk(t *testing.T, cols, rows int) *walker {
 var keyBytes = map[string]string{
 	"enter": "\r", "tab": "\t", "shift+tab": "\x1b[Z", "esc": "\x1b[27u", "space": " ", "backspace": "\x7f",
 	"up": "\x1b[A", "down": "\x1b[B", "right": "\x1b[C", "left": "\x1b[D", "pgup": "\x1b[5~", "pgdown": "\x1b[6~",
-	"ctrl+a": "\x01", "ctrl+c": "\x03", "ctrl+o": "\x0f",
+	"ctrl+a": "\x01", "ctrl+c": "\x03", "ctrl+o": "\x0f", "alt+s": "\x1bs", "alt+n": "\x1bn",
 }
 
 func bytesOf(t *testing.T, key string) string {

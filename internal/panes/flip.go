@@ -2,7 +2,8 @@ package panes
 
 import (
 	"strconv"
-	"strings"
+
+	"github.com/blox-eng/matchblox/internal/keycmd"
 )
 
 // FlipKey goes between a session and its chain's room; NextKey walks the
@@ -13,41 +14,49 @@ const (
 	NextKey = "M-n"
 )
 
-// The flip's APC strings carry one word and its argument to the console, as
-// HomeKey carries the way back: no keyboard types an APC.
-const (
-	apcHead = "\x1b_" + Home + ";"
-	apcTail = "\x1b\\"
-)
+// MatchOption marks an agent pane the service samples (mux.MatchOption).
+const MatchOption = "@matchblox_match"
 
-// FlipAPC tells the console to flip from pane; "" means from the selected
-// session, as the phone's button sends it.
-func FlipAPC(pane string) string { return apc("flip", pane) }
+// flipFrom keeps, for the hand-off, the client that pressed and the pane it
+// pressed in. A format inside send-keys -H is not expanded, so the binding
+// writes them here first, and run-shell -C reads them back at the console.
+const flipFrom = "@matchblox_flip"
 
-// NextAPC tells the console to walk on from pane.
-func NextAPC(pane string) string { return apc("next", pane) }
+// handOff is what the flip key does in a marked pane, as a tmux command
+// list: note the client's tty and pane, take the client to the console as
+// the way back does (goHome), and hand the console the kind, the tty and
+// the pane, as one APC.
+func handOff(kind string) string {
+	note := `run-shell -C "set-option -g ` + flipFrom + ` '#{client_tty} #{pane_id}'"`
+	hand := `run-shell -C -t =` + Home + `: "#{W:#{P:#{?` + runsConsole +
+		`,send-keys -t #{pane_id} -H ` + hexKeys(keycmd.FlipPrefix(kind)) +
+		` ; send-keys -t #{pane_id} -l '#{` + flipFrom + `}' ; send-keys -t #{pane_id} -H 1b 5c ; ,}}}"`
+	return note + " ; " + goHome[2] + " ; " + hand
+}
 
-// OpenAPC tells the console to open the room of chain n of host: the phone
-// knows chains by number only (push.Numbers).
-func OpenAPC(host string, n int) string { return apc("open", host+"/"+strconv.Itoa(n)) }
-
-func apc(kind, arg string) string { return apcHead + kind + "=" + arg + apcTail }
-
-// ParseAPC reads back a string FlipAPC, NextAPC or OpenAPC made.
-func ParseAPC(s string) (kind, arg string, ok bool) {
-	body, ok := strings.CutPrefix(s, apcHead)
-	if !ok {
-		return "", "", false
+// FlipKeysArgv binds ⌥s and ⌥n, and the phone's flip and next buttons
+// (user keys), on the console's tmux server. In a pane the service marked
+// as an agent's they go to the console (handOff); in any other pane the
+// key goes on as typed, so a shell or an editor keeps it, and at the
+// console it is the console's own key.
+func FlipKeysArgv() []string {
+	argv := []string{"tmux"}
+	for _, k := range []struct {
+		key, kind, apc string
+		slot           int
+	}{
+		{FlipKey, "flip", keycmd.FlipAPC(""), keycmd.FlipSlot},
+		{NextKey, "next", keycmd.NextAPC(""), keycmd.NextSlot},
+	} {
+		slot := strconv.Itoa(k.slot)
+		bind := []string{"if-shell", "-F", "#{" + MatchOption + "}", handOff(k.kind), "send-keys " + k.key}
+		if len(argv) > 1 {
+			argv = append(argv, ";")
+		}
+		argv = append(argv, "set-option", "-s", "user-keys["+slot+"]", k.apc,
+			";", "bind-key", "-n", k.key)
+		argv = append(argv, bind...)
+		argv = append(append(argv, ";", "bind-key", "-n", "User"+slot), bind...)
 	}
-	if body, ok = strings.CutSuffix(body, apcTail); !ok {
-		return "", "", false
-	}
-	kind, arg, ok = strings.Cut(body, "=")
-	switch {
-	case !ok:
-		return "", "", false
-	case kind == "flip", kind == "next", kind == "open":
-		return kind, arg, true
-	}
-	return "", "", false
+	return argv
 }

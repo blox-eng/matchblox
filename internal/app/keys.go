@@ -136,6 +136,7 @@ func defaultKeys() keymaps {
 			Back:  bind(ks("esc"), "esc", "back"),
 			Erase: bind(ks("backspace"), "⌫", "erase"),
 			Flip:  bind(ks("alt+s"), "⌥s", "room"),
+			Walk:  bind(ks("alt+n"), "⌥n", "next match"),
 		},
 		search: searchKeys{
 			Clear: bind(ks("esc"), "esc", "clear"),

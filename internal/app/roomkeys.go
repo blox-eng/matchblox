@@ -15,10 +15,10 @@ import (
 
 // roomKeys are the keys of a chain's room. While the talk line types, every
 // key but ⏎, esc and ⌫ is text.
-type roomKeys struct{ Up, Down, Open, Give, Next, Prev, Back, Erase, Flip bkey.Binding }
+type roomKeys struct{ Up, Down, Open, Give, Next, Prev, Back, Erase, Flip, Walk bkey.Binding }
 
 func (k roomKeys) bindings() []bkey.Binding {
-	return []bkey.Binding{k.Up, k.Down, k.Open, k.Give, k.Next, k.Prev, k.Back, k.Erase, k.Flip}
+	return []bkey.Binding{k.Up, k.Down, k.Open, k.Give, k.Next, k.Prev, k.Back, k.Erase, k.Flip, k.Walk}
 }
 
 // goWait is a step of a stoker's run that waits for the owner's go: the
@@ -109,6 +109,10 @@ func (m Model) roomKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	r.at = min(r.at, len(rows)-1)
 	row := rows[r.at]
 	switch {
+	case bkey.Matches(k, rk.Flip):
+		return m.flipHere()
+	case bkey.Matches(k, rk.Walk):
+		return m.walkHere()
 	case bkey.Matches(k, rk.Up):
 		r.at = max(r.at-1, 0)
 	case bkey.Matches(k, rk.Down):

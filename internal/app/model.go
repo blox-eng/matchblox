@@ -677,6 +677,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m.update(msg.msg)
 	case uv.UnknownApcEvent:
+		if next, cmd, ok := m.flipAPC(string(msg)); ok {
+			return next, cmd
+		}
 		if string(msg) == homeKey && m.viewOpen {
 			return m.closeView(), nil
 		}
@@ -1463,9 +1466,7 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case bkey.Matches(k, mk.Order):
 		return m.orderKey()
 	case bkey.Matches(k, m.keys.room.Flip):
-		if s, ok := m.selectedSession(); ok && m.tab == tabSessions {
-			return m.openRoom(m.roomKeyOf(s)), nil
-		}
+		return m.flipHere()
 	case bkey.Matches(k, mk.Rename):
 		if m.tab == tabSessions {
 			return m.openRename()

@@ -41,3 +41,21 @@ func TestTmuxScreensUsesItsCapture(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+func TestTmuxMarkSetsAndTakesOffThePaneOption(t *testing.T) {
+	var ran [][]string
+	m := Tmux{Run: func(argv []string) (string, error) { ran = append(ran, argv); return "", nil }}
+	if err := m.Mark("%1", true); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Mark("%4@matchblox", false); err != nil {
+		t.Fatal(err)
+	}
+	want := [][]string{
+		{"tmux", "set-option", "-p", "-t", "%1", "@matchblox_match", "1"},
+		{"tmux", "-L", "matchblox", "set-option", "-p", "-u", "-t", "%4", "@matchblox_match"},
+	}
+	if !slices.EqualFunc(ran, want, slices.Equal) {
+		t.Fatalf("ran %q, want %q", ran, want)
+	}
+}
