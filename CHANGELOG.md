@@ -6,6 +6,49 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **One command joins a chain.** `matchblox chain <who>` joins the chain of
+  `<who>` at once, or forms one named after the match that ran it. A chain
+  is a team: every match in it hears every other. A chain's name joins it
+  too: `matchblox chain hearth`. The console shows each join for a moment.
+  ([#368](https://github.com/blox-eng/matchblox/issues/368))
+- **A match may be in several chains.** Each chain hears only itself.
+  `matchblox unchain <chain>` leaves one, `--all` every one. Sessions draws a
+  shared match in its first chain's fuse and adds `· also in <chain>`.
+  ([#368](https://github.com/blox-eng/matchblox/issues/368))
+
+### Changed
+
+- **A send to a busy mate waits in its inbox.** A question, a permission
+  prompt, a park, a draft or copy mode no longer refuses a send: the line
+  waits, the sender hears why, and later hears when the mate got it. A mate
+  that waits for your answer in plain text still gets the line typed, and a
+  waiting line is typed at the mate's next rest. A line
+  a full inbox drops tells its sender. A send to OpenCode is kept.
+  ([#368](https://github.com/blox-eng/matchblox/issues/368))
+- **A mate stays in its chain while its pane lives.** An agent that exits
+  in a pane still open stays, not seen; it leaves when its pane closes.
+- **A match in several chains has one stoker.** The stoker of its first
+  chain whose run is on drives it, and the other chains' stokers do not.
+  Chains never merge, so a chain stoker no longer hands its order over on
+  a merge.
+- **Chains and sends reach panes through one small layer** (`internal/mux`),
+  the first step to a multiplexer other than tmux.
+
+### Removed
+
+- **Chain requests.** No ask waits for the other side, and no match hears
+  `asks to chain with you`.
+  ([#368](https://github.com/blox-eng/matchblox/issues/368))
+
+### Fixed
+
+- **A switch keeps the chain.** `matchblox switch` starts the new agent in
+  the match's place in its chain, with its news. The new agent hears who it
+  is chained with, and no mate has to chain again.
+  ([#333](https://github.com/blox-eng/matchblox/issues/333))
+
 ## [0.39.1] - 2026-11-10
 
 ### Fixed
@@ -1130,7 +1173,6 @@ All notable changes to matchblox are in this file. The format follows
   swipe removes one. When the app can't reach a host, it asks for a new
   address and keeps the pairing. Build the app from `ios/` until it is on
   TestFlight.
-
 
 ## [0.8.0] - 2026-10-14
 

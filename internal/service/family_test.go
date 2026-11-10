@@ -621,7 +621,7 @@ func TestScopeIsCheckedAtActTime(t *testing.T) {
 	s, _, _ := familyTest(t)
 	x := sample.Session{Pane: "%9", SessionID: "s9x"}
 	s.mu.Lock()
-	err := s.Chains.Join("c1", memberOf(x))
+	err := s.Chains.JoinID("c1", memberOf(x))
 	s.mu.Unlock()
 	if err != nil {
 		t.Fatal(err)
@@ -681,8 +681,7 @@ func apiNew(repo, pane, target, id string) sample.Session {
 func inChain(s *Service, x sample.Session) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	c, in := s.Chains.ChainOf(memberOf(x))
-	return in && c.ID == "c1"
+	return slices.ContainsFunc(s.Chains.TeamsOf(memberOf(x)), func(c chains.Chain) bool { return c.ID == "c1" })
 }
 
 func TestChainStokerNewJoinsChain(t *testing.T) {
@@ -697,7 +696,7 @@ func TestChainStokerNewJoinsChain(t *testing.T) {
 		s.publish(newSample(s, fresh, sample.Pane{ID: "%42", Target: "api-new:1.1"}), func(state.Doc) {})
 	}
 	s.mu.Lock()
-	c, _ := s.Chains.ChainOf(memberOf(fresh))
+	c, _ := chainByID(s.Chains, "c1")
 	s.mu.Unlock()
 	if !inChain(s, fresh) || len(c.Members) != 3 {
 		t.Fatalf("the new session is not in c1 once: %+v", c)
@@ -783,7 +782,7 @@ func TestChainStokerFailedJoinSays(t *testing.T) {
 	if inChain(s, fresh) {
 		t.Fatal("an off session joined")
 	}
-	if want := "api-new did not join chain api-auth: %42 is off: it takes no chains"; !slices.Contains(cardTexts(u.store), want) {
+	if want := "api-new did not join chain api-auth: a match that is off takes no chains"; !slices.Contains(cardTexts(u.store), want) {
 		t.Fatalf("card %q", cardTexts(u.store))
 	}
 }
@@ -1694,18 +1693,6 @@ func withoutPane(s *Service, pane string) {
 	s.publish(sample.Snapshot{At: night0, Sessions: sessions}, func(state.Doc) {})
 }
 
-// joinChains joins c1 into c2: api-auth asks api-ui, and api-ui asks back.
-func joinChains(t *testing.T, s *Service) {
-	t.Helper()
-	mustAct(t, s, proto.Act{RecID: proto.ChainPrefix + "%7", From: "%3"})
-	mustAct(t, s, proto.Act{RecID: proto.ChainPrefix + "%3", From: "%7"})
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if len(s.Chains.Chains) != 1 || s.Chains.Chains[0].ID != "c2" || len(s.Chains.Chains[0].Members) != 4 {
-		t.Fatalf("the chains did not join into c2: %+v", s.Chains.Chains)
-	}
-}
-
 func count(texts []string, text string) int {
 	n := 0
 	for _, x := range texts {
@@ -1756,114 +1743,6 @@ func TestChainLeftByAllButOneQuitsItsStoker(t *testing.T) {
 	}
 }
 
-func TestJoinKeepsTheOnlyStokerAndRelinks(t *testing.T) {
-	s, ran := twoChains(t)
-	u, err := s.startChainStoker(t.Context(), "api-auth", "", nil, "person")
-	if err != nil {
-		t.Fatal(err)
-	}
-	stokerUp(s, "s1", "%5@mbtest")
-	s.deliverBriefs(t.Context())
-	*ran = nil
-	joinChains(t, s)
-	if got := s.chainIDOf(u); got != "c2" {
-		t.Fatalf("the unit's chain is %q", got)
-	}
-	if l, err := stoker.ReadLink(u.store.Dir()); err != nil || l.Chain != "c2" {
-		t.Fatalf("link %+v %v", l, err)
-	}
-	if s.unitOfChain("c2") != u || s.unitOfChain("c1") != nil {
-		t.Fatal("the joined chain is not the unit's")
-	}
-	if !u.store.Mode().On || killed(*ran, "s1") {
-		t.Fatal("the only stoker of the joined chain stopped")
-	}
-	if slices.ContainsFunc(cardTexts(u.store), func(x string) bool { return strings.HasPrefix(x, "its chain") }) {
-		t.Fatalf("card %q", cardTexts(u.store))
-	}
-	mustAct(t, s, fromChainStoker("message:%8", "go on")) // api-ci is its chain's now
-}
-
-// twoStokers is twoChains with a stoker for each chain: s1 for c1 and s2
-// for c2, their agents up and briefed.
-func twoStokers(t *testing.T, words1 string, goes1 []string, words2 string, goes2 []string) (*Service, *stokerUnit, *stokerUnit, *[][]string) {
-	t.Helper()
-	s, ran := twoChains(t)
-	a, err := s.startChainStoker(t.Context(), "api-auth", words1, goes1, "person")
-	if err != nil {
-		t.Fatal(err)
-	}
-	b, err := s.startChainStoker(t.Context(), "api-ui", words2, goes2, "person")
-	if err != nil {
-		t.Fatal(err)
-	}
-	stokerUp(s, "s1", "%5@mbtest")
-	stokerUp(s, "s2", "%6@mbtest")
-	s.deliverBriefs(t.Context())
-	*ran = nil
-	return s, a, b, ran
-}
-
-func TestJoinOfTwoStokersKeepsSurvivor(t *testing.T) {
-	s, a, b, ran := twoStokers(t, "", nil, "", nil)
-	joinChains(t, s)
-	if got := count(cardTexts(a.store), "its chain joined api-ui"); got != 1 {
-		t.Fatalf("the absorbed card %q", cardTexts(a.store))
-	}
-	if a.store.Mode().On || !killed(*ran, "s1") {
-		t.Fatal("the stoker of the absorbed chain goes on")
-	}
-	if !b.store.Mode().On || killed(*ran, "s2") || s.unitOfChain("c2") != b || s.chainIDOf(b) != "c2" {
-		t.Fatal("the stoker of the surviving chain stopped")
-	}
-	if s.unitByID("s1") != a {
-		t.Fatal("the absorbed unit left the family: its card is lost")
-	}
-	if got := typed(*ran, "%6@mbtest"); len(got) != 0 {
-		t.Fatalf("an order with no words was carried: %q", got)
-	}
-	if res := s.act(t.Context(), fromChainStoker("message:%4", "x")); res.Err == "" {
-		t.Fatal("the absorbed stoker still acts on api-db")
-	}
-	mustAct(t, s, proto.Act{RecID: "message:%4", Confirm: "y", Text: "go on", From: "%6@mbtest", FromPlaced: true})
-}
-
-func TestJoinCarriesOrderWithCommonGos(t *testing.T) {
-	s, _, b, ran := twoStokers(t, "ship the auth fix", []string{"merge", "release"}, "keep ci green", []string{"merge", "deploy"})
-	joinChains(t, s)
-	if got := typed(*ran, "%6@mbtest"); !slices.Equal(got, []string{"New order (from the joined chain api-auth): ship the auth fix"}) {
-		t.Fatalf("typed into the survivor %q", got)
-	}
-	m := b.store.Mode()
-	if m.Order == nil || m.Order.Words != "ship the auth fix" || !slices.Equal(m.Order.Grants, []string{"merge"}) {
-		t.Fatalf("the survivor's order %+v", m.Order)
-	}
-	if got := s.grantsOf(b); !slices.Equal(got, []string{"merge"}) {
-		t.Fatalf("the survivor's goes %q", got)
-	}
-}
-
-// A survivor whose run is off has no goes: the carried order starts its
-// run with none.
-func TestJoinStartsTheSurvivorsRunThatIsOff(t *testing.T) {
-	s, _, b, _ := twoStokers(t, "ship the auth fix", []string{"merge", "release"}, "keep ci green", []string{"merge", "deploy"})
-	if err := b.store.Set(stoker.Mode{}); err != nil {
-		t.Fatal(err)
-	}
-	joinChains(t, s)
-	m := b.store.Mode()
-	if !m.On || m.Order == nil || m.Order.Words != "ship the auth fix" || len(m.Order.Grants) != 0 {
-		t.Fatalf("the survivor's run %+v, order %+v", m, m.Order)
-	}
-	if got := s.grantsOf(b); len(got) != 0 {
-		t.Fatalf("the survivor's goes %q", got)
-	}
-	b2, err := os.ReadFile(filepath.Join(b.store.Dir(), "stoker-brief.md"))
-	if err != nil || !strings.Contains(string(b2), "ship the auth fix") || !strings.Contains(string(b2), "You are the stoker of chain api-ui.") {
-		t.Fatalf("brief %v:\n%s", err, b2)
-	}
-}
-
 // reuseC1 ends c1 (api-db is gone) and forms a new chain of the same id,
 // of api-auth and api-x.
 func reuseC1(t *testing.T, s *Service) {
@@ -1906,49 +1785,14 @@ func TestAnEndedStokerTakesNoNewChainOfItsID(t *testing.T) {
 	stokerUp(s, "s2", "%6@mbtest")
 	s.deliverBriefs(t.Context())
 	*ran = nil
-	joinChains(t, s)
-	if s.unitOfChain("c2") != u || s.chainIDOf(u) != "c2" || !u.store.Mode().On {
-		t.Fatal("the join did not keep the live stoker")
+	if s.unitOfChain("c1") != u {
+		t.Fatal("the new c1 is not the live stoker's")
 	}
 	if got := cardTexts(old.store); !slices.Equal(got, card) {
 		t.Fatalf("the ended unit's card changed: %q", got)
 	}
 	if s.chainIDOf(old) != "c1" {
 		t.Fatalf("the ended unit moved to %q", s.chainIDOf(old))
-	}
-}
-
-func TestJoinAtTheCapCarriesTheOrder(t *testing.T) {
-	s, _, b, _ := twoStokers(t, "ship the auth fix", []string{"merge"}, "keep ci green", nil)
-	s.MaxChains = 2
-	if err := b.store.Set(stoker.Mode{}); err != nil {
-		t.Fatal(err)
-	}
-	if n := s.chainsAtWork(); n != 2 {
-		t.Fatalf("the cap counts %d", n)
-	}
-	joinChains(t, s)
-	if m := b.store.Mode(); !m.On || m.Order == nil || m.Order.Words != "ship the auth fix" {
-		t.Fatalf("the survivor's run %+v; card %q", m, cardTexts(b.store))
-	}
-}
-
-func TestJoinAtNightWaitsForTheMorning(t *testing.T) {
-	s, _, b, ran := twoStokers(t, "ship the auth fix", nil, "keep ci green", nil)
-	mustAct(t, s, orderAct(t, "night", true))
-	if !b.store.Mode().Nightly {
-		t.Fatal("the survivor's run is no night run")
-	}
-	*ran = nil
-	joinChains(t, s)
-	if got := typed(*ran, "%6@mbtest"); len(got) != 0 {
-		t.Fatalf("typed into a sealed night %q", got)
-	}
-	if !slices.Contains(cardTexts(b.store), "the order of the joined chain api-auth waits for the morning: ship the auth fix") {
-		t.Fatalf("card %q", cardTexts(b.store))
-	}
-	if m := b.store.Mode(); m.Order == nil || m.Order.Words != "keep ci green" {
-		t.Fatalf("the survivor's order %+v", m.Order)
 	}
 }
 
@@ -1967,28 +1811,6 @@ func TestChainEndDropsItsWaitingKill(t *testing.T) {
 	if err := s.grant(u, last.ID); err == nil {
 		t.Fatal("a y still gives the dropped kill")
 	}
-}
-
-func TestJoinIntoTheOnlyStokerTakesTheHostsWork(t *testing.T) {
-	s, _ := twoChains(t)
-	mustAct(t, s, orderAct(t, "go", false))
-	mustAct(t, s, fromStokerAct("message:%3", "go on"))
-	if _, in := drivenPanes(t, s.hostUnit())["%3"]; !in {
-		t.Fatal("the host does not drive api-auth")
-	}
-	u, err := s.startChainStoker(t.Context(), "api-ui", "", nil, "person")
-	if err != nil {
-		t.Fatal(err)
-	}
-	stokerUp(s, "s1", "%5@mbtest")
-	joinChains(t, s)
-	if s.unitOfChain("c2") != u || s.chainIDOf(u) != "c2" || !u.store.Mode().On {
-		t.Fatal("the survivor's stoker changed")
-	}
-	if _, in := drivenPanes(t, s.hostUnit())["%3"]; in {
-		t.Fatal("the host still drives api-auth")
-	}
-	mustAct(t, s, fromChainStoker("message:%3", "go on"))
 }
 
 func TestChainOffEndsItsStoker(t *testing.T) {
@@ -2294,9 +2116,37 @@ func TestAStokerJoinsNoChain(t *testing.T) {
 		}
 	}
 	s.mu.Lock()
-	n := len(s.Chains.Requests)
+	n := len(s.Chains.Chains)
 	s.mu.Unlock()
-	if n != 0 {
-		t.Fatalf("%d asks", n)
+	if n != 1 {
+		t.Fatalf("%d chains", n)
 	}
+}
+
+// TestAMatchInTwoChainsHasOneOwner: api-auth is in c1 and c2, and each
+// has a stoker at work. The stoker of c1, its first chain, drives it; the
+// stoker of c2 does not.
+func TestAMatchInTwoChainsHasOneOwner(t *testing.T) {
+	s, ran := twoChains(t)
+	if _, err := s.startChainStoker(t.Context(), "api-auth", "fix the login", nil, "person"); err != nil {
+		t.Fatal(err)
+	}
+	stokerUp(s, "s1", "%5@mbtest")
+	if _, err := s.startChainStoker(t.Context(), "api-ui", "fix the page", nil, "person"); err != nil {
+		t.Fatal(err)
+	}
+	stokerUp(s, "s2", "%6@mbtest")
+	s.deliverBriefs(t.Context())
+	s.mu.Lock()
+	auth, _ := s.sessionAtLocked("%3")
+	if err := s.Chains.JoinID("c2", memberOf(auth)); err != nil {
+		t.Fatal(err)
+	}
+	s.mu.Unlock()
+	*ran = nil
+	res := s.act(t.Context(), proto.Act{RecID: "message:%3", Confirm: "y", Text: "go on", From: "%6@mbtest", FromPlaced: true})
+	if !strings.Contains(res.Err, "has the stoker of chain api-auth") || len(typed(*ran, "%3")) != 0 {
+		t.Fatalf("the stoker of c2 drove api-auth: %+v", res)
+	}
+	mustAct(t, s, fromChainStoker("message:%3", "go on"))
 }

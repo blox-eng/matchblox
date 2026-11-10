@@ -3,9 +3,11 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -52,36 +54,25 @@ func chainFrom(t *testing.T, s *Service, from, recID string) proto.Result {
 	return s.act(context.Background(), proto.Act{RecID: recID, From: from})
 }
 
-func TestChainActFormsAChainOnlyBothWays(t *testing.T) {
+func TestChainActFormsATeamAtOnce(t *testing.T) {
 	s := chainTest(t, filepath.Join(t.TempDir(), "chains.json"))
 	res := chainFrom(t, s, "%1", proto.ChainPrefix+"%2")
-	if res.Err != "" || res.Note != "asked two: the chain forms when it chains back" {
-		t.Fatalf("ask = %+v", res)
+	if res.Err != "" || res.Note != "joined one: 2 matches. To leave it, run: matchblox unchain one" {
+		t.Fatalf("chain = %+v", res)
 	}
 	doc := chainSample(s, chainSessions...)
-	if doc.Chains == nil || len(doc.Chains.Chains) != 0 || len(doc.Chains.Requests) != 1 {
-		t.Fatalf("after one side: %+v", doc.Chains)
+	if doc.Chains == nil || len(doc.Chains.Chains) != 1 {
+		t.Fatalf("after one command: %+v", doc.Chains)
 	}
-	res = chainFrom(t, s, "%2", proto.ChainPrefix+"%1")
-	if res.Err != "" || res.Note != "chained with one: 2 matches" {
-		t.Fatalf("ask back = %+v", res)
-	}
-	doc = chainSample(s, chainSessions...)
-	if doc.Chains == nil || len(doc.Chains.Chains) != 1 || len(doc.Chains.Requests) != 0 {
-		t.Fatalf("after both sides: %+v", doc.Chains)
-	}
-	if c := doc.Chains.Chains[0]; c.Repo != "/dev/app" || len(c.Members) != 2 {
+	if c := doc.Chains.Chains[0]; c.Name != "one" || c.Repo != "/dev/app" || len(c.Members) != 2 {
 		t.Fatalf("chain = %+v", c)
 	}
 }
 
 func TestChainActChainsAcrossRepos(t *testing.T) {
 	s := chainTest(t, filepath.Join(t.TempDir(), "chains.json"))
-	if res := chainFrom(t, s, "%1", proto.ChainPrefix+"%3"); res.Err != "" {
-		t.Fatalf("ask = %+v", res)
-	}
-	if res := chainFrom(t, s, "%3", proto.ChainPrefix+"%1"); res.Err != "" || res.Note != "chained with one: 2 matches" {
-		t.Fatalf("ask back = %+v", res)
+	if res := chainFrom(t, s, "%1", proto.ChainPrefix+"%3"); res.Err != "" || res.Note != "joined one: 2 matches. To leave it, run: matchblox unchain one" {
+		t.Fatalf("chain = %+v", res)
 	}
 	for range 3 { // the chain outlives the samples after it
 		doc := chainSample(s, chainSessions...)
@@ -91,22 +82,13 @@ func TestChainActChainsAcrossRepos(t *testing.T) {
 	}
 }
 
-func TestAnAskAcrossReposLastsItsTTL(t *testing.T) {
-	s := chainTest(t, filepath.Join(t.TempDir(), "chains.json"))
-	chainFrom(t, s, "%1", proto.ChainPrefix+"%3")
-	if doc := chainSample(s, chainSessions...); doc.Chains == nil || len(doc.Chains.Requests) != 1 {
-		t.Fatalf("a sample dropped the ask across repos: %+v", doc.Chains)
-	}
-}
-
 func TestChainActChainsASessionInNoRepo(t *testing.T) {
 	s := chainTest(t, filepath.Join(t.TempDir(), "chains.json"))
 	lost := sample.Session{Pane: "%4", PID: 104, SessionID: "s4", Name: "four", Cwd: "/tmp/x"}
 	sessions := append(slices.Clone(chainSessions), lost)
 	chainSample(s, sessions...)
-	chainFrom(t, s, "%1", proto.ChainPrefix+"%4")
-	if res := chainFrom(t, s, "%4", proto.ChainPrefix+"%1"); res.Err != "" || res.Note != "chained with one: 2 matches" {
-		t.Fatalf("ask back = %+v", res)
+	if res := chainFrom(t, s, "%1", proto.ChainPrefix+"%4"); res.Err != "" || res.Note != "joined one: 2 matches. To leave it, run: matchblox unchain one" {
+		t.Fatalf("chain = %+v", res)
 	}
 	if doc := chainSample(s, sessions...); doc.Chains == nil || len(doc.Chains.Chains) != 1 {
 		t.Fatalf("a sample dropped the no-repo match: %+v", doc.Chains)
@@ -116,7 +98,6 @@ func TestChainActChainsASessionInNoRepo(t *testing.T) {
 func TestChainsPruneBeforeTheFirstGitScan(t *testing.T) {
 	s := chainTest(t, filepath.Join(t.TempDir(), "chains.json"))
 	chainFrom(t, s, "%1", proto.ChainPrefix+"%2")
-	chainFrom(t, s, "%2", proto.ChainPrefix+"%1")
 	s.mu.Lock()
 	s.cur.Git = nil
 	s.mu.Unlock()
@@ -145,8 +126,7 @@ func TestChainActRefusesAGonePane(t *testing.T) {
 func TestChainActLeavesAndTurnsOff(t *testing.T) {
 	s := chainTest(t, filepath.Join(t.TempDir(), "chains.json"))
 	chainFrom(t, s, "%1", proto.ChainPrefix+"%2")
-	chainFrom(t, s, "%2", proto.ChainPrefix+"%1")
-	if res := chainFrom(t, s, "%1", proto.ChainPrefix+"-"); res.Note != "left the chain" {
+	if res := chainFrom(t, s, "%1", proto.ChainPrefix+"-"); res.Note != "left one" {
 		t.Fatalf("leave = %+v", res)
 	}
 	if doc := chainSample(s, chainSessions...); doc.Chains != nil {
@@ -156,7 +136,6 @@ func TestChainActLeavesAndTurnsOff(t *testing.T) {
 		t.Fatalf("off = %+v", res)
 	}
 	chainFrom(t, s, "%1", proto.ChainPrefix+"%2")
-	chainFrom(t, s, "%2", proto.ChainPrefix+"%1")
 	if doc := chainSample(s, chainSessions...); doc.Chains != nil && len(doc.Chains.Chains) > 0 {
 		t.Fatalf("an off match chained: %+v", doc.Chains)
 	}
@@ -169,7 +148,6 @@ func TestChainsSurviveARestart(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "chains.json")
 	s := chainTest(t, path)
 	chainFrom(t, s, "%1", proto.ChainPrefix+"%2")
-	chainFrom(t, s, "%2", proto.ChainPrefix+"%1")
 
 	again := chainTest(t, path)
 	doc := chainSample(again, chainSessions...)
@@ -199,7 +177,6 @@ func TestACorruptChainsFileStartsEmpty(t *testing.T) {
 func TestAGoneMemberIsPrunedOnSample(t *testing.T) {
 	s := chainTest(t, filepath.Join(t.TempDir(), "chains.json"))
 	chainFrom(t, s, "%1", proto.ChainPrefix+"%2")
-	chainFrom(t, s, "%2", proto.ChainPrefix+"%1")
 	if doc := chainSample(s, chainSessions[0], chainSessions[2]); doc.Chains != nil {
 		t.Fatalf("after %%2 went: %+v", doc.Chains)
 	}
@@ -208,7 +185,6 @@ func TestAGoneMemberIsPrunedOnSample(t *testing.T) {
 func TestAMatchThatMovesStaysChained(t *testing.T) {
 	s := chainTest(t, filepath.Join(t.TempDir(), "chains.json"))
 	chainFrom(t, s, "%1", proto.ChainPrefix+"%2")
-	chainFrom(t, s, "%2", proto.ChainPrefix+"%1")
 	moved := chainSessions[1]
 	moved.Cwd = "/dev/www"
 	doc := chainSample(s, chainSessions[0], moved, chainSessions[2])
@@ -227,7 +203,6 @@ func TestAFailedSampleKeepsTheChains(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "chains.json")
 	s := chainTest(t, path)
 	chainFrom(t, s, "%1", proto.ChainPrefix+"%2")
-	chainFrom(t, s, "%2", proto.ChainPrefix+"%1")
 	for _, why := range []string{"tmux: x", "proc: x"} {
 		var doc state.Doc
 		s.publish(sample.Snapshot{At: time.Now(), Errors: []string{why}}, func(d state.Doc) { doc = d })
@@ -251,7 +226,6 @@ func chainInbox(s *Service, x sample.Session) []string {
 func TestAMatchWithANewSessionIDStaysChained(t *testing.T) {
 	s := chainTest(t, filepath.Join(t.TempDir(), "chains.json"))
 	chainFrom(t, s, "%1", proto.ChainPrefix+"%2")
-	chainFrom(t, s, "%2", proto.ChainPrefix+"%1")
 	cleared := chainSessions[1]
 	cleared.SessionID = "s2-new"
 	doc := chainSample(s, chainSessions[0], cleared, chainSessions[2])
@@ -266,7 +240,6 @@ func TestAMatchWithANewSessionIDStaysChained(t *testing.T) {
 func TestAGoneMemberTellsItsMates(t *testing.T) {
 	s := chainTest(t, filepath.Join(t.TempDir(), "chains.json"))
 	chainFrom(t, s, "%1", proto.ChainPrefix+"%2")
-	chainFrom(t, s, "%2", proto.ChainPrefix+"%1")
 	chainSample(s, chainSessions[0], chainSessions[2])
 	if got := chainInbox(s, chainSessions[0]); !slices.Equal(got, []string{"two left the chain"}) {
 		t.Fatalf("one's inbox = %q", got)
@@ -301,13 +274,12 @@ func TestChainActRefusals(t *testing.T) {
 		t.Errorf("itself: %+v", res)
 	}
 	chainFrom(t, s, "%2", proto.ChainPrefix+"off")
-	if res := chainFrom(t, s, "%1", proto.ChainPrefix+"%2"); res.Err != "two is off: it takes no chains" {
+	if res := chainFrom(t, s, "%1", proto.ChainPrefix+"%2"); res.Err != "two is off: it takes no chains. It can run: matchblox chain --on" {
 		t.Errorf("off: %+v", res)
 	}
 	chainFrom(t, s, "%2", proto.ChainPrefix+"on")
 	chainFrom(t, s, "%1", proto.ChainPrefix+"%2")
-	chainFrom(t, s, "%2", proto.ChainPrefix+"%1")
-	if res := chainFrom(t, s, "%1", proto.ChainPrefix+"%2"); res.Note != "already chained with two" || res.Err != "" {
+	if res := chainFrom(t, s, "%1", proto.ChainPrefix+"%2"); res.Note != "already in one" || res.Err != "" {
 		t.Errorf("again: %+v", res)
 	}
 	far := chainSessions[2]
@@ -341,7 +313,6 @@ func TestReadGitNeedsADirectory(t *testing.T) {
 func TestOffWhileTheSampleMissedFindsAClearedMatch(t *testing.T) {
 	s := chainTest(t, filepath.Join(t.TempDir(), "chains.json"))
 	chainFrom(t, s, "%1", proto.ChainPrefix+"%2")
-	chainFrom(t, s, "%2", proto.ChainPrefix+"%1")
 	cleared := slices.Clone(chainSessions)
 	cleared[1].SessionID = "s2-new"
 	s.publish(sample.Snapshot{At: time.Now(), Sessions: cleared, Errors: []string{"tmux: x"}}, func(state.Doc) {})
@@ -359,5 +330,310 @@ func TestOffWhileTheSampleMissedFindsAClearedMatch(t *testing.T) {
 	}
 	if res := chainFrom(t, s, "%2", proto.ChainPrefix+"-"); res.Err != "" || res.Note != "not in a chain" {
 		t.Fatalf("leave = %+v", res)
+	}
+}
+
+// fourSessions are chainSessions and four in www.
+var fourSessions = append(slices.Clone(chainSessions),
+	sample.Session{Pane: "%4", PID: 104, Start: 4, SessionID: "s4", Name: "four", Agent: "cursor", Cwd: "/dev/www"})
+
+func teamTest(t *testing.T) *Service {
+	t.Helper()
+	s := chainTest(t, filepath.Join(t.TempDir(), "chains.json"))
+	chainSample(s, fourSessions...)
+	return s
+}
+
+func mustChain(t *testing.T, s *Service, from, recID string) proto.Result {
+	t.Helper()
+	res := chainFrom(t, s, from, recID)
+	if res.Err != "" {
+		t.Fatalf("%s %s: %+v", from, recID, res)
+	}
+	return res
+}
+
+func TestChainJoinsTheOnlyTeamOfWho(t *testing.T) {
+	s := teamTest(t)
+	mustChain(t, s, "%2", proto.ChainPrefix+"%3") // team "two": two, three
+	res := mustChain(t, s, "%1", proto.ChainPrefix+"%3")
+	if res.Note != "joined two: 3 matches. To leave it, run: matchblox unchain two" {
+		t.Fatalf("join = %+v", res)
+	}
+	if got := chainInbox(s, fourSessions[1]); !slices.Contains(got, "[matchblox] one joined the chain") {
+		t.Fatalf("two heard %q", got)
+	}
+	if got := chainInbox(s, fourSessions[2]); !slices.Contains(got, "[matchblox] one joined the chain (in app)") {
+		t.Fatalf("three heard %q", got)
+	}
+	if got := chainInbox(s, fourSessions[0]); len(got) != 0 {
+		t.Fatalf("the joiner heard %q", got)
+	}
+	s.mu.Lock()
+	spark := s.Chains.Chains[0].Spark
+	s.mu.Unlock()
+	if spark.IsZero() {
+		t.Fatal("a join did not spark")
+	}
+}
+
+func TestChainFormsATeamNamedAfterTheCaller(t *testing.T) {
+	s := teamTest(t)
+	res := mustChain(t, s, "%1", proto.ChainPrefix+"%3")
+	if res.Note != "joined one: 2 matches. To leave it, run: matchblox unchain one" {
+		t.Fatalf("form = %+v", res)
+	}
+}
+
+func TestChainRefusesWhoInTwoTeams(t *testing.T) {
+	s := teamTest(t)
+	mustChain(t, s, "%1", proto.ChainPrefix+"%2") // one: one, two
+	mustChain(t, s, "%3", proto.ChainPrefix+"%4") // three: three, four
+	mustChain(t, s, "%2", proto.ChainPrefix+"@three")
+	res := chainFrom(t, s, "%4", proto.ChainPrefix+"%2")
+	if want := "two is in 2 chains. Run one:\n  matchblox chain one\n  matchblox chain three"; res.Err != want {
+		t.Fatalf("err = %q, want %q", res.Err, want)
+	}
+}
+
+func TestChainByTeamName(t *testing.T) {
+	s := teamTest(t)
+	mustChain(t, s, "%1", proto.ChainPrefix+"%2")
+	if res := mustChain(t, s, "%4", proto.ChainPrefix+"@one"); res.Note != "joined one: 3 matches. To leave it, run: matchblox unchain one" {
+		t.Fatalf("join = %+v", res)
+	}
+	if res := chainFrom(t, s, "%4", proto.ChainPrefix+"@none"); res.Err != "no chain is named none" {
+		t.Fatalf("no team = %+v", res)
+	}
+}
+
+func TestChainRefusesOff(t *testing.T) {
+	s := teamTest(t)
+	mustChain(t, s, "%2", proto.ChainPrefix+"off")
+	if res := chainFrom(t, s, "%1", proto.ChainPrefix+"%2"); res.Err != "two is off: it takes no chains. It can run: matchblox chain --on" {
+		t.Fatalf("to off = %q", res.Err)
+	}
+	if res := chainFrom(t, s, "%2", proto.ChainPrefix+"%1"); res.Err != "two is off: it takes no chains. It can run: matchblox chain --on" {
+		t.Fatalf("from off = %q", res.Err)
+	}
+	mustChain(t, s, "%1", proto.ChainPrefix+"%3")
+	if res := chainFrom(t, s, "%2", proto.ChainPrefix+"@one"); res.Err != "two is off: it takes no chains. It can run: matchblox chain --on" {
+		t.Fatalf("off by name = %q", res.Err)
+	}
+}
+
+func TestBareUnchainInTwoTeamsRefuses(t *testing.T) {
+	s := teamTest(t)
+	mustChain(t, s, "%1", proto.ChainPrefix+"%2") // one
+	mustChain(t, s, "%3", proto.ChainPrefix+"%4") // three
+	mustChain(t, s, "%1", proto.ChainPrefix+"@three")
+	want := "you are in one and three. Run one:\n  matchblox unchain one\n  matchblox unchain three\n  matchblox unchain --all"
+	if res := chainFrom(t, s, "%1", proto.ChainPrefix+"-"); res.Err != want {
+		t.Fatalf("err = %q, want %q", res.Err, want)
+	}
+	s.mu.Lock()
+	_, err := s.Chains.Form(memberOf(fourSessions[0]), memberOf(fourSessions[3]), "web", "")
+	s.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res := chainFrom(t, s, "%1", proto.ChainPrefix+"-"); !strings.HasPrefix(res.Err, "you are in one, three and web. Run one:\n") {
+		t.Fatalf("three teams = %q", res.Err)
+	}
+}
+
+func TestUnchainTeamAndAll(t *testing.T) {
+	s := teamTest(t)
+	mustChain(t, s, "%1", proto.ChainPrefix+"%2")
+	mustChain(t, s, "%3", proto.ChainPrefix+"%4")
+	mustChain(t, s, "%1", proto.ChainPrefix+"@three")
+	if res := mustChain(t, s, "%1", proto.ChainPrefix+"-@one"); res.Note != "left one" {
+		t.Fatalf("leave = %+v", res)
+	}
+	mustChain(t, s, "%1", proto.ChainPrefix+"%2") // one again, with two
+	if res := mustChain(t, s, "%1", proto.ChainPrefix+"-*"); res.Note != "left three and one" {
+		t.Fatalf("leave all = %+v", res)
+	}
+	if res := chainFrom(t, s, "%1", proto.ChainPrefix+"-@three"); res.Note != "not in three" {
+		t.Fatalf("leave again = %+v", res)
+	}
+}
+
+func TestBareUnchainLeavesTheOnlyTeam(t *testing.T) {
+	s := teamTest(t)
+	mustChain(t, s, "%1", proto.ChainPrefix+"%2")
+	if res := mustChain(t, s, "%1", proto.ChainPrefix+"-"); res.Note != "left one" {
+		t.Fatalf("leave = %+v", res)
+	}
+}
+
+func TestOwnerTakesAMatchOut(t *testing.T) {
+	s := teamTest(t)
+	mustChain(t, s, "%1", proto.ChainPrefix+"%2")
+	mustChain(t, s, "%4", proto.ChainPrefix+"@one")
+	chainInbox(s, fourSessions[3])
+	res := s.act(context.Background(), proto.Act{RecID: proto.ChainPrefix + "out:%4@one", Console: true})
+	if res.Err != "" || res.Note != "took four out of one" {
+		t.Fatalf("out = %+v", res)
+	}
+	if got := chainInbox(s, fourSessions[3]); !slices.Equal(got, []string{"[matchblox] the owner took you out of one"}) {
+		t.Fatalf("four heard %q", got)
+	}
+	s.mu.Lock()
+	c, _ := s.Chains.Team("one")
+	s.mu.Unlock()
+	if len(c.Members) != 2 {
+		t.Fatalf("team = %+v", c)
+	}
+}
+
+func TestAnAgentCannotTakeAnotherOut(t *testing.T) {
+	s := teamTest(t)
+	mustChain(t, s, "%1", proto.ChainPrefix+"%2")
+	for _, a := range []proto.Act{
+		{RecID: proto.ChainPrefix + "out:%2@one", From: "%1"},
+		{RecID: proto.ChainPrefix + "out:%2@one", From: "%1", Console: true},
+	} {
+		if res := s.act(context.Background(), a); res.Err == "" {
+			t.Fatalf("%+v took a match out: %+v", a, res)
+		}
+	}
+	s.mu.Lock()
+	c, _ := s.Chains.Team("one")
+	s.mu.Unlock()
+	if len(c.Members) != 2 {
+		t.Fatalf("team = %+v", c)
+	}
+}
+
+func TestStokerJoinsNoChain(t *testing.T) {
+	s := teamTest(t)
+	s.StokerServer = "mbstoker"
+	stoker := sample.Session{Pane: sample.OnServer("%7", "mbstoker"), PID: 107, Start: 7, SessionID: "s7", Name: "stoker", Agent: "claude", Cwd: "/dev/app"}
+	chainSample(s, append(slices.Clone(fourSessions), stoker)...)
+	if res := chainFrom(t, s, "%1", proto.ChainPrefix+stoker.Pane); res.Err != noStokerChain {
+		t.Fatalf("to the stoker = %+v", res)
+	}
+	if res := chainFrom(t, s, stoker.Pane, proto.ChainPrefix+"%1"); res.Err != noStokerChain {
+		t.Fatalf("from the stoker = %+v", res)
+	}
+}
+
+func TestOldStoreTeamsGetNames(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "chains.json")
+	old := `{"chains":[{"id":"%2#1","repo":"/dev/app","members":[{"session_id":"s9","pane":"%9"},{"session_id":"s2","pane":"%2"},{"session_id":"s1","pane":"%1"}]}]}`
+	if err := os.WriteFile(path, []byte(old), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s := chainTest(t, path)
+	doc := chainSample(s, chainSessions...)
+	if doc.Chains == nil || len(doc.Chains.Chains) != 1 || doc.Chains.Chains[0].Name != "two" {
+		t.Fatalf("chains = %+v", doc.Chains)
+	}
+}
+
+// paneSample publishes sessions with the tmux panes listed in panes.
+func paneSample(s *Service, at time.Time, sessions []sample.Session, panes ...string) state.Doc {
+	snap := sample.Snapshot{At: at, Sessions: sessions}
+	for _, p := range panes {
+		snap.Panes = append(snap.Panes, sample.Pane{ID: p})
+	}
+	var doc state.Doc
+	s.publish(snap, func(d state.Doc) { doc = d })
+	s.headRun.wait()
+	return doc
+}
+
+func TestEmptyPaneKeepsTheMateUnseen(t *testing.T) {
+	s := chainTest(t, filepath.Join(t.TempDir(), "chains.json"))
+	clock := night0
+	s.Now = func() time.Time { return clock }
+	mustChain(t, s, "%1", proto.ChainPrefix+"%2")
+	clock = clock.Add(time.Minute)
+	doc := paneSample(s, clock, chainSessions[:1:1], "%1", "%2") // two's agent is gone; its pane lives
+	if doc.Chains == nil || len(doc.Chains.Chains) != 1 {
+		t.Fatalf("two left while its pane lives: %+v", doc.Chains)
+	}
+	first := clock
+	clock = clock.Add(11 * time.Minute)
+	doc = paneSample(s, clock, chainSessions[:1:1], "%1", "%2")
+	i := slices.IndexFunc(doc.Chains.Mates, func(v state.MateView) bool { return v.Member.Pane == "%2" })
+	if i < 0 || !doc.Chains.Mates[i].Unseen.Equal(first) {
+		t.Fatalf("mates = %+v", doc.Chains.Mates)
+	}
+	if got := chainInbox(s, chainSessions[0]); len(got) != 0 {
+		t.Fatalf("one heard %q", got)
+	}
+}
+
+func TestClosedPaneLeaves(t *testing.T) {
+	s := chainTest(t, filepath.Join(t.TempDir(), "chains.json"))
+	mustChain(t, s, "%1", proto.ChainPrefix+"%2")
+	chainInbox(s, chainSessions[1])
+	if doc := paneSample(s, time.Now(), chainSessions[:1:1], "%1"); doc.Chains != nil {
+		t.Fatalf("a closed pane stayed: %+v", doc.Chains)
+	}
+	if got := chainInbox(s, chainSessions[0]); !slices.Equal(got, []string{"two left the chain"}) {
+		t.Fatalf("one heard %q", got)
+	}
+}
+
+func TestSampleMissKeepsTeamsAndTimes(t *testing.T) {
+	s := chainTest(t, filepath.Join(t.TempDir(), "chains.json"))
+	mustChain(t, s, "%1", proto.ChainPrefix+"%2")
+	s.publish(sample.Snapshot{At: time.Now(), Sessions: chainSessions[:1:1], Errors: []string{"tmux: no server"}}, func(state.Doc) {})
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.Chains.Chains) != 1 || len(s.Chains.Unseen) != 0 {
+		t.Fatalf("a missed sample changed the chains: %+v %v", s.Chains.Chains, s.Chains.Unseen)
+	}
+}
+
+func TestSeenAgainClearsUnseen(t *testing.T) {
+	s := chainTest(t, filepath.Join(t.TempDir(), "chains.json"))
+	mustChain(t, s, "%1", proto.ChainPrefix+"%2")
+	paneSample(s, time.Now(), chainSessions[:1:1], "%1", "%2")
+	doc := paneSample(s, time.Now(), chainSessions[:2:2], "%1", "%2")
+	for _, v := range doc.Chains.Mates {
+		if !v.Unseen.IsZero() {
+			t.Fatalf("seen again, still unseen: %+v", v)
+		}
+	}
+}
+
+func TestChainsViewCarriesMates(t *testing.T) {
+	s := chainTest(t, filepath.Join(t.TempDir(), "chains.json"))
+	mustChain(t, s, "%1", proto.ChainPrefix+"%2")
+	chainInbox(s, chainSessions[1])
+	s.mu.Lock()
+	for i := range 3 {
+		s.Chains.Post(memberOf(chainSessions[1]), fmt.Sprint(i), time.Now())
+	}
+	for i := range 21 {
+		s.Chains.Post(memberOf(chainSessions[0]), fmt.Sprint(i), time.Now())
+	}
+	s.mu.Unlock()
+	doc := chainSample(s, chainSessions...)
+	got := map[string]state.MateView{}
+	for _, v := range doc.Chains.Mates {
+		got[v.Member.Pane] = v
+	}
+	if len(doc.Chains.Mates) != 2 || got["%2"].Inbox != 3 || got["%2"].Full || got["%1"].Inbox != 20 || !got["%1"].Full {
+		t.Fatalf("mates = %+v", doc.Chains.Mates)
+	}
+}
+
+// TestAnotherAgentInThePaneEndsTheMate: a pane that shows another agent is
+// not the mate's: the mate leaves, unless a switch started it there.
+func TestAnotherAgentInThePaneEndsTheMate(t *testing.T) {
+	s := chainTest(t, filepath.Join(t.TempDir(), "chains.json"))
+	mustChain(t, s, "%1", proto.ChainPrefix+"%2")
+	chainInbox(s, chainSessions[1])
+	newcomer := sample.Session{Pane: "%2", PID: 109, Start: 9, SessionID: "s9", Name: "newcomer", Agent: "claude", Cwd: "/dev/app"}
+	if doc := paneSample(s, time.Now(), []sample.Session{chainSessions[0], newcomer}, "%1", "%2"); doc.Chains != nil {
+		t.Fatalf("a ghost stayed: %+v", doc.Chains)
+	}
+	if got := chainInbox(s, chainSessions[0]); !slices.Equal(got, []string{"two left the chain"}) {
+		t.Fatalf("one heard %q", got)
 	}
 }
