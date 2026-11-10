@@ -593,8 +593,10 @@ func (m Model) joinNews(next *state.ChainsView, sessions []sample.Session) strin
 // outOfTeam is the act that takes s out of team, from the console only:
 // it asks first, as the match did not ask to leave.
 func (m Model) outOfTeam(s sample.Session, team string) action {
+	what := "take " + s.Name + " out of " + team
 	return action{
-		label:       "take " + s.Name + " out of " + team,
+		label:       what,
+		say:         what, // the confirm's words: it has no command of its own
 		rec:         proto.ChainPrefix + "out:" + s.Pane + "@" + team,
 		destructive: true,
 		host:        s.Host,

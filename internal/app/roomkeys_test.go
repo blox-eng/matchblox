@@ -232,3 +232,27 @@ func TestTalkInAChainOfOneStartsTheHostStoker(t *testing.T) {
 	}
 	_ = next
 }
+
+// TestUTakesAMatchOutOfTheChain: u on a match asks first, with the act
+// named, and a typed y takes it out (#359's toast names the key).
+func TestUTakesAMatchOutOfTheChain(t *testing.T) {
+	st := headState(t, runningPlan(), true)
+	st.Queue = nil
+	m, f := roomWith(t, st, "hearth-api")
+	m, _ = send(t, at(t, m, roomMatch, "ember-billing"), "u")
+	if len(f.acts()) != 0 || m.pending == nil || !m.pending.destructive || m.pending.label != "take ember-billing out of hearth" {
+		t.Fatalf("acts %+v pending %+v", f.acts(), m.pending)
+	}
+	send(t, m, "y")
+	if a := f.acts(); len(a) != 1 || a[0].RecID != "chain:out:%8@hearth" || a[0].Confirm != "y" {
+		t.Fatalf("acts %+v", a)
+	}
+}
+
+func TestUOnAChainOfOneSaysThereIsNoChain(t *testing.T) {
+	m, f := roomWith(t, headState(t, runningPlan(), true), "spark-docs")
+	m, _ = send(t, at(t, m, roomMatch, "spark-docs"), "u")
+	if len(f.acts()) != 0 || m.pending != nil || m.flash == "" {
+		t.Fatalf("acts %+v pending %+v flash %q", f.acts(), m.pending, m.flash)
+	}
+}

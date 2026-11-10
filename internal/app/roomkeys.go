@@ -15,10 +15,10 @@ import (
 
 // roomKeys are the keys of a chain's room. While the talk line types, every
 // key but ⏎, esc and ⌫ is text.
-type roomKeys struct{ Up, Down, Open, Give, Next, Prev, Back, Erase, Flip, Walk bkey.Binding }
+type roomKeys struct{ Up, Down, Open, Give, Next, Prev, Back, Erase, Flip, Walk, Out bkey.Binding }
 
 func (k roomKeys) bindings() []bkey.Binding {
-	return []bkey.Binding{k.Up, k.Down, k.Open, k.Give, k.Next, k.Prev, k.Back, k.Erase, k.Flip, k.Walk}
+	return []bkey.Binding{k.Up, k.Down, k.Open, k.Give, k.Next, k.Prev, k.Back, k.Erase, k.Flip, k.Walk, k.Out}
 }
 
 // goWait is a step of a stoker's run that waits for the owner's go: the
@@ -130,6 +130,17 @@ func (m Model) roomKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	case bkey.Matches(k, rk.Give):
 		return m.give(row)
+	case bkey.Matches(k, rk.Out):
+		s, ok := m.roomSession(row.id)
+		switch {
+		case !ok || row.kind != roomMatch:
+			m.flash = rk.Out.Help().Key + " takes the selected match out of the chain"
+		case r.k.isOne():
+			m.flash = s.Name + " is in no chain"
+		default:
+			a := m.outOfTeam(s, m.roomName(r.k))
+			m.pending = &a
+		}
 	case bkey.Matches(k, rk.Open):
 		switch row.kind {
 		case roomNeed, roomMatch:
@@ -291,6 +302,9 @@ func (m Model) roomKeyLine(w int) string {
 			}
 		case roomMatch:
 			hs = append(hs, hintFor(rk.Open, "go in"))
+			if !r.k.isOne() && row.id != "" {
+				hs = append(hs, hintFor(rk.Out, "out"))
+			}
 		case roomStep:
 			if slices.ContainsFunc(m.goWaits(r.k), func(g goWait) bool { return g.id == row.id }) {
 				hs = append(hs, hintFor(rk.Give, "give"))

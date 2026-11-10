@@ -60,6 +60,7 @@ keys of the selected row.
 | `[` | Opens the previous chain's room. |
 | `⌥s` | Goes back to the session you flipped from. With none, starts typing on the talk line. |
 | `⌥n` | Goes into the chain's first match. |
+| `u` | Takes the selected match out of the chain, after a typed `y`. Its agent goes on; the chain hears it left. |
 | `Esc` | Stops typing (the words stay). Else closes the room. |
 | `Backspace` | Erases the last character while you type. |
 
