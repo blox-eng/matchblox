@@ -2,7 +2,7 @@ package main
 
 import "syscall"
 
-// lowestPriority runs the console, and every command it starts, in the idle
+// lowestPriority runs this process, and every command it starts, in the idle
 // priority class.
 func lowestPriority() {
 	const idlePriorityClass = 0x40
