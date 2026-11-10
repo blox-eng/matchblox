@@ -6,6 +6,8 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+## [0.40.1] - 2026-11-10
+
 ### Fixed
 
 - **Agents stop flickering when the console shows them.** The live view
@@ -1416,7 +1418,8 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.40.0...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.40.1...HEAD
+[0.40.1]: https://github.com/blox-eng/matchblox/compare/v0.40.0...v0.40.1
 [0.40.0]: https://github.com/blox-eng/matchblox/compare/v0.39.1...v0.40.0
 [0.39.1]: https://github.com/blox-eng/matchblox/compare/v0.39.0...v0.39.1
 [0.39.0]: https://github.com/blox-eng/matchblox/compare/v0.38.2...v0.39.0
