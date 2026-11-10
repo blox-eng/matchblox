@@ -286,17 +286,18 @@ func TestTheWayBackWithNoConsoleSaysHowToOpenOne(t *testing.T) {
 		return strings.Contains(tmux("show-messages"), NoHome)
 	})
 	// A console run in place, in a pane of another session: tmux knows it
-	// by its command's name, so a link named matchblox stands in for it.
+	// by its command's name, so a link named matchblox stands in for it. The
+	// link is to bash: a multi-call coreutils sleep refuses an unknown name.
 	bin := filepath.Join(t.TempDir(), Home)
-	sleep, err := exec.LookPath("sleep")
+	shell, err := exec.LookPath("bash")
 	if err != nil {
-		t.Skip("sleep is not installed")
+		t.Skip("bash is not installed")
 	}
-	if err := os.Symlink(sleep, bin); err != nil {
+	if err := os.Symlink(shell, bin); err != nil {
 		t.Fatal(err)
 	}
 	tmux("new-session", "-d", "-s", "side", "-x", "80", "-y", "24")
-	tmux("new-window", "-t", "side", bin+" 300")
+	tmux("new-window", "-t", "side", bin+" -c 'sleep 300; :'")
 	inPlace := tmux("display-message", "-p", "-t", "side:1", "#{pane_id}")
 	until("the console in side never ran", func() bool {
 		return tmux("display-message", "-p", "-t", inPlace, "#{pane_current_command}") == Home
