@@ -35,6 +35,7 @@ type keymaps struct {
 	form     formKeys
 	view     viewKeymap
 	sheet    sheetKeys
+	room     roomKeys
 	search   searchKeys
 	pair     pairKeys
 	takeOver takeOverKeys
@@ -125,6 +126,16 @@ func defaultKeys() keymaps {
 			Tick:  bind(ks("space"), "space", "toggle"),
 			Erase: bind(ks("backspace"), "⌫", "erase"),
 		},
+		room: roomKeys{
+			Up:    bind(ks("up", "k"), "↑↓", "move"),
+			Down:  bind(ks("down", "j"), "↑↓", "move"),
+			Open:  bind(ks("enter"), "⏎", ""),
+			Give:  bind(ks("y"), "y", "give"),
+			Next:  bind(ks("]"), "]", "next"),
+			Prev:  bind(ks("["), "[", "back"),
+			Back:  bind(ks("esc"), "esc", "back"),
+			Erase: bind(ks("backspace"), "⌫", "erase"),
+		},
 		search: searchKeys{
 			Clear: bind(ks("esc"), "esc", "clear"),
 			Keep:  bind(ks("enter"), "⏎", "keep"),
@@ -167,7 +178,7 @@ func KeyNames() []string {
 	k := defaultKeys()
 	var names []string
 	for _, layer := range [][]bkey.Binding{k.global.bindings(), k.main.bindings(), k.form.bindings(), k.view.bindings(),
-		k.sheet.bindings(), k.search.bindings(), k.pair.bindings(), k.takeOver.bindings(), k.confirm.bindings(),
+		k.sheet.bindings(), k.room.bindings(), k.search.bindings(), k.pair.bindings(), k.takeOver.bindings(), k.confirm.bindings(),
 		k.scan.bindings(), k.ask.bindings()} {
 		for _, b := range layer {
 			names = append(names, b.Keys()...)

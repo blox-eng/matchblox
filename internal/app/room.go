@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strconv"
@@ -22,6 +23,11 @@ type room struct {
 	at       int
 	from     map[string]string
 	unfolded bool
+	typing   bool
+	draft    string
+	sent     string // the words of the order in flight, back in the line if it is refused
+	act      string // the order act in flight; "" when none
+	queued   bool   // a chain of one's words wait for the host's stoker it started
 }
 
 type roomKind int
@@ -129,25 +135,32 @@ func (m Model) members(k chainKey) ([]sample.Session, []chains.Member) {
 	return seen, unseen
 }
 
-// needOf is the oldest ask of room k's matches, and how many more wait.
+// needOf is the oldest need of room k: an ask of one of its matches, or a
+// step of its stoker that waits for a go; and how many more wait.
 func (m Model) needOf(k chainKey) (roomRow, int, bool) {
+	type need struct {
+		row roomRow
+		at  int64
+	}
+	var needs []need
 	seen, _ := m.members(k)
-	var asks []queue.Item
 	for _, s := range seen {
 		if it, ok := m.waitOf(s); ok && (it.State == queue.StatePermission || it.State == queue.StateQuestion) {
-			asks = append(asks, it)
+			text := it.Name + " asks"
+			if it.LastLine != "" {
+				text += ": " + it.LastLine
+			}
+			needs = append(needs, need{roomRow{kind: roomNeed, id: it.Pane, text: text}, it.Since.UnixNano()})
 		}
 	}
-	if len(asks) == 0 {
+	for _, g := range m.goWaits(k) {
+		needs = append(needs, need{roomRow{kind: roomNeed, id: g.id, text: "▸ " + g.text + " waits for your go · y"}, g.at})
+	}
+	if len(needs) == 0 {
 		return roomRow{}, 0, false
 	}
-	slices.SortStableFunc(asks, func(a, b queue.Item) int { return a.Since.Compare(b.Since) })
-	it := asks[0]
-	text := it.Name + " asks"
-	if it.LastLine != "" {
-		text += ": " + it.LastLine
-	}
-	return roomRow{kind: roomNeed, id: it.Pane, text: text}, len(asks) - 1, true
+	slices.SortStableFunc(needs, func(a, b need) int { return cmp.Compare(a.at, b.at) })
+	return needs[0].row, len(needs) - 1, true
 }
 
 // roomRows are room k's rows, top down: the need, the stoker's card and its

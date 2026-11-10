@@ -670,6 +670,9 @@ func (m Model) keyLine(w int) (string, []span) {
 	if l := m.lostLine(); l != "" { // a lost host outranks the stand-in's keys, which may not go
 		return fit(" "+st.text.Render(l), w), nil
 	}
+	if m.room != nil {
+		return m.roomKeyLine(w), nil
+	}
 	if m.viewFull() {
 		return m.liveKeyLine(w)
 	}

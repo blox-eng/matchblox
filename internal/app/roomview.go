@@ -103,6 +103,9 @@ func (m Model) roomLine(r roomRow, w int, lit bool, more int) []string {
 		label, text, _ := strings.Cut(r.text, "  ")
 		return []string{st.faint.Render(padTo(label, 6)) + plain.Render(text)}
 	case roomTalk:
+		if m.room != nil && m.room.typing {
+			return []string{st.accent.Render("›") + st.text.Render(" "+m.room.draft) + st.accent.Render("▏")}
+		}
 		if lit {
 			return []string{st.accent.Render(r.text)}
 		}

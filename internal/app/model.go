@@ -803,7 +803,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			news = m.say(toast)
 		}
 		m, order = m.queuedOrder(m.opt.Host)
-		return m, tea.Batch(m.recv(), m.animate(), news, order, focus, again, started)
+		var talk tea.Cmd
+		m, talk = m.roomQueued(m.opt.Host)
+		return m, tea.Batch(m.recv(), m.animate(), news, order, talk, focus, again, started)
 	case graphicsMsg:
 		return m.graphics(msg)
 	case graphicsTickMsg:
@@ -1032,6 +1034,9 @@ func (m Model) result(r proto.Result) (Model, tea.Cmd) {
 	}
 	if mm, ok := m.scanResult(r); ok {
 		return mm, nil
+	}
+	if mm, cmd, ok := m.roomResult(r); ok {
+		return mm, cmd
 	}
 	if mm, ok := m.sheetResult(r); ok {
 		if r.Err == "" && mm.sheet == nil {
@@ -1286,6 +1291,10 @@ func (m Model) pendingKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.standIn {
 		return m.standInKey(k)
+	}
+	if m.room != nil {
+		m.flash = ""
+		return m.roomKey(k)
 	}
 	mk := m.keys.main
 	m.flash = ""
