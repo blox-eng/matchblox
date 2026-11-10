@@ -48,6 +48,11 @@ All notable changes to matchblox are in this file. The format follows
   the match's place in its chain, with its news. The new agent hears who it
   is chained with, and no mate has to chain again.
   ([#333](https://github.com/blox-eng/matchblox/issues/333))
+
+## [0.39.1] - 2026-11-10
+
+### Fixed
+
 - **The console answers a key fast on a busy host.** The console now runs at
   the normal CPU priority. The service and the one-shot commands stay at the
   lowest. Before this fix, a host at load 80 showed each ↑ and ↓ about half a
@@ -1398,7 +1403,8 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.39.0...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.39.1...HEAD
+[0.39.1]: https://github.com/blox-eng/matchblox/compare/v0.39.0...v0.39.1
 [0.39.0]: https://github.com/blox-eng/matchblox/compare/v0.38.2...v0.39.0
 [0.38.2]: https://github.com/blox-eng/matchblox/compare/v0.38.1...v0.38.2
 [0.38.1]: https://github.com/blox-eng/matchblox/compare/v0.38.0...v0.38.1
