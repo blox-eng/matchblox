@@ -6,6 +6,17 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **Agents stop flickering when the console shows them.** The live view
+  sized the agent's own tmux window to itself, and each resize made Codex
+  and Cursor draw their whole screen again, in the view and in their pane.
+  The view now leaves every window as it is: a text agent's lines wrap to
+  the view, and a full-screen agent keeps its shape, cut at the edge with
+  a `›`. A window an older version left sized gets its size back. On a
+  phone, the selected row shows the agent's question.
+  ([#351](https://github.com/blox-eng/matchblox/issues/351))
+
 ## [0.40.0] - 2026-11-10
 
 ### Added
@@ -60,14 +71,6 @@ All notable changes to matchblox are in this file. The format follows
   lowest. Before this fix, a host at load 80 showed each ↑ and ↓ about half a
   second late over ssh. A wheel tick, or a swipe on a phone, also costs about
   40% less: it reads the frame on the screen and does not draw a second one.
-- **Agents stop flickering when the console shows them.** The live view
-  sized the agent's own tmux window to itself, and each resize made Codex
-  and Cursor draw their whole screen again, in the view and in their pane.
-  The view now leaves every window as it is: a text agent's lines wrap to
-  the view, and a full-screen agent keeps its shape, cut at the edge with
-  a `›`. A window an older version left sized gets its size back. On a
-  phone, the selected row shows the agent's question.
-  ([#351](https://github.com/blox-eng/matchblox/issues/351))
 
 ## [0.39.0] - 2026-11-09
 
