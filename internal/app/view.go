@@ -213,6 +213,9 @@ func (m Model) drawScreen(w int) drawn {
 		}
 		return sc
 	}
+	if m.room != nil {
+		return m.roomScreen(w, sc)
+	}
 	listW, detailW := m.panes(w)
 	if m.viewFull() { // one column: the live view takes the screen
 		return m.viewScreen(w)

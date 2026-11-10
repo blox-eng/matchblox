@@ -234,8 +234,8 @@ func (m Model) roomMatchRows(k chainKey, seen []sample.Session, unseen []chains.
 		if mark := providerMarks[s.Provider]; mark != "" {
 			text = mark + " " + text
 		}
-		if len(repos) > 1 {
-			text += "  " + m.repoOf(s)
+		if repo := m.repoOf(s); len(repos) > 1 && repo != s.Name {
+			text += "  " + repo
 		}
 		text += "  " + m.stateWord(s)
 		if n := mateOf(memberOf(s)).Inbox; n > 0 {

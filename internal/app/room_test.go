@@ -186,11 +186,19 @@ func TestMatchRowNamesTheRepoWhenTheTeamSpansTwo(t *testing.T) {
 	m, k := roomOf(t, headState(t, runningPlan(), true), "hearth-api")
 	m.git = &proto.GitReport{Repos: []gitscan.Repo{
 		{Path: "/work/hearth-api", Worktrees: []gitscan.Worktree{{Path: "/work/hearth-api"}}},
-		{Path: "/work/ember-billing", Worktrees: []gitscan.Worktree{{Path: "/work/ember-billing"}}},
+		{Path: "/work/billing", Worktrees: []gitscan.Worktree{{Path: "/work/billing"}, {Path: "/work/billing-v2"}}},
 	}}
+	for i := range m.all.sessions {
+		if m.all.sessions[i].Name == "ember-billing" {
+			m.all.sessions[i].Cwd = "/work/billing-v2"
+		}
+	}
 	row := roomRowOf(t, m.roomRows(k), roomMatch, "ember-billing")
-	if !strings.Contains(row.text, "ember-billing  ember-billing") {
+	if !strings.Contains(row.text, "ember-billing  billing") {
 		t.Fatalf("no repo on a team in two repos: %q", row.text)
+	}
+	if row := roomRowOf(t, m.roomRows(k), roomMatch, "hearth-api"); strings.Contains(row.text, "hearth-api  hearth-api") {
+		t.Fatalf("a repo named as its match is shown twice: %q", row.text)
 	}
 }
 
