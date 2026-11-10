@@ -103,14 +103,14 @@ Four columns, left to right. A match is in exactly one: the leftmost whose rule 
 
 | Column | A match is here when |
 |---|---|
-| `NEEDS YOU` | it asks a question or a permission; a pull request it drives waits for the owner's merge; a stoker step for it waits for the owner's go; its ship is stuck (`CI failed`, `conflicts`, `changes requested`); or its turn ended and it waits for input (`waits`, `paused`, `done` of today's `WAITS FOR YOU`). |
+| `NEEDS YOU` | it asks a question or a permission, or a stoker step for it waits for the owner's go (these two hold even while it is busy or runs a background shell); a pull request it drives waits for the owner's merge; its ship is stuck (`CI failed`, `conflicts`, `changes requested`) and it is not busy; or its turn ended today and it waits for input (`waits`, `paused`, `done` of today's `WAITS FOR YOU`). A wait since yesterday is cold, and cold is `QUIET`, as today. |
 | `WORKING` | it is `busy`, `agents`, `tests` or `shell`. |
 | `SHIPPING` | it is at rest, it needs nothing, and a pull request it drives is in flight (`ci`, `green` with auto-merge, `merged` and deploying). |
 | `QUIET` | everything else: `idle`, `cold`, `stale`, `out`, and held or parked. |
 
 A match that the owner parked (`z`) is in `QUIET` whatever else is true of it, and `● N need you` does not count it: the owner said "not now". Its card says so (`⏸ parked · asks`). A match that the stoker holds follows the rule like any other, so one that asks is in `NEEDS YOU` and is counted: the owner did not choose that hold. A match that works with a full context stays in `WORKING` and shows the spent match.
 
-Order inside a column: `NEEDS YOU` by the oldest wait first. `WORKING` by when the turn started, the oldest first. `SHIPPING` by when the ship reached its stage, the oldest first. Both times are in the sample today, so a phone and a desk show one order, a restart keeps it, and a card keeps its place while it stays. `QUIET` by the newest first. Members of one chain that are in the same column sit together.
+Order inside a column: `NEEDS YOU` by the oldest wait first. `WORKING` by when the session started, the oldest first (the sample has no time for the turn's start; owner, 2026-11-11). `SHIPPING` by when the ship reached its stage, the oldest first. Both times are in the sample today, so a phone and a desk show one order, a restart keeps it, and a card keeps its place while it stays. `QUIET` by the newest first. Members of one chain that are in the same column sit together.
 
 An empty `NEEDS YOU` says `No match waits for you.` in `faint`. Any other empty column shows its name and `· 0`. No column hides or changes width by itself.
 
@@ -123,7 +123,7 @@ Lines, top to bottom. Each is cut with `…`, never wrapped, except where the pe
 3. The ship and its track (`#4551 ●━◉┄○┄○`), or the stoker's step (`≋ step 2 of 3`), then the context (`ctx 62%`, `warn` from 70%, `neg` at the compact line). At the right: the chain's stub. A card under 26 columns drops a context under 70% when it has a ship or a step.
 4. The keys, in `NEEDS YOU` and on the chosen card: `x merge #4556   ⏎ go in`.
 
-The harness mark names the agent that runs in the pane: `✻` Claude Code, `❋` Codex, `⬢` Cursor, `▣` OpenCode, `·` any other. It is `muted`. DESIGN.md §6 gives these four signs to providers today (`providerMarks` in `internal/app/dock.go`). One sign must mean one thing (§1 rule 2), so this work changes §6: the sign names the agent, on a card and on an account row alike. An account row of OpenCode on an Anthropic key shows `▣`, and its words name the provider.
+The harness mark names the agent that runs in the pane: `✻` Claude Code, `❋` Codex, `⬢` Cursor, `▣` OpenCode, `·` any other. It is `muted`. It comes from the session's agent (`Session.Agent`). The account rows keep today's rule: their mark names the provider of the plan (`providerMarks` in `internal/app/dock.go`), and they do not change (owner, 2026-11-11). DESIGN.md §6 gains one sentence: a card's mark names the agent, and an account's mark names the provider. So OpenCode on an Anthropic key shows `▣` on its card and `✻` on its usage row.
 
 **Two densities.** `v` switches them, and each screen (a phone, a desk) keeps its own choice. Verbose: every card shows lines 1 to 3, and line 4 in `NEEDS YOU`. One line: every card shows line 1, and `NEEDS YOU` adds line 2. A phone starts with verbose in `NEEDS YOU` only.
 
@@ -138,7 +138,7 @@ The peek needs no key: moving the selection is the peek. A card in `QUIET` on a 
 
 Three guards:
 
-- **The peek watches the pane.** The service refuses an answering key whose `Seen` is zero (`internal/service/keys.go`). So the chosen card that asks watches its pane's screen, as the live view does, with no size (`Cols` and `Rows` 0), on every shape. The key carries that screen's time as `Seen`. Until the screen arrives the digits are dead and the key line says `reading <name>'s question…`. The service's guard does not change.
+- **The digit is tied to the question the card drew.** The card's options come from the sample, so the key carries the time of that sample as `Seen`, and the console sends it only while the session's question is the one it drew (`Ask.ID`). The service refuses a key whose `Seen` is zero or is not after the question began (`internal/service/keys.go`), so a question that is newer than the sample is refused there too. The pane's screen plays no part, and the peek watches nothing. The service's guard does not change.
 - **The dead time.** The digits take no answer for 400 ms after the peek lands on a card, so a key that was meant for the card before does not answer this one. The "Find the Git repositories" box has this rule today (`internal/app/scanask.go`).
 - **The service's guard stays:** a key is refused when the question started after the screen that the console showed (`not sent: <name> asks something new — look again`).
 
@@ -181,7 +181,7 @@ The strip turns by itself in one case, which DESIGN.md already allows the dock: 
 
 ### The context menu
 
-A right-click on a card, or a long-press on a phone (480 ms), selects the card and opens a menu at the pointer. On a phone it rises from the key line, as the consent box does. `↑` `↓` move, `⏎` or a tap does, `esc` or a tap outside closes.
+A right-click on a card, or a long-press on a phone (480 ms, and only on a terminal that reports the release of a press; a tap still acts on the press), selects the card and opens a menu at the pointer. On a phone it rises from the key line, as the consent box does. `↑` `↓` move, `⏎` or a tap does, `esc` or a tap outside closes.
 
 1. `copy last message` (also `c` on the board, with no menu)
 2. `copy the question` (when it asks)
@@ -198,7 +198,8 @@ No destructive act is in the menu. `x` keeps its consent box.
 - Every copy goes through the console's one `clip` (`internal/app/pairpage.go`): `Options.Clip` when the host gives one, else OSC 52 through `tea.SetClipboard`, as the pair link's `c` does today.
 - **Any text:** a drag over text in the console selects it, in the accent, and copies it on release. The header says `copied 42 characters`. The console owns the mouse, so it does this itself; it does not hand the drag to tmux.
 - **Each hop must pass it on.** The console reads the tmux it runs in (`set-clipboard`, and `allow-passthrough` for its own pane, which it already sets for images). When that tmux would drop the write, the copy says so in the header, with the fix: `not copied: tmux drops it · tmux set -s set-clipboard on`. A new door, "Let copy through", does it on `⏎`.
-- The console cannot read the hops after its own tmux (SSH, the owner's terminal, a tmux on the owner's side, Pocket). So `copied` means "written to the terminal". `docs/console.md` gets a table: each terminal and the one setting it needs. Pocket must take OSC 52 into the iOS clipboard; if it does not today, that is a task of this work.
+- **The console proves the whole path once for each screen** (owner, 2026-11-11). The console cannot read the hops after its own tmux (SSH, the owner's terminal, a tmux on the owner's side, Pocket). So a door, "Check that copy reaches you", copies a 6-letter code and asks for a paste. A paste of that code marks this screen (a phone, or a desk) as checked in `view.json`. Until then each copy says `copied: <what> · not checked here`, and the door is first in the doors line above the cards. The toast takes no key: `⏎` stays "go in". After it, `copied: <what>`. A wrong paste says that a hop drops the copy, and points to the table below.
+- The table: `docs/console.md` gets a table: each terminal and the one setting it needs. Pocket must take OSC 52 into the iOS clipboard; if it does not today, that is a task of this work.
 - **Paste** is unchanged: a paste goes to the agent as text, with today's guard at a menu.
 
 ### Keys
@@ -209,7 +210,7 @@ No destructive act is in the menu. `x` keeps its consent box.
 | `←` `→` | Go to the column at the left or the right. They skip a hidden or an empty column. |
 | `⏎`, `a` | Go into the match's pane (#346). On a phone, a tap on the chosen card. |
 | `1`…`9` | Answer the chosen card's question, with the two guards. |
-| `x` | The other act of the card: merge a ship that waits for the merge, else kill. Through the consent box. |
+| `x` | The other act of the card: merge its leading ship when that ship waits for the merge, else kill. The card and the consent box name which, with the exact command. |
 | `y` | Give the go that a stoker step waits for. |
 | `c` | Copy the last message. |
 | `m` | Open the menu on the chosen card. |
@@ -269,7 +270,7 @@ The console's shape rule decides (DESIGN.md §6, Widths; `layout()` in `internal
 
 A hidden column gives its room to the others in the same proportions. On Wide the live view takes it. A column whose cards do not fit ends in `↓ N more`, and scrolls so that the chosen card is whole.
 
-The screen, top to bottom: the header (the mark, the host filter, `● N need you`, the stoker word or a toast), the tab row (`BOARD 15   machine`, the chain crumb, the hidden columns), a hairline, the body, the strip, a hairline, the key line. The setup doors stay above the columns, the ghost row `+ start a new session here` and the recommendations stay under them, each folded to one line when the columns need the rows.
+The screen, top to bottom: the header (the mark, the host filter, `● N need you`, the stoker word or a toast), the tab row (`BOARD 15   machine`, the chain crumb, the hidden columns), a hairline, the body, the strip, a hairline, the key line. The setup doors stay above the columns, the ghost row `+ start a new session here` and the recommendations stay under them, each folded to one line when the columns need the rows. `↑` from the first card of a column chooses the doors line, and `↓` from the last card chooses the ghost row, then the recommendations. Each opens in place and takes today's keys.
 
 ### The match on the board
 
