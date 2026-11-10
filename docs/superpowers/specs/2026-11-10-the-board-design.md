@@ -32,7 +32,7 @@ Success: the owner opens the console on any screen, sees every match in the colu
 - No swimlanes. Most sessions are chains of one, so a lane for each chain is a row for each card.
 - No fifth column. Held, review and stuck are words on a card.
 - No change to `matchblox sessions --json`, `peek`, `send`, or any command that agents and scripts read.
-- No change to the native screens of the Pocket app in this work. The app draws the console, so it gets the board. The haptics and the clipboard check (below) are the two exceptions, and each is its own task.
+- No new native screen in the Pocket app. The app draws the console, so it gets the board. The app changes in three places, each its own task: the Board layout on the belt, the swipe and the long-press, and the clipboard check.
 - No new way to sort. The order inside a column is fixed (below).
 - No timer that turns the bottom strip, and no setting for one.
 
@@ -68,6 +68,7 @@ All dated 2026-11-10.
 - A bottom strip that the owner turns on and off, and that shows the machine and a weekly view.
 - Each card shows a mark for its harness.
 - Each row that the owner opens on Machine has charts.
+- On Pocket the board's keys are not a line of shortcuts at the bottom of the console. They are part of the app's belt and its layouts.
 
 ## My calls
 
@@ -225,7 +226,7 @@ No destructive act is in the menu. `x` keeps its consent box.
 
 Keys that change their job: `c` (was: open the STOKER tab), `v` (was: list only), `s` (was: sort), `g` (was: group), `u` (was: cycle the dock). Keys that go: `1-7` as tabs, `p`, `S`, and `Space` and `X` outside Machine's repo view.
 
-The key line shows the keys of the chosen card first, then `c`, `v`, `s`, `u`, then `←→` and `tab`. A key that does not fit leaves whole, from the right. On a phone the key line shows `c`, `v`, `s`, `u` only: the chosen card already shows its own keys.
+The key line shows the keys of the chosen card first, then `c`, `v`, `s`, `u`, then `←→` and `tab`. A key that does not fit leaves whole, from the right. A narrow terminal that is not Pocket shows `c`, `v`, `s`, `u` only: the chosen card already shows its own keys. Pocket shows no key line (see "The belt on Pocket").
 
 ### Touch
 
@@ -237,13 +238,24 @@ The key line shows the keys of the chosen card first, then `c`, `v`, `s`, `u`, t
 | go in | Tap the chosen card again. |
 | answer | Tap an option in the peek. |
 | open the menu | Long-press a card. |
-| act | Tap a key on the card or on the key line. A destructive act still waits for a typed `y`. |
+| act | Tap a key on the card or on the belt. A destructive act still waits for a typed `y`. |
 | come back | The belt's `◂`, or the edge swipe. |
 | turn the strip | Tap the strip. |
 
 Nothing drags, so a swipe is always a page and a long-press is always the menu. A vertical swipe scrolls the column. On a phone a drag never selects text: the menu copies.
 
 **What Pocket must send.** Today the console gets a tap as a left click and a vertical swipe as the wheel. It gets no sideways swipe, no long-press and no release. So the app's terminal view gets one small change, in `ios/`: a sideways swipe sends `←` or `→`, and a long-press sends a right click at its cell. Until the app has it, every act still has a way: the page marks are taps, the belt has `←` `→`, and `m` opens the menu on the chosen card. In a narrowed chain a sideways swipe is the next column, not the next chain as #326 has it; `]` and `[` change the chain.
+
+### The belt on Pocket
+
+On Pocket the console draws no key line and no hairline over it. The cards take the two rows. The keys are on the app's belt (`docs/phone.md`, "The key belt"), on a fifth layout named **Board**. It is a fifth match in the matchbox tray.
+
+- **It follows the console.** The app is on Board while the console shows the board or Machine, as Commands follows the agent whose pane the owner is in. When the owner goes into a pane, the belt goes back to the layout it had there. The owner can still choose another layout from the tray.
+- **Home** is `◂ ← → ↑ ↓ ⏎`. Then the keys of the chosen card, in the accent, each with its word under it: `1 answer`, `2 answer`, `x merge`, `y go`. Then `c copy`, `m menu`, `g chain`, `v one line`, `s hosts`, `u strip`, `⇥ machine`, `x kill`.
+- **A key that does not apply is dim** and sends nothing, as a command key is in a pane that is not its agent's.
+- **The consent box** still rises in the console, with its `RUN` line. While it shows, the belt is `◂`, `y runs`, `esc cancels`. A tap is never consent: `y` on the belt is the typed `y`.
+- **What the console tells the app.** The app must know the chosen card's keys. The console sends them when they change, the way it tells the app today which agent a pane runs (`@matchblox_agent`, `internal/panes/home.go`) and that it is at the top (the terminal title, #326). The builder picks the one channel that is already there; no new protocol.
+- **A terminal that is not Pocket** (an SSH app, a narrow tmux pane) keeps the key line, because it has no belt. The console knows Pocket by what the app says when it connects.
 
 ### Layout
 

@@ -74,8 +74,15 @@ button:focus-visible,.term:focus-visible{outline:2px solid var(--accent);outline
 @keyframes breath{50%{color:var(--breath)}}
 @keyframes flick{0%{color:var(--flame)}17%{color:var(--flame-amber)}34%{color:var(--flame-core)}51%{color:var(--flame)}68%{color:var(--flame-core)}85%{color:var(--flame-amber)}}
 @media (prefers-reduced-motion: reduce){.m-ask,.m-burn{animation:none}}
-.belt{display:flex;gap:6px;margin-top:10px}
-.belt button{flex:1;font:500 15px var(--mono);color:var(--muted);background:var(--bg);border:1px solid var(--hair);border-radius:9px;padding:9px 0;cursor:pointer}
+.handle{display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding:0 4px;font:12px var(--mono);color:var(--faint)}
+.handle .flame{color:var(--flame);font-weight:400} .handle .lay{color:var(--muted)}
+.belt{display:flex;gap:6px;margin-top:6px;overflow-x:auto;scrollbar-width:none;max-width:calc(40ch * 1.6);scroll-snap-type:x proximity}
+.belt::-webkit-scrollbar{display:none}
+.belt button{flex:0 0 auto;min-width:44px;min-height:44px;scroll-snap-align:start;font:500 15px var(--mono);color:var(--fg);background:var(--bg);border:1px solid var(--hair);border-radius:9px;padding:4px 10px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px}
+.belt button small{font:10px var(--mono);color:var(--faint)}
+.belt button.wide{min-width:60px}
+.belt button.act{border-color:var(--accent);color:var(--accent)}
+.belt button[disabled]{opacity:.32;cursor:default}
 .belt button:active{background:var(--wash);color:var(--accent)}
 .beltnote{font:12px var(--mono);color:var(--faint);margin-top:8px;text-align:center}
 .cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:22px 32px}
@@ -112,10 +119,9 @@ ol.asks li{color:var(--muted)} ol.asks b{color:var(--fg);font-weight:600} ol.ask
     </div>
     <div class="stage"><div class="device" id="device">
       <div class="term" id="term" tabindex="0" aria-label="Console prototype"></div>
-      <div class="belt" id="belt" hidden>
-        <button data-k="Escape" aria-label="Back">◂</button><button data-k="ArrowUp" aria-label="Up">↑</button><button data-k="ArrowDown" aria-label="Down">↓</button><button data-k="Enter" aria-label="Enter">⏎</button><button data-k="x">x</button><button data-k="y">y</button>
-      </div>
-      <div class="beltnote" id="beltnote" hidden>Pocket's key belt. The console draws everything above it.</div>
+      <div class="handle" id="handle" hidden><span class="lay"><b class="flame">✦</b> Board</span><span class="grip">⋯⋯</span><span class="kb">⌨</span></div>
+      <div class="belt" id="belt" hidden></div>
+      <div class="beltnote" id="beltnote" hidden>Pocket's belt, on a new layout: Board. Drag it sideways. The console draws no key line on Pocket.</div>
     </div></div>
   </section>
 
@@ -146,6 +152,7 @@ ol.asks li{color:var(--muted)} ol.asks b{color:var(--fg);font-weight:600} ol.ask
         <tr><td>see more or less</td><td>Tap <code>v</code> on the key line.</td><td><code>v</code>: verbose cards, or one line each</td></tr>
         <tr><td>do what it needs</td><td>Tap the key on the card. A destructive one still waits for a typed <code>y</code>: a tap is never consent.</td><td>The key the card shows</td></tr>
         <tr><td>come back</td><td>The belt's <code>◂</code>, or the edge swipe.</td><td><code>esc</code></td></tr>
+        <tr><td>press any key of the board</td><td>The belt. On Pocket the console draws no key line: the keys are on a belt layout named Board. The keys of the chosen card come first, in the accent, and a key that does not apply is dim.</td><td>On a desk, the key line</td></tr>
       </tbody>
     </table></div>
   </section>
@@ -159,6 +166,7 @@ ol.asks li{color:var(--muted)} ol.asks b{color:var(--fg);font-weight:600} ol.ask
       <li><b>Two densities, one key.</b> <code>v</code> switches verbose cards and one line a match. The peek is the same in both.</li>
       <li><b>The chain is a stub on the card, and a way to narrow the board.</b> Choose a card and the stubs of its chain light, in every column. Tap a stub, or press <code>g</code>, and the board shows only that chain. <code>esc</code> shows every chain again. The header still counts everyone who needs you.</li>
       <li><b>The dock becomes one strip.</b> One line at the bottom shows usage, the machine or this week. <code>u</code>, or a tap on it, turns to the next, and the fourth turn hides it. It does not turn by itself.</li>
+      <li><b>On Pocket the keys live on the belt.</b> The matchbox tray gets a fifth match, Board. The app is on it while the console shows the board, as Commands follows the agent you are in. Home is <code>◂ ← → ↑ ↓ ⏎</code>, then the chosen card's keys, then <code>c m g v s u ⇥</code>. The two rows the key line took go to the cards.</li>
       <li><b>Each card names its harness.</b> The mark sits beside the wait: <code>✻</code> Claude Code, <code>❋</code> Codex, <code>⬢</code> Cursor, <code>▣</code> OpenCode, <code>·</code> any other. They are the marks the accounts use today.</li>
       <li><b>A host is a filter, not a place.</b> The board opens on all hosts. <code>s</code>, or a tap on the host's name at the top, narrows it to one. A card from another host says so.</li>
       <li><b>Not in the sketch:</b> the setup steps, the new-session row and the recommendations. They keep their place above and below the board.</li>
@@ -353,7 +361,8 @@ function screen(){
   const back=COLS.filter(c=>!vis(c)).flatMap(c=>[['+','accent','show:'+c],[' '+SHORT[c]+' '+inCol(c).length+'  ','faint','show:'+c]]);
   if(!phone){rows.push([spread([[st.tab==='board'?'BOARD '+S.filter(inScope).length:'board '+S.filter(inScope).length,st.tab==='board'?'accent b':'faint','Tab'],['   ',''],[st.tab==='machine'?'MACHINE':'machine',st.tab==='machine'?'accent b':'faint','Tab'],...crumb],back,W)]);
     rows.push([fit(L(['─'.repeat(W),'hair']),W)])}
-  const bodyH=H-rows.length-(st.strip==='off'?2:3);let body=[];
+  const foot=phone&&!st.confirm&&!st.menu?0:2;
+  const bodyH=H-rows.length-(st.strip==='off'?0:1)-foot;let body=[];
   const pane=st.pane&&S.find(x=>x.id===st.pane);
   const head=(c,w)=>fit(L([' ',''],[NAME[c],c===st.col?'accent b':(c==='need'&&need?'accent':'faint'),'hide:'+c],[' · '+inCol(c).length,'faint','hide:'+c],['  −','faint','hide:'+c]),w);
   const none=()=>[[blank(W)],[fit(L(['  Every column is hidden. Tap a ','faint'],['+','accent'],[' name above to bring one back.','faint']),W)]];
@@ -390,8 +399,7 @@ function screen(){
       week:phone?' week ▅▇▆▃▅▁·  ✻ 41%  ❋ 30%':' this week  Mon ▅ Tue ▇ Wed ▆ Thu ▃ Fri ▅ Sat ▁ Sun ·   ✻ 41%   ❋ 30%'+(W<120?'':'   both last the week')}[st.strip];
     const next=STRIPS[(STRIPS.indexOf(st.strip)+1)%4];
     rows.push([spread([[txt,'faint','u']],[[(next==='off'?'hide':next)+' › ','faint','u']],W)])}
-  rows.push([fit(L(['─'.repeat(W),'hair']),W)]);
-  rows.push([fit(L([' ',''],...hints()),W)]);
+  if(foot){rows.push([fit(L(['─'.repeat(W),'hair']),W)]);rows.push([fit(L([' ',''],...hints()),W)])}
   return rows;
 }
 const HARN=['claude','codex','opencode','other','unknown'];
@@ -462,10 +470,18 @@ const esc=t=>t.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])).rep
 function html(rows){return rows.map(r=>'<div class="r">'+r.map(l=>'<span class="blk'+(l.wash?' wash':'')+'"'+(l.act?' data-act="'+l.act+'"':'')+'>'+
   l.segs.map(s=>'<span'+(s[1]?' class="'+s[1]+'"':'')+(s[2]?' data-k="'+s[2]+'"':'')+'>'+esc(s[0])+'</span>').join('')+'</span>').join('')+'</div>').join('')}
 
+function beltKeys(){const s=sel(),b=[['Escape','◂','',1],['ArrowLeft','←','',1],['ArrowRight','→','',1],['ArrowUp','↑','',1,'wide'],['ArrowDown','↓','',1,'wide'],['Enter','⏎','',1,'wide']];
+  if(st.confirm)return [...b.slice(0,1),['y','y','runs',1,'act'],['Escape','esc','cancels',1]];
+  if(st.tab==='board'&&!st.pane&&s){if(s.q)s.q.forEach((q,i)=>b.push([String(i+1),String(i+1),'answer',1,'act']));
+    if(s.merge)b.push(['x','x','merge',1,'act']);if(s.go)b.push(['y','y','go',1,'act'])}
+  const on=st.tab==='board'&&!st.pane;
+  b.push(['c','c','copy',on&&!!s],['m','m','menu',on&&!!s],['g','g','chain',on&&!!(s&&s.chain)||!!st.focus],['v','v',st.verbose?'one line':'verbose',on],['s','s','hosts',!st.pane],['u','u','strip',!st.pane],['Tab','⇥',st.tab==='board'?'machine':'board',!st.pane],['x','x','kill',on&&!!s&&!s.merge]);
+  return b}
+function drawBelt(){document.getElementById('belt').innerHTML=beltKeys().map(k=>'<button data-k="'+k[0]+'" class="'+(k[4]||'')+'"'+(k[3]?'':' disabled')+'>'+k[1]+(k[2]?'<small>'+k[2]+'</small>':'')+'</button>').join('')}
 const term=document.getElementById('term');
 function draw(){term.className='term w'+st.W;term.innerHTML=html(screen())+menuHtml();
   const phone=st.W<60;document.getElementById('device').className='device'+(phone?' phone':'');
-  document.getElementById('belt').hidden=!phone;document.getElementById('beltnote').hidden=!phone;
+  document.getElementById('belt').hidden=!phone;document.getElementById('beltnote').hidden=!phone;document.getElementById('handle').hidden=!phone;if(phone)drawBelt();
   for(const w of [40,80,160])document.getElementById('w'+w).setAttribute('aria-pressed',String(st.W===w))}
 let toastT;function toast(t){st.toast=t;clearTimeout(toastT);toastT=setTimeout(()=>{st.toast='';draw()},2500)}
 function settle(){if(inCol('need').length&&vis('need')){st.col='need';st.idx.need=0}else if(!inCol(st.col).length||!vis(st.col))st.col=COLS.find(c=>vis(c)&&inCol(c).length)||st.col}
@@ -511,6 +527,7 @@ function press(k){
   else if(k==='ArrowLeft'||k==='h')step(-1);
   else if(s&&s.q&&vis(st.col)&&(k==='1'||k==='2'||k==='pick0'||k==='pick1'))answer(s,k==='2'||k==='pick1'?1:0);
   else if(k==='v')st.verbose=!st.verbose;
+  else if(k==='m'&&s)openMenu(s,2,6);
   else if(k==='g'&&s&&s.chain){st.focus=st.focus?null:s.chain;if(!inCol(st.col).length)st.col=COLS.find(c=>vis(c)&&inCol(c).length)||st.col}
   else if(k==='Escape'&&st.focus)st.focus=null;
   else if(k==='c'&&s)copy(s.said[0],'last message of '+s.id);
@@ -548,7 +565,7 @@ term.addEventListener('touchmove',e=>{if(tx!==null&&Math.abs(e.touches[0].client
 term.addEventListener('touchend',e=>{clearTimeout(lp);if(lpDone){skipClick=true;setTimeout(()=>{skipClick=false},400);tx=null;return}
   if(tx===null)return;const dx=e.changedTouches[0].clientX-tx,dy=e.changedTouches[0].clientY-ty;tx=null;
   if(Math.abs(dx)>48&&Math.abs(dx)>Math.abs(dy)*1.5){if(st.pane){if(dx>0)press('Escape')}else if(!st.menu)press(dx<0?'ArrowRight':'ArrowLeft')}},{passive:true});
-document.getElementById('belt').addEventListener('click',e=>{const b=e.target.closest('button');if(b)press(b.dataset.k)});
+document.getElementById('belt').addEventListener('click',e=>{const b=e.target.closest('button');if(b&&!b.disabled){press(b.dataset.k);term.focus({preventScroll:true})}});
 for(const w of [40,80,160])document.getElementById('w'+w).addEventListener('click',()=>{st.W=w;st.pane=null;st.confirm=null;draw()});
 st.W=window.innerWidth<700?40:window.innerWidth<1500?80:160;
 draw();
