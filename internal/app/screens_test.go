@@ -36,7 +36,7 @@ var demoAt = time.Date(2026, 10, 1, 22, 50, 0, 0, time.UTC)
 // screensState is the demo machine on a still clock: kindle-web at a
 // permission prompt, flint-auth asking with the question tool, and a ship
 // of each kind.
-func screensState(t *testing.T) proto.State {
+func screensState(t testing.TB) proto.State {
 	t.Helper()
 	cfg := config.Default()
 	s := &sample.Sampler{
