@@ -8,6 +8,21 @@ All notable changes to matchblox are in this file. The format follows
 
 ### Added
 
+- **Each chain has a room.** `Enter` on a chain's head row, or `⌥s` on any
+  of its sessions, opens it: what waits for you first, the stoker's card
+  and plan, the matches with their inbox, the chain's ships and worktrees,
+  and a talk line to its stoker. The first words to a chain with no stoker
+  start one, with no launch sheet. `y` gives a go; a go that merges, kills,
+  force-pushes or removes asks first. `]` and `[` walk the chains.
+  ([#326](https://github.com/blox-eng/matchblox/issues/326))
+- **⌥s flips between a session and its chain's room.** In an agent's pane,
+  `⌥s` goes to its room and back, and `⌥n` walks the chain's matches. Each
+  terminal comes back to its own session. A shell keeps the keys. Prefix
+  `s` and `n` do the same where Option is not Meta; tmux's session tree
+  moves to prefix `S`.
+  ([#326](https://github.com/blox-eng/matchblox/issues/326))
+- **A feat pull request changes the landing page or says why not.** CI's
+  `Landing page` step, and a hook before an agent's `gh pr merge`.
 - **One command joins a chain.** `matchblox chain <who>` joins the chain of
   `<who>` at once, or forms one named after the match that ran it. A chain
   is a team: every match in it hears every other. A chain's name joins it
@@ -20,6 +35,10 @@ All notable changes to matchblox are in this file. The format follows
 
 ### Changed
 
+- **The header counts the stokers that run: `≋ 2`.** It was `stoker · 2
+  chains`; the dock still counts the chains.
+- **Prefix n no longer goes to the next window** on the console's tmux
+  server: it walks a chain's matches. Prefix p still goes back.
 - **A send to a busy mate waits in its inbox.** A question, a permission
   prompt, a park, a draft or copy mode no longer refuses a send: the line
   waits, the sender hears why, and later hears when the mate got it. A mate
