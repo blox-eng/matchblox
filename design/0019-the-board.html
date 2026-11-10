@@ -1,0 +1,557 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Board</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: the terminal is the page. One working console on top, the argument for it underneath, in the console's own tokens. */
+:root{
+  color-scheme:dark;
+  --bg:#0F0D0A; --fg:#EBE6DC; --muted:#A69D8D; --faint:#776F60; --hair:#2E2921;
+  --accent:#C3A56A; --wash:#221D14; --warn:#B98F44; --neg:#B0563F; --night:#7C8BB0;
+  --flame:#E8822E; --flame-amber:#F5A54A; --flame-core:#FFD27A;
+  --head:#C2452D; --breath:#572318; --panel:#15120E;
+  --ember:#9C5A46; --h-claude:#D4896A; --h-codex:#7FB69A; --h-opencode:#9F8FD1; --h-other:#6FA8C7;
+  --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme: light){ :root:not([data-theme="dark"]){
+  color-scheme:light;
+  --bg:#F5F1E7; --fg:#1C1813; --muted:#5F5A4C; --faint:#8A8170; --hair:#DDD5C3;
+  --accent:#9A7B3F; --wash:#ECE3CF; --warn:#8A6420; --neg:#9E4A34; --night:#55648C;
+  --flame:#E8822E; --flame-amber:#DF8E2C; --flame-core:#D69A2A;
+  --head:#B23A24; --breath:#DAA899; --panel:#EFE9DC;
+  --ember:#9E5E4A; --h-claude:#B5623F; --h-codex:#3F8A66; --h-opencode:#6E5BB5; --h-other:#3B7FA3;
+}}
+:root[data-theme="light"]{
+  color-scheme:light;
+  --bg:#F5F1E7; --fg:#1C1813; --muted:#5F5A4C; --faint:#8A8170; --hair:#DDD5C3;
+  --accent:#9A7B3F; --wash:#ECE3CF; --warn:#8A6420; --neg:#9E4A34; --night:#55648C;
+  --flame:#E8822E; --flame-amber:#DF8E2C; --flame-core:#D69A2A;
+  --head:#B23A24; --breath:#DAA899; --panel:#EFE9DC;
+  --ember:#9E5E4A; --h-claude:#B5623F; --h-codex:#3F8A66; --h-opencode:#6E5BB5; --h-other:#3B7FA3;
+}
+body{background:var(--bg);color:var(--fg);font-family:var(--sans);font-size:16px;line-height:1.55;
+  padding-block:28px 64px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:28px}
+h1{font-family:var(--mono);font-weight:700;font-size:22px;margin:0;letter-spacing:-.01em}
+h1 b{color:var(--accent)}
+h2{font-family:var(--mono);font-size:13px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);margin:0 0 10px}
+p{margin:0;max-width:66ch}
+.lead{color:var(--muted)}
+.bar{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+.seg{display:inline-flex;border:1px solid var(--hair);border-radius:6px;overflow:hidden}
+.seg button{font:500 13px var(--mono);background:none;color:var(--muted);border:0;padding:7px 12px;cursor:pointer}
+.seg button+button{border-left:1px solid var(--hair)}
+.seg button[aria-pressed="true"]{background:var(--wash);color:var(--accent)}
+button:focus-visible,.term:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.hint{font:13px var(--mono);color:var(--faint)}
+.hint kbd{font:inherit;color:var(--muted)}
+.hint a{color:var(--muted)}
+.stage{overflow-x:auto;padding-bottom:4px}
+.device{display:inline-block;vertical-align:top}
+.device.phone{border:1px solid var(--hair);border-radius:26px;padding:14px 10px 10px;background:var(--panel)}
+.term{font-family:var(--mono);white-space:pre;line-height:1.38;cursor:default;touch-action:pan-y;outline-offset:6px;position:relative;-webkit-touch-callout:none}
+@media (pointer:coarse){.term{user-select:none;-webkit-user-select:none}}
+.term ::selection{background:var(--accent);color:var(--bg)}
+.menu{position:absolute;background:var(--bg);z-index:2}
+.term.w40{font-size:min(15px,calc((100vw - 56px) / 24.2))}
+.term.w80{font-size:13px}
+.term.w160{font-size:min(12px,max(10px,calc((100vw - 60px) / 96.5)))}
+.term i{display:inline-block;width:1ch;text-align:center;font-style:normal}
+.r{height:1.38em}
+.blk.wash{background:var(--wash)}
+[data-act],[data-k]{cursor:pointer}
+.fg{color:var(--fg)} .b{font-weight:700} .muted{color:var(--muted)} .faint{color:var(--faint)} .hair{color:var(--hair)}
+.accent{color:var(--accent)} .warn{color:var(--warn)} .neg{color:var(--neg)} .night{color:var(--night)}
+.m-ember{color:var(--ember)} .core{color:var(--flame-core)} .amber{color:var(--flame-amber)}
+.h-claude{color:var(--h-claude)} .h-codex{color:var(--h-codex)} .h-opencode{color:var(--h-opencode)} .h-other{color:var(--h-other)} .h-unknown{color:var(--faint)}
+.l1{opacity:.32} .l2{opacity:.55} .l3{opacity:.78}
+.m-rest{color:var(--head)} .m-ask{color:var(--head);animation:breath 2.4s ease-in-out infinite}
+.m-burn{color:var(--flame);animation:flick 1.2s steps(1) infinite}
+@keyframes breath{50%{color:var(--breath)}}
+@keyframes flick{0%{color:var(--flame)}17%{color:var(--flame-amber)}34%{color:var(--flame-core)}51%{color:var(--flame)}68%{color:var(--flame-core)}85%{color:var(--flame-amber)}}
+@media (prefers-reduced-motion: reduce){.m-ask,.m-burn{animation:none}}
+.belt{display:flex;gap:6px;margin-top:10px}
+.belt button{flex:1;font:500 15px var(--mono);color:var(--muted);background:var(--bg);border:1px solid var(--hair);border-radius:9px;padding:9px 0;cursor:pointer}
+.belt button:active{background:var(--wash);color:var(--accent)}
+.beltnote{font:12px var(--mono);color:var(--faint);margin-top:8px;text-align:center}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:22px 32px}
+.cols>div{min-width:0}
+.cols h3{font:600 15px var(--sans);margin:0 0 6px;color:var(--fg)}
+.cols p{color:var(--muted);font-size:15px}
+.tw{overflow-x:auto}
+table{border-collapse:collapse;font-size:14.5px;min-width:560px;width:100%}
+th,td{text-align:left;padding:8px 14px 8px 0;border-bottom:1px solid var(--hair);vertical-align:top}
+th{font:700 12px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--faint)}
+td:first-child{color:var(--fg);white-space:nowrap;font-family:var(--mono);font-size:13px}
+td{color:var(--muted)}
+code{font:13px var(--mono);color:var(--fg)}
+ol.asks{margin:0;padding-left:1.2em;display:flex;flex-direction:column;gap:12px;max-width:70ch}
+ol.asks li{color:var(--muted)} ol.asks b{color:var(--fg);font-weight:600} ol.asks em{color:var(--accent);font-style:normal}
+</style>
+</head>
+<body style="margin:0">
+
+<div class="wrap">
+  <header>
+    <h1><b>▰</b> the board</h1>
+    <p class="lead">Every match on one screen, in the column of what it needs. This is a working sketch of the console for #372. It runs on made-up sessions.</p>
+  </header>
+
+  <section>
+    <div class="bar" style="margin-bottom:14px">
+      <div class="seg" role="group" aria-label="Terminal width">
+        <button id="w40" data-w="40">40 · Pocket</button>
+        <button id="w80" data-w="80">80</button>
+        <button id="w160" data-w="160">160</button>
+      </div>
+      <span class="hint">tap a card to peek · again to go in · tap a column's name to hide it · right-click or long-press for the menu · <kbd>← → ↑ ↓</kbd> <kbd>⏎</kbd> <kbd>1 2</kbd> <kbd>c</kbd> <kbd>v</kbd> <kbd>g</kbd> <kbd>s</kbd> <kbd>u</kbd> <kbd>tab</kbd> <kbd>x</kbd> <kbd>y</kbd> <kbd>esc</kbd> · drag over text to copy it</span>
+    </div>
+    <div class="stage"><div class="device" id="device">
+      <div class="term" id="term" tabindex="0" aria-label="Console prototype"></div>
+      <div class="belt" id="belt" hidden>
+        <button data-k="Escape" aria-label="Back">◂</button><button data-k="ArrowUp" aria-label="Up">↑</button><button data-k="ArrowDown" aria-label="Down">↓</button><button data-k="Enter" aria-label="Enter">⏎</button><button data-k="x">x</button><button data-k="y">y</button>
+      </div>
+      <div class="beltnote" id="beltnote" hidden>Pocket's key belt. The console draws everything above it.</div>
+    </div></div>
+  </section>
+
+  <section>
+    <h2>Where the board goes</h2>
+    <p style="margin-bottom:18px">My position: <b>the board is the home.</b> It takes the place of the chain list that #326 opens on. A chain stays a place you go into, its room, and a card says which chain it belongs to. Three tests, as you asked.</p>
+    <div class="cols">
+      <div><h3>What Jobs would cut</h3><p>One home. Two lists of the same matches make you choose before you can look. The tabs fall to two, the dock to one line of usage, and the matches at rest lie in a drawer. The one accent on the screen is the thing you do next.</p></div>
+      <div><h3>Nielsen</h3><p>Status is visible: every match is on the screen or counted on it (1). The card names its own key, so you recall nothing (6). <code>esc</code> steps back one level, always (3). The match, the words and the keys are the ones the console has today (4). A match at rest takes one line (8).</p></div>
+      <div><h3>What the use shows</h3><p>Measured on this machine today: 25 sessions. 2 ask, 13 work, 10 are idle, and 14 are held. 15 drive a pull request. So two cards matter, ten should be out of the way, and the pull request earns its own column.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Touch and keys</h2>
+    <div class="tw"><table>
+      <thead><tr><th>You want to</th><th>By hand, on Pocket</th><th>By key</th></tr></thead>
+      <tbody>
+        <tr><td>see the next column</td><td>Swipe sideways. The column names at the top are the page marks.</td><td><code>← →</code>. They skip a hidden column.</td></tr>
+        <tr><td>hide a column</td><td>Tap its name. It leaves the board and waits at the top as <code>+ working 3</code>. Tap that to bring it back.</td><td>The menu's last line</td></tr>
+        <tr><td>peek at a match</td><td>Tap its card. The card opens in place: what the agent said last, and its question with the options.</td><td><code>↑ ↓</code></td></tr>
+        <tr><td>answer from the peek</td><td>Tap an option.</td><td><code>1</code> <code>2</code>, only while the question is open on the card</td></tr>
+        <tr><td>go in</td><td>Tap the open card again.</td><td><code>⏎</code></td></tr>
+        <tr><td>copy the last message</td><td>Long-press the card, then <code>copy last message</code>. On a desk, right-click.</td><td><code>c</code></td></tr>
+        <tr><td>copy any text</td><td>On a desk, drag over it. It is copied when you let go.</td><td></td></tr>
+        <tr><td>see one chain only</td><td>Tap the chain's stub on a card. Tap the chain's name at the top to see everything again.</td><td><code>g</code>, then <code>esc</code></td></tr>
+        <tr><td>change the bottom strip</td><td>Tap the strip. The word at its right names what comes next.</td><td><code>u</code>: usage, machine, week, hidden</td></tr>
+        <tr><td>see more or less</td><td>Tap <code>v</code> on the key line.</td><td><code>v</code>: verbose cards, or one line each</td></tr>
+        <tr><td>do what it needs</td><td>Tap the key on the card. A destructive one still waits for a typed <code>y</code>: a tap is never consent.</td><td>The key the card shows</td></tr>
+        <tr><td>come back</td><td>The belt's <code>◂</code>, or the edge swipe.</td><td><code>esc</code></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>What the sketch proposes</h2>
+    <ol class="asks">
+      <li><b>One column for each match, and the leftmost wins.</b> Needs you: it asks, a pull request waits for your merge, a stoker step waits for your go, or its ship is stuck. Then Working, then Shipping (a pull request moves by itself), then Quiet.</li>
+      <li><b>You choose the columns.</b> A tap on a column's name hides it, and the others take its room. The header still counts who needs you while that column is hidden, and a tap on the count brings it back. The console remembers the choice for each screen.</li>
+      <li><b>The chosen card is the peek.</b> It opens in place with the last message and the question. <code>1</code> and <code>2</code> answer only there, where you see the question. <em>Your call:</em> the console guards a key that answers a question you have not seen. The peek shows it, so I let the digit through.</li>
+      <li><b>Two densities, one key.</b> <code>v</code> switches verbose cards and one line a match. The peek is the same in both.</li>
+      <li><b>The chain is a stub on the card, and a way to narrow the board.</b> Choose a card and the stubs of its chain light, in every column. Tap a stub, or press <code>g</code>, and the board shows only that chain. <code>esc</code> shows every chain again. The header still counts everyone who needs you.</li>
+      <li><b>The dock becomes one strip.</b> One line at the bottom shows usage, the machine or this week. <code>u</code>, or a tap on it, turns to the next, and the fourth turn hides it. It does not turn by itself.</li>
+      <li><b>Each card names its harness.</b> The mark sits beside the wait: <code>✻</code> Claude Code, <code>❋</code> Codex, <code>⬢</code> Cursor, <code>▣</code> OpenCode, <code>·</code> any other. They are the marks the accounts use today.</li>
+      <li><b>A host is a filter, not a place.</b> The board opens on all hosts. <code>s</code>, or a tap on the host's name at the top, narrows it to one. A card from another host says so.</li>
+      <li><b>Not in the sketch:</b> the setup steps, the new-session row and the recommendations. They keep their place above and below the board.</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Machine, and one layer for hosts</h2>
+    <p style="margin-bottom:18px">Press <code>tab</code> in the sketch. Machine is the one place you drill into: accounts and their burn, context, the work grid, repos and the machines. Each row opens with <code>⏎</code> and comes back with <code>esc</code>. Inside, each has its charts: an account's 5-hour window and its week by day, the fullest match's context, a repo's work by day, a machine's CPU and memory over 24 hours.</p>
+    <div class="cols">
+      <div><h3>Does one layer click?</h3><p>Yes. A host is where a match lives. It is not a place you go. Going back to Hosts and in again makes you carry the map in your head. So the host becomes the same thing the chain is: a second fact about a card, and a filter. Hosts as a screen stays only for adding one.</p></div>
+      <div><h3>The work grid</h3><p>One square a day, as on a git profile. The hue is the harness that worked most that day, and the strength is how much. It takes five new colour tokens, and they stay on Machine: the board keeps its one accent.</p></div>
+      <div><h3>What it needs that we lack</h3><p>The service keeps five weeks of plan readings, for Claude Code and Codex only. A grid for every harness needs a small daily record. That is a new data source, which #372 rules out today. A host that cannot be reached must say so on the board, never just lose its cards.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>The match on the board</h2>
+    <p style="margin-bottom:14px">The canon's rule stays: only fire, and a match that needs you, move. On a board the eye also has to follow a card that changes column. Answer <code>api-auth</code> in the sketch and watch it land.</p>
+    <div class="tw"><table>
+      <thead><tr><th>Where</th><th>What moves</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>Needs you</td><td>The head breathes, once each 2.4 s, on every match that waits for you. Nothing else in the column moves.</td><td>The column you must read is the only one that calls.</td></tr>
+        <tr><td>Working</td><td>The flame flickers, as today.</td><td>Fire is the system's work. It is small, and it is what "fine" looks like.</td></tr>
+        <tr><td>a card changes column</td><td>The change plays once on the card where it lands: the strike (the head flashes, a spark, the flame grows) or the going out. The name is bright for a second.</td><td>A card that jumps unseen is the board's worst failure. The motion is the canon's own, at the canon's times.</td></tr>
+        <tr><td>Shipping</td><td>Still. When a ship passes a stage, one bright cell runs along its track, as it does down a chain's fuse today.</td><td>The track is already the picture of progress.</td></tr>
+        <tr><td>Quiet</td><td>Nothing. The head cools with age: red while idle, ember when cold, faint when stale or parked.</td><td>You read the age of the drawer by its colour, with no words.</td></tr>
+        <tr><td>Pocket</td><td>The haptics the app has: a rigid tap on a strike, the buzz on a new wait.</td><td>The hand learns the board without the eye.</td></tr>
+      </tbody>
+    </table></div>
+    <p class="hint" style="margin-top:12px;white-space:normal">Not in the sketch: the bright cell on a ship's track, and the haptics.</p>
+  </section>
+
+  <section>
+    <h2>What the board tools learned first</h2>
+    <p style="margin-bottom:14px">I read how the common board tools handle groups, hidden columns, density and phones, and what kanban writers call the common mistakes. Most of it is vendor documentation and forum threads, not controlled studies. This is what it changes or confirms.</p>
+    <div class="tw"><table>
+      <thead><tr><th>Their lesson</th><th>Where it shows</th><th>On our board</th></tr></thead>
+      <tbody>
+        <tr><td>a column says where,<br>a group says what</td><td>The common board tools all keep status as the columns and put the group in a second dimension. None makes the group a column.</td><td>The chain is never a column and never a second home. It is a stub on the card and a filter on the board. A chain's room is the board narrowed to that chain.</td></tr>
+        <tr><td>a card appears once</td><td>One tool cannot show one issue twice on a board, and users who want it under both its story and its status are told to list the links on the card.</td><td>A match is in one column only. Its chain is on the card, not a second copy of the card.</td></tr>
+        <tr><td>lanes cost rows</td><td>Kanban writers warn that a lane for each person defeats the board. A lane for each group leaves most cells empty.</td><td>No lanes. Most of your sessions are chains of one, so lanes would be 20 rows of one card. A terminal has no rows to spare.</td></tr>
+        <tr><td>a hidden column<br>stays in sight</td><td>One tool's collapsed list keeps its name and count. Another parks hidden columns at the board's edge. Users of the first still ask for collapse on iPad and Android.</td><td>A hidden column waits at the top with its count, and it works the same by tap on Pocket. The count of who needs you never hides.</td></tr>
+        <tr><td>a waiting column<br>hides where work is stuck</td><td>Some writers call a Blocked column an anti-pattern: the card leaves its place in the flow. Others want the pile visible. Both want a marker on the card.</td><td>Needs you stays a column, because "who needs me" is your first question. The card keeps its place in the flow on its own line: <code>#4548 ●━✕┄○┄○</code> is stuck at CI. A parked match is a mark, not a column.</td></tr>
+        <tr><td>Done grows for ever</td><td>Every guide says to archive on a schedule, by hand or after a week.</td><td>Quiet ages by itself, as Sessions does today: idle, then cold after a day, then stale after seven, where <code>x</code> ends it. A ship that went live leaves at the end of the day.</td></tr>
+        <tr><td>few columns</td><td>Guides put the limit near seven. A small team with twelve columns looks at empty ones.</td><td>Four, and no fifth for held, review or stuck. Each of those is a word on a card.</td></tr>
+        <tr><td>the card is not the detail</td><td>One tool keeps descriptions off the card and peeks with a key. Another can show each subtask as its own card, and guides advise against it.</td><td>Verbose and one-line cards, and the peek on the chosen one. Subagents and child runs are a count on the parent's card, never cards.</td></tr>
+        <tr><td>on a phone, drag fights scroll</td><td>The repeated phone complaints are a swipe that drags a card, and a scroll that will not start. The apps that work show one column and swipe between them.</td><td>One column a page on Pocket. Nothing drags: a match changes column when its state changes, not when you move it. So a swipe is always a page and a long-press is always the menu.</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>Copy goes all the way</h2>
+    <p style="margin-bottom:14px">Text you copy in the console lands on the clipboard of the machine in your hand. Every hop passes it on: the console, tmux on the host, SSH, the terminal or Pocket, and a tmux on your side if you run one. No exceptions.</p>
+    <div class="cols">
+      <div><h3>How</h3><p>The console writes the clipboard the way it already does for the pair link: one escape sequence (OSC 52) that travels with the screen. It needs no helper on the far machine.</p></div>
+      <div><h3>When a hop refuses</h3><p>The console never says <code>copied</code> on a guess. It reads the tmux it runs in and names the fix, for example <code>tmux set -s set-clipboard on</code>. For a hop it cannot read, the docs give the one setting of each terminal.</p></div>
+      <div><h3>Not verified yet</h3><p>I have not tested the path from this host through the MacBook's tmux, and I have not checked that Pocket takes the sequence into the iOS clipboard. Both are tests in the plan, before any claim.</p></div>
+    </div>
+  </section>
+</div>
+
+<script>
+const COLS=['need','work','ship','quiet'];
+const NAME={need:'NEEDS YOU',work:'WORKING',ship:'SHIPPING',quiet:'QUIET'};
+const SHORT={need:'need',work:'work',ship:'ship',quiet:'quiet'};
+const FULL={need:'needs you',work:'working',ship:'shipping',quiet:'quiet'};
+const G={ask:['╿','m-ask'],rest:['╿','m-rest'],burn:['✦','m-burn'],spent:['│','faint'],cold:['╿','m-ember'],parked:['╿','faint']};
+// the change of state plays once, from the clock: the strike (800 ms) and the going out (400 ms)
+function glyph(s){const t=s.moved?Date.now()-s.moved:9e9;
+  if(s.arr==='strike'&&t<800)return t<200?['╿','core']:t<500?['·','core']:['✧','amber'];
+  if(s.arr==='out'&&t<400)return t<200?['✧','amber']:['✧','m-ember'];
+  return G[s.m]}
+const fresh=s=>s.moved&&Date.now()-s.moved<1200;
+function moved(s,arr){s.moved=Date.now();s.arr=arr;[210,510,810,1250].forEach(ms=>setTimeout(draw,ms))}
+const HOSTS=['ws-1','macbook'];
+let S=[
+ {id:'api-auth',col:'need',m:'ask',word:'asks',line:'Which way do we fix the login?',wait:'2m',ctx:62,chain:'login',
+  said:['I can fix the login in two ways. The token check is a small patch. The new session store also fixes the logout bug.'],
+  q:['Patch the token check','Move to the new session store'],acts:[['⏎','answer','Enter']]},
+ {id:'web-cart',col:'need',m:'rest',word:'green',line:'#4556 waits for your merge',wait:'9m',ctx:48,ship:'#4556 ●━●━◉┄○┄○',
+  said:['Every check passed on #4556. I did not merge: that is yours.'],merge:'gh pr merge 4556 --squash',acts:[['x','merge #4556','x'],['⏎','go in','Enter']]},
+ {id:'infra-dns',col:'need',m:'rest',word:'go?',line:'the stoker wants to run terraform apply',wait:'4m',ctx:31,step:'≋ step 2 of 3',
+  said:['The plan changes 2 records and removes none.'],go:true,acts:[['y','give the go','y'],['⏎','go in','Enter']]},
+ {id:'search-idx',col:'need',m:'rest',word:'stuck',line:'CI failed · lint, twice',wait:'31m',ctx:77,ship:'#4548 ●━✕┄○┄○',shipTone:'neg',
+  said:['Lint fails on a file I did not change. I tried twice and stopped.'],acts:[['⏎','tell it','Enter']]},
+ {id:'login-ui',col:'work',m:'burn',word:'busy',line:'writes the token refresh test',wait:'12m',ctx:40,chain:'login',said:['Writing the test for a token that expires mid-request.']},
+ {id:'billing',host:'macbook',col:'work',m:'burn',word:'agents',line:'3 subagents work',wait:'6m',ctx:71,said:['Three subagents read the invoice paths.']},
+ {id:'docs-site',col:'work',m:'burn',word:'tests',line:'go test ./... runs',wait:'1m',ctx:22,said:['Running the suite.']},
+ {id:'rate-limit',col:'ship',m:'rest',word:'ci',line:'6 of 9 jobs',wait:'4m',ctx:55,ship:'#4551 ●━◉┄○┄○',said:['Pushed. CI runs.']},
+ {id:'login-api',col:'ship',m:'rest',word:'review',line:'waits for review',wait:'40m',ctx:44,ship:'#4560 ●━◉┄○┄○',chain:'login',said:['Opened #4560 and asked for a review.']},
+ {id:'mailer',host:'macbook',col:'ship',m:'rest',word:'merged',line:'deploying',wait:'2h',ctx:37,ship:'#4549 ●━●━●━◉┄○',said:['Merged. The deploy runs.']},
+ {id:'notes',host:'macbook',col:'quiet',m:'rest',word:'idle',line:'',wait:'1h',ctx:18,said:['Done.']},
+ {id:'reports',col:'quiet',m:'rest',word:'out of work',line:'',wait:'3h',ctx:26,said:['Nothing left on my list.']},
+ {id:'mobile',col:'quiet',m:'rest',word:'out · back 19:50',line:'',wait:'50m',ctx:33,said:['The plan limit stopped me.']},
+ {id:'legacy',col:'quiet',m:'parked',word:'⏸ parked by you',line:'',wait:'5h',ctx:52,said:['Parked.']},
+ {id:'scratch',host:'macbook',col:'quiet',m:'cold',word:'cold',line:'',wait:'2d',ctx:9,said:['Idle since Sunday.']},
+];
+const st={W:80,H:31,col:'need',idx:{need:0,work:0,ship:0,quiet:0},pane:null,confirm:null,toast:'',tab:'board',hidden:new Set(),verbose:true,menu:null,focus:null,host:null,mi:0,drill:null,strip:'usage'};
+const STRIPS=['usage','machine','week','off'];
+const vis=c=>!st.hidden.has(c);
+const hostOf=s=>s.host||'ws-1';
+const MARK={claude:'✻',codex:'❋',cursor:'⬢',opencode:'▣',other:'·'};
+const HN={'web-cart':'codex','docs-site':'codex','mailer':'codex','billing':'opencode','reports':'cursor','scratch':'other'};
+const mark=s=>MARK[HN[s.id]||'claude'];
+const inScope=s=>(!st.host||hostOf(s)===st.host)&&(!st.focus||s.chain===st.focus);
+const inCol=c=>S.filter(s=>s.col===c&&inScope(s));
+const mates=ch=>S.filter(s=>s.chain===ch).length;
+const sel=()=>{const l=inCol(st.col);return l[Math.min(st.idx[st.col],l.length-1)]};
+
+// --- lines: {segs:[[text,cls,key]],wash,act} ---
+const chars=t=>[...t];
+const L=(...segs)=>({segs:segs.filter(s=>s&&s[0]!=='')});
+const len=l=>l.segs.reduce((n,s)=>n+chars(s[0]).length,0);
+function fit(l,w){const out=[];let n=0;
+  for(const s of l.segs){const c=chars(s[0]);
+    if(n+c.length<=w){out.push(s);n+=c.length}
+    else{const room=w-n;if(room>0)out.push([c.slice(0,room-1).join('')+'…',s[1],s[2]]);n=w;break}}
+  if(n<w)out.push([' '.repeat(w-n),'']);return {...l,segs:out}}
+function spread(left,right,w){const r=L(...right),rl=len(r);if(rl>=w)return fit(r,w);const a=fit(L(...left),Math.max(w-rl-1,0));return {segs:[...a.segs,[' ',''],...r.segs]}}
+const blank=w=>fit(L(),w);
+function wrap(t,w,max){const out=[];let cur='';for(const word of t.split(' ')){if((cur+' '+word).trim().length>w&&cur){out.push(cur);cur=word}else cur=(cur+' '+word).trim()}
+  if(cur)out.push(cur);if(max&&out.length>max){out.length=max;out[max-1]=out[max-1].slice(0,w-1)+'…'}return out}
+const ctxCls=c=>c>=85?'neg':c>=70?'warn':'faint';
+
+function card(s,w,isSel,lit){
+  const g=glyph(s),o=[],need=s.col==='need',full=st.verbose||isSel;
+  o.push(spread([[isSel?'▌':' ','accent'],[g[0],g[1]],[' ',''],[s.id,fresh(s)?'core b':isSel?'fg b':'fg'],...(!st.host&&s.host?[[' @'+s.host,'faint']]:[])],[[mark(s)+' ','muted'],[s.wait.padStart(3)+' ','faint']],w));
+  const said=s.word+(s.line?' '+s.line:'');
+  const text=isSel||(need&&w>=34&&st.verbose)?wrap(said,w-3,isSel?3:2):[said];
+  if(full||need)text.forEach((t,i)=>{const wd=i===0?s.word.slice(0,t.length):'';
+    o.push(L(['  ',''],[wd,need?'accent':'muted'],[t.slice(wd.length),'muted']))});
+  if(full){const left=[['  ','']];
+    if(s.ship)left.push([s.ship,s.shipTone||'muted'],['  ','']);
+    if(s.step)left.push([s.step,'night'],['  ','']);
+    if(w>=26||s.ctx>=70||!(s.ship||s.step))left.push(['ctx '+s.ctx+'%',ctxCls(s.ctx)]);
+    o.push(spread(left,s.chain?[[(lit?'━╸':'─╴')+s.chain+' ',lit?'accent':'faint','focus:'+s.chain]]:[],w))}
+  if(isSel){wrap('“'+s.said[0]+'”',w-3,3).forEach(t=>o.push(L(['  ',''],[t,'fg'])));
+    if(s.q)s.q.forEach((q,i)=>wrap((i+1)+'. '+q,w-3,2).forEach((t,j)=>o.push(L([j?'     ':'  ',''],[j?t:t.slice(0,2),'accent','pick'+i],[j?'':t.slice(2),'fg','pick'+i]))))}
+  if(s.acts&&(isSel||need&&st.verbose)){const a=[['  ','']];if(isSel&&s.q)a.push(['1-2','accent'],[' answer   ','muted']);
+    s.acts.forEach(x=>{if(isSel&&s.q&&x[1]==='answer')x=['⏎','go in','Enter'];a.push([x[0],'accent',x[2]],[' '+x[1]+'   ','muted',x[2]])});o.push(L(...a))}
+  if(full)o.push(L());
+  return o.map((l,i)=>({...fit(l,w),wash:isSel&&i<o.length-1,act:'sel:'+s.id}));
+}
+function quietRow(s,w,isSel){const g=glyph(s);
+  const r=[{...spread([[isSel?'▌':' ','accent'],[g[0],g[1]],[' ',''],[s.id.padEnd(11),isSel?'fg b':'fg'],[s.word,'faint']],[[mark(s)+' ','muted'],[s.wait.padStart(3)+' ','faint']],w),wash:isSel,act:'sel:'+s.id}];
+  if(isSel)r.push({...fit(L(['   “'+s.said[0]+'”','muted']),w),wash:true,act:'sel:'+s.id});return r}
+
+function column(c,w,h){
+  const list=inCol(c),cur=sel(),lines=[];
+  if(!list.length){lines.push(blank(w),fit(L(['  '+(c==='need'?'No match waits for you.':'none'),'faint']),w))}
+  const blocks=list.map(s=>{const isSel=st.col===c&&cur&&cur.id===s.id;const lit=cur&&cur.chain&&cur.chain===s.chain;
+    return c==='quiet'&&st.W>=120?quietRow(s,w,isSel):card(s,w,isSel,lit)});
+  let start=0;const si=st.col===c?Math.min(st.idx[c],list.length-1):0;
+  const hOf=(a,b)=>blocks.slice(a,b+1).reduce((n,x)=>n+x.length,0);
+  while(start<si&&hOf(start,si)>h)start++;
+  if(start>0)lines.push(fit(L(['  ↑ '+start+' more','faint']),w));
+  let i=start;for(;i<blocks.length;i++){if(lines.length+blocks[i].length>h-(i<blocks.length-1?1:0))break;lines.push(...blocks[i])}
+  if(i<blocks.length)lines.push(fit(L(['  ↓ '+(blocks.length-i)+' more','faint']),w));
+  while(lines.length<h)lines.push(blank(w));
+  return lines.slice(0,h);
+}
+function paneLines(s,w,h){const o=[];
+  s.said.forEach(t=>wrap(t,w).forEach(x=>o.push(L([x,'fg']))));o.push(L());
+  if(s.q){o.push(L([s.line,'fg b']));s.q.forEach((q,i)=>o.push({...L([(i===0?'❯ ':'  ')+(i+1)+'. ','accent','pick'+i],[q,'fg','pick'+i])}))}
+  else if(st.pane)o.push(L(['keys go to '+s.id,'faint']));
+  while(o.length<h)o.push(L());return o.slice(0,h).map(l=>fit(l,w))}
+function box(title,tcls,inner,w){const top={segs:[['╭─ ','hair'],[title,tcls],[' '+'─'.repeat(Math.max(w-5-chars(title).length,0))+'╮','hair']]};
+  return [fit(top,w),...inner.map(l=>({segs:[['│ ','hair'],...l.segs,[' │','hair']]})),{segs:[['╰'+'─'.repeat(w-2)+'╯','hair']]}]}
+const hjoin=(blocks,h)=>Array.from({length:h},(_,i)=>blocks.flatMap((b,j)=>j?[{segs:[[' ','']]},b[i]]:[b[i]]));
+
+function hints(){const s=sel(),phone=st.W<60;
+  if(st.confirm)return [['RUN ','neg'],[st.confirm.cmd+'   ','fg'],['y','accent','y'],[' runs   ','muted','y'],['esc','accent','Escape'],[' cancels','muted','Escape']];
+  if(st.menu)return [['↑↓','accent'],[' choose   ','muted'],['⏎','accent','Enter'],[' do it   ','muted','Enter'],['esc','accent','Escape'],[' close','muted','Escape']];
+  if(st.tab==='machine')return st.drill?[['esc','accent','Escape'],[' machine','muted','Escape']]:[...(phone?[]:[['↑↓','accent'],[' choose   ','muted']]),['⏎','accent','Enter'],[' open   ','muted','Enter'],['s','accent','s'],[' hosts   ','muted','s'],['tab','accent','Tab'],[' board','muted','Tab']];
+  if(st.pane){const p=S.find(x=>x.id===st.pane);return [...(p&&p.q?[['1-2','accent'],[' answer   ','muted']]:[]),['esc','accent','Escape'],[' board','muted','Escape']]}
+  const gs=[];if(!phone)(s&&s.acts||[['⏎','go in','Enter']]).forEach(a=>{if(s&&s.q&&a[1]==='answer'){gs.push([['1-2','accent'],[' answer   ','muted']]);a=['⏎','go in','Enter']}gs.push([[a[0],'accent',a[2]],[' '+a[1]+'   ','muted',a[2]]])});
+  if(st.focus)gs.push([['esc','accent','Escape'],[' all chains   ','muted','Escape']]);else if(s&&s.chain&&!phone)gs.push([['g','accent','g'],[' its chain   ','muted','g']]);
+  gs.push([['c','accent','c'],[' copy   ','muted','c']],[['v','accent','v'],[st.verbose?' one line   ':' verbose   ','muted','v']]);
+  gs.push([['s','accent','s'],[' hosts   ','muted','s']],[['u','accent','u'],[' strip   ','muted','u']]);
+  if(!phone)gs.push([['←→','accent'],[' columns   ','muted']],[['tab','accent','Tab'],[' machine','muted','Tab']]);
+  const out=[];let n=1;for(const g of gs){const l=len(L(...g));if(n+l>st.W+2)break;n+=l;out.push(...g)}return out}
+
+function screen(){
+  const W=st.W,phone=W<60,wide=W>=120,H=phone?34:wide?38:31,rows=[];st.H=H;
+  const need=S.filter(s=>s.col==='need').length;
+  const crumb=st.focus?[['   ',''],['chain '+st.focus+' · '+mates(st.focus),'accent b','Escape'],['  esc all','faint','Escape']]:[];
+  const right=st.toast?[[st.toast,'muted']]:[need?['● '+need+(need===1?' needs you':' need you'),'accent','show:need']:['all burn or rest','faint'],...(phone?[]:[['   stoker off','faint']])];
+  const scope=[[' '+(st.host||'all hosts')+' ▾',st.host?'accent':'muted','s']];
+  rows.push([spread(phone&&st.focus?[['▰','accent'],[' chain '+st.focus+' · '+mates(st.focus),'accent b','Escape']]:[['▰','accent'],...(phone?[]:[[' matchblox ·','fg']]),...scope],right,W)]);
+  const back=COLS.filter(c=>!vis(c)).flatMap(c=>[['+','accent','show:'+c],[' '+SHORT[c]+' '+inCol(c).length+'  ','faint','show:'+c]]);
+  if(!phone){rows.push([spread([[st.tab==='board'?'BOARD '+S.filter(inScope).length:'board '+S.filter(inScope).length,st.tab==='board'?'accent b':'faint','Tab'],['   ',''],[st.tab==='machine'?'MACHINE':'machine',st.tab==='machine'?'accent b':'faint','Tab'],...crumb],back,W)]);
+    rows.push([fit(L(['─'.repeat(W),'hair']),W)])}
+  const bodyH=H-rows.length-(st.strip==='off'?2:3);let body=[];
+  const pane=st.pane&&S.find(x=>x.id===st.pane);
+  const head=(c,w)=>fit(L([' ',''],[NAME[c],c===st.col?'accent b':(c==='need'&&need?'accent':'faint'),'hide:'+c],[' · '+inCol(c).length,'faint','hide:'+c],['  −','faint','hide:'+c]),w);
+  const none=()=>[[blank(W)],[fit(L(['  Every column is hidden. Tap a ','faint'],['+','accent'],[' name above to bring one back.','faint']),W)]];
+  if(st.tab==='machine'){body=machineBody(W,bodyH)}
+  else if(pane&&!wide){body.push([fit(L(['‹ board','accent','Escape'],['   ',''],[pane.id+' · '+pane.word,'fg b']),W)],[fit(L(['─'.repeat(W),'hair']),W)]);
+    paneLines(pane,W-2,bodyH-2).forEach(l=>body.push([{segs:[[' ',''],...l.segs,[' ','']]}]))}
+  else if(phone){
+    const pg=[];COLS.filter(vis).forEach(c=>{const on=c===st.col;pg.push([(on?NAME[c]:SHORT[c])+' '+inCol(c).length+(on?' −':''),on?'accent b':'faint',on?'hide:'+c:'col:'+c],['  ',''])});
+    if(!back.length)pg.pop();
+    body.push([fit(L([' ',''],...pg,...back),W)],[fit(L(['─'.repeat(W),'hair']),W)]);
+    if(vis(st.col))column(st.col,W,bodyH-2).forEach(l=>body.push([l]));else body.push(...none());
+  } else {
+    const cs=COLS.filter(c=>vis(c)&&(wide||c!=='quiet'));
+    const base=wide?{need:36,work:25,ship:25,quiet:18}:{need:38,work:20,ship:20};
+    let ws=cs.map(c=>base[c]);
+    if(!wide&&cs.length){const room=W-(cs.length-1),sum=ws.reduce((a,b)=>a+b,0);ws=ws.map(x=>Math.floor(x*room/sum));ws[0]+=room-ws.reduce((a,b)=>a+b,0)}
+    const liveW=wide?W-ws.reduce((a,b)=>a+b,0)-ws.length:0;
+    const q=inCol('quiet'),shelfOn=!wide&&vis('quiet');
+    const shelf=!shelfOn?0:(st.col==='quiet'?Math.min(q.length,6)+3:2);
+    const colH=bodyH-1-shelf;
+    const blocks=cs.map((c,i)=>[head(c,ws[i]),...column(c,ws[i],colH)]);
+    if(wide){const s=sel();const inner=paneLines(s&&vis(st.col)?s:{said:['']},liveW-4,bodyH-2);
+      blocks.push(box(s&&vis(st.col)?s.id+' · '+s.word:'',st.pane?'accent b':'muted',inner,liveW))}
+    body=blocks.length?hjoin(blocks,colH+1):none();
+    while(body.length<colH+1)body.push([blank(W)]);
+    if(shelfOn){body.push([fit(L(['─'.repeat(W),'hair']),W)]);
+      if(st.col==='quiet'){body.push([head('quiet',W)]);q.slice(0,6).forEach(s=>body.push(...quietRow(s,W,sel()&&sel().id===s.id).map(l=>[l])))}
+      else body.push([spread([[' QUIET','faint','col:quiet'],[' · '+q.length+'   ','faint','col:quiet'],[q.map(s=>s.id).join(' · '),'faint','col:quiet'],['   ▴','faint','col:quiet']],[['−  ','faint','hide:quiet']],W)])}
+  }
+  while(body.length<bodyH)body.push([blank(W)]);rows.push(...body.slice(0,bodyH));
+  if(st.strip!=='off'){const one=st.host||'ws-1',two=!st.host&&!phone;
+    const txt={usage:phone?' ✻ 5h 62% · wk 41%  ❋ 5h 12%':(W<120?' ✻ Claude Max  5h ▰▰▰▰▰▱▱▱ 62%  wk 41%   ❋ OpenAI Plus  5h 12%':' ✻ Claude Max  5h ▰▰▰▰▰▱▱▱ 62% · 16:00   wk ▰▰▰▱▱▱▱▱ 41%   ❋ OpenAI Plus  5h ▰▱▱▱▱▱▱▱ 12% · 18:40   wk 30%'),
+      machine:phone?' '+one+' cpu 38% · mem 41 of 64 GB':' '+(one==='macbook'?'macbook  cpu ▂▂▃▂▂▃▂▂ 12% · mem 9 of 16 GB':'ws-1  cpu ▃▄▅▄▃▅▆▅ 38% · mem 41 of 64 GB')+(two?(W<120?'   macbook  cpu 12%':'   macbook  cpu ▂▂▃▂▂▃▂▂ 12% · mem 9 of 16 GB'):''),
+      week:phone?' week ▅▇▆▃▅▁·  ✻ 41%  ❋ 30%':' this week  Mon ▅ Tue ▇ Wed ▆ Thu ▃ Fri ▅ Sat ▁ Sun ·   ✻ 41%   ❋ 30%'+(W<120?'':'   both last the week')}[st.strip];
+    const next=STRIPS[(STRIPS.indexOf(st.strip)+1)%4];
+    rows.push([spread([[txt,'faint','u']],[[(next==='off'?'hide':next)+' › ','faint','u']],W)])}
+  rows.push([fit(L(['─'.repeat(W),'hair']),W)]);
+  rows.push([fit(L([' ',''],...hints()),W)]);
+  return rows;
+}
+const HARN=['claude','codex','opencode','other','unknown'];
+const mItems=()=>['acct:claude','acct:openai','ctx','repo:app','repo:site','repo:infra',...(st.host?[st.host]:HOSTS).map(h=>'mach:'+h)];
+const mCur=()=>{const l=mItems();return l[Math.min(st.mi,l.length-1)]};
+function heat(weeks){return ['Mon','   ','Wed','   ','Fri','   ','Sun'].map((d,r)=>{const segs=[['  '+d+' ','faint']];
+  const rnd=(a,b)=>{const v=Math.sin(a*12.9898+b*78.233)*43758.5453;return v-Math.floor(v)};
+  for(let w=0;w<weeks;w++){const a=rnd(w+1,r+1),lvl=r>4?(a>.78?1:0):Math.floor(a*5),x=Math.floor(rnd(r+3,w+7)*20);
+    const h=x<11?'claude':x<16?'codex':x<18?'opencode':x<19?'other':'unknown';
+    segs.push(lvl?['■ ','h-'+h+(lvl<4?' l'+lvl:'')]:['· ','hair'])}return L(...segs)})}
+// a bar chart in cells: one value a column, h rows tall, eighth-blocks at the top of each bar
+function chart(vals,h,max,cls,lab){const B=' ▁▂▃▄▅▆▇█',out=[];
+  for(let r=h-1;r>=0;r--){let t='';for(const v of vals){const u=Math.round(v/max*h*8)-r*8;t+=B[Math.max(0,Math.min(8,u))]}
+    out.push(L([' '+(r===h-1?lab[0]:r===0?lab[1]:'').padStart(5)+' ','faint'],['▏','hair'],[t,cls]))}return out}
+const wave=(n,f,seed)=>Array.from({length:n},(_,i)=>{const v=Math.sin(i*f+seed)*.35+Math.sin(i*f*2.7+seed*3)*.2+.5;return Math.max(.04,Math.min(1,v))});
+function drill(key,W,h){const [k,v]=key.split(':'),o=[],n=Math.min(W-10,W<60?28:W<120?60:96);const t=x=>o.push(L(...x));
+  const title={acct:(v==='claude'?'✻ Claude Max':'❋ OpenAI Plus')+' · the account',ctx:'context · every match, fullest first',repo:v+' · the repo',mach:v+' · the machine'}[k];
+  o.push(L(['‹ machine','accent','Escape'],['   ',''],[title,'fg b']),L(['─'.repeat(W),'hair']));
+  if(k==='acct'){const used=v==='claude'?62:12,wk=v==='claude'?41:30;
+    t([[' THIS 5-HOUR WINDOW','faint'],['   '+used+'% used'+(W<60?'':' · resets '+(v==='claude'?'16:00':'18:40')),'muted']]);
+    o.push(...chart(Array.from({length:n},(_,i)=>i<n*.72?Math.pow(i/(n*.72),1.4)*used:0),4,100,used>=60?'warn':'muted',['100%','0%']));
+    t([['        ',''],['11:00'.padEnd(Math.floor(n*.72)-2),'faint'],['now','muted'],['16:00'.padStart(Math.max(n-Math.floor(n*.72)-1,6)),'faint']]);t([]);
+    t([[' THIS WEEK, BY DAY','faint'],['   '+wk+'% used'+(W<60?'':' · at this pace it lasts the week'),'muted']]);
+    o.push(...chart([9,12,8,7,5,0,0].flatMap(x=>Array(Math.floor(n/7)).fill(x*(wk/41))),3,20,'muted',['20%','0%']));
+    t([['        ',''],...['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map((d,i)=>[d.padEnd(Math.floor(n/7)),i===4?'muted':'faint'])]);t([]);
+    t([[' burns most  ','faint'],['billing · agents','fg'],['   ⏎ go to it','accent']]);t([[' folder      ','faint'],['the default sign-in · 9 matches','muted']])}
+  if(k==='ctx'){t([[W<60?' SEARCH-IDX · 6 HOURS':' HOW FULL, OVER THE LAST 6 HOURS','faint'],[W<60?'':'   the fullest match: search-idx','muted']]);
+    o.push(...chart(Array.from({length:n},(_,i)=>20+57*i/n+(i%9===8?-8:0)),3,100,'warn',['100%','0%']));t([]);
+    S.filter(inScope).sort((a,b)=>b.ctx-a.ctx).slice(0,Math.max(h-9,3)).forEach(s=>{const m=Math.round(s.ctx/12.5);t([[' '+s.id.padEnd(12),'fg'],['▰'.repeat(m)+'▱'.repeat(8-m)+' ',ctxCls(s.ctx)==='faint'?'muted':ctxCls(s.ctx)],[String(s.ctx).padStart(3)+'%',ctxCls(s.ctx)],[s.ctx>=70?'   x compact when it rests':'','faint']])})}
+  if(k==='repo'){t([[' WORK IN THIS REPO · '+n+' days','faint'],[W<60?'':'   matches at work, by day','muted']]);
+    o.push(...chart(wave(n,.31,v.length).map((x,i)=>i%7>4?x*.15:x),3,1,'muted',['9','0']));t([]);
+    t([[' WORKTREES','faint']]);t([['▌','accent'],['main          ','fg b'],['clean · behind its remote by 2','muted']]);t([[' feat/login    ','fg'],['3 dirty paths · api-auth, login-ui','muted']]);t([[' fix/cart      ','fg'],['merged · safe to remove','muted']]);t([[' spike/search  ','fg'],['no match · 9 days old','faint']]);t([]);
+    t([[' ⏎','accent'],[' shell   ','muted'],['N','accent'],[' new session here   ','muted'],['x','accent'],[' remove','muted']])}
+  if(k==='mach'){const hot=v==='ws-1';t([[' CPU · 24 HOURS','faint'],['   now '+(hot?'38%':'12%')+(W<60?'':hot?' · load 4.2 · 16 cores':' · load 0.9 · 10 cores'),'muted']]);
+    o.push(...chart(wave(n,.23,hot?1:4).map(x=>x*(hot?.8:.35)),4,1,'muted',['100%','0%']));t([]);
+    t([[' MEMORY · 24 HOURS','faint'],['   now '+(hot?'41 of 64 GB':'9 of 16 GB'),'muted']]);
+    o.push(...chart(wave(n,.07,2).map(x=>.45+x*.25),3,1,'muted',[hot?'64 GB':'16 GB','0']));
+    t([['        ',''],['24 h ago'.padEnd(n-3),'faint'],['now','muted']]);t([]);
+    t([[' disk     ','faint'],[hot?'▰▰▰▰▰▰▱▱ 71% of 1 TB':'▰▰▰▰▱▱▱▱ 48% of 500 GB','muted']]);t([[' panes    ','faint'],[(hot?'31':'6')+' in tmux   ⏎ list them','muted']]);t([[' devices  ','faint'],[hot?'iPhone · buzz on · island yes':'none paired','muted']])}
+  while(o.length<h)o.push(L());return o.slice(0,h).map(l=>[fit(l,W)])}
+function machineBody(W,h){if(st.drill)return drill(st.drill,W,h);
+  const phone=W<60,o=[],cur=mCur(),sc=S.filter(inScope);
+  const lab=(t,r)=>o.push([spread([[' '+t,'faint']],r||[],W)]);
+  const row=(id,left,right)=>{const on=id===cur;o.push([{...spread([[on?'▌':' ','accent'],...left],right||[],W),wash:on,act:'m:'+id}])};
+  lab('ACCOUNTS');
+  row('acct:claude',[['✻ Claude Max   ','fg'],[phone?'5h 62% · wk 41%':'5h ▰▰▰▰▰▱▱▱ 62% · 16:00   wk ▰▰▰▱▱▱▱▱ 41%','muted']],phone?[]:[['burns most: billing ','faint']]);
+  row('acct:openai',[['❋ OpenAI Plus  ','fg'],[phone?'5h 12% · wk 30%':'5h ▰▱▱▱▱▱▱▱ 12% · 18:40   wk ▰▰▱▱▱▱▱▱ 30% · lasts the week','muted']]);
+  lab('CONTEXT');
+  const hot=sc.filter(s=>s.ctx>=70);
+  row('ctx',[[sc.length+' matches · '+hot.length+' over 70%'+(phone?'':' · none to compact'),'muted']],phone?[]:[[hot.map(s=>s.id+' '+s.ctx+'%').join(' · ')+' ','warn']]);
+  const weeks=phone?16:W>=120?52:30;
+  lab('WORK · '+weeks+' weeks · '+(st.host||'all hosts'));
+  heat(weeks).forEach(l=>o.push([fit(l,W)]));
+  o.push([fit(L([phone?' ':'      ',''],...HARN.flatMap(x=>[['■ ','h-'+x],[(phone&&x==='opencode'?'open':phone&&x==='unknown'?'?':x)+(phone?' ':'   '),'faint']]),...(phone?[]:[['·','hair'],[' no work','faint']])),W)]);
+  lab('REPOS');
+  row('repo:app',[['app     ','fg'],[phone?'9 matches · 1 to remove':'9 matches · 4 worktrees · 1 safe to remove','muted']],phone?[]:[['main behind 2 ','warn']]);
+  row('repo:site',[['site    ','fg'],['4 matches · 2 worktrees','muted']]);
+  row('repo:infra',[['infra   ','fg'],['2 matches · 3 dirty paths','muted']]);
+  lab(st.host?'THE MACHINE':'THE MACHINES');
+  (st.host?[st.host]:HOSTS).forEach((x,i)=>row('mach:'+x,[[x.padEnd(8),'fg'],[i?(phone?'cpu 12% · mem 9 of 16':(W<120?'cpu ▂▂▃▂▂▃▂▂ 12% · mem 9 of 16 GB':'cpu ▂▂▃▂▂▃▂▂ 12% · mem 9 of 16 GB · disk 48%')):(phone?'cpu 38% · mem 41 of 64':(W<120?'cpu ▃▄▅▄▃▅▆▅ 38% · mem 41 of 64 GB':'cpu ▃▄▅▄▃▅▆▅ 38% · mem 41 of 64 GB · disk 71%')),'muted']],phone?[]:[['history · panes · devices ','faint']]));
+  while(o.length<h)o.push([blank(W)]);return o.slice(0,h)}
+function menuHtml(){const m=st.menu;if(!m)return '';const phone=st.W<60,w=phone?st.W:32;
+  const inner=m.items.map((it,i)=>({...fit(L([i===m.i?'▌ ':'  ','accent'],[it[0],i===m.i?'fg b':'fg'],...(it[2]?[['  '+it[2],'faint']]:[])),w-4),wash:i===m.i,act:'menu:'+i}));
+  const rows=box(m.id,'muted',inner,w).map((l,i)=>i>0&&i<=inner.length?[{segs:[l.segs[0]]},inner[i-1],{segs:[l.segs[l.segs.length-1]]}]:[l]);
+  const col=phone?0:Math.max(0,Math.min(m.col,st.W-w)),row=phone?st.H-rows.length-3:Math.max(0,Math.min(m.row,st.H-rows.length-1));
+  return '<div class="menu" style="left:'+col+'ch;top:'+(row*1.38)+'em">'+html(rows)+'</div>'}
+const esc=t=>t.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])).replace(/[^\x00-\x7f]/g,'<i>$&</i>');
+function html(rows){return rows.map(r=>'<div class="r">'+r.map(l=>'<span class="blk'+(l.wash?' wash':'')+'"'+(l.act?' data-act="'+l.act+'"':'')+'>'+
+  l.segs.map(s=>'<span'+(s[1]?' class="'+s[1]+'"':'')+(s[2]?' data-k="'+s[2]+'"':'')+'>'+esc(s[0])+'</span>').join('')+'</span>').join('')+'</div>').join('')}
+
+const term=document.getElementById('term');
+function draw(){term.className='term w'+st.W;term.innerHTML=html(screen())+menuHtml();
+  const phone=st.W<60;document.getElementById('device').className='device'+(phone?' phone':'');
+  document.getElementById('belt').hidden=!phone;document.getElementById('beltnote').hidden=!phone;
+  for(const w of [40,80,160])document.getElementById('w'+w).setAttribute('aria-pressed',String(st.W===w))}
+let toastT;function toast(t){st.toast=t;clearTimeout(toastT);toastT=setTimeout(()=>{st.toast='';draw()},2500)}
+function settle(){if(inCol('need').length&&vis('need')){st.col='need';st.idx.need=0}else if(!inCol(st.col).length||!vis(st.col))st.col=COLS.find(c=>vis(c)&&inCol(c).length)||st.col}
+function goCol(c){if(COLS.includes(c)&&vis(c)&&(inCol(c).length||c==='need'))st.col=c}
+function step(d){let i=COLS.indexOf(st.col)+d;while(i>=0&&i<4&&(!inCol(COLS[i]).length||!vis(COLS[i])))i+=d;if(i>=0&&i<4)st.col=COLS[i]}
+function hide(c){st.hidden.add(c);if(st.col===c){const o=COLS.find(x=>vis(x)&&inCol(x).length);if(o)st.col=o}toast(FULL[c]+' hidden · + shows it')}
+function show(c){st.hidden.delete(c);if(c==='need'){st.focus=null;st.host=null;st.tab='board'}goCol(c)}
+function copy(text,what){const done=ok=>{toast(ok?'copied: '+what:'not copied: this page blocks the clipboard');draw()};
+  try{navigator.clipboard.writeText(text).then(()=>done(true),()=>done(false))}catch(e){done(false)}}
+function answer(p,n){moved(p,'strike');Object.assign(p,{col:'work',m:'burn',word:'busy',line:p.q[n].toLowerCase(),wait:'0s',acts:null,said:['On it: '+p.q[n].toLowerCase()+'.']});p.q=null;
+  st.pane=null;toast('sent to '+p.id+': '+(n+1));settle()}
+function openMenu(s,col,row){st.col=s.col;st.idx[s.col]=inCol(s.col).indexOf(s);
+  const items=[['copy last message',()=>copy(s.said[0],'last message of '+s.id),'c']];
+  if(s.q)items.push(['copy the question',()=>copy(s.line+'\n'+s.q.map((q,i)=>(i+1)+'. '+q).join('\n'),'question of '+s.id)]);
+  if(s.ship)items.push(['copy the link of '+s.ship.split(' ')[0],()=>copy('https://github.com/example/app/pull/'+s.ship.split(' ')[0].slice(1),'link of '+s.ship.split(' ')[0])]);
+  if(s.chain)items.push([st.focus?'show every chain':'show only the chain '+s.chain,()=>{st.focus=st.focus?null:s.chain}]);
+  items.push(['copy its name',()=>copy(s.id,'name')],['go in',()=>{st.pane=s.id},'⏎'],['hide '+FULL[s.col],()=>hide(s.col)]);
+  st.menu={id:s.id,items,i:0,col,row}}
+function press(k){
+  const s=sel();
+  if(st.confirm){if(k==='y'){const c=st.confirm;st.confirm=null;c.run()}else st.confirm=null;return draw()}
+  if(st.menu){const m=st.menu;
+    if(k==='ArrowDown'||k==='j')m.i=(m.i+1)%m.items.length;else if(k==='ArrowUp'||k==='k')m.i=(m.i+m.items.length-1)%m.items.length;
+    else{st.menu=null;if(k==='Enter')m.items[m.i][1]();else if(k==='c')m.items[0][1]()}
+    return draw()}
+  if(k==='u'&&!st.pane){st.strip=STRIPS[(STRIPS.indexOf(st.strip)+1)%4];if(st.strip==='off')toast('the strip is off · u shows it');return draw()}
+  if(k==='Tab'){st.tab=st.tab==='board'?'machine':'board';st.pane=null;st.drill=null;return draw()}
+  if(k==='s'&&!st.pane){const i=HOSTS.indexOf(st.host);st.host=i<0?HOSTS[0]:i+1<HOSTS.length?HOSTS[i+1]:null;if(st.tab==='board'&&!inCol(st.col).length)st.col=COLS.find(c=>vis(c)&&inCol(c).length)||st.col;return draw()}
+  if(st.tab==='machine'){const n=mItems().length;
+    if(st.drill){if(k==='Escape')st.drill=null}
+    else if(k==='Escape')st.tab='board';
+    else if(k==='ArrowDown'||k==='j')st.mi=Math.min(st.mi+1,n-1);
+    else if(k==='ArrowUp'||k==='k')st.mi=Math.max(Math.min(st.mi,n-1)-1,0);
+    else if(k==='Enter')st.drill=mCur();
+    return draw()}
+  if(st.pane){const p=S.find(x=>x.id===st.pane);
+    if(k==='Escape')st.pane=null;
+    else if(p&&p.q&&(k==='1'||k==='2'||k==='pick0'||k==='pick1'||k==='Enter'))answer(p,k==='2'||k==='pick1'?1:0);
+    return draw()}
+  if(k==='ArrowDown'||k==='j')st.idx[st.col]=Math.min(st.idx[st.col]+1,inCol(st.col).length-1);
+  else if(k==='ArrowUp'||k==='k')st.idx[st.col]=Math.max(Math.min(st.idx[st.col],inCol(st.col).length-1)-1,0);
+  else if(k==='ArrowRight'||k==='l')step(1);
+  else if(k==='ArrowLeft'||k==='h')step(-1);
+  else if(s&&s.q&&vis(st.col)&&(k==='1'||k==='2'||k==='pick0'||k==='pick1'))answer(s,k==='2'||k==='pick1'?1:0);
+  else if(k==='v')st.verbose=!st.verbose;
+  else if(k==='g'&&s&&s.chain){st.focus=st.focus?null:s.chain;if(!inCol(st.col).length)st.col=COLS.find(c=>vis(c)&&inCol(c).length)||st.col}
+  else if(k==='Escape'&&st.focus)st.focus=null;
+  else if(k==='c'&&s)copy(s.said[0],'last message of '+s.id);
+  else if(k==='Enter'&&s)st.pane=s.id;
+  else if(k==='x'&&s){
+    if(s.merge){const cmd=s.merge;st.confirm={cmd,run(){moved(s,'out');Object.assign(s,{col:'ship',word:'merged',line:'deploying',ship:s.ship.split(' ')[0]+' ●━●━●━◉┄○',wait:'0s',acts:null,merge:null});toast('ran: '+cmd);settle()}}}
+    else st.confirm={cmd:'tmux kill-pane -t '+s.id,run(){S=S.filter(x=>x!==s);toast('ran: kill '+s.id);settle()}}}
+  else if(k==='y'&&s&&s.go){moved(s,'strike');Object.assign(s,{col:'work',m:'burn',word:'busy',line:'runs terraform apply',wait:'0s',acts:null,go:false});toast('go given to '+s.id);settle()}
+  draw()}
+const cellOf=e=>{const r=term.getBoundingClientRect();return [Math.floor((e.clientX-r.left)/(r.width/st.W)),Math.floor((e.clientY-r.top)/(r.height/st.H))]};
+const cardOf=e=>{const a=e.target.closest('[data-act^="sel:"]');return a&&S.find(x=>x.id===a.dataset.act.slice(4))};
+let skipClick=false;
+term.addEventListener('mouseup',()=>{const t=String(window.getSelection?window.getSelection():'');if(t.trim().length>1){skipClick=true;copy(t,t.length+' characters')}});
+term.addEventListener('click',e=>{if(skipClick){skipClick=false;return}
+  const mi=e.target.closest('[data-act^="menu:"]');if(mi&&st.menu){const m=st.menu;st.menu=null;m.items[+mi.dataset.act.slice(5)][1]();return draw()}
+  if(st.menu){st.menu=null;return draw()}
+  const mr=e.target.closest('[data-act^="m:"]');if(mr&&!e.target.closest('[data-k]')){const id=mr.dataset.act.slice(2);if(mCur()===id)return press('Enter');st.mi=mItems().indexOf(id);return draw()}
+  const kEl=e.target.closest('[data-k]');
+  if(kEl){const k=kEl.dataset.k;
+    if(k.startsWith('col:')){goCol(k.slice(4));st.pane=null;return draw()}
+    if(k.startsWith('hide:')){hide(k.slice(5));return draw()}
+    if(k.startsWith('focus:')){const ch=k.slice(6),was=sel();st.focus=st.focus?null:ch;const s0=cardOf(e);if(s0){st.col=s0.col;st.idx[s0.col]=inCol(s0.col).indexOf(s0)}return draw()}
+    if(k.startsWith('show:')){show(k.slice(5));return draw()}
+    return press(k)}
+  if(st.pane&&st.W<120)return;const s=cardOf(e);if(!s)return;
+  if(sel()&&sel().id===s.id&&st.col===s.col)return press('Enter');
+  st.col=s.col;st.idx[s.col]=inCol(s.col).indexOf(s);st.pane=null;draw()});
+term.addEventListener('contextmenu',e=>{const s=cardOf(e);if(!s)return;e.preventDefault();const [c,r]=cellOf(e);openMenu(s,c,r);draw()});
+term.addEventListener('keydown',e=>{if(e.metaKey||e.ctrlKey||e.altKey)return;
+  if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Enter','Escape','Tab'].includes(e.key)||e.key.length===1){if(e.key==='Tab'&&e.shiftKey)return;e.preventDefault();press(e.key)}});
+let tx=null,ty=0,lp=null,lpDone=false;
+term.addEventListener('touchstart',e=>{tx=e.touches[0].clientX;ty=e.touches[0].clientY;lpDone=false;const s=cardOf(e),t=e.touches[0];
+  clearTimeout(lp);if(s&&!st.menu&&!st.pane)lp=setTimeout(()=>{lpDone=true;const [c,r]=cellOf(t);openMenu(s,c,r);draw()},480)},{passive:true});
+term.addEventListener('touchmove',e=>{if(tx!==null&&Math.abs(e.touches[0].clientX-tx)+Math.abs(e.touches[0].clientY-ty)>10)clearTimeout(lp)},{passive:true});
+term.addEventListener('touchend',e=>{clearTimeout(lp);if(lpDone){skipClick=true;setTimeout(()=>{skipClick=false},400);tx=null;return}
+  if(tx===null)return;const dx=e.changedTouches[0].clientX-tx,dy=e.changedTouches[0].clientY-ty;tx=null;
+  if(Math.abs(dx)>48&&Math.abs(dx)>Math.abs(dy)*1.5){if(st.pane){if(dx>0)press('Escape')}else if(!st.menu)press(dx<0?'ArrowRight':'ArrowLeft')}},{passive:true});
+document.getElementById('belt').addEventListener('click',e=>{const b=e.target.closest('button');if(b)press(b.dataset.k)});
+for(const w of [40,80,160])document.getElementById('w'+w).addEventListener('click',()=>{st.W=w;st.pane=null;st.confirm=null;draw()});
+st.W=window.innerWidth<700?40:window.innerWidth<1500?80:160;
+draw();
+</script>
+</body>
+</html>

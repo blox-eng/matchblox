@@ -1,0 +1,403 @@
+# The board
+
+Issue: #372. Status: sketch approved by the owner, 2026-11-10 ("Looks awesome, lets lock this in"). Date: 2026-11-10.
+Sketch: `design/0019-the-board.html` (the owner's artifact "The Board", version 6). Open it in a browser. It runs at 40, 80 and 160 columns.
+Builds on: #326 (the chain room), #346 (Enter goes into the pane), #299 (chains), design/0017 (every host).
+Merge order: #355 → #361 → #326 → #367, then this. Code starts after #326 lands, or after matchblox-chain agrees the file boundaries (see "The chain room").
+
+## Why
+
+The owner runs 4 to 25 agent sessions on one or two machines. The owner opens the console to answer one question: which session needs me, and what does each one do now?
+
+Today the answer is spread over seven tabs and a dock. The owner said the Ships, Stoker and other tabs are never opened. The owner also said: the most use must come from Matchblox Pocket, and the console must "behave like an app": analog where the hand touches, digital where a key is faster.
+
+Measured on the owner's machine, 2026-11-10 (`matchblox sessions --json`): 25 sessions. 2 ask, 13 work, 10 are idle, 14 are held, and 15 drive a pull request. So two cards matter, ten must be out of the way, and the pull request earns its own column.
+
+Success: the owner opens the console on any screen, sees every match in the column of what it needs, and resolves the first card with one key or one tap.
+
+## Goals
+
+1. The console's home is a board. Each column is a state, and each card is one match.
+2. The card names the one thing the match needs, and the key that does it.
+3. The chosen card opens in place (the peek): its last message, and its question with the options.
+4. The same board works on Pocket at 40 columns, by touch alone.
+5. A chain and a host are filters on the board. Neither is a screen to go into.
+6. Everything else is on one tab, Machine, which the owner drills into.
+7. Text that the owner copies in the console reaches the clipboard of the machine in the owner's hand, through every hop.
+8. Each tab, dock and key that the board replaces leaves the code, the docs and the site.
+
+## Non-goals
+
+- No drag and drop. A match changes column when its state changes. The owner never moves a card.
+- No swimlanes. Most sessions are chains of one, so a lane for each chain is a row for each card.
+- No fifth column. Held, review and stuck are words on a card.
+- No change to `matchblox sessions --json`, `peek`, `send`, or any command that agents and scripts read.
+- No change to the native screens of the Pocket app in this work. The app draws the console, so it gets the board. The haptics and the clipboard check (below) are the two exceptions, and each is its own task.
+- No new way to sort. The order inside a column is fixed (below).
+- No timer that turns the bottom strip, and no setting for one.
+
+## Anti-goals
+
+The work fails, even if it runs, when:
+
+- A match that waits for the owner is not on the screen and not counted on it.
+- A filter (a hidden column, a chain, a host) hides a wait with no sign.
+- A key answers a question that the owner has not seen.
+- A tap is taken as consent for a destructive act.
+- A card moves to another column and the owner cannot see where it went.
+- A host that cannot be reached loses its cards with no word.
+- The console says `copied` when the text did not reach a clipboard.
+- A column moves or changes width by itself while the owner reads.
+
+## Owner's decisions
+
+All dated 2026-11-10.
+
+- The design is made first as an HTML artifact. It must port cleanly to Pocket and follow DESIGN.md.
+- A click or a tap on a column's name hides the column.
+- A right-click opens a context menu with "copy last message".
+- The left and right arrows move between columns.
+- `v` switches verbose and non-verbose cards.
+- Highlighting a card peeks at it and opens its question.
+- Copy passes through every hop (matchblox → the owner's laptop → tmux), "no exceptions".
+- Chains are considered on the board, with the lessons of the common board tools. The owner agrees with the lessons in "What the board tools learned".
+- The Machine tab holds the context stats (burn, usage, configs, accounts) and the repos, with menus to drill into. It is not central.
+- A work grid in the style of a git profile, with a colour for each harness: Claude Code, Codex, OpenCode, other, unknown.
+- Hosts are in one layer. The owner does not go back to a host list and in again.
+- The match's motion is reworked for the board.
+- A bottom strip that the owner turns on and off, and that shows the machine and a weekly view.
+- Each card shows a mark for its harness.
+- Each row that the owner opens on Machine has charts.
+
+## My calls
+
+The owner asked me to decide these from first principles (2026-11-10). Each can be overturned at the review of this document.
+
+| Call | Reason |
+|---|---|
+| The board is the home, in place of #326's chain list. | Two lists of the same matches make the owner choose before looking. One home. |
+| The chain's room is the board narrowed to that chain, plus the stoker's card and the talk line. | The room's own list of matches, ships and worktrees repeats the board. The card and the talk line are the only parts that a room alone has. |
+| The digits answer a question from the peek. Two guards apply. | Seeing the options and choosing one is direct. Going in first adds a step and no safety. The guards remove the stray key. |
+| The bottom strip turns on `u` or a tap only. There is no setting. | Only fire and a match that waits may move (DESIGN.md §1). A line that changes by itself asks for attention it has not earned. |
+| One daily record is allowed, and it ships second. | "No new data sources" in #372 guards the board against growth. The work grid has no other source. The board ships without it. |
+| The harness colours appear on Machine only. | The board keeps one accent (DESIGN.md §1 rule 4). |
+| A tap on `● N need you` clears every filter. | It is the one control that must always reach a wait. |
+| Digits no longer open tabs or columns. | They answer questions, and two tabs need only `Tab`. |
+| The order inside a column never changes while the state does not. | A list that reorders under the eye is the fault the chain room's review already ruled out. |
+
+## Approaches
+
+- **A. The board is the home (picked).** Columns are states. A chain and a host narrow it. The room is the narrowed board with the stoker's card. Cost: it changes two approved parts of #326 (the home list and the room's layout), so the two sessions must agree who builds what.
+- **B. The board is a third tab beside the chain list.** #326 stays as approved. Cost: two homes show the same matches, and the owner chooses between them on every open.
+- **C. The board's cards are chains.** It keeps #326's rule that the chain is the only grouping. Cost: a chain of five hides which match needs the owner, which is the question #372 sets.
+- **D. The board lives inside a room.** No clash with #326's home. Cost: the owner never sees every match on one screen.
+
+A does the most with the fewest screens. The common board tools all keep the state as the columns and put the group in a second dimension. None makes the group a column or a second home.
+
+## The design
+
+### Columns
+
+Four columns, left to right. A match is in exactly one: the leftmost whose rule holds.
+
+| Column | A match is here when |
+|---|---|
+| `NEEDS YOU` | it asks a question or a permission; a pull request it drives waits for the owner's merge; a stoker step for it waits for the owner's go; its ship is stuck (`CI failed`, `conflicts`, `changes requested`); or its turn ended and it waits for input (`waits`, `paused`, `done` of today's `WAITS FOR YOU`). |
+| `WORKING` | it is `busy`, `agents`, `tests` or `shell`. |
+| `SHIPPING` | it is at rest, it needs nothing, and a pull request it drives is in flight (`ci`, `green` with auto-merge, `merged` and deploying). |
+| `QUIET` | everything else: `idle`, `cold`, `stale`, `out`, and held or parked. |
+
+A match that the owner parked (`z`) is in `QUIET` whatever else is true of it, and `● N need you` does not count it: the owner said "not now". Its card says so (`⏸ parked · asks`). A match that the stoker holds follows the rule like any other, so one that asks is in `NEEDS YOU` and is counted: the owner did not choose that hold. A match that works with a full context stays in `WORKING` and shows the spent match.
+
+Order inside a column: `NEEDS YOU` by the oldest wait first. `WORKING` by when the turn started, the oldest first. `SHIPPING` by when the ship reached its stage, the oldest first. Both times are in the sample today, so a phone and a desk show one order, a restart keeps it, and a card keeps its place while it stays. `QUIET` by the newest first. Members of one chain that are in the same column sit together.
+
+An empty `NEEDS YOU` says `No match waits for you.` in `faint`. Any other empty column shows its name and `· 0`. No column hides or changes width by itself.
+
+### The card
+
+Lines, top to bottom. Each is cut with `…`, never wrapped, except where the peek says so.
+
+1. The selection mark `▌`, the match (DESIGN.md §4), the name, `@host` when the board shows more than one host and the match is on another one. At the right: the harness mark, then the wait.
+2. The state word and what it says: `asks Which way do we fix the login?`, `green #4556 waits for your merge`, `busy writes the token refresh test`. The word takes the accent in `NEEDS YOU` and `muted` elsewhere.
+3. The ship and its track (`#4551 ●━◉┄○┄○`), or the stoker's step (`≋ step 2 of 3`), then the context (`ctx 62%`, `warn` from 70%, `neg` at the compact line). At the right: the chain's stub. A card under 26 columns drops a context under 70% when it has a ship or a step.
+4. The keys, in `NEEDS YOU` and on the chosen card: `x merge #4556   ⏎ go in`.
+
+The harness mark names the agent that runs in the pane: `✻` Claude Code, `❋` Codex, `⬢` Cursor, `▣` OpenCode, `·` any other. It is `muted`. DESIGN.md §6 gives these four signs to providers today (`providerMarks` in `internal/app/dock.go`). One sign must mean one thing (§1 rule 2), so this work changes §6: the sign names the agent, on a card and on an account row alike. An account row of OpenCode on an Anthropic key shows `▣`, and its words name the provider.
+
+**Two densities.** `v` switches them, and each screen (a phone, a desk) keeps its own choice. Verbose: every card shows lines 1 to 3, and line 4 in `NEEDS YOU`. One line: every card shows line 1, and `NEEDS YOU` adds line 2. A phone starts with verbose in `NEEDS YOU` only.
+
+**The peek.** The chosen card is always whole, in both densities, on the `wash`. It adds, under line 3:
+
+- what the agent said last, in quotes, three lines at most;
+- its question's options, numbered, each wrapped to two lines at most.
+
+The peek needs no key: moving the selection is the peek. A card in `QUIET` on a wide screen is one line, and its peek adds the last message.
+
+**Answering from the peek.** The digits answer only a question that the sample gives with its options: one question, one choice (`Session.Ask` today, Claude Code's question tool). Then the digit of an option answers it, and a tap on an option answers it. Every other wait shows its first line and `⏎ go in`, with no digits: a permission prompt, a question from Codex or OpenCode, a call with several questions, and a multi-select. The owner answers those in the pane.
+
+Three guards:
+
+- **The peek watches the pane.** The service refuses an answering key whose `Seen` is zero (`internal/service/keys.go`). So the chosen card that asks watches its pane's screen, as the live view does, with no size (`Cols` and `Rows` 0), on every shape. The key carries that screen's time as `Seen`. Until the screen arrives the digits are dead and the key line says `reading <name>'s question…`. The service's guard does not change.
+- **The dead time.** The digits take no answer for 400 ms after the peek lands on a card, so a key that was meant for the card before does not answer this one. The "Find the Git repositories" box has this rule today (`internal/app/scanask.go`).
+- **The service's guard stays:** a key is refused when the question started after the screen that the console showed (`not sent: <name> asks something new — look again`).
+
+After an answer, a merge or a go, the selection goes to the first card of `NEEDS YOU`, as Sessions does today after a jump.
+
+### Hiding a column
+
+A tap or a click on a column's name hides the column. The other columns take its room. A hidden column waits on the tab row as `+ work 3`, and a tap there shows it again and selects it. On a phone the hidden names are at the end of the page marks.
+
+The header's `● N need you` counts every wait on every host and in every chain, whatever is hidden. A tap on it shows `NEEDS YOU`, clears the chain and host filters, and selects the first wait. Each screen keeps its own hidden columns, in the state directory, as `view.json` keeps the layout today.
+
+When every column is hidden the body says how to bring one back.
+
+### Chains
+
+- A card of a chain has a stub at the right of line 3: `─╴login` in `faint`. When the chosen card is in a chain, the stubs of that chain read `━╸login` in the accent, in every column. This is the rule Sessions has today for a view that splits a chain.
+- `g`, or a tap on a stub, narrows the board to that chain. The tab row then says `chain login · 3   esc all`. `esc` shows every chain again. `]` and `[` go to the next and the previous chain, as in #326's room.
+- The narrowed board is the chain's room. It adds two regions that only a room has, above the columns: the stoker's card (its order, the active step and one step on each side, `y` gives a go) and, under the columns, the talk line (`› tell login's stoker…`). Both are #326's, unchanged. #326's need line is the `NEEDS YOU` column. #326's SHIPS and GIT lines go: the ships are on the cards, and the worktrees are on Machine under the repo.
+- A match is never drawn twice.
+
+### Hosts
+
+- The board opens on all hosts that the owner ticked (design/0017). A host is a filter: `s`, or a tap on the host's name in the header (`all hosts ▾`), turns to the next host, then back to all.
+- A card of another host says `@macbook` after its name while the board shows more than one host.
+- `⏎` on a card of another host goes into its pane, as today.
+- A host that cannot be reached keeps one line at the top of the board: `macbook: not reached since 14:02 · ⏎ try again`. Its cards stay, in `faint`, with their last known state and `as of 14:02`. They leave only when the owner removes the host.
+- The Hosts screen stays for adding and removing a host. `Esc` on the board no longer goes to it. It opens from Machine.
+
+### The bottom strip
+
+One line above the key line. `u`, or a tap on it, turns it: usage, the machine, this week, hidden, usage again. The word at its right names what the next turn shows (`machine ›`, `week ›`, `hide ›`), as the dock's word does today. Each screen keeps its own choice. When it is hidden, the body takes the row.
+
+| Face | It shows |
+|---|---|
+| usage | each account's 5-hour window and week, as the dock's usage panel at its fewest lines |
+| machine | CPU and memory of the host in the filter; with all hosts, each host's CPU |
+| week | a bar for each day of this week (the matches at work), and each account's week |
+
+The strip turns by itself in one case, which DESIGN.md already allows the dock: while a detached busy loop burns, or a plan's limit is within 10%, the strip shows that face with the `warn` or `neg` word, until the owner turns it.
+
+### The context menu
+
+A right-click on a card, or a long-press on a phone (480 ms), selects the card and opens a menu at the pointer. On a phone it rises from the key line, as the consent box does. `↑` `↓` move, `⏎` or a tap does, `esc` or a tap outside closes.
+
+1. `copy last message` (also `c` on the board, with no menu)
+2. `copy the question` (when it asks)
+3. `copy the link of #4556` (when it drives a pull request)
+4. `copy its name`
+5. `show only the chain login` (when it is in a chain)
+6. `go in`
+7. `hide <column>`
+
+No destructive act is in the menu. `x` keeps its consent box.
+
+### Copy
+
+- Every copy goes through the console's one `clip` (`internal/app/pairpage.go`): `Options.Clip` when the host gives one, else OSC 52 through `tea.SetClipboard`, as the pair link's `c` does today.
+- **Any text:** a drag over text in the console selects it, in the accent, and copies it on release. The header says `copied 42 characters`. The console owns the mouse, so it does this itself; it does not hand the drag to tmux.
+- **Each hop must pass it on.** The console reads the tmux it runs in (`set-clipboard`, and `allow-passthrough` for its own pane, which it already sets for images). When that tmux would drop the write, the copy says so in the header, with the fix: `not copied: tmux drops it · tmux set -s set-clipboard on`. A new door, "Let copy through", does it on `⏎`.
+- The console cannot read the hops after its own tmux (SSH, the owner's terminal, a tmux on the owner's side, Pocket). So `copied` means "written to the terminal". `docs/console.md` gets a table: each terminal and the one setting it needs. Pocket must take OSC 52 into the iOS clipboard; if it does not today, that is a task of this work.
+- **Paste** is unchanged: a paste goes to the agent as text, with today's guard at a menu.
+
+### Keys
+
+| Key | On the board |
+|---|---|
+| `↑` `↓`, `k` `j` | Choose the card above or below. The choice is the peek. |
+| `←` `→` | Go to the column at the left or the right. They skip a hidden or an empty column. |
+| `⏎`, `a` | Go into the match's pane (#346). On a phone, a tap on the chosen card. |
+| `1`…`9` | Answer the chosen card's question, with the two guards. |
+| `x` | The other act of the card: merge a ship that waits for the merge, else kill. Through the consent box. |
+| `y` | Give the go that a stoker step waits for. |
+| `c` | Copy the last message. |
+| `m` | Open the menu on the chosen card. |
+| `v` | Verbose cards, or one line each. |
+| `g` | Narrow to the chosen card's chain. `esc` shows all. |
+| `]` `[` | The next and the previous chain. |
+| `s` | The next host, then all hosts. |
+| `u` | Turn the bottom strip. |
+| `Tab` | The board, or Machine. |
+| `/` | Search the board. A search narrows every column. |
+| `z` `N` `r` `A` `e` `d` `h` `f` `F` `n` `o` | As today, on the chosen card. |
+| `esc` | Close the menu, then clear the search, then the chain filter. It never leaves the console. |
+| `q`, `Ctrl+C` | Quit the console. |
+
+Keys that change their job: `c` (was: open the STOKER tab), `v` (was: list only), `s` (was: sort), `g` (was: group), `u` (was: cycle the dock). Keys that go: `1-7` as tabs, `p`, `S`, and `Space` and `X` outside Machine's repo view.
+
+The key line shows the keys of the chosen card first, then `c`, `v`, `s`, `u`, then `←→` and `tab`. A key that does not fit leaves whole, from the right. On a phone the key line shows `c`, `v`, `s`, `u` only: the chosen card already shows its own keys.
+
+### Touch
+
+| The owner wants to | By hand |
+|---|---|
+| see the next column | Swipe sideways. The column names at the top are the page marks. |
+| hide a column | Tap the name of the column on the screen. Tap `+ name` to bring it back. |
+| peek | Tap a card. |
+| go in | Tap the chosen card again. |
+| answer | Tap an option in the peek. |
+| open the menu | Long-press a card. |
+| act | Tap a key on the card or on the key line. A destructive act still waits for a typed `y`. |
+| come back | The belt's `◂`, or the edge swipe. |
+| turn the strip | Tap the strip. |
+
+Nothing drags, so a swipe is always a page and a long-press is always the menu. A vertical swipe scrolls the column. On a phone a drag never selects text: the menu copies.
+
+**What Pocket must send.** Today the console gets a tap as a left click and a vertical swipe as the wheel. It gets no sideways swipe, no long-press and no release. So the app's terminal view gets one small change, in `ios/`: a sideways swipe sends `←` or `→`, and a long-press sends a right click at its cell. Until the app has it, every act still has a way: the page marks are taps, the belt has `←` `→`, and `m` opens the menu on the chosen card. In a narrowed chain a sideways swipe is the next column, not the next chain as #326 has it; `]` and `[` change the chain.
+
+### Layout
+
+The console's shape rule decides (DESIGN.md §6, Widths; `layout()` in `internal/app/layout.go`). Three shapes, with today's limits:
+
+| Shape | The board |
+|---|---|
+| Narrow (portrait under 90 columns, or under 60) | One column a page. The top line is the page marks: the open column in capitals with its count and `−`, the others short (`need 4  WORKING 3 −  ship 3  quiet 5`). No tab row; `Tab` and the key line reach Machine. |
+| Medium (60 to 99, and portrait from 90) | `NEEDS YOU`, `WORKING` and `SHIPPING` side by side, at 38, 20 and 20 of 80 columns, scaled to the width. `QUIET` is a drawer under them: one line with the names, which opens to six rows when the selection moves into it. |
+| Wide (100 and over) | Four columns at 36, 25, 25 and 18 of 104, scaled to the width up to 151 columns. From 152 columns the columns keep those widths and the chosen match's live view takes the rest at the right (at least 44 columns), as #346 draws it. |
+
+A hidden column gives its room to the others in the same proportions. On Wide the live view takes it. A column whose cards do not fit ends in `↓ N more`, and scrolls so that the chosen card is whole.
+
+The screen, top to bottom: the header (the mark, the host filter, `● N need you`, the stoker word or a toast), the tab row (`BOARD 15   machine`, the chain crumb, the hidden columns), a hairline, the body, the strip, a hairline, the key line. The setup doors stay above the columns, the ghost row `+ start a new session here` and the recommendations stay under them, each folded to one line when the columns need the rows.
+
+### The match on the board
+
+DESIGN.md §4 stays the source. The board adds where each motion plays.
+
+| Where | What moves |
+|---|---|
+| `NEEDS YOU` | The head of each match that asks breathes (2.4 s). Nothing else in the column moves. |
+| `WORKING` | The flame flickers, as today. |
+| A card that changes column | The change plays once, on the card where it lands: the strike (800 ms) into `WORKING`, the going out (400 ms) into any other column. For 1.2 s the card's name is `flame-core`. The card does not travel across the screen. |
+| `SHIPPING` | Still. When a ship passes a stage, one bright cell runs along its track once, as the spark runs down a fuse today. |
+| `QUIET` | Nothing. The head cools with age: `match-head` while idle, `match-ember` when cold, `faint` when stale, parked or held. |
+| Pocket | The app's haptics (DESIGN.md §5): the rigid impact on a strike. The buzz of §9 for a new wait while the app is closed does not change. |
+
+`--no-motion` shows each end state at once. Motion comes from the clock (§4 rule 4), so the replay tests hold.
+
+## Machine
+
+The one other tab. A list of rows in five groups. `↑` `↓` choose, `⏎` opens a row over the body, `esc` comes back. `s` narrows to one host here too.
+
+| Group | Row | Opened, it shows |
+|---|---|---|
+| `ACCOUNTS` | one for each account: the 5-hour window, the week, what burns most | A chart of the 5-hour window as it filled. A chart of the week by day. The forecast in words. The session that burns most (`⏎` goes to it). The account's folder and its matches. |
+| `CONTEXT` | the count of matches, how many are over 70%, how many must compact | A chart of how the fullest match filled over six hours. Then every match, the fullest first, with `x compact when it rests`. |
+| `WORK` | the work grid (not a row to open) | — |
+| `REPOS` | one for each repository: matches, worktrees, what is safe to remove, behind its remote | A chart of the work in the repository by day. Then its worktrees with today's Git keys: `⏎` shell, `N`, `Space`, `X`, `x`, `r`. |
+| `THE MACHINES` | one for each host in the filter: CPU, memory, disk | Charts of CPU and memory over 24 hours (today's History). Disk, the panes (`⏎` lists them, today's Panes), the devices and `+ pair a device`, the detached busy loops (`x` kills). On a host row: add or remove a host. |
+
+The tab reads `machine !` in `neg` while a detached busy loop burns, as today.
+
+**Charts.** One value a column, in eighth-blocks (`▁▂▃▄▅▆▇█`), three or four rows tall, with the top and the bottom of the scale at the left in `faint` and the ends of the time axis under it. A chart takes one token: `muted`, or `warn` and `neg` by the dock's own limits. A value that was not measured is a gap, never a zero.
+
+**The work grid.** One cell a day, seven rows (Monday to Sunday), a column a week: 16 weeks on a phone, 30 on Medium, 52 on Wide. The hue of a cell is the harness that worked most on that day. Its strength (four steps toward the ground) is how much: the minutes that matches burned. A day with no work is `·` in `hair`. A legend line names the hues. The grid follows the host filter.
+
+A day with two harnesses shows one hue. The opened repo and account views are where the mix is exact. This is a known loss, taken for the shape the owner asked for.
+
+**Tokens.** Five new tokens, used on Machine only. They change DESIGN.md §2.1 in the same pull request.
+
+| Token | Dark | Light | Use |
+|---|---|---|---|
+| `harness-claude` | `#D4896A` | `#B5623F` | a day that Claude Code led |
+| `harness-codex` | `#7FB69A` | `#3F8A66` | a day that Codex led |
+| `harness-opencode` | `#9F8FD1` | `#6E5BB5` | a day that OpenCode led |
+| `harness-other` | `#6FA8C7` | `#3B7FA3` | a day that Cursor or another agent led |
+| (none) | `faint` | `faint` | an agent the console could not name |
+
+The values are a start. The design review may tune them. Each must pass the replay's token test, and each must stay apart from `flame`, `match-head`, `accent` and `night`.
+
+## Data
+
+| What | Source | State |
+|---|---|---|
+| The board, the peek, the strip's usage and machine faces | the service's sample, as today | exists |
+| The account charts | `limits.jsonl`: five weeks of readings, Claude Code and Codex | exists |
+| The machine charts | the 24-hour history | exists |
+| The work grid, the strip's week face, the repo chart | **new:** a daily record | to build |
+| The context chart | **new:** the same record, or the samples the service already holds for six hours | to decide in the plan |
+
+**The daily record.** One append-only file in the state directory, `work.jsonl`. The service adds to the day's line as it samples: for each host, repository and harness, the minutes that a match burned. It is on this machine only, kept for 53 weeks, and `docs/privacy.md` names it. A day before the record began is `·`. Nothing is back-filled from transcripts.
+
+## The chain room
+
+This design changes two parts of #326's approved design. The owner knows (2026-11-10). matchblox-chain must agree before either session builds them.
+
+| #326 says | This design says |
+|---|---|
+| The console opens on a list of chains. | The console opens on the board. The chain list does not exist. |
+| A room has the need line, the card, the matches, SHIPS, GIT and the talk line. | A room is the board narrowed to the chain, with the card above the columns and the talk line under them. |
+| The tabs are `chains · machine`. | The tabs are `board · machine`. |
+| Machine holds usage, CPU, history and panes. | The same, plus accounts, context, the work grid and repos, each with a view to open. |
+| `1` and `2` open the two tabs. | `Tab` changes the tab. The digits answer questions only. |
+| In a room, a sideways swipe is the next chain. | A sideways swipe is the next column. `]` and `[` change the chain. |
+
+What stays #326's, untouched: the stoker's card and its plan, the talk line and typing, the flip (`⌥s`, `⌥n`, prefix `s` and `n`), the back ladder, waking a stoker with no sheet, the removal of the groupings, the phone's Live Activity and the buzz.
+
+The split of the work, to agree:
+
+- **matchblox-chain** builds the card, the talk line, the flip, the back ladder and the removal of the Ships, Git, History, Panes and Stoker tabs. Those five removals are not tasks of this work unless #326 lands without them.
+- **matchblox-board** builds the board, the peek, the filters, the strip, the menu, copy, Machine and its views.
+- The file that both need is the home's body (`internal/app/sessions.go` today). The one that lands second rebases.
+
+If #326 lands as approved before this is agreed, this design still applies: the board replaces the chain list in a later pull request, and the room's layout changes then.
+
+## What goes
+
+Each is its own commit, so that it can be reverted alone. A removal that #326 has made is not made again.
+
+| Part | Why | Where its use went |
+|---|---|---|
+| The dock (usage, the machine, the stoker panels) | The strip and Machine hold it. | the strip, Machine |
+| `u` as the dock's cycle, `v` as list only | The dock and the detail pane go. | `u` the strip, `v` the density |
+| `s`, `S` (sort) and `g` (group) | The columns are the grouping, and their order is fixed. | — |
+| `1-7`, `p`, `c` as tab keys | Two tabs. | `Tab` |
+| The Ships tab | The ship is on its card, and `x` merges there. | the card |
+| The Git tab | It is a repo's view on Machine. | Machine |
+| The History and Panes tabs | They are a machine's view on Machine. | Machine |
+| The Stoker tab | The step is on the card, and the card is in the room. | the card, the room |
+| `Esc` to Hosts | A host is a filter. | `s`, Machine |
+
+`matchblox ships`, `matchblox usage` and every other command stay.
+
+## Docs, the canon and the site
+
+- `DESIGN.md`: §2.1 (the tokens), §4 rule 6 (the board is a place that shows the match), §5 (no new motion: the table says where each plays), §6 (the screen, the board, the card, the strip, the widths, Machine). The 2026-11-01 note about Sessions is replaced.
+- `docs/console.md`, `docs/keys.md`, `docs/ships.md`, `docs/stoker.md`, `docs/phone.md`, `docs/remote.md`: each place that names a tab, the dock or a key that changed.
+- `www/`: matchbloxrelease owns it. This session sends it a brief for each change that the landing page shows (the replay of the home, the tab names, the keys). The feat pull request carries the `www/` change before it merges.
+- `CHANGELOG.md`: the keys that changed their job are named as breaking for the hand, not for scripts.
+
+## Tests
+
+- **A fixed fleet.** One fixture of 15 sessions (the sketch's set: 4 need the owner, 3 work, 3 ship, 5 are quiet, one chain of 3, two hosts). Goldens of the board at 40×34, 80×31 and 160×38, in both densities, with each column hidden, narrowed to the chain, and narrowed to a host.
+- **Every row is as wide as its screen**, in each golden. The sketch's own check does this.
+- **The column rule:** a table test, one case for each line of the Columns table, and one for each pair that could clash (held and asks, busy and a stuck ship).
+- **The guards:** a digit within 400 ms of a new peek is not sent; a digit after a newer question is refused; a tap never runs a destructive act.
+- **The count:** with `NEEDS YOU` hidden, a chain filter and a host filter all on, the header still counts every wait, and a tap on it clears all three.
+- **A host that is not reached** keeps its cards, in `faint`, with `as of`.
+- **Copy:** the console's `clip` gets the exact text for each menu line and for a drag. With `set-clipboard off` in the console's tmux, the copy says the fix and does not say `copied`.
+- **Motion:** the replay draws the strike and the going out on the card where it lands, from the clock.
+- **The record:** a day's line sums a host, a repository and a harness; a missing day draws `·`; a chart draws a gap for a value that was not measured.
+- `go test ./...` passes, and CI is green on Linux and macOS.
+
+## Not verified
+
+- OSC 52 from this host through the owner's laptop and a tmux on it. It is a test in the plan, on the owner's real path, before any claim.
+- That Pocket takes OSC 52 into the iOS clipboard.
+- That a right-click, a release and a motion reach the console through tmux. The console handles only the left click and the wheel today, so it must ask the terminal for button and motion events, and that is new.
+- The sketch was checked by its renderer (every row as wide as its screen, in each state). It was not looked at in a browser by its author.
+- The harness token values, against the replay's token test and in a light terminal.
+
+## Left to the builder
+
+- The exact widths between the three shapes, from the shape rule.
+- How the setup doors, the ghost row and the recommendations fold when the columns need the rows.
+- Whether the context chart reads the daily record or the samples the service already holds.
+- The words of each toast and refusal, by DESIGN.md §7.
+
+## The order of the work
+
+1. **The board** (the home, the card, the peek, the densities, hiding, the chain and host filters, the strip's usage and machine faces, the menu, copy, the motion, the harness mark), with the removals as their own commits, the docs and the site.
+2. **Machine** and its views, with the charts that today's data can draw (accounts, machines), and the repo and context views without their charts.
+3. **The daily record**, the work grid, the strip's week face, the repo and context charts, and the tokens.
+
+Each is one pull request. #372 closes with the first; the second and the third are issues of their own, opened when the plan is approved.
