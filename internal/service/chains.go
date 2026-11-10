@@ -27,13 +27,17 @@ func memberOf(x sample.Session) chains.Member {
 	return chains.Member{SessionID: x.SessionID, Pane: x.Pane, PID: x.PID, Start: x.Start}
 }
 
-// chainAct runs a chain: act from the agent in a.From: chain:<pane> asks,
-// chain:- leaves, chain:off and chain:on. A stoker's pane does none.
+// chainAct runs a chain: act. From an agent's pane: chain:<pane> joins
+// the team of that match, or forms one with it; chain:@<team> joins a team
+// by name; chain:- leaves the only team, chain:-@<team> that team and
+// chain:-* every team; chain:off and chain:on. From the console only:
+// chain:out:<pane>@<team> takes that match out of that team. A stoker's
+// pane does none.
 func (s *Service) chainAct(ctx context.Context, a proto.Act) proto.Result {
 	if _, stokerPane := s.unitOf(a); stokerPane {
-		return refuseText("a stoker joins no chain")
+		return refuseText(noStokerChain)
 	}
-	res, changed := s.changeChains(strings.TrimPrefix(a.RecID, proto.ChainPrefix), a.From)
+	res, changed := s.changeChains(strings.TrimPrefix(a.RecID, proto.ChainPrefix), a)
 	s.followChains(ctx)
 	if changed {
 		s.broadcast()
@@ -41,13 +45,52 @@ func (s *Service) chainAct(ctx context.Context, a proto.Act) proto.Result {
 	return res
 }
 
-func (s *Service) changeChains(arg, fromPane string) (res proto.Result, changed bool) {
+const noStokerChain = "a stoker joins no chain"
+
+// onStokerServer tells if pane is on the stokers' tmux server. It takes
+// no lock, so callers may hold mu.
+func (s *Service) onStokerServer(pane string) bool {
+	server, _ := sample.SplitPane(pane)
+	return s.StokerServer != "" && server == s.StokerServer
+}
+
+// offText is the refusal for a match that is off.
+func offText(name string) string {
+	return name + " is off: it takes no chains. It can run: matchblox chain --on"
+}
+
+// runOne is the refusal that lists one command per team, as matchblox
+// never picks a team itself.
+func runOne(lead, verb string, teams []chains.Chain, more ...string) string {
+	lines := []string{lead + ". Run one:"}
+	for _, c := range teams {
+		lines = append(lines, "  matchblox "+verb+" "+c.Name)
+	}
+	for _, m := range more {
+		lines = append(lines, "  "+m)
+	}
+	return strings.Join(lines, "\n")
+}
+
+// andList is "a", "a and b", or "a, b and c".
+func andList(names []string) string {
+	if len(names) < 2 {
+		return strings.Join(names, "")
+	}
+	return strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1]
+}
+
+func teamNames(cs []chains.Chain) []string {
+	var out []string
+	for _, c := range cs {
+		out = append(out, c.Name)
+	}
+	return out
+}
+
+func (s *Service) changeChains(arg string, a proto.Act) (res proto.Result, changed bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	from, ok := s.sessionAtLocked(fromPane)
-	if !ok {
-		return refuseText(chainNeedsMatch), false
-	}
 	st := s.chainsLocked()
 	if s.refreshChainsLocked(st) { // the act finds a cleared chat by its new id
 		changed = true
@@ -56,52 +99,138 @@ func (s *Service) changeChains(arg, fromPane string) (res proto.Result, changed 
 			return proto.Result{Err: "chains: " + err.Error()}, true
 		}
 	}
-	me := memberOf(from)
 	before := slices.Clone(st.Chains)
-	absorbed, survivor := "", ""
-	switch arg {
-	case "-":
-		if _, in := st.ChainOf(me); !in {
-			return proto.Result{Note: "not in a chain"}, changed
-		}
-		st.Leave(me)
-		res.Note = "left the chain"
-	case "off":
-		st.SetOff(me, true)
-		res.Note = "off: no notices, and no chains"
-	case "on":
-		st.SetOff(me, false)
-		res.Note = "on"
-	default:
-		if s.sampleMissedLocked() { // its target may be one the sample did not read
-			return refuseText("not now: matchblox could not read the sessions; try again"), changed
-		}
-		to, ok := s.sessionAtLocked(arg)
+	var did bool
+	if out, ok := strings.CutPrefix(arg, "out:"); ok {
+		res, did = s.takeOutLocked(st, out, a)
+	} else {
+		from, ok := s.sessionAtLocked(a.From)
 		if !ok {
-			return refuseText("no agent session in " + arg + " any more"), changed
+			return refuseText(chainNeedsMatch), changed
 		}
-		repo, why := s.chainable(st, from, to)
-		if why != "" {
-			return refuseText(why), changed
-		}
-		if c, ok := st.ChainOf(me); ok && slices.ContainsFunc(c.Members, memberOf(to).Same) {
-			return proto.Result{Note: "already chained with " + to.Name}, changed
-		}
-		formed := false
-		if formed, absorbed = st.Ask(me, memberOf(to), repo, s.now()); formed {
-			c, _ := st.ChainOf(me)
-			survivor = c.ID
-			res.Note = fmt.Sprintf("chained with %s: %d matches", to.Name, len(c.Members))
-		} else {
-			res.Note = "asked " + to.Name + ": the chain forms when it chains back"
-		}
+		res, did = s.chainFromLocked(st, arg, from, a)
 	}
-	s.noteChainsLocked(before, absorbed, survivor)
+	if !did {
+		return res, changed
+	}
+	s.noteChainsLocked(before)
 	s.cur.Chains = chainsView(st)
 	if err := s.saveChainsLocked(); err != nil {
 		res.Err = "chains: " + err.Error()
 	}
 	return res, true
+}
+
+// chainFromLocked runs a chain act of the match from, and tells if it
+// changed the chains. Callers hold mu.
+func (s *Service) chainFromLocked(st *chains.Store, arg string, from sample.Session, a proto.Act) (proto.Result, bool) {
+	me := memberOf(from)
+	teams := st.TeamsOf(me)
+	switch {
+	case arg == "-":
+		switch len(teams) {
+		case 0:
+			return proto.Result{Note: "not in a chain"}, false
+		case 1:
+			st.LeaveTeam(me, teams[0].Name)
+			return proto.Result{Note: "left " + teams[0].Name}, true
+		}
+		return refuseText(runOne("you are in "+andList(teamNames(teams)), "unchain", teams, "matchblox unchain --all")), false
+	case arg == "-*":
+		if len(teams) == 0 {
+			return proto.Result{Note: "not in a chain"}, false
+		}
+		st.Leave(me)
+		return proto.Result{Note: "left " + andList(teamNames(teams))}, true
+	case strings.HasPrefix(arg, "-@"):
+		team := strings.TrimPrefix(arg, "-@")
+		if !st.LeaveTeam(me, team) {
+			return proto.Result{Note: "not in " + team}, false
+		}
+		return proto.Result{Note: "left " + team}, true
+	case arg == "off":
+		st.SetOff(me, true)
+		return proto.Result{Note: "off: no notices, and no chains"}, true
+	case arg == "on":
+		st.SetOff(me, false)
+		return proto.Result{Note: "on"}, true
+	case strings.HasPrefix(arg, "@"):
+		team := strings.TrimPrefix(arg, "@")
+		if _, ok := st.Team(team); !ok {
+			return refuseText("no chain is named " + team), false
+		}
+		return s.joinedLocked(st, from, team, func() (chains.Chain, error) { return st.Join(me, team) })
+	}
+	if s.sampleMissedLocked() { // its target may be one the sample did not read
+		return refuseText("not now: matchblox could not read the sessions; try again"), false
+	}
+	if s.onStokerServer(arg) {
+		return refuseText(noStokerChain), false
+	}
+	to, ok := s.sessionAtLocked(arg)
+	if !ok {
+		return refuseText("no agent session in " + arg + " any more"), false
+	}
+	switch theirs := st.TeamsOf(memberOf(to)); len(theirs) {
+	case 0:
+		repo, why := s.chainable(st, from, to)
+		if why != "" {
+			return refuseText(why), false
+		}
+		return s.joinedLocked(st, from, from.Name, func() (chains.Chain, error) {
+			return st.Form(me, memberOf(to), from.Name, repo)
+		})
+	case 1:
+		return s.joinedLocked(st, from, theirs[0].Name, func() (chains.Chain, error) { return st.Join(me, theirs[0].Name) })
+	default:
+		return refuseText(runOne(fmt.Sprintf("%s is in %d chains", to.Name, len(theirs)), "chain", theirs)), false
+	}
+}
+
+// joinedLocked runs join, by which from joins or forms team, and tells the
+// other members and the consoles. Callers hold mu.
+func (s *Service) joinedLocked(st *chains.Store, from sample.Session, team string, join func() (chains.Chain, error)) (proto.Result, bool) {
+	c, err := join()
+	switch {
+	case errors.Is(err, chains.ErrIn):
+		return proto.Result{Note: "already in " + team}, false
+	case errors.Is(err, chains.ErrOff):
+		return refuseText(offText(from.Name)), false
+	case err != nil:
+		return refuseText(err.Error()), false
+	}
+	me, now := memberOf(from), s.now()
+	for _, o := range c.Members {
+		if !o.Same(me) {
+			st.Post(o, "[matchblox] "+from.Name+" joined the chain"+s.elsewhereLocked(me, o), now)
+		}
+	}
+	st.Spark(c.ID, now)
+	return proto.Result{Note: fmt.Sprintf("joined %s: %d matches. To leave it, run: matchblox unchain %s", c.Name, len(c.Members), c.Name)}, true
+}
+
+// takeOutLocked takes the match in pane out of team: out is <pane>@<team>.
+// Only the person at the console may. Callers hold mu.
+func (s *Service) takeOutLocked(st *chains.Store, out string, a proto.Act) (proto.Result, bool) {
+	if _, agent := s.sessionAtLocked(a.From); !a.Console || agent {
+		return refuseText("only the person at the console takes a match out of a chain"), false
+	}
+	pane, team, _ := strings.Cut(out, "@")
+	c, ok := st.Team(team)
+	if !ok {
+		return refuseText("no chain is named " + team), false
+	}
+	i := slices.IndexFunc(c.Members, func(m chains.Member) bool { return m.Pane == pane })
+	if i < 0 {
+		return refuseText("no match in " + pane + " is in " + team), false
+	}
+	m, name := c.Members[i], pane
+	if x, ok := s.sessionOfLocked(m); ok {
+		name = x.Name
+	}
+	st.LeaveTeam(m, team)
+	st.Post(m, "[matchblox] the owner took you out of "+team, s.now())
+	return proto.Result{Note: "took " + name + " out of " + team}, true
 }
 
 // chainable is the repo of from, "" for none, or why from and to cannot
@@ -116,7 +245,7 @@ func (s *Service) chainable(st *chains.Store, from, to sample.Session) (repo, wh
 	}
 	for _, x := range []sample.Session{from, to} {
 		if slices.ContainsFunc(st.Off, memberOf(x).Same) {
-			return "", x.Name + " is off: it takes no chains"
+			return "", offText(x.Name)
 		}
 	}
 	repo, _, _ = gitscan.RepoOf(s.cur.Git, from.Cwd)
@@ -124,25 +253,54 @@ func (s *Service) chainable(st *chains.Store, from, to sample.Session) (repo, wh
 }
 
 // pruneChainsLocked keeps up the members whose session id changed in their
-// pane, drops the members and asks the sessions no longer hold, tells the
-// mates of a match that left, and saves on a change. prev are the sessions
+// pane, keeps a member whose pane lives but shows no agent (unseen since its
+// first miss), drops a member whose pane is gone or shows another agent that
+// no switch started, tells the mates of a match
+// that left, and saves on a change. prev are the sessions
 // of the sample before, which name a match that is gone. Callers hold mu.
 func (s *Service) pruneChainsLocked(now time.Time, prev []sample.Session) error {
 	st := s.chainsLocked()
+	s.tellLostLocked(st, now)
 	if s.sampleMissedLocked() {
 		return nil // every match would look gone
 	}
 	refreshed := s.refreshChainsLocked(st)
-	before, asks, offs := slices.Clone(st.Chains), len(st.Requests), len(st.Off)
+	before, offs, unseen := slices.Clone(st.Chains), len(st.Off), maps.Clone(st.Unseen)
+	panes := map[string]bool{}
+	for _, p := range s.cur.Panes {
+		panes[p.ID] = true
+	}
+	if s.mateNames == nil {
+		s.mateNames = map[string]string{}
+	}
+	for _, x := range slices.Concat(prev, s.cur.Sessions) {
+		if len(st.TeamsOf(memberOf(x))) > 0 {
+			s.mateNames[x.Pane] = x.Name
+		}
+	}
 	live := func(m chains.Member) bool {
-		_, ok := s.sessionOfLocked(m)
-		return ok
+		if x, ok := s.sessionOfLocked(m); ok {
+			st.MarkSeen(m)
+			s.mateNames[m.Pane] = x.Name
+			return true
+		}
+		if !panes[m.Pane] {
+			return false
+		}
+		if _, other := s.sessionAtLocked(m.Pane); other {
+			if _, moving := st.Moving(m); !moving {
+				return false // another agent runs in its pane: it is not this match
+			}
+		}
+		st.MarkUnseen(m, now)
+		return true
 	}
 	left := st.Prune(live, now)
+	defer maps.DeleteFunc(s.mateNames, func(pane, _ string) bool { return !panes[pane] })
 	maps.DeleteFunc(s.cleared, func(id string, _ bool) bool {
 		return !slices.ContainsFunc(s.cur.Sessions, func(x sample.Session) bool { return x.SessionID == id })
 	})
-	s.noteChainsLocked(before, "", "")
+	s.noteChainsLocked(before)
 	for _, l := range left {
 		text := s.leftText(l, prev)
 		for _, c := range before {
@@ -156,7 +314,7 @@ func (s *Service) pruneChainsLocked(now time.Time, prev []sample.Session) error 
 			}
 		}
 	}
-	if !refreshed && len(left) == 0 && len(st.Requests) == asks && len(st.Off) == offs {
+	if !refreshed && len(left) == 0 && len(st.Off) == offs && maps.Equal(st.Unseen, unseen) {
 		return nil
 	}
 	return s.saveChainsLocked()
@@ -169,24 +327,92 @@ func (s *Service) pruneChainsLocked(now time.Time, prev []sample.Session) error 
 // through it is still a clear. A partial session list renames no one
 // wrongly. Callers hold mu.
 func (s *Service) refreshChainsLocked(st *chains.Store) bool {
+	renamed := s.refreshMembersLocked(st)
+	return s.nameTeamsLocked(st) || renamed
+}
+
+// nameTeamsLocked names each team an older build saved with no name, after
+// its first member that has a session now, and tells if any got one.
+// Callers hold mu.
+func (s *Service) nameTeamsLocked(st *chains.Store) (named bool) {
+	for i := range st.Chains {
+		if st.Chains[i].Name != "" {
+			continue
+		}
+		for _, m := range st.Chains[i].Members {
+			if x, ok := s.sessionOfLocked(m); ok {
+				st.Chains[i].Name, named = st.FreeName(x.Name), true
+				break
+			}
+		}
+	}
+	return named
+}
+
+func (s *Service) refreshMembersLocked(st *chains.Store) bool {
 	return st.Refresh(func(m chains.Member) (chains.Member, bool) {
+		if x, ok := s.switchedToLocked(st, m); ok {
+			s.markClearedLocked(st, m, memberOf(x))
+			return memberOf(x), true
+		}
 		for _, x := range s.cur.Sessions {
 			if x.Pane != "" && x.Pane == m.Pane && x.PID == m.PID && x.Start == m.Start {
 				n := memberOf(x)
 				if n.SessionID == "" {
 					n.SessionID = m.SessionID
 				}
-				if _, chained := st.ChainOf(m); chained && m.SessionID != "" && n.SessionID != m.SessionID {
-					if s.cleared == nil {
-						s.cleared = map[string]bool{}
-					}
-					s.cleared[n.SessionID] = true
+				if m.SessionID != "" {
+					s.markClearedLocked(st, m, n)
 				}
 				return n, true
 			}
 		}
 		return chains.Member{}, false
 	})
+}
+
+// moveChainsLocked records that a switch starts another agent in x's pane,
+// or, with on false, that it did not, and saves on a change. Callers hold mu.
+func (s *Service) moveChainsLocked(x sample.Session, on bool) error {
+	st, m := s.chainsLocked(), memberOf(x)
+	_, moving := st.Moving(m)
+	switch {
+	case on:
+		st.Move(m, s.now())
+		if _, now := st.Moving(m); !now && !moving {
+			return nil
+		}
+	case moving:
+		st.Stay(m)
+	default:
+		return nil
+	}
+	return s.saveChainsLocked()
+}
+
+// markClearedLocked marks n, a new chat in m's place, to be told its chain at
+// its next news. Callers hold mu.
+func (s *Service) markClearedLocked(st *chains.Store, m, n chains.Member) {
+	if len(st.TeamsOf(m)) == 0 || n.SessionID == m.SessionID {
+		return
+	}
+	if s.cleared == nil {
+		s.cleared = map[string]bool{}
+	}
+	s.cleared[n.SessionID] = true
+}
+
+// switchedToLocked is the agent a switch started in m's pane, once its
+// session id shows there. Callers hold mu.
+func (s *Service) switchedToLocked(st *chains.Store, m chains.Member) (sample.Session, bool) {
+	if _, ok := st.Moving(m); !ok {
+		return sample.Session{}, false
+	}
+	x, ok := s.sessionAtLocked(m.Pane)
+	if !ok || x.SessionID == "" || x.PID == m.PID && x.Start == m.Start {
+		return sample.Session{}, false
+	}
+	return x, true
 }
 
 // leftText is the news of l: the match is gone. Callers hold mu.
@@ -196,6 +422,8 @@ func (s *Service) leftText(l chains.Left, prev []sample.Session) string {
 		name = x.Name
 	} else if i := slices.IndexFunc(prev, func(x sample.Session) bool { return memberOf(x).Same(l.Who) }); i >= 0 {
 		name = prev[i].Name
+	} else if n, ok := s.mateNames[l.Who.Pane]; ok {
+		name = n
 	}
 	return name + " left the chain"
 }
@@ -241,14 +469,23 @@ func (s *Service) saveChainsLocked() error {
 }
 
 // chainsView copies what the doc shows, so a later change to the store does
-// not reach a doc already sent. Nil: no chain and no ask.
+// not reach a doc already sent. Nil: no chain.
 func chainsView(st *chains.Store) *state.ChainsView {
-	if len(st.Chains) == 0 && len(st.Requests) == 0 {
+	if len(st.Chains) == 0 {
 		return nil
 	}
-	v := &state.ChainsView{Chains: slices.Clone(st.Chains), Requests: slices.Clone(st.Requests)}
+	v := &state.ChainsView{Chains: slices.Clone(st.Chains)}
 	for i := range v.Chains {
 		v.Chains[i].Members = slices.Clone(v.Chains[i].Members)
+		for _, m := range v.Chains[i].Members {
+			if slices.ContainsFunc(v.Mates, func(o state.MateView) bool { return o.Member.Same(m) }) {
+				continue
+			}
+			mv := state.MateView{Member: m}
+			mv.Inbox, mv.Full = st.InboxCount(m)
+			mv.Unseen, _ = st.UnseenSince(m)
+			v.Mates = append(v.Mates, mv)
+		}
 	}
 	return v
 }
@@ -279,6 +516,40 @@ func (s *Service) sessionOfLocked(m chains.Member) (sample.Session, bool) {
 		}
 	}
 	return sample.Session{}, false
+}
+
+// tellLostLocked tells the sender of each line lost since the last sample
+// why its match will not hear it: once for each match it sent to. Callers
+// hold mu.
+func (s *Service) tellLostLocked(st *chains.Store, now time.Time) {
+	type pair struct {
+		from, to chains.Member
+		why      string
+	}
+	var order []pair
+	count := map[pair]int{}
+	for _, l := range st.TakeLost() {
+		p := pair{l.Item.From, l.To, l.Why}
+		if count[p] == 0 {
+			order = append(order, p)
+		}
+		count[p]++
+	}
+	for _, p := range order {
+		name := p.to.Pane
+		if x, ok := s.sessionOfLocked(p.to); ok {
+			name = x.Name
+		}
+		text := didNotGet(name, "you are no longer chained")
+		if p.why == chains.LostFull {
+			lines := "1 line"
+			if n := count[p]; n > 1 {
+				lines = fmt.Sprintf("%d lines", n)
+			}
+			text = "[matchblox] " + lines + " to " + name + " dropped: its inbox is full"
+		}
+		st.Post(p.from, text, now)
+	}
 }
 
 // awaitJoin marks the session that chain unit u started in pane, in the
@@ -337,7 +608,7 @@ func (s *Service) joinNewLocked(now time.Time) (out joins, err error) {
 					return late
 				}
 			}
-			if err := st.Join(s.chainIDOf(u), memberOf(x)); err != nil {
+			if err := st.JoinID(s.chainIDOf(u), memberOf(x)); err != nil {
 				text := fmt.Sprintf("%s did not join chain %s: %s", x.Name, chainName(c, s.cur.Sessions), err)
 				if !ok {
 					text = fmt.Sprintf("%s did not join chain %s: %s", x.Name, s.chainIDOf(u), err)
@@ -389,141 +660,30 @@ func chainByID(st *chains.Store, id string) (chains.Chain, bool) {
 	return st.Chains[i], true
 }
 
-// chainEvent is what a change of the chains did to one chain: it ended,
-// or it joined survivor. name is its name before the change.
-type chainEvent struct {
-	chain, survivor, name string
-}
-
-// noteChainsLocked queues for followChains what a change did to the chains
-// before it: absorbed joined survivor, and each other chain that is gone
-// ended. Callers hold mu.
-func (s *Service) noteChainsLocked(before []chains.Chain, absorbed, survivor string) {
+// noteChainsLocked queues for followChains each team of before that a
+// change ended. Teams never merge. Callers hold mu.
+func (s *Service) noteChainsLocked(before []chains.Chain) {
 	st := s.chainsLocked()
 	for _, c := range before {
-		switch {
-		case c.ID == absorbed:
-			s.chainLife = append(s.chainLife, chainEvent{chain: c.ID, survivor: survivor, name: chainName(c, s.cur.Sessions)})
-		case !slices.ContainsFunc(st.Chains, func(o chains.Chain) bool { return o.ID == c.ID }):
-			s.chainLife = append(s.chainLife, chainEvent{chain: c.ID, name: chainName(c, s.cur.Sessions)})
+		if !slices.ContainsFunc(st.Chains, func(o chains.Chain) bool { return o.ID == c.ID }) {
+			s.chainLife = append(s.chainLife, c.ID)
 		}
 	}
 }
 
-// followChains makes each chain stoker follow what happened to its chain
-// since the last call: the stoker of a chain that ended stops, and the
-// stokers of two chains that joined become one. It runs out of mu.
+// followChains stops the stoker of each team that ended since the last
+// call: it says so on its card, its run ends and its agent quits. It runs
+// out of mu.
 func (s *Service) followChains(ctx context.Context) {
 	s.mu.Lock()
-	events := s.chainLife
+	ended := s.chainLife
 	s.chainLife = nil
 	s.mu.Unlock()
-	for _, e := range events {
-		if e.survivor == "" {
-			s.chainEnded(ctx, e.chain)
-		} else {
-			s.chainsJoined(ctx, e.survivor, e.chain, e.name)
+	for _, id := range ended {
+		if u := s.unitOfChain(id); u != nil {
+			s.retire(ctx, u, "its chain ended", "its chain ended")
 		}
 	}
-}
-
-// chainEnded stops the stoker of a chain that ended: it says so on its
-// card, its run ends and its agent quits.
-func (s *Service) chainEnded(ctx context.Context, chainID string) {
-	if u := s.unitOfChain(chainID); u != nil {
-		s.retire(ctx, u, "its chain ended", "its chain ended")
-	}
-}
-
-// chainsJoined follows the join of the chain absorbed, named name, into
-// survivor. A stoker of absorbed alone takes survivor as its chain. With a
-// stoker on each side, the stoker of survivor stays: the other says so on
-// its card and stops, and its running order goes to the one that stays,
-// with only the goes both had. The stoker that stays takes over the
-// host's work on its new matches.
-func (s *Service) chainsJoined(ctx context.Context, survivor, absorbed, name string) {
-	a, b := s.unitOfChain(absorbed), s.unitOfChain(survivor)
-	switch {
-	case a == nil && b == nil:
-		return
-	case b == nil: // the stoker of absorbed stays, unless a start took survivor meanwhile
-		if b = s.takeChain(a, survivor); b != a {
-			s.yieldTo(ctx, a, b, name)
-		}
-	case a != nil:
-		s.yieldTo(ctx, a, b, name)
-	}
-	if b.store.Mode().On {
-		s.handOver(b)
-	}
-	s.refreshStoker()
-}
-
-// takeChain makes chain unit u the stoker of chain, which has none: under
-// the start's lock, so no start gives chain a second one. It is the unit
-// of chain after: u, or the one a start made first.
-func (s *Service) takeChain(u *stokerUnit, chain string) *stokerUnit {
-	s.fam.start.Lock()
-	defer s.fam.start.Unlock()
-	if o := s.unitOfChain(chain); o != nil {
-		return o
-	}
-	if err := s.relinkChain(u, chain); err != nil {
-		_ = u.store.Append(familyLine(s.now(), fmt.Sprintf("its chain joined %s, and its link did not change: %s", s.chainNameOf(chain), err)))
-	}
-	return u
-}
-
-// yieldTo stops chain unit a, whose chain named name joined the chain of
-// b. The order a runs goes to b, with only the goes both have: a join
-// never gives b a go it did not have. A run of b that is off starts with
-// it.
-func (s *Service) yieldTo(ctx context.Context, a, b *stokerUnit, name string) {
-	words := ""
-	if m := a.store.Mode(); m.On {
-		if o := runningOrder(m); o != nil {
-			words = strings.TrimSpace(o.Words)
-		}
-	}
-	grants := stoker.Given(s.grantsOf(b), s.grantsOf(a)) // before a's run ends
-	joined := s.chainNameOf(s.chainIDOf(b))
-	s.retire(ctx, a, "its chain joined "+joined, "the stoker of chain "+joined+" owns it now")
-	if words == "" {
-		return
-	}
-	if s.nightOf(b) { // the night is sealed: no order reaches it
-		_ = b.store.Append(familyLine(s.now(), fmt.Sprintf("the order of the joined chain %s waits for the morning: %s", name, words)))
-		return
-	}
-	var err error
-	if b.store.Mode().On {
-		if err = s.rebrief(ctx, b); err == nil {
-			line := fmt.Sprintf("New order (from the joined chain %s): %s", name, strings.Join(strings.Fields(words), " "))
-			err = s.sayOrder(ctx, b, words, line, grants, s.now())
-		}
-	} else {
-		s.fam.mu.Lock()
-		giver := b.link.Giver
-		s.fam.mu.Unlock()
-		err = s.rerunChain(ctx, b, words, grants, giver)
-	}
-	if err != nil {
-		_ = b.store.Append(familyLine(s.now(), fmt.Sprintf("the order of the joined chain %s did not reach this stoker: %s", name, err)))
-	}
-}
-
-// nightOf: a run of chain unit u is a night run: the one on, or the one an
-// order would start while the host's night runs.
-func (s *Service) nightOf(u *stokerUnit) bool {
-	if m := u.store.Mode(); m.On {
-		return m.Nightly
-	}
-	h := s.hostUnit()
-	if h == nil {
-		return false
-	}
-	m := h.store.Mode()
-	return m.On && m.Nightly
 }
 
 // retire stops chain unit u for good with text on its card: its link says

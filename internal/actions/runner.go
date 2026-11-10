@@ -45,6 +45,9 @@ type Runner struct {
 	// Stokable reads a pane again for a stoker step: nil when it may be
 	// typed into. Nil means never.
 	Stokable func(pane, typed string) error
+	// PeerStokable is Stokable for a chain-mate's line (Guard.PeerLine): a
+	// session that waits for you may take it.
+	PeerStokable func(pane, typed string) error
 }
 
 // Do runs the steps in order, each after its guard. A guard that fails
@@ -109,10 +112,14 @@ func (r Runner) guard(g advice.Guard) error {
 		}
 	}
 	if g.StokePane != "" {
-		if r.Stokable == nil {
+		stokable := r.Stokable
+		if g.PeerLine {
+			stokable = r.PeerStokable
+		}
+		if stokable == nil {
 			return fmt.Errorf("the pane %s cannot be read", g.StokePane)
 		}
-		if err := r.Stokable(g.StokePane, g.Typed); err != nil {
+		if err := stokable(g.StokePane, g.Typed); err != nil {
 			return err
 		}
 	}

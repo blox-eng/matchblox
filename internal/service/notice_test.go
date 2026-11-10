@@ -83,25 +83,13 @@ func TestNoticeOffInConfig(t *testing.T) {
 	}
 }
 
-func TestNewsBlocksRequestThenNotice(t *testing.T) {
+func TestNewsBlocksInboxThenNotice(t *testing.T) {
 	s, _ := newsTest(t, newsSessions[:3], "%1", "%2")
 	branchGit(s, "main", "peer-send", "www")
-	if res := chainFrom(t, s, "%3", proto.ChainPrefix+"%1"); res.Err != "" {
-		t.Fatalf("ask = %+v", res)
-	}
 	post(s, "%2", "peer-send finished")
 	if got := told(s, proto.News{Pane: "%2"}); got != "[matchblox] since your last turn:\n  peer-send finished\n\n"+
 		"[matchblox] three also works in matchblox, on www.\n  To hear from it, run: matchblox chain three" {
 		t.Fatalf("two's news = %q", got)
-	}
-	post(s, "%1", "two finished")
-	want := "[matchblox] since your last turn:\n  two finished\n\n" +
-		"[matchblox] three asks to chain with you. To accept, run:\n  matchblox chain three"
-	if got := told(s, proto.News{Pane: "%1"}); got != want {
-		t.Fatalf("peer-send's news = %q, want %q", got, want)
-	}
-	if got := told(s, proto.News{Pane: "%1"}); got != "" {
-		t.Fatalf("the request repeats: %q", got)
 	}
 }
 
@@ -172,16 +160,15 @@ func TestANoticeAHookDidNotHearIsToldAgain(t *testing.T) {
 	s, _ := newsTest(t, newsSessions[:2])
 	s.PeerPane = func(pid int) string { return map[int]string{100: "%1"}[pid] }
 	branchGit(s, "main", "peer-send", "www")
-	chainFrom(t, s, "%2", proto.ChainPrefix+"%1")
 	first := newsOver(t, s, 100, proto.News{Pane: "%1"}, false)
-	if !strings.Contains(first, "two asks to chain with you") {
+	if !strings.Contains(first, "two also works in") {
 		t.Fatalf("first ask = %q", first)
 	}
 	if got := newsOver(t, s, 100, proto.News{Pane: "%1"}, true); got != first {
 		t.Fatalf("after a hook that did not hear = %q, want %q", got, first)
 	}
 	if got := newsOver(t, s, 100, proto.News{Pane: "%1"}, true); got != "" {
-		t.Fatalf("a heard request came back: %q", got)
+		t.Fatalf("a heard notice came back: %q", got)
 	}
 }
 
@@ -226,15 +213,14 @@ func TestNewsWithNoPeerCredentialsIsNone(t *testing.T) {
 	}
 }
 
-// TestNewsHeldForOneHookIsNotToldToAnother: while one hook holds a
-// request and a notice it has not said it heard, a second hook of the
+// TestNewsHeldForOneHookIsNotToldToAnother: while one hook holds notices
+// it has not said it heard, a second hook of the
 // match is not told them too; once the first gives them back, they are.
 func TestNewsHeldForOneHookIsNotToldToAnother(t *testing.T) {
 	s, _ := newsTest(t, newsSessions[:3])
 	branchGit(s, "main", "peer-send", "www")
-	chainFrom(t, s, "%2", proto.ChainPrefix+"%1")
 	first := s.news(proto.News{Pane: "%1"})
-	if !strings.Contains(first.text, "two asks to chain with you") || !strings.Contains(first.text, "three also works in") {
+	if !strings.Contains(first.text, "two also works in") || !strings.Contains(first.text, "three also works in") {
 		t.Fatalf("first = %q", first.text)
 	}
 	second := s.news(proto.News{Pane: "%1"})
@@ -248,18 +234,6 @@ func TestNewsHeldForOneHookIsNotToldToAnother(t *testing.T) {
 	}
 	if got := told(s, proto.News{Pane: "%1"}); got != "" {
 		t.Fatalf("heard news came back: %q", got)
-	}
-}
-
-func TestAnAskFromAnotherRepoNamesIt(t *testing.T) {
-	s, _, sessions := twoRepos(t)
-	s.ChainsNotice = false
-	chainFrom(t, s, "%5", proto.ChainPrefix+"%1")
-	chainFrom(t, s, "%2", proto.ChainPrefix+"%1")
-	want := "[matchblox] web-cart (in web) asks to chain with you. To accept, run:\n  matchblox chain web-cart\n\n" +
-		"[matchblox] two asks to chain with you. To accept, run:\n  matchblox chain two"
-	if got := told(s, proto.News{Pane: sessions[0].Pane}); got != want {
-		t.Fatalf("news = %q, want %q", got, want)
 	}
 }
 

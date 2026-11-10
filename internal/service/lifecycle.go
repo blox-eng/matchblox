@@ -324,8 +324,9 @@ func (s *Service) askKill(u *stokerUnit, from, pane string, x sample.Session) {
 // (seatWindow, and Claude's --name), on the account it was last started on
 // (switchAccount), its env on the command; the switch does not change that
 // choice. A hold on the seat waits for the new agent's
-// session id and moves to it (Rebind); a guard that stops the switch, or
-// a respawn that fails, puts it back as it was. The builder takes the seat
+// session id and moves to it (Rebind), and so does the match's place in
+// its chain, its requests and its inbox (chains.Move); a guard that stops
+// the switch, or a respawn that fails, puts them back as they were. The builder takes the seat
 // back from the stoker, which drives it no more, and the old agent's
 // queue state goes with it. Like kill, a session that works or waits
 // takes a second confirm (Anyway).
@@ -424,10 +425,20 @@ func (s *Service) switchAgent(ctx context.Context, pane string, a proto.Act) pro
 	act := SwitchAction(pane, x, s.seatWindow(pane, x), argv)
 	s.mu.Lock()
 	old := s.queue.HookedIn(pane)
+	// Before the respawn: a sample of the pane with no agent in it must
+	// not take the match for gone.
+	if err := s.moveChainsLocked(x, true); err != nil {
+		notes = append(notes, "chains: "+err.Error())
+	}
 	s.mu.Unlock()
 	res := s.Actions.Do(ctx, act, "y")
 	release()
 	if res.Err != "" || len(res.Ran) < len(act.Steps) {
+		s.mu.Lock()
+		if err := s.moveChainsLocked(x, false); err != nil {
+			res.Err = strings.TrimPrefix(res.Err+"; chains: "+err.Error(), "; ")
+		}
+		s.mu.Unlock()
 		switch {
 		case res.Err == "":
 			// A guard stopped a step, maybe after the rename ran: the old

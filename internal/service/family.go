@@ -243,7 +243,9 @@ func (s *Service) chainNamed(who string) (c chains.Chain, name string, members [
 			break
 		}
 		if who != "" && (x.Name == who || x.Pane == who || x.Target == who) {
-			c, ok = st.ChainOf(memberOf(x))
+			if teams := st.TeamsOf(memberOf(x)); len(teams) > 0 {
+				c, ok = teams[0], true // a match in several teams names its first
+			}
 		}
 	}
 	if !ok {
@@ -684,28 +686,6 @@ func (s *Service) relink(u *stokerUnit, grants []string, giver string) error {
 	return nil
 }
 
-// relinkChain makes chain unit u the stoker of chain, in its link.json
-// first: the merge guard reads it there.
-func (s *Service) relinkChain(u *stokerUnit, chain string) error {
-	if err := s.setChain(u, chain); err != nil {
-		return err
-	}
-	s.rememberName(u)
-	return nil
-}
-
-func (s *Service) setChain(u *stokerUnit, chain string) error {
-	s.fam.mu.Lock()
-	defer s.fam.mu.Unlock()
-	l := u.link
-	l.Chain = chain
-	if err := stoker.WriteLink(u.store.Dir(), l); err != nil {
-		return err
-	}
-	u.link.Chain = chain
-	return nil
-}
-
 // endLink marks chain unit u as stopped for good, in its link.json first.
 func (s *Service) endLink(u *stokerUnit) error {
 	s.rememberName(u)
@@ -893,18 +873,18 @@ func (s *Service) newChainAct(ctx context.Context, a proto.Act) proto.Result {
 	return proto.Result{Note: fmt.Sprintf("started the stoker of chain %s (%s)", s.chainNameOf(s.chainIDOf(u)), u.id)}
 }
 
-// ownerOf is the unit that drives the match x: the stoker of x's chain
-// while its run is on, else the host.
+// ownerOf is the unit that drives the match x: the stoker of the first of
+// x's teams whose run is on, else the host.
 func (s *Service) ownerOf(x sample.Session) *stokerUnit {
 	s.mu.Lock()
-	c, in := s.chainsLocked().ChainOf(memberOf(x))
+	teams := s.chainsLocked().TeamsOf(memberOf(x))
 	s.mu.Unlock()
-	return s.ownerOfChain(c.ID, in)
+	return s.ownerOfTeams(teams)
 }
 
-func (s *Service) ownerOfChain(chainID string, in bool) *stokerUnit {
-	if in {
-		if u := s.unitOfChain(chainID); u != nil && u.store.Mode().On {
+func (s *Service) ownerOfTeams(teams []chains.Chain) *stokerUnit {
+	for _, c := range teams {
+		if u := s.unitOfChain(c.ID); u != nil && u.store.Mode().On {
 			return u
 		}
 	}
@@ -912,16 +892,16 @@ func (s *Service) ownerOfChain(chainID string, in bool) *stokerUnit {
 }
 
 // scopeOf refuses a pane act of unit u on a match it does not own: a chain
-// unit acts on its chain's members only, and the host on no match a chain
+// unit acts on its chain's members only, and on none that the stoker of an
+// earlier chain of the match drives; the host acts on no match a chain
 // unit owns. Both read the chains as they are at the act, by the match's
 // identity, not its pane.
 func (s *Service) scopeOf(u *stokerUnit, pane string) error {
 	s.mu.Lock()
 	x, ok := s.sessionAtLocked(pane)
-	var c chains.Chain
-	in := false
+	var teams []chains.Chain
 	if ok {
-		c, in = s.chainsLocked().ChainOf(memberOf(x))
+		teams = s.chainsLocked().TeamsOf(memberOf(x))
 	}
 	s.mu.Unlock()
 	who := pane
@@ -929,12 +909,11 @@ func (s *Service) scopeOf(u *stokerUnit, pane string) error {
 		who = x.Name
 	}
 	if s.chainIDOf(u) != "" {
-		if !in || c.ID != s.chainIDOf(u) {
+		if !slices.ContainsFunc(teams, func(c chains.Chain) bool { return c.ID == s.chainIDOf(u) }) {
 			return fmt.Errorf("%s is not in the chain of this stoker.", who) //nolint:staticcheck // the line a person reads, as it stands
 		}
-		return nil
 	}
-	if o := s.ownerOfChain(c.ID, in); o != nil && o != u {
+	if o := s.ownerOfTeams(teams); o != nil && o != u && (s.chainIDOf(o) != "" || s.chainIDOf(u) == "") {
 		return fmt.Errorf("%s has the stoker of chain %s: give it an order.", who, s.chainNameOf(s.chainIDOf(o))) //nolint:staticcheck // the line a person reads, as it stands
 	}
 	return nil
