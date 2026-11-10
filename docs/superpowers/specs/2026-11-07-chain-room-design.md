@@ -229,6 +229,16 @@ make plain that this stoker is shared.
   Claude Code, Codex and OpenCode, and readline's defaults, for M-s and M-n.
   A key any of them uses is replaced by the nearest free Option key, on desk
   and phone alike, and the spec and DESIGN.md say which.
+- **The key check** (done 2026-11-10). No agent uses M-s or M-n, so the keys
+  stay. matchblox binds them only on agent panes it samples; every other
+  pane gets the key as typed, so readline keeps its M-n.
+
+  | Tool | M-s | M-n | Source, read 2026-11-10 |
+  |---|---|---|---|
+  | Claude Code | free | free | code.claude.com/docs/en/interactive-mode: Alt B, D, F, M, O, P, T, V, Y |
+  | Codex | free | free | the 0.128 default keymap, as codex.danielvaughan.com lists it: no default Alt key (0.163, installed here, not read: `/keymap` shows it) |
+  | OpenCode | free | free | opencode.ai/docs/keybinds: Alt A, B, D, E, F, Return; M-n only with Ctrl |
+  | readline (bash 5.2) | free | non-incremental-forward-search-history | `bind -p` |
 
 ### The keys on a Mac, and the way back
 
