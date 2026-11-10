@@ -29,6 +29,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/hooks"
 	"github.com/blox-eng/matchblox/internal/idle"
 	"github.com/blox-eng/matchblox/internal/limits"
+	"github.com/blox-eng/matchblox/internal/mux"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/push"
 	"github.com/blox-eng/matchblox/internal/queue"
@@ -137,6 +138,9 @@ type Service struct {
 	// with its styles: the guard tells Claude Code's grey suggestion from a
 	// draft a person typed.
 	Capture func(panes []string) map[string]string
+	// Mux is the multiplexer chains and sends reach panes through. Nil:
+	// tmux, through TmuxOut and Capture.
+	Mux mux.Mux
 	// PaneMouse tells if the program in a pane reads the mouse in SGR form,
 	// and the pane's size. Nil: never.
 	PaneMouse func(pane string) (cols, rows int, ok bool)
@@ -287,21 +291,21 @@ type Service struct {
 	// typingActs are the acts that type into a pane now: Serve lets them
 	// finish before it returns.
 	typingActs inFlight
-	// noticed are the branches of each pair at its last notice; heardAsks
-	// the requests already told to their target. Under mu.
-	noticed   map[pair][2]string
-	heardAsks map[chains.Request]bool
-	// chainLife are the chains that ended or joined, for followChains.
+	// noticed are the branches of each pair at its last notice. Under mu.
+	noticed map[pair][2]string
+	// chainLife are the ids of the teams that ended, for followChains.
 	// Under mu.
-	chainLife []chainEvent
-	// heldAsks and heldNotices are what a delivery holds until its hook
-	// says it heard it: no other hook is told them meanwhile. Under mu.
-	heldAsks    map[chains.Request]bool
+	chainLife []string
+	// heldNotices are what a delivery holds until its hook says it heard
+	// it: no other hook is told them meanwhile. Under mu.
 	heldNotices map[pair]bool
 	// cleared are the session ids of chained matches that a /clear started
 	// afresh: each hears once who it is chained with. heldCleared are the
 	// ones a delivery holds.
 	cleared, heldCleared map[string]bool
+	// mateNames is the last name of the chained match in each live pane,
+	// for the news that it left once its session is gone. Under mu.
+	mateNames map[string]string
 	// found goes to each console when foundGen passes the one it has.
 	found     gitscan.Found
 	foundGen  uint64
@@ -403,7 +407,7 @@ func New(cfg config.Config, smp *sample.Sampler, git GitSource) *Service {
 	s.PeerPane, s.TTYPane = s.paneOfPeer, s.paneOfTTY
 	s.Activity = sample.ClientActivity
 	s.alone = s.now()
-	s.Actions = actions.Runner{Check: actions.CheckGuard, Idle: s.idle, Resting: s.resting, Answerable: s.answerable, Messageable: s.messageable, Asking: s.asking, Menu: s.menu, Stokable: s.stokable}
+	s.Actions = actions.Runner{Check: actions.CheckGuard, Idle: s.idle, Resting: s.resting, Answerable: s.answerable, Messageable: s.messageable, Asking: s.asking, Menu: s.menu, Stokable: s.stokable, PeerStokable: s.peerStokable}
 	return s
 }
 

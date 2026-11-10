@@ -946,8 +946,9 @@ func doActFor(path string, a proto.Act, wait time.Duration) (proto.Result, error
 	}
 }
 
-// chainAct is the act `chain` asks for: ask or accept a match, take no
-// chains (--off), or take them again (--on).
+// chainAct is the act `chain` asks for: join a team by its name, or the
+// team of a match (a team's name wins over a match's), take no chains
+// (--off), or take them again (--on).
 func chainAct(doc state.Doc, words []string, off, on bool, from string) (proto.Act, error) {
 	a := proto.Act{Confirm: "y", From: from}
 	switch {
@@ -961,6 +962,8 @@ func chainAct(doc state.Doc, words []string, off, on bool, from string) (proto.A
 		a.RecID = proto.ChainPrefix + "on"
 	case len(words) != 1:
 		return a, errors.New("chain takes one session: matchblox chain <who>")
+	case doc.Chains != nil && slices.ContainsFunc(doc.Chains.Chains, func(c chains.Chain) bool { return c.Name == words[0] }):
+		a.RecID = proto.ChainPrefix + "@" + words[0]
 	default:
 		sess, err := resolve(doc, words[0])
 		if err != nil {
@@ -997,16 +1000,32 @@ func cliChain(words []string, off, on, asJSON bool, w io.Writer, path string) er
 	return chainOutcome(w, path, a)
 }
 
-// cliUnchain leaves the chain of the pane it runs in.
-func cliUnchain(words []string, w io.Writer, path string) error {
-	from := os.Getenv("TMUX_PANE")
+// unchainAct is the act `unchain` asks for: leave the only team, the team
+// named, or every team (--all).
+func unchainAct(words []string, all bool, from string) (proto.Act, error) {
+	a := proto.Act{RecID: proto.ChainPrefix + "-", Confirm: "y", From: from}
 	switch {
-	case len(words) > 0:
-		return errors.New("unchain takes no words: it leaves your chain")
-	case from == "":
+	case len(words) > 1 || all && len(words) > 0:
+		return a, errors.New("unchain takes one chain: matchblox unchain [<chain>|--all]")
+	case all:
+		a.RecID += "*"
+	case len(words) == 1:
+		a.RecID += "@" + words[0]
+	}
+	return a, nil
+}
+
+// cliUnchain leaves a team of the pane it runs in.
+func cliUnchain(words []string, all bool, w io.Writer, path string) error {
+	from := os.Getenv("TMUX_PANE")
+	if from == "" {
 		return errChainNeedsPane
 	}
-	return chainOutcome(w, path, proto.Act{RecID: proto.ChainPrefix + "-", Confirm: "y", From: from})
+	a, err := unchainAct(words, all, from)
+	if err != nil {
+		return err
+	}
+	return chainOutcome(w, path, a)
 }
 
 func chainOutcome(w io.Writer, path string, a proto.Act) error {
@@ -1029,12 +1048,12 @@ type chainMemberJSON struct {
 	Repo string `json:"repo"`
 }
 
-type chainRequestJSON struct {
-	From string `json:"from"`
-	To   string `json:"to"`
+type chainTeamJSON struct {
+	Name    string            `json:"name"`
+	Members []chainMemberJSON `json:"members"`
 }
 
-// writeChain lists the chain pane is in, then the asks to and from it.
+// writeChain lists each team pane is in, with its members.
 func writeChain(w io.Writer, doc state.Doc, pane string, asJSON bool) error {
 	session := func(m chains.Member) (sample.Session, bool) {
 		i := slices.IndexFunc(doc.Sessions, func(s sample.Session) bool { return s.Pane == m.Pane })
@@ -1043,52 +1062,39 @@ func writeChain(w io.Writer, doc state.Doc, pane string, asJSON bool) error {
 		}
 		return doc.Sessions[i], true
 	}
-	name := func(m chains.Member) string {
-		if s, ok := session(m); ok {
-			return s.Name
-		}
-		return m.Pane
-	}
-	members := []chainMemberJSON{}
-	reqs := []chainRequestJSON{}
+	teams := []chainTeamJSON{}
 	var lines []string
 	if doc.Chains != nil {
 		for _, c := range doc.Chains.Chains {
 			if !slices.ContainsFunc(c.Members, func(m chains.Member) bool { return m.Pane == pane }) {
 				continue
 			}
+			t := chainTeamJSON{Name: c.Name, Members: []chainMemberJSON{}}
+			lines = append(lines, c.Name+":")
 			for _, m := range c.Members {
-				s, _ := session(m)
+				name := m.Pane
+				s, ok := session(m)
+				if ok {
+					name = s.Name
+				}
 				repo := repoName(doc, s.Cwd)
-				members = append(members, chainMemberJSON{name(m), m.Pane, repo})
-				line := name(m) + " " + m.Pane
+				t.Members = append(t.Members, chainMemberJSON{name, m.Pane, repo})
+				line := "  " + name + " " + m.Pane
 				if repo != "" {
 					line += " in " + repo
 				}
 				lines = append(lines, line)
 			}
-			break
-		}
-		for _, r := range doc.Chains.Requests {
-			switch pane {
-			case r.To.Pane:
-				lines = append(lines, name(r.From)+" asks you")
-			case r.From.Pane:
-				lines = append(lines, "you asked "+name(r.To))
-			default:
-				continue
-			}
-			reqs = append(reqs, chainRequestJSON{name(r.From), name(r.To)})
+			teams = append(teams, t)
 		}
 	}
 	if asJSON {
 		return json.NewEncoder(w).Encode(struct {
-			Chain    []chainMemberJSON  `json:"chain"`
-			Requests []chainRequestJSON `json:"requests"`
-		}{members, reqs})
+			Chains []chainTeamJSON `json:"chains"`
+		}{teams})
 	}
 	if len(lines) == 0 {
-		lines = []string{"not in a chain. To ask, run: matchblox chain <who>"}
+		lines = []string{"not in a chain. To join one, run: matchblox chain <who>"}
 	}
 	_, err := fmt.Fprintln(w, strings.Join(lines, "\n"))
 	return err

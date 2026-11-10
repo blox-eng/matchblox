@@ -149,14 +149,15 @@ default, 0 for all); `--json` prints `name`, `pane`, `target`, `said`,
 
 ## Chain matches
 
-Two matches on one host can hear from each other once both chain, in one
-repo or across repos. Run in an
-agent's pane, `matchblox chain api` asks to chain with `api`, or accepts its
-ask; nothing is shared until the other side chains back. `matchblox chain`
-lists your chain and the asks to and from you (`--json` prints `chain` and
-`requests`). `matchblox unchain` leaves the chain. `matchblox chain --off`
-takes no chains and no notices; `--on` takes them again. See
-[chains](agents.md#chains) for what a match hears and what a chain grants.
+A chain is a team of matches on one host that all hear each other, in one
+repo or across repos. Run in an agent's pane, `matchblox chain api` joins
+the chain of `api` at once, or forms one with it; `matchblox chain hearth`
+joins the chain named hearth. A match may be in several chains, and each
+hears only itself. `matchblox chain` lists your chains (`--json` prints
+`chains`). `matchblox unchain [<chain>]` leaves your chain, or the one
+named; `--all` leaves every chain. `matchblox chain --off` takes no chains
+and no notices; `--on` takes them again. See [chains](agents.md#chains) for
+what a match hears and what a chain grants.
 
 Sessions draws each chain as a fuse, in a column between the match and the
 name. The rule: a chain stays together in the group of its neediest match.
@@ -178,8 +179,15 @@ before.
   `· 2 hidden`.
 - Child rows and the opened block on a phone carry `│` in the fuse column.
   A held match keeps its place in the chain.
-- When a chain-mate commits, changes branch or sends, a bright cell runs
-  down the fuse once. `--no-motion` shows no spark.
+- A match in two chains draws in the fuse of the chain that formed first.
+  Its row adds a faint `· also in web` while the name has room. The other
+  chain's fuse skips that row and counts the match as shown.
+- When a chain-mate joins, commits, changes branch or sends, a bright cell
+  runs down the fuse once. `--no-motion` shows no spark.
+- When a match joins a chain, the header shows `docs-bot joined hearth · u
+  in its room takes it out` for 2.5 seconds; under 50 columns, `docs-bot
+  joined hearth · u: out`. A new chain shows `hearth formed: hearth,
+  web-cart`. The toast shows with `--no-motion` too.
 - A session in one repo with another that it has not chained with shows a
   faint `· same repo · chain?` after its name, while the name has room. A
   chain with a match in another repo does not hide it.
@@ -209,7 +217,7 @@ took it and the answer never came.
 | `matchblox new "fix the flaky test"` | Starts Claude Code here, in a tmux session of its own named after the directory, with the words as its first message. `--where <path>` starts it elsewhere (`--where <url>` clones a git URL, `https://…`, `git@host:o/r` or `gh:o/r`, into `[git] clone_root`, or uses the clone you have, then starts; it waits up to 30 minutes. A bare `o/r` is a folder here, as any path), `--agent codex` (or `opencode`, `cursor-agent`) starts another agent, `--branch <b>` first adds a worktree for a new branch beside the repository (`<repo>-<b>`, from origin's default branch, tracking nothing), `--name <name>` names it. `--account <name>` starts it on an account of that agent. `--new-account` makes that account first. `--setup like-default`, `copy` or `empty` picks its setup, and the default is `like-default`. A new account starts without a first message, and the command prints `sign in in <session>`. It waits as long as a copy of the default can take, and says "refused" when matchblox refused the start, "failed" when it ran and failed, and "stopped after" the step that ran when a guard stopped the rest. A start on an account that another start or switch is busy with is refused at once. The tmux session, its window and Claude Code's own name are that one name. A first message that starts with a dash is refused: the agent would read it as a flag. |
 | `matchblox rename api ships-flake` | Names the session, its tmux window, its tmux session when it is that session's one window, and Claude Code (`/rename`), all alike. A Claude Code session that works takes its name when it rests (`api renames when it rests`). A name is one word of letters, digits, dashes and underscores, and no other tmux session may have it. |
 | `matchblox kill api` | Ends the session: `tmux kill-pane`, then a `TERM` to its agent if it still runs. It is refused while the session works or waits for you: `--anyway` kills it all the same. Its worktree and its transcript stay. |
-| `matchblox switch api --agent codex` | Saves handover evidence, then replaces the agent in the same pane: same name, directory, park and ship. The new agent starts on its last account, else `default`, with match awareness and a prompt to continue from the saved evidence. Codex starts with workspace trust and workspace-write network access. `--extra "<words>"` adds your instructions for this switch after that prompt, and they win over the handover; `--extra` with `--handoff` or `--preview` is refused before the service is asked. `--handoff "<line>"` replaces the prompt with your exact task; `--handoff ''` starts no task and captures no handover. While the match works or waits, `--anyway` switches it mid-turn. Inside tmux, your client jumps after the switch runs. |
+| `matchblox switch api --agent codex` | Saves handover evidence, then replaces the agent in the same pane: same name, directory, park, ship and chain. The new agent starts on its last account, else `default`, with match awareness and a prompt to continue from the saved evidence. Codex starts with workspace trust and workspace-write network access. `--extra "<words>"` adds your instructions for this switch after that prompt, and they win over the handover; `--extra` with `--handoff` or `--preview` is refused before the service is asked. `--handoff "<line>"` replaces the prompt with your exact task; `--handoff ''` starts no task and captures no handover. While the match works or waits, `--anyway` switches it mid-turn. Inside tmux, your client jumps after the switch runs. |
 | `matchblox switch api --agent codex --preview` | Reads the current handover evidence. It sends no agent input, writes no context files, and replaces no process. |
 | `matchblox recover` | Lists the agents your tmux server ran, from the recovery record: each with its tmux session, agent, folder and state. **live**: an agent runs that conversation now. **can reopen**: its folder is there, on the branch it had, and its saved history is on disk. **cannot reopen**: the line says why and the fix (a folder that is gone, another branch or another repository, no saved history, an agent that is not installed, a conversation that another Claude Code process has open, or a session that ran on Bedrock, Vertex or an API key set in your shell: that sign-in came from your shell, so the line gives the command to run there instead of reopening it on your default sign-in). It changes nothing. The service keeps the record in `recover.json` in its state folder while your agents run: the agent, its conversation (it follows `/clear` and `/resume`), its tmux session, folder, checkout and tmux server. An agent you quit leaves the record. The agents of a server that died stay in it for 14 days. The record holds no transcript, prompt or environment value. Claude Code, Codex and Cursor are recorded; a Cursor line says its history is not checked, as matchblox does not read Cursor's history. `--json` prints the lines as JSON. |
 | `matchblox recover --all` | Reopens each conversation that can reopen, each in a tmux session of its name on your server (`api-2` when `api` is taken), in its folder and on its account: `claude --resume <id>`, `codex resume <id>` or `cursor-agent --resume <id>`. It sends no prompt and replays no command: each agent waits for you. It says reopened only for an agent that still runs a moment later, `remain-on-exit` or not; one that exited at once is a cannot line with the command to run to see why, and its session is closed. It runs no git command that changes anything. A conversation that runs is left alone, so a second `recover --all` starts nothing. A line that could not reopen fails the command, with its fix. `matchblox recover api web` reopens those sessions only. `matchblox recover api --dir ~/src/api-moved` reopens a session whose folder moved, when the new folder is a checkout of the same repository (the same `origin`, or the same first commit) on the same branch; a relative `--dir` is read from the folder you run it in. An agent's pane may list them, but only you reopen them. |

@@ -517,9 +517,13 @@ func (m Model) rowIn(s sample.Session, sel bool, w int, t tracks, fuse string, r
 	if t.fuse > 0 {
 		cell = strings.TrimSuffix(cell, " ") + padTo(fuse, t.fuse) + " "
 	}
-	hint := ""
+	plain := m.alsoIn(s)
 	if m.mayChain(s) {
-		hint = st.faint.Render(sameRepoHint)
+		plain += sameRepoHint
+	}
+	hint := ""
+	if plain != "" {
+		hint = st.faint.Render(plain)
 	}
 	state := padTo(word, t.word) + cutLeft(wait, t.wait)
 	if merged {
@@ -531,7 +535,7 @@ func (m Model) rowIn(s sample.Session, sel bool, w int, t tracks, fuse string, r
 		room := w - lipgloss.Width(mark+cell) - lipgloss.Width(right) - 1
 		if tagged, ok := m.rowName(s, ink, room); ok {
 			name = tagged
-		} else if hint != "" && lipgloss.Width(s.Name+sameRepoHint) <= room {
+		} else if hint != "" && lipgloss.Width(s.Name+plain) <= room {
 			name += hint
 		}
 		line := spread(mark+cell+name, right, w)
@@ -543,7 +547,7 @@ func (m Model) rowIn(s sample.Session, sel bool, w int, t tracks, fuse string, r
 	name := ink.Render(pad(s.Name, t.name))
 	if tagged, ok := m.rowName(s, ink, t.name-1); ok {
 		name = padTo(tagged, t.name) // pad's gap before the word
-	} else if hint != "" && lipgloss.Width(s.Name+sameRepoHint) <= t.name-1 {
+	} else if hint != "" && lipgloss.Width(s.Name+plain) <= t.name-1 {
 		name = padTo(ink.Render(s.Name)+hint, t.name)
 	}
 	line := mark + cell + name + state + cutLeft(ctx, t.ctx)

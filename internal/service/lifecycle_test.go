@@ -18,6 +18,7 @@ import (
 
 	"github.com/blox-eng/matchblox/internal/accounts"
 	"github.com/blox-eng/matchblox/internal/advice"
+	"github.com/blox-eng/matchblox/internal/chains"
 	"github.com/blox-eng/matchblox/internal/holds"
 	"github.com/blox-eng/matchblox/internal/hooks"
 	"github.com/blox-eng/matchblox/internal/panes"
@@ -2062,5 +2063,117 @@ func TestAStaleSwitchRefusesEveryHandoff(t *testing.T) {
 		if res.Err != "the session changed since this switch read it: switch again" || len(*ran) != 0 || captured {
 			t.Errorf("%q: err %q ran %q captured %v", h, res.Err, *ran, captured)
 		}
+	}
+}
+
+// switchChainTest is a switch test where work (%1) is chained with cx (%3),
+// on a clock the test moves.
+func switchChainTest(t *testing.T) (*Service, *time.Time) {
+	t.Helper()
+	s, _ := switchTest(t)
+	clock := night0
+	s.Now = func() time.Time { return clock }
+	s.ChainsPath = filepath.Join(t.TempDir(), "chains.json")
+	if res := chainFrom(t, s, "%1", proto.ChainPrefix+"%3"); res.Err != "" {
+		t.Fatalf("work chains cx: %+v", res)
+	}
+	chainInbox(s, lifeSnap(false).Sessions[2]) // cx heard work join
+	return s, &clock
+}
+
+// switchSample publishes lifeSnap with work's place taken by agent, or
+// empty when agent is nil.
+func switchSample(s *Service, agent *sample.Session) state.Doc {
+	snap := lifeSnap(false)
+	snap.Sessions = slices.Clone(snap.Sessions[1:])
+	if agent != nil {
+		snap.Sessions = append(snap.Sessions, *agent)
+	}
+	var doc state.Doc
+	s.publish(snap, func(d state.Doc) { doc = d })
+	return doc
+}
+
+// TestASwitchKeepsTheChain: #333. A switch respawns the pane, so the new
+// agent has another pid, start and session id; the match keeps its chain
+// and its notices, with no new handshake.
+func TestASwitchKeepsTheChain(t *testing.T) {
+	s, clock := switchChainTest(t)
+	if res := s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: "codex"})); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	if st, err := chains.Load(s.ChainsPath); err != nil || len(st.Moves) != 1 { // a restart keeps the place
+		t.Fatalf("on disk: %+v %v", st, err)
+	}
+	*clock = clock.Add(time.Second)
+	if doc := switchSample(s, nil); doc.Chains == nil || len(doc.Chains.Chains) != 1 {
+		t.Fatalf("while the pane starts the new agent: %+v", doc.Chains)
+	}
+	codex := sample.Session{Agent: "codex", PID: 201, Start: 9, Pane: "%1", Target: "app:1.1", Cwd: "/work/app", Name: "work", Status: "idle"}
+	*clock = clock.Add(10 * time.Minute) // no id read yet: a Codex chat before its first turn
+	if doc := switchSample(s, &codex); doc.Chains == nil || len(doc.Chains.Chains) != 1 {
+		t.Fatalf("before the new agent's id: %+v", doc.Chains)
+	}
+	codex.SessionID = "c1"
+	doc := switchSample(s, &codex)
+	if doc.Chains == nil || len(doc.Chains.Chains) != 1 {
+		t.Fatalf("after the switch: %+v", doc.Chains)
+	}
+	if c := doc.Chains.Chains[0]; len(c.Members) != 2 || !slices.ContainsFunc(c.Members, memberOf(codex).Same) {
+		t.Fatalf("chain = %+v", c)
+	}
+	if got := chainInbox(s, lifeSnap(false).Sessions[2]); len(got) != 0 {
+		t.Fatalf("cx heard %q", got)
+	}
+	d := s.news(proto.News{Pane: "%1"})
+	if !strings.Contains(d.text, "you are chained with cx") {
+		t.Fatalf("the new agent heard %q", d.text)
+	}
+	s.mu.Lock()
+	moves := len(s.Chains.Moves)
+	s.mu.Unlock()
+	if moves != 0 {
+		t.Fatalf("%d moves wait after the new agent showed", moves)
+	}
+}
+
+// TestASwitchWithNoNewAgentStaysWhileItsPaneLives: a pane with no agent
+// after a switch keeps its match, unseen; once the pane closes, the match
+// is gone.
+func TestASwitchWithNoNewAgentStaysWhileItsPaneLives(t *testing.T) {
+	s, clock := switchChainTest(t)
+	if res := s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: "codex"})); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	*clock = clock.Add(time.Hour)
+	if doc := switchSample(s, nil); doc.Chains == nil || len(doc.Chains.Chains) != 1 {
+		t.Fatalf("an hour on, its pane alive: %+v", doc.Chains)
+	}
+	snap := lifeSnap(false)
+	snap.Sessions = slices.Clone(snap.Sessions[1:])
+	snap.Panes = slices.DeleteFunc(slices.Clone(snap.Panes), func(p sample.Pane) bool { return p.ID == "%1" })
+	var doc state.Doc
+	s.publish(snap, func(d state.Doc) { doc = d })
+	if doc.Chains != nil {
+		t.Fatalf("its pane closed, it stayed: %+v", doc.Chains)
+	}
+	if got := chainInbox(s, lifeSnap(false).Sessions[2]); !slices.Equal(got, []string{"work left the chain"}) {
+		t.Fatalf("cx heard %q", got)
+	}
+}
+
+// TestASwitchTheGuardStopsKeepsNoMove: the old agent still runs, so a new
+// agent started by hand later is not taken for it.
+func TestASwitchTheGuardStopsKeepsNoMove(t *testing.T) {
+	s, _ := switchChainTest(t)
+	s.Actions.Check = func(advice.Guard) error { return errors.New("another process has pid 101 now") }
+	if res := s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: "codex"})); len(res.Ran) != 0 {
+		t.Fatalf("%+v", res)
+	}
+	s.mu.Lock()
+	moves := len(s.Chains.Moves)
+	s.mu.Unlock()
+	if moves != 0 {
+		t.Fatalf("a stopped switch left %d moves", moves)
 	}
 }

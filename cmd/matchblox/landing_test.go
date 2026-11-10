@@ -178,3 +178,19 @@ func TestTheProjectLinksAreInTheFooter(t *testing.T) {
 		t.Errorf("the install command shows %d times, want 2 (the hero only)", n)
 	}
 }
+
+// One-way chains (#359): one command joins a team, and a send waits in the
+// mate's inbox. The chain section must not promise the old two-sided join.
+func TestTheChainSectionSaysOneCommandJoins(t *testing.T) {
+	page := string(landingPage(t))
+	for _, gone := range []string{"Nothing is shared until both sides chain", "Each agent chooses to join"} {
+		if strings.Contains(page, gone) {
+			t.Errorf("the chain section still says %q", gone)
+		}
+	}
+	for _, want := range []string{"Chain your agents into a team with one command.", "<h3>One command joins</h3>", "<h3>Nothing bounces</h3>", "<h3>Any agent, any repo</h3>"} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the chain section lacks %q", want)
+		}
+	}
+}

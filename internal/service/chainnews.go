@@ -40,7 +40,7 @@ func (s *Service) chainNews(ev hooks.Event) {
 		return
 	}
 	me := memberOf(x)
-	if _, chained := s.chainsLocked().ChainOf(me); !chained {
+	if len(s.chainsLocked().TeamsOf(me)) == 0 {
 		s.mu.Unlock()
 		return
 	}
@@ -143,7 +143,7 @@ func (s *Service) chainHeads(now time.Time) {
 	}
 	var looks []look
 	for wt, in := range byTree {
-		if slices.ContainsFunc(in, func(x sample.Session) bool { _, ok := st.ChainOf(memberOf(x)); return ok }) {
+		if slices.ContainsFunc(in, func(x sample.Session) bool { return len(st.TeamsOf(memberOf(x))) > 0 }) {
 			old, had := s.heads[wt]
 			looks = append(looks, look{wt, in, old, had})
 		}
@@ -255,22 +255,20 @@ func (s *Service) moveLocked(wt string, old head, had bool, cur head) bool {
 	return had && cur != old
 }
 
-// postLocked puts text in the inbox of every mate of from, never in one of
-// from's own; spark marks their chains. Callers hold mu.
+// postLocked puts text in the inbox of every member of each team of from,
+// never in one of from's own; spark marks those teams. Callers hold mu.
 func (s *Service) postLocked(from []chains.Member, text string, spark bool, now time.Time) {
 	st := s.chainsLocked()
 	var to []chains.Member
 	for _, m := range from {
-		c, ok := st.ChainOf(m)
-		if !ok {
-			continue
-		}
-		if spark {
-			st.Spark(c.ID, now)
-		}
-		for _, o := range st.Mates(m) {
-			if !slices.ContainsFunc(from, o.Same) && !slices.ContainsFunc(to, o.Same) {
-				to = append(to, o)
+		for _, c := range st.TeamsOf(m) {
+			if spark {
+				st.Spark(c.ID, now)
+			}
+			for _, o := range c.Members {
+				if !slices.ContainsFunc(from, o.Same) && !slices.ContainsFunc(to, o.Same) {
+					to = append(to, o)
+				}
 			}
 		}
 	}

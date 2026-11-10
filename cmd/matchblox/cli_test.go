@@ -784,11 +784,7 @@ func TestSessionsJSONNamesTheShipTheRowLeadsWith(t *testing.T) {
 func chainDoc() state.Doc {
 	d := cliDoc()
 	d.Chains = &state.ChainsView{
-		Chains: []chains.Chain{{ID: "c1", Repo: "o/r", Members: []chains.Member{{Pane: "%3"}, {Pane: "%4"}}}},
-		Requests: []chains.Request{
-			{From: chains.Member{Pane: "%5"}, To: chains.Member{Pane: "%3"}},
-			{From: chains.Member{Pane: "%3"}, To: chains.Member{Pane: "%9"}},
-		},
+		Chains: []chains.Chain{{ID: "c1", Name: "api", Repo: "o/r", Members: []chains.Member{{Pane: "%3"}, {Pane: "%4"}}}},
 	}
 	d.Sessions = append(d.Sessions, sample.Session{Pane: "%9", Name: "docs", Cwd: "/tmp/notes"})
 	d.Sessions[0].Cwd, d.Sessions[1].Cwd = "/dev/api/cmd", "/dev/web"
@@ -849,8 +845,8 @@ func chainServiceCounting(t *testing.T, path string, doc state.Doc, note, errTex
 	return acts, snapshots
 }
 
-func TestChainPrintsAskedThenChained(t *testing.T) {
-	for _, note := range []string{"asked docs: the chain forms when it chains back", "chained with docs: 3 matches"} {
+func TestChainPrintsTheAnswer(t *testing.T) {
+	for _, note := range []string{"joined docs: 2 matches. To leave it, run: matchblox unchain docs", "already in api"} {
 		sock := isolate(t)
 		t.Setenv("TMUX_PANE", "%3")
 		acts := chainService(t, sock, chainDoc(), note, "")
@@ -922,32 +918,71 @@ func TestChainSwitchesReadNoDoc(t *testing.T) {
 	}
 }
 
-func TestChainListJSON(t *testing.T) {
+func TestWriteChainListsEachTeam(t *testing.T) {
+	doc := chainDoc()
+	doc.Chains.Chains = append(doc.Chains.Chains,
+		chains.Chain{ID: "c2", Name: "docs", Members: []chains.Member{{Pane: "%9"}, {Pane: "%3"}}},
+		chains.Chain{ID: "c3", Name: "other", Members: []chains.Member{{Pane: "%9"}, {Pane: "%4"}}})
 	var buf bytes.Buffer
-	if err := writeChain(&buf, chainDoc(), "%3", true); err != nil {
+	if err := writeChain(&buf, doc, "%3", false); err != nil {
 		t.Fatal(err)
 	}
-	want := `{"chain":[{"name":"api","pane":"%3","repo":"api"},{"name":"web","pane":"%4","repo":"web"}],"requests":[{"from":"web","to":"api"},{"from":"api","to":"docs"}]}`
+	if want := "api:\n  api %3 in api\n  web %4 in web\ndocs:\n  docs %9\n  api %3 in api\n"; buf.String() != want {
+		t.Fatalf("got %q, want %q", buf.String(), want)
+	}
+	buf.Reset()
+	if err := writeChain(&buf, doc, "%3", true); err != nil {
+		t.Fatal(err)
+	}
+	want := `{"chains":[{"name":"api","members":[{"name":"api","pane":"%3","repo":"api"},{"name":"web","pane":"%4","repo":"web"}]},` +
+		`{"name":"docs","members":[{"name":"docs","pane":"%9","repo":""},{"name":"api","pane":"%3","repo":"api"}]}]}`
 	if strings.TrimSpace(buf.String()) != want {
 		t.Fatalf("got %s", buf.String())
 	}
 	buf.Reset()
-	if err := writeChain(&buf, state.Doc{}, "%3", true); err != nil || strings.TrimSpace(buf.String()) != `{"chain":[],"requests":[]}` {
+	if err := writeChain(&buf, state.Doc{}, "%3", true); err != nil || strings.TrimSpace(buf.String()) != `{"chains":[]}` {
+		t.Fatalf("empty json: %q %v", buf.String(), err)
+	}
+	buf.Reset()
+	if err := writeChain(&buf, state.Doc{}, "%3", false); err != nil || buf.String() != "not in a chain. To join one, run: matchblox chain <who>\n" {
 		t.Fatalf("empty: %q %v", buf.String(), err)
 	}
 }
 
-func TestChainListText(t *testing.T) {
-	var buf bytes.Buffer
-	if err := writeChain(&buf, chainDoc(), "%3", false); err != nil {
-		t.Fatal(err)
+func TestChainNameJoinsTheTeamBeforeTheMatch(t *testing.T) {
+	a, err := chainAct(chainDoc(), []string{"api"}, false, false, "%4")
+	if err != nil || a.RecID != "chain:@api" {
+		t.Fatalf("%+v %v", a, err)
 	}
-	if want := "api %3 in api\nweb %4 in web\nweb asks you\nyou asked docs\n"; buf.String() != want {
-		t.Fatalf("got %q, want %q", buf.String(), want)
+}
+
+func TestChainWhoBecomesPane(t *testing.T) {
+	a, err := chainAct(chainDoc(), []string{"docs"}, false, false, "%3")
+	if err != nil || a.RecID != "chain:%9" {
+		t.Fatalf("%+v %v", a, err)
 	}
-	buf.Reset()
-	if err := writeChain(&buf, state.Doc{}, "%3", false); err != nil || buf.String() != "not in a chain. To ask, run: matchblox chain <who>\n" {
-		t.Fatalf("empty: %q %v", buf.String(), err)
+}
+
+func TestUnchainWords(t *testing.T) {
+	for name, c := range map[string]struct {
+		words []string
+		all   bool
+		want  string
+	}{
+		"bare": {nil, false, "chain:-"}, "team": {[]string{"api"}, false, "chain:-@api"}, "all": {nil, true, "chain:-*"},
+	} {
+		a, err := unchainAct(c.words, c.all, "%3")
+		if err != nil || a.RecID != c.want || a.From != "%3" {
+			t.Errorf("%s: %+v %v", name, a, err)
+		}
+	}
+	for name, c := range map[string]struct {
+		words []string
+		all   bool
+	}{"two words": {[]string{"a", "b"}, false}, "team and all": {[]string{"a"}, true}} {
+		if _, err := unchainAct(c.words, c.all, "%3"); err == nil || err.Error() != "unchain takes one chain: matchblox unchain [<chain>|--all]" {
+			t.Errorf("%s: %v", name, err)
+		}
 	}
 }
 
@@ -964,16 +999,16 @@ func TestChainListNeedsAPane(t *testing.T) {
 func TestUnchain(t *testing.T) {
 	sock := isolate(t)
 	t.Setenv("TMUX_PANE", "%3")
-	acts := chainService(t, sock, chainDoc(), "left the chain", "")
+	acts := chainService(t, sock, chainDoc(), "left api", "")
 	var buf bytes.Buffer
-	if err := cliUnchain(nil, &buf, sock); err != nil || buf.String() != "left the chain\n" {
+	if err := cliUnchain(nil, false, &buf, sock); err != nil || buf.String() != "left api\n" {
 		t.Fatalf("%q %v", buf.String(), err)
 	}
 	if a := <-acts; a.RecID != "chain:-" || a.From != "%3" {
 		t.Fatalf("act %+v", a)
 	}
-	if err := cliUnchain([]string{"x"}, io.Discard, sock); err == nil {
-		t.Fatal("unchain takes no words")
+	if err := cliUnchain([]string{"x", "y"}, false, io.Discard, sock); err == nil {
+		t.Fatal("unchain took two words")
 	}
 }
 

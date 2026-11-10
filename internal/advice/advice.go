@@ -58,6 +58,9 @@ type Guard struct {
 	// step's own command, which starts with Typed.
 	StokePane string `json:"stoke_pane,omitempty"`
 	Typed     string `json:"typed,omitempty"`
+	// PeerLine: the step types a chain-mate's line. StokePane's checks hold,
+	// but a session that waits for you may take it: the line wakes it.
+	PeerLine bool `json:"peer_line,omitempty"`
 }
 
 type Rec struct {

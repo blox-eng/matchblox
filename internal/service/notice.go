@@ -23,7 +23,6 @@ type delivery struct {
 	text    string
 	me      chains.Member
 	taken   chains.Taken
-	asks    []chains.Request
 	notices map[pair][2]string
 	cleared string // the session id told its chain after a /clear
 }
@@ -33,8 +32,7 @@ type delivery struct {
 var newsHeardWait = 200 * time.Millisecond
 
 // news is what the match in n.Pane has not heard yet, in blocks: its inbox,
-// the requests to chain with it, then the same-repo matches it can chain
-// with. It empties the inbox; heard marks the rest as told, unheard gives
+// then the same-repo matches it can chain with. It empties the inbox; heard marks the rest as told, unheard gives
 // the inbox back.
 func (s *Service) news(n proto.News) delivery {
 	s.mu.Lock()
@@ -45,6 +43,16 @@ func (s *Service) news(n proto.News) delivery {
 	}
 	st := s.chainsLocked()
 	d := delivery{me: memberOf(x), taken: st.Take(memberOf(x))}
+	d.taken.Items = slices.DeleteFunc(d.taken.Items, func(it chains.Item) bool {
+		if it.From == (chains.Member{}) {
+			return false
+		}
+		if _, shared := st.Shared(it.From, d.me); shared {
+			return false
+		}
+		st.Lose(d.me, it, chains.LostUnchained) // its sender left, or was taken out
+		return true
+	})
 	var blocks []string
 	if line := s.clearedLocked(st, x); line != "" {
 		d.cleared = x.SessionID
@@ -53,33 +61,21 @@ func (s *Service) news(n proto.News) delivery {
 	if texts := d.taken.Texts(); len(texts) > 0 {
 		blocks = append(blocks, "[matchblox] since your last turn:\n  "+strings.Join(texts, "\n  "))
 	}
-	if !slices.ContainsFunc(st.Off, d.me.Same) {
-		var asks []string
-		asks, d.asks = s.requestsLocked(st, d.me)
-		blocks = append(blocks, asks...)
-		if s.ChainsNotice {
-			var notices []string
-			notices, d.notices = s.noticesLocked(st, x)
-			blocks = append(blocks, notices...)
-		}
+	if !slices.ContainsFunc(st.Off, d.me.Same) && s.ChainsNotice {
+		var notices []string
+		notices, d.notices = s.noticesLocked(st, x)
+		blocks = append(blocks, notices...)
 	}
 	d.text = strings.Join(blocks, "\n\n")
 	s.holdLocked(d, true)
 	return d
 }
 
-// holdLocked marks d's requests and notices as held by a delivery, or no
-// longer. Callers hold mu.
+// holdLocked marks d's notices as held by a delivery, or no longer.
+// Callers hold mu.
 func (s *Service) holdLocked(d delivery, held bool) {
-	if s.heldAsks == nil {
-		s.heldAsks, s.heldNotices = map[chains.Request]bool{}, map[pair]bool{}
-	}
-	for _, r := range d.asks {
-		if held {
-			s.heldAsks[r] = true
-		} else {
-			delete(s.heldAsks, r)
-		}
+	if s.heldNotices == nil {
+		s.heldNotices = map[pair]bool{}
 	}
 	for p := range d.notices {
 		if held {
@@ -100,18 +96,14 @@ func (s *Service) holdLocked(d delivery, held bool) {
 	}
 }
 
-// heard marks d's requests and notices as told.
+// heard marks d's notices as told, and tells the sender of each line in
+// it that its match got it.
 func (s *Service) heard(d delivery) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.holdLocked(d, false)
+	s.toldSendersLocked(d)
 	delete(s.cleared, d.cleared)
-	for _, r := range d.asks {
-		if s.heardAsks == nil {
-			s.heardAsks = map[chains.Request]bool{}
-		}
-		s.heardAsks[r] = true
-	}
 	for p, b := range d.notices {
 		if s.noticed == nil {
 			s.noticed = map[pair][2]string{}
@@ -150,29 +142,7 @@ func (s *Service) clearedLocked(st *chains.Store, x sample.Session) string {
 	return "[matchblox] you are chained with " + strings.Join(names, ", ") + ". To leave, run: matchblox unchain"
 }
 
-// requestsLocked tells me, once each, who asks to chain with it: the lines,
-// and the requests they tell. Callers hold mu.
-func (s *Service) requestsLocked(st *chains.Store, me chains.Member) ([]string, []chains.Request) {
-	maps.DeleteFunc(s.heardAsks, func(r chains.Request, _ bool) bool { return !slices.Contains(st.Requests, r) })
-	var out []string
-	var told []chains.Request
-	for _, r := range st.Requests {
-		if !r.To.Same(me) || s.heardAsks[r] || s.heldAsks[r] {
-			continue
-		}
-		from, ok := s.sessionOfLocked(r.From)
-		if !ok {
-			continue
-		}
-		told = append(told, r)
-		out = append(out, fmt.Sprintf("[matchblox] %s%s asks to chain with you. To accept, run:\n  matchblox chain %s",
-			from.Name, s.elsewhereLocked(r.From, me), from.Name))
-	}
-	return out, told
-}
-
-// noticesLocked tells x of each match in its repo it is not chained with
-// and has no request with: once per pair, again after either changes
+// noticesLocked tells x of each match in its repo it is not chained with: once per pair, again after either changes
 // branch. It returns the lines, and the branches of each pair they tell.
 // Callers hold mu.
 func (s *Service) noticesLocked(st *chains.Store, x sample.Session) ([]string, map[pair][2]string) {
@@ -187,18 +157,13 @@ func (s *Service) noticesLocked(st *chains.Store, x sample.Session) ([]string, m
 	}
 	me := memberOf(x)
 	mates := st.Mates(me)
-	asked := func(other chains.Member) bool {
-		return slices.ContainsFunc(st.Requests, func(r chains.Request) bool {
-			return r.From.Same(me) && r.To.Same(other) || r.From.Same(other) && r.To.Same(me)
-		})
-	}
 	var out []string
 	told := map[pair][2]string{}
 	for _, y := range s.cur.Sessions {
 		other := memberOf(y)
 		yRepo, yWt, ok := gitscan.RepoOf(s.cur.Git, y.Cwd)
 		if !ok || yRepo != repo || y.Host != x.Host || other.Same(me) || slices.ContainsFunc(mates, other.Same) ||
-			slices.ContainsFunc(st.Off, other.Same) || asked(other) {
+			slices.ContainsFunc(st.Off, other.Same) {
 			continue
 		}
 		p, branches := pair{me, other}, [2]string{s.branchLocked(wt), s.branchLocked(yWt)}
@@ -232,4 +197,23 @@ func (s *Service) branchLocked(wt string) string {
 		}
 	}
 	return ""
+}
+
+// toldSendersLocked tells the sender of each line d took that its match
+// heard it, and sparks the team they share. Callers hold mu.
+func (s *Service) toldSendersLocked(d delivery) {
+	st, now := s.chainsLocked(), s.now()
+	name := d.me.Pane
+	if x, ok := s.sessionOfLocked(d.me); ok {
+		name = x.Name
+	}
+	for _, it := range d.taken.Items {
+		if it.From == (chains.Member{}) {
+			continue
+		}
+		st.Post(it.From, gotYourLine(name, "heard", now), now)
+		if c, ok := st.Shared(it.From, d.me); ok {
+			st.Spark(c.ID, now)
+		}
+	}
 }
