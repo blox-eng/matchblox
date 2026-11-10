@@ -101,9 +101,7 @@ func transcript(t *testing.T) string {
 	return string(b)
 }
 
-const (
-	flintRow = 6 // flint-auth's row on the first screen at 44x31
-)
+const flintRow = 6 // flint-auth's row on the first screen at 44x31
 
 // openQuestion opens the stand-in for flint-auth's pane, which asks.
 func openQuestion(t *testing.T) (*demo.Demo, *terminal) {
@@ -233,13 +231,13 @@ func TestTheDemoSurvivesATurn(t *testing.T) {
 	eventually(t, 6*time.Second, "Done", d.Done)
 }
 
-// TestTapsOpenTheStandIn: a tap on the agent's row goes into the stand-in
-// (#352), and the belt's 2 answers.
+// TestTapsOpenTheStandIn: on a phone's one column a tap on the agent's row
+// goes into the stand-in, as Enter does, and the belt's 2 answers (#351).
 func TestTapsOpenTheStandIn(t *testing.T) {
 	t.Setenv("TMPDIR", t.TempDir())
 	d, term := start(t)
 	term.waitFor(t, "WAITS FOR YOU", "flint-auth")
-	term.tap(t, flintRow) // one tap goes in (#352)
+	term.tap(t, flintRow)
 	term.waitFor(t, "type 2 to answer")
 	if d.Done() {
 		t.Fatal("Done before an answer")

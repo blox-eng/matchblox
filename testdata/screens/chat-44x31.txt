@@ -1,31 +1,31 @@
- ‹ Sessions · flint-auth · asks
-
-
-
-
-
-
-
-
-
-
-
-
-
-⏺ The refresh endpoint is in and its tests
-pass.
-
+ ▰ matchblox               ● 6 wait for you
+ SESSIONS 7  ships 3  machine  4  5  6  7
 ────────────────────────────────────────────
- ☐ Rotate
-
-Should a refresh also rotate the token?
-
-❯ 1. Rotate it
-     The old one stops at once.
-  2. Rotate, keep the old one a minute
-  3. Type something.
-
-Enter to select · ↑/↓ to navigate · Esc to
-cancel
+ WAITS FOR YOU · 6
+ │ spark-docs            done      9m   88%
+ ╿ ember-billing         done      4m   32%
 ────────────────────────────────────────────
- enter goes into flint-auth · esc back
+▌╿ flint-auth            asks      2m   41%
+   ? Should a refresh also rotate the
+   token?
+   “The refresh flow works and the tests
+   pass. One choice is yours before I wire…
+   #4545 ●━✕┄○┄○┄○  conflicts with main
+    ▲ clear               A switch  ⏎ go in
+────────────────────────────────────────────
+ ╿ kindle-web            asks      1m   56%
+ ╿ cinder-ci             done      0s   55%
+ ╿ wick-mobile           done      0s    6%
+ WORKING · 1
+ ✦ hearth-api            busy           79%
+ + start a new session
+
+ 1 without an agent: shell:1.1 zsh
+
+ RECOMMENDATIONS · 7 · h hides
+ ▲ The week runs short: compact spark-docs
+ ○ Clear spark-docs (%3)
+ ○ Clear kindle-web (%5)
+ ○ Clear cinder-ci (%6)
+────────────────────────────────────────────
+ ⏎ go in  x kill  r rename  N new

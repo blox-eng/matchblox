@@ -293,8 +293,7 @@ func TestTicksOnlyWhileSomethingMoves(t *testing.T) {
 	}
 	quiet := sessionState(false)
 	next, _ := m.Update(stateMsg(quiet))
-	now = now.Add(5 * time.Second)      // the flame has gone out
-	next, _ = next.Update(sizeDueMsg{}) // the selection rested: its chat's size went
+	now = now.Add(5 * time.Second) // the flame has gone out
 	next, cmd := next.Update(animMsg{})
 	if cmd != nil || next.(Model).animating {
 		t.Fatal("nothing moves, yet the console keeps ticking")

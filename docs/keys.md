@@ -159,8 +159,8 @@ screen, read-only. Sessions splits 40/60 (the list at least 38 columns, at
 most 78) when the view gets at least 44 columns and the body has room for
 its title, its account line and 16 rows for an agent's menu. On a phone, in
 list only, or on a screen on its side with the keyboard up, there is no
-room beside the list: a tap on a row goes into the agent's pane, so what
-you type reaches the agent. A keyboard never changes the layout: the shape goes by the
+view: a tap on a row goes into its pane, and the selected row opens in
+place, with the question the agent asks. The view never resizes the agent's window. A keyboard never changes the layout: the shape goes by the
 tallest height seen at the width. The view is the console's own host's:
 another host's row is list only.
 
@@ -171,7 +171,6 @@ line names the way in: `enter goes into <name>`.
 |---|---|
 | `Enter`, `a` or `→` | Goes into the selected agent's tmux pane (help `go in`). A tap on the view, a second tap on the selected row, or on one column the first tap, does it too. |
 | `Ctrl+O` | Goes into the selected agent's tmux pane, from every tab. |
-| `Esc` | Closes the view over a phone's screen. So does a tap on `‹ Sessions`, its title, or the app's edge swipe. |
 | `ctrl+a m` | In the iOS demo, which has no tmux, `Enter` opens a stand-in for the pane: the agent's screen over the whole screen, and every key goes to the agent. `ctrl+a`, then `m` within 1 s, goes back to Sessions, on the next agent that waits. |
 
 The mouse wheel over the view, or a swipe on a phone, scrolls it back

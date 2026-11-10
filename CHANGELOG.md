@@ -23,6 +23,29 @@ All notable changes to matchblox are in this file. The format follows
   ([#326](https://github.com/blox-eng/matchblox/issues/326))
 - **A feat pull request changes the landing page or says why not.** CI's
   `Landing page` step, and a hook before an agent's `gh pr merge`.
+
+### Changed
+
+- **The header counts the stokers that run: `≋ 2`.** It was `stoker · 2
+  chains`; the dock still counts the chains.
+- **Prefix n no longer goes to the next window** on the console's tmux
+  server: it walks a chain's matches. Prefix p still goes back.
+
+### Fixed
+
+- **Agents stop flickering when the console shows them.** The live view
+  sized the agent's own tmux window to itself, and each resize made Codex
+  and Cursor draw their whole screen again, in the view and in their pane.
+  The view now leaves every window as it is: a text agent's lines wrap to
+  the view, and a full-screen agent keeps its shape, cut at the edge with
+  a `›`. A window an older version left sized gets its size back. On a
+  phone, the selected row shows the agent's question.
+  ([#351](https://github.com/blox-eng/matchblox/issues/351))
+
+## [0.40.0] - 2026-11-10
+
+### Added
+
 - **One command joins a chain.** `matchblox chain <who>` joins the chain of
   `<who>` at once, or forms one named after the match that ran it. A chain
   is a team: every match in it hears every other. A chain's name joins it
@@ -35,10 +58,6 @@ All notable changes to matchblox are in this file. The format follows
 
 ### Changed
 
-- **The header counts the stokers that run: `≋ 2`.** It was `stoker · 2
-  chains`; the dock still counts the chains.
-- **Prefix n no longer goes to the next window** on the console's tmux
-  server: it walks a chain's matches. Prefix p still goes back.
 - **A send to a busy mate waits in its inbox.** A question, a permission
   prompt, a park, a draft or copy mode no longer refuses a send: the line
   waits, the sender hears why, and later hears when the mate got it. A mate
@@ -67,6 +86,11 @@ All notable changes to matchblox are in this file. The format follows
   the match's place in its chain, with its news. The new agent hears who it
   is chained with, and no mate has to chain again.
   ([#333](https://github.com/blox-eng/matchblox/issues/333))
+
+## [0.39.1] - 2026-11-10
+
+### Fixed
+
 - **The console answers a key fast on a busy host.** The console now runs at
   the normal CPU priority. The service and the one-shot commands stay at the
   lowest. Before this fix, a host at load 80 showed each ↑ and ↓ about half a
@@ -1417,7 +1441,9 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.39.0...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.40.0...HEAD
+[0.40.0]: https://github.com/blox-eng/matchblox/compare/v0.39.1...v0.40.0
+[0.39.1]: https://github.com/blox-eng/matchblox/compare/v0.39.0...v0.39.1
 [0.39.0]: https://github.com/blox-eng/matchblox/compare/v0.38.2...v0.39.0
 [0.38.2]: https://github.com/blox-eng/matchblox/compare/v0.38.1...v0.38.2
 [0.38.1]: https://github.com/blox-eng/matchblox/compare/v0.38.0...v0.38.1

@@ -411,27 +411,21 @@ The mouse wheel over the view, or a swipe on a phone, scrolls it back
 through the pane's history, 3 lines for each wheel step. The key line says
 `↑ 12 lines back`. Scrolling only looks: nothing is typed into the pane.
 
-While the view shows an agent, the agent's tmux window takes the view's
-size: the columns and rows it gives the agent's screen, under its title and
-strip. The agent redraws at that size, so its tables, boxes and diffs look
-as they do in its own terminal.
+The view never changes the agent's window: the agent keeps its own size
+and never redraws for the view. A resize made Codex and Cursor print their
+whole screen again (#351). The view fits what the agent drew:
 
-- Browsing resizes no agent: the window takes the view's size once the
-  session has stayed selected for 1 second. The window the selection
-  leaves gets its size back at once.
-- Two consoles on one agent (a phone and a desk): the one that opened it
-  last sizes the window. When it leaves, the other's size applies.
-- A view that is not on screen (another tab, the list on a phone) keeps
-  its size, so the agent does not redraw at each tab.
-- A window of several panes keeps its size: resizing it would reflow the
-  other panes. The view then wraps the agent's lines to its width and keeps
-  the bottom rows.
-- The window gets its own size back when no view watches it: the selection
-  moves, the console closes or loses the service, or the service stops.
+- An agent that draws text, such as Codex or Cursor, has its lines joined
+  where its pane wrapped them, and wrapped again to the view's width.
+- A full-screen agent, such as Claude Code, keeps its shape: the view shows
+  its last rows, where its prompt is, and cuts each wider line at the
+  view's edge with a `›`.
 
-On a narrow screen, and wherever Sessions is one column, a tap on a row
-goes into the agent's pane, as `Enter` does, so what you type reaches the
-agent. The app's edge swipe, ⌘M or ctrl+M (the home gesture) comes back.
+On a narrow screen, and wherever Sessions is one column, there is no view.
+A tap on a row goes into the agent's pane, as `Enter` does, so what you
+type reaches the agent. The selected row opens in place: the question the
+agent asks, its last words, its pull request and its keys. The app's edge
+swipe, ⌘M or ctrl+M (the home gesture) comes back.
 
 The iOS demo has no tmux: there `Enter` opens a stand-in for the pane, the
 view over the whole screen with every key going to the agent. At a question

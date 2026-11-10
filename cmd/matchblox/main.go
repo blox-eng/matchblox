@@ -810,6 +810,7 @@ func newService(cfg config.Config, root string) *service.Service {
 	s.Actions.Run = func(argv []string) error { return actions.Exec(context.Background(), argv) }
 	s.StokerServer = sample.StokerServer
 	s.MarkMatches = true
+	s.ScreenOf = sample.CaptureScreen
 	s.StatePath = state.Path()
 	s.Spool = spoolPath()
 	s.AlertHook = cfg.Hooks.Alert

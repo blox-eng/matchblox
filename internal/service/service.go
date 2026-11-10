@@ -141,6 +141,10 @@ type Service struct {
 	// Mux is the multiplexer chains and sends reach panes through. Nil:
 	// tmux, through TmuxOut and Capture.
 	Mux mux.Mux
+	// ScreenOf reads a pane's live screen for a console's view, and if its
+	// agent draws on the alternate screen. Nil: Capture, as text, as the
+	// demo, the fixtures and the tests have it; only a real tmux sets it.
+	ScreenOf func(pane string) (text string, alt, ok bool)
 	// PaneMouse tells if the program in a pane reads the mouse in SGR form,
 	// and the pane's size. Nil: never.
 	PaneMouse func(pane string) (cols, rows int, ok bool)
@@ -275,8 +279,6 @@ type Service struct {
 	// panes holds a *sync.Mutex per pane: the keys of one act to a pane
 	// never interleave with another's.
 	panes sync.Map
-	// sizes are the chats' sizes and the agents' windows sized to them.
-	sizes viewSizes
 	// grantMu makes each y one check and one go: two consoles pressing it
 	// at once on one step give one go.
 	grantMu sync.Mutex
@@ -463,7 +465,6 @@ func (s *Service) Serve(ctx context.Context, l net.Listener) error {
 	}()
 	<-ctx.Done()
 	l.Close()
-	s.unsizeAll()
 	s.stopClones(cloneStopWait) // a clone cut off removes its partial folder first
 	// The sample loop can still be writing its first state file when the
 	// socket disappears during startup. Finish it before Serve returns.
@@ -1085,7 +1086,6 @@ func (s *Service) HandlePeer(ctx context.Context, c transport.Conn, pid int) err
 	cl.kick <- struct{}{}
 	s.join(cl)
 	defer s.leave(cl)
-	defer s.unwatchSizes(cl) // the console goes: its chats size no window
 
 	done := make(chan struct{})
 	defer close(done)
@@ -1140,9 +1140,6 @@ func (s *Service) HandlePeer(ctx context.Context, c transport.Conn, pid int) err
 				_ = c.Send(proto.KindResult, env.ID, res)
 				continue
 			}
-		}
-		if h.Client == proto.ClientConsole {
-			s.keyedSize(cl, a)
 		}
 		go func(id string) {
 			// A console in a pane the stoker drove, or in the stoker's own,
