@@ -37,8 +37,31 @@ var trailingBlank = regexp.MustCompile(`(?:\x1b\[[0-9;:]*m|[ \t])+$`)
 var sgr = regexp.MustCompile(`\x1b\[[0-9;:]*m`)
 
 // controlStrings is an OSC (a hyperlink, a title), or an APC, DCS, PM or SOS
-// string, up to its terminator: an agent's screen keeps none of them.
+// string, up to its terminator.
 var controlStrings = regexp.MustCompile(`\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[_P^X][^\x1b]*\x1b\\`)
+
+// escapes is any other escape sequence: a CSI, in its 7-bit or C1 form,
+// or ESC and the bytes that end it; else a lone ESC, a C1 control or a C0
+// control other than a tab or a new line.
+var escapes = regexp.MustCompile("(?:\x1b\\[|\u009b)[0-?]*[ -/]*[@-~]|\x1b[ -/]*[0-~]|[\x00-\x08\x0b-\x1f\x7f\u0080-\u009f]")
+
+// sgrOnly matches an SGR, a colour or a style: the one escape sequence an
+// agent's screen keeps.
+var sgrOnly = regexp.MustCompile(`^\x1b\[[0-9;:]*m$`)
+
+// onlyColours is an agent's screen with only its colours and styles: no
+// other escape sequence or control of the agent's reaches the console's
+// terminal, so the screen cannot move the cursor, clear the console, change
+// a mode, set a title or open a link there.
+func onlyColours(text string) string {
+	text = controlStrings.ReplaceAllString(strings.ReplaceAll(text, "\r", ""), "")
+	return escapes.ReplaceAllStringFunc(text, func(seq string) string {
+		if sgrOnly.MatchString(seq) {
+			return seq
+		}
+		return ""
+	})
+}
 
 // fitScreen fits a pane's text into w columns and the last h lines: a rule
 // is cut, other text wraps between words, and the blank lines at the end go.
@@ -48,9 +71,9 @@ func fitScreen(text string, w, h int) []string {
 	if w <= 0 || h <= 0 {
 		return nil
 	}
-	text = controlStrings.ReplaceAllString(text, "")
+	text = onlyColours(text)
 	var out []string
-	for _, line := range strings.Split(strings.ReplaceAll(text, "\r", ""), "\n") {
+	for _, line := range strings.Split(text, "\n") {
 		line = trimBlank(line)
 		if isRule(line) {
 			out = append(out, ansi.Truncate(line, w, ""))
@@ -91,67 +114,36 @@ func isRule(line string) bool {
 	return true
 }
 
-// asDrawn is a screen the agent drew w columns wide, in its last h lines,
-// each as it is: cut at w and no more, its trailing spaces and blank rows
-// kept. Of its escape sequences only the styles stay, as in fitScreen.
-func asDrawn(text string, w, h int) []string {
+// cropScreen fits a full-screen agent's text, laid out for its own pane,
+// into w columns and the last h lines: the blank rows at its end go, and
+// a line wider than w is cut, with a › at the cut. Nothing wraps: a box
+// or a menu keeps its shape. Of its escape sequences only the styles
+// stay, as in fitScreen.
+func cropScreen(text string, w, h int) []string {
 	if w <= 0 || h <= 0 {
 		return nil
 	}
-	text = controlStrings.ReplaceAllString(strings.ReplaceAll(text, "\r", ""), "")
-	lines := strings.Split(strings.TrimSuffix(text, "\n"), "\n")
+	lines := strings.Split(onlyColours(text), "\n")
+	for i, l := range lines {
+		lines[i] = trimBlank(l)
+	}
+	for len(lines) > 0 && ansi.Strip(lines[len(lines)-1]) == "" {
+		lines = lines[:len(lines)-1]
+	}
 	lines = lines[max(len(lines)-h, 0):]
 	for i, l := range lines {
-		lines[i] = ansi.Truncate(l, w, "")
+		if ansi.StringWidth(l) > w {
+			lines[i] = ansi.Truncate(l, max(w-1, 0), "") + "\x1b[m›"
+		}
 	}
 	return lines
 }
 
-// sizedFor tells if the screen is the agent's live screen drawn for a chat
-// w columns wide and h lines tall: the service sized its window to it.
-func (m Model) sizedFor(w, h int) bool {
-	return m.screen.Cols > 0 && m.screen.Cols == w && m.screen.Rows <= h
-}
-
-// sizeDwell is how long the live view's session stays selected before the
-// agent's window takes the view's size: a cursor that passes a row resizes
-// no agent.
-const sizeDwell = time.Second
-
-// sizeDueMsg comes when a selection may have rested sizeDwell.
-type sizeDueMsg struct{}
-
-// viewSize is the room the chat gives the agent's screen as the console
-// draws it now: its columns, and its rows under the chat's title and strip.
-// 0, 0 where no chat is drawn. The service sizes the agent's window to it.
-func (m Model) viewSize() (cols, rows int) {
-	if m.tab != tabSessions {
-		return 0, 0
-	}
-	w := max(m.width, minWidth)
-	_, detailW := m.panes(w)
-	place, full := m.viewPlacement(w)
-	switch {
-	case place == placeFull && m.viewOpen:
-		cols, rows = w, full
-	case place == placeBeside: // beside the list, as viewPlacement has it
-		s, ok := m.viewShown(detailW)
-		if !ok {
-			return 0, 0
-		}
-		room := m.bodyRows()
-		cols, rows = detailW-1, room-1-len(m.viewStrip(s, detailW, room-1))
-	}
-	if cols <= 0 || rows <= 0 {
-		return 0, 0
-	}
-	return cols, rows
-}
-
 // watchCmd asks the service for the selected session's screen when it is
 // not the one already watched, and for none when the selection has no pane
-// or is another host's, or no screen shows the console (away); or the
-// view's size, when it changed. A screen of another pane never stays.
+// or is another host's, or no screen shows the console (away). A screen of
+// another pane never stays. The watch names no size: the agent's window
+// keeps its own (#351).
 func (m *Model) watchCmd() tea.Cmd {
 	want := ""
 	if m.conn != nil && !m.lost && !m.mismatch && !m.away {
@@ -162,44 +154,22 @@ func (m *Model) watchCmd() tea.Cmd {
 	if m.watchHeld != "" && want == m.watchHeld {
 		want = m.watching
 	}
-	if want != m.watching {
-		m.screen = proto.Screen{} // another pane opens blank until its screen comes
-		m.watchSince = m.now()
+	if want == m.watching {
+		return nil
 	}
-	var size [2]int
-	var due tea.Cmd
-	if want != "" {
-		size[0], size[1] = m.viewSize()
-	}
-	if wait := m.watchSince.Add(sizeDwell).Sub(m.now()); size != [2]int{} && wait > 0 {
-		size = [2]int{} // browsing: no agent redraws for a row the cursor passes
-		if !m.sizeTick.Equal(m.watchSince) {
-			m.sizeTick = m.watchSince
-			due = tea.Tick(wait, func(time.Time) tea.Msg { return sizeDueMsg{} })
-		}
-	}
-	if size == [2]int{} && want == m.watching {
-		size = m.watchSize // a chat off screen keeps its size: the agent does not redraw at each tab
-	}
-	if want == m.watching && size == m.watchSize {
-		return due
-	}
-	m.watching, m.watchSize = want, size
+	m.screen = proto.Screen{} // another pane opens blank until its screen comes
+	m.watching = want
 	if m.conn == nil || m.lost || m.mismatch {
-		return due // the service forgot the watch with the connection
+		return nil // the service forgot the watch with the connection
 	}
 	c := m.conn
-	act := proto.Act{RecID: proto.WatchPrefix + want, Cols: size[0], Rows: size[1]}
-	send := func() tea.Msg { // not m.send: the watch takes no number from the acts the builder sees
+	act := proto.Act{RecID: proto.WatchPrefix + want}
+	return func() tea.Msg { // not m.send: the watch takes no number from the acts the builder sees
 		if err := c.Send(proto.KindAct, watchActID+want, act); err != nil {
 			return lostMsg{err, c}
 		}
 		return nil
 	}
-	if due != nil {
-		return tea.Batch(send, due)
-	}
-	return send
 }
 
 // viewLines is the watched screen fitted to w by h, or what stands in its
@@ -222,9 +192,8 @@ func (m Model) viewLines(w, h int) []string {
 	var fit []string
 	switch {
 	case !shown:
-	case m.sizedFor(w, h): // top first, as in the agent's own terminal
-		fit = asDrawn(m.screen.Text, w, h)
-		fit = append(fit, make([]string, h-len(fit))...)
+	case m.screen.Alt:
+		fit = cropScreen(m.screen.Text, w, h)
 	default:
 		fit = fitScreen(m.screen.Text, w, h)
 	}
@@ -257,9 +226,9 @@ const menuLeast = 16
 type viewPlace int
 
 const (
-	placeNone   viewPlace = iota // no room for its menu: the list's opened row shows its question
+	placeNone   viewPlace = iota // one column, or no room for the stand-in's menu: the list's opened row shows the session
 	placeBeside                  // the right side of Sessions, beside the list
-	placeFull                    // the whole screen, once a tap opens it
+	placeFull                    // the whole screen: the demo's stand-in for a pane
 )
 
 // viewPlacement is the one answer to where the selected session's live
@@ -273,6 +242,9 @@ func (m Model) viewPlacement(w int) (viewPlace, int) {
 	}
 	if _, right := m.panes(w); right > 0 && !m.standIn {
 		return placeBeside, max(m.height-5, 0)
+	}
+	if !m.standIn {
+		return placeNone, 0 // one column: the list's opened row shows the session
 	}
 	if s, ok := m.selectedSession(); ok && m.height > 0 && m.height-3 < menuLeast && m.atMenu(s) {
 		return placeNone, 0
@@ -489,7 +461,7 @@ const standInHint = "type 2 to answer"
 // column, with room for its question.
 func (m Model) viewFull() bool {
 	place, _ := m.viewPlacement(max(m.width, minWidth))
-	return m.viewOpen && place == placeFull
+	return m.standIn && place == placeFull
 }
 
 // openStandIn is the demo's stand-in for the pane of a home session: its
@@ -504,7 +476,7 @@ func (m Model) openStandIn(pane string) Model {
 		m.setTab(tabSessions)
 	}
 	m.doorPick, m.recPick, m.ghostPick, m.chose, m.selPID, m.selHost = "", "", 0, true, s.PID, s.Host
-	m.viewOpen, m.standIn, m.flash = true, true, ""
+	m.standIn, m.flash = true, ""
 	return m
 }
 
@@ -512,19 +484,9 @@ func (m Model) openStandIn(pane string) Model {
 // waits next, as a jump back from a real pane does.
 func (m Model) leaveStandIn() Model {
 	s, _ := m.selectedSession()
-	m.viewOpen, m.standIn = false, false
+	m.standIn = false
 	m.keysOut.queue = nil // typed at a screen that is gone; the key in flight still answers
 	return m.nextAfter(s.Pane)
-}
-
-// closeView is the way back from the live view: the stand-in's, or the
-// read-only view's, which keeps the selection.
-func (m Model) closeView() Model {
-	if m.standIn {
-		return m.leaveStandIn()
-	}
-	m.viewOpen = false
-	return m
 }
 
 // keepView closes the live view once Sessions or the selected session's
@@ -533,16 +495,16 @@ func (m Model) closeView() Model {
 // never a screen's the person cannot see. A new tap or Enter opens it again.
 // A session that ended shows the list again, and the key line says why.
 func (m Model) keepView() Model {
-	if !m.viewOpen {
+	if !m.standIn {
 		return m
 	}
 	s, ok := m.selectedSession()
 	place, _ := m.viewPlacement(max(m.width, minWidth))
 	switch {
 	case !ok || m.tab != tabSessions || s.Pane == "" || s.Host != m.opt.Host || place == placeNone:
-		m.viewOpen, m.standIn = false, false
+		m.standIn = false
 	case m.screen.Pane == s.Pane && m.screen.Gone:
-		m.viewOpen, m.standIn, m.flash = false, false, "That session ended."
+		m.standIn, m.flash = false, "That session ended."
 	}
 	if !m.standIn {
 		m.keysOut.queue = nil
@@ -580,18 +542,11 @@ func (m Model) liveKeyLine(w int) (string, []span) {
 		text string
 		key  string // the key a tap on it presses; "" none
 	}
-	in := m.keys.main.Open.Keys()[0]
-	lead := part{st.accent.Render(in) + st.muted.Render(" goes into "+s.Name), in}
-	back := part{st.accent.Render(m.keys.main.Back.Help().Key) + st.muted.Render(" back"), tapBack}
-	switch {
-	case m.standIn && m.atMenu(s):
+	lead := part{st.text.Render("keys go to " + s.Name), ""}
+	if m.atMenu(s) {
 		lead = part{st.text.Render(standInHint), ""}
-	case m.standIn:
-		lead = part{st.text.Render("keys go to " + s.Name), ""}
 	}
-	if m.standIn {
-		back.text = st.accent.Render(m.backKeys()) + st.muted.Render(" back")
-	}
+	back := part{st.accent.Render(m.backKeys()) + st.muted.Render(" back"), tapBack}
 	if n := m.screen.Back; n > 0 {
 		lead.text = st.warn.Render(fmt.Sprintf("↑ %d lines back", n)) + st.muted.Render(" · ") + lead.text
 	}
