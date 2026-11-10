@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -84,6 +85,11 @@ func (m Model) roomLine(r roomRow, w int, lit bool, more int) []string {
 		case "warn":
 			return []string{st.warn.Render(r.text)}
 		}
+		if rest, ok := strings.CutPrefix(r.text, "≋ "); ok && m.inCharge() {
+			// A chain stoker in charge paints only its own glyph in the
+			// night's ink; the console wears the night for the host's run.
+			return []string{lipgloss.NewStyle().Foreground(nightInk).Render("≋") + st.muted.Render(" "+rest)}
+		}
 		return []string{st.muted.Render(r.text)}
 	case roomStep:
 		mark, text, _ := strings.Cut(r.text, " ")
@@ -118,6 +124,12 @@ func (m Model) roomLine(r roomRow, w int, lit bool, more int) []string {
 		return []string{st.muted.Render(r.text)}
 	}
 	return []string{r.text}
+}
+
+// inCharge tells if the room's chain stoker runs its order now.
+func (m Model) inCharge() bool {
+	u, ok := m.unitOf(m.room.k)
+	return ok && !m.room.k.isOne() && chainAlive(u) && u.View.On && u.View.Rests.IsZero()
 }
 
 // roomSession is the session of a match row of the room on screen.

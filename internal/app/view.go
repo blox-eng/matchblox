@@ -507,7 +507,15 @@ func (m Model) stokerBadge(short bool) string {
 	if word == "" || n == 0 {
 		return word
 	}
-	return word + m.st.stoker.Render(chainsWord(n))
+	// The stokers that run, as one count: ≋ 2. A host stoker that asks, or
+	// wears the night, keeps its word before the count.
+	if m.stoker != nil && m.stoker.On && !m.resting() && m.hostCount() == 1 {
+		if m.stokerAsks() || !m.stoker.Until.IsZero() {
+			return word + m.st.stoker.Render(" ≋ "+strconv.Itoa(n))
+		}
+		n++
+	}
+	return m.st.stoker.Render("≋ " + strconv.Itoa(n))
 }
 
 // hostBadge is the host stoker's word of stokerBadge.
