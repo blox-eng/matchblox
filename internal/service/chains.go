@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"maps"
@@ -9,11 +10,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/chains"
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/state"
+	"github.com/blox-eng/matchblox/internal/stoker"
 )
 
 const chainNeedsMatch = "chain needs a match: run it from an agent's pane"
@@ -28,16 +31,28 @@ func memberOf(x sample.Session) chains.Member {
 // the team of that match, or forms one with it; chain:@<team> joins a team
 // by name; chain:- leaves the only team, chain:-@<team> that team and
 // chain:-* every team; chain:off and chain:on. From the console only:
-// chain:out:<pane>@<team> takes that match out of that team.
-func (s *Service) chainAct(a proto.Act) proto.Result {
+// chain:out:<pane>@<team> takes that match out of that team. A stoker's
+// pane does none.
+func (s *Service) chainAct(ctx context.Context, a proto.Act) proto.Result {
+	if _, stokerPane := s.unitOf(a); stokerPane {
+		return refuseText(noStokerChain)
+	}
 	res, changed := s.changeChains(strings.TrimPrefix(a.RecID, proto.ChainPrefix), a)
+	s.followChains(ctx)
 	if changed {
 		s.broadcast()
 	}
 	return res
 }
 
-const noStokerChain = "the stoker joins no chain"
+const noStokerChain = "a stoker joins no chain"
+
+// onStokerServer tells if pane is on the stokers' tmux server. It takes
+// no lock, so callers may hold mu.
+func (s *Service) onStokerServer(pane string) bool {
+	server, _ := sample.SplitPane(pane)
+	return s.StokerServer != "" && server == s.StokerServer
+}
 
 // offText is the refusal for a match that is off.
 func offText(name string) string {
@@ -84,6 +99,7 @@ func (s *Service) changeChains(arg string, a proto.Act) (res proto.Result, chang
 			return proto.Result{Err: "chains: " + err.Error()}, true
 		}
 	}
+	before := slices.Clone(st.Chains)
 	var did bool
 	if out, ok := strings.CutPrefix(arg, "out:"); ok {
 		res, did = s.takeOutLocked(st, out, a)
@@ -97,6 +113,7 @@ func (s *Service) changeChains(arg string, a proto.Act) (res proto.Result, chang
 	if !did {
 		return res, changed
 	}
+	s.noteChainsLocked(before)
 	s.cur.Chains = chainsView(st)
 	if err := s.saveChainsLocked(); err != nil {
 		res.Err = "chains: " + err.Error()
@@ -137,8 +154,6 @@ func (s *Service) chainFromLocked(st *chains.Store, arg string, from sample.Sess
 	case arg == "on":
 		st.SetOff(me, false)
 		return proto.Result{Note: "on"}, true
-	case s.fromStoker(a):
-		return refuseText(noStokerChain), false
 	case strings.HasPrefix(arg, "@"):
 		team := strings.TrimPrefix(arg, "@")
 		if _, ok := st.Team(team); !ok {
@@ -149,7 +164,7 @@ func (s *Service) chainFromLocked(st *chains.Store, arg string, from sample.Sess
 	if s.sampleMissedLocked() { // its target may be one the sample did not read
 		return refuseText("not now: matchblox could not read the sessions; try again"), false
 	}
-	if s.fromStoker(proto.Act{From: arg}) {
+	if s.onStokerServer(arg) {
 		return refuseText(noStokerChain), false
 	}
 	to, ok := s.sessionAtLocked(arg)
@@ -285,6 +300,7 @@ func (s *Service) pruneChainsLocked(now time.Time, prev []sample.Session) error 
 	maps.DeleteFunc(s.cleared, func(id string, _ bool) bool {
 		return !slices.ContainsFunc(s.cur.Sessions, func(x sample.Session) bool { return x.SessionID == id })
 	})
+	s.noteChainsLocked(before)
 	for _, l := range left {
 		text := s.leftText(l, prev)
 		for _, c := range before {
@@ -534,4 +550,177 @@ func (s *Service) tellLostLocked(st *chains.Store, now time.Time) {
 		}
 		st.Post(p.from, text, now)
 	}
+}
+
+// awaitJoin marks the session that chain unit u started in pane, in the
+// tmux session name, to join u's chain once a sample finds it there. No
+// pane: nothing tells the session, and it joins nothing.
+func (s *Service) awaitJoin(u *stokerUnit, pane, name string) {
+	if u == nil || s.chainIDOf(u) == "" || pane == "" {
+		return
+	}
+	s.mu.Lock()
+	u.joins = append(u.joins, &pendingJoin{pane: pane, name: name, at: s.now()})
+	s.mu.Unlock()
+}
+
+// joinNewLocked puts each session a chain unit started in its chain, once
+// the sample finds its agent in the pane the start made, in the tmux
+// session of its name and in the chain's repo. A pane that is gone, or now
+// holds another session or another agent, is let go, and so is one not
+// found within stokerStartsIn. It saves on a join. Callers hold mu, and
+// call joinedOut once they let it go: the joins are the units a session
+// joined, and the lines what each failed join says on its unit's card.
+func (s *Service) joinNewLocked(now time.Time) (out joins, err error) {
+	if s.cur.Git == nil || s.sampleMissedLocked() {
+		return out, nil
+	}
+	st := s.chainsLocked()
+	for _, u := range s.family() {
+		u.joins = slices.DeleteFunc(u.joins, func(j *pendingJoin) bool {
+			late := now.Sub(j.at) >= stokerStartsIn
+			if s.cur.At.Before(j.at) {
+				return late // a sample from before the start
+			}
+			p := slices.IndexFunc(s.cur.Panes, func(p sample.Pane) bool { return p.ID == j.pane })
+			if p < 0 {
+				return true // gone
+			}
+			if name, _, _ := strings.Cut(s.cur.Panes[p].Target, ":"); name != j.name {
+				return true // the pane moved to another session
+			}
+			i := slices.IndexFunc(s.cur.Sessions, func(x sample.Session) bool { return x.Pane == j.pane })
+			if i < 0 {
+				return late
+			}
+			x := s.cur.Sessions[i]
+			switch {
+			case x.TmuxSession() != j.name:
+				return true
+			case j.sessionID == "":
+				j.sessionID = x.SessionID
+			case x.SessionID != j.sessionID:
+				return true // another agent runs there now
+			}
+			c, ok := chainByID(st, s.chainIDOf(u))
+			if ok {
+				if repo, _, _ := gitscan.RepoOf(s.cur.Git, x.Cwd); repo != c.Repo {
+					return late
+				}
+			}
+			if err := st.JoinID(s.chainIDOf(u), memberOf(x)); err != nil {
+				text := fmt.Sprintf("%s did not join chain %s: %s", x.Name, chainName(c, s.cur.Sessions), err)
+				if !ok {
+					text = fmt.Sprintf("%s did not join chain %s: %s", x.Name, s.chainIDOf(u), err)
+				}
+				out.lines = append(out.lines, unitLine{u, familyLine(now, text)})
+				return true
+			}
+			if !slices.Contains(out.units, u) {
+				out.units = append(out.units, u)
+			}
+			return true
+		})
+	}
+	if len(out.units) == 0 {
+		return out, nil
+	}
+	return out, s.saveChainsLocked()
+}
+
+// joins is what joinNewLocked leaves to do out of mu.
+type joins struct {
+	units []*stokerUnit
+	lines []unitLine
+}
+
+type unitLine struct {
+	u *stokerUnit
+	e stoker.Entry
+}
+
+// joinedOut writes the cards' lines of j, and hands each unit whose run
+// is on the host's work on its new matches. It runs out of mu.
+func (s *Service) joinedOut(j joins) {
+	for _, l := range j.lines {
+		_ = l.u.store.Append(l.e)
+	}
+	for _, u := range j.units {
+		if u.store.Mode().On {
+			s.handOver(u)
+		}
+	}
+}
+
+func chainByID(st *chains.Store, id string) (chains.Chain, bool) {
+	i := slices.IndexFunc(st.Chains, func(c chains.Chain) bool { return c.ID == id })
+	if i < 0 {
+		return chains.Chain{}, false
+	}
+	return st.Chains[i], true
+}
+
+// noteChainsLocked queues for followChains each team of before that a
+// change ended. Teams never merge. Callers hold mu.
+func (s *Service) noteChainsLocked(before []chains.Chain) {
+	st := s.chainsLocked()
+	for _, c := range before {
+		if !slices.ContainsFunc(st.Chains, func(o chains.Chain) bool { return o.ID == c.ID }) {
+			s.chainLife = append(s.chainLife, c.ID)
+		}
+	}
+}
+
+// followChains stops the stoker of each team that ended since the last
+// call: it says so on its card, its run ends and its agent quits. It runs
+// out of mu.
+func (s *Service) followChains(ctx context.Context) {
+	s.mu.Lock()
+	ended := s.chainLife
+	s.chainLife = nil
+	s.mu.Unlock()
+	for _, id := range ended {
+		if u := s.unitOfChain(id); u != nil {
+			s.retire(ctx, u, "its chain ended", "its chain ended")
+		}
+	}
+}
+
+// retire stops chain unit u for good with text on its card: its link says
+// it ended, each kill or go that waits for a y is dropped with why, its run
+// ends and its agent quits. Its dir and card stay, for the morning card and
+// the STOKER tab; the cap counts it no more, and no chain is its again.
+func (s *Service) retire(ctx context.Context, u *stokerUnit, text, why string) {
+	now := s.now()
+	_ = u.store.Append(familyLine(now, text))
+	if err := s.endLink(u); err != nil {
+		_ = u.store.Append(familyLine(now, "its link did not change: "+err.Error()))
+	}
+	s.dropWaits(u, func(pane, _ string) (string, bool) {
+		if x, ok := s.sessionAt(pane); ok && x.Name != "" {
+			return x.Name, true
+		}
+		return pane, true
+	}, why)
+	if res := s.stokerAct(u, "off", now); res.Err != "" {
+		_ = u.store.Append(familyLine(now, "its run did not end: "+res.Err))
+	}
+	if err := s.quitAgent(ctx, u); err != nil {
+		_ = u.store.Append(familyLine(now, "its agent did not quit: "+err.Error()))
+	}
+}
+
+// quitAgent ends chain unit u's agent and its tmux session, when it is
+// there, with what waited to be typed into it or to join its chain.
+func (s *Service) quitAgent(ctx context.Context, u *stokerUnit) error {
+	if s.StokerServer == "" || !s.stokerThere(ctx, u) {
+		return nil
+	}
+	if res := s.Actions.Do(ctx, advice.Action{Label: "quit the stoker", Steps: [][]string{s.stokerSessionArgv(u, "kill-session")}, Destructive: true}, "y"); res.Err != "" {
+		return errors.New(res.Err)
+	}
+	s.mu.Lock()
+	u.startedAt, u.brief, u.dropped, u.joins = time.Time{}, nil, nil, nil
+	s.mu.Unlock()
+	return nil
 }

@@ -88,6 +88,8 @@ type Stoker struct {
 	PaneSet bool `toml:"-"`
 	// MaxSteps is how many messages the stoker agent may send in one run.
 	MaxSteps int `toml:"max_steps"`
+	// MaxChains is how many chain stokers the family runs at once.
+	MaxChains int `toml:"max_chains"`
 }
 
 // Hooks run a command when something happens. The command is an argv list,
@@ -186,7 +188,7 @@ func Default() Config {
 			Commands: []string{"sh", "bash", "zsh", "dash", "fish"},
 		},
 		Git:    Git{Interval: Duration{5 * time.Minute}, Remote: "origin", CloneRoot: "~/src"},
-		Stoker: Stoker{NightEnds: "07:00", MaxSteps: 60, Agent: "claude"},
+		Stoker: Stoker{NightEnds: "07:00", MaxSteps: 60, MaxChains: 4, Agent: "claude"},
 		Limits: Limits{QuietHours: "23:00-08:00", QuietDays: []string{"Sat", "Sun"}, Quiet: defaultQuiet},
 		Push:   Push{Relay: "https://matchblox.sh"},
 		Chains: Chains{Notice: true, Send: "chain"},

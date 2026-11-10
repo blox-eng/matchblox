@@ -26,6 +26,10 @@ All notable changes to matchblox are in this file. The format follows
   a full inbox drops tells its sender. A send to OpenCode is kept.
 - **A mate stays in its chain while its pane lives.** An agent that exits
   in a pane still open stays, not seen; it leaves when its pane closes.
+- **A match in several chains has one stoker.** The stoker of its first
+  chain whose run is on drives it, and the other chains' stokers do not.
+  Chains never merge, so a chain stoker no longer hands its order over on
+  a merge.
 - **Chains and sends reach panes through one small layer** (`internal/mux`),
   the first step to a multiplexer other than tmux.
 
@@ -40,6 +44,39 @@ All notable changes to matchblox are in this file. The format follows
   the match's place in its chain, with its news. The new agent hears who it
   is chained with, and no mate has to chain again.
   ([#333](https://github.com/blox-eng/matchblox/issues/333))
+
+## [0.39.0] - 2026-11-09
+
+### Added
+
+- **A family of stokers.** A chain can have a stoker of its own. You talk to
+  the chain, and its stoker answers: `Enter` on the head row of its fuse opens
+  its stoker's pane, or `matchblox stoker order <chain> "<text>"`. `F` on a
+  member, or `matchblox stoker new --chain <who>`, starts one. A chain stoker
+  drives the matches of its chain only, and its gos are never more than its
+  giver's. Only the console or the host stoker gives gos: a shell's `--go` is
+  refused, so an agent in a pane matchblox has not seen yet cannot grant
+  itself merges. At
+  night the host stoker heads the family and gives each chain stoker its
+  orders. The STOKER tab lists every stoker, and `[stoker] max_chains` (4)
+  caps how many run at once.
+  ([#304](https://github.com/blox-eng/matchblox/issues/304))
+
+### Fixed
+
+- **A hook's event is not lost while the service is busy.** The hook stays
+  until the service has read the pane of its process. Before this fix, a
+  slow service read the pane after the hook had ended and dropped the event.
+  ([#304](https://github.com/blox-eng/matchblox/issues/304))
+
+## [0.38.2] - 2026-11-09
+
+### Changed
+
+- **On the phone, a tap on a session goes into it.** The first tap goes into
+  the agent's pane, as `Enter` does, so what you type reaches the agent. It
+  no longer opens a read-only view first.
+  ([#352](https://github.com/blox-eng/matchblox/issues/352))
 
 ## [0.38.1] - 2026-11-09
 
@@ -1123,7 +1160,6 @@ All notable changes to matchblox are in this file. The format follows
   address and keeps the pairing. Build the app from `ios/` until it is on
   TestFlight.
 
-
 ## [0.8.0] - 2026-10-14
 
 ### Added
@@ -1353,7 +1389,9 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.38.1...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.39.0...HEAD
+[0.39.0]: https://github.com/blox-eng/matchblox/compare/v0.38.2...v0.39.0
+[0.38.2]: https://github.com/blox-eng/matchblox/compare/v0.38.1...v0.38.2
 [0.38.1]: https://github.com/blox-eng/matchblox/compare/v0.38.0...v0.38.1
 [0.38.0]: https://github.com/blox-eng/matchblox/compare/v0.37.0...v0.38.0
 [0.37.0]: https://github.com/blox-eng/matchblox/compare/v0.36.0...v0.37.0

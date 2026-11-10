@@ -53,11 +53,14 @@ in the run log, not in its context.
 - **Turn it off:** `f` stops the run. The agent stays and rests, so the
   next order finds its context.
 - **Quit it:** `Q` on the STOKER tab, then a typed `y`, ends the agent and
-  its session. The next `f` starts a new one.
+  its session. The next `f` starts a new one. From a shell,
+  `matchblox stoker quit` does the same.
 
-Every pane of matchblox's own server is the stoker's: a `matchblox`
-command run there is the stoker's, and during a run the guard stops
-merges, releases and deploys there (see
+Every pane of matchblox's own server belongs to a stoker: tmux session
+`stoker` is the host stoker's, and `stoker-<id>` is the stoker of a chain
+(see [A family of stokers](#a-family-of-stokers)). A `matchblox` command
+run there is that stoker's, and during a run the guard stops merges,
+releases and deploys there (see
 [Merges and the guard](#merges-and-the-guard)).
 
 The `pane` key of earlier builds is no longer read. `matchblox status`
@@ -411,6 +414,166 @@ The guard has limits:
   with or without the agent. `matchblox compact` is a request to that same
   compactor, under the same rules, so the two never act on one pane.
 - A night ends at `night_ends`, like a night without an agent.
+
+## A family of stokers
+
+A [chain](agents.md#chains) can have a stoker of its own. You talk to the
+chain, and its stoker answers. It has its own order, plan, card and gos,
+and it drives the matches of its chain only. The stoker of the host heads
+the family: at night it gives an order to the stoker of each chain.
+
+No chain stoker starts by itself. Each one starts when you start it, or
+when the host stoker gives its chain an order. Each one is one more agent,
+and it uses tokens. `[stoker] max_chains` (4 by default) caps how many run
+at once. A fifth start is refused:
+`the family has its 4 chain stokers: max_chains. Quit one on the STOKER tab first.`
+
+### Talk to a chain
+
+A chain with a stoker has a head row at the top of its fuse in Sessions:
+the stoker's name and the steps of its plan that are done.
+
+```text
+ WAITS FOR YOU · 1 · chain of 3
+ ✦─╮ stoker   kindle-web · plan 2/5
+▌╿─┤ kindle-web
+ ✦─┤ hearth-api
+ ╿─╯ ember-billing
+```
+
+- `a` or `Enter` on the head row opens the chain's stoker in a popup. It
+  runs on matchblox's own tmux server. Type an order in your own words, or
+  answer its prompts; prefix `d` closes the popup. By day, a later order
+  goes in as `New order: <your words>` and goes onto its card.
+- `a` on a member row goes into that member's pane. Answer one match
+  yourself when you want to.
+- `F` on a member of a chain with no stoker opens the start sheet. On a
+  desk, a tap on the fuse does the same. When the stoker's run is off,
+  `a` on its head row opens the start sheet too: a new run needs an order
+  and its gos.
+- A head row is no session. `x`, `r`, `A` and `z` on it say
+  `the stoker of chain <name> is no session: quit it on the STOKER tab`.
+- The chain moves into the group of its neediest row, the head row too. A
+  stoker that asks you puts its chain in WAITS FOR YOU.
+
+The start sheet is the launch sheet for one chain:
+
+```text
+Stoke the chain kindle-web (3 matches)?
+How should I run this chain?  ____________________________
+gos ✓ merges  ○ releases  ○ deploys  ○ kills
+```
+
+`Enter` starts the agent in tmux session `stoker-<id>` on matchblox's own
+server, writes its brief and types `Read <path> and follow it.` into its
+pane. The card of the host stoker says
+`started the stoker of chain <name> (<id>)`. Each chain stoker has an id of
+its own (`s1`, `s2`, …), not its chain's.
+
+From a shell, start one and give it orders:
+
+```sh
+matchblox stoker new --chain api-auth "finish the login flow and merge it on green"
+matchblox stoker order api-auth "add the docs page next"
+matchblox stoker quit --chain api-auth
+```
+
+- `matchblox stoker new --chain <who> ["<order>"]` starts the stoker of the
+  chain that `<who>` is in. `<who>` is any member's name, a pane or the
+  chain's id. Only you start one: from an agent's pane it is refused.
+- `matchblox stoker order <chain> "<text>"` gives the chain's stoker an
+  order. If the chain has no stoker, it starts one. An order to a stoker
+  that runs needs words: `an order needs words`.
+- From your shell, a chain's stoker gets no go: `--go` there is refused
+  with `goes are given at the console: drop --go here, and grant them on
+  the STOKER tab`. A pane with no agent seen in it yet counts as yours, so
+  an agent there must not grant itself merges. Grant gos on the STOKER tab.
+- From the host stoker's pane, `--go merges,releases,deploys,kills` gives
+  the chain's stoker those gos; with no `--go`, it has the host stoker's.
+- `matchblox stoker quit --chain <who>` quits the stoker of that chain:
+  its agent, its tmux session and its run. Its card gets its score, and
+  `max_chains` counts it no more. When its agent is already gone and its
+  run is on, the quit ends the run. `matchblox stoker quit` alone quits the
+  host stoker.
+- A command with neither a pane nor a terminal is refused:
+  `not started: matchblox cannot tell who starts this. Start from a terminal, a tmux pane or the console.`
+  and `not ordered: matchblox cannot tell who orders this. Order from a terminal, a tmux pane or the console.`
+
+### The night heads the family
+
+- By day, each chain stoker's run is its own. `f` turns the host stoker on
+  or off only.
+- `n` starts the night. Each chain stoker with a run on joins it, and the
+  night seals it. The end of the night turns them all off.
+- The night is sealed for you. You can answer a chain stoker's prompts,
+  but a new order is refused:
+  `the night is sealed: answer the stoker's prompts, or give the order in the morning`.
+- The host stoker gives orders: from its pane it runs
+  `matchblox stoker order <chain> "<text>"`. If the chain has no stoker,
+  this starts one, and at night that stoker is part of the night. Its
+  brief lists each chain, its stoker and that stoker's plan.
+- A chain stoker's gos are never more than its giver's. An order with a go
+  that the giver does not have is refused:
+  `the order gives <go>, which its giver does not have`. When the host
+  stoker loses a go, its chain stokers lose it too.
+- `max_steps` counts for each stoker.
+
+### One owner for each match
+
+- A chain stoker acts on the matches of its chain only. Its `send`,
+  `compact`, `hold`, `release` and `kill` to any other session fail with
+  `<who> is not in the chain of this stoker.` and nothing happens.
+- It reads the whole host: `peek`, `sessions`, `ships` and `usage` work
+  as for the host stoker.
+- A session it starts with `matchblox new` must be in its chain's repo,
+  and it joins the chain. A start in another folder is refused:
+  `a session of chain <name> starts in its repo: <repo>`.
+- It gives no orders (`a chain stoker gives no orders`), and it does not
+  act on a recommendation
+  (`a chain stoker acts on the matches of its chain only`).
+- The host stoker does not act on a match whose chain has a stoker with a
+  run on: `<who> has the stoker of chain <name>: give it an order.` When
+  that run starts, the host stoker's holds and triggers on the chain pass
+  to the chain stoker. A kill or a go that waits on the host card for one
+  of its matches is dropped, and the card says so:
+  `dropped the kill for <session>: the stoker of chain <name> owns it now`.
+- Every rule of [What the stoker agent cannot do](#what-the-stoker-agent-cannot-do)
+  holds for a chain stoker too, and the guard watches its panes.
+
+### When a chain ends, or a match joins
+
+- A chain stoker ends with its chain. Its card says `its chain ended`, and
+  it quits.
+- A session that joins a chain whose stoker runs is that stoker's to
+  drive at once. A pane the host stoker drove stays guarded: the chain
+  stoker drives it from the start, with its own gos. A go you gave for one
+  pane with `y` stays with the host stoker.
+- Chains never merge. A match in several chains is driven by the stoker
+  of the first of its chains whose run is on. Each other chain's stoker
+  refuses it with `<who> has the stoker of chain <name>`.
+
+### See the family
+
+- The STOKER tab lists the family: the host stoker's card first, then a
+  `CHAIN <name>` card for each chain stoker. `Enter` on a chain card opens
+  that stoker's pane. `Q` and a typed `y` quit that stoker only, and end
+  its run. `Q` shows on a card whose run is on, even when its agent is
+  gone.
+- A go that a chain stoker's run waits for shows on its card under
+  `YOUR GO`. `y` on it gives that go, once, as on the host's card. The
+  tab's name counts it with the host's.
+- An ended chain stoker keeps its card until you look at the host's card
+  after its end (the morning card). Then its card leaves the tab and
+  `matchblox status`. Its run log stays on disk, and the merge guard reads
+  it no more.
+- The dock and the header count the chain stokers: `stoker · 2 chains`
+  (`· 1 chain` for one). With no chain stoker, they read as before.
+- In `matchblox sessions --json`, a chain stoker's row has `"stoker": true`,
+  its `stoker_id` and its `chain` (the chain's id). The host stoker's row
+  has neither.
+- `matchblox status --text` lists each chain stoker under `stoker:`, as
+  `  chain <name> (<id>): <state> · plan <done>/<all>`, where the state is
+  `on`, `night` or `off`.
 
 ## Which sessions it compacts
 

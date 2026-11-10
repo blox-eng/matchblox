@@ -1,0 +1,38 @@
+ ▰ matchblox                                                         ● 6 wait for you  stoker · 1 chain
+ sessions 7    ships 3    machine    git    history    panes    STOKER
+────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+  STOKER AGENT  claude · rests                                                        ⏎ open the stoker
+
+ STOKER · since 18:50                                                                                on
+
+  “pause what waits on review”
+  ✓ merges
+  ! releases, deploys and kills still ask you
+
+ PLAN 0 of 1
+  ○       hearth-api hold: not priority (ways: priority)
+
+ CHAIN hearth-api                                                                                    on
+▌ STOKER AGENT  claude · works                                                        ⏎ open the stoker
+  “merge them on green”
+ PLAN 1 of 2
+  ✓ 21:10 hearth-api merge #4551 when green
+          merged #4551
+  ○       ember-billing rebase on main, then merge #4552
+
+ CHAIN kindle-web                                                                           ended 22:20
+   its chain joined hearth-api
+  THE RUN · ready 2/2
+   2 watched · 0 were full · 1 compacted · 0 waited
+
+
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ↑↓ move  ⏎ open the stoker  Q quit it  1 sessions  p ships  f stoker  / find  q quit    sampled 0s ago

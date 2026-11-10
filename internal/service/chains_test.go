@@ -511,10 +511,10 @@ func TestStokerJoinsNoChain(t *testing.T) {
 	s.StokerServer = "mbstoker"
 	stoker := sample.Session{Pane: sample.OnServer("%7", "mbstoker"), PID: 107, Start: 7, SessionID: "s7", Name: "stoker", Agent: "claude", Cwd: "/dev/app"}
 	chainSample(s, append(slices.Clone(fourSessions), stoker)...)
-	if res := chainFrom(t, s, "%1", proto.ChainPrefix+stoker.Pane); res.Err != "the stoker joins no chain" {
+	if res := chainFrom(t, s, "%1", proto.ChainPrefix+stoker.Pane); res.Err != noStokerChain {
 		t.Fatalf("to the stoker = %+v", res)
 	}
-	if res := chainFrom(t, s, stoker.Pane, proto.ChainPrefix+"%1"); res.Err != "the stoker joins no chain" {
+	if res := chainFrom(t, s, stoker.Pane, proto.ChainPrefix+"%1"); res.Err != noStokerChain {
 		t.Fatalf("from the stoker = %+v", res)
 	}
 }

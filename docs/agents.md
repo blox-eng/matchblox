@@ -212,6 +212,13 @@ and drives as the stoker's own, and the chain's limits do not apply.
 A chain gives a match the right to message its chain-mates, and nothing
 more. It grants no control over them, and every service guard still applies.
 
+A chain can have a stoker of its own. You talk to the chain, and its stoker
+answers: `a` on the head row of its fuse in Sessions, or
+`matchblox stoker order <chain> "<text>"` from a shell. That stoker drives
+the matches of its chain only. `F` on a member of a chain with no stoker
+starts one, and so does `matchblox stoker new --chain <who>`. See
+[A family of stokers](stoker.md#a-family-of-stokers).
+
 What each agent gets:
 
 - **Claude Code** hears the news at the start of a turn and after each tool

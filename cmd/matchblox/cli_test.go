@@ -1022,3 +1022,121 @@ func TestChainParsesItsFlags(t *testing.T) {
 		t.Fatalf("unchain: %v", err)
 	}
 }
+
+// TestCLIStokerQuitChain: matchblox stoker quit --chain <who> quits the
+// stoker of one chain: the service finds it by who. With no --chain it
+// quits the host stoker, as before.
+func TestCLIStokerQuitChain(t *testing.T) {
+	a, err := stokerQuitAct([]string{"quit"}, "api", "%7")
+	if err != nil || a.RecID != "stoker:quit" || a.Confirm != "y" || a.From != "%7" || a.Text != "api" {
+		t.Fatalf("act %+v, %v", a, err)
+	}
+	if a, err := stokerQuitAct([]string{"quit"}, "", ""); err != nil || a.Text != "" {
+		t.Fatalf("no --chain: %+v, %v", a, err)
+	}
+	if _, err := stokerQuitAct([]string{"quit", "api"}, "", ""); err == nil {
+		t.Fatal("quit takes no words")
+	}
+}
+
+// TestCLIStokerNewParsesGo: matchblox stoker new --chain <who> gives the
+// chain a stoker, with the gos of --go and the order's words. With no
+// --go, it gives none.
+func TestCLIStokerNewParsesGo(t *testing.T) {
+	a, err := stokerNewAct([]string{"new", "merge", "on", "green"}, "api", "merges,kills", "%7")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ask struct {
+		Chain  string   `json:"chain"`
+		Words  string   `json:"words"`
+		Grants []string `json:"grants"`
+	}
+	if a.RecID != "stoker:new" || a.Confirm != "y" || a.From != "%7" || json.Unmarshal([]byte(a.Text), &ask) != nil ||
+		ask.Chain != "api" || ask.Words != "merge on green" || !slices.Equal(ask.Grants, []string{"merge", "kill"}) {
+		t.Fatalf("act %+v ask %+v", a, ask)
+	}
+	a, err = stokerNewAct([]string{"new"}, "api", "", "")
+	if err != nil || json.Unmarshal([]byte(a.Text), &ask) != nil || len(ask.Grants) != 0 || ask.Words != "" {
+		t.Fatalf("no --go: %+v %v", ask, err)
+	}
+	if _, err := stokerNewAct([]string{"new"}, "", "", ""); err == nil {
+		t.Error("new with no --chain makes an act")
+	}
+	if _, err := stokerNewAct([]string{"new"}, "api", "merges,pushes", ""); err == nil {
+		t.Error("--go pushes makes an act")
+	}
+}
+
+// TestCLIStokerOrder: matchblox stoker order <chain> [--go …] "<text>"
+// gives a chain an order. With no --go it sends no goes at all: the
+// service gives the host its own, and the person none.
+func TestCLIStokerOrder(t *testing.T) {
+	a, err := stokerOrderAct([]string{"order", "api", "merge", "on", "green"}, "merges,releases", "%7")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ask map[string]any
+	if a.RecID != "stoker:order-chain" || a.Confirm != "y" || a.From != "%7" || json.Unmarshal([]byte(a.Text), &ask) != nil ||
+		ask["chain"] != "api" || ask["words"] != "merge on green" || !reflect.DeepEqual(ask["grants"], []any{"merge", "release"}) {
+		t.Fatalf("act %+v ask %+v", a, ask)
+	}
+	a, err = stokerOrderAct([]string{"order", "api", "go"}, "", "")
+	ask = nil
+	if err != nil || json.Unmarshal([]byte(a.Text), &ask) != nil {
+		t.Fatalf("no --go: %v", err)
+	}
+	if _, in := ask["grants"]; in {
+		t.Fatalf("no --go sends goes: %+v", ask)
+	}
+	for _, words := range [][]string{{"order"}, {"order", "api"}} {
+		if _, err := stokerOrderAct(words, "", ""); err == nil {
+			t.Errorf("%q makes an act", words)
+		}
+	}
+	if _, err := stokerOrderAct([]string{"order", "api", "go"}, "pushes", ""); err == nil {
+		t.Error("--go pushes makes an act")
+	}
+}
+
+func TestSessionsJSONMarksChainStoker(t *testing.T) {
+	d := cliDoc()
+	d.StokerServer = "mbtest"
+	d.Stokers = []state.ChainStoker{{ID: "s1", Chain: "c1", Name: "api"}}
+	d.Sessions = append(d.Sessions,
+		sample.Session{Pane: "%9@mbtest", Target: "stoker:1.1", Name: "boss"},
+		sample.Session{Pane: "%8@mbtest", Target: "stoker-s1:1.1", Name: "stoker-s1"})
+	var buf bytes.Buffer
+	if err := writeSessions(&buf, d, true); err != nil {
+		t.Fatal(err)
+	}
+	var rows []map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &rows); err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range rows {
+		switch r["pane"] {
+		case "%8@mbtest":
+			if r["stoker"] != true || r["stoker_id"] != "s1" || r["chain"] != "c1" {
+				t.Fatalf("chain stoker row %v", r)
+			}
+		default:
+			if _, ok := r["stoker_id"]; ok {
+				t.Fatalf("%v: stoker_id", r)
+			}
+			if _, ok := r["chain"]; ok {
+				t.Fatalf("%v: chain", r)
+			}
+		}
+	}
+}
+
+func TestSessionsJSONUnchangedWithoutFamily(t *testing.T) {
+	var buf bytes.Buffer
+	if err := writeSessions(&buf, cliDoc(), true); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(buf.String(), "stoker_id") || strings.Contains(buf.String(), `"chain"`) {
+		t.Fatalf("family keys without a family: %s", buf.String())
+	}
+}

@@ -130,6 +130,13 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	}
 	picked := m.view().index != nil && m.rowIndex() == sc.rows[i] && (m.tab != tabSessions || m.chose)
 	m.selectRow(sc.rows[i])
+	if s, ok := m.selectedSession(); ok && m.tab == tabSessions && !m.oneColumn(w) && m.onFuse(ms.X, sc.listW) {
+		// A phone's row tap opens its chat: there F stokes the chain.
+		if k, chained := m.chainKeyOf(s); chained && !m.headed(k) {
+			m.armed = ""
+			return m.startChain(k), nil
+		}
+	}
 	if m.tab == tabShips {
 		// A tap on the selected ship goes to its session, as Enter does.
 		m.armed, m.flash = "", ""
@@ -139,11 +146,11 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if host, pane := m.tapTarget(); pane != "" {
-		// A tap selects a session, and on a phone opens its live view; a
-		// tap on it once it is selected goes into its pane.
+		// A tap selects a session; a tap on it once it is selected goes into
+		// its pane. On a phone the first tap goes in (#352): the owner taps a
+		// session to answer it, and a view that takes no keys is a dead end.
 		m.armed, m.flash = "", ""
-		if !picked { // the default selection is not a tap
-			m.viewOpen = m.oneColumn(w)
+		if !picked && !m.oneColumn(w) { // the default selection is not a tap
 			return m, nil
 		}
 		return m.goIntoAsking(host, pane)

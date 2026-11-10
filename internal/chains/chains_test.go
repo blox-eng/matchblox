@@ -473,3 +473,30 @@ func TestUnseenFollowsARenameAndGoesWithItsMatch(t *testing.T) {
 		t.Fatalf("unseen = %v", s.Unseen)
 	}
 }
+
+// TestJoinIDAddsAStokersSession: a session a chain's stoker started joins
+// the team by its id, with no ask; a match in another team joins too.
+func TestJoinIDAddsAStokersSession(t *testing.T) {
+	var s Store
+	c := chainOf(t, &s, "a", "b")
+	if err := s.JoinID(c.ID, mem("n")); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.Team(c.Name); len(got.Members) != 3 {
+		t.Fatalf("n did not join: %+v", got)
+	}
+	if err := s.JoinID(c.ID, mem("n")); err != nil {
+		t.Fatalf("a member joins its own team again: %v", err)
+	}
+	s.SetOff(mem("off"), true)
+	if err := s.JoinID(c.ID, mem("off")); !errors.Is(err, ErrOff) {
+		t.Fatalf("an off match joined: %v", err)
+	}
+	chainOf(t, &s, "x", "y")
+	if err := s.JoinID(c.ID, mem("x")); err != nil || len(s.TeamsOf(mem("x"))) != 2 {
+		t.Fatalf("x is in %d teams: %v", len(s.TeamsOf(mem("x"))), err)
+	}
+	if err := s.JoinID("gone", mem("z")); err == nil {
+		t.Fatal("z joined a team that is not there")
+	}
+}

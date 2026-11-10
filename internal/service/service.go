@@ -123,6 +123,9 @@ type Service struct {
 	Ways string
 	// OrderSteps is how many messages the stoker agent may send in a run.
 	OrderSteps int
+	// MaxChains is how many chain stokers may run at once ([stoker]
+	// max_chains).
+	MaxChains int
 	// PeerPane is the tmux pane a CLI that connected runs in, by its pid
 	// ("" outside every pane). An act's From is ignored where it is known.
 	PeerPane func(pid int) string
@@ -241,9 +244,6 @@ type Service struct {
 
 	mu  sync.Mutex
 	cur state.Doc
-	// startedAt is when matchblox started the stoker agent; zero once it
-	// is ready, or gave up on it.
-	startedAt time.Time
 	// sampled are the sessions as the sampler read them; cur.Sessions adds
 	// the question tool's calls the hooks announced.
 	sampled  []sample.Session
@@ -258,11 +258,10 @@ type Service struct {
 	sampleKick chan struct{}
 	stop       context.CancelCauseFunc
 
-	acts  acts
-	ways  waysCache
-	wakes wakeState
-	// driven are the panes the stoker drove, for the merge guard.
-	driven drivenState
+	acts acts
+	ways waysCache
+	// fam are the stokers: the host, then one for each chain that has one.
+	fam stokerFamily
 	// sentAt is when a command or a compact last went to a pane, by pane:
 	// until restLatch after it, the pane is not at rest (latchRest).
 	sentAt map[string]time.Time
@@ -294,6 +293,9 @@ type Service struct {
 	typingActs inFlight
 	// noticed are the branches of each pair at its last notice. Under mu.
 	noticed map[pair][2]string
+	// chainLife are the ids of the teams that ended, for followChains.
+	// Under mu.
+	chainLife []string
 	// heldNotices are what a delivery holds until its hook says it heard
 	// it: no other hook is told them meanwhile. Under mu.
 	heldNotices map[pair]bool
@@ -385,6 +387,7 @@ func New(cfg config.Config, smp *sample.Sampler, git GitSource) *Service {
 		NightEnds:   cfg.Stoker.NightEnds,
 		StokerAgent: cfg.Stoker.Agent,
 		OrderSteps:  cfg.Stoker.MaxSteps,
+		MaxChains:   cfg.Stoker.MaxChains,
 		full:        sample.Full{Pct: cfg.Sessions.CompactAt, Tokens: cfg.Sessions.CompactTokens},
 
 		ChainsNotice: cfg.Chains.Notice,
@@ -568,6 +571,9 @@ func (s *Service) Run(ctx context.Context) {
 	}
 	s.mu.Unlock()
 	rec := s.recorder()
+	if err := s.loadFamily(); err != nil {
+		fmt.Fprintln(os.Stderr, "matchblox: a chain stoker did not load:", err)
+	}
 	s.loadFound()
 	s.loadUsed()
 	go s.gitLoop(ctx)
@@ -579,8 +585,10 @@ func (s *Service) Run(ctx context.Context) {
 	for first := true; ; first = false {
 		s.readSpool()
 		s.publish(s.sample(), rec)
+		s.followChains(ctx)
 		s.renameAtRest(ctx)
 		s.stoke(ctx, s.now())
+		s.deliverBriefs(ctx)
 		now := s.now()
 		s.restRun.start(func() { s.deliverAtRest(now) })
 		if first {
@@ -606,9 +614,10 @@ func (s *Service) publish(snap sample.Snapshot, rec func(state.Doc)) {
 	gen := s.doorsGen()
 	ds := s.doors()
 	var view *stoker.View
-	if s.Stoker != nil {
-		view = s.stokerView(snap.Sessions)
+	if u := s.hostUnit(); u != nil {
+		view = s.stokerView(u, snap.Sessions)
 	}
+	stokers := s.chainStokers(snap.Sessions)
 	known, skipped := s.knownAccounts(snap.Sessions)
 	s.lastAccounts.signedIn(lastAccountsPath(s.StatePath), snap.Sessions)
 	last := s.lastListed(known)
@@ -635,9 +644,10 @@ func (s *Service) publish(snap sample.Snapshot, rec func(state.Doc)) {
 		}
 	}
 	s.cur.SignIns = s.signIns.keep(here)
-	if s.Stoker != nil {
+	if view != nil {
 		s.cur.Stoker = view
 	}
+	s.cur.Stokers = stokers
 	s.cur.Recommendations = advice.Build(snap, s.cur.Git)
 	// Join hooks before holds: Cursor has no session file, so its id comes
 	// from the hooked chat, and prune must see that id as present.
@@ -658,6 +668,10 @@ func (s *Service) publish(snap sample.Snapshot, rec func(state.Doc)) {
 		}
 		s.cur.Holds = s.Holds.List()
 	}
+	joined, err := s.joinNewLocked(s.now())
+	if err != nil {
+		s.cur.Errors = append(s.cur.Errors, "chains: "+err.Error())
+	}
 	if err := s.pruneChainsLocked(s.now(), prev); err != nil {
 		s.cur.Errors = append(s.cur.Errors, "chains: "+err.Error())
 	}
@@ -674,6 +688,7 @@ func (s *Service) publish(snap sample.Snapshot, rec func(state.Doc)) {
 	}
 	doc := s.cur
 	s.mu.Unlock()
+	s.joinedOut(joined)
 	if s.Recovery != nil {
 		// Out of the lock: it reads the checkout of a new agent's folder.
 		if err := s.Recovery.Update(live, alive, s.now()); err != nil {

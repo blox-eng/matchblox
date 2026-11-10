@@ -155,9 +155,14 @@ func (s *Store) FreeName(name string) string {
 // Join adds m to the team named team. ErrIn comes with the team.
 func (s *Store) Join(m Member, team string) (Chain, error) {
 	i := s.teamIndex(team)
-	switch {
-	case i < 0:
+	if i < 0 {
 		return Chain{}, fmt.Errorf("no chain is named %s", team)
+	}
+	return s.joinAt(m, i)
+}
+
+func (s *Store) joinAt(m Member, i int) (Chain, error) {
+	switch {
 	case slices.ContainsFunc(s.Chains[i].Members, m.Same):
 		return s.Chains[i], ErrIn
 	case s.isOff(m):
@@ -236,6 +241,20 @@ func (s *Store) leave(m Member) (ids []string) {
 	}
 	slices.Reverse(ids)
 	return ids
+}
+
+// JoinID adds m to the team chainID with no ask: a session a chain's stoker
+// started. A member of the team joins it again as a no-op. It fails when m
+// is off or the team is gone.
+func (s *Store) JoinID(chainID string, m Member) error {
+	i := slices.IndexFunc(s.Chains, func(c Chain) bool { return c.ID == chainID })
+	if i < 0 {
+		return fmt.Errorf("chain %s is gone", chainID)
+	}
+	if _, err := s.joinAt(m, i); err != nil && !errors.Is(err, ErrIn) {
+		return err
+	}
+	return nil
 }
 
 // SetOff makes m refuse chains (off leaves its chain too), or accept them again.

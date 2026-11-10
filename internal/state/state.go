@@ -32,6 +32,9 @@ type Doc struct {
 	// Stoker is the stoker mode and the steps of its last run. Nil: the
 	// service keeps no stoker.
 	Stoker *stoker.View `json:"stoker,omitempty"`
+	// Stokers are the chain stokers, by id, an ended one too: its card is
+	// read in the morning. Nil: the family has no chain stoker.
+	Stokers []ChainStoker `json:"stokers,omitempty"`
 	// Ships are the pull requests sessions drive. Nil: the service reads
 	// none (no git, or a fixture).
 	Ships *ships.Report `json:"ships,omitempty"`
@@ -153,4 +156,13 @@ func Read(path string) (Doc, error) {
 		return doc, err
 	}
 	return doc, json.Unmarshal(b, &doc)
+}
+
+// ChainStoker is the view of one chain's stoker, with the chain's id and
+// name.
+type ChainStoker struct {
+	ID    string      `json:"id"`
+	Chain string      `json:"chain"`
+	Name  string      `json:"name"`
+	View  stoker.View `json:"view"`
 }

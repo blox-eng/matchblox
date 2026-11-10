@@ -313,9 +313,10 @@ type Model struct {
 	queue      []queue.Item
 	doors      []doors.Door // the open doors, above the sessions
 	stoker     *proto.StokerView
-	doorPick   string // the selected door
-	doorAt     int    // its row, for the door after it when it folds
-	previewTop int    // the first line of a door's diff on screen
+	stokers    []state.ChainStoker // the chain stokers, for the head rows of their chains
+	doorPick   string              // the selected door
+	doorAt     int                 // its row, for the door after it when it folds
+	previewTop int                 // the first line of a door's diff on screen
 	paneSel    int
 	screen     proto.Screen       // the last capture of the watched pane
 	watching   string             // the pane the service sends, or ""
@@ -732,7 +733,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if joined := m.joinNews(st.Chains, st.Sessions); joined != "" {
 			toast = joined
 		}
-		m.stoker, m.stokerServer = st.Stoker, st.StokerServer
+		m.stoker, m.stokerServer, m.stokers = st.Stoker, st.StokerServer, st.Stokers
 		if !m.stokerClaims() {
 			m.dockSwitched = false
 		}
@@ -1286,6 +1287,12 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.viewFull() && bkey.Matches(k, mk.Back) {
 		return m.closeView(), nil
 	}
+	if s, ok := m.selectedSession(); ok && bkey.Matches(k, mk.Second, mk.Rename, mk.Switch, mk.Park) {
+		if u, head := m.headRow(s); head { // its agent is the stoker's, not a session of the builder's
+			m.flash = "the stoker of chain " + u.Name + " is no session: quit it on the STOKER tab"
+			return m, nil
+		}
+	}
 	switch {
 	case bkey.Matches(k, mk.Stoker):
 		return m.openStoker(), nil
@@ -1346,6 +1353,9 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.markAllSafe()
 		}
 	case bkey.Matches(k, mk.QuitAgent):
+		if u, ok := m.selectedUnit(); ok && m.tab == tabStoker {
+			return m.quitUnit(u)
+		}
 		if m.tab == tabStoker {
 			return m.quitAgent()
 		}
@@ -1361,11 +1371,19 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			if r, ok := m.stokerSelected(); ok && r.kind == rowAgent {
 				return m.openAgent()
 			}
+			if u, ok := m.selectedUnit(); ok {
+				return m.openUnit(u)
+			}
 			m.showCommand()
 			return m, nil
 		}
 		if b, ok := m.selectedBlocked(); ok {
 			return m.unblockHost(b)
+		}
+		if s, ok := m.selectedSession(); ok {
+			if u, head := m.headRow(s); head {
+				return m.headAct(s, u)
+			}
 		}
 		if s, ok := m.selectedSession(); ok && s.Host == m.opt.Host {
 			return m.intoSelected()
@@ -1398,7 +1416,16 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		case tabStoker:
 			return m.stokerInto()
 		}
+		if s, ok := m.selectedSession(); ok {
+			if u, head := m.headRow(s); head {
+				return m.headAct(s, u)
+			}
+		}
 		return m.intoSelected()
+	case bkey.Matches(k, mk.StokeChain):
+		if m.tab == tabSessions {
+			return m.stokeChain()
+		}
 	case bkey.Matches(k, mk.Jump):
 		return m.intoSelected()
 	case bkey.Matches(k, mk.Dismiss):
