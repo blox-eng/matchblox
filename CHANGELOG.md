@@ -48,6 +48,11 @@ All notable changes to matchblox are in this file. The format follows
   the match's place in its chain, with its news. The new agent hears who it
   is chained with, and no mate has to chain again.
   ([#333](https://github.com/blox-eng/matchblox/issues/333))
+- **The console answers a key fast on a busy host.** The console now runs at
+  the normal CPU priority. The service and the one-shot commands stay at the
+  lowest. Before this fix, a host at load 80 showed each ↑ and ↓ about half a
+  second late over ssh. A wheel tick, or a swipe on a phone, also costs about
+  40% less: it reads the frame on the screen and does not draw a second one.
 
 ## [0.39.0] - 2026-11-09
 

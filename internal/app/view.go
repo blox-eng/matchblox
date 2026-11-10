@@ -86,7 +86,27 @@ func (m Model) render() string {
 
 func (m Model) frame(w int) string {
 	sc := m.draw(w)
+	if m.shown != nil {
+		*m.shown = shownFrame{ok: true, w: w, sc: sc}
+	}
 	return strings.Join(sc.lines, "\n")
+}
+
+// shownFrame is the last frame View drew, and its width.
+type shownFrame struct {
+	ok bool
+	w  int
+	sc drawn
+}
+
+// onScreen is the frame the person sees. View draws one after every
+// message, so a wheel tick needs no second draw. kept is false with no
+// frame yet, or one of another width.
+func (m Model) onScreen(w int) (sc drawn, kept bool) {
+	if m.shown != nil && m.shown.ok && m.shown.w == w {
+		return m.shown.sc, true
+	}
+	return drawn{}, false
 }
 
 // span is a tap target on a line: columns x0 to x1, and the key it presses.

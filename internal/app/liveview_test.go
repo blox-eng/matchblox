@@ -260,7 +260,7 @@ func TestKeyNames(t *testing.T) {
 
 // demoSized is the demo machine at w by h, the selected session's screen
 // a question with three options.
-func demoSized(t *testing.T, w, h int) Model {
+func demoSized(t testing.TB, w, h int) Model {
 	t.Helper()
 	m := New(Options{NoMotion: true, Conn: newFake(), Now: func() time.Time { return demoAt }})
 	next, _ := m.Update(tea.WindowSizeMsg{Width: w, Height: h})
