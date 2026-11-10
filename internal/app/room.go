@@ -28,6 +28,9 @@ type room struct {
 	sent     string // the words of the order in flight, back in the line if it is refused
 	act      string // the order act in flight; "" when none
 	queued   bool   // a chain of one's words wait for the host's stoker it started
+	starts   bool   // the act in flight starts the chain's stoker (stoker:new)
+	woke     bool   // the stoker:new went through: the card says waking until it runs
+	failed   string // why the chain's stoker did not start; "" when it did or was not asked
 }
 
 type roomKind int
@@ -51,6 +54,7 @@ type roomRow struct {
 	id    string
 	text  string
 	faint bool
+	tone  string // "warn" or "neg" for a state that needs the owner; "" plain
 }
 
 // oneKey is the room of a session in no chain: its chain of one, which the
@@ -173,7 +177,7 @@ func (m Model) roomRows(k chainKey) []roomRow {
 	rows = append(rows, m.cardRows(k)...)
 	seen, unseen := m.members(k)
 	rows = append(rows, m.roomMatchRows(k, seen, unseen)...)
-	rows = append(rows, m.shipsRow(seen), m.gitRow(k.host, seen), roomRow{kind: roomTalk, text: m.talkText(k)})
+	rows = append(rows, m.shipsRow(k.host, seen), m.gitRow(k.host, seen), roomRow{kind: roomTalk, text: m.talkText(k)})
 	return rows
 }
 
@@ -198,6 +202,7 @@ func (m Model) cardRows(k chainKey) []roomRow {
 	if title != "" {
 		rows = append(rows, roomRow{kind: roomCard, text: title})
 	}
+	rows = append(rows, m.cardState(k, v)...)
 	done, all := v.PlanProgress()
 	if all == 0 {
 		return rows
@@ -221,6 +226,47 @@ func (m Model) cardRows(k chainKey) []roomRow {
 		rows = append(rows, roomRow{kind: roomMore, text: "↓ " + strconv.Itoa(hidden) + " more"})
 	}
 	return rows
+}
+
+// quietFor is how long a stoker that runs an order may say nothing before
+// the card calls it quiet.
+const quietFor = 60 * time.Second
+
+// cardState is the card's state line, when it has one: the stoker did not
+// start, it wakes, or it is quiet.
+func (m Model) cardState(k chainKey, v proto.StokerView) []roomRow {
+	if r := m.room; r != nil && r.k == k {
+		u, ok := m.unitOf(k)
+		switch {
+		case r.failed != "":
+			return []roomRow{{kind: roomCard, text: "the stoker did not start: " + r.failed, tone: "neg"}}
+		case r.woke && (!ok || !chainAlive(u)):
+			return []roomRow{{kind: roomCard, text: "≋ waking…"}}
+		}
+	}
+	o := v.Order
+	if o == nil || o.State != "running" || v.Ready || !v.PaneUp {
+		return nil
+	}
+	last := o.At
+	for _, at := range append([]time.Time{o.Went}, runTimes(v.Run)...) {
+		if at.After(last) {
+			last = at
+		}
+	}
+	if last.IsZero() || m.now().Sub(last) < quietFor {
+		return nil
+	}
+	return []roomRow{{kind: roomCard, id: "quiet", tone: "warn",
+		text: "≋ " + m.roomStokerWord(k) + " is quiet since " + last.Local().Format("15:04") + " · " + m.keys.room.Open.Help().Key + " asks it"}}
+}
+
+func runTimes(run []proto.StokerEntry) []time.Time {
+	out := make([]time.Time, len(run))
+	for i, e := range run {
+		out[i] = e.At
+	}
+	return out
 }
 
 // roomMatchRows are one row a match: its agent's mark, its name, its repo when
@@ -265,6 +311,9 @@ func (m Model) roomMatchRows(k chainKey, seen []sample.Session, unseen []chains.
 		}
 		rows = append(rows, roomRow{kind: roomMatch, id: s.Pane, text: text})
 	}
+	if len(seen) == 0 && len(unseen) == 0 {
+		return []roomRow{{kind: roomMatch, text: "the chain has no matches · + start one here"}}
+	}
 	for _, mb := range unseen {
 		text := mb.Pane + "  not seen"
 		if at := mateOf(mb).Unseen; !at.IsZero() {
@@ -287,7 +336,10 @@ func shortAgo(d time.Duration) string {
 }
 
 // shipsRow is the chain's pull requests on one line.
-func (m Model) shipsRow(seen []sample.Session) roomRow {
+func (m Model) shipsRow(host string, seen []sample.Session) roomRow {
+	if !slices.ContainsFunc(m.shipReports(), func(h hostShips) bool { return h.host == host }) {
+		return roomRow{kind: roomShips, text: "SHIPS  reading…"}
+	}
 	var parts []string
 	got := map[string]bool{}
 	for _, s := range seen {
@@ -322,8 +374,11 @@ func (m Model) gitRow(host string, seen []sample.Session) roomRow {
 			r = g.r
 		}
 	}
+	if r == nil {
+		return roomRow{kind: roomGit, text: "GIT  reading…"}
+	}
 	var n, merged, safe int
-	if r != nil {
+	{
 		for _, repo := range r.Repos {
 			if !slices.ContainsFunc(seen, func(s sample.Session) bool { return inRepo(repo.Worktrees, s.Cwd) }) {
 				continue

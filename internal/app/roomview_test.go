@@ -77,7 +77,7 @@ func TestRoomShowsInPlaceOfTheList(t *testing.T) {
 	m, k := roomOf(t, st, "hearth-api")
 	m = m.openRoom(k)
 	f := ansi.Strip(m.render())
-	for _, want := range []string{"‹ ≋ hearth", "hearth-api asks: may I force-push the rebase?", "› tell hearth's stoker…", "SHIPS no ships yet", "GIT   no worktrees"} {
+	for _, want := range []string{"‹ ≋ hearth", "hearth-api asks: may I force-push the rebase?", "› tell hearth's stoker…", "SHIPS reading…", "GIT   reading…"} {
 		if !strings.Contains(f, want) {
 			t.Errorf("no %q in:\n%s", want, f)
 		}

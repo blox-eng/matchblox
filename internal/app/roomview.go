@@ -78,6 +78,12 @@ func (m Model) roomLine(r roomRow, w int, lit bool, more int) []string {
 		}
 		return wrapped
 	case roomCard:
+		switch r.tone {
+		case "neg":
+			return []string{st.neg.Render(r.text)}
+		case "warn":
+			return []string{st.warn.Render(r.text)}
+		}
 		return []string{st.muted.Render(r.text)}
 	case roomStep:
 		mark, text, _ := strings.Cut(r.text, " ")

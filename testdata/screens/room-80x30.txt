@@ -3,6 +3,7 @@
 ────────────────────────────────────────────────────────────────────────────────
 ▌╿ hearth-api asks: may I force-push the rebase?  +2
  ≋ "ship the chain"
+ ≋ hearth's stoker is quiet since 22:49 · ⏎ asks it
    ✓ step
    ▸ step
      step
@@ -10,10 +11,9 @@
  ╿ ✻ kindle-web  idle
  ✦ ✻ hearth-api  busy
  ╿ ✻ ember-billing  waits
- SHIPS no ships yet
- GIT   no worktrees
+ SHIPS reading…
+ GIT   reading…
  › tell hearth's stoker…
-
 
 
 

@@ -253,6 +253,7 @@ func TestRoomGitCountsAMergedWorktreeWithNoSession(t *testing.T) {
 
 func TestRoomWithNoShipsOrWorktreesSaysSo(t *testing.T) {
 	m, k := roomOf(t, headState(t, runningPlan(), true), "hearth-api")
+	m.git, m.shipReport = &proto.GitReport{}, &proto.Ships{}
 	rows := m.roomRows(k)
 	roomRowOf(t, rows, roomShips, "SHIPS  no ships yet")
 	roomRowOf(t, rows, roomGit, "GIT  no worktrees")

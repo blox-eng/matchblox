@@ -133,6 +133,9 @@ func (m Model) roomKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case bkey.Matches(k, rk.Open):
 		switch row.kind {
 		case roomNeed, roomMatch:
+			if row.kind == roomMatch && row.id == "" { // the chain has no matches: + start one here
+				return m.openNew()
+			}
 			if s, ok := m.roomSession(row.id); ok {
 				m.ghostPick, m.chose, m.selPID, m.selHost = 0, true, s.PID, s.Host
 				return m.goInto(s.Host, s.Pane)
@@ -141,6 +144,10 @@ func (m Model) roomKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			r.unfolded = true
 		case roomTalk:
 			r.typing = true
+		case roomCard:
+			if row.id == "quiet" { // ⏎ asks the quiet stoker
+				r.typing = true
+			}
 		}
 	}
 	return m, nil
@@ -199,7 +206,7 @@ func (m Model) talk() (tea.Model, tea.Cmd) {
 		rec = "stoker:order-chain"
 	}
 	cmd := m.sendTo(k.host, proto.Act{RecID: rec, Which: "primary", Confirm: "y", Text: string(body)})
-	r.act = "a" + strconv.Itoa(m.acts)
+	r.act, r.starts, r.failed = "a"+strconv.Itoa(m.acts), rec == "stoker:new", ""
 	return m, cmd
 }
 
@@ -239,13 +246,20 @@ func (m Model) roomResult(res proto.Result) (Model, tea.Cmd, bool) {
 	r := *m.room
 	m.room = &r
 	r.act = ""
+	starts := r.starts
+	r.starts = false
 	if res.Err != "" {
-		m.flash = "not sent: " + res.Err
+		if starts {
+			r.failed = res.Err // the card says it, in neg
+		} else {
+			m.flash = "not sent: " + res.Err
+		}
 		if r.draft == "" {
 			r.draft = r.sent
 		}
 		return m, nil, true
 	}
+	r.woke = r.woke || starts
 	return m, m.say("sent to " + m.roomStokerWord(r.k)), true
 }
 
