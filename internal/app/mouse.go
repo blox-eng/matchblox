@@ -224,11 +224,19 @@ func (m Model) overView(ms tea.Mouse) bool {
 		return false
 	}
 	w := max(m.width, minWidth)
-	sc := m.draw(w)
+	sc, kept := m.onScreen(w)
+	if !kept {
+		sc = m.draw(w)
+	}
+	return m.overViewOf(ms, sc)
+}
+
+// overViewOf tells if ms is over the live view of the frame sc.
+func (m Model) overViewOf(ms tea.Mouse, sc drawn) bool {
 	if sc.placeFull {
 		return true
 	}
-	_, detailW := m.panes(w)
+	_, detailW := m.panes(max(m.width, minWidth))
 	_, viewing := m.viewShown(detailW)
 	return viewing && ms.X > sc.listW && ms.Y >= sc.bodyTop && ms.Y < sc.bodyTop+len(sc.rows)
 }

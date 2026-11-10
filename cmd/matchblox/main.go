@@ -309,9 +309,9 @@ func run(args []string) error {
 		}
 	}
 
-	// matchblox must not add load: lowest CPU priority for us and every
-	// command we start.
-	lowestPriority()
+	if lowersPriority(cmd) {
+		lowestPriority()
+	}
 
 	path := transport.SocketPath()
 	switch cmd {

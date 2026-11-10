@@ -464,6 +464,10 @@ type Model struct {
 	// until a screen shows it again or the person acts there.
 	away    bool
 	askedBy string
+
+	// shown is the frame View drew last, shared by every copy of this
+	// Model: a tap and a wheel tick find what they hit in it.
+	shown *shownFrame
 }
 
 func New(opt Options) Model {
@@ -480,7 +484,7 @@ func New(opt Options) Model {
 		opt.Binary = "dev"
 	}
 	m := Model{opt: opt, conn: opt.Conn, st: newStyles(true), dark: true, width: 100, height: 30, history: newSeries(60),
-		recPrefs: loadRecPrefs(opt.StateDir), viewPrefs: loadViewPrefs(opt.StateDir), keys: defaultKeys(), peers: links(opt.Peers)}
+		recPrefs: loadRecPrefs(opt.StateDir), viewPrefs: loadViewPrefs(opt.StateDir), keys: defaultKeys(), peers: links(opt.Peers), shown: &shownFrame{}}
 	m.splashAt = m.now()
 	if opt.Ask != nil {
 		m.askCtx, m.askStop = context.WithCancel(context.Background())

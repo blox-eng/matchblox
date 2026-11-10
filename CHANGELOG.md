@@ -6,6 +6,14 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **The console answers a key fast on a busy host.** The console now runs at
+  the normal CPU priority. The service and the one-shot commands stay at the
+  lowest. Before this fix, a host at load 80 showed each ↑ and ↓ about half a
+  second late over ssh. A wheel tick, or a swipe on a phone, also costs about
+  40% less: it reads the frame on the screen and does not draw a second one.
+
 ## [0.39.0] - 2026-11-09
 
 ### Added
