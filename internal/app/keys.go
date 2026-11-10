@@ -135,6 +135,7 @@ func defaultKeys() keymaps {
 			Prev:  bind(ks("["), "[", "back"),
 			Back:  bind(ks("esc"), "esc", "back"),
 			Erase: bind(ks("backspace"), "⌫", "erase"),
+			Flip:  bind(ks("alt+s"), "⌥s", "room"),
 		},
 		search: searchKeys{
 			Clear: bind(ks("esc"), "esc", "clear"),
@@ -378,6 +379,9 @@ func keyPress(k string) tea.KeyPressMsg {
 	}
 	if r := []rune(k); len(r) == 6 && k[:5] == "ctrl+" {
 		return tea.KeyPressMsg{Code: r[5], Mod: tea.ModCtrl}
+	}
+	if r := []rune(k); len(r) == 5 && k[:4] == "alt+" {
+		return tea.KeyPressMsg{Code: r[4], Mod: tea.ModAlt}
 	}
 	if r := []rune(k); len(r) == 7 && k[:6] == "shift+" {
 		return tea.KeyPressMsg{Code: r[6], Mod: tea.ModShift}

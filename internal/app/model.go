@@ -1395,8 +1395,8 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m.unblockHost(b)
 		}
 		if s, ok := m.selectedSession(); ok {
-			if u, head := m.headRow(s); head {
-				return m.headAct(s, u)
+			if u, head := m.headRow(s); head { // a chain's head opens its room
+				return m.openRoom(chainKey{s.Host, u.Chain}), nil
 			}
 		}
 		if s, ok := m.selectedSession(); ok && s.Host == m.opt.Host {
@@ -1462,6 +1462,10 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.stokerKey(true)
 	case bkey.Matches(k, mk.Order):
 		return m.orderKey()
+	case bkey.Matches(k, m.keys.room.Flip):
+		if s, ok := m.selectedSession(); ok && m.tab == tabSessions {
+			return m.openRoom(m.roomKeyOf(s)), nil
+		}
 	case bkey.Matches(k, mk.Rename):
 		if m.tab == tabSessions {
 			return m.openRename()

@@ -15,10 +15,10 @@ import (
 
 // roomKeys are the keys of a chain's room. While the talk line types, every
 // key but ⏎, esc and ⌫ is text.
-type roomKeys struct{ Up, Down, Open, Give, Next, Prev, Back, Erase bkey.Binding }
+type roomKeys struct{ Up, Down, Open, Give, Next, Prev, Back, Erase, Flip bkey.Binding }
 
 func (k roomKeys) bindings() []bkey.Binding {
-	return []bkey.Binding{k.Up, k.Down, k.Open, k.Give, k.Next, k.Prev, k.Back, k.Erase}
+	return []bkey.Binding{k.Up, k.Down, k.Open, k.Give, k.Next, k.Prev, k.Back, k.Erase, k.Flip}
 }
 
 // goWait is a step of a stoker's run that waits for the owner's go: the

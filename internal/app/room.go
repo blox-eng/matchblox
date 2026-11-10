@@ -372,6 +372,18 @@ func (m Model) talkText(k chainKey) string {
 	return "› what should " + name + "'s stoker do?"
 }
 
+// roomKeyOf is the room of session s: its chain's (its first team's), the
+// chain of a head row's stoker, else its chain of one.
+func (m Model) roomKeyOf(s sample.Session) chainKey {
+	if u, head := m.headRow(s); head {
+		return chainKey{s.Host, u.Chain}
+	}
+	if teams := m.teamsOf(s); len(teams) > 0 {
+		return chainKey{s.Host, teams[0].ID}
+	}
+	return oneKey(s)
+}
+
 // openRoom opens room k with the cursor on its need, else on its talk line.
 func (m Model) openRoom(k chainKey) Model {
 	rows := m.roomRows(k)
