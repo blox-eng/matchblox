@@ -1,4 +1,4 @@
-/// What each belt key sends. The host's chat reads the bytes as its keys.
+/// What each belt key sends. The agent's pane reads the bytes as its keys.
 public enum KeyBar {
     private static let esc: UInt8 = 0x1b
 

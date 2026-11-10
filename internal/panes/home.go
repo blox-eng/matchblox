@@ -46,17 +46,24 @@ const homeUserKey = "900"
 const runsConsole = "#{==:#{pane_current_command}," + Home + "}"
 
 // goHome is the way back, as the words of a tmux if-shell: on a console's pane
-// the key goes on to that console, whole, so its chat gives the keys back; a
+// the key goes on to that console, whole, so the console reads it itself; a
 // pane in copy mode leaves it first, as copy mode would read the key's bytes
 // as its own commands. From any other pane the client goes to the console's
 // session, and on to the console's pane there, as another window may be the
-// one on screen.
+// one on screen. With no console's session, the key says how to open one,
+// not tmux's bare "can't find session" (#354).
 var goHome = [3]string{
 	runsConsole,
 	`if-shell -F "#{pane_in_mode}" "send-keys -X cancel" ; send-keys -H ` + hexKeys(HomeKey),
-	"switch-client -t =" + Home + " ; run-shell -C -t =" + Home + `: "#{W:#{P:#{?` + runsConsole +
-		`,select-window -t #{window_id} ; select-pane -t #{pane_id} ; ,}}}"`,
+	`if-shell -F "` + homeExists + `" { switch-client -t =` + Home + " ; run-shell -C -t =" + Home + `: "#{W:#{P:#{?` + runsConsole +
+		`,select-window -t #{window_id} ; select-pane -t #{pane_id} ; ,}}}" } { display-message "` + NoHome + `" }`,
 }
+
+// homeExists is "1" while the tmux server has the console's session.
+const homeExists = "#{S:#{?#{==:#{session_name}," + Home + "},1,}}"
+
+// NoHome is what the way back says when no console's session is there.
+const NoHome = "No matchblox console here: run matchblox in a shell to open one"
 
 // NamedConsole tells if a console started as arg0 is one to tmux: if not, the
 // way back's test fails on its own pane.
@@ -74,13 +81,12 @@ func HomeKeyArgv() []string {
 }
 
 // CommandKeysArgv makes each command key of the phone a key of the tmux
-// server, in user-keys slots from 901 up (keycmd's table). A client in the
-// console's session, on a pane the console still runs in, hands the key on
-// to the console, whole, so its chat runs the command. Anywhere else the key
-// does nothing: a command runs only from the chat, and a shell left where a
-// console quit never reads it as typing.
+// server, in user-keys slots from 901 up (keycmd's table). In a pane the
+// console marked as an agent of the command's kind (@matchblox_agent) the
+// key types the command's text there, with no Return: the builder sends
+// it. Anywhere else the key does nothing, so a shell or another agent never
+// reads it as typing.
 func CommandKeysArgv() []string {
-	const atConsole = "#{&&:#{==:#{session_name}," + Home + "},#{==:#{pane_current_command}," + Home + "}}"
 	argv := []string{"tmux"}
 	for _, c := range keycmd.All() {
 		slot, seq := strconv.Itoa(c.Slot), keycmd.Sequence(c.ID)
@@ -88,9 +94,37 @@ func CommandKeysArgv() []string {
 			argv = append(argv, ";")
 		}
 		argv = append(argv, "set-option", "-s", "user-keys["+slot+"]", seq,
-			";", "bind-key", "-n", "User"+slot, "if-shell", "-F", atConsole, "send-keys -H "+hexKeys(seq))
+			";", "bind-key", "-n", "User"+slot, "if-shell", "-F", "#{==:#{@matchblox_agent},"+c.Agent+"}", "send-keys -l "+c.Text)
 	}
 	return argv
+}
+
+// atConsole is true for a client in the console's session, on a pane the
+// console still runs in.
+const atConsole = "#{&&:#{==:#{session_name}," + Home + "},#{==:#{pane_current_command}," + Home + "}}"
+
+// MarkKeyArgv makes the app's marker key a key of the tmux server. At the
+// console it hands the console the tty of the client that pressed, without
+// typing anything into an agent pane; elsewhere it does nothing. run-shell -C
+// expands #{client_tty} and #{pane_id} before the three send-keys run.
+func MarkKeyArgv() []string {
+	slot := strconv.Itoa(keycmd.MarkSlot)
+	hand := "run-shell -C 'send-keys -t #{pane_id} -H " + hexKeys(keycmd.MarkedPrefix) +
+		" ; send-keys -t #{pane_id} -l #{client_tty} ; send-keys -t #{pane_id} -H 1b 5c'"
+	return []string{"tmux", "set-option", "-s", "user-keys[" + slot + "]", keycmd.MarkKey,
+		";", "bind-key", "-n", "User" + slot, "if-shell", "-F", atConsole, hand}
+}
+
+// ViewerHookArgv tells the console the moment a terminal attaches to it or
+// switches to it, so the console announces the marks to that terminal then:
+// tmux passes the announce only to the clients that show the pane when it is
+// sent. Without it, the console's own 2 s check finds the new terminal, and a
+// key before that is taken as the desk's. The hooks use MarkKey's slot.
+func ViewerHookArgv() []string {
+	slot := strconv.Itoa(keycmd.MarkSlot)
+	hook := `if-shell -F '` + atConsole + `' "run-shell -C 'send-keys -t #{pane_id} -H ` + hexKeys(keycmd.ViewerKey) + `'"`
+	return []string{"tmux", "set-hook", "-g", "client-attached[" + slot + "]", hook,
+		";", "set-hook", "-g", "client-session-changed[" + slot + "]", hook}
 }
 
 // hexKeys is s as the hex bytes of tmux send-keys -H.

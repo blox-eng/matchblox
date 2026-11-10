@@ -535,7 +535,7 @@ func TestSwitchNowEndsTheWait(t *testing.T) {
 
 func TestSwitchNowRefusesTheStokerAndItsPanes(t *testing.T) {
 	s, _ := handsLife(t)
-	s.drive("%4")
+	s.drive(s.hostUnit(), "%4")
 	x, _ := s.sessionAt("%1")
 	run, done := s.startRefresh(x, time.Now().Add(time.Minute))
 	defer done()

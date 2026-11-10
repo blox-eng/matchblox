@@ -297,7 +297,7 @@ func TestPlanSkipsHeld(t *testing.T) {
 // TestACommandEndingInASemicolonTypesIt: a command goes through the
 // literal send, so tmux does not read its final ";" as the end of argv.
 func TestACommandEndingInASemicolonTypesIt(t *testing.T) {
-	a := CommandAction("%1", 42, 7, "/run a;", true)
+	a := atRest("%1", 42, 7, "command", "/run a;", "")
 	if typed := a.Steps[0]; typed[len(typed)-1] != `/run a\;` {
 		t.Fatalf("typed %q", typed)
 	}

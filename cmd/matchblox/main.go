@@ -258,10 +258,13 @@ func run(args []string) error {
 		if err != nil {
 			return err
 		}
+		if len(words) > 0 && (words[0] == "new" || words[0] == "order") {
+			return cliStokerNew(words, *o.chain, *o.goes, os.Stdout, transport.SocketPath())
+		}
 		if len(words) > 0 && words[0] == "when" {
 			return cliWhen(words, whenOpts{ship: *o.ship, stage: *o.stage, rest: *o.rest, why: *o.why, drop: *o.drop, list: *o.list}, os.Stdout, transport.SocketPath())
 		}
-		return cliStoker(words, *o.state, *o.needs, *o.rule, os.Stdin, os.Stdout, transport.SocketPath())
+		return cliStoker(words, *o.state, *o.needs, *o.rule, *o.chain, os.Stdin, os.Stdout, transport.SocketPath())
 	case "setup":
 		cfg, _ := config.Load(*cfgPath) // a broken config still opens the doors, at the default line
 		return setupDoors(*liveSetup(cfg.Sessions.CompactAt), os.Stdin, os.Stdout, runInTerminal)
@@ -299,7 +302,7 @@ func run(args []string) error {
 			binds = append(binds, panes.HomeKeyArgv())
 		}
 		if os.Getenv(panes.HomeEnv) == "1" {
-			binds = append(binds, panes.SizeArgv(), panes.CommandKeysArgv())
+			binds = append(binds, panes.SizeArgv(), panes.CommandKeysArgv(), panes.MarkKeyArgv(), panes.ViewerHookArgv())
 		}
 		for _, argv := range binds {
 			_ = exec.Command("tmux", argv[1:]...).Run()
@@ -366,6 +369,7 @@ type flags struct {
 	all                   *bool
 	dir                   *string
 	off, on               *bool
+	chain, goes           *string
 }
 
 // usageText heads --help: every command, one line each, then the flags.
@@ -402,7 +406,9 @@ Commands:
   matchblox scan [<folder>…|off]   find the Git repositories here for N, now and every 30 minutes (off: stop and forget)
   matchblox stoker plan|step       the stoker agent's plan and steps, for its card
   matchblox stoker when …          a trigger matchblox fires itself (--ship n --stage s, or --rest who)
-  matchblox stoker quit            end the stoker agent and its own tmux session
+  matchblox stoker quit            end the stoker agent and its own tmux session (--chain <who>: the stoker of one chain)
+  matchblox stoker new --chain <who> ["<order>"]  start a stoker for one chain (--go: from the host stoker only)
+  matchblox stoker order <chain> "<text>"  give a chain's stoker an order, or start one (--go: from the host stoker only)
 
 <who> is a pane (%3), a target (app:1.1) or a name.
 
@@ -449,6 +455,8 @@ func newFlags() (*flag.FlagSet, flags) {
 		dir:        fl.String("dir", "", "recover <name>: the new place of the session's folder"),
 		off:        fl.Bool("off", false, "chain: take no chains and no notices"),
 		on:         fl.Bool("on", false, "chain: take chains and notices again"),
+		chain:      fl.String("chain", "", "stoker new and quit: the chain, by any member's name, a pane or the chain's id"),
+		goes:       fl.String("go", "", "stoker new and order: the gos the chain stoker has: merges, releases, deploys, kills (default: none, or the host stoker's own)"),
 		noMotion:   fl.Bool("no-motion", os.Getenv("NO_MOTION") == "1", "every motion is an instant change (also NO_MOTION=1)"),
 	}
 }
@@ -517,7 +525,7 @@ func hook(args []string, stdin io.Reader, out io.Writer, sock, spool string, pro
 			return nil // a tool call the service has no use for
 		}
 		// The spool lives in the state dir, beside driven.json.
-		if why := stoker.Deny(filepath.Dir(spool), ev.Socket, ev.Pane, ev.Guards); why != "" {
+		if why := stoker.DenyFamily(filepath.Dir(spool), ev.Socket, ev.Pane, ev.Guards); why != "" {
 			ev.Denied = true
 			_ = json.NewEncoder(out).Encode(hookDeny(why))
 		}
@@ -627,7 +635,7 @@ const consoleFPS = 60
 
 func console(path string, cfg config.Config, root string, noMotion bool, host string) error {
 	base := app.Options{Binary: version, CompactAt: cfg.Sessions.CompactAt, CompactTokens: cfg.Sessions.CompactTokens, NoMotion: noMotion,
-		OutsideTmux: os.Getenv("TMUX") == "", Self: invokedPath(os.Args[0]), StateDir: filepath.Dir(state.Path())}
+		OutsideTmux: os.Getenv("TMUX") == "", Pane: os.Getenv("TMUX_PANE"), Self: invokedPath(os.Args[0]), StateDir: filepath.Dir(state.Path())}
 	if !base.OutsideTmux {
 		base.Prefix, base.Home, base.LocalTmux = localTmux()
 		base.NoPrefixM = !panes.NamedConsole(os.Args[0])

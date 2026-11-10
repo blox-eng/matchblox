@@ -14,13 +14,17 @@ const watchEvery = 150 * time.Millisecond
 // screen taken in between, changed or not, may be the one before the menu.
 const waitSettle = 500 * time.Millisecond
 
-const keysOnlyFromConsole = "keys go only from a console"
+const (
+	keysOnlyInDemo       = "not sent: keys go to an agent in its own pane"
+	watchOnlyFromConsole = "screens go only to a console"
+)
 
 // aConsole tells if the act comes from a person at a console: not from an
 // agent's pane, nor the stoker's.
 func (s *Service) aConsole(console bool, a proto.Act) bool {
 	_, inAgent := s.sessionAt(a.From)
-	return console && !inAgent && !s.agentsPane(a) && !s.fromStoker(a)
+	_, own := s.unitOf(a)
+	return console && !inAgent && !s.agentsPane(a) && !own
 }
 
 // watched is the pane a console streams, and where in its history: back
@@ -36,7 +40,7 @@ const scrollStep = 3
 const backToLive = "not sent: back to the live screen — press it again to send"
 
 // scrollKey handles a console's key for the pane it watches while it scrolls
-// a pane whose agent does not read the mouse: a wheel step moves through the
+// back: a wheel step moves through the
 // history, and any other key only comes back to the live screen, so it never
 // answers a prompt the person did not see. handled is false for every other
 // key, which goes on to the agent.
@@ -51,11 +55,6 @@ func (s *Service) scrollKey(cl *client, clientKind string, a proto.Act, pane str
 		}
 		s.watchAt(cl, &watched{pane: pane})
 		return proto.Result{Err: backToLive}, true
-	}
-	if s.PaneMouse != nil {
-		if _, _, mouse := s.PaneMouse(pane); mouse {
-			return proto.Result{}, false
-		}
 	}
 	if s.PaneHistory == nil || s.CaptureBack == nil {
 		return proto.Result{}, false
@@ -87,7 +86,7 @@ func (s *Service) watchAt(cl *client, w *watched) {
 // watchAct sets the pane cl streams; an empty pane stops the stream.
 func (s *Service) watchAct(cl *client, clientKind string, a proto.Act, pane string) proto.Result {
 	if !s.aConsole(clientKind == proto.ClientConsole, a) {
-		return proto.Result{Err: keysOnlyFromConsole}
+		return proto.Result{Err: watchOnlyFromConsole}
 	}
 	if _, ok := s.sessionAt(pane); pane != "" && !ok {
 		return proto.Result{Err: "no agent session in " + pane + " any more"}

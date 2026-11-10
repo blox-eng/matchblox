@@ -29,6 +29,9 @@ const (
 	// command it denied in a pane the stoker drives, which waits for the
 	// builder's y.
 	RuleGo = "go"
+	// RuleFamily marks a line matchblox puts on a card about the family: a
+	// chain stoker started, or did not.
+	RuleFamily = "family"
 	// WhyOrder marks a compact the stoker agent asked for, not the plan.
 	WhyOrder = "order"
 	// MaxCompacts bounds the compacts the plan sends in one run.
@@ -286,18 +289,6 @@ func Plan(m Mode, sessions []sample.Session, waiting map[string]bool, full sampl
 // and no draft of the builder's (before the Enter, the compact itself).
 func CompactAction(pane string, pid int, start uint64) advice.Action {
 	return atRest(pane, pid, start, RuleCompact, "/compact", " "+Instruction)
-}
-
-// CommandAction types a command key's text and its Enter into a pane,
-// under the guards of CompactAction. Where the agent's prompt cannot be
-// read (read false), no draft shows there, and the Enter does not wait
-// for the text on the prompt.
-func CommandAction(pane string, pid int, start uint64, text string, read bool) advice.Action {
-	a := atRest(pane, pid, start, "command", text, "")
-	if !read {
-		a.Guards[1].Typed = ""
-	}
-	return a
 }
 
 // atRest types command and its args into pane, then Enter. The Enter waits

@@ -11,11 +11,11 @@ import (
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
-// chatSizes are the sizes the consoles' chats give the agents' screens,
-// and the windows sized to them. A window of one pane takes the size of
-// the chat that took the pane's keys last, else of the one that watched
-// it last; with no chat on it, it is put back.
-type chatSizes struct {
+// viewSizes are the sizes the consoles' live views give the agents'
+// screens, and the windows sized to them. A window of one pane takes the
+// size of the view that sent the pane keys last (the demo's stand-in),
+// else of the one that watched it last; with no view on it, it is put back.
+type viewSizes struct {
 	mu     sync.Mutex
 	seq    uint64
 	wants  map[string]map[*client]sizeWant // by pane
@@ -43,7 +43,7 @@ type heldWindow struct {
 
 // watch notes that cl watches pane ("": none) with a chat of cols by rows
 // (0: not drawn). It returns the panes whose window may change.
-func (z *chatSizes) watch(cl *client, pane string, cols, rows int) []string {
+func (z *viewSizes) watch(cl *client, pane string, cols, rows int) []string {
 	z.mu.Lock()
 	defer z.mu.Unlock()
 	touched := z.dropLocked(cl, pane)
@@ -70,7 +70,7 @@ func (z *chatSizes) watch(cl *client, pane string, cols, rows int) []string {
 
 // keyed notes that cl sent a key to pane; it tells if cl's chat watches
 // it.
-func (z *chatSizes) keyed(cl *client, pane string) bool {
+func (z *viewSizes) keyed(cl *client, pane string) bool {
 	z.mu.Lock()
 	defer z.mu.Unlock()
 	w, ok := z.wants[pane][cl]
@@ -83,14 +83,14 @@ func (z *chatSizes) keyed(cl *client, pane string) bool {
 }
 
 // drop forgets every pane cl watches, and returns them.
-func (z *chatSizes) drop(cl *client) []string {
+func (z *viewSizes) drop(cl *client) []string {
 	z.mu.Lock()
 	defer z.mu.Unlock()
 	return z.dropLocked(cl, "")
 }
 
 // dropLocked forgets the panes cl watches but keep, and returns them.
-func (z *chatSizes) dropLocked(cl *client, keep string) []string {
+func (z *viewSizes) dropLocked(cl *client, keep string) []string {
 	var out []string
 	for p, ws := range z.wants {
 		if _, ok := ws[cl]; ok && p != keep {
@@ -106,7 +106,7 @@ func (z *chatSizes) dropLocked(cl *client, keep string) []string {
 
 // winner is the size pane's window takes: the chat's with a size that took
 // the keys last, else watched last. False: none, or the service stops.
-func (z *chatSizes) winner(pane string) (sizeWant, bool) {
+func (z *viewSizes) winner(pane string) (sizeWant, bool) {
 	z.mu.Lock()
 	defer z.mu.Unlock()
 	var best sizeWant
@@ -122,14 +122,14 @@ func (z *chatSizes) winner(pane string) (sizeWant, bool) {
 	return best, found
 }
 
-func (z *chatSizes) heldOf(pane string) (heldWindow, bool) {
+func (z *viewSizes) heldOf(pane string) (heldWindow, bool) {
 	z.mu.Lock()
 	defer z.mu.Unlock()
 	h, ok := z.held[pane]
 	return h, ok
 }
 
-func (z *chatSizes) hold(pane string, h heldWindow) {
+func (z *viewSizes) hold(pane string, h heldWindow) {
 	z.mu.Lock()
 	defer z.mu.Unlock()
 	if z.held == nil {
@@ -138,7 +138,7 @@ func (z *chatSizes) hold(pane string, h heldWindow) {
 	z.held[pane] = h
 }
 
-func (z *chatSizes) forget(pane string) {
+func (z *viewSizes) forget(pane string) {
 	z.mu.Lock()
 	defer z.mu.Unlock()
 	delete(z.held, pane)
@@ -147,7 +147,7 @@ func (z *chatSizes) forget(pane string) {
 // paneSize is the size of pane where a chat sized its window, and the
 // generation it was read at: a screen captured between two reads of the
 // same even generation is of that size.
-func (z *chatSizes) paneSize(pane string) (cols, rows int, gen uint64) {
+func (z *viewSizes) paneSize(pane string) (cols, rows int, gen uint64) {
 	gen = z.gen.Load()
 	if h, ok := z.heldOf(pane); ok && gen%2 == 0 {
 		return h.paneW, h.paneH, gen

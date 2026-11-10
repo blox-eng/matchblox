@@ -156,7 +156,7 @@ func TestVIsFree(t *testing.T) {
 // shows the switch where room is left.
 func TestTheSwitchGivesWayOnTheDesk(t *testing.T) {
 	m := loaded(t, 100)
-	if k := keyText(m.draw(100)); !strings.Contains(k, "/ find") || strings.Contains(k, "list only v") {
+	if k := keyText(m.draw(100)); strings.Contains(k, "list only v") {
 		t.Fatalf("the switch took a key's place: %q", k)
 	}
 	m.tab = tabPanes

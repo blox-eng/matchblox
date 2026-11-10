@@ -16,19 +16,19 @@ final class DemoConsoleTests: XCTestCase {
         expectTheConsole(in: launched())
     }
 
-    /// The chat the person left can only give way to the session list through a new run: the
-    /// label changes only with output, so a console stuck connecting would keep showing the chat.
+    /// The stand-in the person left can only give way to the session list through a new run: the
+    /// label changes only with output, so a console stuck connecting would keep showing the stand-in.
     @MainActor
     func testTheDemoStartsFreshAfterTheBackground() {
         let app = launched()
         expectTheConsole(in: app)
         app.buttons["Return"].tap()
-        expect(in: app, "label CONTAINS %@", "keys go to flint-auth")
+        expect(in: app, "label CONTAINS %@", "type 2 to answer")
 
         sendToTheBackground(app)
         app.activate()
 
-        expect(in: app, "label CONTAINS %@ AND NOT label CONTAINS %@", "matchblox · demo", "keys go to")
+        expect(in: app, "label CONTAINS %@ AND NOT label CONTAINS %@", "matchblox · demo", "type 2 to answer")
         XCTAssertFalse(app.buttons["Try again"].exists, app.debugDescription)
     }
 
@@ -58,8 +58,8 @@ final class DemoConsoleTests: XCTestCase {
         expectTheConsole(in: app)
     }
 
-    /// A tap on the session's row, a tap on its second option, and the agent finishes: the invite
-    /// rises with the line to run, and Copy puts that line on the pasteboard.
+    /// A tap on the session's row opens its stand-in, the belt's keyboard types 2, and the agent
+    /// finishes: the invite rises with the line to run, and Copy puts that line on the pasteboard.
     @MainActor
     func testAnAnswerReachesTheInvite() {
         let app = launched()
@@ -77,8 +77,29 @@ final class DemoConsoleTests: XCTestCase {
         XCTAssertTrue(invite.exists)
     }
 
+    /// The belt drives the stand-in as it drives a pane: Down moves to the second option, and
+    /// Return picks it (T17).
+    @MainActor
+    func testTheBeltsArrowsAndReturnAnswer() {
+        let app = launched()
+        openTheStandIn(in: app)
+        app.buttons["Down"].firstMatch.tap()
+        // The moved cursor reaches the screen the stand-in shows before Return picks.
+        waitUntilSteady(app.descendants(matching: .any)["demo-terminal"])
+        app.buttons["Return"].firstMatch.tap()
+        _ = expectTheAnswer(in: app)
+    }
+
+    @MainActor
+    func testBackToMatchbloxReturnsToSessions() {
+        let app = launched()
+        openTheStandIn(in: app)
+        app.buttons["Back to matchblox"].firstMatch.tap()
+        expect(in: app, step: "the sessions after Back to matchblox", "label CONTAINS %@", "WAITS FOR YOU")
+    }
+
     /// Keep looking closes the sheet over the agent's closing text, and the console goes on with no
-    /// keyboard: one tap on a row reaches the console, and the belt works. Then the ended screen
+    /// keyboard: the tap on a row reaches the console, and the belt works. Then the ended screen
     /// carries the install line, and Open again starts a console with no sheet.
     @MainActor
     func testKeepLookingLeavesTheConsoleWorking() {
@@ -94,8 +115,8 @@ final class DemoConsoleTests: XCTestCase {
         // The belt works with the terminal unfocused; the list is where a row can be tapped.
         app.buttons["Back to matchblox"].firstMatch.tap()
         expect(in: app, "NOT label CONTAINS %@", "I rotate the token")
-        tapRow(in: app, containing: "hearth-api", until: "keys go to hearth-api")
-        expect(in: app, step: "the chat of hearth-api after the tap on its row", "label CONTAINS %@", "keys go to hearth-api")
+        goInto(app, row: "hearth-api")
+        expect(in: app, step: "the stand-in of hearth-api after the tap on its row", "label CONTAINS %@", "keys go to hearth-api")
         XCTAssertFalse(invite.exists, "the sheet came back")
 
         app.buttons["Back to matchblox"].firstMatch.tap()
@@ -120,18 +141,19 @@ final class DemoConsoleTests: XCTestCase {
     }
 
     /// A tap clicks and leaves the keyboard down, so it never covers the question. The belt's key
-    /// raises it, and once it is down a tap still clicks.
+    /// raises it, and once it is down a tap still clicks. The stand-in takes its answer from the
+    /// keys, so the second tap only counts as a click.
     @MainActor
     func testATapDoesNotRaiseTheKeyboard() {
         let app = launched()
         expect(in: app, "label CONTAINS %@", "WAITS FOR YOU")
         let terminal = app.descendants(matching: .any)["demo-terminal"]
         waitUntilSteady(terminal)
-        tapRow(in: app, containing: "flint-auth")
-        expect(in: app, step: "the chat's question after the first tap", "label CONTAINS %@", "2. Rotate, keep")
+        goInto(app, row: "flint-auth")
+        expect(in: app, step: "the stand-in's question after the taps", "label CONTAINS %@ AND label CONTAINS %@", "type 2 to answer", "2. Rotate, keep")
         XCTAssertFalse(app.keyboards.firstMatch.exists, "a tap raised the keyboard")
         XCTAssertFalse(app.buttons["Hide keyboard"].firstMatch.exists, "a tap took the keyboard")
-        keep(app, "7 chat with no keyboard")
+        keep(app, "7 stand-in with no keyboard")
 
         app.buttons["Show keyboard"].firstMatch.tap()
         dismissKeyboardTip(in: app)
@@ -141,22 +163,26 @@ final class DemoConsoleTests: XCTestCase {
         let down = app.buttons["Show keyboard"].firstMatch.waitForExistence(timeout: 10)
         keep(app, "8 keyboard hidden")
         XCTAssertTrue(down, app.debugDescription)
-        expect(in: app, step: "the chat to be back after the keyboard hid", "label CONTAINS %@ AND label CONTAINS %@", "keys go to flint-auth", "2. Rotate, keep")
+        expect(in: app, step: "the stand-in to be back after the keyboard hid", "label CONTAINS %@ AND label CONTAINS %@", "type 2 to answer", "2. Rotate, keep")
         waitUntilSteady(terminal)
+        let before = presses(on: terminal)
         tapRow(in: app, containing: "2. Rotate, keep")
-        if !terminal.label.contains("I rotate the token on each refresh") {
-            // The tap is a second one only when the first visibly did nothing.
-            let answered = NSPredicate(format: "label CONTAINS %@", "I rotate the token on each refresh")
-            let shown = XCTNSPredicateExpectation(predicate: answered, object: terminal)
-            if XCTWaiter().wait(for: [shown], timeout: 6) != .completed, terminal.label.contains("2. Rotate, keep") {
-                waitUntilSteady(terminal)
-                tapRow(in: app, containing: "2. Rotate, keep")
-            }
+        let deadline = Date().addingTimeInterval(10)
+        while presses(on: terminal) <= before, Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.3)
         }
-        expect(in: app, step: "the answer after the tap on the option", "label CONTAINS %@", "I rotate the token on each refresh")
+        XCTAssertGreaterThan(presses(on: terminal), before, "the tap with the keyboard down did not click")
+        XCTAssertFalse(app.keyboards.firstMatch.exists, "the second tap raised the keyboard")
     }
 
-    /// A real host's first tap, on the demo's screens: the tap clicks the row once, so the chat
+    /// The presses of the left button the terminal has sent, as its accessibility value counts them.
+    @MainActor
+    private func presses(on terminal: XCUIElement) -> Int {
+        let counts = terminal.value as? String ?? ""
+        return Int(counts.components(separatedBy: " ").first?.dropFirst("press=".count) ?? "") ?? 0
+    }
+
+    /// A real host's tap, on the demo's screens: the tap on the row clicks once, so the stand-in
     /// opens and its question is not clicked through, and the keyboard rises.
     @MainActor
     func testARealHostsFirstTapClicksOnceAndRaisesTheKeyboard() {
@@ -164,12 +190,12 @@ final class DemoConsoleTests: XCTestCase {
         expect(in: app, "label CONTAINS %@", "WAITS FOR YOU")
         let terminal = app.descendants(matching: .any)["demo-terminal"]
         waitUntilSteady(terminal)
-        tapRow(in: app, containing: "flint-auth")
-        expect(in: app, step: "the chat after the first tap on flint-auth", "label CONTAINS %@", "keys go to flint-auth")
+        goInto(app, row: "flint-auth")
+        expect(in: app, step: "the stand-in after the tap on flint-auth", "label CONTAINS %@", "type 2 to answer")
         dismissKeyboardTip(in: app)
-        XCTAssertTrue(app.buttons["Hide keyboard"].firstMatch.waitForExistence(timeout: 10), "the first tap did not raise the keyboard. " + app.debugDescription)
+        XCTAssertTrue(app.buttons["Hide keyboard"].firstMatch.waitForExistence(timeout: 10), "the taps did not raise the keyboard. " + app.debugDescription)
         Thread.sleep(forTimeInterval: 1)
-        XCTAssertEqual(terminal.value as? String, "press=1 release=1", "the first tap did not click exactly once")
+        XCTAssertEqual(terminal.value as? String, "press=1 release=1", "the tap did not click exactly once")
         waitUntilSteady(terminal)
         XCTAssertFalse(terminal.label.contains("I rotate the token on each refresh"), "the tap clicked through to the answer: \(terminal.label)")
         keep(app, "9 real host tap")
@@ -195,15 +221,29 @@ final class DemoConsoleTests: XCTestCase {
         XCTAssertTrue((1...2).contains(presses), "two taps made \(counts)")
     }
 
-    /// Taps by the terminal's cells, as a thumb does, with no keyboard taken first: the session's
-    /// row opens its chat, and the second option ends in the invite, which rises after the closing
-    /// text has been shown. Returns the invite's heading, once it shows.
+    /// The session's row, tapped by the terminal's cells as a thumb does, opens its stand-in; the
+    /// belt's keyboard key raises the keyboard, and 2 answers. Returns the invite's heading, once
+    /// it shows.
     @MainActor
     private func answerTheAgent(in app: XCUIApplication) -> XCUIElement {
+        openTheStandIn(in: app)
+        app.buttons["Show keyboard"].firstMatch.tap()
+        dismissKeyboardTip(in: app)
+        XCTAssertTrue(app.buttons["Hide keyboard"].firstMatch.waitForExistence(timeout: 10), app.debugDescription)
+        app.typeText("2")
+        return expectTheAnswer(in: app)
+    }
+
+    @MainActor
+    private func openTheStandIn(in app: XCUIApplication) {
         expect(in: app, "label CONTAINS %@", "WAITS FOR YOU")
-        tapRow(in: app, containing: "flint-auth", until: "2. Rotate, keep")
-        expect(in: app, step: "the chat's question after the tap on flint-auth", "label CONTAINS %@", "2. Rotate, keep")
-        tapRow(in: app, containing: "2. Rotate, keep", until: "I rotate the token on each refresh")
+        goInto(app, row: "flint-auth")
+        expect(in: app, step: "the stand-in after the tap on flint-auth", "label CONTAINS %@", "type 2 to answer")
+    }
+
+    /// The closing text shows first, and the invite rises over it after.
+    @MainActor
+    private func expectTheAnswer(in app: XCUIApplication) -> XCUIElement {
         let heading = app.staticTexts["Your agents wait the same way."]
         expect(in: app, "label CONTAINS %@", "I rotate the token on each refresh")
         XCTAssertFalse(heading.exists, "the invite covered the closing text")
@@ -226,16 +266,25 @@ final class DemoConsoleTests: XCTestCase {
         }
     }
 
-    /// Taps a row, and taps once more only when the first tap visibly did nothing in 6 seconds.
+    /// On a phone the first tap on a row goes into its pane: the stand-in here (#352). The stand-in
+    /// of an agent at a question shows its hint; any other shows where the keys go.
     @MainActor
-    private func tapRow(in app: XCUIApplication, containing text: String, until shown: String) {
+    private func goInto(_ app: XCUIApplication, row text: String) {
+        tapRow(in: app, containing: text, until: "keys go to \(text)", "type 2 to answer")
+    }
+
+    /// Taps a row, and taps once more only when the first tap visibly did nothing in 6 seconds:
+    /// the screen shows none of the texts in shown.
+    @MainActor
+    private func tapRow(in app: XCUIApplication, containing text: String, until shown: String...) {
         let terminal = app.descendants(matching: .any)["demo-terminal"]
         waitUntilSteady(terminal)
         tapRow(in: app, containing: text)
-        let reacted = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", shown), object: terminal)
+        let format = shown.map { _ in "label CONTAINS %@" }.joined(separator: " OR ")
+        let reacted = XCTNSPredicateExpectation(predicate: NSPredicate(format: format, argumentArray: shown), object: terminal)
         if XCTWaiter().wait(for: [reacted], timeout: 6) != .completed {
             waitUntilSteady(terminal)
-            if !terminal.label.contains(shown) { tapRow(in: app, containing: text) }
+            if !shown.contains(where: { terminal.label.contains($0) }) { tapRow(in: app, containing: text) }
         }
     }
 

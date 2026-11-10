@@ -300,7 +300,7 @@ func TestWatchEmptyStops(t *testing.T) {
 func TestWatchRefusedForCLI(t *testing.T) {
 	s, _, ctx := watchTest(t, map[string]string{"%1": idleScreen})
 	c := connectAs(t, ctx, s, proto.ClientCLI)
-	if res := act(t, c, "w", proto.Act{RecID: proto.WatchPrefix + "%1"}); res.Err != "keys go only from a console" {
+	if res := act(t, c, "w", proto.Act{RecID: proto.WatchPrefix + "%1"}); res.Err != watchOnlyFromConsole {
 		t.Fatalf("err %q", res.Err)
 	}
 }
@@ -354,7 +354,7 @@ func TestWatchRefusedFromAnAgentPane(t *testing.T) {
 	if err := json.Unmarshal(next(t, c, proto.KindResult).Body, &res); err != nil {
 		t.Fatal(err)
 	}
-	if res.Err != "keys go only from a console" {
+	if res.Err != watchOnlyFromConsole {
 		t.Fatalf("err %q", res.Err)
 	}
 }

@@ -139,14 +139,14 @@ type drawn struct {
 	// detail: their line, and the key a tap on each presses.
 	actKeysAt int
 	actKeys   []span
-	// chatFull: the chat is the whole screen, and a tap on its title row
-	// goes back to Sessions. chatRows: the lines of the agent's screen the
+	// placeFull: the chat is the whole screen, and a tap on its title row
+	// goes back to Sessions. viewRows: the lines of the agent's screen the
 	// chat shows.
-	chatFull bool
-	// chatAt, chatX, chatW: the first row of the agent's screen in the chat,
-	// the chat's first column for a tap, and the screen's width; chatW 0: no chat.
-	chatAt, chatX, chatW int
-	chatRows             int
+	placeFull bool
+	// viewAt, viewX, viewW: the first row of the agent's screen in the chat,
+	// the chat's first column for a tap, and the screen's width; viewW 0: no chat.
+	viewAt, viewX, viewW int
+	viewRows             int
 }
 
 // draw is the screen, with an ssh prompt over everything.
@@ -194,18 +194,18 @@ func (m Model) drawScreen(w int) drawn {
 		return sc
 	}
 	listW, detailW := m.panes(w)
-	if place, _ := m.chatPlacement(w); m.chatKeys && place == chatFull { // one column: the chat takes the screen
-		return m.chatScreen(w)
+	if m.viewFull() { // one column: the live view takes the screen
+		return m.viewScreen(w)
 	}
 	full := m.bodyRows()
 	sc.listW = listW
 	b := m.body(listW)
-	chat, chatting := m.chatShown(detailW)
+	chat, viewing := m.viewShown(detailW)
 	stacked := m.tab == tabSessions && detailW > 0 // usage, the machine and the stoker under the list
 	paneFull := true
 	paneLines := func(rows int) []string {
 		switch {
-		case detailW == 0 || chatting:
+		case detailW == 0 || viewing:
 			return nil
 		}
 		lines, all := m.detailPane(detailW, rows)
@@ -240,19 +240,16 @@ func (m Model) drawScreen(w int) drawn {
 	sc.full = d.full || m.tab == tabMachine || m.tab == tabStoker || m.listOnly() // list only has no dock to show
 	detail = paneLines(room)
 	sc.paneFull = paneFull && len(detail) <= room
-	if chatting {
-		detail = m.chatPane(chat, detailW, room)
-		sc.chatRows = room - 1 - len(m.chatStrip(chat, detailW, room-1))
-		sc.chatAt, sc.chatX, sc.chatW = sc.bodyTop+room-sc.chatRows, listW+1, detailW-1
+	if viewing {
+		detail = m.viewPane(chat, detailW, room)
+		sc.viewRows = room - 1 - len(m.viewStrip(chat, detailW, room-1))
+		sc.viewAt, sc.viewX, sc.viewW = sc.bodyTop+room-sc.viewRows, listW+1, detailW-1
 	}
 	vis := windowed(b, room, m.rowIndex())
 	if stacked {
 		vis, sc.full = m.leftColumn(b, listW, room)
 	}
 	edge := m.st.hair
-	if chatting && m.chatKeys {
-		edge = m.st.accent
-	}
 	for i := range room {
 		line, row := "", -1
 		if i < len(vis.lines) {
@@ -267,7 +264,7 @@ func (m Model) drawScreen(w int) drawn {
 		}
 		sc.lines, sc.rows = append(sc.lines, line), append(sc.rows, row)
 	}
-	m.markActKeys(&sc, b, vis, detail, room, detailW, chatting)
+	m.markActKeys(&sc, b, vis, detail, room, detailW, viewing)
 	if len(d.lines) > 0 {
 		sc.dockAt, sc.dockH, sc.stx0, sc.stx1 = len(sc.lines)+1, len(d.lines), d.stx0, d.stx1
 		sc.lines = append(append(sc.lines, m.st.hair.Render(strings.Repeat("─", w))), d.lines...)
@@ -330,7 +327,7 @@ func (m Model) panes(w int) (list, detail int) {
 	at := splitAt(w, m.layoutAt(w))
 	if m.tab == tabSessions {
 		at = sessionsSplit(w)
-		if !m.chatRoom(w - at - 1) {
+		if !m.viewRoom(w - at - 1) {
 			return w, 0 // no room for a menu beside the list: the chat opens full-screen
 		}
 	}
@@ -477,8 +474,21 @@ func (m Model) stokerHit(word string, w int) span {
 }
 
 // stokerBadge is the stoker's word: off in faint, on and the night in the
-// stoker's token, resting in muted. A phone drops the night's end.
+// stoker's token, resting in muted, then the chain stokers at work. A
+// phone drops the night's end.
 func (m Model) stokerBadge(short bool) string {
+	word, n := m.hostBadge(short), 0
+	for _, h := range m.hosts() {
+		n += m.chainsAtWork(h)
+	}
+	if word == "" || n == 0 {
+		return word
+	}
+	return word + m.st.stoker.Render(chainsWord(n))
+}
+
+// hostBadge is the host stoker's word of stokerBadge.
+func (m Model) hostBadge(short bool) string {
 	st := m.st
 	if m.opt.Demo != "" {
 		return ""
@@ -634,11 +644,11 @@ func (m Model) keyLine(w int) (string, []span) {
 	if m.flash != "" {
 		return fit(" "+st.text.Render(m.flash), w), nil
 	}
-	if l := m.lostLine(); l != "" { // a lost host outranks the chat's keys, which may not go
+	if l := m.lostLine(); l != "" { // a lost host outranks the stand-in's keys, which may not go
 		return fit(" "+st.text.Render(l), w), nil
 	}
-	if m.chatKeys {
-		return m.chatKeyLine(w)
+	if m.viewFull() {
+		return m.liveKeyLine(w)
 	}
 	hints := slices.DeleteFunc(slices.Clone(m.view().keys(m)), func(h hint) bool { return h == (hint{}) })
 	if m.layoutAt(w) == Wide {

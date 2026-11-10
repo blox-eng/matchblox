@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"testing"
 )
 
@@ -81,21 +82,38 @@ func TestForAgent(t *testing.T) {
 	}
 }
 
-func TestByID(t *testing.T) {
-	c, ok := ByID("compact")
-	if !ok || c.Agent != "claude" || c.Run != "compact" {
-		t.Errorf("ByID(compact) = %+v, %v", c, ok)
-	}
-	if _, ok := ByID("nope"); ok {
-		t.Error("ByID(nope) found")
-	}
-}
-
 func TestSequences(t *testing.T) {
 	if got, want := Sequence("compact"), "\x1b_matchblox;cmd=compact\x1b\\"; got != want {
 		t.Errorf("Sequence = %q, want %q", got, want)
 	}
 	if got, want := AgentSignal("codex"), "\x1b_matchblox;agent=codex\x1b\\"; got != want {
 		t.Errorf("AgentSignal = %q, want %q", got, want)
+	}
+}
+
+func TestCompactTypesItsText(t *testing.T) {
+	i := slices.IndexFunc(ForAgent("claude"), func(c Command) bool { return c.ID == "compact" })
+	if i < 0 || ForAgent("claude")[i].Text != "/compact" {
+		t.Errorf("claude's commands %+v have no compact that types /compact", ForAgent("claude"))
+	}
+}
+
+func TestTheSignalsNameThePaneAndTheMarks(t *testing.T) {
+	if got := PaneSignal("claude", "%12"); got != "\x1b_matchblox;agent=claude;pane=%12\x1b\\" {
+		t.Errorf("PaneSignal = %q", got)
+	}
+	if got := MarksSignal(); got != "\x1b_matchblox;agent=;marks\x1b\\" {
+		t.Errorf("MarksSignal = %q", got)
+	}
+}
+
+// A command's text goes unquoted into a tmux binding (panes.CommandKeysArgv):
+// one word, no tmux syntax.
+func TestACommandsTextIsOneSlashWord(t *testing.T) {
+	word := regexp.MustCompile(`^/[a-z-]+$`)
+	for _, c := range table {
+		if c.Text != "" && !word.MatchString(c.Text) {
+			t.Errorf("%s types %q", c.ID, c.Text)
+		}
 	}
 }

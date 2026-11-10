@@ -163,10 +163,9 @@ const WatchPrefix = "watch:"
 // a key name of KeyNames, or LitPrefix and the text to type.
 const KeysPrefix = "keys:"
 
-// CommandPrefix starts an act that types a command of the command table
-// (keycmd) into the pane after it, at rest. Text is the command's id; PID
-// is the agent the console showed.
-const CommandPrefix = "cmd:"
+// IntoPrefix starts the act a console sends when the person went into the
+// pane after it while the host's stoker rests: they took the session over.
+const IntoPrefix = "into:"
 
 // ChainPrefix starts an act from an agent's pane that asks to chain with the
 // agent in the pane after it. After it, "-" leaves the chain, "off" refuses
@@ -493,9 +492,11 @@ type (
 	StokerCard  = stoker.Card
 	StokerMiss  = stoker.Miss
 	StokerLapse = stoker.Lapse
-	StokerOrder = stoker.Order
-	StokerPlan  = stoker.PlanStep
-	StokerSaid  = stoker.Said
+	// StokerChainCard is a chain stoker's night on the host's morning card.
+	StokerChainCard = stoker.ChainCard
+	StokerOrder     = stoker.Order
+	StokerPlan      = stoker.PlanStep
+	StokerSaid      = stoker.Said
 	// StokerTrigger is a `matchblox stoker when` that has not fired.
 	StokerTrigger = stoker.Trigger
 	// StokerUnguard is a plan's session no merge guard watches.

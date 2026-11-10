@@ -1,15 +1,18 @@
 package app
 
 import (
+	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/blox-eng/matchblox/internal/keycmd"
+	"github.com/blox-eng/matchblox/internal/logos"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/remote"
-	"github.com/blox-eng/matchblox/internal/said"
 	"github.com/blox-eng/matchblox/internal/state"
 )
 
@@ -24,32 +27,9 @@ func focused(pane string, at time.Time) proto.State {
 	return st
 }
 
-// A tap on the island or a buzz for a session that waits opens its chat,
-// from any tab, once for each focus.
-func TestFocusOpensTheChatOfAWait(t *testing.T) {
-	m, _ := loadedWith(t, 100, fixtureState())
-	m.setTab(tabGit)
-	at := time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC)
-	next, _ := m.Update(stateMsg(focused("%2", at)))
-	nm := next.(Model)
-	if s, ok := nm.selectedSession(); nm.tab != tabSessions || !ok || s.Pane != "%2" || !nm.chatKeys {
-		t.Fatalf("tab %d selected %q chatKeys %v: want the chat of app-review", nm.tab, s.Pane, nm.chatKeys)
-	}
-	// The next state carries the same focus: the chat given back stays so.
-	nm.chatKeys = false
-	next, _ = nm.Update(stateMsg(focused("%2", at)))
-	if next.(Model).chatKeys {
-		t.Fatal("the same focus opened the chat again")
-	}
-	// A new focus opens it again.
-	next, _ = next.Update(stateMsg(focused("%2", at.Add(time.Second))))
-	if !next.(Model).chatKeys {
-		t.Fatal("a new focus did not open the chat")
-	}
-}
-
-// A session at work has no answer to give: the focus opens its pane on the
-// phone's own tmux client, once that client is attached, and on no other.
+// A focus opens the session's pane on the phone's own tmux client, once that
+// client is attached, and on no other. As Enter does, it names the pane's
+// agent first, so the phone's command keys light in the pane.
 func TestFocusOpensThePaneOfABurn(t *testing.T) {
 	m, _ := loadedWith(t, 100, fixtureState())
 	var ran []string
@@ -66,35 +46,45 @@ func TestFocusOpensThePaneOfABurn(t *testing.T) {
 	st.Focus.Client = "/dev/ttys004"
 	next, cmd := m.Update(stateMsg(st))
 	nm := next.(Model)
-	if nm.chatKeys {
+	if nm.standIn {
 		t.Fatal("a session at work got the chat's keys")
 	}
 	if s, ok := nm.selectedSession(); !ok || s.Pane != "%1" || nm.tab != tabSessions {
 		t.Fatalf("selected %q on tab %d", s.Pane, nm.tab)
 	}
-	runFocus(t, cmd)
-	if len(ran) != 1 || ran[0] != strings.Join(remote.FocusArgv("/dev/ttys004", "%1"), " ") || asks < 3 {
-		t.Fatalf("ran %q after %d asks", ran, asks)
+	msgs := runFocus(t, cmd)
+	if len(ran) != 2 || ran[0] != strings.Join(remote.AgentMarkArgv("%1", "claude"), " ") || !isFocus(strings.Fields(ran[1]), "/dev/ttys004", "%1") || asks < 3 {
+		t.Fatalf("ran %q after %d asks, want the mark, then the focus of /dev/ttys004 on %%1", ran, asks)
+	}
+	signal := slices.Index(msgs, tea.Msg(tea.RawMsg{Msg: logos.Passthrough(keycmd.PaneSignal("claude", "%1"))}))
+	moved := slices.IndexFunc(msgs, func(msg tea.Msg) bool { r, ok := msg.(ranMsg); return ok && r.jumped == "%1" })
+	if signal < 0 || moved < signal {
+		t.Errorf("messages %v: want the pane signal before the jump", msgs)
 	}
 }
 
-// runFocus runs the commands of a state update, giving each up to one
-// seconds: the focus waits for the phone's client.
-func runFocus(t *testing.T, cmd tea.Cmd) {
+// runFocus runs the commands of a state update, a batch's or a sequence's
+// each in turn, giving each up to one second: the focus waits for the
+// phone's client. It returns the messages they gave.
+func runFocus(t *testing.T, cmd tea.Cmd) []tea.Msg {
 	t.Helper()
 	if cmd == nil {
-		return
+		return nil
 	}
 	out := make(chan tea.Msg, 1)
 	go func() { out <- cmd() }()
 	select {
 	case msg := <-out:
-		if b, ok := msg.(tea.BatchMsg); ok {
-			for _, c := range b {
-				runFocus(t, c)
+		if v := reflect.ValueOf(msg); v.Kind() == reflect.Slice && v.Type().Elem() == reflect.TypeFor[tea.Cmd]() {
+			var got []tea.Msg
+			for i := range v.Len() {
+				got = append(got, runFocus(t, v.Index(i).Interface().(tea.Cmd))...)
 			}
+			return got
 		}
+		return []tea.Msg{msg}
 	case <-time.After(time.Second):
+		return nil
 	}
 }
 
@@ -155,8 +145,8 @@ func TestFocusOfAGoneSessionSaysSo(t *testing.T) {
 		next, cmd := m.Update(stateMsg(st))
 		nm := next.(Model)
 		drain(cmd)
-		if nm.flash != "That session ended." || nm.chatKeys || len(ran) != 0 || nm.tab != tabSessions {
-			t.Fatalf("%+v: flash %q chatKeys %v ran %q tab %d", f, nm.flash, nm.chatKeys, ran, nm.tab)
+		if nm.flash != "That session ended." || nm.standIn || len(ran) != 0 || nm.tab != tabSessions {
+			t.Fatalf("%+v: flash %q stand-in %v ran %q tab %d", f, nm.flash, nm.standIn, ran, nm.tab)
 		}
 		nm.setTab(tabGit)
 		m = nm
@@ -168,19 +158,9 @@ func TestNoFocusLeavesTheConsoleAlone(t *testing.T) {
 	m, _ := loadedWith(t, 100, fixtureState())
 	m.setTab(tabGit)
 	next, _ := m.Update(stateMsg(fixtureState()))
-	if nm := next.(Model); nm.tab != tabGit || nm.chatKeys || nm.flash != "" {
-		t.Fatalf("tab %d chatKeys %v flash %q", nm.tab, nm.chatKeys, nm.flash)
+	if nm := next.(Model); nm.tab != tabGit || nm.standIn || nm.flash != "" {
+		t.Fatalf("tab %d stand-in %v flash %q", nm.tab, nm.standIn, nm.flash)
 	}
-}
-
-// withFocus is st with a focus on the session in pane.
-func withFocus(st proto.State, pane string, at time.Time) proto.State {
-	for _, s := range st.Sessions {
-		if s.Pane == pane {
-			st.Focus = &state.Focus{SessionID: s.SessionID, Pane: s.Pane, At: at}
-		}
-	}
-	return st
 }
 
 // A confirm armed on another tab is dropped when a gone focus moves to
@@ -200,60 +180,4 @@ func TestFocusOfAGoneSessionDropsAConfirm(t *testing.T) {
 	if acts := f.acts(); len(acts) != 0 {
 		t.Fatalf("y ran %+v", acts)
 	}
-}
-
-// A focus does not move the chat off an agent the person is typing to: not
-// while keys wait to go, nor for a moment after the last one. The key line
-// names the agent that asked instead. After the moment the focus moves it.
-func TestFocusKeepsAChatBeingTyped(t *testing.T) {
-	st := queueState() // app-feature (%1) asks for permission
-	m, f := loadedWith(t, 100, st)
-	m, now := clocked(m)
-	m = pressKeys(t, onPane(t, m, "%2"), "enter")
-	*now = now.Add(time.Second)
-	m = pressKeys(t, m, "t", "h", "e", "n")
-	if len(keyActs(f)) == 0 {
-		t.Fatal("no key went")
-	}
-	at := time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC)
-	next, _ := m.Update(stateMsg(withFocus(st, "%1", at)))
-	m = next.(Model)
-	if s, _ := m.selectedSession(); s.Pane != "%2" || !m.chatKeys || !strings.Contains(m.flash, "app-feature") {
-		t.Fatalf("a focus while typing moved the chat to %s (chatKeys %v), flash %q", s.Pane, m.chatKeys, m.flash)
-	}
-	m.keyInFlight, m.keyQ = "", nil // the keys went
-	*now = now.Add(chatTypingHold)
-	next, _ = m.Update(stateMsg(withFocus(st, "%1", at.Add(time.Second))))
-	if s, _ := next.(Model).selectedSession(); s.Pane != "%1" {
-		t.Fatalf("a focus after the typing stopped stays on %s", s.Pane)
-	}
-}
-
-// The home console is shared: an Enter on its way at the desk when the
-// phone's tap lands must not answer a question nobody read. A focus starts
-// the menu's quiet, on its own session too.
-func TestFocusStartsTheMenusQuiet(t *testing.T) {
-	st := queueState()
-	for i := range st.Sessions {
-		if st.Sessions[i].Pane == "%2" {
-			st.Sessions[i].Ask = &said.Ask{ID: "toolu_1", Questions: []said.Question{
-				{Question: "Which next?", Options: []said.Option{{Label: "Start task 11"}, {Label: "Fix the flake"}}},
-			}}
-		}
-	}
-	m, f := loadedWith(t, 100, st)
-	next, _ := m.Update(stateMsg(withFocus(st, "%2", time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC))))
-	if s, _ := next.(Model).selectedSession(); s.Pane != "%2" || !next.(Model).chatKeys {
-		t.Fatalf("the focus opened %q, keys %v", s.Pane, next.(Model).chatKeys)
-	}
-	next, cmd := key(next, "enter")
-	drain(cmd)
-	if acts := f.acts(); len(keyActs(f)) != 0 || next.(Model).flash != askedAgain(sessionName(next.(Model))) {
-		t.Fatalf("an Enter at once sent %+v (flash %q)", acts, next.(Model).flash)
-	}
-}
-
-func sessionName(m Model) string {
-	s, _ := m.selectedSession()
-	return s.Name
 }

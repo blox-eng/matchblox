@@ -16,10 +16,13 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
+	"github.com/blox-eng/matchblox/internal/keycmd"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/transport"
 )
@@ -123,25 +126,32 @@ func NavAllowed(argv []string) bool {
 	return false
 }
 
-// StokerPopup opens the stoker's own tmux session (on the server server,
-// tmux -L) in a popup over the console: the builder answers the stoker's
-// prompts there, and detaching (prefix d) closes it.
-func StokerPopup(server string) []string {
-	return []string{"tmux", "display-popup", "-E", "-w", "90%", "-h", "90%", "tmux -L " + server + " attach -t stoker"}
+// StokerPopup opens the host stoker's own tmux session (on the server
+// server, tmux -L) in a popup over the console: the builder answers the
+// stoker's prompts there, and detaching (prefix d) closes it.
+func StokerPopup(server string) []string { return StokerPopupOf(server, "stoker") }
+
+// StokerPopupOf is StokerPopup on the tmux session of any stoker of the
+// family: stoker, or stoker-<id> for a chain's.
+func StokerPopupOf(server, session string) []string {
+	return []string{"tmux", "display-popup", "-E", "-w", "90%", "-h", "90%", "tmux -L " + server + " attach -t " + session}
 }
 
-var serverRE = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+var (
+	serverRE  = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+	stokersRE = regexp.MustCompile(`^stoker(-s[1-9][0-9]*)?$`)
+)
 
-// PopupAllowed is what the console's popup may be: exactly StokerPopup of
-// a server name a shell reads as one word. display-popup runs its last
-// argument through a shell.
+// PopupAllowed is what the console's popup may be: exactly StokerPopupOf
+// a server name a shell reads as one word and a stoker's session.
+// display-popup runs its last argument through a shell.
 func PopupAllowed(argv []string) bool {
 	if len(argv) != 8 {
 		return false
 	}
 	rest, ok := strings.CutPrefix(argv[7], "tmux -L ")
-	server, ok2 := strings.CutSuffix(rest, " attach -t stoker")
-	return ok && ok2 && serverRE.MatchString(server) && slices.Equal(argv, StokerPopup(server))
+	server, session, ok2 := strings.Cut(rest, " attach -t ")
+	return ok && ok2 && serverRE.MatchString(server) && stokersRE.MatchString(session) && slices.Equal(argv, StokerPopupOf(server, session))
 }
 
 // PaneID is a tmux pane id such as %12.
@@ -449,20 +459,65 @@ var ttyRE = regexp.MustCompile(`^/dev/[A-Za-z0-9_/-]{1,32}$`)
 // tmux's client_tty give it: the client a focus moves.
 func ClientTTY(tty string) bool { return ttyRE.MatchString(tty) }
 
-// FocusArgv moves the tmux client on tty to pane: a tap on the island or a
-// buzz opens the session's pane on the phone, and on no other terminal. A
+// FocusArgv moves the tmux client on tty to pane: Enter, a tap on the island
+// or a buzz opens the session's pane on that terminal, and on no other. A
 // switch to a pane changes its session's window for every client on that
-// session, so the phone gets a session of its own, grouped with the pane's
-// one, and goes there. The session ends once the phone leaves it.
-func FocusArgv(tty, pane string) []string {
-	return []string{"tmux", "new-session", "-d", "-t", pane,
-		";", "set-option", "destroy-unattached", "on",
+// session, so the terminal gets a session of its own, grouped with the
+// pane's one and named for the moment at, and goes there. The session ends
+// once the terminal leaves it. Every step names that session: a bare
+// set-option would land on the session of the pane tmux runs from, the
+// console's own, and end the console when the terminal leaves it (#354).
+func FocusArgv(tty, pane string, at time.Time) []string {
+	name := focusPrefix + strconv.FormatInt(at.UnixNano(), 10)
+	return []string{"tmux", "new-session", "-d", "-t", pane, "-s", name,
+		";", "set-option", "-t", name, "destroy-unattached", "on",
 		";", "switch-client", "-c", tty, "-t", pane}
 }
 
-// FocusAllowed is exactly FocusArgv of a terminal device and a pane id. It
-// is not a Nav step: the gate never runs it.
+// focusPrefix starts the name of a session FocusArgv makes.
+const focusPrefix = "matchblox-in-"
+
+var focusName = regexp.MustCompile(`^` + focusPrefix + `[0-9]{1,20}$`)
+
+// FocusAllowed is exactly FocusArgv of a terminal device, a pane id and a
+// moment. It is not a Nav step: the gate never runs it.
 func FocusAllowed(argv []string) bool {
-	return len(argv) == 15 && ClientTTY(argv[12]) && PaneID(argv[4]) &&
-		slices.Equal(argv, FocusArgv(argv[12], argv[4]))
+	tty, pane, ok := FocusOf(argv)
+	return ok && ClientTTY(tty) && PaneID(pane)
+}
+
+// FocusOf is the terminal and the pane of a FocusArgv; ok is false for any
+// other argv.
+func FocusOf(argv []string) (tty, pane string, ok bool) {
+	if len(argv) != 19 || !focusName.MatchString(argv[6]) {
+		return "", "", false
+	}
+	n, err := strconv.ParseInt(strings.TrimPrefix(argv[6], focusPrefix), 10, 64)
+	if err != nil || !slices.Equal(argv, FocusArgv(argv[16], argv[4], time.Unix(0, n))) {
+		return "", "", false
+	}
+	return argv[16], argv[4], true
+}
+
+// AgentMarkArgv marks pane as running agent, in the pane option the
+// console reads.
+func AgentMarkArgv(pane, agent string) []string {
+	return []string{"tmux", "set-option", "-p", "-t", pane, "@matchblox_agent", agent}
+}
+
+// AgentUnmarkArgv takes the agent mark off pane: its agent has no command
+// keys, or none the console knows.
+func AgentUnmarkArgv(pane string) []string {
+	return []string{"tmux", "set-option", "-p", "-u", "-t", pane, "@matchblox_agent"}
+}
+
+// AgentUnmarkAllowed is exactly AgentUnmarkArgv of a pane id.
+func AgentUnmarkAllowed(argv []string) bool {
+	return len(argv) == 7 && PaneID(argv[5]) && slices.Equal(argv, AgentUnmarkArgv(argv[5]))
+}
+
+// AgentMarkAllowed is exactly AgentMarkArgv of a pane id and a known agent.
+func AgentMarkAllowed(argv []string) bool {
+	return len(argv) == 7 && PaneID(argv[4]) && len(keycmd.ForAgent(argv[6])) > 0 &&
+		slices.Equal(argv, AgentMarkArgv(argv[4], argv[6]))
 }

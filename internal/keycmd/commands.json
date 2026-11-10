@@ -5,6 +5,7 @@
     "agent": "claude",
     "mark": "claude-color",
     "run": "compact",
+    "text": "/compact",
     "slot": 901
   },
   {

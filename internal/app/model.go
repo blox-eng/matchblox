@@ -24,6 +24,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/doors"
 	"github.com/blox-eng/matchblox/internal/history"
+	"github.com/blox-eng/matchblox/internal/keycmd"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/remote"
@@ -134,6 +135,12 @@ type Options struct {
 	// Clients are the ttys of the clients of this console's tmux server, for
 	// a focus that moves the phone's client. Nil: ask tmux.
 	Clients func() ([]string, error)
+	// Pane is the console's own tmux pane (TMUX_PANE); "" outside tmux.
+	Pane string
+	// ClientList is tmux list-clients -F '#{client_activity} #{client_tty}
+	// #{pane_id}': who shows the console, for the client a jump moves. Nil:
+	// ask tmux.
+	ClientList func() (string, error)
 	// Clip copies text to the builder's clipboard. Nil: OSC 52 with the output.
 	Clip func(text string)
 	// Graphics says whether every terminal that shows the console draws
@@ -172,9 +179,13 @@ type connMsg struct {
 	gen  int
 }
 type ranMsg struct {
-	cmd    string
-	err    error
-	jumped string // the pane a jump went to
+	cmd     string
+	err     error
+	jumped  string // the pane a jump went to
+	host    string // the host of that pane; "" this console's
+	tty     string // the client the jump moved; "" whichever tmux picked
+	watched bool   // another client still shows the console
+	alone   bool   // tmux listed the clients, and none but the moved one showed the console
 }
 
 // action waits for the person's confirm. A Nav action runs here; any other
@@ -203,10 +214,14 @@ type action struct {
 	againText   string                      // the Text the second y sends ("": killAnyway)
 	done        string                      // a switch: what the flash says when it ran
 	agent       string                      // a start on a new account: the last agent once it ran
+	paneAgent   string                      // a switch, and the jump after it: the agent the pane runs once the switch ran
 	climb       *climb                      // a rung of the key ladder
 	ghost       bool                        // a ghost row of Sessions: it opens N on where
 	where       string                      // a ghost row: the folder N opens on ("": N as it is)
 	host        string                      // the host of the row it acts on; "": the home host, as a peer is never ""
+	tty         string                      // a jump or a switch: the marked client that asked; "" unmarked
+	asker       bool                        // a jump of this machine's tmux: it moves only its tty's client, else the desk's
+	deskLocal   func(tty string) []string   // a host jump of an unmarked key: its local list for the desk's client
 }
 
 // recRun is an act on a recommendation: the row shows its outcome.
@@ -298,9 +313,10 @@ type Model struct {
 	queue      []queue.Item
 	doors      []doors.Door // the open doors, above the sessions
 	stoker     *proto.StokerView
-	doorPick   string // the selected door
-	doorAt     int    // its row, for the door after it when it folds
-	previewTop int    // the first line of a door's diff on screen
+	stokers    []state.ChainStoker // the chain stokers, for the head rows of their chains
+	doorPick   string              // the selected door
+	doorAt     int                 // its row, for the door after it when it folds
+	previewTop int                 // the first line of a door's diff on screen
 	paneSel    int
 	screen     proto.Screen       // the last capture of the watched pane
 	watching   string             // the pane the service sends, or ""
@@ -308,11 +324,6 @@ type Model struct {
 	watchSize  [2]int             // the chat's size the service sizes the agent's window to: cols, rows
 	watchSince time.Time          // when the watched pane was selected: its size waits sizeDwell
 	sizeTick   time.Time          // the watchSince a sizeDueMsg is on its way for
-	menuSeen   menuSeen           // the chat's quiet: the wait it shows and its start
-	tapped     tappedOption       // the option a tap pressed, until the next screen
-	shortPID   int                // the session whose chat a too short screen dropped, until the person chooses something else
-	chatShut   time.Time          // when the chat last closed by itself: keys typed for it go nowhere for a moment
-	chatTyped  time.Time          // when the person last typed in the chat
 	changes    map[paneKey]change // a match change that plays once
 	animating  bool
 	hist       history.Series
@@ -358,15 +369,10 @@ type Model struct {
 	// copied on write.
 	held        func(Model) (tea.Model, tea.Cmd)
 	heldOn      string
-	chatKeys    bool      // the chat has the keys: they go to the selected session's agent
-	backArmed   time.Time // when ctrl+a, the first key of the chat's way back, was pressed; zero: not armed
-	agentSaid   string    // the agent signal last written to the terminal; "" none yet
-	tmuxSaid    bool      // the key line said this tmux passes no agent signal
-	keyQ        []chatKey // the chat's keys behind the one in flight
-	keyInFlight string    // the act id of the chat's key the service has not answered
-	keyFlying   chatKey   // the key in flight
-	ctrlC       ctrlCMark // the last ^C the chat sent, and when it went
-	ctrlCHeld   ctrlCMark // the agent whose next ^C goes: one came within a second of the last
+	viewOpen    bool      // one column: the selected session's live view takes the screen
+	keysOut     keysOut   // the keys the stand-in sends, one at a time
+	standIn     bool      // the demo's stand-in for a pane: the live view forwards the keys to the demo's world
+	backArmed   time.Time // when ctrl+a, the first key of the stand-in's way back, was pressed; zero: not armed
 	touched     map[string]time.Time
 	all         lists  // what every host sent, merged; queue, recs and snap hold the drawn copies
 	homeAll     lists  // what the home host sent
@@ -389,7 +395,7 @@ type Model struct {
 	scanLater   bool                              // the scan question was closed or answered at this console
 	scanAct     string                            // the act of the box's yes, for its result
 	form        *form                             // the open New session, Rename, Switch agent or scan folders form; nil none
-	jumpAfter   switchSent                        // a switch sent: the pane to jump to when it runs
+	jumpAfter   switchSent                        // a switch sent: the pane to jump to when it runs, its new agent, for the client that asked
 	startAfter  struct{ act, agent, done string } // a start on a new account sent: its agent, the last once it runs, and what it says then
 	lastAgent   string                            // the agent this console last started
 	keptAgent   string                            // the agent last started, as the service keeps it
@@ -455,6 +461,14 @@ type Model struct {
 	keyFor   string // the host whose ladder makes a new key; its prompts name this machine
 	askCtx   context.Context
 	askStop  context.CancelFunc
+
+	// marked is the client the tmux binding named for the next input
+	// event; askedBy is the client of the event being handled, "" unmarked.
+	marked clientMark
+	// away: a jump left no screen on the console, so it watches no pane
+	// until a screen shows it again or the person acts there.
+	away    bool
+	askedBy string
 }
 
 func New(opt Options) Model {
@@ -598,19 +612,33 @@ func (m *Model) sendOn(c transport.Conn, a proto.Act) (string, tea.Cmd) {
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if apc, ok := msg.(uv.UnknownApcEvent); ok {
+		if tty, ok := strings.CutPrefix(string(apc), keycmd.MarkedPrefix); ok {
+			if tty, ok = strings.CutSuffix(tty, "\x1b\\"); ok && remote.ClientTTY(tty) {
+				m.marked = clientMark{tty, m.now()}
+			}
+			return m, nil
+		}
+		if string(apc) == keycmd.ViewerKey {
+			m.away = false // a terminal came to show the console
+			return m, tea.Batch(sayAgent(keycmd.MarksSignal(), m.opt), m.watchCmd())
+		}
+		if string(apc) == homeKey {
+			m.away = false
+		}
+	}
 	m = m.scanShows()
 	switch msg.(type) {
-	case tea.KeyPressMsg, tea.MouseClickMsg:
-		m.shortPID = 0 // a choice made: the dropped chat stays dropped
+	case tea.KeyPressMsg, tea.MouseClickMsg, tea.MouseWheelMsg, tea.PasteMsg:
+		m.askedBy, m.marked, m.away = m.marked.spend(m.now()), clientMark{}, false
+	default:
+		m.askedBy = ""
 	}
 	next, cmd := m.update(msg)
 	if nm, ok := next.(Model); ok {
-		nm = nm.scanShows().keepChat(m).noteMenu().inDemo()
+		nm = nm.scanShows().keepView().inDemo()
 		if watch := nm.watchCmd(); watch != nil {
 			cmd = tea.Batch(cmd, watch)
-		}
-		if say := nm.tellAgent(); say != nil {
-			cmd = tea.Batch(cmd, say)
 		}
 		next = nm
 	}
@@ -649,27 +677,19 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m.update(msg.msg)
 	case uv.UnknownApcEvent:
-		if string(msg) == homeKey {
-			m.chatKeys = false
-			return m, nil
-		}
-		return m.commandKey(string(msg))
-	case sizeDueMsg:
-		return m, nil // Update sends the size, if it is due
-	case ctrlCLapsed:
-		return m.lapseCtrlC(msg), nil
-	case tapLapsed:
-		if m.tapped.at.Equal(msg.at) {
-			m.tapped = tappedOption{}
+		if string(msg) == homeKey && m.viewOpen {
+			return m.closeView(), nil
 		}
 		return m, nil
+	case sizeDueMsg:
+		return m, nil // Update sends the size, if it is due
 	case screenMsg:
 		if msg.Pane == m.watching && msg.Err != "" {
 			m.flash = msg.Err // a read that failed: the session and its last screen stay
 			return m, m.recv()
 		}
 		if msg.Pane == m.watching {
-			m.screen, m.tapped = proto.Screen(msg), tappedOption{}
+			m.screen = proto.Screen(msg)
 		}
 		return m, m.recv()
 	case peerMsg:
@@ -715,7 +735,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		st := proto.State(msg)
 		m.queue = st.Queue
 		toast := m.stokerNews(st.Stoker)
-		m.stoker, m.stokerServer = st.Stoker, st.StokerServer
+		m.stoker, m.stokerServer, m.stokers = st.Stoker, st.StokerServer, st.Stokers
 		if !m.stokerClaims() {
 			m.dockSwitched = false
 		}
@@ -810,8 +830,12 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case planTickMsg:
 		return m.planTick(msg)
 	case resultMsg:
-		if msg.ActID != "" && msg.ActID == m.keyInFlight {
-			return m.keyAnswered(proto.Result(msg))
+		if strings.HasPrefix(msg.ActID, keyActID) {
+			if msg.Err != "" {
+				m.flash = msg.Err
+			}
+			next := m.nextKey()
+			return m, tea.Batch(m.recv(), next)
 		}
 		if pane, ok := strings.CutPrefix(msg.ActID, watchActID); ok && msg.Err != "" {
 			// A pane that went before the watch came is a race, not the builder's error.
@@ -841,9 +865,6 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var lost []string
 		if m.hostCount() == 1 {
 			lost = append(lost, "connection lost: "+msg.err.Error())
-		}
-		if n := len(m.keyQ); n > 0 { // keepChat drops them: the agent may hold half a line
-			lost = append(lost, "not sent: "+plural(n, "key")+", the connection dropped")
 		}
 		if m.batch != nil {
 			// Their results went with the connection; a peer's still come.
@@ -929,28 +950,34 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.endRec("nav", proto.Result{Ran: [][]string{strings.Fields(msg.cmd)}})
 		}
+		if errors.Is(msg.err, errNotAttached) || errors.Is(msg.err, errNoClient) {
+			m.flash = msg.err.Error()
+			return m, nil
+		}
 		if msg.err != nil {
 			m.flash = "failed: " + msg.cmd + ": " + msg.err.Error()
 			return m, nil
 		}
+		var took tea.Cmd
 		if msg.jumped != "" {
-			m = m.nextAfter(msg.jumped)
+			m = m.pairJumped(msg.tty, msg.jumped)
+			if !msg.watched {
+				m = m.nextAfter(msg.jumped)
+			}
+			if !m.opt.OutsideTmux { // outside, confirm told the host as the attach began
+				took = m.tookOver(cmp.Or(msg.host, m.opt.Host), msg.jumped)
+				m.away = msg.alone
+			}
 		}
 		toast := m.say("ran: " + msg.cmd)
-		return m, toast
+		return m, tea.Batch(took, toast)
 	case tea.PasteMsg:
-		// Only the ssh prompt, the form and the chat take a paste: in
-		// their field, as typed, or to the agent.
+		// Only the ssh prompt and the form take a paste, in their field.
 		if m.ask != nil {
 			return m.askPaste(msg.Content), nil
 		}
-		switch f := m.focus(tea.KeyPressMsg{}); {
-		case f == layerForm:
+		if m.focus(tea.KeyPressMsg{}) == layerForm {
 			return m.formPaste(msg.Content)
-		case f == layerMain && m.chatKeys:
-			m, touch := m.touchRest()
-			next, cmd := m.chatPaste(msg.Content)
-			return next, tea.Batch(touch, cmd)
 		}
 		return m, nil
 	case tea.MouseClickMsg:
@@ -970,23 +997,19 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var touch tea.Cmd
 		// f and n are stoker acts themselves: a touch sent with them would
 		// race them on the service.
-		if m.pair != nil || m.sheet != nil || m.form != nil || m.searching || m.chatKeys || !bkey.Matches(msg, m.keys.main.Stoke, m.keys.main.Night) {
+		if m.pair != nil || m.sheet != nil || m.form != nil || m.searching || m.standIn || !bkey.Matches(msg, m.keys.main.Stoke, m.keys.main.Night) {
 			m, touch = m.touchRest()
 		}
 		f := m.focus(msg)
-		if m.chatJustShut() && (f == layerMain || bkey.Matches(msg, m.keys.global.Quit)) {
-			return m, touch // typed for the chat that just closed: no q quits, no letter acts
-		}
 		armed := m.backArmed
 		m.backArmed = time.Time{}
-		if m.chatKeys && (f == layerMain || f == layerTakeOver) && m.chatBacks(msg, armed) {
-			m.chatKeys = false
-			return m, touch
+		if m.standIn && f == layerMain && m.viewBacks(msg, armed) {
+			return m.leaveStandIn(), touch
 		}
 		// ctrl+c quits from every layer but a question, where any key but
-		// its answers cancels, and the chat, which sends it to the agent.
-		chat := m.chatKeys && (f == layerMain || f == layerTakeOver)
-		if f != layerAsk && f != layerHeld && f != layerPending && !chat && bkey.Matches(msg, m.keys.global.Quit) {
+		// its answers cancels, and the stand-in, which sends it to the agent.
+		standIn := m.standIn && f == layerMain
+		if f != layerAsk && f != layerHeld && f != layerPending && !standIn && bkey.Matches(msg, m.keys.global.Quit) {
 			next, cmd := m.quit()
 			if f == layerMain {
 				next, cmd = stokerSeen(next, cmd) // as every key of the tabs
@@ -1042,11 +1065,9 @@ var focusWait = 10 * time.Second
 const focusGone = "That session ended."
 
 // takeFocus opens the session a tap on the island or a buzz asked for, once
-// for each focus the service sends, on Sessions: its chat when it waits,
-// else its pane on the phone's own tmux client. A form, sheet, pair page,
-// take-over or a chat typed to a moment ago keeps
-// the keys: what the person types there is not thrown away, nor sent to
-// another agent. The key line names the agent that asked.
+// for each focus the service sends, on Sessions: its pane on the phone's own
+// tmux client. A form, sheet, pair page or take-over keeps the keys: what the
+// person types there is not thrown away, nor sent to another agent.
 func (m Model) takeFocus(f *proto.Focus) (Model, tea.Cmd) {
 	if f == nil || f.At.Equal(m.focusAt) {
 		return m, nil
@@ -1063,13 +1084,7 @@ func (m Model) takeFocus(f *proto.Focus) (Model, tea.Cmd) {
 			break
 		}
 	}
-	typing := m.chatKeys && (len(m.keyQ) > 0 || m.keyInFlight != "" || m.now().Before(m.chatTyped.Add(chatTypingHold)))
-	busy := m.pair.owns() || m.sheet != nil || m.form != nil || m.held != nil || typing
-	if typing && found && !f.Gone {
-		if cur, _ := m.selectedSession(); cur.Pane != s.Pane {
-			m.flash = s.Name + " asks for you · the chat stays on " + cur.Name + " while you type"
-		}
-	}
+	busy := m.pair.owns() || m.sheet != nil || m.form != nil || m.held != nil
 	if f.Gone || !found {
 		if !busy {
 			m.setTab(tabSessions)
@@ -1087,20 +1102,13 @@ func (m Model) takeFocus(f *proto.Focus) (Model, tea.Cmd) {
 	if s.Pane == "" {
 		return m, nil // outside tmux: no pane to open
 	}
-	if _, waits := m.waitOf(s); waits {
-		// The home console is shared: the chat shows on the phone too, and an
-		// Enter on its way at the desk must not answer it: the quiet starts.
-		m = m.chatOn(s.Pane)
-		m.menuSeen = m.seenOf(s)
-		return m, nil
-	}
 	// Only the phone's client moves, into a session of its own (FocusArgv),
 	// and only on this console's own tmux: a console of another host (over
 	// ssh) or outside tmux never moves a terminal for a tap on the phone.
 	if m.opt.Host != "" || m.opt.OutsideTmux || !remote.ClientTTY(f.Client) {
 		return m, nil
 	}
-	return m, focusJump(m.clients(), m.opt.Run, f.Client, s.Pane)
+	return m, m.focusJump(f.Client, s.Pane)
 }
 
 // clients is how this console reads the clients of its tmux server.
@@ -1123,11 +1131,15 @@ func tmuxClients() ([]string, error) {
 }
 
 // focusJump waits up to focusWait for the client on tty to attach to this
-// console's tmux, then moves it to pane. A client that never comes is not
-// this console's: nothing moves.
-func focusJump(clients func() ([]string, error), run func([]string) error, tty, pane string) tea.Cmd {
+// console's tmux, then moves it to pane. As every jump of this machine's
+// tmux, it names the pane's agent first, once the client is there to hear
+// it. A client that never comes is not this console's: nothing moves.
+func (m Model) focusJump(tty, pane string) tea.Cmd {
+	clients, read, run := m.clients(), m.readClients(), m.opt.Run
+	agent := m.agentOfPane(pane)
+	say, mark, at := sayAgent(keycmd.PaneSignal(agent, pane), m.opt), paneMark(pane, agent), m.now()
 	return func() tea.Msg {
-		argv := remote.FocusArgv(tty, pane)
+		argv := remote.FocusArgv(tty, pane, at)
 		if !remote.FocusAllowed(argv) {
 			return nil
 		}
@@ -1139,8 +1151,16 @@ func focusJump(clients func() ([]string, error), run func([]string) error, tty, 
 				return nil
 			}
 		}
-		// The toast names the move, not the session the phone gets for it.
-		return ranMsg{cmd: "tmux switch-client -c " + tty + " -t " + pane, err: run(argv), jumped: pane}
+		jump := func() tea.Msg {
+			if mark != nil {
+				_ = run(mark) // the mark only names the agent: the jump goes without it
+			}
+			// The toast names the move, not the session the phone gets for it.
+			err := run(argv)
+			cs, _ := read()
+			return ranMsg{cmd: "tmux switch-client -c " + tty + " -t " + pane, err: err, jumped: pane, tty: tty, watched: err == nil && othersHere(cs, tty), alone: err == nil && cs != nil && !othersHere(cs, tty)}
+		}
+		return tea.Sequence(say, jump)()
 	}
 }
 
@@ -1270,10 +1290,19 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if bkey.Matches(k, mk.Back) && m.waiting() {
 		return m, m.switchNow()
 	}
-	if m.chatKeys {
-		return m.chatKey(k)
+	if m.standIn {
+		return m.standInKey(k)
 	}
 	m.flash = ""
+	if m.viewFull() && bkey.Matches(k, mk.Back) {
+		return m.closeView(), nil
+	}
+	if s, ok := m.selectedSession(); ok && bkey.Matches(k, mk.Second, mk.Rename, mk.Switch, mk.Park) {
+		if u, head := m.headRow(s); head { // its agent is the stoker's, not a session of the builder's
+			m.flash = "the stoker of chain " + u.Name + " is no session: quit it on the STOKER tab"
+			return m, nil
+		}
+	}
 	switch {
 	case bkey.Matches(k, mk.Stoker):
 		return m.openStoker(), nil
@@ -1334,6 +1363,9 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.markAllSafe()
 		}
 	case bkey.Matches(k, mk.QuitAgent):
+		if u, ok := m.selectedUnit(); ok && m.tab == tabStoker {
+			return m.quitUnit(u)
+		}
 		if m.tab == tabStoker {
 			return m.quitAgent()
 		}
@@ -1349,14 +1381,22 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			if r, ok := m.stokerSelected(); ok && r.kind == rowAgent {
 				return m.openAgent()
 			}
+			if u, ok := m.selectedUnit(); ok {
+				return m.openUnit(u)
+			}
 			m.showCommand()
 			return m, nil
 		}
 		if b, ok := m.selectedBlocked(); ok {
 			return m.unblockHost(b)
 		}
+		if s, ok := m.selectedSession(); ok {
+			if u, head := m.headRow(s); head {
+				return m.headAct(s, u)
+			}
+		}
 		if s, ok := m.selectedSession(); ok && s.Host == m.opt.Host {
-			return m.openChat(), nil
+			return m.intoSelected()
 		}
 		if a := m.primary(); a != nil && a.pair {
 			return m.openPairDoor()
@@ -1379,13 +1419,25 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.tab == tabStoker {
 			return m.grantStep()
 		}
-	case bkey.Matches(k, mk.Chat):
-		if m.tab == tabShips {
-			return m.shipChat(), nil
+	case bkey.Matches(k, mk.Into):
+		switch m.tab {
+		case tabShips:
+			return m.shipInto()
+		case tabStoker:
+			return m.stokerInto()
 		}
-		return m.openChat(), nil
+		if s, ok := m.selectedSession(); ok {
+			if u, head := m.headRow(s); head {
+				return m.headAct(s, u)
+			}
+		}
+		return m.intoSelected()
+	case bkey.Matches(k, mk.StokeChain):
+		if m.tab == tabSessions {
+			return m.stokeChain()
+		}
 	case bkey.Matches(k, mk.Jump):
-		return m.intoPane(), nil
+		return m.intoSelected()
 	case bkey.Matches(k, mk.Dismiss):
 		if m.tab == tabSessions {
 			m.dismissRec()
@@ -1431,8 +1483,19 @@ func (m *Model) refuse() {
 }
 
 // confirm runs an action the person consented to: a Nav step here, any
-// other on the service.
+// other on the service. Inside tmux a jump tells its host that the person
+// took the session over once it went (ranMsg). Outside, the attach returns
+// only when they leave the pane, so the host hears it as the jump starts.
 func (m Model) confirm(a action) (tea.Model, tea.Cmd) {
+	if !a.nav || a.pane == "" || !m.opt.OutsideTmux {
+		return m.confirmed(a)
+	}
+	took := m.tookOver(m.hostOf(a), a.pane)
+	next, cmd := m.confirmed(a)
+	return next, tea.Batch(took, cmd)
+}
+
+func (m Model) confirmed(a action) (tea.Model, tea.Cmd) {
 	if m.opt.Demo != "" && a.leavesTheDemo() {
 		m.flash = m.opt.Demo
 		return m, nil
@@ -1472,9 +1535,8 @@ func (m Model) confirm(a action) (tea.Model, tea.Cmd) {
 		return m.runDoor(a)
 	}
 	if a.nav {
-		run := m.opt.Run
 		m.startRec(a, "nav")
-		return m, func() tea.Msg { return runNav(a, run) }
+		return m, m.signalled(a, m.intoCmd(a))
 	}
 	if why := m.refusal(host); why != "" {
 		m.flash = why
@@ -1492,7 +1554,7 @@ func (m Model) confirm(a action) (tea.Model, tea.Cmd) {
 	cmd := m.sendTo(host, proto.Act{RecID: a.rec, Which: a.which, Confirm: confirm, Text: a.text})
 	m.startRec(a, "a"+strconv.Itoa(m.acts))
 	if pane, ok := strings.CutPrefix(a.rec, "switch:"); ok {
-		m.jumpAfter = switchSent{act: "a" + strconv.Itoa(m.acts), host: a.host, pane: pane, done: a.done}
+		m.jumpAfter = switchSent{act: "a" + strconv.Itoa(m.acts), host: a.host, pane: pane, done: a.done, tty: a.tty, agent: a.paneAgent}
 	}
 	if a.agent != "" {
 		m.startAfter.act, m.startAfter.agent, m.startAfter.done = "a"+strconv.Itoa(m.acts), a.agent, a.done
@@ -1525,8 +1587,8 @@ func (m Model) started(r proto.Result) (Model, bool) {
 // switchSent is a switch this console sent: the pane to jump to when it
 // runs, and whether esc sent its switch now.
 type switchSent struct {
-	act, host, pane, done string
-	now                   bool
+	act, host, pane, done, tty, agent string
+	now                               bool
 }
 
 // switched takes the result of a switch: one that ran jumps to its pane,
@@ -1549,7 +1611,10 @@ func (m Model) switched(r proto.Result) (Model, tea.Cmd) {
 		m.flash = j.done
 		return m, nil
 	}
-	next, jump := m.confirm(*m.forHost(j.host, m.jumpOn(j.host, j.pane)))
+	m.askedBy = j.tty // the jump moves the client that asked for the switch
+	a := m.forHost(j.host, m.jumpOn(j.host, j.pane))
+	a.paneAgent = j.agent
+	next, jump := m.confirm(*a)
 	nm := next.(Model)
 	say := []string{j.done}
 	if ran {
@@ -1562,10 +1627,12 @@ func (m Model) switched(r proto.Result) (Model, tea.Cmd) {
 	return nm, jump
 }
 
+var errNavRefused = errors.New("refused: only tmux switch-client, new-window and the stoker's popup run in the console")
+
 func runNav(a action, run func([]string) error) ranMsg {
 	for _, step := range a.steps {
 		if !remote.NavAllowed(step) && !remote.PopupAllowed(step) {
-			return ranMsg{cmd: strings.Join(step, " "), err: fmt.Errorf("refused: only tmux switch-client, new-window and the stoker's popup run in the console")}
+			return ranMsg{cmd: strings.Join(step, " "), err: errNavRefused}
 		}
 	}
 	for _, step := range a.steps {
@@ -1586,7 +1653,7 @@ func (m Model) jump(pane string) *action {
 			{"tmux", "attach-session", "-t", pane},
 		}}
 	}
-	return &action{label: "jump", nav: true, pane: pane, steps: [][]string{{"tmux", "switch-client", "-t", pane}}}
+	return &action{label: "jump", nav: true, pane: pane, tty: m.askedBy, asker: true, steps: [][]string{{"tmux", "switch-client", "-t", pane}}}
 }
 
 // jumpOn is jump to a pane of host.

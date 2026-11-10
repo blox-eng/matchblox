@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
@@ -371,7 +372,7 @@ func (m Model) shipKeys(sh proto.Ship) []hint {
 		keys = append(keys, hintFor(mk.Second, "merge"))
 	}
 	if sh.Kind == shipStuck {
-		keys = append(keys, hintFor(mk.Chat, "answer"))
+		keys = append(keys, hintFor(mk.Into, ""))
 	}
 	return keys
 }
@@ -470,23 +471,32 @@ func (m Model) toDriver() Model {
 	return m
 }
 
-// shipChat is a on a stuck ship: the chat of its session, to answer it.
-func (m Model) shipChat() Model {
+// shipInto is a on a stuck ship: the pane of its session, to answer it.
+func (m Model) shipInto() (tea.Model, tea.Cmd) {
 	sh, ok := m.selectedShip()
 	if !ok || sh.Kind != shipStuck {
-		m.flash = "a answers the session of a stuck ship"
-		return m
+		m.flash = "a goes into the session of a stuck ship"
+		return m, nil
 	}
-	s, ok := m.driver(sh)
-	switch {
-	case !ok || s.Pane == "":
+	host, pane := m.shipTarget()
+	if pane == "" {
 		m.flash = m.driverGone(sh)
-		return m
-	case s.Host != m.opt.Host: // the chat is the home host's
-		m.flash = s.Name + " runs on " + m.nameOf(s.Host) + ": " + m.keys.main.Open.Help().Key + " goes to its session"
-		return m
+		return m, nil
 	}
-	return m.chatOn(s.Pane)
+	return m.goInto(host, pane)
+}
+
+// shipTarget is the host and pane of the session that drives the selected
+// stuck ship; no pane when there is none to go into.
+func (m Model) shipTarget() (host, pane string) {
+	sh, ok := m.selectedShip()
+	if !ok || sh.Kind != shipStuck {
+		return "", ""
+	}
+	if s, ok := m.driver(sh); ok {
+		return s.Host, s.Pane
+	}
+	return "", ""
 }
 
 // mergeShip is x on a ship that waits for your merge: the repository's

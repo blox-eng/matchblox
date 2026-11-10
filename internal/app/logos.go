@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/blox-eng/matchblox/internal/keycmd"
 	"github.com/blox-eng/matchblox/internal/logos"
 )
 
@@ -67,9 +68,18 @@ func (m Model) graphics(msg graphicsMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 	m.gfxBusy = false
-	if msg.key != m.viewers {
-		m.viewers, m.agentSaid = msg.key, "" // a new viewer knows no agent yet: tellAgent says it again
+	var marks tea.Cmd
+	if msg.watched && msg.key != m.viewers {
+		// A new viewer has not heard the marks yet; tmux passes them only
+		// to the clients that show the pane.
+		m.viewers, marks = msg.key, sayAgent(keycmd.MarksSignal(), m.opt)
 	}
+	m, draw := m.drawLogos(msg)
+	return m, tea.Batch(marks, draw)
+}
+
+// drawLogos sends the logos to viewers that can draw them and have not.
+func (m Model) drawLogos(msg graphicsMsg) (Model, tea.Cmd) {
 	if !msg.watched {
 		// Nobody shows the console: kitty keeps the images, so the logos
 		// are there the moment the builder comes back.

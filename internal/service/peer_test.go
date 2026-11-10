@@ -341,9 +341,10 @@ func TestAConsoleClaimFailsClosedWithoutDrivenJSON(t *testing.T) {
 			t.Fatal(err)
 		}
 		if restart {
-			s.driven.mu.Lock()
-			s.driven.d = nil // what the service knew is gone with it
-			s.driven.mu.Unlock()
+			ds := &s.hostUnit().driven
+			ds.mu.Lock()
+			ds.d = nil // what the service knew is gone with it
+			ds.mu.Unlock()
 		}
 		if res := actOver(t, s, 100, proto.ClientConsole, proto.Act{RecID: "message:%2", Confirm: "y", Text: "merge it"}); res.Err != "" {
 			t.Fatalf("restart %v: %q", restart, res.Err)
@@ -450,5 +451,43 @@ func TestThePaneOfATerminal(t *testing.T) {
 	s.TmuxOut = func([]string) (string, error) { return "", errors.New("signal: killed") }
 	if _, ok := s.paneOfTerminal(1, tty, dev); ok {
 		t.Error("a tmux that failed placed the sender")
+	}
+}
+
+// TestGoingInFromAConsoleFreesThePane: the person who went into a pane after
+// they took the session over types there, which the guard cannot see, so the
+// pane is theirs. A command, or a driven pane that says it is a console, frees
+// nothing.
+func TestGoingInFromAConsoleFreesThePane(t *testing.T) {
+	s, _, _ := guardedRun(t)
+	s.PeerPane = func(pid int) string { return map[int]string{100: "%1"}[pid] }
+	if res := actOver(t, s, 777, proto.ClientCLI, proto.Act{RecID: proto.IntoPrefix + "%1"}); res.Err != intoOnlyFromConsole {
+		t.Fatalf("a command's into: %+v", res)
+	}
+	if res := actOver(t, s, 100, proto.ClientConsole, proto.Act{RecID: proto.IntoPrefix + "%1"}); res.Err != intoOnlyFromConsole {
+		t.Fatalf("a driven pane's into: %+v", res)
+	}
+	if !denies(t, s, "%1", "gh pr merge 4556") {
+		t.Fatal("an into: from no person freed the pane")
+	}
+	// While the stoker is in charge the session stays its own, whatever a
+	// console thinks: a console that has not heard the stoker woke frees nothing.
+	if res := actOver(t, s, 555, proto.ClientConsole, proto.Act{RecID: proto.IntoPrefix + "%1"}); res.Err != intoInCharge {
+		t.Fatalf("an into: while the stoker is in charge: %+v", res)
+	}
+	if !denies(t, s, "%1", "gh pr merge 4556") {
+		t.Fatal("an into: freed a pane the stoker is in charge of")
+	}
+	if res := actOver(t, s, 555, proto.ClientConsole, proto.Act{RecID: "stoker:rest", Confirm: "y"}); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	if res := actOver(t, s, 555, proto.ClientConsole, proto.Act{RecID: proto.IntoPrefix + "%404"}); res.Err == "" {
+		t.Fatal("an into: of a pane no session holds was taken")
+	}
+	if res := actOver(t, s, 555, proto.ClientConsole, proto.Act{RecID: proto.IntoPrefix + "%1"}); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	if denies(t, s, "%1", "gh pr merge 4556") {
+		t.Fatal("the person went in, and the pane stayed the stoker's")
 	}
 }

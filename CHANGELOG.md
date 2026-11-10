@@ -16,6 +16,63 @@ All notable changes to matchblox are in this file. The format follows
   capture says whether the record was written for this switch, or why it was
   not. ([#336](https://github.com/blox-eng/matchblox/issues/336))
 
+## [0.39.0] - 2026-11-09
+
+### Added
+
+- **A family of stokers.** A chain can have a stoker of its own. You talk to
+  the chain, and its stoker answers: `Enter` on the head row of its fuse opens
+  its stoker's pane, or `matchblox stoker order <chain> "<text>"`. `F` on a
+  member, or `matchblox stoker new --chain <who>`, starts one. A chain stoker
+  drives the matches of its chain only, and its gos are never more than its
+  giver's. Only the console or the host stoker gives gos: a shell's `--go` is
+  refused, so an agent in a pane matchblox has not seen yet cannot grant
+  itself merges. At
+  night the host stoker heads the family and gives each chain stoker its
+  orders. The STOKER tab lists every stoker, and `[stoker] max_chains` (4)
+  caps how many run at once.
+  ([#304](https://github.com/blox-eng/matchblox/issues/304))
+
+### Fixed
+
+- **A hook's event is not lost while the service is busy.** The hook stays
+  until the service has read the pane of its process. Before this fix, a
+  slow service read the pane after the hook had ended and dropped the event.
+  ([#304](https://github.com/blox-eng/matchblox/issues/304))
+
+## [0.38.2] - 2026-11-09
+
+### Changed
+
+- **On the phone, a tap on a session goes into it.** The first tap goes into
+  the agent's pane, as `Enter` does, so what you type reaches the agent. It
+  no longer opens a read-only view first.
+  ([#352](https://github.com/blox-eng/matchblox/issues/352))
+
+## [0.38.1] - 2026-11-09
+
+### Fixed
+
+- **Enter no longer ends the console.** Going into an agent's pane gives
+  your terminal a tmux session of its own. Since 0.38.0, the option that
+  ends that session once you leave it landed on the console's own
+  `matchblox` session instead, so the console ended as you went in, and
+  each jump left a session behind. Every step now names the jump's own
+  session. `Ctrl+M` with no console says how to open one, not a bare tmux
+  error. ([#354](https://github.com/blox-eng/matchblox/issues/354))
+
+## [0.38.0] - 2026-11-08
+
+### Changed
+
+- **Enter goes into the pane.** `Enter`, `a`, `→`, `ctrl+o` and a tap go into
+  the agent's own tmux pane, on every host and device, and move only the
+  screen that asked. Sessions shows the selected agent's live screen,
+  read-only; the wheel scrolls it back. The phone's command keys type into
+  the agent's pane. The key-giving chat is gone; the demo shows a stand-in
+  for the pane. A session you go into while the stoker rests is yours: the merge
+  guard lets it be. ([#334](https://github.com/blox-eng/matchblox/issues/334))
+
 ## [0.37.0] - 2026-11-08
 
 ### Changed
@@ -1304,7 +1361,11 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.37.0...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.39.0...HEAD
+[0.39.0]: https://github.com/blox-eng/matchblox/compare/v0.38.2...v0.39.0
+[0.38.2]: https://github.com/blox-eng/matchblox/compare/v0.38.1...v0.38.2
+[0.38.1]: https://github.com/blox-eng/matchblox/compare/v0.38.0...v0.38.1
+[0.38.0]: https://github.com/blox-eng/matchblox/compare/v0.37.0...v0.38.0
 [0.37.0]: https://github.com/blox-eng/matchblox/compare/v0.36.0...v0.37.0
 [0.36.0]: https://github.com/blox-eng/matchblox/compare/v0.35.0...v0.36.0
 [0.35.0]: https://github.com/blox-eng/matchblox/compare/v0.34.0...v0.35.0

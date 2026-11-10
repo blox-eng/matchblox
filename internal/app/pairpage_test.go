@@ -621,7 +621,7 @@ func TestBeatThreeOnTheDevicesNote(t *testing.T) {
 	}
 	deviceIn(t, r, m.pair.device.ID, r.now.Add(time.Second))
 	m = poll(t, m)
-	if want := "iPad is in. Answer an agent from it, or esc to go back."; m.pair.beat != 3 || m.pair.line != want {
+	if want := "iPad is in: go into an agent from it, or esc to go back."; m.pair.beat != 3 || m.pair.line != want {
 		t.Fatalf("beat %d, line %q", m.pair.beat, m.pair.line)
 	}
 }
@@ -644,7 +644,7 @@ func TestBeatFourNamesTheAct(t *testing.T) {
 	if m.pair.beat != 4 || m.pair.line != "iPad answered api" {
 		t.Fatalf("beat %d, line %q", m.pair.beat, m.pair.line)
 	}
-	m = m.pairActed(action{rec: "keys:%2"})
+	m = m.pairActed(action{rec: "message:%2"})
 	if m.pair.line != "iPad answered api" {
 		t.Fatalf("a second act changed the line: %q", m.pair.line)
 	}
@@ -660,7 +660,7 @@ func TestBeatFourNamesTheAct(t *testing.T) {
 
 func TestBeatFourVerbs(t *testing.T) {
 	for rec, want := range map[string]string{
-		"keys:%2": "iPad picked in api", "message:%2": "iPad wrote to api",
+		"message:%2": "iPad wrote to api",
 		"compact:%2": "iPad compacted api", "kill:%2": "iPad acted in api",
 	} {
 		_, m, tty := inPage(t)
@@ -668,6 +668,31 @@ func TestBeatFourVerbs(t *testing.T) {
 		if m = m.pairActed(action{rec: rec}); m.pair.line != want {
 			t.Errorf("%s: line %q, want %q", rec, m.pair.line, want)
 		}
+	}
+}
+
+func TestPairingSaysGoIntoAnAgent(t *testing.T) {
+	_, m, _ := inPage(t)
+	if want := "iPad is in: go into an agent from it, or esc to go back."; m.pair.line != want {
+		t.Fatalf("line %q, want %q", m.pair.line, want)
+	}
+}
+
+// T22
+func TestPairingEndsOnTheDevicesFirstJump(t *testing.T) {
+	m, _ := loadedWith(t, 100, apiAsks())
+	m.opt.Pair = &PairHost{DeviceIn: func(id string) (time.Time, string, bool) { return time.Now(), phoneTTY, id == "iPad-id" }}
+	m.pair = &pairPage{beat: 3, device: PairDevice{Name: "iPad", ID: "iPad-id"}}
+
+	if got := m.pairJumped("/dev/pts/1", "%2"); got.pair.beat != 3 {
+		t.Fatalf("the desk's jump moved the page to beat %d", got.pair.beat)
+	}
+	if got := m.pairJumped(phoneTTY, "%99"); got.pair.beat != 3 {
+		t.Fatalf("a jump into no home session moved the page to beat %d", got.pair.beat)
+	}
+	next, _ := m.Update(ranMsg{cmd: "tmux switch-client", jumped: "%2", tty: phoneTTY})
+	if got := next.(Model); got.pair.beat != 4 || got.pair.line != "iPad went into api" || got.pair.foldAt.IsZero() {
+		t.Fatalf("page %+v", got.pair)
 	}
 }
 
@@ -733,24 +758,15 @@ func apiAsks() proto.State {
 	return st
 }
 
-// TestBeatFourOnAMenuAnswer: the phone answers an agent's menu in the chat,
-// with a key and no confirm, while the page waits at beat 3.
-func TestBeatFourOnAMenuAnswer(t *testing.T) {
-	m, f := loadedWith(t, 100, apiAsks())
+// TestBeatFourOnADevicesAct: the phone acts on an agent while the page
+// waits at beat 3.
+func TestBeatFourOnADevicesAct(t *testing.T) {
+	m, _ := loadedWith(t, 100, apiAsks())
 	m.opt.LastClient = func() (string, time.Time, error) { return phoneTTY, time.Time{}, nil }
 	m.opt.Pair = &PairHost{DeviceIn: func(id string) (time.Time, string, bool) { return time.Now(), phoneTTY, id == "iPad-id" }}
-	next, _ := key(m, "down") // api asks
-	next, _ = key(next, "enter")
-	m = pastQuiet(next.(Model))
 	m.pair = &pairPage{beat: 3, device: PairDevice{Name: "iPad", ID: "iPad-id"}}
-	next, cmd := key(m, "enter")
-	drain(cmd)
-	got := next.(Model)
-	if got.pair == nil || got.pair.beat != 4 || got.pair.line != "iPad picked in api" {
+	if got := m.pairActed(action{rec: "answer:%2"}); got.pair.beat != 4 || got.pair.line != "iPad answered api" {
 		t.Fatalf("page %+v", got.pair)
-	}
-	if acts := keyActs(f); len(acts) != 1 || acts[0].RecID != "keys:%2" {
-		t.Fatalf("acts %+v", acts)
 	}
 
 	// An act the builder sent, and an act that names no session, do not count.
@@ -765,42 +781,23 @@ func TestBeatFourOnAMenuAnswer(t *testing.T) {
 }
 
 // TestTheStripHandsTheConsoleBack: from beat 3 the page is one line on the
-// key line. The device's keys work the console, its answer is beat 4, and
-// esc dismisses the strip when the console has nothing to cancel.
+// key line. The device's act is beat 4, and esc dismisses the strip when the console has nothing to cancel.
 func TestTheStripHandsTheConsoleBack(t *testing.T) {
-	m, f := loadedWith(t, 100, apiAsks())
+	m, _ := loadedWith(t, 100, apiAsks())
 	now := time.Date(2026, 10, 21, 14, 32, 0, 0, time.UTC)
 	m.opt.Now = func() time.Time { return now }
 	m.opt.LastClient = func() (string, time.Time, error) { return phoneTTY, time.Time{}, nil }
 	m.opt.Pair = &PairHost{DeviceIn: func(id string) (time.Time, string, bool) { return now, phoneTTY, id == "iPad-id" }}
-	m.pair = &pairPage{beat: 3, line: "iPad is in. Answer an agent from it, or esc to go back.", device: PairDevice{Name: "iPad", ID: "iPad-id"}}
-	if out := ansi.Strip(m.render()); !strings.Contains(out, "iPad is in. Answer an agent from it, or esc to go back.") || !strings.Contains(out, "SESSIONS") && !strings.Contains(out, "api") {
+	m.pair = &pairPage{beat: 3, line: "iPad is in: go into an agent from it, or esc to go back.", device: PairDevice{Name: "iPad", ID: "iPad-id"}}
+	if out := ansi.Strip(m.render()); !strings.Contains(out, "iPad is in: go into an agent from it, or esc to go back.") || !strings.Contains(out, "SESSIONS") && !strings.Contains(out, "api") {
 		t.Fatalf("the console does not show with the strip:\n%s", out)
 	}
 
-	next, _ := key(m, "down")
-	next, _ = key(next, "a")
-	if !next.(Model).chatKeys {
-		t.Fatal("a key did not reach the console at beat 3")
-	}
-	now = now.Add(time.Second)    // the menu's quiet passes
-	next, cmd := key(next, "esc") // goes to the agent, and the strip stays
-	drain(cmd)
-	if got := next.(Model); got.pair == nil || len(keyActs(f)) != 1 || keyActs(f)[0].Text != "Escape" {
-		t.Fatalf("esc in the chat: page %v, acts %+v", got.pair, f.acts())
-	}
-	next = answered(t, next.(Model), "")
-	now = now.Add(time.Second) // the menu's quiet passes
-	next, cmd = key(next, "enter")
-	drain(cmd)
-	got := next.(Model)
-	if got.pair == nil || got.pair.beat != 4 || got.pair.line != "iPad picked in api" {
+	got := m.pairActed(action{rec: "answer:%2"})
+	if got.pair == nil || got.pair.beat != 4 || got.pair.line != "iPad answered api" {
 		t.Fatalf("page %+v", got.pair)
 	}
-	if acts := keyActs(f); len(acts) != 2 || acts[1].RecID != "keys:%2" || acts[1].Text != "Enter" {
-		t.Fatalf("acts %+v", f.acts())
-	}
-	if out := ansi.Strip(got.render()); !strings.Contains(out, "iPad picked in api") {
+	if out := ansi.Strip(got.render()); !strings.Contains(out, "iPad answered api") {
 		t.Fatalf("the strip does not say the act:\n%s", out)
 	}
 	now = now.Add(1600 * time.Millisecond)
@@ -810,7 +807,7 @@ func TestTheStripHandsTheConsoleBack(t *testing.T) {
 	}
 
 	// esc with nothing to cancel dismisses the strip at beat 3.
-	next, _ = key(m, "esc")
+	next, _ := key(m, "esc")
 	if next.(Model).pair != nil {
 		t.Fatal("esc did not dismiss the strip")
 	}
