@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/blox-eng/matchblox/internal/advice"
+	"github.com/blox-eng/matchblox/internal/chains"
 	"github.com/blox-eng/matchblox/internal/doors"
 	"github.com/blox-eng/matchblox/internal/holds"
 	"github.com/blox-eng/matchblox/internal/panes"
@@ -687,10 +688,14 @@ func (s *Service) setDoors(gen uint64, ds []doors.Door) {
 func (s *Service) names() proto.Result {
 	s.mu.Lock()
 	sessions, accounts := s.cur.Sessions, s.cur.Limits
+	var chs []chains.Chain
+	if s.cur.Chains != nil {
+		chs = s.cur.Chains.Chains
+	}
 	s.mu.Unlock()
-	n := &proto.Names{Sessions: map[int]string{}, Accounts: map[int]string{}}
+	n := &proto.Names{Sessions: map[int]string{}, Accounts: map[int]string{}, Chains: map[int]string{}}
 	if s.PushNumbers != nil {
-		n.Sessions, n.Accounts = s.PushNumbers.Names(sessions, accounts)
+		n.Sessions, n.Accounts, n.Chains = s.PushNumbers.Names(sessions, accounts, chs)
 	}
 	return proto.Result{Names: n}
 }
