@@ -247,18 +247,18 @@ Enter goes into the agent's own tmux pane, and moves only the phone. Sessions
 keeps a read-only live view of the selected agent. See
 [the live view](console.md#the-live-view).
 
-1. Tap an agent in Sessions. On a one-column phone, its live view fills the
-   screen. The title row reads `‹ Sessions · <name> · <state>`. Held wide
-   with room for an agent's menu, the view is the pane beside the list, and
-   a tap on the selected row goes into its pane.
-2. Tap the view, or press Return, to go into the pane. On a host the
-   stoker drives, the console asks `take over?` first. A session with no
-   pane says `<name> runs outside tmux: no pane to go into`.
+1. Tap an agent in Sessions, or press Return on the selected one, to go
+   into its pane. The selected row shows the question the agent asks and
+   its last words. Held wide with room for an agent's menu, the live view
+   sits beside the list, and the first tap selects: tap the row again to
+   go in.
+2. On a host the stoker drives, the console asks `take over?` first. A
+   session with no pane says `<name> runs outside tmux: no pane to go into`.
 3. Type in the pane. The belt's keys (`Esc`, `Ctrl`, arrows, `Tab`, the
    prefix) reach the agent unchanged.
 4. To come back, tap `◂` on the belt, tap `◂ matchblox` in the tmux status
-   line, or press `prefix m`. From the live view, tap `‹ Sessions` or press
-   `Esc`. The console then selects the next agent that waits.
+   line, or press `prefix m`. The console then selects the next agent that
+   waits.
 
 The demo has no tmux. There Return opens a full-screen stand-in for the
 pane, and the belt answers it: at a question the key line says `type 2 to
@@ -283,8 +283,8 @@ and stops with a key at the left side.
   quotes, smart dashes and auto capitalisation. So they never change a key
   you send.
 
-- `◂` goes back. In the live view it goes to Sessions. In a tmux pane it
-  goes to the console.
+- `◂` goes back. In a tmux pane it goes to the console. In the demo's
+  stand-in it goes to Sessions.
 - `^C` interrupts. `^C` twice stops Claude Code. A second `^C` within 1 s
   is held, and the key line says so.
 - `⇞` and `⇟` send `PgUp` and `PgDn` (`ESC [ 5 ~` and `ESC [ 6 ~`). In the

@@ -180,6 +180,14 @@ func TestWatchSendsTheScreen(t *testing.T) {
 
 func TestWatchSendsOnlyChanges(t *testing.T) {
 	s, f, ctx := watchTest(t, map[string]string{"%1": idleScreen})
+	// The idle session's wait is new: a still screen goes once more when it
+	// settles, by design. Watch after that, so only a change sends again.
+	for deadline := time.Now().Add(waitLimit); !s.waitShown("%1", time.Now()); {
+		if time.Now().After(deadline) {
+			t.Fatal("the wait never settled")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 	c := connectAs(t, ctx, s, proto.ClientConsole)
 	r := read(c)
 	if res := r.act(t, "w", proto.WatchPrefix+"%1"); res.Err != "" {

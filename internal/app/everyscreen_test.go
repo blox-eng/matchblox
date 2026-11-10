@@ -86,12 +86,12 @@ func TestEveryGoldenShowsTheAgentsWholeMenu(t *testing.T) {
 			if drawn, _ := viewDrawn(m); !drawn {
 				continue
 			}
-			cols, rows := m.viewSize()
+			cols, rows := viewRoom(m)
 			if cols == 0 {
 				continue // in the list: no chat sizes the agent
 			}
 			at := fitScreen(text, cols, rows)
-			next, _ := m.Update(screenMsg{Pane: m.watching, At: demoAt, Text: strings.Join(at, "\n"), Cols: cols, Rows: rows})
+			next, _ := m.Update(screenMsg{Pane: m.watching, At: demoAt, Text: strings.Join(at, "\n")})
 			out := screen(next)
 			for _, want := range menuFrom(t, text, cols) {
 				if !strings.Contains(out, strings.TrimSpace(want)) {
@@ -149,25 +149,6 @@ func TestTheListOutranksTheMachine(t *testing.T) {
 	}
 }
 
-// TestTheLiveKeyLineNamesTheWayIn: the full-screen view's key line names
-// the way in whole at every phone width, and a tap on it presses enter.
-func TestTheLiveKeyLineNamesTheWayIn(t *testing.T) {
-	for w := 40; w <= 70; w++ {
-		m := flintAt(t, w, 31, "enter")
-		if !m.viewFull() {
-			t.Fatalf("%d columns: the view does not take the screen", w)
-		}
-		line, spans := m.liveKeyLine(w)
-		got := strings.TrimSpace(ansi.Strip(line))
-		if strings.Contains(got, "…") || !strings.HasPrefix(got, "enter goes into flint-auth") {
-			t.Fatalf("%d columns: the key line is %q", w, got)
-		}
-		if len(spans) == 0 || spans[0].press != "enter" {
-			t.Fatalf("%d columns: the taps are %+v", w, spans)
-		}
-	}
-}
-
 // TestListOnlyFillsItsFreeRowsWithUsage: in list only the list comes first
 // and is never cut for the stats; the rows it leaves free take usage, then
 // the machine, under a hairline, each whole at its fewest lines.
@@ -211,7 +192,7 @@ func TestAChatBesideTheListHasRoomForAMenu(t *testing.T) {
 			if _, right := m.panes(w); right == 0 {
 				continue
 			}
-			if _, rows := m.viewSize(); rows < menuLeast {
+			if _, rows := viewRoom(m); rows < menuLeast {
 				t.Fatalf("%dx%d: the chat beside the list has %d rows:\n%s", w, h, rows, screen(m))
 			}
 		}

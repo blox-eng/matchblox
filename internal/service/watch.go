@@ -92,7 +92,6 @@ func (s *Service) watchAct(cl *client, clientKind string, a proto.Act, pane stri
 		return proto.Result{Err: "no agent session in " + pane + " any more"}
 	}
 	cl.watch.Store(&watched{pane: pane})
-	s.watchSize(cl, pane, a)
 	select {
 	case cl.screenKick <- struct{}{}:
 	default:
@@ -133,22 +132,21 @@ func (s *Service) watchLoop(ctx context.Context, cl *client) {
 		read := false
 		_, live := s.sessionAt(pane)
 		if live {
-			cols, rows, gen := s.sizes.paneSize(pane)
-			if w.back > 0 {
+			switch {
+			case w.back > 0:
 				text, read = s.CaptureBack(pane, w.back, w.rows)
 				scr.Back = w.back
-			} else {
+			case s.ScreenOf != nil:
+				text, scr.Alt, read = s.ScreenOf(pane)
+			default:
 				text, read = s.Capture([]string{pane})[pane]
-			}
-			if _, _, after := s.sizes.paneSize(pane); after == gen { // not sized while it was read
-				scr.Cols, scr.Rows = cols, rows
 			}
 		}
 		scr.Text, scr.Gone = text, !live // only a pane with no session in it any more is gone
 		if live && !read {
 			scr.Err = "could not read " + pane + ": tmux did not answer"
 		}
-		if sent && pane == last.Pane && text == last.Text && scr.Gone == last.Gone && scr.Err == last.Err && scr.Cols == last.Cols && scr.Rows == last.Rows && scr.Back == last.Back && (s.waitShown(pane, last.At) || !s.waitShown(pane, scr.At)) {
+		if sent && pane == last.Pane && text == last.Text && scr.Gone == last.Gone && scr.Err == last.Err && scr.Alt == last.Alt && scr.Back == last.Back && (s.waitShown(pane, last.At) || !s.waitShown(pane, scr.At)) {
 			continue
 		}
 		sent, last = true, scr

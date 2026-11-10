@@ -670,9 +670,11 @@ func cutLeft(s string, w int) string {
 	return padLeft(ansi.Truncate(s, w, "…"), w)
 }
 
-// opened is what a selected row on a phone grows by: what the agent said
-// last, its pull request, then its plan and its keys. Every line starts with
-// two blanks: fused drops those two cells to make room for the fuse.
+// opened is what a selected row on a phone grows by: the question the
+// agent asks, what it said last, its pull request, then its plan and its
+// keys. The question is read here, and answered in the agent's own pane.
+// Every line starts with two blanks: fused drops those two cells to make
+// room for the fuse.
 func (m Model) opened(s sample.Session, w int) []string {
 	st := m.st
 	var out []string
@@ -680,6 +682,14 @@ func (m Model) opened(s sample.Session, w int) []string {
 	if _, head := m.headRow(s); head {
 		if q, asks := m.headAsks(s); asks && q != "" {
 			said = q // the head's row cuts its question: here it is whole
+		}
+	} else if s.Ask != nil && len(s.Ask.Questions) > 0 {
+		lines := wrapPlain("? "+s.Ask.Questions[0].Question, w-4)
+		if len(lines) > 2 {
+			lines = []string{lines[0], ansi.Truncate(lines[1], w-5, "") + "…"}
+		}
+		for _, l := range lines {
+			out = append(out, "   "+st.accent.Render(l))
 		}
 	}
 	if said != "" {

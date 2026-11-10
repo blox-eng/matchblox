@@ -6,6 +6,7 @@
  ╿ ember-billing                             done       4m   32%  ▲ clear      #4552 ●━●━◉┄○┄○
 ───────────────────────────────────────────────────────────────────────────────────────────────
 ▌╿ flint-auth                                asks       2m   41%  ▲ clear      #4545 ●━✕┄○┄○┄○
+   ? Should a refresh also rotate the token?
    “The refresh flow works and the tests pass. One choice is yours before I wire the
    rotation.”
    #4545 ●━✕┄○┄○┄○  conflicts with main
@@ -28,7 +29,6 @@
  ○ Clear flint-auth (%2)
  ○ Clear ember-billing (%8)
  ○ Clear wick-mobile (%7)
-
 
 
 

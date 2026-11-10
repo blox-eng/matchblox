@@ -182,8 +182,8 @@ final class DemoConsoleTests: XCTestCase {
         return Int(counts.components(separatedBy: " ").first?.dropFirst("press=".count) ?? "") ?? 0
     }
 
-    /// A real host's tap, on the demo's screens: the tap on the row clicks once, so the stand-in
-    /// opens and its question is not clicked through, and the keyboard rises.
+    /// A real host's tap, on the demo's screens: the tap on the row clicks once and goes into the
+    /// stand-in (#351), its question is not clicked through, and the keyboard rises.
     @MainActor
     func testARealHostsFirstTapClicksOnceAndRaisesTheKeyboard() {
         let app = launched(extra: ["-demoTapRaisesKeyboard"])
@@ -266,11 +266,10 @@ final class DemoConsoleTests: XCTestCase {
         }
     }
 
-    /// On a phone the first tap on a row goes into its pane: the stand-in here (#352). The stand-in
-    /// of an agent at a question shows its hint; any other shows where the keys go.
+    /// On one column a tap on a row goes into the pane, as Return does: the stand-in here (#351).
     @MainActor
     private func goInto(_ app: XCUIApplication, row text: String) {
-        tapRow(in: app, containing: text, until: "keys go to \(text)", "type 2 to answer")
+        tapRow(in: app, containing: text, until: "‹ Sessions")
     }
 
     /// Taps a row, and taps once more only when the first tap visibly did nothing in 6 seconds:

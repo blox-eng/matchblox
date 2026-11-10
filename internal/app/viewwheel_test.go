@@ -75,7 +75,7 @@ func TestTheWheelScrollsTheLiveViewBack(t *testing.T) {
 	if len(got) != 1 || got[0].Text != proto.WheelUp || got[0].RecID != proto.KeysPrefix+"%1" {
 		t.Fatalf("sent %+v, want one keys:%%1 %s", got, proto.WheelUp)
 	}
-	if m.standIn || m.viewOpen {
+	if m.standIn {
 		t.Fatal("the wheel opened the view")
 	}
 }

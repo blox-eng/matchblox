@@ -279,8 +279,8 @@ func TestTheStandInIsFullScreenOnADesk(t *testing.T) {
 	if !m.standIn || !strings.HasPrefix(strings.TrimSpace(lines[0]), "‹ Sessions") {
 		t.Fatalf("stand-in %v, row 0 is %q", m.standIn, lines[0])
 	}
-	if cols, _ := m.viewSize(); cols != 132 {
-		t.Errorf("the agent's window is %d columns, want the whole 132", cols)
+	if sc := m.draw(132); !sc.placeFull || sc.viewW != 132 {
+		t.Errorf("the stand-in is %d columns, want the whole 132", sc.viewW)
 	}
 }
 
@@ -291,8 +291,8 @@ func TestAShortScreenClosesTheStandIn(t *testing.T) {
 	f := m.conn.(*fakeConn)
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 106, Height: 10})
 	m = next.(Model)
-	if m.standIn || m.viewOpen {
-		t.Fatalf("106x10: stand-in %v, view %v: want the list", m.standIn, m.viewOpen)
+	if m.standIn {
+		t.Fatal("106x10: the stand-in stays: want the list")
 	}
 	m = pressKeys(t, m, "down", "2", "esc")
 	if got := keyActs(f); len(got) != 0 {
@@ -309,7 +309,7 @@ func TestTheStandInsBackKeyReturnsToTheNextWait(t *testing.T) {
 	want := m.nextAfter(paneNamedIn(t, m, "flint-auth"))
 	next, _ := m.Update(uv.UnknownApcEvent(homeKey))
 	nm := next.(Model)
-	if nm.standIn || nm.viewOpen {
+	if nm.standIn {
 		t.Fatal("the home key left the stand-in open")
 	}
 	got, _ := nm.selectedSession()

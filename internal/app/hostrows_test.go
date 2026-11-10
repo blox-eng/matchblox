@@ -456,21 +456,3 @@ func TestTheLostLineOutranksTheStandInsKeys(t *testing.T) {
 		t.Fatalf("key line %q, want the lost line %q", ansi.Strip(line), want)
 	}
 }
-
-// The view closes when the selection lands on another host's row with the
-// same pane id: that pane is another pane, and no key goes to it.
-func TestTheViewClosesOnAnotherHostsPaneOfTheSameID(t *testing.T) {
-	now := lostAt
-	m, _, conns := hostsAt(t, &now, "", 196, 40, "ws-1")
-	m = upd(t, m, stateMsg(stateAt(hostState(sess(1, "api-auth", "%3", nil)), now)))
-	m = upd(t, m, peerMsg{host: "ws-1", conn: conns["ws-1"], msg: stateMsg(stateAt(hostState(sess(2, "train-loop", "%3", nil)), now))})
-	m.tab, m.chose, m.selPID, m.selHost = tabSessions, true, 1, m.opt.Host
-	m = openView(t, m)
-	if !m.viewOpen {
-		t.Fatal("api-auth's view did not open")
-	}
-	m.selPID, m.selHost = 2, "ws-1"
-	if m = m.keepView(); m.viewOpen {
-		t.Fatal("the view stayed open on ws-1's %3")
-	}
-}

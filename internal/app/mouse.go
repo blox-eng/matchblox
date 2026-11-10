@@ -50,7 +50,7 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	if sc.placeFull && ms.Y != sc.keysAt {
 		switch {
 		case ms.Y == 0:
-			return m.closeView(), nil
+			return m.leaveStandIn(), nil
 		case m.standIn:
 			return m, nil
 		}
@@ -80,7 +80,7 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		if s, ok := spanAt(sc.keys, ms.X); ok {
 			m.armed = ""
 			if s.press == tapBack {
-				return m.closeView(), nil
+				return m.leaveStandIn(), nil
 			}
 			return m.keyed(keyPress(s.press))
 		}
@@ -146,9 +146,9 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if host, pane := m.tapTarget(); pane != "" {
-		// A tap selects a session; a tap on it once it is selected goes into
-		// its pane. On a phone the first tap goes in (#352): the owner taps a
-		// session to answer it, and a view that takes no keys is a dead end.
+		// On one column, as on a phone, a tap goes into the session's pane,
+		// as Enter does (#351, #352). Beside the view, a tap selects the
+		// session, and a tap on it once it is selected goes in.
 		m.armed, m.flash = "", ""
 		if !picked && !m.oneColumn(w) { // the default selection is not a tap
 			return m, nil
