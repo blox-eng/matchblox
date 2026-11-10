@@ -85,3 +85,42 @@ func plainPane(t *testing.T) (*os.File, string) {
 	waitFor(t, func() bool { return tmux("display-message", "-p", "-t", pane, "#{pane_current_command}") == "cat" })
 	return attach(t, sock, "work"), typed
 }
+
+// TestPrefixSFlipsFromAMarkedPane: prefix s is ⌥s for a terminal that does
+// not send Option as Meta.
+func TestPrefixSFlipsFromAMarkedPane(t *testing.T) {
+	sock, tmux, got := consolePane(t)
+	tmux("new-session", "-d", "-s", "work", "sleep", "100")
+	pane := tmux("display-message", "-p", "-t", "work", "#{pane_id}")
+	tmux("set-option", "-p", "-t", pane, "@matchblox_match", "1")
+	tmux(FlipKeysArgv()[1:]...)
+	term := attach(t, sock, "work")
+	waitFor(t, func() bool { return tmux("list-clients", "-F", "#{client_session}") == "work" })
+	tty := tmux("list-clients", "-F", "#{client_tty}")
+	time.Sleep(100 * time.Millisecond)
+	for _, k := range []string{"\x02", "s"} {
+		if _, err := term.WriteString(k); err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(30 * time.Millisecond)
+	}
+	want := eventLine(uv.UnknownApcEvent(keycmd.FlipAPC(tty + " " + pane)))
+	waitFor(t, func() bool { return strings.Contains(strings.Join(paneRead(t, got), "\n"), want) })
+}
+
+// TestPrefixSAtTheConsoleIsItsKey: prefix s at the console is ⌥s there.
+func TestPrefixSAtTheConsoleIsItsKey(t *testing.T) {
+	sock, tmux, got := consolePane(t)
+	tmux(FlipKeysArgv()[1:]...)
+	term := attach(t, sock, Home)
+	waitFor(t, func() bool { return tmux("list-clients", "-F", "#{client_session}") == Home })
+	time.Sleep(100 * time.Millisecond)
+	for _, k := range []string{"\x02", "s"} {
+		if _, err := term.WriteString(k); err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(30 * time.Millisecond)
+	}
+	want := eventLine(uv.KeyPressEvent{Code: 's', Mod: uv.ModAlt})
+	waitFor(t, func() bool { return strings.Contains(strings.Join(paneRead(t, got), "\n"), want) })
+}

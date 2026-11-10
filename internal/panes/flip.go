@@ -14,6 +14,13 @@ const (
 	NextKey = "M-n"
 )
 
+// FlipElsewhere and NextElsewhere are what prefix s and prefix n say on a pane with
+// no agent matchblox samples.
+const (
+	FlipElsewhere = "prefix s flips from an agent's pane to its chain's room"
+	NextElsewhere = "prefix n walks a chain's agents from one of their panes"
+)
+
 // MatchOption marks an agent pane the service samples (mux.MatchOption).
 const MatchOption = "@matchblox_match"
 
@@ -42,11 +49,11 @@ func handOff(kind string) string {
 func FlipKeysArgv() []string {
 	argv := []string{"tmux"}
 	for _, k := range []struct {
-		key, kind, apc string
-		slot           int
+		key, kind, apc, prefix, elsewhere string
+		slot                              int
 	}{
-		{FlipKey, "flip", keycmd.FlipAPC(""), keycmd.FlipSlot},
-		{NextKey, "next", keycmd.NextAPC(""), keycmd.NextSlot},
+		{FlipKey, "flip", keycmd.FlipAPC(""), "s", FlipElsewhere, keycmd.FlipSlot},
+		{NextKey, "next", keycmd.NextAPC(""), "n", NextElsewhere, keycmd.NextSlot},
 	} {
 		slot := strconv.Itoa(k.slot)
 		bind := []string{"if-shell", "-F", "#{" + MatchOption + "}", handOff(k.kind), "send-keys " + k.key}
@@ -57,6 +64,13 @@ func FlipKeysArgv() []string {
 			";", "bind-key", "-n", k.key)
 		argv = append(argv, bind...)
 		argv = append(append(argv, ";", "bind-key", "-n", "User"+slot), bind...)
+		// The prefix key is the fallback for a terminal that does not send
+		// Option as Meta. Elsewhere than an agent's pane or the console it
+		// says where it works, and types nothing.
+		prefix := []string{"if-shell", "-F", "#{" + MatchOption + "}", handOff(k.kind),
+			`if-shell -F "` + runsConsole + `" "send-keys ` + k.key + `" "display-message '` + k.elsewhere + `'"`}
+		argv = append(append(argv, ";", "bind-key", k.prefix), prefix...)
 	}
-	return argv
+	// tmux's own prefix s, the session tree, moves to prefix S.
+	return append(argv, ";", "bind-key", "S", "choose-tree", "-Zs")
 }

@@ -281,3 +281,17 @@ func TestTheWayBackWithNoConsoleSaysHowToOpenOne(t *testing.T) {
 		return tmux("display-message", "-p", "-c", tty, "#{session_name}") == Home
 	})
 }
+
+// TestChooseTreeMovesToPrefixCapitalS: prefix s flips, so tmux's own
+// session tree moves to prefix S.
+func TestChooseTreeMovesToPrefixCapitalS(t *testing.T) {
+	argv := strings.Join(FlipKeysArgv(), "\x00")
+	if !strings.Contains(argv, "bind-key\x00S\x00choose-tree\x00-Zs") {
+		t.Fatalf("no prefix S choose-tree in %q", FlipKeysArgv())
+	}
+	for _, k := range []string{"bind-key\x00s\x00if-shell", "bind-key\x00n\x00if-shell"} {
+		if !strings.Contains(argv, k) {
+			t.Errorf("no %q", strings.ReplaceAll(k, "\x00", " "))
+		}
+	}
+}

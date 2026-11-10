@@ -683,6 +683,14 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if string(msg) == homeKey && m.viewOpen {
 			return m.closeView(), nil
 		}
+		if string(msg) == homeKey && m.room != nil { // one level back a press: typing, then the room
+			if m.room.typing {
+				r := *m.room
+				r.typing, m.room = false, &r
+				return m, nil
+			}
+			m.room = nil
+		}
 		return m, nil
 	case sizeDueMsg:
 		return m, nil // Update sends the size, if it is due
