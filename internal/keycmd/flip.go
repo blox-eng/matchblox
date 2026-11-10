@@ -55,3 +55,12 @@ func ParseAPC(s string) (kind, arg string, ok bool) {
 	}
 	return "", "", false
 }
+
+// FeelNeeds and FeelDone tell the phone to play a haptic: a match on the
+// console's host started to ask, or one finished. The console writes them as
+// it writes the agent signal; the app reads them and plays at most one each
+// 2 s.
+const (
+	FeelNeeds = "\x1b_matchblox;feel=needs\x1b\\"
+	FeelDone  = "\x1b_matchblox;feel=done\x1b\\"
+)

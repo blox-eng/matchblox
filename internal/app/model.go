@@ -744,6 +744,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		first := !m.have
 		m.watchHeld = ""
 		st := proto.State(msg)
+		var feel tea.Cmd
+		if f := feelOf(m.queue, st.Queue); f != "" && !first {
+			feel = sayAgent(f, m.opt)
+		}
 		m.queue = st.Queue
 		toast := m.stokerNews(st.Stoker)
 		if joined := m.joinNews(st.Chains, st.Sessions); joined != "" {
@@ -816,7 +820,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m, order = m.queuedOrder(m.opt.Host)
 		var talk tea.Cmd
 		m, talk = m.roomQueued(m.opt.Host)
-		return m, tea.Batch(m.recv(), m.animate(), news, order, talk, focus, again, started)
+		return m, tea.Batch(m.recv(), m.animate(), news, order, talk, feel, focus, again, started)
 	case graphicsMsg:
 		return m.graphics(msg)
 	case graphicsTickMsg:
