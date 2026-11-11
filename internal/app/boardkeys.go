@@ -80,7 +80,7 @@ func (m *Model) boardChooseCard(c boardCol, s sample.Session) {
 		pick = map[boardCol]paneKey{}
 	}
 	pick[c] = paneOf(s)
-	m.boardAt, m.boardPick = c, pick
+	m.boardAt, m.boardPick, m.boardAbove = c, pick, 0
 }
 
 // startPeek starts the peek of s's card: for peekDead its digits arm
@@ -190,14 +190,43 @@ func isDigit(k tea.KeyPressMsg) bool {
 }
 
 // boardMove chooses the card d cards down the open column.
+// Up from the first card chooses the last line above the columns.
 func (m *Model) boardMove(d int) {
 	b, _ := m.boardDrawOf()
-	if !b.picked {
+	ss := b.idx[b.open]
+	i := slices.IndexFunc(ss, func(s sample.Session) bool { return b.picked && paneOf(s) == paneOf(b.chosen) })
+	switch {
+	case d < 0 && i <= 0 && len(m.aboveLines()) > 0:
+		m.boardAbove = 1
+	case b.picked:
+		m.boardChooseCard(b.open, ss[clampMove(i, d, len(ss))])
+	}
+}
+
+// aboveMove is ↑ (d -1) and ↓ (d 1) on a line above the columns: up
+// through them, and down from the last one to the first card of the open
+// column.
+func (m *Model) aboveMove(d int) {
+	if m.boardAbove = min(m.boardAbove-d, len(m.aboveLines())); m.boardAbove > 0 {
 		return
 	}
-	ss := b.idx[b.open]
-	i := slices.IndexFunc(ss, func(s sample.Session) bool { return paneOf(s) == paneOf(b.chosen) })
-	m.boardChooseCard(b.open, ss[clampMove(i, d, len(ss))])
+	m.boardAbove = 0
+	if b, _ := m.boardDrawOf(); len(b.idx[b.open]) > 0 {
+		m.boardChooseCard(b.open, b.idx[b.open][0])
+	}
+}
+
+// aboveOpen is ⏎ on a line above the columns: a host that is not reached
+// is dialed again, and the setup doors open as from their row in Sessions.
+func (m Model) aboveOpen(host string, k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if host == "" {
+		m.selectRow(0)
+		return m.key(k)
+	}
+	if i := m.peerAt(host); i >= 0 {
+		return m.peerTryAgain(i)
+	}
+	return m, nil
 }
 
 // boardSide opens the next shown column that has a card, at the left (d -1)
@@ -358,9 +387,21 @@ func (m Model) boardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 	}
 	bk, mk := m.keys.board, m.keys.main
 	s, ok := m.boardSelected()
+	line, above := m.aboveChosen()
 	m.flash = ""
 	var cmd tea.Cmd
 	switch {
+	case above && bkey.Matches(k, mk.Up):
+		m.aboveMove(-1)
+	case above && bkey.Matches(k, mk.Down):
+		m.aboveMove(1)
+	case above && bkey.Matches(k, mk.Back):
+		m.boardAbove = 0 // back to the card
+	case above && bkey.Matches(k, mk.Open):
+		next, cmd := m.aboveOpen(line, k)
+		return next, cmd, true
+	case above && isDigit(k):
+		// a digit answers a card, and no card is chosen
 	case bkey.Matches(k, mk.Up):
 		m.boardMove(-1)
 	case bkey.Matches(k, mk.Down):
@@ -403,8 +444,13 @@ func (m Model) boardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 		return next, cmd, true
 	case !ok && len(m.snap.Sessions) > 0 && bkey.Matches(k, bk.Merge, mk.Second, mk.Grant, mk.Open, mk.Into, mk.Jump,
 		mk.Park, mk.Rename, mk.Switch, mk.Dismiss, mk.Fold, mk.Stoke, mk.StokeChain, mk.Night, mk.Order):
-		// Every column is hidden: never a row of Sessions the person cannot see.
-		cmd = m.notice("no card is chosen · tap a + name to show a column")
+		// A line above the columns is chosen, or every column is hidden:
+		// never a row of Sessions the person cannot see.
+		if above {
+			cmd = m.notice("no card is chosen · ↓ goes back to the cards")
+		} else {
+			cmd = m.notice("no card is chosen · tap a + name to show a column")
+		}
 	case !ok && bkey.Matches(k, bk.Merge, mk.Second, mk.Grant):
 		// no match at all: nothing to act on
 	case !ok:
@@ -533,7 +579,12 @@ func (m Model) boardHints(w int) []hint {
 		return tail
 	}
 	var hs []hint
+	line, above := m.aboveChosen()
 	switch b, _ := m.boardDrawOf(); {
+	case above && line == "":
+		hs = []hint{hintFor(m.keys.main.Open, "set up")}
+	case above:
+		hs = []hint{hintFor(m.keys.main.Open, "try again")}
 	case b.picked:
 		q, answers := m.oneChoice(b.chosen)
 		armed, sent := m.peekMarks(b.chosen)

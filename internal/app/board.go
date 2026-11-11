@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strconv"
@@ -62,6 +63,9 @@ type boardDrawn struct {
 	cards  map[boardSpot]paneKey
 	taps   map[int][]span
 	hostAt map[int]string
+	// tabRow and tabSpans are the tab row while the board shows.
+	tabRow   string
+	tabSpans []span
 }
 
 // boardSpot is a line of one column.
@@ -90,22 +94,27 @@ func (b boardDraw) empty() bool {
 // boardShown: the board is drawn in Sessions' place.
 func (m Model) boardShown() bool { return m.board && m.tab == tabSessions }
 
-// boardPanel is the board in w by h (the spec's "Layout"): the setup doors
-// above, the columns, the ghost row and the recommendations under them,
-// each folded to one line.
+// boardPanel is the board in w by h (the spec's "Layout"): the lines of
+// the hosts that are not reached and the setup doors above, the columns,
+// the ghost row and the recommendations under them, each folded to one
+// line. It draws the tab row too, from the same index.
 func (m Model) boardPanel(w, h int) boardDrawn {
 	d := boardDrawn{headAt: -1, cards: map[boardSpot]paneKey{}, taps: map[int][]span{}, hostAt: map[int]string{}}
 	b, shown := m.boardDrawOf()
+	d.tabRow, d.tabSpans = m.boardTabRow(w, &b)
 
 	st := m.st
-	if len(m.doors) > 0 {
-		d.add(-1, st.label.Render(fit(fmt.Sprintf(" SET UP · %d", len(m.doors)), w)))
-	}
+	chosen, above := m.aboveChosen()
 	for _, h := range m.unreached() {
-		for _, l := range m.hostLine(h, w) {
+		sel := above && chosen == h
+		for _, l := range m.hostLine(h, w, sel) {
 			d.hostAt[len(d.lines)] = h
-			d.add(-1, l)
+			d.addRow(-1, sel, w, st, l)
 		}
+	}
+	if len(m.doors) > 0 {
+		sel := above && chosen == ""
+		d.addRow(-1, sel, w, st, m.chosenMark(sel)+st.label.Render(fmt.Sprintf("SET UP · %d", len(m.doors))))
 	}
 	none := m.have && b.none
 	var under []string
@@ -188,8 +197,8 @@ func (m Model) boardChoose(b *boardDraw, shown []boardCol) {
 		}
 	}
 	ss := b.idx[b.open]
-	if len(ss) == 0 {
-		return
+	if _, above := m.aboveChosen(); above || len(ss) == 0 {
+		return // a line above the columns is chosen in place of a card
 	}
 	i := 0
 	if k, ok := m.boardPick[b.open]; ok {
@@ -499,7 +508,7 @@ func (m Model) boardBlockOf(b *boardDraw, c boardCol, s sample.Session, w int, q
 	} else {
 		o.sent = sent
 	}
-	if m.hostCount() > 1 && m.stale(s.Host) {
+	if s.Host != m.opt.Host && m.stale(s.Host) { // a host that is not reached
 		o.asOf = m.stateAt(s.Host).Format("15:04")
 	}
 	if k, ok := m.chainKeyOf(s); ok && b.picked {
@@ -548,21 +557,70 @@ func (m Model) unreached() []string {
 func (m Model) hostLines(w int) []string {
 	var out []string
 	for _, h := range m.unreached() {
-		out = append(out, m.hostLine(h, w)...)
+		out = append(out, m.hostLine(h, w, false)...)
 	}
 	return out
 }
 
 // hostLine says since when host is not reached, and the key that dials it
 // again: one line, two on a phone when it does not fit.
-func (m Model) hostLine(host string, w int) []string {
+func (m Model) hostLine(host string, w int, sel bool) []string {
 	st := m.st
 	since := m.nameOf(host) + ": not reached since " + m.stateAt(host).Format("15:04")
 	again := st.text.Render(m.keys.main.Open.Help().Key) + st.muted.Render(" try again")
-	if line := " " + st.muted.Render(since+" · ") + again; lipgloss.Width(line) <= w {
+	lead := m.chosenMark(sel)
+	if line := lead + st.muted.Render(since+" · ") + again; lipgloss.Width(line) <= w {
 		return []string{fit(line, w)}
 	}
-	return []string{fit(" "+st.muted.Render(since), w), fit("   "+again, w)}
+	return []string{fit(lead+st.muted.Render(since), w), fit("   "+again, w)}
+}
+
+// chosenMark is the first cell of a line: ▌ in the accent when it is
+// chosen.
+func (m Model) chosenMark(sel bool) string {
+	if sel {
+		return m.st.accent.Render("▌")
+	}
+	return " "
+}
+
+// aboveLines are the lines above the columns that ↑ chooses, top to
+// bottom: each host that is not reached, then the setup doors ("").
+func (m Model) aboveLines() []string {
+	lines := m.unreached()
+	if len(m.doors) > 0 {
+		lines = append(lines, "")
+	}
+	return lines
+}
+
+// aboveChosen is the line above the columns that is chosen: a host, or ""
+// for the setup doors. false: a card is chosen.
+func (m Model) aboveChosen() (string, bool) {
+	lines := m.aboveLines()
+	if m.boardAbove <= 0 || m.boardAbove > len(lines) {
+		return "", false
+	}
+	return lines[len(lines)-m.boardAbove], true
+}
+
+// boardHostWord is the header's host filter while the board shows.
+func (m Model) boardHostWord() string {
+	return cmp.Or(m.boardHost, "all hosts") + " ▾"
+}
+
+// boardHostHit is where the header head has the host filter: a tap there
+// does what s does.
+func (m Model) boardHostHit(head string) span {
+	if !m.boardShown() || m.hostCount() == 1 {
+		return span{}
+	}
+	lead, word := " ▰ matchblox · ", m.boardHostWord()
+	if !strings.HasPrefix(ansi.Strip(head), lead+word) {
+		return span{} // short of room the header drops the host
+	}
+	x := ansi.StringWidth(lead)
+	return span{x, x + ansi.StringWidth(word), m.keys.board.Host.Keys()[0]}
 }
 
 // boardCrumb is what the tab row of a screen w wide adds while the board
@@ -570,13 +628,12 @@ func (m Model) hostLine(host string, w int) []string {
 // then each hidden column with its count (on a phone they are in the page
 // marks). A part that does not fit in w-2 leaves whole, with every one
 // after it. The spans press esc, or a hidden column's short name.
-func (m Model) boardCrumb(w int) (string, []span) {
+func (m Model) boardCrumb(w int, b *boardDraw) (string, []span) {
 	phone := m.layoutAt(w) == Narrow
 	if m.boardChain == "" && (phone || !slices.ContainsFunc(boardCols[:], m.colHidden)) {
 		return "", nil
 	}
 	st := m.st
-	b, _ := m.boardDrawOf()
 	type part struct{ text, press, gap string }
 	var parts []part
 	if m.boardChain != "" {
@@ -617,8 +674,8 @@ func (m Model) boardCrumb(w int) (string, []span) {
 
 // boardTabRow is the tab row while the board shows: the tabs, and at its
 // right the crumb. Short of room the tabs shorten, and then go.
-func (m Model) boardTabRow(w int) (string, []span) {
-	crumb, cs := m.boardCrumb(w)
+func (m Model) boardTabRow(w int, b *boardDraw) (string, []span) {
+	crumb, cs := m.boardCrumb(w, b)
 	if crumb == "" {
 		return m.tabsLine(w)
 	}

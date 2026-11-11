@@ -1,7 +1,6 @@
 package app
 
 import (
-	"cmp"
 	"fmt"
 	"slices"
 	"strconv"
@@ -130,6 +129,7 @@ func spanAt(spans []span, x int) (span, bool) {
 type drawn struct {
 	lines   []string
 	waits   span // the header's "● N wait for you"
+	hostAt  span // the board's host filter in the header: a tap turns it
 	tabs    []span
 	bodyTop int   // the line of the first body row
 	rows    []int // the row each body line shows; -1 none, headerRow
@@ -191,11 +191,8 @@ const minBlank = 3
 func (m Model) drawScreen(w int) drawn {
 	head, waits, stokerAt := m.header(w)
 	tabs, tabSpans := m.tabsLine(w)
-	if m.boardShown() {
-		tabs, tabSpans = m.boardTabRow(w)
-	}
 	sc := drawn{lines: []string{head, tabs, m.st.rule.Render(strings.Repeat("─", w))}, waits: waits, stokerAt: stokerAt, tabs: tabSpans,
-		bodyTop: 3, listW: w, dockAt: -1, keysAt: -1, actKeysAt: -1}
+		bodyTop: 3, listW: w, dockAt: -1, keysAt: -1, actKeysAt: -1, hostAt: m.boardHostHit(head)}
 	switch {
 	case m.hostCount() > 1 && m.shows():
 		// A blocked host of two or more is a row, never the screen.
@@ -226,7 +223,13 @@ func (m Model) drawScreen(w int) drawn {
 	}
 	full := m.bodyRows()
 	sc.listW = listW
-	b := m.body(listW)
+	var b body
+	if m.boardShown() { // the board draws its tab row from the body's index
+		p := m.boardPanel(listW, full)
+		b, sc.lines[1], sc.tabs = p.body, p.tabRow, p.tabSpans
+	} else {
+		b = m.body(listW)
+	}
 	chat, viewing := m.viewShown(detailW)
 	stacked := m.tab == tabSessions && detailW > 0 // usage, the machine and the stoker under the list
 	paneFull := true
@@ -423,7 +426,7 @@ func (m Model) header(w int) (string, span, span) {
 		host = m.host.Host
 	}
 	if n := m.hostCount(); n > 1 && m.boardShown() {
-		host = cmp.Or(m.boardHost, "all hosts") + " ▾"
+		host = m.boardHostWord()
 	} else if n > 1 {
 		host = fmt.Sprintf("%d hosts", n)
 	}

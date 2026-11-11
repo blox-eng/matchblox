@@ -477,6 +477,9 @@ type Model struct {
 	// boardChain and boardHost narrow the board to one chain and one host,
 	// each by its name; "" shows all.
 	boardChain, boardHost string
+	// boardAbove is the line above the columns that is chosen in place of a
+	// card, counted up from the columns (aboveLines); 0: none.
+	boardAbove int
 	// peekAt is when the peek last started, and peekAsk the question
 	// (Ask.ID) its card drew then, on the card peekPane. peekNew: a new
 	// question on the same card started it.

@@ -259,13 +259,18 @@ func (m Model) chainLabelOf(s sample.Session) string {
 	return ""
 }
 
-// boardChains are the names of the chains with a match on the board, in
-// the order of the hosts and of each host's chains: what ] and [ turn.
+// boardChains are the names of the chains with a match that the host
+// filter and the search leave on the board, in the order of the hosts and
+// of each host's chains: what ] and [ turn.
 func (m Model) boardChains() []string {
+	all := m
+	all.boardChain = ""
 	on := map[string]bool{}
 	for _, ss := range m.boardIndex() {
 		for _, s := range ss {
-			on[m.chainLabelOf(s)] = true
+			if all.inBoard(s) {
+				on[m.chainLabelOf(s)] = true
+			}
 		}
 	}
 	var out []string

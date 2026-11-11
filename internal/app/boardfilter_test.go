@@ -1,6 +1,7 @@
 package app
 
 import (
+	"io"
 	"slices"
 	"strings"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/chains"
+	"github.com/blox-eng/matchblox/internal/doors"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
@@ -217,6 +219,15 @@ func TestGNarrowsToTheChain(t *testing.T) {
 		t.Errorf("esc keeps the chain %q: %v", m.boardChain, drawnNames(m))
 	}
 
+	searched := chainsFixture(t)
+	searched.filter = "spark"
+	if searched = pressOn(searched, "]"); searched.boardChain != "docs" {
+		t.Errorf("] with a search of spark goes to %q, want docs: login draws no card", searched.boardChain)
+	}
+	if hosted := pressOn(func() Model { h := chainsFixture(t); h.boardHost = "gpu-1"; return h }(), "]"); hosted.boardChain != "" {
+		t.Errorf("] on gpu-1 alone goes to %q: no chain has a match there", hosted.boardChain)
+	}
+
 	m = pressOn(m, "right")
 	for chosenName(t, m) != "flint-docs" {
 		m = pressOn(m, "down")
@@ -294,6 +305,154 @@ func TestAHostThatIsNotReachedKeepsItsCards(t *testing.T) {
 	}
 	if f := next.(Model).flash; !strings.Contains(f, "ws-1") {
 		t.Errorf("the redial says %q", f)
+	}
+
+	m = firstCard(m)
+	m = pressOn(m, "up")
+	if line, above := m.aboveChosen(); !above || line != "ws-1" {
+		t.Fatalf("up from the first card chose %q, %v; want the host line", line, above)
+	}
+	next, cmd = key(m, "enter")
+	if msgs := cmdMsgs(cmd); !slices.ContainsFunc(msgs, func(msg tea.Msg) bool { r, ok := msg.(peerRedialMsg); return ok && r.host == "ws-1" }) {
+		t.Errorf("enter on the host line does not redial ws-1: %v", msgs)
+	}
+	if f := next.(Model).flash; !strings.Contains(f, "ws-1") {
+		t.Errorf("the redial by enter says %q", f)
+	}
+}
+
+// firstCard chooses the first card of the open column.
+func firstCard(m Model) Model {
+	b, _ := m.boardDrawOf()
+	m.boardChooseCard(b.open, b.idx[b.open][0])
+	return m
+}
+
+// TestTheLinesAboveTheColumnsTakeTheArrows: up from the first card
+// chooses the doors line, then the host line; down goes back down to the
+// first card. A chosen line has the wash, and no card is chosen while it
+// is.
+func TestTheLinesAboveTheColumnsTakeTheArrows(t *testing.T) {
+	m := lostPeer(t, 40*time.Second)
+	m.splashDone, m.board = true, true
+	m.doors = []doors.Door{{ID: doors.Tmux, Title: "Install tmux", Term: []string{"sh", "-c", "true"}}}
+	m = firstCard(upd(t, m, tea.WindowSizeMsg{Width: 80, Height: 31}))
+	first := chosenName(t, m)
+	chosen := func(m Model) string {
+		line, above := m.aboveChosen()
+		if !above {
+			return "card"
+		}
+		return "line " + line
+	}
+	for _, c := range []struct{ key, want string }{
+		{"up", "line "}, {"up", "line ws-1"}, {"up", "line ws-1"}, {"down", "line "}, {"down", "card"},
+	} {
+		if m = pressOn(m, c.key); chosen(m) != c.want {
+			t.Fatalf("%s chose %s, want %s", c.key, chosen(m), c.want)
+		}
+	}
+	if chosenName(t, m) != first {
+		t.Errorf("down from the doors line chose %s, want %s", chosenName(t, m), first)
+	}
+
+	m = pressOn(m, "up", "up")
+	if _, ok := m.boardSelected(); ok {
+		t.Error("a card is chosen with the host line")
+	}
+	d := m.boardPanel(80, m.bodyRows())
+	if host := slices.IndexFunc(plainLines(d.lines), func(l string) bool { return strings.Contains(l, "ws-1: not reached") }); host < 0 ||
+		!strings.Contains(d.lines[host], washOn(m)) || !strings.HasPrefix(plainLines(d.lines)[host], "▌") {
+		t.Errorf("the chosen host line is not drawn as a chosen row: %q", d.lines[max(host, 0)])
+	}
+	if m = pressOn(m, "1"); m.peekArmed != 0 || len(boardFake(m).acts()) != 0 {
+		t.Errorf("a digit on the host line marked %d, sent %v", m.peekArmed, boardFake(m).acts())
+	}
+	if m = pressOn(m, "x"); m.pending != nil || noticeRow(m) != "no card is chosen · ↓ goes back to the cards" {
+		t.Errorf("x on the host line: pending %v, notice %q", m.pending, noticeRow(m))
+	}
+	if m = pressOn(m, "esc"); chosen(m) != "card" || chosenName(t, m) != first {
+		t.Errorf("esc on the host line: %s", chosen(m))
+	}
+
+	m = pressOn(m, "up")
+	next, _ := key(m, "enter")
+	if p := next.(Model).pending; p == nil || p.door != doors.Tmux {
+		t.Errorf("enter on the doors line opens %+v, want the door's step", p)
+	}
+}
+
+func TestAWaitOnAHostNotReachedIsNotCounted(t *testing.T) {
+	now := lostAt
+	m, _, conns := hostsAt(t, &now, "", 104, 30, "ws-1")
+	m.splashDone, m.board = true, true
+	home := hostState(sess(1, "api-auth", "%1", nil))
+	asks := hostState(sess(2, "train-loop", "%2", func(s *sample.Session) { s.Permits = true }))
+	m = upd(t, m, stateMsg(stateAt(home, now)))
+	m = upd(t, m, peerMsg{host: "ws-1", conn: conns["ws-1"], msg: stateMsg(asks)})
+	if n := m.needCount(); n != 1 {
+		t.Fatalf("with ws-1 reached the count is %d, want 1", n)
+	}
+	m = upd(t, m, peerMsg{host: "ws-1", conn: conns["ws-1"], msg: lostMsg{err: io.EOF, conn: conns["ws-1"]}})
+	now = lostAt.Add(40 * time.Second)
+	m = upd(t, m, stateMsg(stateAt(home, now)))
+	if n := m.needCount(); n != 0 {
+		t.Errorf("with ws-1 not reached the count is %d, want 0", n)
+	}
+	if len(m.boardColumn(colNeed)) != 1 {
+		t.Error("the card of ws-1 that asks left NEEDS YOU")
+	}
+}
+
+func TestEscClearsTheSearchThenTheChain(t *testing.T) {
+	now := demoAt
+	m := boardShot(t, boardFixture(t), 80, 31, func(m *Model) {
+		m.opt.Now = func() time.Time { return now }
+		m.boardChain, m.filter = "login", "flint"
+		m.refresh()
+	})
+	for i, want := range []struct {
+		chain string
+		peek  bool
+	}{{"login", true}, {"", true}, {"", false}} {
+		was := m.peekAt
+		now = now.Add(time.Second)
+		m = pressOn(m, "esc")
+		if m.filter != "" || m.boardChain != want.chain {
+			t.Fatalf("esc %d left search %q and chain %q, want chain %q", i+1, m.filter, m.boardChain, want.chain)
+		}
+		if moved := !m.peekAt.Equal(was); moved != want.peek || moved && !m.peekAt.Equal(now) {
+			t.Errorf("esc %d: the peek is at %v (was %v, now %v)", i+1, m.peekAt, was, now)
+		}
+	}
+}
+
+func TestATapOnTheHostWordTurnsTheHost(t *testing.T) {
+	m := boardShot(t, boardFixture(t), 80, 31, nil)
+	sc := m.draw(80)
+	if word := ansi.Strip(ansi.Cut(sc.lines[0], sc.hostAt.x0, sc.hostAt.x1)); sc.hostAt.press == "" || !strings.HasPrefix(word, "all hosts") {
+		t.Fatalf("the host word is at %+v: %q", sc.hostAt, word)
+	}
+	next, cmd := tap(m, sc.hostAt.x0+1, 0)
+	drain(cmd)
+	if m = next.(Model); m.boardHost != m.nameOf(m.opt.Host) {
+		t.Fatalf("a tap on the host word turns to %q", m.boardHost)
+	}
+	if head := ansi.Strip(m.draw(80).lines[0]); !strings.Contains(head, m.boardHost+" ▾") {
+		t.Errorf("the header does not say the host: %q", head)
+	}
+}
+
+func TestAStaleHomeSaysNoAsOf(t *testing.T) {
+	m := boardShot(t, boardFixture(t), 80, 31, nil)
+	next, _ := m.Update(lostMsg{err: io.EOF, conn: m.conn})
+	m = next.(Model)
+	m.opt.Now = func() time.Time { return demoAt.Add(time.Minute) }
+	if !m.stale(m.opt.Host) {
+		t.Fatal("home is not stale")
+	}
+	if f := plainFrame(m); strings.Contains(f, "as of") {
+		t.Errorf("a card of this machine says as of:\n%s", f)
 	}
 }
 

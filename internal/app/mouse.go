@@ -61,6 +61,9 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		if s, ok := spanAt([]span{sc.stokerAt}, ms.X); ok && s.press != "" {
 			return m.openAgent()
 		}
+		if s, ok := spanAt([]span{sc.hostAt}, ms.X); ok && s.press != "" {
+			return m.keyed(keyPress(s.press)) // the host filter: as s
+		}
 		if s, ok := spanAt([]span{sc.waits}, ms.X); ok && s.press != "" {
 			if m.boardShown() {
 				m.clearBoardFilters()
