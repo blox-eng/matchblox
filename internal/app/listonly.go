@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 )
 
 // viewPrefs is how the person views the console, kept in the state
@@ -12,6 +13,19 @@ import (
 type viewPrefs struct {
 	ListOnlyPhone bool `json:"list_only_phone"`
 	ListOnlyDesk  bool `json:"list_only_desk"`
+
+	// The board's views, for each shape: the columns hidden (boardCol.short),
+	// one line a card, and the strip's face (usage, machine, week or off;
+	// empty reads as usage).
+	HiddenPhone  []string `json:"hidden_phone"`
+	HiddenDesk   []string `json:"hidden_desk"`
+	OneLinePhone bool     `json:"one_line_phone"`
+	OneLineDesk  bool     `json:"one_line_desk"`
+	StripPhone   string   `json:"strip_phone"`
+	StripDesk    string   `json:"strip_desk"`
+
+	// Told is the notices already shown once, for both shapes.
+	Told []string `json:"told"`
 }
 
 const viewPrefsFile = "view.json"
@@ -57,10 +71,93 @@ func (m *Model) flipListOnly() {
 	} else {
 		m.viewPrefs.ListOnlyDesk = !m.viewPrefs.ListOnlyDesk
 	}
+	m.keepViewPrefs()
+}
+
+func (m *Model) keepViewPrefs() {
 	m.flash = ""
 	if err := keepState(m.opt.StateDir, viewPrefsFile, m.viewPrefs); err != nil {
 		m.flash = "not kept: " + err.Error()
 	}
+}
+
+// colHidden: the board leaves this column out, for the shape the screen has
+// now. (Not hidden: Model.hidden counts the hosts the builder hid.)
+func (m Model) colHidden(c boardCol) bool {
+	if m.upright() {
+		return slices.Contains(m.viewPrefs.HiddenPhone, c.short())
+	}
+	return slices.Contains(m.viewPrefs.HiddenDesk, c.short())
+}
+
+// flipHidden hides the column, or shows it again.
+func (m *Model) flipHidden(c boardCol) {
+	list := &m.viewPrefs.HiddenDesk
+	if m.upright() {
+		list = &m.viewPrefs.HiddenPhone
+	}
+	if i := slices.Index(*list, c.short()); i >= 0 {
+		*list = slices.Delete(slices.Clone(*list), i, i+1)
+	} else {
+		*list = append(slices.Clone(*list), c.short())
+	}
+	m.keepViewPrefs()
+}
+
+// oneLine: a card takes one line.
+func (m Model) oneLine() bool {
+	if m.upright() {
+		return m.viewPrefs.OneLinePhone
+	}
+	return m.viewPrefs.OneLineDesk
+}
+
+func (m *Model) flipOneLine() {
+	if m.upright() {
+		m.viewPrefs.OneLinePhone = !m.viewPrefs.OneLinePhone
+	} else {
+		m.viewPrefs.OneLineDesk = !m.viewPrefs.OneLineDesk
+	}
+	m.keepViewPrefs()
+}
+
+// stripFace is what the strip shows: usage, machine, week or off.
+func (m Model) stripFace() string {
+	face := m.viewPrefs.StripDesk
+	if m.upright() {
+		face = m.viewPrefs.StripPhone
+	}
+	if face == "" {
+		return "usage"
+	}
+	return face
+}
+
+// stripTurn is the order the strip turns through. Week joins it when the
+// daily record exists.
+var stripTurn = []string{"usage", "machine", "off"}
+
+// turnStrip moves the strip to its next face.
+func (m *Model) turnStrip() {
+	next := stripTurn[(slices.Index(stripTurn, m.stripFace())+1)%len(stripTurn)]
+	if m.upright() {
+		m.viewPrefs.StripPhone = next
+	} else {
+		m.viewPrefs.StripDesk = next
+	}
+	m.keepViewPrefs()
+}
+
+// told: this notice was shown before.
+func (m Model) told(key string) bool { return slices.Contains(m.viewPrefs.Told, key) }
+
+// tell marks the notice shown, once, and keeps it.
+func (m *Model) tell(key string) {
+	if m.told(key) {
+		return
+	}
+	m.viewPrefs.Told = append(slices.Clone(m.viewPrefs.Told), key)
+	m.keepViewPrefs()
 }
 
 // listOnlyHint is the key line's switch: the word, then its key.

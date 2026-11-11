@@ -280,3 +280,66 @@ func TestOneColumnOpensTheRowInPlace(t *testing.T) {
 		}
 	}
 }
+
+// TestBoardPrefsAreKeptForEachShape: a phone and a desk each keep their
+// hidden columns, density and strip; an old view.json still loads.
+func TestBoardPrefsAreKeptForEachShape(t *testing.T) {
+	dir := t.TempDir()
+	m := demoIn(t, dir, 44, 31)
+	if !m.upright() || m.colHidden(colWork) || m.oneLine() || m.stripFace() != "usage" {
+		t.Fatalf("a fresh phone is not plain: %+v", m.viewPrefs)
+	}
+	m.flipHidden(colWork)
+	m.flipOneLine()
+	m.turnStrip()
+
+	again := demoIn(t, dir, 44, 31)
+	if !again.colHidden(colWork) || again.colHidden(colNeed) || !again.oneLine() || again.stripFace() != "machine" {
+		t.Fatalf("the phone lost its board views: %+v", again.viewPrefs)
+	}
+	desk := demoIn(t, dir, 132, 32)
+	if desk.upright() || desk.colHidden(colWork) || desk.oneLine() || desk.stripFace() != "usage" {
+		t.Fatalf("the desk took the phone's board views: %+v", desk.viewPrefs)
+	}
+
+	again.flipHidden(colWork)
+	if again.colHidden(colWork) {
+		t.Fatal("a second flip did not show the column again")
+	}
+	for _, want := range []string{"off", "usage"} {
+		again.turnStrip()
+		if got := again.stripFace(); got != want {
+			t.Fatalf("the strip turned to %q, want %q", got, want)
+		}
+	}
+}
+
+// TestAnOldViewFileStillLoads: a view.json with only list_only_phone keeps it
+// and gives the board its defaults.
+func TestAnOldViewFileStillLoads(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "view.json"), []byte(`{"list_only_phone":false}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	p := loadViewPrefs(dir)
+	if p.ListOnlyPhone || p.OneLinePhone || p.StripPhone != "" || len(p.HiddenPhone) != 0 || len(p.Told) != 0 {
+		t.Fatalf("old file: %+v", p)
+	}
+}
+
+// TestTellKeepsANoticeOnce: a told key stays told for the next console.
+func TestTellKeepsANoticeOnce(t *testing.T) {
+	dir := t.TempDir()
+	m := demoIn(t, dir, 44, 31)
+	if m.told("x") {
+		t.Fatal("told before tell")
+	}
+	m.tell("x")
+	m.tell("x")
+	if len(m.viewPrefs.Told) != 1 {
+		t.Fatalf("tell added twice: %v", m.viewPrefs.Told)
+	}
+	if again := demoIn(t, dir, 132, 32); !again.told("x") || again.told("y") {
+		t.Fatalf("the next console lost what it was told: %v", again.viewPrefs.Told)
+	}
+}
