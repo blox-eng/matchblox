@@ -915,3 +915,138 @@ func TestTheBeltValueKeepsItsLimit(t *testing.T) {
 		t.Error("the armed key does not show")
 	}
 }
+
+// TestPocketExpiresWhenTheBeltLeavesBoard (controller ruling 22): while
+// on Pocket, each viewers poll sends the value again as a new value; an
+// app that answers keeps Pocket, one whose belt left Board stops
+// answering and loses it within one poll plus beltAnswerWait, with no
+// state change. With a desk viewing nothing is sent again.
+func TestPocketExpiresWhenTheBeltLeavesBoard(t *testing.T) {
+	st := boardFixture(t)
+	clock := demoAt
+	m := boardShot(t, st, 40, 34, func(m *Model) { m.opt.Now = func() time.Time { return clock } })
+	var cmd tea.Cmd
+	update := func(msgs ...tea.Msg) {
+		t.Helper()
+		for _, msg := range msgs {
+			var next tea.Model
+			next, cmd = m.Update(msg)
+			m = next.(Model)
+		}
+	}
+	phone := "/dev/pts/7:105@here"
+	poll := func(key string) tea.Msg { return graphicsMsg{gen: m.opt.Gen, watched: true, key: key} }
+	answer := uv.UnknownApcEvent(keycmd.BeltFromPrefix + "/dev/pts/7\x1b\\")
+	update(poll(phone), answer)
+	if !m.onPocket() {
+		t.Fatal("the app answered: not on Pocket")
+	}
+	value := m.belt.value
+
+	for range 3 { // an app on Board answers every poll's value
+		clock = clock.Add(graphicsEvery)
+		update(poll(phone))
+		if got := boardSaid(cmd); !slices.Equal(got, []string{value}) {
+			t.Fatalf("a poll on Pocket wrote %q, want %q again", got, value)
+		}
+		update(answer)
+		if !m.onPocket() {
+			t.Fatal("the app answers each value, yet the console left Pocket")
+		}
+	}
+
+	// The belt leaves Board: no answer, and nothing on the board changes.
+	clock = clock.Add(graphicsEvery)
+	update(poll(phone))
+	if len(boardSaid(cmd)) != 1 || !m.onPocket() {
+		t.Fatalf("the poll wrote %q; on Pocket %v while the answer may come", boardSaid(cmd), m.onPocket())
+	}
+	clock = clock.Add(beltAnswerWait)
+	if m.onPocket() {
+		t.Fatal("no answer for a poll plus the grace, yet the console stays on Pocket")
+	}
+	clock = clock.Add(graphicsEvery)
+	if update(poll(phone)); len(boardSaid(cmd)) != 0 {
+		t.Errorf("off Pocket, a poll sent the unchanged value: %q", boardSaid(cmd))
+	}
+
+	// A late answer to a value counts for the next, but not past one poll.
+	update(answer)
+	if !m.onPocket() {
+		t.Fatal("the app answered again: not on Pocket")
+	}
+	clock = clock.Add(graphicsEvery)
+	update(poll(phone)) // sent again: the app is gone from Board and says nothing
+	clock = clock.Add(beltAnswerWait / 2)
+	update(answer) // late: it answers the value before, and counts for this one
+	clock = clock.Add(graphicsEvery)
+	update(poll(phone))
+	clock = clock.Add(beltAnswerWait)
+	if m.onPocket() {
+		t.Error("a late answer held Pocket past the next poll")
+	}
+
+	desk := boardShot(t, st, 40, 34, func(m *Model) { m.opt.Now = func() time.Time { return clock } })
+	next, _ := desk.Update(poll("/dev/pts/2:90@here," + phone))
+	next, _ = next.Update(answer)
+	clock = clock.Add(graphicsEvery)
+	if _, c := next.Update(poll("/dev/pts/2:90@here," + phone)); len(boardSaid(c)) != 0 {
+		t.Errorf("with a desk viewing, a poll sent the unchanged value: %q", boardSaid(c))
+	}
+}
+
+// TestATerminalThatComesWaitsForTheViewers: on ViewerKey the console asks
+// who views it at once, and counts no answer until that reply came; then
+// every viewer must answer.
+func TestATerminalThatComesWaitsForTheViewers(t *testing.T) {
+	st := boardFixture(t)
+	viewers := "/dev/pts/7:105@here"
+	m := boardShot(t, st, 40, 34, func(m *Model) {
+		m.opt.Graphics = func() (bool, string, bool) { return false, viewers, true }
+	})
+	answer := uv.UnknownApcEvent(keycmd.BeltFromPrefix + "/dev/pts/7\x1b\\")
+	update := func(msg tea.Msg) tea.Cmd {
+		t.Helper()
+		next, cmd := m.Update(msg)
+		m = next.(Model)
+		return cmd
+	}
+	update(graphicsMsg{gen: m.opt.Gen, watched: true, key: viewers})
+	update(answer)
+	if !m.onPocket() {
+		t.Fatal("the app answered: not on Pocket")
+	}
+
+	viewers = "/dev/pts/2:90@here,/dev/pts/7:105@here" // a desk attaches
+	cmd := update(uv.UnknownApcEvent(keycmd.ViewerKey))
+	var asked []graphicsMsg
+	for _, msg := range cmdMsgs(cmd) {
+		if g, ok := msg.(graphicsMsg); ok {
+			asked = append(asked, g)
+		}
+	}
+	if len(asked) != 1 {
+		t.Fatalf("a terminal came, yet the console did not ask who views it: %v", cmdMsgs(cmd))
+	}
+	update(answer) // the app answers at once, before the viewers are known
+	if m.onPocket() {
+		t.Fatal("the app answered before the viewers were known: on Pocket with a desk there")
+	}
+	update(asked[0])
+	update(answer)
+	if m.onPocket() || m.draw(40).keysAt < 0 {
+		t.Fatal("the desk views the console, yet the key line is gone")
+	}
+
+	viewers = "/dev/pts/7:105@here" // the desk leaves; the app came again
+	cmd = update(uv.UnknownApcEvent(keycmd.ViewerKey))
+	for _, msg := range cmdMsgs(cmd) {
+		if g, ok := msg.(graphicsMsg); ok {
+			update(g)
+		}
+	}
+	update(answer)
+	if !m.onPocket() {
+		t.Error("only the app views the console and it answered: not on Pocket")
+	}
+}

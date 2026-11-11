@@ -908,6 +908,7 @@ type beltSaid struct {
 	n         int
 	at        time.Time
 	pocket    []pocketClient
+	wait      int // viewers replies to wait for before an answer counts
 }
 
 // pocketClient is a client ("tty:pid", pid "" until the viewers name it)
@@ -944,7 +945,7 @@ func (m Model) tellBelt(again bool) (Model, tea.Cmd) {
 // passed.
 func (m Model) heardFrom(tty string) beltSaid {
 	b := m.belt
-	if tty == "" || b.value == "" || !b.passes {
+	if tty == "" || b.value == "" || !b.passes || b.wait > 0 {
 		return b
 	}
 	client := tty + ":"
@@ -955,6 +956,37 @@ func (m Model) heardFrom(tty string) beltSaid {
 	}
 	b.pocket = append(slices.DeleteFunc(slices.Clone(b.pocket), func(p pocketClient) bool { return p.client == client }), pocketClient{client, b.n})
 	return b
+}
+
+// waitViewers is a terminal that came (ViewerKey): every answer is
+// cleared, and none counts until the console knows its viewers again, so
+// a desk that attached keeps the key line. It asks at once; a question
+// already out may have its reply from before the terminal came.
+func (m Model) waitViewers() (Model, tea.Cmd) {
+	m.belt.pocket = nil
+	if m.opt.Graphics == nil {
+		return m, nil
+	}
+	m.belt.wait = 1
+	if m.gfxBusy {
+		m.belt.wait = 2
+	}
+	return m.askViewers()
+}
+
+// beltPoll says, for msg, if the value goes again as a new one: the
+// viewers reply a terminal that came waited for, or a viewers poll while
+// on Pocket (ruling 22), which an app still on Board answers and one that
+// left it does not. Off Pocket an unchanged value never goes again.
+func (m *Model) beltPoll(msg tea.Msg) bool {
+	if g, ok := msg.(graphicsMsg); !ok || g.gen != m.opt.Gen {
+		return false
+	}
+	if m.belt.wait > 0 {
+		m.belt.wait--
+		return m.belt.wait == 0
+	}
+	return m.onPocket()
 }
 
 // keepPocket keeps the clients that still view the console: one gone, or

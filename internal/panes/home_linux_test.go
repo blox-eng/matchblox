@@ -511,6 +511,33 @@ func TestTheBeltsAnswerNamesTheClientThatSentIt(t *testing.T) {
 	}
 	belt := eventLine(uv.UnknownApcEvent(keycmd.BeltFromPrefix + phoneTTY + "\x1b\\"))
 	waitFor(t, func() bool { return slices.Contains(paneRead(t, got), belt) })
+	if deskBelt := eventLine(uv.UnknownApcEvent(keycmd.BeltFromPrefix + desk + "\x1b\\")); slices.Contains(paneRead(t, got), deskBelt) {
+		t.Errorf("the answer names the desk %s: %q", desk, paneRead(t, got))
+	}
+}
+
+func TestABeltAnswerElsewhereTypesNothing(t *testing.T) {
+	sock := tmuxtest.Server(t)
+	tmux := func(args ...string) string {
+		t.Helper()
+		out, err := exec.Command("tmux", append([]string{"-L", sock, "-f", os.DevNull}, args...)...).CombinedOutput() //nolint:gosec // test argv
+		if err != nil {
+			t.Fatalf("tmux %q: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	typed := t.TempDir() + "/typed"
+	tmux("new-session", "-d", "-s", "work", "cat -v > "+typed)
+	tmux(BeltKeyArgv()[1:]...)
+	client := attach(t, sock, "work")
+	waitFor(t, func() bool { return len(clientTTYs(tmux)) == 1 })
+	if _, err := client.WriteString(keycmd.BeltKey + "x\r"); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool { b, _ := os.ReadFile(typed); return strings.Contains(string(b), "x") })
+	if b, _ := os.ReadFile(typed); strings.Contains(string(b), "matchblox") || strings.Contains(string(b), "belt") {
+		t.Errorf("the belt's answer was typed: %q", b)
+	}
 }
 
 func TestAMarkElsewhereTypesNothing(t *testing.T) {

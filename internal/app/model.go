@@ -691,10 +691,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if string(apc) == keycmd.ViewerKey {
-			m.away = false      // a terminal came to show the console
-			m.belt.pocket = nil // it may be a desk: the app answers again
-			m, belt := m.tellBelt(true)
-			return m, tea.Batch(sayAgent(keycmd.MarksSignal(), m.opt), belt, m.watchCmd())
+			m.away = false // a terminal came to show the console
+			// It may be a desk: the app answers again once the viewers are known.
+			var ask, belt tea.Cmd
+			m, ask = m.waitViewers()
+			m, belt = m.tellBelt(true)
+			return m, tea.Batch(sayAgent(keycmd.MarksSignal(), m.opt), belt, ask, m.watchCmd())
 		}
 		if string(apc) == homeKey {
 			m.away = false
@@ -714,7 +716,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	next, cmd := m.update(msg)
 	if nm, ok := next.(Model); ok {
 		nm = nm.scanShows().keepView().inDemo().peekOn()
-		nm, belt := nm.tellBelt(false)
+		again := nm.beltPoll(msg)
+		nm, belt := nm.tellBelt(again)
 		cmd = tea.Batch(cmd, belt)
 		if nm.stripTurned && nm.stripWarn() == "" {
 			nm.stripTurned = false // the warning ended: the next one turns the strip
