@@ -6,6 +6,11 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Security
+
+- **Built with Go 1.26.11.** It fixes an HTTP/1 server crash in Go's own
+  `net/http` (GO-2026-6859), which the relay and the update check reach.
+
 ## [0.40.1] - 2026-11-10
 
 ### Fixed
