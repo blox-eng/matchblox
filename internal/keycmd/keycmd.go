@@ -52,6 +52,10 @@ func PaneSignal(agent, pane string) string { return AgentSignal(agent + ";pane="
 // MarksSignal is the console's announce that it reads the marker.
 func MarksSignal() string { return AgentSignal(";marks") }
 
+// BoardSignal tells the app the board's keys for its belt: keys is the
+// console's value (beltValue in internal/app), "" when the board is gone.
+func BoardSignal(keys string) string { return "\x1b_matchblox;board=" + keys + "\x1b\\" }
+
 const (
 	// MarkKey is what the app sends before a Return or a press, so tmux
 	// hands the console the tty of the client that sent it.

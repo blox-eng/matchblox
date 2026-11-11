@@ -9,8 +9,11 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/blox-eng/matchblox/internal/keycmd"
+	"github.com/blox-eng/matchblox/internal/logos"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -547,5 +550,283 @@ func TestTheLiveViewIsSizedAsDrawn(t *testing.T) {
 	}
 	if m = boardShot(t, st, 151, 38, nil); func() bool { c, r := m.viewSize(); return c != 0 || r != 0 }() {
 		t.Error("a size for a live view at 151 columns")
+	}
+}
+
+// pocketOnly makes the app the only viewer, one that answered the board's
+// keys with a mark.
+func pocketOnly(m *Model) {
+	m.viewers, m.belt.pocket = "/dev/pts/7:105@here", []string{"/dev/pts/7:105"}
+}
+
+// boardSaid are the board= values in what cmd writes to the terminal.
+func boardSaid(cmd tea.Cmd) []string {
+	var got []string
+	for _, r := range raws(cmd) {
+		if _, v, ok := strings.Cut(r, "matchblox;board="); ok {
+			got = append(got, v[:strings.Index(v, "\x1b")])
+		}
+	}
+	return got
+}
+
+// TestPocketHasNoKeyLine (spec "The belt on Pocket"): on Pocket the strip
+// is the last line and the cards take the key line's two rows; a frame
+// that is not Pocket's, the menu and the consent box keep the key line.
+func TestPocketHasNoKeyLine(t *testing.T) {
+	st := boardFixture(t)
+	desk := boardShot(t, st, 40, 34, chooseCard("kindle-web"))
+	pocket := boardShot(t, st, 40, 34, func(m *Model) { chooseCard("kindle-web")(m); pocketOnly(m) })
+	if desk.onPocket() || !pocket.onPocket() {
+		t.Fatalf("onPocket: desk %v, pocket %v", desk.onPocket(), pocket.onPocket())
+	}
+	ds, ps := desk.draw(40), pocket.draw(40)
+	if ds.keysAt != len(ds.lines)-1 || !strings.Contains(ansi.Strip(ds.lines[ds.keysAt]), "copy") {
+		t.Errorf("the desk's last line is %q, want the key line", ansi.Strip(ds.lines[len(ds.lines)-1]))
+	}
+	if ps.keysAt != -1 || ps.stripAt != len(ps.lines)-1 {
+		t.Errorf("Pocket: key line at %d, strip at %d of %d lines; want no key line and the strip last", ps.keysAt, ps.stripAt, len(ps.lines))
+	}
+	if strings.Contains(ansi.Strip(ps.lines[len(ps.lines)-2]), "─────") {
+		t.Errorf("Pocket keeps the key line's hairline: %q", ansi.Strip(ps.lines[len(ps.lines)-2]))
+	}
+	if pocket.bodyRows() != desk.bodyRows()+2 {
+		t.Errorf("Pocket's body has %d rows, the desk's %d: want two more", pocket.bodyRows(), desk.bodyRows())
+	}
+	if n := len(frameLines(pocket)); n != 34 {
+		t.Errorf("Pocket's frame has %d lines, want 34", n)
+	}
+	for name, m := range map[string]Model{"the menu": pressOn(pocket, "m"), "the consent box": pressOn(pocket, "p")} {
+		if sc := m.draw(40); sc.keysAt != len(sc.lines)-1 || m.bodyRows() != desk.bodyRows() {
+			t.Errorf("%s on Pocket: key line at %d of %d lines, body %d rows; want the key line kept", name, sc.keysAt, len(sc.lines), m.bodyRows())
+		}
+	}
+	both := pocket
+	both.viewers = "/dev/pts/2:90@here,/dev/pts/7:105@here"
+	if both.onPocket() || both.draw(40).keysAt < 0 {
+		t.Error("with a desk also viewing, the key line goes")
+	}
+	off := pocket
+	off.board = false
+	if off.draw(40).keysAt < 0 {
+		t.Error("with the board off, Pocket loses the key line")
+	}
+}
+
+// TestPocketIsTheAppThatAnswered: onPocket holds while every viewer of the
+// session marked a key after the board's keys reached it, since it
+// attached; a desk that joins, or a new client on the same tty, ends it.
+func TestPocketIsTheAppThatAnswered(t *testing.T) {
+	st := boardFixture(t)
+	m := boardShot(t, st, 40, 34, nil)
+	update := func(msg tea.Msg) {
+		t.Helper()
+		next, _ := m.Update(msg)
+		m = next.(Model)
+	}
+	mark := func(tty string) tea.Msg { return uv.UnknownApcEvent(keycmd.MarkedPrefix + tty + "\x1b\\") }
+	viewers := func(key string) tea.Msg { return graphicsMsg{gen: m.opt.Gen, watched: true, key: key} }
+
+	update(viewers("/dev/pts/7:105@here"))
+	if m.onPocket() {
+		t.Fatal("Pocket before the app marked a key")
+	}
+	update(mark("/dev/pts/7"))
+	if !m.onPocket() {
+		t.Fatal("the app marked a key after the board's keys: not on Pocket")
+	}
+	update(viewers("/dev/pts/2:90@here,/dev/pts/7:105@here"))
+	if m.onPocket() {
+		t.Error("a desk joined, yet the console is on Pocket")
+	}
+	update(viewers("/dev/pts/7:105@away"))
+	if !m.onPocket() {
+		t.Error("the desk left and the app stays: not on Pocket")
+	}
+	update(viewers("/dev/pts/7:200@here"))
+	if m.onPocket() {
+		t.Error("a new client on the app's tty is on Pocket before it marked a key")
+	}
+
+	off := boardShot(t, st, 40, 34, func(m *Model) { m.board = false })
+	next, _ := off.Update(viewers("/dev/pts/7:105@here"))
+	next, _ = next.Update(mark("/dev/pts/7"))
+	if next.(Model).onPocket() {
+		t.Error("a mark while the board is off answered no board signal")
+	}
+
+	old := boardShot(t, st, 40, 34, func(m *Model) { m.opt.LocalTmux = "3.2" })
+	next, _ = old.Update(viewers("/dev/pts/7:105@here"))
+	next, _ = next.Update(mark("/dev/pts/7"))
+	if next.(Model).onPocket() {
+		t.Error("below tmux 3.3 the signal does not pass, yet the console is on Pocket")
+	}
+}
+
+func beltFaces(ks []beltKey) []string {
+	var out []string
+	for _, k := range ks {
+		out = append(out, k.Face)
+	}
+	return out
+}
+
+func beltKeyOf(t *testing.T, ks []beltKey, face string) beltKey {
+	t.Helper()
+	for _, k := range ks {
+		if k.Face == face {
+			return k
+		}
+	}
+	t.Fatalf("no %s on the belt: %v", face, beltFaces(ks))
+	return beltKey{}
+}
+
+// TestBeltKeysFollowTheChosenCard (design decision 10): home is ◂, the
+// chosen card's keys, ↑ ↓ ⏎; the tail has every other key of the board.
+func TestBeltKeysFollowTheChosenCard(t *testing.T) {
+	tail := []string{"c", "m", "g", "v", "s", "u", "⇥", "x", "←", "→", "]", "[", "/", "z"}
+	st := boardFixture(t)
+
+	m, _ := flintBoard(t, 80, 34)
+	ks := m.beltKeys()
+	if want := append([]string{"◂", "1", "2", "↑", "↓", "⏎"}, tail...); !slices.Equal(beltFaces(ks), want) {
+		t.Fatalf("flint-auth's belt is %v, want %v", beltFaces(ks), want)
+	}
+	for i, n := range []string{"1", "2"} {
+		if k := ks[1+i]; k != (beltKey{Key: n, Face: n, Word: "answer", On: true, Act: true}) {
+			t.Errorf("key %d is %+v, want %s answer in the accent", 1+i, k, n)
+		}
+	}
+	if g := beltKeyOf(t, ks, "g"); !g.On || g.Word != "chain" {
+		t.Errorf("flint-auth is in chain login, yet g is %+v", g)
+	}
+	for _, k := range ks[3:] {
+		if k.Act {
+			t.Errorf("%s is in the accent: only the card's keys are", k.Face)
+		}
+	}
+
+	kindle := boardShot(t, st, 80, 34, chooseCard("kindle-web"))
+	ks = kindle.beltKeys()
+	if want := append([]string{"◂", "p", "↑", "↓", "⏎"}, tail...); !slices.Equal(beltFaces(ks), want) {
+		t.Fatalf("kindle-web's belt is %v, want %v", beltFaces(ks), want)
+	}
+	if p := ks[1]; p != (beltKey{Key: "p", Face: "p", Word: "merge", On: true, Act: true}) {
+		t.Errorf("kindle-web's ship waits, yet its key is %+v", p)
+	}
+	if g := beltKeyOf(t, ks, "g"); g.On {
+		t.Errorf("kindle-web is in no chain, yet g is %+v", g)
+	}
+	words := map[string]string{"c": "copy", "m": "menu", "g": "chain", "v": "one line", "s": "hosts", "u": "strip", "⇥": "machine", "x": "kill", "z": "park"}
+	for face, word := range words {
+		if k := beltKeyOf(t, ks, face); k.Word != word {
+			t.Errorf("%s says %q, want %q", face, k.Word, word)
+		}
+	}
+
+	box := pressOn(kindle, "p")
+	want := []beltKey{{Face: "◂", On: true}, {Key: "y", Face: "y", Word: "runs", On: true, Act: true}, {Key: "esc", Face: "esc", Word: "cancels", On: true}}
+	if got := box.beltKeys(); !slices.Equal(got, want) {
+		t.Errorf("with the consent box up the belt is %+v, want %+v", got, want)
+	}
+}
+
+// TestTheBeltSignalSaysTheBoardsKeys: the console tells the app the
+// chosen card's keys, an armed one with *, and the dim keys after ;; box
+// and menu while they show; "" when it leaves the board. It says a value
+// once, and again to new viewers.
+func TestTheBeltSignalSaysTheBoardsKeys(t *testing.T) {
+	st := boardFixture(t)
+	value := func(m Model) string { t.Helper(); return m.beltValue() }
+
+	empty := st
+	empty.Sessions, empty.Queue, empty.Ships, empty.Chains = nil, nil, &proto.Ships{At: demoAt}, nil
+	if got := value(boardShot(t, empty, 80, 34, nil)); got != ";c,m,g,s,x,],[,z" {
+		t.Errorf("no card chosen: %q", got)
+	}
+
+	m, clock := flintBoard(t, 80, 34)
+	if got := value(m); got != "1,2;" {
+		t.Errorf("flint-auth: %q, want %q", got, "1,2;")
+	}
+	m = pressOn(m, "2")
+	*clock = clock.Add(time.Millisecond)
+	if got := value(m); got != "1,2*;" {
+		t.Errorf("flint-auth with 2 armed: %q, want %q", got, "1,2*;")
+	}
+
+	kindle := boardShot(t, st, 80, 34, chooseCard("kindle-web"))
+	if got := value(kindle); got != "p;g" {
+		t.Errorf("kindle-web, its ship waits and it is in no chain: %q", got)
+	}
+	if got := value(pressOn(kindle, "m")); got != "menu" {
+		t.Errorf("the menu open: %q", got)
+	}
+	if got := value(pressOn(kindle, "p")); got != "box" {
+		t.Errorf("the consent box up: %q", got)
+	}
+	off := kindle
+	off.board = false
+	if got := value(off); got != "" {
+		t.Errorf("the board off: %q", got)
+	}
+
+	// Sent once for each change, through the agent signal's way.
+	next, cmd := kindle.Update(noticeMsg{})
+	if got := raws(cmd); !slices.Contains(got, logos.Passthrough(keycmd.BoardSignal("p;g"))) {
+		t.Fatalf("the first frame wrote %q, want board=p;g through tmux", got)
+	}
+	next, cmd = next.Update(noticeMsg{})
+	if got := boardSaid(cmd); len(got) != 0 {
+		t.Errorf("an unchanged value went again: %q", got)
+	}
+	next, cmd = next.Update(graphicsMsg{gen: kindle.opt.Gen, watched: true, key: "/dev/pts/7:105@here"})
+	if got := boardSaid(cmd); !slices.Equal(got, []string{"p;g"}) {
+		t.Errorf("new viewers got %q, want p;g", got)
+	}
+	next, cmd = next.Update(uv.UnknownApcEvent(keycmd.ViewerKey))
+	if got := boardSaid(cmd); !slices.Equal(got, []string{"p;g"}) {
+		t.Errorf("a terminal that came got %q, want p;g", got)
+	}
+	nm := next.(Model)
+	nm.board = false
+	next, cmd = nm.Update(noticeMsg{})
+	if got := boardSaid(cmd); !slices.Equal(got, []string{""}) {
+		t.Errorf("leaving the board wrote %q, want one empty value", got)
+	}
+	for range 2 {
+		if next, cmd = next.Update(noticeMsg{}); len(boardSaid(cmd)) != 0 {
+			t.Errorf("the board is off, yet the console wrote %q", boardSaid(cmd))
+		}
+	}
+	never := boardShot(t, st, 80, 34, func(m *Model) { m.board = false })
+	if _, cmd := never.Update(graphicsMsg{gen: never.opt.Gen, watched: true, key: "/dev/pts/7:105@here"}); len(boardSaid(cmd)) != 0 {
+		t.Errorf("a console with no board wrote %q", boardSaid(cmd))
+	}
+}
+
+// TestTheBeltValueKeepsItsLimit: a value never passes beltMax bytes; the
+// dim keys leave whole, from the right, and the card's keys stay.
+func TestTheBeltValueKeepsItsLimit(t *testing.T) {
+	ks := []beltKey{{Face: "◂", On: true}, {Key: "1", Act: true, On: true}, {Key: "2", Act: true, On: true}, {Key: "3", Act: true, On: true}}
+	for i := range 20 {
+		ks = append(ks, beltKey{Key: fmt.Sprintf("long%02d", i)})
+	}
+	got := beltWord(ks, "3")
+	if len(got) > beltMax {
+		t.Fatalf("%q has %d bytes, more than %d", got, len(got), beltMax)
+	}
+	card, dims, ok := strings.Cut(got, ";")
+	if !ok || card != "1,2,3*" {
+		t.Fatalf("%q: want the card's keys 1,2,3* before ;", got)
+	}
+	for i, d := range strings.Split(dims, ",") {
+		if d != fmt.Sprintf("long%02d", i) {
+			t.Fatalf("dim key %d is %q in %q: want whole keys, in order", i, d, got)
+		}
+	}
+	if beltWord(ks, "") == beltWord(ks, "3") {
+		t.Error("the armed key does not show")
 	}
 }

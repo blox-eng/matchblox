@@ -1,15 +1,18 @@
 package app
 
 import (
+	"cmp"
 	"maps"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/blox-eng/matchblox/internal/keycmd"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
@@ -729,4 +732,243 @@ func (m Model) boardTabTap(press string) (Model, bool) {
 		}
 	}
 	return m, false
+}
+
+// beltKey is a key of the board on Pocket's belt (design decision 10): the
+// key the console reads, its face and word on the belt, On when it applies
+// (a key that is off is dim and sends nothing), and Act for the chosen
+// card's own keys, in the accent.
+type beltKey struct {
+	Key, Face, Word string
+	On, Act         bool
+}
+
+// beltOf is binding b on the belt: its first key, face (its help key when
+// ""), and word.
+func beltOf(b bkey.Binding, face, word string, on bool) beltKey {
+	return beltKey{Key: b.Keys()[0], Face: cmp.Or(face, b.Help().Key), Word: word, On: on}
+}
+
+// beltKeys are the board's keys on the belt, in its order: home is ◂, the
+// chosen card's keys (at most three), ↑ ↓ ⏎; the tail has every other key
+// of the board. The consent box leaves ◂, y and esc; the menu ◂ ↑ ↓ ⏎ esc.
+func (m Model) beltKeys() []beltKey {
+	bk, mk := m.keys.board, m.keys.main
+	home := beltKey{Face: "◂", On: true}
+	up, down := beltOf(mk.Up, "↑", "", true), beltOf(mk.Down, "↓", "", true)
+	switch {
+	case m.consenting():
+		yes := beltOf(m.keys.confirm.Yes, "", "runs", true)
+		yes.Act = true
+		return []beltKey{home, yes, beltOf(mk.Back, "", "cancels", true)}
+	case m.menu != nil:
+		return []beltKey{home, up, down, beltOf(mk.Open, "", "do", true), beltOf(mk.Back, "", "close", true)}
+	}
+	board := m.boardShown()
+	s, card := m.boardSelected()
+	_, above := m.aboveChosen()
+	card = board && card && !above
+	ks := []beltKey{home}
+	if card {
+		ks = append(ks, m.cardBelt(s)...)
+	}
+	_, head := m.headRow(s)
+	chains := board && len(m.boardChains()) > 0
+	return append(ks, up, down, beltOf(mk.Open, "", "", true),
+		beltOf(bk.Copy, "", "copy", card),
+		beltOf(bk.Menu, "", "menu", card),
+		beltOf(bk.Chain, "", "chain", card && m.chainLabelOf(s) != ""),
+		beltOf(bk.Density, "", "one line", board),
+		beltOf(bk.Host, "", "hosts", board && m.hostCount() > 1),
+		beltOf(bk.Strip, "", "strip", board),
+		beltOf(mk.NextTab, "⇥", "machine", true),
+		beltOf(mk.Second, "", "kill", card && !head && m.killAction(s) != nil),
+		beltOf(bk.Left, "←", "", board),
+		beltOf(bk.Right, "→", "", board),
+		beltOf(bk.NextChain, "", "", chains),
+		beltOf(bk.PrevChain, "", "", chains),
+		beltOf(mk.Search, "", "", board),
+		beltOf(mk.Park, "", "park", card),
+	)
+}
+
+// cardBelt are the chosen card's keys on the belt: the digits of the
+// options it asks (at most three), or p for the ship that waits for its
+// merge and y for the go that waits.
+func (m Model) cardBelt(s sample.Session) []beltKey {
+	var ks []beltKey
+	if q, answers := m.oneChoice(s); answers {
+		if _, sent := m.peekMarks(s); sent == 0 {
+			for i := range min(len(q.Options), 3) {
+				n := strconv.Itoa(i + 1)
+				ks = append(ks, beltKey{Key: n, Face: n, Word: "answer", On: true, Act: true})
+			}
+			return ks
+		}
+	}
+	if _, ok := m.mergeable(s); ok {
+		ks = append(ks, beltOf(m.keys.board.Merge, "", "merge", true))
+	}
+	if m.goWaits(s) {
+		ks = append(ks, beltOf(m.keys.main.Grant, "", "go", true))
+	}
+	for i := range ks {
+		ks[i].Act = true
+	}
+	return ks
+}
+
+// beltMax is the most bytes a board= value has: the app gives up on a
+// longer one.
+const beltMax = 48
+
+// beltValue is what the console tells the app's belt (beltWord): "" off
+// the board, "box" under the consent box, "menu" under the menu.
+func (m Model) beltValue() string {
+	switch {
+	case !m.board || m.standIn || m.viewFull() || m.tab != tabSessions && m.tab != tabMachine:
+		return ""
+	case m.consenting():
+		return "box"
+	case m.menu != nil:
+		return "menu"
+	}
+	armed := ""
+	if s, ok := m.boardSelected(); ok && m.boardShown() {
+		if a, _ := m.peekMarks(s); a > 0 {
+			armed = strconv.Itoa(a)
+		}
+	}
+	return beltWord(m.beltKeys(), armed)
+}
+
+// beltWord is the board= value of the keys ks, armed the card key that a
+// first press marked ("" for none). The grammar, in printable ASCII:
+//
+//	value = card ";" dim
+//	card  = "" | key *( "," key )   the card's keys (Act), in order; "*" after the armed one
+//	dim   = "" | tok *( "," tok )   the keys that are off, in the belt's order
+//	key   = tok [ "*" ]
+//
+// A tok is a beltKey's Key: 1-9 p y up down enter c m g v s u tab x left
+// right ] [ / z esc. ◂ has none and is never sent. At most beltMax bytes:
+// dim toks leave whole from the right, then card keys from the right.
+// The other values ("" off the board, "box", "menu") come from beltValue.
+func beltWord(ks []beltKey, armed string) string {
+	var card, dim []string
+	for _, k := range ks {
+		switch {
+		case k.Key == "":
+		case k.Act && k.On && k.Key == armed:
+			card = append(card, k.Key+"*")
+		case k.Act && k.On:
+			card = append(card, k.Key)
+		case !k.On:
+			dim = append(dim, k.Key)
+		}
+	}
+	word := func() string { return strings.Join(card, ",") + ";" + strings.Join(dim, ",") }
+	for len(word()) > beltMax && len(dim) > 0 {
+		dim = dim[:len(dim)-1]
+	}
+	for len(word()) > beltMax && len(card) > 0 {
+		card = card[:len(card)-1]
+	}
+	return word()
+}
+
+// beltSaid is the board= value the console last sent and the viewers it
+// went to; passes: tmux passed it (3.3 and on, or no tmux). pocket are the
+// clients ("tty:pid", pid "" until the viewers name it) that marked a key
+// while a board= value was out to them: the app.
+type beltSaid struct {
+	value, to string
+	passes    bool
+	pocket    []string
+}
+
+// tellBelt sends the board's keys to the app when the value changes, and
+// again to new viewers; again: a terminal came to show the console. Off
+// the board it sends "" once.
+func (m Model) tellBelt(again bool) (Model, tea.Cmd) {
+	m.belt.pocket = keepPocket(m.belt.pocket, m.viewers)
+	v := m.beltValue()
+	if v == m.belt.value && (v == "" || m.belt.to == m.viewers && !again) {
+		return m, nil
+	}
+	say := sayAgent(keycmd.BoardSignal(v), m.opt)
+	m.belt.value, m.belt.to, m.belt.passes = v, m.viewers, say != nil
+	return m, say
+}
+
+// heardFrom is the belt once the client on tty marked a key: it answered
+// the board's keys when a board= value was out and passed.
+func (m Model) heardFrom(tty string) beltSaid {
+	b := m.belt
+	if b.value == "" || !b.passes {
+		return b
+	}
+	client := tty + ":"
+	for _, v := range viewerClients(m.viewers) {
+		if strings.HasPrefix(v, client) {
+			client = v
+		}
+	}
+	if !slices.Contains(b.pocket, client) {
+		b.pocket = append(slices.Clone(b.pocket), client)
+	}
+	return b
+}
+
+// keepPocket keeps the clients that still view the console: one gone, or
+// a new client on its tty, has not answered since it attached.
+func keepPocket(pocket []string, viewers string) []string {
+	if len(pocket) == 0 {
+		return pocket
+	}
+	vs := viewerClients(viewers)
+	var kept []string
+	for _, p := range pocket {
+		tty, pid, _ := strings.Cut(p, ":")
+		for _, v := range vs {
+			if vtty, vpid, _ := strings.Cut(v, ":"); vtty == tty && (pid == "" || pid == vpid) {
+				kept = append(kept, v)
+			}
+		}
+	}
+	return kept
+}
+
+// viewerClients are the clients of a viewers key (logos.Viewers): "tty:pid"
+// each, where they look left out.
+func viewerClients(viewers string) []string {
+	var out []string
+	for v := range strings.SplitSeq(viewers, ",") {
+		if c, _, _ := strings.Cut(v, "@"); c != "" {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// onPocket: every client on the console's session is the app, which
+// answered the board's keys with a mark since it attached. One frame goes
+// to every viewer, so a desk among them keeps the key line.
+func (m Model) onPocket() bool {
+	vs := viewerClients(m.viewers)
+	if len(vs) == 0 {
+		return false
+	}
+	for _, v := range vs {
+		if !slices.Contains(m.belt.pocket, v) {
+			return false
+		}
+	}
+	return true
+}
+
+// beltOnly: the belt has the board's keys, and the frame has no key line.
+// The menu, the consent box, a search and a lost host keep it.
+func (m Model) beltOnly() bool {
+	return m.boardShown() && m.onPocket() && !m.consenting() && m.menu == nil && !m.searching && !m.viewFull() && m.lostLine() == ""
 }

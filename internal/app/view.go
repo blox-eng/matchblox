@@ -305,9 +305,11 @@ func (m Model) drawScreen(w int) drawn {
 		sc.dockAt, sc.dockH, sc.stx0, sc.stx1 = len(sc.lines)+1, len(d.lines), d.stx0, d.stx1
 		sc.lines = append(append(sc.lines, m.st.hair.Render(strings.Repeat("─", w))), d.lines...)
 	}
-	hair, keys, keySpans := m.keyRows(w)
-	sc.keysAt, sc.keys = len(sc.lines)+1, keySpans
-	sc.lines = append(sc.lines, hair, keys)
+	if !m.beltOnly() { // Pocket's belt has the keys
+		hair, keys, keySpans := m.keyRows(w)
+		sc.keysAt, sc.keys = len(sc.lines)+1, keySpans
+		sc.lines = append(sc.lines, hair, keys)
+	}
 	switch {
 	case m.consenting():
 		m.overlayConsent(&sc, w)
@@ -373,8 +375,13 @@ func (m Model) panes(w int) (list, detail int) {
 }
 
 // bodyRows is how many rows the body has under the header and over the key
-// line.
-func (m Model) bodyRows() int { return max(m.height-5, 1) }
+// line; on Pocket's belt, to the bottom.
+func (m Model) bodyRows() int {
+	if m.beltOnly() {
+		return max(m.height-3, 1)
+	}
+	return max(m.height-5, 1)
+}
 
 // sessionsSplit is the list's width where Sessions splits: 40% of the
 // screen, at least 38 columns and at most 78; the chat takes the rest.

@@ -466,6 +466,8 @@ type Model struct {
 	// marked is the client the tmux binding named for the next input
 	// event; askedBy is the client of the event being handled, "" unmarked.
 	marked clientMark
+	// belt is what Pocket's belt was told (board=), and who answered.
+	belt beltSaid
 	// away: a jump left no screen on the console, so it watches no pane
 	// until a screen shows it again or the person acts there.
 	away    bool
@@ -674,13 +676,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if apc, ok := msg.(uv.UnknownApcEvent); ok {
 		if tty, ok := strings.CutPrefix(string(apc), keycmd.MarkedPrefix); ok {
 			if tty, ok = strings.CutSuffix(tty, "\x1b\\"); ok && remote.ClientTTY(tty) {
-				m.marked = clientMark{tty, m.now()}
+				m.marked, m.belt = clientMark{tty, m.now()}, m.heardFrom(tty)
 			}
 			return m, nil
 		}
 		if string(apc) == keycmd.ViewerKey {
 			m.away = false // a terminal came to show the console
-			return m, tea.Batch(sayAgent(keycmd.MarksSignal(), m.opt), m.watchCmd())
+			m, belt := m.tellBelt(true)
+			return m, tea.Batch(sayAgent(keycmd.MarksSignal(), m.opt), belt, m.watchCmd())
 		}
 		if string(apc) == homeKey {
 			m.away = false
@@ -700,6 +703,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	next, cmd := m.update(msg)
 	if nm, ok := next.(Model); ok {
 		nm = nm.scanShows().keepView().inDemo().peekOn()
+		nm, belt := nm.tellBelt(false)
+		cmd = tea.Batch(cmd, belt)
 		if nm.stripTurned && nm.stripWarn() == "" {
 			nm.stripTurned = false // the warning ended: the next one turns the strip
 		}
