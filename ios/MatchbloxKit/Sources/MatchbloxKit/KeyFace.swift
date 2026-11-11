@@ -31,7 +31,7 @@ public struct KeyFace: Equatable, Sendable {
             size = board.count > 1 ? .word : .glyph
             mark = nil
             isCommand = false
-            spoken = board
+            spoken = BoardBelt.spoken(of: key.id) ?? board
             return
         }
         if let command = catalog.command(key.id) {

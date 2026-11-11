@@ -28,8 +28,8 @@ final class BoardBeltTests: XCTestCase {
     // MARK: The keys
 
     func testHomeIsBackTheCardsKeysAndTheArrows() throws {
-        XCTAssertEqual(try labels("1,2;"), ["◂", "1 answer", "2 answer"] + arrows + tail)
-        XCTAssertEqual(try labels("p,y;"), ["◂", "p merge", "y go"] + arrows + tail)
+        XCTAssertEqual(try labels("1,2;"), ["◂", "1", "2"] + arrows + tail)
+        XCTAssertEqual(try labels("p,y;"), ["◂", "p", "y"] + arrows + tail)
         XCTAssertEqual(try labels(";c,m,g,s,x,],[,z"), ["◂"] + arrows + tail)
     }
 
@@ -88,7 +88,7 @@ final class BoardBeltTests: XCTestCase {
     }
 
     func testAnUnknownTokenIsNotShown() throws {
-        XCTAssertEqual(try labels("1,q,c;w,zz"), ["◂", "1 answer"] + arrows + tail)
+        XCTAssertEqual(try labels("1,q,c;w,zz"), ["◂", "1"] + arrows + tail)
         XCTAssertTrue(board("1;w").dim.contains("w"))
         XCTAssertFalse(board("1;w").keys.contains { $0.id.hasSuffix("w") })
     }
@@ -103,9 +103,82 @@ final class BoardBeltTests: XCTestCase {
         let c = try catalog()
         XCTAssertEqual(c.keys(.board, agent: nil, mine: []), BoardBelt.plain.keys)
         XCTAssertEqual(c.keys(.board, agent: "claude", mine: [], board: board("1,2;")), board("1,2;").keys)
-        XCTAssertEqual(board("1,2;").keys.map(\.cells).prefix(6), [1, 2, 2, 2, 2, 2])
         XCTAssertEqual(KeyFace(BeltKey(id: "board.c", cells: 2), in: c).size, .word)
         XCTAssertEqual(KeyFace(BeltKey(id: "board.]", cells: 1), in: c).size, .glyph)
+        XCTAssertEqual(KeyFace(BeltKey(id: "board.1", cells: 1), in: c).size, .glyph)
+    }
+
+    /// Design decision 10: the belt is seven cells wide at rest, and home is ◂, the card's keys,
+    /// then ↑ ↓ ⏎. A card key is one cell, its glyph only, and so are the arrows and Return.
+    func testHomeFitsTheBeltAtRest() {
+        let three = board("1,2,3;").keys
+        XCTAssertEqual(three.prefix(7).map(\.id), ["◂", "board.1", "board.2", "board.3", "↑", "↓", "⏎"])
+        XCTAssertEqual(three.prefix(7).map(\.cells), [1, 1, 1, 1, 1, 1, 1])
+        XCTAssertEqual(board("p;").keys.prefix(6).map(\.id), ["◂", "board.p", "↑", "↓", "⏎", "board.c"])
+        XCTAssertEqual(board("menu").keys.map(\.cells), [1, 1, 1, 2, 2])
+        XCTAssertEqual(board("box").keys.map(\.cells), [1, 2, 2])
+    }
+
+    func testVoiceOverSaysTheWords() throws {
+        let c = try catalog()
+        let spoken = ["board.1", "board.p", "board.y", "board.tab", "board.]", "board.[", "board./", "board.c", "board.runs", "←"]
+            .map { KeyFace(BeltKey(id: $0, cells: 1), in: c).spoken }
+        XCTAssertEqual(spoken, ["1, answer", "p, merge", "y, go", "machine", "next chain", "previous chain", "find", "copy", "y, run", "Left"])
+    }
+
+    // MARK: Away from the board
+
+    func testAwayEveryKeyButBackIsDim() {
+        let away = BoardBelt.away
+        XCTAssertEqual(away.keys.map(\.id), BoardBelt.plain.keys.map(\.id))
+        XCTAssertEqual(away.keys.map(\.id).filter { !away.isDim($0) }, ["◂"])
+        XCTAssertFalse(away.keys.contains { away.isLit($0.id) })
+    }
+
+    func testTheBeltIsAwayWithNoValueOrInAPane() {
+        var follow = BoardFollow()
+        XCTAssertEqual(follow.belt, .away)
+        _ = follow.heard("1,2;", on: .board)
+        XCTAssertEqual(follow.belt, board("1,2;"))
+        _ = follow.pane(true, on: .board)
+        XCTAssertEqual(follow.belt, .away)
+        _ = follow.pane(false, on: .board)
+        XCTAssertEqual(follow.belt, board("1,2;"))
+        _ = follow.heard("", on: .board)
+        XCTAssertEqual(follow.belt, .away)
+        _ = follow.heard("what", on: .board)
+        XCTAssertEqual(follow.belt, .plain)
+    }
+
+    // MARK: The terminal's touches
+
+    func testTheTouchesActOnlyWhileTheBoardShows() {
+        var follow = BoardFollow()
+        XCTAssertFalse(follow.turnsPages)
+        XCTAssertFalse(follow.opensMenu)
+        _ = follow.heard("1,2;", on: .steer)
+        XCTAssertTrue(follow.turnsPages)
+        XCTAssertTrue(follow.opensMenu)
+        _ = follow.pane(true, on: .board)
+        XCTAssertFalse(follow.turnsPages)
+        XCTAssertFalse(follow.opensMenu)
+        _ = follow.pane(false, on: .steer)
+        _ = follow.heard("", on: .board)
+        XCTAssertFalse(follow.turnsPages)
+        XCTAssertFalse(follow.opensMenu)
+    }
+
+    func testNoPageOnMachineUnderTheBoxOrInTheMenu() {
+        var follow = BoardFollow()
+        _ = follow.heard(";c,m,g,v,s,u,x,left,right,],[,/,z", on: .board)
+        XCTAssertFalse(follow.turnsPages)
+        XCTAssertTrue(follow.opensMenu)
+        _ = follow.heard("box", on: .board)
+        XCTAssertFalse(follow.turnsPages)
+        _ = follow.heard("menu", on: .board)
+        XCTAssertFalse(follow.turnsPages)
+        _ = follow.heard(";g", on: .board)
+        XCTAssertTrue(follow.turnsPages)
     }
 
     // MARK: What each key sends

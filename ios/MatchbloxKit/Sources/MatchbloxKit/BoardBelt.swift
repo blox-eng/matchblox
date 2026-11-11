@@ -20,8 +20,11 @@ public struct BoardBelt: Equatable, Sendable {
     /// The app's answer to each value it takes while its belt shows Board (`keycmd.BeltKey`).
     public static let answer = Array("\u{1b}_matchblox;belt\u{1b}\\".utf8)
 
-    /// Board with no value from the console: home with no card keys, and every key on.
+    /// Board for a value the app cannot read: home with no card keys, and every key on.
     public static let plain = BoardBelt(shape: .board, card: [], armed: nil, dim: [])
+    /// Board while the console does not show the board, or the screen is a pane: every key but
+    /// `◂` is dim, as none of them means there what it means on the board.
+    public static let away = BoardBelt(shape: .board, card: [], armed: nil, dim: Set(["up", "down", "enter"] + BoardBelt.tail))
 
     private static let cardTokens: Set<String> = ["1", "2", "3", "p", "y"]
     private static let maxCard = 3
@@ -64,13 +67,24 @@ public struct BoardBelt: Equatable, Sendable {
 
     /// The layout's keys, in order.
     public var keys: [BeltKey] {
-        let home = Self.key("◂")
-        let arrows = ["up", "down"].map(Self.key)
+        var row = [Self.key("◂")]
         switch shape {
-        case .box: return [home, Self.key("runs"), Self.key("cancels")]
-        case .menu: return [home] + arrows + [Self.key("do"), Self.key("close")]
-        case .board: return [home] + card.map(Self.key) + arrows + [Self.key("enter")] + Self.tail.map(Self.key)
+        case .box:
+            row.append(Self.key("runs"))
+            row.append(Self.key("cancels"))
+        case .menu:
+            row.append(Self.key("up"))
+            row.append(Self.key("down"))
+            row.append(Self.key("do"))
+            row.append(Self.key("close"))
+        case .board:
+            for token in card { row.append(Self.key(token)) }
+            row.append(Self.key("up"))
+            row.append(Self.key("down"))
+            row.append(Self.key("enter"))
+            for token in Self.tail { row.append(Self.key(token)) }
         }
+        return row
     }
 
     /// Dim, and sends nothing: a key the console says is off.
@@ -99,28 +113,34 @@ public struct BoardBelt: Equatable, Sendable {
     private struct Face: Sendable {
         let id: String
         let label: String
+        let spoken: String
         let bytes: [UInt8]
     }
 
-    /// Each token's key: its id on the belt, its face, and the bytes the console's binding reads.
-    /// `◂`, the arrows and Return are the belt's own keys, and send as `KeyBar` says.
+    /// Each token's key: its id on the belt, its face, what VoiceOver says, and the bytes the
+    /// console's binding reads. `◂`, the arrows and Return are the belt's own keys, and send as
+    /// `KeyBar` says. A glyph is one cell, the arrows and Return too, so home (`◂`, three card
+    /// keys, `↑ ↓ ⏎`) is the belt's seven cells at rest. A card key shows its glyph only: the
+    /// card on the screen says what it does.
     private static let faces: [String: Face] = {
         let esc: UInt8 = 0x1b
-        func own(_ id: String) -> Face { Face(id: id, label: id, bytes: []) }
-        func word(_ token: String, _ label: String, _ bytes: [UInt8]? = nil) -> Face {
-            Face(id: "board.\(token)", label: label, bytes: bytes ?? Array(token.utf8))
+        func own(_ id: String) -> Face { Face(id: id, label: id, spoken: id, bytes: []) }
+        func word(_ token: String, _ label: String, _ spoken: String, _ bytes: [UInt8]? = nil) -> Face {
+            Face(id: "board.\(token)", label: label, spoken: spoken, bytes: bytes ?? Array(token.utf8))
         }
         return [
             "◂": own("◂"), "up": own("↑"), "down": own("↓"), "enter": own("⏎"),
             "left": own("←"), "right": own("→"),
-            "1": word("1", "1 answer"), "2": word("2", "2 answer"), "3": word("3", "3 answer"),
-            "p": word("p", "p merge"), "y": word("y", "y go"),
-            "c": word("c", "c copy"), "m": word("m", "m menu"), "g": word("g", "g chain"),
-            "v": word("v", "v one line"), "s": word("s", "s hosts"), "u": word("u", "u strip"),
-            "tab": word("tab", "⇥ machine", [0x09]), "x": word("x", "x kill"),
-            "]": word("]", "]"), "[": word("[", "["), "/": word("/", "/"), "z": word("z", "z park"),
-            "runs": word("runs", "y runs", Array("y".utf8)), "cancels": word("cancels", "esc cancels", [esc]),
-            "do": word("do", "⏎ do", [0x0d]), "close": word("close", "esc close", [esc]),
+            "1": word("1", "1", "1, answer"), "2": word("2", "2", "2, answer"), "3": word("3", "3", "3, answer"),
+            "p": word("p", "p", "p, merge"), "y": word("y", "y", "y, go"),
+            "c": word("c", "c copy", "copy"), "m": word("m", "m menu", "menu"), "g": word("g", "g chain", "chain"),
+            "v": word("v", "v one line", "one line"), "s": word("s", "s hosts", "hosts"),
+            "u": word("u", "u strip", "strip"), "tab": word("tab", "⇥ machine", "machine", [0x09]),
+            "x": word("x", "x kill", "kill"), "]": word("]", "]", "next chain"),
+            "[": word("[", "[", "previous chain"), "/": word("/", "/", "find"), "z": word("z", "z park", "park"),
+            "runs": word("runs", "y runs", "y, run", Array("y".utf8)),
+            "cancels": word("cancels", "esc cancels", "escape, cancel", [esc]),
+            "do": word("do", "⏎ do", "return, do", [0x0d]), "close": word("close", "esc close", "escape, close", [esc]),
         ]
     }()
 
@@ -128,7 +148,7 @@ public struct BoardBelt: Equatable, Sendable {
 
     private static func key(_ token: String) -> BeltKey {
         let face = faces[token]!
-        return BeltKey(id: face.id, cells: face.label.count > 1 || ["up", "down", "enter"].contains(token) ? 2 : 1)
+        return BeltKey(id: face.id, cells: face.label.count > 1 ? 2 : 1)
     }
 
     private static func token(of id: String) -> String? { tokens[id] }
@@ -137,6 +157,12 @@ public struct BoardBelt: Equatable, Sendable {
     public static func label(of id: String) -> String? {
         guard id.hasPrefix("board."), let token = tokens[id] else { return nil }
         return faces[token]?.label
+    }
+
+    /// What VoiceOver says for a Board key of the app's own, or nil for any other id.
+    public static func spoken(of id: String) -> String? {
+        guard id.hasPrefix("board."), let token = tokens[id] else { return nil }
+        return faces[token]?.spoken
     }
 
     /// The bytes of a Board key of the app's own, or nil for any other id.
@@ -160,6 +186,23 @@ public struct BoardFollow: Sendable {
 
     /// The console shows the board, and the terminal shows the console.
     public var shows: Bool { said != nil && !inPane }
+
+    /// The Board layout's keys now: what the console said while it shows the board, else every
+    /// key dim but `◂`.
+    public var belt: BoardBelt {
+        guard shows, let said else { return .away }
+        return said
+    }
+
+    /// The terminal's long-press is the card's menu only while the console shows the board.
+    public var opensMenu: Bool { shows }
+
+    /// A sideways swipe turns the board's page only while the board shows with `←` and `→` on:
+    /// not on Machine, under the consent box or in the menu.
+    public var turnsPages: Bool {
+        let now = self.belt
+        return shows && now.shape == .board && !now.isDim("←") && !now.isDim("→")
+    }
 
     /// The console sent `value`. Returns the layout to turn to, or nil to stay.
     public mutating func heard(_ value: String, on layout: BeltLayout) -> BeltLayout? {

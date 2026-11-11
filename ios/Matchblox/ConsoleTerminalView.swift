@@ -4,8 +4,9 @@ import UIKit
 
 /// The console's terminal, with three ways back to matchblox: a swipe in from the left edge,
 /// a tap on "◂ matchblox" in the tmux status line, and ⌘M or ctrl+M. Each one sends `HomeKey`.
-/// While the program reads the mouse, a vertical swipe sends wheel steps (`WheelScroll`). On
-/// the console, a sideways swipe sends `←` or `→` and a long-press a right click (`BoardTouch`).
+/// While the program reads the mouse, a vertical swipe sends wheel steps (`WheelScroll`). While
+/// the console shows the board, a sideways swipe sends `←` or `→` and a long-press a right click
+/// (`BoardTouch`).
 final class ConsoleTerminalView: TerminalView {
     private struct Coast {
         let link: CADisplayLink
@@ -18,6 +19,10 @@ final class ConsoleTerminalView: TerminalView {
     var onHome: @MainActor () -> Void = {}
     /// Called when the terminal takes or gives up the keyboard.
     var onFocus: @MainActor (Bool) -> Void = { _ in }
+    /// The console shows the board (`BoardFollow`): a sideways swipe turns its page, and a
+    /// long-press opens the card's menu. Otherwise the terminal's own pans and long-press act.
+    var turnsPages = false
+    var opensMenu = false
     /// False on the demo: a tap only clicks, and the keyboard comes from the belt's key, so it does
     /// not cover the question the demo shows.
     var tapRaisesKeyboard = true
@@ -173,11 +178,11 @@ final class ConsoleTerminalView: TerminalView {
         if gesture === pagePan, let pan = gesture as? UIPanGestureRecognizer {
             let velocity = pan.velocity(in: self)
             let start = pan.location(in: self).x - pan.translation(in: self).x
-            return readsMouse && !selection.active && !inTmuxPane
+            return turnsPages && readsMouse && !selection.active && !inTmuxPane
                 && BoardTouch.isSideways(dx: velocity.x, dy: velocity.y) && !BoardTouch.fromEdge(x: start)
         }
         if gesture === hold {
-            return sendsClicks && !inTmuxPane && !tapsLabel(at: gesture.location(in: self))
+            return opensMenu && sendsClicks && !inTmuxPane && !tapsLabel(at: gesture.location(in: self))
         }
         return super.gestureRecognizerShouldBegin(gesture)
     }

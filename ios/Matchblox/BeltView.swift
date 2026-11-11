@@ -81,7 +81,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
     private var savesLayout = true
 
     /// The keys the console's board says. Board shows them; another layout keeps them.
-    var board = BoardBelt.plain {
+    var board = BoardBelt.away {
         didSet {
             guard board != oldValue, layout == .board else { return }
             if Self.catalog.keys(.board, agent: agent, mine: [], board: board) != builtKeys {
@@ -490,7 +490,11 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
 
     /// Dim, and sends nothing: a command off its agent's pane, or a Board key that is off.
     private func isDim(_ piece: Piece) -> Bool {
-        (piece.key.isCommand && !commandsLive) || (layout == .board && board.isDim(piece.id))
+        (piece.key.isCommand && !commandsLive) || isBoardDim(piece)
+    }
+
+    private func isBoardDim(_ piece: Piece) -> Bool {
+        layout == .board && board.isDim(piece.id)
     }
 
     private static func paint(_ piece: Piece, pressed: Bool, lit: Bool = false) {
@@ -705,7 +709,10 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
             flash("commands run in an agent's pane")
             return
         }
-        if isDim(piece) { return }
+        if isBoardDim(piece) {
+            flash("this key is off here")
+            return
+        }
         if motion.keys[i].id == KeyBar.ctrl {
             onCtrl()
             return
@@ -965,7 +972,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
                 let layer = piece.layer
                 key.activate = { [weak self] in
                     guard let self, let i = self.pieces.firstIndex(where: { $0.layer === layer }),
-                          self.motion?.onScreen.contains(i) == true else { return false }
+                          self.motion?.onScreen.contains(i) == true, !self.isBoardDim(self.pieces[i]) else { return false }
                     self.press(i)
                     return true
                 }

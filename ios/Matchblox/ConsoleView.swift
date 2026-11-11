@@ -326,10 +326,9 @@ private final class Belts {
     private func checkLive() {
         let inPane = terminal?.inTmuxPane == true
         onPaneSeen(inPane)
-        if let layout = board.pane(inPane, on: lifted.layout) {
-            turn(to: layout)
-            answerBoard()
-        }
+        let layout = board.pane(inPane, on: lifted.layout)
+        followBoard(turn: layout)
+        if layout == .board { answerBoard() }
         guard paneShows else {
             goingLive?.cancel()
             goingLive = nil
@@ -376,12 +375,19 @@ private final class Belts {
     /// board and back when it leaves, and they answer each value while they show Board, also a
     /// value they already had: the console counts the answers to know the app is Pocket.
     func boardSaid(_ value: String) {
-        let layout = board.heard(value, on: lifted.layout)
-        let said = board.said ?? .plain
-        lifted.board = said
-        dock.board = said
-        if let layout { turn(to: layout) }
+        followBoard(turn: board.heard(value, on: lifted.layout))
         if !value.isEmpty { answerBoard() }
+    }
+
+    /// The belts and the terminal's touches as the board is now. A belt that leaves Board turns
+    /// before its keys change, so it never shows the keys of no board.
+    private func followBoard(turn layout: BeltLayout?) {
+        if let layout, layout != .board { turn(to: layout) }
+        lifted.board = board.belt
+        dock.board = board.belt
+        terminal?.turnsPages = board.turnsPages
+        terminal?.opensMenu = board.opensMenu
+        if layout == .board { turn(to: .board) }
     }
 
     private func turn(to layout: BeltLayout) {
