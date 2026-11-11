@@ -19,7 +19,6 @@ import (
 const (
 	tmuxDrops     = "not copied: tmux drops it · tmux set -s set-clipboard on"
 	notChecked    = " · not checked here"
-	pasteHere     = "Now paste here."
 	pasteWrong    = `That is not the code. A hop drops the copy: see docs/console.md, "Copy".`
 	pasteChecked  = "Copy reaches this screen."
 	copyCodeChars = "abcdefghijklmnopqrstuvwxyz"
@@ -186,7 +185,27 @@ func (m *Model) openCopyCheck() tea.Cmd {
 		code[i] = copyCodeChars[rand.N(len(copyCodeChars))] //nolint:gosec // a check of the screen, no secret
 	}
 	m.copyCode = string(code)
-	return tea.Batch(m.clip(m.copyCode), m.notice(pasteHere))
+	return tea.Batch(m.clip(m.copyCode), m.notice(m.pasteHere()))
+}
+
+// pasteHere is what the copy check says while it waits for its paste.
+func (m Model) pasteHere() string {
+	return "Now paste here · " + m.keys.main.Back.Help().Key + " cancels"
+}
+
+// copyCheckOn ends the copy check, unchecked, once its door is no longer
+// the chosen line: the paste it waits for answers only that door.
+func (m Model) copyCheckOn() Model {
+	if m.copyCode == "" {
+		return m
+	}
+	if line, above := m.aboveChosen(); !m.boardShown() || !above || line != "" {
+		m.copyCode = ""
+		if m.noticeText == m.pasteHere() {
+			m.noticeText = ""
+		}
+	}
+	return m
 }
 
 // copyPasted is a paste while the check waits: the code checks this

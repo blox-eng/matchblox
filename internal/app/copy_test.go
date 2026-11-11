@@ -477,7 +477,7 @@ func TestCopySaysUncheckedUntilAPasteProvesIt(t *testing.T) {
 	if utf8.RuneCountInString(code) != 6 || strings.Trim(code, "abcdefghijklmnopqrstuvwxyz") != "" {
 		t.Errorf("the code is %q, want 6 letters", code)
 	}
-	if got := noticeRow(m); got != "Now paste here." {
+	if got := noticeRow(m); got != m.pasteHere() {
 		t.Errorf("the check says %q", got)
 	}
 	m = pressOn(m, "esc", "enter")
@@ -500,6 +500,29 @@ func TestCopySaysUncheckedUntilAPasteProvesIt(t *testing.T) {
 	m = pressOn(m, "c")
 	if got := noticeRow(m); got != "copied: last message of flint-auth" {
 		t.Errorf("c on a checked screen says %q", got)
+	}
+}
+
+func TestTheCopyCheckSaysHowToLeave(t *testing.T) {
+	for _, size := range [][2]int{{40, 34}, {80, 31}} {
+		name := fmt.Sprintf("%dx%d", size[0], size[1])
+		m, _, clock := uncheckedBoard(t, size[0], size[1], t.TempDir(), nil)
+		m = pressOn(toDoors(t, m), "enter")
+		if m.copyCode == "" {
+			t.Fatalf("%s: ⏎ on the doors line started no check", name)
+		}
+		*clock = clock.Add(time.Hour)
+		m = upd(t, m, noticeMsg{})
+		if row := stripRow(m); !strings.Contains(row, "Now paste here · esc cancels") {
+			t.Errorf("%s: an hour on, the check's row says %q", name, row)
+		}
+		if keys := keyLineOf(m); !strings.Contains(keys, "esc cancel") || strings.Contains(keys, "set up") {
+			t.Errorf("%s: while the check waits the key line says %q", name, keys)
+		}
+		m = pressOn(m, "down") // off the doors line
+		if m.copyCode != "" || strings.Contains(stripRow(m), "paste") || strings.Contains(keyLineOf(m), "cancel") {
+			t.Errorf("%s: a move off the doors line keeps the check: code %q, row %q, keys %q", name, m.copyCode, stripRow(m), keyLineOf(m))
+		}
 	}
 }
 
@@ -532,7 +555,7 @@ func TestNoPasteLeavesItUnchecked(t *testing.T) {
 	if m.copyCode != "" || m.copyChecked() {
 		t.Fatalf("esc: code %q, checked %v", m.copyCode, m.copyChecked())
 	}
-	if strings.Contains(plainFrame(m), "Now paste here.") {
+	if strings.Contains(plainFrame(m), m.pasteHere()) {
 		t.Error("esc leaves the check's line")
 	}
 	m = mouse(t, m, tea.PasteMsg{Content: "abcdef"})

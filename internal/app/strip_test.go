@@ -265,7 +265,7 @@ func TestALongNoticeIsWholeOnAPhone(t *testing.T) {
 // fixedNotices are the notices the board says in words of its own: the
 // copy's, the once-notices of the keys that changed, and the refusals.
 var fixedNotices = []string{
-	tmuxDrops, pasteHere, pasteWrong, pasteChecked,
+	tmuxDrops, "Now paste here · esc cancels", pasteWrong, pasteChecked,
 	"copied: last message of ember-reports" + notChecked,
 	"copied: 1234 characters" + notChecked,
 	"c copies now. The stoker is on its card.",

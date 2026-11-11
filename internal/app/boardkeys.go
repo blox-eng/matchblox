@@ -89,6 +89,7 @@ func (m Model) peekOn() Model {
 	if m.boardAbove > len(m.aboveLines()) {
 		m.boardAbove = 0
 	}
+	m = m.copyCheckOn()
 	if _, ok := m.menuOn(); m.menu != nil && !ok {
 		m.menu = nil
 	}
@@ -383,7 +384,7 @@ func (m Model) boardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 	switch {
 	case m.copyCode != "" && bkey.Matches(k, mk.Back):
 		m.copyCode = "" // the check closes, unchecked
-		if m.noticeText == pasteHere {
+		if m.noticeText == m.pasteHere() {
 			m.noticeText = ""
 		}
 	case above && line == "" && bkey.Matches(k, bk.Left):
@@ -592,12 +593,18 @@ func (m Model) boardHints(w int) []hint {
 		density.label = "verbose"
 	}
 	tail := []hint{hintFor(bk.Copy, ""), density, hintFor(bk.Host, ""), hintFor(bk.Strip, "")}
+	cancel := hintFor(mk.Back, "cancel") // the copy check waits for its paste
 	if m.layoutAt(w) == Narrow {
+		if m.copyCode != "" {
+			return append([]hint{cancel}, tail...)
+		}
 		return tail
 	}
 	var hs []hint
 	line, above := m.aboveChosen()
 	switch b, _ := m.boardDrawOf(); {
+	case m.copyCode != "":
+		hs = []hint{cancel}
 	case above && line == "":
 		hs = []hint{hintFor(mk.Open, "set up")}
 	case above:

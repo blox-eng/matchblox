@@ -89,7 +89,7 @@ func (m Model) strip(w int) (lines []string, tap span, ok bool) {
 		return m.noticeRows(m.noticeText, w), span{}, true
 	}
 	if m.copyCode != "" {
-		return m.noticeRows(pasteHere, w), span{}, true
+		return m.noticeRows(m.pasteHere(), w), span{}, true
 	}
 	if text := m.boardStateNotice(); text != "" {
 		return m.noticeRows(text, w), turn, true
