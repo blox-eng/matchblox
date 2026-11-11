@@ -676,18 +676,15 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if next, cmd, ok := m.flipAPC(string(msg)); ok {
 			return next, cmd
 		}
-		if string(msg) == homeKey && m.standIn {
+		switch {
+		case string(msg) != homeKey:
+			return m, nil
+		case m.standIn:
 			return m.leaveStandIn(), nil
 		}
-		if string(msg) == homeKey && m.room != nil { // one level back a press: typing, then the room
-			if m.room.typing {
-				r := *m.room
-				r.typing, m.room = false, &r
-				return m, nil
-			}
-			m.room = nil
-		}
-		return m, nil
+		// Elsewhere the home key goes back as Esc does: what is open
+		// closes, a filter clears, then the hosts show (#360).
+		return m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	case screenMsg:
 		if msg.Pane == m.watching && msg.Err != "" {
 			m.flash = msg.Err // a read that failed: the session and its last screen stay

@@ -31,6 +31,31 @@ All notable changes to matchblox are in this file. The format follows
 
 ### Fixed
 
+- **The way back finds a console you started inside tmux.** `Ctrl+M`,
+  prefix `m` and a tap on `◂ matchblox` went only to a session named
+  `matchblox`. A console run in a pane of another session said `No
+  matchblox console here`. It now goes to that pane. The console binds the
+  tap on `◂ matchblox` too, over an older line in your tmux config.
+  ([#354](https://github.com/blox-eng/matchblox/issues/354))
+
+### Changed
+
+- **`Ctrl+M` in the console goes back, as `Esc` does.** What is open
+  closes, a search clears, then the hosts list shows. One back gesture now
+  works everywhere: in a pane it goes to the console, in the console back
+  to the hosts. ([#360](https://github.com/blox-eng/matchblox/issues/360))
+
+## [0.40.2] - 2026-11-11
+
+### Security
+
+- **Built with Go 1.26.11.** It fixes an HTTP/1 server crash in Go's own
+  `net/http` (GO-2026-6859), which the relay and the update check reach.
+
+## [0.40.1] - 2026-11-10
+
+### Fixed
+
 - **Agents stop flickering when the console shows them.** The live view
   sized the agent's own tmux window to itself, and each resize made Codex
   and Cursor draw their whole screen again, in the view and in their pane.
@@ -1439,7 +1464,9 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.40.0...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.40.2...HEAD
+[0.40.2]: https://github.com/blox-eng/matchblox/compare/v0.40.1...v0.40.2
+[0.40.1]: https://github.com/blox-eng/matchblox/compare/v0.40.0...v0.40.1
 [0.40.0]: https://github.com/blox-eng/matchblox/compare/v0.39.1...v0.40.0
 [0.39.1]: https://github.com/blox-eng/matchblox/compare/v0.39.0...v0.39.1
 [0.39.0]: https://github.com/blox-eng/matchblox/compare/v0.38.2...v0.39.0
