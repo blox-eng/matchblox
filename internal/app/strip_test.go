@@ -262,6 +262,57 @@ func TestALongNoticeIsWholeOnAPhone(t *testing.T) {
 	}
 }
 
+// fixedNotices are the notices the board says in words of its own: the
+// copy's, the once-notices of the keys that changed, and the refusals.
+var fixedNotices = []string{
+	tmuxDrops, pasteHere, pasteWrong, pasteChecked,
+	"copied: last message of ember-reports" + notChecked,
+	"copied: 1234 characters" + notChecked,
+	"c copies now. The stoker is on its card.",
+	"v changes the cards now: verbose, or one line.",
+	"s changes the host now. The order of a column is fixed.",
+	"g shows one chain now. esc shows all.",
+	"u turns the strip now.",
+	"p merges now. The ships are on their cards.",
+	"x kills. p merges #4556.",
+	"A digit marks an answer now. Press it again to send.",
+	"not sent: flint-auth is on gpu-1 · ⏎ goes in",
+	"not sent: no service · it redials",
+	"not sent: ember-reports asks something new — look again",
+	"look at ember-reports's question first",
+	"no card is chosen · ↓ goes back to the cards",
+	"no card is chosen · tap a + name to show a column",
+	"nothing to copy: no card is chosen",
+	"nothing to copy: kindle-legacy said nothing yet",
+	"no ship of kindle-legacy waits for a merge",
+	"the stoker of chain login is no session: quit it on the STOKER tab",
+	"kindle-legacy runs outside tmux: no pane to kill",
+	"no step waits for your go on kindle-legacy",
+	"tap y again to give the go",
+	"the service does not answer: stop `matchblox serve`, then start matchblox again",
+	"refused: a tmux move on gpu-1 never runs on this machine",
+}
+
+func TestEveryNoticeKeepsItsFix(t *testing.T) {
+	for _, size := range [][2]int{{40, 34}, {80, 31}, {104, 38}, {160, 38}} {
+		m := boardShot(t, boardFixture(t), size[0], size[1], nil)
+		for _, text := range fixedNotices {
+			m.notice(text)
+			lines, _, _ := m.strip(size[0])
+			var said []string
+			for _, l := range lines {
+				said = append(said, strings.TrimSpace(ansi.Strip(l)))
+			}
+			if got := strings.Join(said, " "); got != text {
+				t.Errorf("%dx%d: the notice shows %q, want %q", size[0], size[1], said, text)
+			}
+			if row := stripRow(m); !strings.Contains(row, said[len(said)-1]) {
+				t.Errorf("%dx%d: the frame does not draw the notice's last line %q:\n%s", size[0], size[1], said[len(said)-1], row)
+			}
+		}
+	}
+}
+
 func TestOldDataSaysSo(t *testing.T) {
 	m := boardShot(t, boardFixture(t), 80, 31, func(m *Model) {
 		at := m.snap.At.Add(40 * time.Second)

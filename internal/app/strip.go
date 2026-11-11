@@ -21,6 +21,9 @@ import (
 // noticeFor is how long a notice shows in the strip's row.
 const noticeFor = 2500 * time.Millisecond
 
+// noticeLines is the most lines a notice takes of the board.
+const noticeLines = 3
+
 // noticeMsg comes when a notice ends: the frame drops it.
 type noticeMsg struct{}
 
@@ -50,12 +53,13 @@ func (m *Model) flashNotice(was string) tea.Cmd {
 	return m.notice(m.flash)
 }
 
-// noticeRows are a notice in w columns: one line, two on Narrow when it
-// does not fit, so its fix is never cut.
+// noticeRows are a notice in w columns: one line, more on every shape
+// when it does not fit, so its fix is never cut. Only a text longer than
+// any of the board's own runs past noticeLines and ends in "…".
 func (m Model) noticeRows(text string, w int) []string {
 	lines := []string{text}
-	if m.layoutAt(w) == Narrow && ansi.StringWidth(text) > w-1 {
-		lines = upTo(cutNotice(text, w-1), 2, w-1)
+	if ansi.StringWidth(text) > w-1 {
+		lines = upTo(cutNotice(text, w-1), noticeLines, w-1)
 	}
 	for i, l := range lines {
 		lines[i] = fit(" "+m.st.text.Render(l), w)

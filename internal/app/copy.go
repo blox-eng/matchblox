@@ -20,7 +20,7 @@ const (
 	tmuxDrops     = "not copied: tmux drops it · tmux set -s set-clipboard on"
 	notChecked    = " · not checked here"
 	pasteHere     = "Now paste here."
-	pasteWrong    = `That is not what the console copied. A hop drops it: see docs/console.md, "Copy".`
+	pasteWrong    = `That is not the code. A hop drops the copy: see docs/console.md, "Copy".`
 	pasteChecked  = "Copy reaches this screen."
 	copyCodeChars = "abcdefghijklmnopqrstuvwxyz"
 )

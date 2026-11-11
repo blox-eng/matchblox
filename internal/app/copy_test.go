@@ -512,7 +512,7 @@ func TestAWrongPasteKeepsTheCheckOpen(t *testing.T) {
 	}
 	sent := len(boardFake(m).sent)
 	m = mouse(t, m, tea.PasteMsg{Content: "hello flint"})
-	if got := noticeRow(m); got != `That is not what the console copied. A hop drops it: see docs/console.md, "Copy".` {
+	if got := noticeRow(m); got != pasteWrong {
 		t.Errorf("a wrong paste says %q", got)
 	}
 	if m.copyChecked() || loadViewPrefs(dir).CopyCheckedDesk || m.copyCode != (*clipped)[0] {
