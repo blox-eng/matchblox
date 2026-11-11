@@ -70,6 +70,8 @@ type boardDrawn struct {
 	// stripAt is the strip's first line (-1: none), and strip its tap.
 	stripAt int
 	strip   span
+	// doorsAt is the doors line (-1: none).
+	doorsAt int
 }
 
 // boardSpot is a line of one column.
@@ -103,7 +105,7 @@ func (m Model) boardShown() bool { return m.board && m.tab == tabSessions }
 // the ghost row and the recommendations under them, each folded to one
 // line. It draws the tab row too, from the same index.
 func (m Model) boardPanel(w, h int) boardDrawn {
-	d := boardDrawn{headAt: -1, stripAt: -1, cards: map[boardSpot]paneKey{}, taps: map[int][]span{}, hostAt: map[int]string{}}
+	d := boardDrawn{headAt: -1, stripAt: -1, doorsAt: -1, cards: map[boardSpot]paneKey{}, taps: map[int][]span{}, hostAt: map[int]string{}}
 	b, shown := m.boardDrawOf()
 	d.tabRow, d.tabSpans = m.boardTabRow(w, &b)
 
@@ -117,8 +119,13 @@ func (m Model) boardPanel(w, h int) boardDrawn {
 		}
 	}
 	if ds := m.boardDoors(); len(ds) > 0 {
-		sel := above && chosen == ""
-		d.addRow(-1, sel, w, st, m.chosenMark(sel)+st.label.Render(fmt.Sprintf("SET UP · %d", len(ds)))+st.muted.Render(" · "+ds[0].Title))
+		sel, i := above && chosen == "", m.doorIndex(len(ds))
+		count := fmt.Sprintf("SET UP · %d", len(ds))
+		if len(ds) > 1 {
+			count = fmt.Sprintf("SET UP · %d of %d", i+1, len(ds))
+		}
+		d.doorsAt = len(d.lines)
+		d.addRow(-1, sel, w, st, m.chosenMark(sel)+st.label.Render(count)+st.muted.Render(" · "+ds[i].Title))
 	}
 	none := m.have && b.none
 	var under []string

@@ -209,11 +209,7 @@ func (m *Model) aboveMove(d int) {
 // is dialed again, and the setup doors open as from their row in Sessions.
 func (m Model) aboveOpen(host string, k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if host == "" {
-		if next, cmd, ok := m.openCopyDoor(); ok {
-			return next, cmd
-		}
-		m.selectRow(0)
-		return m.key(k)
+		return m.openBoardDoor()
 	}
 	if i := m.peerAt(host); i >= 0 {
 		return m.peerTryAgain(i)
@@ -392,6 +388,10 @@ func (m Model) boardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 		if m.noticeText == pasteHere {
 			m.noticeText = ""
 		}
+	case above && line == "" && bkey.Matches(k, bk.Left):
+		m.stepDoor(-1)
+	case above && line == "" && bkey.Matches(k, bk.Right):
+		m.stepDoor(1)
 	case above && bkey.Matches(k, mk.Up):
 		m.aboveMove(-1)
 	case above && bkey.Matches(k, mk.Down):
@@ -497,10 +497,13 @@ func (m *Model) boardCopy(s sample.Session, ok bool) tea.Cmd {
 		return m.once("copy", first, "nothing to copy: "+s.Name+" said nothing yet")
 	}
 	copied := m.copyText(m.lastWords(s), "last message of "+s.Name)
-	if m.clipKnown && !m.clipOK {
+	if m.clipKnown && !m.clipOK || m.told("copy") {
 		return copied // the fix comes before the news of the key
 	}
-	return tea.Batch(copied, m.once("copy", first, "")) // the first c says what changed
+	said := m.noticeText
+	news := m.once("copy", first, "") // the first c says what changed, then what it copied
+	m.noticeNext = said
+	return tea.Batch(copied, news)
 }
 
 // boardMerge is p: the merge of the chosen card's leading ship, behind the
@@ -604,7 +607,11 @@ func (m Model) boardHints(w int) []hint {
 	case m.have && b.none: // the ghost row leads
 		hs = []hint{hintFor(mk.Open, "new session")}
 	}
-	return append(append(hs, tail...), hintFor(bk.Right, ""), hintFor(mk.NextTab, ""))
+	right := hintFor(bk.Right, "")
+	if above && line == "" && len(m.boardDoors()) > 1 {
+		right.label = "doors"
+	}
+	return append(append(hs, tail...), right, hintFor(mk.NextTab, ""))
 }
 
 // boardKeyLine is the board's key line: its hints, three cells apart. A
@@ -655,6 +662,10 @@ func (m Model) boardTap(x, y int) (tea.Model, tea.Cmd) {
 			return m.peerTryAgain(i)
 		}
 	}
+	if y == d.doorsAt {
+		m.boardAbove = 1 // the doors line is the last line above
+		return m.openBoardDoor()
+	}
 	if sp, ok := spanAt(d.taps[y], x); ok && sp.press == colQuiet.short() {
 		m.flipHidden(colQuiet) // the drawer's name
 		return m, nil
@@ -663,9 +674,12 @@ func (m Model) boardTap(x, y int) (tea.Model, tea.Cmd) {
 	if !ok {
 		return m, nil
 	}
+	again := b.picked && paneOf(b.chosen) == paneOf(s)
 	m.boardChooseCard(c, s)
 	sp, ok := spanAt(d.taps[y], x)
 	switch {
+	case (!ok || sp.press == "") && again: // the chosen card again: in
+		return m.boardInto(s)
 	case !ok || sp.press == "":
 		return m, nil
 	case sp.press == m.keys.main.Grant.Keys()[0]:

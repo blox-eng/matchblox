@@ -28,8 +28,16 @@ type noticeMsg struct{}
 // the board: text takes the strip's row for noticeFor. The header never
 // shows it.
 func (m *Model) notice(text string) tea.Cmd {
-	m.noticeText, m.noticeUntil, m.goArmed = text, m.now().Add(noticeFor), paneKey{}
+	m.noticeText, m.noticeUntil, m.goArmed, m.noticeNext = text, m.now().Add(noticeFor), paneKey{}, ""
 	return tea.Tick(noticeFor, func(time.Time) tea.Msg { return noticeMsg{} })
+}
+
+// noticeEnded shows the notice that waits for the one that ends.
+func (m *Model) noticeEnded() tea.Cmd {
+	if m.noticeNext == "" || m.now().Before(m.noticeUntil) {
+		return nil
+	}
+	return m.notice(m.noticeNext)
 }
 
 // flashNotice puts a new flash in the strip's row while the board shows,

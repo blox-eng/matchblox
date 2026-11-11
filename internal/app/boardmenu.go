@@ -106,7 +106,7 @@ func (m Model) shipLink(s sample.Session) (string, int, bool) {
 func (m Model) openMenu(s sample.Session, x, y int) Model {
 	if m.boardShown() {
 		m.menu, m.longPress.on = &boardMenu{pane: paneOf(s), items: m.menuFor(s), x: x, y: y}, false
-		m.dragFrom, m.dragTo = nil, nil // a long press starts no drag
+		m.dragFrom, m.dragTo, m.tapLater = nil, nil, nil // a long press starts no drag, and is no tap
 	}
 	return m
 }

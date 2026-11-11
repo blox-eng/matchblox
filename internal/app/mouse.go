@@ -111,6 +111,10 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case m.boardShown() && ms.Y >= sc.bodyTop && ms.Y < sc.keysAt-1:
+		if m.tapWaits(ms.X, ms.Y-sc.bodyTop) {
+			m.tapLater = &point{ms.X, ms.Y} // a drag may start here: the tap waits for the release
+			return m.holdPress(m, nil, ms)
+		}
 		next, cmd := m.boardTap(ms.X, ms.Y-sc.bodyTop)
 		return m.holdPress(next, cmd, ms)
 	case sc.dockAt >= 0 && ms.Y >= sc.dockAt && ms.Y < sc.dockAt+sc.dockH:

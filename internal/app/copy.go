@@ -40,18 +40,19 @@ func (m Model) clip(text string) tea.Cmd {
 	return tea.SetClipboard(text)
 }
 
-// tmuxPassesClipboard reads the set-clipboard of the tmux that run runs:
-// on and external pass a copy on to the terminal, off drops it. known is
-// false outside tmux, or for a value it does not know.
+// tmuxPassesClipboard reads the set-clipboard of the tmux that run runs.
+// Only on passes an application's copy on to the terminal: external, the
+// default, and off drop it. known is false outside tmux, or for a value it
+// does not know.
 func tmuxPassesClipboard(run func(args ...string) (string, error)) (ok, known bool) {
 	out, err := run("show", "-sv", "set-clipboard")
 	if err != nil {
 		return false, false
 	}
 	switch strings.TrimSpace(out) {
-	case "on", "external":
+	case "on":
 		return true, true
-	case "off":
+	case "external", "off":
 		return false, true
 	}
 	return false, false
@@ -127,21 +128,34 @@ func (m Model) copyDoors() []doors.Door {
 // boardDoors are the doors of the board's doors line: the copy's first.
 func (m Model) boardDoors() []doors.Door { return append(m.copyDoors(), m.doors...) }
 
-// openCopyDoor is ⏎ on the doors line when a door of the copy leads: the
-// check copies its code, the fix waits for its y. false: another door leads.
-func (m Model) openCopyDoor() (Model, tea.Cmd, bool) {
-	ds := m.copyDoors()
+// doorIndex is the door the doors line names, of n.
+func (m Model) doorIndex(n int) int { return max(min(m.boardDoor, n-1), 0) }
+
+// stepDoor names the door d steps (← -1, → 1) along the doors line.
+func (m *Model) stepDoor(d int) {
+	n := len(m.boardDoors())
+	m.boardDoor = max(min(m.doorIndex(n)+d, n-1), 0)
+}
+
+// openBoardDoor is ⏎ or a tap on the doors line: it opens the door the
+// line names. The check copies its code, the fix waits for its y, and a
+// service's door opens as from its row in Sessions.
+func (m Model) openBoardDoor() (tea.Model, tea.Cmd) {
+	ds := m.boardDoors()
 	if len(ds) == 0 {
-		return m, nil, false
+		return m, nil
 	}
-	switch d := ds[0]; d.ID {
+	i := m.doorIndex(len(ds))
+	switch d := ds[i]; d.ID {
 	case doors.CopyCheck:
 		cmd := m.openCopyCheck()
-		return m, cmd, true
-	default:
+		return m, cmd
+	case doors.CopyThrough:
 		m.pending, m.previewTop = m.doorAction(d), 0 // this machine's tmux, whatever the host
-		return m, nil, true
+		return m, nil
 	}
+	m.selectRow(i - len(m.copyDoors()))
+	return m.key(keyPress(m.keys.main.Open.Keys()[0]))
 }
 
 // openCopyCheck copies a new code of six letters; a paste of it checks
@@ -195,10 +209,14 @@ func (m Model) dragStart(x, y int) Model {
 }
 
 // dragOn is a move with the button down: it starts the drag once it is
-// more than a cell from the press, and the drag follows it from then.
+// more than a cell from the press, and the drag follows it from then. The
+// frame as it is then is the text the drag copies.
 func (m Model) dragOn(at point) Model {
 	if m.dragFrom == nil || m.menu != nil {
 		return m
+	}
+	if m.dragTo == nil && farFrom(*m.dragFrom, at) {
+		m.dragLines = m.drawScreen(max(m.width, minWidth)).lines
 	}
 	if m.dragTo != nil || farFrom(*m.dragFrom, at) {
 		m.dragTo = &at
@@ -206,21 +224,68 @@ func (m Model) dragOn(at point) Model {
 	return m
 }
 
-// dragEnd is the release: a drag copies the text it covers. A press with
-// no drag was a tap, and it acted.
+// dragEnd is the release. One within a cell of the press is a tap: the
+// act the press left for it runs now. Else a drag copies the text it
+// covers.
 func (m Model) dragEnd(at point) (Model, tea.Cmd) {
-	dragged := m.dragTo != nil && m.menu == nil && m.boardShown()
-	if !dragged {
-		m.dragFrom, m.dragTo = nil, nil
+	from, to, lines, later := m.dragFrom, m.dragTo, m.dragLines, m.tapLater
+	m.dragFrom, m.dragTo, m.dragLines, m.tapLater = nil, nil, nil, nil
+	switch {
+	case from == nil || m.menu != nil || !m.boardShown():
+		return m, nil
+	case !farFrom(*from, at):
+		if later == nil {
+			return m, nil
+		}
+		return m.tapOnRelease(*later)
+	case to == nil:
 		return m, nil
 	}
-	m.dragTo = &at
-	text := m.selectedText(m.drawScreen(max(m.width, minWidth)))
+	m.dragFrom, m.dragTo = from, &at
+	text := m.selectedText(drawn{lines: lines})
 	m.dragFrom, m.dragTo = nil, nil
 	if text == "" {
 		return m, nil
 	}
-	return m, m.copyText(text, strconv.Itoa(utf8.RuneCountInString(text))+" characters")
+	return m, m.copyText(text, characters(utf8.RuneCountInString(text)))
+}
+
+// characters is what a drag of n characters copied.
+func characters(n int) string {
+	if n == 1 {
+		return "1 character"
+	}
+	return strconv.Itoa(n) + " characters"
+}
+
+// tapWaits: the press at x, y of the board's body acts on its release,
+// as no drag may start it: a column's name hides the column, and the
+// chosen card goes in. Only with a drag possible and a terminal that
+// reports releases; a key or an option on a card acts on the press.
+func (m Model) tapWaits(x, y int) bool {
+	if !m.sawRelease || m.dragFrom == nil {
+		return false
+	}
+	d := m.boardPanel(max(m.width, minWidth), m.bodyRows())
+	b, _ := m.boardDrawOf()
+	if _, ok := spanAt(d.heads, x); ok && y == d.headAt {
+		return true
+	}
+	sp, onSpan := spanAt(d.taps[y], x)
+	if onSpan && sp.press == colQuiet.short() {
+		return true
+	}
+	_, s, ok := m.cardAt(d, b, x, y)
+	return ok && b.picked && paneOf(s) == paneOf(b.chosen) && (!onSpan || sp.press == "")
+}
+
+// tapOnRelease runs the tap of a press that waited for its release.
+func (m Model) tapOnRelease(p point) (Model, tea.Cmd) {
+	next, cmd := m.boardTap(p.x, p.y-m.drawScreen(max(m.width, minWidth)).bodyTop)
+	if nm, ok := next.(Model); ok {
+		return nm, cmd
+	}
+	return m, cmd
 }
 
 // dragSpan is the drag from its first cell to its last, in reading order.
@@ -264,7 +329,7 @@ func (m Model) selectedText(sc drawn) string {
 	return strings.TrimRight(strings.Join(rows, "\n"), "\n")
 }
 
-// overlayDrag draws the cells the drag covers in the accent while the
+// overlayDrag draws the cells the drag covers on the wash while the
 // button is down.
 func (m Model) overlayDrag(sc *drawn) {
 	a, b, ok := m.dragSpan()
@@ -277,6 +342,6 @@ func (m Model) overlayDrag(sc *drawn) {
 		if x0 >= x1 {
 			continue
 		}
-		sc.lines[y] = ansi.Truncate(l, x0, "") + m.st.accent.Render(ansi.Strip(ansi.Cut(l, x0, x1))) + ansi.TruncateLeft(l, x1, "")
+		sc.lines[y] = ansi.Truncate(l, x0, "") + m.st.selected.Render(ansi.Strip(ansi.Cut(l, x0, x1))) + ansi.TruncateLeft(l, x1, "")
 	}
 }

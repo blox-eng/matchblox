@@ -498,6 +498,12 @@ type Model struct {
 	copyCode          string
 	clipOK, clipKnown bool
 	dragFrom, dragTo  *point
+	// dragLines is the frame the drag copies from. tapLater is a press
+	// whose tap waits for its release. boardDoor is the door the board's
+	// doors line names.
+	dragLines []string
+	tapLater  *point
+	boardDoor int
 	// peekAt is when the peek last started, and peekAsk the question
 	// (Ask.ID) its card drew then, on the card peekPane. peekNew: a new
 	// question on the same card started it.
@@ -518,6 +524,7 @@ type Model struct {
 	peekSentAsk, peekSentPane string
 	// noticeText shows in the board's notice row until noticeUntil.
 	noticeText  string
+	noticeNext  string // the notice that shows when this one ends
 	noticeUntil time.Time
 	// goArmed is the card whose go a first tap armed; a second tap gives it.
 	goArmed paneKey
@@ -746,7 +753,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case sizeDueMsg:
 		return m, nil // Update sends the size, if it is due
 	case noticeMsg:
-		return m, nil // the notice ends: the frame drops it
+		return m, m.noticeEnded() // the frame drops it, or the next one shows
 	case screenMsg:
 		if msg.Pane == m.watching && msg.Err != "" {
 			m.flash = msg.Err // a read that failed: the session and its last screen stay
