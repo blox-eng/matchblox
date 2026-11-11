@@ -23,7 +23,7 @@
  ╿ flint-auth                 ✻  2m
   asks Which way do we fix the log…
   ctx 62%                   ─╴login
-  ⏎ answer
+  ⏎ go in
 
 
 

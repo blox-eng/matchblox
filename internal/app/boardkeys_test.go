@@ -1063,3 +1063,72 @@ func TestATerminalThatComesWaitsForTheViewers(t *testing.T) {
 		t.Error("only the app views the console and it answered: not on Pocket")
 	}
 }
+
+// remoteAuth is the fixture with flint-auth, and its question, on gpu-1.
+func remoteAuth(t *testing.T) proto.State {
+	t.Helper()
+	st := boardFixture(t)
+	for i, s := range st.Sessions {
+		if s.Name == "flint-auth" {
+			st.Sessions[i].Host = "gpu-1"
+			for j, it := range st.Queue {
+				if it.Pane == s.Pane {
+					st.Queue[j].Host = "gpu-1"
+				}
+			}
+		}
+	}
+	return st
+}
+
+func TestARemoteCardOffersNoDigits(t *testing.T) {
+	for _, size := range [][2]int{{40, 34}, {80, 31}, {104, 38}} {
+		m := boardShot(t, remoteAuth(t), size[0], size[1], chooseCard("flint-auth"))
+		if s, ok := m.boardSelected(); !ok || s.Name != "flint-auth" || s.Host != "gpu-1" {
+			t.Fatalf("%dx%d: the chosen card is %s on %q", size[0], size[1], s.Name, s.Host)
+		}
+		frame := plainFrame(m)
+		for _, no := range []string{"1-2", "1. Patch the token check", "2. Move to the new session store"} {
+			if strings.Contains(frame, no) {
+				t.Errorf("%dx%d: a card on gpu-1 offers %q:\n%s", size[0], size[1], no, frame)
+			}
+		}
+		if keys := keyLineOf(m); size[0] > 40 && !strings.HasPrefix(keys, "⏎ go in") {
+			t.Errorf("%dx%d: the key line of a card on gpu-1 is %q", size[0], size[1], keys)
+		}
+		if !strings.Contains(frame, "⏎ go in") {
+			t.Errorf("%dx%d: the card on gpu-1 shows no ⏎ go in:\n%s", size[0], size[1], frame)
+		}
+	}
+}
+
+func TestEveryEnterHintSaysGoIn(t *testing.T) {
+	for _, size := range [][2]int{{40, 34}, {80, 31}, {104, 38}, {160, 38}} {
+		m := boardShot(t, boardFixture(t), size[0], size[1], nil)
+		if frame := plainFrame(m); strings.Contains(frame, "⏎ answer") {
+			t.Errorf("%dx%d: a card says ⏎ answer:\n%s", size[0], size[1], frame)
+		}
+	}
+
+	// A tap on the key row of a card that is not chosen chooses it, and
+	// never goes in.
+	m, _, _ := menuBoard(t, 40, 34, nil)
+	lines := strings.Split(plainFrame(m), "\n")
+	_, ny := cardOn(t, m, "flint-auth")
+	ky := -1
+	for y := ny + 1; y < len(lines); y++ {
+		if strings.Contains(lines[y], "⏎ ") {
+			ky = y
+			break
+		}
+	}
+	if ky < 0 {
+		t.Fatalf("flint-auth draws no key row:\n%s", plainFrame(m))
+	}
+	kx := ansi.StringWidth(lines[ky][:strings.Index(lines[ky], "⏎")])
+	next, cmd := m.Update(tea.MouseClickMsg{X: kx, Y: ky, Button: tea.MouseLeft})
+	m = next.(Model)
+	if wentIn(cmdMsgs(cmd), paneNamed(boardFixture(t), "flint-auth")) || chosenName(t, m) != "flint-auth" {
+		t.Errorf("a tap on flint-auth's ⏎ go in: chosen %s, went in %v", chosenName(t, m), cmdMsgs(cmd))
+	}
+}

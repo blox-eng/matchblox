@@ -69,7 +69,7 @@ func (m Model) boardCard(s sample.Session, w int, o cardOpts) (lines []string, t
 	if whole {
 		add(m.cardTrack(s, w, o))
 	}
-	q, answers := m.oneChoice(s)
+	q, answers := m.offersDigits(s)
 	if last := m.lastWords(s); o.sel && !o.bare && last != "" {
 		for _, l := range upTo(wrapPlain("“"+last+"”", w-3), 3, w-3) {
 			add(pad("  "+m.st.muted.Render(l), w), nil)
@@ -291,8 +291,6 @@ func (m Model) cardHints(s sample.Session, o cardOpts, options int, answers bool
 		hs, gap = []hint{{n, "again sends ·", n}, hintFor(mk.Back, "clears")}, 1
 	case answers && o.sel:
 		hs = []hint{{"1-" + strconv.Itoa(options), "mark an answer", ""}, goIn}
-	case answers:
-		hs = []hint{hintFor(mk.Open, "answer")}
 	default:
 		if sh, ok := m.mergeable(s); ok {
 			hs = append(hs, hintFor(m.keys.board.Merge, "merge #"+strconv.Itoa(sh.Number)))
@@ -322,6 +320,14 @@ func (m Model) oneChoice(s sample.Session) (q said.Question, ok bool) {
 	}
 	q = s.Ask.Questions[0]
 	return q, !q.Multi && len(q.Options) > 0
+}
+
+// offersDigits is the question a card offers its digits for: one choice,
+// asked on this host. A card on another host takes no digit from the
+// peek, so it offers none and shows ⏎ go in.
+func (m Model) offersDigits(s sample.Session) (said.Question, bool) {
+	q, ok := m.oneChoice(s)
+	return q, ok && s.Host == m.opt.Host
 }
 
 // upTo keeps the first n lines, the last cut with … when there were more.

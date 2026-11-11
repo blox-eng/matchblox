@@ -83,7 +83,7 @@ func TestCardLines(t *testing.T) {
 		" ╿ flint-auth                   ✻  2m ",
 		"  asks Which way do we fix the login? ",
 		"  #4551 ●━◉┄○┄○┄○  ctx 62%    ─╴login ",
-		"  ⏎ answer                            ",
+		"  ⏎ go in                             ",
 	}
 	if got := plainLines(lines); !slices.Equal(got, want) {
 		t.Fatalf("a card that waits, not chosen:\n%q\nwant\n%q", got, want)

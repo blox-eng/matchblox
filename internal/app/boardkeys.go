@@ -610,7 +610,7 @@ func (m Model) boardHints(w int) []hint {
 	case above:
 		hs = []hint{hintFor(mk.Open, "try again")}
 	case b.picked:
-		q, answers := m.oneChoice(b.chosen)
+		q, answers := m.offersDigits(b.chosen)
 		armed, sent := m.peekMarks(b.chosen)
 		hs, _ = m.cardHints(b.chosen, cardOpts{sel: true, armed: armed}, len(q.Options), answers && sent == 0)
 	case m.have && b.none: // the ghost row leads
@@ -688,10 +688,11 @@ func (m Model) boardTap(x, y int) (tea.Model, tea.Cmd) {
 	m.boardChooseCard(c, s)
 	m.boardMine = paneOf(s) // a tap chooses by hand
 	sp, ok := spanAt(d.taps[y], x)
+	goIn := ok && sp.press == m.keys.main.Open.Keys()[0]
 	switch {
-	case (!ok || sp.press == "") && again: // the chosen card again: in
+	case (!ok || sp.press == "" || goIn) && again: // the chosen card again: in
 		return m.boardInto(s)
-	case !ok || sp.press == "":
+	case !ok || sp.press == "" || goIn: // a tap goes in only on a card the person chose
 		return m, nil
 	case sp.press == m.keys.main.Grant.Keys()[0]:
 		return m.boardTapGo(s)
