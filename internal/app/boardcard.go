@@ -58,17 +58,18 @@ func (m Model) boardCard(s sample.Session, w int, o cardOpts) (lines []string, t
 		add(m.cardTrack(s, w, o))
 	}
 	q, answers := m.oneChoice(s)
-	if o.sel && !o.bare {
-		if last := m.lastWords(s); last != "" {
-			for _, l := range upTo(wrapPlain("“"+last+"”", w-3), 3, w-3) {
-				add(pad("  "+m.st.muted.Render(l), w), nil)
-			}
+	if last := m.lastWords(s); o.sel && !o.bare && last != "" {
+		for _, l := range upTo(wrapPlain("“"+last+"”", w-3), 3, w-3) {
+			add(pad("  "+m.st.muted.Render(l), w), nil)
 		}
-		if answers && o.sent == 0 {
-			for i, opt := range q.Options {
-				for j, l := range upTo(wrapPlain(opt.Label, w-6), 2, w-6) {
-					add(m.optionLine(i+1, j, l, w, o.armed), []span{{0, w, strconv.Itoa(i + 1)}})
-				}
+	}
+	if o.sel && answers && o.sent == 0 {
+		for i, opt := range q.Options {
+			if o.bare && i+1 != o.armed {
+				continue // the live view shows the options: a bare card shows only the marked one
+			}
+			for j, l := range upTo(wrapPlain(opt.Label, w-6), 2, w-6) {
+				add(m.optionLine(i+1, j, l, w, o.armed), []span{{0, w, strconv.Itoa(i + 1)}})
 			}
 		}
 	}

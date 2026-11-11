@@ -659,13 +659,21 @@ func (m *Model) sendKey(s sample.Session, text string) tea.Cmd {
 	if m.screen.Pane == s.Pane {
 		seen = m.screen.At
 	}
-	return m.sendKeySeen(s, text, seen)
-}
-
-// sendKeySeen is sendKey for what the console showed of s at seen.
-func (m *Model) sendKeySeen(s sample.Session, text string, seen time.Time) tea.Cmd {
 	if m.conn == nil || m.lost {
 		return nil
+	}
+	cmd, why := m.sendKeySeen(s, text, seen)
+	if why != "" {
+		m.flash = why
+	}
+	return cmd
+}
+
+// sendKeySeen is sendKey for what the console showed of s at seen. why
+// says why the key neither went nor waits in line; "" when it did.
+func (m *Model) sendKeySeen(s sample.Session, text string, seen time.Time) (cmd tea.Cmd, why string) {
+	if m.conn == nil || m.lost {
+		return nil, "not sent: no service · it redials"
 	}
 	act := proto.Act{RecID: proto.KeysPrefix + s.Pane, Text: text, PID: s.PID, Start: s.Start, Seen: seen}
 	if m.keysOut.conn != m.conn { // a new connection: no answer comes for the old one's keys
@@ -673,14 +681,13 @@ func (m *Model) sendKeySeen(s sample.Session, text string, seen time.Time) tea.C
 	}
 	if m.keysOut.busy {
 		if len(m.keysOut.queue) >= maxKeysAhead {
-			m.flash = "not sent: " + strconv.Itoa(maxKeysAhead) + " keys still wait for " + s.Name
-			return nil
+			return nil, "not sent: " + strconv.Itoa(maxKeysAhead) + " keys still wait for " + s.Name
 		}
 		m.keysOut.queue = append(m.keysOut.queue, act)
-		return nil
+		return nil, ""
 	}
 	m.keysOut.busy = true
-	return sendKeyAct(m.conn, act)
+	return sendKeyAct(m.conn, act), ""
 }
 
 // nextKey sends the key that waits behind the one the service answered.

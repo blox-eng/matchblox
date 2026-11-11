@@ -196,7 +196,17 @@ func TestTheSentState(t *testing.T) {
 func TestADigitAnswersTheChosenQuestion(t *testing.T) {
 	for _, size := range [][2]int{{40, 34}, {80, 31}, {160, 38}} {
 		m, _ := flintBoard(t, size[0], size[1])
-		m = pressOn(m, "1", "1")
+		if bare := size[0] >= liveFrom; bare && strings.Contains(plainFrame(m), "1. Patch the token check") {
+			t.Errorf("%v: the card beside the live view draws its options before a digit", size)
+		}
+		m = pressOn(m, "1")
+		if f := plainFrame(m); len(sent(m)) != 0 || !armedOn(m, "1") || !strings.Contains(f, "1 again sends · esc clears") {
+			t.Errorf("%v: the first 1 sent %+v, or the card does not show the mark:\n%s", size, sent(m), f)
+		}
+		if f := plainFrame(m); size[0] >= liveFrom && strings.Contains(f, "2. Move to the new session store") {
+			t.Errorf("%v: the bare card draws an option that is not marked:\n%s", size, f)
+		}
+		m = pressOn(m, "1")
 		acts := sent(m)
 		flint := matchNamed(t, m, "flint-auth")
 		if len(acts) != 1 || acts[0].Text != proto.LitPrefix+"1" || acts[0].RecID != proto.KeysPrefix+flint.Pane || acts[0].PID != flint.PID {
@@ -404,5 +414,96 @@ func TestADigitWhileTheServiceIsLostIsNotSent(t *testing.T) {
 	}
 	if got := noticeRow(m); got != "not sent: no service · it redials" {
 		t.Errorf("the notice says %q", got)
+	}
+	if head := strings.Split(plainFrame(m), "\n")[0]; strings.Contains(head, "not sent") {
+		t.Errorf("the header shows the refusal: %q", head)
+	}
+}
+
+func TestAnAnswerThatCannotWaitInLineIsNotSent(t *testing.T) {
+	m, _ := flintBoard(t, 80, 31)
+	m.keysOut = keysOut{conn: m.conn, busy: true, queue: make([]proto.Act, maxKeysAhead)}
+	m = pressOn(m, "1", "1")
+	if got := noticeRow(m); got != "not sent: 64 keys still wait for flint-auth" {
+		t.Errorf("the notice says %q", got)
+	}
+	if head := strings.Split(plainFrame(m), "\n")[0]; strings.Contains(head, "not sent") || m.flash != "" {
+		t.Errorf("the header shows %q, the flash %q", head, m.flash)
+	}
+	if _, sentN := m.peekMarks(matchNamed(t, m, "flint-auth")); sentN != 0 || chosenName(t, m) != "flint-auth" || !armedOn(m, "1") {
+		t.Errorf("a key that did not go counts as sent (%d), or the choice moved to %s", sentN, chosenName(t, m))
+	}
+	m.keysOut.queue = nil
+	if m = pressOn(m, "1"); len(m.keysOut.queue) != 1 || m.keysOut.queue[0].Text != proto.LitPrefix+"1" {
+		t.Errorf("the digits are not live after the line had room: %+v", m.keysOut.queue)
+	}
+}
+
+func TestOnlyTheAnswersRefusalTakesItsDigitsBack(t *testing.T) {
+	m, _ := flintBoard(t, 80, 31)
+	m = pressOn(m, "1", "1")
+	flint := matchNamed(t, m, "flint-auth")
+	next, _ := m.Update(resultMsg{ActID: keyActID + "%another", Err: "not sent: kindle-web asks something new — look again"})
+	m = next.(Model)
+	if _, n := m.peekMarks(flint); n != 1 {
+		t.Errorf("a refused key of another pane cleared the answer: sent %d", n)
+	}
+	next, _ = m.Update(resultMsg{ActID: keyActID + flint.Pane, Err: "not sent: flint-auth asks something new — look again"})
+	if _, n := next.(Model).peekMarks(flint); n != 0 {
+		t.Errorf("the answer's refusal kept it sent: %d", n)
+	}
+}
+
+func TestADigitIsDeadWhenTheChoiceMovesWithNoKey(t *testing.T) {
+	st := boardFixture(t)
+	for i, s := range st.Sessions {
+		if s.Name == "spark-search" {
+			s.Ask = &said.Ask{ID: "toolu_lint", Questions: []said.Question{{Question: "Do I skip the lint?",
+				Options: []said.Option{{Label: "Skip it"}, {Label: "Fix the file"}}}}}
+			st.Sessions[i] = s
+			st.Queue = append(st.Queue, waitFor(s, queue.StateQuestion, 31*time.Minute))
+		}
+	}
+	m, clock := askBoard(t, st, 80, 31, "flint-auth")
+	gone := st
+	gone.Sessions = slices.Clone(st.Sessions)
+	for i, s := range gone.Sessions {
+		if s.Name == "flint-auth" {
+			s.Ask, s.Busy, s.Status = nil, true, "busy"
+			gone.Sessions[i] = s
+		}
+	}
+	gone.Queue = st.Queue[1:]
+	*clock = clock.Add(time.Second)
+	m = newBoardState(t, m, gone)
+	if s, ok := m.boardSelected(); !ok || s.Name == "flint-auth" || !m.peekAnswers(s) {
+		t.Fatalf("the choice is %s (%v), want a card that asks", s.Name, ok)
+	}
+	if m = pressOn(m, "1"); armedOn(m, "1") {
+		t.Errorf("a digit right after the choice moved with no key marks an answer")
+	}
+	*clock = clock.Add(peekDead)
+	if m = pressOn(m, "1"); !armedOn(m, "1") || len(sent(m)) != 0 {
+		t.Errorf("a digit %v later marks %v, sent %+v", peekDead, armedOn(m, "1"), sent(m))
+	}
+}
+
+func TestADigitIsDeadWhenTheBoardComesBackFromTheConsentBox(t *testing.T) {
+	m, clock := flintBoard(t, 80, 31)
+	m = pressOn(m, "x")
+	if m.pending == nil {
+		t.Fatal("x opened no consent box")
+	}
+	*clock = clock.Add(time.Second)
+	m = pressOn(m, "esc")
+	if m.pending != nil || chosenName(t, m) != "flint-auth" {
+		t.Fatalf("esc left the box open, or chose %s", chosenName(t, m))
+	}
+	if m = pressOn(m, "1"); armedOn(m, "1") {
+		t.Errorf("a digit right after the consent box closed marks an answer")
+	}
+	*clock = clock.Add(peekDead)
+	if m = pressOn(m, "1"); !armedOn(m, "1") {
+		t.Errorf("a digit %v after the box closed marks nothing", peekDead)
 	}
 }

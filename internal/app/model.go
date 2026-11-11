@@ -487,14 +487,17 @@ type Model struct {
 	peekAsk  string
 	peekPane paneKey
 	peekNew  bool
+	// peekReached: at the last message a digit reached the chosen card.
+	peekReached bool
 	// peekArmed is the option a first digit marked, at peekArmedAt; a mark
 	// from before the peek started holds no more.
 	peekArmed   int
 	peekArmedAt time.Time
-	// peekSent is the option sent to the question peekSentAsk: the digits of
-	// its card are dead until the question changes.
-	peekSent    int
-	peekSentAsk string
+	// peekSent is the option sent to the question peekSentAsk in the pane
+	// peekSentPane: the digits of its card are dead until the question
+	// changes.
+	peekSent                  int
+	peekSentAsk, peekSentPane string
 	// noticeText shows in the board's notice row until noticeUntil.
 	noticeText  string
 	noticeUntil time.Time
@@ -865,7 +868,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			var note tea.Cmd
 			switch {
 			case msg.Err != "" && m.boardShown():
-				m.peekSent, m.peekSentAsk = 0, "" // not sent: the card takes digits again
+				if msg.ActID == keyActID+m.peekSentPane { // the answer was not sent: its card takes digits again
+					m.peekSent, m.peekSentAsk, m.peekSentPane = 0, "", ""
+				}
 				note = m.notice(msg.Err)
 			case msg.Err != "":
 				m.flash = msg.Err

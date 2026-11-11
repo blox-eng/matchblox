@@ -97,23 +97,30 @@ func askOf(s sample.Session) string {
 	return s.Ask.ID
 }
 
-// peekOn keeps the peek on the chosen card. A choice that moved with no
-// key (the first state, a card that left its column, a filter) starts a
-// new peek, and so does a new question on the chosen card.
+// peekOn keeps the peek on the chosen card. The card coming into reach of
+// the digits (the first frame, a layer over the board that closes, a line
+// above the columns left), a choice that moved with no key (a card that
+// left its column, a filter) and a new question on the chosen card each
+// start a new peek.
 func (m Model) peekOn() Model {
-	if !m.boardShown() {
-		return m
-	}
 	s, ok := m.boardSelected()
+	reach := ok && m.peekReach()
+	was := m.peekReached
+	m.peekReached = reach
 	switch {
-	case !ok:
-	case paneOf(s) != m.peekPane:
+	case !reach:
+	case !was || paneOf(s) != m.peekPane:
 		m.startPeek(s)
 	case askOf(s) != m.peekAsk:
 		m.startPeek(s)
 		m.peekNew = askOf(s) != ""
 	}
 	return m
+}
+
+// peekReach: a digit reaches the board, with no layer over it.
+func (m Model) peekReach() bool {
+	return m.boardShown() && !m.standIn && !m.viewFull() && m.focus(keyPress("1")) == layerMain
 }
 
 // peekAnswers: the digits answer s's question, one question with one
@@ -146,7 +153,7 @@ func (m Model) answerFromPeek(digit string) (tea.Model, tea.Cmd) {
 	q, _ := m.oneChoice(s)
 	n, _ := strconv.Atoi(digit)
 	armed, sent := m.peekMarks(s)
-	said, send := "", false
+	said, answer, queued := "", tea.Cmd(nil), false
 	switch {
 	case !ok || !m.peekAnswers(s) || sent > 0:
 		// no question to answer, or its answer is sent
@@ -163,24 +170,28 @@ func (m Model) answerFromPeek(digit string) (tea.Model, tea.Cmd) {
 		said = "look at " + s.Name + "'s question first"
 	case n < 1 || n > len(q.Options):
 	case n == armed:
-		send = true
+		var why string
+		if answer, why = m.sendAnswer(s, digit); why != "" {
+			said = why // not in line: the mark and the digits stay
+			break
+		}
+		m.peekArmed, m.peekSent, m.peekSentAsk, m.peekSentPane, queued = 0, n, askOf(s), s.Pane, true
 		said = "sent " + digit + " to " + s.Name + " · now in " + colWork.name()
 	default:
 		m.peekArmed, m.peekArmedAt = n, m.now()
 	}
 	note := m.once("digit", "A digit marks an answer now. Press it again to send.", said)
-	if !send {
-		return m, note
+	if queued {
+		return m.boardActed(), tea.Batch(answer, note)
 	}
-	m.peekArmed, m.peekSent, m.peekSentAsk = 0, n, askOf(s)
-	answer := m.sendAnswer(s, digit)
-	return m.boardActed(), tea.Batch(answer, note)
+	return m, note
 }
 
 // sendAnswer sends digit to the pane of s as sendKey does, seen at the
 // time of the sample that carried the question the card drew: the card's
-// options come from the sample, not from the pane's screen.
-func (m *Model) sendAnswer(s sample.Session, digit string) tea.Cmd {
+// options come from the sample, not from the pane's screen. why says why
+// the key did not go and does not wait in line; "" when it did.
+func (m *Model) sendAnswer(s sample.Session, digit string) (tea.Cmd, string) {
 	return m.sendKeySeen(s, proto.LitPrefix+digit, m.stateAt(s.Host))
 }
 
