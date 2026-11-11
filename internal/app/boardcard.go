@@ -1,0 +1,291 @@
+package app
+
+import (
+	"fmt"
+	"slices"
+	"strconv"
+	"strings"
+
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
+
+	"github.com/blox-eng/matchblox/internal/said"
+	"github.com/blox-eng/matchblox/internal/sample"
+)
+
+// agentMarks name the agent that runs in a card's pane. The account rows
+// keep providerMarks: their mark names the provider of the plan.
+var agentMarks = map[string]string{"claude": "✻", "codex": "❋", "cursor": "⬢", "opencode": "▣"}
+
+func harnessMark(s sample.Session) string {
+	if mk, ok := agentMarks[s.Agent]; ok {
+		return mk
+	}
+	return "·"
+}
+
+// cardOpts is how a card is drawn. armed and sent are an option's number,
+// 0 for none. bare: the chosen card beside the live view, which shows the
+// quote and the options.
+type cardOpts struct {
+	sel, lit, oneLine, need, quietRow, otherHost, bare bool
+	armed, sent                                        int
+}
+
+// boardCard is one match drawn in a column (the spec's "The card"):
+// every line is w cells, and taps[i] are the spans of line i.
+func (m Model) boardCard(s sample.Session, w int, o cardOpts) (lines []string, taps [][]span) {
+	add := func(l string, sp []span) {
+		lines, taps = append(lines, l), append(taps, sp)
+	}
+	word, says := m.cardSays(s)
+	if o.quietRow {
+		add(m.cardHead(s, w, o, word), nil)
+		if said := m.lastWords(s); o.sel && said != "" {
+			add(pad("   "+m.st.muted.Render("“"+said+"”"), w), nil)
+		}
+		return m.washed(lines, w, o), taps
+	}
+	whole := o.sel || !o.oneLine
+	add(m.cardHead(s, w, o, ""), nil)
+	if whole || o.need {
+		add(pad("  "+m.wordInk(o).Render(word)+m.st.muted.Render(strings.TrimRight(" "+says, " ")), w), nil)
+	}
+	if whole {
+		add(m.cardTrack(s, w, o))
+	}
+	q, answers := m.oneChoice(s)
+	if o.sel && !o.bare {
+		if said := m.lastWords(s); said != "" {
+			for _, l := range upTo(wrapPlain("“"+said+"”", w-3), 3, w-3) {
+				add(pad("  "+m.st.text.Render(l), w), nil)
+			}
+		}
+		if answers && o.sent == 0 {
+			for i, opt := range q.Options {
+				for j, l := range upTo(wrapPlain(opt.Label, w-6), 2, w-6) {
+					add(m.optionLine(i+1, j, l, w, o.armed), []span{{0, w, strconv.Itoa(i + 1)}})
+				}
+			}
+		}
+	}
+	if o.sel || o.need && !o.oneLine {
+		add(m.cardKeys(s, w, o, len(q.Options), answers))
+	}
+	return m.washed(lines, w, o), taps
+}
+
+// washed puts every cell of a chosen card on the wash, as a selected row.
+func (m Model) washed(lines []string, w int, o cardOpts) []string {
+	var b body
+	b.addRow(0, o.sel, w, m.st, lines...)
+	return b.lines
+}
+
+// wordInk is the state word's ink: the accent on the chosen card, fg bold
+// on a card that waits, muted elsewhere.
+func (m Model) wordInk(o cardOpts) lipgloss.Style {
+	switch {
+	case o.sel:
+		return m.st.accent
+	case o.need:
+		return m.st.text.Bold(true)
+	}
+	return m.st.muted
+}
+
+// cardHead is line 1: the selection mark, the match, the name and its
+// host; at the right the harness mark and the wait. A quiet row adds its
+// state word after the name.
+func (m Model) cardHead(s sample.Session, w int, o cardOpts, word string) string {
+	mark, name := " ", m.st.text
+	if o.sel {
+		mark, name = m.st.accent.Render("▌"), name.Bold(true)
+	}
+	left := mark + m.matchCell(s) + name.Render(s.Name)
+	if o.otherHost {
+		left += m.st.faint.Render(" @" + m.nameOf(s.Host))
+	}
+	right := m.st.muted.Render(harnessMark(s)) + " " + m.st.faint.Render(padLeft(m.waitCell(s), 3)) + " "
+	if word != "" && 18+lipgloss.Width(word)+1+lipgloss.Width(right) <= w {
+		left = padTo(left, 17) + " " + m.st.faint.Render(word) // shown whole, or not at all
+	}
+	return spread(left, right, w)
+}
+
+// cardSays is line 2: the state word and what it says.
+func (m Model) cardSays(s sample.Session) (word, says string) {
+	w, _ := m.rowWord(s)
+	word = ansi.Strip(w)
+	if h, held := m.holdOf(s); held {
+		if h.By == holdByYou && m.asksNow(s) {
+			return "⏸ parked · asks", ""
+		}
+		return word, ""
+	}
+	if q, ok := m.headAsks(s); ok {
+		return word, q
+	}
+	if sh, ok := m.shipOf(s, shipWaits, shipStuck, shipRunning); ok && !s.Works() {
+		switch sh.Kind {
+		case shipWaits:
+			return stageNames[sh.Stage], "#" + strconv.Itoa(sh.Number) + " waits for your merge"
+		case shipStuck:
+			return "stuck", sh.Note
+		}
+		return stageNames[sh.Stage], sh.Note
+	}
+	return word, m.lastWords(s)
+}
+
+// cardTrack is line 3: the ship and its track, the context, and at the
+// right the chain's stub. Short of room it drops the stub, then a context
+// under 70%, then the track's undone stages from the right.
+func (m Model) cardTrack(s sample.Session, w int, o cardOpts) (string, []span) {
+	ship, undone := "", 0
+	ships := m.shipsOf(s)
+	if len(ships) > 0 {
+		sh := ships[0]
+		ship = m.st.muted.Render("#"+strconv.Itoa(sh.Number)) + " " + m.track(sh)
+		undone = len(stageNames) - 1 - sh.Stage
+	}
+	ctx, keepCtx := "", false
+	if s.Context == "known" {
+		ctx = m.contextStyle(s).Render(fmt.Sprintf("ctx %.0f%%", s.ContextPct))
+		keepCtx = s.ContextPct >= 70 || m.full().Reached(s)
+	}
+	stub := ""
+	if k, ok := m.chainKeyOf(s); ok {
+		glyph, ink := "─╴", m.st.faint
+		if o.lit || o.sel {
+			glyph, ink = "━╸", m.st.text
+		}
+		stub = ink.Render(glyph + m.chainLabel(k))
+	}
+	left := func(cut int, withCtx bool) string {
+		var parts []string
+		if ship != "" {
+			parts = append(parts, ansi.Truncate(ship, lipgloss.Width(ship)-2*cut, ""))
+		}
+		if withCtx && ctx != "" {
+			parts = append(parts, ctx)
+		}
+		return "  " + strings.Join(parts, "  ")
+	}
+	cut, withCtx, withStub := 0, true, stub != ""
+	for {
+		l, room := left(cut, withCtx), w
+		if withStub {
+			room -= lipgloss.Width(stub) + 2
+		}
+		if lipgloss.Width(l) <= room {
+			break
+		}
+		switch {
+		case withStub:
+			withStub = false
+		case withCtx && ctx != "" && !keepCtx:
+			withCtx = false
+		case cut < undone:
+			cut++
+		default:
+			return fit(l, w), nil // nothing left to drop: fit cuts it
+		}
+	}
+	if !withStub {
+		return fit(left(cut, withCtx), w), nil
+	}
+	sw := lipgloss.Width(stub)
+	return spread(left(cut, withCtx), stub+" ", w), []span{{w - 1 - sw, w - 1, hintFor(m.keys.main.Group, "").press}}
+}
+
+// chainLabel is the name a chain goes by: its own, else its first match's.
+func (m Model) chainLabel(k chainKey) string {
+	if cv := m.chainsOf(k.host); cv != nil {
+		for _, c := range cv.Chains {
+			if c.ID == k.id && c.Name != "" {
+				return c.Name
+			}
+		}
+	}
+	return m.chainName(k)
+}
+
+// optionLine is line j of option n: "  1. Patch the token check", with
+// ❯ in the accent when it is armed.
+func (m Model) optionLine(n, j int, text string, w, armed int) string {
+	if j > 0 {
+		return pad("     "+m.st.text.Render(text), w)
+	}
+	lead, num, label := "  ", m.st.muted, m.st.text
+	if n == armed {
+		lead, num, label = m.st.accent.Render("❯")+" ", m.st.accent.Bold(true), m.st.text.Bold(true)
+	}
+	return pad(lead+num.Render(strconv.Itoa(n)+".")+" "+label.Render(text), w)
+}
+
+// cardKeys is line 4: what the match needs, and the key that does it.
+func (m Model) cardKeys(s sample.Session, w int, o cardOpts, options int, answers bool) (string, []span) {
+	if answers && o.sent > 0 {
+		return pad("  "+m.st.muted.Render(fmt.Sprintf("sent %d · waits for %s", o.sent, s.Name)), w), nil
+	}
+	mk := m.keys.main
+	goIn := hintFor(mk.Open, "go in")
+	var hs []hint
+	gap := 3
+	switch {
+	case answers && o.sel && o.armed > 0:
+		n := strconv.Itoa(o.armed)
+		hs, gap = []hint{{n, "again sends ·", n}, hintFor(mk.Back, "clears")}, 1
+	case answers && o.sel:
+		hs = []hint{{"1-" + strconv.Itoa(options), "mark an answer", ""}, goIn}
+	case answers:
+		hs = []hint{hintFor(mk.Open, "answer")}
+	default:
+		if sh, ok := m.shipOf(s, shipWaits); ok {
+			hs = append(hs, hintFor(mk.Ships, "merge #"+strconv.Itoa(sh.Number)))
+		}
+		if m.goWaits(s) {
+			hs = append(hs, hintFor(mk.Grant, ""))
+		}
+		hs = append(hs, goIn)
+	}
+	hs = slices.DeleteFunc(hs, func(h hint) bool { return h == (hint{}) })
+	ink := m.st.muted
+	if o.sel {
+		ink = m.st.accent
+	}
+	line, x := "  ", 2
+	var spans []span
+	for i, h := range hs {
+		if i > 0 {
+			line, x = line+strings.Repeat(" ", gap), x+gap
+		}
+		part := ink.Render(h.key) + m.st.muted.Render(" "+h.label)
+		if h.press != "" && x < w {
+			spans = append(spans, span{x, min(x+lipgloss.Width(part), w), h.press})
+		}
+		line, x = line+part, x+lipgloss.Width(part)
+	}
+	return pad(line, w), spans
+}
+
+// oneChoice is the question the digits answer: one question with one
+// choice, given with its options.
+func (m Model) oneChoice(s sample.Session) (q said.Question, ok bool) {
+	if s.Ask == nil || len(s.Ask.Questions) != 1 || !m.asksNow(s) {
+		return q, false
+	}
+	q = s.Ask.Questions[0]
+	return q, !q.Multi && len(q.Options) > 0
+}
+
+// upTo keeps the first n lines, the last cut with … when there were more.
+func upTo(ls []string, n, w int) []string {
+	if len(ls) <= n {
+		return ls
+	}
+	ls = ls[:n]
+	ls[n-1] = ansi.Truncate(ls[n-1]+" …", w, "…")
+	return ls
+}
