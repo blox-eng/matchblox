@@ -393,7 +393,7 @@ This design changes two parts of #326's approved design. The owner knows (2026-1
 | `1` and `2` open the two tabs. | `Tab` changes the tab. The digits answer questions only. |
 | In a room, a sideways swipe is the next chain. | A sideways swipe is the next column. `]` and `[` change the chain. |
 
-What stays #326's, untouched: the stoker's card and its plan, the talk line and typing, the flip (`⌥s`, `⌥n`, prefix `s` and `n`), the back ladder, waking a stoker with no sheet, the removal of the groupings, the phone's Live Activity and the buzz.
+What stays #326's, untouched: the stoker's card and its plan, the talk line and typing, the flip (`⌥s`, `⌥n`, prefix `s`; prefix `n` stays tmux's next window), the back ladder, waking a stoker with no sheet, the removal of the groupings, the phone's Live Activity and the buzz.
 
 The split of the work, to agree:
 
