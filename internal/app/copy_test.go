@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/doors"
+	"github.com/blox-eng/matchblox/internal/proto"
 )
 
 // lastMessage is a message of five lines: the peek shows less of it.
@@ -882,5 +883,52 @@ func TestTheNamedDoorResetsWhenTheDoorsChange(t *testing.T) {
 	m.doors = append(m.doors, doors.Door{ID: doors.Guide, Title: "Open a guide session"})
 	if !strings.Contains(plainFrame(m), "SET UP · 1 of 3 · Check that copy reaches you") {
 		t.Errorf("a new list of doors keeps the old door:\n%s", plainFrame(m))
+	}
+}
+
+func TestASwipeMovesTheCardAsTheArrowsDo(t *testing.T) {
+	for _, size := range [][2]int{{40, 34}, {80, 31}} {
+		name := fmt.Sprintf("%dx%d", size[0], size[1])
+		keys, _, _ := menuBoard(t, size[0], size[1], chooseCard("spark-search"))
+		swipe, _, _ := menuBoard(t, size[0], size[1], chooseCard("spark-search"))
+		for _, step := range []struct {
+			key string
+			b   tea.MouseButton
+		}{{"down", tea.MouseWheelDown}, {"down", tea.MouseWheelDown}, {"up", tea.MouseWheelUp}} {
+			keys = pressOn(keys, step.key)
+			x, y := cardOn(t, swipe, chosenName(t, swipe))
+			swipe = mouse(t, swipe, tea.MouseWheelMsg{X: x, Y: y, Button: step.b})
+			if got, want := chosenName(t, swipe), chosenName(t, keys); got != want {
+				t.Errorf("%s: a swipe %s chose %s, the arrow %s", name, step.key, got, want)
+			}
+		}
+		if chosenName(t, keys) == "spark-search" {
+			t.Fatalf("%s: the arrows never moved: the test proves nothing", name)
+		}
+	}
+
+	// A step drops a marked option, as an arrow does.
+	m, _, clock := menuBoard(t, 80, 31, chooseCard("flint-auth"))
+	*clock = clock.Add(time.Second)
+	m = pressOn(m, "1")
+	if armed, _ := m.peekMarks(matchNamed(t, m, "flint-auth")); armed != 1 {
+		t.Fatalf("1 marked %d", armed)
+	}
+	x, y := cardOn(t, m, "flint-auth")
+	m = mouse(t, m, tea.MouseWheelMsg{X: x, Y: y, Button: tea.MouseWheelUp}) // flint-auth is the column's last
+	if armed, _ := m.peekMarks(matchNamed(t, m, "flint-auth")); armed != 0 {
+		t.Errorf("a swipe kept the mark %d", armed)
+	}
+
+	// Over the live view the wheel still scrolls it.
+	m, _, _ = menuBoard(t, 160, 38, chooseCard("spark-search"))
+	before := len(keyActs(boardFake(m)))
+	m = mouse(t, m, tea.MouseWheelMsg{X: 150, Y: 10, Button: tea.MouseWheelUp})
+	got := keyActs(boardFake(m))[before:]
+	if len(got) != 1 || got[0].Text != proto.WheelUp || got[0].RecID != proto.KeysPrefix+paneNamed(boardFixture(t), "spark-search") {
+		t.Errorf("the wheel over the live view sent %+v, want one %s to spark-search", got, proto.WheelUp)
+	}
+	if chosenName(t, m) != "spark-search" {
+		t.Errorf("the wheel over the live view moved the card to %s", chosenName(t, m))
 	}
 }

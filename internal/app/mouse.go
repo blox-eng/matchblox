@@ -235,6 +235,9 @@ func (m Model) wheel(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.held = nil // a swipe is another key: it drops the question
+	if m.boardShown() && !m.standIn && !m.viewFull() {
+		return m.boardWheel(ms)
+	}
 	if m.overView(ms) {
 		m.armed = ""
 		return m.wheelView(ms.Button == tea.MouseWheelUp)
@@ -247,6 +250,32 @@ func (m Model) wheel(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	}
 	m.armed = ""
 	return m, nil
+}
+
+// boardWheel is a wheel step, or a phone's swipe, on the board: over the
+// live view beside the columns it scrolls the chosen card's pane, else it
+// moves the chosen card as ↑ and ↓ do, by the same keys and their rules.
+func (m Model) boardWheel(ms tea.Mouse) (tea.Model, tea.Cmd) {
+	up := ms.Button == tea.MouseWheelUp
+	if s, ok := m.boardSelected(); ok && m.overBoardView(ms) {
+		return m.onCard(s).wheelView(up)
+	}
+	k := m.keys.main.Down
+	if up {
+		k = m.keys.main.Up
+	} else if ms.Button != tea.MouseWheelDown {
+		return m, nil
+	}
+	next, cmd, _ := m.boardKey(keyPress(k.Keys()[0]))
+	return next, cmd
+}
+
+// overBoardView tells if ms is over the live view beside the board.
+func (m Model) overBoardView(ms tea.Mouse) bool {
+	w := max(m.width, minWidth)
+	d := m.boardPanel(w, m.bodyRows())
+	y := ms.Y - m.drawScreen(w).bodyTop
+	return d.live > 0 && ms.X >= w-d.live && y >= d.headAt && y < d.colsTo
 }
 
 // overView tells if ms is over the live view: the whole screen of a
