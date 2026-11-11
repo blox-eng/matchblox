@@ -305,7 +305,7 @@ func TestAChangedKeySaysSoOnce(t *testing.T) {
 	}
 	m := open()
 	for _, c := range []struct{ key, once, then string }{
-		{"c", "c copies now. The stoker is on its card.", "copied: the last message of spark-search"},
+		{"c", "c copies now. The stoker is on its card.", "copied: last message of spark-search · not checked here"},
 		{"v", "v changes the cards now: verbose, or one line.", ""},
 		{"g", "g shows one chain now. esc shows all.", "spark-search is in no chain"},
 		{"u", "u turns the strip now.", ""},

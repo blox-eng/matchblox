@@ -103,3 +103,32 @@ func TestOnlyTheTerminalDoorsRunTermThere(t *testing.T) {
 		t.Fatal("KeepRunning shows its command and runs it after the file")
 	}
 }
+
+func TestCopyThroughRunsOnlyTheTmuxSetting(t *testing.T) {
+	d := CopyThroughDoor()
+	if want := []string{"tmux", "set", "-s", "set-clipboard", "on"}; !slices.Equal(d.Term, want) || !d.RunsTerm() {
+		t.Fatalf("copy-through runs %q, want %q in the terminal", d.Term, want)
+	}
+	if !TermAllowed(d.Term) || d.ID != CopyThrough || d.Title != "Let copy through" {
+		t.Fatalf("copy-through: %+v, allowed %v", d, TermAllowed(d.Term))
+	}
+	for _, argv := range [][]string{
+		{"tmux", "set", "-g", "set-clipboard", "on"},
+		{"tmux", "set", "-s", "set-clipboard", "on", ";", "run", "sh"},
+	} {
+		if TermAllowed(argv) {
+			t.Errorf("TermAllowed(%q) = true", argv)
+		}
+	}
+	d.Term[0] = "sh"
+	if CopyThroughDoor().Term[0] != "tmux" {
+		t.Error("a door's Term is the package's own argv")
+	}
+}
+
+func TestCopyCheckRunsNothing(t *testing.T) {
+	d := CopyCheckDoor()
+	if d.ID != CopyCheck || d.Title != "Check that copy reaches you" || d.RunsTerm() || d.Path != "" || !d.Open() {
+		t.Fatalf("copy-check: %+v", d)
+	}
+}

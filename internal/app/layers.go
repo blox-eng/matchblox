@@ -225,6 +225,7 @@ func (s Shell) openOn(host string, peers []string, first bool) (Shell, tea.Cmd) 
 	// A jump starts from this machine's tmux, whatever the host.
 	o.OutsideTmux, o.Prefix, o.Home, o.LocalTmux, o.JumpID = b.OutsideTmux, b.Prefix, b.Home, b.LocalTmux, b.JumpID
 	o.Pane, o.ClientList = b.Pane, b.ClientList // the client a jump moves is one of this machine's
+	o.Tmux = b.Tmux                             // a copy goes through this machine's tmux, whatever the host
 	// The builder's own ssh login goes from this machine, whatever the host.
 	o.Check, o.MasterBase, o.SSH = b.Check, b.MasterBase, b.SSH
 	o.Ask, o.NoAsk = b.Ask, b.NoAsk // the prompts of this machine's ssh

@@ -116,9 +116,9 @@ func (m Model) boardPanel(w, h int) boardDrawn {
 			d.addRow(-1, sel, w, st, l)
 		}
 	}
-	if len(m.doors) > 0 {
+	if ds := m.boardDoors(); len(ds) > 0 {
 		sel := above && chosen == ""
-		d.addRow(-1, sel, w, st, m.chosenMark(sel)+st.label.Render(fmt.Sprintf("SET UP · %d", len(m.doors))))
+		d.addRow(-1, sel, w, st, m.chosenMark(sel)+st.label.Render(fmt.Sprintf("SET UP · %d", len(ds)))+st.muted.Render(" · "+ds[0].Title))
 	}
 	none := m.have && b.none
 	var under []string
@@ -168,7 +168,7 @@ func (m Model) boardRows(w, h int, none bool) int {
 // boardRowsUnder is boardRows with the strip's lines worked out.
 func (m Model) boardRowsUnder(w, h int, none bool, strip int) int {
 	rows := h - strip - len(m.hostLines(w))
-	if len(m.doors) > 0 {
+	if len(m.boardDoors()) > 0 {
 		rows--
 	}
 	if !none {
@@ -609,7 +609,7 @@ func (m Model) chosenMark(sel bool) string {
 // bottom: each host that is not reached, then the setup doors ("").
 func (m Model) aboveLines() []string {
 	lines := m.unreached()
-	if len(m.doors) > 0 {
+	if len(m.boardDoors()) > 0 {
 		lines = append(lines, "")
 	}
 	return lines

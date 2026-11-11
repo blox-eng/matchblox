@@ -31,4 +31,4 @@
 │   hide needs you                     │
 ╰─ ⏎ do ─ esc close ───────────────────╯
 ────────────────────────────────────────
- c copy   v one line   s hosts   u strip
+ ↑↓ move   ⏎ do   esc close

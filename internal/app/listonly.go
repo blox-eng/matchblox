@@ -26,6 +26,10 @@ type viewPrefs struct {
 
 	// Told is the notices already shown once, for both shapes.
 	Told []string `json:"told"`
+
+	// A paste proved that a copy reaches this shape of screen.
+	CopyCheckedPhone bool `json:"copy_checked_phone"`
+	CopyCheckedDesk  bool `json:"copy_checked_desk"`
 }
 
 const viewPrefsFile = "view.json"
@@ -163,6 +167,15 @@ func (m *Model) setStripFace(face string) {
 		m.viewPrefs.StripDesk = face
 	}
 	m.keepViewPrefs()
+}
+
+// copyChecked: a paste proved that a copy reaches the shape the screen has
+// now.
+func (m Model) copyChecked() bool {
+	if m.upright() {
+		return m.viewPrefs.CopyCheckedPhone
+	}
+	return m.viewPrefs.CopyCheckedDesk
 }
 
 // told: this notice was shown before.

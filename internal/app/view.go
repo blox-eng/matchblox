@@ -178,6 +178,7 @@ func (m Model) draw(w int) drawn {
 	if m.asking() {
 		m.overlayAsk(&sc, w)
 	}
+	m.overlayDrag(&sc)
 	return sc
 }
 

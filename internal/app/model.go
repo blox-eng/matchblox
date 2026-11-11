@@ -143,6 +143,9 @@ type Options struct {
 	ClientList func() (string, error)
 	// Clip copies text to the builder's clipboard. Nil: OSC 52 with the output.
 	Clip func(text string)
+	// Tmux runs a command of the console's own tmux and gives its output.
+	// Nil: tmux. Outside tmux the console runs none.
+	Tmux func(args ...string) (string, error)
 	// Graphics says whether every terminal that shows the console draws
 	// images, which they are, and whether any shows it (logos.Viewers).
 	// Nil: never.
@@ -488,6 +491,13 @@ type Model struct {
 	menu       *boardMenu
 	sawRelease bool
 	longPress  longPress
+	// copyCode is the code the copy check copied, while it waits for its
+	// paste. clipOK, clipKnown: the console's tmux passes a copy on, as it
+	// was read last. dragFrom, dragTo: a drag over the board's text, from
+	// the press to the pointer; dragTo is nil until it is a drag.
+	copyCode          string
+	clipOK, clipKnown bool
+	dragFrom, dragTo  *point
 	// peekAt is when the peek last started, and peekAsk the question
 	// (Ask.ID) its card drew then, on the card peekPane. peekNew: a new
 	// question on the same card started it.
@@ -556,7 +566,7 @@ func (m Model) Init() tea.Cmd {
 	if err := m.opt.DialErr; err != nil && m.conn == nil {
 		return tea.Batch(tea.RequestBackgroundColor, func() tea.Msg { return lostMsg{err: err} }, m.splashCmd(), m.waitAsk(), peers)
 	}
-	return tea.Batch(tea.RequestBackgroundColor, m.hello(), m.recv(), m.watchSilence(), m.splashCmd(), m.graphicsTick(0), m.waitAsk(), peers)
+	return tea.Batch(tea.RequestBackgroundColor, m.hello(), m.recv(), m.watchSilence(), m.splashCmd(), m.graphicsTick(0), m.waitAsk(), m.clipRead(), peers)
 }
 
 func (m Model) watchSilence() tea.Cmd {
@@ -1038,6 +1048,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.focus(tea.KeyPressMsg{}) == layerForm {
 			return m.formPaste(msg.Content)
 		}
+		if m.copyCode != "" && m.boardShown() { // the check's answer, never an agent's
+			return m.copyPasted(msg.Content)
+		}
 		return m, nil
 	case tea.MouseClickMsg:
 		m, touch := m.touchRest()
@@ -1048,7 +1061,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		next, cmd := m.wheel(msg.Mouse())
 		return next, tea.Batch(touch, cmd)
 	case tea.MouseReleaseMsg, tea.MouseMotionMsg, longPressMsg:
-		return m.pointer(msg), nil
+		return m.pointer(msg)
+	case clipMsg:
+		m.clipOK, m.clipKnown = msg.ok, msg.known
+		return m, nil
 	case tea.KeyPressMsg:
 		if m.splashing() {
 			m.splashDone = true // any key stops the start screen, and does nothing else

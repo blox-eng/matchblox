@@ -209,6 +209,9 @@ func (m *Model) aboveMove(d int) {
 // is dialed again, and the setup doors open as from their row in Sessions.
 func (m Model) aboveOpen(host string, k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if host == "" {
+		if next, cmd, ok := m.openCopyDoor(); ok {
+			return next, cmd
+		}
 		m.selectRow(0)
 		return m.key(k)
 	}
@@ -384,6 +387,11 @@ func (m Model) boardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 	m.flash = ""
 	var cmd tea.Cmd
 	switch {
+	case m.copyCode != "" && bkey.Matches(k, mk.Back):
+		m.copyCode = "" // the check closes, unchecked
+		if m.noticeText == pasteHere {
+			m.noticeText = ""
+		}
 	case above && bkey.Matches(k, mk.Up):
 		m.aboveMove(-1)
 	case above && bkey.Matches(k, mk.Down):
@@ -479,20 +487,20 @@ func (m Model) boardInto(s sample.Session) (tea.Model, tea.Cmd) {
 	return next, cmd
 }
 
-// boardCopy is c: the chosen card's last message on the clipboard.
+// boardCopy is c: the chosen card's last message, whole, on the clipboard.
 func (m *Model) boardCopy(s sample.Session, ok bool) tea.Cmd {
-	words, said := "", "nothing to copy: no card is chosen"
-	if ok {
-		words, said = m.lastWords(s), "copied: the last message of "+s.Name
+	first := m.keys.board.Copy.Help().Key + " copies now. The stoker is on its card."
+	switch {
+	case !ok:
+		return m.once("copy", first, "nothing to copy: no card is chosen")
+	case m.lastWords(s) == "":
+		return m.once("copy", first, "nothing to copy: "+s.Name+" said nothing yet")
 	}
-	if ok && words == "" {
-		said = "nothing to copy: " + s.Name + " said nothing yet"
+	copied := m.copyText(m.lastWords(s), "last message of "+s.Name)
+	if m.clipKnown && !m.clipOK {
+		return copied // the fix comes before the news of the key
 	}
-	note := m.once("copy", m.keys.board.Copy.Help().Key+" copies now. The stoker is on its card.", said)
-	if words == "" {
-		return note
-	}
-	return tea.Batch(m.clip(words), note)
+	return tea.Batch(copied, m.once("copy", first, "")) // the first c says what changed
 }
 
 // boardMerge is p: the merge of the chosen card's leading ship, behind the
@@ -570,7 +578,10 @@ func (m Model) boardTapGo(s sample.Session) (tea.Model, tea.Cmd) {
 // c v s u, then ←→ and tab. A phone shows c v s u only: the chosen card
 // shows its own keys.
 func (m Model) boardHints(w int) []hint {
-	bk := m.keys.board
+	bk, mk := m.keys.board, m.keys.main
+	if m.menu != nil { // the menu takes every key
+		return []hint{hintFor(mk.Up, ""), hintFor(mk.Open, "do"), hintFor(mk.Back, "close")}
+	}
 	density := hintFor(bk.Density, "")
 	if m.oneLine() {
 		density.label = "verbose"
@@ -583,17 +594,17 @@ func (m Model) boardHints(w int) []hint {
 	line, above := m.aboveChosen()
 	switch b, _ := m.boardDrawOf(); {
 	case above && line == "":
-		hs = []hint{hintFor(m.keys.main.Open, "set up")}
+		hs = []hint{hintFor(mk.Open, "set up")}
 	case above:
-		hs = []hint{hintFor(m.keys.main.Open, "try again")}
+		hs = []hint{hintFor(mk.Open, "try again")}
 	case b.picked:
 		q, answers := m.oneChoice(b.chosen)
 		armed, sent := m.peekMarks(b.chosen)
 		hs, _ = m.cardHints(b.chosen, cardOpts{sel: true, armed: armed}, len(q.Options), answers && sent == 0)
 	case m.have && b.none: // the ghost row leads
-		hs = []hint{hintFor(m.keys.main.Open, "new session")}
+		hs = []hint{hintFor(mk.Open, "new session")}
 	}
-	return append(append(hs, tail...), hintFor(bk.Right, ""), hintFor(m.keys.main.NextTab, ""))
+	return append(append(hs, tail...), hintFor(bk.Right, ""), hintFor(mk.NextTab, ""))
 }
 
 // boardKeyLine is the board's key line: its hints, three cells apart. A

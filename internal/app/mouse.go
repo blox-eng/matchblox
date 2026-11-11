@@ -47,6 +47,7 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	if !m.shows() || m.hostCount() == 1 && m.mismatch {
 		return m, nil
 	}
+	m = m.dragStart(ms.X, ms.Y)
 	m.searching = false // keep the search; what the tap asks for shows on the key line
 	w := max(m.width, minWidth)
 	sc := m.draw(w)
@@ -226,7 +227,7 @@ func (m Model) tapAct() (string, func(Model) (tea.Model, tea.Cmd), string) {
 // wheel is a swipe on a phone: over the live view it scrolls the agent's
 // screen back; elsewhere it moves the selection, as ↑ and ↓ do.
 func (m Model) wheel(ms tea.Mouse) (tea.Model, tea.Cmd) {
-	if m.asking() {
+	if m.asking() || m.menu != nil && m.boardShown() { // the menu moves only with its keys
 		return m, nil
 	}
 	m.held = nil // a swipe is another key: it drops the question

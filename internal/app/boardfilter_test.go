@@ -276,6 +276,7 @@ func TestSTurnsThroughTheHosts(t *testing.T) {
 func TestAHostThatIsNotReachedKeepsItsCards(t *testing.T) {
 	m := lostPeer(t, 40*time.Second)
 	m.splashDone, m.board = true, true
+	m.viewPrefs.CopyCheckedPhone, m.viewPrefs.CopyCheckedDesk = true, true // the copy check has its own test
 	m = upd(t, m, tea.WindowSizeMsg{Width: 40, Height: 34})
 	m = openOn(m, "api-auth")
 	w := 40
@@ -335,6 +336,7 @@ func firstCard(m Model) Model {
 func TestTheLinesAboveTheColumnsTakeTheArrows(t *testing.T) {
 	m := lostPeer(t, 40*time.Second)
 	m.splashDone, m.board = true, true
+	m.viewPrefs.CopyCheckedPhone, m.viewPrefs.CopyCheckedDesk = true, true // the copy check has its own test
 	m.doors = []doors.Door{{ID: doors.Tmux, Title: "Install tmux", Term: []string{"sh", "-c", "true"}}}
 	m = firstCard(upd(t, m, tea.WindowSizeMsg{Width: 80, Height: 31}))
 	first := chosenName(t, m)

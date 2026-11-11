@@ -76,6 +76,9 @@ func (m Model) strip(w int) (lines []string, tap span, ok bool) {
 	if m.noticeText != "" && m.now().Before(m.noticeUntil) {
 		return m.noticeRows(m.noticeText, w), span{}, true
 	}
+	if m.copyCode != "" {
+		return m.noticeRows(pasteHere, w), span{}, true
+	}
 	if text := m.boardStateNotice(); text != "" {
 		return m.noticeRows(text, w), turn, true
 	}

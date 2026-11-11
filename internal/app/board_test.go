@@ -186,6 +186,8 @@ func boardShot(t testing.TB, st proto.State, w, h int, edit func(*Model)) Model 
 	}
 	m := next.(Model)
 	m.splashDone, m.board = true, true
+	// The screens are checked: the copy check's door has its own test.
+	m.viewPrefs.CopyCheckedPhone, m.viewPrefs.CopyCheckedDesk = true, true
 	if edit != nil {
 		edit(&m)
 	}

@@ -107,6 +107,8 @@ func (m Model) doorRan(msg doorRanMsg) (tea.Model, tea.Cmd) {
 	case msg.err != nil:
 		m.flash = fmt.Sprintf("failed: %s: %v", msg.cmd, msg.err)
 		return m, nil
+	case msg.door == doors.CopyThrough:
+		return m.copyRan(), nil
 	case msg.door == doors.Tmux:
 		m.flash = "tmux is installed: " + m.keys.main.Quit.Help().Key + ", then matchblox, opens the console in tmux"
 	case msg.door == doors.Guide:

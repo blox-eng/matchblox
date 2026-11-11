@@ -49,16 +49,16 @@ func (m Model) menuFor(s sample.Session) []menuItem {
 	items := []menuItem{{"copy last message", bk.Copy.Help().Key, func(m *Model) tea.Cmd { return m.boardCopy(s, true) }}}
 	if q := questionText(s); q != "" && m.asksNow(s) {
 		items = append(items, menuItem{"copy the question", "", func(m *Model) tea.Cmd {
-			return m.copied(q, "the question of "+s.Name)
+			return m.copyText(q, "the question of "+s.Name)
 		}})
 	}
 	if link, n, ok := m.shipLink(s); ok {
 		number := "#" + strconv.Itoa(n)
 		items = append(items, menuItem{"copy the link of " + number, "", func(m *Model) tea.Cmd {
-			return m.copied(link, "the link of "+number)
+			return m.copyText(link, "the link of "+number)
 		}})
 	}
-	items = append(items, menuItem{"copy its name", "", func(m *Model) tea.Cmd { return m.copied(s.Name, s.Name) }})
+	items = append(items, menuItem{"copy its name", "", func(m *Model) tea.Cmd { return m.copyText(s.Name, s.Name) }})
 	if chain := m.chainLabelOf(s); chain != "" {
 		items = append(items, menuItem{"show only the chain " + chain, bk.Chain.Help().Key, func(m *Model) tea.Cmd {
 			return m.boardChainOf(s, true)
@@ -102,15 +102,11 @@ func (m Model) shipLink(s sample.Session) (string, int, bool) {
 	return "", 0, false
 }
 
-// copied puts text on the clipboard and says what it was.
-func (m *Model) copied(text, what string) tea.Cmd {
-	return tea.Batch(m.clip(text), m.notice("copied: "+what))
-}
-
 // openMenu opens s's menu at the cell x, y. It opens only on the board.
 func (m Model) openMenu(s sample.Session, x, y int) Model {
 	if m.boardShown() {
 		m.menu, m.longPress.on = &boardMenu{pane: paneOf(s), items: m.menuFor(s), x: x, y: y}, false
+		m.dragFrom, m.dragTo = nil, nil // a long press starts no drag
 	}
 	return m
 }
@@ -288,24 +284,28 @@ func (m Model) holdPress(next tea.Model, cmd tea.Cmd, ms tea.Mouse) (tea.Model, 
 }
 
 // pointer is a release, a drag and the long press's tick. A release says
-// the terminal reports them, and ends the press; a move of more than one
-// cell is no long press.
-func (m Model) pointer(msg tea.Msg) Model {
+// the terminal reports them, ends the press and copies a drag; a move of
+// more than one cell is a drag, and no long press.
+func (m Model) pointer(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.MouseReleaseMsg:
 		m.sawRelease, m.longPress.on = true, false
+		ms := msg.Mouse()
+		return m.dragEnd(point{ms.X, ms.Y})
 	case tea.MouseMotionMsg:
-		if ms := msg.Mouse(); max(abs(ms.X-m.longPress.x), abs(ms.Y-m.longPress.y)) > 1 {
+		ms := msg.Mouse()
+		if farFrom(point{m.longPress.x, m.longPress.y}, point{ms.X, ms.Y}) {
 			m.longPress.on = false
 		}
+		return m.dragOn(point{ms.X, ms.Y}), nil
 	case longPressMsg:
 		s, ok := m.boardSelected()
 		if !m.longPress.on || msg.id != m.longPress.id || !ok || paneOf(s) != m.longPress.pane || !m.peekReach() {
-			return m
+			return m, nil
 		}
-		return m.openMenu(s, m.longPress.x, m.longPress.y)
+		return m.openMenu(s, m.longPress.x, m.longPress.y), nil
 	}
-	return m
+	return m, nil
 }
 
 func abs(n int) int { return max(n, -n) }

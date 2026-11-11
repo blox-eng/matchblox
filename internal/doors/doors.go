@@ -30,6 +30,10 @@ const (
 	// KeepRunning writes a user unit, then runs Term: the service writes
 	// the file and runs the command, so the terminal never runs it.
 	KeepRunning = "keeprunning"
+	// CopyCheck and CopyThrough are the console's own doors, of the screen
+	// it shows on: no service finds them.
+	CopyCheck   = "copy-check"
+	CopyThrough = "copy-through"
 )
 
 type Door struct {
@@ -143,11 +147,26 @@ func GuideArgv(inTmux bool) []string {
 	return []string{"claude", GuidePrompt}
 }
 
+// copyThroughArgv lets the console's tmux pass a copy on to the terminal.
+var copyThroughArgv = []string{"tmux", "set", "-s", "set-clipboard", "on"}
+
+// CopyCheckDoor proves that a copy reaches the screen the person reads: it
+// copies a code, and a paste of that code checks the screen.
+func CopyCheckDoor() Door {
+	return Door{ID: CopyCheck, Title: "Check that copy reaches you", Why: "the console copies a code, and you paste it here"}
+}
+
+// CopyThroughDoor lets a copy through the console's tmux, which drops it now.
+func CopyThroughDoor() Door {
+	return Door{ID: CopyThrough, Title: "Let copy through", Why: "tmux drops what the console copies",
+		Term: slices.Clone(copyThroughArgv), Preview: strings.Join(copyThroughArgv, " ")}
+}
+
 // TermAllowed is what a door may run in the builder's terminal: the console
 // runs it on a typed y, so a service can never make it run anything but
 // these exact commands.
 func TermAllowed(argv []string) bool {
-	if slices.Equal(argv, GuideArgv(false)) || slices.Equal(argv, GuideArgv(true)) || slices.Equal(argv, brew) {
+	if slices.Equal(argv, GuideArgv(false)) || slices.Equal(argv, GuideArgv(true)) || slices.Equal(argv, brew) || slices.Equal(argv, copyThroughArgv) {
 		return true
 	}
 	cmd := argv
