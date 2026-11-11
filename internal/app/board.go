@@ -61,9 +61,6 @@ type boardDrawn struct {
 	heads  []span
 	cards  map[boardSpot]paneKey
 	taps   map[int][]span
-	// viewCols, viewRows: the room of the agent's screen in the live view
-	// at the right; 0, 0 for none.
-	viewCols, viewRows int
 }
 
 // boardSpot is a line of one column.
@@ -110,7 +107,7 @@ func (m Model) boardPanel(w, h int) boardDrawn {
 		under = append(under, st.label.Render(fit(fmt.Sprintf(" RECOMMENDATIONS · %d", len(m.recs)), w)))
 	}
 	note := m.noticeLines(w)
-	rows := max(h-len(d.lines)-len(under)-len(note), 0)
+	rows := m.boardRows(w, h, none)
 	top := len(d.lines)
 	switch l := m.layoutAt(w); {
 	case none:
@@ -132,6 +129,23 @@ func (m Model) boardPanel(w, h int) boardDrawn {
 	d.add(-1, under...)
 	d.add(-1, note...)
 	return d
+}
+
+// boardRows is how many of the board's h rows the columns take: all but the
+// doors line above, the ghost row and the recommendations under them, and
+// the notice row. none: no session at all, and no ghost row under.
+func (m Model) boardRows(w, h int, none bool) int {
+	rows := h - len(m.noticeLines(w))
+	if len(m.doors) > 0 {
+		rows--
+	}
+	if !none {
+		rows--
+	}
+	if len(m.recs) > 0 {
+		rows--
+	}
+	return max(rows, 0)
 }
 
 // boardDrawOf is what a draw of the board works out first: every match in
@@ -157,7 +171,10 @@ func (m Model) boardDrawOf() (boardDraw, []boardCol) {
 // person chose, else the first card of the first shown column that has one.
 func (m Model) boardChoose(b *boardDraw, shown []boardCol) {
 	b.open = m.boardAt
-	if !slices.Contains(shown, b.open) && len(shown) > 0 {
+	if len(shown) == 0 {
+		return // every column is hidden: no card is chosen
+	}
+	if !slices.Contains(shown, b.open) {
 		b.open = shown[0]
 	}
 	if len(b.idx[b.open]) == 0 {
@@ -281,7 +298,6 @@ func (m Model) boardColumns(d *boardDrawn, b *boardDraw, l Layout, shown []board
 			v := m
 			v.chose, v.selPID, v.selHost = true, b.chosen.PID, b.chosen.Host
 			view = v.viewPane(b.chosen, live, colH+1)
-			d.viewCols, d.viewRows = live-1, colH-len(v.viewStrip(b.chosen, live, colH))
 		}
 		for i := d.headAt; i < first+colH; i++ {
 			right := ""

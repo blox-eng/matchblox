@@ -481,6 +481,8 @@ type Model struct {
 	// noticeText shows in the board's notice row until noticeUntil.
 	noticeText  string
 	noticeUntil time.Time
+	// goArmed is the card whose go a first tap armed; a second tap gives it.
+	goArmed paneKey
 }
 
 func New(opt Options) Model {
@@ -695,6 +697,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case sizeDueMsg:
 		return m, nil // Update sends the size, if it is due
+	case noticeMsg:
+		return m, nil // the notice ends: the frame drops it
 	case screenMsg:
 		if msg.Pane == m.watching && msg.Err != "" {
 			m.flash = msg.Err // a read that failed: the session and its last screen stay

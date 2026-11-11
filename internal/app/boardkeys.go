@@ -23,7 +23,7 @@ type noticeMsg struct{}
 // notice shows text in the board's notice row, over the key line, for
 // noticeFor. The header never shows it.
 func (m *Model) notice(text string) tea.Cmd {
-	m.noticeText, m.noticeUntil = text, m.now().Add(noticeFor)
+	m.noticeText, m.noticeUntil, m.goArmed = text, m.now().Add(noticeFor), paneKey{}
 	return tea.Tick(noticeFor, func(time.Time) tea.Msg { return noticeMsg{} })
 }
 
@@ -66,7 +66,7 @@ func (m Model) boardSelected() (sample.Session, bool) {
 // to another match starts its peek.
 func (m *Model) boardChooseCard(c boardCol, s sample.Session) {
 	if was, ok := m.boardSelected(); !ok || paneOf(was) != paneOf(s) {
-		m.peekAt, m.peekAsk = m.now(), ""
+		m.peekAt, m.peekAsk, m.goArmed = m.now(), "", paneKey{}
 		if s.Ask != nil {
 			m.peekAsk = s.Ask.ID
 		}
@@ -133,6 +133,22 @@ func (m Model) onCard(s sample.Session) Model {
 	return m
 }
 
+// boardViewSize is the room of the agent's screen in the live view beside
+// the board, worked out as boardPanel lays it out; 0, 0 with no live view.
+func (m Model) boardViewSize() (cols, rows int) {
+	if !m.boardLive() {
+		return 0, 0
+	}
+	w := max(m.width, minWidth)
+	b, shown := m.boardDrawOf()
+	_, live := boardWidths(Wide, w, shown)
+	if !b.picked || len(shown) == 0 || live <= 0 {
+		return 0, 0
+	}
+	colH := max(m.boardRows(w, m.bodyRows(), false)-1, 0) // under the heads
+	return live - 1, colH - len(m.viewStrip(b.chosen, live, colH))
+}
+
 // boardLive: the board has the live view of its chosen card at its right.
 func (m Model) boardLive() bool {
 	w := max(m.width, minWidth)
@@ -159,7 +175,9 @@ func (m Model) boardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 	case bkey.Matches(k, bk.Right):
 		m.boardSide(1)
 	case bkey.Matches(k, mk.Back):
-		if m.filter != "" { // the menu (Task 9) and the chain (Task 6) close first
+		// The menu (Task 9) closes first; the chain filter (Task 6) after the search.
+		m.goArmed = paneKey{}
+		if m.filter != "" {
 			m.filter = ""
 			m.refresh()
 		}
@@ -175,8 +193,12 @@ func (m Model) boardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 	case bkey.Matches(k, bk.Strip):
 		cmd = m.once("strip", bk.Strip.Help().Key+" turns the strip now.", "")
 		m.turnStrip()
+	case !ok && len(m.snap.Sessions) > 0 && bkey.Matches(k, bk.Merge, mk.Second, mk.Grant, mk.Open, mk.Into, mk.Jump,
+		mk.Park, mk.Rename, mk.Switch, mk.Dismiss, mk.Fold, mk.Stoke, mk.StokeChain, mk.Night, mk.Order):
+		// Every column is hidden: never a row of Sessions the person cannot see.
+		cmd = m.notice("no card is chosen · tap a + name to show a column")
 	case !ok && bkey.Matches(k, bk.Merge, mk.Second, mk.Grant):
-		// no card: nothing to act on, and never a row of Sessions
+		// no match at all: nothing to act on
 	case !ok:
 		return m, nil, false
 	case bkey.Matches(k, bk.Merge):
@@ -186,7 +208,7 @@ func (m Model) boardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 	case bkey.Matches(k, mk.Grant):
 		next, cmd := m.boardGo(s)
 		return next, cmd, true
-	case bkey.Matches(k, mk.Open, mk.Into):
+	case bkey.Matches(k, mk.Open, mk.Into, mk.Jump):
 		next, cmd := m.onCard(s).intoSelected()
 		if nm, ok := next.(Model); ok && nm.pending == nil {
 			next = nm.boardActed() // a jump that waits for its y chooses on the y
@@ -221,21 +243,33 @@ func (m *Model) boardCopy(s sample.Session, ok bool) tea.Cmd {
 // boardMerge is p: the merge of the chosen card's leading ship, behind the
 // consent box, when that ship waits for it.
 func (m *Model) boardMerge(s sample.Session) tea.Cmd {
+	sh, ok := m.mergeable(s)
 	said := "no ship of " + s.Name + " waits for a merge"
-	if sh, ok := m.mergeable(s); ok {
+	if ok {
 		said = ""
+	}
+	// once keeps the views, which clears the flash: it goes before refuse,
+	// which says in the flash why a host takes no merge.
+	note := m.once("merge", m.keys.board.Merge.Help().Key+" merges now. The ships are on their cards.", said)
+	if ok {
 		m.pending, m.previewTop = m.onRowHost(m.mergeAction(sh)), 0
 		m.refuse()
 	}
-	return m.once("merge", m.keys.board.Merge.Help().Key+" merges now. The ships are on their cards.", said)
+	return note
 }
 
 // boardKill is x: the kill of the chosen match, behind the consent box. On
 // a card whose ship waits, the first x says once that p merges now.
 func (m *Model) boardKill(s sample.Session) tea.Cmd {
+	if u, head := m.headRow(s); head {
+		return m.notice("the stoker of chain " + u.Name + " is no session: quit it on the STOKER tab")
+	}
 	a := m.killAction(s)
-	if a == nil {
-		return m.notice(s.Name + " has no pane to kill")
+	switch {
+	case a == nil && s.Pane == "":
+		return m.notice(s.Name + " runs outside tmux: no pane to kill")
+	case a == nil: // the stoker's own session
+		return m.notice("the stoker is no session: quit it on the STOKER tab")
 	}
 	var note tea.Cmd
 	if sh, ok := m.mergeable(s); ok {
@@ -247,28 +281,47 @@ func (m *Model) boardKill(s sample.Session) tea.Cmd {
 }
 
 // boardGo is y: the go that a stoker step waits for on the chosen match.
+// Once the go is sent, the choice moves on.
 func (m Model) boardGo(s sample.Session) (tea.Model, tea.Cmd) {
 	if s.Host == m.opt.Host {
 		for _, r := range m.stokerRows() {
 			if (r.kind == rowGo || r.kind == rowPlan) && r.state() == "waits" && r.e.Needs != "" && r.e.Pane == s.Pane {
-				return m.boardActed().grant(r)
+				next, cmd := m.grant(r)
+				if nm, ok := next.(Model); ok && cmd != nil {
+					next = nm.boardActed()
+				}
+				return next, cmd
 			}
 		}
 	}
 	return m, m.notice("no step waits for your go on " + s.Name)
 }
 
+// boardTapGo is a tap on a card's go: a tap is not consent, so the first
+// tap arms it and a second tap on the same card's go, while the notice
+// shows, gives it. A move, esc or the notice's end disarms it.
+func (m Model) boardTapGo(s sample.Session) (tea.Model, tea.Cmd) {
+	if m.goArmed == paneOf(s) && m.now().Before(m.noticeUntil) {
+		m.goArmed = paneKey{}
+		return m.boardGo(s)
+	}
+	g := m.keys.main.Grant
+	cmd := m.notice("tap " + g.Help().Key + " again to " + g.Help().Desc)
+	m.goArmed = paneOf(s)
+	return m, cmd
+}
+
 // boardHints are the board's keys on the key line: the chosen card's, then
 // c v s u, then ←→ and tab. A phone shows c v s u only: the chosen card
 // shows its own keys.
-func (m Model) boardHints() []hint {
+func (m Model) boardHints(w int) []hint {
 	bk := m.keys.board
 	density := hintFor(bk.Density, "")
 	if m.oneLine() {
 		density.label = "verbose"
 	}
 	tail := []hint{hintFor(bk.Copy, ""), density, hintFor(bk.Host, ""), hintFor(bk.Strip, "")}
-	if m.layoutAt(m.width) == Narrow {
+	if m.layoutAt(w) == Narrow {
 		return tail
 	}
 	var hs []hint
@@ -288,7 +341,7 @@ func (m Model) boardKeyLine(w int) (string, []span) {
 	st := m.st
 	line, x := " ", 1
 	var spans []span
-	for i, h := range m.boardHints() {
+	for i, h := range m.boardHints(w) {
 		gap := ""
 		if i > 0 {
 			gap = "   "
@@ -325,13 +378,19 @@ func (m Model) boardTap(x, y int) (tea.Model, tea.Cmd) {
 		if !ok || !inColumn(c) {
 			continue
 		}
-		if at := slices.IndexFunc(b.idx[c], func(s sample.Session) bool { return paneOf(s) == k }); at >= 0 {
-			m.boardChooseCard(c, b.idx[c][at])
+		at := slices.IndexFunc(b.idx[c], func(s sample.Session) bool { return paneOf(s) == k })
+		if at < 0 {
+			return m, nil
 		}
-		if sp, ok := spanAt(d.taps[y], x); ok && sp.press != "" {
-			return m.keyed(keyPress(sp.press))
+		m.boardChooseCard(c, b.idx[c][at])
+		sp, ok := spanAt(d.taps[y], x)
+		switch {
+		case !ok || sp.press == "":
+			return m, nil
+		case sp.press == m.keys.main.Grant.Keys()[0]:
+			return m.boardTapGo(b.idx[c][at])
 		}
-		return m, nil
+		return m.keyed(keyPress(sp.press))
 	}
 	return m, nil
 }

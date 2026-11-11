@@ -1,6 +1,8 @@
 package app
 
 import (
+	"fmt"
+	"io"
 	"slices"
 	"strings"
 	"testing"
@@ -153,7 +155,7 @@ func TestAfterAnActTheFirstWaitIsChosen(t *testing.T) {
 func TestTheKeyLineDropsWholeKeysFromTheRight(t *testing.T) {
 	st := boardFixture(t)
 	m := boardShot(t, st, 80, 31, chooseCard("kindle-web"))
-	hints := m.boardHints()
+	hints := m.boardHints(80)
 	if hints[0].key != "p" || !slices.ContainsFunc(hints, func(h hint) bool { return h.key == "tab" }) {
 		t.Fatalf("the board's keys: %+v", hints)
 	}
@@ -379,7 +381,7 @@ func TestAPhoneStartsVerboseInNeedsYouOnly(t *testing.T) {
 func TestTheNoticeIsGoneAfterItsTime(t *testing.T) {
 	now := demoAt
 	m := boardShot(t, boardFixture(t), 40, 34, func(m *Model) { m.opt.Now = func() time.Time { return now } })
-	m.notice("not copied: tmux drops it · tmux set -s set-clipboard on")
+	tick := m.notice("not copied: tmux drops it · tmux set -s set-clipboard on")
 	lines := strings.Split(plainFrame(m), "\n")
 	two := strings.TrimSpace(lines[len(lines)-4]) + " " + strings.TrimSpace(lines[len(lines)-3])
 	if two != "not copied: tmux drops it · tmux set -s set-clipboard on" {
@@ -388,8 +390,154 @@ func TestTheNoticeIsGoneAfterItsTime(t *testing.T) {
 	if !strings.Contains(ansi.Strip(m.render()), "● 2 wait for you") {
 		t.Error("the header changed for a notice")
 	}
+	msg := tick() // the tick ends the notice; it waits noticeFor
+	if _, ok := msg.(noticeMsg); !ok {
+		t.Fatalf("the notice's tick is %T", msg)
+	}
 	now = now.Add(noticeFor)
-	if f := plainFrame(m); strings.Contains(f, "not copied") {
+	next, _ := m.Update(msg)
+	if f := plainFrame(next.(Model)); strings.Contains(f, "not copied") {
 		t.Errorf("the notice stays after %v:\n%s", noticeFor, f)
+	}
+}
+
+func TestARefusedMergeKeepsItsReason(t *testing.T) {
+	m := boardShot(t, boardFixture(t), 80, 31, func(m *Model) {
+		m.opt.StateDir, m.viewPrefs = t.TempDir(), viewPrefs{} // the first p ever
+		chooseCard("kindle-web")(m)
+	})
+	next, _ := m.Update(lostMsg{err: io.EOF, conn: m.conn})
+	m = pressOn(next.(Model), "p")
+	if m.pending != nil || !strings.Contains(m.flash, "is not connected") || !strings.Contains(actionLine(m), "is not connected") {
+		t.Errorf("the first p on a lost host: pending %v, flash %q, key line %q", m.pending, m.flash, actionLine(m))
+	}
+}
+
+// goBoard is the board with a stoker step that waits for a go on
+// hearth-api's pane.
+func goBoard(t *testing.T, now *time.Time, edit func(*Model)) Model {
+	t.Helper()
+	st := boardFixture(t)
+	hearth := st.Sessions[slices.IndexFunc(st.Sessions, func(s sample.Session) bool { return s.Name == "hearth-api" })]
+	st.Stoker = &proto.StokerView{Mode: proto.StokerMode{On: true}, Run: []proto.StokerEntry{goFor(hearth, 2*time.Minute)}}
+	return boardShot(t, st, 80, 31, func(m *Model) {
+		m.opt.Now = func() time.Time { return *now }
+		if edit != nil {
+			edit(m)
+		}
+	})
+}
+
+var grantAct = proto.Act{RecID: "stoker:grant", Which: "primary", Confirm: "y", Text: "go-hearth-api"}
+
+func TestATapOnTheGoArmsItAndASecondGivesIt(t *testing.T) {
+	now := demoAt
+	goAt := func(m Model) (int, int) {
+		t.Helper()
+		for y, l := range strings.Split(plainFrame(m), "\n") {
+			if x := strings.Index(l, "y give the go"); x >= 0 {
+				return x, y
+			}
+		}
+		t.Fatalf("no y on a card:\n%s", plainFrame(m))
+		return 0, 0
+	}
+	tapGo := func(m Model) Model {
+		x, y := goAt(m)
+		next, cmd := tap(m, x, y)
+		drain(cmd)
+		return next.(Model)
+	}
+
+	m := tapGo(goBoard(t, &now, nil))
+	if len(boardFake(m).acts()) != 0 || noticeRow(m) != "tap y again to give the go" || chosenName(t, m) != "hearth-api" {
+		t.Fatalf("the first tap: acts %+v, notice %q", boardFake(m).acts(), noticeRow(m))
+	}
+	if m = tapGo(m); !slices.Equal(boardFake(m).acts(), []proto.Act{grantAct}) {
+		t.Fatalf("the second tap sent %+v", boardFake(m).acts())
+	}
+
+	for name, between := range map[string]func(Model) Model{
+		"a move":           func(m Model) Model { return pressOn(m, "up", "down") },
+		"esc":              func(m Model) Model { return pressOn(m, "esc") },
+		"the notice's end": func(m Model) Model { now = now.Add(noticeFor); return m },
+	} {
+		now = demoAt
+		m = tapGo(goBoard(t, &now, nil))
+		if m = tapGo(between(m)); len(boardFake(m).acts()) != 0 {
+			t.Errorf("a tap after %s gave the go: %+v", name, boardFake(m).acts())
+		}
+	}
+
+	now = demoAt
+	m = pressOn(goBoard(t, &now, chooseCard("hearth-api")), "y")
+	if !slices.Equal(boardFake(m).acts(), []proto.Act{grantAct}) {
+		t.Errorf("a typed y sent %+v", boardFake(m).acts())
+	}
+}
+
+func TestCtrlOGoesIntoTheChosenCard(t *testing.T) {
+	st := boardFixture(t)
+	var ran []string
+	m := boardShot(t, st, 80, 31, func(m *Model) {
+		chooseCard("hearth-api")(m)
+		m.opt.Run = func(argv []string) error { ran = argv; return nil }
+	})
+	next, cmd := key(m, "ctrl+o")
+	fed(next, cmd)
+	if want := "tmux switch-client -t " + paneNamed(st, "hearth-api"); strings.Join(ran, " ") != want {
+		t.Errorf("ctrl+o ran %q, want %q", ran, want)
+	}
+}
+
+func TestNoCardChosenActsOnNothing(t *testing.T) {
+	st := boardFixture(t)
+	st.Agents = []string{"claude"}
+	m := boardShot(t, st, 80, 31, func(m *Model) {
+		for _, c := range boardCols {
+			m.flipHidden(c)
+		}
+		m.opt.Run = func(argv []string) error { t.Errorf("ran %v", argv); return nil }
+	})
+	if _, ok := m.boardSelected(); ok {
+		t.Fatal("a card is chosen with every column hidden")
+	}
+	for _, k := range []string{"enter", "a", "ctrl+o", "z", "r", "A", "d", "h", "f", "F", "n", "o", "x", "p", "y"} {
+		next, cmd := key(m, k)
+		drain(cmd)
+		nm := next.(Model)
+		if nm.pending != nil || nm.form != nil || nm.tab != tabSessions || len(boardFake(nm).acts()) != 0 {
+			t.Errorf("%s acted with no card: pending %v, form %v, tab %d, acts %+v", k, nm.pending, nm.form != nil, nm.tab, boardFake(nm).acts())
+		}
+		if got := noticeRow(nm); got != "no card is chosen · tap a + name to show a column" {
+			t.Errorf("%s says %q", k, got)
+		}
+	}
+	if nm := pressOn(m, "N"); nm.form == nil {
+		t.Errorf("N opens no form with no card: %q", nm.flash)
+	}
+	if nm := pressOn(m, "/"); !nm.searching {
+		t.Error("/ does not search with no card")
+	}
+}
+
+func TestTheLiveViewIsSizedAsDrawn(t *testing.T) {
+	st := boardFixture(t)
+	m := boardShot(t, st, 160, 38, chooseCard("flint-auth"))
+	cols, rows := m.viewSize()
+	if _, live := boardWidths(Wide, 160, boardCols[:]); cols != live-1 || rows < 10 {
+		t.Fatalf("viewSize %d x %d beside a live view %d wide", cols, rows, live)
+	}
+	var text strings.Builder
+	for i := 1; i <= rows; i++ {
+		fmt.Fprintf(&text, "row %d\n", i)
+	}
+	m.screen = proto.Screen{Pane: paneNamed(st, "flint-auth"), At: demoAt, Cols: cols, Rows: rows, Text: text.String()}
+	f := strings.Join(plainLines(m.boardPanel(160, m.bodyRows()).lines), "\n")
+	if !strings.Contains(f, " row 1 ") && !strings.HasSuffix(f, " row 1") || !strings.Contains(f, fmt.Sprintf("row %d", rows)) {
+		t.Errorf("a screen of %d rows is not whole in the live view:\n%s", rows, f)
+	}
+	if m = boardShot(t, st, 151, 38, nil); func() bool { c, r := m.viewSize(); return c != 0 || r != 0 }() {
+		t.Error("a size for a live view at 151 columns")
 	}
 }

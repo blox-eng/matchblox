@@ -130,8 +130,7 @@ func (m Model) viewSize() (cols, rows int) {
 	}
 	w := max(m.width, minWidth)
 	if m.boardShown() {
-		d := m.boardPanel(w, m.bodyRows())
-		return d.viewCols, d.viewRows
+		return m.boardViewSize()
 	}
 	_, detailW := m.panes(w)
 	place, full := m.viewPlacement(w)
