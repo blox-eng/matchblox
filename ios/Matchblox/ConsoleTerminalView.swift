@@ -204,6 +204,7 @@ final class ConsoleTerminalView: TerminalView {
         switch pan.state {
         case .began, .changed:
             if pan.state == .began {
+                if turnsPages { tick.prepare() }
                 stopCoast()
                 wheel = WheelScroll(cellHeight: cellSize.height, linesPerStep: inTmuxPane ? WheelScroll.tmuxLines : 1)
             }
@@ -221,6 +222,7 @@ final class ConsoleTerminalView: TerminalView {
 
     /// The page turns once, as the finger lifts.
     @objc private func pagePanned(_ pan: UIPanGestureRecognizer) {
+        if pan.state == .began { tick.prepare() }
         guard pan.state == .ended,
               let key = BoardTouch.page(dx: pan.translation(in: self).x, velocity: pan.velocity(in: self).x) else { return }
         tick.selectionChanged()
