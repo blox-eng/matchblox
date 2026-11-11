@@ -6,7 +6,7 @@ import UIKit
 /// a tap on "◂ matchblox" in the tmux status line, and ⌘M or ctrl+M. Each one sends `HomeKey`.
 /// While the program reads the mouse, a vertical swipe sends wheel steps (`WheelScroll`). While
 /// the console shows the board, a sideways swipe sends `←` or `→` and a long-press a right click
-/// (`BoardTouch`).
+/// (`BoardTouch`), and each step of a swipe, in any direction, ticks once.
 final class ConsoleTerminalView: TerminalView {
     private struct Coast {
         let link: CADisplayLink
@@ -31,6 +31,8 @@ final class ConsoleTerminalView: TerminalView {
     @objc var inlinePredictionType: UITextInlinePredictionType = .no
 
     private let haptic = UIImpactFeedbackGenerator(style: .light)
+    /// The board's tick: one for each card or page a swipe moves.
+    private let tick = UISelectionFeedbackGenerator()
     private var edge: UIScreenEdgePanGestureRecognizer?
     private var labelTap: UITapGestureRecognizer?
     private var clickTap: UITapGestureRecognizer?
@@ -221,6 +223,7 @@ final class ConsoleTerminalView: TerminalView {
     @objc private func pagePanned(_ pan: UIPanGestureRecognizer) {
         guard pan.state == .ended,
               let key = BoardTouch.page(dx: pan.translation(in: self).x, velocity: pan.velocity(in: self).x) else { return }
+        tick.selectionChanged()
         send(key)
     }
 
@@ -263,6 +266,7 @@ final class ConsoleTerminalView: TerminalView {
     /// Each step at the touch's cell, encoded by SwiftTerm for the program's mouse protocol.
     private func sendWheel(_ steps: [WheelScroll.Step], at point: CGPoint) {
         guard readsMouse, !steps.isEmpty, let spot = cell(at: point) else { return }
+        if turnsPages { tick.selectionChanged() }
         let terminal = getTerminal()
         let pixelX = Int(point.x)
         let pixelY = Int(point.y - contentOffset.y)
