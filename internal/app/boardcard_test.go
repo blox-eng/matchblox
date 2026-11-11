@@ -123,6 +123,7 @@ func TestCardLines(t *testing.T) {
 		{0, st.accent.Render("▌"), "the selection mark"},
 		{1, st.accent.Render("asks"), "the state word"},
 		{2, st.text.Render("━╸login"), "the lit stub"},
+		{3, st.muted.Render("“I can fix the login in two ways.”"), "the quote"},
 		{6, st.accent.Render("1-2"), "the digits"},
 		{6, st.accent.Render("⏎"), "the key"},
 	} {
@@ -179,6 +180,11 @@ func TestCardLines(t *testing.T) {
 	}
 	if lines, _ = m.boardCard(s, 26, cardOpts{quietRow: true}); strings.Contains(ansi.Strip(lines[0]), "…") {
 		t.Errorf("a quiet row cuts its word: %q", ansi.Strip(lines[0]))
+	}
+	long := s
+	long.Name = "flint-auth-refresh-2"
+	if lines, _ = m.boardCard(long, 80, cardOpts{quietRow: true}); !strings.Contains(ansi.Strip(lines[0]), "flint-auth-refresh-2 asks") {
+		t.Errorf("a quiet row with room cuts a long name: %q", ansi.Strip(lines[0]))
 	}
 
 	// A narrow card: the stub goes, then a context under 70%.

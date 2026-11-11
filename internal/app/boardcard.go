@@ -41,8 +41,8 @@ func (m Model) boardCard(s sample.Session, w int, o cardOpts) (lines []string, t
 	word, says := m.cardSays(s)
 	if o.quietRow {
 		add(m.cardHead(s, w, o, word), nil)
-		if said := m.lastWords(s); o.sel && said != "" {
-			add(pad("   "+m.st.muted.Render("“"+said+"”"), w), nil)
+		if last := m.lastWords(s); o.sel && last != "" {
+			add(pad("   "+m.st.muted.Render("“"+last+"”"), w), nil)
 		}
 		return m.washed(lines, w, o), taps
 	}
@@ -56,9 +56,9 @@ func (m Model) boardCard(s sample.Session, w int, o cardOpts) (lines []string, t
 	}
 	q, answers := m.oneChoice(s)
 	if o.sel && !o.bare {
-		if said := m.lastWords(s); said != "" {
-			for _, l := range upTo(wrapPlain("“"+said+"”", w-3), 3, w-3) {
-				add(pad("  "+m.st.text.Render(l), w), nil)
+		if last := m.lastWords(s); last != "" {
+			for _, l := range upTo(wrapPlain("“"+last+"”", w-3), 3, w-3) {
+				add(pad("  "+m.st.muted.Render(l), w), nil)
 			}
 		}
 		if answers && o.sent == 0 {
@@ -107,8 +107,10 @@ func (m Model) cardHead(s sample.Session, w int, o cardOpts, word string) string
 		left += m.st.faint.Render(" @" + m.nameOf(s.Host))
 	}
 	right := m.st.muted.Render(harnessMark(s)) + " " + m.st.faint.Render(padLeft(m.waitCell(s), 3)) + " "
-	if word != "" && 18+lipgloss.Width(word)+1+lipgloss.Width(right) <= w {
-		left = padTo(left, 17) + " " + m.st.faint.Render(word) // shown whole, or not at all
+	// The word lines up after a short name, and is shown whole or not at
+	// all: short of room the name is cut, never the word.
+	if lw := max(lipgloss.Width(left), 17); word != "" && lw+1+lipgloss.Width(word)+1+lipgloss.Width(right) <= w {
+		left = padTo(left, lw) + " " + m.st.faint.Render(word)
 	}
 	return spread(left, right, w)
 }
