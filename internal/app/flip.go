@@ -1,6 +1,7 @@
 package app
 
 import (
+	"maps"
 	"slices"
 	"strings"
 
@@ -53,13 +54,18 @@ func (m Model) flipFrom(tty, pane string) Model {
 		return m
 	}
 	k := m.roomKeyOf(s)
-	from := map[string]string{}
-	if m.room != nil && m.room.k == k {
-		from = m.room.from
+	if m.room == nil || m.room.k != k {
+		m = m.openRoom(k)
 	}
-	m = m.openRoom(k)
-	m.room.from = from
-	m.room.from[tty] = pane
+	// The room open already keeps its draft and the order on its way; the
+	// cursor lands as in a new one: on the need, else on the talk line,
+	// typing.
+	r := *m.room
+	r.from = maps.Clone(r.from)
+	r.from[tty] = pane
+	r.at = m.openRoom(k).room.at
+	r.typing = m.roomRows(k)[r.at].kind == roomTalk
+	m.room = &r
 	return m
 }
 

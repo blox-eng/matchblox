@@ -324,3 +324,38 @@ func TestUOnAChainOfOneSaysThereIsNoChain(t *testing.T) {
 		t.Fatalf("acts %+v pending %+v flash %q", f.acts(), m.pending, m.flash)
 	}
 }
+
+// TestASecondFlipKeepsTheRoom: ⌥s into the room already open keeps the
+// draft and the order on its way (spec: "the draft stays").
+func TestASecondFlipKeepsTheRoom(t *testing.T) {
+	st := headState(t, runningPlan(), true)
+	st.Queue = nil
+	m, f := roomWith(t, st, "hearth-api")
+	m, _ = send(t, m, "enter", "g", "o", "enter", "x", "esc")
+	act := m.room.act
+	m = m.flipFrom("/dev/pts/1", paneNamed(st, "hearth-api"))
+	if m.room.act != act || act == "" || m.room.draft != "x" {
+		t.Fatalf("after the flip: %+v", m.room)
+	}
+	if _, _ = send(t, m, "enter"); len(f.acts()) != 1 {
+		t.Fatalf("a second order went while the first is on its way: %+v", f.acts())
+	}
+}
+
+// TestAFlipLandsTyping: ⌥s from a pane lands on the talk line, typing,
+// when no need waits; on the need line when one does.
+func TestAFlipLandsTyping(t *testing.T) {
+	st := headState(t, runningPlan(), true)
+	st.Queue = nil
+	m, _ := headModel(t, 160, st)
+	m = m.flipFrom("/dev/pts/1", paneNamed(st, "hearth-api"))
+	if rows := m.roomRows(m.room.k); rows[m.room.at].kind != roomTalk || !m.room.typing {
+		t.Fatalf("landed on %+v, typing %v", rows[m.room.at], m.room.typing)
+	}
+	twoAsk(&st)
+	m, _ = headModel(t, 160, st)
+	m = m.flipFrom("/dev/pts/1", paneNamed(st, "hearth-api"))
+	if rows := m.roomRows(m.room.k); rows[m.room.at].kind != roomNeed || m.room.typing {
+		t.Fatalf("landed on %+v, typing %v", rows[m.room.at], m.room.typing)
+	}
+}
