@@ -170,7 +170,7 @@ func (m Model) boardWords(b *boardDraw) string {
 	case !m.have:
 		return "reading your matches…"
 	case m.filter != "" && b.empty():
-		return fmt.Sprintf("nothing matches %q · %s clears", m.filter, m.keys.main.Back.Help().Key)
+		return `nothing matches "` + m.filter + `" · ` + m.keys.main.Back.Help().Key + " clears"
 	}
 	return ""
 }
@@ -381,6 +381,9 @@ func (m Model) boardStack(d *boardDrawn, b *boardDraw, c boardCol, y, x, w, h in
 			sel = i
 		}
 	}
+	if last := &blocks[len(blocks)-1]; len(last.lines) > last.n { // a blank row is between two cards only
+		last.lines, last.taps = last.lines[:last.n], last.taps[:last.n]
+	}
 	tall := func(a, z int) int {
 		n := 0
 		for _, bl := range blocks[a : z+1] {
@@ -428,7 +431,8 @@ func (m Model) boardStack(d *boardDrawn, b *boardDraw, c boardCol, y, x, w, h in
 }
 
 // boardBlockOf is the card of s in column c, dimmed while the service is
-// lost or its host is not reached, with a blank line under a whole card.
+// lost or its host is not reached, with a blank line under a whole card
+// (boardStack drops it under the last).
 func (m Model) boardBlockOf(b *boardDraw, c boardCol, s sample.Session, w int, quietRow bool) boardBlock {
 	o := cardOpts{
 		sel:       b.picked && c == b.open && paneOf(s) == paneOf(b.chosen),

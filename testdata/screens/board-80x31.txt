@@ -19,10 +19,10 @@
   ctx 31%
   ⏎ go in
 
-  ↓ 1 more
-
-
-
+ ╿ flint-auth                   ✻  2m
+  asks Which way do we fix the login?
+  ctx 62%                     ─╴login
+  ⏎ answer
 ────────────────────────────────────────────────────────────────────────────────
  QUIET · 5   wick-mobile · hearth-notes · ember-reports · kindle-legacy · t… −
  + start a new session

@@ -489,3 +489,83 @@ func TestTheLiveViewFollowsTheChosenCard(t *testing.T) {
 		t.Errorf("at 151 columns the columns do not take the width: %+v (of %v)", d.heads, cols)
 	}
 }
+
+// needStack draws NEEDS YOU of boardFixture, 38 wide and h tall, with
+// name chosen: its lines, and the lines of each card in the column.
+func needStack(t *testing.T, name string, h int) (plain []string, cards [][]string) {
+	t.Helper()
+	m := boardShot(t, boardFixture(t), 80, 31, chooseCard(name))
+	b := boardDraw{idx: m.boardIndex()}
+	m.boardChoose(&b, boardCols[:])
+	for _, s := range b.idx[colNeed] {
+		bl := m.boardBlockOf(&b, colNeed, s, 38, false)
+		cards = append(cards, plainLines(bl.lines[:bl.n]))
+	}
+	d := boardDrawn{cards: map[boardSpot]paneKey{}, taps: map[int][]span{}}
+	m.boardStack(&d, &b, colNeed, 0, 0, 38, h, false)
+	return plainLines(d.lines), cards
+}
+
+func TestTheLastCardTakesNoBlankRow(t *testing.T) {
+	_, cards := needStack(t, "spark-search", 30)
+	h := len(cards) - 1 // a blank between two cards
+	for _, c := range cards {
+		h += len(c)
+	}
+	plain, _ := needStack(t, "spark-search", h)
+	f := strings.Join(plain, "\n")
+	if strings.Contains(f, "↓") || !strings.Contains(f, strings.Join(cards[len(cards)-1], "\n")) {
+		t.Errorf("a last card that fits exactly is not whole in %d rows:\n%s", h, f)
+	}
+
+	// flint-auth, the last, chosen: the ↑ line, hearth-api and a blank, flint-auth.
+	_, cards = needStack(t, "flint-auth", 30)
+	last := len(cards) - 1
+	h = 1 + len(cards[last-1]) + 1 + len(cards[last])
+	plain, _ = needStack(t, "flint-auth", h)
+	if got := strings.TrimRight(plain[0], " "); got != "  ↑ 2 more" {
+		t.Errorf("the chosen last card scrolls to %q, want ↑ 2 more:\n%s", got, strings.Join(plain, "\n"))
+	}
+	if f := strings.Join(plain, "\n"); !strings.Contains(f, strings.Join(cards[last], "\n")) || strings.Contains(f, "↓") {
+		t.Errorf("the chosen last card is not whole:\n%s", f)
+	}
+}
+
+func TestASearchIsSaidAsTyped(t *testing.T) {
+	m := boardShot(t, boardFixture(t), 80, 31, func(m *Model) {
+		m.filter = `say "hi"`
+		m.refresh()
+	})
+	f := strings.Join(plainLines(m.boardPanel(80, m.bodyRows()).lines), "\n")
+	if !strings.Contains(f, `nothing matches "say "hi"" · esc clears`) {
+		t.Errorf("the search is not said as typed:\n%s", f)
+	}
+}
+
+func TestAHiddenColumnGivesItsRoom(t *testing.T) {
+	for _, size := range [][2]int{{80, 31}, {160, 38}} {
+		w := size[0]
+		m := boardShot(t, boardFixture(t), w, size[1], func(m *Model) { m.flipHidden(colWork) })
+		d := m.boardPanel(w, m.bodyRows())
+		for i, l := range d.lines {
+			if lipgloss.Width(l) != w {
+				t.Errorf("w=%d: line %d is %d cells: %q", w, i, lipgloss.Width(l), ansi.Strip(l))
+			}
+		}
+		f := strings.Join(plainLines(d.lines), "\n")
+		for _, name := range []string{"WORKING", "flint-ui", "spark-docs", "ember-billing"} {
+			if strings.Contains(f, name) {
+				t.Errorf("w=%d: the hidden column draws %s:\n%s", w, name, f)
+			}
+		}
+		shown := []boardCol{colNeed, colShip, colQuiet}
+		cols, live := boardWidths(m.layoutAt(w), w, shown)
+		full, _ := boardWidths(m.layoutAt(w), w, boardCols[:])
+		if len(d.heads) != len(cols) || d.heads[0].x1 != cols[0] {
+			t.Errorf("w=%d: heads %+v, want widths %v", w, d.heads, cols)
+		}
+		if live == 0 && cols[0] <= full[0] {
+			t.Errorf("w=%d: NEEDS YOU does not take the room: %v, was %v", w, cols, full)
+		}
+	}
+}
