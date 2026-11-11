@@ -1132,3 +1132,22 @@ func TestEveryEnterHintSaysGoIn(t *testing.T) {
 		t.Errorf("a tap on flint-auth's ⏎ go in: chosen %s, went in %v", chosenName(t, m), cmdMsgs(cmd))
 	}
 }
+
+func TestADigitThatCannotActSaysWhy(t *testing.T) {
+	for _, c := range []struct{ card, digit, said string }{
+		{"hearth-api", "1", "hearth-api asks in its pane · ⏎ goes in"},
+		{"flint-auth", "9", "1-2 only"},
+		{"flint-auth", "0", "1-2 only"},
+		{"flint-ui", "1", "flint-ui asks no question"},
+	} {
+		m, _, clock := menuBoard(t, 80, 31, chooseCard(c.card))
+		*clock = clock.Add(time.Second) // past the dead time
+		m = pressOn(m, c.digit)
+		if got := noticeRow(m); got != c.said {
+			t.Errorf("%s on %s says %q, want %q", c.digit, c.card, got, c.said)
+		}
+		if armed, _ := m.peekMarks(matchNamed(t, m, c.card)); armed != 0 {
+			t.Errorf("%s on %s armed %d", c.digit, c.card, armed)
+		}
+	}
+}

@@ -291,6 +291,9 @@ var fixedNotices = []string{
 	"tap y again to give the go",
 	"the service does not answer: stop `matchblox serve`, then start matchblox again",
 	"refused: a tmux move on gpu-1 never runs on this machine",
+	"ember-reports asks in its pane · ⏎ goes in",
+	"ember-reports asks no question",
+	"1-2 only",
 }
 
 func TestEveryNoticeKeepsItsFix(t *testing.T) {

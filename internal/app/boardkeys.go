@@ -148,8 +148,12 @@ func (m Model) answerFromPeek(digit string) (tea.Model, tea.Cmd) {
 	armed, sent := m.peekMarks(s)
 	said, answer, queued := "", tea.Cmd(nil), false
 	switch {
-	case !ok || !m.peekAnswers(s) || sent > 0:
-		// no question to answer, or its answer is sent
+	case !ok || sent > 0:
+		// no card, or the card says its answer is sent
+	case !m.peekAnswers(s) && m.asksNow(s):
+		said = s.Name + " asks in its pane · " + m.keys.main.Open.Help().Key + " goes in"
+	case !m.peekAnswers(s):
+		said = s.Name + " asks no question"
 	case m.lost || m.conn == nil:
 		m.peekArmed, said = 0, "not sent: no service · it redials"
 	case s.Host != m.opt.Host:
@@ -162,6 +166,7 @@ func (m Model) answerFromPeek(digit string) (tea.Model, tea.Cmd) {
 	case m.now().Sub(m.peekAt) < peekDead:
 		said = "look at " + s.Name + "'s question first"
 	case n < 1 || n > len(q.Options):
+		said = "1-" + strconv.Itoa(len(q.Options)) + " only"
 	case n == armed:
 		var why string
 		if answer, why = m.sendAnswer(s, digit); why != "" {
