@@ -168,10 +168,10 @@ func quietTone(s sample.Session, held bool) string {
 func (m Model) quietCell(s sample.Session) string {
 	mk := m.marks()
 	ch, c := "╿", mk.Head
-	switch k := m.matchOf(s); {
-	case k == matchBurnt:
+	switch m.matchOf(s) {
+	case matchBurnt:
 		ch, c = "│", m.st.theme.Faint
-	case k == matchLit:
+	case matchLit:
 		ch, c = "✦", mk.Flame
 	default:
 		_, held := m.holdOf(s)

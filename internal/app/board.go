@@ -502,7 +502,7 @@ func (m Model) boardStack(d *boardDrawn, b *boardDraw, c boardCol, y, x, w, h in
 		if i < len(blocks)-1 {
 			reserve = 1
 		}
-		if at+len(bl.lines)+reserve > h && !(i == sel && i == start) {
+		if at+len(bl.lines)+reserve > h && (i != sel || i != start) {
 			break
 		}
 		for j, l := range bl.lines {

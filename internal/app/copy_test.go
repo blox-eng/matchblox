@@ -593,7 +593,7 @@ func TestADragIsNeverATap(t *testing.T) {
 	x, y := cardOn(t, m, "kindle-web")
 	m = mouse(t, m, tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft}) // its commands run
 	m = mouse(t, m, tea.MouseMotionMsg{X: x + 12, Y: y + 2, Button: tea.MouseLeft})
-	m = letGo(t, m, point{x + 12, y + 2})
+	letGo(t, m, point{x + 12, y + 2})
 	if len(ran) != 0 || len(*clipped) != 1 {
 		t.Errorf("a drag from the chosen card: ran %q, copied %q", ran, *clipped)
 	}
@@ -603,7 +603,7 @@ func TestADragIsNeverATap(t *testing.T) {
 	if len(ran) != 0 {
 		t.Fatalf("a press on the chosen card went in before the release: %q", ran)
 	}
-	if m = letGo(t, m, point{x, y}); strings.Join(ran, " ") != goIn {
+	if letGo(t, m, point{x, y}); strings.Join(ran, " ") != goIn {
 		t.Errorf("a click on the chosen card ran %q, want %q", ran, goIn)
 	}
 
