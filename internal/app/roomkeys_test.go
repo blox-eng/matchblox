@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"slices"
 	"strings"
 	"testing"
@@ -358,4 +359,48 @@ func TestAFlipLandsTyping(t *testing.T) {
 	if rows := m.roomRows(m.room.k); rows[m.room.at].kind != roomNeed || m.room.typing {
 		t.Fatalf("landed on %+v, typing %v", rows[m.room.at], m.room.typing)
 	}
+}
+
+// TestTalkToAHostThatIsNotConnectedKeepsTheWords: nothing goes, the line
+// says why, and the words stay.
+func TestTalkToAHostThatIsNotConnectedKeepsTheWords(t *testing.T) {
+	st := headState(t, runningPlan(), true)
+	st.Queue = nil
+	m, f := roomWith(t, st, "hearth-api")
+	m.lost = true
+	m, _ = send(t, m, "enter", "g", "o", "enter")
+	if len(f.acts()) != 0 || m.room.act != "" || m.room.draft != "go" || !strings.HasPrefix(m.flash, "not sent: ") {
+		t.Fatalf("acts %+v room %+v flash %q", f.acts(), m.room, m.flash)
+	}
+}
+
+// TestALostConnFreesTheTalkLine: an order whose conn is lost has no
+// answer: its words come back, and the line takes the next.
+func TestALostConnFreesTheTalkLine(t *testing.T) {
+	st := headState(t, runningPlan(), true)
+	st.Queue = nil
+	m, _ := roomWith(t, st, "hearth-api")
+	m, _ = send(t, m, "enter", "g", "o", "enter")
+	next, _ := m.Update(lostMsg{errors.New("eof"), m.conn})
+	if m = next.(Model); m.room.act != "" || m.room.draft != "go" {
+		t.Fatalf("after the loss: %+v", m.room)
+	}
+}
+
+// TestAStartThatFailsSaysWhyOnTheCard: a chain of one whose host stoker
+// does not start says why, and the words come back.
+func TestAStartThatFailsSaysWhyOnTheCard(t *testing.T) {
+	st := headState(t, runningPlan(), true)
+	st.Queue, st.Stoker = nil, &proto.StokerView{}
+	m, f := roomWith(t, st, "spark-docs")
+	m, _ = send(t, at(t, m, roomTalk, "›"), "enter", "g", "o", "enter")
+	if a := f.acts(); len(a) != 1 || a[0].RecID != "stoker:start" {
+		t.Fatalf("acts %+v", a)
+	}
+	next, _ := m.Update(resultMsg(proto.Result{ActID: m.room.act, Err: "no agent on the PATH"}))
+	m = next.(Model)
+	if m.room.queued || m.room.draft != "go" {
+		t.Fatalf("after the refusal: %+v", m.room)
+	}
+	roomRowOf(t, m.roomRows(m.room.k), roomCard, "no agent on the PATH")
 }

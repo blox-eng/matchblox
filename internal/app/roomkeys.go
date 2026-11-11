@@ -209,11 +209,16 @@ func (m Model) talk() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	k := r.k
+	if why := m.cannotSend(k.host); why != "" {
+		m.flash = "not sent: " + why
+		return m, nil
+	}
 	r.sent, r.draft = words, ""
 	if k.isOne() {
 		if v := m.stoker; v == nil || !v.Ready {
-			r.queued = true
-			return m, m.sendTo(k.host, proto.Act{RecID: "stoker:start", Which: "primary"})
+			cmd := m.sendTo(k.host, proto.Act{RecID: "stoker:start", Which: "primary"})
+			r.queued, r.act, r.failed = true, "a"+strconv.Itoa(m.acts), ""
+			return m, cmd
 		}
 		return m.sendRoomOrder()
 	}
@@ -258,8 +263,35 @@ func (m Model) roomQueued(host string) (Model, tea.Cmd) {
 	return m.sendRoomOrder()
 }
 
+// cannotSend is why an order cannot go to host now; "" when it can.
+func (m Model) cannotSend(host string) string {
+	if why := m.refusal(host); why != "" {
+		return why
+	}
+	if host == m.opt.Host && (m.conn == nil || m.lost) {
+		return "no connection"
+	}
+	return ""
+}
+
+// roomLost frees the talk line when host's conn is lost with an order or
+// a start on its way: no answer comes, so the words come back.
+func (m Model) roomLost(host string) Model {
+	if m.room == nil || m.room.k.host != host || m.room.act == "" && !m.room.queued {
+		return m
+	}
+	r := *m.room
+	m.room = &r
+	r.act, r.queued, r.starts = "", false, false
+	if r.draft == "" {
+		r.draft = r.sent
+	}
+	return m
+}
+
 // roomResult takes the result of the talk line's order: the toast when it
-// went, and the words back in the line when it was refused.
+// went, and the words back in the line when it was refused. A chain of
+// one's start that is refused says why on the card.
 func (m Model) roomResult(res proto.Result) (Model, tea.Cmd, bool) {
 	if m.room == nil || m.room.act == "" || m.room.act != res.ActID {
 		return m, nil, false
@@ -267,6 +299,15 @@ func (m Model) roomResult(res proto.Result) (Model, tea.Cmd, bool) {
 	r := *m.room
 	m.room = &r
 	r.act = ""
+	if r.queued { // the start's answer: the words go once the stoker is ready
+		if res.Err != "" {
+			r.queued, r.failed = false, res.Err
+			if r.draft == "" {
+				r.draft = r.sent
+			}
+		}
+		return m, nil, true
+	}
 	starts := r.starts
 	r.starts = false
 	if res.Err != "" {

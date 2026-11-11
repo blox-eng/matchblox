@@ -861,6 +861,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		first := !m.lost
 		m.lost = true
+		m = m.roomLost(m.opt.Host)
 		if blocking(msg.err) {
 			// Trying again cannot help: connecting the host can.
 			m.blocked, m.flash = msg.err, ""
