@@ -1,7 +1,7 @@
 # The board
 
 Issue: #372. Status: sketch approved by the owner, 2026-11-10 ("Looks awesome, lets lock this in"); engineering review and design review, 2026-11-11, with the owner's answers written in below. Date: 2026-11-10.
-Sketch: `design/0019-the-board.html` (the owner's artifact "The Board", version 6). Open it in a browser. It runs at 40, 80 and 160 columns. The sketch is from before the two reviews of 2026-11-11. Where it and this document differ, this document applies (the list is in "What the reviews changed").
+Sketch: `design/0019-the-board.html` (the owner's artifact "The Board", version 6). Open it in a browser. It runs at 40, 80 and 160 columns. It was brought up to the two reviews of 2026-11-11 (artifact version 8). Where it and this document still differ, this document applies.
 Builds on: #326 (the chain room), #346 (Enter goes into the pane), #299 (chains), design/0017 (every host).
 Merge order: #355 → #361 → #326 → #367, then this. Code starts after #326 lands, or after matchblox-chain agrees the file boundaries (see "The chain room").
 
@@ -316,9 +316,9 @@ DESIGN.md §4 stays the source. The board adds where each motion plays.
 
 ## What the reviews changed
 
-The sketch (`design/0019-the-board.html`) shows the design of 2026-11-10. These points differ, by the owner's answers of 2026-11-11:
+The owner approved the sketch of 2026-11-10 (version 7). The reviews of 2026-11-11 changed these points, by the owner's answers. The sketch now shows them (version 8), except where the last table says so:
 
-| The sketch | This document |
+| The design of 2026-11-10 | The reviewed design |
 |---|---|
 | A digit or a tap answers at once | The first press arms, the second sends |
 | `x` merges or kills | `x` kills, `p` merges |
@@ -332,7 +332,9 @@ The sketch (`design/0019-the-board.html`) shows the design of 2026-11-10. These 
 | `WORKING` in the sample's order | By the session's start |
 | Invented names (`api-auth`, `web-cart`) | The canon's fleet (DESIGN.md §7): `hearth-api`, `flint-auth`, `spark-docs`, `kindle-web`, `ember-billing`, `cinder-ci`, `wick-mobile`, on `ws-1` |
 
-One point the owner kept as the sketch has it, against the design review's advice: on a phone a tap on the open page's mark hides that page.
+One point the owner kept as it was, against the design review's advice: on a phone a tap on the open page's mark hides that page.
+
+The sketch does not show: the loading state, the lost service, an empty search, a host that is not reached, the 400 ms dead time, the paste-back check's door, `/` and `z`, and more than one chain.
 
 ## Machine
 

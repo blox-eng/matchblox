@@ -105,7 +105,7 @@ ol.asks li{color:var(--muted)} ol.asks b{color:var(--fg);font-weight:600} ol.ask
 <div class="wrap">
   <header>
     <h1><b>▰</b> the board</h1>
-    <p class="lead">Every match on one screen, in the column of what it needs. This is a working sketch of the console for #372. It runs on made-up sessions.</p>
+    <p class="lead">Every match on one screen, in the column of what it needs. This is a working sketch of the console for #372, on the demo machine's made-up sessions. It shows the design after the engineering and design reviews of 2026-11-11.</p>
   </header>
 
   <section>
@@ -115,13 +115,13 @@ ol.asks li{color:var(--muted)} ol.asks b{color:var(--fg);font-weight:600} ol.ask
         <button id="w80" data-w="80">80</button>
         <button id="w160" data-w="160">160</button>
       </div>
-      <span class="hint">tap a card to peek · again to go in · tap a column's name to hide it · right-click or long-press for the menu · <kbd>← → ↑ ↓</kbd> <kbd>⏎</kbd> <kbd>1 2</kbd> <kbd>c</kbd> <kbd>v</kbd> <kbd>g</kbd> <kbd>s</kbd> <kbd>u</kbd> <kbd>tab</kbd> <kbd>x</kbd> <kbd>y</kbd> <kbd>esc</kbd> · drag over text to copy it</span>
+      <span class="hint">tap a card to peek · again to go in · a digit marks an answer, the same digit sends it · tap a column's name to hide it · right-click or long-press for the menu · <kbd>← → ↑ ↓</kbd> <kbd>⏎</kbd> <kbd>1 2</kbd> <kbd>p</kbd> <kbd>x</kbd> <kbd>y</kbd> <kbd>c</kbd> <kbd>v</kbd> <kbd>g</kbd> <kbd>s</kbd> <kbd>u</kbd> <kbd>tab</kbd> <kbd>esc</kbd> · drag over text to copy it</span>
     </div>
     <div class="stage"><div class="device" id="device">
       <div class="term" id="term" tabindex="0" aria-label="Console prototype"></div>
       <div class="handle" id="handle" hidden><span class="lay"><b class="flame">✦</b> Board</span><span class="grip">⋯⋯</span><span class="kb">⌨</span></div>
       <div class="belt" id="belt" hidden></div>
-      <div class="beltnote" id="beltnote" hidden>Pocket's belt, on a new layout: Board. Drag it sideways. The console draws no key line on Pocket.</div>
+      <div class="beltnote" id="beltnote" hidden>Pocket's belt, on a new layout: Board. Home is ◂, the chosen card's keys, then ↑ ↓ ⏎. Drag it sideways for the rest. Two dim keys (/ and z) are not in this sketch.</div>
     </div></div>
   </section>
 
@@ -143,7 +143,8 @@ ol.asks li{color:var(--muted)} ol.asks b{color:var(--fg);font-weight:600} ol.ask
         <tr><td>see the next column</td><td>Swipe sideways. The column names at the top are the page marks.</td><td><code>← →</code>. They skip a hidden column.</td></tr>
         <tr><td>hide a column</td><td>Tap its name. It leaves the board and waits at the top as <code>+ working 3</code>. Tap that to bring it back.</td><td>The menu's last line</td></tr>
         <tr><td>peek at a match</td><td>Tap its card. The card opens in place: what the agent said last, and its question with the options.</td><td><code>↑ ↓</code></td></tr>
-        <tr><td>answer from the peek</td><td>Tap an option.</td><td><code>1</code> <code>2</code>, only while the question is open on the card</td></tr>
+        <tr><td>answer from the peek</td><td>Tap an option to mark it. Tap it again to send.</td><td><code>1</code> or <code>2</code> marks; the same digit again sends; <code>esc</code> clears</td></tr>
+        <tr><td>merge a pull request</td><td>The belt's <code>p merge</code>, then <code>y</code>.</td><td><code>p</code>, then a typed <code>y</code>. <code>x</code> only ever kills.</td></tr>
         <tr><td>go in</td><td>Tap the open card again.</td><td><code>⏎</code></td></tr>
         <tr><td>copy the last message</td><td>Long-press the card, then <code>copy last message</code>. On a desk, right-click.</td><td><code>c</code></td></tr>
         <tr><td>copy any text</td><td>On a desk, drag over it. It is copied when you let go.</td><td></td></tr>
@@ -162,11 +163,14 @@ ol.asks li{color:var(--muted)} ol.asks b{color:var(--fg);font-weight:600} ol.ask
     <ol class="asks">
       <li><b>One column for each match, and the leftmost wins.</b> Needs you: it asks, a pull request waits for your merge, a stoker step waits for your go, or its ship is stuck. Then Working, then Shipping (a pull request moves by itself), then Quiet.</li>
       <li><b>You choose the columns.</b> A tap on a column's name hides it, and the others take its room. The header still counts who needs you while that column is hidden, and a tap on the count brings it back. The console remembers the choice for each screen.</li>
-      <li><b>The chosen card is the peek.</b> It opens in place with the last message and the question. <code>1</code> and <code>2</code> answer only there, where you see the question. <em>Your call:</em> the console guards a key that answers a question you have not seen. The peek shows it, so I let the digit through.</li>
+      <li><b>The chosen card is the peek, and an answer takes two presses.</b> The card opens in place with the last message and the question. The first <code>1</code> or tap marks an option. The same press again sends it. So an old habit or a thumb cannot answer by mistake.</li>
+      <li><b>One gold card.</b> The accent marks the chosen card, the count in the header and the open tab. Nothing else.</li>
+      <li><b>Notices show in the strip's row.</b> The count in the header never hides. On a phone a notice may take two lines, so its fix is never cut. A key that changed its job says so once.</li>
+      <li><b><code>x</code> kills. <code>p</code> merges.</b> No key changes what it does by the state of a card.</li>
       <li><b>Two densities, one key.</b> <code>v</code> switches verbose cards and one line a match. The peek is the same in both.</li>
-      <li><b>The chain is a stub on the card, and a way to narrow the board.</b> Choose a card and the stubs of its chain light, in every column. Tap a stub, or press <code>g</code>, and the board shows only that chain. <code>esc</code> shows every chain again. The header still counts everyone who needs you.</li>
+      <li><b>The chain is a stub on the card, and a way to narrow the board.</b> Choose a card and the stubs of its chain light, in every column. Tap a stub, or press <code>g</code>, and the board shows only that chain, with its stoker's card above the columns. On a phone the stoker is its own page. <code>esc</code> shows every chain again. The header still counts everyone who needs you.</li>
       <li><b>The dock becomes one strip.</b> One line at the bottom shows usage, the machine or this week. <code>u</code>, or a tap on it, turns to the next, and the fourth turn hides it. It does not turn by itself.</li>
-      <li><b>On Pocket the keys live on the belt.</b> The matchbox tray gets a fifth match, Board. The app is on it while the console shows the board, as Commands follows the agent you are in. Home is <code>◂ ← → ↑ ↓ ⏎</code>, then the chosen card's keys, then <code>c m g v s u ⇥</code>. The two rows the key line took go to the cards.</li>
+      <li><b>On Pocket the keys live on the belt.</b> The matchbox tray gets a fifth match, Board. The app is on it while the console shows the board, as Commands follows the agent you are in. Home is <code>◂</code>, the chosen card's keys, then <code>↑ ↓ ⏎</code>. The rest is one drag away. The two rows the key line took go to the cards.</li>
       <li><b>Each card names its harness.</b> The mark sits beside the wait: <code>✻</code> Claude Code, <code>❋</code> Codex, <code>⬢</code> Cursor, <code>▣</code> OpenCode, <code>·</code> any other. They are the marks the accounts use today.</li>
       <li><b>A host is a filter, not a place.</b> The board opens on all hosts. <code>s</code>, or a tap on the host's name at the top, narrows it to one. A card from another host says so.</li>
       <li><b>Not in the sketch:</b> the setup steps, the new-session row and the recommendations. They keep their place above and below the board.</li>
@@ -185,13 +189,13 @@ ol.asks li{color:var(--muted)} ol.asks b{color:var(--fg);font-weight:600} ol.ask
 
   <section>
     <h2>The match on the board</h2>
-    <p style="margin-bottom:14px">The canon's rule stays: only fire, and a match that needs you, move. On a board the eye also has to follow a card that changes column. Answer <code>api-auth</code> in the sketch and watch it land.</p>
+    <p style="margin-bottom:14px">The canon's rule stays: only fire, and a match that needs you, move. On a board the eye also has to follow a card that changes column. Answer <code>flint-auth</code> in the sketch (<code>1</code>, then <code>1</code>) and watch it land.</p>
     <div class="tw"><table>
       <thead><tr><th>Where</th><th>What moves</th><th>Why</th></tr></thead>
       <tbody>
         <tr><td>Needs you</td><td>The head breathes, once each 2.4 s, on every match that waits for you. Nothing else in the column moves.</td><td>The column you must read is the only one that calls.</td></tr>
         <tr><td>Working</td><td>The flame flickers, as today.</td><td>Fire is the system's work. It is small, and it is what "fine" looks like.</td></tr>
-        <tr><td>a card changes column</td><td>The change plays once on the card where it lands: the strike (the head flashes, a spark, the flame grows) or the going out. The name is bright for a second.</td><td>A card that jumps unseen is the board's worst failure. The motion is the canon's own, at the canon's times.</td></tr>
+        <tr><td>a card changes column</td><td>Land, 1.2 s. Into Working: the strike plays and the name is bright. Into any other column: the going out plays and the card sits on the wash, with no fire.</td><td>A card that jumps unseen is the board's worst failure. The motion is the canon's own, at the canon's times.</td></tr>
         <tr><td>Shipping</td><td>Still. When a ship passes a stage, one bright cell runs along its track, as it does down a chain's fuse today.</td><td>The track is already the picture of progress.</td></tr>
         <tr><td>Quiet</td><td>Nothing. The head cools with age: red while idle, ember when cold, faint when stale or parked.</td><td>You read the age of the drawer by its colour, with no words.</td></tr>
         <tr><td>Pocket</td><td>The haptics the app has: a rigid tap on a strike, the buzz on a new wait.</td><td>The hand learns the board without the eye.</td></tr>
@@ -243,35 +247,37 @@ function glyph(s){const t=s.moved?Date.now()-s.moved:9e9;
   return G[s.m]}
 const fresh=s=>s.moved&&Date.now()-s.moved<1200;
 function moved(s,arr){s.moved=Date.now();s.arr=arr;[210,510,810,1250].forEach(ms=>setTimeout(draw,ms))}
-const HOSTS=['ws-1','macbook'];
+const HOSTS=['ws-1','gpu-1'];
 let S=[
- {id:'api-auth',col:'need',m:'ask',word:'asks',line:'Which way do we fix the login?',wait:'2m',ctx:62,chain:'login',
+ {id:'flint-auth',col:'need',m:'ask',word:'asks',line:'Which way do we fix the login?',wait:'2m',ctx:62,chain:'login',
   said:['I can fix the login in two ways. The token check is a small patch. The new session store also fixes the logout bug.'],
   q:['Patch the token check','Move to the new session store'],acts:[['⏎','answer','Enter']]},
- {id:'web-cart',col:'need',m:'rest',word:'green',line:'#4556 waits for your merge',wait:'9m',ctx:48,ship:'#4556 ●━●━◉┄○┄○',
-  said:['Every check passed on #4556. I did not merge: that is yours.'],merge:'gh pr merge 4556 --squash',acts:[['x','merge #4556','x'],['⏎','go in','Enter']]},
- {id:'infra-dns',col:'need',m:'rest',word:'go?',line:'the stoker wants to run terraform apply',wait:'4m',ctx:31,step:'≋ step 2 of 3',
+ {id:'kindle-web',col:'need',m:'rest',word:'green',line:'#4556 waits for your merge',wait:'9m',ctx:48,ship:'#4556 ●━●━◉┄○┄○',
+  said:['Every check passed on #4556. I did not merge: that is yours.'],merge:'gh pr merge 4556 --squash',acts:[['p','merge #4556','p'],['⏎','go in','Enter']]},
+ {id:'hearth-api',col:'need',m:'rest',word:'go?',line:'the stoker wants to run terraform apply',wait:'4m',ctx:31,step:'≋ step 2 of 3',
   said:['The plan changes 2 records and removes none.'],go:true,acts:[['y','give the go','y'],['⏎','go in','Enter']]},
- {id:'search-idx',col:'need',m:'rest',word:'stuck',line:'CI failed · lint, twice',wait:'31m',ctx:77,ship:'#4548 ●━✕┄○┄○',shipTone:'neg',
+ {id:'spark-search',col:'need',m:'rest',word:'stuck',line:'CI failed · lint, twice',wait:'31m',ctx:77,ship:'#4548 ●━✕┄○┄○',shipTone:'neg',
   said:['Lint fails on a file I did not change. I tried twice and stopped.'],acts:[['⏎','tell it','Enter']]},
- {id:'login-ui',col:'work',m:'burn',word:'busy',line:'writes the token refresh test',wait:'12m',ctx:40,chain:'login',said:['Writing the test for a token that expires mid-request.']},
- {id:'billing',host:'macbook',col:'work',m:'burn',word:'agents',line:'3 subagents work',wait:'6m',ctx:71,said:['Three subagents read the invoice paths.']},
- {id:'docs-site',col:'work',m:'burn',word:'tests',line:'go test ./... runs',wait:'1m',ctx:22,said:['Running the suite.']},
- {id:'rate-limit',col:'ship',m:'rest',word:'ci',line:'6 of 9 jobs',wait:'4m',ctx:55,ship:'#4551 ●━◉┄○┄○',said:['Pushed. CI runs.']},
- {id:'login-api',col:'ship',m:'rest',word:'review',line:'waits for review',wait:'40m',ctx:44,ship:'#4560 ●━◉┄○┄○',chain:'login',said:['Opened #4560 and asked for a review.']},
- {id:'mailer',host:'macbook',col:'ship',m:'rest',word:'merged',line:'deploying',wait:'2h',ctx:37,ship:'#4549 ●━●━●━◉┄○',said:['Merged. The deploy runs.']},
- {id:'notes',host:'macbook',col:'quiet',m:'rest',word:'idle',line:'',wait:'1h',ctx:18,said:['Done.']},
- {id:'reports',col:'quiet',m:'rest',word:'out of work',line:'',wait:'3h',ctx:26,said:['Nothing left on my list.']},
- {id:'mobile',col:'quiet',m:'rest',word:'out · back 19:50',line:'',wait:'50m',ctx:33,said:['The plan limit stopped me.']},
- {id:'legacy',col:'quiet',m:'parked',word:'⏸ parked by you',line:'',wait:'5h',ctx:52,said:['Parked.']},
- {id:'scratch',host:'macbook',col:'quiet',m:'cold',word:'cold',line:'',wait:'2d',ctx:9,said:['Idle since Sunday.']},
+ {id:'flint-ui',col:'work',m:'burn',word:'busy',line:'writes the token refresh test',wait:'12m',ctx:40,chain:'login',said:['Writing the test for a token that expires mid-request.']},
+ {id:'ember-billing',host:'gpu-1',col:'work',m:'burn',word:'agents',line:'3 subagents work',wait:'6m',ctx:71,said:['Three subagents read the invoice paths.']},
+ {id:'spark-docs',col:'work',m:'burn',word:'tests',line:'go test ./... runs',wait:'1m',ctx:22,said:['Running the suite.']},
+ {id:'hearth-limits',col:'ship',m:'rest',word:'ci',line:'6 of 9 jobs',wait:'4m',ctx:55,ship:'#4551 ●━◉┄○┄○',said:['Pushed. CI runs.']},
+ {id:'flint-api',col:'ship',m:'rest',word:'review',line:'waits for review',wait:'40m',ctx:44,ship:'#4560 ●━◉┄○┄○',chain:'login',said:['Opened #4560 and asked for a review.']},
+ {id:'cinder-ci',host:'gpu-1',col:'ship',m:'rest',word:'merged',line:'deploying',wait:'2h',ctx:37,ship:'#4549 ●━●━●━◉┄○',said:['Merged. The deploy runs.']},
+ {id:'hearth-notes',host:'gpu-1',col:'quiet',m:'rest',word:'idle',line:'',wait:'1h',ctx:18,said:['Done.']},
+ {id:'ember-reports',col:'quiet',m:'rest',word:'out of work',line:'',wait:'3h',ctx:26,said:['Nothing left on my list.']},
+ {id:'wick-mobile',col:'quiet',m:'rest',word:'out · back 19:50',line:'',wait:'50m',ctx:33,said:['The plan limit stopped me.']},
+ {id:'kindle-legacy',col:'quiet',m:'parked',word:'⏸ parked by you',line:'',wait:'5h',ctx:52,said:['Parked.']},
+ {id:'tinder-scratch',host:'gpu-1',col:'quiet',m:'cold',word:'cold',line:'',wait:'2d',ctx:9,said:['Idle since Sunday.']},
 ];
-const st={W:80,H:31,col:'need',idx:{need:0,work:0,ship:0,quiet:0},pane:null,confirm:null,toast:'',tab:'board',hidden:new Set(),verbose:true,menu:null,focus:null,host:null,mi:0,drill:null,strip:'usage'};
+const st={W:80,H:31,col:'need',idx:{need:0,work:0,ship:0,quiet:0},pane:null,confirm:null,toast:'',tab:'board',hidden:new Set(),verbose:true,menu:null,focus:null,host:null,mi:0,drill:null,strip:'usage',arm:null,once:new Set(),stokerPage:false};
+const ONCE={c:'c copies now. The stoker is on its card.',v:'v changes the cards now: verbose, or one line.',s:'s changes the host now. The order of a column is fixed.',g:'g shows one chain now. esc shows all.',u:'u turns the strip now.',p:'p merges now. The ships are on their cards.',digit:'A digit marks an answer now. Press it again to send.'};
+const once=k=>{if(ONCE[k]&&!st.once.has(k)){st.once.add(k);toast(ONCE[k])}};
 const STRIPS=['usage','machine','week','off'];
 const vis=c=>!st.hidden.has(c);
 const hostOf=s=>s.host||'ws-1';
 const MARK={claude:'✻',codex:'❋',cursor:'⬢',opencode:'▣',other:'·'};
-const HN={'web-cart':'codex','docs-site':'codex','mailer':'codex','billing':'opencode','reports':'cursor','scratch':'other'};
+const HN={'kindle-web':'codex','cinder-ci':'codex','wick-mobile':'opencode','ember-reports':'cursor','tinder-scratch':'other'};
 const mark=s=>MARK[HN[s.id]||'claude'];
 const inScope=s=>(!st.host||hostOf(s)===st.host)&&(!st.focus||s.chain===st.focus);
 const inCol=c=>S.filter(s=>s.col===c&&inScope(s));
@@ -294,31 +300,37 @@ function wrap(t,w,max){const out=[];let cur='';for(const word of t.split(' ')){i
 const ctxCls=c=>c>=85?'neg':c>=70?'warn':'faint';
 
 function card(s,w,isSel,lit){
-  const g=glyph(s),o=[],need=s.col==='need',full=st.verbose||isSel;
-  o.push(spread([[isSel?'▌':' ','accent'],[g[0],g[1]],[' ',''],[s.id,fresh(s)?'core b':isSel?'fg b':'fg'],...(!st.host&&s.host?[[' @'+s.host,'faint']]:[])],[[mark(s)+' ','muted'],[s.wait.padStart(3)+' ','faint']],w));
+  const g=glyph(s),o=[],need=s.col==='need',full=st.verbose||isSel,beside=st.W>=120;
+  const landed=fresh(s),fire=landed&&s.arr==='strike';
+  o.push(spread([[isSel?'▌':' ','accent'],[g[0],g[1]],[' ',''],[s.id,fire?'core b':isSel?'fg b':'fg'],...(!st.host&&s.host?[[' @'+s.host,'faint']]:[])],[[mark(s)+' ','muted'],[s.wait.padStart(3)+' ','faint']],w));
   const said=s.word+(s.line?' '+s.line:'');
   const text=isSel||(need&&w>=34&&st.verbose)?wrap(said,w-3,isSel?3:2):[said];
   if(full||need)text.forEach((t,i)=>{const wd=i===0?s.word.slice(0,t.length):'';
-    o.push(L(['  ',''],[wd,need?'accent':'muted'],[t.slice(wd.length),'muted']))});
-  if(full){const left=[['  ','']];
-    if(s.ship)left.push([s.ship,s.shipTone||'muted'],['  ','']);
+    o.push(L(['  ',''],[wd,isSel?'accent':need?'fg b':'muted'],[t.slice(wd.length),'muted']))});
+  if(full){const left=[['  ','']];let ship=s.ship,stub=s.chain?[[(lit?'━╸':'─╴')+s.chain+' ',lit?'fg':'faint','focus:'+s.chain]]:[];
+    const ctx=(w>=26||s.ctx>=70||!(s.ship||s.step))?['ctx '+s.ctx+'%',ctxCls(s.ctx)]:null;
+    if(w<26&&(ship||s.step))stub=[];                                  // a narrow card: the stub leaves first
+    if(ship&&w<26){const room=w-3-(ctx?ctx[0].length+2:0);let c=chars(ship);while(c.length>room&&c.slice(-2).join('')==='┄○')c=c.slice(0,-2);ship=c.join('')}
+    if(ship)left.push([ship,s.shipTone||'muted'],['  ','']);
     if(s.step)left.push([s.step,'night'],['  ','']);
-    if(w>=26||s.ctx>=70||!(s.ship||s.step))left.push(['ctx '+s.ctx+'%',ctxCls(s.ctx)]);
-    o.push(spread(left,s.chain?[[(lit?'━╸':'─╴')+s.chain+' ',lit?'accent':'faint','focus:'+s.chain]]:[],w))}
-  if(isSel){wrap('“'+s.said[0]+'”',w-3,3).forEach(t=>o.push(L(['  ',''],[t,'fg'])));
-    if(s.q)s.q.forEach((q,i)=>wrap((i+1)+'. '+q,w-3,2).forEach((t,j)=>o.push(L([j?'     ':'  ',''],[j?t:t.slice(0,2),'accent','pick'+i],[j?'':t.slice(2),'fg','pick'+i]))))}
-  if(s.acts&&(isSel||need&&st.verbose)){const a=[['  ','']];if(isSel&&s.q)a.push(['1-2','accent'],[' answer   ','muted']);
-    s.acts.forEach(x=>{if(isSel&&s.q&&x[1]==='answer')x=['⏎','go in','Enter'];a.push([x[0],'accent',x[2]],[' '+x[1]+'   ','muted',x[2]])});o.push(L(...a))}
+    if(ctx)left.push(ctx);
+    o.push(spread(left,stub,w))}
+  const armed=isSel&&st.arm&&st.arm.id===s.id?st.arm.n:-1;
+  if(isSel&&!beside){wrap('“'+s.said[0]+'”',w-3,3).forEach(t=>o.push(L(['  ',''],[t,'fg'])));
+    if(s.q)s.q.forEach((q,i)=>wrap((i+1)+'. '+q,w-3,2).forEach((t,j)=>o.push(L([j?'     ':(i===armed?'❯ ':'  '),'accent','pick'+i],[j?t:t.slice(0,2),i===armed?'accent b':'muted','pick'+i],[j?'':t.slice(2),i===armed?'fg b':'fg','pick'+i]))))}
+  if(s.acts&&(isSel||need&&st.verbose)){const a=[['  ','']],kc=isSel?'accent':'muted';
+    if(isSel&&s.q)a.push(...(armed>=0?[[String(armed+1),'accent','pick'+armed],[' again sends · ','muted','pick'+armed],['esc','accent','Escape'],[' clears   ','muted','Escape']]:[['1-2','accent'],[' mark an answer   ','muted']]));
+    s.acts.forEach(x=>{if(isSel&&s.q&&x[1]==='answer')x=['⏎','go in','Enter'];a.push([x[0],kc,x[2]],[' '+x[1]+'   ','muted',x[2]])});o.push(L(...a))}
   if(full)o.push(L());
-  return o.map((l,i)=>({...fit(l,w),wash:isSel&&i<o.length-1,act:'sel:'+s.id}));
+  return o.map((l,i)=>({...fit(l,w),wash:(isSel||landed&&!fire)&&i<o.length-(full?1:0),act:'sel:'+s.id}));
 }
 function quietRow(s,w,isSel){const g=glyph(s);
-  const r=[{...spread([[isSel?'▌':' ','accent'],[g[0],g[1]],[' ',''],[s.id.padEnd(11),isSel?'fg b':'fg'],[s.word,'faint']],[[mark(s)+' ','muted'],[s.wait.padStart(3)+' ','faint']],w),wash:isSel,act:'sel:'+s.id}];
+  const r=[{...spread([[isSel?'▌':' ','accent'],[g[0],g[1]],[' ',''],[w<22?s.id:s.id.padEnd(14),isSel?'fg b':'fg'],[w<22?'':s.word,'faint']],[[mark(s)+' ','muted'],[s.wait.padStart(3)+' ','faint']],w),wash:isSel,act:'sel:'+s.id}];
   if(isSel)r.push({...fit(L(['   “'+s.said[0]+'”','muted']),w),wash:true,act:'sel:'+s.id});return r}
 
 function column(c,w,h){
   const list=inCol(c),cur=sel(),lines=[];
-  if(!list.length){lines.push(blank(w),fit(L(['  '+(c==='need'?'No match waits for you.':'none'),'faint']),w))}
+  if(!list.length){lines.push(blank(w),fit(L(['  '+(c==='need'?'nothing needs you':'none'),'faint']),w))}
   const blocks=list.map(s=>{const isSel=st.col===c&&cur&&cur.id===s.id;const lit=cur&&cur.chain&&cur.chain===s.chain;
     return c==='quiet'&&st.W>=120?quietRow(s,w,isSel):card(s,w,isSel,lit)});
   let start=0;const si=st.col===c?Math.min(st.idx[c],list.length-1):0;
@@ -332,7 +344,7 @@ function column(c,w,h){
 }
 function paneLines(s,w,h){const o=[];
   s.said.forEach(t=>wrap(t,w).forEach(x=>o.push(L([x,'fg']))));o.push(L());
-  if(s.q){o.push(L([s.line,'fg b']));s.q.forEach((q,i)=>o.push({...L([(i===0?'❯ ':'  ')+(i+1)+'. ','accent','pick'+i],[q,'fg','pick'+i])}))}
+  if(s.q){o.push(L([s.line,'fg b']));s.q.forEach((q,i)=>{const on=st.arm&&st.arm.id===s.id&&st.arm.n===i;o.push({...L([(on?'❯ ':'  ')+(i+1)+'. ',on?'accent b':'muted','pick'+i],[q,on?'fg b':'fg','pick'+i])})})}
   else if(st.pane)o.push(L(['keys go to '+s.id,'faint']));
   while(o.length<h)o.push(L());return o.slice(0,h).map(l=>fit(l,w))}
 function box(title,tcls,inner,w){const top={segs:[['╭─ ','hair'],[title,tcls],[' '+'─'.repeat(Math.max(w-5-chars(title).length,0))+'╮','hair']]};
@@ -344,7 +356,7 @@ function hints(){const s=sel(),phone=st.W<60;
   if(st.menu)return [['↑↓','accent'],[' choose   ','muted'],['⏎','accent','Enter'],[' do it   ','muted','Enter'],['esc','accent','Escape'],[' close','muted','Escape']];
   if(st.tab==='machine')return st.drill?[['esc','accent','Escape'],[' machine','muted','Escape']]:[...(phone?[]:[['↑↓','accent'],[' choose   ','muted']]),['⏎','accent','Enter'],[' open   ','muted','Enter'],['s','accent','s'],[' hosts   ','muted','s'],['tab','accent','Tab'],[' board','muted','Tab']];
   if(st.pane){const p=S.find(x=>x.id===st.pane);return [...(p&&p.q?[['1-2','accent'],[' answer   ','muted']]:[]),['esc','accent','Escape'],[' board','muted','Escape']]}
-  const gs=[];if(!phone)(s&&s.acts||[['⏎','go in','Enter']]).forEach(a=>{if(s&&s.q&&a[1]==='answer'){gs.push([['1-2','accent'],[' answer   ','muted']]);a=['⏎','go in','Enter']}gs.push([[a[0],'accent',a[2]],[' '+a[1]+'   ','muted',a[2]]])});
+  const gs=[];if(!phone)(s&&s.acts||[['⏎','go in','Enter']]).forEach(a=>{if(s&&s.q&&a[1]==='answer'){gs.push(st.arm&&st.arm.id===s.id?[[String(st.arm.n+1),'accent'],[' again sends   ','muted'],['esc','accent','Escape'],[' clears   ','muted','Escape']]:[['1-2','accent'],[' mark an answer   ','muted']]);a=['⏎','go in','Enter']}gs.push([[a[0],'accent',a[2]],[' '+a[1]+'   ','muted',a[2]]])});
   if(st.focus)gs.push([['esc','accent','Escape'],[' all chains   ','muted','Escape']]);else if(s&&s.chain&&!phone)gs.push([['g','accent','g'],[' its chain   ','muted','g']]);
   gs.push([['c','accent','c'],[' copy   ','muted','c']],[['v','accent','v'],[st.verbose?' one line   ':' verbose   ','muted','v']]);
   gs.push([['s','accent','s'],[' hosts   ','muted','s']],[['u','accent','u'],[' strip   ','muted','u']]);
@@ -354,26 +366,29 @@ function hints(){const s=sel(),phone=st.W<60;
 function screen(){
   const W=st.W,phone=W<60,wide=W>=120,H=phone?34:wide?38:31,rows=[];st.H=H;
   const need=S.filter(s=>s.col==='need').length;
-  const crumb=st.focus?[['   ',''],['chain '+st.focus+' · '+mates(st.focus),'accent b','Escape'],['  esc all','faint','Escape']]:[];
-  const right=st.toast?[[st.toast,'muted']]:[need?['● '+need+(need===1?' needs you':' need you'),'accent','show:need']:['all burn or rest','faint'],...(phone?[]:[['   stoker off','faint']])];
-  const scope=[[' '+(st.host||'all hosts')+' ▾',st.host?'accent':'muted','s']];
-  rows.push([spread(phone&&st.focus?[['▰','accent'],[' chain '+st.focus+' · '+mates(st.focus),'accent b','Escape']]:[['▰','accent'],...(phone?[]:[[' matchblox ·','fg']]),...scope],right,W)]);
+  const crumb=st.focus?[['   ',''],['chain '+st.focus+' · '+mates(st.focus),'fg b','Escape'],['  esc all','faint','Escape']]:[];
+  const right=[need?['● '+need+(need===1?' needs you':' need you'),'accent','show:need']:['all burn or rest','faint'],...(phone?[]:[['   stoker off','faint']])];
+  const scope=[[' '+(st.host||'all hosts')+' ▾',st.host?'fg':'muted','s']];
+  rows.push([spread(phone&&st.focus?[['▰','accent'],[' chain '+st.focus+' · '+mates(st.focus),'fg b','Escape']]:[['▰','accent'],...(phone?[]:[[' matchblox ·','fg']]),...scope],right,W)]);
   const back=COLS.filter(c=>!vis(c)).flatMap(c=>[['+','accent','show:'+c],[' '+SHORT[c]+' '+inCol(c).length+'  ','faint','show:'+c]]);
   if(!phone){rows.push([spread([[st.tab==='board'?'BOARD '+S.filter(inScope).length:'board '+S.filter(inScope).length,st.tab==='board'?'accent b':'faint','Tab'],['   ',''],[st.tab==='machine'?'MACHINE':'machine',st.tab==='machine'?'accent b':'faint','Tab'],...crumb],back,W)]);
     rows.push([fit(L(['─'.repeat(W),'hair']),W)])}
   const foot=phone&&!st.confirm&&!st.menu?0:2;
-  const bodyH=H-rows.length-(st.strip==='off'?0:1)-foot;let body=[];
+  const note=st.toast?wrap(st.toast,W-2,phone?2:1):null;
+  const bodyH=H-rows.length-(note?note.length:st.strip==='off'?0:1)-foot;let body=[];
   const pane=st.pane&&S.find(x=>x.id===st.pane);
-  const head=(c,w)=>fit(L([' ',''],[NAME[c],c===st.col?'accent b':(c==='need'&&need?'accent':'faint'),'hide:'+c],[' · '+inCol(c).length,'faint','hide:'+c],['  −','faint','hide:'+c]),w);
+  const head=(c,w)=>fit(L([' ',''],[NAME[c],c===st.col?'fg b':'faint','hide:'+c],[' · '+inCol(c).length,'faint','hide:'+c],['  −','faint','hide:'+c]),w);
   const none=()=>[[blank(W)],[fit(L(['  Every column is hidden. Tap a ','faint'],['+','accent'],[' name above to bring one back.','faint']),W)]];
   if(st.tab==='machine'){body=machineBody(W,bodyH)}
   else if(pane&&!wide){body.push([fit(L(['‹ board','accent','Escape'],['   ',''],[pane.id+' · '+pane.word,'fg b']),W)],[fit(L(['─'.repeat(W),'hair']),W)]);
     paneLines(pane,W-2,bodyH-2).forEach(l=>body.push([{segs:[[' ',''],...l.segs,[' ','']]}]))}
   else if(phone){
-    const pg=[];COLS.filter(vis).forEach(c=>{const on=c===st.col;pg.push([(on?NAME[c]:SHORT[c])+' '+inCol(c).length+(on?' −':''),on?'accent b':'faint',on?'hide:'+c:'col:'+c],['  ',''])});
+    const pg=[];COLS.filter(vis).forEach(c=>{const on=c===st.col;pg.push([(on?NAME[c]:SHORT[c])+' '+inCol(c).length+(on?' −':''),on?'fg b':'faint',on?'hide:'+c:'col:'+c],['  ',''])});
+    if(st.focus)pg.unshift([st.stokerPage?'STOKER':'stoker',st.stokerPage?'fg b':'faint','stoker'],['  ','']);
     if(!back.length)pg.pop();
     body.push([fit(L([' ',''],...pg,...back),W)],[fit(L(['─'.repeat(W),'hair']),W)]);
-    if(vis(st.col))column(st.col,W,bodyH-2).forEach(l=>body.push([l]));else body.push(...none());
+    if(st.focus&&st.stokerPage)stokerCard(W,true).forEach(l=>body.push([fit(l,W)]));
+    else if(vis(st.col))column(st.col,W,bodyH-2).forEach(l=>body.push([l]));else body.push(...none());
   } else {
     const cs=COLS.filter(c=>vis(c)&&(wide||c!=='quiet'));
     const base=wide?{need:36,work:25,ship:25,quiet:18}:{need:38,work:20,ship:20};
@@ -382,20 +397,25 @@ function screen(){
     const liveW=wide?W-ws.reduce((a,b)=>a+b,0)-ws.length:0;
     const q=inCol('quiet'),shelfOn=!wide&&vis('quiet');
     const shelf=!shelfOn?0:(st.col==='quiet'?Math.min(q.length,6)+3:2);
-    const colH=bodyH-1-shelf;
+    const room=st.focus?stokerCard(W,false):[];
+    const colH=bodyH-1-shelf-room.length-(st.focus?1:0);
     const blocks=cs.map((c,i)=>[head(c,ws[i]),...column(c,ws[i],colH)]);
     if(wide){const s=sel();const inner=paneLines(s&&vis(st.col)?s:{said:['']},liveW-4,bodyH-2);
       blocks.push(box(s&&vis(st.col)?s.id+' · '+s.word:'',st.pane?'accent b':'muted',inner,liveW))}
     body=blocks.length?hjoin(blocks,colH+1):none();
+    body.unshift(...room.map(l=>[fit(l,W)]));
     while(body.length<colH+1)body.push([blank(W)]);
+    while(body.length<colH+1+room.length)body.push([blank(W)]);
+    if(st.focus)body.push([fit(L([' › ','muted'],['tell '+st.focus+"'s stoker…",'faint']),W)]);
     if(shelfOn){body.push([fit(L(['─'.repeat(W),'hair']),W)]);
       if(st.col==='quiet'){body.push([head('quiet',W)]);q.slice(0,6).forEach(s=>body.push(...quietRow(s,W,sel()&&sel().id===s.id).map(l=>[l])))}
       else body.push([spread([[' QUIET','faint','col:quiet'],[' · '+q.length+'   ','faint','col:quiet'],[q.map(s=>s.id).join(' · '),'faint','col:quiet'],['   ▴','faint','col:quiet']],[['−  ','faint','hide:quiet']],W)])}
   }
   while(body.length<bodyH)body.push([blank(W)]);rows.push(...body.slice(0,bodyH));
-  if(st.strip!=='off'){const one=st.host||'ws-1',two=!st.host&&!phone;
+  if(note)note.forEach(t=>rows.push([fit(L([' '+t,'fg']),W)]));
+  else if(st.strip!=='off'){const one=st.host||'ws-1',two=!st.host&&!phone;
     const txt={usage:phone?' ✻ 5h 62% · wk 41%  ❋ 5h 12%':(W<120?' ✻ Claude Max  5h ▰▰▰▰▰▱▱▱ 62%  wk 41%   ❋ OpenAI Plus  5h 12%':' ✻ Claude Max  5h ▰▰▰▰▰▱▱▱ 62% · 16:00   wk ▰▰▰▱▱▱▱▱ 41%   ❋ OpenAI Plus  5h ▰▱▱▱▱▱▱▱ 12% · 18:40   wk 30%'),
-      machine:phone?' '+one+' cpu 38% · mem 41 of 64 GB':' '+(one==='macbook'?'macbook  cpu ▂▂▃▂▂▃▂▂ 12% · mem 9 of 16 GB':'ws-1  cpu ▃▄▅▄▃▅▆▅ 38% · mem 41 of 64 GB')+(two?(W<120?'   macbook  cpu 12%':'   macbook  cpu ▂▂▃▂▂▃▂▂ 12% · mem 9 of 16 GB'):''),
+      machine:phone?' '+one+' cpu 38% · mem 41 of 64 GB':' '+(one==='gpu-1'?'gpu-1  cpu ▂▂▃▂▂▃▂▂ 12% · mem 9 of 16 GB':'ws-1  cpu ▃▄▅▄▃▅▆▅ 38% · mem 41 of 64 GB')+(two?(W<120?'   gpu-1  cpu 12%':'   gpu-1  cpu ▂▂▃▂▂▃▂▂ 12% · mem 9 of 16 GB'):''),
       week:phone?' week ▅▇▆▃▅▁·  ✻ 41%  ❋ 30%':' this week  Mon ▅ Tue ▇ Wed ▆ Thu ▃ Fri ▅ Sat ▁ Sun ·   ✻ 41%   ❋ 30%'+(W<120?'':'   both last the week')}[st.strip];
     const next=STRIPS[(STRIPS.indexOf(st.strip)+1)%4];
     rows.push([spread([[txt,'faint','u']],[[(next==='off'?'hide':next)+' › ','faint','u']],W)])}
@@ -425,13 +445,13 @@ function drill(key,W,h){const [k,v]=key.split(':'),o=[],n=Math.min(W-10,W<60?28:
     t([[' THIS WEEK, BY DAY','faint'],['   '+wk+'% used'+(W<60?'':' · at this pace it lasts the week'),'muted']]);
     o.push(...chart([9,12,8,7,5,0,0].flatMap(x=>Array(Math.floor(n/7)).fill(x*(wk/41))),3,20,'muted',['20%','0%']));
     t([['        ',''],...['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map((d,i)=>[d.padEnd(Math.floor(n/7)),i===4?'muted':'faint'])]);t([]);
-    t([[' burns most  ','faint'],['billing · agents','fg'],['   ⏎ go to it','accent']]);t([[' folder      ','faint'],['the default sign-in · 9 matches','muted']])}
-  if(k==='ctx'){t([[W<60?' SEARCH-IDX · 6 HOURS':' HOW FULL, OVER THE LAST 6 HOURS','faint'],[W<60?'':'   the fullest match: search-idx','muted']]);
+    t([[' burns most  ','faint'],['ember-billing · agents','fg'],['   ⏎ go to it','accent']]);t([[' folder      ','faint'],['the default sign-in · 9 matches','muted']])}
+  if(k==='ctx'){t([[W<60?' SEARCH-IDX · 6 HOURS':' HOW FULL, OVER THE LAST 6 HOURS','faint'],[W<60?'':'   the fullest match: spark-search','muted']]);
     o.push(...chart(Array.from({length:n},(_,i)=>20+57*i/n+(i%9===8?-8:0)),3,100,'warn',['100%','0%']));t([]);
     S.filter(inScope).sort((a,b)=>b.ctx-a.ctx).slice(0,Math.max(h-9,3)).forEach(s=>{const m=Math.round(s.ctx/12.5);t([[' '+s.id.padEnd(12),'fg'],['▰'.repeat(m)+'▱'.repeat(8-m)+' ',ctxCls(s.ctx)==='faint'?'muted':ctxCls(s.ctx)],[String(s.ctx).padStart(3)+'%',ctxCls(s.ctx)],[s.ctx>=70?'   x compact when it rests':'','faint']])})}
   if(k==='repo'){t([[' WORK IN THIS REPO · '+n+' days','faint'],[W<60?'':'   matches at work, by day','muted']]);
     o.push(...chart(wave(n,.31,v.length).map((x,i)=>i%7>4?x*.15:x),3,1,'muted',['9','0']));t([]);
-    t([[' WORKTREES','faint']]);t([['▌','accent'],['main          ','fg b'],['clean · behind its remote by 2','muted']]);t([[' feat/login    ','fg'],['3 dirty paths · api-auth, login-ui','muted']]);t([[' fix/cart      ','fg'],['merged · safe to remove','muted']]);t([[' spike/search  ','fg'],['no match · 9 days old','faint']]);t([]);
+    t([[' WORKTREES','faint']]);t([['▌','accent'],['main          ','fg b'],['clean · behind its remote by 2','muted']]);t([[' feat/login    ','fg'],['3 dirty paths · flint-auth, flint-ui','muted']]);t([[' fix/cart      ','fg'],['merged · safe to remove','muted']]);t([[' spike/search  ','fg'],['no match · 9 days old','faint']]);t([]);
     t([[' ⏎','accent'],[' shell   ','muted'],['N','accent'],[' new session here   ','muted'],['x','accent'],[' remove','muted']])}
   if(k==='mach'){const hot=v==='ws-1';t([[' CPU · 24 HOURS','faint'],['   now '+(hot?'38%':'12%')+(W<60?'':hot?' · load 4.2 · 16 cores':' · load 0.9 · 10 cores'),'muted']]);
     o.push(...chart(wave(n,.23,hot?1:4).map(x=>x*(hot?.8:.35)),4,1,'muted',['100%','0%']));t([]);
@@ -445,7 +465,7 @@ function machineBody(W,h){if(st.drill)return drill(st.drill,W,h);
   const lab=(t,r)=>o.push([spread([[' '+t,'faint']],r||[],W)]);
   const row=(id,left,right)=>{const on=id===cur;o.push([{...spread([[on?'▌':' ','accent'],...left],right||[],W),wash:on,act:'m:'+id}])};
   lab('ACCOUNTS');
-  row('acct:claude',[['✻ Claude Max   ','fg'],[phone?'5h 62% · wk 41%':'5h ▰▰▰▰▰▱▱▱ 62% · 16:00   wk ▰▰▰▱▱▱▱▱ 41%','muted']],phone?[]:[['burns most: billing ','faint']]);
+  row('acct:claude',[['✻ Claude Max   ','fg'],[phone?'5h 62% · wk 41%':'5h ▰▰▰▰▰▱▱▱ 62% · 16:00   wk ▰▰▰▱▱▱▱▱ 41%','muted']],phone?[]:[['burns most: ember-billing ','faint']]);
   row('acct:openai',[['❋ OpenAI Plus  ','fg'],[phone?'5h 12% · wk 30%':'5h ▰▱▱▱▱▱▱▱ 12% · 18:40   wk ▰▰▱▱▱▱▱▱ 30% · lasts the week','muted']]);
   lab('CONTEXT');
   const hot=sc.filter(s=>s.ctx>=70);
@@ -461,6 +481,9 @@ function machineBody(W,h){if(st.drill)return drill(st.drill,W,h);
   lab(st.host?'THE MACHINE':'THE MACHINES');
   (st.host?[st.host]:HOSTS).forEach((x,i)=>row('mach:'+x,[[x.padEnd(8),'fg'],[i?(phone?'cpu 12% · mem 9 of 16':(W<120?'cpu ▂▂▃▂▂▃▂▂ 12% · mem 9 of 16 GB':'cpu ▂▂▃▂▂▃▂▂ 12% · mem 9 of 16 GB · disk 48%')):(phone?'cpu 38% · mem 41 of 64':(W<120?'cpu ▃▄▅▄▃▅▆▅ 38% · mem 41 of 64 GB':'cpu ▃▄▅▄▃▅▆▅ 38% · mem 41 of 64 GB · disk 71%')),'muted']],phone?[]:[['history · panes · devices ','faint']]));
   while(o.length<h)o.push([blank(W)]);return o.slice(0,h)}
+function stokerCard(W,page){const o=[L([' ≋ ','night'],[st.focus+"'s stoker",'fg b'],['   “merge them on green”','muted']),L(['   ✓ 1 rebase flint-api    ','faint'],['▸ 2 fix the token test    ','fg'],['3 merge #4560','faint'])];
+  if(page)o.push(L(),L([' ✓ ','faint'],['1 rebase flint-api','faint']),L([' ▸ ','accent'],['2 fix the token test','fg'],['   flint-ui works on it','muted']),L(['   ','faint'],['3 merge #4560 on green','faint']),L(),L([' › ','muted'],['tell '+st.focus+"'s stoker…",'faint']));
+  else o.push(L(['─'.repeat(W),'hair']));return o}
 function menuHtml(){const m=st.menu;if(!m)return '';const phone=st.W<60,w=phone?st.W:32;
   const inner=m.items.map((it,i)=>({...fit(L([i===m.i?'▌ ':'  ','accent'],[it[0],i===m.i?'fg b':'fg'],...(it[2]?[['  '+it[2],'faint']]:[])),w-4),wash:i===m.i,act:'menu:'+i}));
   const rows=box(m.id,'muted',inner,w).map((l,i)=>i>0&&i<=inner.length?[{segs:[l.segs[0]]},inner[i-1],{segs:[l.segs[l.segs.length-1]]}]:[l]);
@@ -470,12 +493,13 @@ const esc=t=>t.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])).rep
 function html(rows){return rows.map(r=>'<div class="r">'+r.map(l=>'<span class="blk'+(l.wash?' wash':'')+'"'+(l.act?' data-act="'+l.act+'"':'')+'>'+
   l.segs.map(s=>'<span'+(s[1]?' class="'+s[1]+'"':'')+(s[2]?' data-k="'+s[2]+'"':'')+'>'+esc(s[0])+'</span>').join('')+'</span>').join('')+'</div>').join('')}
 
-function beltKeys(){const s=sel(),b=[['Escape','◂','',1],['ArrowLeft','←','',1],['ArrowRight','→','',1],['ArrowUp','↑','',1,'wide'],['ArrowDown','↓','',1,'wide'],['Enter','⏎','',1,'wide']];
-  if(st.confirm)return [...b.slice(0,1),['y','y','runs',1,'act'],['Escape','esc','cancels',1]];
-  if(st.tab==='board'&&!st.pane&&s){if(s.q)s.q.forEach((q,i)=>b.push([String(i+1),String(i+1),'answer',1,'act']));
-    if(s.merge)b.push(['x','x','merge',1,'act']);if(s.go)b.push(['y','y','go',1,'act'])}
-  const on=st.tab==='board'&&!st.pane;
-  b.push(['c','c','copy',on&&!!s],['m','m','menu',on&&!!s],['g','g','chain',on&&!!(s&&s.chain)||!!st.focus],['v','v',st.verbose?'one line':'verbose',on],['s','s','hosts',!st.pane],['u','u','strip',!st.pane],['Tab','⇥',st.tab==='board'?'machine':'board',!st.pane],['x','x','kill',on&&!!s&&!s.merge]);
+function beltKeys(){const s=sel(),on=st.tab==='board'&&!st.pane,b=[['Escape','◂','',1]];
+  if(st.confirm)return [...b,['y','y','runs',1,'act'],['Escape','esc','cancels',1]];
+  if(on&&s&&!st.stokerPage){const arm=st.arm&&st.arm.id===s.id?st.arm.n:-1;
+    if(s.q)s.q.forEach((q,i)=>b.push([String(i+1),String(i+1),i===arm?'send':'answer',1,'act']));
+    if(s.merge)b.push(['p','p','merge',1,'act']);if(s.go)b.push(['y','y','go',1,'act'])}
+  b.push(['ArrowUp','↑','',1,'wide'],['ArrowDown','↓','',1,'wide'],['Enter','⏎','',1,'wide']);
+  b.push(['c','c','copy',on&&!!s],['m','m','menu',on&&!!s],['g','g','chain',on&&!!(s&&s.chain)||!!st.focus],['v','v',st.verbose?'one line':'verbose',on],['s','s','hosts',!st.pane],['u','u','strip',!st.pane],['Tab','⇥',st.tab==='board'?'machine':'board',!st.pane],['x','x','kill',on&&!!s],['ArrowLeft','←','',on],['ArrowRight','→','',on],[']',']','chain',on&&!!st.focus],['[','[','chain',on&&!!st.focus],['/','/','search',0],['z','z','park',0]);
   return b}
 function drawBelt(){document.getElementById('belt').innerHTML=beltKeys().map(k=>'<button data-k="'+k[0]+'" class="'+(k[4]||'')+'"'+(k[3]?'':' disabled')+'>'+k[1]+(k[2]?'<small>'+k[2]+'</small>':'')+'</button>').join('')}
 const term=document.getElementById('term');
@@ -491,8 +515,8 @@ function hide(c){st.hidden.add(c);if(st.col===c){const o=COLS.find(x=>vis(x)&&in
 function show(c){st.hidden.delete(c);if(c==='need'){st.focus=null;st.host=null;st.tab='board'}goCol(c)}
 function copy(text,what){const done=ok=>{toast(ok?'copied: '+what:'not copied: this page blocks the clipboard');draw()};
   try{navigator.clipboard.writeText(text).then(()=>done(true),()=>done(false))}catch(e){done(false)}}
-function answer(p,n){moved(p,'strike');Object.assign(p,{col:'work',m:'burn',word:'busy',line:p.q[n].toLowerCase(),wait:'0s',acts:null,said:['On it: '+p.q[n].toLowerCase()+'.']});p.q=null;
-  st.pane=null;toast('sent to '+p.id+': '+(n+1));settle()}
+function answer(p,n){moved(p,'strike');st.arm=null;Object.assign(p,{col:'work',m:'burn',word:'busy',line:p.q[n].toLowerCase(),wait:'0s',acts:null,said:['On it: '+p.q[n].toLowerCase()+'.']});p.q=null;
+  st.pane=null;settle()}
 function openMenu(s,col,row){st.col=s.col;st.idx[s.col]=inCol(s.col).indexOf(s);
   const items=[['copy last message',()=>copy(s.said[0],'last message of '+s.id),'c']];
   if(s.q)items.push(['copy the question',()=>copy(s.line+'\n'+s.q.map((q,i)=>(i+1)+'. '+q).join('\n'),'question of '+s.id)]);
@@ -507,9 +531,9 @@ function press(k){
     if(k==='ArrowDown'||k==='j')m.i=(m.i+1)%m.items.length;else if(k==='ArrowUp'||k==='k')m.i=(m.i+m.items.length-1)%m.items.length;
     else{st.menu=null;if(k==='Enter')m.items[m.i][1]();else if(k==='c')m.items[0][1]()}
     return draw()}
-  if(k==='u'&&!st.pane){st.strip=STRIPS[(STRIPS.indexOf(st.strip)+1)%4];if(st.strip==='off')toast('the strip is off · u shows it');return draw()}
+  if(k==='u'&&!st.pane){st.strip=STRIPS[(STRIPS.indexOf(st.strip)+1)%4];if(st.strip==='off')toast('the strip is off · u shows it');once('u');return draw()}
   if(k==='Tab'){st.tab=st.tab==='board'?'machine':'board';st.pane=null;st.drill=null;return draw()}
-  if(k==='s'&&!st.pane){const i=HOSTS.indexOf(st.host);st.host=i<0?HOSTS[0]:i+1<HOSTS.length?HOSTS[i+1]:null;if(st.tab==='board'&&!inCol(st.col).length)st.col=COLS.find(c=>vis(c)&&inCol(c).length)||st.col;return draw()}
+  if(k==='s'&&!st.pane){const i=HOSTS.indexOf(st.host);st.host=i<0?HOSTS[0]:i+1<HOSTS.length?HOSTS[i+1]:null;if(st.tab==='board'&&!inCol(st.col).length)st.col=COLS.find(c=>vis(c)&&inCol(c).length)||st.col;st.arm=null;once('s');return draw()}
   if(st.tab==='machine'){const n=mItems().length;
     if(st.drill){if(k==='Escape')st.drill=null}
     else if(k==='Escape')st.tab='board';
@@ -521,20 +545,28 @@ function press(k){
     if(k==='Escape')st.pane=null;
     else if(p&&p.q&&(k==='1'||k==='2'||k==='pick0'||k==='pick1'||k==='Enter'))answer(p,k==='2'||k==='pick1'?1:0);
     return draw()}
+  const pick=k==='1'||k==='pick0'?0:k==='2'||k==='pick1'?1:-1;
+  if(pick>=0){if(s&&s.q&&vis(st.col)){if(st.arm&&st.arm.id===s.id&&st.arm.n===pick){st.arm=null;const id=s.id;answer(s,pick);toast('sent '+(pick+1)+' to '+id+' · now in WORKING')}else{st.arm={id:s.id,n:pick};once('digit')}}return draw()}
+  if(k==='Escape'&&st.arm){st.arm=null;return draw()}
+  st.arm=null;
+  if(k==='stoker'){st.stokerPage=!st.stokerPage;return draw()}
+  if(st.focus&&st.W<60&&k==='ArrowLeft'&&!st.stokerPage&&COLS.filter(c=>vis(c)&&inCol(c).length)[0]===st.col){st.stokerPage=true;return draw()}
+  if(st.stokerPage&&(k==='ArrowRight'||k==='Escape')){st.stokerPage=false;return draw()}
   if(k==='ArrowDown'||k==='j')st.idx[st.col]=Math.min(st.idx[st.col]+1,inCol(st.col).length-1);
   else if(k==='ArrowUp'||k==='k')st.idx[st.col]=Math.max(Math.min(st.idx[st.col],inCol(st.col).length-1)-1,0);
   else if(k==='ArrowRight'||k==='l')step(1);
   else if(k==='ArrowLeft'||k==='h')step(-1);
-  else if(s&&s.q&&vis(st.col)&&(k==='1'||k==='2'||k==='pick0'||k==='pick1'))answer(s,k==='2'||k==='pick1'?1:0);
-  else if(k==='v')st.verbose=!st.verbose;
+  else if(k==='v'){st.verbose=!st.verbose;once('v')}
   else if(k==='m'&&s)openMenu(s,2,6);
-  else if(k==='g'&&s&&s.chain){st.focus=st.focus?null:s.chain;if(!inCol(st.col).length)st.col=COLS.find(c=>vis(c)&&inCol(c).length)||st.col}
-  else if(k==='Escape'&&st.focus)st.focus=null;
-  else if(k==='c'&&s)copy(s.said[0],'last message of '+s.id);
+  else if(k==='g'&&s&&s.chain){once('g');st.stokerPage=false;st.focus=st.focus?null:s.chain;if(!inCol(st.col).length)st.col=COLS.find(c=>vis(c)&&inCol(c).length)||st.col}
+  else if((k===']'||k==='[')&&st.focus)toast('login is the only chain in this sketch');
+  else if(k==='Escape'&&st.focus){st.focus=null;st.stokerPage=false}
+  else if(k==='c'&&s){copy(s.said[0],'last message of '+s.id+(st.copyOk?'':' · not checked here'));once('c')}
   else if(k==='Enter'&&s)st.pane=s.id;
-  else if(k==='x'&&s){
+  else if(k==='p'&&s){once('p');
     if(s.merge){const cmd=s.merge;st.confirm={cmd,run(){moved(s,'out');Object.assign(s,{col:'ship',word:'merged',line:'deploying',ship:s.ship.split(' ')[0]+' ●━●━●━◉┄○',wait:'0s',acts:null,merge:null});toast('ran: '+cmd);settle()}}}
-    else st.confirm={cmd:'tmux kill-pane -t '+s.id,run(){S=S.filter(x=>x!==s);toast('ran: kill '+s.id);settle()}}}
+    else toast('no ship of '+s.id+' waits for a merge')}
+  else if(k==='x'&&s)st.confirm={cmd:'tmux kill-pane -t '+s.id,run(){S=S.filter(x=>x!==s);toast('ran: kill '+s.id);settle()}};
   else if(k==='y'&&s&&s.go){moved(s,'strike');Object.assign(s,{col:'work',m:'burn',word:'busy',line:'runs terraform apply',wait:'0s',acts:null,go:false});toast('go given to '+s.id);settle()}
   draw()}
 const cellOf=e=>{const r=term.getBoundingClientRect();return [Math.floor((e.clientX-r.left)/(r.width/st.W)),Math.floor((e.clientY-r.top)/(r.height/st.H))]};
@@ -549,6 +581,7 @@ term.addEventListener('click',e=>{if(skipClick){skipClick=false;return}
   if(kEl){const k=kEl.dataset.k;
     if(k.startsWith('col:')){goCol(k.slice(4));st.pane=null;return draw()}
     if(k.startsWith('hide:')){hide(k.slice(5));return draw()}
+    if(k==='stoker'){return press('stoker')}
     if(k.startsWith('focus:')){const ch=k.slice(6),was=sel();st.focus=st.focus?null:ch;const s0=cardOf(e);if(s0){st.col=s0.col;st.idx[s0.col]=inCol(s0.col).indexOf(s0)}return draw()}
     if(k.startsWith('show:')){show(k.slice(5));return draw()}
     return press(k)}
