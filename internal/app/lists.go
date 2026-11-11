@@ -35,7 +35,9 @@ type lists struct {
 // home host's. One local host: the lists are home's as they came.
 func (m *Model) merge() {
 	m.all, m.snap.Children = m.homeAll, m.homeAll.children
-	m.allShips = m.shipsMerged()
+	ships := m.shipsMerged()
+	m.noteShipSparks(ships)
+	m.allShips = ships
 	if m.opt.Host == "" && !slices.ContainsFunc(m.peers, func(l link) bool { return l.have }) {
 		m.refresh()
 		return

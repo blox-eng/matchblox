@@ -28,12 +28,24 @@ func harnessMark(s sample.Session) string {
 // cardOpts is how a card is drawn. armed and sent are an option's number,
 // 0 for none. bare: the chosen card beside the live view, which shows the
 // quote and the options. asOf: the time of the last state of a host that
-// is not reached, "" for one that is.
+// is not reached, "" for one that is. land: how a card that changed column
+// lands. match: the match cell drawn, "" for the match of this moment.
 type cardOpts struct {
 	sel, lit, oneLine, need, quietRow, otherHost, bare bool
 	armed, sent                                        int
-	asOf                                               string
+	asOf, match                                        string
+	land                                               landing
 }
+
+// landing is how a card that changed column lands, for landGlow (design
+// decision 7): fire only into WORKING, the wash elsewhere.
+type landing int
+
+const (
+	landNone landing = iota
+	landFire         // the name is flame-core
+	landWash         // the card's lines sit on the wash
+)
 
 // boardCard is one match drawn in a column (the spec's "The card"):
 // every line is w cells, and taps[i] are the spans of line i.
@@ -79,10 +91,11 @@ func (m Model) boardCard(s sample.Session, w int, o cardOpts) (lines []string, t
 	return m.washed(lines, w, o), taps
 }
 
-// washed puts every cell of a chosen card on the wash, as a selected row.
+// washed puts every cell of a chosen card, or one that lands outside
+// WORKING, on the wash, as a selected row.
 func (m Model) washed(lines []string, w int, o cardOpts) []string {
 	var b body
-	b.addRow(0, o.sel, w, m.st, lines...)
+	b.addRow(0, o.sel || o.land == landWash, w, m.st, lines...)
 	return b.lines
 }
 
@@ -103,11 +116,17 @@ func (m Model) wordInk(o cardOpts) lipgloss.Style {
 // not reached sent its last state. A quiet row adds its
 // state word after the name.
 func (m Model) cardHead(s sample.Session, w int, o cardOpts, word string) string {
-	mark, name := " ", m.st.text
+	mark, name, match := " ", m.st.text, o.match
+	if o.land == landFire {
+		name = lipgloss.NewStyle().Foreground(m.marks().Core)
+	}
 	if o.sel {
 		mark, name = m.st.accent.Render("▌"), name.Bold(true)
 	}
-	left := mark + m.matchCell(s) + name.Render(s.Name)
+	if match == "" {
+		match = m.matchCell(s)
+	}
+	left := mark + match + name.Render(s.Name)
 	if o.otherHost {
 		left += m.st.faint.Render(" @" + m.nameOf(s.Host))
 	}
@@ -157,7 +176,7 @@ func (m Model) cardTrack(s sample.Session, w int, o cardOpts) (string, []span) {
 	ships := m.shipsOf(s)
 	if len(ships) > 0 {
 		sh := ships[0]
-		ship = m.st.muted.Render("#"+strconv.Itoa(sh.Number)) + " " + m.track(sh)
+		ship = m.st.muted.Render("#"+strconv.Itoa(sh.Number)) + " " + m.trackAt(sh, m.shipSpark(sh))
 		undone = len(stageNames) - 1 - sh.Stage
 	}
 	ctx, keepCtx := "", false

@@ -234,8 +234,6 @@ func (m Model) shipStyle(sh proto.Ship) lipgloss.Style {
 	return m.st.faint
 }
 
-// track is a ship's five stages, ●━●━◉┄○┄○: done muted, the current one in
-// its colour (✕ when stuck), the rest faint.
 // trackW is the width of a ship's track: a mark for each stage and a line
 // between two.
 var trackW = 2*len(stageNames) - 1
@@ -250,31 +248,85 @@ func (m Model) numW() int {
 	return n
 }
 
-func (m Model) track(sh proto.Ship) string {
+// track is a ship's five stages, ●━●━◉┄○┄○: done muted, the current one in
+// its colour (✕ when stuck), the rest faint.
+func (m Model) track(sh proto.Ship) string { return m.trackAt(sh, -1) }
+
+// trackAt is the track with its cell spark lit in flame-core, -1 for none.
+func (m Model) trackAt(sh proto.Ship, spark int) string {
 	st := m.st
 	var b strings.Builder
+	x := 0
+	put := func(ink lipgloss.Style, cell string) {
+		if x == spark {
+			ink = m.sparkStyle()
+		}
+		b.WriteString(ink.Render(cell))
+		x++
+	}
 	for i := range stageNames {
 		switch {
 		case i < sh.Stage:
-			b.WriteString(st.muted.Render("●"))
+			put(st.muted, "●")
 		case i == sh.Stage && sh.Kind == shipStuck:
-			b.WriteString(st.neg.Render("✕"))
+			put(st.neg, "✕")
 		case i == sh.Stage && sh.Kind == shipDone:
-			b.WriteString(m.shipStyle(sh).Render("●"))
+			put(m.shipStyle(sh), "●")
 		case i == sh.Stage:
-			b.WriteString(m.shipStyle(sh).Render("◉"))
+			put(m.shipStyle(sh), "◉")
 		default:
-			b.WriteString(st.faint.Render("○"))
+			put(st.faint, "○")
 		}
 		switch {
 		case i == len(stageNames)-1:
 		case i < sh.Stage:
-			b.WriteString(st.muted.Render("━"))
+			put(st.muted, "━")
 		default:
-			b.WriteString(st.faint.Render("┄"))
+			put(st.faint, "┄")
 		}
 	}
 	return b.String()
+}
+
+// shipKey is where a ship's spark is kept among the changes: apart from
+// every pane and chain.
+func shipKey(sh proto.Ship) paneKey {
+	return paneKey{sh.Host, "ship:" + sh.Repo + "#" + strconv.Itoa(sh.Number)}
+}
+
+// noteShipSparks plays the spark of each ship that passed a stage since
+// the console last saw it.
+func (m *Model) noteShipSparks(next []proto.Ship) {
+	if m.opt.NoMotion {
+		return
+	}
+	was := map[paneKey]int{}
+	for _, sh := range m.allShips {
+		was[shipKey(sh)] = sh.Stage
+	}
+	now := m.now()
+	for _, sh := range next {
+		if stage, ok := was[shipKey(sh)]; ok && sh.Stage > stage {
+			if m.changes == nil {
+				m.changes = map[paneKey]change{}
+			}
+			m.changes[shipKey(sh)] = change{changeSpark, now}
+		}
+	}
+}
+
+// shipSpark is the cell of sh's track the spark is on now, -1 for none:
+// it runs along the track once, in sparkFor.
+func (m Model) shipSpark(sh proto.Ship) int {
+	c, ok := m.changes[shipKey(sh)]
+	if m.opt.NoMotion || !ok || c.kind != changeSpark {
+		return -1
+	}
+	e := m.now().Sub(c.at)
+	if e < 0 || e >= sparkFor {
+		return -1
+	}
+	return int(e * time.Duration(trackW) / sparkFor)
 }
 
 // shipCell is "#4551 ●━◉┄○┄○", with the note when note is set.

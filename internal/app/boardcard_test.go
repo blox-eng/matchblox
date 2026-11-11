@@ -303,3 +303,204 @@ func TestTheCardsMarkFollowsTheAgent(t *testing.T) {
 		t.Errorf("the dock's account row for the Anthropic plan lost ✻:\n%s", out)
 	}
 }
+
+// landState is flint-auth, which asks or works, beside hearth-api, which
+// waits longer for a permission and so is the chosen card.
+func landState(busy bool) (proto.State, sample.Session) {
+	st, s := cardState(func(s *sample.Session) {
+		if busy {
+			s.Busy, s.Status, s.Ask = true, "busy", nil
+		}
+	})
+	other := boardMatch("hearth-api", 2*time.Hour)
+	st.Sessions = append(st.Sessions, other)
+	st.Queue = []queue.Item{waitFor(other, queue.StatePermission, 10*time.Minute)}
+	if !busy {
+		st.Queue = append(st.Queue, waitFor(s, queue.StateQuestion, 2*time.Minute))
+	}
+	return st, s
+}
+
+// TestACardLandsWithATrueSign (design decision 7): a match that starts to
+// work lands in WORKING with the strike and its name in flame-core for
+// 1.2 s; one that stops lands elsewhere with the going out, on the wash,
+// with no fire.
+func TestACardLandsWithATrueSign(t *testing.T) {
+	t.Run("into WORKING", func(t *testing.T) {
+		before, s := landState(false)
+		at := boardAt
+		now := at
+		m := motionBoard(t, before, &now, false)
+		after, _ := landState(true)
+		next, cmd := m.Update(stateMsg(after))
+		m = next.(Model)
+		if cmd == nil || !m.animating {
+			t.Fatal("no tick for the landing")
+		}
+		if c := m.columnOf(m.all.sessions[slices.IndexFunc(m.all.sessions, func(x sample.Session) bool { return x.Name == s.Name })]); c != colWork {
+			t.Fatalf("%s is in %s, want WORKING", s.Name, c.name())
+		}
+		for _, f := range []struct {
+			e     time.Duration
+			glyph string
+			ink   []string
+			name  string
+		}{
+			{0, "╿", []string{"flame-core"}, "flame-core"},
+			{200 * time.Millisecond, "·", []string{"flame-core"}, "flame-core"},
+			{500 * time.Millisecond, "✧", []string{"flame-amber"}, "flame-core"},
+			{800 * time.Millisecond, "✦✧", []string{"flame", "flame-amber", "flame-core"}, "flame-core"},
+			{1100 * time.Millisecond, "✦✧", []string{"flame", "flame-amber", "flame-core"}, "flame-core"},
+			{landGlow, "✦✧", []string{"flame", "flame-amber", "flame-core"}, "fg"},
+		} {
+			now = at.Add(f.e)
+			d := m.boardPanel(120, 30)
+			inWork := false
+			for spot, k := range d.cards {
+				inWork = inWork || spot.col == colWork && k.pane == s.Pane
+			}
+			if !inWork {
+				t.Fatalf("+%v: the card of %s is not in WORKING", f.e, s.Name)
+			}
+			cells := inkedCells(t, m.render())
+			y, x, ok := headOf(cells, s.Name)
+			if !ok {
+				t.Fatalf("+%v: no card of %s", f.e, s.Name)
+			}
+			g := cells[y][x-2]
+			if !strings.Contains(f.glyph, g.ch) || !slices.Contains(f.ink, g.fg) {
+				t.Errorf("+%v: the match is %+v, want %s in %v", f.e, g, f.glyph, f.ink)
+			}
+			for i := range len(s.Name) {
+				if c := cells[y][x+i]; c.fg != f.name || c.bg == "wash" {
+					t.Fatalf("+%v: the name's cell %d is %+v, want %s off the wash", f.e, i, c, f.name)
+				}
+			}
+		}
+	})
+
+	t.Run("into NEEDS YOU", func(t *testing.T) {
+		before, s := landState(true)
+		at := boardAt
+		now := at
+		m := motionBoard(t, before, &now, false)
+		after, _ := landState(false)
+		next, _ := m.Update(stateMsg(after))
+		m = next.(Model)
+		for _, f := range []struct {
+			e     time.Duration
+			glyph string
+			ink   string
+			wash  bool
+		}{
+			{0, "✧", "flame-amber", true},
+			{250 * time.Millisecond, "✧", "match-ember", true},
+			{500 * time.Millisecond, "╿", "", true},
+			{1100 * time.Millisecond, "╿", "", true},
+			{landGlow, "╿", "", false},
+		} {
+			now = at.Add(f.e)
+			cells := inkedCells(t, m.render())
+			y, x, ok := headOf(cells, s.Name)
+			if !ok {
+				t.Fatalf("+%v: no card of %s", f.e, s.Name)
+			}
+			if x > 40 {
+				t.Fatalf("+%v: the card of %s is not in NEEDS YOU (cell %d)", f.e, s.Name, x)
+			}
+			if g := cells[y][x-2]; g.ch != f.glyph || f.ink != "" && g.fg != f.ink {
+				t.Errorf("+%v: the match is %+v, want %s %s", f.e, g, f.glyph, f.ink)
+			}
+			for dy := range 2 {
+				for cx := x - 3; cx < x+20; cx++ {
+					c := cells[y+dy][cx]
+					if c.fg == "flame-core" {
+						t.Fatalf("+%v: line %d cell %d is flame-core: %+v", f.e, dy, cx, c)
+					}
+					if (c.bg == "wash") != f.wash {
+						t.Fatalf("+%v: line %d cell %d is %+v, want on the wash: %v", f.e, dy, cx, c, f.wash)
+					}
+				}
+			}
+		}
+	})
+
+	t.Run("the ticks stop after the glow", func(t *testing.T) {
+		before, _ := cardState(func(s *sample.Session) { s.Busy, s.Status, s.Ask = true, "busy", nil })
+		before.Queue = nil
+		at := boardAt
+		now := at
+		m := motionBoard(t, before, &now, false)
+		after, _ := cardState(func(s *sample.Session) { s.Ask = nil })
+		after.Queue = nil
+		next, _ := m.Update(stateMsg(after))
+		m = next.(Model)
+		now = at.Add(landGlow - 100*time.Millisecond)
+		if !m.moving() {
+			t.Fatal("the glow still plays, yet the console stops drawing")
+		}
+		now = at.Add(landGlow + 100*time.Millisecond)
+		next, cmd := m.Update(animMsg{})
+		if cmd != nil || next.(Model).animating {
+			t.Fatal("the glow is over and nothing moves, yet the console keeps ticking")
+		}
+	})
+}
+
+// TestAShipThatPassesAStageSparksOnce: a ship that goes from ci to green
+// runs one bright cell along its track once, on the board only.
+func TestAShipThatPassesAStageSparksOnce(t *testing.T) {
+	before, s := landState(false)
+	at := boardAt
+	now := at
+	m := motionBoard(t, before, &now, false)
+	after, _ := landState(false)
+	after.Ships = &proto.Ships{Ships: []proto.Ship{shipFor(s, 4551, shipRunning, "green", 2, 0)}}
+	next, _ := m.Update(stateMsg(after))
+	m = next.(Model)
+	if c, ok := m.changes[shipKey(m.ships()[0])]; !ok || c.kind != changeSpark {
+		t.Fatalf("no spark for the ship: %v", m.changes)
+	}
+	trackAt := func(cells [][]inked) []inked {
+		for _, row := range cells {
+			for x := 0; x+6 <= len(row); x++ {
+				if textOf(row, x, x+6) == "#4551 " {
+					return row[x+6 : x+6+trackW]
+				}
+			}
+		}
+		t.Fatal("no track of #4551")
+		return nil
+	}
+	var visited []int
+	for e := time.Duration(0); e < 2*sparkFor; e += 20 * time.Millisecond {
+		now = at.Add(e)
+		var bright []int
+		for i, c := range trackAt(inkedCells(t, m.render())) {
+			if c.fg == "flame-core" {
+				bright = append(bright, i)
+			}
+		}
+		switch {
+		case e < sparkFor && len(bright) != 1:
+			t.Fatalf("+%v: %d bright cells on the track, want 1", e, len(bright))
+		case e >= sparkFor && len(bright) != 0:
+			t.Fatalf("+%v: the spark runs again: %v", e, bright)
+		case len(bright) == 1:
+			if n := len(visited); n > 0 && bright[0] < visited[n-1] {
+				t.Fatalf("+%v: the spark runs back: %v then %d", e, visited, bright[0])
+			}
+			visited = append(visited, bright[0])
+		}
+	}
+	if visited[0] != 0 || visited[len(visited)-1] != trackW-1 {
+		t.Errorf("the spark does not run the whole track: %v", visited)
+	}
+
+	// The Ships tab keeps its look: no spark there.
+	now = at.Add(sparkFor / 2)
+	sh := m.ships()[0]
+	if got, want := m.track(sh), m.trackAt(sh, -1); got != want {
+		t.Errorf("the Ships tab's track sparks: %q", got)
+	}
+}

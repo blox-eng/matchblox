@@ -529,6 +529,14 @@ func (m Model) boardBlockOf(b *boardDraw, c boardCol, s sample.Session, w int, q
 	} else {
 		o.sent = sent
 	}
+	switch {
+	case m.landed(paneOf(s)) && c == colWork:
+		o.land = landFire
+	case m.landed(paneOf(s)):
+		o.land = landWash
+	case c == colQuiet:
+		o.match = m.quietCell(s)
+	}
 	if s.Host != m.opt.Host && m.stale(s.Host) { // a host that is not reached
 		o.asOf = m.stateAt(s.Host).Format("15:04")
 	}
