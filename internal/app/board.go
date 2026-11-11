@@ -366,15 +366,17 @@ func (m Model) boardDrawer(d *boardDrawn, b *boardDraw, w int) {
 	st := m.st
 	ss := b.idx[colQuiet]
 	d.add(-1, st.hair.Render(strings.Repeat("─", w)))
+	name := " " + colQuiet.name()
+	if m.have {
+		name += " · " + strconv.Itoa(len(ss))
+	}
 	if b.open == colQuiet {
+		d.taps[len(d.lines)] = []span{{0, lipgloss.Width(name) + 3, colQuiet.short()}} // with its −
 		d.add(-1, m.boardHead(colQuiet, len(ss), w, true))
 		m.boardStack(d, b, colQuiet, len(d.lines), 0, w, quietRows, true)
 		return
 	}
-	line := " " + colQuiet.name()
-	if m.have {
-		line += " · " + strconv.Itoa(len(ss))
-	}
+	line := name
 	if len(ss) > 0 {
 		names := make([]string, len(ss))
 		for i, s := range ss {
@@ -382,7 +384,7 @@ func (m Model) boardDrawer(d *boardDrawn, b *boardDraw, w int) {
 		}
 		line += "   " + strings.Join(names, " · ")
 	}
-	d.taps[len(d.lines)] = []span{{0, w, colQuiet.short()}}
+	d.taps[len(d.lines)] = []span{{0, lipgloss.Width(name), colQuiet.short()}, {w - 3, w, colQuiet.short()}} // the name and the −
 	d.add(-1, spread(st.faint.Render(line+"   ▴"), st.faint.Render("−")+"  ", w))
 }
 

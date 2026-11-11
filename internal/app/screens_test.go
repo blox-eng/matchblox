@@ -197,6 +197,7 @@ func TestScreens(t *testing.T) {
 	for _, size := range [][2]int{{80, 31}, {40, 34}} {
 		golden(t, pressOn(boardShot(t, board, size[0], size[1], onLogin), "g"), "boardchain", size[0], size[1])
 		golden(t, boardShot(t, board, size[0], size[1], func(m *Model) { m.flipHidden(colWork) }), "boardhidden", size[0], size[1])
+		golden(t, pressOn(boardShot(t, board, size[0], size[1], chooseCard("flint-auth")), "m"), "boardmenu", size[0], size[1])
 	}
 }
 

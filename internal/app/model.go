@@ -483,6 +483,11 @@ type Model struct {
 	// boardAbove is the line above the columns that is chosen in place of a
 	// card, counted up from the columns (aboveLines); 0: none.
 	boardAbove int
+	// menu is the card's menu while it is open. sawRelease: the terminal
+	// reported the release of a press, so a press held is a long press.
+	menu       *boardMenu
+	sawRelease bool
+	longPress  longPress
 	// peekAt is when the peek last started, and peekAsk the question
 	// (Ask.ID) its card drew then, on the card peekPane. peekNew: a new
 	// question on the same card started it.
@@ -1042,6 +1047,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m, touch := m.touchRest()
 		next, cmd := m.wheel(msg.Mouse())
 		return next, tea.Batch(touch, cmd)
+	case tea.MouseReleaseMsg, tea.MouseMotionMsg, longPressMsg:
+		return m.pointer(msg), nil
 	case tea.KeyPressMsg:
 		if m.splashing() {
 			m.splashDone = true // any key stops the start screen, and does nothing else

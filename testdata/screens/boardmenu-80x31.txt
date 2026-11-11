@@ -1,0 +1,31 @@
+ ▰ matchblox · all hosts ▾                                         ● 4 need you
+ SESSIONS 15    ships    machine    git    history    panes    stoker
+────────────────────────────────────────────────────────────────────────────────
+ NEEDS YOU · 4  −                       WORKING · 3  −       SHIPPING · 3  −
+  ↑ 1 more                              ✦ flint-ui   ✻       ╿ cinder-ci… ❋  2h
+ ╿ kindle-web                   ✻  9m    busy Writing the…    merged deploying
+  green #4556 waits for your merge       ctx 40%   ━╸login    #4549 ●━●━●━◉┄○
+  #4556 ●━●━◉┄○┄○  ctx 48%
+  p merge #4556   ⏎ go in               ✦ ember-bil… ✻       ╿ flint-api  ✻ 40m
+                                         agents Three sub…    ci waits for rev…
+ ╿ hearth-api                   ✻  4m    ctx 71%              #4560 ●━◉┄○┄○┄○
+  asks The plan changes 2 records an…
+  ctx 31%                               ✦ spark-docs ✻       ╿ hearth-li… ✻  4m
+  ⏎ go in                                busy Running the…    ci CI · 6 of 9 j…
+                                         ctx 22%              #4551 ●━◉┄○┄○┄○
+▌╿ flint-auth                   ✻  2m
+  ╭─ flint-auth ────────────────────╮
+  │ ▌ copy last message           c │
+  │   copy the question             │
+  │   copy its name                 │
+  │   show only the chain login   g │
+  │   go in                       a │
+  │   hide needs you                │
+  ╰─ ⏎ do ─ esc close ──────────────╯
+────────────────────────────────────────────────────────────────────────────────
+ QUIET · 5   wick-mobile · hearth-notes · ember-reports · kindle-legacy · t… −
+ + start a new session
+ RECOMMENDATIONS · 7
+ ✻ 5h 84% · wk 82%   · not measured   ❋ 5h 40% · wk 12%               machine ›
+────────────────────────────────────────────────────────────────────────────────
+ 1-2 mark an answer   ⏎ go in   c copy   v one line   s hosts   u strip

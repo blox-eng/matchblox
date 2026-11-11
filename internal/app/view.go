@@ -314,6 +314,8 @@ func (m Model) drawScreen(w int) drawn {
 		m.overlaySheet(&sc, w)
 	case m.form != nil:
 		m.overlayForm(&sc, w)
+	case m.menu != nil && m.boardShown():
+		m.overlayMenu(&sc, w)
 	}
 	return sc
 }

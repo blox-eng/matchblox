@@ -15,9 +15,18 @@ import (
 // on another row selects it and shows the step a second tap runs: an answer for
 // a session that waits, else the row's Enter. The second tap runs it when
 // it only moves this terminal, or asks to confirm it. A tap is never
-// consent to a destructive step, and it cancels a pending one.
+// consent to a destructive step, and it cancels a pending one. On the
+// board a right-click on a card opens its menu, and while the menu is open
+// it takes every tap.
 func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
-	if ms.Button != tea.MouseLeft || m.pair.owns() || m.asking() { // the pair page and an ssh prompt take keys only
+	switch {
+	case m.pair.owns() || m.asking(): // the pair page and an ssh prompt take keys only
+		return m, nil
+	case m.menu != nil && m.boardShown():
+		return m.menuTap(ms)
+	case ms.Button == tea.MouseRight && m.boardShown():
+		return m.boardRightClick(ms)
+	case ms.Button != tea.MouseLeft:
 		return m, nil
 	}
 	if m.held != nil { // a tap is another key: it drops the question
@@ -101,7 +110,8 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case m.boardShown() && ms.Y >= sc.bodyTop && ms.Y < sc.keysAt-1:
-		return m.boardTap(ms.X, ms.Y-sc.bodyTop)
+		next, cmd := m.boardTap(ms.X, ms.Y-sc.bodyTop)
+		return m.holdPress(next, cmd, ms)
 	case sc.dockAt >= 0 && ms.Y >= sc.dockAt && ms.Y < sc.dockAt+sc.dockH:
 		if x0, x1 := m.dockToggle(w); ms.Y == sc.dockAt && m.phoneDock(w) && ms.X >= x0 && ms.X < x1 {
 			m.cycleDock()

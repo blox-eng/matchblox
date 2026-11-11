@@ -68,11 +68,19 @@ func askOf(s sample.Session) string {
 }
 
 // peekOn keeps the peek on the chosen card. The card coming into reach of
-// the digits (the first frame, a layer over the board that closes, a line
-// above the columns left), a choice that moved with no key (a card that
-// left its column, a filter) and a new question on the chosen card each
-// start a new peek.
+// the digits (the first frame, a layer over the board that closes, the
+// menu that closes, a line above the columns left), a choice that moved
+// with no key (a card that left its column, a filter) and a new question
+// on the chosen card each start a new peek. A chosen line above the
+// columns that is gone is no choice, and a menu off the board or on a
+// match that is gone closes.
 func (m Model) peekOn() Model {
+	if m.boardAbove > len(m.aboveLines()) {
+		m.boardAbove = 0
+	}
+	if _, ok := m.menuOn(); m.menu != nil && !ok {
+		m.menu = nil
+	}
 	s, ok := m.boardSelected()
 	reach := ok && m.peekReach()
 	was := m.peekReached
@@ -88,9 +96,9 @@ func (m Model) peekOn() Model {
 	return m
 }
 
-// peekReach: a digit reaches the board, with no layer over it.
+// peekReach: a digit reaches the board, with no layer or menu over it.
 func (m Model) peekReach() bool {
-	return m.boardShown() && !m.standIn && !m.viewFull() && m.focus(keyPress("1")) == layerMain
+	return m.boardShown() && m.menu == nil && !m.standIn && !m.viewFull() && m.focus(keyPress("1")) == layerMain
 }
 
 // peekAnswers: the digits answer s's question, one question with one
@@ -366,6 +374,10 @@ func (m Model) boardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 	if !m.boardShown() || m.standIn || m.viewFull() {
 		return m, nil, false
 	}
+	if m.menu != nil { // the menu takes every key
+		next, cmd := m.menuKey(k)
+		return next, cmd, true
+	}
 	bk, mk := m.keys.board, m.keys.main
 	s, ok := m.boardSelected()
 	line, above := m.aboveChosen()
@@ -392,7 +404,7 @@ func (m Model) boardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 	case bkey.Matches(k, bk.Right):
 		m.boardSide(1)
 	case bkey.Matches(k, mk.Back):
-		// The menu (Task 9) closes first, then the search, then the chain.
+		// The menu took esc first; then the mark, the search, the chain.
 		m.goArmed = paneKey{}
 		switch armed, _ := m.peekMarks(s); {
 		case ok && armed > 0:
@@ -423,7 +435,7 @@ func (m Model) boardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 	case isDigit(k): // never a tab on the board
 		next, cmd := m.answerFromPeek(k.Text)
 		return next, cmd, true
-	case !ok && len(m.snap.Sessions) > 0 && bkey.Matches(k, bk.Merge, mk.Second, mk.Grant, mk.Open, mk.Into, mk.Jump,
+	case !ok && len(m.snap.Sessions) > 0 && bkey.Matches(k, bk.Merge, bk.Menu, mk.Second, mk.Grant, mk.Open, mk.Into, mk.Jump,
 		mk.Park, mk.Rename, mk.Switch, mk.Dismiss, mk.Fold, mk.Stoke, mk.StokeChain, mk.Night, mk.Order):
 		// A line above the columns is chosen, or every column is hidden:
 		// never a row of Sessions the person cannot see.
@@ -432,10 +444,12 @@ func (m Model) boardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 		} else {
 			cmd = m.notice("no card is chosen · tap a + name to show a column")
 		}
-	case !ok && bkey.Matches(k, bk.Merge, mk.Second, mk.Grant):
+	case !ok && bkey.Matches(k, bk.Merge, bk.Menu, mk.Second, mk.Grant):
 		// no match at all: nothing to act on
 	case !ok:
 		return m, nil, false
+	case bkey.Matches(k, bk.Menu):
+		m = m.openMenuOnChosen(s)
 	case bkey.Matches(k, bk.Merge):
 		cmd = m.boardMerge(s)
 	case bkey.Matches(k, mk.Second):
@@ -444,10 +458,7 @@ func (m Model) boardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 		next, cmd := m.boardGo(s)
 		return next, cmd, true
 	case bkey.Matches(k, mk.Open, mk.Into, mk.Jump):
-		next, cmd := m.onCard(s).intoSelected()
-		if nm, ok := next.(Model); ok && nm.pending == nil {
-			next = nm.boardActed() // a jump that waits for its y chooses on the y
-		}
+		next, cmd := m.boardInto(s)
 		return next, cmd, true
 	case bkey.Matches(k, mk.Park, mk.New, mk.Rename, mk.Switch, mk.Exited, mk.Dismiss, mk.Fold,
 		mk.Stoke, mk.StokeChain, mk.Night, mk.Order, mk.Search):
@@ -457,6 +468,15 @@ func (m Model) boardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 		return m, nil, false
 	}
 	return m, cmd, true
+}
+
+// boardInto is ⏎: into the pane of s, then the first other wait is chosen.
+func (m Model) boardInto(s sample.Session) (tea.Model, tea.Cmd) {
+	next, cmd := m.onCard(s).intoSelected()
+	if nm, ok := next.(Model); ok && nm.pending == nil {
+		next = nm.boardActed() // a jump that waits for its y chooses on the y
+	}
+	return next, cmd
 }
 
 // boardCopy is c: the chosen card's last message on the clipboard.
@@ -600,11 +620,12 @@ func (m Model) boardKeyLine(w int) (string, []span) {
 	return fit(line, w), spans
 }
 
-// boardTap is a tap at x on line y of the board's body: on a column's name
-// it hides the column; on a phone's page mark it opens that page, hides
-// the open one and shows a hidden one; on a host line it dials the host
-// again. On a card it chooses the card, and a tap on one of the card's
-// keys presses that key. A destructive key only opens the consent box.
+// boardTap is a tap at x on line y of the board's body: on a column's name,
+// the QUIET drawer's too, it hides the column; on a phone's page mark it
+// opens that page, hides the open one and shows a hidden one; on a host
+// line it dials the host again. On a card it chooses the card, and a tap
+// on one of the card's keys presses that key. A destructive key only opens
+// the consent box.
 func (m Model) boardTap(x, y int) (tea.Model, tea.Cmd) {
 	w := max(m.width, minWidth)
 	d := m.boardPanel(w, m.bodyRows())
@@ -623,8 +644,29 @@ func (m Model) boardTap(x, y int) (tea.Model, tea.Cmd) {
 			return m.peerTryAgain(i)
 		}
 	}
+	if sp, ok := spanAt(d.taps[y], x); ok && sp.press == colQuiet.short() {
+		m.flipHidden(colQuiet) // the drawer's name
+		return m, nil
+	}
+	c, s, ok := m.cardAt(d, b, x, y)
+	if !ok {
+		return m, nil
+	}
+	m.boardChooseCard(c, s)
+	sp, ok := spanAt(d.taps[y], x)
+	switch {
+	case !ok || sp.press == "":
+		return m, nil
+	case sp.press == m.keys.main.Grant.Keys()[0]:
+		return m.boardTapGo(s)
+	}
+	return m.keyed(keyPress(sp.press))
+}
+
+// cardAt is the card at x on line y of the board d draws, and its column.
+func (m Model) cardAt(d boardDrawn, b boardDraw, x, y int) (boardCol, sample.Session, bool) {
 	inColumn := func(c boardCol) bool {
-		if m.layoutAt(w) == Narrow {
+		if m.layoutAt(max(m.width, minWidth)) == Narrow {
 			return true // the page is the one column
 		}
 		i := slices.IndexFunc(d.heads, func(h span) bool { return h.press == c.short() })
@@ -637,19 +679,11 @@ func (m Model) boardTap(x, y int) (tea.Model, tea.Cmd) {
 		}
 		at := slices.IndexFunc(b.idx[c], func(s sample.Session) bool { return paneOf(s) == k })
 		if at < 0 {
-			return m, nil
+			return c, sample.Session{}, false
 		}
-		m.boardChooseCard(c, b.idx[c][at])
-		sp, ok := spanAt(d.taps[y], x)
-		switch {
-		case !ok || sp.press == "":
-			return m, nil
-		case sp.press == m.keys.main.Grant.Keys()[0]:
-			return m.boardTapGo(b.idx[c][at])
-		}
-		return m.keyed(keyPress(sp.press))
+		return c, b.idx[c][at], true
 	}
-	return m, nil
+	return 0, sample.Session{}, false
 }
 
 // boardTabTap is a tap on the crumb of the tab row: esc all shows every

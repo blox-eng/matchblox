@@ -1,0 +1,34 @@
+ ▰ matchblox · all hosts ▾ ● 4 need you
+ SESSIONS 15  ships  3  4  5  6  7
+────────────────────────────────────────
+ NEEDS YOU 4 −  work 3  ship 3  quiet 5
+────────────────────────────────────────
+ ╿ spark-search                   ✻ 31m
+  stuck CI failed · lint, twice
+  #4548 ●━✕┄○┄○┄○  ctx 77%
+  ⏎ go in
+
+ ╿ kindle-web                     ✻  9m
+  green #4556 waits for your merge
+  #4556 ●━●━◉┄○┄○  ctx 48%
+  p merge #4556   ⏎ go in
+
+ ╿ hearth-api                     ✻  4m
+  asks The plan changes 2 records and …
+  ctx 31%
+  ⏎ go in
+
+▌╿ flint-auth                     ✻  2m
+  asks Which way do we fix the login?
+  ctx 62%                       ━╸login
+  “I can fix it in two ways. The token
+╭─ flint-auth ─────────────────────────╮
+│ ▌ copy last message                c │
+│   copy the question                  │
+│   copy its name                      │
+│   show only the chain login        g │
+│   go in                            a │
+│   hide needs you                     │
+╰─ ⏎ do ─ esc close ───────────────────╯
+────────────────────────────────────────
+ c copy   v one line   s hosts   u strip
