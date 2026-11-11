@@ -599,6 +599,10 @@ func (m Model) boardHints(w int) []hint {
 	}
 	tail := []hint{hintFor(bk.Copy, ""), density, hintFor(bk.Host, ""), hintFor(bk.Strip, "")}
 	cancel := hintFor(mk.Back, "cancel") // the copy check waits for its paste
+	if b, _ := m.boardDrawOf(); m.have && b.none && m.copyCode == "" && m.boardAbove == 0 {
+		// No session at all: only the keys that act on an empty board.
+		return []hint{hintFor(mk.Open, "new session"), hintFor(bk.Strip, ""), hintFor(mk.NextTab, "")}
+	}
 	if m.layoutAt(w) == Narrow {
 		if m.copyCode != "" {
 			return append([]hint{cancel}, tail...)
@@ -618,8 +622,6 @@ func (m Model) boardHints(w int) []hint {
 		q, answers := m.offersDigits(b.chosen)
 		armed, sent := m.peekMarks(b.chosen)
 		hs, _ = m.cardHints(b.chosen, cardOpts{sel: true, armed: armed}, len(q.Options), answers && sent == 0)
-	case m.have && b.none: // the ghost row leads
-		hs = []hint{hintFor(mk.Open, "new session")}
 	}
 	right := hintFor(bk.Right, "")
 	if above && line == "" && len(m.boardDoors()) > 1 {

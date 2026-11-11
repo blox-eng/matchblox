@@ -586,3 +586,14 @@ func TestAHiddenColumnGivesItsRoom(t *testing.T) {
 		}
 	}
 }
+
+func TestTheEmptyBoardOffersOnlyWhatActs(t *testing.T) {
+	none := boardFixture(t)
+	none.Sessions, none.Queue, none.Ships, none.Holds, none.Chains = nil, nil, nil, nil, nil
+	for _, size := range [][2]int{{40, 34}, {80, 31}, {160, 38}} {
+		m := boardShot(t, none, size[0], size[1], nil)
+		if got := keyLineOf(m); got != "⏎ new session   u strip   tab next" {
+			t.Errorf("%dx%d: the empty board offers %q", size[0], size[1], got)
+		}
+	}
+}
