@@ -1,4 +1,4 @@
- ▰ matchblox · 2 hosts                                                                                                                         ● 2 wait for you
+ ▰ matchblox · all hosts ▾                                                                                                                         ● 4 need you
  SESSIONS 15    ships    machine    git    history    panes    stoker
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  NEEDS YOU · 4  −                     WORKING · 3  −            SHIPPING · 3  −           QUIET · 5  −     │ spark-search · idle

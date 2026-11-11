@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strconv"
@@ -190,6 +191,9 @@ const minBlank = 3
 func (m Model) drawScreen(w int) drawn {
 	head, waits, stokerAt := m.header(w)
 	tabs, tabSpans := m.tabsLine(w)
+	if m.boardShown() {
+		tabs, tabSpans = m.boardTabRow(w)
+	}
 	sc := drawn{lines: []string{head, tabs, m.st.rule.Render(strings.Repeat("─", w))}, waits: waits, stokerAt: stokerAt, tabs: tabSpans,
 		bodyTop: 3, listW: w, dockAt: -1, keysAt: -1, actKeysAt: -1}
 	switch {
@@ -418,7 +422,9 @@ func (m Model) header(w int) (string, span, span) {
 	if host == "" {
 		host = m.host.Host
 	}
-	if n := m.hostCount(); n > 1 {
+	if n := m.hostCount(); n > 1 && m.boardShown() {
+		host = cmp.Or(m.boardHost, "all hosts") + " ▾"
+	} else if n > 1 {
 		host = fmt.Sprintf("%d hosts", n)
 	}
 	lost := ""
@@ -448,10 +454,14 @@ func (m Model) header(w int) (string, span, span) {
 		room := max(w-lipgloss.Width(left+lost)-3, 1)
 		return spread(left+lost, st.accent.Render(ansi.Truncate(m.toast, room, "…"))+" ", w), span{}, span{}
 	}
-	n := 0
-	for _, s := range m.all.sessions {
-		if m.groupOf(s) == groupWaits {
-			n++
+	n, count := 0, "● %d wait for you"
+	if m.boardShown() {
+		n, count = m.needCount(), "● %d need you"
+	} else {
+		for _, s := range m.all.sessions {
+			if m.groupOf(s) == groupWaits {
+				n++
+			}
 		}
 	}
 	stoker := m.stokerBadge(m.layoutAt(w) == Narrow)
@@ -459,7 +469,7 @@ func (m Model) header(w int) (string, span, span) {
 	// waits; the count stays.
 	waits := []string{""}
 	if n > 0 {
-		waits = []string{fmt.Sprintf("● %d wait for you", n), fmt.Sprintf("● %d", n)}
+		waits = []string{fmt.Sprintf(count, n), fmt.Sprintf("● %d", n)}
 	}
 	lefts := []string{left}
 	if host != "" {

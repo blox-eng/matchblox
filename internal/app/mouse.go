@@ -6,7 +6,7 @@ import (
 
 // tap is a click or a finger on a phone. A tap on a tab opens it, on a key
 // of the key line, of an opened row or under the detail presses it, on `● N wait for you` selects the first
-// session that waits, on the dock's `machine ›` switches the panel. A tap
+// session that waits (on the board `● N need you` clears its filters), on the dock's `machine ›` switches the panel. A tap
 // on the live view goes into the agent's pane: right of the list, or over
 // the whole screen of a phone, where its title row goes back to Sessions.
 // The demo's stand-in is answered with the belt: a tap on its screen
@@ -62,15 +62,22 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 			return m.openAgent()
 		}
 		if s, ok := spanAt([]span{sc.waits}, ms.X); ok && s.press != "" {
-			m.setTab(tabSessions)
-			if i := m.firstWaiting(); i >= 0 {
-				m.selectRow(len(m.doors) + i)
+			if m.boardShown() {
+				m.clearBoardFilters()
+			} else {
+				m.setTab(tabSessions)
+				if i := m.firstWaiting(); i >= 0 {
+					m.selectRow(len(m.doors) + i)
+				}
 			}
 			m.flash = ""
 		}
 		return m, nil
 	case ms.Y == 1:
 		if s, ok := spanAt(sc.tabs, ms.X); ok {
+			if next, crumb := m.boardTabTap(s.press); crumb {
+				return next, nil
+			}
 			m.setTab(int(s.press[0] - '1'))
 			m.flash = ""
 			return m.seeStoker()

@@ -95,14 +95,99 @@ func (m *Model) boardMove(d int) {
 func (m *Model) boardSide(d int) {
 	b, shown := m.boardDrawOf()
 	for i := slices.Index(shown, b.open) + d; i >= 0 && i < len(shown); i += d {
-		c := shown[i]
-		if ss := b.idx[c]; len(ss) > 0 {
-			k, ok := m.boardPick[c]
-			at := slices.IndexFunc(ss, func(s sample.Session) bool { return ok && paneOf(s) == k })
-			m.boardChooseCard(c, ss[max(at, 0)])
+		if m.boardOpen(shown[i]) {
 			return
 		}
 	}
+}
+
+// boardOpen opens column c on the card it had chosen, else its first;
+// false: c has no card.
+func (m *Model) boardOpen(c boardCol) bool {
+	b, _ := m.boardDrawOf()
+	ss := b.idx[c]
+	if len(ss) == 0 {
+		return false
+	}
+	k, ok := m.boardPick[c]
+	at := slices.IndexFunc(ss, func(s sample.Session) bool { return ok && paneOf(s) == k })
+	m.boardChooseCard(c, ss[max(at, 0)])
+	return true
+}
+
+// boardShowCol shows column c when it is hidden, and opens it.
+func (m *Model) boardShowCol(c boardCol) {
+	if m.colHidden(c) {
+		m.flipHidden(c)
+	}
+	if !m.boardOpen(c) {
+		m.boardAt = c
+	}
+}
+
+// clearBoardFilters is a tap on the count: NEEDS YOU shows, every chain,
+// host and search goes, and the first wait is chosen.
+func (m *Model) clearBoardFilters() {
+	if m.colHidden(colNeed) {
+		m.flipHidden(colNeed)
+	}
+	m.boardChain, m.boardHost, m.filter, m.searching = "", "", "", false
+	m.refresh()
+	m.peekAt, m.boardAt = m.now(), colNeed
+	if ss := m.boardColumn(colNeed); len(ss) > 0 {
+		m.boardChooseCard(colNeed, ss[0])
+	}
+}
+
+// boardChainOf is g: the board narrows to the chosen card's chain. A card
+// in no chain says so.
+func (m *Model) boardChainOf(s sample.Session, ok bool) tea.Cmd {
+	name, said := "", ""
+	if ok {
+		if name = m.chainLabelOf(s); name == "" {
+			said = s.Name + " is in no chain"
+		}
+	}
+	cmd := m.once("chain", m.keys.board.Chain.Help().Key+" shows one chain now. "+m.keys.main.Back.Help().Key+" shows all.", said)
+	if name != "" {
+		m.boardChain, m.peekAt = name, m.now()
+	}
+	return cmd
+}
+
+// turnChain is ] (d 1) and [ (d -1): the next or the previous chain on
+// the board, from the first or the last when none is chosen.
+func (m *Model) turnChain(d int) {
+	names := m.boardChains()
+	if len(names) == 0 {
+		return
+	}
+	i := slices.Index(names, m.boardChain)
+	switch {
+	case i < 0 && d > 0:
+		i = 0
+	case i < 0:
+		i = len(names) - 1
+	default:
+		i = (i + d + len(names)) % len(names)
+	}
+	m.boardChain, m.peekAt = names[i], m.now()
+}
+
+// turnHost is s: the next host, then all hosts again.
+func (m *Model) turnHost() {
+	if m.hostCount() == 1 {
+		return
+	}
+	var names []string
+	for _, h := range m.hosts() {
+		names = append(names, m.nameOf(h))
+	}
+	next := ""
+	if i := slices.Index(names, m.boardHost); i+1 < len(names) {
+		next = names[i+1]
+	}
+	m.boardHost, m.peekAt = next, m.now()
 }
 
 // boardActed chooses, after an act on the chosen card, the first other card
@@ -175,21 +260,29 @@ func (m Model) boardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 	case bkey.Matches(k, bk.Right):
 		m.boardSide(1)
 	case bkey.Matches(k, mk.Back):
-		// The menu (Task 9) closes first; the chain filter (Task 6) after the search.
+		// The menu (Task 9) closes first, then the search, then the chain.
 		m.goArmed = paneKey{}
-		if m.filter != "" {
-			m.filter = ""
+		switch {
+		case m.filter != "":
+			m.filter, m.peekAt = "", m.now()
 			m.refresh()
+		case m.boardChain != "":
+			m.boardChain, m.peekAt = "", m.now()
 		}
 	case bkey.Matches(k, bk.Copy):
 		cmd = m.boardCopy(s, ok)
 	case bkey.Matches(k, bk.Density):
 		cmd = m.once("density", bk.Density.Help().Key+" changes the cards now: verbose, or one line.", "")
 		m.flipOneLine()
-	case bkey.Matches(k, bk.Host): // Task 6 turns the hosts
+	case bkey.Matches(k, bk.Host):
 		cmd = m.once("host", bk.Host.Help().Key+" changes the host now. The order of a column is fixed.", "")
-	case bkey.Matches(k, bk.Chain): // Task 6 narrows to the chain
-		cmd = m.once("chain", bk.Chain.Help().Key+" shows one chain now. "+mk.Back.Help().Key+" shows all.", "")
+		m.turnHost()
+	case bkey.Matches(k, bk.Chain):
+		cmd = m.boardChainOf(s, ok)
+	case bkey.Matches(k, bk.NextChain):
+		m.turnChain(1)
+	case bkey.Matches(k, bk.PrevChain):
+		m.turnChain(-1)
 	case bkey.Matches(k, bk.Strip):
 		cmd = m.once("strip", bk.Strip.Help().Key+" turns the strip now.", "")
 		m.turnStrip()
@@ -329,7 +422,7 @@ func (m Model) boardHints(w int) []hint {
 	case b.picked:
 		q, answers := m.oneChoice(b.chosen)
 		hs, _ = m.cardHints(b.chosen, cardOpts{sel: true}, len(q.Options), answers)
-	case m.have && m.filter == "" && b.empty(): // the ghost row leads
+	case m.have && b.none: // the ghost row leads
 		hs = []hint{hintFor(m.keys.main.Open, "new session")}
 	}
 	return append(append(hs, tail...), hintFor(bk.Right, ""), hintFor(m.keys.main.NextTab, ""))
@@ -359,13 +452,29 @@ func (m Model) boardKeyLine(w int) (string, []span) {
 	return fit(line, w), spans
 }
 
-// boardTap is a tap at x on line y of the board's body: it chooses the card
-// there, and a tap on one of the card's keys presses that key. A
-// destructive key only opens the consent box.
+// boardTap is a tap at x on line y of the board's body: on a column's name
+// it hides the column; on a phone's page mark it opens that page, hides
+// the open one and shows a hidden one; on a host line it dials the host
+// again. On a card it chooses the card, and a tap on one of the card's
+// keys presses that key. A destructive key only opens the consent box.
 func (m Model) boardTap(x, y int) (tea.Model, tea.Cmd) {
 	w := max(m.width, minWidth)
 	d := m.boardPanel(w, m.bodyRows())
 	b, _ := m.boardDrawOf()
+	if h, ok := spanAt(d.heads, x); ok && y == d.headAt {
+		c := boardCols[slices.IndexFunc(boardCols[:], func(c boardCol) bool { return c.short() == h.press })]
+		if m.colHidden(c) || m.layoutAt(w) == Narrow && c != b.open {
+			m.boardShowCol(c)
+		} else {
+			m.flipHidden(c)
+		}
+		return m, nil
+	}
+	if host, ok := d.hostAt[y]; ok {
+		if i := m.peerAt(host); i >= 0 {
+			return m.peerTryAgain(i)
+		}
+	}
 	inColumn := func(c boardCol) bool {
 		if m.layoutAt(w) == Narrow {
 			return true // the page is the one column
@@ -393,4 +502,24 @@ func (m Model) boardTap(x, y int) (tea.Model, tea.Cmd) {
 		return m.keyed(keyPress(sp.press))
 	}
 	return m, nil
+}
+
+// boardTabTap is a tap on the crumb of the tab row: esc all shows every
+// chain, and a hidden column's + name shows it and opens it. false: the
+// tap is on a tab.
+func (m Model) boardTabTap(press string) (Model, bool) {
+	if !m.boardShown() {
+		return m, false
+	}
+	if press == m.keys.main.Back.Help().Key {
+		m.boardChain, m.peekAt = "", m.now()
+		return m, true
+	}
+	for _, c := range boardCols {
+		if press == c.short() {
+			m.boardShowCol(c)
+			return m, true
+		}
+	}
+	return m, false
 }

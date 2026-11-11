@@ -27,10 +27,12 @@ func harnessMark(s sample.Session) string {
 
 // cardOpts is how a card is drawn. armed and sent are an option's number,
 // 0 for none. bare: the chosen card beside the live view, which shows the
-// quote and the options.
+// quote and the options. asOf: the time of the last state of a host that
+// is not reached, "" for one that is.
 type cardOpts struct {
 	sel, lit, oneLine, need, quietRow, otherHost, bare bool
 	armed, sent                                        int
+	asOf                                               string
 }
 
 // boardCard is one match drawn in a column (the spec's "The card"):
@@ -96,7 +98,8 @@ func (m Model) wordInk(o cardOpts) lipgloss.Style {
 }
 
 // cardHead is line 1: the selection mark, the match, the name and its
-// host; at the right the harness mark and the wait. A quiet row adds its
+// host; at the right the harness mark and the wait, or when a host that is
+// not reached sent its last state. A quiet row adds its
 // state word after the name.
 func (m Model) cardHead(s sample.Session, w int, o cardOpts, word string) string {
 	mark, name := " ", m.st.text
@@ -107,7 +110,11 @@ func (m Model) cardHead(s sample.Session, w int, o cardOpts, word string) string
 	if o.otherHost {
 		left += m.st.faint.Render(" @" + m.nameOf(s.Host))
 	}
-	right := m.st.muted.Render(harnessMark(s)) + " " + m.st.faint.Render(padLeft(m.waitCell(s), 3)) + " "
+	wait := padLeft(m.waitCell(s), 3)
+	if o.asOf != "" {
+		wait = "as of " + o.asOf
+	}
+	right := m.st.muted.Render(harnessMark(s)) + " " + m.st.faint.Render(wait) + " "
 	// The word lines up after a short name, and is shown whole or not at
 	// all: short of room the name is cut, never the word.
 	if lw := max(lipgloss.Width(left), 17); word != "" && lw+1+lipgloss.Width(word)+1+lipgloss.Width(right) <= w {

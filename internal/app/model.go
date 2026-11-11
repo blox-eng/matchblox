@@ -474,6 +474,9 @@ type Model struct {
 	board     bool
 	boardAt   boardCol
 	boardPick map[boardCol]paneKey
+	// boardChain and boardHost narrow the board to one chain and one host,
+	// each by its name; "" shows all.
+	boardChain, boardHost string
 	// peekAt is when the choice last moved to another match, and peekAsk
 	// the question (Ask.ID) its card drew then.
 	peekAt  time.Time

@@ -2,6 +2,7 @@ package app
 
 import (
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/blox-eng/matchblox/internal/proto"
@@ -214,13 +215,68 @@ func (m Model) chainsTogether(ss []sample.Session) []sample.Session {
 	return out
 }
 
-// boardColumn is the matches of column c, in its order.
+// boardColumn is the matches of column c that the filters show, in its
+// order.
 func (m Model) boardColumn(c boardCol) []sample.Session {
-	return m.boardIndex()[c]
+	return slices.DeleteFunc(m.boardIndex()[c], func(s sample.Session) bool { return !m.inBoard(s) })
 }
 
-// needCount is every match that needs the owner, on every host: one the
-// owner parked is not counted.
+// needCount is every match that needs the owner, on every host and in
+// every chain, whatever the filters hide: one the owner parked is not
+// counted, nor one on a host that is not reached.
 func (m Model) needCount() int {
-	return len(m.boardIndex()[colNeed])
+	n := 0
+	for _, s := range m.boardIndex()[colNeed] {
+		if !m.stale(s.Host) {
+			n++
+		}
+	}
+	return n
+}
+
+// inBoard: the chain filter, the host filter and the search show s.
+func (m Model) inBoard(s sample.Session) bool {
+	if m.boardChain != "" && m.chainLabelOf(s) != m.boardChain {
+		return false
+	}
+	if m.boardHost != "" && m.nameOf(s.Host) != m.boardHost {
+		return false
+	}
+	if m.filter == "" {
+		return true
+	}
+	word, says := m.cardSays(s)
+	text := strings.Join([]string{s.Name, s.Target, s.Pane, s.Tab, s.Cwd, s.Model, m.lastWords(s), m.wordOf(s),
+		word, says, m.chainLabelOf(s)}, " ")
+	return strings.Contains(strings.ToLower(text), strings.ToLower(m.filter))
+}
+
+// chainLabelOf is the name of the chain s is in, "" for none.
+func (m Model) chainLabelOf(s sample.Session) string {
+	if k, ok := m.chainKeyOf(s); ok {
+		return m.chainLabel(k)
+	}
+	return ""
+}
+
+// boardChains are the names of the chains with a match on the board, in
+// the order of the hosts and of each host's chains: what ] and [ turn.
+func (m Model) boardChains() []string {
+	on := map[string]bool{}
+	for _, ss := range m.boardIndex() {
+		for _, s := range ss {
+			on[m.chainLabelOf(s)] = true
+		}
+	}
+	var out []string
+	for _, h := range m.hosts() {
+		if cv := m.chainsOf(h); cv != nil {
+			for _, c := range cv.Chains {
+				if name := m.chainLabel(chainKey{h, c.ID}); on[name] && !slices.Contains(out, name) {
+					out = append(out, name)
+				}
+			}
+		}
+	}
+	return out
 }

@@ -54,13 +54,14 @@ func boardWidths(l Layout, w int, shown []boardCol) (cols []int, live int) {
 // what it hit: the line of the column heads (or of the page marks) and a
 // span on it for each column, which presses its short name; the card on
 // each line of each column; the tap targets of a line, in the board's
-// columns.
+// columns; the host of each host line, which a tap dials again.
 type boardDrawn struct {
 	body
 	headAt int
 	heads  []span
 	cards  map[boardSpot]paneKey
 	taps   map[int][]span
+	hostAt map[int]string
 }
 
 // boardSpot is a line of one column.
@@ -70,13 +71,15 @@ type boardSpot struct {
 }
 
 // boardDraw is what one draw of the board works out once: the columns of
-// every match, the open column and its chosen card.
+// the matches the filters show, the open column and its chosen card.
+// none: no match at all, whatever the filters.
 type boardDraw struct {
 	idx    [4][]sample.Session
 	open   boardCol
 	chosen sample.Session
 	picked bool
 	live   int
+	none   bool
 }
 
 // empty: no column has a card.
@@ -91,14 +94,20 @@ func (m Model) boardShown() bool { return m.board && m.tab == tabSessions }
 // above, the columns, the ghost row and the recommendations under them,
 // each folded to one line.
 func (m Model) boardPanel(w, h int) boardDrawn {
-	d := boardDrawn{headAt: -1, cards: map[boardSpot]paneKey{}, taps: map[int][]span{}}
+	d := boardDrawn{headAt: -1, cards: map[boardSpot]paneKey{}, taps: map[int][]span{}, hostAt: map[int]string{}}
 	b, shown := m.boardDrawOf()
 
 	st := m.st
 	if len(m.doors) > 0 {
 		d.add(-1, st.label.Render(fit(fmt.Sprintf(" SET UP · %d", len(m.doors)), w)))
 	}
-	none := m.have && m.filter == "" && b.empty()
+	for _, h := range m.unreached() {
+		for _, l := range m.hostLine(h, w) {
+			d.hostAt[len(d.lines)] = h
+			d.add(-1, l)
+		}
+	}
+	none := m.have && b.none
 	var under []string
 	if !none {
 		under = append(under, m.ghostRow(m.ghosts()[0], false, w))
@@ -115,8 +124,9 @@ func (m Model) boardPanel(w, h int) boardDrawn {
 		for i, g := range m.ghosts() {
 			d.addRow(-1, i == 0, w, st, m.ghostRow(g, i == 0, w))
 		}
-	case len(shown) == 0:
-		d.add(-1, "", fit("  "+st.faint.Render("Every column is hidden. Tap a + name to show it."), w))
+	case len(shown) == 0 && l != Narrow: // the + names wait on the tab row
+		d.add(-1, strings.Repeat(" ", w))
+		d.add(-1, m.allHidden(w)...)
 	case l == Narrow:
 		m.boardPage(&d, &b, shown, w, rows)
 	default:
@@ -135,7 +145,7 @@ func (m Model) boardPanel(w, h int) boardDrawn {
 // doors line above, the ghost row and the recommendations under them, and
 // the notice row. none: no session at all, and no ghost row under.
 func (m Model) boardRows(w, h int, none bool) int {
-	rows := h - len(m.noticeLines(w))
+	rows := h - len(m.noticeLines(w)) - len(m.hostLines(w))
 	if len(m.doors) > 0 {
 		rows--
 	}
@@ -149,18 +159,13 @@ func (m Model) boardRows(w, h int, none bool) int {
 }
 
 // boardDrawOf is what a draw of the board works out first: every match in
-// its column, narrowed by the search, the columns shown, and the open
+// its column, narrowed by the filters, the columns shown, and the open
 // column with its chosen card.
 func (m Model) boardDrawOf() (boardDraw, []boardCol) {
 	b := boardDraw{idx: m.boardIndex()}
-	if m.filter != "" {
-		found := map[paneKey]bool{}
-		for _, s := range m.snap.Sessions {
-			found[paneOf(s)] = true
-		}
-		for c := range b.idx {
-			b.idx[c] = slices.DeleteFunc(b.idx[c], func(s sample.Session) bool { return !found[paneOf(s)] })
-		}
+	b.none = b.empty()
+	for c := range b.idx {
+		b.idx[c] = slices.DeleteFunc(b.idx[c], func(s sample.Session) bool { return !m.inBoard(s) })
 	}
 	shown := slices.DeleteFunc(slices.Clone(boardCols[:]), m.colHidden)
 	m.boardChoose(&b, shown)
@@ -218,14 +223,12 @@ func (m Model) boardStateNotice() string {
 // open column.
 func (m Model) boardPage(d *boardDrawn, b *boardDraw, shown []boardCol, w, rows int) {
 	st := m.st
-	line, x := " ", 1
-	mark := func(text string, ink lipgloss.Style, c boardCol) {
-		if x > 1 {
-			line, x = line+"  ", x+2
-		}
-		d.heads = append(d.heads, span{x, min(x+lipgloss.Width(text), w), c.short()})
-		line, x = line+ink.Render(text), x+lipgloss.Width(text)
+	type mark struct {
+		text string
+		ink  lipgloss.Style
+		c    boardCol
 	}
+	var marks []mark
 	count := func(c boardCol) string {
 		if !m.have {
 			return "" // before the first state, never a zero
@@ -234,18 +237,37 @@ func (m Model) boardPage(d *boardDrawn, b *boardDraw, shown []boardCol, w, rows 
 	}
 	for _, c := range shown {
 		if c == b.open {
-			mark(c.name()+count(c)+" −", st.text.Bold(true), c)
+			marks = append(marks, mark{c.name() + count(c) + " −", st.text.Bold(true), c})
 		} else {
-			mark(c.short()+count(c), st.faint, c)
+			marks = append(marks, mark{c.short() + count(c), st.faint, c})
 		}
 	}
 	for _, c := range boardCols {
 		if !slices.Contains(shown, c) {
-			mark("+ "+c.short()+count(c), st.faint, c)
+			marks = append(marks, mark{"+ " + c.short() + count(c), st.faint, c})
 		}
+	}
+	gap, need := "  ", 1 // the marks close up to one cell apart when two do not fit
+	for i, mk := range marks {
+		need += lipgloss.Width(mk.text) + min(i, 1)*2
+	}
+	if need > w {
+		gap = " "
+	}
+	line, x := " ", 1
+	for i, mk := range marks {
+		if i > 0 {
+			line, x = line+gap, x+len(gap)
+		}
+		d.heads = append(d.heads, span{x, min(x+lipgloss.Width(mk.text), w), mk.c.short()})
+		line, x = line+mk.ink.Render(mk.text), x+lipgloss.Width(mk.text)
 	}
 	d.headAt = len(d.lines)
 	d.add(-1, fit(line, w), st.hair.Render(strings.Repeat("─", w)))
+	if len(shown) == 0 {
+		d.add(-1, m.allHidden(w)...)
+		return
+	}
 	m.boardStack(d, b, b.open, len(d.lines), 0, w, rows-2, false)
 	if words := m.boardWords(b); words != "" && rows > 2 {
 		d.lines[d.headAt+2] = fit("  "+st.faint.Render(words), w)
@@ -398,7 +420,7 @@ func (m Model) boardStack(d *boardDrawn, b *boardDraw, c boardCol, y, x, w, h in
 		set(i, "", nil, nil)
 	}
 	if len(ss) == 0 {
-		if c == colNeed && m.have && m.filter == "" {
+		if c == colNeed && m.have && m.filter == "" && m.boardChain == "" && m.boardHost == "" {
 			set(1, "  "+st.faint.Render("nothing needs you"), nil, nil)
 		}
 		return
@@ -469,8 +491,11 @@ func (m Model) boardBlockOf(b *boardDraw, c boardCol, s sample.Session, w int, q
 		oneLine:   m.oneLineIn(c),
 		need:      c == colNeed,
 		quietRow:  quietRow,
-		otherHost: m.hostCount() > 1 && s.Host != m.opt.Host,
+		otherHost: m.hostCount() > 1 && m.boardHost == "" && s.Host != m.opt.Host,
 		bare:      b.live > 0,
+	}
+	if m.hostCount() > 1 && m.stale(s.Host) {
+		o.asOf = m.stateAt(s.Host).Format("15:04")
 	}
 	if k, ok := m.chainKeyOf(s); ok && b.picked {
 		if ck, ok := m.chainKeyOf(b.chosen); ok && ck == k {
@@ -489,4 +514,113 @@ func (m Model) boardBlockOf(b *boardDraw, c boardCol, s sample.Session, w int, q
 		bl.lines, bl.taps = append(bl.lines, ""), append(bl.taps, nil)
 	}
 	return bl
+}
+
+// allHidden is what the body says when every column is hidden: the + names
+// are on the tab row, and on a phone in the page marks.
+func (m Model) allHidden(w int) []string {
+	lines := wrapPlain("Every column is hidden. Tap a + name to show it.", w-3)
+	for i, l := range lines {
+		lines[i] = fit("  "+m.st.faint.Render(l), w)
+	}
+	return lines
+}
+
+// unreached are the hosts besides this one that are not reached: what
+// shows of each is its last state.
+func (m Model) unreached() []string {
+	var out []string
+	for _, h := range m.hosts()[1:] {
+		if m.stale(h) {
+			out = append(out, h)
+		}
+	}
+	return out
+}
+
+// hostLines are the board's top lines, one for each host that is not
+// reached.
+func (m Model) hostLines(w int) []string {
+	var out []string
+	for _, h := range m.unreached() {
+		out = append(out, m.hostLine(h, w)...)
+	}
+	return out
+}
+
+// hostLine says since when host is not reached, and the key that dials it
+// again: one line, two on a phone when it does not fit.
+func (m Model) hostLine(host string, w int) []string {
+	st := m.st
+	since := m.nameOf(host) + ": not reached since " + m.stateAt(host).Format("15:04")
+	again := st.text.Render(m.keys.main.Open.Help().Key) + st.muted.Render(" try again")
+	if line := " " + st.muted.Render(since+" · ") + again; lipgloss.Width(line) <= w {
+		return []string{fit(line, w)}
+	}
+	return []string{fit(" "+st.muted.Render(since), w), fit("   "+again, w)}
+}
+
+// boardCrumb is what the tab row of a screen w wide adds while the board
+// shows: the chain the board is narrowed to and the key that shows all,
+// then each hidden column with its count (on a phone they are in the page
+// marks). A part that does not fit in w-2 leaves whole, with every one
+// after it. The spans press esc, or a hidden column's short name.
+func (m Model) boardCrumb(w int) (string, []span) {
+	phone := m.layoutAt(w) == Narrow
+	if m.boardChain == "" && (phone || !slices.ContainsFunc(boardCols[:], m.colHidden)) {
+		return "", nil
+	}
+	st := m.st
+	b, _ := m.boardDrawOf()
+	type part struct{ text, press, gap string }
+	var parts []part
+	if m.boardChain != "" {
+		n := 0
+		for _, ss := range b.idx {
+			n += len(ss)
+		}
+		back := m.keys.main.Back.Help().Key
+		parts = append(parts, part{st.text.Render("chain " + m.boardChain + " · " + strconv.Itoa(n)), "", ""},
+			part{st.text.Render(back) + st.muted.Render(" all"), back, "   "})
+	}
+	if !phone {
+		gap := "   "
+		for _, c := range boardCols {
+			if m.colHidden(c) {
+				parts = append(parts, part{st.faint.Render("+ " + c.short() + " " + strconv.Itoa(len(b.idx[c]))), c.short(), gap})
+				gap = "  "
+			}
+		}
+	}
+	line, x := "", 0
+	var spans []span
+	for i, p := range parts {
+		if i == 0 {
+			p.gap = ""
+		}
+		if x+len(p.gap)+lipgloss.Width(p.text) > w-2 {
+			break
+		}
+		x += len(p.gap)
+		if p.press != "" {
+			spans = append(spans, span{x, x + lipgloss.Width(p.text), p.press})
+		}
+		line, x = line+p.gap+p.text, x+lipgloss.Width(p.text)
+	}
+	return line, spans
+}
+
+// boardTabRow is the tab row while the board shows: the tabs, and at its
+// right the crumb. Short of room the tabs shorten, and then go.
+func (m Model) boardTabRow(w int) (string, []span) {
+	crumb, cs := m.boardCrumb(w)
+	if crumb == "" {
+		return m.tabsLine(w)
+	}
+	room := w - lipgloss.Width(crumb) - 1
+	tabs, spans := m.tabsLine(room)
+	if len(spans) == 0 || spans[len(spans)-1].x1 > room-2 {
+		tabs, spans, room = " ", nil, 1
+	}
+	return fit(tabs+crumb, w), append(spans, shift(cs, room)...)
 }

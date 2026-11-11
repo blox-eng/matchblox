@@ -181,7 +181,8 @@ func (m *Model) refresh() {
 	case tabSessions:
 		m.recs = slices.DeleteFunc(m.recs, func(r advice.Rec) bool { return !keep(r.Title, r.Evidence) })
 		sessions = slices.DeleteFunc(sessions, func(s sample.Session) bool {
-			return !keep(s.Name, s.Target, s.Pane, s.Tab, s.Cwd, s.Model, m.lastWords(s), m.wordOf(s))
+			// The board searches its own cards (inBoard): every match stays a row it can act on.
+			return !m.board && !keep(s.Name, s.Target, s.Pane, s.Tab, s.Cwd, s.Model, m.lastWords(s), m.wordOf(s))
 		})
 	case tabMachine:
 		m.snap.Orphans = slices.DeleteFunc(slices.Clone(m.all.orphans), func(o sample.Orphan) bool {
@@ -414,12 +415,13 @@ func (m Model) search(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	m.refresh()
+	m.peekAt = m.now()
 	return m, nil
 }
 
 // setTab opens a tab; a search belongs to the tab it was typed on.
 func (m *Model) setTab(t int) {
-	m.tab, m.filter, m.searching, m.armed = t, "", false, ""
+	m.tab, m.filter, m.searching, m.armed, m.peekAt = t, "", false, "", m.now()
 	if t == tabMachine {
 		m.loadDevices()
 	}

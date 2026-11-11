@@ -1,8 +1,8 @@
- ▰ matchblox · 2 hosts                                         ● 2 wait for you
+ ▰ matchblox · all hosts ▾                                         ● 4 need you
  SESSIONS 15    ships    machine    git    history    panes    stoker
 ────────────────────────────────────────────────────────────────────────────────
  NEEDS YOU · 0  −                       WORKING · 0  −       SHIPPING · 0  −
-  nothing matches "log" · esc clears
+  nothing matches "redis" · esc clears
 
 
 

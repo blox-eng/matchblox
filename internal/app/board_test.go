@@ -379,12 +379,12 @@ func TestTheBoardsStates(t *testing.T) {
 	})
 	t.Run("a search with no match", func(t *testing.T) {
 		m := boardShot(t, st, 80, 31, func(m *Model) {
-			m.filter = "log"
+			m.filter = "redis"
 			m.refresh()
 		})
 		d := m.boardPanel(80, m.bodyRows())
 		f := strings.Join(plainLines(d.lines), "\n")
-		if !strings.Contains(f, `nothing matches "log" · esc clears`) {
+		if !strings.Contains(f, `nothing matches "redis" · esc clears`) {
 			t.Errorf("no line for the search:\n%s", f)
 		}
 		for _, c := range []boardCol{colNeed, colWork, colShip} {

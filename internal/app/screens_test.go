@@ -190,6 +190,14 @@ func TestScreens(t *testing.T) {
 	for _, size := range [][2]int{{40, 34}, {160, 38}} { // v, before the board takes its keys
 		golden(t, boardShot(t, board, size[0], size[1], oneLineBoard), "boardoneline", size[0], size[1])
 	}
+	onLogin := func(m *Model) {
+		chooseCard("flint-auth")(m)
+		m.viewPrefs.Told = []string{"chain"} // the shot is of the chain, not of g's once-notice
+	}
+	for _, size := range [][2]int{{80, 31}, {40, 34}} {
+		golden(t, pressOn(boardShot(t, board, size[0], size[1], onLogin), "g"), "boardchain", size[0], size[1])
+		golden(t, boardShot(t, board, size[0], size[1], func(m *Model) { m.flipHidden(colWork) }), "boardhidden", size[0], size[1])
+	}
 }
 
 // threeHostShips is Ships over three hosts: the demo machine's four, the

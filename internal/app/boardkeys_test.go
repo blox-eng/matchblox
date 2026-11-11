@@ -300,10 +300,10 @@ func TestAChangedKeySaysSoOnce(t *testing.T) {
 	for _, c := range []struct{ key, once, then string }{
 		{"c", "c copies now. The stoker is on its card.", "copied: the last message of spark-search"},
 		{"v", "v changes the cards now: verbose, or one line.", ""},
-		{"s", "s changes the host now. The order of a column is fixed.", ""},
-		{"g", "g shows one chain now. esc shows all.", ""},
+		{"g", "g shows one chain now. esc shows all.", "spark-search is in no chain"},
 		{"u", "u turns the strip now.", ""},
 		{"p", "p merges now. The ships are on their cards.", "no ship of spark-search waits for a merge"},
+		{"s", "s changes the host now. The order of a column is fixed.", ""}, // last: it turns to the next host
 	} {
 		m = pressOn(m, c.key)
 		if got := noticeRow(m); got != c.once {
@@ -387,7 +387,7 @@ func TestTheNoticeIsGoneAfterItsTime(t *testing.T) {
 	if two != "not copied: tmux drops it · tmux set -s set-clipboard on" {
 		t.Errorf("a long notice on a phone is not two whole lines: %q", two)
 	}
-	if !strings.Contains(ansi.Strip(m.render()), "● 2 wait for you") {
+	if !strings.Contains(ansi.Strip(m.render()), "● 4 need you") {
 		t.Error("the header changed for a notice")
 	}
 	msg := tick() // the tick ends the notice; it waits noticeFor
