@@ -477,10 +477,21 @@ type Model struct {
 	// boardChain and boardHost narrow the board to one chain and one host,
 	// each by its name; "" shows all.
 	boardChain, boardHost string
-	// peekAt is when the choice last moved to another match, and peekAsk
-	// the question (Ask.ID) its card drew then.
-	peekAt  time.Time
-	peekAsk string
+	// peekAt is when the peek last started, and peekAsk the question
+	// (Ask.ID) its card drew then, on the card peekPane. peekNew: a new
+	// question on the same card started it.
+	peekAt   time.Time
+	peekAsk  string
+	peekPane paneKey
+	peekNew  bool
+	// peekArmed is the option a first digit marked, at peekArmedAt; a mark
+	// from before the peek started holds no more.
+	peekArmed   int
+	peekArmedAt time.Time
+	// peekSent is the option sent to the question peekSentAsk: the digits of
+	// its card are dead until the question changes.
+	peekSent    int
+	peekSentAsk string
 	// noticeText shows in the board's notice row until noticeUntil.
 	noticeText  string
 	noticeUntil time.Time
@@ -653,7 +664,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	next, cmd := m.update(msg)
 	if nm, ok := next.(Model); ok {
-		nm = nm.scanShows().keepView().inDemo()
+		nm = nm.scanShows().keepView().inDemo().peekOn()
 		if watch := nm.watchCmd(); watch != nil {
 			cmd = tea.Batch(cmd, watch)
 		}
@@ -848,11 +859,16 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.planTick(msg)
 	case resultMsg:
 		if strings.HasPrefix(msg.ActID, keyActID) {
-			if msg.Err != "" {
+			var note tea.Cmd
+			switch {
+			case msg.Err != "" && m.boardShown():
+				m.peekSent, m.peekSentAsk = 0, "" // not sent: the card takes digits again
+				note = m.notice(msg.Err)
+			case msg.Err != "":
 				m.flash = msg.Err
 			}
 			next := m.nextKey()
-			return m, tea.Batch(m.recv(), next)
+			return m, tea.Batch(m.recv(), next, note)
 		}
 		if pane, ok := strings.CutPrefix(msg.ActID, watchActID); ok && msg.Err != "" {
 			// A pane that went before the watch came is a race, not the builder's error.

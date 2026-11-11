@@ -101,6 +101,32 @@ func TestEnterRefusedForAQuestionNotSeen(t *testing.T) {
 	}
 }
 
+// TestTheServiceRefusesAnAnswerToAQuestionNewerThanTheSample: the board
+// sends a digit with the time of the sample its card drew as Seen, and
+// relies on this guard for a question that began after that sample.
+func TestTheServiceRefusesAnAnswerToAQuestionNewerThanTheSample(t *testing.T) {
+	sampled := time.Now()
+	refused := "not sent: flint asks something new — look again"
+	for _, c := range []struct {
+		name  string
+		since time.Time
+		err   string
+	}{
+		{"a question newer than the sample", sampled.Add(time.Second), refused},
+		{"a question that began just before the sample", sampled.Add(-waitSettle / 2), refused},
+		{"a question the sample showed", sampled.Add(-time.Second), ""},
+	} {
+		s, ran := keysTest(t)
+		s.cur.Queue = []queue.Item{{Pane: "%1", State: queue.StateQuestion, Since: c.since}}
+		a := key(proto.LitPrefix + "1")
+		a.Seen = sampled
+		res := s.act(t.Context(), a)
+		if want := 1; c.err != "" && (res.Err != c.err || len(*ran) != 0) || c.err == "" && (res.Err != "" || len(*ran) != want) {
+			t.Errorf("%s: res %+v ran %q", c.name, res, *ran)
+		}
+	}
+}
+
 func TestEnterAtAPermissionPromptRuns(t *testing.T) {
 	s, ran := keysTest(t)
 	since := time.Now()

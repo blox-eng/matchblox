@@ -11,11 +11,17 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
 // noticeFor is how long a notice shows in the board's notice row.
 const noticeFor = 2500 * time.Millisecond
+
+// peekDead is how long the digits arm nothing after the peek lands on a
+// card, the board opens, a tab or a filter changes, or a new question
+// comes.
+const peekDead = 400 * time.Millisecond
 
 // noticeMsg comes when a notice ends: the frame drops it.
 type noticeMsg struct{}
@@ -66,10 +72,8 @@ func (m Model) boardSelected() (sample.Session, bool) {
 // to another match starts its peek.
 func (m *Model) boardChooseCard(c boardCol, s sample.Session) {
 	if was, ok := m.boardSelected(); !ok || paneOf(was) != paneOf(s) {
-		m.peekAt, m.peekAsk, m.goArmed = m.now(), "", paneKey{}
-		if s.Ask != nil {
-			m.peekAsk = s.Ask.ID
-		}
+		m.startPeek(s)
+		m.goArmed = paneKey{}
 	}
 	pick := maps.Clone(m.boardPick)
 	if pick == nil {
@@ -77,6 +81,112 @@ func (m *Model) boardChooseCard(c boardCol, s sample.Session) {
 	}
 	pick[c] = paneOf(s)
 	m.boardAt, m.boardPick = c, pick
+}
+
+// startPeek starts the peek of s's card: for peekDead its digits arm
+// nothing, and a mark from before holds no more.
+func (m *Model) startPeek(s sample.Session) {
+	m.peekAt, m.peekAsk, m.peekPane, m.peekNew = m.now(), askOf(s), paneOf(s), false
+}
+
+// askOf is the question s asks with its options (Ask.ID), "" for none.
+func askOf(s sample.Session) string {
+	if s.Ask == nil {
+		return ""
+	}
+	return s.Ask.ID
+}
+
+// peekOn keeps the peek on the chosen card. A choice that moved with no
+// key (the first state, a card that left its column, a filter) starts a
+// new peek, and so does a new question on the chosen card.
+func (m Model) peekOn() Model {
+	if !m.boardShown() {
+		return m
+	}
+	s, ok := m.boardSelected()
+	switch {
+	case !ok:
+	case paneOf(s) != m.peekPane:
+		m.startPeek(s)
+	case askOf(s) != m.peekAsk:
+		m.startPeek(s)
+		m.peekNew = askOf(s) != ""
+	}
+	return m
+}
+
+// peekAnswers: the digits answer s's question, one question with one
+// choice, given with its options.
+func (m Model) peekAnswers(s sample.Session) bool {
+	_, ok := m.oneChoice(s)
+	return ok
+}
+
+// peekMarks are the option a first digit marked on s's card, and the
+// option sent to its question; 0 for none.
+func (m Model) peekMarks(s sample.Session) (armed, sent int) {
+	switch id := askOf(s); {
+	case id == "":
+	case id == m.peekSentAsk:
+		sent = m.peekSent
+	case paneOf(s) == m.peekPane && id == m.peekAsk && m.peekArmedAt.After(m.peekAt):
+		armed = m.peekArmed
+	}
+	return armed, sent
+}
+
+// answerFromPeek is a digit on the board (the spec's "Answering from the
+// peek"): the first marks that option of the chosen card's question, the
+// same digit again sends it. It sends nothing for peekDead after the peek
+// starts, to a question the card did not draw, or while the service is
+// lost.
+func (m Model) answerFromPeek(digit string) (tea.Model, tea.Cmd) {
+	s, ok := m.boardSelected()
+	q, _ := m.oneChoice(s)
+	n, _ := strconv.Atoi(digit)
+	armed, sent := m.peekMarks(s)
+	said, send := "", false
+	switch {
+	case !ok || !m.peekAnswers(s) || sent > 0:
+		// no question to answer, or its answer is sent
+	case m.lost || m.conn == nil:
+		m.peekArmed, said = 0, "not sent: no service · it redials"
+	case s.Host != m.opt.Host:
+		said = "not sent: " + s.Name + " is on " + m.nameOf(s.Host) + " · " + m.keys.main.Open.Help().Key + " goes in"
+	case paneOf(s) != m.peekPane || askOf(s) != m.peekAsk:
+		m.startPeek(s) // a question the card has not drawn yet
+		said = "not sent: " + s.Name + " asks something new — look again"
+	case m.now().Sub(m.peekAt) < peekDead && m.peekNew:
+		said = "not sent: " + s.Name + " asks something new — look again"
+	case m.now().Sub(m.peekAt) < peekDead:
+		said = "look at " + s.Name + "'s question first"
+	case n < 1 || n > len(q.Options):
+	case n == armed:
+		send = true
+		said = "sent " + digit + " to " + s.Name + " · now in " + colWork.name()
+	default:
+		m.peekArmed, m.peekArmedAt = n, m.now()
+	}
+	note := m.once("digit", "A digit marks an answer now. Press it again to send.", said)
+	if !send {
+		return m, note
+	}
+	m.peekArmed, m.peekSent, m.peekSentAsk = 0, n, askOf(s)
+	answer := m.sendAnswer(s, digit)
+	return m.boardActed(), tea.Batch(answer, note)
+}
+
+// sendAnswer sends digit to the pane of s as sendKey does, seen at the
+// time of the sample that carried the question the card drew: the card's
+// options come from the sample, not from the pane's screen.
+func (m *Model) sendAnswer(s sample.Session, digit string) tea.Cmd {
+	return m.sendKeySeen(s, proto.LitPrefix+digit, m.stateAt(s.Host))
+}
+
+// isDigit: k is a digit with no modifier.
+func isDigit(k tea.KeyPressMsg) bool {
+	return k.Mod == 0 && len(k.Text) == 1 && k.Text[0] >= '0' && k.Text[0] <= '9'
 }
 
 // boardMove chooses the card d cards down the open column.
@@ -262,7 +372,9 @@ func (m Model) boardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 	case bkey.Matches(k, mk.Back):
 		// The menu (Task 9) closes first, then the search, then the chain.
 		m.goArmed = paneKey{}
-		switch {
+		switch armed, _ := m.peekMarks(s); {
+		case ok && armed > 0:
+			m.peekArmed = 0
 		case m.filter != "":
 			m.filter, m.peekAt = "", m.now()
 			m.refresh()
@@ -286,6 +398,9 @@ func (m Model) boardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 	case bkey.Matches(k, bk.Strip):
 		cmd = m.once("strip", bk.Strip.Help().Key+" turns the strip now.", "")
 		m.turnStrip()
+	case isDigit(k): // never a tab on the board
+		next, cmd := m.answerFromPeek(k.Text)
+		return next, cmd, true
 	case !ok && len(m.snap.Sessions) > 0 && bkey.Matches(k, bk.Merge, mk.Second, mk.Grant, mk.Open, mk.Into, mk.Jump,
 		mk.Park, mk.Rename, mk.Switch, mk.Dismiss, mk.Fold, mk.Stoke, mk.StokeChain, mk.Night, mk.Order):
 		// Every column is hidden: never a row of Sessions the person cannot see.
@@ -421,7 +536,8 @@ func (m Model) boardHints(w int) []hint {
 	switch b, _ := m.boardDrawOf(); {
 	case b.picked:
 		q, answers := m.oneChoice(b.chosen)
-		hs, _ = m.cardHints(b.chosen, cardOpts{sel: true}, len(q.Options), answers)
+		armed, sent := m.peekMarks(b.chosen)
+		hs, _ = m.cardHints(b.chosen, cardOpts{sel: true, armed: armed}, len(q.Options), answers && sent == 0)
 	case m.have && b.none: // the ghost row leads
 		hs = []hint{hintFor(m.keys.main.Open, "new session")}
 	}

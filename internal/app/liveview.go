@@ -655,13 +655,19 @@ const maxKeysAhead = 64
 // the console shows. Not m.send: a key takes no number from the acts the
 // builder sees, and its answer is no toast.
 func (m *Model) sendKey(s sample.Session, text string) tea.Cmd {
+	var seen time.Time
+	if m.screen.Pane == s.Pane {
+		seen = m.screen.At
+	}
+	return m.sendKeySeen(s, text, seen)
+}
+
+// sendKeySeen is sendKey for what the console showed of s at seen.
+func (m *Model) sendKeySeen(s sample.Session, text string, seen time.Time) tea.Cmd {
 	if m.conn == nil || m.lost {
 		return nil
 	}
-	act := proto.Act{RecID: proto.KeysPrefix + s.Pane, Text: text, PID: s.PID, Start: s.Start}
-	if m.screen.Pane == s.Pane {
-		act.Seen = m.screen.At
-	}
+	act := proto.Act{RecID: proto.KeysPrefix + s.Pane, Text: text, PID: s.PID, Start: s.Start, Seen: seen}
 	if m.keysOut.conn != m.conn { // a new connection: no answer comes for the old one's keys
 		m.keysOut = keysOut{conn: m.conn}
 	}

@@ -116,9 +116,16 @@ func TestTheChoiceFollowsItsMatch(t *testing.T) {
 	if got := chosenName(t, m); got != "tinder-auth" {
 		t.Errorf("↑ at the top: %s", got)
 	}
-	m = pressOn(boardShot(t, st, 80, 31, chooseCard("flint-auth")), "down")
-	if got := chosenName(t, m); got != "flint-auth" || m.peekAsk != "" {
-		t.Errorf("↓ at the bottom: %s, peek of %q", got, m.peekAsk)
+	clock := demoAt
+	m = boardShot(t, st, 80, 31, func(m *Model) {
+		chooseCard("flint-auth")(m)
+		m.opt.Now = func() time.Time { return clock }
+	})
+	m = pressOn(m, "esc") // the first frame lands the peek
+	clock = clock.Add(time.Minute)
+	m = pressOn(m, "down")
+	if got := chosenName(t, m); got != "flint-auth" || !m.peekAt.Equal(demoAt) {
+		t.Errorf("↓ at the bottom: %s, the peek started again at %v", got, m.peekAt)
 	}
 	m = pressOn(m, "up", "down")
 	if m.peekAsk != "toolu_board" {
@@ -303,6 +310,7 @@ func TestAChangedKeySaysSoOnce(t *testing.T) {
 		{"g", "g shows one chain now. esc shows all.", "spark-search is in no chain"},
 		{"u", "u turns the strip now.", ""},
 		{"p", "p merges now. The ships are on their cards.", "no ship of spark-search waits for a merge"},
+		{"1", "A digit marks an answer now. Press it again to send.", ""},
 		{"s", "s changes the host now. The order of a column is fixed.", ""}, // last: it turns to the next host
 	} {
 		m = pressOn(m, c.key)
@@ -320,7 +328,7 @@ func TestAChangedKeySaysSoOnce(t *testing.T) {
 	}
 
 	m = open()
-	for _, k := range []string{"c", "v", "s", "g", "u", "p"} {
+	for _, k := range []string{"c", "v", "s", "g", "u", "p", "1"} {
 		m = pressOn(m, k)
 		if got := noticeRow(m); strings.Contains(got, " now") {
 			t.Errorf("a new console says %q again on %s", got, k)
