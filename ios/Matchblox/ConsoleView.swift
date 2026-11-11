@@ -181,6 +181,8 @@ private struct TerminalRepresentable: UIViewRepresentable {
         terminal.tapRaisesKeyboard = !connection.isDemo
         terminal.onFocus = { [weak belts] focused in belts?.focusChanged(focused) }
         connection.onAgent = { agent in belts.agentChanged(agent) }
+        connection.onBoard = { value in belts.boardSaid(value) }
+        belts.onAnswer = { [weak connection] in connection?.answerBoard() }
         belts.onPaneSeen = { [weak connection] inPane in connection?.paneSeen(inPane) }
         #if DEBUG
         let isDemo = connection.isDemo
@@ -257,6 +259,10 @@ private final class Belts {
     private var goingLive: Task<Void, Never>?
     /// Whether the terminal shows a pane's way back, at each live check.
     var onPaneSeen: @MainActor (Bool) -> Void = { _ in }
+    /// The belts follow the console's board.
+    private var board = BoardFollow()
+    /// Sends the app's answer to the console's board (`BoardBelt.answer`).
+    var onAnswer: @MainActor () -> Void = {}
 
     init(terminal: ConsoleTerminalView, screen: HeldScreen, isDemo: Bool) {
         self.terminal = terminal
@@ -318,7 +324,12 @@ private final class Belts {
     /// Off at once; on only once the pane has shown for `liveDelay`, so a screen that flickers
     /// past a pane never lights the keys.
     private func checkLive() {
-        onPaneSeen(terminal?.inTmuxPane == true)
+        let inPane = terminal?.inTmuxPane == true
+        onPaneSeen(inPane)
+        if let layout = board.pane(inPane, on: lifted.layout) {
+            turn(to: layout)
+            answerBoard()
+        }
         guard paneShows else {
             goingLive?.cancel()
             goingLive = nil
@@ -352,10 +363,34 @@ private final class Belts {
         }
     }
 
-    /// A layout picked on one belt is the layout of both.
+    /// A layout picked on one belt is the layout of both. A pick of Board while the console
+    /// shows the board answers the last value the console sent.
     private func layoutPicked(_ layout: BeltLayout) {
         lifted.layout = layout
         dock.layout = layout
+        board.picked()
+        answerBoard()
+    }
+
+    /// The console's board signal. The belts turn to Board when the console starts to show the
+    /// board and back when it leaves, and they answer each value while they show Board, also a
+    /// value they already had: the console counts the answers to know the app is Pocket.
+    func boardSaid(_ value: String) {
+        let layout = board.heard(value, on: lifted.layout)
+        let said = board.said ?? .plain
+        lifted.board = said
+        dock.board = said
+        if let layout { turn(to: layout) }
+        if !value.isEmpty { answerBoard() }
+    }
+
+    private func turn(to layout: BeltLayout) {
+        lifted.turn(to: layout)
+        dock.turn(to: layout)
+    }
+
+    private func answerBoard() {
+        if board.answers(on: lifted.layout) { onAnswer() }
     }
 
     /// The Mine editor, as a sheet over the console.
@@ -418,6 +453,9 @@ final class ConsoleConnection {
     @ObservationIgnored weak var terminal: ConsoleTerminalView?
     /// The agent of the pane this app jumped into, or nil for none. A new session starts with none.
     @ObservationIgnored var onAgent: @MainActor (String?) -> Void = { _ in }
+    /// Each value of the console's board signal; "" when it left the board. A new session
+    /// starts off the board.
+    @ObservationIgnored var onBoard: @MainActor (String) -> Void = { _ in }
     /// The console announced that it reads the app's marks; an older console never does.
     @ObservationIgnored private var consoleMarks = false
     @ObservationIgnored private var paneAgent = PaneAgent()
@@ -475,6 +513,11 @@ final class ConsoleConnection {
 
     func goHome() {
         outgoing?.yield(.input(Data(HomeKey.bytes)))
+    }
+
+    /// The answer goes with no mark: the console's binding names the terminal that sent it.
+    func answerBoard() {
+        outgoing?.yield(.input(Data(BoardBelt.answer)))
     }
 
     private func cancel() {
@@ -649,14 +692,18 @@ final class ConsoleConnection {
         settling?.cancel()
         settling = nil
         onAgent(nil)
+        onBoard("")
         for await chunk in output {
             sawOutput = true
-            let (pass, raw) = signal.feed(ArraySlice(chunk))
+            let (pass, raw, board) = signal.feed(ArraySlice(chunk))
             if !pass.isEmpty {
                 terminal?.feed(byteArray: pass[...])
             }
             if let raw {
                 heard(ConsoleSignal(raw))
+            }
+            if let board {
+                onBoard(board)
             }
             onOutput()
         }

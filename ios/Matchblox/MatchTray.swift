@@ -44,7 +44,7 @@ final class TrayModel {
     }
 }
 
-/// The inside of the matchbox: the four layouts lie on the tray floor as matches, drawn as the
+/// The inside of the matchbox: the five layouts lie on the tray floor as matches, drawn as the
 /// island draws its match, with the session's agent and the stamped `EDIT MINE` under them.
 struct MatchTrayView: View {
     static let height: CGFloat = 88

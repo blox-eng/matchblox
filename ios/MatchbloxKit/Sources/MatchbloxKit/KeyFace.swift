@@ -26,6 +26,14 @@ public struct KeyFace: Equatable, Sendable {
     ]
 
     public init(_ key: BeltKey, in catalog: KeyCatalog) {
+        if let board = BoardBelt.label(of: key.id) {
+            label = board
+            size = board.count > 1 ? .word : .glyph
+            mark = nil
+            isCommand = false
+            spoken = board
+            return
+        }
         if let command = catalog.command(key.id) {
             label = command.label
             size = .word
