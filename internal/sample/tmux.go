@@ -199,6 +199,28 @@ func CapturePanesStyled(panes []string) map[string]string {
 	return out
 }
 
+// CaptureScreen reads pane id's live screen for a console's view: its
+// text with its styles, the lines the pane wrapped joined again, and if
+// the program in it draws on the alternate screen. One tmux call reads
+// both, so the flag is the text's.
+func CaptureScreen(id string) (text string, alt, ok bool) {
+	return captureScreen(output, id)
+}
+
+func captureScreen(run func(string, ...string) ([]byte, error), id string) (text string, alt, ok bool) {
+	server, bare := SplitPane(id)
+	tmux := tmuxUTF8(server)
+	b, err := run(tmux[0], append(tmux[1:], "display-message", "-p", "-t", bare, "#{alternate_on}", ";", "capture-pane", "-p", "-e", "-J", "-t", bare)...)
+	if err != nil {
+		return "", false, false
+	}
+	flag, rest, found := strings.Cut(string(b), "\n")
+	if !found || (flag != "0" && flag != "1") {
+		return "", false, false
+	}
+	return rest, flag == "1", true
+}
+
 // PaneMouse tells if the program in pane id reads the mouse in SGR form, and
 // the pane's size.
 func PaneMouse(id string) (cols, rows int, ok bool) {
@@ -247,7 +269,7 @@ func captureBack(run func(string, ...string) ([]byte, error), id string, back, r
 	server, bare := SplitPane(id)
 	tmux := tmuxUTF8(server)
 	start, end := strconv.Itoa(-back), strconv.Itoa(rows-1-back)
-	b, err := run(tmux[0], append(tmux[1:], "capture-pane", "-p", "-e", "-t", bare, "-S", start, "-E", end)...)
+	b, err := run(tmux[0], append(tmux[1:], "capture-pane", "-p", "-e", "-J", "-t", bare, "-S", start, "-E", end)...)
 	if err != nil {
 		return "", false
 	}

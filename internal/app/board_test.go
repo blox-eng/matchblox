@@ -483,7 +483,7 @@ func TestTheLiveViewFollowsTheChosenCard(t *testing.T) {
 	// The screen comes from the service's watch, which follows the chosen
 	// card and not the selection of Sessions.
 	m = boardShot(t, st, 160, 38, chooseCard("flint-auth"))
-	next, _ := m.Update(sizeDueMsg{})
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 160, Height: 38})
 	next, _ = next.Update(screenMsg{Pane: paneNamed(st, "flint-auth"), At: demoAt, Text: "the pane of flint-auth\n"})
 	m = next.(Model)
 	if r := side(m.boardPanel(160, m.bodyRows())); m.watching != paneNamed(st, "flint-auth") || !strings.Contains(r, "the pane of flint-auth") {

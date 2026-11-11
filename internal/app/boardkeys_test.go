@@ -532,24 +532,37 @@ func TestNoCardChosenActsOnNothing(t *testing.T) {
 	}
 }
 
-func TestTheLiveViewIsSizedAsDrawn(t *testing.T) {
+// The live view beside the board crops the chosen card's full-screen agent
+// as main's live view does: its lines are cut at the view's edge with a ›,
+// its last rows show, and its window keeps its own size (#351). At 151
+// columns there is no live view, and no screen is watched.
+func TestTheLiveViewCropsTheChosenCardsScreen(t *testing.T) {
 	st := boardFixture(t)
-	m := boardShot(t, st, 160, 38, chooseCard("flint-auth"))
-	cols, rows := m.viewSize()
-	if _, live := boardWidths(Wide, 160, boardCols[:]); cols != live-1 || rows < 10 {
-		t.Fatalf("viewSize %d x %d beside a live view %d wide", cols, rows, live)
+	watched := func(w int) Model {
+		next, _ := boardShot(t, st, w, 38, chooseCard("flint-auth")).Update(tea.WindowSizeMsg{Width: w, Height: 38})
+		return next.(Model)
 	}
+	m := watched(160)
+	if m.watching != paneNamed(st, "flint-auth") {
+		t.Fatalf("the board watches %q, not flint-auth", m.watching)
+	}
+	_, live := boardWidths(Wide, 160, boardCols[:])
 	var text strings.Builder
-	for i := 1; i <= rows; i++ {
-		fmt.Fprintf(&text, "row %d\n", i)
+	for i := 1; i <= 60; i++ {
+		fmt.Fprintf(&text, "row %d %s\n", i, strings.Repeat("=", 2*live))
 	}
-	m.screen = proto.Screen{Pane: paneNamed(st, "flint-auth"), At: demoAt, Cols: cols, Rows: rows, Text: text.String()}
+	m.screen = proto.Screen{Pane: paneNamed(st, "flint-auth"), At: demoAt, Alt: true, Text: text.String()}
 	f := strings.Join(plainLines(m.boardPanel(160, m.bodyRows()).lines), "\n")
-	if !strings.Contains(f, " row 1 ") && !strings.HasSuffix(f, " row 1") || !strings.Contains(f, fmt.Sprintf("row %d", rows)) {
-		t.Errorf("a screen of %d rows is not whole in the live view:\n%s", rows, f)
+	if !strings.Contains(f, "row 60 =") || strings.Contains(f, "row 1 =") || !strings.Contains(f, "=›") {
+		t.Errorf("the live view does not show the last rows of flint-auth, cut with a ›:\n%s", f)
 	}
-	if m = boardShot(t, st, 151, 38, nil); func() bool { c, r := m.viewSize(); return c != 0 || r != 0 }() {
-		t.Error("a size for a live view at 151 columns")
+	for _, l := range plainLines(m.boardPanel(160, m.bodyRows()).lines) {
+		if n := ansi.StringWidth(l); n > 160 {
+			t.Errorf("a line %d wide at 160 columns: %q", n, l)
+		}
+	}
+	if m = watched(151); m.watching != "" {
+		t.Errorf("at 151 columns the board watches %q", m.watching)
 	}
 }
 

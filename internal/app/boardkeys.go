@@ -359,22 +359,6 @@ func (m Model) onCard(s sample.Session) Model {
 	return m
 }
 
-// boardViewSize is the room of the agent's screen in the live view beside
-// the board, worked out as boardPanel lays it out; 0, 0 with no live view.
-func (m Model) boardViewSize() (cols, rows int) {
-	if !m.boardLive() {
-		return 0, 0
-	}
-	w := max(m.width, minWidth)
-	b, shown := m.boardDrawOf()
-	_, live := boardWidths(Wide, w, shown)
-	if !b.picked || len(shown) == 0 || live <= 0 {
-		return 0, 0
-	}
-	colH := max(m.boardRows(w, m.bodyRows(), false)-1, 0) // under the heads
-	return live - 1, colH - len(m.viewStrip(b.chosen, live, colH))
-}
-
 // boardLive: the board has the live view of its chosen card at its right.
 func (m Model) boardLive() bool {
 	w := max(m.width, minWidth)

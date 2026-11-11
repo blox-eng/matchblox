@@ -324,9 +324,6 @@ type Model struct {
 	screen     proto.Screen       // the last capture of the watched pane
 	watching   string             // the pane the service sends, or ""
 	watchHeld  string             // the pane the service refused, until the next snapshot
-	watchSize  [2]int             // the chat's size the service sizes the agent's window to: cols, rows
-	watchSince time.Time          // when the watched pane was selected: its size waits sizeDwell
-	sizeTick   time.Time          // the watchSince a sizeDueMsg is on its way for
 	changes    map[paneKey]change // a match change that plays once
 	animating  bool
 	hist       history.Series
@@ -372,7 +369,6 @@ type Model struct {
 	// copied on write.
 	held        func(Model) (tea.Model, tea.Cmd)
 	heldOn      string
-	viewOpen    bool      // one column: the selected session's live view takes the screen
 	keysOut     keysOut   // the keys the stand-in sends, one at a time
 	standIn     bool      // the demo's stand-in for a pane: the live view forwards the keys to the demo's world
 	backArmed   time.Time // when ctrl+a, the first key of the stand-in's way back, was pressed; zero: not armed
@@ -765,12 +761,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m.update(msg.msg)
 	case uv.UnknownApcEvent:
-		if string(msg) == homeKey && m.viewOpen {
-			return m.closeView(), nil
+		if string(msg) == homeKey && m.standIn {
+			return m.leaveStandIn(), nil
 		}
 		return m, nil
-	case sizeDueMsg:
-		return m, nil // Update sends the size, if it is due
 	case noticeMsg:
 		return m, m.noticeEnded() // the frame drops it, or the next one shows
 	case screenMsg:
@@ -1397,9 +1391,6 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	mk := m.keys.main
 	m.flash = ""
-	if m.viewFull() && bkey.Matches(k, mk.Back) {
-		return m.closeView(), nil
-	}
 	if s, ok := m.selectedSession(); ok && bkey.Matches(k, mk.Second, mk.Rename, mk.Switch, mk.Park) {
 		if u, head := m.headRow(s); head { // its agent is the stoker's, not a session of the builder's
 			m.flash = "the stoker of chain " + u.Name + " is no session: quit it on the STOKER tab"

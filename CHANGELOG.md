@@ -6,6 +6,28 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+## [0.40.2] - 2026-11-11
+
+### Security
+
+- **Built with Go 1.26.11.** It fixes an HTTP/1 server crash in Go's own
+  `net/http` (GO-2026-6859), which the relay and the update check reach.
+
+## [0.40.1] - 2026-11-10
+
+### Fixed
+
+- **Agents stop flickering when the console shows them.** The live view
+  sized the agent's own tmux window to itself, and each resize made Codex
+  and Cursor draw their whole screen again, in the view and in their pane.
+  The view now leaves every window as it is: a text agent's lines wrap to
+  the view, and a full-screen agent keeps its shape, cut at the edge with
+  a `›`. A window an older version left sized gets its size back. On a
+  phone, the selected row shows the agent's question.
+  ([#351](https://github.com/blox-eng/matchblox/issues/351))
+
+## [0.40.0] - 2026-11-10
+
 ### Added
 
 - **One command joins a chain.** `matchblox chain <who>` joins the chain of
@@ -1403,7 +1425,10 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.39.1...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.40.2...HEAD
+[0.40.2]: https://github.com/blox-eng/matchblox/compare/v0.40.1...v0.40.2
+[0.40.1]: https://github.com/blox-eng/matchblox/compare/v0.40.0...v0.40.1
+[0.40.0]: https://github.com/blox-eng/matchblox/compare/v0.39.1...v0.40.0
 [0.39.1]: https://github.com/blox-eng/matchblox/compare/v0.39.0...v0.39.1
 [0.39.0]: https://github.com/blox-eng/matchblox/compare/v0.38.2...v0.39.0
 [0.38.2]: https://github.com/blox-eng/matchblox/compare/v0.38.1...v0.38.2
