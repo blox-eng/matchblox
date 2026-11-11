@@ -704,6 +704,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg.(type) {
 	case tea.KeyPressMsg, tea.MouseClickMsg, tea.MouseWheelMsg, tea.PasteMsg:
 		m.askedBy, m.marked, m.away = m.marked.spend(m.now()), clientMark{}, false
+		m = m.dragDropped(msg)
 		if _, wheel := msg.(tea.MouseWheelMsg); m.boardShown() && m.held == nil && !wheel {
 			m.flash = "" // a flash after the key is new: it goes to the strip's row
 		}

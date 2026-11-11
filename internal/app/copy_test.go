@@ -932,3 +932,31 @@ func TestASwipeMovesTheCardAsTheArrowsDo(t *testing.T) {
 		t.Errorf("the wheel over the live view moved the card to %s", chosenName(t, m))
 	}
 }
+
+func TestALostDragReleaseLeavesTheFrameLive(t *testing.T) {
+	m, _, clock := menuBoard(t, 80, 31, func(m *Model) { chooseCard("spark-search")(m); m.sawRelease = true })
+	x, y := cardOn(t, m, "kindle-web")
+	m = drag(t, m, point{x, y}, point{x + 5, y}, point{x + 10, y + 2}) // its release is lost
+	m = pressOn(m, "down", "down")
+	*clock = clock.Add(time.Minute)
+	m = upd(t, m, noticeMsg{})
+	if chosenName(t, m) != "hearth-api" {
+		t.Fatalf("↓ ↓ chose %s", chosenName(t, m))
+	}
+	if x, y := cardOn(t, m, "hearth-api"); !strings.HasPrefix(strings.Split(plainFrame(m), "\n")[y], "▌") || x == 0 {
+		t.Errorf("the frame does not show hearth-api chosen:\n%s", plainFrame(m))
+	}
+	if m.dragFrom != nil || m.dragTo != nil || m.dragLines != nil {
+		t.Error("a key keeps the drag")
+	}
+
+	// A paste and a wheel step end it too.
+	for _, msg := range []tea.Msg{tea.PasteMsg{Content: "x"}, tea.MouseWheelMsg{X: 1, Y: 5, Button: tea.MouseWheelDown}} {
+		m, _, _ = menuBoard(t, 80, 31, nil)
+		x, y = cardOn(t, m, "kindle-web")
+		m = mouse(t, drag(t, m, point{x, y}, point{x + 10, y + 2}), msg)
+		if m.dragFrom != nil || m.dragTo != nil {
+			t.Errorf("%T keeps the drag", msg)
+		}
+	}
+}

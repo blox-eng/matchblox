@@ -248,6 +248,16 @@ func (m Model) dragStart(x, y int) Model {
 	return m
 }
 
+// dragDropped ends a drag whose release never came, at a key, a paste or
+// a wheel step: the frame of the press shows no more, and the screen is
+// live again. A press starts its own drag.
+func (m Model) dragDropped(msg tea.Msg) Model {
+	if _, press := msg.(tea.MouseClickMsg); !press {
+		m.dragFrom, m.dragTo, m.dragLines, m.tapLater = nil, nil, nil, nil
+	}
+	return m
+}
+
 // dragColumn is the cells of each row that a drag from x on line y of the
 // board's body may cover: those of the column or the live view under the
 // press, else the whole width.
