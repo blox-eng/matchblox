@@ -31,6 +31,7 @@ func (m Model) roomView(w, h int) []string {
 	rows := m.roomRows(k)
 	_, more, needs := m.needOf(k)
 	var lines []string
+	selEnd := 0 // the line after the cursor's row
 	for i, r := range rows {
 		sel := i == m.room.at
 		mark := " "
@@ -45,9 +46,15 @@ func (m Model) roomView(w, h int) []string {
 			lines = append(lines, ansi.Truncate(mark+l, w, "…"))
 			mark = " "
 		}
+		if sel {
+			selEnd = len(lines)
+		}
 	}
+	// Taller than the screen: the lines scroll so the cursor's row shows.
+	h = max(h, 0)
 	if len(lines) > h {
-		lines = lines[:max(h, 0)]
+		top := max(selEnd-h, 0)
+		lines = lines[top : top+h]
 	}
 	return lines
 }

@@ -433,3 +433,17 @@ func TestTheRoomCursorStaysOnItsRow(t *testing.T) {
 		t.Fatalf("the cursor moved to %+v", row)
 	}
 }
+
+// TestTheRoomScrollsToTheCursor: a room taller than the screen keeps the
+// cursor's row on it.
+func TestTheRoomScrollsToTheCursor(t *testing.T) {
+	st := headState(t, runningPlan(), true)
+	st.Queue = nil
+	m, _ := roomWith(t, st, "hearth-api")
+	rows := m.roomRows(m.room.k)
+	m.room.at = len(rows) - 1
+	lines := m.roomView(40, 4)
+	if len(lines) != 4 || !strings.Contains(ansi.Strip(lines[3]), "› tell hearth's stoker…") {
+		t.Fatalf("the talk line is off screen:\n%s", ansi.Strip(strings.Join(lines, "\n")))
+	}
+}
