@@ -90,9 +90,17 @@ jobs:
       # The jump tests drive two real tmux servers and a real sshd; without
       # them they skip, and the guard of #214 would pass unseen.
       # strace proves the demo's walk makes no socket and runs no command.
+      # The runner image has all three. apt-get update runs only when one is
+      # missing: on 2026-11-11 the Ubuntu mirrors timed out for 3m20s and
+      # pushed the job past its limit.
       - name: tmux and sshd for the jump tests, strace for the demo's
         if: runner.os == 'Linux'
-        run: sudo apt-get update -q && sudo apt-get install -y -q tmux openssh-server strace
+        run: |
+          pkgs="tmux openssh-server strace"
+          # shellcheck disable=SC2086 # one word per package
+          if ! dpkg -s $pkgs >/dev/null 2>&1; then
+            sudo apt-get update -q && sudo apt-get install -y -q $pkgs
+          fi
       # Two sentinel tmux servers stand in for the builder's: one that $TMUX
       # names, as when the tests run inside tmux, and the default server.
       # The suite must leave both alive (#215).
