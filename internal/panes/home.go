@@ -48,36 +48,46 @@ const runsConsole = "#{==:#{pane_current_command}," + Home + "}"
 // goHome is the way back, as the words of a tmux if-shell: on a console's pane
 // the key goes on to that console, whole, so the console reads it itself; a
 // pane in copy mode leaves it first, as copy mode would read the key's bytes
-// as its own commands. From any other pane the client goes to the console's
-// session, and on to the console's pane there, as another window may be the
-// one on screen. With no console's session, the key says how to open one,
-// not tmux's bare "can't find session" (#354).
+// as its own commands. From any other pane it is goTo.
 var goHome = [3]string{
 	runsConsole,
 	`if-shell -F "#{pane_in_mode}" "send-keys -X cancel" ; send-keys -H ` + hexKeys(HomeKey),
-	`if-shell -F "` + homeExists + `" { switch-client -t =` + Home + " ; run-shell -C -t =" + Home + `: "#{W:#{P:#{?` + runsConsole +
-		`,select-window -t #{window_id} ; select-pane -t #{pane_id} ; ,}}}" } { display-message "` + NoHome + `" }`,
+	goTo,
 }
+
+// goTo takes the client to a console: to the console's session and on to
+// the console's pane there, as another window may be the one on screen;
+// with no such session, to a console run in place in a pane of any other
+// session (#354). With no console at all, it says how to open one, not
+// tmux's bare "can't find session".
+var goTo = `if-shell -F "` + homeExists + `" { switch-client -t =` + Home + " ; run-shell -C -t =" + Home + `: "#{W:#{P:#{?` + runsConsole +
+	`,select-window -t #{window_id} ; select-pane -t #{pane_id} ; ,}}}" } { if-shell -F "` + consoleExists +
+	`" { run-shell -C "#{S:#{W:#{P:#{?` + runsConsole + `,switch-client -t #{pane_id} ; ,}}}}" } { display-message "` + NoHome + `" } }`
 
 // homeExists is "1" while the tmux server has the console's session.
 const homeExists = "#{S:#{?#{==:#{session_name}," + Home + "},1,}}"
 
-// NoHome is what the way back says when no console's session is there.
+// consoleExists is not empty while a pane of any session runs a console.
+const consoleExists = "#{S:#{W:#{P:#{?" + runsConsole + ",1,}}}}"
+
+// NoHome is what the way back says when no pane runs a console.
 const NoHome = "No matchblox console here: run matchblox in a shell to open one"
 
 // NamedConsole tells if a console started as arg0 is one to tmux: if not, the
 // way back's test fails on its own pane.
 func NamedConsole(arg0 string) bool { return filepath.Base(arg0) == Home }
 
-// HomeKeyArgv makes HomeKey a key of the tmux server, and binds it and prefix
-// m to goHome. It wins over a `bind m` in the person's tmux config until that
+// HomeKeyArgv makes HomeKey a key of the tmux server, binds it and prefix m
+// to goHome, and a tap on "◂ matchblox" in the status line to goTo. It wins
+// over the person's tmux config, an older way back included, until that
 // config is sourced again. A client attached already gets it at once.
 func HomeKeyArgv() []string {
 	ifHome := []string{"if-shell", "-F", goHome[0], goHome[1], goHome[2]}
 	argv := []string{"tmux", "set-option", "-s", "user-keys[" + homeUserKey + "]", HomeKey,
 		";", "bind-key", "-n", "User" + homeUserKey}
 	argv = append(append(argv, ifHome...), ";", "bind-key", "m")
-	return append(argv, ifHome...)
+	argv = append(argv, ifHome...)
+	return append(argv, ";", "bind-key", "-n", "MouseDown1Status", "if-shell", "-F", statusTap, goTo, "select-window -t =")
 }
 
 // CommandKeysArgv makes each command key of the phone a key of the tmux
@@ -142,16 +152,18 @@ const HomeEnv = "MATCHBLOX_HOME"
 
 // WayBack is the tmux config of the way back to the console: prefix m (goHome,
 // as HomeKeyArgv binds it), and a tap on "◂ matchblox" in the status line.
-// "=matchblox" is the session of that exact name, never one that only starts
-// with it. The label is added once, also when the config is sourced again.
+// A tap on the label goes as goTo does. The label is added once, also when the config is sourced again.
 // The default status-left-length (10) would cut the tap target off, so a
 // shorter length grows to 40.
 var WayBack = `# matchblox: the way back to the console
 bind m if-shell -F '` + goHome[0] + `' '` + goHome[1] + `' '` + goHome[2] + `'
 if -F "#{m:*range=user|matchblox*,#{status-left}}" "" "set -ga status-left '#[range=user|matchblox] ◂ matchblox #[norange]'"
 if -F "#{<:#{status-left-length},40}" "set -g status-left-length 40"
-bind -n MouseDown1Status if -F "#{==:#{mouse_status_range},matchblox}" "switch-client -t =matchblox" "select-window -t ="
+bind -n MouseDown1Status if -F "` + statusTap + `" '` + goTo + `' "select-window -t ="
 `
+
+// statusTap is true for a tap on "◂ matchblox" in the status line.
+const statusTap = "#{==:#{mouse_status_range}," + Home + "}"
 
 // Mouse turns the tmux mouse on, so a tap on "◂ matchblox" works from a
 // phone. It changes how every pane selects and scrolls, so the way back

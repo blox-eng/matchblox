@@ -672,10 +672,15 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m.update(msg.msg)
 	case uv.UnknownApcEvent:
-		if string(msg) == homeKey && m.standIn {
+		switch {
+		case string(msg) != homeKey:
+			return m, nil
+		case m.standIn:
 			return m.leaveStandIn(), nil
 		}
-		return m, nil
+		// Elsewhere the home key goes back as Esc does: what is open
+		// closes, a filter clears, then the hosts show (#360).
+		return m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	case screenMsg:
 		if msg.Pane == m.watching && msg.Err != "" {
 			m.flash = msg.Err // a read that failed: the session and its last screen stay

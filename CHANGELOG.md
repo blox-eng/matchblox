@@ -6,6 +6,22 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **The way back finds a console you started inside tmux.** `Ctrl+M`,
+  prefix `m` and a tap on `◂ matchblox` went only to a session named
+  `matchblox`. A console run in a pane of another session said `No
+  matchblox console here`. It now goes to that pane. The console binds the
+  tap on `◂ matchblox` too, over an older line in your tmux config.
+  ([#354](https://github.com/blox-eng/matchblox/issues/354))
+
+### Changed
+
+- **`Ctrl+M` in the console goes back, as `Esc` does.** What is open
+  closes, a search clears, then the hosts list shows. One back gesture now
+  works everywhere: in a pane it goes to the console, in the console back
+  to the hosts. ([#360](https://github.com/blox-eng/matchblox/issues/360))
+
 ## [0.40.2] - 2026-11-11
 
 ### Security
