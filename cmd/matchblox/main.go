@@ -205,7 +205,7 @@ func run(args []string) error {
 			return err
 		}
 		if cmd == "unchain" {
-			return cliUnchain(words, os.Stdout, transport.SocketPath())
+			return cliUnchain(words, *o.all, os.Stdout, transport.SocketPath())
 		}
 		return cliChain(words, *o.off, *o.on, *o.json, os.Stdout, transport.SocketPath())
 	case "recover":
@@ -309,9 +309,9 @@ func run(args []string) error {
 		}
 	}
 
-	// matchblox must not add load: lowest CPU priority for us and every
-	// command we start.
-	lowestPriority()
+	if lowersPriority(cmd) {
+		lowestPriority()
+	}
 
 	path := transport.SocketPath()
 	switch cmd {
@@ -397,9 +397,9 @@ Commands:
   matchblox new ["<first message>"]  start an agent in a tmux session of its own (--where, --agent, --branch, --name, --account)
   matchblox rename <who> <name>    name a session, its tmux session and its agent alike
   matchblox kill <who>             end a session: its agent and its pane (--anyway while it works)
-  matchblox chain <who>            ask to chain with a match, or accept its ask
-  matchblox chain                  list your chain (--json)
-  matchblox unchain                leave your chain
+  matchblox chain <who>|<chain>    join the chain of a match, or a chain by its name
+  matchblox chain                  list your chains (--json)
+  matchblox unchain [<chain>]      leave your chain, or the one named (--all: every chain)
   matchblox chain --off|--on       take no chains and no notices, or take them again
   matchblox switch <who> --agent <name>  run another agent in a session's pane (--extra, --handoff, --no-refresh, --anyway while it works)
   matchblox recover [<name>…]      the agents a lost tmux server ran, and what reopens (--all reopens each, --dir a moved folder, --json)
@@ -451,7 +451,7 @@ func newFlags() (*flag.FlagSet, flags) {
 		account:    fl.String("account", "", "new: the account of the agent to start on (default: the default sign-in)"),
 		newAccount: fl.Bool("new-account", false, "new: make the --account, and sign in to it in the session"),
 		setup:      fl.String("setup", "", "new --new-account: like-default (default), copy or empty"),
-		all:        fl.Bool("all", false, "recover: reopen each conversation that can reopen"),
+		all:        fl.Bool("all", false, "recover: reopen each conversation that can reopen; unchain: leave every chain"),
 		dir:        fl.String("dir", "", "recover <name>: the new place of the session's folder"),
 		off:        fl.Bool("off", false, "chain: take no chains and no notices"),
 		on:         fl.Bool("on", false, "chain: take chains and notices again"),
@@ -811,6 +811,7 @@ func newService(cfg config.Config, root string) *service.Service {
 	}
 	s.Actions.Run = func(argv []string) error { return actions.Exec(context.Background(), argv) }
 	s.StokerServer = sample.StokerServer
+	s.ScreenOf = sample.CaptureScreen
 	s.StatePath = state.Path()
 	s.Spool = spoolPath()
 	s.AlertHook = cfg.Hooks.Alert

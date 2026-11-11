@@ -6,8 +6,23 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **The way back finds a console you started inside tmux.** `Ctrl+M`,
+  prefix `m` and a tap on `◂ matchblox` went only to a session named
+  `matchblox`. A console run in a pane of another session said `No
+  matchblox console here`. It now goes to that pane. The console binds the
+  tap on `◂ matchblox` too, over an older line in your tmux config.
+  ([#354](https://github.com/blox-eng/matchblox/issues/354))
+
 ### Changed
 
+- **`Ctrl+M` in the console goes back, as `Esc` does.** What is open
+  closes, a search clears, then the hosts list shows. One back gesture now
+  works everywhere: in a pane it goes to the console, in the console back
+  to the hosts. ([#360](https://github.com/blox-eng/matchblox/issues/360))
+- **Built with Go 1.27.4.** A build from source needs Go 1.27 or later: the
+  install script and the README say so.
 - **A switch waits for the agent's task record.** Before it captures the
   evidence, an idle Claude Code or Codex agent is asked to update its task
   record, and the switch waits for it for up to 3 minutes. The console shows
@@ -15,6 +30,81 @@ All notable changes to matchblox are in this file. The format follows
   the wait to stderr, and Ctrl-C switches now. `--no-refresh` skips it. The
   capture says whether the record was written for this switch, or why it was
   not. ([#336](https://github.com/blox-eng/matchblox/issues/336))
+
+## [0.40.2] - 2026-11-11
+
+### Security
+
+- **Built with Go 1.26.11.** It fixes an HTTP/1 server crash in Go's own
+  `net/http` (GO-2026-6859), which the relay and the update check reach.
+
+## [0.40.1] - 2026-11-10
+
+### Fixed
+
+- **Agents stop flickering when the console shows them.** The live view
+  sized the agent's own tmux window to itself, and each resize made Codex
+  and Cursor draw their whole screen again, in the view and in their pane.
+  The view now leaves every window as it is: a text agent's lines wrap to
+  the view, and a full-screen agent keeps its shape, cut at the edge with
+  a `›`. A window an older version left sized gets its size back. On a
+  phone, the selected row shows the agent's question.
+  ([#351](https://github.com/blox-eng/matchblox/issues/351))
+
+## [0.40.0] - 2026-11-10
+
+### Added
+
+- **One command joins a chain.** `matchblox chain <who>` joins the chain of
+  `<who>` at once, or forms one named after the match that ran it. A chain
+  is a team: every match in it hears every other. A chain's name joins it
+  too: `matchblox chain hearth`. The console shows each join for a moment.
+  ([#368](https://github.com/blox-eng/matchblox/issues/368))
+- **A match may be in several chains.** Each chain hears only itself.
+  `matchblox unchain <chain>` leaves one, `--all` every one. Sessions draws a
+  shared match in its first chain's fuse and adds `· also in <chain>`.
+  ([#368](https://github.com/blox-eng/matchblox/issues/368))
+
+### Changed
+
+- **A send to a busy mate waits in its inbox.** A question, a permission
+  prompt, a park, a draft or copy mode no longer refuses a send: the line
+  waits, the sender hears why, and later hears when the mate got it. A mate
+  that waits for your answer in plain text still gets the line typed, and a
+  waiting line is typed at the mate's next rest. A line
+  a full inbox drops tells its sender. A send to OpenCode is kept.
+  ([#368](https://github.com/blox-eng/matchblox/issues/368))
+- **A mate stays in its chain while its pane lives.** An agent that exits
+  in a pane still open stays, not seen; it leaves when its pane closes.
+- **A match in several chains has one stoker.** The stoker of its first
+  chain whose run is on drives it, and the other chains' stokers do not.
+  Chains never merge, so a chain stoker no longer hands its order over on
+  a merge.
+- **Chains and sends reach panes through one small layer** (`internal/mux`),
+  the first step to a multiplexer other than tmux.
+
+### Removed
+
+- **Chain requests.** No ask waits for the other side, and no match hears
+  `asks to chain with you`.
+  ([#368](https://github.com/blox-eng/matchblox/issues/368))
+
+### Fixed
+
+- **A switch keeps the chain.** `matchblox switch` starts the new agent in
+  the match's place in its chain, with its news. The new agent hears who it
+  is chained with, and no mate has to chain again.
+  ([#333](https://github.com/blox-eng/matchblox/issues/333))
+
+## [0.39.1] - 2026-11-10
+
+### Fixed
+
+- **The console answers a key fast on a busy host.** The console now runs at
+  the normal CPU priority. The service and the one-shot commands stay at the
+  lowest. Before this fix, a host at load 80 showed each ↑ and ↓ about half a
+  second late over ssh. A wheel tick, or a swipe on a phone, also costs about
+  40% less: it reads the frame on the screen and does not draw a second one.
 
 ## [0.39.0] - 2026-11-09
 
@@ -1131,7 +1221,6 @@ All notable changes to matchblox are in this file. The format follows
   address and keeps the pairing. Build the app from `ios/` until it is on
   TestFlight.
 
-
 ## [0.8.0] - 2026-10-14
 
 ### Added
@@ -1361,7 +1450,11 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.39.0...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.40.2...HEAD
+[0.40.2]: https://github.com/blox-eng/matchblox/compare/v0.40.1...v0.40.2
+[0.40.1]: https://github.com/blox-eng/matchblox/compare/v0.40.0...v0.40.1
+[0.40.0]: https://github.com/blox-eng/matchblox/compare/v0.39.1...v0.40.0
+[0.39.1]: https://github.com/blox-eng/matchblox/compare/v0.39.0...v0.39.1
 [0.39.0]: https://github.com/blox-eng/matchblox/compare/v0.38.2...v0.39.0
 [0.38.2]: https://github.com/blox-eng/matchblox/compare/v0.38.1...v0.38.2
 [0.38.1]: https://github.com/blox-eng/matchblox/compare/v0.38.0...v0.38.1

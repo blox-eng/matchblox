@@ -335,7 +335,7 @@ func TestNoRefreshWhen(t *testing.T) {
 		},
 		"a draft": {
 			screen: strings.Replace(idleScreen, "> \n", "> half a thought\n", 1),
-			note:   "not refreshed: the request did not reach work: not delivered: work has a draft in its prompt",
+			note:   "not refreshed: the request did not reach work: it has a draft in its prompt",
 		},
 	} {
 		t.Run(name, func(t *testing.T) {

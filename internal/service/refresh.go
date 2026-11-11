@@ -176,7 +176,7 @@ func (s *Service) refreshRecord(ctx context.Context, x sample.Session, n proto.S
 		return "", refreshNotRun, release, ctx.Err()
 	}
 	if res.Err != "" {
-		return proto.NotRefreshed + "the request did not reach " + x.Name + ": " + strings.TrimSuffix(res.Err, peerRetry), refreshNotRun, done, nil
+		return proto.NotRefreshed + "the request did not reach " + x.Name + ": " + res.Err, refreshNotRun, done, nil
 	}
 	tick := time.NewTicker(refreshPoll)
 	defer tick.Stop()

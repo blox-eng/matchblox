@@ -260,7 +260,7 @@ func TestKeyNames(t *testing.T) {
 
 // demoSized is the demo machine at w by h, the selected session's screen
 // a question with three options.
-func demoSized(t *testing.T, w, h int) Model {
+func demoSized(t testing.TB, w, h int) Model {
 	t.Helper()
 	m := New(Options{NoMotion: true, Conn: newFake(), Now: func() time.Time { return demoAt }})
 	next, _ := m.Update(tea.WindowSizeMsg{Width: w, Height: h})
@@ -323,28 +323,6 @@ func TestMediumSplitsListAndChat(t *testing.T) {
 	_, right := sides(sc, 86)
 	if !slices.ContainsFunc(right, func(l string) bool { return strings.Contains(l, "Esc to") }) {
 		t.Fatalf("the right half has no screen:\n%s", strings.Join(right, "\n"))
-	}
-}
-
-func TestNarrowSwapsToChat(t *testing.T) {
-	list := demoSized(t, 44, 31)
-	m := openView(t, list)
-	sc := m.draw(44)
-	if got := strings.TrimSpace(ansi.Strip(sc.lines[0])); got != "‹ Sessions · spark-docs · done" {
-		t.Fatalf("title row %q", got)
-	}
-	out := ansi.Strip(strings.Join(sc.lines, "\n"))
-	if len(sc.lines) != 31 || strings.Contains(out, "WAITS FOR YOU") || !strings.Contains(out, "Esc to") {
-		t.Fatalf("not the chat alone, %d lines:\n%s", len(sc.lines), out)
-	}
-	next, _ := m.Update(tea.MouseClickMsg(tea.Mouse{X: 3, Y: 0, Button: tea.MouseLeft}))
-	if m = next.(Model); m.standIn || screen(m) != screen(list) {
-		t.Fatalf("a tap on ‹ Sessions: stand-in %v, not the list as before:\n%s", m.standIn, screen(m))
-	}
-	tall := openView(t, fullView(demoSized(t, 44, 50)))
-	next, _ = tall.Update(tea.MouseClickMsg(tea.Mouse{X: 3, Y: 0, Button: tea.MouseLeft}))
-	if sc := next.(Model).draw(44); sc.dockAt < 0 {
-		t.Fatalf("no dock under the list:\n%s", screen(next))
 	}
 }
 
@@ -492,20 +470,16 @@ func TestAShortDeskKeepsItsStats(t *testing.T) {
 func inView(t *testing.T) Model {
 	t.Helper()
 	m, _ := viewModel(t)
-	next, _ := m.Update(tea.WindowSizeMsg{Width: 44, Height: 30})
-	m = onPane(t, next.(Model), "%1")
-	next, _ = m.Update(screenMsg{Pane: m.watching, At: time.Unix(100, 0), Text: "> "})
-	m = openView(t, next.(Model))
-	if !m.viewFull() {
-		t.Fatal("the view does not take the screen")
-	}
-	return m
+	m = onPane(t, m, "%1")
+	next, _ := m.Update(screenMsg{Pane: m.watching, At: time.Unix(100, 0), Text: "> "})
+	return next.(Model)
 }
 
 func TestAGoneScreenSaysTheSessionEnded(t *testing.T) {
 	next, _ := inView(t).Update(screenMsg{Pane: "%1", Gone: true})
-	if m := next.(Model); m.viewOpen || m.flash != "That session ended." {
-		t.Fatalf("view %v, flash %q: want the list, and why", m.viewOpen, m.flash)
+	m := next.(Model)
+	if out := ansi.Strip(screen(m)); !strings.Contains(out, "That session ended.") {
+		t.Fatalf("the view does not say the session ended:\n%s", out)
 	}
 }
 
@@ -618,8 +592,8 @@ func raws(cmd tea.Cmd) []string {
 func TestAFailedReadKeepsTheChat(t *testing.T) {
 	next, _ := inView(t).Update(screenMsg{Pane: "%1", At: time.Unix(101, 0), Err: "could not read %1: tmux did not answer"})
 	m := next.(Model)
-	if !m.viewOpen || m.screen.Text != "> " || !strings.Contains(m.flash, "could not read") {
-		t.Fatalf("view %v screen %+v flash %q", m.viewOpen, m.screen, m.flash)
+	if m.screen.Text != "> " || !strings.Contains(m.flash, "could not read") {
+		t.Fatalf("screen %+v flash %q", m.screen, m.flash)
 	}
 }
 
@@ -636,6 +610,29 @@ func TestTheScreenDropsLinksAndOtherControls(t *testing.T) {
 	}
 	if ansi.Strip(out) != "see the docs bold end" || !strings.Contains(out, "\x1b[1m") {
 		t.Errorf("text or colours lost: %q", out)
+	}
+}
+
+// Only colours reach the console's terminal from an agent's screen: any
+// other escape sequence (a cursor move, a screen clear, a mode, a reset),
+// a C1 control and any other C0 control goes, in both fits, its text stays.
+func TestOnlyColoursReachTheConsole(t *testing.T) {
+	text := "a\x1b[2Jb\x1b[10;10Hc\x1b[?1049hd\x1bce\x1b7f\u009b31mg\u009dh\x07i\x08j \x1b[38;5;1mred\x1b[m"
+	for name, out := range map[string]string{
+		"fitScreen":  strings.Join(fitScreen(text, 80, 5), "\n"),
+		"cropScreen": strings.Join(cropScreen(text, 80, 5), "\n"),
+	} {
+		if plain := ansi.Strip(out); plain != "abcdefghij red" {
+			t.Errorf("%s: text %q, want abcdefghij red (%q)", name, plain, out)
+		}
+		for _, bad := range []string{"\x1b[2J", "\x1b[10;10H", "\x1b[?1049h", "\x1bc", "\x1b7", "\u009b", "\u009d", "\x07", "\x08"} {
+			if strings.Contains(out, bad) {
+				t.Errorf("%s kept %q: %q", name, bad, out)
+			}
+		}
+		if !strings.Contains(out, "\x1b[38;5;1m") {
+			t.Errorf("%s lost the colour: %q", name, out)
+		}
 	}
 }
 

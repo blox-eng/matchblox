@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -17,7 +18,9 @@ import (
 
 	"github.com/blox-eng/matchblox/internal/chains"
 	"github.com/blox-eng/matchblox/internal/hooks"
+	"github.com/blox-eng/matchblox/internal/mux/muxtest"
 	"github.com/blox-eng/matchblox/internal/proto"
+	"github.com/blox-eng/matchblox/internal/said"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/state"
 	"github.com/blox-eng/matchblox/internal/stoker"
@@ -65,17 +68,22 @@ func peerTest(t *testing.T) (*Service, *[][]string, *time.Time) {
 	return s, ran, &now
 }
 
-// chainUp chains the session in the first pane with the one in each other
-// pane, as if each pair had chained both ways.
+// chainUp makes one team of the sessions in panes, named after the first.
 func chainUp(s *Service, panes ...string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	st := s.chainsLocked()
 	first, _ := s.sessionAtLocked(panes[0])
-	for _, p := range panes[1:] {
+	second, _ := s.sessionAtLocked(panes[1])
+	c, err := st.Form(memberOf(first), memberOf(second), first.Name, "/src/app")
+	if err != nil {
+		panic(err)
+	}
+	for _, p := range panes[2:] {
 		x, _ := s.sessionAtLocked(p)
-		st.Ask(memberOf(first), memberOf(x), "/src/app", s.now())
-		st.Ask(memberOf(x), memberOf(first), "/src/app", s.now())
+		if _, err := st.Join(memberOf(x), c.Name); err != nil {
+			panic(err)
+		}
 	}
 }
 
@@ -109,7 +117,7 @@ func typedLine(ran [][]string) []string {
 func TestPeerSendTypesTheTaggedLine(t *testing.T) {
 	s, ran, _ := peerTest(t)
 	res := s.act(t.Context(), peerAct("message:%1", "read file docs/plan.md"))
-	if res.Err != "" || len(res.Ran) != 2 {
+	if res.Err != "" || res.Note != "sent" || len(res.Ran) != 2 {
 		t.Fatalf("%+v", res)
 	}
 	if got := typedLine(*ran); len(got) != 1 || got[0] != "[from other %3] read file docs/plan.md" {
@@ -139,45 +147,97 @@ func TestPeerSendIsOnlyAPlainSend(t *testing.T) {
 	}
 }
 
-// Guard 2: the receiver must be stokable, read before the send and again
-// right before each key. A refusal says what to do.
-func TestPeerSendNeedsAStokablePane(t *testing.T) {
-	for name, screen := range map[string]string{
-		"permission": "Bash command\n  rm -rf build\nDo you want to proceed?\n❯ 1. Yes\n  2. No, and tell Claude what to do differently\n",
-		"question":   "⏺ Should I drop the old table?\n\n> \n",
+// workInbox empties work's inbox in a peerTest.
+func workInbox(s *Service) []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.Chains.Take(chains.Member{SessionID: "s1"}).Texts()
+}
+
+// A mate that is not ready for a typed line gets the line in its inbox:
+// the sender hears why it waits, and nothing is typed.
+func TestPeerSendToAMateNotReadyQueues(t *testing.T) {
+	for name, c := range map[string]struct{ screen, why string }{
+		"permission": {"Bash command\n  rm -rf build\nDo you want to proceed?\n❯ 1. Yes\n  2. No, and tell Claude what to do differently\n", "it shows a permission prompt"},
+		"question":   {"⏺ Should I drop the old table?\n\n> \n", "it asks a question now"},
+		"draft":      {"⏺ Done.\n────────\n> half a prompt the builder left\n────────\n", "it has a draft in its prompt"},
 	} {
 		s, ran, _ := peerTest(t)
-		s.Capture = func([]string) map[string]string { return map[string]string{"%1": screen} }
+		s.Capture = func([]string) map[string]string { return map[string]string{"%1": c.screen} }
 		res := s.act(t.Context(), peerAct("message:%1", "read file x"))
-		if !strings.Contains(res.Err, "the pane %1") || !strings.HasSuffix(res.Err, peerRetry) || len(*ran) != 0 {
-			t.Fatalf("%s: %+v, ran %q", name, res, *ran)
+		if want := "queued for work: " + c.why + ". It gets the line at its next rest."; res.Err != "" || res.Note != want || len(*ran) != 0 {
+			t.Fatalf("%s: %+v, ran %q, want %q", name, res, *ran, want)
+		}
+		if got := workInbox(s); !slices.Equal(got, []string{"[from other %3] read file x"}) {
+			t.Fatalf("%s: inbox %q", name, got)
 		}
 	}
 }
 
-// A draft already in the prompt refuses the send: a typed line would join it.
-func TestPeerSendRefusesADraft(t *testing.T) {
+// A mate at rest that waits for your answer in plain text still gets the
+// line typed: its prompt is empty, and the line wakes it.
+func TestPeerSendToASessionThatWaitsForYouTypes(t *testing.T) {
 	s, ran, _ := peerTest(t)
-	s.Capture = func([]string) map[string]string {
-		return map[string]string{"%1": "⏺ Done.\n────────\n> half a prompt the builder left\n────────\n"}
-	}
+	s.Hook(hooks.Event{Name: "Stop", SessionID: "s1", Pane: "%1", Asks: true, Message: "Drop the old table?", At: night0})
 	res := s.act(t.Context(), peerAct("message:%1", "read file x"))
-	if res.Err != "not delivered: work has a draft in its prompt" || len(*ran) != 0 {
+	if res.Err != "" || res.Note != "sent" || len(typedLine(*ran)) != 1 {
 		t.Fatalf("%+v, ran %q", res, *ran)
 	}
 }
 
-func TestPeerSendRefusesASessionThatWaitsForYou(t *testing.T) {
-	s, ran, _ := peerTest(t)
-	s.Hook(hooks.Event{Name: "Stop", SessionID: "s1", Pane: "%1", Asks: true, Message: "Drop the old table?", At: night0})
-	res := s.act(t.Context(), peerAct("message:%1", "read file x"))
-	if !strings.Contains(res.Err, "waits for you") || !strings.HasSuffix(res.Err, peerRetry) || len(*ran) != 0 {
-		t.Fatalf("%+v, ran %q", res, *ran)
+// A Claude Code mate that was busy gets its waiting line typed at its next
+// rest, and the sender hears it was typed.
+func TestClaudeInboxLineIsTypedAtRest(t *testing.T) {
+	h := newSendHost(t, busyMate)
+	if res := h.send(t, "%2", "hi"); res.Note != "queued for mate: it is busy. It gets the line at its next rest." {
+		t.Fatalf("%+v", res)
+	}
+	h.s.deliverAtRest(night0)
+	if k := h.keys(); len(k) != 0 {
+		t.Fatalf("a busy mate got keys: %q", k)
+	}
+	h.publish(idleMate)
+	h.s.deliverAtRest(night0)
+	if got := typedLine(h.keys()); !slices.Equal(got, []string{"[from peer-send %1] hi"}) {
+		t.Fatalf("typed %q", got)
+	}
+	h.s.deliverAtRest(night0)
+	if got := typedLine(h.keys()); len(got) != 1 {
+		t.Fatalf("typed twice: %q", got)
+	}
+	h.s.mu.Lock()
+	defer h.s.mu.Unlock()
+	if items := h.s.Chains.Take(chains.Member{SessionID: "s2"}).Texts(); len(items) != 0 {
+		t.Fatalf("the typed line is still in the inbox: %q", items)
+	}
+	if want := "[matchblox] mate got your line (typed " + night0.Format("15:04") + ")"; !slices.Equal(h.s.Chains.Take(chains.Member{SessionID: "s1"}).Texts(), []string{want}) {
+		t.Fatalf("the sender did not hear %q", want)
+	}
+}
+
+// A question menu holds the line: typing would answer it. Once the question
+// is answered and the mate rests, the line is typed.
+func TestAQuestionHoldsTheLineUntilItIsAnswered(t *testing.T) {
+	h := newSendHost(t, idleMate)
+	h.screens["%2"] = "⏺ Should I drop the old table?\n\n> \n"
+	if res := h.send(t, "%2", "hi"); res.Note != "queued for mate: it asks a question now. It gets the line at its next rest." {
+		t.Fatalf("%+v", res)
+	}
+	h.s.deliverAtRest(night0)
+	if k := h.keys(); len(k) != 0 {
+		t.Fatalf("typed into a question: %q", k)
+	}
+	h.mu.Lock()
+	h.screens["%2"] = idleScreen
+	h.mu.Unlock()
+	h.s.deliverAtRest(night0)
+	if got := typedLine(h.keys()); !slices.Equal(got, []string{"[from peer-send %1] hi"}) {
+		t.Fatalf("typed %q", got)
 	}
 }
 
 // The pane is read again right before each key: a draft typed after the
-// first look stops the send.
+// first look stops the keys, and the line waits instead.
 func TestPeerSendReadsThePaneAgainBeforeItTypes(t *testing.T) {
 	s, ran, _ := peerTest(t)
 	reads := 0
@@ -189,12 +249,112 @@ func TestPeerSendReadsThePaneAgainBeforeItTypes(t *testing.T) {
 		return map[string]string{"%1": "⏺ Done.\n────────\n> the builder types now\n────────\n"}
 	}
 	res := s.act(t.Context(), peerAct("message:%1", "read file x"))
-	if reads < 2 || !strings.Contains(res.Err, "has text you typed") || !strings.HasSuffix(res.Err, peerRetry) || len(*ran) != 0 {
+	if reads < 2 || res.Note != "queued for work: it has a draft in its prompt. It gets the line at its next rest." || len(*ran) != 0 {
 		t.Fatalf("reads %d: %+v, ran %q", reads, res, *ran)
 	}
 }
 
-// Guard 3: never into the stoker's panes, never into the sender's own.
+// TestSendWhyForEachWait: each state of the mate the session knows gives
+// its own reason, read through the mux.
+func TestSendWhyForEachWait(t *testing.T) {
+	for name, c := range map[string]struct {
+		mate sample.Session
+		mode bool
+		why  string
+	}{
+		"asks":    {sample.Session{Agent: "claude", Status: "idle", Idle: 5 * time.Minute, Ask: &said.Ask{ID: "q1"}}, false, "it asks a question now"},
+		"permits": {sample.Session{Agent: "claude", Status: "idle", Idle: 5 * time.Minute, Permits: true}, false, "it shows a permission prompt"},
+		"busy":    {busyMate, false, "it is busy"},
+		"copy":    {idleMate, true, "its pane is in copy mode"},
+	} {
+		h := newSendHost(t, c.mate)
+		fake := &muxtest.Fake{Mode: map[string]bool{"%2": c.mode}}
+		fake.SetScreen("%2", idleScreen)
+		h.s.Mux = fake
+		res := h.send(t, "%2", "hi")
+		if want := "queued for mate: " + c.why + ". It gets the line at its next rest."; res.Note != want || res.Err != "" {
+			t.Errorf("%s: %+v, want %q", name, res, want)
+		}
+		if k := h.keys(); len(k) != 0 {
+			t.Errorf("%s: ran %q", name, k)
+		}
+	}
+}
+
+func TestHeardLineTellsTheSender(t *testing.T) {
+	h := newSendHost(t, busyMate)
+	h.send(t, "%2", "hi")
+	d := h.s.news(proto.News{Pane: "%2"})
+	if !strings.Contains(d.text, "[from peer-send %1] hi") {
+		t.Fatalf("mate heard %q", d.text)
+	}
+	h.s.heard(d)
+	h.s.mu.Lock()
+	got := h.s.Chains.Take(chains.Member{SessionID: "s1"}).Texts()
+	h.s.mu.Unlock()
+	if want := "[matchblox] mate got your line (heard " + night0.Format("15:04") + ")"; !slices.Equal(got, []string{want}) {
+		t.Fatalf("sender heard %q, want %q", got, want)
+	}
+}
+
+func TestSendTypedAtOnceGetsNoDeliveryNotice(t *testing.T) {
+	h := newSendHost(t, idleMate)
+	if res := h.send(t, "%2", "hi"); res.Note != "sent" {
+		t.Fatalf("%+v", res)
+	}
+	h.s.mu.Lock()
+	defer h.s.mu.Unlock()
+	if got := h.s.Chains.Take(chains.Member{SessionID: "s1"}).Texts(); len(got) != 0 {
+		t.Fatalf("sender heard %q", got)
+	}
+}
+
+func TestSendToAMateInOneOfTwoTeams(t *testing.T) {
+	h := newSendHost(t, busyMate)
+	h.s.mu.Lock()
+	_, err := h.s.Chains.Form(chains.Member{SessionID: "s1", Pane: "%1"}, chains.Member{SessionID: "s3", Pane: "%3"}, "side", "")
+	h.s.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res := h.send(t, "%3", "hi"); res.Err != "" {
+		t.Fatalf("to stranger in side: %+v", res)
+	}
+	if res := h.send(t, "%2", "hi"); res.Err != "" {
+		t.Fatalf("to mate in the first team: %+v", res)
+	}
+}
+
+func TestQueuedLineToAMateThatLeftIsDropped(t *testing.T) {
+	h := newSendHost(t, busyMate)
+	h.send(t, "%2", "hi")
+	h.s.act(t.Context(), proto.Act{RecID: proto.ChainPrefix + "-", From: "%2"})
+	h.publish(busyMate) // the sample tells the senders
+	h.s.mu.Lock()
+	got := h.s.Chains.Take(chains.Member{SessionID: "s1"}).Texts()
+	h.s.mu.Unlock()
+	if !slices.Equal(got, []string{"mate did not get your line: you are no longer chained"}) {
+		t.Fatalf("sender heard %q", got)
+	}
+}
+
+func TestADroppedLineTellsItsSender(t *testing.T) {
+	h := newSendHost(t, busyMate)
+	h.send(t, "%2", "hi")
+	h.s.mu.Lock()
+	for i := range chains.InboxMax {
+		h.s.Chains.Post(chains.Member{SessionID: "s2", Pane: "%2"}, fmt.Sprint(i), night0)
+	}
+	h.s.mu.Unlock()
+	h.publish(busyMate)
+	h.s.mu.Lock()
+	got := h.s.Chains.Take(chains.Member{SessionID: "s1"}).Texts()
+	h.s.mu.Unlock()
+	if !slices.Equal(got, []string{"[matchblox] 1 line to mate dropped: its inbox is full"}) {
+		t.Fatalf("sender heard %q", got)
+	}
+}
+
 func TestPeerSendNeverToTheStokerNorItself(t *testing.T) {
 	s, ran, _ := peerTest(t)
 	// Every session rests and every pane shows the empty prompt: only
@@ -345,19 +505,12 @@ func TestPeerSendRateLimit(t *testing.T) {
 }
 
 // A send a guard stopped uses no slot.
+// A refused send uses no slot of the rate limit: the next one goes.
 func TestPeerSendRefusedUsesNoSlot(t *testing.T) {
 	s, ran, _ := peerTest(t)
-	capture, draft := s.Capture, true
-	s.Capture = func(ps []string) map[string]string {
-		if draft {
-			return map[string]string{"%1": "⏺ Done.\n────────\n> half typed\n────────\n"}
-		}
-		return capture(ps)
+	if res := s.act(t.Context(), peerAct("message:%1", "two\nlines")); res.Err == "" || len(*ran) != 0 {
+		t.Fatalf("sent two lines: %+v", res)
 	}
-	if res := s.act(t.Context(), peerAct("message:%1", "x")); res.Err == "" || len(*ran) != 0 {
-		t.Fatalf("sent over a draft: %+v", res)
-	}
-	draft = false
 	if res := s.act(t.Context(), peerAct("message:%1", "x")); res.Err != "" || len(*ran) != 2 {
 		t.Fatalf("%+v, ran %q", res, *ran)
 	}
@@ -499,7 +652,7 @@ func TestSendOutsideTheChainIsRefused(t *testing.T) {
 
 func TestSendToAnIdleMateTypesTheLine(t *testing.T) {
 	h := newSendHost(t, idleMate)
-	if res := h.send(t, "%2", "hi"); res.Err != "" || len(res.Ran) != 2 {
+	if res := h.send(t, "%2", "hi"); res.Err != "" || res.Note != "sent" || len(res.Ran) != 2 {
 		t.Fatalf("%+v", res)
 	}
 	if got := typedLine(h.keys()); !slices.Equal(got, []string{"[from peer-send %1] hi"}) {
@@ -507,7 +660,7 @@ func TestSendToAnIdleMateTypesTheLine(t *testing.T) {
 	}
 	h.s.mu.Lock()
 	defer h.s.mu.Unlock()
-	if c, _ := h.s.Chains.ChainOf(chains.Member{SessionID: "s1"}); !c.Spark.Equal(night0) {
+	if c := h.s.Chains.TeamsOf(chains.Member{SessionID: "s1"})[0]; !c.Spark.Equal(night0) {
 		t.Fatalf("the send did not spark the chain: %v", c.Spark)
 	}
 }
@@ -515,7 +668,7 @@ func TestSendToAnIdleMateTypesTheLine(t *testing.T) {
 func TestSendToABusyMateQueues(t *testing.T) {
 	h := newSendHost(t, busyMate)
 	res := h.send(t, "%2", "hi")
-	if res.Err != "" || res.Note != "queued for mate's next step" {
+	if res.Err != "" || res.Note != "queued for mate: it is busy. It gets the line at its next rest." {
 		t.Fatalf("%+v", res)
 	}
 	if k := h.keys(); len(k) != 0 {
@@ -527,7 +680,7 @@ func TestSendToABusyMateQueues(t *testing.T) {
 	if len(items) != 1 || items[0] != "[from peer-send %1] hi" {
 		t.Fatalf("inbox %+v", items)
 	}
-	if c, _ := h.s.Chains.ChainOf(chains.Member{SessionID: "s1"}); !c.Spark.Equal(night0) {
+	if c := h.s.Chains.TeamsOf(chains.Member{SessionID: "s1"})[0]; !c.Spark.Equal(night0) {
 		t.Fatalf("the queued send did not spark the chain: %v", c.Spark)
 	}
 }
@@ -535,7 +688,7 @@ func TestSendToABusyMateQueues(t *testing.T) {
 func TestCodexGetsItsQueuedLineAtRest(t *testing.T) {
 	codex := sample.Session{Agent: "codex", Status: "busy", Busy: true}
 	h := newSendHost(t, codex)
-	if res := h.send(t, "%2", "hi"); res.Err != "" || res.Note != "queued for mate's next step" {
+	if res := h.send(t, "%2", "hi"); res.Err != "" || res.Note != "queued for mate: it is busy. It gets the line at its next rest." {
 		t.Fatalf("%+v", res)
 	}
 	h.s.deliverAtRest(night0)
@@ -557,6 +710,9 @@ func TestCodexGetsItsQueuedLineAtRest(t *testing.T) {
 	if items := h.s.Chains.Take(chains.Member{SessionID: "s2"}).Texts(); len(items) != 0 {
 		t.Fatalf("the typed line is in the inbox too: %+v", items)
 	}
+	if want := "[matchblox] mate got your line (typed " + night0.Format("15:04") + ")"; !slices.Equal(h.s.Chains.Take(chains.Member{SessionID: "s1"}).Texts(), []string{want}) {
+		t.Fatalf("the sender did not hear %q", want)
+	}
 }
 
 // At most one line a sample: the next waits for the next rest.
@@ -576,7 +732,7 @@ func TestCodexGetsOneQueuedLineEachSample(t *testing.T) {
 
 func TestCursorGetsTheInboxOnly(t *testing.T) {
 	h := newSendHost(t, sample.Session{Agent: "cursor-agent", Status: "idle", Idle: 5 * time.Minute})
-	if res := h.send(t, "%2", "hi"); res.Err != "" || res.Note != "queued for mate's next step" {
+	if res := h.send(t, "%2", "hi"); res.Err != "" || res.Note != "queued for mate: it takes no typed lines. It hears the line at its next step." {
 		t.Fatalf("%+v", res)
 	}
 	h.s.deliverAtRest(night0)
@@ -585,30 +741,35 @@ func TestCursorGetsTheInboxOnly(t *testing.T) {
 	}
 }
 
-func TestOpenCodeIsRefused(t *testing.T) {
+func TestSendToOpenCodeIsKept(t *testing.T) {
 	h := newSendHost(t, sample.Session{Agent: "opencode", Status: "idle", Idle: 5 * time.Minute})
 	res := h.send(t, "%2", "hi")
-	if want := "mate runs OpenCode, which matchblox cannot type into safely. It sees the chain in `matchblox chain`."; res.Err != want {
-		t.Fatalf("%q, want %q", res.Err, want)
+	if want := "kept for mate: OpenCode takes no typed lines. It shows in matchblox peek mate."; res.Err != "" || res.Note != want {
+		t.Fatalf("%+v, want %q", res, want)
 	}
 	if k := h.keys(); len(k) != 0 {
 		t.Fatalf("ran %q", k)
 	}
+	h.s.mu.Lock()
+	defer h.s.mu.Unlock()
+	if n, _ := h.s.Chains.InboxCount(chains.Member{SessionID: "s2"}); n != 1 {
+		t.Fatalf("inbox %d", n)
+	}
 }
 
-func TestCopyModeIsRefused(t *testing.T) {
+func TestTypingRefusedBeforeAKeyQueues(t *testing.T) {
 	h := newSendHost(t, idleMate)
 	h.inMode["%2"] = "1"
-	if res := h.send(t, "%2", "hi"); res.Err != "not delivered: mate's pane is in copy mode" {
+	if res := h.send(t, "%2", "hi"); res.Note != "queued for mate: its pane is in copy mode. It gets the line at its next rest." {
 		t.Fatalf("%+v", res)
 	}
 	if k := h.keys(); len(k) != 0 {
 		t.Fatalf("ran %q", k)
 	}
-	// Nothing was typed, so the slot is given back.
-	h.inMode["%2"] = "0"
-	if res := h.send(t, "%2", "hi"); res.Err != "" {
-		t.Fatal(res.Err)
+	h.s.mu.Lock()
+	defer h.s.mu.Unlock()
+	if got := h.s.Chains.Take(chains.Member{SessionID: "s2"}).Texts(); !slices.Equal(got, []string{"[from peer-send %1] hi"}) {
+		t.Fatalf("inbox %q", got)
 	}
 }
 
@@ -616,8 +777,14 @@ func TestALineThatDoesNotShowIsCleared(t *testing.T) {
 	h := newSendHost(t, idleMate)
 	h.hidden["%2"] = true
 	res := h.send(t, "%2", "hi")
-	if res.Err != "not delivered: mate did not show the line" {
+	if res.Err != "" || res.Note != "queued for mate: its prompt did not show the line. It gets the line at its next rest." {
 		t.Fatalf("%+v", res)
+	}
+	h.s.mu.Lock()
+	inbox := h.s.Chains.Take(chains.Member{SessionID: "s2"}).Texts()
+	h.s.mu.Unlock()
+	if !slices.Equal(inbox, []string{"[from peer-send %1] hi"}) {
+		t.Fatalf("inbox %q", inbox)
 	}
 	k := h.keys()
 	if last := k[len(k)-1]; last[len(last)-1] != "C-u" || slices.ContainsFunc(k, func(a []string) bool { return a[len(a)-1] == "Enter" }) {
@@ -685,7 +852,7 @@ func TestTwoSendsAtOnceToARestingCodexQueueTheSecond(t *testing.T) {
 	if res := <-first; res.Err != "" {
 		t.Fatalf("the first: %+v", res)
 	}
-	if second.Err != "" || second.Note != "queued for mate's next step" {
+	if second.Err != "" || second.Note != "queued for mate: a line to it types now. It gets the line at its next rest." {
 		t.Fatalf("the second: %+v", second)
 	}
 	if !h.s.peers.waits(chains.Member{SessionID: "s2"}) {
@@ -819,7 +986,7 @@ func TestAQueuedLineOutsideTheChainIsDropped(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			codex := sample.Session{Agent: "codex", Status: "busy", Busy: true}
 			h := newSendHost(t, codex)
-			if res := h.send(t, "%2", "hi"); res.Note != "queued for mate's next step" {
+			if res := h.send(t, "%2", "hi"); res.Note != "queued for mate: it is busy. It gets the line at its next rest." {
 				t.Fatalf("%+v", res)
 			}
 			cut(h.s)
@@ -841,21 +1008,64 @@ func TestAQueuedLineOutsideTheChainIsDropped(t *testing.T) {
 
 // A line that waited ten minutes is stale: it is dropped untyped, and the
 // sender hears so.
-func TestAQueuedLineGoesStale(t *testing.T) {
+// A line that waits is never refused for its wait: past ten minutes it
+// still lands at the mate's next rest.
+func TestAQueuedLineWaitsPastTenMinutes(t *testing.T) {
 	codex := sample.Session{Agent: "codex", Status: "busy", Busy: true}
 	h := newSendHost(t, codex)
 	h.send(t, "%2", "hi")
 	codex.Status, codex.Busy = "idle", false
 	h.publish(codex)
-	h.s.deliverAtRest(night0.Add(10 * time.Minute))
-	h.s.deliverAtRest(night0.Add(10 * time.Minute))
-	if k := h.keys(); len(k) != 0 {
-		t.Fatalf("ran %q", k)
+	h.s.deliverAtRest(night0.Add(time.Hour))
+	if got := typedLine(h.keys()); !slices.Equal(got, []string{"[from peer-send %1] hi"}) {
+		t.Fatalf("typed %q", got)
+	}
+}
+
+// A failed sample sees no sessions: the lines that wait for a Codex rest
+// stay. A mate truly gone drops them, and each sender hears it.
+func TestCodexLinesSurviveAFailedSampleAndTellWhenTheMateIsGone(t *testing.T) {
+	codex := sample.Session{Agent: "codex", Status: "busy", Busy: true}
+	h := newSendHost(t, codex)
+	h.send(t, "%2", "hi")
+	h.s.publish(sample.Snapshot{At: night0, Errors: []string{"tmux: no server"}}, func(state.Doc) {})
+	h.s.deliverAtRest(night0)
+	if !h.s.peers.waits(chains.Member{SessionID: "s2"}) {
+		t.Fatal("a failed sample dropped the waiting line")
+	}
+	h.s.publish(sample.Snapshot{At: night0, Sessions: []sample.Session{
+		{Agent: "claude", Pane: "%1", SessionID: "s1", Name: "peer-send", Status: "busy", Busy: true},
+	}}, func(state.Doc) {})
+	h.s.deliverAtRest(night0)
+	if h.s.peers.waits(chains.Member{SessionID: "s2"}) {
+		t.Fatal("a line waits for a mate that is gone")
 	}
 	h.s.mu.Lock()
 	defer h.s.mu.Unlock()
-	if items := h.s.Chains.Take(chains.Member{SessionID: "s1"}).Texts(); !slices.Equal(items, []string{"mate did not get your line: it waited 10 minutes and went stale"}) {
-		t.Fatalf("the sender's inbox: %q", items)
+	if got := h.s.Chains.Take(chains.Member{SessionID: "s1"}).Texts(); !slices.Contains(got, "mate did not get your line: it is gone") {
+		t.Fatalf("the sender heard %q", got)
+	}
+}
+
+// A line whose sender no longer shares a team with its mate is not heard:
+// the sender hears it did not go.
+func TestALineFromASenderThatLeftIsNotHeard(t *testing.T) {
+	h := newSendHost(t, busyMate)
+	h.send(t, "%2", "hi")
+	if res := h.s.act(t.Context(), proto.Act{RecID: proto.ChainPrefix + "-", From: "%1"}); res.Err != "" {
+		t.Fatalf("%+v", res)
+	}
+	d := h.s.news(proto.News{Pane: "%2"})
+	if strings.Contains(d.text, "[from peer-send %1] hi") {
+		t.Fatalf("mate heard %q", d.text)
+	}
+	h.s.heard(d)
+	h.publish(busyMate)
+	h.s.mu.Lock()
+	got := h.s.Chains.Take(chains.Member{SessionID: "s1"}).Texts()
+	h.s.mu.Unlock()
+	if !slices.Equal(got, []string{"mate did not get your line: you are no longer chained"}) {
+		t.Fatalf("sender heard %q", got)
 	}
 }
 
@@ -1040,5 +1250,20 @@ func TestInFlightWaitIsBounded(t *testing.T) {
 	f.done()
 	if !f.wait(50 * time.Millisecond) {
 		t.Fatal("an idle count still waits")
+	}
+}
+
+// TestTypeLineChecksThePaneUnderItsHold: the pane is read again once it is
+// held, so a pane that went into copy mode after the first look gets no key.
+func TestTypeLineChecksThePaneUnderItsHold(t *testing.T) {
+	h := newSendHost(t, idleMate)
+	x, _ := h.s.sessionAt("%2")
+	h.inMode["%2"] = "1"
+	res, typed, _, _ := h.s.typeLine(t.Context(), x, "[from peer-send %1] hi", "[from peer-send %1]", peerLead, nil)
+	if typed || res.Err != "its pane is in copy mode" {
+		t.Fatalf("typed %v: %+v", typed, res)
+	}
+	if k := h.keys(); len(k) != 0 {
+		t.Fatalf("ran %q", k)
 	}
 }

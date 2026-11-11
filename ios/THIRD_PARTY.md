@@ -27,7 +27,7 @@ library inside the app. These are the modules it links, from
 
 | Module | Version | License | Used by |
 | --- | --- | --- | --- |
-| Go standard library | go1.26.10 | BSD-3-Clause | the Go runtime |
+| Go standard library | go1.27.4 | BSD-3-Clause | the Go runtime |
 | [charm.land/bubbles/v2](https://pkg.go.dev/charm.land/bubbles/v2) | v2.2.1 | MIT | demo |
 | [charm.land/bubbletea/v2](https://pkg.go.dev/charm.land/bubbletea/v2) | v2.0.10 | MIT | demo |
 | [charm.land/lipgloss/v2](https://pkg.go.dev/charm.land/lipgloss/v2) | v2.0.6 | MIT | demo |

@@ -520,9 +520,13 @@ func (m Model) rowIn(s sample.Session, sel bool, w int, t tracks, fuse string, r
 	if t.fuse > 0 {
 		cell = strings.TrimSuffix(cell, " ") + padTo(fuse, t.fuse) + " "
 	}
-	hint := ""
+	plain := m.alsoIn(s)
 	if m.mayChain(s) {
-		hint = st.faint.Render(sameRepoHint)
+		plain += sameRepoHint
+	}
+	hint := ""
+	if plain != "" {
+		hint = st.faint.Render(plain)
 	}
 	state := padTo(word, t.word) + cutLeft(wait, t.wait)
 	if merged {
@@ -534,7 +538,7 @@ func (m Model) rowIn(s sample.Session, sel bool, w int, t tracks, fuse string, r
 		room := w - lipgloss.Width(mark+cell) - lipgloss.Width(right) - 1
 		if tagged, ok := m.rowName(s, ink, room); ok {
 			name = tagged
-		} else if hint != "" && lipgloss.Width(s.Name+sameRepoHint) <= room {
+		} else if hint != "" && lipgloss.Width(s.Name+plain) <= room {
 			name += hint
 		}
 		line := spread(mark+cell+name, right, w)
@@ -546,7 +550,7 @@ func (m Model) rowIn(s sample.Session, sel bool, w int, t tracks, fuse string, r
 	name := ink.Render(pad(s.Name, t.name))
 	if tagged, ok := m.rowName(s, ink, t.name-1); ok {
 		name = padTo(tagged, t.name) // pad's gap before the word
-	} else if hint != "" && lipgloss.Width(s.Name+sameRepoHint) <= t.name-1 {
+	} else if hint != "" && lipgloss.Width(s.Name+plain) <= t.name-1 {
 		name = padTo(ink.Render(s.Name)+hint, t.name)
 	}
 	line := mark + cell + name + state + cutLeft(ctx, t.ctx)
@@ -669,9 +673,11 @@ func cutLeft(s string, w int) string {
 	return padLeft(ansi.Truncate(s, w, "…"), w)
 }
 
-// opened is what a selected row on a phone grows by: what the agent said
-// last, its pull request, then its plan and its keys. Every line starts with
-// two blanks: fused drops those two cells to make room for the fuse.
+// opened is what a selected row on a phone grows by: the question the
+// agent asks, what it said last, its pull request, then its plan and its
+// keys. The question is read here, and answered in the agent's own pane.
+// Every line starts with two blanks: fused drops those two cells to make
+// room for the fuse.
 func (m Model) opened(s sample.Session, w int) []string {
 	st := m.st
 	var out []string
@@ -679,6 +685,14 @@ func (m Model) opened(s sample.Session, w int) []string {
 	if _, head := m.headRow(s); head {
 		if q, asks := m.headAsks(s); asks && q != "" {
 			said = q // the head's row cuts its question: here it is whole
+		}
+	} else if s.Ask != nil && len(s.Ask.Questions) > 0 {
+		lines := wrapPlain("? "+s.Ask.Questions[0].Question, w-4)
+		if len(lines) > 2 {
+			lines = []string{lines[0], ansi.Truncate(lines[1], w-5, "") + "…"}
+		}
+		for _, l := range lines {
+			out = append(out, "   "+st.accent.Render(l))
 		}
 	}
 	if said != "" {

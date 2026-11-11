@@ -10,7 +10,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	uv "github.com/charmbracelet/ultraviolet"
-	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/keycmd"
 	"github.com/blox-eng/matchblox/internal/logos"
@@ -40,48 +39,30 @@ func TestEveryWayInJumps(t *testing.T) {
 	}
 }
 
-// A tap goes in on a phone (owner, 2026-11-09, #352, replacing the phone's
-// live view of 2026-11-08): the owner taps a session to answer it, so the
-// first tap on its row goes into its pane, as Enter does, and every key then
-// reaches the agent. A split screen shows the view beside the list, and a
-// second tap on the row goes in.
+// A phone (owner, 2026-11-09, #351 and #352): on one column the first tap
+// on a row goes into its pane, as Enter does. A split screen shows the view
+// beside the list: the first tap selects the row, and a second tap on it
+// goes in.
 func TestATapOnARowJumps(t *testing.T) {
 	m, _ := loadedWith(t, 44, fixtureState())
 	ran := recordRuns(&m)
-	next, cmd := tap(m, 5, sessLine(t, m, "app-review"))
+	_, cmd := tap(m, 5, sessLine(t, m, "app-review"))
 	drain(cmd)
-	if nm := next.(Model); nm.viewOpen || len(*ran) != 1 || strings.Join((*ran)[0], " ") != "tmux switch-client -t %2" {
-		t.Fatalf("44 wide: the first tap ran %q, view open %v: want the jump at once", *ran, nm.viewOpen)
+	if len(*ran) != 1 || strings.Join((*ran)[0], " ") != "tmux switch-client -t %2" {
+		t.Fatalf("44 wide: the first tap ran %q, want the jump into %%2", *ran)
 	}
 
 	m, _ = loadedWith(t, 100, fixtureState())
 	ran = recordRuns(&m)
-	next, cmd = tap(m, 5, sessLine(t, m, "app-review"))
+	next, cmd := tap(m, 5, sessLine(t, m, "app-review"))
 	drain(cmd)
-	if s, _ := next.(Model).selectedSession(); s.Pane != "%2" || len(*ran) != 0 || next.(Model).viewOpen {
-		t.Fatalf("100 wide: the first tap selected %q, ran %q, view open %v", s.Pane, *ran, next.(Model).viewOpen)
+	if s, _ := next.(Model).selectedSession(); s.Pane != "%2" || len(*ran) != 0 {
+		t.Fatalf("100 wide: the first tap selected %q, ran %q", s.Pane, *ran)
 	}
 	_, cmd = tap(next, 5, sessLine(t, next.(Model), "app-review"))
 	drain(cmd)
 	if len(*ran) != 1 || strings.Join((*ran)[0], " ") != "tmux switch-client -t %2" {
 		t.Errorf("100 wide: the second tap ran %q", *ran)
-	}
-}
-
-func TestATapOnTheViewsTitleGoesBack(t *testing.T) {
-	m, _ := loadedWith(t, 44, fixtureState())
-	m = openView(t, m)
-	next, _ := tap(m, 3, 0)
-	if nm := next.(Model); nm.viewOpen || !strings.Contains(ansi.Strip(nm.render()), "SESSIONS") {
-		t.Fatalf("a tap on ‹ Sessions left view %v", nm.viewOpen)
-	}
-	next, _ = key(m, "esc")
-	if next.(Model).viewOpen {
-		t.Fatal("esc left the view open")
-	}
-	next, _ = m.Update(uv.UnknownApcEvent(homeKey))
-	if next.(Model).viewOpen {
-		t.Fatal("the home key left the view open")
 	}
 }
 
@@ -170,18 +151,18 @@ func TestAFocusOnAWaitGoesIntoThePane(t *testing.T) {
 	}
 }
 
-// openViewCmd opens the live view of the selected session, as a first tap
-// on its row does on a phone.
+// openViewCmd is the selected session as the console shows it once
+// selected: on a phone, its row opened in place (#351: no view takes the
+// screen).
 func openViewCmd(m Model) (Model, tea.Cmd) {
-	m.viewOpen = true
 	next, cmd := m.Update(tea.WindowSizeMsg{Width: m.width, Height: m.height})
 	return next.(Model), cmd
 }
 
 // keyOrOpen presses k; an Enter on a session, which would go into its pane,
-// opens its live view instead.
+// leaves the console as the selection shows it instead.
 func keyOrOpen(m tea.Model, k string) (tea.Model, tea.Cmd) {
-	if nm, ok := m.(Model); ok && k == "enter" && !nm.viewOpen && nm.focus(keyPress(k)) == layerMain {
+	if nm, ok := m.(Model); ok && k == "enter" && !nm.standIn && nm.focus(keyPress(k)) == layerMain {
 		if s, ok := nm.selectedSession(); ok && s.Pane != "" {
 			return openViewCmd(nm)
 		}

@@ -112,27 +112,52 @@ off. No line tells a match of an agent in another repo. To chain across
 repos, find the name in `matchblox sessions`, which names the repo of each
 agent (`in web`), and run `matchblox chain <who>`.
 
-- `matchblox chain <who>` asks to chain with `<who>`, or accepts its ask.
-  `<who>` is a name or a pane, as in `matchblox peek`.
-- `matchblox chain` lists the chain, with the repo of each chain-mate, and
-  the asks to and from the match. `--json` prints `chain` (each with
-  `name`, `pane` and `repo`) and `requests`.
-- `matchblox unchain` leaves the chain.
-- `matchblox chain --off` leaves the chain and takes no chains and no
-  notices. `--on` takes them again.
+A chain is a team: every match in it hears every other. One command joins.
 
-A chain needs both sides. The ask waits until `<who>`, or a match already in
-its chain, runs `matchblox chain` back. Until then nothing is shared: no news,
-no send and no fuse. The match asked hears the ask once, at its next step.
-An ask from another repo names that repo: `[matchblox] web-cart (in web)
-asks to chain with you.` An ask lapses after one hour, or when either match
-is gone. Both matches must be on one host. A match stays in its chain when
-it moves to another repo. It leaves when it is gone, when it runs
-`matchblox unchain`, or when it turns chains off.
+- `matchblox chain <who>` joins the chain of `<who>` at once. When `<who>`
+  is in no chain, the two form one, named after the match that ran the
+  command. `<who>` is a name or a pane, as in `matchblox peek`, or a chain's
+  name: `matchblox chain hearth` joins hearth. A name that is both a
+  chain's and a match's joins the chain. The answer reads `joined hearth: 3
+  matches. To leave it, run: matchblox unchain hearth`. Each mate hears
+  `[matchblox] <name> joined the chain` at its next step.
+- When `<who>` is in two or more chains, matchblox picks none. It answers
+  with one command per chain:
+
+  ```
+  web-cart is in 2 chains. Run one:
+    matchblox chain hearth
+    matchblox chain web
+  ```
+
+- `matchblox chain` lists each chain of the match, with the repo of each
+  mate. `--json` prints `chains`, each with its `name` and its `members`
+  (`name`, `pane` and `repo`).
+- `matchblox unchain` leaves the match's only chain. `matchblox unchain
+  <chain>` leaves that chain, and `--all` leaves every chain. In two chains,
+  a bare `unchain` lists the three commands instead.
+- `matchblox chain --off` leaves every chain and takes no chains and no
+  notices. Nobody can join it then: `<who> is off: it takes no chains. It
+  can run: matchblox chain --on`. `--on` takes them again.
+
+A match may be in several chains. Each chain hears only itself: a match in
+hearth and web passes nothing from one to the other. A chain keeps its name
+when the match that started it leaves. A clash among the chains of a host
+adds `-2`, `-3`. A chain of one ends. The stoker joins no chain.
+
+Every match of a chain is on one host. A match stays in its chain when it
+moves to another repo. While its pane lives but shows no agent, it stays,
+`not seen` since its first miss. It leaves when its pane closes, when it
+runs `matchblox unchain`, when it turns chains off, or when the person at
+the console takes it out. The match taken out hears `[matchblox] the owner
+took you out of hearth`, and can join again with one command. A sample that
+could not read the panes changes nothing.
 
 A `/clear` starts a new conversation in the same pane, and the chain keeps
 it. Its next step starts with one line: `[matchblox] you are chained with
-api, docs. To leave, run: matchblox unchain`.
+api, docs. To leave, run: matchblox unchain`. A `matchblox switch` keeps the
+chain too: the new agent takes the match's place and its news, and hears
+the same line.
 
 Chain-mates hear each other's commits, branch changes, finishes, waits for
 the person and messages. The hook prints what is new under
@@ -147,12 +172,30 @@ wait: when the service does not answer in 30 ms, it prints nothing, and the
 news waits for the next time. A tool call inside a subagent hears nothing:
 the news waits for the match's own.
 
-`matchblox send <who> "<text>"` from a match reaches its chain-mates only.
-To any other match it fails with `<who> is not in your chain.` and nothing is
-typed. The line carries the tag `[from <name> <pane>]`. A busy chain-mate
-hears it at its next step. One at rest gets it typed into its prompt, which
-wakes it. Each pair sends at most one message every 30 seconds, and a match
-sends at most 20 an hour. `[chains] send = "off"` turns these sends off.
+`matchblox send <who> "<text>"` from a match reaches a match it shares a
+chain with. To any other match it fails with `<who> is not in your chain.`
+and nothing is typed. The line carries the tag `[from <name> <pane>]`.
+
+A send works like an inbox: the mate's state never refuses it. A mate at
+rest with an empty prompt gets the line typed, and the sender hears `sent`.
+That holds while the mate waits for your answer in plain text too: the line
+wakes it. Any other mate keeps the line, and the sender hears why it waits:
+`queued for web-cart: it asks a question now. It gets the line at its next
+rest.` A question menu or a permission prompt holds the line, as text typed
+there would answer it; so do a park, a draft, copy mode and work in
+progress. None refuses it. At the mate's next rest with an empty prompt
+the line is typed, one a sample; a Claude Code mate that takes a step first
+hears it then. A line waits as long as the mate's pane lives. Once a line
+that waited lands, its sender hears, at its next step, `[matchblox]
+web-cart got your line (typed 14:02)` or `(heard 14:02)`. A line sent at
+once gets no second notice.
+
+A mate keeps at most 20 items. When a full inbox drops a line, its sender
+hears `[matchblox] 1 line to web-cart dropped: its inbox is full`. When the
+mate leaves the chain before it hears a line, the sender hears `web-cart
+did not get your line: you are no longer chained`. Each pair sends at most
+one message every 30 seconds, and a match sends at most 20 an hour.
+`[chains] send = "off"` turns these sends off.
 
 A send from a terminal, a tmux pane or the console goes as before. A send
 from a process with neither a pane nor a terminal (a cron job, a service, a
@@ -180,19 +223,19 @@ What each agent gets:
 
 - **Claude Code** hears the news at the start of a turn and after each tool
   call. A message typed at rest wakes it.
-- **Codex** runs no matchblox hook, so it hears no news, no notice and no
-  ask. It learns of an ask through `matchblox chain`. A message is typed
-  into its prompt at rest; one sent while it works is typed once it rests.
+- **Codex** runs no matchblox hook, so it hears no news and no notice. A
+  message is typed into its prompt at rest; one sent while it works is
+  typed once it rests.
   A line that does not show is tried 3 times, then dropped, and the sender
   hears `<who> could not take your line: it did not show after 3 tries`.
-- **OpenCode** can chain and shows on the fuse, but takes no send: a typed
-  line can send its draft. A send to it fails with `<who> runs OpenCode,
-  which matchblox cannot type into safely. It sees the chain in matchblox
-  chain.`
+- **OpenCode** can chain and shows on the fuse, but takes no typed line: a
+  typed line can send its draft. A send to it is kept: `kept for oc:
+  OpenCode takes no typed lines. It shows in matchblox peek oc.`
 - **Cursor** hears the news when its session starts and after each tool
   call. It hears nothing when a prompt is sent: that hook cannot add text to
   the turn. matchblox types nothing into it, so a message to it waits for its
-  next tool call.
+  next tool call: `queued for <who>: it takes no typed lines. It hears the
+  line at its next step.`
 
 ## Codex launch settings
 

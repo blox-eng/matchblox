@@ -540,7 +540,7 @@ matchblox stoker quit --chain api-auth
 - Every rule of [What the stoker agent cannot do](#what-the-stoker-agent-cannot-do)
   holds for a chain stoker too, and the guard watches its panes.
 
-### When a chain ends or joins
+### When a chain ends, or a match joins
 
 - A chain stoker ends with its chain. Its card says `its chain ended`, and
   it quits.
@@ -548,10 +548,9 @@ matchblox stoker quit --chain api-auth
   drive at once. A pane the host stoker drove stays guarded: the chain
   stoker drives it from the start, with its own gos. A go you gave for one
   pane with `y` stays with the host stoker.
-- When two chains join, one stoker stays. The other writes
-  `its chain joined <name>` on its card and quits. Its latest order goes
-  to the stoker that stays, with only the gos that both had. At night, that
-  order waits for the morning.
+- Chains never merge. A match in several chains is driven by the stoker
+  of the first of its chains whose run is on. Each other chain's stoker
+  refuses it with `<who> has the stoker of chain <name>`.
 
 ### See the family
 
