@@ -369,6 +369,14 @@ func TestWatchRefusedFromAnAgentPane(t *testing.T) {
 
 func TestWatchStopsWhenTheSessionLeaves(t *testing.T) {
 	s, f, ctx := watchTest(t, map[string]string{"%1": idleScreen})
+	// A still screen goes once more when the idle session's wait settles.
+	// Watch after that, so the screen after the first is the leave (#382).
+	for deadline := time.Now().Add(waitLimit); !s.waitShown("%1", time.Now()); {
+		if time.Now().After(deadline) {
+			t.Fatal("the wait never settled")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 	c := connectAs(t, ctx, s, proto.ClientConsole)
 	r := read(c)
 	if res := r.act(t, "w", proto.WatchPrefix+"%1"); res.Err != "" {

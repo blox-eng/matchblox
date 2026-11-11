@@ -166,6 +166,7 @@ func startWalk(t *testing.T, cols, rows int) *walker {
 		t.Fatal(err)
 	}
 	t.Cleanup(d.Stop)
+	term.d = d
 	w := &walker{t: t, d: d, term: term, spy: spy, cols: cols, rows: rows, ended: make(chan struct{})}
 	go func() {
 		_ = d.Wait()
@@ -773,20 +774,6 @@ func (w *walker) flashes(what string, keys ...string) {
 	w.saysAfter(what, demo.Refusal, keys...)
 }
 
-// screen is the whole screen as the console draws it now, or what it drew
-// since the last whole frame when none comes.
-func (w *walker) screen() string {
-	n, frame := w.term.wholeFrame()
-	w.d.Repaint()
-	for range 200 {
-		if m, f := w.term.wholeFrame(); m > n {
-			return f
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	return frame
-}
-
 // clear takes the line off the screen and waits for a whole frame to show it
 // gone: the console draws only what changed, so the next refusal draws again.
 // A wait of a set time let a slow frame keep the line, and the next refusal
@@ -835,7 +822,7 @@ func (w *walker) opens(what, want, key string) {
 			}
 		}
 		if time.Now().After(deadline) {
-			w.t.Fatalf("%s: %q never drew %q; the screen:\n%s", what, key, want, w.screen())
+			w.t.Fatalf("%s: %q never drew %q; the screen:\n%s", what, key, want, w.term.screen())
 		}
 		w.clear()
 	}
@@ -849,7 +836,7 @@ func (w *walker) saysAfter(what, want string, keys ...string) {
 	deadline := time.Now().Add(30 * time.Second)
 	for !strings.Contains(w.term.text()[from:], want) {
 		if time.Now().After(deadline) {
-			w.t.Fatalf("%s: never drew %q after %q; the screen:\n%s", what, want, w.steps[max(len(w.steps)-12, 0):], w.screen())
+			w.t.Fatalf("%s: never drew %q after %q; the screen:\n%s", what, want, w.steps[max(len(w.steps)-12, 0):], w.term.screen())
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
@@ -932,7 +919,7 @@ func TestSessionsCanBeStartedAndKilled(t *testing.T) {
 	// The search finds the session only once the console's list holds it: on
 	// a slow machine its sample comes after the word that it started.
 	eventually(t, 30*time.Second, "the list to show fresh-one", func() bool {
-		return slices.ContainsFunc(strings.Split(w.screen(), "\n"), func(l string) bool {
+		return slices.ContainsFunc(strings.Split(w.term.screen(), "\n"), func(l string) bool {
 			return strings.Contains(l, "fresh-one") && !strings.Contains(l, "started fresh-one")
 		})
 	})

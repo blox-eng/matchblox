@@ -238,7 +238,14 @@ func TestASubagentsToolCallTakesNoNews(t *testing.T) {
 // TestHookStaysInBudgetWithTheServiceStuck: a service that takes the
 // event and never answers the news holds the agent no longer than one
 // that is down.
+//
+// The budget is ten times the real one, as in the slow hello's test: a
+// loaded macOS runner took 133 ms against a fixed 50 ms (#382). The bound
+// keeps its ratio, 5/3 of the budget.
 func TestHookStaysInBudgetWithTheServiceStuck(t *testing.T) {
+	old := hookTimeout
+	hookTimeout = 300 * time.Millisecond
+	t.Cleanup(func() { hookTimeout = old })
 	stuck := make(chan struct{})
 	t.Cleanup(func() { close(stuck) })
 	sock := newsService(t, func(net.Conn, proto.Envelope) { <-stuck })
@@ -250,7 +257,7 @@ func TestHookStaysInBudgetWithTheServiceStuck(t *testing.T) {
 		if err := hook([]string{name}, strings.NewReader(hookEvent(name)), &out, sock, spool, false); err != nil {
 			t.Fatal(err)
 		}
-		if d := time.Since(start); d > 50*time.Millisecond {
+		if d := time.Since(start); d > hookTimeout*5/3 {
 			t.Fatalf("%s took %v", name, d)
 		}
 		if out.Len() != 0 {

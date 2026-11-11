@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -28,6 +29,7 @@ const tree = "../../testdata/demo"
 type terminal struct {
 	in  *io.PipeWriter
 	out *io.PipeReader
+	d   *demo.Demo // to ask for a whole frame; nil until the demo starts
 
 	mu     sync.Mutex
 	drawn  bytes.Buffer
@@ -97,6 +99,7 @@ func tryStartTree(t *testing.T, tree string, cols, rows int) (*demo.Demo, *termi
 		return nil, term, err
 	}
 	t.Cleanup(d.Stop)
+	term.d = d
 	return d, term, nil
 }
 
@@ -144,14 +147,20 @@ func (term *terminal) wholeFrame() (int, string) {
 	return strings.Count(raw, clear), ansi.Strip(raw[i:])
 }
 
+// waitFor waits until the console drew every want, in what it wrote or in a
+// whole frame. The console writes only the cells that change, so a count it
+// drew while it waited for the service turns from "SESSIONS 0" to "SESSIONS 7"
+// by one cell, and what it wrote never holds "SESSIONS 7" whole (#321).
 func (term *terminal) waitFor(t *testing.T, want ...string) {
 	t.Helper()
 	deadline := time.Now().Add(30 * time.Second)
+	repaint := time.Now().Add(time.Second)
 	for {
 		text := term.text()
+		_, frame := term.wholeFrame()
 		missing := ""
 		for _, w := range want {
-			if !strings.Contains(text, w) {
+			if !strings.Contains(text, w) && !strings.Contains(frame, w) {
 				missing = w
 				break
 			}
@@ -165,8 +174,26 @@ func (term *terminal) waitFor(t *testing.T, want ...string) {
 			term.mu.Unlock()
 			t.Fatalf("the console never drew %q; it drew:\n%s\nthe states it had:\n%s", missing, text, states)
 		}
+		if term.d != nil && time.Now().After(repaint) {
+			term.d.Repaint()
+			repaint = time.Now().Add(time.Second)
+		}
 		time.Sleep(10 * time.Millisecond)
 	}
+}
+
+// screen is the whole screen as the console draws it now, or what it drew
+// since the last whole frame when none comes.
+func (term *terminal) screen() string {
+	n, frame := term.wholeFrame()
+	term.d.Repaint()
+	for range 200 {
+		if m, f := term.wholeFrame(); m > n {
+			return f
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	return frame
 }
 
 func tempCopies(t *testing.T) []string {
@@ -181,6 +208,40 @@ func tempCopies(t *testing.T) []string {
 func TestTheConsoleDrawsTheMachine(t *testing.T) {
 	t.Setenv("TMPDIR", t.TempDir())
 	_, term := start(t)
+	term.waitFor(t, "SESSIONS 7", "hearth-api")
+}
+
+// late holds back the console's first state until the start mark has played,
+// as a slow machine does: the console then draws "SESSIONS 0" while it waits.
+type late struct {
+	transport.Conn
+	held *atomic.Bool
+}
+
+func (l late) Recv() (proto.Envelope, error) {
+	env, err := l.Conn.Recv()
+	if err == nil && env.Kind == proto.KindSnapshot && !l.held.Swap(true) {
+		time.Sleep(time.Second)
+	}
+	return env, err
+}
+
+func TestAStateAfterTheStartMarkStillDrawsTheCount(t *testing.T) {
+	t.Setenv("TMPDIR", t.TempDir())
+	inR, inW := io.Pipe()
+	outR, outW := io.Pipe()
+	term := &terminal{in: inW, out: outR, ended: make(chan struct{})}
+	go term.read()
+	t.Cleanup(term.close)
+	var held atomic.Bool
+	d, err := demo.Start(demo.WithConsole(demo.Options{Tree: tree, In: inR, Out: outW, Cols: 44, Rows: 31}, func(a *app.Options) {
+		a.Conn = late{Conn: a.Conn, held: &held}
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(d.Stop)
+	term.d = d
 	term.waitFor(t, "SESSIONS 7", "hearth-api")
 }
 
@@ -250,6 +311,7 @@ func TestAStartAfterAStopIsFresh(t *testing.T) {
 	t.Setenv("TMPDIR", t.TempDir())
 	d, first := start(t)
 	first.waitFor(t, "SESSIONS 7", "start a new session")
+	firstSeen := first.screen()
 
 	if _, _, err := tryStart(t); !errors.Is(err, demo.ErrRunning) {
 		t.Errorf("a second Start with no Stop: want ErrRunning, got %v", err)
@@ -265,13 +327,14 @@ func TestAStartAfterAStopIsFresh(t *testing.T) {
 
 	_, second := start(t)
 	second.waitFor(t, "SESSIONS 7", "start a new session")
-	if a, b := firstScreen(first.text()), firstScreen(second.text()); a != b {
+	if a, b := firstScreen(firstSeen), firstScreen(second.screen()); a != b {
 		t.Errorf("the first screens differ:\n--- first\n%s\n--- after the restart\n%s", a, b)
 	}
 }
 
-// firstScreen is the sessions list as first drawn: the logo before it and the
-// spark of a working session turn with the clock, and differ from run to run.
+// firstScreen is the sessions list in a whole frame: the logo before it and
+// the spark of a working session turn with the clock, and differ from run to
+// run.
 func firstScreen(text string) string {
 	_, list, _ := strings.Cut(text, "SESSIONS 7")
 	list, _, _ = strings.Cut(list, "start a new session")
