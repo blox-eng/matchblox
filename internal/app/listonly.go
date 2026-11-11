@@ -16,10 +16,10 @@ type viewPrefs struct {
 
 	// The board's views, for each shape: the columns hidden (boardCol.short),
 	// one line a card, and the strip's face (usage, machine, week or off;
-	// empty reads as usage).
+	// empty reads as usage). A phone's density is nil until its first v.
 	HiddenPhone  []string `json:"hidden_phone"`
 	HiddenDesk   []string `json:"hidden_desk"`
-	OneLinePhone bool     `json:"one_line_phone"`
+	OneLinePhone *bool    `json:"one_line_phone,omitempty"`
 	OneLineDesk  bool     `json:"one_line_desk"`
 	StripPhone   string   `json:"strip_phone"`
 	StripDesk    string   `json:"strip_desk"`
@@ -104,17 +104,27 @@ func (m *Model) flipHidden(c boardCol) {
 	m.keepViewPrefs()
 }
 
-// oneLine: a card takes one line.
+// oneLine: every card takes one line, by the person's choice.
 func (m Model) oneLine() bool {
 	if m.upright() {
-		return m.viewPrefs.OneLinePhone
+		return m.viewPrefs.OneLinePhone != nil && *m.viewPrefs.OneLinePhone
 	}
 	return m.viewPrefs.OneLineDesk
 }
 
+// oneLineIn: a card of column c takes one line. A phone with no choice yet
+// keeps NEEDS YOU verbose and every other page one line.
+func (m Model) oneLineIn(c boardCol) bool {
+	if m.upright() && m.viewPrefs.OneLinePhone == nil {
+		return c != colNeed
+	}
+	return m.oneLine()
+}
+
 func (m *Model) flipOneLine() {
 	if m.upright() {
-		m.viewPrefs.OneLinePhone = !m.viewPrefs.OneLinePhone
+		one := !m.oneLine()
+		m.viewPrefs.OneLinePhone = &one
 	} else {
 		m.viewPrefs.OneLineDesk = !m.viewPrefs.OneLineDesk
 	}

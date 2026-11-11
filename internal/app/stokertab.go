@@ -283,6 +283,11 @@ func (m Model) grantStep() (tea.Model, tea.Cmd) {
 		m.flash = m.keys.main.Grant.Help().Key + " gives the go a step waits for"
 		return m, nil
 	}
+	return m.grant(r)
+}
+
+// grant gives the go that step r waits for.
+func (m Model) grant(r stokerRow) (tea.Model, tea.Cmd) {
 	if m.conn == nil || m.lost {
 		m.flash = "not sent, no connection"
 		return m, nil

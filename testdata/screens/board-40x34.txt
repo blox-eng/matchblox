@@ -31,4 +31,4 @@
  + start a new session
  RECOMMENDATIONS · 7
 ────────────────────────────────────────
- ⏎ go in  x kill  r rename  N new
+ c copy   v one line   s hosts   u strip

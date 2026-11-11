@@ -85,6 +85,8 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 			return m.keyed(keyPress(s.press))
 		}
 		return m, nil
+	case m.boardShown() && ms.Y >= sc.bodyTop && ms.Y < sc.keysAt-1:
+		return m.boardTap(ms.X, ms.Y-sc.bodyTop)
 	case sc.dockAt >= 0 && ms.Y >= sc.dockAt && ms.Y < sc.dockAt+sc.dockH:
 		if x0, x1 := m.dockToggle(w); ms.Y == sc.dockAt && m.phoneDock(w) && ms.X >= x0 && ms.X < x1 {
 			m.cycleDock()

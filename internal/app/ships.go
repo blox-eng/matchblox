@@ -503,7 +503,15 @@ func (m Model) shipTarget() (host, pane string) {
 // merge, behind a typed y.
 func (m Model) mergeShip() *action {
 	sh, ok := m.selectedShip()
-	if !ok || len(sh.Merge) == 0 {
+	if !ok {
+		return nil
+	}
+	return m.mergeAction(sh)
+}
+
+// mergeAction is the merge of sh, behind a typed y; nil when sh has none.
+func (m Model) mergeAction(sh proto.Ship) *action {
+	if len(sh.Merge) == 0 {
 		return nil
 	}
 	return &action{label: "merge", steps: [][]string{sh.Merge}, destructive: true,

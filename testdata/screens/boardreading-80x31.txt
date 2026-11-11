@@ -28,4 +28,4 @@
  QUIET   ▴                                                                   −
  + start a new session
 ────────────────────────────────────────────────────────────────────────────────
- ⏎ new session  p ships  f stoker  list only v           sampled 106751d23h ago
+ c copy   v one line   s hosts   u strip   ←→ columns   tab next

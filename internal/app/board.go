@@ -61,6 +61,9 @@ type boardDrawn struct {
 	heads  []span
 	cards  map[boardSpot]paneKey
 	taps   map[int][]span
+	// viewCols, viewRows: the room of the agent's screen in the live view
+	// at the right; 0, 0 for none.
+	viewCols, viewRows int
 }
 
 // boardSpot is a line of one column.
@@ -92,18 +95,7 @@ func (m Model) boardShown() bool { return m.board && m.tab == tabSessions }
 // each folded to one line.
 func (m Model) boardPanel(w, h int) boardDrawn {
 	d := boardDrawn{headAt: -1, cards: map[boardSpot]paneKey{}, taps: map[int][]span{}}
-	b := boardDraw{idx: m.boardIndex()}
-	if m.filter != "" {
-		found := map[paneKey]bool{}
-		for _, s := range m.snap.Sessions {
-			found[paneOf(s)] = true
-		}
-		for c := range b.idx {
-			b.idx[c] = slices.DeleteFunc(b.idx[c], func(s sample.Session) bool { return !found[paneOf(s)] })
-		}
-	}
-	shown := slices.DeleteFunc(slices.Clone(boardCols[:]), m.colHidden)
-	m.boardChoose(&b, shown)
+	b, shown := m.boardDrawOf()
 
 	st := m.st
 	if len(m.doors) > 0 {
@@ -117,7 +109,8 @@ func (m Model) boardPanel(w, h int) boardDrawn {
 	if len(m.recs) > 0 {
 		under = append(under, st.label.Render(fit(fmt.Sprintf(" RECOMMENDATIONS · %d", len(m.recs)), w)))
 	}
-	rows := max(h-len(d.lines)-len(under), 0)
+	note := m.noticeLines(w)
+	rows := max(h-len(d.lines)-len(under)-len(note), 0)
 	top := len(d.lines)
 	switch l := m.layoutAt(w); {
 	case none:
@@ -137,7 +130,27 @@ func (m Model) boardPanel(w, h int) boardDrawn {
 	}
 	d.lines, d.rows = d.lines[:top+rows], d.rows[:top+rows]
 	d.add(-1, under...)
+	d.add(-1, note...)
 	return d
+}
+
+// boardDrawOf is what a draw of the board works out first: every match in
+// its column, narrowed by the search, the columns shown, and the open
+// column with its chosen card.
+func (m Model) boardDrawOf() (boardDraw, []boardCol) {
+	b := boardDraw{idx: m.boardIndex()}
+	if m.filter != "" {
+		found := map[paneKey]bool{}
+		for _, s := range m.snap.Sessions {
+			found[paneOf(s)] = true
+		}
+		for c := range b.idx {
+			b.idx[c] = slices.DeleteFunc(b.idx[c], func(s sample.Session) bool { return !found[paneOf(s)] })
+		}
+	}
+	shown := slices.DeleteFunc(slices.Clone(boardCols[:]), m.colHidden)
+	m.boardChoose(&b, shown)
+	return b, shown
 }
 
 // boardChoose finds the open column and its chosen card: the one the
@@ -268,6 +281,7 @@ func (m Model) boardColumns(d *boardDrawn, b *boardDraw, l Layout, shown []board
 			v := m
 			v.chose, v.selPID, v.selHost = true, b.chosen.PID, b.chosen.Host
 			view = v.viewPane(b.chosen, live, colH+1)
+			d.viewCols, d.viewRows = live-1, colH-len(v.viewStrip(b.chosen, live, colH))
 		}
 		for i := d.headAt; i < first+colH; i++ {
 			right := ""
@@ -436,7 +450,7 @@ func (m Model) boardStack(d *boardDrawn, b *boardDraw, c boardCol, y, x, w, h in
 func (m Model) boardBlockOf(b *boardDraw, c boardCol, s sample.Session, w int, quietRow bool) boardBlock {
 	o := cardOpts{
 		sel:       b.picked && c == b.open && paneOf(s) == paneOf(b.chosen),
-		oneLine:   m.oneLine(),
+		oneLine:   m.oneLineIn(c),
 		need:      c == colNeed,
 		quietRow:  quietRow,
 		otherHost: m.hostCount() > 1 && s.Host != m.opt.Host,

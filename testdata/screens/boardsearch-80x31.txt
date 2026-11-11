@@ -28,4 +28,4 @@
  QUIET · 0   ▴                                                               −
  + start a new session
 ────────────────────────────────────────────────────────────────────────────────
- / log · esc clears  ⏎ new session  p ships  f stoker            sampled 0s ago
+ c copy   v one line   s hosts   u strip   ←→ columns   tab next

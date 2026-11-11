@@ -123,8 +123,10 @@ func boardFixture(t testing.TB) proto.State {
 		sh.Host = s.Host
 		return sh
 	}
+	waits := ship(kindle, 4556, shipWaits, "green · waits for your merge", 2, 9*time.Minute)
+	waits.Merge = []string{"gh", "pr", "merge", "4556", "--squash", "-R", waits.Repo}
 	st.Ships = &proto.Ships{At: demoAt, Ships: []proto.Ship{
-		ship(kindle, 4556, shipWaits, "green · waits for your merge", 2, 9*time.Minute),
+		waits,
 		ship(search, 4548, shipStuck, "CI failed · lint, twice", 1, 31*time.Minute),
 		ship(limits, 4551, shipRunning, "CI · 6 of 9 jobs", 1, 4*time.Minute),
 		ship(api, 4560, shipRunning, "waits for review", 1, 40*time.Minute),
@@ -206,7 +208,10 @@ func chooseCard(name string) func(*Model) {
 	}
 }
 
-func oneLineBoard(m *Model) { m.viewPrefs.OneLinePhone, m.viewPrefs.OneLineDesk = true, true }
+func oneLineBoard(m *Model) {
+	yes := true
+	m.viewPrefs.OneLinePhone, m.viewPrefs.OneLineDesk = &yes, true
+}
 
 func frameLines(m Model) []string { return strings.Split(m.render(), "\n") }
 
@@ -471,6 +476,16 @@ func TestTheLiveViewFollowsTheChosenCard(t *testing.T) {
 	s := m.boardIndex()[colNeed][3]
 	if r := side(d); !strings.Contains(r, m.viewTitle(s)) || !strings.Contains(r, "the pane of flint-auth") {
 		t.Errorf("the live view does not show flint-auth:\n%s", r)
+	}
+
+	// The screen comes from the service's watch, which follows the chosen
+	// card and not the selection of Sessions.
+	m = boardShot(t, st, 160, 38, chooseCard("flint-auth"))
+	next, _ := m.Update(sizeDueMsg{})
+	next, _ = next.Update(screenMsg{Pane: paneNamed(st, "flint-auth"), At: demoAt, Text: "the pane of flint-auth\n"})
+	m = next.(Model)
+	if r := side(m.boardPanel(160, m.bodyRows())); m.watching != paneNamed(st, "flint-auth") || !strings.Contains(r, "the pane of flint-auth") {
+		t.Errorf("the live view watches %q, not flint-auth:\n%s", m.watching, r)
 	}
 
 	m = boardShot(t, st, 160, 38, screen("hearth-api")) // ↓ from flint-auth

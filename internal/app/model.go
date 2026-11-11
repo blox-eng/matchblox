@@ -474,6 +474,13 @@ type Model struct {
 	board     bool
 	boardAt   boardCol
 	boardPick map[boardCol]paneKey
+	// peekAt is when the choice last moved to another match, and peekAsk
+	// the question (Ask.ID) its card drew then.
+	peekAt  time.Time
+	peekAsk string
+	// noticeText shows in the board's notice row until noticeUntil.
+	noticeText  string
+	noticeUntil time.Time
 }
 
 func New(opt Options) Model {
@@ -1234,7 +1241,10 @@ func (m Model) press(f layerID, k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case layerPending:
 		next, cmd = m.pendingKey(k)
 	case layerMain:
-		next, cmd = m.key(k)
+		var took bool
+		if next, cmd, took = m.boardKey(k); !took {
+			next, cmd = m.key(k)
+		}
 	}
 	if f.underOverlays() {
 		return stokerSeen(next, cmd)
@@ -1281,7 +1291,7 @@ func (m Model) pendingKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	// A destructive action needs a typed y; Enter alone is not consent.
 	if yes || (bkey.Matches(k, m.keys.confirm.Enter) && !a.destructive) {
-		return m.confirm(a)
+		return m.boardActed().confirm(a)
 	}
 	m.flash = "cancelled: " + a.String()
 	return m, nil

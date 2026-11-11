@@ -28,4 +28,4 @@
 
  RECOMMENDATIONS · 7
 ────────────────────────────────────────────────────────────────────────────────
- ⏎ new session  p ships  f stoker  list only v                   sampled 0s ago
+ ⏎ new session   c copy   v one line   s hosts   u strip   ←→ columns   tab next

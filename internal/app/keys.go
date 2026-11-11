@@ -41,6 +41,7 @@ type keymaps struct {
 	confirm  confirmKeys
 	scan     scanKeys
 	ask      askKeys
+	board    boardKeys
 }
 
 type shellKeymaps struct {
@@ -60,6 +61,7 @@ var shadowsMain = map[string]map[string]bool{
 	"confirm":  {"y": true, "enter": true, "up": true, "k": true, "down": true, "j": true},
 	"scan":     {"y": true, "n": true, "p": true, "esc": true},
 	"ask":      {"esc": true, "enter": true, "c": true},
+	"board":    {"right": true, "c": true, "v": true, "s": true, "g": true, "u": true, "p": true},
 }
 
 func defaultKeys() keymaps {
@@ -157,6 +159,19 @@ func defaultKeys() keymaps {
 			Cancel: bind(ks("esc"), "esc", "cancel the ssh"),
 			Erase:  bind(ks("backspace"), "⌫", "erase"),
 			Copy:   bind(ks("c"), "c", "copy the link"),
+		},
+		board: boardKeys{
+			Left:      bind(ks("left"), "←→", "columns"),
+			Right:     bind(ks("right"), "←→", "columns"),
+			Copy:      bind(ks("c"), "c", "copy"),
+			Density:   bind(ks("v"), "v", "one line"),
+			Chain:     bind(ks("g"), "g", "chain"),
+			Host:      bind(ks("s"), "s", "hosts"),
+			Strip:     bind(ks("u"), "u", "strip"),
+			NextChain: bind(ks("]"), "]", "next chain"),
+			PrevChain: bind(ks("["), "[", "previous chain"),
+			Menu:      bind(ks("m"), "m", "menu"),
+			Merge:     bind(ks("p"), "p", "merge"),
 		},
 	}
 }
@@ -268,6 +283,16 @@ func (k scanKeys) bindings() []bkey.Binding { return []bkey.Binding{k.Find, k.Ne
 type askKeys struct{ Send, Cancel, Erase, Copy bkey.Binding }
 
 func (k askKeys) bindings() []bkey.Binding { return []bkey.Binding{k.Send, k.Cancel, k.Erase, k.Copy} }
+
+// boardKeys are the board's own keys, over mainKeys while the board shows:
+// ↑ ↓ ⏎ x y esc and the rest keep their mainKeys bindings.
+type boardKeys struct {
+	Left, Right, Copy, Density, Chain, Host, Strip, NextChain, PrevChain, Menu, Merge bkey.Binding
+}
+
+func (k boardKeys) bindings() []bkey.Binding {
+	return []bkey.Binding{k.Left, k.Right, k.Copy, k.Density, k.Chain, k.Host, k.Strip, k.NextChain, k.PrevChain, k.Menu, k.Merge}
+}
 
 // shellKeys are the Hosts list.
 type shellKeys struct {

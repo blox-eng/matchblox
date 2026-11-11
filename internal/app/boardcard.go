@@ -9,6 +9,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/said"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
@@ -231,28 +232,7 @@ func (m Model) cardKeys(s sample.Session, w int, o cardOpts, options int, answer
 	if answers && o.sent > 0 {
 		return pad("  "+m.st.muted.Render(fmt.Sprintf("sent %d · waits for %s", o.sent, s.Name)), w), nil
 	}
-	mk := m.keys.main
-	goIn := hintFor(mk.Open, "go in")
-	var hs []hint
-	gap := 3
-	switch {
-	case answers && o.sel && o.armed > 0:
-		n := strconv.Itoa(o.armed)
-		hs, gap = []hint{{n, "again sends ·", n}, hintFor(mk.Back, "clears")}, 1
-	case answers && o.sel:
-		hs = []hint{{"1-" + strconv.Itoa(options), "mark an answer", ""}, goIn}
-	case answers:
-		hs = []hint{hintFor(mk.Open, "answer")}
-	default:
-		if sh, ok := m.shipOf(s, shipWaits); ok {
-			hs = append(hs, hintFor(mk.Ships, "merge #"+strconv.Itoa(sh.Number)))
-		}
-		if m.goWaits(s) {
-			hs = append(hs, hintFor(mk.Grant, ""))
-		}
-		hs = append(hs, goIn)
-	}
-	hs = slices.DeleteFunc(hs, func(h hint) bool { return h == (hint{}) })
+	hs, gap := m.cardHints(s, o, options, answers)
 	ink := m.st.muted
 	if o.sel {
 		ink = m.st.accent
@@ -270,6 +250,41 @@ func (m Model) cardKeys(s sample.Session, w int, o cardOpts, options int, answer
 		line, x = line+part, x+lipgloss.Width(part)
 	}
 	return pad(line, w), spans
+}
+
+// cardHints are the keys of a card, and the gap between two of them.
+func (m Model) cardHints(s sample.Session, o cardOpts, options int, answers bool) ([]hint, int) {
+	mk := m.keys.main
+	goIn := hintFor(mk.Open, "go in")
+	var hs []hint
+	gap := 3
+	switch {
+	case answers && o.sel && o.armed > 0:
+		n := strconv.Itoa(o.armed)
+		hs, gap = []hint{{n, "again sends ·", n}, hintFor(mk.Back, "clears")}, 1
+	case answers && o.sel:
+		hs = []hint{{"1-" + strconv.Itoa(options), "mark an answer", ""}, goIn}
+	case answers:
+		hs = []hint{hintFor(mk.Open, "answer")}
+	default:
+		if sh, ok := m.mergeable(s); ok {
+			hs = append(hs, hintFor(m.keys.board.Merge, "merge #"+strconv.Itoa(sh.Number)))
+		}
+		if m.goWaits(s) {
+			hs = append(hs, hintFor(mk.Grant, ""))
+		}
+		hs = append(hs, goIn)
+	}
+	return slices.DeleteFunc(hs, func(h hint) bool { return h == (hint{}) }), gap
+}
+
+// mergeable is the ship of s that p merges: its leading ship, when it waits
+// for the merge and the service gave its merge.
+func (m Model) mergeable(s sample.Session) (proto.Ship, bool) {
+	if ss := m.shipsOf(s); len(ss) > 0 && ss[0].Kind == shipWaits && len(ss[0].Merge) > 0 {
+		return ss[0], true
+	}
+	return proto.Ship{}, false
 }
 
 // oneChoice is the question the digits answer: one question with one

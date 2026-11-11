@@ -322,7 +322,7 @@ func TestAnOldViewFileStillLoads(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := loadViewPrefs(dir)
-	if p.ListOnlyPhone || p.OneLinePhone || p.StripPhone != "" || len(p.HiddenPhone) != 0 || len(p.Told) != 0 {
+	if p.ListOnlyPhone || p.OneLinePhone != nil || p.StripPhone != "" || len(p.HiddenPhone) != 0 || len(p.Told) != 0 {
 		t.Fatalf("old file: %+v", p)
 	}
 }

@@ -129,6 +129,10 @@ func (m Model) viewSize() (cols, rows int) {
 		return 0, 0
 	}
 	w := max(m.width, minWidth)
+	if m.boardShown() {
+		d := m.boardPanel(w, m.bodyRows())
+		return d.viewCols, d.viewRows
+	}
 	_, detailW := m.panes(w)
 	place, full := m.viewPlacement(w)
 	switch {
@@ -155,7 +159,12 @@ func (m Model) viewSize() (cols, rows int) {
 func (m *Model) watchCmd() tea.Cmd {
 	want := ""
 	if m.conn != nil && !m.lost && !m.mismatch && !m.away {
-		if s, ok := m.selected(); ok && s.Host == m.opt.Host { // another host's pane id names another pane here
+		s, ok := m.selected()
+		if m.boardShown() { // the board watches its chosen card, and only beside the live view
+			s, ok = m.boardSelected()
+			ok = ok && m.boardLive()
+		}
+		if ok && s.Host == m.opt.Host { // another host's pane id names another pane here
 			want = s.Pane
 		}
 	}

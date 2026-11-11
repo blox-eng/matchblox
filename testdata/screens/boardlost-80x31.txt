@@ -28,4 +28,4 @@
  + start a new session
  RECOMMENDATIONS · 7
 ────────────────────────────────────────────────────────────────────────────────
- ⏎ go in  x kill  r rename  z park  N new  p ships  f stoker     sampled 0s ago
+ ⏎ go in   c copy   v one line   s hosts   u strip   ←→ columns   tab next
