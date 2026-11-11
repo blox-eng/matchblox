@@ -496,12 +496,14 @@ type Model struct {
 	copyCode          string
 	clipOK, clipKnown bool
 	dragFrom, dragTo  *point
-	// dragLines is the frame the drag copies from. tapLater is a press
-	// whose tap waits for its release. boardDoor is the door the board's
-	// doors line names.
-	dragLines []string
-	tapLater  *point
-	boardDoor int
+	// dragLines is the frame at the press, which the drag copies from, and
+	// dragWithin the cells of a row it may cover: its column's. tapLater
+	// is a press whose tap waits for its release. boardDoor is the door
+	// the board's doors line names.
+	dragLines  []string
+	dragWithin [2]int
+	tapLater   *point
+	boardDoor  int
 	// boardDoorsOf names the doors boardDoor counts in. boardMine is the
 	// card the person chose, by a key or a tap: a tap on it again goes in.
 	boardDoorsOf string

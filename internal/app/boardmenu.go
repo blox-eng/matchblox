@@ -255,6 +255,17 @@ func (m Model) boardRightClick(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	return m.openMenu(s, ms.X, ms.Y), nil
 }
 
+// boardCardOf is the card of pane k on the board, and its column.
+func (m Model) boardCardOf(k paneKey) (boardCol, sample.Session, bool) {
+	b, _ := m.boardDrawOf()
+	for _, c := range boardCols {
+		if i := slices.IndexFunc(b.idx[c], func(s sample.Session) bool { return paneOf(s) == k }); i >= 0 {
+			return c, b.idx[c][i], true
+		}
+	}
+	return 0, sample.Session{}, false
+}
+
 // cardAtCell is the card at the frame's cell x, y, and its column.
 func (m Model) cardAtCell(x, y int) (boardCol, sample.Session, bool) {
 	w := max(m.width, minWidth)
@@ -302,10 +313,12 @@ func (m Model) pointer(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		return m.dragOn(point{ms.X, ms.Y}), nil
 	case longPressMsg:
-		s, ok := m.boardSelected()
-		if !m.longPress.on || msg.id != m.longPress.id || !ok || paneOf(s) != m.longPress.pane || !m.peekReach() {
+		c, s, ok := m.boardCardOf(m.longPress.pane)
+		if !m.longPress.on || msg.id != m.longPress.id || !ok || !m.peekReach() {
 			return m, nil
 		}
+		m.boardChooseCard(c, s) // a press that waits for its release has not chosen it yet
+		m.boardMine = paneOf(s)
 		return m.openMenu(s, m.longPress.x, m.longPress.y), nil
 	}
 	return m, nil

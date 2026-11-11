@@ -72,6 +72,9 @@ type boardDrawn struct {
 	strip   span
 	// doorsAt is the doors line (-1: none).
 	doorsAt int
+	// colsTo is the line under the columns side by side, and live the
+	// width of the live view at their right (0: none).
+	colsTo, live int
 }
 
 // boardSpot is a line of one column.
@@ -321,7 +324,7 @@ func (m Model) boardColumns(d *boardDrawn, b *boardDraw, l Layout, shown []board
 		}
 	}
 	widths, live := boardWidths(l, w, shown)
-	b.live = live
+	b.live, d.live = live, live
 	drawer := 0
 	if l == Medium && slices.Contains(shown, colQuiet) {
 		drawer = 2
@@ -341,6 +344,7 @@ func (m Model) boardColumns(d *boardDrawn, b *boardDraw, l Layout, shown []board
 	d.headAt = len(d.lines)
 	d.add(-1, strings.Join(heads, " "))
 	first := len(d.lines)
+	d.colsTo = first + colH
 	x = 0
 	for i, c := range drawn {
 		m.boardStack(d, b, c, first, x, widths[i], colH, l == Wide && c == colQuiet)

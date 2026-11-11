@@ -105,8 +105,8 @@ func TestALongPressOpensTheMenu(t *testing.T) {
 		m = mouse(t, m, tea.MouseReleaseMsg{X: 1, Y: 1, Button: tea.MouseLeft}) // the terminal reports releases
 		x, y := cardOn(t, m, "kindle-web")
 		m = pressAt(t, m, x, y)
-		if chosenName(t, m) != "kindle-web" || m.menu != nil {
-			t.Fatalf("a press on kindle-web chose %s, menu %v", chosenName(t, m), m.menu)
+		if m.tapLater == nil || m.menu != nil {
+			t.Fatalf("a press on kindle-web waits for no release: menu %v", m.menu)
 		}
 		return m, x, y
 	}

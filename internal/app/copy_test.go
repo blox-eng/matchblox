@@ -166,22 +166,65 @@ func letGo(t *testing.T, m Model, at point) Model {
 	return mouse(t, m, tea.MouseReleaseMsg{X: at.x, Y: at.y, Button: tea.MouseLeft})
 }
 
-// cellsOf is the plain text of frame from a to b, row by row: the first
-// row from a, the last to b, each right-trimmed.
-func cellsOf(frame string, a, b point) string {
+// cellsIn is cellsOf with each row cut to the cells x0 to x1 of a column.
+func cellsIn(frame string, a, b point, x0, x1 int) string {
 	lines := strings.Split(frame, "\n")
 	var out []string
 	for y := a.y; y <= b.y; y++ {
-		x0, x1 := 0, ansi.StringWidth(lines[y])
+		from, to := x0, x1
 		if y == a.y {
-			x0 = a.x
+			from = max(a.x, x0)
 		}
 		if y == b.y {
-			x1 = b.x + 1
+			to = min(b.x+1, x1)
 		}
-		out = append(out, strings.TrimRight(ansi.Cut(lines[y], x0, x1), " "))
+		out = append(out, strings.TrimRight(ansi.Cut(lines[y], from, max(from, to)), " "))
 	}
-	return strings.Join(out, "\n")
+	return strings.TrimRight(strings.Join(out, "\n"), "\n")
+}
+
+// columnOn is the cells of the board's column head over x.
+func columnOn(t *testing.T, m Model, x int) (x0, x1 int) {
+	t.Helper()
+	for _, h := range m.boardPanel(max(m.width, minWidth), m.bodyRows()).heads {
+		if x >= h.x0 && x < h.x1 {
+			return h.x0, h.x1
+		}
+	}
+	t.Fatalf("no column at %d", x)
+	return 0, 0
+}
+
+func TestADragCopiesOnlyWhatWasUnderThePointer(t *testing.T) {
+	// A press on a card that is not chosen, then a drag: the press never
+	// chooses the card first, and no row reaches into the next column.
+	for _, released := range []bool{true, false} {
+		m, clipped, _ := menuBoard(t, 80, 31, func(m *Model) { m.sawRelease = released })
+		before := plainFrame(m)
+		x, y := cardOn(t, m, "green #4556")
+		from, to := point{x, y}, point{x + 22, y + 1}
+		m = drag(t, m, from, point{x + 5, y}, to)
+		x0, x1 := columnOn(t, m, x)
+		want := cellsIn(before, from, to, x0, x1)
+		if !strings.HasPrefix(want, "green #4556 waits for your merge\n") {
+			t.Fatalf("the press is not where the test thinks: %q", want)
+		}
+		if during := plainFrame(m); cellsIn(during, from, to, x0, x1) != want {
+			t.Errorf("released %v: the frame moved under the drag:\n%s", released, during)
+		}
+		m = letGo(t, m, to)
+		if len(*clipped) != 1 || (*clipped)[0] != want {
+			t.Errorf("released %v: the drag copied %q, want %q", released, *clipped, want)
+		}
+		for _, other := range []string{"spark-docs", "hearth-li", "Running", "“Every"} {
+			if len(*clipped) == 1 && strings.Contains((*clipped)[0], other) {
+				t.Errorf("released %v: the drag copied %q of another column or card: %q", released, other, (*clipped)[0])
+			}
+		}
+		if released && chosenName(t, m) == "kindle-web" {
+			t.Errorf("a drag chose the card it started on")
+		}
+	}
 }
 
 func TestADragCopiesWhatItCovers(t *testing.T) {
@@ -193,12 +236,13 @@ func TestADragCopiesWhatItCovers(t *testing.T) {
 			from, to := point{x, y}, point{x + 20, y + rows}
 			m = drag(t, m, from, point{x + 5, y}, to)
 			frame := plainFrame(m)
-			want := cellsOf(frame, from, to)
+			x0, x1 := columnOn(t, m, x)
+			want := cellsIn(frame, from, to, x0, x1)
 			if want == "" || rows > 0 && strings.Count(want, "\n") != rows {
 				t.Fatalf("%s: the drag covers %q", name, want)
 			}
 			raw := strings.Split(m.render(), "\n")
-			end := ansi.StringWidth(strings.Split(frame, "\n")[from.y])
+			end := x1 // the rows of a drag stay in the column of its press
 			if rows == 0 {
 				end = to.x + 1
 			}
@@ -779,7 +823,7 @@ func TestALostReleaseRunsNoOldTap(t *testing.T) {
 	}
 	o, oy := cardOn(t, m, "hearth-api")
 	m = mouse(t, m, tea.MouseClickMsg{X: o, Y: oy, Button: tea.MouseLeft})
-	if m.tapLater != nil {
+	if m.tapLater != nil && *m.tapLater == (point{x, y}) {
 		t.Error("a new press keeps the old tap")
 	}
 	if m = letGo(t, m, point{x, y}); len(ran) != 0 {

@@ -2,6 +2,7 @@ package app
 
 import (
 	"math/rand/v2"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -215,24 +216,43 @@ func (m Model) copyRan() Model {
 }
 
 // dragStart keeps a left press as the start of a drag: on the board, on a
-// mid screen or a desk. A phone never selects: its menu copies.
+// mid screen or a desk. A phone never selects: its menu copies. The frame
+// as it is at the press, before any tap acts, is the text a drag copies,
+// and the column under the press bounds each row of it.
 func (m Model) dragStart(x, y int) Model {
-	m.dragFrom, m.dragTo, m.tapLater = nil, nil, nil // a release that never came leaves no tap
-	if m.boardShown() && m.menu == nil && m.layoutAt(max(m.width, minWidth)) != Narrow {
-		m.dragFrom = &point{x, y}
+	m.dragFrom, m.dragTo, m.dragLines, m.tapLater = nil, nil, nil, nil // a release that never came leaves no tap
+	w := max(m.width, minWidth)
+	if m.boardShown() && m.menu == nil && m.layoutAt(w) != Narrow {
+		sc := m.drawScreen(w)
+		m.dragFrom, m.dragLines, m.dragWithin = &point{x, y}, sc.lines, m.dragColumn(x, y-sc.bodyTop, w)
 	}
 	return m
 }
 
+// dragColumn is the cells of each row that a drag from x on line y of the
+// board's body may cover: those of the column or the live view under the
+// press, else the whole width.
+func (m Model) dragColumn(x, y, w int) [2]int {
+	d := m.boardPanel(w, m.bodyRows())
+	switch {
+	case d.headAt < 0 || y < d.headAt || y >= d.colsTo:
+		return [2]int{0, w}
+	case d.live > 0 && x >= w-d.live:
+		return [2]int{w - d.live, w}
+	}
+	for _, h := range d.heads {
+		if x >= h.x0 && x <= h.x1 { // the gap at a column's right is its own
+			return [2]int{h.x0, h.x1}
+		}
+	}
+	return [2]int{0, w}
+}
+
 // dragOn is a move with the button down: it starts the drag once it is
-// more than a cell from the press, and the drag follows it from then. The
-// frame as it is then is the text the drag copies.
+// more than a cell from the press, and the drag follows it from then.
 func (m Model) dragOn(at point) Model {
 	if m.dragFrom == nil || m.menu != nil {
 		return m
-	}
-	if m.dragTo == nil && farFrom(*m.dragFrom, at) {
-		m.dragLines = m.drawScreen(max(m.width, minWidth)).lines
 	}
 	if m.dragTo != nil || farFrom(*m.dragFrom, at) {
 		m.dragTo = &at
@@ -272,15 +292,19 @@ func characters(n int) string {
 }
 
 // tapWaits: the press at x, y of the board's body acts on its release,
-// so that a drag or a long press may start there: the card the person
-// chose goes in on every shape, and on a mid screen or a desk a column's
-// name hides the column. Only on a terminal that reports the release of
-// a left press; a key or an option on a card acts on the press.
+// so that a drag or a long press may start there: on a mid screen or a
+// desk any card and a column's name, so a drag never chooses or presses
+// anything; on a phone the card the person chose, which goes in. Only on
+// a terminal that reports the release of a left press; on a phone a key
+// or an option on a card acts on the press.
 func (m Model) tapWaits(x, y int) bool {
 	if !m.sawRelease || !m.boardShown() || m.menu != nil {
 		return false
 	}
 	_, s, ok := m.cardAtCell(x, y+m.drawScreen(max(m.width, minWidth)).bodyTop)
+	if ok && m.dragFrom != nil {
+		return true
+	}
 	if ok && m.chosenByHand(s) {
 		d := m.boardPanel(max(m.width, minWidth), m.bodyRows())
 		sp, onSpan := spanAt(d.taps[y], x)
@@ -325,21 +349,25 @@ func (m Model) dragSpan() (a, b point, ok bool) {
 	return a, b, true
 }
 
-// dragCols are the columns the drag covers on line y of a line w wide.
-func dragCols(a, b point, y, w int) (x0, x1 int) {
-	x0, x1 = 0, w
+// dragCols are the cells the drag covers on line y of a line w wide, in
+// the column within: the first row from the press, the last to the
+// pointer, the rows between whole.
+func dragCols(a, b point, y, w int, within [2]int) (x0, x1 int) {
+	x0, x1 = within[0], min(within[1], w)
+	if within[1] == 0 {
+		x0, x1 = 0, w
+	}
 	if y == a.y {
-		x0 = a.x
+		x0 = max(x0, a.x)
 	}
 	if y == b.y {
-		x1 = b.x + 1
+		x1 = min(x1, b.x+1)
 	}
-	return x0, min(x1, w)
+	return x0, max(x0, x1)
 }
 
 // selectedText is the plain text of the cells of sc the drag covers, row
-// by row as a terminal selects: the first row from the press, the last to
-// the pointer, each right-trimmed.
+// by row as a terminal selects in one column: each right-trimmed.
 func (m Model) selectedText(sc drawn) string {
 	a, b, ok := m.dragSpan()
 	if !ok {
@@ -348,22 +376,25 @@ func (m Model) selectedText(sc drawn) string {
 	var rows []string
 	for y := max(a.y, 0); y <= b.y && y < len(sc.lines); y++ {
 		plain := ansi.Strip(sc.lines[y])
-		x0, x1 := dragCols(a, b, y, ansi.StringWidth(plain))
+		x0, x1 := dragCols(a, b, y, ansi.StringWidth(plain), m.dragWithin)
 		rows = append(rows, strings.TrimRight(ansi.Cut(plain, x0, x1), " "))
 	}
 	return strings.TrimRight(strings.Join(rows, "\n"), "\n")
 }
 
-// overlayDrag draws the cells the drag covers on the wash while the
-// button is down.
+// overlayDrag draws, while the button is down, the frame of the press,
+// which the drag copies, with the cells it covers on the wash.
 func (m Model) overlayDrag(sc *drawn) {
 	a, b, ok := m.dragSpan()
 	if !ok {
 		return
 	}
+	if len(m.dragLines) == len(sc.lines) {
+		sc.lines = slices.Clone(m.dragLines)
+	}
 	for y := max(a.y, 0); y <= b.y && y < len(sc.lines); y++ {
 		l := sc.lines[y]
-		x0, x1 := dragCols(a, b, y, lipgloss.Width(l))
+		x0, x1 := dragCols(a, b, y, lipgloss.Width(l), m.dragWithin)
 		if x0 >= x1 {
 			continue
 		}
