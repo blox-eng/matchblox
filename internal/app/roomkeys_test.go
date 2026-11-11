@@ -404,3 +404,16 @@ func TestAStartThatFailsSaysWhyOnTheCard(t *testing.T) {
 	}
 	roomRowOf(t, m.roomRows(m.room.k), roomCard, "no agent on the PATH")
 }
+
+// TestTheLiveViewFollowsTheRoomCursor: on a desk the right side shows the
+// match under the cursor, whichever was selected before the room opened.
+func TestTheLiveViewFollowsTheRoomCursor(t *testing.T) {
+	st := headState(t, runningPlan(), true)
+	st.Queue = nil
+	m, _ := roomWith(t, st, "hearth-api")
+	m = at(t, m, roomMatch, "kindle-web")
+	m, _ = send(t, m, "down")
+	if s, ok := m.selected(); !ok || s.Name != "hearth-api" || !m.roomAtMatch(s.Pane) {
+		t.Fatalf("selected %+v, ok %v; the cursor is on %+v", s, ok, m.roomRows(m.room.k)[m.room.at])
+	}
+}

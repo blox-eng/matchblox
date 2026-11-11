@@ -130,8 +130,10 @@ func (m Model) roomKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.walkHere()
 	case bkey.Matches(k, rk.Up):
 		r.at = max(r.at-1, 0)
+		return m.followCursor()
 	case bkey.Matches(k, rk.Down):
 		r.at = min(r.at+1, len(rows)-1)
+		return m.followCursor()
 	case bkey.Matches(k, rk.Back):
 		m.room = nil
 	case bkey.Matches(k, rk.Next, rk.Prev):
@@ -174,6 +176,19 @@ func (m Model) roomKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			if row.id == "quiet" { // ⏎ asks the quiet stoker
 				r.typing = true
 			}
+		}
+	}
+	return m, nil
+}
+
+// followCursor selects the match under the room's cursor, so the desk's
+// live view and a tap on it go to that match.
+func (m Model) followCursor() (tea.Model, tea.Cmd) {
+	rows := m.roomRows(m.room.k)
+	if row := rows[m.room.at]; row.kind == roomMatch {
+		if s, ok := m.roomSession(row.id); ok {
+			m.ghostPick, m.chose, m.selPID, m.selHost = 0, true, s.PID, s.Host
+			return m, m.watchCmd()
 		}
 	}
 	return m, nil
