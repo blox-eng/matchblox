@@ -731,6 +731,11 @@ func TestTheCheckBlocksNoOtherDoor(t *testing.T) {
 		t.Errorf("← does not step back:\n%s", plainFrame(m))
 	}
 
+	// → during the check names another door: the check ends.
+	if m = pressOn(open(), "enter", "right"); m.copyCode != "" || strings.Contains(stripRow(m), "paste") || strings.Contains(keyLineOf(m), "cancel") {
+		t.Errorf("→ to another door keeps the check: code %q, row %q, keys %q", m.copyCode, stripRow(m), keyLineOf(m))
+	}
+
 	m = open()
 	for y, l := range strings.Split(plainFrame(m), "\n") {
 		if strings.Contains(l, "SET UP") {
@@ -958,5 +963,32 @@ func TestALostDragReleaseLeavesTheFrameLive(t *testing.T) {
 		if m.dragFrom != nil || m.dragTo != nil {
 			t.Errorf("%T keeps the drag", msg)
 		}
+	}
+}
+
+func TestAFirstPressThatOpensABoxStartsNoDrag(t *testing.T) {
+	m, clipped, _ := menuBoard(t, 80, 31, chooseCard("kindle-web")) // no release seen yet: the press acts at once
+	x, y := cardOn(t, m, "p merge")
+	m = pressAt(t, m, x, y)
+	if m.pending == nil {
+		t.Fatalf("the press on p merge opened no consent box:\n%s", plainFrame(m))
+	}
+	shown := plainFrame(m)
+	m = mouse(t, m, tea.MouseMotionMsg{X: x + 10, Y: y + 2, Button: tea.MouseLeft})
+	if m.dragTo != nil || plainFrame(m) != shown {
+		t.Errorf("a drag hides the consent box the press opened:\n%s", plainFrame(m))
+	}
+	if m = letGo(t, m, point{x + 10, y + 2}); len(*clipped) != 0 {
+		t.Errorf("the drag copied %q", *clipped)
+	}
+}
+
+func TestADragCopiesNoCutMark(t *testing.T) {
+	m, clipped, _ := menuBoard(t, 80, 31, func(m *Model) { m.sawRelease = true })
+	x, y := cardOn(t, m, "busy Writing the…")
+	to := point{x + 25, y + 1}
+	letGo(t, drag(t, m, point{x, y}, to), to)
+	if len(*clipped) != 1 || strings.Contains((*clipped)[0], "…") || !strings.HasPrefix((*clipped)[0], "busy Writing the\n") {
+		t.Errorf("the drag copied %q, want the text without the … of the cut", *clipped)
 	}
 }

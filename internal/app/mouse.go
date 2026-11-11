@@ -116,6 +116,10 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 			return m.holdPress(m, nil, ms)
 		}
 		next, cmd := m.boardTap(ms.X, ms.Y-sc.bodyTop)
+		if nm, ok := next.(Model); ok && (nm.pending != nil || nm.menu != nil || !nm.peekReach()) {
+			nm.dragFrom, nm.dragLines = nil, nil // the press opened a box: no drag hides it
+			next = nm
+		}
 		return m.holdPress(next, cmd, ms)
 	case sc.dockAt >= 0 && ms.Y >= sc.dockAt && ms.Y < sc.dockAt+sc.dockH:
 		if x0, x1 := m.dockToggle(w); ms.Y == sc.dockAt && m.phoneDock(w) && ms.X >= x0 && ms.X < x1 {

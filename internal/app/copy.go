@@ -194,12 +194,15 @@ func (m Model) pasteHere() string {
 }
 
 // copyCheckOn ends the copy check, unchecked, once its door is no longer
-// the chosen line: the paste it waits for answers only that door.
+// the chosen line, or the doors line names another door: the paste it
+// waits for answers only that door.
 func (m Model) copyCheckOn() Model {
 	if m.copyCode == "" {
 		return m
 	}
-	if line, above := m.aboveChosen(); !m.boardShown() || !above || line != "" {
+	ds := m.boardDoors()
+	line, above := m.aboveChosen()
+	if !m.boardShown() || !above || line != "" || len(ds) == 0 || ds[m.doorIndex(ds)].ID != doors.CopyCheck {
 		m.copyCode = ""
 		if m.noticeText == m.pasteHere() {
 			m.noticeText = ""
@@ -396,7 +399,8 @@ func dragCols(a, b point, y, w int, within [2]int) (x0, x1 int) {
 }
 
 // selectedText is the plain text of the cells of sc the drag covers, row
-// by row as a terminal selects in one column: each right-trimmed.
+// by row as a terminal selects in one column: each right-trimmed, and
+// without the … that ends a cut line.
 func (m Model) selectedText(sc drawn) string {
 	a, b, ok := m.dragSpan()
 	if !ok {
@@ -406,7 +410,8 @@ func (m Model) selectedText(sc drawn) string {
 	for y := max(a.y, 0); y <= b.y && y < len(sc.lines); y++ {
 		plain := ansi.Strip(sc.lines[y])
 		x0, x1 := dragCols(a, b, y, ansi.StringWidth(plain), m.dragWithin)
-		rows = append(rows, strings.TrimRight(ansi.Cut(plain, x0, x1), " "))
+		row := strings.TrimRight(ansi.Cut(plain, x0, x1), " ")
+		rows = append(rows, strings.TrimSuffix(row, "…")) // the mark of a cut line is no text
 	}
 	return strings.TrimRight(strings.Join(rows, "\n"), "\n")
 }
