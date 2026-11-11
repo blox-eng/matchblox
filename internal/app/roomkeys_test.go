@@ -417,3 +417,19 @@ func TestTheLiveViewFollowsTheRoomCursor(t *testing.T) {
 		t.Fatalf("selected %+v, ok %v; the cursor is on %+v", s, ok, m.roomRows(m.room.k)[m.room.at])
 	}
 }
+
+// TestTheRoomCursorStaysOnItsRow: a need line that comes on top leaves the
+// cursor on the match it was on.
+func TestTheRoomCursorStaysOnItsRow(t *testing.T) {
+	st := headState(t, runningPlan(), true)
+	st.Queue = nil
+	m, _ := roomWith(t, st, "hearth-api")
+	m = at(t, m, roomMatch, "ember-billing")
+	twoAsk(&st)
+	next, cmd := m.Update(stateMsg(st))
+	drain(cmd)
+	m = next.(Model)
+	if row := m.roomRows(m.room.k)[m.room.at]; row.kind != roomMatch || !strings.Contains(row.text, "ember-billing") {
+		t.Fatalf("the cursor moved to %+v", row)
+	}
+}

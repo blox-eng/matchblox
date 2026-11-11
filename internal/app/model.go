@@ -630,8 +630,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	default:
 		m.askedBy = ""
 	}
+	var anchor roomRow
+	if _, input := msg.(tea.KeyPressMsg); !input && m.room != nil { // the rows may move under the cursor
+		if rows := m.roomRows(m.room.k); m.room.at < len(rows) {
+			anchor = rows[m.room.at]
+		}
+	}
 	next, cmd := m.update(msg)
 	if nm, ok := next.(Model); ok {
+		nm = nm.keepRoomRow(m.room, anchor)
 		nm = nm.scanShows().keepView().inDemo()
 		if watch := nm.watchCmd(); watch != nil {
 			cmd = tea.Batch(cmd, watch)

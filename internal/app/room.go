@@ -453,3 +453,20 @@ func (m Model) openRoom(k chainKey) Model {
 	m.room = &room{k: k, at: at, from: map[string]string{}}
 	return m
 }
+
+// keepRoomRow keeps the room's cursor on the row it was on, by its kind and
+// id, when rows come or go under it.
+func (m Model) keepRoomRow(was *room, anchor roomRow) Model {
+	if was == nil || m.room == nil || m.room.k != was.k || anchor.kind == 0 && anchor.id == "" {
+		return m
+	}
+	rows := m.roomRows(m.room.k)
+	i := slices.IndexFunc(rows, func(r roomRow) bool { return r.kind == anchor.kind && r.id == anchor.id })
+	if i < 0 || i == m.room.at {
+		return m
+	}
+	r := *m.room
+	r.at = i
+	m.room = &r
+	return m
+}
