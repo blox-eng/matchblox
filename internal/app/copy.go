@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/doors"
+	"github.com/blox-eng/matchblox/internal/sample"
 )
 
 // The words of a copy (the spec's "Copy").
@@ -128,13 +129,28 @@ func (m Model) copyDoors() []doors.Door {
 // boardDoors are the doors of the board's doors line: the copy's first.
 func (m Model) boardDoors() []doors.Door { return append(m.copyDoors(), m.doors...) }
 
-// doorIndex is the door the doors line names, of n.
-func (m Model) doorIndex(n int) int { return max(min(m.boardDoor, n-1), 0) }
+// doorIndex is the door the doors line names, of ds: the first again once
+// the list of doors changes.
+func (m Model) doorIndex(ds []doors.Door) int {
+	if m.boardDoorsOf != doorIDs(ds) {
+		return 0
+	}
+	return max(min(m.boardDoor, len(ds)-1), 0)
+}
+
+// doorIDs names a list of doors.
+func doorIDs(ds []doors.Door) string {
+	ids := make([]string, len(ds))
+	for i, d := range ds {
+		ids[i] = d.ID
+	}
+	return strings.Join(ids, " ")
+}
 
 // stepDoor names the door d steps (← -1, → 1) along the doors line.
 func (m *Model) stepDoor(d int) {
-	n := len(m.boardDoors())
-	m.boardDoor = max(min(m.doorIndex(n)+d, n-1), 0)
+	ds := m.boardDoors()
+	m.boardDoor, m.boardDoorsOf = max(min(m.doorIndex(ds)+d, len(ds)-1), 0), doorIDs(ds)
 }
 
 // openBoardDoor is ⏎ or a tap on the doors line: it opens the door the
@@ -145,7 +161,7 @@ func (m Model) openBoardDoor() (tea.Model, tea.Cmd) {
 	if len(ds) == 0 {
 		return m, nil
 	}
-	i := m.doorIndex(len(ds))
+	i := m.doorIndex(ds)
 	switch d := ds[i]; d.ID {
 	case doors.CopyCheck:
 		cmd := m.openCopyCheck()
@@ -201,7 +217,7 @@ func (m Model) copyRan() Model {
 // dragStart keeps a left press as the start of a drag: on the board, on a
 // mid screen or a desk. A phone never selects: its menu copies.
 func (m Model) dragStart(x, y int) Model {
-	m.dragFrom, m.dragTo = nil, nil
+	m.dragFrom, m.dragTo, m.tapLater = nil, nil, nil // a release that never came leaves no tap
 	if m.boardShown() && m.menu == nil && m.layoutAt(max(m.width, minWidth)) != Narrow {
 		m.dragFrom = &point{x, y}
 	}
@@ -231,14 +247,11 @@ func (m Model) dragEnd(at point) (Model, tea.Cmd) {
 	from, to, lines, later := m.dragFrom, m.dragTo, m.dragLines, m.tapLater
 	m.dragFrom, m.dragTo, m.dragLines, m.tapLater = nil, nil, nil, nil
 	switch {
-	case from == nil || m.menu != nil || !m.boardShown():
+	case m.menu != nil || !m.boardShown():
 		return m, nil
-	case !farFrom(*from, at):
-		if later == nil {
-			return m, nil
-		}
+	case later != nil && !farFrom(*later, at):
 		return m.tapOnRelease(*later)
-	case to == nil:
+	case from == nil || to == nil || !farFrom(*from, at):
 		return m, nil
 	}
 	m.dragFrom, m.dragTo = from, &at
@@ -259,24 +272,36 @@ func characters(n int) string {
 }
 
 // tapWaits: the press at x, y of the board's body acts on its release,
-// as no drag may start it: a column's name hides the column, and the
-// chosen card goes in. Only with a drag possible and a terminal that
-// reports releases; a key or an option on a card acts on the press.
+// so that a drag or a long press may start there: the card the person
+// chose goes in on every shape, and on a mid screen or a desk a column's
+// name hides the column. Only on a terminal that reports the release of
+// a left press; a key or an option on a card acts on the press.
 func (m Model) tapWaits(x, y int) bool {
-	if !m.sawRelease || m.dragFrom == nil {
+	if !m.sawRelease || !m.boardShown() || m.menu != nil {
+		return false
+	}
+	_, s, ok := m.cardAtCell(x, y+m.drawScreen(max(m.width, minWidth)).bodyTop)
+	if ok && m.chosenByHand(s) {
+		d := m.boardPanel(max(m.width, minWidth), m.bodyRows())
+		sp, onSpan := spanAt(d.taps[y], x)
+		return !onSpan || sp.press == ""
+	}
+	if m.dragFrom == nil { // no drag on a phone: a name acts on the press
 		return false
 	}
 	d := m.boardPanel(max(m.width, minWidth), m.bodyRows())
-	b, _ := m.boardDrawOf()
 	if _, ok := spanAt(d.heads, x); ok && y == d.headAt {
 		return true
 	}
 	sp, onSpan := spanAt(d.taps[y], x)
-	if onSpan && sp.press == colQuiet.short() {
-		return true
-	}
-	_, s, ok := m.cardAt(d, b, x, y)
-	return ok && b.picked && paneOf(s) == paneOf(b.chosen) && (!onSpan || sp.press == "")
+	return onSpan && sp.press == colQuiet.short()
+}
+
+// chosenByHand: s is the chosen card, and the person chose it, by a key
+// or a tap. The board's own first choice is no choice of theirs.
+func (m Model) chosenByHand(s sample.Session) bool {
+	c, ok := m.boardSelected()
+	return ok && paneOf(c) == paneOf(s) && m.boardMine == paneOf(s)
 }
 
 // tapOnRelease runs the tap of a press that waited for its release.

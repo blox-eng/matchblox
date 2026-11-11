@@ -70,6 +70,14 @@ func askOf(s sample.Session) string {
 	return s.Ask.ID
 }
 
+// chooseByHand marks the chosen card as the person's choice, after a key
+// that moved it.
+func (m *Model) chooseByHand() {
+	if s, ok := m.boardSelected(); ok {
+		m.boardMine = paneOf(s)
+	}
+}
+
 // peekOn keeps the peek on the chosen card. The card coming into reach of
 // the digits (the first frame, a layer over the board that closes, the
 // menu that closes, a line above the columns left), a choice that moved
@@ -85,6 +93,9 @@ func (m Model) peekOn() Model {
 		m.menu = nil
 	}
 	s, ok := m.boardSelected()
+	if !ok || paneOf(s) != m.boardMine {
+		m.boardMine = paneKey{} // the choice moved by itself
+	}
 	reach := ok && m.peekReach()
 	was := m.peekReached
 	m.peekReached = reach
@@ -408,12 +419,16 @@ func (m Model) boardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 		// a digit answers a card, and no card is chosen
 	case bkey.Matches(k, mk.Up):
 		m.boardMove(-1)
+		m.chooseByHand()
 	case bkey.Matches(k, mk.Down):
 		m.boardMove(1)
+		m.chooseByHand()
 	case bkey.Matches(k, bk.Left):
 		m.boardSide(-1)
+		m.chooseByHand()
 	case bkey.Matches(k, bk.Right):
 		m.boardSide(1)
+		m.chooseByHand()
 	case bkey.Matches(k, mk.Back):
 		// The menu took esc first; then the mark, the search, the chain.
 		m.goArmed = paneKey{}
@@ -666,7 +681,8 @@ func (m Model) boardTap(x, y int) (tea.Model, tea.Cmd) {
 		}
 	}
 	if y == d.doorsAt {
-		m.boardAbove = 1 // the doors line is the last line above
+		lines := m.aboveLines()
+		m.boardAbove = len(lines) - slices.Index(lines, "") // counted from the columns up
 		return m.openBoardDoor()
 	}
 	if sp, ok := spanAt(d.taps[y], x); ok && sp.press == colQuiet.short() {
@@ -677,8 +693,9 @@ func (m Model) boardTap(x, y int) (tea.Model, tea.Cmd) {
 	if !ok {
 		return m, nil
 	}
-	again := b.picked && paneOf(b.chosen) == paneOf(s)
+	again := m.chosenByHand(s)
 	m.boardChooseCard(c, s)
+	m.boardMine = paneOf(s) // a tap chooses by hand
 	sp, ok := spanAt(d.taps[y], x)
 	switch {
 	case (!ok || sp.press == "") && again: // the chosen card again: in

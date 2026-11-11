@@ -119,7 +119,7 @@ func (m Model) boardPanel(w, h int) boardDrawn {
 		}
 	}
 	if ds := m.boardDoors(); len(ds) > 0 {
-		sel, i := above && chosen == "", m.doorIndex(len(ds))
+		sel, i := above && chosen == "", m.doorIndex(ds)
 		count := fmt.Sprintf("SET UP · %d", len(ds))
 		if len(ds) > 1 {
 			count = fmt.Sprintf("SET UP · %d of %d", i+1, len(ds))

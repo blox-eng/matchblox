@@ -506,6 +506,10 @@ type Model struct {
 	dragLines []string
 	tapLater  *point
 	boardDoor int
+	// boardDoorsOf names the doors boardDoor counts in. boardMine is the
+	// card the person chose, by a key or a tap: a tap on it again goes in.
+	boardDoorsOf string
+	boardMine    paneKey
 	// peekAt is when the peek last started, and peekAsk the question
 	// (Ask.ID) its card drew then, on the card peekPane. peekNew: a new
 	// question on the same card started it.

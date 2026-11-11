@@ -251,6 +251,7 @@ func (m Model) boardRightClick(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.boardChooseCard(c, s)
+	m.boardMine = paneOf(s)
 	return m.openMenu(s, ms.X, ms.Y), nil
 }
 
@@ -289,8 +290,10 @@ func (m Model) holdPress(next tea.Model, cmd tea.Cmd, ms tea.Mouse) (tea.Model, 
 func (m Model) pointer(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.MouseReleaseMsg:
-		m.sawRelease, m.longPress.on = true, false
 		ms := msg.Mouse()
+		// Only a left release: a phone's long press may send a right
+		// press and release while its taps send none.
+		m.sawRelease, m.longPress.on = m.sawRelease || ms.Button == tea.MouseLeft, false
 		return m.dragEnd(point{ms.X, ms.Y})
 	case tea.MouseMotionMsg:
 		ms := msg.Mouse()

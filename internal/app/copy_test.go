@@ -558,8 +558,15 @@ func TestTheCheckLeadsTheDoorsLine(t *testing.T) {
 // its jumps kept in ran.
 func releasing(t *testing.T, sawRelease bool, ran *[]string) (Model, *[]string) {
 	t.Helper()
-	m, clipped, _ := menuBoard(t, 80, 31, func(m *Model) {
+	return releasingAt(t, 80, 31, sawRelease, ran)
+}
+
+// releasingAt is releasing at w by h, kindle-web chosen by hand.
+func releasingAt(t *testing.T, w, h int, sawRelease bool, ran *[]string) (Model, *[]string) {
+	t.Helper()
+	m, clipped, _ := menuBoard(t, w, h, func(m *Model) {
 		chooseCard("kindle-web")(m)
+		m.chooseByHand()
 		m.opt.Run = func(argv []string) error { *ran = argv; return nil }
 	})
 	m.sawRelease = sawRelease
@@ -677,5 +684,136 @@ func TestTheFirstCSaysWhatItCopied(t *testing.T) {
 	*clock = clock.Add(noticeFor)
 	if m = mouse(t, m, noticeMsg{}); noticeRow(m) != "copied: last message of flint-auth · not checked here" {
 		t.Errorf("after the key's news: %q", noticeRow(m))
+	}
+}
+
+// wentIn: msgs hold the jump into the pane of name.
+func wentIn(msgs []tea.Msg, pane string) bool {
+	return slices.ContainsFunc(msgs, func(msg tea.Msg) bool {
+		r, ok := msg.(ranMsg)
+		return ok && r.cmd == "tmux switch-client -t "+pane
+	})
+}
+
+func TestOnlyACardYouChoseGoesIn(t *testing.T) {
+	m, _, _ := menuBoard(t, 80, 31, nil)
+	m.sawRelease = true
+	first := chosenName(t, m) // the board's own first choice
+	pane := paneNamed(boardFixture(t), first)
+	x, y := cardOn(t, m, first)
+	click := func(m Model) (Model, []tea.Msg) {
+		next, cmd := m.Update(tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft})
+		msgs := cmdMsgs(cmd)
+		next, cmd = next.Update(tea.MouseReleaseMsg{X: x, Y: y, Button: tea.MouseLeft})
+		return next.(Model), append(msgs, cmdMsgs(cmd)...)
+	}
+	m, msgs := click(m)
+	if wentIn(msgs, pane) || chosenName(t, m) != first {
+		t.Fatalf("the first tap on the card the board chose went in: %v", msgs)
+	}
+	if _, msgs = click(m); !wentIn(msgs, pane) {
+		t.Errorf("the second tap did not go in: %v", msgs)
+	}
+
+	// A key move chooses by hand too; a choice that moves by itself does not.
+	m, _, _ = menuBoard(t, 80, 31, nil)
+	m = pressOn(m, "down", "up")
+	if !m.chosenByHand(matchNamed(t, m, first)) {
+		t.Error("↓ ↑ is no choice by hand")
+	}
+	m = pressOn(m, "down")
+	m.boardPick = map[boardCol]paneKey{m.boardAt: paneOf(matchNamed(t, m, first))}
+	if m = upd(t, m, noticeMsg{}); m.chosenByHand(matchNamed(t, m, first)) {
+		t.Error("a choice that moved by itself counts as the person's")
+	}
+}
+
+func TestALongPressOnTheChosenCardOnAPhone(t *testing.T) {
+	goIn := "tmux switch-client -t " + paneNamed(boardFixture(t), "kindle-web")
+	var ran []string
+	open := func(sawRelease bool) (Model, int, int) {
+		ran = nil
+		m, _ := releasingAt(t, 40, 34, sawRelease, &ran)
+		x, y := cardOn(t, m, "kindle-web")
+		return m, x, y
+	}
+
+	m, x, y := open(true)
+	m = mouse(t, m, tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft})
+	if m = mouse(t, m, longPressMsg{m.longPress.id}); m.menu == nil || len(ran) != 0 {
+		t.Errorf("a long press on the chosen card: menu %v, ran %q", m.menu, ran)
+	}
+	if m = letGo(t, m, point{x, y}); len(ran) != 0 {
+		t.Errorf("the release after the menu ran %q", ran)
+	}
+
+	m, x, y = open(true)
+	m = mouse(t, m, tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft})
+	if letGo(t, m, point{x, y}); strings.Join(ran, " ") != goIn { // at 100 ms: before the tick
+		t.Errorf("a tap with a release ran %q, want %q", ran, goIn)
+	}
+
+	m, x, y = open(false)
+	if mouse(t, m, tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft}); strings.Join(ran, " ") != goIn {
+		t.Errorf("with no release seen, a press ran %q", ran)
+	}
+
+	// A right release alone is no release of a tap.
+	m, x, y = open(false)
+	m = mouse(t, m, tea.MouseReleaseMsg{X: 1, Y: 1, Button: tea.MouseRight})
+	if m.sawRelease {
+		t.Fatal("a right release counts as a left one")
+	}
+	if mouse(t, m, tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft}); strings.Join(ran, " ") != goIn {
+		t.Errorf("after a right release, a press ran %q", ran)
+	}
+}
+
+func TestALostReleaseRunsNoOldTap(t *testing.T) {
+	var ran []string
+	m, _ := releasing(t, true, &ran)
+	x, y := cardOn(t, m, "kindle-web")
+	m = mouse(t, m, tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft}) // its release is lost
+	if m.tapLater == nil {
+		t.Fatal("the press on the chosen card waits for no release")
+	}
+	o, oy := cardOn(t, m, "hearth-api")
+	m = mouse(t, m, tea.MouseClickMsg{X: o, Y: oy, Button: tea.MouseLeft})
+	if m.tapLater != nil {
+		t.Error("a new press keeps the old tap")
+	}
+	if m = letGo(t, m, point{x, y}); len(ran) != 0 {
+		t.Errorf("a later release ran the old tap: %q", ran)
+	}
+}
+
+func TestATapOnTheDoorsLineUnderAHost(t *testing.T) {
+	m := lostPeer(t, 40*time.Second)
+	m.splashDone, m.board = true, true
+	m = upd(t, m, tea.WindowSizeMsg{Width: 80, Height: 31})
+	if len(m.unreached()) != 1 {
+		t.Fatalf("unreached hosts: %q", m.unreached())
+	}
+	for y, l := range strings.Split(plainFrame(m), "\n") {
+		if strings.Contains(l, "SET UP") {
+			m = mouse(t, m, tea.MouseClickMsg{X: 3, Y: y, Button: tea.MouseLeft})
+		}
+	}
+	if line, above := m.aboveChosen(); !above || line != "" || m.copyCode == "" {
+		t.Errorf("a tap on the doors line chose %q, %v, code %q", line, above, m.copyCode)
+	}
+}
+
+func TestTheNamedDoorResetsWhenTheDoorsChange(t *testing.T) {
+	m, _, _ := uncheckedBoard(t, 80, 31, t.TempDir(), func(m *Model) {
+		m.doors = []doors.Door{{ID: doors.Tmux, Title: "Install tmux", Term: []string{"sh", "-c", "true"}}}
+	})
+	m = pressOn(toDoors(t, m), "right")
+	if !strings.Contains(plainFrame(m), "SET UP · 2 of 2 · Install tmux") {
+		t.Fatalf("→ named no second door:\n%s", plainFrame(m))
+	}
+	m.doors = append(m.doors, doors.Door{ID: doors.Guide, Title: "Open a guide session"})
+	if !strings.Contains(plainFrame(m), "SET UP · 1 of 3 · Check that copy reaches you") {
+		t.Errorf("a new list of doors keeps the old door:\n%s", plainFrame(m))
 	}
 }
