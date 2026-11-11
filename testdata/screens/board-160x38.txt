@@ -1,7 +1,7 @@
  ▰ matchblox · all hosts ▾                                                                                                                         ● 4 need you
  SESSIONS 15    ships    machine    git    history    panes    stoker
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- NEEDS YOU · 4  −                     WORKING · 3  −            SHIPPING · 3  −           QUIET · 5  −     │ spark-search · idle
+ NEEDS YOU · 4  −                     WORKING · 3  −            SHIPPING · 3  −           QUIET · 5  −     │ spark-search · stuck
 ▌╿ spark-search               ✻ 31m   ✦ flint-ui        ✻       ╿ cinder-ci @gpu… ❋  2h   ╿ wick-… ▣ 23:50 │ ✻ · #4548 ●━✕┄○┄○┄○  CI failed · lint, twice
   stuck CI failed · lint, twice        busy Writing the test…    merged deploying         ╿ hearth-… ✻  1h │
   #4548 ●━✕┄○┄○┄○  ctx 77%             ctx 40%        ─╴login    #4549 ●━●━●━◉┄○          ╿ ember-r… ⬢  3h │

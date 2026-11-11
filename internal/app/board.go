@@ -359,6 +359,8 @@ func (m Model) boardColumns(d *boardDrawn, b *boardDraw, l Layout, shown []board
 			v := m
 			v.chose, v.selPID, v.selHost = true, b.chosen.PID, b.chosen.Host
 			view = v.viewPane(b.chosen, live, colH+1)
+			word, _ := m.cardSays(b.chosen) // the head says what the card says
+			view[0] = fit(" "+st.label.Render(m.titleOf(b.chosen)+" · "+word), live)
 		}
 		for i := d.headAt; i < first+colH; i++ {
 			right := ""

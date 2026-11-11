@@ -597,3 +597,16 @@ func TestTheEmptyBoardOffersOnlyWhatActs(t *testing.T) {
 		}
 	}
 }
+
+func TestTheLiveViewSaysTheCardsWord(t *testing.T) {
+	m := boardShot(t, boardFixture(t), 160, 38, chooseCard("spark-search"))
+	word, _ := m.cardSays(matchNamed(t, m, "spark-search"))
+	if word != "stuck" {
+		t.Fatalf("the card of spark-search says %q, want stuck", word)
+	}
+	head := strings.Split(plainFrame(m), "\n")[3]
+	view := strings.TrimSpace(head[strings.LastIndex(head, "│")+len("│"):])
+	if view != "spark-search · stuck" {
+		t.Errorf("the live view's head is %q, want the card's word: spark-search · stuck", view)
+	}
+}
