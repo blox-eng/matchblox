@@ -1,7 +1,7 @@
 # The board
 
-Issue: #372. Status: sketch approved by the owner, 2026-11-10 ("Looks awesome, lets lock this in"). Date: 2026-11-10.
-Sketch: `design/0019-the-board.html` (the owner's artifact "The Board", version 6). Open it in a browser. It runs at 40, 80 and 160 columns.
+Issue: #372. Status: sketch approved by the owner, 2026-11-10 ("Looks awesome, lets lock this in"); engineering review and design review, 2026-11-11, with the owner's answers written in below. Date: 2026-11-10.
+Sketch: `design/0019-the-board.html` (the owner's artifact "The Board", version 6). Open it in a browser. It runs at 40, 80 and 160 columns. The sketch is from before the two reviews of 2026-11-11. Where it and this document differ, this document applies (the list is in "What the reviews changed").
 Builds on: #326 (the chain room), #346 (Enter goes into the pane), #299 (chains), design/0017 (every host).
 Merge order: #355 → #361 → #326 → #367, then this. Code starts after #326 lands, or after matchblox-chain agrees the file boundaries (see "The chain room").
 
@@ -112,7 +112,7 @@ A match that the owner parked (`z`) is in `QUIET` whatever else is true of it, a
 
 Order inside a column: `NEEDS YOU` by the oldest wait first. `WORKING` by when the session started, the oldest first (the sample has no time for the turn's start; owner, 2026-11-11). `SHIPPING` by when the ship reached its stage, the oldest first. Both times are in the sample today, so a phone and a desk show one order, a restart keeps it, and a card keeps its place while it stays. `QUIET` by the newest first. Members of one chain that are in the same column sit together.
 
-An empty `NEEDS YOU` says `No match waits for you.` in `faint`. Any other empty column shows its name and `· 0`. No column hides or changes width by itself.
+An empty `NEEDS YOU` says `nothing needs you` in `faint` (owner, 2026-11-11: "needs you" is the product's phrase, in the header, the column, the canon, the docs and the site). Any other empty column shows its name and `· 0`. No column hides or changes width by itself.
 
 ### The card
 
@@ -120,8 +120,8 @@ Lines, top to bottom. Each is cut with `…`, never wrapped, except where the pe
 
 1. The selection mark `▌`, the match (DESIGN.md §4), the name, `@host` when the board shows more than one host and the match is on another one. At the right: the harness mark, then the wait.
 2. The state word and what it says: `asks Which way do we fix the login?`, `green #4556 waits for your merge`, `busy writes the token refresh test`. The word takes the accent in `NEEDS YOU` and `muted` elsewhere.
-3. The ship and its track (`#4551 ●━◉┄○┄○`), or the stoker's step (`≋ step 2 of 3`), then the context (`ctx 62%`, `warn` from 70%, `neg` at the compact line). At the right: the chain's stub. A card under 26 columns drops a context under 70% when it has a ship or a step.
-4. The keys, in `NEEDS YOU` and on the chosen card: `x merge #4556   ⏎ go in`.
+3. The ship and its track (`#4551 ●━◉┄○┄○`), or the stoker's step (`≋ step 2 of 3`), then the context (`ctx 62%`, `warn` from 70%, `neg` at the compact line). At the right: the chain's stub. On a card under 26 columns this line drops parts in this order until it fits (owner, 2026-11-11): the chain's stub, a context under 70%, then the track's undone stages (`┄○`) from the right, never inside a stage. A context of 70% or more stays. Line 1 cuts the name with `…` and keeps the harness mark and the wait. Nothing is cut inside a run of glyphs.
+4. The keys, in `NEEDS YOU` and on the chosen card: `p merge #4556   ⏎ go in`.
 
 The harness mark names the agent that runs in the pane: `✻` Claude Code, `❋` Codex, `⬢` Cursor, `▣` OpenCode, `·` any other. It is `muted`. It comes from the session's agent (`Session.Agent`). The account rows keep today's rule: their mark names the provider of the plan (`providerMarks` in `internal/app/dock.go`), and they do not change (owner, 2026-11-11). DESIGN.md §6 gains one sentence: a card's mark names the agent, and an account's mark names the provider. So OpenCode on an Anthropic key shows `▣` on its card and `✻` on its usage row.
 
@@ -132,17 +132,43 @@ The harness mark names the agent that runs in the pane: `✻` Claude Code, `❋`
 - what the agent said last, in quotes, three lines at most;
 - its question's options, numbered, each wrapped to two lines at most.
 
-The peek needs no key: moving the selection is the peek. A card in `QUIET` on a wide screen is one line, and its peek adds the last message.
+The peek needs no key: moving the selection is the peek. From 152 columns, where the live view shows the chosen match at the right, the chosen card adds no quote and no options: the live view has them (owner, 2026-11-11). Its keys and the digits still act. A card in `QUIET` on a wide screen is one line, and its peek adds the last message.
 
-**Answering from the peek.** The digits answer only a question that the sample gives with its options: one question, one choice (`Session.Ask` today, Claude Code's question tool). Then the digit of an option answers it, and a tap on an option answers it. Every other wait shows its first line and `⏎ go in`, with no digits: a permission prompt, a question from Codex or OpenCode, a call with several questions, and a multi-select. The owner answers those in the pane.
+**Answering from the peek: arm, then send** (owner, 2026-11-11). The digits answer only a question that the sample gives with its options: one question, one choice (`Session.Ask` today, Claude Code's question tool). Every other wait shows its first line and `⏎ go in`, with no digits: a permission prompt, a question from Codex or OpenCode, a call with several questions, and a multi-select. The owner answers those in the pane.
 
-Three guards:
+- **The first press arms.** A digit, or a tap on an option, marks that option: `❯ 1. Patch the token check` on the `wash`, with `❯` in the accent, and the card's key line says `1 again sends · esc clears`. Nothing is sent.
+- **The second press sends.** The same digit, or a tap on the same option, sends it. Another digit moves the mark. `esc`, a move of the peek, or a new question clears the mark. So no single press, and no old habit, can answer.
+- **The sent state.** After the send the card says `sent 1 · waits for <name>` in `muted`, and its digits are dead until the question changes. The notice says where the card went: `sent 1 to <name> · now in WORKING`.
+
+Three guards stay under that:
 
 - **The digit is tied to the question the card drew.** The card's options come from the sample, so the key carries the time of that sample as `Seen`, and the console sends it only while the session's question is the one it drew (`Ask.ID`). The service refuses a key whose `Seen` is zero or is not after the question began (`internal/service/keys.go`), so a question that is newer than the sample is refused there too. The pane's screen plays no part, and the peek watches nothing. The service's guard does not change.
-- **The dead time.** The digits take no answer for 400 ms after the peek lands on a card, so a key that was meant for the card before does not answer this one. The "Find the Git repositories" box has this rule today (`internal/app/scanask.go`).
-- **The service's guard stays:** a key is refused when the question started after the screen that the console showed (`not sent: <name> asks something new — look again`).
+- **The dead time.** The digits arm nothing for 400 ms after the peek lands on a card, after the console opens, and after a tab or a filter changes. The "Find the Git repositories" box has this rule today (`internal/app/scanask.go`).
+- **The service's guard stays:** a key is refused when the question started after the sample that the card drew (`not sent: <name> asks something new — look again`).
 
 After an answer, a merge or a go, the selection goes to the first card of `NEEDS YOU`, as Sessions does today after a jump.
+
+### The accent
+
+The accent is on one card (owner, 2026-11-11; DESIGN.md §1 rule 4): the chosen card's `▌`, its state word and its keys, and the `❯` of an armed option on it. It is also on `● N need you` and on the open tab. Nothing else takes it. The state word of a waiting card that is not chosen is `fg` bold, and its keys are `muted`. The open column's name is `fg` bold. The lit stubs of the chosen card's chain are `fg` (the glyph still changes to `━╸`). Text under a drag is on the `wash`.
+
+### States
+
+| State | The owner sees |
+|---|---|
+| Before the first sample | The column names with no counts, and one `faint` line with the Pulse (DESIGN.md §5): `reading your matches…`. Never a zero, and never `nothing needs you` (§6: "before its first state only the name, never zero figures"). |
+| An answer was sent | The card says `sent 1 · waits for <name>` in `muted`; its digits are dead until the question changes. The notice: `sent 1 to <name> · now in WORKING`. |
+| No session at all | No columns. The ghost row `+ start a new session here` leads and has the cursor, and two quick starts follow, as DESIGN.md §6 has it today. |
+| The service is lost | The board stays, in the dimmed inks the console uses today for a lost service, with `no service · it redials` in the notice row. No key sends. |
+| A search matches nothing | Every column keeps its name with `· 0`, and one line says `nothing matches "<text>" · esc clears`. |
+| A wait on a host that is not reached | The card is `faint` with `as of 14:02`. The header does not count it, and it takes no digits. |
+| A column has no card | Its name and `· 0`. `NEEDS YOU` says `nothing needs you`. |
+
+### Notices
+
+Every toast, every refusal and the age of the data show in one place: the strip's row, in place of the strip, for 2.5 s (owner, 2026-11-11). On Narrow a notice may wrap to two lines, so its fix is never cut. With the strip hidden, the row appears for the notice only. The header never changes for a notice: `● N need you` and the host filter stay. When the sample is older than the console's stale limit, the row says `data is 40 s old · the service is slow` until it is fresh.
+
+**A key that changed its job says so once.** The first press of `c`, `v`, `s`, `g`, `u`, `p`, `x` on a card whose ship waits, and of a digit, shows one notice, and the key still does its new job: `c copies now. The stoker is on its card.`, `v changes the cards now: verbose, or one line.`, `s changes the host now. The order of a column is fixed.`, `g shows one chain now. esc shows all.`, `u turns the strip now.`, `p merges now. The ships are on their cards.`, `x kills. p merges #4556.`, `A digit marks an answer now. Press it again to send.` Each shows once ever; the state directory keeps which.
 
 ### Hiding a column
 
@@ -156,7 +182,7 @@ When every column is hidden the body says how to bring one back.
 
 - A card of a chain has a stub at the right of line 3: `─╴login` in `faint`. When the chosen card is in a chain, the stubs of that chain read `━╸login` in the accent, in every column. This is the rule Sessions has today for a view that splits a chain.
 - `g`, or a tap on a stub, narrows the board to that chain. The tab row then says `chain login · 3   esc all`. `esc` shows every chain again. `]` and `[` go to the next and the previous chain, as in #326's room.
-- The narrowed board is the chain's room. It adds two regions that only a room has, above the columns: the stoker's card (its order, the active step and one step on each side, `y` gives a go) and, under the columns, the talk line (`› tell login's stoker…`). Both are #326's, unchanged. #326's need line is the `NEEDS YOU` column. #326's SHIPS and GIT lines go: the ships are on the cards, and the worktrees are on Machine under the repo.
+- The narrowed board is the chain's room. It adds two regions that only a room has, above the columns: the stoker's card (its order, the active step and one step on each side, `y` gives a go) and, under the columns, the talk line (`› tell login's stoker…`). Both are #326's, unchanged. On Narrow the stoker is its own page, first in the row (`STOKER  need 1  work 1  ship 1`), with the card and the talk line on it; the other pages are the columns (owner, 2026-11-11). #326's need line is the `NEEDS YOU` column. #326's SHIPS and GIT lines go: the ships are on the cards, and the worktrees are on Machine under the repo.
 - A match is never drawn twice.
 
 ### Hosts
@@ -210,7 +236,8 @@ No destructive act is in the menu. `x` keeps its consent box.
 | `←` `→` | Go to the column at the left or the right. They skip a hidden or an empty column. |
 | `⏎`, `a` | Go into the match's pane (#346). On a phone, a tap on the chosen card. |
 | `1`…`9` | Answer the chosen card's question, with the two guards. |
-| `x` | The other act of the card: merge its leading ship when that ship waits for the merge, else kill. The card and the consent box name which, with the exact command. |
+| `x` | Kill the match. Always, and only, through the consent box. |
+| `p` | Merge the card's leading ship when it waits for the merge, through the consent box (owner, 2026-11-11: one destructive key has one meaning). On any other card it says `no ship of <name> waits for a merge`. |
 | `y` | Give the go that a stoker step waits for. |
 | `c` | Copy the last message. |
 | `m` | Open the menu on the chosen card. |
@@ -225,7 +252,7 @@ No destructive act is in the menu. `x` keeps its consent box.
 | `esc` | Close the menu, then clear the search, then the chain filter. It never leaves the console. |
 | `q`, `Ctrl+C` | Quit the console. |
 
-Keys that change their job: `c` (was: open the STOKER tab), `v` (was: list only), `s` (was: sort), `g` (was: group), `u` (was: cycle the dock). Keys that go: `1-7` as tabs, `p`, `S`, and `Space` and `X` outside Machine's repo view.
+Keys that change their job: `c` (was: open the STOKER tab), `v` (was: list only), `s` (was: sort), `g` (was: group), `u` (was: cycle the dock). `p` (was: open Ships) now merges, and `x` no longer merges. Keys that go: `1-7` as tabs, `S`, and `Space` and `X` outside Machine's repo view.
 
 The key line shows the keys of the chosen card first, then `c`, `v`, `s`, `u`, then `←→` and `tab`. A key that does not fit leaves whole, from the right. A narrow terminal that is not Pocket shows `c`, `v`, `s`, `u` only: the chosen card already shows its own keys. Pocket shows no key line (see "The belt on Pocket").
 
@@ -252,7 +279,7 @@ Nothing drags, so a swipe is always a page and a long-press is always the menu. 
 On Pocket the console draws no key line and no hairline over it. The cards take the two rows. The keys are on the app's belt (`docs/phone.md`, "The key belt"), on a fifth layout named **Board**. It is a fifth match in the matchbox tray.
 
 - **It follows the console.** The app is on Board while the console shows the board or Machine, as Commands follows the agent whose pane the owner is in. When the owner goes into a pane, the belt goes back to the layout it had there. The owner can still choose another layout from the tray.
-- **Home** is `◂ ← → ↑ ↓ ⏎`. Then the keys of the chosen card, in the accent, each with its word under it: `1 answer`, `2 answer`, `x merge`, `y go`. Then `c copy`, `m menu`, `g chain`, `v one line`, `s hosts`, `u strip`, `⇥ machine`, `x kill`.
+- **Home** is `◂`, then the keys of the chosen card in the accent (at most three, each with its word under it: `1 answer`, `2 answer`, or `p merge`, or `y go`), then `↑ ↓ ⏎` (owner, 2026-11-11). So what the owner does most needs no drag, and `◂` and `↑ ↓ ⏎` are where every layout has them. The tail, in this order: `c copy`, `m menu`, `g chain`, `v one line`, `s hosts`, `u strip`, `⇥ machine`, `x kill`, `←`, `→`, `]`, `[`, `/`, `z park`. Every key of the board is on the belt.
 - **A key that does not apply is dim** and sends nothing, as a command key is in a pane that is not its agent's.
 - **The consent box** still rises in the console, with its `RUN` line. While it shows, the belt is `◂`, `y runs`, `esc cancels`. A tap is never consent: `y` on the belt is the typed `y`.
 - **What the console tells the app.** The app must know the chosen card's keys. The console sends them when they change, the way it tells the app today which agent a pane runs (`@matchblox_agent`, `internal/panes/home.go`) and that it is at the top (the terminal title, #326). The builder picks the one channel that is already there; no new protocol.
@@ -270,7 +297,7 @@ The console's shape rule decides (DESIGN.md §6, Widths; `layout()` in `internal
 
 A hidden column gives its room to the others in the same proportions. On Wide the live view takes it. A column whose cards do not fit ends in `↓ N more`, and scrolls so that the chosen card is whole.
 
-The screen, top to bottom: the header (the mark, the host filter, `● N need you`, the stoker word or a toast), the tab row (`BOARD 15   machine`, the chain crumb, the hidden columns), a hairline, the body, the strip, a hairline, the key line. The setup doors stay above the columns, the ghost row `+ start a new session here` and the recommendations stay under them, each folded to one line when the columns need the rows. `↑` from the first card of a column chooses the doors line, and `↓` from the last card chooses the ghost row, then the recommendations. Each opens in place and takes today's keys.
+The screen, top to bottom: the header (the mark, the host filter, `● N need you`, the stoker word; never a toast), the tab row (`BOARD 15   machine`, the chain crumb, the hidden columns), a hairline, the body, the strip, a hairline, the key line. The setup doors stay above the columns, the ghost row `+ start a new session here` and the recommendations stay under them, each folded to one line when the columns need the rows. `↑` from the first card of a column chooses the doors line, and `↓` from the last card chooses the ghost row, then the recommendations. Each opens in place and takes today's keys.
 
 ### The match on the board
 
@@ -280,12 +307,32 @@ DESIGN.md §4 stays the source. The board adds where each motion plays.
 |---|---|
 | `NEEDS YOU` | The head of each match that asks breathes (2.4 s). Nothing else in the column moves. |
 | `WORKING` | The flame flickers, as today. |
-| A card that changes column | The change plays once, on the card where it lands: the strike (800 ms) into `WORKING`, the going out (400 ms) into any other column. For 1.2 s the card's name is `flame-core`. The card does not travel across the screen. |
+| A card that changes column | **Land**, a new row of DESIGN.md §5 (owner, 2026-11-11), 1.2 s. Into `WORKING`: the strike plays (800 ms) and the name is `flame-core`. Into any other column: the going out plays (400 ms) and the card's lines sit on the `wash`, with no fire. The card does not travel across the screen. |
 | `SHIPPING` | Still. When a ship passes a stage, one bright cell runs along its track once, as the spark runs down a fuse today. |
 | `QUIET` | Nothing. The head cools with age: `match-head` while idle, `match-ember` when cold, `faint` when stale, parked or held. |
 | Pocket | The app's haptics (DESIGN.md §5): the rigid impact on a strike. The buzz of §9 for a new wait while the app is closed does not change. |
 
 `--no-motion` shows each end state at once. Motion comes from the clock (§4 rule 4), so the replay tests hold.
+
+## What the reviews changed
+
+The sketch (`design/0019-the-board.html`) shows the design of 2026-11-10. These points differ, by the owner's answers of 2026-11-11:
+
+| The sketch | This document |
+|---|---|
+| A digit or a tap answers at once | The first press arms, the second sends |
+| `x` merges or kills | `x` kills, `p` merges |
+| The accent on every waiting card | The accent on the chosen card and the count |
+| `No match waits for you.` | `nothing needs you` |
+| A toast in the header | Notices in the strip's row |
+| Belt home `◂ ← → ↑ ↓ ⏎` | Belt home `◂`, the card's keys, `↑ ↓ ⏎` |
+| The name glows wherever a card lands | Fire only into `WORKING`; the `wash` elsewhere |
+| The peek repeats beside the live view | No repeat from 152 columns |
+| The peek watches nothing, and `Seen` is not shown | `Seen` is the sample's time; the question's `Ask.ID` is checked |
+| `WORKING` in the sample's order | By the session's start |
+| Invented names (`api-auth`, `web-cart`) | The canon's fleet (DESIGN.md §7): `hearth-api`, `flint-auth`, `spark-docs`, `kindle-web`, `ember-billing`, `cinder-ci`, `wick-mobile`, on `ws-1` |
+
+One point the owner kept as the sketch has it, against the design review's advice: on a phone a tap on the open page's mark hides that page.
 
 ## Machine
 
@@ -381,7 +428,7 @@ Each is its own commit, so that it can be reverted alone. A removal that #326 ha
 
 ## Tests
 
-- **A fixed fleet.** One fixture of 15 sessions (the sketch's set: 4 need the owner, 3 work, 3 ship, 5 are quiet, one chain of 3, two hosts). Goldens of the board at 40×34, 80×31 and 160×38, in both densities, with each column hidden, narrowed to the chain, and narrowed to a host.
+- **A fixed fleet.** One fixture of 15 sessions with the canon's names (DESIGN.md §7: the Hearth fleet on `ws-1`, and a second host `gpu-1`), in the sketch's shape ( 4 need the owner, 3 work, 3 ship, 5 are quiet, one chain of 3, two hosts). Goldens of the board at 40×34, 80×31 and 160×38, in both densities, with each column hidden, narrowed to the chain, and narrowed to a host.
 - **Every row is as wide as its screen**, in each golden. The sketch's own check does this.
 - **The column rule:** a table test, one case for each line of the Columns table, and one for each pair that could clash (held and asks, busy and a stuck ship).
 - **The guards:** a digit within 400 ms of a new peek is not sent; a digit after a newer question is refused; a tap never runs a destructive act.
