@@ -77,14 +77,13 @@ theirs apart. In a shell or an editor the keys type as always: matchblox
 binds them only in the panes of the agents it samples.
 
 A terminal that does not send Option as Meta types `ß` for `⌥s`. Use
-prefix `s` and prefix `n`, or set Option as Meta: in Terminal.app, Settings
+prefix `s`, or set Option as Meta: in Terminal.app, Settings
 → Profiles → Keyboard → **Use Option as Meta key**; in iTerm2, Settings →
 Profiles → Keys → **Left Option key: Esc+**. Ghostty and kitty send it as
 Meta.
 
-matchblox moves tmux's session tree from prefix s to prefix S. Prefix n no
-longer goes to the next window; prefix p still goes to the previous one, and
-a window's digit to that window.
+matchblox moves tmux's session tree from prefix s to prefix S. Prefix n
+stays tmux's next window: the walk has only `⌥n`.
 
 ## The STOKER tab
 

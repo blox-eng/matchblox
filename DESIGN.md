@@ -196,7 +196,7 @@ Reduce Motion.
 > stoker's card, the matches, SHIPS, GIT and the talk line, on a desk the
 > left 40 % beside the selected match's live view. The need line holds the
 > one accent (rule 4); with none, the selected row. ⌥s (prefix s) flips
-> between an agent's pane and its room, ⌥n (prefix n) walks the chain's
+> between an agent's pane and its room, ⌥n walks the chain's
 > matches. The header counts the stokers that run, `≋ 2`. A go that
 > merges, kills, force-pushes or removes goes through the consent box.
 

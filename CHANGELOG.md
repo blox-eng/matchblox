@@ -18,8 +18,8 @@ All notable changes to matchblox are in this file. The format follows
 - **⌥s flips between a session and its chain's room.** In an agent's pane,
   `⌥s` goes to its room and back, and `⌥n` walks the chain's matches. Each
   terminal comes back to its own session. A shell keeps the keys. Prefix
-  `s` and `n` do the same where Option is not Meta; tmux's session tree
-  moves to prefix `S`.
+  `s` flips where Option is not Meta; tmux's session tree moves to prefix
+  `S`.
   ([#326](https://github.com/blox-eng/matchblox/issues/326))
 - **A feat pull request changes the landing page or says why not.** CI's
   `Landing page` step, and a hook before an agent's `gh pr merge`.
@@ -28,8 +28,6 @@ All notable changes to matchblox are in this file. The format follows
 
 - **The header counts the stokers that run: `≋ 2`.** It was `stoker · 2
   chains`; the dock still counts the chains.
-- **Prefix n no longer goes to the next window** on the console's tmux
-  server: it walks a chain's matches. Prefix p still goes back.
 
 ### Fixed
 

@@ -289,9 +289,10 @@ func TestChooseTreeMovesToPrefixCapitalS(t *testing.T) {
 	if !strings.Contains(argv, "bind-key\x00S\x00choose-tree\x00-Zs") {
 		t.Fatalf("no prefix S choose-tree in %q", FlipKeysArgv())
 	}
-	for _, k := range []string{"bind-key\x00s\x00if-shell", "bind-key\x00n\x00if-shell"} {
-		if !strings.Contains(argv, k) {
-			t.Errorf("no %q", strings.ReplaceAll(k, "\x00", " "))
-		}
+	if !strings.Contains(argv, "bind-key\x00s\x00if-shell") {
+		t.Error("prefix s does not flip")
+	}
+	if strings.Contains(argv, "bind-key\x00n\x00") {
+		t.Error("prefix n is bound: it stays tmux's next window; the walk is ⌥n")
 	}
 }
