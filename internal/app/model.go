@@ -804,6 +804,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		first := !m.have
 		m.watchHeld = ""
 		st := proto.State(msg)
+		m.noteChanges(m.opt.Host, st.Sessions, st.Chains) // before the state: a card's column before the change
 		m.queue = st.Queue
 		toast := m.stokerNews(st.Stoker)
 		if joined := m.joinNews(st.Chains, st.Sessions); joined != "" {
@@ -814,7 +815,6 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.dockSwitched = false
 		}
 		m.doors = m.shownDoors(st.Doors)
-		m.noteChanges(m.opt.Host, st.Sessions, st.Chains)
 		m.snap, m.git, m.recs, m.have, m.answered, m.at = st.Snapshot, st.Git, st.Recommendations, true, true, m.now()
 		m.shipReport = st.Ships
 		m.holds, m.reasons, m.chains = st.Holds, st.Reasons, st.Chains

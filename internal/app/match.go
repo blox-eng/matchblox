@@ -49,6 +49,7 @@ const (
 type change struct {
 	kind changeKind
 	at   time.Time
+	from boardCol // the column the card had before a strike or a going out
 }
 
 type animMsg struct{}
@@ -132,15 +133,23 @@ func (m Model) matchCell(s sample.Session) string {
 	return lipgloss.NewStyle().Foreground(c).Render(ch) + " "
 }
 
-// landed tells if the card of pane k still glows where it landed: for
-// landGlow after the match struck or went out.
-func (m Model) landed(k paneKey) bool {
+// landed tells if the card of pane k, now in column col, still glows
+// where it landed: for landGlow after the match struck or went out and
+// the card changed column.
+func (m Model) landed(k paneKey, col boardCol) bool {
 	c, ok := m.changes[k]
-	if m.opt.NoMotion || !ok || c.kind != changeStrike && c.kind != changeOut {
+	if m.opt.NoMotion || !ok || c.kind != changeStrike && c.kind != changeOut || c.from == col {
 		return false
 	}
 	e := m.now().Sub(c.at)
 	return e >= 0 && e < landGlow
+}
+
+// stillCell is the match of s with no change playing and no motion: a
+// card that strikes outside WORKING lands with no fire.
+func (m Model) stillCell(s sample.Session) string {
+	m.opt.NoMotion = true
+	return m.matchCell(s)
 }
 
 // quietTone is the token of a QUIET head: it cools with age.
@@ -196,25 +205,25 @@ func (m *Model) noteChanges(host string, next []sample.Session, chains *state.Ch
 		m.changes = map[paneKey]change{}
 	}
 	now := m.now()
-	was := map[string]matchKind{}
+	was := map[string]sample.Session{}
 	for _, s := range m.snap.Sessions {
 		if s.Host == host {
-			was[s.Pane] = m.matchOf(s)
+			was[s.Pane] = s
 		}
 	}
 	for _, s := range next {
-		old, ok := was[s.Pane]
+		prev, ok := was[s.Pane]
 		if !ok {
 			continue
 		}
-		at := paneKey{host, s.Pane}
+		at, old, from := paneKey{host, s.Pane}, m.matchOf(prev), m.columnOf(prev)
 		switch k := m.matchOf(s); {
 		case k == matchLit && old != matchLit:
-			m.changes[at] = change{changeStrike, now}
+			m.changes[at] = change{changeStrike, now, from}
 		case k == matchUnlit && old == matchLit:
-			m.changes[at] = change{changeOut, now}
+			m.changes[at] = change{changeOut, now, from}
 		case k == matchBurnt && old != matchBurnt:
-			m.changes[at] = change{changeBurn, now}
+			m.changes[at] = change{kind: changeBurn, at: now}
 		}
 	}
 	m.noteSparks(host, chains, now)

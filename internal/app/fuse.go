@@ -450,7 +450,7 @@ func (m *Model) noteSparks(host string, next *state.ChainsView, now time.Time) {
 	}
 	for _, c := range next.Chains {
 		if !c.Spark.IsZero() && !c.Spark.Equal(was[c.ID]) {
-			m.changes[sparkKey(chainKey{host, c.ID})] = change{changeSpark, now}
+			m.changes[sparkKey(chainKey{host, c.ID})] = change{kind: changeSpark, at: now}
 		}
 	}
 }

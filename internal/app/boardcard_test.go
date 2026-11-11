@@ -447,6 +447,91 @@ func TestACardLandsWithATrueSign(t *testing.T) {
 	})
 }
 
+// asksState is landState's match asking its question, busy or idle: in
+// NEEDS YOU either way.
+func asksState(busy bool) (proto.State, sample.Session) {
+	st, s := landState(false)
+	for i := range st.Sessions {
+		if st.Sessions[i].Name == s.Name {
+			st.Sessions[i].Busy = busy
+		}
+	}
+	return st, s
+}
+
+// cardCells are the first two lines of the card of name, from its
+// selection mark on, at now.
+func cardCells(t *testing.T, m Model, name string) [][]inked {
+	t.Helper()
+	cells := inkedCells(t, m.render())
+	y, x, ok := headOf(cells, name)
+	if !ok {
+		t.Fatalf("no card of %s", name)
+	}
+	if x > 40 {
+		t.Fatalf("the card of %s is not in NEEDS YOU (cell %d)", name, x)
+	}
+	return [][]inked{cells[y][x-3 : x+20], cells[y+1][x-3 : x+20]}
+}
+
+// TestFireLandsOnlyInWorking (design decision 7): a match that strikes
+// and lands in NEEDS YOU sits on the wash with its still flame, never
+// the strike's flame-core; one that goes out and stays in its column
+// does not land.
+func TestFireLandsOnlyInWorking(t *testing.T) {
+	t.Run("a strike into NEEDS YOU", func(t *testing.T) {
+		before, s := landState(false)
+		before.Queue = before.Queue[:1] // hearth-api's wait only
+		for i := range before.Sessions {
+			if before.Sessions[i].Name == s.Name {
+				before.Sessions[i].Ask = nil
+			}
+		}
+		at := boardAt
+		now := at
+		m := motionBoard(t, before, &now, false)
+		if c := m.columnOf(m.all.sessions[slices.IndexFunc(m.all.sessions, func(x sample.Session) bool { return x.Name == s.Name })]); c != colShip {
+			t.Fatalf("%s starts in %s, want SHIPPING", s.Name, c.name())
+		}
+		after, _ := asksState(true)
+		next, _ := m.Update(stateMsg(after))
+		m = next.(Model)
+		for _, e := range []time.Duration{0, 200 * time.Millisecond, 500 * time.Millisecond, 800 * time.Millisecond, 1100 * time.Millisecond} {
+			now = at.Add(e)
+			for dy, row := range cardCells(t, m, s.Name) {
+				for cx, c := range row {
+					if c.fg == "flame-core" {
+						t.Fatalf("+%v: line %d cell %d is flame-core: %+v", e, dy, cx, c)
+					}
+					if c.bg != "wash" {
+						t.Fatalf("+%v: line %d cell %d is %+v, want on the wash", e, dy, cx, c)
+					}
+				}
+			}
+		}
+	})
+
+	t.Run("no move, no landing", func(t *testing.T) {
+		before, s := asksState(true)
+		at := boardAt
+		now := at
+		m := motionBoard(t, before, &now, false)
+		after, _ := asksState(false)
+		next, _ := m.Update(stateMsg(after))
+		m = next.(Model)
+		for _, e := range []time.Duration{0, 500 * time.Millisecond, 1100 * time.Millisecond} {
+			now = at.Add(e)
+			for dy, row := range cardCells(t, m, s.Name) {
+				for cx, c := range row {
+					if c.bg == "wash" {
+						t.Fatalf("+%v: line %d cell %d is %+v on the wash: the card did not move", e, dy, cx, c)
+					}
+				}
+			}
+		}
+	})
+}
+
 // TestAShipThatPassesAStageSparksOnce: a ship that goes from ci to green
 // runs one bright cell along its track once, on the board only.
 func TestAShipThatPassesAStageSparksOnce(t *testing.T) {

@@ -310,7 +310,7 @@ func (m *Model) noteShipSparks(next []proto.Ship) {
 			if m.changes == nil {
 				m.changes = map[paneKey]change{}
 			}
-			m.changes[shipKey(sh)] = change{changeSpark, now}
+			m.changes[shipKey(sh)] = change{kind: changeSpark, at: now}
 		}
 	}
 }

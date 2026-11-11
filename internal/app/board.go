@@ -537,10 +537,13 @@ func (m Model) boardBlockOf(b *boardDraw, c boardCol, s sample.Session, w int, q
 		o.sent = sent
 	}
 	switch {
-	case m.landed(paneOf(s)) && c == colWork:
+	case m.landed(paneOf(s), c) && c == colWork:
 		o.land = landFire
-	case m.landed(paneOf(s)):
+	case m.landed(paneOf(s), c):
 		o.land = landWash
+		if m.changes[paneOf(s)].kind == changeStrike {
+			o.match = m.stillCell(s) // fire lands only in WORKING
+		}
 	case c == colQuiet:
 		o.match = m.quietCell(s)
 	}
