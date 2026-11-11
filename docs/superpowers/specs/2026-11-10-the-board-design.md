@@ -223,7 +223,7 @@ No destructive act is in the menu. `x` keeps its consent box.
 
 - Every copy goes through the console's one `clip` (`internal/app/pairpage.go`): `Options.Clip` when the host gives one, else OSC 52 through `tea.SetClipboard`, as the pair link's `c` does today.
 - **Any text:** a drag over text in the console selects it, in the accent, and copies it on release. The header says `copied 42 characters`. The console owns the mouse, so it does this itself; it does not hand the drag to tmux.
-- **Each hop must pass it on.** The console reads the tmux it runs in (`set-clipboard`, and `allow-passthrough` for its own pane, which it already sets for images). When that tmux would drop the write, the copy says so in the header, with the fix: `not copied: tmux drops it · tmux set -s set-clipboard on`. A new door, "Let copy through", does it on `⏎`.
+- **Each hop must pass it on.** The console reads the tmux it runs in (`set-clipboard`, and `allow-passthrough` for its own pane, which it already sets for images). When that tmux would drop the write, the copy says so in the header, with the fix: `not copied: tmux drops it · tmux set -s set-clipboard on`. A new door, "Let copy through", does it on `⏎`. Only `set-clipboard on` passes an application's copy: with `external`, which is tmux's default, and with `off`, tmux ignores it, so the console treats both as "tmux drops it" (found in the build, 2026-11-11).
 - **The console proves the whole path once for each screen** (owner, 2026-11-11). The console cannot read the hops after its own tmux (SSH, the owner's terminal, a tmux on the owner's side, Pocket). So a door, "Check that copy reaches you", copies a 6-letter code and asks for a paste. A paste of that code marks this screen (a phone, or a desk) as checked in `view.json`. Until then each copy says `copied: <what> · not checked here`, and the door is first in the doors line above the cards. The toast takes no key: `⏎` stays "go in". After it, `copied: <what>`. A wrong paste says that a hop drops the copy, and points to the table below.
 - The table: `docs/console.md` gets a table: each terminal and the one setting it needs. Pocket must take OSC 52 into the iOS clipboard; if it does not today, that is a task of this work.
 - **Paste** is unchanged: a paste goes to the agent as text, with today's guard at a menu.
@@ -438,7 +438,7 @@ Each is its own commit, so that it can be reverted alone. A removal that #326 ha
 - **The guards:** a digit within 400 ms of a new peek is not sent; a digit after a newer question is refused; a tap never runs a destructive act.
 - **The count:** with `NEEDS YOU` hidden, a chain filter and a host filter all on, the header still counts every wait, and a tap on it clears all three.
 - **A host that is not reached** keeps its cards, in `faint`, with `as of`.
-- **Copy:** the console's `clip` gets the exact text for each menu line and for a drag. With `set-clipboard off` in the console's tmux, the copy says the fix and does not say `copied`.
+- **Copy:** the console's `clip` gets the exact text for each menu line and for a drag. With `set-clipboard off` or `external` in the console's tmux, the copy says the fix and does not say `copied`.
 - **Motion:** the replay draws the strike and the going out on the card where it lands, from the clock.
 - **The record:** a day's line sums a host, a repository and a harness; a missing day draws `·`; a chart draws a gap for a value that was not measured.
 - `go test ./...` passes, and CI is green on Linux and macOS.
