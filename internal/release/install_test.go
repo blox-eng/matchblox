@@ -253,7 +253,7 @@ func TestInstallWithoutAReleaseOrGoSaysWhatToDo(t *testing.T) {
 	if err == nil {
 		t.Fatalf("no error:\n%s", out)
 	}
-	mustContain(t, out, "no release yet", "Go 1.26", "https://go.dev/dl/")
+	mustContain(t, out, "no release yet", "Go 1.27", "https://go.dev/dl/")
 }
 
 func TestInstallOfflineInstallsNothing(t *testing.T) {

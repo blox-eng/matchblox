@@ -21,6 +21,8 @@ All notable changes to matchblox are in this file. The format follows
   closes, a search clears, then the hosts list shows. One back gesture now
   works everywhere: in a pane it goes to the console, in the console back
   to the hosts. ([#360](https://github.com/blox-eng/matchblox/issues/360))
+- **Built with Go 1.27.4.** A build from source needs Go 1.27 or later: the
+  install script and the README say so.
 
 ## [0.40.2] - 2026-11-11
 
