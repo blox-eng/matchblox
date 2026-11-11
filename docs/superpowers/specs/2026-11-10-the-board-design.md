@@ -422,7 +422,9 @@ Each is its own commit, so that it can be reverted alone. A removal that #326 ha
 ## Docs, the canon and the site
 
 - `DESIGN.md`: §2.1 (the tokens), §4 rule 6 (the board is a place that shows the match), §5 (no new motion: the table says where each plays), §6 (the screen, the board, the card, the strip, the widths, Machine). The 2026-11-01 note about Sessions is replaced.
-- `docs/console.md`, `docs/keys.md`, `docs/ships.md`, `docs/stoker.md`, `docs/phone.md`, `docs/remote.md`: each place that names a tab, the dock or a key that changed.
+- `README.md`, `docs/index.md`, `docs/start.md`, `docs/console.md`, `docs/keys.md`, `docs/ships.md`, `docs/stoker.md`, `docs/phone.md`, `docs/remote.md`: each place that names a tab, the dock, a key that changed or "waits for you" (owner, 2026-11-11: the README, the docs, the landing page and the videos match the board when it merges).
+- **The replays** (the moving pictures of the README and the site: `www/demo/replay-desk.svg`, `replay-phone.svg`, the frames and the still in `www/index.html`) are recorded again from a script that shows the board: one gold card, an answer armed and sent, a strike, a merge with `p`, a hidden column, a narrowed chain.
+- **The app's demo** and its words in `docs/phone.md` follow the board and arm then send.
 - `www/`: matchbloxrelease owns it. This session sends it a brief for each change that the landing page shows (the replay of the home, the tab names, the keys). The feat pull request carries the `www/` change before it merges.
 - `CHANGELOG.md`: the keys that changed their job are named as breaking for the hand, not for scripts.
 
