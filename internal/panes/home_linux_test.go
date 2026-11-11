@@ -489,6 +489,30 @@ func TestAMarkedReturnNamesTheClientThatSentIt(t *testing.T) {
 	}
 }
 
+// TestTheBeltsAnswerNamesTheClientThatSentIt: the app's answer to the
+// board's keys reaches the console with the tty of the client that sent
+// it, and of no other.
+func TestTheBeltsAnswerNamesTheClientThatSentIt(t *testing.T) {
+	sock, tmux, got := consolePane(t)
+	tmux(BeltKeyArgv()[1:]...)
+	attach(t, sock, Home)
+	waitFor(t, func() bool { return len(clientTTYs(tmux)) == 1 })
+	desk := clientTTYs(tmux)[0]
+	phone := attach(t, sock, Home)
+	waitFor(t, func() bool { return len(clientTTYs(tmux)) == 2 })
+	phoneTTY := ""
+	for _, tty := range clientTTYs(tmux) {
+		if tty != desk {
+			phoneTTY = tty
+		}
+	}
+	if _, err := phone.WriteString(keycmd.BeltKey); err != nil {
+		t.Fatal(err)
+	}
+	belt := eventLine(uv.UnknownApcEvent(keycmd.BeltFromPrefix + phoneTTY + "\x1b\\"))
+	waitFor(t, func() bool { return slices.Contains(paneRead(t, got), belt) })
+}
+
 func TestAMarkElsewhereTypesNothing(t *testing.T) {
 	sock := tmuxtest.Server(t)
 	tmux := func(args ...string) string {

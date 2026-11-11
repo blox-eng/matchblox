@@ -556,7 +556,8 @@ func TestTheLiveViewIsSizedAsDrawn(t *testing.T) {
 // pocketOnly makes the app the only viewer, one that answered the board's
 // keys with a mark.
 func pocketOnly(m *Model) {
-	m.viewers, m.belt.pocket = "/dev/pts/7:105@here", []string{"/dev/pts/7:105"}
+	m.viewers, m.belt.value, m.belt.n = "/dev/pts/7:105@here", ";", 1
+	m.belt.pocket = []pocketClient{{"/dev/pts/7:105", 1}}
 }
 
 // boardSaid are the board= values in what cmd writes to the terminal.
@@ -613,29 +614,72 @@ func TestPocketHasNoKeyLine(t *testing.T) {
 	}
 }
 
-// TestPocketIsTheAppThatAnswered: onPocket holds while every viewer of the
-// session marked a key after the board's keys reached it, since it
-// attached; a desk that joins, or a new client on the same tty, ends it.
+// TestPocketIsTheAppThatAnswered (controller ruling 21): onPocket holds
+// while every viewer of the session answered the board's keys with the
+// belt's answer (BeltKey, which tmux hands on with its tty) since it attached. Any other mark
+// is no answer: an old app keeps its key line. A desk that joins, a
+// terminal that comes, a new client on the same tty, or a value left
+// unanswered ends it.
 func TestPocketIsTheAppThatAnswered(t *testing.T) {
 	st := boardFixture(t)
-	m := boardShot(t, st, 40, 34, nil)
-	update := func(msg tea.Msg) {
+	clock := demoAt
+	m := boardShot(t, st, 40, 34, func(m *Model) { m.opt.Now = func() time.Time { return clock } })
+	update := func(msgs ...tea.Msg) {
 		t.Helper()
-		next, _ := m.Update(msg)
-		m = next.(Model)
+		for _, msg := range msgs {
+			next, _ := m.Update(msg)
+			m = next.(Model)
+		}
 	}
 	mark := func(tty string) tea.Msg { return uv.UnknownApcEvent(keycmd.MarkedPrefix + tty + "\x1b\\") }
+	answer := uv.UnknownApcEvent(keycmd.BeltFromPrefix + "/dev/pts/7\x1b\\")
 	viewers := func(key string) tea.Msg { return graphicsMsg{gen: m.opt.Gen, watched: true, key: key} }
 
 	update(viewers("/dev/pts/7:105@here"))
 	if m.onPocket() {
-		t.Fatal("Pocket before the app marked a key")
+		t.Fatal("Pocket before the app answered")
 	}
-	update(mark("/dev/pts/7"))
+	update(mark("/dev/pts/7"), keyPress("down"))
+	if m.onPocket() {
+		t.Fatal("a mark alone (an old app's key) made the console Pocket")
+	}
+	update(uv.UnknownApcEvent(keycmd.BeltKey))
+	if m.onPocket() {
+		t.Fatal("the app's answer with no client named made the console Pocket")
+	}
+	update(answer)
 	if !m.onPocket() {
-		t.Fatal("the app marked a key after the board's keys: not on Pocket")
+		t.Fatal("the app answered the board's keys: not on Pocket")
 	}
-	update(viewers("/dev/pts/2:90@here,/dev/pts/7:105@here"))
+
+	// A new value: the answer to the one before holds for beltAnswerWait.
+	update(keyPress("m"))
+	if m.belt.value != "menu" || !m.onPocket() {
+		t.Fatalf("value %q: the key line comes back while the app's answer is on its way", m.belt.value)
+	}
+	clock = clock.Add(beltAnswerWait)
+	if m.onPocket() {
+		t.Error("the app did not answer the menu's value, yet the console stays on Pocket")
+	}
+	update(answer)
+	if !m.onPocket() {
+		t.Error("the app answered again: not on Pocket")
+	}
+	update(keyPress("esc"), keyPress("m"))
+	if m.onPocket() {
+		t.Error("two values went unanswered, yet the console stays on Pocket")
+	}
+	update(answer)
+
+	update(uv.UnknownApcEvent(keycmd.ViewerKey))
+	if m.onPocket() {
+		t.Error("a terminal came, yet the console stays on Pocket before the app answers again")
+	}
+	update(answer)
+	if !m.onPocket() {
+		t.Error("the app answered after a terminal came: not on Pocket")
+	}
+	update(viewers("/dev/pts/2:90@here,/dev/pts/7:105@here"), answer) // the app answers the value sent again
 	if m.onPocket() {
 		t.Error("a desk joined, yet the console is on Pocket")
 	}
@@ -645,19 +689,19 @@ func TestPocketIsTheAppThatAnswered(t *testing.T) {
 	}
 	update(viewers("/dev/pts/7:200@here"))
 	if m.onPocket() {
-		t.Error("a new client on the app's tty is on Pocket before it marked a key")
+		t.Error("a new client on the app's tty is on Pocket before it answered")
 	}
 
 	off := boardShot(t, st, 40, 34, func(m *Model) { m.board = false })
 	next, _ := off.Update(viewers("/dev/pts/7:105@here"))
-	next, _ = next.Update(mark("/dev/pts/7"))
+	next, _ = next.Update(answer)
 	if next.(Model).onPocket() {
-		t.Error("a mark while the board is off answered no board signal")
+		t.Error("an answer while the board is off answered no board signal")
 	}
 
 	old := boardShot(t, st, 40, 34, func(m *Model) { m.opt.LocalTmux = "3.2" })
 	next, _ = old.Update(viewers("/dev/pts/7:105@here"))
-	next, _ = next.Update(mark("/dev/pts/7"))
+	next, _ = next.Update(answer)
 	if next.(Model).onPocket() {
 		t.Error("below tmux 3.3 the signal does not pass, yet the console is on Pocket")
 	}
@@ -766,6 +810,47 @@ func TestTheBeltSignalSaysTheBoardsKeys(t *testing.T) {
 	if got := value(pressOn(kindle, "p")); got != "box" {
 		t.Errorf("the consent box up: %q", got)
 	}
+	// Only the box that takes a typed y and esc is box; the take-over
+	// question and the scan's consent are home with no card keys, and keep
+	// the key line on Pocket.
+	held := kindle
+	held.held = func(m Model) (tea.Model, tea.Cmd) { return m, nil }
+	scan := kindle
+	scan.scanAsk, scan.found = &scanAsk{}, &proto.Found{}
+	for name, c := range map[string]Model{"the take-over question": held, "the scan's consent": scan} {
+		if !c.consenting() {
+			t.Fatalf("%s does not show", name)
+		}
+		if got := value(c); got != ";c,m,g,v,s,u,tab,x,left,right,],[,/,z" {
+			t.Errorf("%s: %q, want the home with no card keys", name, got)
+		}
+		if ks := c.beltKeys(); slices.ContainsFunc(ks, func(k beltKey) bool { return k.Act }) {
+			t.Errorf("%s: card keys on the belt: %v", name, beltFaces(ks))
+		}
+		pocketOnly(&c)
+		if c.draw(80).keysAt < 0 {
+			t.Errorf("%s on Pocket: no key line", name)
+		}
+	}
+
+	// A card on another host takes no digit: its digits are dim.
+	far := st
+	far.Sessions = slices.Clone(st.Sessions)
+	far.Queue = slices.Clone(st.Queue)
+	for i := range far.Sessions {
+		if far.Sessions[i].Name == "flint-auth" {
+			far.Sessions[i].Host = "gpu-1"
+		}
+	}
+	for i := range far.Queue {
+		if far.Queue[i].Name == "flint-auth" {
+			far.Queue[i].Host = "gpu-1"
+		}
+	}
+	if got := value(boardShot(t, far, 80, 34, chooseCard("flint-auth"))); !strings.HasPrefix(got, ";1,2") {
+		t.Errorf("flint-auth on gpu-1: %q, want its digits dim", got)
+	}
+
 	off := kindle
 	off.board = false
 	if got := value(off); got != "" {

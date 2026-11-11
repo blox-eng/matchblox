@@ -680,12 +680,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if apc, ok := msg.(uv.UnknownApcEvent); ok {
 		if tty, ok := strings.CutPrefix(string(apc), keycmd.MarkedPrefix); ok {
 			if tty, ok = strings.CutSuffix(tty, "\x1b\\"); ok && remote.ClientTTY(tty) {
-				m.marked, m.belt = clientMark{tty, m.now()}, m.heardFrom(tty)
+				m.marked = clientMark{tty, m.now()}
+			}
+			return m, nil
+		}
+		if tty, ok := strings.CutPrefix(string(apc), keycmd.BeltFromPrefix); ok { // the app's belt took the board's keys
+			if tty, ok = strings.CutSuffix(tty, "\x1b\\"); ok && remote.ClientTTY(tty) {
+				m.belt = m.heardFrom(tty)
 			}
 			return m, nil
 		}
 		if string(apc) == keycmd.ViewerKey {
-			m.away = false // a terminal came to show the console
+			m.away = false      // a terminal came to show the console
+			m.belt.pocket = nil // it may be a desk: the app answers again
 			m, belt := m.tellBelt(true)
 			return m, tea.Batch(sayAgent(keycmd.MarksSignal(), m.opt), belt, m.watchCmd())
 		}

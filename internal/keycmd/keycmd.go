@@ -67,6 +67,14 @@ const (
 	// ViewerKey is what tmux hands the console when a terminal comes to
 	// show it: the console then announces the marks (MarksSignal) at once.
 	ViewerKey = "\x1b_matchblox;viewer\x1b\\"
+	// BeltKey is the app's answer to each board= value it takes while its
+	// belt shows the Board layout: the console then draws no key line.
+	BeltKey = "\x1b_matchblox;belt\x1b\\"
+	// BeltSlot is BeltKey's user-keys slot.
+	BeltSlot = 951
+	// BeltFromPrefix is what BeltKey's binding hands the console, then the
+	// tty of the client that answered, then ESC \.
+	BeltFromPrefix = "\x1b_matchblox;belt="
 )
 
 // OtherAgent is the agent signal's id for a pane whose agent has no

@@ -115,6 +115,17 @@ func MarkKeyArgv() []string {
 		";", "bind-key", "-n", "User" + slot, "if-shell", "-F", atConsole, hand}
 }
 
+// BeltKeyArgv makes the app's answer to the board's keys a key of the tmux
+// server. At the console it hands the console the tty of the client that
+// answered, as MarkKeyArgv does; elsewhere it does nothing.
+func BeltKeyArgv() []string {
+	slot := strconv.Itoa(keycmd.BeltSlot)
+	hand := "run-shell -C 'send-keys -t #{pane_id} -H " + hexKeys(keycmd.BeltFromPrefix) +
+		" ; send-keys -t #{pane_id} -l #{client_tty} ; send-keys -t #{pane_id} -H 1b 5c'"
+	return []string{"tmux", "set-option", "-s", "user-keys[" + slot + "]", keycmd.BeltKey,
+		";", "bind-key", "-n", "User" + slot, "if-shell", "-F", atConsole, hand}
+}
+
 // ViewerHookArgv tells the console the moment a terminal attaches to it or
 // switches to it, so the console announces the marks to that terminal then:
 // tmux passes the announce only to the clients that show the pane when it is

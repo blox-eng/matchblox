@@ -769,19 +769,21 @@ func beltOf(b bkey.Binding, face, word string, on bool) beltKey {
 // beltKeys are the board's keys on the belt, in its order: home is ◂, the
 // chosen card's keys (at most three), ↑ ↓ ⏎; the tail has every other key
 // of the board. The consent box leaves ◂, y and esc; the menu ◂ ↑ ↓ ⏎ esc.
+// Another consent (the take-over question, the scan's, ⏎'s) is home with no
+// card keys and every key of the tail off.
 func (m Model) beltKeys() []beltKey {
 	bk, mk := m.keys.board, m.keys.main
 	home := beltKey{Face: "◂", On: true}
 	up, down := beltOf(mk.Up, "↑", "", true), beltOf(mk.Down, "↓", "", true)
 	switch {
-	case m.consenting():
+	case m.yesBox():
 		yes := beltOf(m.keys.confirm.Yes, "", "runs", true)
 		yes.Act = true
 		return []beltKey{home, yes, beltOf(mk.Back, "", "cancels", true)}
 	case m.menu != nil:
 		return []beltKey{home, up, down, beltOf(mk.Open, "", "do", true), beltOf(mk.Back, "", "close", true)}
 	}
-	board := m.boardShown()
+	board := m.boardShown() && !m.consenting()
 	s, card := m.boardSelected()
 	_, above := m.aboveChosen()
 	card = board && card && !above
@@ -798,7 +800,7 @@ func (m Model) beltKeys() []beltKey {
 		beltOf(bk.Density, "", "one line", board),
 		beltOf(bk.Host, "", "hosts", board && m.hostCount() > 1),
 		beltOf(bk.Strip, "", "strip", board),
-		beltOf(mk.NextTab, "⇥", "machine", true),
+		beltOf(mk.NextTab, "⇥", "machine", !m.consenting()),
 		beltOf(mk.Second, "", "kill", card && !head && m.killAction(s) != nil),
 		beltOf(bk.Left, "←", "", board),
 		beltOf(bk.Right, "→", "", board),
@@ -810,15 +812,16 @@ func (m Model) beltKeys() []beltKey {
 }
 
 // cardBelt are the chosen card's keys on the belt: the digits of the
-// options it asks (at most three), or p for the ship that waits for its
-// merge and y for the go that waits.
+// options it asks (at most three; off on another host, which takes no
+// digit), or p for the ship that waits for its merge and y for the go
+// that waits.
 func (m Model) cardBelt(s sample.Session) []beltKey {
 	var ks []beltKey
 	if q, answers := m.oneChoice(s); answers {
 		if _, sent := m.peekMarks(s); sent == 0 {
 			for i := range min(len(q.Options), 3) {
 				n := strconv.Itoa(i + 1)
-				ks = append(ks, beltKey{Key: n, Face: n, Word: "answer", On: true, Act: true})
+				ks = append(ks, beltKey{Key: n, Face: n, Word: "answer", On: s.Host == m.opt.Host, Act: true})
 			}
 			return ks
 		}
@@ -845,7 +848,7 @@ func (m Model) beltValue() string {
 	switch {
 	case !m.board || m.standIn || m.viewFull() || m.tab != tabSessions && m.tab != tabMachine:
 		return ""
-	case m.consenting():
+	case m.yesBox():
 		return "box"
 	case m.menu != nil:
 		return "menu"
@@ -867,8 +870,9 @@ func (m Model) beltValue() string {
 //	dim   = "" | tok *( "," tok )   the keys that are off, in the belt's order
 //	key   = tok [ "*" ]
 //
-// A tok is a beltKey's Key: 1-9 p y up down enter c m g v s u tab x left
-// right ] [ / z esc. ◂ has none and is never sent. At most beltMax bytes:
+// A tok is a beltKey's Key: 1 2 3 p y up down enter c m g v s u tab x
+// left right ] [ / z. A card's key that is off (a digit on another host)
+// is a dim tok. ◂ has none and is never sent. At most beltMax bytes:
 // dim toks leave whole from the right, then card keys from the right.
 // The other values ("" off the board, "box", "menu") come from beltValue.
 func beltWord(ks []beltKey, armed string) string {
@@ -895,14 +899,28 @@ func beltWord(ks []beltKey, armed string) string {
 }
 
 // beltSaid is the board= value the console last sent and the viewers it
-// went to; passes: tmux passed it (3.3 and on, or no tmux). pocket are the
-// clients ("tty:pid", pid "" until the viewers name it) that marked a key
-// while a board= value was out to them: the app.
+// went to; passes: tmux passed it (3.3 and on, or no tmux); n counts the
+// non-empty values sent, at the time the last went out. pocket are the
+// clients that answered a value (BeltKey): the app on the Board layout.
 type beltSaid struct {
 	value, to string
 	passes    bool
-	pocket    []string
+	n         int
+	at        time.Time
+	pocket    []pocketClient
 }
+
+// pocketClient is a client ("tty:pid", pid "" until the viewers name it)
+// and the value it answered last (beltSaid.n).
+type pocketClient struct {
+	client string
+	n      int
+}
+
+// beltAnswerWait is how long the app's answer to the value before holds
+// while the console waits for the answer to the last one: the key line
+// does not flash at each new value.
+const beltAnswerWait = time.Second
 
 // tellBelt sends the board's keys to the app when the value changes, and
 // again to new viewers; again: a terminal came to show the console. Off
@@ -915,14 +933,18 @@ func (m Model) tellBelt(again bool) (Model, tea.Cmd) {
 	}
 	say := sayAgent(keycmd.BoardSignal(v), m.opt)
 	m.belt.value, m.belt.to, m.belt.passes = v, m.viewers, say != nil
+	if v != "" {
+		m.belt.n, m.belt.at = m.belt.n+1, m.now()
+	}
 	return m, say
 }
 
-// heardFrom is the belt once the client on tty marked a key: it answered
-// the board's keys when a board= value was out and passed.
+// heardFrom is the belt once the client on tty answered the board's keys
+// (BeltKey after its mark): it counts while a board= value is out and
+// passed.
 func (m Model) heardFrom(tty string) beltSaid {
 	b := m.belt
-	if b.value == "" || !b.passes {
+	if tty == "" || b.value == "" || !b.passes {
 		return b
 	}
 	client := tty + ":"
@@ -931,25 +953,23 @@ func (m Model) heardFrom(tty string) beltSaid {
 			client = v
 		}
 	}
-	if !slices.Contains(b.pocket, client) {
-		b.pocket = append(slices.Clone(b.pocket), client)
-	}
+	b.pocket = append(slices.DeleteFunc(slices.Clone(b.pocket), func(p pocketClient) bool { return p.client == client }), pocketClient{client, b.n})
 	return b
 }
 
 // keepPocket keeps the clients that still view the console: one gone, or
 // a new client on its tty, has not answered since it attached.
-func keepPocket(pocket []string, viewers string) []string {
+func keepPocket(pocket []pocketClient, viewers string) []pocketClient {
 	if len(pocket) == 0 {
 		return pocket
 	}
 	vs := viewerClients(viewers)
-	var kept []string
+	var kept []pocketClient
 	for _, p := range pocket {
-		tty, pid, _ := strings.Cut(p, ":")
+		tty, pid, _ := strings.Cut(p.client, ":")
 		for _, v := range vs {
 			if vtty, vpid, _ := strings.Cut(v, ":"); vtty == tty && (pid == "" || pid == vpid) {
-				kept = append(kept, v)
+				kept = append(kept, pocketClient{v, p.n})
 			}
 		}
 	}
@@ -968,20 +988,32 @@ func viewerClients(viewers string) []string {
 	return out
 }
 
-// onPocket: every client on the console's session is the app, which
-// answered the board's keys with a mark since it attached. One frame goes
-// to every viewer, so a desk among them keeps the key line.
+// onPocket: every client on the console's session is the app on its
+// Board layout: it answered the last board= value since it attached (or
+// the one before, for beltAnswerWait after the last went out). One frame
+// goes to every viewer, so a desk among them keeps the key line.
 func (m Model) onPocket() bool {
 	vs := viewerClients(m.viewers)
 	if len(vs) == 0 {
 		return false
 	}
+	b := m.belt
 	for _, v := range vs {
-		if !slices.Contains(m.belt.pocket, v) {
+		i := slices.IndexFunc(b.pocket, func(p pocketClient) bool { return p.client == v })
+		if i < 0 {
+			return false
+		}
+		if n := b.pocket[i].n; n != b.n && (n != b.n-1 || m.now().Sub(b.at) >= beltAnswerWait) {
 			return false
 		}
 	}
 	return true
+}
+
+// yesBox: the consent box that takes a typed y, and esc, shows: a
+// destructive step's.
+func (m Model) yesBox() bool {
+	return m.consenting() && m.held == nil && !m.scanShown() && m.pending != nil && m.pending.destructive
 }
 
 // beltOnly: the belt has the board's keys, and the frame has no key line.
