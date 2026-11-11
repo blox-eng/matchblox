@@ -6,6 +6,8 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+## [0.40.2] - 2026-11-11
+
 ### Security
 
 - **Built with Go 1.26.11.** It fixes an HTTP/1 server crash in Go's own
@@ -1423,7 +1425,8 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.40.1...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.40.2...HEAD
+[0.40.2]: https://github.com/blox-eng/matchblox/compare/v0.40.1...v0.40.2
 [0.40.1]: https://github.com/blox-eng/matchblox/compare/v0.40.0...v0.40.1
 [0.40.0]: https://github.com/blox-eng/matchblox/compare/v0.39.1...v0.40.0
 [0.39.1]: https://github.com/blox-eng/matchblox/compare/v0.39.0...v0.39.1
