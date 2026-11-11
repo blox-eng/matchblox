@@ -5,7 +5,7 @@
  ≋ "ship the chain"
  ≋ hearth's stoker is quiet since 22:49 · ⏎ asks it
    ✓ step
-   ▸ step
+   ▸ step · waits for your go
      step
    ↓ 2 more
  ╿ ✻ kindle-web  idle

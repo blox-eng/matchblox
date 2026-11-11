@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"encoding/json"
 	"slices"
 	"strconv"
@@ -21,15 +22,18 @@ func (k roomKeys) bindings() []bkey.Binding {
 	return []bkey.Binding{k.Up, k.Down, k.Open, k.Give, k.Next, k.Prev, k.Back, k.Erase, k.Flip, k.Walk, k.Out}
 }
 
-// goWait is a step of a stoker's run that waits for the owner's go: the
-// entry's id, what it says, the go it needs and the command it runs.
+// goWait is a go room k's stoker waits on: the entry's id, what it says,
+// the go it needs, the command it runs, and its plan step (0 for a go the
+// guard holds).
 type goWait struct {
 	id, text, needs, want string
+	step                  int
 	at                    int64
 }
 
-// goWaits are the steps room k's stoker waits on a go for: the last entry
-// of each step, when it waits and names its go.
+// goWaits are the gos room k's stoker waits on, oldest first: each plan
+// step whose last entry waits and names its go, and each go the guard
+// holds (rule "go") that is not given yet.
 func (m Model) goWaits(k chainKey) []goWait {
 	var v *proto.StokerView
 	switch u, ok := m.unitOf(k); {
@@ -43,47 +47,58 @@ func (m Model) goWaits(k chainKey) []goWait {
 	}
 	last := map[int]proto.StokerEntry{}
 	var steps []int
+	held := map[string]proto.StokerEntry{} // the last go entry of each pane and go
+	var gos []string
 	for _, e := range v.Run {
-		if e.Step == 0 {
-			continue
+		switch {
+		case e.Rule == "go":
+			key := e.Pane + " " + e.Needs
+			if _, seen := held[key]; !seen {
+				gos = append(gos, key)
+			}
+			held[key] = e
+		case e.Step > 0:
+			if _, seen := last[e.Step]; !seen {
+				steps = append(steps, e.Step)
+			}
+			last[e.Step] = e
 		}
-		if _, seen := last[e.Step]; !seen {
-			steps = append(steps, e.Step)
-		}
-		last[e.Step] = e
 	}
 	var out []goWait
-	for _, n := range steps {
-		if e := last[n]; e.State == "waits" && e.Needs != "" {
+	for _, key := range gos {
+		if e := held[key]; e.State == "waits" && e.Needs != "" {
 			out = append(out, goWait{id: e.ID, text: e.Text, needs: e.Needs, want: e.Want, at: e.At.UnixNano()})
 		}
 	}
+	for _, n := range steps {
+		if e := last[n]; e.State == "waits" && e.Needs != "" {
+			out = append(out, goWait{id: e.ID, text: e.Text, needs: e.Needs, want: e.Want, step: n, at: e.At.UnixNano()})
+		}
+	}
+	slices.SortStableFunc(out, func(a, b goWait) int { return cmp.Compare(a.at, b.at) })
 	return out
 }
 
-// unitText is what stoker:grant names a step of room k by: the unit's id
+// goOf is the go row waits on: a need row's by its entry, a step row's by
+// its plan step.
+func (m Model) goOf(k chainKey, row roomRow) (goWait, bool) {
+	for _, g := range m.goWaits(k) {
+		switch {
+		case row.kind == roomNeed && g.id == row.id,
+			row.kind == roomStep && g.step > 0 && strconv.Itoa(g.step) == row.id:
+			return g, true
+		}
+	}
+	return goWait{}, false
+}
+
+// unitText is what stoker:grant names a go of room k by: the unit's id
 // and the entry's, or the entry's alone for the host's stoker.
 func (m Model) unitText(k chainKey, id string) string {
 	if u, ok := m.unitOf(k); ok && !k.isOne() {
 		return u.ID + " " + id
 	}
 	return id
-}
-
-// actsOutside tells if a go runs a command that acts outside the session:
-// a merge, a kill, a force-push or a removal. It goes through the consent
-// box with its exact argv.
-func actsOutside(g goWait) bool {
-	switch {
-	case strings.HasPrefix(g.needs, "merge"), g.needs == "kill":
-		return true
-	}
-	for _, w := range []string{"--force", "push -f", "remove", "rm "} {
-		if strings.Contains(g.want, w) {
-			return true
-		}
-	}
-	return false
 }
 
 // roomKey is a key in the room.
@@ -164,28 +179,23 @@ func (m Model) roomKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// give is y on a row: the go its step waits for. A go that acts outside
-// the session waits in the consent box for a typed y.
+// give is y on a row: the go it waits for. Every go the stoker knows
+// (merge, release, deploy, kill) acts outside the session, so each waits
+// in the consent box for a typed y, with the command it lets run.
 func (m Model) give(row roomRow) (tea.Model, tea.Cmd) {
 	k := m.room.k
-	i := slices.IndexFunc(m.goWaits(k), func(g goWait) bool { return g.id == row.id })
-	if i < 0 || row.kind != roomNeed && row.kind != roomStep {
+	g, ok := m.goOf(k, row)
+	if !ok {
 		m.flash = m.keys.room.Give.Help().Key + " gives the go a step waits for"
 		return m, nil
 	}
-	g := m.goWaits(k)[i]
-	text := m.unitText(k, g.id)
-	if actsOutside(g) {
-		argv := strings.Fields(g.want)
-		if len(argv) == 0 {
-			argv = []string{g.needs}
-		}
-		m.pending = &action{label: "give the go: " + g.text, steps: [][]string{argv}, destructive: true,
-			rec: "stoker:grant", which: "primary", text: text, host: k.host}
-		return m, nil
+	argv := strings.Fields(g.want)
+	if len(argv) == 0 {
+		argv = []string{g.needs}
 	}
-	m.flash = "go given: " + g.text
-	return m, m.sendTo(k.host, proto.Act{RecID: "stoker:grant", Which: "primary", Confirm: "y", Text: text})
+	m.pending = &action{label: "give the go: " + g.text, steps: [][]string{argv}, destructive: true,
+		rec: "stoker:grant", which: "primary", text: m.unitText(k, g.id), host: k.host}
+	return m, nil
 }
 
 // talk sends the talk line to the chain's stoker: its first order starts
@@ -297,7 +307,7 @@ func (m Model) roomKeyLine(w int) string {
 		switch row := rows[r.at]; row.kind {
 		case roomNeed:
 			hs = append(hs, hintFor(rk.Open, "go in"))
-			if slices.ContainsFunc(m.goWaits(r.k), func(g goWait) bool { return g.id == row.id }) {
+			if _, ok := m.goOf(r.k, row); ok {
 				hs = []hint{hintFor(rk.Give, "give")}
 			}
 		case roomMatch:
@@ -306,7 +316,7 @@ func (m Model) roomKeyLine(w int) string {
 				hs = append(hs, hintFor(rk.Out, "out"))
 			}
 		case roomStep:
-			if slices.ContainsFunc(m.goWaits(r.k), func(g goWait) bool { return g.id == row.id }) {
+			if _, ok := m.goOf(r.k, row); ok {
 				hs = append(hs, hintFor(rk.Give, "give"))
 			}
 		case roomMore:

@@ -220,7 +220,11 @@ func (m Model) cardRows(k chainKey) []roomRow {
 		case i == done:
 			mark = "▸"
 		}
-		rows = append(rows, roomRow{kind: roomStep, id: strconv.Itoa(plan[i].N), text: mark + " " + plan[i].Text})
+		row := roomRow{kind: roomStep, id: strconv.Itoa(plan[i].N), text: mark + " " + plan[i].Text}
+		if _, waits := m.goOf(k, row); waits {
+			row.text += " · waits for your go"
+		}
+		rows = append(rows, row)
 	}
 	if hidden := len(plan) - (hi - lo); hidden > 0 {
 		rows = append(rows, roomRow{kind: roomMore, text: "↓ " + strconv.Itoa(hidden) + " more"})

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -80,8 +81,11 @@ func TestEnterActsOnTheSelectedRow(t *testing.T) {
 	}
 }
 
-func TestYGivesAGoOnTheNeedLine(t *testing.T) {
-	st := headState(t, aGo(runningPlan(), "rebase", ""), true)
+// TestEveryGoAsksInTheConsentBox: each go the stoker knows (merge,
+// release, deploy, kill) acts outside the session, so y on the need line
+// asks for a typed y first.
+func TestEveryGoAsksInTheConsentBox(t *testing.T) {
+	st := headState(t, aGo(runningPlan(), "release", ""), true)
 	st.Queue = nil
 	m, f := roomWith(t, st, "hearth-api")
 	rows := m.roomRows(m.room.k)
@@ -89,11 +93,75 @@ func TestYGivesAGoOnTheNeedLine(t *testing.T) {
 		t.Fatalf("need row %+v", rows[m.room.at])
 	}
 	next, _ := send(t, m, "y")
+	if len(f.acts()) != 0 || next.pending == nil || !next.pending.destructive {
+		t.Fatalf("a release go sent %+v, pending %+v", f.acts(), next.pending)
+	}
+	send(t, next, "y")
 	if a := f.acts(); len(a) != 1 || a[0].RecID != "stoker:grant" || a[0].Text != "s1 e9" {
 		t.Fatalf("acts %+v", a)
 	}
-	if next.flash != "go given: rebase ember-billing" {
-		t.Fatalf("flash %q", next.flash)
+}
+
+// guardGo makes the guard hold a command of hearth-api for a go, as the
+// service logs it: a RuleGo entry with no step.
+func guardGo(t *testing.T, st proto.State, needs, want string) proto.State {
+	t.Helper()
+	for _, s := range st.Sessions {
+		if s.Name == "hearth-api" {
+			st.Stokers[0].View.Run = append(st.Stokers[0].View.Run, proto.StokerEntry{ID: "go@1/" + needs, At: demoAt.Add(-time.Minute),
+				Name: "hearth-api", Pane: s.Pane, Rule: "go", State: "waits", Needs: needs, Want: want, Text: "hearth-api wants to run " + want})
+			return st
+		}
+	}
+	t.Fatal("no hearth-api")
+	return st
+}
+
+func TestTheRoomShowsAGoTheGuardHolds(t *testing.T) {
+	st := guardGo(t, headState(t, runningPlan(), true), "merge:#4552", "gh pr merge 4552 --squash")
+	st.Queue = nil
+	m, f := roomWith(t, st, "hearth-api")
+	rows := m.roomRows(m.room.k)
+	if rows[m.room.at].kind != roomNeed || rows[m.room.at].text != "▸ hearth-api wants to run gh pr merge 4552 --squash waits for your go · y" {
+		t.Fatalf("need row %+v", rows[m.room.at])
+	}
+	next, _ := send(t, m, "y")
+	if next.pending == nil || strings.Join(next.pending.steps[0], " ") != "gh pr merge 4552 --squash" {
+		t.Fatalf("pending %+v", next.pending)
+	}
+	send(t, next, "y")
+	if a := f.acts(); len(a) != 1 || a[0].Text != "s1 go@1/merge:#4552" {
+		t.Fatalf("acts %+v", a)
+	}
+}
+
+func TestAGivenGuardGoLeavesTheRoom(t *testing.T) {
+	st := guardGo(t, headState(t, runningPlan(), true), "kill:%9", "matchblox kill ember-billing")
+	e := st.Stokers[0].View.Run[len(st.Stokers[0].View.Run)-1]
+	e.ID, e.State = "go@2/kill:%9", "done"
+	st.Stokers[0].View.Run = append(st.Stokers[0].View.Run, e)
+	st.Queue = nil
+	m, _ := roomWith(t, st, "hearth-api")
+	if slices.Contains(kinds(m.roomRows(m.room.k)), roomNeed) {
+		t.Fatalf("a given go still waits:\n%s", rowsText(m.roomRows(m.room.k)))
+	}
+}
+
+func TestYOnAWaitingStepGivesItsGo(t *testing.T) {
+	st := headState(t, aGo(runningPlan(), "merge:#4556", ""), true)
+	st.Queue = nil
+	m, f := roomWith(t, st, "hearth-api")
+	m = at(t, m, roomStep, "▸ step · waits for your go")
+	if keys := ansi.Strip(m.render()); !strings.Contains(keys, "y give") {
+		t.Fatalf("no y on a waiting step:\n%s", keys)
+	}
+	next, _ := send(t, m, "y")
+	if next.pending == nil {
+		t.Fatalf("y on a waiting step: flash %q", next.flash)
+	}
+	send(t, next, "y")
+	if a := f.acts(); len(a) != 1 || a[0].Text != "s1 e9" {
+		t.Fatalf("acts %+v", a)
 	}
 }
 
