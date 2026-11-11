@@ -32,6 +32,27 @@ func TestFlipFromAMarkedPaneTakesTheClientToTheConsole(t *testing.T) {
 	waitFor(t, func() bool { return strings.Contains(strings.Join(paneRead(t, got), "\n"), want) })
 }
 
+// TestFlipReachesAConsoleRunInPlace: with the console run in place in a
+// session of another name (#354), ⌥s takes the client to it and hands it
+// the flip.
+func TestFlipReachesAConsoleRunInPlace(t *testing.T) {
+	sock, tmux, got := consolePaneIn(t, "desk")
+	tmux("new-session", "-d", "-s", "work", "sleep", "100")
+	pane := tmux("display-message", "-p", "-t", "work", "#{pane_id}")
+	tmux("set-option", "-p", "-t", pane, "@matchblox_match", "1")
+	tmux(FlipKeysArgv()[1:]...)
+	term := attach(t, sock, "work")
+	waitFor(t, func() bool { return tmux("list-clients", "-F", "#{client_session}") == "work" })
+	tty := tmux("list-clients", "-F", "#{client_tty}")
+	time.Sleep(100 * time.Millisecond)
+	if _, err := term.WriteString("\x1bs"); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool { return tmux("list-clients", "-F", "#{client_session}") == "desk" })
+	want := eventLine(uv.UnknownApcEvent(keycmd.FlipAPC(tty + " " + pane)))
+	waitFor(t, func() bool { return strings.Contains(strings.Join(paneRead(t, got), "\n"), want) })
+}
+
 // TestNextFromAMarkedPaneSaysNext: ⌥n hands the console the walk.
 func TestNextFromAMarkedPaneSaysNext(t *testing.T) {
 	sock, tmux, got := consolePane(t)
