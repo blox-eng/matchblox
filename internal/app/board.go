@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -66,6 +67,9 @@ type boardDrawn struct {
 	// tabRow and tabSpans are the tab row while the board shows.
 	tabRow   string
 	tabSpans []span
+	// stripAt is the strip's first line (-1: none), and strip its tap.
+	stripAt int
+	strip   span
 }
 
 // boardSpot is a line of one column.
@@ -99,7 +103,7 @@ func (m Model) boardShown() bool { return m.board && m.tab == tabSessions }
 // the ghost row and the recommendations under them, each folded to one
 // line. It draws the tab row too, from the same index.
 func (m Model) boardPanel(w, h int) boardDrawn {
-	d := boardDrawn{headAt: -1, cards: map[boardSpot]paneKey{}, taps: map[int][]span{}, hostAt: map[int]string{}}
+	d := boardDrawn{headAt: -1, stripAt: -1, cards: map[boardSpot]paneKey{}, taps: map[int][]span{}, hostAt: map[int]string{}}
 	b, shown := m.boardDrawOf()
 	d.tabRow, d.tabSpans = m.boardTabRow(w, &b)
 
@@ -124,7 +128,7 @@ func (m Model) boardPanel(w, h int) boardDrawn {
 	if len(m.recs) > 0 {
 		under = append(under, st.label.Render(fit(fmt.Sprintf(" RECOMMENDATIONS · %d", len(m.recs)), w)))
 	}
-	note := m.noticeLines(w)
+	strip, tap, _ := m.strip(w)
 	rows := m.boardRows(w, h, none)
 	top := len(d.lines)
 	switch l := m.layoutAt(w); {
@@ -146,15 +150,19 @@ func (m Model) boardPanel(w, h int) boardDrawn {
 	}
 	d.lines, d.rows = d.lines[:top+rows], d.rows[:top+rows]
 	d.add(-1, under...)
-	d.add(-1, note...)
+	if len(strip) > 0 {
+		d.stripAt, d.strip = len(d.lines), tap
+	}
+	d.add(-1, strip...)
 	return d
 }
 
 // boardRows is how many of the board's h rows the columns take: all but the
 // doors line above, the ghost row and the recommendations under them, and
-// the notice row. none: no session at all, and no ghost row under.
+// the strip's row. none: no session at all, and no ghost row under.
 func (m Model) boardRows(w, h int, none bool) int {
-	rows := h - len(m.noticeLines(w)) - len(m.hostLines(w))
+	strip, _, _ := m.strip(w)
+	rows := h - len(strip) - len(m.hostLines(w))
 	if len(m.doors) > 0 {
 		rows--
 	}
@@ -219,11 +227,17 @@ func (m Model) boardWords(b *boardDraw) string {
 	return ""
 }
 
-// boardStateNotice is what the notice row says of the board's state: the
-// service lost, or nothing.
+// boardStateNotice is what the strip's row says of the board's state: the
+// service lost, data older than the stale limit, or nothing.
 func (m Model) boardStateNotice() string {
-	if m.lost && m.have {
+	switch age := m.now().Sub(m.snap.At); {
+	case !m.have:
+	case m.lost:
 		return "no service · it redials"
+	case age >= staleAfter && age < 2*time.Minute:
+		return fmt.Sprintf("data is %d s old · the service is slow", int(age.Seconds()))
+	case age >= staleAfter:
+		return fmt.Sprintf("data is %d min old · the service is slow", int(age.Minutes()))
 	}
 	return ""
 }

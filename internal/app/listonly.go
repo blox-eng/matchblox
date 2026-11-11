@@ -147,13 +147,20 @@ func (m Model) stripFace() string {
 // daily record exists.
 var stripTurn = []string{"usage", "machine", "off"}
 
+// stripNext is the face after face.
+func stripNext(face string) string {
+	return stripTurn[(slices.Index(stripTurn, face)+1)%len(stripTurn)]
+}
+
 // turnStrip moves the strip to its next face.
-func (m *Model) turnStrip() {
-	next := stripTurn[(slices.Index(stripTurn, m.stripFace())+1)%len(stripTurn)]
+func (m *Model) turnStrip() { m.setStripFace(stripNext(m.stripFace())) }
+
+// setStripFace keeps face as this shape's strip.
+func (m *Model) setStripFace(face string) {
 	if m.upright() {
-		m.viewPrefs.StripPhone = next
+		m.viewPrefs.StripPhone = face
 	} else {
-		m.viewPrefs.StripDesk = next
+		m.viewPrefs.StripDesk = face
 	}
 	m.keepViewPrefs()
 }

@@ -135,6 +135,8 @@ type drawn struct {
 	rows    []int // the row each body line shows; -1 none, headerRow
 	listW   int   // the list's columns; the detail or the chat is right of them
 	dockAt  int   // the dock's first line; -1 when it is folded
+	stripAt int   // the board's strip; -1 when it has none
+	strip   span  // a tap on the strip turns it
 	keysAt  int   // the key line; -1 when there is none
 	keys    []span
 	// A box over the screen (the sheet, a form): its first line and
@@ -192,7 +194,7 @@ func (m Model) drawScreen(w int) drawn {
 	head, waits, stokerAt := m.header(w)
 	tabs, tabSpans := m.tabsLine(w)
 	sc := drawn{lines: []string{head, tabs, m.st.rule.Render(strings.Repeat("─", w))}, waits: waits, stokerAt: stokerAt, tabs: tabSpans,
-		bodyTop: 3, listW: w, dockAt: -1, keysAt: -1, actKeysAt: -1, hostAt: m.boardHostHit(head)}
+		bodyTop: 3, listW: w, dockAt: -1, stripAt: -1, keysAt: -1, actKeysAt: -1, hostAt: m.boardHostHit(head)}
 	switch {
 	case m.hostCount() > 1 && m.shows():
 		// A blocked host of two or more is a row, never the screen.
@@ -227,6 +229,9 @@ func (m Model) drawScreen(w int) drawn {
 	if m.boardShown() { // the board draws its tab row from the body's index
 		p := m.boardPanel(listW, full)
 		b, sc.lines[1], sc.tabs = p.body, p.tabRow, p.tabSpans
+		if p.stripAt >= 0 {
+			sc.stripAt, sc.strip = sc.bodyTop+p.stripAt, p.strip
+		}
 	} else {
 		b = m.body(listW)
 	}
@@ -244,7 +249,7 @@ func (m Model) drawScreen(w int) drawn {
 	}
 	detail := paneLines(0)
 	var d docked
-	if m.tab != tabMachine && m.tab != tabStoker && !stacked && !m.listOnly() {
+	if m.tab != tabMachine && m.tab != tabStoker && !stacked && !m.listOnly() && !m.boardShown() { // the board has its strip
 		d = m.dock(w, -1)
 	}
 	room := full
@@ -448,7 +453,7 @@ func (m Model) header(w int) (string, span, span) {
 		}
 		return fit(left, w), span{}, span{}
 	}
-	if m.toast != "" {
+	if m.toast != "" && !m.boardShown() { // the board's toasts are notices
 		// A long toast is cut, never the name; the host stays when the
 		// toast still has room.
 		if host != "" && w-lipgloss.Width(left+lost)-len(host)-6 >= 20 {
@@ -677,7 +682,7 @@ func (m Model) keyLine(w int) (string, []span) {
 	if m.pair.strips() && (m.pair.beat == 4 || m.flash == "") {
 		return fit(" "+st.text.Render(m.pair.line), w), nil
 	}
-	if m.flash != "" {
+	if m.flash != "" && (!m.boardShown() || m.viewFull()) { // the board's flash is a notice
 		return fit(" "+st.text.Render(m.flash), w), nil
 	}
 	if l := m.lostLine(); l != "" { // a lost host outranks the stand-in's keys, which may not go

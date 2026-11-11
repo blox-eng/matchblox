@@ -9,45 +9,15 @@ import (
 	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
-// noticeFor is how long a notice shows in the board's notice row.
-const noticeFor = 2500 * time.Millisecond
-
 // peekDead is how long the digits arm nothing after the peek lands on a
 // card, the board opens, a tab or a filter changes, or a new question
 // comes.
 const peekDead = 400 * time.Millisecond
-
-// noticeMsg comes when a notice ends: the frame drops it.
-type noticeMsg struct{}
-
-// notice shows text in the board's notice row, over the key line, for
-// noticeFor. The header never shows it.
-func (m *Model) notice(text string) tea.Cmd {
-	m.noticeText, m.noticeUntil, m.goArmed = text, m.now().Add(noticeFor), paneKey{}
-	return tea.Tick(noticeFor, func(time.Time) tea.Msg { return noticeMsg{} })
-}
-
-// noticeLines is the notice row while a notice shows: one line, two on
-// Narrow when it does not fit, so its fix is never cut.
-func (m Model) noticeLines(w int) []string {
-	if m.noticeText == "" || !m.now().Before(m.noticeUntil) {
-		return nil
-	}
-	lines := []string{m.noticeText}
-	if m.layoutAt(w) == Narrow && ansi.StringWidth(m.noticeText) > w-1 {
-		lines = upTo(wrapPlain(m.noticeText, w-1), 2, w-1)
-	}
-	for i, l := range lines {
-		lines[i] = fit(" "+m.st.text.Render(l), w)
-	}
-	return lines
-}
 
 // once is the notice of a key that changed its job: first, the first time
 // ever, else said ("" says nothing).
@@ -449,7 +419,7 @@ func (m Model) boardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 		m.turnChain(-1)
 	case bkey.Matches(k, bk.Strip):
 		cmd = m.once("strip", bk.Strip.Help().Key+" turns the strip now.", "")
-		m.turnStrip()
+		m.turnStripShown()
 	case isDigit(k): // never a tab on the board
 		next, cmd := m.answerFromPeek(k.Text)
 		return next, cmd, true

@@ -95,6 +95,11 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 			return m.keyed(keyPress(s.press))
 		}
 		return m, nil
+	case sc.stripAt > 0 && ms.Y == sc.stripAt:
+		if s, ok := spanAt([]span{sc.strip}, ms.X); ok && s.press != "" {
+			return m.keyed(keyPress(s.press)) // as u
+		}
+		return m, nil
 	case m.boardShown() && ms.Y >= sc.bodyTop && ms.Y < sc.keysAt-1:
 		return m.boardTap(ms.X, ms.Y-sc.bodyTop)
 	case sc.dockAt >= 0 && ms.Y >= sc.dockAt && ms.Y < sc.dockAt+sc.dockH:

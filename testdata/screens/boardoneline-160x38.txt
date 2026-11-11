@@ -31,8 +31,8 @@
                                                                                                            │
                                                                                                            │
                                                                                                            │
-                                                                                                           │
  + start a new session
  RECOMMENDATIONS · 7
+ ✻ Claude Max  5h ▰▰▰▰▰▰▰▱ 84%  wk 82%   · Google login  not measured   ❋ OpenAI Plus  5h ▰▰▰▱▱▱▱▱ 40%  wk 12%                                        machine ›
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ⏎ go in   c copy   v verbose   s hosts   u strip   ←→ columns   tab next

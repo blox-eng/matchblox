@@ -408,6 +408,9 @@ type Model struct {
 	// claimed the dock, so it no longer takes it by itself.
 	dockPanel    int
 	dockSwitched bool
+	// stripTurned: u turned the board's strip while a warning lasts, so the
+	// warning no longer turns it.
+	stripTurned bool
 	// stokerSel is the selected row of the STOKER tab, stokerShown the row
 	// whose command it shows, ackSent when the steps were last marked seen.
 	stokerSel    int
@@ -665,12 +668,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg.(type) {
 	case tea.KeyPressMsg, tea.MouseClickMsg, tea.MouseWheelMsg, tea.PasteMsg:
 		m.askedBy, m.marked, m.away = m.marked.spend(m.now()), clientMark{}, false
+		if m.boardShown() && m.held == nil {
+			m.flash = "" // a flash after the key is new: it goes to the strip's row
+		}
 	default:
 		m.askedBy = ""
 	}
+	was := m.flash
 	next, cmd := m.update(msg)
 	if nm, ok := next.(Model); ok {
 		nm = nm.scanShows().keepView().inDemo().peekOn()
+		if note := nm.flashNotice(was); note != nil {
+			cmd = tea.Batch(cmd, note)
+		}
 		if watch := nm.watchCmd(); watch != nil {
 			cmd = tea.Batch(cmd, watch)
 		}
@@ -781,6 +791,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.doors = m.shownDoors(st.Doors)
 		m.noteChanges(m.opt.Host, st.Sessions, st.Chains)
 		m.snap, m.git, m.recs, m.have, m.answered, m.at = st.Snapshot, st.Git, st.Recommendations, true, true, m.now()
+		if m.stripWarn() == "" {
+			m.stripTurned = false
+		}
 		m.shipReport = st.Ships
 		m.holds, m.reasons, m.chains = st.Holds, st.Reasons, st.Chains
 		m.agents, m.renames, m.accounts, m.signIns = st.Agents, st.Renames, st.Accounts, st.SignIns
@@ -1761,6 +1774,9 @@ const toastFor = 2500 * time.Millisecond
 
 // say shows what an action did on the header's right, for toastFor.
 func (m *Model) say(text string) tea.Cmd {
+	if m.boardShown() {
+		return m.notice(text)
+	}
 	m.toasts++
 	m.toast = text
 	n := m.toasts

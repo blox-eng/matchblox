@@ -475,7 +475,7 @@ func TestSearchNarrowsEveryColumn(t *testing.T) {
 		}
 	}
 	m = pressOn(m, "enter", "esc")
-	if m.filter != "" || len(drawnNames(m)) < 10 {
+	if m.filter != "" || len(drawnNames(m)) <= 3 {
 		t.Errorf("esc keeps the search %q: %v", m.filter, drawnNames(m))
 	}
 }

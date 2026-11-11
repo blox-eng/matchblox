@@ -416,8 +416,8 @@ func TestARefusedMergeKeepsItsReason(t *testing.T) {
 	})
 	next, _ := m.Update(lostMsg{err: io.EOF, conn: m.conn})
 	m = pressOn(next.(Model), "p")
-	if m.pending != nil || !strings.Contains(m.flash, "is not connected") || !strings.Contains(actionLine(m), "is not connected") {
-		t.Errorf("the first p on a lost host: pending %v, flash %q, key line %q", m.pending, m.flash, actionLine(m))
+	if m.pending != nil || !strings.Contains(m.flash, "is not connected") || !strings.Contains(noticeRow(m), "is not connected") {
+		t.Errorf("the first p on a lost host: pending %v, flash %q, notice row %q", m.pending, m.flash, noticeRow(m))
 	}
 }
 
