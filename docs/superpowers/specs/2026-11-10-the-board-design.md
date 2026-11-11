@@ -166,7 +166,7 @@ The accent is on one card (owner, 2026-11-11; DESIGN.md §1 rule 4): the chosen 
 
 ### Notices
 
-Every toast, every refusal and the age of the data show in one place: the strip's row, in place of the strip, for 2.5 s (owner, 2026-11-11). On Narrow a notice may wrap to two lines, so its fix is never cut. With the strip hidden, the row appears for the notice only. The header never changes for a notice: `● N need you` and the host filter stay. When the sample is older than the console's stale limit, the row says `data is 40 s old · the service is slow` until it is fresh.
+Every toast, every refusal and the age of the data show in one place: the strip's row, in place of the strip, for 2.5 s (owner, 2026-11-11). A notice that does not fit wraps, up to three lines, on every shape, so its fix is never cut (2026-11-12: at 40 columns the lost-service notice needs three). With the strip hidden, the row appears for the notice only. The header never changes for a notice: `● N need you` and the host filter stay. When the sample is older than the console's stale limit, the row says `data is 40 s old · the service is slow` until it is fresh.
 
 **A key that changed its job says so once.** The first press of `c`, `v`, `s`, `g`, `u`, `p`, `x` on a card whose ship waits, and of a digit, shows one notice, and the key still does its new job: `c copies now. The stoker is on its card.`, `v changes the cards now: verbose, or one line.`, `s changes the host now. The order of a column is fixed.`, `g shows one chain now. esc shows all.`, `u turns the strip now.`, `p merges now. The ships are on their cards.`, `x kills. p merges #4556.`, `A digit marks an answer now. Press it again to send.` Each shows once ever; the state directory keeps which.
 
