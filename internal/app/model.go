@@ -673,7 +673,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg.(type) {
 	case tea.KeyPressMsg, tea.MouseClickMsg, tea.MouseWheelMsg, tea.PasteMsg:
 		m.askedBy, m.marked, m.away = m.marked.spend(m.now()), clientMark{}, false
-		if m.boardShown() && m.held == nil {
+		if _, wheel := msg.(tea.MouseWheelMsg); m.boardShown() && m.held == nil && !wheel {
 			m.flash = "" // a flash after the key is new: it goes to the strip's row
 		}
 	default:
@@ -683,6 +683,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	next, cmd := m.update(msg)
 	if nm, ok := next.(Model); ok {
 		nm = nm.scanShows().keepView().inDemo().peekOn()
+		if nm.stripTurned && nm.stripWarn() == "" {
+			nm.stripTurned = false // the warning ended: the next one turns the strip
+		}
 		if note := nm.flashNotice(was); note != nil {
 			cmd = tea.Batch(cmd, note)
 		}
@@ -796,9 +799,6 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.doors = m.shownDoors(st.Doors)
 		m.noteChanges(m.opt.Host, st.Sessions, st.Chains)
 		m.snap, m.git, m.recs, m.have, m.answered, m.at = st.Snapshot, st.Git, st.Recommendations, true, true, m.now()
-		if m.stripWarn() == "" {
-			m.stripTurned = false
-		}
 		m.shipReport = st.Ships
 		m.holds, m.reasons, m.chains = st.Holds, st.Reasons, st.Chains
 		m.agents, m.renames, m.accounts, m.signIns = st.Agents, st.Renames, st.Accounts, st.SignIns

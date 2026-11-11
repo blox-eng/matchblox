@@ -26,6 +26,6 @@
 
 
  RECOMMENDATIONS · 7
- ✻ 5h 84% · wk 82%   · not measured   ❋ 5h 40% · wk 12%               machine ›
+ ✻ Claude Max  5h ▰▰▰▰▰▰▰▱ 84%  wk 82%                                machine ›
 ────────────────────────────────────────────────────────────────────────────────
  ⏎ new session   c copy   v one line   s hosts   u strip   ←→ columns   tab next

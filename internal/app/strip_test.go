@@ -80,13 +80,64 @@ func TestTheStripFollowsTheHostFilter(t *testing.T) {
 	m := boardShot(t, boardFixture(t), 104, 38, func(m *Model) { m.viewPrefs.StripDesk = "machine" })
 	home := m.nameOf(m.opt.Host)
 	all := stripRow(m)
-	if !strings.Contains(all, home) || !strings.Contains(all, "gpu-1") {
-		t.Fatalf("with all hosts the machine strip does not name each host: %q", all)
+	if !strings.Contains(all, home) || !strings.Contains(all, "gpu-1") || strings.Contains(all, "mem") {
+		t.Fatalf("with all hosts the machine strip is not each host's CPU: %q", all)
 	}
 	m.boardHost = "gpu-1"
 	one := stripRow(m)
-	if !strings.Contains(one, "gpu-1") || strings.Contains(one, home) {
-		t.Errorf("with gpu-1 chosen the strip is not gpu-1's only: %q", one)
+	if !strings.Contains(one, "gpu-1") || strings.Contains(one, home) || !strings.Contains(one, "mem") {
+		t.Errorf("with gpu-1 chosen the strip is not gpu-1's CPU and memory: %q", one)
+	}
+}
+
+// gpuAtPlanEdge puts the first window of gpu-1's first account at pct.
+func gpuAtPlanEdge(pct float64) func(*Model) {
+	return func(m *Model) {
+		m.peers = slices.Clone(m.peers)
+		i := m.peerAt("gpu-1")
+		ls := slices.Clone(m.peers[i].st.Limits)
+		j := slices.IndexFunc(ls, func(a limits.Account) bool { return len(a.Windows) > 0 })
+		ls[j].Windows = slices.Clone(ls[j].Windows)
+		ls[j].Windows[0].UsedPct = pct
+		m.peers[i].st.Limits = ls
+	}
+}
+
+func TestAPlanOnAnotherHostWarnsToo(t *testing.T) {
+	m := boardShot(t, boardFixture(t), 104, 38, func(m *Model) {
+		m.viewPrefs.StripDesk = "machine"
+		gpuAtPlanEdge(95)(m)
+	})
+	lines, _, _ := m.strip(104)
+	plain := ansi.Strip(lines[0])
+	if !strings.Contains(lines[0], m.meter(95, 8, m.st.neg)) || !strings.HasPrefix(plain, " ✻ Claude Max @gpu-1  5h") {
+		t.Errorf("a plan at 95%% on gpu-1 does not lead the usage strip with its host and the neg bar: %q", plain)
+	}
+	m.boardHost = m.nameOf(m.opt.Host)
+	if row := stripRow(m); !strings.Contains(row, "cpu") || strings.Contains(row, "95%") {
+		t.Errorf("with the filter on this machine, gpu-1's plan turns the strip: %q", row)
+	}
+}
+
+func TestTheStateNoticeKeepsTheTap(t *testing.T) {
+	m := boardShot(t, boardFixture(t), 80, 31, func(m *Model) {
+		toldStrip(m)
+		at := m.snap.At.Add(40 * time.Second)
+		m.opt.Now = func() time.Time { return at }
+	})
+	m.opt.StateDir = t.TempDir()
+	sc := m.draw(80)
+	if sc.stripAt < 0 || sc.strip.press == "" {
+		t.Fatalf("the row under old data takes no tap: at %d, %+v", sc.stripAt, sc.strip)
+	}
+	next, cmd := tap(m, 3, sc.stripAt)
+	drain(cmd)
+	m = next.(Model)
+	if f := m.stripFace(); f != "machine" {
+		t.Errorf("a tap on the state notice turns the strip to %q, want machine", f)
+	}
+	if row := stripRow(m); !strings.Contains(row, "data is 40 s old") {
+		t.Errorf("the state notice does not stay on top: %q", row)
 	}
 }
 
@@ -143,7 +194,7 @@ func TestANoticeNeverHidesTheCount(t *testing.T) {
 	if !strings.Contains(head, "● 4 need you") || !strings.Contains(head, "all hosts ▾") {
 		t.Fatalf("the header before the notice: %q", head)
 	}
-	tick := m.notice("copied hearth-api's last answer")
+	m.notice("copied hearth-api's last answer")
 	if h := strings.Split(plainFrame(m), "\n")[0]; h != head {
 		t.Errorf("the header changed for a notice:\n%q\n%q", head, h)
 	}
@@ -151,7 +202,7 @@ func TestANoticeNeverHidesTheCount(t *testing.T) {
 		t.Errorf("the strip's row has no notice: %q", row)
 	}
 	now = now.Add(noticeFor)
-	next, _ := m.Update(tick())
+	next, _ := m.Update(noticeMsg{}) // the notice's tick, delivered at once
 	m = next.(Model)
 	if row := stripRow(m); !strings.Contains(row, "machine ›") {
 		t.Errorf("the strip is not back after %v: %q", noticeFor, row)
@@ -160,7 +211,6 @@ func TestANoticeNeverHidesTheCount(t *testing.T) {
 	if h := strings.Split(plainFrame(m), "\n")[0]; h != head || !strings.Contains(stripRow(m), "ran: git fetch") {
 		t.Errorf("a toast on the board is not a notice: header %q, row %q", h, stripRow(m))
 	}
-	now = now.Add(noticeFor)
 
 	now = demoAt
 	off := boardShot(t, boardFixture(t), 80, 31, func(m *Model) {

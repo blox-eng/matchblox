@@ -129,7 +129,7 @@ func (m Model) boardPanel(w, h int) boardDrawn {
 		under = append(under, st.label.Render(fit(fmt.Sprintf(" RECOMMENDATIONS · %d", len(m.recs)), w)))
 	}
 	strip, tap, _ := m.strip(w)
-	rows := m.boardRows(w, h, none)
+	rows := m.boardRowsUnder(w, h, none, len(strip))
 	top := len(d.lines)
 	switch l := m.layoutAt(w); {
 	case none:
@@ -162,7 +162,12 @@ func (m Model) boardPanel(w, h int) boardDrawn {
 // the strip's row. none: no session at all, and no ghost row under.
 func (m Model) boardRows(w, h int, none bool) int {
 	strip, _, _ := m.strip(w)
-	rows := h - len(strip) - len(m.hostLines(w))
+	return m.boardRowsUnder(w, h, none, len(strip))
+}
+
+// boardRowsUnder is boardRows with the strip's lines worked out.
+func (m Model) boardRowsUnder(w, h int, none bool, strip int) int {
+	rows := h - strip - len(m.hostLines(w))
 	if len(m.doors) > 0 {
 		rows--
 	}

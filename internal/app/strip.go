@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strings"
@@ -41,15 +42,6 @@ func (m *Model) flashNotice(was string) tea.Cmd {
 	return m.notice(m.flash)
 }
 
-// stripNotice is what the strip's row says in place of the strip: a live
-// notice, then the board's state ("": nothing).
-func (m Model) stripNotice() string {
-	if m.noticeText != "" && m.now().Before(m.noticeUntil) {
-		return m.noticeText
-	}
-	return m.boardStateNotice()
-}
-
 // noticeRows are a notice in w columns: one line, two on Narrow when it
 // does not fit, so its fix is never cut.
 func (m Model) noticeRows(text string, w int) []string {
@@ -76,11 +68,16 @@ func cutNotice(text string, w int) []string {
 }
 
 // strip is the strip's row in w columns: a notice, else the face it
-// shows with the word of the next face at its right. tap covers the face
-// and presses u. ok is false when the face is off and no notice shows.
+// shows with the word of the next face at its right. tap covers the row
+// and presses u, under the board's state too; a passing notice takes no
+// tap. ok is false when the face is off and no notice shows.
 func (m Model) strip(w int) (lines []string, tap span, ok bool) {
-	if text := m.stripNotice(); text != "" {
-		return m.noticeRows(text, w), span{}, true
+	turn := span{0, w, m.keys.board.Strip.Help().Key}
+	if m.noticeText != "" && m.now().Before(m.noticeUntil) {
+		return m.noticeRows(m.noticeText, w), span{}, true
+	}
+	if text := m.boardStateNotice(); text != "" {
+		return m.noticeRows(text, w), turn, true
 	}
 	face := m.stripShows()
 	if face == "off" {
@@ -100,7 +97,7 @@ func (m Model) strip(w int) (lines []string, tap span, ok bool) {
 	default:
 		left = m.stripUsage(room)
 	}
-	return []string{spread(" "+left, word, w)}, span{0, w, m.keys.board.Strip.Help().Key}, true
+	return []string{spread(" "+left, word, w)}, turn, true
 }
 
 // stripShows is the face the strip shows: a warning's face until the
@@ -116,14 +113,9 @@ func (m Model) stripShows() string {
 // window is within 10% of its limit, the machine while a detached busy
 // loop burns ("": none).
 func (m Model) stripWarn() string {
-	now := m.now()
-	for _, h := range m.stripUsageHosts() {
-		for _, a := range m.limitsOf(h) {
-			for _, u := range a.Uses(now) {
-				if u.Pct >= 90 {
-					return "usage"
-				}
-			}
+	for _, a := range m.stripAccounts() {
+		if a.fullest >= 90 {
+			return "usage"
 		}
 	}
 	if len(m.all.orphans) > 0 {
@@ -155,13 +147,43 @@ func (m Model) stripFilterHost() (string, bool) {
 	return "", false
 }
 
-// stripUsageHosts are the hosts whose plans the strip shows: the one in
-// the filter, else this machine.
-func (m Model) stripUsageHosts() []string {
+// stripHosts are the hosts the strip shows: the one in the filter, else
+// every host with a state, this machine first.
+func (m Model) stripHosts() []string {
 	if h, ok := m.stripFilterHost(); ok {
 		return []string{h}
 	}
+	if hs := m.statedHosts(); len(hs) > 0 {
+		return hs
+	}
 	return []string{m.opt.Host}
+}
+
+// stripAcct is an account the strip shows: its host, its name on that
+// host, and its fullest window.
+type stripAcct struct {
+	host, name string
+	a          limits.Account
+	fullest    float64
+}
+
+// stripAccounts are the accounts of the strip's hosts, the fullest first.
+func (m Model) stripAccounts() []stripAcct {
+	now := m.now()
+	var out []stripAcct
+	for _, h := range m.stripHosts() {
+		ls := m.limitsOf(h)
+		names, _ := accountNames(ls, false)
+		for i, a := range ls {
+			sa := stripAcct{host: h, name: names[i], a: a}
+			for _, u := range a.Uses(now) {
+				sa.fullest = max(sa.fullest, u.Pct)
+			}
+			out = append(out, sa)
+		}
+	}
+	slices.SortStableFunc(out, func(x, y stripAcct) int { return cmp.Compare(y.fullest, x.fullest) })
+	return out
 }
 
 // stripJoin is the parts that fit whole in w cells, in order, three cells
@@ -182,9 +204,9 @@ func stripJoin(parts []string, w int) (line string, all bool) {
 
 // stripShape is how much a part of the strip says: the names, a bar (or
 // spark) for every window (or host) or the first only, the resets, the
-// memory of every host or the first only.
+// memory of a host shown alone.
 type stripShape struct {
-	names, bars, firstBar, resets, mem, firstMem bool
+	names, bars, firstBar, resets, mem bool
 }
 
 // The shapes of usage and of the machine, from the most each says to the
@@ -198,39 +220,50 @@ var (
 	}
 	machineShapes = []stripShape{
 		{names: true, bars: true, mem: true},
-		{names: true, firstBar: true, firstMem: true},
-		{firstMem: true},
+		{names: true, mem: true},
+		{mem: true},
 		{},
 	}
 )
 
-// stripFits is the parts in the first shape where every part fits w
-// cells; else the last shape's parts that fit whole.
-func stripFits(w int, shapes []stripShape, parts func(stripShape) []string) string {
+// stripFits is the parts that fit whole in w cells, in the first shape
+// where the first need parts fit (need 0: every part); else in the last
+// shape.
+func stripFits(w, need int, shapes []stripShape, parts func(stripShape) []string) string {
 	line := ""
 	for _, sh := range shapes {
+		ps := parts(sh)
+		if need > 0 && need < len(ps) {
+			if _, all := stripJoin(ps[:need], w); all {
+				line, _ = stripJoin(ps, w)
+				break
+			}
+		}
 		var all bool
-		if line, all = stripJoin(parts(sh), w); all {
+		if line, all = stripJoin(ps, w); all {
 			break
 		}
 	}
 	return line
 }
 
-// stripUsage is each account's windows on one line of w cells.
+// stripUsage is each account's windows on one line of w cells, the
+// fullest first; an account of another host says its host. The richest
+// shape is the one where every account at 60% or more fits; the
+// accounts after them go when they do not fit whole.
 func (m Model) stripUsage(w int) string {
-	var accounts []limits.Account
-	for _, h := range m.stripUsageHosts() {
-		accounts = append(accounts, m.limitsOf(h)...)
-	}
+	accounts := m.stripAccounts()
 	if len(accounts) == 0 {
 		return m.st.faint.Render("no session runs under a plan")
 	}
-	names, _ := accountNames(accounts, false)
-	return stripFits(w, usageShapes, func(sh stripShape) []string {
+	need := 0
+	for need < len(accounts) && accounts[need].fullest >= 60 {
+		need++
+	}
+	return stripFits(w, need, usageShapes, func(sh stripShape) []string {
 		parts := make([]string, len(accounts))
 		for i, a := range accounts {
-			parts[i] = m.stripAccount(a, names[i], sh)
+			parts[i] = m.stripAccount(a, sh)
 		}
 		return parts
 	})
@@ -238,11 +271,17 @@ func (m Model) stripUsage(w int) string {
 
 // stripAccount is one account in the strip: "✻ Claude Max  5h ▰▰▰▱▱▱▱▱ 38%  wk 41%".
 // A window at 60% or more is in warn, at 90% in neg.
-func (m Model) stripAccount(a limits.Account, name string, sh stripShape) string {
-	st, now := m.st, m.now()
+func (m Model) stripAccount(sa stripAcct, sh stripShape) string {
+	st, now, a := m.st, m.now(), sa.a
 	head := m.accountMark(a.Provider) + " "
 	if sh.names {
-		head += st.text.Render(name) + "  "
+		head += st.text.Render(sa.name) + " "
+	}
+	if sa.host != m.opt.Host {
+		head += st.muted.Render("@"+m.nameOf(sa.host)) + " "
+	}
+	if sh.names {
+		head += " "
 	}
 	if a.State == limits.Unmeasured {
 		return head + st.warn.Render("not measured")
@@ -278,15 +317,10 @@ func (m Model) stripAccount(a limits.Account, name string, sh stripShape) string
 }
 
 // stripMachine is the machine on one line of w cells: the host in the
-// filter, or each host with a state; a detached busy loop leads in warn.
+// filter with its memory, or each host's CPU; a detached busy loop leads
+// in warn.
 func (m Model) stripMachine(w int) string {
-	hosts := m.statedHosts()
-	if h, ok := m.stripFilterHost(); ok {
-		hosts = []string{h}
-	}
-	if len(hosts) == 0 {
-		hosts = []string{m.opt.Host}
-	}
+	hosts := m.stripHosts()
 	var lead []string
 	switch n := len(m.all.orphans); {
 	case n == 1:
@@ -294,17 +328,18 @@ func (m Model) stripMachine(w int) string {
 	case n > 1:
 		lead = []string{m.st.warn.Render(fmt.Sprintf("%d busy loops burn", n))}
 	}
-	return stripFits(w, machineShapes, func(sh stripShape) []string {
+	return stripFits(w, 0, machineShapes, func(sh stripShape) []string {
 		parts := slices.Clone(lead)
-		for i, h := range hosts {
-			parts = append(parts, m.stripHost(h, sh, i == 0))
+		for _, h := range hosts {
+			parts = append(parts, m.stripHost(h, sh, len(hosts) == 1))
 		}
 		return parts
 	})
 }
 
 // stripHost is one host in the strip: "ws-1  cpu ▃▄▅▄▃▅▆▅ 38% · mem 41 of 64 GB".
-func (m Model) stripHost(h string, sh stripShape, first bool) string {
+// Memory shows only for a host alone: with all hosts, each host's CPU.
+func (m Model) stripHost(h string, sh stripShape, alone bool) string {
 	st := m.st
 	line := st.text.Render(m.nameOf(h)) + " "
 	if note := m.staleNote(h); note != "" {
@@ -315,11 +350,11 @@ func (m Model) stripHost(h string, sh stripShape, first bool) string {
 		line += " "
 	}
 	line += st.label.Render("cpu ")
-	if sh.bars || sh.firstBar && first {
+	if sh.bars {
 		line += st.muted.Render(spark(m.viewOf(h).history.cpu, 8, 100)) + " "
 	}
 	line += st.text.Render(fmt.Sprintf("%.0f%%", mc.CPU))
-	if sh.mem || sh.firstMem && first {
+	if sh.mem && alone {
 		used, _ := memUse(mc)
 		line += st.faint.Render(" · ") + st.label.Render("mem ") + st.text.Render(fmt.Sprintf("%.0f of %.0f GB", gb(used), gb(mc.MemTotal)))
 	}

@@ -33,6 +33,6 @@
 
  + start a new session
  RECOMMENDATIONS · 7
- ✻ 5h ▰▰▰▰▰▰▰▱ 84%  wk 82%   · not measured   ❋ 5h ▰▰▰▱▱▱▱▱ 40%  wk 12%                       machine ›
+ ✻ Claude Max  5h ▰▰▰▰▰▰▰▱ 84%  wk 82%   ✻ Claude Max @gpu-1  5h ▰▰▰▰▰▰▰▱ 84%  wk 82%         machine ›
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
  ⏎ go in   c copy   v one line   s hosts   u strip   ←→ columns   tab next

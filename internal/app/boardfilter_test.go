@@ -464,6 +464,7 @@ func openOn(m Model, name string) Model {
 
 func TestSearchNarrowsEveryColumn(t *testing.T) {
 	m := boardShot(t, boardFixture(t), 80, 31, nil)
+	before := drawnNames(m)
 	m = pressOn(m, "/", "l", "o", "g")
 	if got, want := drawnNames(m), []string{"flint-api", "flint-auth", "flint-ui"}; !slices.Equal(got, want) {
 		t.Errorf("a search of log leaves %v, want %v", got, want)
@@ -475,7 +476,7 @@ func TestSearchNarrowsEveryColumn(t *testing.T) {
 		}
 	}
 	m = pressOn(m, "enter", "esc")
-	if m.filter != "" || len(drawnNames(m)) <= 3 {
-		t.Errorf("esc keeps the search %q: %v", m.filter, drawnNames(m))
+	if m.filter != "" || !slices.Equal(drawnNames(m), before) {
+		t.Errorf("esc keeps the search %q: %v, want %v", m.filter, drawnNames(m), before)
 	}
 }
