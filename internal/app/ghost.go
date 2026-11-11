@@ -147,7 +147,7 @@ func (m Model) ghostRow(g ghost, sel bool, w int) string {
 	}
 	left := mark + st.accent.Render("+") + " " + ink.Render(words)
 	if t := m.sessTracks(w); t.wide {
-		left = mark + st.accent.Render("+") + " " + ink.Render(pad(words, t.name))
+		left = mark + st.accent.Render("+") + " " + ink.Render(pad(words, max(t.name, lipgloss.Width(words)+1)))
 	}
 	if where == "" {
 		return fit(left, w)

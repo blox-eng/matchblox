@@ -334,4 +334,9 @@ func (m Model) onRowHost(a *action) *action {
 	return m.forHost(m.hostOf(*a), a)
 }
 
-func (m Model) body(w int) body { return m.view().body(m, w) }
+func (m Model) body(w int) body {
+	if m.boardShown() {
+		return m.boardPanel(w, m.bodyRows()).body
+	}
+	return m.view().body(m, w)
+}

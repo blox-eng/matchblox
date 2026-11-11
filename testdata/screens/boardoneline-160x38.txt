@@ -1,0 +1,38 @@
+ ▰ matchblox · 2 hosts                                                                                                                         ● 2 wait for you
+ SESSIONS 15    ships    machine    git    history    panes    stoker
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ NEEDS YOU · 4  −                     WORKING · 3  −            SHIPPING · 3  −           QUIET · 5  −     │ spark-search · idle
+▌╿ spark-search               ✻ 31m   ✦ flint-ui        ✻       ╿ cinder-ci @gpu… ❋  2h   ╿ wick-… ▣ 23:50 │ ✻ · #4548 ●━✕┄○┄○┄○  CI failed · lint, twice
+  stuck CI failed · lint, twice       ✦ ember-billing … ✻       ╿ flint-api       ✻ 40m   ╿ hearth-… ✻  1h │
+  #4548 ●━✕┄○┄○┄○  ctx 77%            ✦ spark-docs      ✻       ╿ hearth-limits   ✻  4m   ╿ ember-r… ⬢  3h │
+  ⏎ go in                                                                                 ╿ kindle-… ✻  5h │
+                                                                                          ╿ tinder-… ·  2d │
+ ╿ kindle-web                 ✻  9m                                                                        │
+  green #4556 waits for your merge                                                                         │
+ ╿ hearth-api                 ✻  4m                                                                        │
+  asks The plan changes 2 records …                                                                        │
+ ╿ flint-auth                 ✻  2m                                                                        │
+  asks Which way do we fix the log…                                                                        │
+                                                                                                           │
+                                                                                                           │
+                                                                                                           │
+                                                                                                           │
+                                                                                                           │
+                                                                                                           │
+                                                                                                           │
+                                                                                                           │
+                                                                                                           │
+                                                                                                           │
+                                                                                                           │
+                                                                                                           │
+                                                                                                           │
+                                                                                                           │
+                                                                                                           │
+                                                                                                           │
+                                                                                                           │
+                                                                                                           │
+                                                                                                           │
+ + start a new session
+ RECOMMENDATIONS · 7
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ↑↓ move  enter goes into hearth-api  x kill  r rename  A switch  z park  N new  p ships  f stoker  / find  q quit  list only v                  sampled 0s ago

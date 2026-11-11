@@ -183,6 +183,13 @@ func TestScreens(t *testing.T) {
 	machine := threeHosts(t, st, 104, 38, "stale")
 	machine.setTab(tabMachine)
 	golden(t, machine, "machine3", 104, 38)
+	board := boardFixture(t)
+	for _, size := range [][2]int{{40, 34}, {80, 31}, {104, 38}, {160, 38}} {
+		golden(t, boardShot(t, board, size[0], size[1], nil), "board", size[0], size[1])
+	}
+	for _, size := range [][2]int{{40, 34}, {160, 38}} { // v, before the board takes its keys
+		golden(t, boardShot(t, board, size[0], size[1], oneLineBoard), "boardoneline", size[0], size[1])
+	}
 }
 
 // threeHostShips is Ships over three hosts: the demo machine's four, the

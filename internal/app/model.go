@@ -468,6 +468,12 @@ type Model struct {
 	// shown is the frame View drew last, shared by every copy of this
 	// Model: a tap and a wheel tick find what they hit in it.
 	shown *shownFrame
+
+	// board draws the board in Sessions' place until it is the home (R1):
+	// its open column, and the chosen card of each column.
+	board     bool
+	boardAt   boardCol
+	boardPick map[boardCol]paneKey
 }
 
 func New(opt Options) Model {

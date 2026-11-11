@@ -1,0 +1,38 @@
+ ▰ matchblox · 2 hosts                                                                                                                         ● 2 wait for you
+ SESSIONS 15    ships    machine    git    history    panes    stoker
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ NEEDS YOU · 4  −                     WORKING · 3  −            SHIPPING · 3  −           QUIET · 5  −     │ spark-search · idle
+▌╿ spark-search               ✻ 31m   ✦ flint-ui        ✻       ╿ cinder-ci @gpu… ❋  2h   ╿ wick-… ▣ 23:50 │ ✻ · #4548 ●━✕┄○┄○┄○  CI failed · lint, twice
+  stuck CI failed · lint, twice        busy Writing the test…    merged deploying         ╿ hearth-… ✻  1h │
+  #4548 ●━✕┄○┄○┄○  ctx 77%             ctx 40%        ─╴login    #4549 ●━●━●━◉┄○          ╿ ember-r… ⬢  3h │
+  ⏎ go in                                                                                 ╿ kindle-… ✻  5h │
+                                      ✦ ember-billing … ✻       ╿ flint-api       ✻ 40m   ╿ tinder-… ·  2d │
+ ╿ kindle-web                 ✻  9m    agents Three subagent…    ci waits for review                       │
+  green #4556 waits for your merge     ctx 71%                   #4560 ●━◉┄○┄○┄○                           │
+  #4556 ●━●━◉┄○┄○  ctx 48%                                                                                 │
+  p merge #4556   ⏎ go in             ✦ spark-docs      ✻       ╿ hearth-limits   ✻  4m                    │
+                                       busy Running the suit…    ci CI · 6 of 9 jobs                       │
+ ╿ hearth-api                 ✻  4m    ctx 22%                   #4551 ●━◉┄○┄○┄○                           │
+  asks The plan changes 2 records …                                                                        │
+  ctx 31%                                                                                                  │
+  ⏎ go in                                                                                                  │
+                                                                                                           │
+ ╿ flint-auth                 ✻  2m                                                                        │
+  asks Which way do we fix the log…                                                                        │
+  ctx 62%                   ─╴login                                                                        │
+  ⏎ answer                                                                                                 │
+                                                                                                           │
+                                                                                                           │
+                                                                                                           │
+                                                                                                           │
+                                                                                                           │
+                                                                                                           │
+                                                                                                           │
+                                                                                                           │
+                                                                                                           │
+                                                                                                           │
+                                                                                                           │
+ + start a new session
+ RECOMMENDATIONS · 7
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ↑↓ move  enter goes into hearth-api  x kill  r rename  A switch  z park  N new  p ships  f stoker  / find  q quit  list only v                  sampled 0s ago

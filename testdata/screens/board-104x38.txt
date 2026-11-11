@@ -1,0 +1,38 @@
+ ▰ matchblox · 2 hosts                                                                 ● 2 wait for you
+ SESSIONS 15    ships    machine    git    history    panes    stoker
+────────────────────────────────────────────────────────────────────────────────────────────────────────
+ NEEDS YOU · 4  −                     WORKING · 3  −           SHIPPING · 3  −          QUIET · 5  −
+▌╿ spark-search               ✻ 31m   ✦ flint-ui       ✻       ╿ cinder-ci @gp… ❋  2h   ╿ wick… ▣ 23:50
+  stuck CI failed · lint, twice        busy Writing the tes…    merged deploying        ╿ hearth… ✻  1h
+  #4548 ●━✕┄○┄○┄○  ctx 77%             ctx 40%       ─╴login    #4549 ●━●━●━◉┄○         ╿ ember-… ⬢  3h
+  “Lint fails on a file I did not                                                       ╿ kindle… ✻  5h
+  change. I tried twice and           ✦ ember-billing… ✻       ╿ flint-api      ✻ 40m   ╿ tinder… ·  2d
+  stopped.”                            agents Three subagen…    ci waits for review
+  ⏎ go in                              ctx 71%                  #4560 ●━◉┄○┄○┄○
+
+ ╿ kindle-web                 ✻  9m   ✦ spark-docs     ✻       ╿ hearth-limits  ✻  4m
+  green #4556 waits for your merge     busy Running the sui…    ci CI · 6 of 9 jobs
+  #4556 ●━●━◉┄○┄○  ctx 48%             ctx 22%                  #4551 ●━◉┄○┄○┄○
+  p merge #4556   ⏎ go in
+
+ ╿ hearth-api                 ✻  4m
+  asks The plan changes 2 records …
+  ctx 31%
+  ⏎ go in
+
+ ╿ flint-auth                 ✻  2m
+  asks Which way do we fix the log…
+  ctx 62%                   ─╴login
+  ⏎ answer
+
+
+
+
+
+
+
+
+ + start a new session
+ RECOMMENDATIONS · 7
+────────────────────────────────────────────────────────────────────────────────────────────────────────
+ enter goes into hearth-api  x kill  r rename  z park  N new  p ships  f stoker  / find  sampled 0s ago

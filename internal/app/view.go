@@ -201,7 +201,7 @@ func (m Model) drawScreen(w int) drawn {
 	case m.blocked != nil:
 		sc.lines = append(sc.lines, "", m.blockedText(w))
 		return sc
-	case !m.have:
+	case !m.have && !m.boardShown():
 		why := m.waitingWhy()
 		if len(sc.lines)+markH/2+3 <= m.height {
 			sc.lines = append(append(sc.lines, ""), m.markLines(w)...)
@@ -214,6 +214,9 @@ func (m Model) drawScreen(w int) drawn {
 		return sc
 	}
 	listW, detailW := m.panes(w)
+	if m.boardShown() {
+		listW, detailW = w, 0
+	}
 	if m.viewFull() { // one column: the live view takes the screen
 		return m.viewScreen(w)
 	}
