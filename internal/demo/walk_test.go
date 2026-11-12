@@ -209,11 +209,66 @@ func (w *walker) press(keys ...string) {
 // tabWords are the tabs as the tab row names the open one, by digit.
 var tabWords = map[string]string{"1": "SESSIONS", "2": "SHIPS", "3": "MACHINE", "4": "GIT", "5": "HISTORY", "6": "PANES", "7": "STOKER"}
 
-// toTab opens tab n, "1" to "7": Tab or Shift+Tab, the shorter way round,
-// one at a time, each after the redraw of the one before, so that the walk
-// never counts on a frame from before its key. A digit on the board answers
-// its card (Task 12 step 1).
+// toTab opens tab n, "1" to "7": a tap on its name on the tab row, as a
+// person on a phone does, then one wait for the redraw. A digit on the board
+// answers its card (ruling 37). With no tab row on screen, or a box on top
+// that takes the tap, it walks by Tab.
 func (w *walker) toTab(n string) {
+	w.t.Helper()
+	want := tabWords[n]
+	_, frame := w.term.wholeFrame()
+	open := w.openTab()
+	if open == want {
+		return
+	}
+	if x, ok := tabCell(frame, n); ok && open != "" {
+		w.tap(x, 2)
+		if w.tabIs(want, 300*time.Millisecond) {
+			return
+		}
+	}
+	w.tabByKey(n) // no tab row, or a box on top that takes the tap
+}
+
+// tabCell is the column, counted from 1, of tab n's name on the tab row of
+// frame: the row's cells are the tabs in order, two spaces or more apart.
+func tabCell(frame, n string) (int, bool) {
+	lines := strings.Split(frame, "\n")
+	if len(lines) < 2 {
+		return 0, false
+	}
+	row, cell := lines[1], 0
+	for i := 0; i < len(row); {
+		if row[i] == ' ' {
+			i++
+			continue
+		}
+		cell++
+		if cell == int(n[0]-'0') {
+			return i + 1, true
+		}
+		for i < len(row) && (row[i] != ' ' || i+1 >= len(row) || row[i+1] != ' ') {
+			i++
+		}
+	}
+	return 0, false
+}
+
+// tabIs waits up to d for the tab row to name want.
+func (w *walker) tabIs(want string, d time.Duration) bool {
+	for until := time.Now().Add(d); time.Now().Before(until); time.Sleep(5 * time.Millisecond) {
+		if tabOf(w.term.wholeFrame()) == want {
+			return true
+		}
+	}
+	return false
+}
+
+// tabByKey opens tab n by the Tab key: Tab or Shift+Tab, the shorter way
+// round, one at a time, each after the redraw of the one before, so that the
+// walk never counts on a frame from before its key. The doors walk by it, so
+// the Tab key stays covered end to end.
+func (w *walker) tabByKey(n string) {
 	w.t.Helper()
 	want := tabWords[n]
 	for i, open := 0, w.openTab(); open != want; i++ {
@@ -460,30 +515,30 @@ func (w *walker) scrolls(where string) {
 // the order.
 func (w *walker) walkTheDoors() {
 	w.t.Helper()
-	w.toTab("1")
+	w.tabByKey("1")
 	w.scrolls("in a chat")
 	w.reset()
 	w.clear()
-	w.toTab("6")
+	w.tabByKey("6")
 	w.refused("a pane", "enter")
-	w.toTab("4")
+	w.tabByKey("4")
 	w.refused("a worktree's shell", "enter")
-	w.toTab("3")
+	w.tabByKey("3")
 	w.press(slices.Repeat([]string{"j"}, 9)...)
 	w.refused("Pair a device", "enter")
 
-	w.toTab("1")
+	w.tabByKey("1")
 	w.press("N")
 	w.send("a repository", "example/cloned")
 	w.refused("a clone", "enter")
-	w.toTab("1")
+	w.tabByKey("1")
 	w.press("N")
 	w.send("a folder", "/work/flint-auth")
 	w.press("tab")
 	w.send("a branch", "a-branch")
 	w.refused("a new worktree", "enter")
 
-	w.toTab("1")
+	w.tabByKey("1")
 	w.press("N")
 	w.send("a folder", "/work/flint-auth")
 	w.press("tab", "tab")
@@ -491,7 +546,7 @@ func (w *walker) walkTheDoors() {
 	w.takes("a new session", "new-session", "enter")
 	w.clear()
 
-	w.toTab("1")
+	w.tabByKey("1")
 	w.press("/")
 	w.send("a search", "spark-docs")
 	w.press("enter", "r", "backspace")
@@ -500,24 +555,24 @@ func (w *walker) walkTheDoors() {
 	w.clear()
 	w.press("esc", "esc")
 
-	w.toTab("2")
+	w.tabByKey("2")
 	w.press("k", "k", "k", "k", "j")
 	w.takes("a merge", "gh pr merge", "x", "y")
 	w.clear()
 
-	w.toTab("4")
+	w.tabByKey("4")
 	w.press("X")
 	w.takes("a merged worktree's removal", "worktree remove", "x", "y")
 	w.clear()
 
-	w.toTab("1")
+	w.tabByKey("1")
 	w.press("/")
 	w.send("a search", "hearth-api")
 	w.takes("a kill", "kill-pane", "enter", "x", "y", "y")
 	w.press("esc", "esc")
 	w.clear()
 
-	w.toTab("7")
+	w.tabByKey("7")
 	w.press("f", "enter")
 	w.clear()
 	w.opens("the order sheet", "How should I run?", "o")
@@ -1052,13 +1107,13 @@ func TestSessionsCanBeStartedAndKilled(t *testing.T) {
 		time.Sleep(300 * time.Millisecond)
 		return !strings.Contains(paneList(t), "renamed-one")
 	})
-	// Another tab and back draws the list anew: it has the new session, not the
-	// killed one.
+	// Another tab and back, by the Tab key, draws the list anew: it has the new
+	// session, not the killed one.
 	eventually(t, 5*time.Second, "the drawn list to lose the killed session", func() bool {
-		w.toTab("2")
+		w.tabByKey("2")
 		time.Sleep(200 * time.Millisecond)
 		from := len(w.term.text())
-		w.toTab("1")
+		w.tabByKey("1")
 		time.Sleep(200 * time.Millisecond)
 		drawn := w.term.text()[from:]
 		return strings.Contains(drawn, "fresh-o") && !strings.Contains(drawn, "renamed-o") // a column may cut a name
