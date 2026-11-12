@@ -6,6 +6,8 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+## [0.40.3] - 2026-11-11
+
 ### Fixed
 
 - **The way back finds a console you started inside tmux.** `Ctrl+M`,
@@ -1443,7 +1445,8 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.40.2...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.40.3...HEAD
+[0.40.3]: https://github.com/blox-eng/matchblox/compare/v0.40.2...v0.40.3
 [0.40.2]: https://github.com/blox-eng/matchblox/compare/v0.40.1...v0.40.2
 [0.40.1]: https://github.com/blox-eng/matchblox/compare/v0.40.0...v0.40.1
 [0.40.0]: https://github.com/blox-eng/matchblox/compare/v0.39.1...v0.40.0
