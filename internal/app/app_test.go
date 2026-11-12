@@ -405,6 +405,25 @@ func TestSilentServiceShowsFix(t *testing.T) {
 	}
 }
 
+// TestASilentServicesFixFitsAShortPane: on a short pane the board still
+// says the silent service's fix whole, and draws no line past the pane.
+func TestASilentServicesFixFitsAShortPane(t *testing.T) {
+	for _, size := range [][2]int{{100, 12}, {44, 12}, {100, 8}} {
+		w, h := size[0], size[1]
+		f := newFake()
+		var next tea.Model = New(Options{NoMotion: true, Conn: f, Owner: func() int { return 4321 }})
+		next, _ = next.Update(tea.WindowSizeMsg{Width: w, Height: h})
+		next, _ = next.Update(silentMsg{conn: f})
+		lines := strings.Split(ansi.Strip(next.(Model).render()), "\n")
+		if len(lines) > h {
+			t.Errorf("%dx%d: %d lines in the pane", w, h, len(lines))
+		}
+		if said := strings.Join(strings.Fields(strings.Join(lines, " ")), " "); !strings.Contains(said, "kill 4321") {
+			t.Errorf("%dx%d: the fix fell off the pane:\n%s", w, h, strings.Join(lines, "\n"))
+		}
+	}
+}
+
 func TestSilentAfterReconnectShowsFix(t *testing.T) {
 	m, _ := loadedWith(t, 100, fixtureState())
 	m.opt.Owner = func() int { return 77 }
