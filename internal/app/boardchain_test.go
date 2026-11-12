@@ -558,3 +558,24 @@ func TestAnAskingChainStokerIsANeed(t *testing.T) {
 		t.Errorf("the stoker's card in the room does not say it asks:\n%s", f)
 	}
 }
+
+// TestAChainStokerWhoseRunIsOffIsNoCard: the agent of a chain stoker that
+// rests (its run off) is no card and no count, on the whole board and in
+// its chain's room; while it does not ask, the same holds when it runs.
+func TestAChainStokerWhoseRunIsOffIsNoCard(t *testing.T) {
+	for name, v := range map[string]proto.StokerView{"off": {}, "on": runningPlan()} {
+		st := headState(t, v, true)
+		board, _ := chainBoard(t, 160, st, "")
+		room, _ := hearthOpen(t, 160, st)
+		for where, m := range map[string]Model{"board": board, "room": room} {
+			for _, ss := range m.boardIndex() {
+				if slices.ContainsFunc(ss, func(s sample.Session) bool { return s.Pane == stokerPane }) {
+					t.Errorf("run %s, %s: the stoker's agent is a card", name, where)
+				}
+			}
+			if f := plainFrame(m); strings.Contains(f, "stoker-s1") || strings.Contains(f, "╿ hearth's stoker") {
+				t.Errorf("run %s, %s: the stoker's agent is drawn:\n%s", name, where, f)
+			}
+		}
+	}
+}
