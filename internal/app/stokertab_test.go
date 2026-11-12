@@ -282,6 +282,23 @@ func TestOpeningTheTabSendsOneAck(t *testing.T) {
 	if acks != 1 {
 		t.Fatalf("%d acks: %+v", acks, f.acts())
 	}
+
+	// A tap on Machine's chosen row stoker opens the screen, and so sees
+	// the steps too, as a phone only taps.
+	m, f = loadedWith(t, 100, tabNight(screensState(t)))
+	m.setTab(tabMachine)
+	m.selectRow(0) // the person chose the row: the second tap opens it
+	y := lineOf(t, m, "stoker")
+	once, cmd := tap(m, 3, y)
+	drain(cmd)
+	opened, cmd := tap(once, 3, y)
+	drain(cmd)
+	if opened.(Model).tab != tabStoker {
+		t.Fatalf("a tap on the row stoker opens tab %d", opened.(Model).tab)
+	}
+	if acts := f.acts(); len(acts) != 1 || acts[0].RecID != "stoker:ack" {
+		t.Fatalf("a tap on the row stoker: acts %+v, want one ack", acts)
+	}
 }
 
 // A failed step whose session ended offers no look: it says what resolves it.

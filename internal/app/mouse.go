@@ -165,7 +165,7 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		// A tap on the selected view row opens it, as Enter does.
 		m.armed, m.flash = "", ""
 		if picked {
-			return m.openView(v), nil
+			return m.openView(v).seeStoker() // taps are not wrapped in stokerSeen: the stoker's screen sees its steps here
 		}
 		return m, nil
 	}
