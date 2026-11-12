@@ -43,7 +43,6 @@ type chainIndex struct {
 	need    map[chainKey]int             // the neediest group of the chain's listed matches
 	present map[chainKey]int             // the matches the host has, whatever the filter hides
 	shown   map[chainKey]int             // the matches in the list
-	rows    map[chainKey][]int           // the list rows of each chain, top down
 	heads   map[rowKey]state.ChainStoker // the head rows: the chain stoker of each
 	repo    map[chainKey]string          // the repo label of a chain with a head
 }
@@ -236,17 +235,6 @@ func (m Model) chainName(k chainKey) string {
 	return k.id
 }
 
-// indexChainRows notes the list rows of each chain: the spark runs down
-// them.
-func (m *Model) indexChainRows() {
-	m.chainIx.rows = map[chainKey][]int{}
-	for i, s := range m.snap.Sessions {
-		if k, ok := m.chainKeyOf(s); ok {
-			m.chainIx.rows[k] = append(m.chainIx.rows[k], i)
-		}
-	}
-}
-
 func (m Model) chainKeyOf(s sample.Session) (chainKey, bool) {
 	k, ok := m.chainIx.of[keyOf(s)]
 	return k, ok
@@ -330,34 +318,6 @@ func (m *Model) noteSparks(host string, next *state.ChainsView, now time.Time) {
 }
 
 func (m Model) sparkStyle() lipgloss.Style { return lipgloss.NewStyle().Foreground(m.marks().Core) }
-
-// chainedTogether tells if a and b are in one chain.
-func (m Model) chainedTogether(a, b sample.Session) bool {
-	ka, okA := m.chainKeyOf(a)
-	kb, okB := m.chainKeyOf(b)
-	return okA && okB && ka == kb
-}
-
-// sharingRepos are the sessions of ss that share their repo, on their host,
-// with another session they are not chained with.
-func (m Model) sharingRepos(ss []sample.Session) map[rowKey]bool {
-	type in struct{ host, repo string }
-	byRepo := map[in][]sample.Session{}
-	for _, s := range ss {
-		if r, _, ok := proto.RepoOf(m.gitOf(s.Host), s.Cwd); ok {
-			byRepo[in{s.Host, r}] = append(byRepo[in{s.Host, r}], s)
-		}
-	}
-	out := map[rowKey]bool{}
-	for _, mates := range byRepo {
-		for _, s := range mates {
-			out[keyOf(s)] = slices.ContainsFunc(mates, func(o sample.Session) bool {
-				return keyOf(o) != keyOf(s) && !m.chainedTogether(s, o)
-			})
-		}
-	}
-	return out
-}
 
 // teamsOf are the teams s is in, in the order they formed: it draws in the
 // first one's fuse.

@@ -194,8 +194,6 @@ func (m *Model) refresh() {
 	})
 	sessions = m.together(sessions)
 	m.snap.Sessions = sessions
-	m.indexChainRows()
-	m.repoMates = m.sharingRepos(sessions)
 	for k := range m.picked {
 		if m.gitOf(k.host) != nil && !m.safeWorktree(k) {
 			delete(m.picked, k)

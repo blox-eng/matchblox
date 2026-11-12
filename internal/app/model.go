@@ -378,9 +378,8 @@ type Model struct {
 	searching   bool   // the search line takes the keys
 	holds       []proto.Hold
 	chains      *state.ChainsView
-	chainIx     chainIndex      // worked out in refresh
-	room        *room           // the chain room on screen; nil when none
-	repoMates   map[rowKey]bool // the listed sessions with a repo mate they are not chained with
+	chainIx     chainIndex // worked out in refresh
+	room        *room      // the chain room on screen; nil when none
 	reasons     map[string]proto.IdleReason
 	agents      []string                          // the agents a new session can start on the host
 	renames     map[string]string                 // the names sessions take at their next rest, by pane
