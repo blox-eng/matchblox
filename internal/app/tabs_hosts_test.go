@@ -200,10 +200,10 @@ func machineHosts(t *testing.T, after time.Duration, w, h int) Model {
 	return upd(t, m, stateMsg(stateAt(cpu(hostState(sess(1, "api-auth", "%1", nil)), 12), now)))
 }
 
-// TestDockMachineLinePerHost: the machine of two or more hosts says each
-// host with its CPU, in Hosts order. The dock's line is the strip's
-// machine face now (Task 12 step 2).
-func TestDockMachineLinePerHost(t *testing.T) {
+// TestTheStripsMachineLinePerHost: the strip's machine face of two or more
+// hosts says each host with its CPU, in Hosts order (the dock's line
+// before Task 12 step 2).
+func TestTheStripsMachineLinePerHost(t *testing.T) {
 	m := machineHosts(t, 10*time.Second, 132, 40)
 	line := ansi.Strip(m.stripMachine(200))
 	at := 0
