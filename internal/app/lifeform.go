@@ -323,6 +323,72 @@ func (m Model) switchAction(f form) *action {
 	return a
 }
 
+// refreshOf is the record refresh that runs in pane on host, before its
+// switch.
+func (m Model) refreshOf(host, pane string) (proto.Refresh, bool) {
+	rs := m.stateOf(host).Refreshes
+	if i := slices.IndexFunc(rs, func(r proto.Refresh) bool { return r.Pane == pane }); i >= 0 {
+		return rs[i], true
+	}
+	return proto.Refresh{}, false
+}
+
+// recordWait is the record refresh the switch this console sent waits for.
+func (m Model) recordWait() (proto.Refresh, bool) {
+	if m.jumpAfter.act == "" {
+		return proto.Refresh{}, false
+	}
+	return m.refreshOf(cmp.Or(m.jumpAfter.host, m.opt.Host), m.jumpAfter.pane)
+}
+
+func (m Model) waiting() bool {
+	_, ok := m.recordWait()
+	return ok
+}
+
+// switchNow ends the record wait of this console's switch: the switch
+// goes ahead from the evidence. It sends once: the service refuses a
+// second.
+func (m *Model) switchNow() tea.Cmd {
+	if m.jumpAfter.now {
+		return nil
+	}
+	m.jumpAfter.now = true
+	return m.sendTo(cmp.Or(m.jumpAfter.host, m.opt.Host), proto.Act{RecID: proto.SwitchNowPrefix + m.jumpAfter.pane})
+}
+
+type waitTickMsg struct{}
+
+// waitTick starts the second ticks of the record wait's clock, while this
+// console's switch waits and none run yet.
+func (m *Model) waitTick() tea.Cmd {
+	if m.waitTicking || !m.waiting() {
+		return nil
+	}
+	m.waitTicking = true
+	return tea.Tick(time.Second, func(time.Time) tea.Msg { return waitTickMsg{} })
+}
+
+// waitRows are the hair's row and the key line while this console's switch
+// waits for the record: who writes it, for how long, and how to stop
+// waiting. ok is false when it waits for nothing, or esc goes elsewhere.
+func (m Model) waitRows(w int) (wait, keys string, spans []span, ok bool) {
+	back := m.keys.main.Back
+	r, waits := m.recordWait()
+	if !waits || m.focus(keyPress(back.Keys()[0])) != layerMain {
+		return "", "", nil, false
+	}
+	st := m.st
+	d := max(m.now().Sub(r.Since), 0).Truncate(time.Second)
+	clock := fmt.Sprintf("%d:%02d", int(d.Minutes()), int(d.Seconds())%60)
+	wait = fit(" "+st.accent.Render("◐ ")+st.text.Render(r.Agent+" writes its task record ")+st.muted.Render(clock), w)
+	if m.jumpAfter.now {
+		return wait, fit(" "+st.muted.Render("switching now"), w), nil, true
+	}
+	esc := keyWord(back, st.accent, st.muted, " switches now")
+	return wait, fit(" "+esc, w), []span{{1, 1 + lipgloss.Width(esc), back.Keys()[0]}}, true
+}
+
 // fields are the form's fields, in Tab's order.
 func (f *form) fields() []int {
 	switch {

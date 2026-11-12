@@ -69,9 +69,14 @@ func (m Model) inDemo() Model {
 	return m
 }
 
-// keyRows are the hair above the key line and the key line. The demo's line
+// keyRows are the hair above the key line and the key line. While this
+// console's switch waits for the record, the wait takes the hair's row and
+// esc's word the key line. The demo's line
 // does not fit a phone's width: where it shows, it takes the hair's row too.
 func (m Model) keyRows(w int) (hair, keys string, spans []span) {
+	if wait, keys, spans, ok := m.waitRows(w); ok {
+		return wait, keys, spans
+	}
 	hair = m.st.hair.Render(strings.Repeat("─", w))
 	keys, spans = m.keyLine(w)
 	if m.opt.Demo == "" || ansi.StringWidth(m.opt.Demo)+1 <= w || m.flash != m.opt.Demo ||

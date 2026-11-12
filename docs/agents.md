@@ -302,6 +302,30 @@ and take priority over the handover. On the command line, `--handoff` gives a
 custom first message that keeps your exact text, and an empty one starts no
 task and captures no handover. Match awareness still applies.
 
+### Task record refresh
+
+Before the capture, an idle Claude Code or Codex agent with a verified
+transcript and a managed task record is asked to update its record. matchblox
+types one fixed line into its pane, names no other agent, and waits up to
+3 minutes for the turn to end. The console shows `◐ claude writes its task
+record 0:42` and `esc switches now`, then `switching now` once esc is
+pressed; every other console shows `writes its record` on the row. On the
+command line, `matchblox switch` prints `<name> writes its task record
+first; Ctrl-C switches now` to stderr, and Ctrl-C switches now, from the
+evidence. `--no-refresh` skips the request.
+
+The capture says which record it carries: `written for this switch`, or
+`not refreshed: <reason>`. The reasons are `<name> works` or `<name> waits
+for you` (only with `--anyway`), `out of usage until <HH:MM>`, `<agent> gives
+no turn end` (Cursor, OpenCode, or Claude Code and Codex without a verified
+transcript), `no managed task record`, `skipped with --no-refresh`,
+`the request did not reach <name>: <why>`, `switched now` (esc or Ctrl-C),
+`the refresh timed out after 3:00`, and `it ended its turn without writing
+the record`. A switch with `--anyway` on a busy or waiting agent does not
+refresh, and neither does a start with **no task**. While the wait runs, other
+input to that pane is refused. The request in a transcript shows as
+`[matchblox refresh request]`; the agent's reply stays.
+
 The console's confirm shows the switch only.
 `matchblox switch api --agent codex --preview` shows the full current capture
 without switching. The actual switch captures again just before replacement.

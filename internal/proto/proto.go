@@ -94,6 +94,21 @@ type State struct {
 	// Clones are the clones the service runs, and the ones that ended
 	// in the last minute: in every snapshot while any is listed.
 	Clones []Clone `json:"clones,omitempty"`
+	// Refreshes are the record waits before a switch: in every snapshot
+	// while any runs.
+	Refreshes []Refresh `json:"refreshes,omitempty"`
+}
+
+// RefreshLimit is how long a switch waits for an idle agent's task record.
+const RefreshLimit = 3 * time.Minute
+
+// Refresh is an idle agent's record refresh, before a switch, in Pane.
+type Refresh struct {
+	Pane  string    `json:"pane"`
+	Name  string    `json:"name"`
+	Agent string    `json:"agent"`
+	Since time.Time `json:"since"`
+	Until time.Time `json:"until"`
 }
 
 type Event struct {
@@ -187,6 +202,10 @@ const (
 // PickPrefix starts an act that answers the question tool in the pane
 // after it; its text is the said.Answer.
 const PickPrefix = "pick:"
+
+// SwitchNowPrefix starts an act that switches the pane after it at once,
+// with no record refresh first.
+const SwitchNowPrefix = "switchnow:"
 
 // Screen is one capture of the watched pane. Gone: the pane is not there.
 type Screen struct {
@@ -318,8 +337,8 @@ type Names struct {
 	Chains   map[int]string `json:"chains,omitempty"`
 }
 
-// The notes of a start on an account that ran: each is one skip of its
-// Result, and the start ran all the same (StartNotes).
+// The notes of a start or a switch that ran: each is one skip of its
+// Result, and the act ran all the same (StartNotes).
 const (
 	// NotLinked starts the note of a like-default account whose new shared
 	// entries did not all link.
@@ -332,6 +351,12 @@ const (
 	NotCopied = "not copied: "
 	// CopyGoesOn is the note of a copy that has not ended.
 	CopyGoesOn = "the copy is not complete: it goes on at the next start"
+	// RecordWritten is the note of a switch whose agent wrote its task
+	// record for it.
+	RecordWritten = "record written for this switch"
+	// NotRefreshed starts the note of a switch that went on without a
+	// fresh task record, and why.
+	NotRefreshed = "not refreshed: "
 )
 
 // noteMax is how many entries Notes names before it counts the rest.
@@ -352,17 +377,30 @@ func Notes(prefix string, items []string) []string {
 
 // StartNotes are the skips of r when r has no error and every skip is a
 // note of a start on an account (NotLinked, StillShared, NotCopied,
-// CopyGoesOn): the act ran all the same.
+// CopyGoesOn) or of a switch's record (RecordWritten, NotRefreshed): the
+// act ran all the same.
 func StartNotes(r Result) ([]string, bool) {
 	if r.Err != "" || len(r.Skipped) == 0 {
 		return nil, false
 	}
 	for _, k := range r.Skipped {
-		if k != CopyGoesOn && !strings.HasPrefix(k, NotLinked) && !strings.HasPrefix(k, StillShared) && !strings.HasPrefix(k, NotCopied) {
+		if !isStartNote(k) {
 			return nil, false
 		}
 	}
 	return slices.Clone(r.Skipped), true
+}
+
+func isStartNote(k string) bool {
+	if k == CopyGoesOn || k == RecordWritten {
+		return true
+	}
+	for _, p := range []string{NotLinked, StillShared, NotCopied, NotRefreshed} {
+		if strings.HasPrefix(k, p) {
+			return true
+		}
+	}
+	return false
 }
 
 // News asks for the news of the match in Pane, at the hook Event.
@@ -517,6 +555,9 @@ type SwitchAgent struct {
 	// included). The service refuses the switch when it would pick another
 	// now. Empty, from an older client, takes whichever it picks.
 	Account string `json:"account,omitempty"`
+	// NoRefresh skips the record refresh before the switch. Empty, from an
+	// older client, keeps the refresh.
+	NoRefresh bool `json:"no_refresh,omitempty"`
 }
 
 // DefaultHandoff selects an evidence capture and the service's fixed switch

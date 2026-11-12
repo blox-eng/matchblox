@@ -6,6 +6,16 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **A switch waits for the agent's task record.** Before it captures the
+  evidence, an idle Claude Code or Codex agent is asked to update its task
+  record, and the switch waits for it for up to 3 minutes. The console shows
+  the wait with the time, and `esc` switches now. `matchblox switch` prints
+  the wait to stderr, and Ctrl-C switches now. `--no-refresh` skips it. The
+  capture says whether the record was written for this switch, or why it was
+  not. ([#336](https://github.com/blox-eng/matchblox/issues/336))
+
 ## [0.41.0] - 2026-11-12
 
 ### Added

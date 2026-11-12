@@ -149,6 +149,9 @@ func (m Model) rowWord(s sample.Session) (word string, merged bool) {
 		}
 		return st.muted.Render("⏸ " + why), true
 	}
+	if _, ok := m.refreshOf(s.Host, s.Pane); ok {
+		return st.accent.Render("writes its record"), true
+	}
 	plain := m.wordOf(s)
 	asks := plain == "asks" || plain == "waits"
 	if s.SigningIn && !asks {

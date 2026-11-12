@@ -1259,7 +1259,7 @@ func TestTypeLineChecksThePaneUnderItsHold(t *testing.T) {
 	h := newSendHost(t, idleMate)
 	x, _ := h.s.sessionAt("%2")
 	h.inMode["%2"] = "1"
-	res, typed, _, _ := h.s.typeLine(t.Context(), x, "[from peer-send %1] hi", "[from peer-send %1]")
+	res, typed, _, _ := h.s.typeLine(t.Context(), x, "[from peer-send %1] hi", "[from peer-send %1]", peerLead, nil)
 	if typed || res.Err != "its pane is in copy mode" {
 		t.Fatalf("typed %v: %+v", typed, res)
 	}
