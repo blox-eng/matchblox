@@ -6,6 +6,8 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+## [0.41.0] - 2026-11-12
+
 ### Added
 
 - **Each chain has a room.** `Enter` on a chain's head row, or `⌥s` on any
@@ -1475,7 +1477,8 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.40.3...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.41.0...HEAD
+[0.41.0]: https://github.com/blox-eng/matchblox/compare/v0.40.3...v0.41.0
 [0.40.3]: https://github.com/blox-eng/matchblox/compare/v0.40.2...v0.40.3
 [0.40.2]: https://github.com/blox-eng/matchblox/compare/v0.40.1...v0.40.2
 [0.40.1]: https://github.com/blox-eng/matchblox/compare/v0.40.0...v0.40.1
