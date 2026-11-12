@@ -238,16 +238,19 @@ Where the build differs from the text above:
 - `u` updates the selected host, and `d` dismisses its note. `x` stays the
   key that removes a host.
 - The key that starts an old console again on the newer service is `R`.
-- Auto installs a release once. When it waits on work in flight, the offer
+- Auto installs a release once when the install works; a failed install is
+  tried again after the next look. When it waits on work in flight, the offer
   says why: `Auto waits for the stoker run to end.` or
   `Auto waits for a clone to end.`
 - When the service still runs the old release after an install, `SET UP`
   shows "matchblox v0.43.0 is installed" and asks the person to quit
   matchblox and open it again.
-- A release check that fails for three days shows the `SET UP` row
-  "matchblox cannot look for a new release", with the reason and
-  `Run: matchblox update`. A shorter run of failed looks stays quiet.
-- While an install runs, no new clone starts. It says
+- A release check that fails for three days, counted from the first failed
+  look of the run, shows the `SET UP` row "matchblox cannot look for a new
+  release", with the reason and `Run: matchblox update`. A shorter run of
+  failed looks stays quiet, and a look that works ends the run.
+- From the start of an install until matchblox runs again on the new
+  release, no new clone starts. It says
   `matchblox is updating. Try again in a minute.`
 - Only a person at a console opens a `SET UP` row or updates a host. An
   agent's session, a session the stoker drives and a script are refused.

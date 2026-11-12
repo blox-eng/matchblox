@@ -46,7 +46,7 @@ What does not work yet, and what to do until it does.
 | No native Windows | Use Linux or macOS. |
 | `mode = "auto"` does not update a Homebrew install | Homebrew owns that binary, and matchblox never replaces it. Run `brew upgrade matchblox`: the offer names it too. |
 | `mode = "auto"` waits a day | It installs a release a day after this machine first sees it, and waits for work in flight to end: see [Config](config.md#update). To install sooner, open the offer under `SET UP`, or run `matchblox update`. |
-| A clone waits while matchblox updates | While an install runs, matchblox starts no clone, and no session from a git URL. It says "matchblox is updating. Try again in a minute." Start it again after the install. |
+| A clone is refused while matchblox updates | From the start of an install until matchblox runs again on the new release, which takes about a minute, matchblox starts no clone and no session from a git URL. It says "matchblox is updating. Try again in a minute." Start it again then. |
 | A host on an older release has no `u` | A release from before the offer cannot be updated from another console. Its row on Hosts says `on ws-1: matchblox update`: run that on the host once, and later releases take `u`. |
 | The app updates through Apple | matchblox updates the binary on your hosts only. Matchblox Pocket gets its updates from TestFlight or the App Store. |
 | No downgrade, no pinned release | matchblox offers and installs the latest release only. With `mode = "offer"` nothing installs without your typed `y`. `mode = "off"` also stops the daily request and the offer, once the service starts again ([how](config.md)). Then only `matchblox update` on the host, or `u` on its row in a console, changes the release. |

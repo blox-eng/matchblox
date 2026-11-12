@@ -23,7 +23,8 @@ All notable changes to matchblox are in this file. The format follows
   this machine first saw the release, then until no stoker run is on and no
   clone runs.
   While it waits on work, the offer says why. The console then says
-  `updated to v0.43.0 at 03:12`. While an install runs, a new clone waits.
+  `updated to v0.43.0 at 03:12`. From the start of an install until matchblox
+  runs again on the new release, a new clone is refused.
   `"off"` never looks. See [Config](https://docs.matchblox.com/config/#update).
   ([#390](https://github.com/blox-eng/matchblox/issues/390))
 - **A host on another release says so on its row.** Hosts shows

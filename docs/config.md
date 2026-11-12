@@ -155,10 +155,11 @@ checkout) never looks, and a prerelease is never offered. A look that
 fails keeps the release it found before, and never reads as up to date.
 One failed look, or two days of them, stay quiet: `matchblox status` gives
 the reason in `update.err`. After three days of failed looks, counted from
-the last look that worked, Sessions shows the step "matchblox cannot look
+the first failed look, Sessions shows the step "matchblox cannot look
 for a new release" under `SET UP`, with the reason and
-`Run: matchblox update`. Closing it hides it until a look works and the
-looks then fail for three more days.
+`Run: matchblox update`. A look that works starts the count again. Closing
+the step hides it until a look works and the looks then fail for three more
+days.
 
 **offer.** Sessions shows the step "matchblox v0.43.0 is out" under `SET UP`.
 `Enter` shows the release it installs and the file it replaces. It also
@@ -181,12 +182,18 @@ Closing the offer does not stop the install: to skip a release on this
 machine, use `"offer"` or `"off"`.
 
 The install makes the same checks as `matchblox update` and records which
-ones it made. While it runs, a new clone is refused. The console then says
+ones it made. The console then says
 once `updated to v0.43.0 at 03:12` (`on Nov 11 at 03:12` when it was not
 today), or why the update failed and the command to run. Auto installs a
-release once. When the service still runs the old release after the
+release once when the install works. A failed install is tried again after
+the next look.
+
+From the start of any install, from the offer, from auto or from `u`,
+until matchblox runs again on the new release, a new clone is refused: see
+[Limits](limits.md). When the service still runs the old release after the
 install, Sessions shows the step "matchblox v0.43.0 is installed" with
 `v0.43.0 is installed, but this service still runs v0.42.0. Quit matchblox and open it again.`
+`x` closes that step until a newer release comes out.
 
 **off.** No look, no request and no offer. A person who presses `u` on this
 host's row in another console still updates it: see
