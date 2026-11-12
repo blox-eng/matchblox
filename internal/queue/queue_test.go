@@ -666,3 +666,16 @@ func TestARestartSeedsWaitsFromReports(t *testing.T) {
 		}
 	}
 }
+
+// TestAHookedSessionWithNoWaitRowSeedsItsReportedWait: a session the hooks
+// know but whose wait hook was lost is an ask by its own report.
+func TestAHookedSessionWithNoWaitRowSeedsItsReportedWait(t *testing.T) {
+	q := New()
+	q.Apply(hooks.Event{Name: "SessionStart", SessionID: "flint", Pane: "%2", At: at(0)})
+	s := session("flint", "%2", "flint-auth", "waiting", time.Minute)
+	s.Agent, s.Reported, s.WaitingFor = "claude", true, "permission prompt"
+	q.Merge([]sample.Session{s}, at(600))
+	if items := q.Items(); len(items) != 1 || items[0].State != StatePermission || items[0].SessionID != "flint" {
+		t.Fatalf("items %+v, want flint-auth's permission", items)
+	}
+}

@@ -922,6 +922,7 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 			delete(s.longCtx, key)
 		}
 	}
+	s.opencode.pruneReports(alive)
 	for key := range s.screens {
 		if !alive[key] {
 			delete(s.screens, key)

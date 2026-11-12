@@ -1,6 +1,7 @@
 package sample
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -95,5 +96,23 @@ func TestADeadProcessReportIsIgnored(t *testing.T) {
 	smp.OwnEntries = true
 	if s := byPane(smp.Sample())["%1"]; s.Reported || s.WaitingFor != "" {
 		t.Fatalf("Claude Code: an earlier process's report was used: %+v", s)
+	}
+}
+
+// TestTheReportsOfGoneProcessesAreForgotten: the reader keeps a report
+// only while its process lives.
+func TestTheReportsOfGoneProcessesAreForgotten(t *testing.T) {
+	root := copyFixture(t)
+	smp := opencodeAt(t, root, `{"pid":930,"startedAt":1790000000000,"status":"busy","statusUpdatedAt":1790003600000}`)
+	smp.Sample()
+	if len(smp.opencode.reports) != 1 {
+		t.Fatalf("reports %v, want 930's", smp.opencode.reports)
+	}
+	if err := os.RemoveAll(filepath.Join(root, "proc", "930")); err != nil {
+		t.Fatal(err)
+	}
+	smp.Sample()
+	if len(smp.opencode.reports) != 0 {
+		t.Fatalf("reports %v after 930 is gone", smp.opencode.reports)
 	}
 }

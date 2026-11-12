@@ -112,6 +112,19 @@ func (r *opencodeReader) session(data, cwd string, startMs int64) (best opencode
 	return best, n
 }
 
+// pruneReports forgets the reports of processes that are gone.
+func (r *opencodeReader) pruneReports(alive map[procKey]bool) {
+	live := map[string]bool{}
+	for key := range alive {
+		live[strconv.Itoa(key.pid)+".json"] = true
+	}
+	for path := range r.reports {
+		if !live[filepath.Base(path)] {
+			delete(r.reports, path)
+		}
+	}
+}
+
 // opencodeLook bounds how many of the newest messages are read to find the
 // last reply with output: a turn writes a few messages at most.
 const opencodeLook = 50
