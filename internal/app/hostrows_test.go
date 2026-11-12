@@ -767,3 +767,67 @@ func TestNarrowHostRowSaysWhichSide(t *testing.T) {
 		}
 	}
 }
+
+// How the update of a host went shows on Hosts in the host's name: the
+// reason of one that failed, and the release of one that worked.
+func TestHostsSaysHowAHostUpdateWent(t *testing.T) {
+	for _, c := range []struct {
+		result proto.Result
+		want   string
+	}{
+		{proto.Result{Err: "checksum mismatch for matchblox-linux-amd64. Nothing was changed"},
+			"ws-1 is not updated: checksum mismatch for matchblox-linux-amd64. Nothing was changed"},
+		{proto.Result{Ran: [][]string{{"install", "v0.42.0"}}}, "ws-1 installed v0.42.0: its service starts again"},
+	} {
+		r := releaseRig(t, "v0.42.0", "v0.38.1", viewOn("v0.38.1"))
+		ws := r.conns["ws-1"]
+		r.key(t, "u")
+		r.key(t, "y")
+		ws.mu.Lock()
+		c.result.ActID = ws.sent[len(ws.sent)-1].ID
+		ws.mu.Unlock()
+		r.update(peerMsg{host: "ws-1", conn: ws, msg: resultMsg(c.result)})
+		if got := r.sh.cur.flash; got != c.want {
+			t.Errorf("%+v: %q, want %q", c.result, got, c.want)
+		}
+		if out := r.view(); !strings.Contains(out, c.want[:40]) {
+			t.Errorf("%+v: Hosts does not say it:\n%s", c.result, out)
+		}
+	}
+}
+
+// d dismisses the note of any host that has one, with or without the
+// update act: a host too old for it, a Homebrew host, and a host that is
+// ahead.
+func TestDismissWorksOnAHostWithNoUpdateAct(t *testing.T) {
+	brew := viewOn("v0.38.1")
+	brew.Managed = "brew upgrade matchblox"
+	for name, c := range map[string]struct {
+		host string
+		view *state.UpdateView
+		fix  string
+	}{
+		"no update view": {"v0.38.1", nil, "on ws-1: matchblox update"},
+		"Homebrew":       {"v0.38.1", brew, "on ws-1: brew upgrade matchblox"},
+		"ahead":          {"v0.43.0", viewOn("v0.43.0"), "this console is older: run matchblox update"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			r := releaseRig(t, "v0.42.0", c.host, c.view)
+			dir := t.TempDir()
+			r.sh.cur.opt.StateDir = dir
+			if out := r.view(); !strings.Contains(r.rowOf("ws-1"), "this console (v0.42.0)") || !strings.Contains(out, c.fix) || strings.Contains(out, "u update") {
+				t.Fatalf("before d: the row %q, want the note and the fix %q with no u:\n%s", r.rowOf("ws-1"), c.fix, out)
+			}
+			r.key(t, "d")
+			if row := r.rowOf("ws-1"); strings.Contains(row, "this console") {
+				t.Fatalf("the dismissed note shows: %q", row)
+			}
+			if out := r.view(); strings.Contains(out, c.fix) || !strings.Contains(out, "dismissed: ws-1 on "+c.host) {
+				t.Fatalf("after d: the fix stays, or no word of the dismissal:\n%s", out)
+			}
+			if p := loadRecPrefs(dir); len(p.Releases) != 1 || p.Releases[0] != "ws-1\x00"+c.host+"\x00v0.42.0" {
+				t.Fatalf("kept %+v", p)
+			}
+		})
+	}
+}

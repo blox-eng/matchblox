@@ -1376,3 +1376,171 @@ func TestTheRestartRowSaysProvenanceWasNotChecked(t *testing.T) {
 		}
 	}
 }
+
+// u on the row of a host whose build is no release does not look and does
+// not install: there is no release to compare it with.
+func TestHostUpdateActOnABuildThatIsNoRelease(t *testing.T) {
+	for _, build := range []string{"dev", "v0.42.1-0.20261112093000-f15b80c1abcd"} {
+		for _, mode := range []string{config.UpdateOffer, config.UpdateOff} {
+			s, src, _ := updateTest(t, build, mode, filepath.Join(t.TempDir(), "update.json"))
+			s.loadUpdate()
+			if r := hostUpdateAct(s, "y"); r.Err != notARelease || len(r.Ran) > 0 {
+				t.Errorf("%s under %s: %+v, want the error %q", build, mode, r, notARelease)
+			}
+			if n, got := src.count(), src.installed(); n != 0 || len(got) != 0 {
+				t.Errorf("%s under %s: Latest calls %d, installs %v", build, mode, n, got)
+			}
+		}
+	}
+}
+
+// A pre-release is never installed by u: not under off, which looks only
+// then, and not under offer.
+func TestHostUpdateActNeverInstallsAPreRelease(t *testing.T) {
+	for _, mode := range []string{config.UpdateOff, config.UpdateOffer} {
+		s, src, _ := updateTest(t, "v0.42.0", mode, filepath.Join(t.TempDir(), "update.json"))
+		src.set("v0.43.0-rc.1", nil)
+		s.loadUpdate()
+		r := hostUpdateAct(s, "y")
+		if r.Err != "" || len(r.Ran) > 0 || !slices.Equal(r.Skipped, []string{"v0.43.0-rc.1 is the latest release"}) {
+			t.Errorf("under %s: %+v", mode, r)
+		}
+		if got := src.installed(); len(got) != 0 {
+			t.Errorf("under %s: installed %v", mode, got)
+		}
+	}
+}
+
+func checkDoorAct(s *Service, which string) proto.Result {
+	return s.act(context.Background(), proto.Act{RecID: "door:" + doors.UpdateCheck, Which: which, Confirm: "y", Console: true})
+}
+
+// The row of failed looks has no action: Enter on it is refused, and the
+// row stays.
+func TestTheCheckRowHasNoAction(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "update.json")
+	s, src, clk := updateTest(t, "v0.42.0", config.UpdateOffer, path)
+	src.set("", errors.New(offline))
+	s.loadUpdate()
+	s.checkUpdate(clk.now())
+	clk.add(checkFailFor)
+	s.checkUpdate(clk.now())
+	for _, which := range []string{"primary", "also"} {
+		if r := checkDoorAct(s, which); r.Err != "this row has no action. Run: matchblox update" || len(r.Ran) > 0 {
+			t.Fatalf("%s: %+v", which, r)
+		}
+	}
+	if _, ok := checkDoorOf(s); !ok {
+		t.Fatal("an act with no action closed the row")
+	}
+	if f := state.ReadUpdate(path); !f.CheckClosed.IsZero() || len(src.installed()) != 0 {
+		t.Fatalf("update.json %+v, installs %v", f, src.installed())
+	}
+}
+
+// A close of the row closes only a row that shows: after a look that
+// works, and under three days of failed looks, it closes nothing.
+func TestACloseOfNoCheckRowClosesNothing(t *testing.T) {
+	const worksAgain = "the release check works again"
+	path := filepath.Join(t.TempDir(), "update.json")
+	s, src, clk := updateTest(t, "v0.42.0", config.UpdateOffer, path)
+	src.set("", errors.New(offline))
+	s.loadUpdate()
+	s.checkUpdate(clk.now())
+	clk.add(checkFailFor - time.Hour)
+	s.checkUpdate(clk.now())
+	if r := s.closeUpdateCheck(); r.Err != worksAgain || len(r.Ran) > 0 {
+		t.Fatalf("a close under three days of failures: %+v", r)
+	}
+	if f := state.ReadUpdate(path); !f.CheckClosed.IsZero() {
+		t.Fatalf("a close with no row was kept: %+v", f)
+	}
+	clk.add(time.Hour)
+	s.checkUpdate(clk.now())
+	if _, ok := checkDoorOf(s); !ok {
+		t.Fatal("no row after three days: the refused close closed it")
+	}
+	src.set("v0.43.0", nil)
+	s.checkUpdate(clk.now())
+	if r := checkDoorAct(s, "secondary"); r.Err != worksAgain || len(r.Ran) > 0 {
+		t.Fatalf("a close after a look that works: %+v", r)
+	}
+	if f := state.ReadUpdate(path); !f.CheckClosed.IsZero() {
+		t.Fatalf("a close with no row was kept: %+v", f)
+	}
+}
+
+// A closed offer hides the row only: its install act, and u on the host's
+// row, still install the release, and the offer stays closed.
+func TestAClosedOfferStillInstalls(t *testing.T) {
+	for name, install := range map[string]func(s *Service) proto.Result{
+		"the door's install": func(s *Service) proto.Result { return updateAct(s, "primary", "y", "v0.43.0") },
+		"update:host":        func(s *Service) proto.Result { return hostUpdateAct(s, "y") },
+	} {
+		s, src, path := offerTest(t, config.UpdateOffer)
+		if r := updateAct(s, "secondary", "y", "v0.43.0"); r.Err != "" {
+			t.Fatalf("close %+v", r)
+		}
+		if r := install(s); r.Err != "" || len(r.Ran) != 1 || !slices.Equal(r.Ran[0], []string{"install", "v0.43.0"}) {
+			t.Errorf("%s over a closed offer: %+v", name, r)
+		}
+		if got := src.installed(); !slices.Equal(got, []string{"v0.43.0"}) {
+			t.Errorf("%s over a closed offer: installed %v", name, got)
+		}
+		if f := state.ReadUpdate(path); f.Closed != "v0.43.0" || f.Last == nil || f.Last.To != "v0.43.0" || f.Last.Err != "" {
+			t.Errorf("%s: update.json %+v, last %+v", name, f, f.Last)
+		}
+	}
+}
+
+// The row of a failed install closes as any offer does, and the record of
+// the failure stays.
+func TestTheRowOfAFailedInstallCloses(t *testing.T) {
+	s, src, path := offerTest(t, config.UpdateOffer)
+	src.installErr = errors.New("checksum mismatch for matchblox-linux-amd64. Nothing was changed")
+	if r := updateAct(s, "primary", "y", "v0.43.0"); r.Err == "" {
+		t.Fatalf("install %+v", r)
+	}
+	if d, ok := updateDoorOf(s); !ok || !strings.Contains(d.Why, "The install failed") {
+		t.Fatalf("door %+v %v", d, ok)
+	}
+	if r := updateAct(s, "secondary", "y", "v0.43.0"); r.Err != "" || len(r.Ran) == 0 {
+		t.Fatalf("close %+v", r)
+	}
+	if d, ok := updateDoorOf(s); ok {
+		t.Fatalf("the closed row shows %+v", d)
+	}
+	f := state.ReadUpdate(path)
+	if f.Closed != "v0.43.0" || f.Last == nil || !strings.Contains(f.Last.Err, "checksum mismatch") {
+		t.Fatalf("update.json %+v, last %+v", f, f.Last)
+	}
+	if v := updateView(s); v.Last == nil || !strings.Contains(v.Last.Err, "checksum mismatch") {
+		t.Fatalf("view last %+v", v.Last)
+	}
+}
+
+// One install at a time: u on the host's row, and auto, beside a person's
+// install that runs, install nothing.
+func TestNothingInstallsBesideAnInstallThatRuns(t *testing.T) {
+	s, src, _ := offerTest(t, config.UpdateOffer)
+	src.began, src.gate = make(chan struct{}), make(chan struct{})
+	first := make(chan proto.Result)
+	go func() { first <- updateAct(s, "primary", "y", "v0.43.0") }()
+	<-src.began
+	if r := hostUpdateAct(s, "y"); r.Err != "" || len(r.Ran) > 0 || !slices.Equal(r.Skipped, []string{"already updating"}) {
+		t.Errorf("update:host beside an install: %+v", r)
+	}
+	if s.autoInstall("v0.43.0") {
+		t.Error("auto installed beside a person's install")
+	}
+	if !s.installing.Load() {
+		t.Error("the refused installs let go of the flag of the one that runs")
+	}
+	close(src.gate)
+	if r := <-first; r.Err != "" || len(r.Ran) != 1 {
+		t.Fatalf("the person's install %+v", r)
+	}
+	if got := src.installed(); !slices.Equal(got, []string{"v0.43.0"}) {
+		t.Fatalf("Install calls %v, want one", got)
+	}
+}

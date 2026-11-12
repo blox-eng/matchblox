@@ -19,16 +19,22 @@ import (
 // releaseWorld is a GitHub with one latest release, a gh, and this binary
 // in a directory of its own.
 type releaseWorld struct {
-	t       *testing.T
-	latest  string // "" is a repository with no release
-	bin     []byte // matchblox-linux-amd64 of the latest release
-	sum     string // its published .sha256, the true one when ""
-	hits    []string
-	gh      string // "" no gh, "old", "out" (not logged in), "ok", "fail"
-	calls   []string
-	runErr  error // what running the downloaded binary returns, with no output
-	out     bytes.Buffer
-	updater *Updater
+	t      *testing.T
+	latest string // "" is a repository with no release
+	bin    []byte // matchblox-linux-amd64 of the latest release
+	sum    string // its published .sha256, the true one when ""
+	// Answers of a GitHub that is wrong: where releases/latest redirects
+	// ({github} is the server), a .sha256 with nothing in it, and files with a 404.
+	location string
+	emptySum bool
+	noSum    bool
+	noAsset  bool
+	hits     []string
+	gh       string // "" no gh, "old", "out" (not logged in), "ok", "fail"
+	calls    []string
+	runErr   error // what running the downloaded binary returns, with no output
+	out      bytes.Buffer
+	updater  *Updater
 }
 
 func newReleaseWorld(t *testing.T, current, latest string) *releaseWorld {
@@ -54,13 +60,18 @@ func (w *releaseWorld) serve(rw http.ResponseWriter, r *http.Request) {
 	w.hits = append(w.hits, r.URL.Path)
 	base := "http://" + r.Host + "/" + releaseRepo + "/releases"
 	switch p := strings.TrimPrefix(r.URL.Path, "/"+releaseRepo+"/releases/"); {
+	case p == "latest" && w.location != "":
+		rw.Header().Set("Location", strings.ReplaceAll(w.location, "{github}", "http://"+r.Host))
+		rw.WriteHeader(http.StatusFound)
 	case p == "latest" && w.latest == "":
 		http.Redirect(rw, r, base, http.StatusFound)
 	case p == "latest":
 		http.Redirect(rw, r, base+"/tag/"+w.latest, http.StatusFound)
-	case p == "download/"+w.latest+"/matchblox-linux-amd64":
+	case p == "download/"+w.latest+"/matchblox-linux-amd64" && !w.noAsset:
 		_, _ = rw.Write(w.bin)
-	case p == "download/"+w.latest+"/matchblox-linux-amd64.sha256":
+	case p == "download/"+w.latest+"/matchblox-linux-amd64.sha256" && w.emptySum:
+		_, _ = rw.Write([]byte(" \n"))
+	case p == "download/"+w.latest+"/matchblox-linux-amd64.sha256" && !w.noSum:
 		sum := w.sum
 		if sum == "" {
 			h := sha256.Sum256(w.bin)
@@ -372,5 +383,68 @@ func TestInstallSaysWhyTheNewBinaryDidNotRun(t *testing.T) {
 	}
 	if got := w.installed(); got != "old" {
 		t.Fatalf("installed %q", got)
+	}
+}
+
+// Latest takes a tag only from a redirect to this repository's own release
+// page, and only a release tag: anything else is a failed look, with no
+// download.
+func TestLatestRefusesARedirectThatIsNoReleaseOfThisRepository(t *testing.T) {
+	for name, c := range map[string]struct{ location, want string }{
+		"another repository":    {"{github}/someone/else/releases/tag/v0.2.0", "GitHub sent"},
+		"another site":          {"https://example.com/blox-eng/matchblox/releases/tag/v0.2.0", "GitHub sent"},
+		"a tag with no version": {"{github}/blox-eng/matchblox/releases/tag/nightly", `"nightly" is not a release tag`},
+		"a tag that climbs out": {"{github}/blox-eng/matchblox/releases/tag/v0.2.0/../../x", "GitHub sent"},
+		"a tag with a path":     {"{github}/blox-eng/matchblox/releases/tag/v0.2.0%2F..%2F..%2Fx", "is not a release tag"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			w := newReleaseWorld(t, "v0.1.0", "v0.2.0")
+			w.location = c.location
+			if tag, err := w.updater.Latest(); err == nil || tag != "" || !strings.Contains(err.Error(), c.want) {
+				t.Fatalf("Latest = %q, %v; want an error with %q", tag, err, c.want)
+			}
+			if err := w.updater.Update(); err == nil {
+				t.Fatal("Update took the redirect")
+			}
+			if got := w.installed(); got != "old" {
+				t.Fatalf("installed %q", got)
+			}
+			for _, hit := range w.hits {
+				if strings.Contains(hit, "/download/") {
+					t.Errorf("downloaded %s", hit)
+				}
+			}
+		})
+	}
+}
+
+// An install that cannot get its checksum or its binary changes nothing,
+// says so, and leaves no download beside the binary.
+func TestInstallWithoutItsFilesChangesNothing(t *testing.T) {
+	for name, c := range map[string]struct {
+		set  func(w *releaseWorld)
+		want string
+	}{
+		"an empty checksum": {func(w *releaseWorld) { w.emptySum = true }, "the published checksum is empty"},
+		"no checksum (404)": {func(w *releaseWorld) { w.noSum = true }, "could not download the checksum for matchblox-linux-amd64: GitHub answered 404"},
+		"no binary (404)":   {func(w *releaseWorld) { w.noAsset = true }, "could not download matchblox-linux-amd64 v0.2.0: GitHub answered 404"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			w := newReleaseWorld(t, "v0.1.0", "v0.2.0")
+			c.set(w)
+			proof, err := w.updater.Install("v0.2.0")
+			if err == nil || !strings.Contains(err.Error(), c.want) || !strings.HasSuffix(err.Error(), "Nothing was changed") {
+				t.Fatalf("err = %v, want %q and, last, that nothing was changed", err, c.want)
+			}
+			if proof != (Proof{}) {
+				t.Errorf("proof of a failed install = %+v", proof)
+			}
+			if got := w.installed(); got != "old" {
+				t.Fatalf("installed %q", got)
+			}
+			if len(w.calls) != 0 {
+				t.Errorf("ran %q after a failed download", w.calls)
+			}
+		})
 	}
 }
