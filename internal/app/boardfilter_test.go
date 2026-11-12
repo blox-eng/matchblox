@@ -8,6 +8,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/chains"
@@ -425,6 +426,34 @@ func TestEscClearsTheSearchThenTheChain(t *testing.T) {
 		}
 		if moved := !m.peekAt.Equal(was); moved != want.peek || moved && !m.peekAt.Equal(now) {
 			t.Errorf("esc %d: the peek is at %v (was %v, now %v)", i+1, m.peekAt, was, now)
+		}
+	}
+}
+
+// TestTheHomeKeyActsAsTheBoardsEsc: outside a stand-in the home key goes
+// back as esc does (#360); on the board that clears the search, then the
+// chain, and never leaves the board.
+func TestTheHomeKeyActsAsTheBoardsEsc(t *testing.T) {
+	m := boardShot(t, boardFixture(t), 80, 31, func(m *Model) {
+		m.opt.Layered = true
+		m.boardChain, m.filter = "login", "flint"
+		m.refresh()
+	})
+	home := func(m Model) (Model, []tea.Msg) {
+		next, cmd := m.Update(uv.UnknownApcEvent(homeKey))
+		return next.(Model), cmdMsgs(cmd)
+	}
+	left := func(msgs []tea.Msg) bool {
+		return slices.ContainsFunc(msgs, func(msg tea.Msg) bool { _, ok := msg.(layerMsg); return ok })
+	}
+	for i, chain := range []string{"login", "", ""} {
+		var msgs []tea.Msg
+		m, msgs = home(m)
+		if m.filter != "" || m.boardChain != chain {
+			t.Fatalf("home key %d left search %q and chain %q, want chain %q", i+1, m.filter, m.boardChain, chain)
+		}
+		if left(msgs) || !m.boardShown() {
+			t.Fatalf("home key %d left the board", i+1)
 		}
 	}
 }
