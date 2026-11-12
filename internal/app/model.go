@@ -440,6 +440,11 @@ type Model struct {
 	newer      string
 	updateAct  string
 	restarting bool
+	// hostAct is the act id of the update of a host on Hosts, hostActOn
+	// that host. behindSaid is the notice of a remote home's newer
+	// release, said once.
+	hostAct, hostActOn string
+	behindSaid         string
 	// used is where matchblox started sessions; wrepos the known repos,
 	// for N's where list: built when what it reads changes (wfrom), not
 	// at each snapshot or draw.
@@ -777,6 +782,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.dockSwitched = false
 		}
 		m.doors, m.updateView = m.shownDoors(st.Doors), st.Update
+		if n := m.behindNotice(); n != "" && n != m.behindSaid {
+			m.flash, m.behindSaid = n, n // once for each release: a key clears it
+		}
 		m.noteChanges(m.opt.Host, st.Sessions, st.Chains)
 		m.snap, m.git, m.recs, m.have, m.answered, m.at = st.Snapshot, st.Git, st.Recommendations, true, true, m.now()
 		m.shipReport = st.Ships
@@ -1093,6 +1101,10 @@ func (m Model) result(r proto.Result) (Model, tea.Cmd) {
 		if r.Err == "" && len(r.Ran) > 0 && m.opt.Restart != nil {
 			return m.startAgain() // the install replaced this console's binary too
 		}
+	}
+	if r.ActID != "" && r.ActID == m.hostAct {
+		m.flash, m.hostAct = m.hostUpdated(r), ""
+		return m, nil
 	}
 	if m.tally(r) {
 		return m, nil

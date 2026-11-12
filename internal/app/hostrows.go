@@ -14,8 +14,10 @@ import (
 
 	"github.com/blox-eng/matchblox/internal/hosts"
 	"github.com/blox-eng/matchblox/internal/proto"
+	"github.com/blox-eng/matchblox/internal/release"
 	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/sample"
+	"github.com/blox-eng/matchblox/internal/state"
 )
 
 // staleAfter is how long a lost host of two or more keeps its rows as
@@ -323,8 +325,8 @@ func (m Model) rowName(s sample.Session, ink lipgloss.Style, w int) (string, boo
 	return m.taggedName(name, tag, ink, w), true
 }
 
-// hostNote is host's live note on Hosts: its sessions, and those that
-// wait. "" before its first state.
+// hostNote is host's live note on Hosts: its sessions, those that wait,
+// and its release when it is not the console's. "" before its first state.
 func (m Model) hostNote(host string) string {
 	have := m.have
 	if host != m.opt.Host {
@@ -351,5 +353,106 @@ func (m Model) hostNote(host string) string {
 	if waits > 0 {
 		note += fmt.Sprintf(" · %d waits", waits)
 	}
+	if r := m.releaseNote(host); r != "" {
+		note += " · " + r
+	}
 	return note
+}
+
+// releaseNote names host's release and this console's when both are
+// releases and differ, and the person did not dismiss that pair. The
+// console's own service has its own notice.
+func (m Model) releaseNote(host string) string {
+	h, c := m.helloOf(host).Binary, m.opt.Binary
+	if host == m.opt.Host && m.opt.Local || !releases(h, c) || release.Compare(h, c) == 0 ||
+		slices.Contains(m.recPrefs.Releases, releasePair(host, h, c)) {
+		return ""
+	}
+	return h + " · this console " + c
+}
+
+func releasePair(host, hostRelease, consoleRelease string) string {
+	return host + "\x00" + hostRelease + "\x00" + consoleRelease
+}
+
+// releaseFix is what a host row with a release note offers: the update act
+// of an older host that knows it, else the words of the fix.
+func (m Model) releaseFix(host string) (act bool, fix string) {
+	switch newer := release.Compare(m.helloOf(host).Binary, m.opt.Binary) > 0; {
+	case newer && m.opt.Local:
+		return false, "this console is older: update it in SETUP"
+	case newer:
+		return false, "this console is older: run matchblox update"
+	case m.updateOf(host) == nil: // a service older than the act
+		return false, "on " + m.nameOf(host) + ": matchblox update"
+	}
+	return true, ""
+}
+
+// updateOf is the update view host sent last; nil from a service older
+// than it, or a build that is no release.
+func (m Model) updateOf(host string) *state.UpdateView {
+	if host == m.opt.Host {
+		return m.updateView
+	}
+	return m.stateOf(host).Update
+}
+
+// updateHost sends the update act to host. hostAct keeps its id, so the
+// screen that shows says how it went.
+func (m Model) updateHost(host string) (Model, tea.Cmd) {
+	if why := m.refusal(host); why != "" {
+		m.flash = why
+		return m, nil
+	}
+	a := proto.Act{RecID: proto.HostUpdateAct, Confirm: "y"}
+	var cmd tea.Cmd
+	if host == m.opt.Host {
+		m.hostAct, cmd = m.sendOn(m.conn, a)
+	} else {
+		i := m.peerAt(host)
+		cmd = m.sendPeer(i, a)
+		m.hostAct = m.peers[i].acts[len(m.peers[i].acts)-1]
+	}
+	m.hostActOn, m.flash = host, "updating "+m.nameOf(host)+"…"
+	return m, cmd
+}
+
+// hostUpdated is what the update act on a host came to.
+func (m Model) hostUpdated(r proto.Result) string {
+	switch {
+	case r.Err != "":
+		return m.nameOf(m.hostActOn) + " is not updated: " + r.Err
+	case len(r.Skipped) > 0:
+		return m.nameOf(m.hostActOn) + ": " + r.Skipped[0]
+	case len(r.Ran) > 0 && len(r.Ran[0]) == 2:
+		return m.nameOf(m.hostActOn) + " installed " + r.Ran[0][1] + ": its service starts again"
+	}
+	return describe(r)
+}
+
+// closeRelease dismisses host's release note for its pair of releases. A
+// pair dismissed before for host goes: it can show no more.
+func (m Model) closeRelease(host string) (Model, string) {
+	h := m.helloOf(host).Binary
+	p := m.recPrefs
+	p.Releases = slices.DeleteFunc(slices.Clone(p.Releases), func(e string) bool { return strings.HasPrefix(e, host+"\x00") })
+	p.Releases = append(p.Releases, releasePair(host, h, m.opt.Binary))
+	m.recPrefs = p
+	if err := p.save(m.opt.StateDir); err != nil {
+		return m, "dismissed for now, not kept: " + err.Error()
+	}
+	return m, "dismissed: " + m.nameOf(host) + " on " + h + " · back when a release changes"
+}
+
+// behindNotice: a console whose home is a remote host runs an older
+// release than the latest its home host knows. It has no service of its
+// own to update it: the command does.
+func (m Model) behindNotice() string {
+	v := m.updateView
+	if m.opt.Local || v == nil || !releases(m.opt.Binary, v.Latest) || strings.Contains(v.Latest, "-") ||
+		release.Compare(m.opt.Binary, v.Latest) >= 0 {
+		return ""
+	}
+	return fmt.Sprintf("this console runs %s, the latest is %s · run: matchblox update", m.opt.Binary, v.Latest)
 }

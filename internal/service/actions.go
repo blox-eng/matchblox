@@ -209,14 +209,14 @@ func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 }
 
 // yours are the acts only the person at a console sends: the launch
-// sheet's and the stoker tab's verbs, and z. The stoker's own plan and
-// steps come from its CLI.
+// sheet's and the stoker tab's verbs, z, and the update of a host. The
+// stoker's own plan and steps come from its CLI.
 func yours(recID string) bool {
 	if verb, ok := strings.CutPrefix(recID, "stoker:"); ok {
 		// matchblox stoker quit, new and order are the builder's in a shell too.
 		return verb != "plan" && verb != "step" && verb != "when" && verb != "quit" && verb != "new" && verb != "order-chain"
 	}
-	return strings.HasPrefix(recID, "park:")
+	return strings.HasPrefix(recID, "park:") || recID == proto.HostUpdateAct
 }
 
 func (s *Service) dispatch(ctx context.Context, a proto.Act) proto.Result {
@@ -314,6 +314,11 @@ func (s *Service) dispatch(ctx context.Context, a proto.Act) proto.Result {
 		if id == doors.Update {
 			ran = len(res.Ran) > 0 // "already updating" is no install: a retry runs
 		}
+		return res
+	}
+	if a.RecID == proto.HostUpdateAct {
+		res := s.hostUpdate(a)
+		ran = len(res.Ran) > 0 // "already updating" or up to date: a retry looks again
 		return res
 	}
 	if pick {

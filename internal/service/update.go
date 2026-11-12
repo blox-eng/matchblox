@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -236,6 +237,49 @@ func (s *Service) closeUpdate(tag string) proto.Result {
 	return proto.Result{Ran: [][]string{{"close", doors.Update}}}
 }
 
+// hostUpdate is a person's key press on this host's row: it looks for the
+// latest release now, under mode off too, and installs it when it is newer.
+func (s *Service) hostUpdate(a proto.Act) proto.Result {
+	if a.Confirm != "y" {
+		return proto.Result{Err: "needs a typed y"}
+	}
+	if !s.updating() {
+		return proto.Result{Err: notARelease}
+	}
+	tag, err := s.lookNow()
+	if err != nil {
+		return proto.Result{Err: err.Error()}
+	}
+	if strings.Contains(tag, "-") || release.Compare(s.Binary, tag) >= 0 {
+		return proto.Result{Skipped: []string{tag + " is the latest release"}}
+	}
+	return s.installUpdate(tag)
+}
+
+// lookNow finds the latest release. Under mode off it keeps nothing: the
+// service never looks again by itself.
+func (s *Service) lookNow() (string, error) {
+	if s.UpdateMode == config.UpdateOff {
+		tag, err := s.Update.Latest()
+		if err == nil && !release.IsRelease(tag) {
+			err = fmt.Errorf("the latest release %q is not a release tag", tag)
+		}
+		return tag, err
+	}
+	if s.currentUpdateView().Mode == "" {
+		s.loadUpdate() // the view keeps its mode and release
+	}
+	s.checkUpdate(s.now())
+	v := s.currentUpdateView()
+	if v.Err != "" {
+		return "", errors.New(v.Err)
+	}
+	return v.Latest, nil
+}
+
+// notARelease is why a build from a checkout does not update itself.
+const notARelease = "this matchblox is not a release build, so it does not update itself"
+
 // installUpdate installs tag over this binary and records how it went. A
 // good install changes the binary on disk, and the watch of it stops the
 // service (ErrReplaced): the next console starts the new one.
@@ -245,7 +289,7 @@ func (s *Service) installUpdate(tag string) proto.Result {
 	}
 	defer s.installing.Store(false)
 	if !s.updating() {
-		return proto.Result{Err: "this matchblox is not a release build, so it does not update itself"}
+		return proto.Result{Err: notARelease}
 	}
 	if cmd := s.Update.Managed(); cmd != "" {
 		return proto.Result{Err: managedProblem + " Run: " + cmd}

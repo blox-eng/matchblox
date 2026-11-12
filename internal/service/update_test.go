@@ -538,3 +538,76 @@ func TestManagedInstallOffersTheManagersCommand(t *testing.T) {
 		t.Fatalf("Install calls %d, want 0", n)
 	}
 }
+
+func hostUpdateAct(s *Service, confirm string) proto.Result {
+	return s.act(context.Background(), proto.Act{RecID: proto.HostUpdateAct, Confirm: confirm, Console: true})
+}
+
+// A key press on a host's row is the person's consent: the act looks for
+// the release then, under mode off too, and keeps nothing that makes the
+// service look again.
+func TestHostUpdateActLooksEvenWhenOff(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "update.json")
+	s, src, _ := updateTest(t, "v0.42.0", config.UpdateOff, path)
+	s.loadUpdate()
+	r := hostUpdateAct(s, "y")
+	if r.Err != "" || len(r.Ran) != 1 || !slices.Equal(r.Ran[0], []string{"install", "v0.43.0"}) {
+		t.Fatalf("result %+v", r)
+	}
+	if n := src.count(); n != 1 {
+		t.Fatalf("Latest calls %d, want 1", n)
+	}
+	if got := src.installed(); !slices.Equal(got, []string{"v0.43.0"}) {
+		t.Fatalf("installed %v", got)
+	}
+	if f := state.ReadUpdate(path); f.Latest != "" {
+		t.Fatalf("mode off kept the release it found: %+v", f)
+	}
+	if v := updateView(s); v == nil || v.Mode != config.UpdateOff || v.Current != "v0.42.0" || v.Latest != "" {
+		t.Fatalf("view %+v", v)
+	}
+}
+
+func TestHostUpdateActLooksAndKeepsWhatItFound(t *testing.T) {
+	s, src, _ := updateTest(t, "v0.42.0", config.UpdateOffer, filepath.Join(t.TempDir(), "update.json"))
+	s.loadUpdate()
+	src.set("v0.44.0", nil)
+	if r := hostUpdateAct(s, "y"); r.Err != "" || !slices.Equal(src.installed(), []string{"v0.44.0"}) {
+		t.Fatalf("result %+v, installed %v", r, src.installed())
+	}
+	if v := updateView(s); v.Mode != config.UpdateOffer || v.Current != "v0.42.0" || v.Latest != "v0.44.0" {
+		t.Fatalf("view %+v", v)
+	}
+}
+
+func TestHostUpdateActSaysWhenUpToDate(t *testing.T) {
+	s, src, _ := updateTest(t, "v0.43.0", config.UpdateOffer, filepath.Join(t.TempDir(), "update.json"))
+	s.loadUpdate()
+	for range 2 { // nothing ran: the second press looks again
+		if r := hostUpdateAct(s, "y"); r.Err != "" || !slices.Equal(r.Skipped, []string{"v0.43.0 is the latest release"}) {
+			t.Fatalf("result %+v", r)
+		}
+	}
+	if n, got := src.count(), src.installed(); n != 2 || len(got) != 0 {
+		t.Fatalf("Latest calls %d, installs %v", n, got)
+	}
+	src.set("", errors.New("GitHub answered 502"))
+	if r := hostUpdateAct(s, "y"); !strings.Contains(r.Err, "502") {
+		t.Fatalf("a failed look: %+v", r)
+	}
+}
+
+func TestHostUpdateActNeedsATypedY(t *testing.T) {
+	s, src, _ := updateTest(t, "v0.42.0", config.UpdateOff, filepath.Join(t.TempDir(), "update.json"))
+	s.loadUpdate()
+	if r := hostUpdateAct(s, ""); r.Err == "" {
+		t.Fatalf("without a typed y: %+v", r)
+	}
+	cli := s.act(context.Background(), proto.Act{RecID: proto.HostUpdateAct, Confirm: "y"})
+	if cli.Err == "" {
+		t.Fatalf("from no console: %+v", cli)
+	}
+	if n, got := src.count(), src.installed(); n != 0 || len(got) != 0 {
+		t.Fatalf("Latest calls %d, installs %v", n, got)
+	}
+}

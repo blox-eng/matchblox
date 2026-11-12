@@ -203,6 +203,8 @@ func defaultShellKeys() shellKeymaps {
 			Open:      bind(ks("enter"), "⏎", "open"),
 			Tick:      bind(ks("space"), "space", "show/hide"),
 			Connect:   bind(ks("c"), "c", "connect"),
+			Update:    bind(ks("u"), "u", "update"),
+			Dismiss:   bind(ks("d"), "d", "dismiss"),
 			Yes:       bind(ks("y"), "y", "run"),
 			Interrupt: bind(ks("ctrl+c"), "ctrl+c", "quit"),
 		},
@@ -285,13 +287,14 @@ type askKeys struct{ Send, Cancel, Erase, Copy bkey.Binding }
 
 func (k askKeys) bindings() []bkey.Binding { return []bkey.Binding{k.Send, k.Cancel, k.Erase, k.Copy} }
 
-// shellKeys are the Hosts list.
+// shellKeys are the Hosts list. Update and Dismiss act on a host on
+// another release than the console.
 type shellKeys struct {
-	Quit, Up, Down, Back, Remove, Open, Tick, Connect, Yes, Interrupt bkey.Binding
+	Quit, Up, Down, Back, Remove, Open, Tick, Connect, Update, Dismiss, Yes, Interrupt bkey.Binding
 }
 
 func (k shellKeys) bindings() []bkey.Binding {
-	return []bkey.Binding{k.Quit, k.Up, k.Down, k.Back, k.Remove, k.Open, k.Tick, k.Connect, k.Yes, k.Interrupt}
+	return []bkey.Binding{k.Quit, k.Up, k.Down, k.Back, k.Remove, k.Open, k.Tick, k.Connect, k.Update, k.Dismiss, k.Yes, k.Interrupt}
 }
 
 // shellTypingKeys are the host name line.

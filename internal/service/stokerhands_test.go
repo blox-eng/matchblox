@@ -317,3 +317,15 @@ func TestACompactLatchesThePaneBusy(t *testing.T) {
 		t.Fatal("a sample after the latch does not show the pane at rest")
 	}
 }
+
+func TestStokerCannotUpdateAHost(t *testing.T) {
+	s, _ := handsTest(t)
+	src := &fakeUpdates{latest: "v0.43.0"}
+	s.Binary, s.UpdateMode, s.Update = "v0.42.0", config.UpdateOffer, src
+	if res := s.act(t.Context(), fromStokerAct(proto.HostUpdateAct, "")); res.Err != "the stoker does not update matchblox: u on Hosts is yours" {
+		t.Fatalf("stoker update: %+v", res)
+	}
+	if n, got := src.count(), src.installed(); n != 0 || len(got) != 0 {
+		t.Fatalf("Latest calls %d, installs %v", n, got)
+	}
+}

@@ -14,10 +14,13 @@ const recsLabelRow = -3
 
 // recPrefs is what the person did to the recommendations, kept in the
 // state directory: the ones dismissed, each with the evidence it was
-// dismissed on, and whether the section is folded.
+// dismissed on, and whether the section is folded. Releases are the
+// release notes of host rows dismissed, each as host, its release and
+// this console's, joined by NUL.
 type recPrefs struct {
 	Dismissed map[string]string `json:"dismissed,omitempty"`
 	Folded    bool              `json:"folded,omitempty"`
+	Releases  []string          `json:"releases,omitempty"`
 }
 
 const recPrefsFile = "recommendations.json"

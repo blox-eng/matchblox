@@ -222,7 +222,9 @@ On the chips:
 | `Enter` | Opens one console of the ticked hosts, or adds a host. With no host ticked, it opens the selected host. |
 | `c` | Connects the host again with `matchblox connect`. |
 | `x` | Removes a host from the list. matchblox stays on that host. |
-| `y` | Confirms the remove or the connect. |
+| `u` | Updates a host on an older release than the console. The host looks for the latest release and installs it, even with `mode = "off"`. |
+| `d` | Dismisses the note of a host on another release, until either release changes. |
+| `y` | Confirms the remove, the connect or the update. |
 | `Backspace` | Deletes the last character of a host you type. |
 | `Esc` | Leaves the list of hosts to add. |
 | `q` or `Ctrl+C` | Quits. |

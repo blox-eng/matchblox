@@ -189,6 +189,9 @@ func TestScreens(t *testing.T) {
 	for _, size := range [][2]int{{44, 31}, {86, 30}} {
 		golden(t, hostsTicks(st, size[0], size[1]), "hoststicks", size[0], size[1])
 	}
+	for _, size := range [][2]int{{44, 31}, {104, 38}} {
+		golden(t, hostsRelease(st, size[0], size[1]), "hostsrelease", size[0], size[1])
+	}
 	golden(t, threeHostShips(t, st, 132, 32), "ships3", 132, 32)
 	machine := threeHosts(t, st, 104, 38, "stale")
 	machine.setTab(tabMachine)
@@ -298,6 +301,25 @@ func hostsTicks(st proto.State, w, h int) Shell {
 		stateMsg(st),
 		peerMsg{host: "ws-1", conn: conns["ws-1"], msg: stateMsg(ws)},
 		layerMsg{},
+	} {
+		next, _ = next.Update(msg)
+	}
+	return next.(Shell)
+}
+
+// hostsRelease is hostsTicks with ws-1 selected on v0.38.1, a release
+// older than the console's v0.42.0: its note, and the key that updates it.
+func hostsRelease(st proto.State, w, h int) Shell {
+	sh := hostsTicks(st, w, h)
+	sh.cur.opt.Binary, sh.cur.opt.Local = "v0.42.0", true
+	ws := sh.cur.peers[0].conn
+	_, peer := peerStates(st)
+	peer.Update = &state.UpdateView{Mode: "offer", Current: "v0.38.1"}
+	var next tea.Model = sh
+	for _, msg := range []tea.Msg{
+		peerMsg{host: "ws-1", conn: ws, msg: helloMsg(proto.Hello{Version: proto.Version, Binary: "v0.38.1"})},
+		peerMsg{host: "ws-1", conn: ws, msg: stateMsg(peer)},
+		keyPress("down"),
 	} {
 		next, _ = next.Update(msg)
 	}

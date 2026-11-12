@@ -13,6 +13,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/sample"
+	"github.com/blox-eng/matchblox/internal/state"
 	"github.com/blox-eng/matchblox/internal/transport"
 )
 
@@ -454,5 +455,189 @@ func TestTheLostLineOutranksTheStandInsKeys(t *testing.T) {
 	want := m.lostLine()
 	if line, _ := m.keyLine(m.width); want == "" || !strings.Contains(ansi.Strip(line), want[:20]) {
 		t.Fatalf("key line %q, want the lost line %q", ansi.Strip(line), want)
+	}
+}
+
+// releaseRig is Hosts over this machine and ws-1, ws-1 selected: the
+// console runs console, ws-1 hostRel with its update view (nil: a host
+// older than the update act).
+func releaseRig(t *testing.T, console, hostRel string, view *state.UpdateView) *shellRig {
+	t.Helper()
+	r := newShell(t, []string{"ws-1"}, nil, "", false)
+	r.sh.opt.Base.Binary, r.sh.cur.opt.Binary, r.sh.cur.opt.Local = console, console, true
+	ws := r.conns["ws-1"]
+	r.update(peerMsg{host: "ws-1", conn: ws, msg: helloMsg(proto.Hello{Version: proto.Version, Binary: hostRel})})
+	st := hostState(sess(2, "api-auth", "%1", nil))
+	st.Update = view
+	r.update(peerMsg{host: "ws-1", conn: ws, msg: stateMsg(st)})
+	r.toHosts(t)
+	r.key(t, "down")
+	return r
+}
+
+func viewOn(current string) *state.UpdateView {
+	return &state.UpdateView{Mode: "offer", Current: current}
+}
+
+func TestHostRowNamesBothReleases(t *testing.T) {
+	r := releaseRig(t, "v0.42.0", "v0.38.1", viewOn("v0.38.1"))
+	if row := r.rowOf("ws-1"); !strings.HasSuffix(strings.TrimSpace(row), "1 sessions · v0.38.1 · this console v0.42.0") {
+		t.Fatalf("the ws-1 row: %q", row)
+	}
+	if row := r.rowOf("this machine"); strings.Contains(row, "this console") {
+		t.Fatalf("this machine's row: %q", row)
+	}
+}
+
+func TestHostRowSilentWhenEqual(t *testing.T) {
+	r := releaseRig(t, "v0.42.0", "v0.42.0", viewOn("v0.42.0"))
+	if row := r.rowOf("ws-1"); !strings.HasSuffix(strings.TrimSpace(row), "1 sessions") {
+		t.Fatalf("the ws-1 row: %q", row)
+	}
+	if out := r.view(); strings.Contains(out, "matchblox update") || strings.Contains(out, "update ws-1") {
+		t.Fatalf("an offer for a host on the same release:\n%s", out)
+	}
+}
+
+func TestHostRowSilentForADevBuild(t *testing.T) {
+	for _, c := range [][2]string{{"dev", "v0.38.1"}, {"v0.42.0", "dev"}, {"v0.42.0", "v0.42.1-0.20261112093000-f15b80c1abcd"}} {
+		r := releaseRig(t, c[0], c[1], viewOn(c[1]))
+		if row := r.rowOf("ws-1"); !strings.HasSuffix(strings.TrimSpace(row), "1 sessions") {
+			t.Errorf("console %s, ws-1 %s: the row %q", c[0], c[1], row)
+		}
+	}
+}
+
+func TestHostUpdateKeySendsTheActToThatHost(t *testing.T) {
+	r := releaseRig(t, "v0.42.0", "v0.38.1", viewOn("v0.38.1"))
+	if out := r.view(); !strings.Contains(out, "u update ws-1") {
+		t.Fatalf("no key for the update:\n%s", out)
+	}
+	ws, home := r.conns["ws-1"], r.conns[""]
+	r.key(t, "u")
+	r.key(t, "enter") // not a typed y
+	if acts := ws.acts(); len(acts) != 0 {
+		t.Fatalf("an act with no typed y: %+v", acts)
+	}
+	r.key(t, "u")
+	if out := r.view(); !strings.Contains(out, "Update ws-1") {
+		t.Fatalf("no confirm:\n%s", out)
+	}
+	r.key(t, "y")
+	want := proto.Act{RecID: proto.HostUpdateAct, Confirm: "y"}
+	if acts := ws.acts(); len(acts) != 1 || acts[0] != want {
+		t.Fatalf("ws-1 got %+v", acts)
+	}
+	for _, a := range home.acts() {
+		if a.RecID == proto.HostUpdateAct {
+			t.Fatalf("home got the update: %+v", a)
+		}
+	}
+	ws.mu.Lock()
+	id := ws.sent[len(ws.sent)-1].ID
+	ws.mu.Unlock()
+	r.update(peerMsg{host: "ws-1", conn: ws, msg: resultMsg(proto.Result{ActID: id, Skipped: []string{"v0.38.1 is the latest release"}})})
+	if out := r.view(); !strings.Contains(out, "v0.38.1 is the latest release") {
+		t.Fatalf("Hosts does not say how it went:\n%s", out)
+	}
+}
+
+func TestOldHostGetsTheCommandNotTheKey(t *testing.T) {
+	r := releaseRig(t, "v0.42.0", "v0.38.1", nil)
+	out := r.view()
+	if !strings.Contains(out, "on ws-1: matchblox update") || strings.Contains(out, "u update") {
+		t.Fatalf("an old host's fix:\n%s", out)
+	}
+	r.key(t, "u")
+	if r.sh.pending != nil || len(r.conns["ws-1"].acts()) != 0 {
+		t.Fatalf("u on an old host: pending %+v, acts %+v", r.sh.pending, r.conns["ws-1"].acts())
+	}
+}
+
+func TestNewerHostPointsAtThisMachine(t *testing.T) {
+	r := releaseRig(t, "v0.42.0", "v0.43.0", viewOn("v0.43.0"))
+	out := r.view()
+	if !strings.Contains(r.rowOf("ws-1"), "v0.43.0 · this console v0.42.0") || !strings.Contains(out, "this console is older: update it in SETUP") {
+		t.Fatalf("a newer host:\n%s", out)
+	}
+	r.key(t, "u")
+	if r.sh.pending != nil {
+		t.Fatalf("u on a newer host: %+v", r.sh.pending)
+	}
+}
+
+// A console whose home is a remote host has no service of its own to ask:
+// the home host's latest release tells it, and it gets the command.
+func TestRemoteHomeConsoleGetsTheCommand(t *testing.T) {
+	behind := &state.UpdateView{Mode: "offer", Current: "v0.43.0", Latest: "v0.43.0"}
+	for _, c := range []struct {
+		local   bool
+		console string
+		say     bool
+	}{{false, "v0.41.0", true}, {true, "v0.41.0", false}, {false, "v0.43.0", false}, {false, "dev", false}} {
+		conn := newFake()
+		m := New(Options{NoMotion: true, Host: "ws-1", Conn: conn, Binary: c.console, Local: c.local})
+		m = upd(t, m, tea.WindowSizeMsg{Width: 104, Height: 38})
+		st := fixtureState()
+		st.Update = behind
+		m = upd(t, m, stateMsg(st))
+		notice := "this console runs v0.41.0, the latest is v0.43.0 · run: matchblox update"
+		if got := strings.Contains(strings.Join(frameOf(m), "\n"), notice); got != c.say {
+			t.Errorf("local %v, console %s: notice %v, want %v\n%s", c.local, c.console, got, c.say, strings.Join(frameOf(m), "\n"))
+		}
+		for _, a := range conn.acts() {
+			if a.RecID == proto.HostUpdateAct || strings.HasPrefix(a.RecID, "door:") {
+				t.Errorf("local %v, console %s: sent %+v", c.local, c.console, a)
+			}
+		}
+	}
+}
+
+func TestClosedReleaseNoteStaysClosedForThatPair(t *testing.T) {
+	r := releaseRig(t, "v0.42.0", "v0.38.1", viewOn("v0.38.1"))
+	dir := t.TempDir()
+	r.sh.cur.opt.StateDir = dir
+	r.key(t, "d")
+	if row := r.rowOf("ws-1"); strings.Contains(row, "this console") {
+		t.Fatalf("the closed note shows: %q", row)
+	}
+	if out := r.view(); strings.Contains(out, "u update ws-1") {
+		t.Fatalf("the closed note keeps its key:\n%s", out)
+	}
+	if p := loadRecPrefs(dir); len(p.Releases) != 1 || p.Releases[0] != "ws-1\x00v0.38.1\x00v0.42.0" {
+		t.Fatalf("kept %+v", p)
+	}
+	ws := r.conns["ws-1"]
+	r.update(peerMsg{host: "ws-1", conn: ws, msg: helloMsg(proto.Hello{Version: proto.Version, Binary: "v0.39.0"})})
+	if row := r.rowOf("ws-1"); !strings.Contains(row, "v0.39.0 · this console v0.42.0") {
+		t.Fatalf("a new release of the host: %q", row)
+	}
+	r.update(peerMsg{host: "ws-1", conn: ws, msg: helloMsg(proto.Hello{Version: proto.Version, Binary: "v0.38.1"})})
+	r.sh.cur.opt.Binary = "v0.43.0"
+	if row := r.rowOf("ws-1"); !strings.Contains(row, "v0.38.1 · this console v0.43.0") {
+		t.Fatalf("a new release of the console: %q", row)
+	}
+}
+
+// After its update the host's service starts again: the peer redials, and
+// the new hello takes the note away, with no stale row.
+func TestAnUpdatedHostShowsItsNewRelease(t *testing.T) {
+	r := releaseRig(t, "v0.42.0", "v0.38.1", viewOn("v0.38.1"))
+	ws := r.conns["ws-1"]
+	r.update(peerMsg{host: "ws-1", conn: ws, msg: lostMsg{err: io.EOF, conn: ws}})
+	r.drain(r.update(peerRedialMsg{host: "ws-1", gen: r.sh.cur.opt.Gen, id: r.sh.cur.peers[0].id}))
+	again := r.sh.cur.peers[0].conn
+	if again == nil || again == transport.Conn(ws) {
+		t.Fatalf("no redial: %v", again)
+	}
+	r.update(peerMsg{host: "ws-1", conn: again, msg: helloMsg(proto.Hello{Version: proto.Version, Binary: "v0.42.0"})})
+	st := hostState(sess(2, "api-auth", "%1", nil))
+	st.Update = viewOn("v0.42.0")
+	r.update(peerMsg{host: "ws-1", conn: again, msg: stateMsg(st)})
+	if row := r.rowOf("ws-1"); !strings.HasSuffix(strings.TrimSpace(row), "1 sessions") {
+		t.Fatalf("the ws-1 row after its update: %q", row)
+	}
+	if out := r.view(); strings.Contains(out, "lost") || strings.Contains(out, "stale") || strings.Contains(out, "update ws-1") {
+		t.Fatalf("Hosts after the update:\n%s", out)
 	}
 }
