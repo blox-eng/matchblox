@@ -666,10 +666,13 @@ func TestMachineOpensTheStoker(t *testing.T) {
 	if m.tab != tabStoker || !strings.Contains(lines[3], "STOKER") {
 		t.Fatalf("⏎ on the row: tab %d, the screen's top %q", m.tab, lines[3])
 	}
-	for _, want := range []string{"TODAY", "RESUME: run the migration test", "esc machine"} {
+	for _, want := range []string{"TODAY", "RESUME: run the migration test", "esc machine", "app-review"} {
 		if !strings.Contains(screen(m), want) {
 			t.Fatalf("the STOKER screen lacks %q:\n%s", want, screen(m))
 		}
+	}
+	if strings.Contains(screen(m), "the whole run") { // this screen is the whole run
+		t.Fatalf("the STOKER screen points to itself:\n%s", screen(m))
 	}
 	if !strings.Contains(strings.Split(screen(m), "\n")[1], "MACHINE") {
 		t.Fatalf("the tab row does not name Machine open: %q", strings.Split(screen(m), "\n")[1])

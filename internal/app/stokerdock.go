@@ -192,9 +192,6 @@ func (m Model) stokerLines(w int, full bool) []string {
 	default:
 		out = append(out, m.stepLine(v.Run[len(v.Run)-1], w))
 	}
-	if v.Unseen {
-		out = append(out, fit(" "+keyWord(m.keys.main.Stoker, st.accent, st.muted, " the whole run"), w))
-	}
 	return out
 }
 

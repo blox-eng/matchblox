@@ -507,11 +507,7 @@ func (m Model) stokerHostCard(w int) body {
 		return b
 	}
 	if len(v.Run) > 0 || m.card() != nil || order != nil { // the stoker's panel heads its screen (ruling 28)
-		panel := m.stokerLines(w, false)
-		if v.Unseen {
-			panel = panel[:len(panel)-1] // "c the whole run": this screen is the whole run
-		}
-		b.add(-1, panel...)
+		b.add(-1, m.stokerLines(w, false)...)
 	}
 	b.add(-1, "")
 	rows := m.stokerRows()
