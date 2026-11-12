@@ -7,15 +7,14 @@ import (
 
 // UpdateFile is what the service keeps of the releases across restarts:
 // the latest one found and when this machine first saw it, the release
-// whose offer a person closed, and the last install. Good is the last look
-// that worked, Failed the first one that failed after it, and CheckClosed
-// the start of the run of failed looks whose row a person closed.
+// whose offer a person closed, and the last install. Failed is the first
+// failed look of the run of them now, zero after a look that worked, and
+// CheckClosed the start of the run whose row a person closed.
 type UpdateFile struct {
 	Latest      string        `json:"latest,omitempty"`
 	FirstSeen   time.Time     `json:"first_seen,omitzero"`
 	Closed      string        `json:"closed,omitempty"`
 	Last        *UpdateRecord `json:"last,omitempty"`
-	Good        time.Time     `json:"good,omitzero"`
 	Failed      time.Time     `json:"failed,omitzero"`
 	CheckClosed time.Time     `json:"check_closed,omitzero"`
 }

@@ -958,22 +958,46 @@ func TestUpdateCheckDoorAfterThreeDaysOfFailures(t *testing.T) {
 	}
 }
 
-func TestUpdateCheckDoorCountsFromTheLastGoodLook(t *testing.T) {
+// A laptop off for a week whose first look fails has one failed look,
+// not a week of them.
+func TestUpdateCheckDoorCountsFromTheFirstFailure(t *testing.T) {
 	s, src, clk := updateTest(t, "v0.42.0", config.UpdateOffer, filepath.Join(t.TempDir(), "update.json"))
 	tick := startUpdates(t, s)
 	tick()
+	clk.add(7 * 24 * time.Hour)
 	src.set("", errors.New(offline))
+	first := clk.now()
+	tick()
 	for range 2 {
+		if _, ok := checkDoorOf(s); ok {
+			t.Fatalf("a door %v after the first failure", clk.now().Sub(first))
+		}
 		clk.add(24 * time.Hour)
 		tick()
 	}
 	if _, ok := checkDoorOf(s); ok {
-		t.Fatal("a door after 1 day of failed looks")
+		t.Fatal("a door 2 days after the first failure")
 	}
 	clk.add(24 * time.Hour)
 	tick()
-	if _, ok := checkDoorOf(s); !ok {
-		t.Fatal("no door 3 days after the last good look")
+	want := "Every look since " + first.Local().Format("Jan 2 at 15:04") + " failed: " + offline + ". Run: matchblox update."
+	if d, ok := checkDoorOf(s); !ok || d.Why != want {
+		t.Fatalf("door 3 days after the first failure %+v %v", d, ok)
+	}
+}
+
+func TestARestartKeepsTheRunOfFailures(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "update.json")
+	s, src, clk := updateTest(t, "v0.42.0", config.UpdateOffer, path)
+	src.set("", errors.New(offline))
+	s.loadUpdate()
+	s.checkUpdate(clk.now())
+	again, _, _ := updateTest(t, "v0.42.0", config.UpdateOffer, path)
+	again.Update, again.Now = src, func() time.Time { return updateT0.Add(72 * time.Hour) }
+	again.loadUpdate()
+	again.checkUpdate(again.now())
+	if _, ok := checkDoorOf(again); !ok {
+		t.Fatal("a restart started the run of failures again")
 	}
 }
 
@@ -1011,9 +1035,9 @@ func TestClosedUpdateCheckDoorStaysClosed(t *testing.T) {
 	src.set("v0.43.0", nil)
 	days(1)
 	src.set("", errors.New(offline))
-	days(2)
+	days(3)
 	if _, ok := checkDoorOf(s); ok {
-		t.Fatal("a door 2 days after the good look")
+		t.Fatal("a door 2 days after the first failure of the new run")
 	}
 	days(1)
 	if _, ok := checkDoorOf(s); !ok {
@@ -1033,5 +1057,86 @@ func TestUpdateCheckDoorNeverWhenOff(t *testing.T) {
 	hostUpdateAct(s, "y")
 	if d, ok := checkDoorOf(s); ok {
 		t.Fatalf("a door under mode off: %+v", d)
+	}
+}
+
+func TestAZeroFirstSeenIsNotDue(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "update.json")
+	writeUpdates(t, path, state.UpdateFile{Latest: "v0.43.0"})
+	s, src, clk := updateTest(t, "v0.42.0", config.UpdateAuto, path)
+	src.set("", errors.New(offline))
+	tick := startUpdates(t, s)
+	for range 3 {
+		tick()
+		clk.add(24 * time.Hour)
+	}
+	if got := src.installed(); len(got) != 0 {
+		t.Fatalf("installs with no first sight %v", got)
+	}
+}
+
+// Work that starts between auto's look at it and the install's flag makes
+// auto wait, with the flag let go.
+func TestAutoBacksOutWhenWorkStartsAtItsInstall(t *testing.T) {
+	s, src, clk, _ := autoTest(t, config.UpdateAuto, 25*time.Hour)
+	s.loadUpdate()
+	s.checkUpdate(clk.now())
+	if due, _ := s.autoDue(clk.now()); !due {
+		t.Fatal("not due")
+	}
+	s.mu.Lock()
+	s.clones = map[string]*cloneJob{"/work/api-auth": {c: proto.Clone{Target: "/work/api-auth"}}}
+	s.mu.Unlock()
+	if s.autoInstall("v0.43.0") {
+		t.Fatal("auto installed under a clone")
+	}
+	if got := src.installed(); len(got) != 0 {
+		t.Fatalf("installs %v", got)
+	}
+	if v := updateView(s); v.Waiting != "auto waits for a clone to end" || s.installing.Load() {
+		t.Fatalf("waiting %q, installing %v", v.Waiting, s.installing.Load())
+	}
+}
+
+// After a good install the service is about to start again: another
+// install says so and runs nothing.
+func TestAnInstallAfterAGoodOneSaysItIsDone(t *testing.T) {
+	s, src, _ := offerTest(t, config.UpdateOffer)
+	if r := s.installUpdate("v0.43.0"); r.Err != "" {
+		t.Fatalf("install %+v", r)
+	}
+	want := []string{"v0.43.0 is installed: matchblox starts again in a moment"}
+	if r := s.installUpdate("v0.43.0"); !slices.Equal(r.Skipped, want) {
+		t.Fatalf("a second install %+v", r)
+	}
+	if r := hostUpdateAct(s, "y"); !slices.Equal(r.Skipped, want) {
+		t.Fatalf("the host act after it %+v", r)
+	}
+	if got := src.installed(); len(got) != 1 {
+		t.Fatalf("installs %v", got)
+	}
+}
+
+func TestTheInstalledRowCloses(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "update.json")
+	writeUpdates(t, path, state.UpdateFile{Latest: "v0.43.0", FirstSeen: updateT0.Add(-48 * time.Hour),
+		Last: &state.UpdateRecord{From: "v0.42.0", To: "v0.43.0", At: updateT0.Add(-time.Hour)}})
+	s, src, clk := updateTest(t, "v0.42.0", config.UpdateOffer, path)
+	s.loadUpdate()
+	s.checkUpdate(clk.now())
+	d, ok := updateDoorOf(s)
+	if !ok || d.Sum != "v0.43.0" || d.Problem != stillRuns {
+		t.Fatalf("door %+v %v", d, ok)
+	}
+	if r := updateAct(s, "secondary", "y", d.Sum); r.Err != "" {
+		t.Fatalf("close %+v", r)
+	}
+	if d, ok := updateDoorOf(s); ok {
+		t.Fatalf("the closed row shows %+v", d)
+	}
+	src.set("v0.44.0", nil)
+	s.checkUpdate(clk.now().Add(24 * time.Hour))
+	if d, ok := updateDoorOf(s); !ok || d.Sum != "v0.44.0" || d.Problem != "" {
+		t.Fatalf("a newer release %+v %v", d, ok)
 	}
 }

@@ -491,3 +491,17 @@ func TestUpdateCheckRowOnlyCloses(t *testing.T) {
 		t.Fatalf("close says %q", a.say)
 	}
 }
+
+// The row of a release installed under a service that still runs the old
+// one closes that release.
+func TestInstalledRowClosesItsRelease(t *testing.T) {
+	d := doors.Door{ID: doors.Update, Title: "matchblox v0.43.0 is installed", Why: "This machine runs v0.42.0.", Sum: "v0.43.0",
+		Problem: "v0.43.0 is installed, but this service still runs v0.42.0. Quit matchblox and open it again."}
+	var m Model
+	if a := m.doorAction(d); a != nil {
+		t.Fatalf("an install action %+v", a)
+	}
+	if a := closeDoor(d); a.rec != "door:"+doors.Update || a.which != "secondary" || a.text != "v0.43.0" {
+		t.Fatalf("close %+v", a)
+	}
+}

@@ -1300,3 +1300,39 @@ func TestNoCloneStartsWhileUpdating(t *testing.T) {
 		t.Fatalf("a clone is listed: %+v", s.clones)
 	}
 }
+
+// cloneUpdating is a clone service on a release, with an updater.
+func cloneUpdating(t *testing.T) (*Service, *fakeUpdates, string) {
+	t.Helper()
+	s, root := cloneTest(t)
+	src := &fakeUpdates{latest: "v0.43.0"}
+	s.Binary, s.UpdateMode, s.Update = "v0.42.0", "offer", src
+	s.cloneRun = func(context.Context, gitremote.Remote, string, func(int)) error { return nil }
+	s.loadUpdate()
+	s.checkUpdate(s.now())
+	return s, src, root
+}
+
+func TestNoCloneStartsBetweenAnInstallAndItsRestart(t *testing.T) {
+	s, _, root := cloneUpdating(t)
+	if r := s.installUpdate("v0.43.0"); r.Err != "" {
+		t.Fatalf("install %+v", r)
+	}
+	r := s.act(t.Context(), startAct(t, "https://github.com/o/r", filepath.Join(root, "r")))
+	if r.Err != "matchblox is updating. Try again in a minute." {
+		t.Fatalf("a clone after a good install: %+v", r)
+	}
+}
+
+func TestACloneStartsAfterAFailedInstall(t *testing.T) {
+	s, src, root := cloneUpdating(t)
+	src.installErr = errors.New("checksum mismatch for matchblox-linux-amd64. Nothing was changed")
+	if r := s.installUpdate("v0.43.0"); r.Err == "" {
+		t.Fatalf("install %+v", r)
+	}
+	r := s.act(t.Context(), startAct(t, "https://github.com/o/r", filepath.Join(root, "r")))
+	if r.Err != "" || r.CloneID == 0 {
+		t.Fatalf("a clone after a failed install: %+v", r)
+	}
+	clonesUntil(t, s, "the clone ends", func(cs []proto.Clone) bool { return len(cs) == 1 && (cs[0].Done || cs[0].Err != "") })
+}

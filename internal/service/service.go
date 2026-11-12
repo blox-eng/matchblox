@@ -396,8 +396,12 @@ type Service struct {
 	// loadedAt is when loadUpdate read the file: an install recorded
 	// before it is one an earlier service made. Under updateMu.
 	loadedAt time.Time
-	// installing is true while installUpdate runs: one install at a time.
+	// installing is true while an install runs, and after a good one until
+	// the service stops: one install at a time, and no clone that the
+	// restart would cut off. installed is the release a good install put
+	// on disk, under updateMu.
 	installing atomic.Bool
+	installed  string
 }
 
 func New(cfg config.Config, smp *sample.Sampler, git GitSource) *Service {

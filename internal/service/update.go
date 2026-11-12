@@ -96,8 +96,7 @@ func (s *Service) updateLoop(ctx context.Context) {
 			due, waiting = s.autoDue(now)
 		}
 		s.setWaiting(waiting)
-		if tag, ok := s.newer(); ok && due {
-			s.installUpdate(tag)
+		if tag, ok := s.newer(); ok && due && s.autoInstall(tag) {
 			tried = true
 		}
 		select {
@@ -128,7 +127,7 @@ func (s *Service) autoDue(now time.Time) (due bool, waiting string) {
 	if l := v.Last; l != nil && l.To == tag && l.Err == "" {
 		return false, "" // installed: a service that still runs the old one says so
 	}
-	if now.Sub(v.FirstSeen) < autoWait {
+	if v.FirstSeen.IsZero() || now.Sub(v.FirstSeen) < autoWait {
 		return false, ""
 	}
 	if why := s.busy(); why != "" {
@@ -201,7 +200,7 @@ func (s *Service) checkUpdate(now time.Time) {
 		if f.FirstSeen.IsZero() || f.FirstSeen.After(now) {
 			f.FirstSeen = now
 		}
-		f.Good, f.Failed = now, time.Time{}
+		f.Failed = time.Time{}
 		s.saveUpdates()
 	}
 	v.Latest, v.FirstSeen = s.updates.Latest, s.updates.FirstSeen
@@ -281,7 +280,7 @@ func (s *Service) updateDoor() (doors.Door, bool) {
 	case closed == tag || v.Mode == config.UpdateOff:
 		return doors.Door{}, false
 	case installed && v.Restart != "":
-		return doors.Door{ID: doors.Update, Title: "matchblox " + tag + " is installed", Why: "This machine runs " + v.Current + ".", Problem: v.Restart}, true
+		return doors.Door{ID: doors.Update, Title: "matchblox " + tag + " is installed", Why: "This machine runs " + v.Current + ".", Sum: tag, Problem: v.Restart}, true
 	case installed:
 		return doors.Door{}, false
 	}
@@ -390,9 +389,48 @@ const notARelease = "this matchblox is not a release build, so it does not updat
 // service (ErrReplaced): the next console starts the new one.
 func (s *Service) installUpdate(tag string) proto.Result {
 	if !s.installing.CompareAndSwap(false, true) {
-		return proto.Result{Skipped: []string{"already updating"}}
+		return s.notAgain()
 	}
-	defer s.installing.Store(false)
+	return s.install(tag)
+}
+
+// notAgain is the answer to an install while another runs, or after a
+// good one: the service is about to start again on it.
+func (s *Service) notAgain() proto.Result {
+	s.updateMu.Lock()
+	done := s.installed
+	s.updateMu.Unlock()
+	if done != "" {
+		return proto.Result{Skipped: []string{done + " is installed: matchblox starts again in a moment"}}
+	}
+	return proto.Result{Skipped: []string{"already updating"}}
+}
+
+// autoInstall is mode auto's install: it looks at the work in flight
+// again once it holds the flag, which no new clone passes, and waits when
+// work started since it looked.
+func (s *Service) autoInstall(tag string) bool {
+	if !s.installing.CompareAndSwap(false, true) {
+		return false
+	}
+	if why := s.busy(); why != "" {
+		s.installing.Store(false)
+		s.setWaiting(why)
+		return false
+	}
+	s.install(tag)
+	return true
+}
+
+// install runs with the installing flag held. It lets go of the flag
+// unless the install worked: then the service stops for the new binary,
+// and nothing new may start before it does.
+func (s *Service) install(tag string) (res proto.Result) {
+	defer func() {
+		if len(res.Ran) == 0 {
+			s.installing.Store(false)
+		}
+	}()
 	if !s.updating() {
 		return proto.Result{Err: notARelease}
 	}
@@ -406,6 +444,9 @@ func (s *Service) installUpdate(tag string) proto.Result {
 	}
 	s.updateMu.Lock()
 	s.updates.Last = &rec
+	if err == nil {
+		s.installed = tag
+	}
 	s.saveUpdates()
 	v := s.currentUpdateView()
 	last := rec
@@ -421,45 +462,41 @@ func (s *Service) installUpdate(tag string) proto.Result {
 	return proto.Result{Ran: [][]string{{"install", tag}}}
 }
 
-// checkFailFor is how long the looks fail before a person is told: one
-// failed look on a laptop that is offline is no news.
+// checkFailFor is how long a run of failed looks lasts before a person
+// is told: one failed look on a laptop that is offline is no news. The run
+// starts at its first failed look and ends at a look that works.
 const checkFailFor = 3 * 24 * time.Hour
-
-// failingSince is the start of the run of failed looks: the last look
-// that worked, or the first that failed when none ever did. Hold updateMu.
-func (s *Service) failingSince() time.Time {
-	if !s.updates.Good.IsZero() {
-		return s.updates.Good
-	}
-	return s.updates.Failed
-}
 
 // updateCheckDoor says the looks have failed for days, and how to see why.
 // It has no action; a person who closes it closes this run of failures.
 func (s *Service) updateCheckDoor() (doors.Door, bool) {
+	s.updateMu.Lock()
+	defer s.updateMu.Unlock()
+	return s.checkDoorLocked()
+}
+
+// checkDoorLocked is updateCheckDoor. Hold updateMu.
+func (s *Service) checkDoorLocked() (doors.Door, bool) {
 	if !s.updating() || s.UpdateMode == config.UpdateOff {
 		return doors.Door{}, false
 	}
-	s.updateMu.Lock()
-	failed, since, closed := s.updates.Failed, s.failingSince(), s.updates.CheckClosed
-	s.updateMu.Unlock()
-	v := s.currentUpdateView()
-	if v.Err == "" || failed.IsZero() || s.now().Sub(since) < checkFailFor || closed.Equal(since) {
+	f, v := s.updates, s.currentUpdateView()
+	if v.Err == "" || f.Failed.IsZero() || s.now().Sub(f.Failed) < checkFailFor || f.CheckClosed.Equal(f.Failed) {
 		return doors.Door{}, false
 	}
-	why := fmt.Sprintf("Every look since %s failed: %s. Run: matchblox update.", failed.Local().Format("Jan 2 at 15:04"), strings.TrimSuffix(v.Err, "."))
+	why := fmt.Sprintf("Every look since %s failed: %s. Run: matchblox update.", f.Failed.Local().Format("Jan 2 at 15:04"), strings.TrimSuffix(v.Err, "."))
 	return doors.Door{ID: doors.UpdateCheck, Title: "matchblox cannot look for a new release", Why: why, Preview: "matchblox update"}, true
 }
 
 // closeUpdateCheck closes the row of this run of failed looks: a look
 // that works ends the run, and three days of failures open it again.
 func (s *Service) closeUpdateCheck() proto.Result {
-	if _, ok := s.updateCheckDoor(); !ok {
+	s.updateMu.Lock()
+	defer s.updateMu.Unlock()
+	if _, ok := s.checkDoorLocked(); !ok {
 		return proto.Result{Err: "the release check works again"}
 	}
-	s.updateMu.Lock()
-	s.updates.CheckClosed = s.failingSince()
+	s.updates.CheckClosed = s.updates.Failed
 	s.saveUpdates()
-	s.updateMu.Unlock()
 	return proto.Result{Ran: [][]string{{"close", doors.UpdateCheck}}}
 }
