@@ -73,7 +73,7 @@ func TestHistoryWithAFlatSeries(t *testing.T) {
 // TestProgressShowsWhereThePersonLooks: the bar an agent reported shows
 // under its opened row on a phone and on its desk row.
 func TestProgressShowsWhereThePersonLooks(t *testing.T) {
-	t.Skip("dropped (Task 12 step 1): no plan progress bar on a match card")
+	t.Skip("dropped (ruling 29): no plan progress bar on a match card; the room's stoker card holds the plan's place")
 	m, _ := loadedWith(t, 50, queueState())
 	if out := screen(m); !strings.Contains(out, "▰▰▰▰▱ plan 75%") {
 		t.Fatalf("the opened row has no plan:\n%s", out)

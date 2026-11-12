@@ -359,7 +359,7 @@ func TestSearchKeepsTheMarks(t *testing.T) {
 
 // Review 2, #5: the plan cell holds its column at any percent.
 func TestProgressHoldsItsColumn(t *testing.T) {
-	t.Skip("dropped (Task 12 step 1): no plan progress bar on a match card")
+	t.Skip("dropped (ruling 29): no plan progress bar on a match card; the room's stoker card holds the plan's place")
 	st := sortFixture()
 	st.Sessions[0].Progress = &sample.Progress{Pct: 5}
 	st.Sessions[1].Progress = &sample.Progress{Pct: 100}

@@ -229,7 +229,7 @@ func TestTheCountFoldsBeforeTheTrack(t *testing.T) {
 // (stuck, waits for you, in flight, merged, live): the first three, then
 // how many more. A desk shows the chat beside the list, and the Ships tab.
 func TestTheOpenedRowListsEveryShipOfTheSession(t *testing.T) {
-	t.Skip("dropped (Task 12 step 1): the phone's opened row goes with the list")
+	t.Skip("dropped (Task 12 step 1; deleted at step 7, listed at step 8): the phone's opened row goes with the list")
 	st := withShips(screensState(t), "spark-docs",
 		proto.Ship{Number: 4549, Title: "Changelog", Kind: shipRunning, Note: "merged · deploying", Stage: 3},
 		proto.Ship{Number: 4548, Title: "Search", Kind: shipRunning, Note: "CI · 2 of 5 jobs", Stage: 1},
@@ -336,7 +336,7 @@ func drawnAt(t *testing.T, st proto.State, w, h int) (drawn, []string) {
 // more, and the session's keys stay where a tap finds them, on the line
 // that shows them.
 func TestManyShipsKeepTheSessionsKeys(t *testing.T) {
-	t.Skip("dropped (Task 12 step 1): the phone's opened row goes with the list")
+	t.Skip("dropped (Task 12 step 1; deleted at step 7, listed at step 8): the phone's opened row goes with the list")
 	var more []proto.Ship
 	for i := range 5 {
 		more = append(more, proto.Ship{Number: 4600 + i, Title: "Page " + strconv.Itoa(i), Kind: shipRunning, Note: "CI", Stage: 1})

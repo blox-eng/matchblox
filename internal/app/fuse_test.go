@@ -532,7 +532,7 @@ func TestAChainWithOneMatchHereIsNoChain(t *testing.T) {
 // blanks; and a tap on the opened keys of a chained row on a phone presses
 // the key it shows.
 func TestOpenedLinesStartWithTwoBlanks(t *testing.T) {
-	t.Skip("dropped (Task 12 step 1): the fuse's two cells go")
+	t.Skip("dropped (Task 12 step 1; deleted at step 7, listed at step 8): the fuse's two cells go")
 	m := fuseModel(t, 44, fuseState(t, mockupChain), "hearth-api")
 	s, _ := m.selectedSession()
 	for _, l := range m.opened(s, 44) {
@@ -957,7 +957,7 @@ func tapFuse(t *testing.T, m Model, name string) Model {
 // opens its start sheet. On a chain with a head it is a row tap, and on a
 // phone, with no fuse column, it is a row tap too.
 func TestTapOnBareFuseOpensSheet(t *testing.T) {
-	t.Skip("dropped (Task 12 step 1): the fuse goes")
+	t.Skip("dropped (Task 12 step 1; deleted at step 7, listed at step 8): the fuse goes; F holds the way in")
 	m := fuseModel(t, 160, fuseState(t, mockupChain), "")
 	if next := tapFuse(t, m, "hearth-api"); next.sheet == nil || next.sheet.chain != "c1" {
 		t.Fatalf("a tap on the fuse opened no sheet: %+v", next.sheet)
@@ -994,7 +994,7 @@ func TestABareChainStartsNothingAtNight(t *testing.T) {
 // TestAHeadIsNoSession: x, r, A and z on a head row send nothing and say
 // where its agent quits.
 func TestAHeadIsNoSession(t *testing.T) {
-	t.Skip("dropped (Task 12 step 1): head rows go with Sessions (re-plan)")
+	t.Skip("dropped (Task 12 step 1; deleted at step 7, listed at step 8): head rows go with Sessions (re-plan)")
 	m, f := headModel(t, 160, headState(t, runningPlan(), true))
 	m = pick(t, m, stokerPane)
 	for _, k := range []string{"x", "r", "A", "z"} {

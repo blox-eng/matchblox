@@ -209,18 +209,73 @@ func (w *walker) press(keys ...string) {
 // tabWords are the tabs as the tab row names the open one, by digit.
 var tabWords = map[string]string{"1": "SESSIONS", "2": "SHIPS", "3": "MACHINE", "4": "GIT", "5": "HISTORY", "6": "PANES", "7": "STOKER"}
 
-// toTab opens tab n, "1" to "7": Tab walks the tabs until the tab row names
-// it. A digit on the board answers its card (Task 12 step 1).
+// toTab opens tab n, "1" to "7": Tab or Shift+Tab, the shorter way round,
+// one at a time, each after the redraw of the one before, so that the walk
+// never counts on a frame from before its key. A digit on the board answers
+// its card (Task 12 step 1).
 func (w *walker) toTab(n string) {
 	w.t.Helper()
 	want := tabWords[n]
-	for range 2 * len(tabWords) {
-		if lines := strings.Split(w.term.screen(), "\n"); len(lines) > 1 && strings.Contains(lines[1], want) {
-			return
+	for i, open := 0, w.openTab(); open != want; i++ {
+		if i == len(tabWords) {
+			w.t.Fatalf("Tab never opened %s: the tab row names %q", want, open)
 		}
-		w.press("tab")
+		key := "tab"
+		if from := tabDigit(open); from != "" && (int(n[0])-int(from[0])+len(tabWords))%len(tabWords) > len(tabWords)/2 {
+			key = "shift+tab"
+		}
+		w.press(key)
+		open = w.tabAfter(open)
 	}
-	w.t.Fatalf("Tab never opened %s", want)
+}
+
+// tabDigit is the digit of the tab the tab row names word, or "".
+func tabDigit(word string) string {
+	for d, wd := range tabWords {
+		if wd == word {
+			return d
+		}
+	}
+	return ""
+}
+
+// openTab is the word of the tab the tab row draws open, or "". A frame
+// that names none, or no whole frame yet, asks for a repaint.
+func (w *walker) openTab() string {
+	if open := tabOf(w.term.wholeFrame()); open != "" {
+		return open
+	}
+	return tabOf(0, w.term.screen())
+}
+
+func tabOf(_ int, frame string) string {
+	if lines := strings.Split(frame, "\n"); len(lines) > 1 {
+		for _, word := range tabWords {
+			if strings.Contains(lines[1], word) {
+				return word
+			}
+		}
+	}
+	return ""
+}
+
+// tabAfter waits for the tab row to name a tab other than was.
+func (w *walker) tabAfter(was string) string {
+	w.t.Helper()
+	deadline, repaint := time.Now().Add(10*time.Second), time.Now().Add(time.Second)
+	for {
+		if open := tabOf(w.term.wholeFrame()); open != was && open != "" {
+			return open
+		}
+		if time.Now().After(deadline) {
+			w.t.Fatalf("Tab from %s drew no other tab", was)
+		}
+		if time.Now().After(repaint) {
+			w.d.Repaint()
+			repaint = time.Now().Add(time.Second)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
 }
 
 // pressLast presses a key that ends the program: the end may come before
