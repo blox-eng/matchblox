@@ -515,7 +515,7 @@ func (m Model) stokerHostCard(w int) body {
 		b.add(-1, "")
 	}
 	if len(v.Run) == 0 && m.card() == nil && order == nil {
-		b.add(-1, m.stokerLines(w, true, "")...)
+		b.add(-1, m.stokerLines(w, true)...)
 		return b
 	}
 	b.add(-1, spread(st.label.Render(" "+m.stokerHeadline()), st.stoker.Render(m.stokerStatus())+" ", w))

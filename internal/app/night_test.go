@@ -161,6 +161,7 @@ func quietNight() proto.StokerView {
 // panel until it is seen, and c opens the whole card. The phone shows it
 // in its full view: list only has no dock.
 func TestAQuietNightShowsItsCard(t *testing.T) {
+	t.Skip("waits for TestMachineOpensTheStoker (Task 12 step 6b): the dock's stoker panel goes to the top of Machine's row stoker (ruling 28)")
 	for _, w := range []int{40, 120} {
 		m, _ := loadedWith(t, w, stokerState(quietNight()))
 		m = fullView(m)

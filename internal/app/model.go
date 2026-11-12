@@ -403,11 +403,6 @@ type Model struct {
 	picked      map[wtKey]bool // worktrees x removes
 	batch       *batch
 	showExited  bool // e: the exited agents, one by one
-	// dockPanel is the panel a phone's dock shows (usage, the machine, the
-	// stoker), u cycling it; dockSwitched: u was pressed while the stoker
-	// claimed the dock, so it no longer takes it by itself.
-	dockPanel    int
-	dockSwitched bool
 	// stripTurned: u turned the board's strip while a warning lasts, so the
 	// warning no longer turns it.
 	stripTurned bool
@@ -854,9 +849,6 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			toast = joined
 		}
 		m.stoker, m.stokerServer, m.stokers = st.Stoker, st.StokerServer, st.Stokers
-		if !m.stokerClaims() {
-			m.dockSwitched = false
-		}
 		m.doors = m.shownDoors(st.Doors)
 		m.snap, m.git, m.recs, m.have, m.answered, m.at = st.Snapshot, st.Git, st.Recommendations, true, true, m.now()
 		m.shipReport = st.Ships
@@ -1595,8 +1587,6 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	case bkey.Matches(k, mk.Ships):
 		m.setTab(tabShips)
-	case bkey.Matches(k, mk.Dock):
-		m.cycleDock()
 	case bkey.Matches(k, mk.ListOnly):
 		m.flipListOnly()
 	case bkey.Matches(k, mk.Stoke):

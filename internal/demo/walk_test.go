@@ -967,6 +967,34 @@ func (w *walker) opens(what, want, key string) {
 	}
 }
 
+// searched is the screen with the board searched for name, then esc
+// clears the search.
+func (w *walker) searched(name string) string {
+	w.t.Helper()
+	w.press("/")
+	w.send("a search", name)
+	w.press("enter")
+	time.Sleep(200 * time.Millisecond)
+	screen := w.term.screen()
+	w.press("esc")
+	return screen
+}
+
+// finds tells if the board, searched for name, shows its card: a line
+// with name that is not the strip's "started name".
+func (w *walker) finds(name string) bool {
+	w.t.Helper()
+	return slices.ContainsFunc(strings.Split(w.searched(name), "\n"), func(l string) bool {
+		return strings.Contains(l, name) && !strings.Contains(l, "started "+name) && !strings.Contains(l, "nothing matches")
+	})
+}
+
+// findsNothing tells if the board, searched for name, says nothing matches.
+func (w *walker) findsNothing(name string) bool {
+	w.t.Helper()
+	return strings.Contains(w.searched(name), `nothing matches "`+name+`"`)
+}
+
 // saysAfter presses keys and waits for want in what the console then draws.
 func (w *walker) saysAfter(what, want string, keys ...string) {
 	w.t.Helper()
@@ -1062,12 +1090,9 @@ func TestSessionsCanBeStartedAndKilled(t *testing.T) {
 		t.Errorf("tmux's list has no new session:\n%s", got)
 	}
 	// The search finds the session only once the console's list holds it: on
-	// a slow machine its sample comes after the word that it started.
-	eventually(t, 30*time.Second, "the list to show fresh-one", func() bool {
-		return slices.ContainsFunc(strings.Split(w.term.screen(), "\n"), func(l string) bool {
-			return strings.Contains(l, "fresh-one") && !strings.Contains(l, "started fresh-one")
-		})
-	})
+	// a slow machine its sample comes after the word that it started. A new
+	// busy match may land under a column's "↓ n more": the search shows it.
+	eventually(t, 30*time.Second, "the board to show fresh-one", func() bool { return w.finds("fresh-one") })
 
 	// The new session takes a message like any other.
 	w.press("/")
@@ -1107,16 +1132,13 @@ func TestSessionsCanBeStartedAndKilled(t *testing.T) {
 		time.Sleep(300 * time.Millisecond)
 		return !strings.Contains(paneList(t), "renamed-one")
 	})
-	// Another tab and back, by the Tab key, draws the list anew: it has the new
-	// session, not the killed one.
-	eventually(t, 5*time.Second, "the drawn list to lose the killed session", func() bool {
+	// Another tab and back, by the Tab key, draws the board anew: it has the
+	// new session, not the killed one.
+	eventually(t, 5*time.Second, "the drawn board to lose the killed session", func() bool {
 		w.tabByKey("2")
 		time.Sleep(200 * time.Millisecond)
-		from := len(w.term.text())
 		w.tabByKey("1")
-		time.Sleep(200 * time.Millisecond)
-		drawn := w.term.text()[from:]
-		return strings.Contains(drawn, "fresh-o") && !strings.Contains(drawn, "renamed-o") // a column may cut a name
+		return w.finds("fresh-one") && w.findsNothing("renamed-one")
 	})
 	if got := m.spawns(t); got != "" {
 		t.Errorf("a real command ran:\n%s", got)

@@ -162,12 +162,9 @@ func (m Model) stepLine(e proto.StokerEntry, w int) string {
 
 // stokerLines are the stoker's panel in w columns: its fewest lines, or
 // (full) with its recent steps.
-func (m Model) stokerLines(w int, full bool, toggle string) []string {
+func (m Model) stokerLines(w int, full bool) []string {
 	st := m.st
 	right := st.stoker.Render(m.stokerWord()) + " "
-	if toggle != "" {
-		right = st.accent.Render(toggle) + " "
-	}
 	head := st.label.Render(" STOKER")
 	if n := m.chainsAtWork(m.opt.Host); n > 0 {
 		head += st.stoker.Render(chainsWord(n))
@@ -183,11 +180,7 @@ func (m Model) stokerLines(w int, full bool, toggle string) []string {
 	if c := m.card(); c != nil {
 		out = append(out, fit(" "+st.text.Render(fmt.Sprintf("ready %d/%d", c.Ready, c.Of))+st.muted.Render(" · "+score), w))
 	} else {
-		lead := " " // the state is on the label line, unless a phone's switch has it
-		if toggle != "" {
-			lead += st.stoker.Render(m.stokerWord()) + st.muted.Render(" · ")
-		}
-		out = append(out, fit(lead+st.muted.Render(fmt.Sprintf("watching %d · ", len(v.Watched))+score), w))
+		out = append(out, fit(" "+st.muted.Render(fmt.Sprintf("watching %d · ", len(v.Watched))+score), w))
 	}
 	switch {
 	case len(v.Run) == 0:
@@ -205,7 +198,7 @@ func (m Model) stokerLines(w int, full bool, toggle string) []string {
 	return out
 }
 
-// openStoker is c, or a tap on the stoker's panel: its tab.
+// openStoker is c: the stoker's tab.
 func (m Model) openStoker() Model {
 	if m.stoker == nil {
 		m.flash = "this service keeps no stoker"

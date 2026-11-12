@@ -61,7 +61,7 @@ func TestAnUprightPhoneGetsTheDrawer(t *testing.T) {
 		next, _ := fullView(m).Update(tea.WindowSizeMsg{Width: 107, Height: h})
 		m = next.(Model)
 		out := screen(m)
-		if lineOf(t, m, "USAGE") >= lineOf(t, m, "MACHINE") || m.draw(107).dockAt >= 0 {
+		if lineOf(t, m, "USAGE") >= lineOf(t, m, "MACHINE") {
 			t.Fatalf("107x%d: usage and the machine are not under the list:\n%s", h, out)
 		}
 		fitsWidth(t, m, 107)
@@ -527,7 +527,7 @@ func TestTheDockSaysTheDisk(t *testing.T) {
 	st := queueState()
 	st.Machine.Disks = []sample.Disk{{Path: "/home/user", Total: 1 << 40, Used: 710 << 30, Avail: 290 << 30}, {Path: "/", Total: 100 << 30, Used: 90 << 30, Avail: 10 << 30}}
 	m, _ := loadedWith(t, 100, st)
-	out := ansi.Strip(strings.Join(m.machineLines(60, false, ""), "\n"))
+	out := ansi.Strip(strings.Join(m.machineLines(60, false), "\n"))
 	if !strings.Contains(out, "disk ▰▰▰▰▰▰▱▱ 71% of 1 TB · / 90%") {
 		t.Fatalf("the machine lacks the disk:\n%s", out)
 	}

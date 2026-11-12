@@ -72,12 +72,8 @@ func (m Model) shapeRows() int {
 	return m.height
 }
 
-// upright is a portrait screen: its dock shows one panel at a time and its
-// boxes sit at the bottom, as on a phone.
+// upright is a portrait screen: its boxes sit at the bottom, as on a phone.
 func (m Model) upright() bool { return portrait(m.width, m.shapeRows()) }
-
-// phoneDock is a dock of one panel, u cycling it: a one-column phone.
-func (m Model) phoneDock(w int) bool { return m.layoutAt(w) == Narrow }
 
 // body is a panel: its lines, and for each line the row it shows (-1 for
 // none), so a tap knows what it hit.

@@ -21,12 +21,12 @@
    ●━●━●━●━●  live                                                            │
                                                                               │
                                                                               │
-────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- USAGE                                                                        │ MACHINE                                     3 hosts
- ✻ Claude Max    5h   this machine 84% · gpu-1 84% · ws-1 84%                 │ this machine cpu ▁ 0%   mem 40%  disk 71%
-                 wk   this machine 82% · gpu-1 82% · ws-1 82%                 │ gpu-1        cpu ▁▁ 0%   mem 40%  disk 71%
- · Google login  not measured · OpenCode keeps no limits                      │ ws-1         cpu ▁▁ 0%   mem 40%  disk 71%
- ❋ OpenAI Plus   5h   this machine 40% · gpu-1 40% · ws-1 40%                 │
-                 wk   this machine 12% · gpu-1 12% · ws-1 12%                 │
+                                                                              │
+                                                                              │
+                                                                              │
+                                                                              │
+                                                                              │
+                                                                              │
+                                                                              │
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ↑↓ move  ⏎ session  f stoker  / find  q quit  list only v                                                           sampled 0s ago

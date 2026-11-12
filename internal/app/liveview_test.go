@@ -288,9 +288,6 @@ func TestWideStacksStatsLeft(t *testing.T) {
 	if sc.listW > 200*2/5 {
 		t.Fatalf("the left column is %d of 200 columns", sc.listW)
 	}
-	if sc.dockAt >= 0 {
-		t.Fatal("the dock is drawn on a desk")
-	}
 	left, right := sides(sc, 200)
 	at := map[string]int{}
 	for y, l := range left {
@@ -314,9 +311,6 @@ func TestMediumSplitsListAndChat(t *testing.T) {
 	sc := m.draw(86)
 	if sc.listW != 38 {
 		t.Fatalf("the list is %d of 86 columns", sc.listW)
-	}
-	if sc.dockAt >= 0 {
-		t.Fatal("a dock under the chat: usage goes under the list")
 	}
 	_, right := sides(sc, 86)
 	if !slices.ContainsFunc(right, func(l string) bool { return strings.Contains(l, "Esc to") }) {

@@ -125,7 +125,7 @@ func spanAt(spans []span, x int) (span, bool) {
 }
 
 // drawn is a frame and where its parts are, so a tap finds what it
-// hit: the header, the tabs, the body rows, the dock and the key line.
+// hit: the header, the tabs, the body rows and the key line.
 type drawn struct {
 	lines   []string
 	waits   span // the header's "● N wait for you"
@@ -134,7 +134,6 @@ type drawn struct {
 	bodyTop int   // the line of the first body row
 	rows    []int // the row each body line shows; -1 none, headerRow
 	listW   int   // the list's columns; the detail or the chat is right of them
-	dockAt  int   // the dock's first line; -1 when it is folded
 	stripAt int   // the board's strip; -1 when it has none
 	strip   span  // a tap on the strip turns it
 	// boardView is the live view beside the board: from column x0 and line
@@ -148,10 +147,9 @@ type drawn struct {
 	boxAt, boxX, boxW int
 	boxRows           []string
 	boxKeys           []span
-	// The dock: its height and the columns of the stoker's panel. full:
-	// the dock shows all it has; paneFull: so does the right pane.
-	dockH, stx0, stx1 int
-	full, paneFull    bool
+	// full: list only's usage and machine show all they have; paneFull:
+	// so does the right pane.
+	full, paneFull bool
 	// The launch sheet's go chips: their line, and the key a tap on each
 	// one presses.
 	sheetGoesAt int
@@ -187,18 +185,13 @@ func (m Model) draw(w int) drawn {
 
 // drawScreen lays out the screen, top to bottom: the header, the tabs, a
 // hairline, the body (on an opened phone and a desk the list and the
-// detail side by side), the dock when it fits and the view is not list
-// only, then a hairline and the
-// key line (design/0006 §4.1).
-// minBlank is how many blank rows a folded dock may not leave: short of
-// fewer, the dock folds; of more, it stays and the body scrolls.
-const minBlank = 3
-
+// detail side by side), then a hairline and the key line (design/0006
+// §4.1).
 func (m Model) drawScreen(w int) drawn {
 	head, waits, stokerAt := m.header(w)
 	tabs, tabSpans := m.tabsLine(w)
 	sc := drawn{lines: []string{head, tabs, m.st.rule.Render(strings.Repeat("─", w))}, waits: waits, stokerAt: stokerAt, tabs: tabSpans,
-		bodyTop: 3, listW: w, dockAt: -1, stripAt: -1, keysAt: -1, actKeysAt: -1, hostAt: m.boardHostHit(head)}
+		bodyTop: 3, listW: w, stripAt: -1, keysAt: -1, actKeysAt: -1, hostAt: m.boardHostHit(head)}
 	switch {
 	case m.hostCount() > 1 && m.shows():
 		// A blocked host of two or more is a row, never the screen.
@@ -244,7 +237,6 @@ func (m Model) drawScreen(w int) drawn {
 		b = m.body(listW)
 	}
 	chat, viewing := m.viewShown(detailW)
-	stacked := m.tab == tabSessions && detailW > 0 // usage, the machine and the stoker under the list
 	paneFull := true
 	paneLines := func(rows int) []string {
 		switch {
@@ -255,33 +247,16 @@ func (m Model) drawScreen(w int) drawn {
 		paneFull = all
 		return lines
 	}
-	detail := paneLines(0)
-	var d docked
-	if m.tab != tabMachine && m.tab != tabStoker && !stacked && !m.listOnly() && !m.boardShown() { // the board has its strip
-		d = m.dock(w, -1)
-	}
 	room := full
-	tall := max(len(b.lines), len(detail))
-	switch {
-	case len(d.lines) > 0 && tall+len(d.lines)+1 <= full:
-		// The dock fits; it grows into the rows the body leaves free.
-		d = m.dock(w, full-tall-1)
-		room -= len(d.lines) + 1
-	case len(d.lines) > 0 && full-tall >= minBlank && full-len(d.lines)-1 >= full/2:
-		// A few rows short: the dock stays at its fewest and the body
-		// scrolls, rather than leave the rows it would free blank.
-		room -= len(d.lines) + 1
-	default:
-		d = docked{}
-	}
+	d := docked{full: true}
 	if m.listOnly() && m.tab != tabMachine && m.tab != tabStoker {
 		d = m.listOnlyStats(w, full-len(b.lines))
 		if len(d.lines) > 0 {
 			room -= len(d.lines) + 1
 		}
 	}
-	sc.full = d.full || m.tab == tabMachine || m.tab == tabStoker || m.listOnly() // list only has no dock to show
-	detail = paneLines(room)
+	sc.full = d.full || m.tab == tabMachine || m.tab == tabStoker || m.listOnly() // list only has no more to show
+	detail := paneLines(room)
 	sc.paneFull = paneFull && len(detail) <= room
 	if viewing {
 		detail = m.viewPane(chat, detailW, room)
@@ -289,9 +264,6 @@ func (m Model) drawScreen(w int) drawn {
 		sc.viewAt, sc.viewX, sc.viewW = sc.bodyTop+room-sc.viewRows, listW+1, detailW-1
 	}
 	vis := windowed(b, room, m.rowIndex())
-	if stacked {
-		vis, sc.full = m.leftColumn(b, listW, room)
-	}
 	edge := m.st.hair
 	for i := range room {
 		line, row := "", -1
@@ -309,7 +281,6 @@ func (m Model) drawScreen(w int) drawn {
 	}
 	m.markActKeys(&sc, b, vis, detail, room, detailW, viewing)
 	if len(d.lines) > 0 {
-		sc.dockAt, sc.dockH, sc.stx0, sc.stx1 = len(sc.lines)+1, len(d.lines), d.stx0, d.stx1
 		sc.lines = append(append(sc.lines, m.st.hair.Render(strings.Repeat("─", w))), d.lines...)
 	}
 	if !m.beltOnly() { // Pocket's belt has the keys

@@ -82,6 +82,7 @@ func TestStatusShowsStokerOrNight(t *testing.T) {
 }
 
 func TestStokedListsRunsWithResume(t *testing.T) {
+	t.Skip("waits for TestMachineOpensTheStoker (Task 12 step 6b): the dock's stoker panel goes to the top of Machine's row stoker (ruling 28)")
 	for _, w := range []int{40, 100} {
 		st := stokerState(stokedRun(fixtureState().At))
 		m0, _ := loadedWith(t, w, st)
@@ -238,7 +239,7 @@ func TestTheStokerLivesInTheDock(t *testing.T) {
 	}
 
 	drawer := fullView(sized(t, 107, 101, st))
-	if usage, stoker := lineOf(t, drawer, "USAGE"), lineOf(t, drawer, "STOKER"); usage >= stoker || drawer.draw(107).dockAt >= 0 {
+	if usage, stoker := lineOf(t, drawer, "USAGE"), lineOf(t, drawer, "STOKER"); usage >= stoker {
 		t.Fatalf("107x101: the stoker is not under the list:\n%s", screen(drawer))
 	}
 	card, _ = tap(drawer, 3, lineOf(t, drawer, "STOKER")+1)

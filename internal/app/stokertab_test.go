@@ -538,7 +538,7 @@ func TestDockCountsChains(t *testing.T) {
 		if !strings.Contains(lines[0], "≋ ") {
 			t.Errorf("header %q has no stoker count", lines[0])
 		}
-		dock := ansi.Strip(strings.Join(m.stokerLines(40, false, ""), "\n"))
+		dock := ansi.Strip(strings.Join(m.stokerLines(40, false), "\n"))
 		if !strings.Contains(dock, "STOKER "+c.dock) {
 			t.Errorf("dock %q, want %q", dock, c.dock)
 		}
@@ -634,7 +634,7 @@ func TestTheDockWithNoChainIsTodaysBytes(t *testing.T) {
 	m, _ := loadedWith(t, 104, sheetScreen(screensState(t), true))
 	st := m.st
 	want := spread(st.label.Render(" STOKER"), st.stoker.Render(m.stokerWord())+" ", 40)
-	if got := m.stokerLines(40, false, "")[0]; got != want {
+	if got := m.stokerLines(40, false)[0]; got != want {
 		t.Fatalf("dock head %q, want %q", got, want)
 	}
 }

@@ -10,8 +10,8 @@ import (
 )
 
 // TestNoBlankRowsWhileThereIsMore: on the demo machine, every tab at every
-// size leaves no run of three blank rows in the body while the dock or the
-// right pane has more to say: they grow into free rows first.
+// size leaves no run of three blank rows in the body while list only's
+// usage or the right pane has more to say: they grow into free rows first.
 func TestNoBlankRowsWhileThereIsMore(t *testing.T) {
 	st := screensState(t)
 	for _, size := range [][2]int{{44, 31}, {107, 60}, {107, 101}, {132, 32}} {
@@ -27,9 +27,6 @@ func TestNoBlankRowsWhileThereIsMore(t *testing.T) {
 			nm.setTab(tab)
 			sc := nm.draw(w)
 			end := len(sc.lines) - 2 // the key line's hairline
-			if sc.dockAt >= 0 {
-				end = sc.dockAt - 1
-			}
 			run := 0
 			for i := sc.bodyTop; i < end; i++ {
 				if strings.Trim(ansi.Strip(sc.lines[i]), " │") == "" {
@@ -38,7 +35,7 @@ func TestNoBlankRowsWhileThereIsMore(t *testing.T) {
 					run = 0
 				}
 				if run >= 3 && (!sc.full || !sc.paneFull) {
-					t.Fatalf("%dx%d %s: three blank rows from line %d while the dock (all %v) or the pane (all %v) has more:\n%s",
+					t.Fatalf("%dx%d %s: three blank rows from line %d while list only (all %v) or the pane (all %v) has more:\n%s",
 						w, h, tabNames[tab], i-2, sc.full, sc.paneFull, ansi.Strip(strings.Join(sc.lines, "\n")))
 				}
 			}

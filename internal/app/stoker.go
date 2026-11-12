@@ -58,12 +58,6 @@ func (m Model) unsent(host string) string {
 	return ""
 }
 
-// stokedShows: the stoker has steps, or the card of a run, the builder
-// has not seen.
-func (m Model) stokedShows() bool {
-	return m.stoker != nil && m.stoker.Unseen && (len(m.stoker.Run) > 0 || m.card() != nil)
-}
-
 // card is the score of the run that ended, while no run is on.
 func (m Model) card() *proto.StokerCard {
 	if m.stoker == nil || m.stoker.On {

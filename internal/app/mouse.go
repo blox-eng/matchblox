@@ -6,7 +6,7 @@ import (
 
 // tap is a click or a finger on a phone. A tap on a tab opens it, on a key
 // of the key line, of an opened row or under the detail presses it, on `● N wait for you` selects the first
-// session that waits (on the board `● N need you` clears its filters), on the dock's `machine ›` switches the panel. A tap
+// session that waits (on the board `● N need you` clears its filters). A tap
 // on the live view goes into the agent's pane: right of the list, or over
 // the whole screen of a phone, where its title row goes back to Sessions.
 // The demo's stand-in is answered with the belt: a tap on its screen
@@ -121,15 +121,6 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 			next = nm
 		}
 		return m.holdPress(next, cmd, ms)
-	case sc.dockAt >= 0 && ms.Y >= sc.dockAt && ms.Y < sc.dockAt+sc.dockH:
-		if x0, x1 := m.dockToggle(w); ms.Y == sc.dockAt && m.phoneDock(w) && ms.X >= x0 && ms.X < x1 {
-			m.cycleDock()
-			return m, nil
-		}
-		if ms.X >= sc.stx0 && ms.X < sc.stx1 {
-			return m.openStoker().seeStoker()
-		}
-		return m, nil
 	}
 	if ms.Y == sc.actKeysAt {
 		if s, ok := spanAt(sc.actKeys, ms.X); ok {
@@ -146,9 +137,6 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 			return m.intoSelected()
 		}
 		return m, nil
-	}
-	if sc.rows[i] == stokerPanelRow {
-		return m.openStoker().seeStoker()
 	}
 	if sc.rows[i] == headerRow {
 		return m.tapHeader(ms.X)

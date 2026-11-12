@@ -104,34 +104,6 @@ func TestTheDockSaysUsageAndTheMachine(t *testing.T) {
 // and so no switch: v shows it.
 func TestAPhoneDockShowsOnePanel(t *testing.T) {
 	t.Skip("replaced by TestTheStripTurnsOnUAndOnATap (Task 12 step 1)")
-	m, _ := loadedWith(t, 44, limitsState())
-	if strings.Contains(screen(m), "machine ›") {
-		t.Fatalf("list only shows the dock's switch:\n%s", screen(m))
-	}
-	next, _ := key(m, "v")
-	m = next.(Model)
-	m.height = len(m.body(44).lines) + len(m.dock(44, -1).lines) + 1 + 5 // no row to grow into
-	out := screen(m)
-	if !strings.Contains(out, "USAGE") || !strings.Contains(out, "machine ›") || strings.Contains(out, "MACHINE") {
-		t.Fatalf("the phone dock is not usage alone:\n%s", out)
-	}
-	if !strings.Contains(out, "❋ OpenAI          5h ▱▱▱ 12% · wk 92%") {
-		t.Fatalf("Codex does not fold to one line:\n%s", out)
-	}
-	fitsWidth(t, m, 44)
-	next, _ = key(m, "u")
-	if out := screen(next); !strings.Contains(out, "MACHINE") || !strings.Contains(out, "stoker ›") || strings.Contains(out, "USAGE") {
-		t.Fatalf("u does not show the machine:\n%s", out)
-	}
-	y := lineOf(t, next, "stoker ›")
-	x := strings.Index(strings.Split(screen(next), "\n")[y], "stoker ›")
-	st, _ := tap(next, len([]rune(strings.Split(screen(next), "\n")[y][:x])), y)
-	if out := screen(st); !strings.Contains(out, "STOKER") || !strings.Contains(out, "usage ›") || !strings.Contains(out, "f starts it") {
-		t.Fatalf("a tap on stoker › does not show the stoker:\n%s", out)
-	}
-	if back, _ := key(st, "u"); !strings.Contains(screen(back), "USAGE") {
-		t.Fatalf("u does not come back to usage:\n%s", screen(back))
-	}
 }
 
 // TestTheDockFoldsWhenItDoesNotFit: the dock shows when the body, the
@@ -141,26 +113,6 @@ func TestAPhoneDockShowsOnePanel(t *testing.T) {
 // phone's full view: list only has no dock.
 func TestTheDockFoldsWhenItDoesNotFit(t *testing.T) {
 	t.Skip("replaced by TestAHiddenStripGivesItsRowToTheBody (Task 12 step 1)")
-	m, _ := loadedWith(t, 44, limitsState())
-	m = fullView(m)
-	tall := len(m.body(44).lines)
-	need := tall + len(m.dock(44, -1).lines) + 1 + 5 // the header, the tabs, two hairlines, the key line
-	fold := tall + 5 + minBlank - 1
-	if fold >= need-1 {
-		t.Fatalf("the dock is too short to test: needs %d, folds at %d", need, fold)
-	}
-	for h, docked := range map[int]bool{need: true, need - 1: true, fold + 1: true, fold: false} {
-		m.height = h
-		if got := strings.Contains(screen(m), "USAGE"); got != docked {
-			t.Errorf("height %d (needs %d, folds at %d): docked %v, want %v:\n%s", h, need, fold, got, docked, screen(m))
-		}
-	}
-	m.height = fold
-	next, _ := key(m, "3")
-	lines := strings.Split(screen(next), "\n")
-	if !strings.Contains(lines[3], "USAGE") || !strings.Contains(screen(next), "MACHINE") {
-		t.Fatalf("the Machine tab does not start with usage:\n%s", screen(next))
-	}
 }
 
 // TestARecommendationShowsItsResult: Enter on a recommendation shows the

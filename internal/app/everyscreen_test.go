@@ -111,8 +111,8 @@ func TestSessionsSplitsFortySixty(t *testing.T) {
 	for _, c := range []struct{ w, h, list int }{{95, 65, 38}, {86, 30, 38}, {132, 32, 52}, {200, 50, 78}, {110, 65, 44}} {
 		m := fullView(flintAt(t, c.w, c.h))
 		sc := m.draw(c.w)
-		if list, right := m.panes(c.w); list != c.list || right != c.w-c.list-1 || sc.dockAt >= 0 {
-			t.Errorf("%dx%d: list %d, chat %d, dock at %d; want list %d and no dock", c.w, c.h, list, right, sc.dockAt, c.list)
+		if list, right := m.panes(c.w); list != c.list || right != c.w-c.list-1 {
+			t.Errorf("%dx%d: list %d, chat %d; want list %d", c.w, c.h, list, right, c.list)
 			continue
 		}
 		for _, word := range []string{"USAGE", "MACHINE"} {

@@ -178,7 +178,7 @@ func TestUsageRowsPerHostNeverMerged(t *testing.T) {
 	home.Limits = []limits.Account{acct(work, 41), acct("/home/u/.matchblox/accounts/claude/side", 10)}
 	peer.Limits = []limits.Account{acct(work, 77)}
 	m, _ := twoHosts(t, home, peer)
-	out := m.usageLines(100, true, "")
+	out := m.usageLines(100, true)
 	frame := ansi.Strip(strings.Join(out, "\n"))
 	var rows []string
 	for _, l := range out {
@@ -205,7 +205,7 @@ func TestUsageCellOfAStaleHost(t *testing.T) {
 		Windows: []limits.Window{{UsedPct: 30, Minutes: limits.BoxMinutes}}}
 	m.snap.Limits = []limits.Account{acct}
 	m.peers[0].st.Limits = []limits.Account{acct}
-	if l := ansi.Strip(lineWith(m.usageLines(100, true, ""), "Claude")); !strings.Contains(l, "this machine 30% · ws-1 stale") {
+	if l := ansi.Strip(lineWith(m.usageLines(100, true), "Claude")); !strings.Contains(l, "this machine 30% · ws-1 stale") {
 		t.Fatalf("the row is %q", l)
 	}
 }
@@ -231,7 +231,7 @@ func machineHosts(t *testing.T, after time.Duration, w, h int) Model {
 
 func TestDockMachineLinePerHost(t *testing.T) {
 	m := machineHosts(t, 10*time.Second, 132, 40)
-	least, _ := m.panel(panelMachine, 60, "")
+	least, _ := m.panel(panelMachine, 60)
 	if len(least) != 4 {
 		t.Fatalf("the machine panel has %d lines, want its label and one per host:\n%s", len(least), ansi.Strip(strings.Join(least, "\n")))
 	}
@@ -245,7 +245,7 @@ func TestDockMachineLinePerHost(t *testing.T) {
 
 func TestStaleMachineLine(t *testing.T) {
 	m := machineHosts(t, 40*time.Second, 132, 40)
-	least, _ := m.panel(panelMachine, 60, "")
+	least, _ := m.panel(panelMachine, 60)
 	if l := ansi.Strip(lineWith(least, "gpu-1")); !strings.Contains(l, "stale · as of 14:02") || strings.Contains(l, "87%") {
 		t.Fatalf("the stale host's line is %q", l)
 	}
@@ -288,7 +288,7 @@ func TestOneHostMachineTabHasNoSections(t *testing.T) {
 	if got := heads(m.machinePanel(104).lines); len(got) != 0 {
 		t.Fatalf("one host's Machine tab has sections %q", got)
 	}
-	least, _ := m.panel(panelMachine, 60, "")
+	least, _ := m.panel(panelMachine, 60)
 	if len(least) != 5 {
 		t.Fatalf("one host's dock machine has %d lines", len(least))
 	}
@@ -319,7 +319,7 @@ func TestShortUsageLineKeepsItsWindow(t *testing.T) {
 	m, _ := twoHosts(t, home, peer)
 	want := map[string][]string{"5h": {"this machine 84%", "ws-1 61%"}, "wk": {"this machine 82%", "ws-1 12%"}}
 	for _, w := range []int{40, 50, 100} {
-		lines := m.usageLines(w, false, "")[1:]
+		lines := m.usageLines(w, false)[1:]
 		got := map[string][]string{}
 		win := ""
 		for _, line := range lines {
