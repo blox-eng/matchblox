@@ -1286,3 +1286,17 @@ func TestABrokenUsedFileIsKept(t *testing.T) {
 		t.Fatalf("broken: %q", b)
 	}
 }
+
+func TestNoCloneStartsWhileUpdating(t *testing.T) {
+	s, root := cloneTest(t)
+	s.installing.Store(true)
+	r := s.act(t.Context(), startAct(t, "https://github.com/o/r", filepath.Join(root, "r")))
+	if r.Err != "matchblox is updating. Try again in a minute." {
+		t.Fatalf("%+v", r)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.clones) != 0 {
+		t.Fatalf("a clone is listed: %+v", s.clones)
+	}
+}

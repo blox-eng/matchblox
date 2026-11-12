@@ -90,6 +90,9 @@ func closeDoor(d doors.Door) *action {
 		// The release the person saw: the service refuses to close a newer one.
 		a.say, a.text = "close "+d.Title+" (the next release opens it again)", d.Sum
 	}
+	if d.ID == doors.UpdateCheck {
+		a.say = "close " + d.Title + " (after a look that works, three days of failed looks open it again)"
+	}
 	return a
 }
 

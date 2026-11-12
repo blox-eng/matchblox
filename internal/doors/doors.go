@@ -33,6 +33,9 @@ const (
 	// Update installs a newer release. The service offers it, not setup,
 	// and closing it closes that one release.
 	Update = "update"
+	// UpdateCheck says the looks for a release have failed for days. It
+	// has no action; closing it closes that run of failures.
+	UpdateCheck = "updatecheck"
 )
 
 type Door struct {

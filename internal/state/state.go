@@ -99,6 +99,11 @@ type UpdateView struct {
 	Err       string        `json:"err,omitempty"`
 	Managed   string        `json:"managed,omitempty"`
 	Last      *UpdateRecord `json:"last,omitempty"`
+	// Waiting is why mode auto waits to install a release that is due.
+	Waiting string `json:"waiting,omitempty"`
+	// Restart: the last install put the latest release on disk, but this
+	// service started on the old one. It says so, with the fix.
+	Restart string `json:"restart,omitempty"`
 }
 
 // UpdateRecord is the last install: from which release to which, what it

@@ -393,6 +393,9 @@ type Service struct {
 	updates     state.UpdateFile
 	updateMu    sync.Mutex
 	updateTicks <-chan time.Time
+	// loadedAt is when loadUpdate read the file: an install recorded
+	// before it is one an earlier service made. Under updateMu.
+	loadedAt time.Time
 	// installing is true while installUpdate runs: one install at a time.
 	installing atomic.Bool
 }

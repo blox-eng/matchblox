@@ -652,13 +652,16 @@ func (s *Service) permits(pane string) bool {
 }
 
 // doors reads the machine's doors: a few small files, cheap on each sample.
-// The update door comes last.
+// The update doors come last.
 func (s *Service) doors() []doors.Door {
 	var ds []doors.Door
 	if s.Setup != nil {
 		ds = setup.Doors(*s.Setup)
 	}
 	if d, ok := s.updateDoor(); ok {
+		ds = append(ds, d)
+	}
+	if d, ok := s.updateCheckDoor(); ok {
 		ds = append(ds, d)
 	}
 	return ds
@@ -677,6 +680,13 @@ func (s *Service) door(id string, a proto.Act) proto.Result {
 			return s.closeUpdate(a.Text)
 		}
 		return s.updateAct(a.Text)
+	}
+	if id == doors.UpdateCheck {
+		if a.Which != "secondary" {
+			return proto.Result{Err: "this row has no action. Run: matchblox update"}
+		}
+		defer s.refreshDoors()
+		return s.closeUpdateCheck()
 	}
 	if s.Setup == nil {
 		return proto.Result{Err: "no doors on this machine"}

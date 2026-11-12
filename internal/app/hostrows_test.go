@@ -601,7 +601,8 @@ func TestAutoUpdateNewsShowsOnce(t *testing.T) {
 	auto := &state.UpdateView{Mode: "auto", Current: "v0.43.0", Latest: "v0.43.0",
 		Last: &state.UpdateRecord{From: "v0.42.0", To: "v0.43.0", At: at, Checksum: true}}
 	console := func() Model {
-		m := New(Options{NoMotion: true, Host: "ws-1", Conn: newFake(), Binary: "v0.43.0", Local: true, StateDir: dir})
+		m := New(Options{NoMotion: true, Host: "ws-1", Conn: newFake(), Binary: "v0.43.0", Local: true, StateDir: dir,
+			Now: func() time.Time { return at.Add(time.Hour) }})
 		return upd(t, m, tea.WindowSizeMsg{Width: 104, Height: 38})
 	}
 	stateWith := func(v *state.UpdateView) stateMsg {
@@ -625,6 +626,12 @@ func TestAutoUpdateNewsShowsOnce(t *testing.T) {
 	failed.Current, failed.Last = "v0.42.0", &state.UpdateRecord{From: "v0.42.0", To: "v0.43.0", At: at.Add(24 * time.Hour), Err: "no route to host"}
 	if m = upd(t, m, stateWith(&failed)); m.flash != "the update to v0.43.0 failed: no route to host · run: matchblox update" {
 		t.Fatalf("a failed update: %q", m.flash)
+	}
+
+	yesterday := *auto
+	yesterday.Last = &state.UpdateRecord{From: "v0.42.0", To: "v0.43.0", At: at.Add(-24 * time.Hour), Checksum: true}
+	if m = upd(t, m, stateWith(&yesterday)); m.flash != "updated to v0.43.0 on Nov 11 at 03:12" {
+		t.Fatalf("a record from another day: %q", m.flash)
 	}
 
 	offer := *auto

@@ -774,3 +774,264 @@ func TestAutoFailureIsSaidAndTriedTheNextDay(t *testing.T) {
 		t.Fatalf("at the next daily look: Latest calls %d, installs %v", n, got)
 	}
 }
+
+// writeUpdates starts update.json with f.
+func writeUpdates(t *testing.T, path string, f state.UpdateFile) {
+	t.Helper()
+	if err := state.WriteUpdate(path, f); err != nil {
+		t.Fatal(err)
+	}
+}
+
+const stillRuns = "v0.43.0 is installed, but this service still runs v0.42.0. Quit matchblox and open it again."
+
+func TestAutoNeverInstallsAReleaseAgain(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "update.json")
+	writeUpdates(t, path, state.UpdateFile{Latest: "v0.43.0", FirstSeen: updateT0.Add(-48 * time.Hour),
+		Last: &state.UpdateRecord{From: "v0.42.0", To: "v0.43.0", At: updateT0.Add(-time.Hour), Checksum: true}})
+	s, src, clk := updateTest(t, "v0.42.0", config.UpdateAuto, path)
+	tick := startUpdates(t, s)
+	for _, d := range []time.Duration{time.Minute, 10 * time.Minute, 24 * time.Hour, 24 * time.Hour} {
+		tick()
+		clk.add(d)
+	}
+	tick()
+	if n, got := src.count(), src.installed(); n != 3 || len(got) != 0 {
+		t.Fatalf("Latest calls %d, installs %v", n, got)
+	}
+	if v := updateView(s); v.Restart != stillRuns {
+		t.Fatalf("restart %q", v.Restart)
+	}
+	if d, ok := updateDoorOf(s); !ok || d.Problem != stillRuns {
+		t.Fatalf("door %+v %v", d, ok)
+	}
+}
+
+func TestAutoInstallsOnceBeforeTheNextLook(t *testing.T) {
+	s, src, clk, _ := autoTest(t, config.UpdateAuto, 25*time.Hour)
+	tick := startUpdates(t, s)
+	tick()
+	for _, d := range []time.Duration{time.Minute, 10 * time.Minute, 23 * time.Hour, time.Hour} {
+		clk.add(d)
+		tick()
+	}
+	if n, got := src.count(), src.installed(); n != 2 || !slices.Equal(got, []string{"v0.43.0"}) {
+		t.Fatalf("Latest calls %d, installs %v", n, got)
+	}
+	if v := updateView(s); v.Restart != "" {
+		t.Fatalf("the service that installed says to restart: %q", v.Restart)
+	}
+}
+
+func TestANewerReleaseStartsTheDayAgain(t *testing.T) {
+	s, src, clk, _ := autoTest(t, config.UpdateAuto, 0)
+	tick := startUpdates(t, s)
+	tick()
+	clk.add(23 * time.Hour)
+	tick()
+	src.set("v0.44.0", nil)
+	clk.add(time.Hour)
+	tick() // the look finds v0.44.0: a day from now
+	clk.add(23 * time.Hour)
+	tick()
+	if got := src.installed(); len(got) != 0 {
+		t.Fatalf("installs 23h after the newer release %v", got)
+	}
+	clk.add(time.Hour)
+	tick()
+	if got := src.installed(); !slices.Equal(got, []string{"v0.44.0"}) {
+		t.Fatalf("installs 24h after the newer release %v", got)
+	}
+}
+
+func TestFirstSeenIsNeverLaterThanNow(t *testing.T) {
+	for name, seen := range map[string]time.Time{"ahead": updateT0.Add(48 * time.Hour), "zero": {}} {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "update.json")
+			writeUpdates(t, path, state.UpdateFile{Latest: "v0.43.0", FirstSeen: seen})
+			s, src, clk := updateTest(t, "v0.42.0", config.UpdateAuto, path)
+			tick := startUpdates(t, s)
+			tick()
+			if f := state.ReadUpdate(path); !f.FirstSeen.Equal(updateT0) {
+				t.Fatalf("first seen kept %v", f.FirstSeen)
+			}
+			clk.add(23 * time.Hour)
+			tick()
+			if got := src.installed(); len(got) != 0 {
+				t.Fatalf("installs after 23h %v", got)
+			}
+			clk.add(time.Hour)
+			tick()
+			if got := src.installed(); len(got) != 1 {
+				t.Fatalf("installs after 24h %v", got)
+			}
+		})
+	}
+}
+
+func TestAutoSaysWhyItWaits(t *testing.T) {
+	s, src, clk, _ := autoTest(t, config.UpdateAuto, 23*time.Hour)
+	s.mu.Lock()
+	s.cur.Stoker = &stoker.View{Mode: stoker.Mode{On: true}}
+	s.mu.Unlock()
+	tick := startUpdates(t, s)
+	tick()
+	if v := updateView(s); v.Waiting != "" {
+		t.Fatalf("waits before it is due: %q", v.Waiting)
+	}
+	clk.add(time.Hour)
+	tick()
+	if v := updateView(s); v.Waiting != "auto waits for the stoker run to end" {
+		t.Fatalf("waiting %q", v.Waiting)
+	}
+	if d, _ := updateDoorOf(s); d.Why != "This machine runs v0.42.0. Auto waits for the stoker run to end." {
+		t.Fatalf("why %q", d.Why)
+	}
+	s.mu.Lock()
+	gen := s.gen
+	s.mu.Unlock()
+	for range 3 {
+		clk.add(time.Minute)
+		tick()
+	}
+	s.mu.Lock()
+	again := s.gen
+	s.cur.Stoker = nil
+	s.clones = map[string]*cloneJob{"/work/api-auth": {c: proto.Clone{Target: "/work/api-auth"}}}
+	s.mu.Unlock()
+	if again != gen {
+		t.Fatalf("each wait sent the view again: gen %d then %d", gen, again)
+	}
+	clk.add(time.Minute)
+	tick()
+	if v := updateView(s); v.Waiting != "auto waits for a clone to end" {
+		t.Fatalf("waiting %q", v.Waiting)
+	}
+	s.mu.Lock()
+	s.clones["/work/api-auth"].end = s.now()
+	s.mu.Unlock()
+	clk.add(time.Minute)
+	tick()
+	if v := updateView(s); v.Waiting != "" || len(src.installed()) != 1 {
+		t.Fatalf("waiting %q, installs %v", v.Waiting, src.installed())
+	}
+}
+
+func checkDoorOf(s *Service) (doors.Door, bool) {
+	for _, d := range s.doors() {
+		if d.ID == doors.UpdateCheck {
+			return d, true
+		}
+	}
+	return doors.Door{}, false
+}
+
+const offline = "could not reach GitHub to find the latest release: no route to host"
+
+func TestUpdateCheckDoorAfterThreeDaysOfFailures(t *testing.T) {
+	s, src, clk := updateTest(t, "v0.42.0", config.UpdateOffer, filepath.Join(t.TempDir(), "update.json"))
+	src.set("", errors.New(offline))
+	tick := startUpdates(t, s)
+	tick()
+	for range 2 {
+		clk.add(24 * time.Hour)
+		tick()
+	}
+	if d, ok := checkDoorOf(s); ok {
+		t.Fatalf("a door after 2 days: %+v", d)
+	}
+	clk.add(24 * time.Hour)
+	tick()
+	d, ok := checkDoorOf(s)
+	want := "Every look since " + updateT0.Local().Format("Jan 2 at 15:04") + " failed: " + offline + ". Run: matchblox update."
+	if !ok || d.Title != "matchblox cannot look for a new release" || d.Why != want || d.Sum != "" || d.Term != nil {
+		t.Fatalf("door after 3 days %+v %v", d, ok)
+	}
+	if st := s.State(); !slices.ContainsFunc(st.Doors, func(d doors.Door) bool { return d.ID == doors.UpdateCheck }) {
+		t.Fatalf("the state has no check door: %+v", st.Doors)
+	}
+	src.set("v0.43.0", nil)
+	clk.add(24 * time.Hour)
+	tick()
+	if _, ok := checkDoorOf(s); ok {
+		t.Fatal("a good look kept the door")
+	}
+}
+
+func TestUpdateCheckDoorCountsFromTheLastGoodLook(t *testing.T) {
+	s, src, clk := updateTest(t, "v0.42.0", config.UpdateOffer, filepath.Join(t.TempDir(), "update.json"))
+	tick := startUpdates(t, s)
+	tick()
+	src.set("", errors.New(offline))
+	for range 2 {
+		clk.add(24 * time.Hour)
+		tick()
+	}
+	if _, ok := checkDoorOf(s); ok {
+		t.Fatal("a door after 1 day of failed looks")
+	}
+	clk.add(24 * time.Hour)
+	tick()
+	if _, ok := checkDoorOf(s); !ok {
+		t.Fatal("no door 3 days after the last good look")
+	}
+}
+
+func TestClosedUpdateCheckDoorStaysClosed(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "update.json")
+	s, src, clk := updateTest(t, "v0.42.0", config.UpdateOffer, path)
+	src.set("", errors.New(offline))
+	tick := startUpdates(t, s)
+	tick()
+	days := func(n int) {
+		for range n {
+			clk.add(24 * time.Hour)
+			tick()
+		}
+	}
+	days(3)
+	r := s.act(context.Background(), proto.Act{RecID: "door:" + doors.UpdateCheck, Which: "secondary", Confirm: "y", Console: true})
+	if r.Err != "" {
+		t.Fatalf("close %+v", r)
+	}
+	if _, ok := checkDoorOf(s); ok {
+		t.Fatal("the closed door shows")
+	}
+	days(2)
+	again, _, _ := updateTest(t, "v0.42.0", config.UpdateOffer, path)
+	again.loadUpdate()
+	again.Update = src
+	again.checkUpdate(clk.now())
+	if _, ok := checkDoorOf(s); ok {
+		t.Fatal("the closed door shows after more failed looks")
+	}
+	if _, ok := checkDoorOf(again); ok {
+		t.Fatal("the closed door shows after a restart")
+	}
+	src.set("v0.43.0", nil)
+	days(1)
+	src.set("", errors.New(offline))
+	days(2)
+	if _, ok := checkDoorOf(s); ok {
+		t.Fatal("a door 2 days after the good look")
+	}
+	days(1)
+	if _, ok := checkDoorOf(s); !ok {
+		t.Fatal("no door after a new run of 3 days of failures")
+	}
+}
+
+func TestUpdateCheckDoorNeverWhenOff(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "update.json")
+	writeUpdates(t, path, state.UpdateFile{Latest: "v0.43.0", FirstSeen: updateT0.Add(-30 * 24 * time.Hour), Failed: updateT0.Add(-10 * 24 * time.Hour)})
+	s, src, clk := updateTest(t, "v0.42.0", config.UpdateOff, path)
+	src.set("", errors.New(offline))
+	tick := startUpdates(t, s)
+	tick()
+	clk.add(4 * 24 * time.Hour)
+	tick()
+	hostUpdateAct(s, "y")
+	if d, ok := checkDoorOf(s); ok {
+		t.Fatalf("a door under mode off: %+v", d)
+	}
+}

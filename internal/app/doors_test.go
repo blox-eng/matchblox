@@ -478,3 +478,16 @@ func TestMWithoutAChoiceCancelsAsAnyKey(t *testing.T) {
 		t.Fatalf("m on a door without a choice: pending %+v, acts %+v", next.(Model).pending, f.acts())
 	}
 }
+
+// The row of failed release looks has no action, and its close says when
+// it comes back.
+func TestUpdateCheckRowOnlyCloses(t *testing.T) {
+	d := doors.Door{ID: doors.UpdateCheck, Title: "matchblox cannot look for a new release", Why: "Every look since Nov 9 at 14:02 failed: no route to host. Run: matchblox update.", Preview: "matchblox update"}
+	var m Model
+	if a := m.doorAction(d); a != nil {
+		t.Fatalf("an action %+v", a)
+	}
+	if a := closeDoor(d); a.say != "close matchblox cannot look for a new release (after a look that works, three days of failed looks open it again)" {
+		t.Fatalf("close says %q", a.say)
+	}
+}

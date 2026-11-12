@@ -498,5 +498,9 @@ func (m Model) updateNews() (news, key string) {
 	case v.Last.Err != "":
 		return fmt.Sprintf("the update to %s failed: %s · run: matchblox update", v.Last.To, v.Last.Err), key
 	}
-	return fmt.Sprintf("updated to %s at %s", v.Last.To, v.Last.At.Local().Format("15:04")), key
+	at, now := v.Last.At.Local(), m.now().Local()
+	if at.YearDay() != now.YearDay() || at.Year() != now.Year() {
+		return fmt.Sprintf("updated to %s on %s", v.Last.To, at.Format("Jan 2 at 15:04")), key
+	}
+	return fmt.Sprintf("updated to %s at %s", v.Last.To, at.Format("15:04")), key
 }

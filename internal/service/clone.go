@@ -276,6 +276,10 @@ func (s *Service) registerClone(ctx context.Context, r gitremote.Remote, target,
 		return nil, tildeIn(fmt.Sprintf("cannot make %s: %v", root, err))
 	}
 	s.mu.Lock()
+	if s.installing.Load() { // the service starts again after it: the clone would be cut off
+		s.mu.Unlock()
+		return nil, "matchblox is updating. Try again in a minute."
+	}
 	if s.cloningInto(target) {
 		s.mu.Unlock()
 		return nil, tildeIn(target + " is being cloned")
