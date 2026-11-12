@@ -439,6 +439,39 @@ func TestTheMenuTakesAMatchOutOfItsChain(t *testing.T) {
 	if a := f.acts(); len(a) != 1 || a[0].RecID != "chain:out:%8@hearth" || a[0].Confirm != "y" {
 		t.Fatalf("y: acts %+v", a)
 	}
+
+	// A tap that clears the narrowing closes the room: esc all on the tab
+	// row, and the count in the header. The line goes with it.
+	asks, _ := hearthOpen(t, 160, headState(t, runningPlan(), true)) // kindle-web asks: the header counts it
+	if menuLine(asks, s, "out of hearth") < 0 {
+		t.Fatalf("the room's menu lacks out of hearth: %q", itemLabels(asks.menuFor(s)))
+	}
+	sc, wc := m.drawScreen(160), asks.drawScreen(160)
+	crumb := slices.IndexFunc(sc.tabs, func(sp span) bool { return sp.press == m.keys.main.Back.Help().Key })
+	if crumb < 0 || wc.waits.press == "" {
+		t.Fatalf("no esc all on the tab row (%+v) or no count in the header (%+v)", sc.tabs, wc.waits)
+	}
+	for _, c := range []struct {
+		name string
+		m    Model
+		at   tea.MouseClickMsg
+	}{
+		{"esc all", m, tea.MouseClickMsg{X: sc.tabs[crumb].x0, Y: 1, Button: tea.MouseLeft}},
+		{"the count", asks, tea.MouseClickMsg{X: wc.waits.x0, Y: 0, Button: tea.MouseLeft}},
+	} {
+		name, at := c.name, c.at
+		cleared := mouse(t, c.m, at)
+		cleared = mouse(t, cleared, tea.MouseReleaseMsg{X: at.X, Y: at.Y, Button: tea.MouseLeft})
+		if cleared.boardChain != "" || cleared.room != nil {
+			t.Fatalf("a tap on %s: chain %q, room %v", name, cleared.boardChain, cleared.room)
+		}
+		if j := menuLine(cleared, s, "out of hearth"); j >= 0 {
+			t.Fatalf("a tap on %s left the line: %q", name, itemLabels(cleared.menuFor(s)))
+		}
+		if run := outOfChain(cleared, s, i); run.pending != nil && run.pending.destructive {
+			t.Fatalf("a tap on %s: the menu's line %d still asks %+v", name, i, run.pending)
+		}
+	}
 }
 
 // TestATabLeavesTheRoom: off the board the room is only the board's filter.

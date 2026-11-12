@@ -91,8 +91,8 @@ func (m Model) menuFor(s sample.Session) []menuItem {
 // roomOf is the chain whose room is open on the board with s in it: the
 // room's out of line takes s out. A chain of one has none.
 func (m Model) roomOf(s sample.Session) (chainKey, bool) {
-	if m.room == nil || !m.boardShown() || m.room.k.isOne() {
-		return chainKey{}, false
+	if m.room == nil || !m.boardShown() || m.room.k.isOne() || m.boardChain != m.chainLabel(m.room.k) {
+		return chainKey{}, false // the line shows only while the board is narrowed to the room's chain
 	}
 	seen, _ := m.members(m.room.k)
 	if !slices.ContainsFunc(seen, func(x sample.Session) bool { return paneOf(x) == paneOf(s) }) {

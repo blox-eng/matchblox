@@ -365,6 +365,9 @@ func (m *Model) clearBoardFilters() {
 	if m.colHidden(colNeed) {
 		m.flipHidden(colNeed)
 	}
+	if m.room != nil { // the room is the narrowing: both go
+		*m = m.closeRoom()
+	}
 	m.boardChain, m.boardHost, m.filter, m.searching = "", "", "", false
 	m.refresh()
 	m.peekAt, m.boardAt = m.now(), colNeed
@@ -951,9 +954,8 @@ func (m Model) boardTabTap(press string) (Model, bool) {
 	if !m.boardShown() {
 		return m, false
 	}
-	if press == m.keys.main.Back.Help().Key {
-		m.boardChain, m.peekAt = "", m.now()
-		return m, true
+	if press == m.keys.main.Back.Help().Key { // the room is the narrowing: both go
+		return m.closeRoom(), true
 	}
 	for _, c := range boardCols {
 		if press == c.short() {

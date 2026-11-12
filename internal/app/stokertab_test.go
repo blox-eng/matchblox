@@ -287,7 +287,7 @@ func TestOpeningTheTabSendsOneAck(t *testing.T) {
 	// the steps too, as a phone only taps.
 	m, f = loadedWith(t, 100, tabNight(screensState(t)))
 	m.setTab(tabMachine)
-	m.selectRow(0) // the person chose the row: the second tap opens it
+	m.selectRow(0) // the row is chosen already: the first tap opens STOKER, the second lands on it
 	y := lineOf(t, m, "stoker")
 	once, cmd := tap(m, 3, y)
 	drain(cmd)
