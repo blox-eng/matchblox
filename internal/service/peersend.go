@@ -88,6 +88,10 @@ func (s *Service) peerSend(ctx context.Context, sender sample.Session, pane stri
 	if !ok {
 		return proto.Result{Err: fmt.Sprintf("%s is not in your chain. Run `matchblox chain %s` first.", x.Name, x.Name)}
 	}
+	// Not into the inbox either: the agent would read it in its refresh turn.
+	if err := s.switchingErr(pane, nil); err != nil {
+		return proto.Result{Err: err.Error()}
+	}
 	now := s.now()
 	slot, err := s.peers.reserve(a.From, pane, x.Name, now)
 	if err != nil {
@@ -134,7 +138,7 @@ func (s *Service) peerSend(ctx context.Context, sender sample.Session, pane stri
 	if !s.peers.claim(pane) {
 		return wait("a line to it types now")
 	}
-	res, typed, cleared, stuck := s.typeLine(ctx, x, line, tag)
+	res, typed, cleared, stuck := s.typeLine(ctx, x, line, tag, peerLead, nil)
 	s.peers.unclaim(pane)
 	if !typed || cleared {
 		why, _ := s.peerWait(pane, x)
@@ -212,7 +216,7 @@ func (s *Service) deliverAtRest(now time.Time) {
 		if why, err := s.peerWait(x.Pane, x); err != nil || why != "" || !s.peers.claim(x.Pane) {
 			continue
 		}
-		res, typed, cleared, stuck := s.typeLine(context.Background(), x, l.line, l.tag)
+		res, typed, cleared, stuck := s.typeLine(context.Background(), x, l.line, l.tag, peerLead, nil)
 		s.peers.unclaim(x.Pane)
 		if !typed {
 			continue
@@ -276,7 +280,7 @@ func (s *Service) typeInboxAtRest(now time.Time) {
 			continue
 		}
 		tag, _, _ := strings.Cut(it.Text, "] ")
-		res, typed, cleared, stuck := s.typeLine(context.Background(), x, it.Text, tag+"]")
+		res, typed, cleared, stuck := s.typeLine(context.Background(), x, it.Text, tag+"]", peerLead, nil)
 		s.peers.unclaim(x.Pane)
 		s.mu.Lock()
 		st = s.chainsLocked()
@@ -298,13 +302,18 @@ func (s *Service) typeInboxAtRest(now time.Time) {
 
 // typeLine types line and Enter into x's pane, which rests: never over a
 // draft or into a pane in copy mode, each key guarded as a stoker step is,
-// and Enter only once the prompt shows the line. A line that does not show
-// in peerShowWait is cleared. typed tells if any key reached the pane,
-// cleared if the line typed did not go and is cleared from the prompt, and
-// stuck if it did not go and its clear failed: it may still be there.
-func (s *Service) typeLine(ctx context.Context, x sample.Session, line, tag string) (res proto.Result, typed, cleared, stuck bool) {
+// and Enter only once the prompt shows a line that starts with lead. A
+// line that does not show in peerShowWait is cleared. typed tells if any
+// key reached the pane, cleared if the line typed did not go and is cleared
+// from the prompt, and stuck if it did not go and its clear failed: it may
+// still be there. own is the refresh that types line as its request: only
+// it passes the pane's switching mark. It is nil for any other line.
+func (s *Service) typeLine(ctx context.Context, x sample.Session, line, tag, lead string, own *refreshRun) (res proto.Result, typed, cleared, stuck bool) {
 	pane := x.Pane
 	defer s.holdPane(pane)()
+	if err := s.switchingErr(pane, own); err != nil {
+		return proto.Result{Err: err.Error()}, false, false, false
+	}
 	// Read again under the hold: the look before it may be stale.
 	switch why, err := s.peerWait(pane, x); {
 	case err != nil:
@@ -312,17 +321,23 @@ func (s *Service) typeLine(ctx context.Context, x sample.Session, line, tag stri
 	case why != "":
 		return proto.Result{Err: why}, false, false, false
 	}
-	g := advice.Guard{PID: x.PID, StartTicks: x.Start, RestPane: pane, StokePane: pane, MessagePane: pane, MessagePID: x.PID, PeerLine: true}
-	res = s.Actions.Do(ctx, peerStep(s.mux().Type(pane, line), g), "y")
+	run := s.Actions
+	if own != nil {
+		run.Messageable = func(pane string, pid int) error { return s.messageableFor(pane, pid, own) }
+		run.Stokable = func(pane, typed string) error { return s.stokableFor(pane, typed, own) }
+	}
+	// A refresh request is no chain-mate's line: the plain stoker guard holds.
+	g := advice.Guard{PID: x.PID, StartTicks: x.Start, RestPane: pane, StokePane: pane, MessagePane: pane, MessagePID: x.PID, PeerLine: own == nil}
+	res = run.Do(ctx, peerStep(s.mux().Type(pane, line), g), "y")
 	if len(res.Ran) == 0 {
 		return refusedStep(res), false, false, false
 	}
-	if !s.showsLine(ctx, pane) {
+	if !s.showsLine(ctx, pane, lead) {
 		cleared = s.clearLine(ctx, pane)
 		return proto.Result{Ran: res.Ran, Err: "not delivered: " + x.Name + " did not show the line"}, true, cleared, !cleared
 	}
 	g.Typed = tag
-	enter := s.Actions.Do(ctx, peerStep(s.mux().Keys(pane, "Enter"), g), "y")
+	enter := run.Do(ctx, peerStep(s.mux().Keys(pane, "Enter"), g), "y")
 	res.Ran = append(res.Ran, enter.Ran...)
 	if len(enter.Ran) == 0 {
 		// The line stays the mate's draft unless it goes: clear it while it is
@@ -361,12 +376,12 @@ func typedResult(res proto.Result) string {
 	return "typed, not sent"
 }
 
-// showsLine reads the pane until its prompt shows a peer line, for up to
-// peerShowWait.
-func (s *Service) showsLine(ctx context.Context, pane string) bool {
+// showsLine reads the pane until its prompt shows a line that starts with
+// lead, for up to peerShowWait.
+func (s *Service) showsLine(ctx context.Context, pane, lead string) bool {
 	deadline := time.Now().Add(peerShowWait)
 	for {
-		if screen, ok := s.mux().Screens([]string{pane})[pane]; ok && strings.HasPrefix(said.Draft(screen), "[from ") {
+		if screen, ok := s.mux().Screens([]string{pane})[pane]; ok && strings.HasPrefix(said.Draft(screen), lead) {
 			return true
 		}
 		if time.Now().After(deadline) {
@@ -521,7 +536,10 @@ func tagName(x sample.Session) string {
 	return name + " " + x.Pane
 }
 
-func peerTag(x sample.Session) string { return "[from " + tagName(x) + "]" }
+func peerTag(x sample.Session) string { return peerLead + tagName(x) + "]" }
+
+// peerLead starts every peer line, as the prompt shows it.
+const peerLead = "[from "
 
 // peerSent is one peer send that counts in the limits; n tells it from
 // the others.

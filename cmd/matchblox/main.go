@@ -225,7 +225,7 @@ func run(args []string) error {
 		if err != nil {
 			return err
 		}
-		so := switchOpts{anyway: *o.anyway, preview: *o.preview}
+		so := switchOpts{anyway: *o.anyway, preview: *o.preview, noRefresh: *o.noRefresh}
 		fl.Visit(func(f *flag.Flag) {
 			switch f.Name {
 			case "agent":
@@ -361,6 +361,7 @@ type flags struct {
 	list                  *bool
 	anyway                *bool
 	preview               *bool
+	noRefresh             *bool
 	where, agent, branch  *string
 	name, handoff, extra  *string
 	account, setup        *string
@@ -400,7 +401,7 @@ Commands:
   matchblox chain                  list your chains (--json)
   matchblox unchain [<chain>]      leave your chain, or the one named (--all: every chain)
   matchblox chain --off|--on       take no chains and no notices, or take them again
-  matchblox switch <who> --agent <name>  run another agent in a session's pane (--extra, --handoff, --anyway while it works)
+  matchblox switch <who> --agent <name>  run another agent in a session's pane (--extra, --handoff, --no-refresh, --anyway while it works)
   matchblox recover [<name>…]      the agents a lost tmux server ran, and what reopens (--all reopens each, --dir a moved folder, --json)
   matchblox scan [<folder>…|off]   find the Git repositories here for N, now and every 30 minutes (off: stop and forget)
   matchblox stoker plan|step       the stoker agent's plan and steps, for its card
@@ -444,6 +445,7 @@ func newFlags() (*flag.FlagSet, flags) {
 		handoff:    fl.String("handoff", "", "switch: the new agent's task (default: continue from captured handover evidence; empty: no task)"),
 		extra:      fl.String("extra", "", "switch: your instructions for this switch, after the default handoff; they win over the handover"),
 		preview:    fl.Bool("preview", false, "switch: read the handover evidence without replacing the agent"),
+		noRefresh:  fl.Bool("no-refresh", false, "switch: do not ask an idle agent to write its task record first"),
 		branch:     fl.String("branch", "", "new: first add a worktree for this new branch, beside the repository"),
 		name:       fl.String("name", "", "new: the name of the session, its tmux session and its agent (default: the directory's)"),
 		account:    fl.String("account", "", "new: the account of the agent to start on (default: the default sign-in)"),
