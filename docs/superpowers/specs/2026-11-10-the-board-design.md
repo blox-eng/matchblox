@@ -114,6 +114,31 @@ Order inside a column: `NEEDS YOU` by the oldest wait first. `WORKING` by when t
 
 An empty `NEEDS YOU` says `nothing needs you` in `faint` (owner, 2026-11-11: "needs you" is the product's phrase, in the header, the column, the canon, the docs and the site). Any other empty column shows its name and `· 0`. No column hides or changes width by itself.
 
+### Where a lane comes from
+
+Added 2026-11-12. The owner, after a first use of the board: "sometimes stuff are in needs you, and I can see the lane is working and not needing me, same for quiet". The owner chose to fix it in this pull request, for Claude Code and OpenCode both.
+
+What went wrong, live on 2026-11-12:
+- A session showed a question menu but sat in `QUIET`. Its hook was lost when the service restarted.
+- A session ran two shells and two agents but sat in `NEEDS YOU`. An old question in its transcript won over live work.
+
+The rule: **an agent that reports its own state decides its lane.** matchblox guesses only when no report exists.
+
+- **Claude Code** writes `<config dir>/sessions/<pid>.json` itself. matchblox reads `status`, `waitingFor` and `statusUpdatedAt`:
+
+  | `status` | Lane input | The card says |
+  |---|---|---|
+  | `waiting` | asks | the reason in `waitingFor`: `permission prompt`, `input needed`, `dialog open`, and others as written |
+  | `busy` | works | as today |
+  | `shell` | works (the turn ended and background shells or agents run) | `shell` |
+  | `idle` | today's rules: a turn that ended on a question asks, a turn that ended today waits | as today |
+
+- **OpenCode** reports nothing outside its process by default. `matchblox setup` installs a plugin, `matchblox.ts`, in OpenCode's global plugin folder. The plugin writes `<matchblox state dir>/opencode/<pid>.json` in the same shape: `status` is `busy`, `waiting`, `retry` or `idle`. `waitingFor` is `permission` or `question`. `retry` carries the attempt count and the time of the next try. A permission or a question waits until its own reply event clears it, matched by its id. Retry is `works`, and the card says `retrying · attempt N`.
+- **A report from a dead process is no report.** matchblox checks that the pid lives and started when the report says.
+- **A live report beats an old guess.** With a report present, `busy` or `shell` means no ask from the transcript or the hook queue puts the card in `NEEDS YOU`. A stoker step that waits for the owner's go still does, because that wait belongs to matchblox.
+- **A restart loses no wait.** After the service starts, the queue seeds each `waiting` report as an ask.
+- **No report** (Codex, an older OpenCode, other agents): the pane decides, as today, but only from the live lines at the bottom of the pane, never from the transcript above them.
+
 ### The card
 
 Lines, top to bottom. Each is cut with `…`, never wrapped, except where the peek says so.
