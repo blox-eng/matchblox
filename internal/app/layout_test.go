@@ -161,7 +161,7 @@ func TestAPhoneRowOpensInPlace(t *testing.T) {
 	if at := sessLine(t, next, "app-review"); !strings.Contains(out[at+1], "A switch  ⏎ go in") {
 		t.Fatalf("no a for a session that waits for an answer:\n%s", strings.Join(out, "\n"))
 	}
-	for tab := range tabNames {
+	for tab := range screenNames() { // the tabs and Machine's views
 		m.tab = tab
 		fitsWidth(t, m, 50)
 	}
@@ -216,13 +216,13 @@ func TestTapOnATabOpensIt(t *testing.T) {
 	for _, w := range []int{58, 100} {
 		m, _ := loadedWith(t, w, queueState())
 		line := ansi.Strip(strings.Split(m.render(), "\n")[1])
-		x := strings.Index(line, "panes")
+		x := strings.Index(line, "machine")
 		if x < 0 {
-			t.Fatalf("width %d: no panes tab in %q", w, line)
+			t.Fatalf("width %d: no machine tab in %q", w, line)
 		}
 		next, _ := tap(m, len([]rune(line[:x])), 1)
-		if got := next.(Model).tab; got != tabPanes {
-			t.Fatalf("width %d: tab %d, want the panes tab", w, got)
+		if got := next.(Model).tab; got != tabMachine {
+			t.Fatalf("width %d: tab %d, want the machine tab", w, got)
 		}
 	}
 }
@@ -274,7 +274,7 @@ func TestTapWhilePendingCancels(t *testing.T) {
 func TestNoCtrlKeysNeeded(t *testing.T) {
 	for _, w := range []int{50, 100} {
 		m, _ := loadedWith(t, w, queueState())
-		for tab := range tabNames {
+		for tab := range screenNames() { // the tabs and Machine's views
 			m.tab = tab
 			line, _ := m.keyLine(w)
 			footer := ansi.Strip(line)

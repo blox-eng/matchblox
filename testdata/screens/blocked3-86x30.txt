@@ -1,5 +1,5 @@
  ▰ matchblox · all hosts ▾                                               ● 7 need you
- SESSIONS 9    machine    git    history    panes
+ BOARD 9    machine
 ──────────────────────────────────────────────────────────────────────────────────────
  gpu-1: is not connected · ⏎ connect
  NEEDS YOU · 7  −                           WORKING · 2  −        SHIPPING · 0  −

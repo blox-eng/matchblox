@@ -686,6 +686,41 @@ func fromMachine(t *testing.T, m Model, name string) Model {
 	return pressOn(m, "enter")
 }
 
+// TestMachineOpensGitHistoryAndPanes: Git, History and Panes are Machine's
+// rows, under the stoker's (the owner, 2026-11-12: "Rows on Machine"): ⏎
+// on each opens today's screen, and esc comes back to Machine on its row.
+func TestMachineOpensGitHistoryAndPanes(t *testing.T) {
+	m, _ := loadedWith(t, 100, fixtureState())
+	machine := m
+	machine.setTab(tabMachine)
+	rows := strings.Split(screen(machine), "\n")[3:7]
+	for i, name := range []string{"stoker", "git", "history", "panes"} {
+		if !strings.HasPrefix(strings.TrimLeft(rows[i], " ▌"), name) {
+			t.Fatalf("Machine's row %d is %q, want %s", i, rows[i], name)
+		}
+	}
+	for _, c := range []struct {
+		name string
+		tab  int
+		body func(Model, int) body
+	}{{"git", tabGit, Model.gitPanel}, {"history", tabHistory, Model.historyBody}, {"panes", tabPanes, Model.panesPanel}} {
+		open := fromMachine(t, m, c.name)
+		if open.tab != c.tab {
+			t.Fatalf("⏎ on %s opens tab %d", c.name, open.tab)
+		}
+		if got, want := open.body(100).lines, c.body(open, 100).lines; !slices.Equal(got, want) {
+			t.Fatalf("%s is not today's screen:\n%s", c.name, screen(open))
+		}
+		if !strings.Contains(actionLine(open), "esc machine") {
+			t.Fatalf("%s's key line has no way back: %q", c.name, actionLine(open))
+		}
+		back := pressOn(open, "esc")
+		if v, ok := back.selectedMachineView(); back.tab != tabMachine || !ok || v.name != c.name {
+			t.Fatalf("esc on %s: tab %d on %+v", c.name, back.tab, v)
+		}
+	}
+}
+
 // TestMachineOpensTheStoker: the host stoker's screen is Machine's row
 // stoker, its first (ruling 28): ⏎ opens today's STOKER screen, the
 // stoker's panel at its top, and esc comes back to Machine on that row.

@@ -35,6 +35,7 @@ func devicesConsole(t *testing.T, orphans int) (*pairRig, Model) {
 	next, _ := m.Update(stateMsg(st))
 	m = next.(Model)
 	m.setTab(tabMachine)
+	m.height = 50 // Machine's views head it: the devices need the rows
 	return r, m
 }
 

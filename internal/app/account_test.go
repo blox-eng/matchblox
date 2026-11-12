@@ -183,7 +183,7 @@ func TestNoCredentialReachesTheScreen(t *testing.T) {
 	shown := false
 	for _, w := range []int{50, 100, 160, 220} {
 		for _, m := range []Model{demoSessions(t, w), demoDetails(t, w)} {
-			for tab := range tabNames {
+			for tab := range screenNames() { // the tabs and Machine's views
 				m.tab = tab
 				out := ansi.Strip(m.render())
 				shown = shown || strings.Contains(out, "team@example.com")

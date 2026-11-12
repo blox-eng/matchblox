@@ -15,17 +15,18 @@ var emptyTexts = []string{"scanning repositories…", "collecting history", "thi
 // fillBound is how long a tab may take to fill after its key is pressed.
 const fillBound = 2 * time.Second
 
-// tabs are the tabs in Tab's order (a digit on the board answers its
-// card), then the stoker, Machine's first row, each with a string only its
-// seeded data
-// draws: a screen that is blank or still loading cannot pass on absence alone.
+// tabs are the screens in turn, each with the keys that open it from the
+// one before and a string only its seeded data draws: a screen that is
+// blank or still loading cannot pass on absence alone. Tab turns between
+// the board and Machine (a digit on the board answers its card); the
+// stoker, Git, History and Panes are Machine's rows, in that order.
 var tabs = []struct{ key, name, seeded string }{
-	{"\t", "Machine", "NETWORK AND DISK"},
-	{"\t", "Git", "9 WORKTREES"},
-	{"\t", "History", "LAST 2H"},
-	{"\t", "Panes", "hearth:2.1"},
-	{"\t", "Sessions", "flint-auth"},
-	{"\t\r", "Stoker", "n starts a night"}, // Machine, then its row stoker
+	{"\t", "Machine", "load 6.2"},
+	{"j\r", "Git", "9 WORKTREES"},             // Machine's second row
+	{"\t\tj\r", "History", "LAST 2H"},         // the board, Machine on Git's row, the next
+	{"\t\tj\r", "Panes", "hearth:2.1"},        // the board, Machine on History's row, the next
+	{"\t", "Board", "flint-auth"},             // Tab from a view of Machine
+	{"\tkkk\r", "Stoker", "n starts a night"}, // Machine on Panes' row, up to the first
 }
 
 func TestEveryTabHasData(t *testing.T) {

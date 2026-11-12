@@ -50,7 +50,7 @@ func TestTheHeaderHasNoLimits(t *testing.T) {
 	for _, w := range []int{44, 86, 132} {
 		m, _ := loadedWith(t, w, limitsState())
 		lines := strings.Split(screen(m), "\n")
-		if !strings.Contains(lines[1], "SESSIONS") || strings.Contains(strings.Join(lines[:3], "\n"), "62%") {
+		if !strings.Contains(lines[1], "BOARD") || strings.Contains(strings.Join(lines[:3], "\n"), "62%") {
 			t.Fatalf("width %d: the header is not one line:\n%s", w, strings.Join(lines[:4], "\n"))
 		}
 		if !strings.Contains(lines[0], "● 2 need you") { // the board's words

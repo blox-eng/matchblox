@@ -1,5 +1,5 @@
  ▰ matchblox                   ● 1 need you
- SESSIONS 6  machine  git  history  panes
+ BOARD 6    machine
 ────────────────────────────────────────────
  NEEDS YOU 1 −  work 2  ship 0  quiet 2
 ────────────────────────────────────────────

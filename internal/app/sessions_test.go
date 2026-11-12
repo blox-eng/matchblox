@@ -1,6 +1,7 @@
 package app
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -76,11 +77,30 @@ func TestSessionsGroupByNeed(t *testing.T) {
 	}
 }
 
-// TestTabsAndTheirDigits: Sessions, Ships, Machine, Git, History, Panes,
-// the digits in that order; p opens Ships, Tab and Shift+Tab cycle. Short
-// of room the tabs far from the open one shorten to their digit.
+// TestTabsAndTheirDigits: two tabs, board and machine, turned by Tab and
+// Shift+Tab; no digit opens one (on the board a digit answers its card,
+// TestTheTabRowIsBoardAndMachine), and p merges and opens none. A phone's
+// Machine names both tabs whole.
 func TestTabsAndTheirDigits(t *testing.T) {
-	t.Skip("waits for TestTheTabRowIsBoardAndMachine (Task 12 steps 5 and 6c): a digit on the board answers its card")
+	m, _ := loadedWith(t, 100, queueState())
+	machine := m
+	machine.setTab(tabMachine)
+	for _, k := range []string{"1", "2", "3", "7", "p"} {
+		if next := pressOn(m, k); next.tab != tabSessions {
+			t.Errorf("%s on the board opens tab %d", k, next.tab)
+		}
+		if next := pressOn(machine, k); next.tab != tabMachine {
+			t.Errorf("%s on Machine opens tab %d", k, next.tab)
+		}
+	}
+	if pressOn(m, "tab").tab != tabMachine || pressOn(machine, "tab").tab != tabSessions || pressOn(machine, "shift+tab").tab != tabSessions {
+		t.Fatal("Tab and Shift+Tab do not turn between the two tabs")
+	}
+	phone, _ := loadedWith(t, 44, queueState())
+	phone.setTab(tabMachine)
+	if line, _ := phone.tabsLine(44); !slices.Equal(strings.Fields(ansi.Strip(line)), []string{"board", "3", "MACHINE"}) {
+		t.Errorf("Machine on a phone: %q", ansi.Strip(line))
+	}
 }
 
 // reasonFixture is three sessions at rest, one of them in pane %3.

@@ -540,36 +540,27 @@ func (m Model) hostBadge(short bool) string {
 	return st.stoker.Render("stoker")
 }
 
-// tabsLine names every tab: the open one uppercase in the accent with its
-// rule, the others lowercase in faint, a count after a name when it means
-// something. When the names do not fit, the tabs far from the open one
-// shorten to their digit, the nearest last.
+// tabsLine names both tabs: the open one uppercase in the accent with its
+// rule, the other lowercase in faint, a count after a name when it means
+// something. Short of room the gap between them narrows; a tab's span
+// presses its place in tabNames, counted from 1.
 func (m Model) tabsLine(w int) (string, []span) {
 	alert := m.alert()
 	aw := lipgloss.Width(alert)
-	open := m.openTab()
-	try := func(near int, gap string) (string, []span) {
-		line, x := " ", 1
-		var spans []span
+	var line string
+	var spans []span
+	for _, gap := range []string{"    ", "   ", "  "} {
+		line, spans = " ", nil
 		for i := range tabNames {
 			if i > 0 {
 				line += gap
-				x += len(gap)
 			}
-			label := m.tabLabel(i, i-open <= near && open-i <= near)
+			label := m.tabLabel(i)
+			x := lipgloss.Width(line)
 			spans = append(spans, span{x, x + lipgloss.Width(label), strconv.Itoa(i + 1)})
 			line += label
-			x += lipgloss.Width(label)
 		}
-		return line, spans
-	}
-	var line string
-	var spans []span
-	for _, t := range []struct {
-		near int
-		gap  string
-	}{{len(tabNames), "    "}, {len(tabNames), "   "}, {len(tabNames), "  "}, {2, "  "}, {1, "  "}, {0, "  "}, {-1, "  "}} {
-		if line, spans = try(t.near, t.gap); lipgloss.Width(line)+aw+2 <= w {
+		if lipgloss.Width(line)+aw+2 <= w {
 			break
 		}
 	}
@@ -579,8 +570,8 @@ func (m Model) tabsLine(w int) (string, []span) {
 	return fit(line, w), spans
 }
 
-// tabLabel is a tab's name and count, or its digit when it is shortened.
-func (m Model) tabLabel(i int, named bool) string {
+// tabLabel is a tab's name and count.
+func (m Model) tabLabel(i int) string {
 	st := m.st
 	name, count := tabNames[i], ""
 	switch i {
@@ -591,9 +582,6 @@ func (m Model) tabLabel(i int, named bool) string {
 			count = "!" // a detached busy loop burns
 		}
 	}
-	if !named {
-		name = strconv.Itoa(i + 1)
-	}
 	switch {
 	case i == m.openTab() && count == "":
 		return st.tabActive.Render(strings.ToUpper(name))
@@ -601,7 +589,7 @@ func (m Model) tabLabel(i int, named bool) string {
 		return st.tabActive.Render(strings.ToUpper(name)) + st.accent.Render(" "+count)
 	case count == "!":
 		return st.faint.Render(name) + st.neg.Render(" !")
-	case count != "" && named:
+	case count != "":
 		return st.faint.Render(name + " " + count)
 	}
 	return st.faint.Render(name)
@@ -720,10 +708,13 @@ func (m Model) keyLine(w int) (string, []span) {
 }
 
 // spareKeys are the keys a short key line drops first, in that order:
-// each one is reached another way (a tab tap, the dock, the docs).
+// each one is reached another way (a tab tap, the docs). esc, the way back
+// from a view of Machine, goes last: a tap on the tab row's MACHINE also
+// goes back.
 var spareKeys = func() []string {
 	k := defaultKeys().main
-	return []string{k.Switch.Help().Key, k.Up.Help().Key, k.Quit.Help().Key, k.Search.Help().Key, k.Park.Help().Key, k.Stoke.Help().Key}
+	return []string{k.Switch.Help().Key, k.Up.Help().Key, k.Quit.Help().Key, k.Search.Help().Key, k.Park.Help().Key, k.Stoke.Help().Key,
+		k.Back.Help().Key}
 }()
 
 // fitHints drops spare keys until the hints fit in room columns. The

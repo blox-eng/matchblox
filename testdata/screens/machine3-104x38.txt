@@ -1,7 +1,10 @@
  ▰ matchblox · 3 hosts · gpu-1 stale                                                   ● 8 wait for you
- sessions 10    MACHINE    git    history    panes
+ board 10    MACHINE
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
  stoker    off
+ git
+ history
+ panes
 
  USAGE
  ✻ Claude Max    5h   this machine 84% · gpu-1 stale · ws-1 84%
@@ -31,8 +34,5 @@
  26G used of 64G   38G available   swap 0G
 
  THERMAL AND POWER
- package 68 °C
-
- DETACHED BUSY LOOPS
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
  gpu-1: connection lost. Tries again in 8s.

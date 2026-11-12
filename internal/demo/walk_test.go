@@ -208,11 +208,11 @@ func (w *walker) press(keys ...string) {
 
 // tabWords are the tabs in the tab row's order, each as the row names it
 // while it is open.
-var tabWords = []string{"SESSIONS", "MACHINE", "GIT", "HISTORY", "PANES"}
+var tabWords = []string{"BOARD", "MACHINE"}
 
 // viewWords are the views that open from Machine's first rows, in their
 // order, each with a word only its screen draws.
-var viewWords = []struct{ name, word string }{{"stoker", "STOKER"}}
+var viewWords = []struct{ name, word string }{{"stoker", "STOKER"}, {"git", "WORKTREES"}, {"history", "PEAK PER COLUMN"}, {"panes", "PANES"}}
 
 // open opens a tab of the tab row, or a view of Machine's.
 func (w *walker) open(screen string) {
@@ -224,12 +224,12 @@ func (w *walker) open(screen string) {
 	w.toView(screen)
 }
 
-// onView tells if the screen shows the view name: its word, and the way
-// back to Machine on the key line.
+// onView tells if the screen shows the view name: its word, under the tab
+// row's MACHINE.
 func (w *walker) onView(name string) bool {
 	at := slices.IndexFunc(viewWords, func(v struct{ name, word string }) bool { return v.name == name })
 	_, frame := w.term.wholeFrame()
-	return at >= 0 && strings.Contains(frame, viewWords[at].word) && strings.Contains(frame, "esc machine")
+	return at >= 0 && tabOf(0, frame) == "MACHINE" && strings.Contains(frame, viewWords[at].word)
 }
 
 // toView opens the view name from its row on Machine: up to the first
@@ -244,6 +244,7 @@ func (w *walker) toView(name string) {
 		return
 	}
 	w.toTab("MACHINE")
+	w.press("esc") // from another view, back to Machine; on Machine it stays
 	w.press(slices.Repeat([]string{"k"}, 12)...)
 	w.press(slices.Repeat([]string{"j"}, at)...)
 	w.press("enter")
@@ -289,10 +290,12 @@ func tabCell(frame, want string) (int, bool) {
 	return 0, false
 }
 
-// tabIs waits up to d for the tab row to name want.
+// tabIs waits up to d for the tab row to name want, in a frame drawn
+// whole after the wait began: the console writes only the cells that
+// change, so an old whole frame still names the tab before a tap.
 func (w *walker) tabIs(want string, d time.Duration) bool {
-	for until := time.Now().Add(d); time.Now().Before(until); time.Sleep(5 * time.Millisecond) {
-		if tabOf(w.term.wholeFrame()) == want {
+	for until := time.Now().Add(d); time.Now().Before(until); {
+		if tabOf(0, w.term.screen()) == want {
 			return true
 		}
 	}
@@ -306,7 +309,7 @@ func (w *walker) tabIs(want string, d time.Duration) bool {
 func (w *walker) tabByKey(want string) {
 	w.t.Helper()
 	to, n := slices.Index(tabWords, want), len(tabWords)
-	for i, open := 0, w.openTab(); open != want; i++ {
+	for i, open := 0, tabOf(0, w.term.screen()); open != want; i++ { // a fresh frame: a tap before may have turned it
 		if i == n {
 			w.t.Fatalf("Tab never opened %s: the tab row names %q", want, open)
 		}
@@ -540,30 +543,30 @@ func (w *walker) scrolls(where string) {
 // the order.
 func (w *walker) walkTheDoors() {
 	w.t.Helper()
-	w.tabByKey("SESSIONS")
+	w.tabByKey("BOARD")
 	w.scrolls("in a chat")
 	w.reset()
 	w.clear()
-	w.tabByKey("PANES")
+	w.toView("panes")
 	w.refused("a pane", "enter")
-	w.tabByKey("GIT")
+	w.toView("git")
 	w.refused("a worktree's shell", "enter")
-	w.tabByKey("MACHINE")
-	w.press(slices.Repeat([]string{"j"}, 9)...)
+	w.tabByKey("MACHINE") // its last row is the device row, under its views
+	w.press(slices.Repeat([]string{"j"}, 15)...)
 	w.refused("Pair a device", "enter")
 
-	w.tabByKey("SESSIONS")
+	w.tabByKey("BOARD")
 	w.press("N")
 	w.send("a repository", "example/cloned")
 	w.refused("a clone", "enter")
-	w.tabByKey("SESSIONS")
+	w.tabByKey("BOARD")
 	w.press("N")
 	w.send("a folder", "/work/flint-auth")
 	w.press("tab")
 	w.send("a branch", "a-branch")
 	w.refused("a new worktree", "enter")
 
-	w.tabByKey("SESSIONS")
+	w.tabByKey("BOARD")
 	w.press("N")
 	w.send("a folder", "/work/flint-auth")
 	w.press("tab", "tab")
@@ -571,7 +574,7 @@ func (w *walker) walkTheDoors() {
 	w.takes("a new session", "new-session", "enter")
 	w.clear()
 
-	w.tabByKey("SESSIONS")
+	w.tabByKey("BOARD")
 	w.press("/")
 	w.send("a search", "spark-docs")
 	w.press("enter", "r", "backspace")
@@ -580,7 +583,7 @@ func (w *walker) walkTheDoors() {
 	w.clear()
 	w.press("esc", "esc")
 
-	w.tabByKey("SESSIONS") // the ship is on its card: #214 waits for its merge
+	w.tabByKey("BOARD") // the ship is on its card: #214 waits for its merge
 	w.press("/")
 	w.send("a search", "ember-billing")
 	w.press("enter")
@@ -588,12 +591,12 @@ func (w *walker) walkTheDoors() {
 	w.clear()
 	w.press("esc", "esc")
 
-	w.tabByKey("GIT")
+	w.toView("git")
 	w.press("X")
 	w.takes("a merged worktree's removal", "worktree remove", "x", "y")
 	w.clear()
 
-	w.tabByKey("SESSIONS")
+	w.tabByKey("BOARD")
 	w.press("/")
 	w.send("a search", "hearth-api")
 	w.takes("a kill", "kill-pane", "enter", "x", "y", "y")
@@ -635,7 +638,7 @@ func walk(t *testing.T) (saw []string) {
 		w.alive()
 		saw = append(saw, w.spy.seen()...)
 		w.d.Stop()
-		for _, tab := range append(slices.Clone(tabWords), "stoker") {
+		for _, tab := range append(slices.Clone(tabWords), "stoker", "git", "history", "panes") {
 			w := startWalk(t, size[0], size[1])
 			if size[0] == 44 {
 				w.walkKeys(tab)
@@ -736,7 +739,7 @@ func TestQAndCtrlCEnd(t *testing.T) {
 		}
 	}
 	w := startWalk(t, 132, 32)
-	w.toTab("SESSIONS")
+	w.toTab("BOARD")
 	w.press("enter")
 	w.flashes("ctrl+c in a chat", "ctrl+c")
 	w.alive()
@@ -1042,20 +1045,20 @@ func (w *walker) saysAfter(what, want string, keys ...string) {
 func TestWhatThePhoneCannotDoSaysSo(t *testing.T) {
 	m := newMachine(t)
 	w := startWalk(t, 132, 32)
-	w.toTab("PANES")
+	w.toView("panes")
 	w.flashes("a pane", "enter")
 	w.clear()
-	w.toTab("GIT")
+	w.toView("git")
 	w.flashes("a worktree's shell", "enter")
 	w.clear()
 
-	// The Machine tab's last row is its device row.
+	// The Machine tab's last row is its device row, under its views.
 	w.toTab("MACHINE")
-	w.press("j", "j", "j", "j", "j", "j", "j", "j", "j")
+	w.press(slices.Repeat([]string{"j"}, 15)...)
 	w.flashes("Pair a device", "enter")
 	w.clear()
 
-	w.toTab("SESSIONS") // the ship is on its card: #214 waits for its merge
+	w.toTab("BOARD") // the ship is on its card: #214 waits for its merge
 	w.press("/")
 	w.send("a search", "ember-billing")
 	w.press("enter")
@@ -1063,7 +1066,7 @@ func TestWhatThePhoneCannotDoSaysSo(t *testing.T) {
 	w.clear()
 	w.press("esc", "esc")
 
-	w.toTab("SESSIONS")
+	w.toTab("BOARD")
 	w.press("N")
 	w.send("a folder", "/work/flint-auth")
 	w.press("tab")
@@ -1170,7 +1173,7 @@ func TestSessionsCanBeStartedAndKilled(t *testing.T) {
 	eventually(t, 5*time.Second, "the drawn board to lose the killed session", func() bool {
 		w.tabByKey("MACHINE")
 		time.Sleep(200 * time.Millisecond)
-		w.tabByKey("SESSIONS")
+		w.tabByKey("BOARD")
 		return w.finds("fresh-one") && w.findsNothing("renamed-one")
 	})
 	if got := m.spawns(t); got != "" {

@@ -1,5 +1,5 @@
  ▰ matchblox   ● 6 wait for you  stoker off
- sessions 7  MACHINE  git  history  panes
+ board 7    MACHINE
 ────────────────────────────────────────────
  21:50 │ hearth-api  176k → 9k
 

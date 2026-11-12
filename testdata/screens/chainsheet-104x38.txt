@@ -1,5 +1,5 @@
  ▰ matchblox                                                                               ● 1 need you
- SESSIONS 5    machine    git    history    panes
+ BOARD 5    machine
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
  NEEDS YOU · 1  −                     WORKING · 2  −           SHIPPING · 0  −          QUIET · 2  −
 ▌╿ kindle-web                 ✻  1m   ✦ hearth-api     ✻                                ╿ ember-… ✻  3m

@@ -1,5 +1,5 @@
  ▰ matchblox · all hosts ▾                                         ● 4 need you
- SESSIONS 15    machine    git    history    panes    chain login · 3   esc all
+ BOARD 15    machine                                  chain login · 3   esc all
 ────────────────────────────────────────────────────────────────────────────────
  NEEDS YOU · 1  −                       WORKING · 1  −       SHIPPING · 1  −
 ▌╿ flint-auth                   ✻  2m   ✦ flint-ui   ✻       ╿ flint-api  ✻ 40m

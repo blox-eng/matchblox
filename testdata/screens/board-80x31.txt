@@ -1,5 +1,5 @@
  ▰ matchblox · all hosts ▾                                         ● 4 need you
- SESSIONS 15    machine    git    history    panes
+ BOARD 15    machine
 ────────────────────────────────────────────────────────────────────────────────
  NEEDS YOU · 4  −                       WORKING · 3  −       SHIPPING · 3  −
 ▌╿ spark-search                 ✻ 31m   ✦ flint-ui   ✻       ╿ cinder-ci… ❋  2h

@@ -138,8 +138,28 @@ func TestTheConsoleOpensOnTheBoard(t *testing.T) {
 	}
 }
 
+// TestTheTabRowIsBoardAndMachine: two tabs, the board and Machine; Git,
+// History, Panes and the stoker open from Machine's rows. Tab and
+// Shift+Tab turn between the two.
 func TestTheTabRowIsBoardAndMachine(t *testing.T) {
-	t.Skip("needs Task 12 step 6c: the tab row is board · machine")
+	if !slices.Equal(tabNames, []string{"board", "machine"}) {
+		t.Fatalf("tabs %q, want board and machine", tabNames)
+	}
+	m, _ := loadedWith(t, 100, queueState())
+	for tab, want := range map[int][]string{tabSessions: {"BOARD", "3", "machine"}, tabMachine: {"board", "3", "MACHINE"}} {
+		on := m
+		on.setTab(tab)
+		if row := strings.Fields(strings.Split(screen(on), "\n")[1]); !slices.Equal(row, want) {
+			t.Errorf("tab %d: the tab row is %q, want %q", tab, row, want)
+		}
+	}
+	if next := pressOn(m, "tab"); next.tab != tabMachine {
+		t.Fatalf("tab on the board opens tab %d", next.tab)
+	}
+	machine := pressOn(m, "tab")
+	if pressOn(machine, "tab").tab != tabSessions || pressOn(machine, "shift+tab").tab != tabSessions || pressOn(m, "shift+tab").tab != tabMachine {
+		t.Fatal("Tab and Shift+Tab do not turn between the board and Machine")
+	}
 }
 
 // roomRowNow is the room's row the cursor is on, "" when it is on the

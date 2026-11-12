@@ -69,8 +69,9 @@ type machineView struct {
 	tab  int
 }
 
-// machineViews are Machine's first rows.
-var machineViews = []machineView{{"stoker", tabStoker}}
+// machineViews are Machine's first rows (the owner, 2026-11-12: "Rows on
+// Machine" for Git, History and Panes until Machine's own plan).
+var machineViews = []machineView{{"stoker", tabStoker}, {"git", tabGit}, {"history", tabHistory}, {"panes", tabPanes}}
 
 // machineRows are the views, the orphans, the device rows, then the host
 // rows.

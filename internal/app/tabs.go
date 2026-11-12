@@ -264,10 +264,10 @@ var views = [...]tabView{
 	},
 }
 
-// tabNames names the tabs of the tab row, in Tab's order. The STOKER
-// screen is no tab: it opens from Machine's row stoker.
-var tabNames = []string{tabSessions: "sessions", tabMachine: "machine", tabGit: "git",
-	tabHistory: "history", tabPanes: "panes"}
+// tabNames names the tabs of the tab row, in Tab's order: the board and
+// Machine. The stoker, Git, History and Panes are no tabs: they open from
+// Machine's rows (machineViews).
+var tabNames = []string{tabSessions: "board", tabMachine: "machine"}
 
 func (m Model) view() tabView { return views[m.tab] }
 

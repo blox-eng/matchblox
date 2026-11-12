@@ -111,7 +111,7 @@ func TestTabsFit80WithAlert(t *testing.T) {
 	m, _ := loadedWith(t, 80, st)
 	line, _ := m.tabsLine(80)
 	line = ansi.Strip(line)
-	for _, want := range []string{"SESSIONS", "machine", "git", "history", "panes", "▲ 1 alert"} {
+	for _, want := range []string{"BOARD", "machine", "▲ 1 alert"} {
 		if !strings.Contains(line, want) || strings.Contains(line, "…") {
 			t.Fatalf("tab line %q lacks %q", line, want)
 		}

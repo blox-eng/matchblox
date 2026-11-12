@@ -171,7 +171,7 @@ func TestNoSessionActionOnTheGhost(t *testing.T) {
 	if len(words) == 0 || slices.Contains(words, "kill") || slices.Contains(words, "rename") {
 		t.Fatalf("keys %q", words)
 	}
-	if s := screen(g); !strings.Contains(s, "SESSIONS "+strconv.Itoa(n)) {
+	if s := screen(g); !strings.Contains(s, "BOARD "+strconv.Itoa(n)) {
 		t.Fatalf("the count is not %d:\n%s", n, s)
 	}
 }

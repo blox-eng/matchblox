@@ -1,5 +1,5 @@
  ▰ matchblox · all hosts ▾                                                                                             ● 8 need you
- SESSIONS 10    machine    git    history    panes
+ BOARD 10    machine
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  NEEDS YOU · 8  −                              WORKING · 2  −                  SHIPPING · 0  −                 QUIET · 0  −
 ▌╿ flint-auth                          ✻  2m   ✦ hearth-api            ✻

@@ -1,5 +1,5 @@
  ▰ matchblox
- SESSIONS 0    machine    git    history    panes
+ BOARD 0    machine
 ────────────────────────────────────────────────────────────────────────────────
  NEEDS YOU  −                           WORKING  −           SHIPPING  −
   reading your matches…

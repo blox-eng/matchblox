@@ -1,5 +1,5 @@
  ▰ matchblox                                                               ● 6 wait for you  stoker off
- sessions 7    MACHINE    git    history    panes
+ board 7    MACHINE
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
  STOKER                                                                                             off
  ready 4/5 · 1 compacted · 0 waited · 0k back

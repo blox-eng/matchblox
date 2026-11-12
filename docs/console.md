@@ -10,10 +10,10 @@ you`; a tap selects the first) and [the stoker](stoker.md): `stoker off`,
 `stoker`, or `☾ night → 07:00`. For a moment after an action it says what
 ran instead.
 
-The tabs are `sessions`, `ships`, `machine`, `git`, `history`, `panes` and `stoker`,
-opened by `Tab` and `Shift+Tab`, or a tap on the name. The digits answer a
-card's question. The open one is uppercase. A narrow screen shortens the
-tabs far from the open one to their number. `machine !` has a problem.
+The tabs are `board` and `machine`, turned by `Tab` and `Shift+Tab`, or a
+tap on the name. The digits answer a card's question. The open one is
+uppercase. `machine !` has a problem. The stoker, Git, History and Panes
+are Machine's first rows: `Enter` opens one, `Esc` comes back to Machine.
 
 The key line at the bottom shows the keys of the open tab, and how old the
 sample is. A tap on a key presses it. It is also where you confirm a step

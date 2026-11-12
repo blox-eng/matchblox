@@ -1,5 +1,5 @@
  ▰ matchblox                                                                                      ● 6 wait for you  ☾ night → 02:50
- sessions 7    MACHINE    git    history    panes
+ board 7    MACHINE
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  STOKER                                                                                                               night → 02:50
  watching 0 · 1 compacted · 0 waited · 167k back

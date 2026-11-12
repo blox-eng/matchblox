@@ -16,7 +16,7 @@ func TestNoBlankRowsWhileThereIsMore(t *testing.T) {
 	st := screensState(t)
 	for _, size := range [][2]int{{44, 31}, {107, 60}, {107, 101}, {132, 32}} {
 		w, h := size[0], size[1]
-		for tab := range tabNames {
+		for tab := range screenNames() { // the tabs and Machine's views
 			if tab == tabSessions {
 				continue // the board's columns end where their cards do (TestBoardKeepsTheChosenCardWhole)
 			}
@@ -36,7 +36,7 @@ func TestNoBlankRowsWhileThereIsMore(t *testing.T) {
 				}
 				if run >= 3 && !sc.paneFull {
 					t.Fatalf("%dx%d %s: three blank rows from line %d while the pane has more:\n%s",
-						w, h, tabNames[tab], i-2, ansi.Strip(strings.Join(sc.lines, "\n")))
+						w, h, screenNames()[tab], i-2, ansi.Strip(strings.Join(sc.lines, "\n")))
 				}
 			}
 		}
