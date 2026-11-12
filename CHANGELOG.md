@@ -57,6 +57,15 @@ All notable changes to matchblox are in this file. The format follows
   Open the step "Keep matchblox running" under `SET UP` once to get the new
   unit text. ([#390](https://github.com/blox-eng/matchblox/issues/390))
 
+  **The update to this release is the last one that can end them.** The
+  service of v0.42.0 or earlier does that update with its old code. On Linux
+  with the keep-running unit, it still ends every tmux server that the
+  service started: the stoker's (`tmux -L matchblox`), and any other that did
+  not run before the service opened a session on it. A tmux server that you
+  started is not touched. Run `matchblox update` when no stoker run and no
+  clone is in flight, and when you can lose those sessions. Then open the
+  step "Keep matchblox running" once. Later updates end nothing.
+
 ### Security
 
 - **Only a person at a console opens a `SET UP` step or updates a host.**
