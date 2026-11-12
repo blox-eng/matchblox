@@ -1,0 +1,31 @@
+ ▰ matchblox · hosts
+────────────────────────────────────────────
+ HOSTS · 3 · 2 SHOWN
+   ● this machine
+ ▌ ● ws-1 behind
+   ○ gpu-1
+     + add a host
+
+ ws-1: v0.38.1, behind this console
+ (v0.42.0)
+ u update ws-1  d dismiss
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+────────────────────────────────────────────
+ show/hide space  open ⏎  connect c  quit q

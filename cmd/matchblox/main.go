@@ -47,6 +47,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/config"
 	"github.com/blox-eng/matchblox/internal/demo"
 	"github.com/blox-eng/matchblox/internal/doors"
+	"github.com/blox-eng/matchblox/internal/filestamp"
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/history"
 	"github.com/blox-eng/matchblox/internal/holds"
@@ -66,6 +67,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/state"
 	"github.com/blox-eng/matchblox/internal/stoker"
 	"github.com/blox-eng/matchblox/internal/transport"
+	selfupdate "github.com/blox-eng/matchblox/internal/update"
 )
 
 // version is stamped into a release build (-ldflags -X main.version=vX),
@@ -634,8 +636,20 @@ func spoolPath() string { return filepath.Join(filepath.Dir(state.Path()), "spoo
 const consoleFPS = 60
 
 func console(path string, cfg config.Config, root string, noMotion bool, host string) error {
+	restart, err := runConsole(path, cfg, root, noMotion, host)
+	if err != nil || restart == nil {
+		return err
+	}
+	// Once every defer of the run is done: the pair code is gone, and the
+	// prompt socket and the pane's passthrough are as they were.
+	return restart()
+}
+
+// runConsole runs the console until it ends, and returns what starts it
+// again when it ended for that.
+func runConsole(path string, cfg config.Config, root string, noMotion bool, host string) (func() error, error) {
 	base := app.Options{Binary: version, CompactAt: cfg.Sessions.CompactAt, CompactTokens: cfg.Sessions.CompactTokens, NoMotion: noMotion,
-		OutsideTmux: os.Getenv("TMUX") == "", Pane: os.Getenv("TMUX_PANE"), Self: invokedPath(os.Args[0]), StateDir: filepath.Dir(state.Path())}
+		OutsideTmux: os.Getenv("TMUX") == "", Pane: os.Getenv("TMUX_PANE"), Self: invokedPath(os.Args[0]), SelfAt: exeAt, StateDir: filepath.Dir(state.Path())}
 	if !base.OutsideTmux {
 		base.Prefix, base.Home, base.LocalTmux = localTmux()
 		base.NoPrefixM = !panes.NamedConsole(os.Args[0])
@@ -666,8 +680,9 @@ func console(path string, cfg config.Config, root string, noMotion bool, host st
 		if m, ok := final.(app.Model); ok {
 			m.ClosePair() // however the program ended, its pair code goes with it
 		}
-		return err
+		return nil, err
 	}
+	base.Restart = func() error { return startAgain(base.Self) }
 	ask, closeAsk, why := consoleAsk(base.MasterBase, base.Self)
 	defer closeAsk()
 	base.Ask, base.NoAsk = ask, why
@@ -689,10 +704,29 @@ func console(path string, cfg config.Config, root string, noMotion bool, host st
 		TailscaleGate: setup.TailscaleGateMessage,
 	})
 	final, err := tea.NewProgram(sh, tea.WithFPS(consoleFPS)).Run()
-	if s, ok := final.(app.Shell); ok {
-		s.Close()
+	s, ok := final.(app.Shell)
+	if !ok {
+		return nil, err
 	}
-	return err
+	s.Close()
+	if err != nil {
+		return nil, err
+	}
+	return s.Restart, nil
+}
+
+// startAgain runs self, this console's binary, in place of this process.
+func startAgain(self string) error {
+	if self == "" {
+		var err error
+		if self, err = os.Executable(); err != nil {
+			return fmt.Errorf("start the console again: %w", err)
+		}
+	}
+	if err := runAgain(self, os.Environ()); err != nil {
+		return fmt.Errorf("start the console again: %w", err)
+	}
+	return nil
 }
 
 // consoleAsk is the prompt socket of this console run (design §3.4), in
@@ -875,6 +909,12 @@ func newService(cfg config.Config, root string) *service.Service {
 		s.ConsentPath, s.ReposPath = state.ScanPath(), state.ReposPath()
 	}
 	s.UsedPath = state.UsedPath()
+	s.UpdatePath = state.UpdatePath()
+	if u, err := selfupdate.New(version, io.Discard); err == nil {
+		s.Update = u
+	} else {
+		fmt.Fprintln(os.Stderr, "matchblox: the update check is off:", err)
+	}
 	if cfg.Git.CloneRoot != "" {
 		s.CloneRoot = service.ExpandHome(cfg.Git.CloneRoot)
 	}
@@ -922,8 +962,8 @@ const unitEnv = "MATCHBLOX_UNIT"
 var socketWait = time.Second
 
 // serve runs the service on the socket until a signal, or until the binary
-// on disk is replaced or the socket removed (the user unit or the next
-// console starts the new one).
+// on disk is installed over (serve runs the new one in its place) or the
+// socket removed (the user unit or the next console starts a new one).
 //
 // mk builds the service once the socket is this serve's: a unit's serve may
 // wait long for it, and the state it reads (numbers, holds, the stoker) is
@@ -931,26 +971,61 @@ var socketWait = time.Second
 func serve(path string, exeAt os.FileInfo, mk func() *service.Service) error {
 	unit := os.Getenv(unitEnv) != ""
 	_ = os.Unsetenv(unitEnv) // what serve starts is not the unit's serve
+	again, err := serveOn(path, exeAt, mk, unit)
+	if again == "" {
+		return err
+	}
+	// This process becomes the new binary, now that the socket, its lock and
+	// the push sender are let go. Under the unit too: its pid stays, so
+	// systemd sees no exit and ends no tmux server this serve started.
+	env := os.Environ()
+	if unit {
+		env = append(env, unitEnv+"=1")
+	}
+	if err := runAgain(again, env); err != nil {
+		fmt.Fprintln(os.Stderr, "matchblox: the new binary did not start:", err)
+		return errRestart
+	}
+	return nil
+}
+
+// runAgain runs exe in place of this process, with its arguments and env.
+// A file that cannot run is never run.
+func runAgain(exe string, env []string) error {
+	fi, err := os.Stat(exe)
+	if err != nil {
+		return err
+	}
+	if fi.IsDir() || fi.Mode().Perm()&0o111 == 0 {
+		return fmt.Errorf("%s is not executable", exe)
+	}
+	pprof.StopCPUProfile()
+	return execFn(exe, os.Args, env)
+}
+
+// serveOn is serve, told whether the unit runs it. A binary installed over
+// is again: the binary to run in its place.
+func serveOn(path string, exeAt os.FileInfo, mk func() *service.Service, unit bool) (again string, err error) {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	l, err := transport.Listen(path)
 	if errors.Is(err, transport.ErrInUse) {
 		fmt.Fprintf(os.Stderr, "matchblox: the service already runs on %s (pid %d)\n", path, transport.Owner(path))
 		if !unit {
-			return nil
+			return "", nil
 		}
 		fmt.Fprintln(os.Stderr, "matchblox: started by the user unit: waiting to take over")
 		for errors.Is(err, transport.ErrInUse) {
 			select {
 			case <-ctx.Done():
-				return nil
+				return "", nil
 			case <-time.After(socketWait):
 			}
 			l, err = transport.Listen(path)
 		}
 	}
 	if err != nil {
-		return err
+		return "", err
 	}
 	warnTailscaleSSHGate(os.Stderr)
 	s := mk()
@@ -966,14 +1041,19 @@ func serve(path string, exeAt os.FileInfo, mk func() *service.Service) error {
 		// Removed with nothing in its place: uninstalled. A restart would only
 		// fail to start, again and again.
 		fmt.Fprintln(os.Stderr, "matchblox: stopping, the binary is gone")
-		return nil
+		return "", nil
+	case errors.Is(err, service.ErrReplaced) && filestamp.Changed(exeAt, s.Exe):
+		// Installed over: the binary on disk is not this process's. A console's
+		// replace leaves it as it was, and the console starts the next serve.
+		fmt.Fprintln(os.Stderr, "matchblox: replaced by a newer binary: starting it")
+		return s.Exe, nil
 	case errors.Is(err, service.ErrReplaced) || errors.Is(err, service.ErrSocketGone):
 		fmt.Fprintln(os.Stderr, "matchblox: stopping,", strings.TrimPrefix(err.Error(), "service: "))
-		return errRestart
+		return "", errRestart
 	case errors.Is(err, context.Canceled):
-		return nil
+		return "", nil
 	}
-	return err
+	return "", err
 }
 
 // serveStdio joins stdin and stdout to the local service, starting it if

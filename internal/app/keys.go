@@ -99,6 +99,7 @@ func defaultKeys() keymaps {
 			Night:      bind(ks("n"), "n", "stop night"),
 			Order:      bind(ks("o"), "o", "new order"),
 			Rename:     bind(ks("r"), "r", "rename"),
+			StartAgain: bind(ks("R", "shift+r"), "R", "start again"),
 			Into:       bind(ks("a", "right"), "a", "go in"),
 			Jump:       bind(ks("ctrl+o"), "ctrl+o", "go in"),
 		},
@@ -202,6 +203,8 @@ func defaultShellKeys() shellKeymaps {
 			Open:      bind(ks("enter"), "⏎", "open"),
 			Tick:      bind(ks("space"), "space", "show/hide"),
 			Connect:   bind(ks("c"), "c", "connect"),
+			Update:    bind(ks("u"), "u", "update"),
+			Dismiss:   bind(ks("d"), "d", "dismiss"),
 			Yes:       bind(ks("y"), "y", "run"),
 			Interrupt: bind(ks("ctrl+c"), "ctrl+c", "quit"),
 		},
@@ -224,13 +227,14 @@ type mainKeys struct {
 	Group, Park, Mark, Exited, MarkSafe, QuitAgent, Up, Down, Open     bkey.Binding
 	Second, New, Switch, Grant, Dismiss, Fold, Ships, Dock             bkey.Binding
 	Stoke, StokeChain, Night, Order, Rename, Into, Jump, ListOnly      bkey.Binding
+	StartAgain                                                         bkey.Binding
 }
 
 func (k mainKeys) bindings() []bkey.Binding {
 	return []bkey.Binding{k.Stoker, k.Quit, k.NextTab, k.PrevTab, k.Tabs, k.Search, k.Back, k.Sort, k.SortBack,
 		k.Group, k.Park, k.Mark, k.Exited, k.MarkSafe, k.QuitAgent, k.Up, k.Down, k.Open,
 		k.Second, k.New, k.Switch, k.Grant, k.Dismiss, k.Fold, k.Ships, k.Dock,
-		k.Stoke, k.StokeChain, k.Night, k.Order, k.Rename, k.Into, k.Jump, k.ListOnly}
+		k.Stoke, k.StokeChain, k.Night, k.Order, k.Rename, k.Into, k.Jump, k.ListOnly, k.StartAgain}
 }
 
 // formKeys are the new-session, switch and rename form. Down and Up go to
@@ -283,13 +287,14 @@ type askKeys struct{ Send, Cancel, Erase, Copy bkey.Binding }
 
 func (k askKeys) bindings() []bkey.Binding { return []bkey.Binding{k.Send, k.Cancel, k.Erase, k.Copy} }
 
-// shellKeys are the Hosts list.
+// shellKeys are the Hosts list. Update and Dismiss act on a host on
+// another release than the console.
 type shellKeys struct {
-	Quit, Up, Down, Back, Remove, Open, Tick, Connect, Yes, Interrupt bkey.Binding
+	Quit, Up, Down, Back, Remove, Open, Tick, Connect, Update, Dismiss, Yes, Interrupt bkey.Binding
 }
 
 func (k shellKeys) bindings() []bkey.Binding {
-	return []bkey.Binding{k.Quit, k.Up, k.Down, k.Back, k.Remove, k.Open, k.Tick, k.Connect, k.Yes, k.Interrupt}
+	return []bkey.Binding{k.Quit, k.Up, k.Down, k.Back, k.Remove, k.Open, k.Tick, k.Connect, k.Update, k.Dismiss, k.Yes, k.Interrupt}
 }
 
 // shellTypingKeys are the host name line.

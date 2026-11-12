@@ -184,6 +184,14 @@ func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 			return proto.Result{Err: scanRefused}
 		}
 	}
+	if personsOwn(a.RecID) && !agent { // likewise for a door and an update: they change the person's files
+		if _, ok := s.sessionAt(a.From); ok {
+			if a.RecID == proto.HostUpdateAct {
+				return proto.Result{Err: noHostUpdate}
+			}
+			return proto.Result{Err: noDoor}
+		}
+	}
 	if a.RecID == NewSessionID && a.Console && picksAccount(a.Text) { // likewise for an account
 		if _, ok := s.sessionAt(a.From); ok {
 			return proto.Result{Err: accountRefused}
@@ -209,15 +217,27 @@ func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 }
 
 // yours are the acts only the person at a console sends: the launch
-// sheet's and the stoker tab's verbs, and z. The stoker's own plan and
-// steps come from its CLI.
+// sheet's and the stoker tab's verbs, z, the doors and the update of a
+// host. The stoker's own plan and steps come from its CLI.
 func yours(recID string) bool {
 	if verb, ok := strings.CutPrefix(recID, "stoker:"); ok {
 		// matchblox stoker quit, new and order are the builder's in a shell too.
 		return verb != "plan" && verb != "step" && verb != "when" && verb != "quit" && verb != "new" && verb != "order-chain"
 	}
-	return strings.HasPrefix(recID, "park:")
+	return strings.HasPrefix(recID, "park:") || personsOwn(recID)
 }
+
+// personsOwn are the acts that change the person's own files or binary: a
+// door, and the update of a host. No agent's pane sends them, whatever
+// its hello says.
+func personsOwn(recID string) bool {
+	return strings.HasPrefix(recID, "door:") || recID == proto.HostUpdateAct
+}
+
+const (
+	noDoor       = "only you open or close a door, at a console"
+	noHostUpdate = "only you update matchblox, at a console"
+)
 
 func (s *Service) dispatch(ctx context.Context, a proto.Act) proto.Result {
 	switch a.RecID {
@@ -311,6 +331,14 @@ func (s *Service) dispatch(ctx context.Context, a proto.Act) proto.Result {
 	if door {
 		res := s.door(id, a)
 		ran = res.Err == ""
+		if id == doors.Update {
+			ran = len(res.Ran) > 0 // "already updating" is no install: a retry runs
+		}
+		return res
+	}
+	if a.RecID == proto.HostUpdateAct {
+		res := s.hostUpdate(a)
+		ran = len(res.Ran) > 0 // "already updating" or up to date: a retry looks again
 		return res
 	}
 	if pick {
@@ -624,22 +652,44 @@ func (s *Service) permits(pane string) bool {
 }
 
 // doors reads the machine's doors: a few small files, cheap on each sample.
+// The update doors come last.
 func (s *Service) doors() []doors.Door {
-	if s.Setup == nil {
-		return nil
+	var ds []doors.Door
+	if s.Setup != nil {
+		ds = setup.Doors(*s.Setup)
 	}
-	return setup.Doors(*s.Setup)
+	if d, ok := s.updateDoor(); ok {
+		ds = append(ds, d)
+	}
+	if d, ok := s.updateCheckDoor(); ok {
+		ds = append(ds, d)
+	}
+	return ds
 }
 
 // door opens a door ("primary", Text = the Sum of the preview the person
 // saw; "also" opens it with the choice of its preview turned on) or closes
 // it ("secondary"). All need a typed y: they change the person's own files.
 func (s *Service) door(id string, a proto.Act) proto.Result {
-	if s.Setup == nil {
-		return proto.Result{Err: "no doors on this machine"}
-	}
 	if a.Confirm != "y" {
 		return proto.Result{Err: "needs a typed y"}
+	}
+	if id == doors.Update {
+		defer s.refreshDoors()
+		if a.Which == "secondary" {
+			return s.closeUpdate(a.Text)
+		}
+		return s.updateAct(a.Text)
+	}
+	if id == doors.UpdateCheck {
+		if a.Which != "secondary" {
+			return proto.Result{Err: "this row has no action. Run: matchblox update"}
+		}
+		defer s.refreshDoors()
+		return s.closeUpdateCheck()
+	}
+	if s.Setup == nil {
+		return proto.Result{Err: "no doors on this machine"}
 	}
 	defer s.refreshDoors()
 	if a.Which == "secondary" {

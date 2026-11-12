@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -390,6 +391,119 @@ func TestReplaceAtMostOnce(t *testing.T) {
 	drain(cmd)
 	if acts := g.acts(); len(acts) != 0 {
 		t.Fatalf("two consoles of two versions would replace each other forever: %+v", acts)
+	}
+}
+
+// selfOver is a console binary, stamped as the console started on it, then
+// installed over when over is true.
+func selfOver(t *testing.T, over bool) (string, os.FileInfo) {
+	t.Helper()
+	self := filepath.Join(t.TempDir(), "matchblox")
+	if err := os.WriteFile(self, []byte("v0.42.0"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	at, err := os.Stat(self)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if over {
+		if err := os.WriteFile(self, []byte("v0.43.0, a new install"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return self, at
+}
+
+// TestOldConsoleDoesNotReplaceANewerService: a console left open on an old
+// release never puts that release back over a newer service. It says so,
+// and R starts this console again on the new binary.
+func TestOldConsoleDoesNotReplaceANewerService(t *testing.T) {
+	f := newFake()
+	restarts := 0
+	self, at := selfOver(t, true)
+	m := New(Options{NoMotion: true, Conn: f, Local: true, Binary: "v0.42.0", Self: self, SelfAt: at,
+		Redial: func() (transport.Conn, error) { return newFake(), nil }, Restart: func() error { restarts++; return nil }})
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	next, cmd := next.Update(helloMsg(proto.Hello{Version: proto.Version, Binary: "v0.43.0", Host: "ws-1"}))
+	drain(cmd)
+	next, _ = next.Update(stateMsg(fixtureState()))
+	if acts := f.acts(); len(acts) != 0 {
+		t.Fatalf("an old console sent %+v to a newer service", acts)
+	}
+	if out := ansi.Strip(next.(Model).render()); !strings.Contains(out, "R start again · service v0.43.0, console v0.42.0") {
+		t.Fatalf("no notice:\n%s", out)
+	}
+	if err := next.(Model).Restart(); err != nil || restarts != 0 {
+		t.Fatalf("started again before R: %d, %v", restarts, err)
+	}
+	next, cmd = key(next, "R")
+	if !slices.ContainsFunc(cmdMsgs(cmd), func(msg tea.Msg) bool { _, ok := msg.(tea.QuitMsg); return ok }) {
+		t.Fatal("R did not end the console")
+	}
+	if err := next.(Model).Restart(); err != nil || restarts != 1 {
+		t.Fatalf("R started again %d times, %v", restarts, err)
+	}
+}
+
+func TestNewConsoleStillReplacesAnOlderService(t *testing.T) {
+	const pseudo = "v0.42.1-0.20261112093000-f15b80c1abcd"
+	for _, tc := range []struct {
+		console, service string
+		replace          bool
+	}{
+		{"v0.43.0", "v0.42.0", true},
+		{"v0.10.0", "v0.9.0", true},   // by number, not by letter
+		{"v0.42.0", "v0.43.0", false}, // the notice and R instead
+		{"v0.42.0", "v0.42.0", false},
+		{"v0.42.0", "dev", true},
+		{"v0.43.0", pseudo, true},
+		{pseudo, "v0.43.0", true},
+		{pseudo, "dev", true},
+		{"dev", "v0.42.0", false}, // a checkout's build replaces only an older wire
+		{"dev", pseudo, false},
+	} {
+		f := newFake()
+		m := New(Options{NoMotion: true, Conn: f, Local: true, Binary: tc.console, Redial: func() (transport.Conn, error) { return newFake(), nil }})
+		_, cmd := m.Update(helloMsg(proto.Hello{Version: proto.Version, Binary: tc.service, Host: "ws-1"}))
+		drain(cmd)
+		n := 0
+		for _, a := range f.acts() {
+			if a.RecID == "service:replace" {
+				n++
+			}
+		}
+		if want := map[bool]int{true: 1, false: 0}[tc.replace]; n != want {
+			t.Errorf("console %s, service %s: %d replaces, want %d", tc.console, tc.service, n, want)
+		}
+	}
+}
+
+// TestAConsoleThatCannotStartAgainAsksThePerson: without Restart, or when
+// the binary this console started on was not installed over (R would
+// start the same release into the same notice), the notice offers no key,
+// and R does nothing.
+func TestAConsoleThatCannotStartAgainAsksThePerson(t *testing.T) {
+	self, at := selfOver(t, false)
+	for name, opt := range map[string]Options{
+		"no Restart":        {Self: self, SelfAt: at},
+		"the same binary":   {Self: self, SelfAt: at, Restart: func() error { return nil }},
+		"no binary stamped": {Self: self, Restart: func() error { return nil }},
+	} {
+		f := newFake()
+		opt.NoMotion, opt.Conn, opt.Local, opt.Binary = true, f, true, "v0.42.0"
+		opt.Redial = func() (transport.Conn, error) { return newFake(), nil }
+		m := New(opt)
+		next, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+		next, cmd := next.Update(helloMsg(proto.Hello{Version: proto.Version, Binary: "v0.43.0", Host: "ws-1"}))
+		drain(cmd)
+		next, _ = next.Update(stateMsg(fixtureState()))
+		out := ansi.Strip(next.(Model).render())
+		if !strings.Contains(out, "quit and reopen · service v0.43.0, console v0.42.0") || strings.Contains(out, "start again") {
+			t.Fatalf("%s: notice:\n%s", name, out)
+		}
+		if _, cmd := key(next, "R"); slices.ContainsFunc(cmdMsgs(cmd), func(msg tea.Msg) bool { _, ok := msg.(tea.QuitMsg); return ok }) {
+			t.Fatalf("%s: R ended the console", name)
+		}
 	}
 }
 

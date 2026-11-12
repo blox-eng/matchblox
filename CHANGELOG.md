@@ -6,6 +6,75 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **The console offers a new release.** The service looks for the latest
+  release when it starts and once a day. When one is newer, Sessions shows
+  the step "Update to v0.43.0" under `SET UP`. `Enter` shows what it installs
+  and what it checks first. A typed `y` installs it with the checks of
+  `matchblox update`. The service runs again on it, and the console starts
+  again or says `quit and open matchblox again`. Your sessions run on. A
+  failed install stays on the offer: it says that nothing was changed and
+  that `Enter` tries again, then the reason. When the restart does not come,
+  `SET UP` shows "Restart for v0.43.0" and asks you to quit matchblox and
+  open it again. While a clone runs, the install says
+  `a clone of o/r runs. Update when it ends.` A Homebrew install shows
+  `brew upgrade matchblox` instead. After three days of failed looks,
+  `SET UP` shows "Release check fails", with the reason and the command.
+  ([#390](https://github.com/blox-eng/matchblox/issues/390))
+- **`[update] mode` picks `"offer"`, `"auto"` or `"off"`.** `"offer"` is the
+  default. `"auto"` installs a release by itself, once. It waits a day after
+  this machine first saw the release, then until no stoker run is on and no
+  clone runs.
+  During the day, the offer says when auto installs it. While it waits on
+  work, the offer says why. Closing the offer does not stop auto. The
+  console then says
+  `updated to v0.43.0 at 03:12`. The service installs with no person there:
+  when no logged-in `gh` checked the build's provenance, the console adds
+  `· provenance not checked`. From the start of an install until matchblox
+  runs again on the new release, a new clone is refused.
+  `"off"` never looks. See [Config](https://docs.matchblox.com/config/#update).
+  ([#390](https://github.com/blox-eng/matchblox/issues/390))
+- **A host on another release says so on its row.** Hosts shows
+  `v0.38.1, behind this console (v0.42.0)`. `u` and a typed `y` update a
+  host that is behind, and `d` dismisses the note. A host too old for `u`
+  shows the command to run on it.
+  ([#390](https://github.com/blox-eng/matchblox/issues/390),
+  [#389](https://github.com/blox-eng/matchblox/issues/389))
+
+### Changed
+
+- **A console never puts its older build back over a newer service.** It
+  says `R start again · service v0.43.0, console v0.42.0`, and `R` starts
+  the console again on the new release.
+  ([#390](https://github.com/blox-eng/matchblox/issues/390))
+
+### Fixed
+
+- **An update no longer ends the tmux sessions the service started under
+  the keep-running unit.** The service now runs the new binary in its own
+  place, and the Linux unit ends only `matchblox serve` when it exits.
+  Open the step "Keep matchblox running" under `SET UP` once to get the new
+  unit text. ([#390](https://github.com/blox-eng/matchblox/issues/390))
+
+  **The update to this release is the last one that can end them.** The
+  service of v0.42.0 or earlier does that update with its old code. On Linux
+  with the keep-running unit, it still ends every tmux server that the
+  service started: the stoker's (`tmux -L matchblox`), and any other that did
+  not run before the service opened a session on it. A tmux server that you
+  started is not touched. Run `matchblox update` when no stoker run and no
+  clone is in flight, and when you can lose those sessions. Then open the
+  step "Keep matchblox running" once. Later updates end nothing.
+
+### Security
+
+- **Only a person at a console opens a `SET UP` step or updates a host.**
+  An agent's session, a session the stoker drives and a `matchblox` command
+  are refused. `matchblox update` in your own shell still updates this
+  machine. See [Limits](https://docs.matchblox.com/limits/) for what this
+  does not stop.
+  ([#390](https://github.com/blox-eng/matchblox/issues/390))
+
 ## [0.42.0] - 2026-11-12
 
 ### Changed
