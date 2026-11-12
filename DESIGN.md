@@ -152,7 +152,10 @@ Rules:
    always draws the same frame (the replay depends on it).
 5. With `--no-motion` or `NO_MOTION=1`: `✦` in `flame`, `╿` in
    `match-head`, `│` in `faint`, no change plays.
-6. Every place that shows an agent uses this match: the queue, the sessions,
+6. `≋` means "has a stoker": a chain's room card and the header's count
+   use it, in `muted`, and in the night's ink while that chain's stoker
+   runs its order. It is never a match.
+7. Every place that shows an agent uses this match: the queue, the sessions,
    the replay, the site, STOKED (the stoker's run), the docs, and later the
    tmux status line. A new place uses the same glyphs and motions.
    A new state is a change to this section first.
@@ -186,6 +189,16 @@ impact, a stand is success, and a failure is error. Haptics play with
 Reduce Motion.
 
 ## 6. Console layout
+
+> **2026-11-10, the chain room (#326):** a chain opens into a room, as
+> [docs/superpowers/specs/2026-11-07-chain-room-design.md](docs/superpowers/specs/2026-11-07-chain-room-design.md)
+> says: the tab row reads `‹ ≋ <chain>`; the body is the need line, the
+> stoker's card, the matches, SHIPS, GIT and the talk line, on a desk the
+> left 40 % beside the selected match's live view. The need line holds the
+> one accent (rule 4); with none, the selected row. ⌥s (prefix s) flips
+> between an agent's pane and its room, ⌥n walks the chain's
+> matches. The header counts the stokers that run, `≋ 2`. A go that
+> merges, kills, force-pushes or removes goes through the consent box.
 
 > **2026-11-01:** Sessions now follows
 > [docs/superpowers/specs/2026-11-01-every-screen-chat-design.md](docs/superpowers/specs/2026-11-01-every-screen-chat-design.md):

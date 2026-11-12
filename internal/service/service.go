@@ -151,6 +151,10 @@ type Service struct {
 	// KeysToWorld lets keys: acts reach a pane. Only the demo's World takes
 	// them: a person's keys go to an agent in its own pane (#334).
 	KeysToWorld bool
+	// MarkMatches puts the flip key's mark on the agent panes it samples.
+	// Only the real service: a fixture's pane ids name this machine's
+	// own panes.
+	MarkMatches bool
 	// PaneHistory is how many lines of history a pane holds, and its
 	// height; CaptureBack reads the pane back lines up from its live
 	// screen, with its styles. Nil: a console scrolls no history.
@@ -250,13 +254,15 @@ type Service struct {
 	cur state.Doc
 	// sampled are the sessions as the sampler read them; cur.Sessions adds
 	// the question tool's calls the hooks announced.
-	sampled  []sample.Session
-	have     bool
-	hist     history.Series
-	queue    *queue.Queue
-	clients  map[*client]struct{}
-	gitKick  chan struct{}
-	shipKick chan struct{}
+	sampled []sample.Session
+	// flipMarked are the panes markMatches marked. Sample loop only.
+	flipMarked map[string]bool
+	have       bool
+	hist       history.Series
+	queue      *queue.Queue
+	clients    map[*client]struct{}
+	gitKick    chan struct{}
+	shipKick   chan struct{}
 	// sampleKick asks the sample loop for a sample now: a session started
 	// here shows without waiting for the tick.
 	sampleKick chan struct{}
@@ -690,6 +696,7 @@ func (s *Service) publish(snap sample.Snapshot, rec func(state.Doc)) {
 	doc := s.cur
 	s.mu.Unlock()
 	s.joinedOut(joined)
+	s.markMatches(snap.Sessions)
 	if s.Recovery != nil {
 		// Out of the lock: it reads the checkout of a new agent's folder.
 		if err := s.Recovery.Update(live, alive, s.now()); err != nil {

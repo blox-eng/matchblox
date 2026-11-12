@@ -301,6 +301,7 @@ func (m Model) peerLost(i int, err error) (tea.Model, tea.Cmd) {
 	}
 	first := !p.lost
 	p.lost, p.silent = true, false
+	m = m.roomLost(p.host)
 	news := m.noAnswer(*p)
 	m.batchLost(p.host, p.acts)
 	p.acts = nil

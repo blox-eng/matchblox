@@ -33,7 +33,7 @@ func homeWithPhoneID(t *testing.T) string {
 	return home
 }
 
-func noNames() (map[int]string, map[int]string) { return nil, nil }
+func noNames() (map[int]string, map[int]string, map[int]string) { return nil, nil, nil }
 
 func registerLine(t *testing.T, r push.RegisterRequest) string {
 	t.Helper()
@@ -44,7 +44,7 @@ func registerLine(t *testing.T, r push.RegisterRequest) string {
 	return string(b) + "\n"
 }
 
-func register(t *testing.T, home, id, in string, names func() (map[int]string, map[int]string)) string {
+func register(t *testing.T, home, id, in string, names func() (map[int]string, map[int]string, map[int]string)) string {
 	t.Helper()
 	var out bytes.Buffer
 	if err := registerMain(home, strings.NewReader(in), &out, id, names); err != nil {
@@ -55,14 +55,14 @@ func register(t *testing.T, home, id, in string, names func() (map[int]string, m
 
 func TestRegisterRepliesTheNames(t *testing.T) {
 	home := homeWithPhoneID(t)
-	names := func() (map[int]string, map[int]string) {
-		return map[int]string{1: "api", 3: "docs"}, map[int]string{2: "claude work"}
+	names := func() (map[int]string, map[int]string, map[int]string) {
+		return map[int]string{1: "api", 3: "docs"}, map[int]string{2: "claude work"}, map[int]string{1: "hearth"}
 	}
 	before := time.Now()
 	req := push.RegisterRequest{DeviceToken: "tok", Grants: map[string]string{"device:tok": "g"}, NotifyKey: make([]byte, 32), Buzz: true,
 		Island: &push.IslandReg{StartToken: "start", Channel: "chan"}}
 	got := register(t, home, regID, registerLine(t, req), names)
-	if want := `{"ok":true,"sessions":{"1":"api","3":"docs"},"accounts":{"2":"claude work"}}` + "\n"; got != want {
+	if want := `{"ok":true,"sessions":{"1":"api","3":"docs"},"accounts":{"2":"claude work"},"chains":{"1":"hearth"}}` + "\n"; got != want {
 		t.Fatalf("reply = %s, want %s", got, want)
 	}
 	rs, err := setup.Registrations(home)
@@ -156,16 +156,16 @@ func TestServiceNamesAsksTheService(t *testing.T) {
 			return
 		}
 		c.Send(proto.KindResult, env.ID, proto.Result{ActID: env.ID, Names: &proto.Names{
-			Sessions: map[int]string{4: "api"}, Accounts: map[int]string{1: "claude work"}}})
+			Sessions: map[int]string{4: "api"}, Accounts: map[int]string{1: "claude work"}, Chains: map[int]string{2: "hearth"}}})
 	}()
-	ss, as := serviceNames(sock)
-	if ss[4] != "api" || len(ss) != 1 || as[1] != "claude work" || len(as) != 1 {
-		t.Fatalf("names = %v, %v", ss, as)
+	ss, as, cs := serviceNames(sock)
+	if ss[4] != "api" || len(ss) != 1 || as[1] != "claude work" || len(as) != 1 || cs[2] != "hearth" || len(cs) != 1 {
+		t.Fatalf("names = %v, %v, %v", ss, as, cs)
 	}
 }
 
 func TestServiceNamesWithoutAServiceAreEmpty(t *testing.T) {
-	if ss, as := serviceNames(isolate(t)); len(ss) != 0 || len(as) != 0 {
+	if ss, as, cs := serviceNames(isolate(t)); len(ss) != 0 || len(as) != 0 || len(cs) != 0 {
 		t.Fatalf("names = %v, %v", ss, as)
 	}
 }

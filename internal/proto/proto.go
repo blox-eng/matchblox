@@ -315,6 +315,7 @@ type Clone struct {
 type Names struct {
 	Sessions map[int]string `json:"sessions"`
 	Accounts map[int]string `json:"accounts"`
+	Chains   map[int]string `json:"chains,omitempty"`
 }
 
 // The notes of a start on an account that ran: each is one skip of its

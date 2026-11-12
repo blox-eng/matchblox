@@ -32,7 +32,7 @@ func pushCmd(args []string) error {
 	if err != nil {
 		return err
 	}
-	return registerMain(home, os.Stdin, os.Stdout, args[1], func() (map[int]string, map[int]string) {
+	return registerMain(home, os.Stdin, os.Stdout, args[1], func() (map[int]string, map[int]string, map[int]string) {
 		return serviceNames(transport.SocketPath())
 	})
 }
@@ -41,7 +41,7 @@ func pushCmd(args []string) error {
 // line has the id id, keeps it as that phone's one registration on this host,
 // and replies the names of the numbers. A request without the island takes
 // this phone's island off this host. It never echoes the request.
-func registerMain(home string, in io.Reader, out io.Writer, id string, names func() (map[int]string, map[int]string)) error {
+func registerMain(home string, in io.Reader, out io.Writer, id string, names func() (map[int]string, map[int]string, map[int]string)) error {
 	reply := func(r any) error {
 		b, _ := json.Marshal(r)
 		_, err := fmt.Fprintf(out, "%s\n", b)
@@ -88,14 +88,14 @@ func registerMain(home string, in io.Reader, out io.Writer, id string, names fun
 		fmt.Fprintln(os.Stderr, "matchblox push register:", err)
 		return refuse("write failed")
 	}
-	ss, as := names()
+	ss, as, cs := names()
 	if ss == nil {
 		ss = map[int]string{}
 	}
 	if as == nil {
 		as = map[int]string{}
 	}
-	return reply(push.RegisterReply{OK: true, Sessions: ss, Accounts: as})
+	return reply(push.RegisterReply{OK: true, Sessions: ss, Accounts: as, Chains: cs})
 }
 
 // namesWait is how long push register waits for the service's names: the
@@ -104,7 +104,7 @@ const namesWait = 5 * time.Second
 
 // serviceNames asks the running service what each number is called now. No
 // service, or one that does not answer within namesWait, names nothing.
-func serviceNames(path string) (map[int]string, map[int]string) {
+func serviceNames(path string) (ss, as, cs map[int]string) {
 	got := make(chan *proto.Names, 1)
 	go func() {
 		res, err := doAct(path, proto.Act{RecID: service.NamesAct})
@@ -118,9 +118,9 @@ func serviceNames(path string) (map[int]string, map[int]string) {
 	select {
 	case n := <-got:
 		if n != nil {
-			return n.Sessions, n.Accounts
+			return n.Sessions, n.Accounts, n.Chains
 		}
 	case <-timer.C:
 	}
-	return map[int]string{}, map[int]string{}
+	return map[int]string{}, map[int]string{}, nil
 }
