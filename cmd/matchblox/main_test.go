@@ -141,6 +141,10 @@ func TestEnsureServiceGivesUpWithTheFix(t *testing.T) {
 // binary or a removed socket says so; a second serve, or a binary removed
 // with nothing in its place (uninstalled), exits 0.
 func TestServeAsksForARestart(t *testing.T) {
+	t.Setenv(unitEnv, "1") // the unit's serve: it never runs the new binary itself
+	old := execFn
+	execFn = func(string, []string, []string) error { t.Error("the unit's serve ran a binary"); return nil }
+	t.Cleanup(func() { execFn = old })
 	for _, tc := range []struct {
 		name    string
 		after   func(exe, sock string) error
@@ -318,10 +322,41 @@ func TestServeOfTheUnitStopsForAnInstallWhileItWaits(t *testing.T) {
 	}
 }
 
-// replaceServed runs serve on a binary of mode, installs over it, and
+// installOver writes a new binary over exe, as an install does.
+func installOver(t *testing.T, exe, _ string) {
+	if err := os.WriteFile(exe, []byte("v2, a new install"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// replaceAct is a newer console's service:replace: the binary stays.
+func replaceAct(t *testing.T, _, sock string) {
+	c, err := transport.Dial(sock, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	if err := c.Send(proto.KindHello, "", proto.Hello{Version: proto.Version}); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Send(proto.KindAct, "r", proto.Act{RecID: "service:replace"}); err != nil {
+		t.Fatal(err)
+	}
+	for {
+		env, err := c.Recv()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if env.Kind == proto.KindResult && env.ID == "r" {
+			return
+		}
+	}
+}
+
+// replaceServed runs serve on a binary of mode, stops it with stop, and
 // returns the binary, the binaries execFn was asked to run and what serve
 // returned. At each exec the socket is free for the new process to listen on.
-func replaceServed(t *testing.T, mode os.FileMode, execErr error) (exe string, execs []string, err error) {
+func replaceServed(t *testing.T, mode os.FileMode, execErr error, stop func(t *testing.T, exe, sock string)) (exe string, execs []string, err error) {
 	t.Helper()
 	path := isolate(t)
 	exe = filepath.Join(t.TempDir(), "matchblox")
@@ -343,18 +378,20 @@ func replaceServed(t *testing.T, mode os.FileMode, execErr error) (exe string, e
 		return execErr
 	}
 	t.Cleanup(func() { execFn = old })
+	at, err := os.Stat(exe)
+	if err != nil {
+		t.Fatal(err)
+	}
 	s := newService(config.Default(), fixtures(t))
 	s.Exe, s.ExeEvery = exe, 10*time.Millisecond
 	done := make(chan error, 1)
-	go func() { done <- serve(path, nil, func() *service.Service { return s }) }()
+	go func() { done <- serve(path, at, func() *service.Service { return s }) }()
 	select {
 	case <-s.Watching():
 	case <-time.After(waitLimit):
 		t.Fatal("the watch did not start")
 	}
-	if err := os.WriteFile(exe, []byte("v2, a new install"), mode); err != nil {
-		t.Fatal(err)
-	}
+	stop(t, exe, path)
 	select {
 	case err = <-done:
 	case <-time.After(waitLimit):
@@ -367,16 +404,25 @@ func replaceServed(t *testing.T, mode os.FileMode, execErr error) (exe string, e
 // so the service runs it in its own place.
 func TestReplacedServiceRunsAgainWithoutAUnit(t *testing.T) {
 	t.Setenv(unitEnv, "")
-	exe, execs, err := replaceServed(t, 0o700, nil)
+	exe, execs, err := replaceServed(t, 0o700, nil, installOver)
 	if err != nil || !slices.Equal(execs, []string{exe}) {
 		t.Fatalf("serve returned %v, ran %v, want %s once", err, execs, exe)
+	}
+}
+
+// TestAServiceAConsoleReplacesExits: a newer console's replace leaves the
+// binary as it was; the console starts the next serve.
+func TestAServiceAConsoleReplacesExits(t *testing.T) {
+	t.Setenv(unitEnv, "")
+	if _, execs, err := replaceServed(t, 0o700, nil, replaceAct); !errors.Is(err, errRestart) || len(execs) != 0 {
+		t.Fatalf("serve returned %v, ran %v", err, execs)
 	}
 }
 
 // TestReplacedServiceUnderAUnitExits: the unit starts the new binary.
 func TestReplacedServiceUnderAUnitExits(t *testing.T) {
 	t.Setenv(unitEnv, "1")
-	_, execs, err := replaceServed(t, 0o700, nil)
+	_, execs, err := replaceServed(t, 0o700, nil, installOver)
 	if !errors.Is(err, errRestart) || len(execs) != 0 {
 		t.Fatalf("serve returned %v, ran %v", err, execs)
 	}
@@ -386,10 +432,10 @@ func TestReplacedServiceUnderAUnitExits(t *testing.T) {
 // and an exec that fails exits for a restart as before.
 func TestFailedExecFallsBackToExit(t *testing.T) {
 	t.Setenv(unitEnv, "")
-	if _, execs, err := replaceServed(t, 0o700, errors.New("exec format error")); !errors.Is(err, errRestart) || len(execs) != 1 {
+	if _, execs, err := replaceServed(t, 0o700, errors.New("exec format error"), installOver); !errors.Is(err, errRestart) || len(execs) != 1 {
 		t.Fatalf("a failed exec: serve returned %v, ran %v", err, execs)
 	}
-	if _, execs, err := replaceServed(t, 0o600, nil); !errors.Is(err, errRestart) || len(execs) != 0 {
+	if _, execs, err := replaceServed(t, 0o600, nil, installOver); !errors.Is(err, errRestart) || len(execs) != 0 {
 		t.Fatalf("a binary that does not run: serve returned %v, ran %v", err, execs)
 	}
 }

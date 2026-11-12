@@ -2,6 +2,8 @@ package app
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -130,17 +132,27 @@ func TestTheUpdateDoorInstallsTheTagItShowed(t *testing.T) {
 
 // TestConsoleStartsAgainAfterItsUpdate: the install replaced the binary
 // this console runs, so a good result starts the console again on it. A
-// failed one leaves it as it is, and says why.
+// binary the install did not touch is not run, and a failed install
+// leaves the console as it is and says why.
 func TestConsoleStartsAgainAfterItsUpdate(t *testing.T) {
-	install := func(t *testing.T, r proto.Result) (Model, tea.Cmd, int) {
+	install := func(t *testing.T, r proto.Result, over bool) (Model, tea.Cmd, int) {
 		t.Helper()
+		self := filepath.Join(t.TempDir(), "matchblox")
+		if err := os.WriteFile(self, []byte("v0.42.0"), 0o700); err != nil {
+			t.Fatal(err)
+		}
 		m, _ := loadedWith(t, 100, doorState(updateDoor))
 		restarts := 0
-		m.opt.Local, m.opt.Restart = true, func() error { restarts++; return nil }
+		m.opt.Local, m.opt.Self, m.opt.Restart = true, self, func() error { restarts++; return nil }
 		next, _ := key(m, "enter")
 		next, cmd := key(next, "y")
 		if cmd != nil {
 			next.Update(cmd())
+		}
+		if over {
+			if err := os.WriteFile(self, []byte("v0.43.0, a new install"), 0o700); err != nil {
+				t.Fatal(err)
+			}
 		}
 		r.ActID = "a" + fmt.Sprint(next.(Model).acts)
 		next, cmd = next.Update(resultMsg(r))
@@ -152,10 +164,18 @@ func TestConsoleStartsAgainAfterItsUpdate(t *testing.T) {
 	quits := func(cmd tea.Cmd) bool {
 		return slices.ContainsFunc(cmdMsgs(cmd), func(msg tea.Msg) bool { _, ok := msg.(tea.QuitMsg); return ok })
 	}
-	if _, cmd, n := install(t, proto.Result{Ran: [][]string{{"install", "v0.43.0"}}}); n != 1 || !quits(cmd) {
+	good := proto.Result{Ran: [][]string{{"install", "v0.43.0"}}}
+	if _, cmd, n := install(t, good, true); n != 1 || !quits(cmd) {
 		t.Fatalf("a good install started the console again %d times, quit: %v", n, quits(cmd))
 	}
-	m, cmd, n := install(t, proto.Result{Err: "the checksum does not match"})
+	m, cmd, n := install(t, good, false)
+	if n != 0 || quits(cmd) {
+		t.Fatalf("an install beside this console's binary started it again %d times, quit: %v", n, quits(cmd))
+	}
+	if out := ansi.Strip(m.render()); !strings.Contains(out, "updated to v0.43.0 · quit and open matchblox again") {
+		t.Fatalf("no word to open it again:\n%s", out)
+	}
+	m, cmd, n = install(t, proto.Result{Err: "the checksum does not match"}, true)
 	if n != 0 || quits(cmd) {
 		t.Fatalf("a failed install started the console again %d times, quit: %v", n, quits(cmd))
 	}

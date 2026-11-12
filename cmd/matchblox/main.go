@@ -47,6 +47,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/config"
 	"github.com/blox-eng/matchblox/internal/demo"
 	"github.com/blox-eng/matchblox/internal/doors"
+	"github.com/blox-eng/matchblox/internal/filestamp"
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/history"
 	"github.com/blox-eng/matchblox/internal/holds"
@@ -1036,7 +1037,9 @@ func serveOn(path string, exeAt os.FileInfo, mk func() *service.Service, unit bo
 		// fail to start, again and again.
 		fmt.Fprintln(os.Stderr, "matchblox: stopping, the binary is gone")
 		return "", nil
-	case errors.Is(err, service.ErrReplaced) && !unit:
+	case errors.Is(err, service.ErrReplaced) && !unit && filestamp.Changed(exeAt, s.Exe):
+		// Installed over: the binary on disk is not this process's. A console's
+		// replace leaves it as it was, and the console starts the next serve.
 		fmt.Fprintln(os.Stderr, "matchblox: replaced by a newer binary: starting it")
 		return s.Exe, nil
 	case errors.Is(err, service.ErrReplaced) || errors.Is(err, service.ErrSocketGone):

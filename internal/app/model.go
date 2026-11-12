@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"slices"
 	"strconv"
@@ -23,6 +24,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/accounts"
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/doors"
+	"github.com/blox-eng/matchblox/internal/filestamp"
 	"github.com/blox-eng/matchblox/internal/history"
 	"github.com/blox-eng/matchblox/internal/keycmd"
 	"github.com/blox-eng/matchblox/internal/proto"
@@ -436,9 +438,13 @@ type Model struct {
 	updateView *state.UpdateView
 	// newer says the local service runs a newer release than this console;
 	// R starts the console again on it. updateAct is the act id of the
-	// update door's install. restarting: the program ends to start again.
+	// update door's install, updateTag its release and selfAt this
+	// console's binary when it was sent. restarting: the program ends to
+	// start again.
 	newer      string
 	updateAct  string
+	updateTag  string
+	selfAt     os.FileInfo
 	restarting bool
 	// hostAct is the act id of the update of a host on Hosts, hostActOn
 	// that host. behindSaid is the notice of a remote home's newer
@@ -740,7 +746,11 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.newer = ""
 		if m.newerLocal() {
-			m.newer = fmt.Sprintf("the service runs %s, this console %s · %s: start again", m.host.Binary, m.opt.Binary, m.keys.main.StartAgain.Help().Key)
+			again := m.keys.main.StartAgain.Help().Key + ": start again"
+			if m.opt.Restart == nil {
+				again = reopen
+			}
+			m.newer = fmt.Sprintf("the service runs %s, this console %s · %s", m.host.Binary, m.opt.Binary, again)
 		}
 		m.mismatch = m.host.Version != proto.Version
 		if m.mismatch {
@@ -1096,11 +1106,8 @@ func (m Model) result(r proto.Result) (Model, tea.Cmd) {
 	if r.ActID != "" && r.ActID == m.jumpAfter.act {
 		return m.switched(r)
 	}
-	if r.ActID != "" && r.ActID == m.updateAct {
-		m.updateAct = ""
-		if r.Err == "" && len(r.Ran) > 0 && m.opt.Restart != nil {
-			return m.startAgain() // the install replaced this console's binary too
-		}
+	if mm, cmd, ok := m.updated(r); ok {
+		return mm, cmd
 	}
 	if r.ActID != "" && r.ActID == m.hostAct {
 		m.flash, m.hostAct = m.hostUpdated(r), ""
@@ -1226,13 +1233,14 @@ func (m Model) focusJump(tty, pane string) tea.Cmd {
 }
 
 // olderLocal tells if the local service should give way to this console:
-// an older wire, or an older release. Once only, so two consoles of two
-// versions do not replace each other forever.
+// an older wire, or another build, unless the service runs a newer
+// release. Once only, so two consoles of two versions do not replace each
+// other forever.
 func (m Model) olderLocal() bool {
 	if !m.opt.Local || m.replaced || m.opt.Redial == nil {
 		return false
 	}
-	return m.host.Version < proto.Version || releases(m.host.Binary, m.opt.Binary) && release.Compare(m.host.Binary, m.opt.Binary) < 0
+	return m.host.Version < proto.Version || (m.opt.Binary != "dev" && m.host.Binary != m.opt.Binary && !m.newerLocal())
 }
 
 // newerLocal tells if the local service runs a newer release than this
@@ -1246,6 +1254,27 @@ func (m Model) newerLocal() bool {
 func releases(a, b string) bool {
 	isRelease := func(v string) bool { return release.IsRelease(v) && !release.IsPseudo(v) }
 	return isRelease(a) && isRelease(b)
+}
+
+// reopen is what a console that cannot start again asks of the person.
+const reopen = "quit and open matchblox again"
+
+// updated takes the result of this console's own update: a good install
+// over this console's binary starts it again; otherwise the person does.
+func (m Model) updated(r proto.Result) (Model, tea.Cmd, bool) {
+	if r.ActID == "" || r.ActID != m.updateAct {
+		return m, nil, false
+	}
+	m.updateAct = ""
+	if r.Err != "" || len(r.Ran) == 0 {
+		return m, nil, false
+	}
+	if m.opt.Restart != nil && filestamp.Changed(m.selfAt, m.opt.Self) {
+		mm, cmd := m.startAgain()
+		return mm, cmd, true
+	}
+	m.flash = "updated to " + m.updateTag + " · " + reopen
+	return m, nil, true
 }
 
 // startAgain ends the program so that main runs this binary again
@@ -1400,7 +1429,7 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	switch {
-	case bkey.Matches(k, mk.StartAgain) && m.newer != "":
+	case bkey.Matches(k, mk.StartAgain) && m.newer != "" && m.opt.Restart != nil:
 		return m.startAgain()
 	case bkey.Matches(k, mk.Stoker):
 		return m.openStoker(), nil
@@ -1657,7 +1686,7 @@ func (m Model) confirmed(a action) (tea.Model, tea.Cmd) {
 		m.jumpAfter = switchSent{act: "a" + strconv.Itoa(m.acts), host: a.host, pane: pane, done: a.done, tty: a.tty, agent: a.paneAgent}
 	}
 	if a.rec == "door:"+doors.Update && a.which == "primary" && m.opt.Local && host == m.opt.Host {
-		m.updateAct = "a" + strconv.Itoa(m.acts)
+		m.updateAct, m.updateTag, m.selfAt = "a"+strconv.Itoa(m.acts), a.text, filestamp.Of(m.opt.Self)
 	}
 	if a.agent != "" {
 		m.startAfter.act, m.startAfter.agent, m.startAfter.done = "a"+strconv.Itoa(m.acts), a.agent, a.done

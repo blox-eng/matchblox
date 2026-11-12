@@ -22,6 +22,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/chains"
 	"github.com/blox-eng/matchblox/internal/config"
+	"github.com/blox-eng/matchblox/internal/filestamp"
 	"github.com/blox-eng/matchblox/internal/gitremote"
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/history"
@@ -509,25 +510,11 @@ func (s *Service) Serve(ctx context.Context, l net.Listener) error {
 // install over it, or a link repointed to a new version) or when its
 // socket file is removed or replaced.
 func (s *Service) watch(ctx context.Context, stop context.CancelCauseFunc, sock string) {
-	stat := func(p string) os.FileInfo {
-		if p == "" {
-			return nil
-		}
-		fi, _ := os.Stat(p)
-		return fi
-	}
-	changed := func(was os.FileInfo, p string) bool {
-		if was == nil {
-			return false
-		}
-		now := stat(p)
-		return now == nil || !os.SameFile(was, now) || now.Size() != was.Size() || !now.ModTime().Equal(was.ModTime())
-	}
-	exe, socket := stat(s.Exe), stat(sock)
+	exe, socket := filestamp.Of(s.Exe), filestamp.Of(sock)
 	if s.ExeAt != nil && s.Exe != "" {
 		was := exe
 		exe = s.ExeAt
-		if was == nil || changed(exe, s.Exe) {
+		if was == nil || filestamp.Changed(exe, s.Exe) {
 			// Installed over or removed since the process started, as while
 			// a unit's serve waits for the socket: not this process's code.
 			s.watchingOnce.Do(func() { close(s.watchingChan()) })
@@ -554,10 +541,10 @@ func (s *Service) watch(ctx context.Context, stop context.CancelCauseFunc, sock 
 			return
 		case <-t.C:
 			switch {
-			case changed(exe, s.Exe):
+			case filestamp.Changed(exe, s.Exe):
 				stop(ErrReplaced)
 				return
-			case changed(socket, sock):
+			case filestamp.Changed(socket, sock):
 				stop(ErrSocketGone)
 				return
 			}

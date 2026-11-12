@@ -425,16 +425,21 @@ func TestOldConsoleDoesNotReplaceANewerService(t *testing.T) {
 }
 
 func TestNewConsoleStillReplacesAnOlderService(t *testing.T) {
+	const pseudo = "v0.42.1-0.20261112093000-f15b80c1abcd"
 	for _, tc := range []struct {
 		console, service string
 		replace          bool
 	}{
 		{"v0.43.0", "v0.42.0", true},
-		{"v0.10.0", "v0.9.0", true}, // by number, not by letter
+		{"v0.10.0", "v0.9.0", true},   // by number, not by letter
+		{"v0.42.0", "v0.43.0", false}, // the notice and R instead
 		{"v0.42.0", "v0.42.0", false},
+		{"v0.42.0", "dev", true},
+		{"v0.43.0", pseudo, true},
+		{pseudo, "v0.43.0", true},
+		{pseudo, "dev", true},
 		{"dev", "v0.42.0", false}, // a checkout's build replaces only an older wire
-		{"v0.42.0", "dev", false}, // and a release never puts one back
-		{"v0.43.0", "v0.42.1-0.20261112093000-f15b80c1abcd", false},
+		{"dev", pseudo, false},
 	} {
 		f := newFake()
 		m := New(Options{NoMotion: true, Conn: f, Local: true, Binary: tc.console, Redial: func() (transport.Conn, error) { return newFake(), nil }})
@@ -449,6 +454,24 @@ func TestNewConsoleStillReplacesAnOlderService(t *testing.T) {
 		if want := map[bool]int{true: 1, false: 0}[tc.replace]; n != want {
 			t.Errorf("console %s, service %s: %d replaces, want %d", tc.console, tc.service, n, want)
 		}
+	}
+}
+
+// TestAConsoleThatCannotStartAgainAsksThePerson: without Restart the
+// notice offers no key, and R does nothing.
+func TestAConsoleThatCannotStartAgainAsksThePerson(t *testing.T) {
+	f := newFake()
+	m := New(Options{NoMotion: true, Conn: f, Local: true, Binary: "v0.42.0", Redial: func() (transport.Conn, error) { return newFake(), nil }})
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	next, cmd := next.Update(helloMsg(proto.Hello{Version: proto.Version, Binary: "v0.43.0", Host: "ws-1"}))
+	drain(cmd)
+	next, _ = next.Update(stateMsg(fixtureState()))
+	out := ansi.Strip(next.(Model).render())
+	if !strings.Contains(out, "the service runs v0.43.0, this console v0.42.0 · quit and open matchblox again") || strings.Contains(out, "start again") {
+		t.Fatalf("notice:\n%s", out)
+	}
+	if _, cmd := key(next, "R"); slices.ContainsFunc(cmdMsgs(cmd), func(msg tea.Msg) bool { _, ok := msg.(tea.QuitMsg); return ok }) {
+		t.Fatal("R ended a console that cannot start again")
 	}
 }
 
