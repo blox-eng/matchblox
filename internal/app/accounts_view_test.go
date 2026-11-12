@@ -119,30 +119,6 @@ func TestRowSaysByHandForItsSessionName(t *testing.T) {
 	}
 }
 
-func TestRowNamesANonDefaultAccount(t *testing.T) {
-	t.Skip("replaced by TestThePeekNamesAnAccountThatIsNotTheDefault (Task 12 step 1, ruling 35)")
-	st := queueState()
-	st.Sessions[0].AccountDir = "/home/u/.matchblox/accounts/claude/work"
-	m, _ := loadedWith(t, 132, st)
-	m.tab = tabSessions
-	if out := screen(m); !strings.Contains(out, st.Sessions[0].Name+" work") {
-		t.Errorf("the row does not name its account:\n%s", out)
-	}
-	// Narrow, the row keeps the tag after the name.
-	narrow, _ := loadedWith(t, 60, st)
-	narrow.tab = tabSessions
-	if row := ansi.Strip(strings.Join(narrow.sessionRow(st.Sessions[0], false, 60), "\n")); !strings.Contains(row, st.Sessions[0].Name+" work") {
-		t.Errorf("narrow, the row does not name its account: %q", row)
-	}
-	// With fewer than four cells left after the name, the tag is dropped.
-	if got := ansi.Strip(m.taggedName("app-feature", "work", m.st.ink(false), len("app-feature")+4)); got != "app-feature" {
-		t.Errorf("room 3: %q, want the tag dropped", got)
-	}
-	if got := ansi.Strip(m.taggedName("app-feature", "work", m.st.ink(false), len("app-feature")+5)); got != "app-feature work" {
-		t.Errorf("room 4: %q, want the tag", got)
-	}
-}
-
 // TestAccountTagKeepsAGapBeforeTheWord: wide or narrow, a tag cut short or a
 // name longer than its column leaves a space before the state word.
 func TestAccountTagKeepsAGapBeforeTheWord(t *testing.T) {

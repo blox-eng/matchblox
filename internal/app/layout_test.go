@@ -2,7 +2,6 @@ package app
 
 import (
 	"fmt"
-	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -49,46 +48,6 @@ func TestLayoutBreakpoints(t *testing.T) {
 	}
 }
 
-// TestAnUprightPhoneGetsTheDrawer: a phone held upright with a small font
-// (107x60 with the keyboard up, 107x101 down) splits the list and the
-// detail at the middle, the detail a drawer on the right, and no row opens
-// in place; its dock shows two panels side by side. Upright under 90
-// columns is one column. The phone starts list only: this is its full view.
-func TestAnUprightPhoneGetsTheDrawer(t *testing.T) {
-	t.Skip("replaced by TestBoardWidths (Task 12 step 1)")
-	for _, h := range []int{60, 101} {
-		m, _ := loadedWith(t, 107, limitsState())
-		next, _ := fullView(m).Update(tea.WindowSizeMsg{Width: 107, Height: h})
-		m = next.(Model)
-		out := screen(m)
-		if lineOf(t, m, "USAGE") >= lineOf(t, m, "MACHINE") {
-			t.Fatalf("107x%d: usage and the machine are not under the list:\n%s", h, out)
-		}
-		fitsWidth(t, m, 107)
-		if list, detail := m.panes(107); list != 42 || detail != 64 {
-			t.Fatalf("107x%d: panes = %d, %d, want 42, 64", h, list, detail)
-		}
-		for _, s := range m.all.sessions {
-			if rows := m.sessionRow(s, true, 42); len(rows) != 1 {
-				t.Fatalf("107x%d: the selected row opens in place: %q", h, rows)
-			}
-		}
-	}
-	m, _ := loadedWith(t, 70, limitsState())
-	next, _ := m.Update(tea.WindowSizeMsg{Width: 70, Height: 120})
-	m = next.(Model)
-	if list, detail := m.panes(70); list != 70 || detail != 0 {
-		t.Fatalf("70x120: panes = %d, %d, want one column", list, detail)
-	}
-	if s := m.all.sessions; len(s) == 0 || len(m.sessionRow(s[0], true, 70)) < 2 {
-		t.Fatal("70x120: the selected row does not open in place")
-	}
-	wide, _ := loadedWith(t, 107, limitsState())
-	if wide.layoutAt(107) != Wide {
-		t.Fatal("107x30 is no longer a desk")
-	}
-}
-
 // lineOf is the screen row of the first line that holds s.
 func lineOf(t *testing.T, m tea.Model, s string) int {
 	t.Helper()
@@ -127,89 +86,8 @@ func sessLine(t *testing.T, m tea.Model, name string) int {
 	return -1
 }
 
-// TestAPhoneRowOpensInPlace: on a phone each session is one line, and the
-// selected one grows by what its agent said, then its plan and its keys.
-// Who waits comes before the quiet ones. Every tab fits.
-func TestAPhoneRowOpensInPlace(t *testing.T) {
-	t.Skip("replaced by TestAPhoneStartsVerboseInNeedsYouOnly (Task 12 step 1)")
-	m, _ := loadedWith(t, 50, queueState())
-	fitsWidth(t, m, 50)
-	out := strings.Split(ansi.Strip(m.render()), "\n")
-	at := sessLine(t, m, "app-feature")
-	if !strings.HasPrefix(out[at], "▌") || !strings.Contains(out[at], "asks") || !strings.Contains(out[at], "3m") || !strings.Contains(out[at], "90%") {
-		t.Fatalf("the selected row: %q", out[at])
-	}
-	if !strings.Contains(out[at+1], "“Claude needs your permission to use Bash”") {
-		t.Fatalf("no last words under the row:\n%s", strings.Join(out, "\n"))
-	}
-	// With one chat hint the plan and the keys share a line at 50 columns.
-	if !strings.Contains(out[at+2], "plan 75%") || !strings.Contains(out[at+2], "! compact") || !strings.Contains(out[at+2], "A switch  ⏎ go in") {
-		t.Fatalf("no plan and keys:\n%s", strings.Join(out[at:at+4], "\n"))
-	}
-	if !strings.HasPrefix(out[at-1], "────") || !strings.HasPrefix(out[at+3], "────") {
-		t.Fatalf("the opened block is not between hairlines:\n%s", strings.Join(out, "\n"))
-	}
-	if sessLine(t, m, "app-review") != at+4 || strings.Contains(out[at+5], "“") {
-		t.Fatalf("the rows that are not selected open too:\n%s", strings.Join(out, "\n"))
-	}
-	if lineOf(t, m, "WAITS FOR YOU · 2") > lineOf(t, m, "QUIET · 1") {
-		t.Fatalf("the quiet ones come first:\n%s", strings.Join(out, "\n"))
-	}
-	// Selected, app-review (done) offers its chat.
-	next, _ := key(m, "down")
-	out = strings.Split(ansi.Strip(next.(Model).render()), "\n")
-	if at := sessLine(t, next, "app-review"); !strings.Contains(out[at+1], "A switch  ⏎ go in") {
-		t.Fatalf("no a for a session that waits for an answer:\n%s", strings.Join(out, "\n"))
-	}
-	for tab := range screenNames() { // the tabs and Machine's views
-		m.tab = tab
-		fitsWidth(t, m, 50)
-	}
-}
-
 func tap(m tea.Model, x, y int) (tea.Model, tea.Cmd) {
 	return m.Update(tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft})
-}
-
-// On a desk; a phone taps as TestATapOnARowJumps does.
-func TestTapSelectsThenActs(t *testing.T) {
-	t.Skip("replaced by TestOnlyACardYouChoseGoesIn (Task 12 step 1)")
-	const w = 100
-	m, f := loadedWith(t, w, queueState())
-	var ran [][]string
-	m.opt.Run = func(argv []string) error { ran = append(ran, argv); return nil }
-
-	// A session that does not wait: the first tap selects it, a tap on it
-	// selected goes into its pane. Nothing is sent to the service.
-	next, cmd := tap(m, 5, sessLine(t, m, "tools"))
-	drain(cmd)
-	if len(f.acts()) != 0 || len(ran) != 0 || next.(Model).standIn {
-		t.Fatalf("width %d: the first tap acted", w)
-	}
-	if it, _ := next.(Model).selectedSession(); it.Pane != "%3" {
-		t.Fatalf("width %d: selected %q, want %%3", w, it.Pane)
-	}
-	next, cmd = tap(next, 5, sessLine(t, next, "tools"))
-	drain(cmd)
-	if len(ran) != 1 || strings.Join(ran[0], " ") != "tmux switch-client -t %3" || next.(Model).standIn {
-		t.Fatalf("width %d: the second tap ran %q", w, ran)
-	}
-	if len(f.acts()) != 0 {
-		t.Fatalf("width %d: a tap sent %v to the service", w, f.acts())
-	}
-
-	// A session that waits: the same.
-	ran = nil
-	next, cmd = tap(m, 5, sessLine(t, m, "app-review"))
-	drain(cmd)
-	if len(ran) != 0 {
-		t.Fatalf("width %d: the first tap ran %q", w, ran)
-	}
-	_, cmd = tap(next, 5, sessLine(t, next, "app-review"))
-	drain(cmd)
-	if len(ran) != 1 || strings.Join(ran[0], " ") != "tmux switch-client -t %2" {
-		t.Fatalf("width %d: the second tap ran %q", w, ran)
-	}
 }
 
 func TestTapOnATabOpensIt(t *testing.T) {
@@ -254,19 +132,6 @@ func TestTapNeverRunsADestructiveStep(t *testing.T) {
 	}
 	if len(f.acts()) != 0 {
 		t.Fatalf("a tap sent %v", f.acts())
-	}
-}
-
-func TestTapWhilePendingCancels(t *testing.T) {
-	t.Skip("replaced by TestATapNeverRunsADestructiveAct (Task 12 step 1)")
-	m, _ := loadedWith(t, 100, queueState())
-	next, _ := key(m, "x")
-	if next.(Model).pending == nil {
-		t.Fatal("x did not ask to confirm")
-	}
-	next, cmd := tap(next, 5, sessLine(t, next, "app-feature"))
-	if cmd != nil || next.(Model).pending != nil {
-		t.Fatal("a tap did not cancel the pending step")
 	}
 }
 
@@ -345,121 +210,6 @@ func TestNarrowScrollsToTheSelection(t *testing.T) {
 	next, _ = tap(next, 5, y)
 	if s, _ := next.(Model).selected(); s.Name != "agent-24" {
 		t.Fatalf("the tap selected %s", s.Name)
-	}
-}
-
-// TestFirstTapOnTheSelectedRowOnlyShows: on a desk the default selection
-// is not a tap; the step shows before a tap runs it, and a key in between
-// disarms.
-func TestFirstTapOnTheSelectedRowOnlyShows(t *testing.T) {
-	t.Skip("replaced by TestOnlyACardYouChoseGoesIn (Task 12 step 1)")
-	m, _ := loadedWith(t, 100, queueState())
-	ran := recordRuns(&m)
-	y := sessLine(t, m, "app-feature")
-	next, cmd := tap(m, 5, y)
-	drain(cmd)
-	if len(*ran) != 0 {
-		t.Fatal("one tap on the preselected row acted")
-	}
-	_, cmd = tap(next, 5, y)
-	drain(cmd)
-	if len(*ran) != 1 {
-		t.Fatal("a tap on the row it selected does not go in")
-	}
-	y = sessLine(t, m, "tools")
-	next, cmd = tap(m, 5, y)
-	drain(cmd)
-	if len(*ran) != 1 || next.(Model).flash != "" {
-		t.Fatalf("one tap on another row acted: flash %q", next.(Model).flash)
-	}
-	_, cmd = tap(next, 5, sessLine(t, next, "tools"))
-	drain(cmd)
-	if len(*ran) != 2 {
-		t.Fatal("a tap on a selected session that does not wait does not go in")
-	}
-}
-
-func TestWheelMovesTheSelection(t *testing.T) {
-	t.Skip("replaced by TestTheWheelMovesTheChosenCard (Task 12 step 1)")
-	m, _ := loadedWith(t, 50, queueState())
-	next, _ := m.Update(tea.MouseWheelMsg{X: 5, Y: 6, Button: tea.MouseWheelDown})
-	if it, _ := next.(Model).selectedSession(); it.Pane != "%2" {
-		t.Fatalf("wheel down selected %s", it.Pane)
-	}
-	next, _ = next.Update(tea.MouseWheelMsg{X: 5, Y: 6, Button: tea.MouseWheelUp})
-	if it, _ := next.(Model).selectedSession(); it.Pane != "%1" {
-		t.Fatalf("wheel up selected %s", it.Pane)
-	}
-}
-
-// TestTheKeyLineIsAtTheBottom: the keys, a tap's step, a confirm and the
-// answer being typed are all on the last line, under a hairline
-// (design/0006 §11.1).
-func TestTheKeyLineIsAtTheBottom(t *testing.T) {
-	t.Skip("replaced by TestTheKeyLineDropsWholeKeysFromTheRight (Task 12 step 1)")
-	for _, w := range []int{50, 100} {
-		m, _ := loadedWith(t, w, queueState())
-		last := func(m tea.Model) string {
-			out := strings.Split(ansi.Strip(m.(Model).render()), "\n")
-			if !strings.HasPrefix(out[len(out)-2], "────") {
-				t.Fatalf("width %d: no hairline over the key line:\n%s", w, strings.Join(out, "\n"))
-			}
-			return out[len(out)-1]
-		}
-		// A phone drops the spare keys first: p ships is a tab tap away.
-		goesIn := func(l string) bool { return strings.Contains(l, "⏎ go in") || strings.Contains(l, "enter goes into") }
-		if l := last(m); !goesIn(l) || strings.Contains(l, "a go in") || !strings.Contains(l, "x kill") || !strings.Contains(l, "N new") || w > 60 && !strings.Contains(l, "p ships") {
-			t.Fatalf("width %d: the keys are not at the bottom: %q", w, l)
-		}
-		if l := last(selectPane(t, m, "%3")); !goesIn(l) {
-			t.Fatalf("width %d: the keys are not at the bottom: %q", w, l)
-		}
-		if strings.Contains(ansi.Strip(strings.Split(m.render(), "\n")[2]), "open") {
-			t.Fatalf("width %d: keys under the tabs", w)
-		}
-		next := selectPane(t, m, "%3")
-		pending := next.(Model)
-		pending.pending = pending.primary()
-		next = pending
-		// The confirm is a box: on a phone its foot sits on the key line's
-		// hairline, under the thumb; wider, it is in the middle.
-		out := strings.Split(ansi.Strip(next.(Model).render()), "\n")
-		foot := slices.IndexFunc(out, func(l string) bool { return strings.Contains(l, "╰─ ⏎ run") })
-		phone := next.(Model).layoutAt(w) == Narrow || next.(Model).upright()
-		if !strings.Contains(actionLine(next), "tmux switch-client -t %3") || foot < 0 || phone != (foot == len(out)-3) {
-			t.Fatalf("width %d: the confirm box is not where it belongs:\n%s", w, strings.Join(out, "\n"))
-		}
-	}
-}
-
-// TestATapOnAKeyPressesIt: each key of the key line is a tap target.
-func TestATapOnAKeyPressesIt(t *testing.T) {
-	t.Skip("replaced by TestATapOnABoardKeyPressesIt (Task 12 step 1)")
-	st := queueState()
-	st.Agents = []string{"claude"}
-	m, _ := loadedWith(t, 50, st)
-	out := strings.Split(ansi.Strip(m.render()), "\n")
-	y, line := len(out)-1, out[len(out)-1]
-	next, _ := tap(m, len([]rune(line[:strings.Index(line, "N new")])), y)
-	if f := next.(Model).form; f == nil || f.rename {
-		t.Fatalf("a tap on N new opened %+v", f)
-	}
-	next, _ = tap(m, len([]rune(line[:strings.Index(line, "x kill")])), y)
-	if p := next.(Model).pending; p == nil || p.rec != "kill:%1" {
-		t.Fatalf("a tap on x kill: pending %+v", p)
-	}
-	ran := recordRuns(&m)
-	next, cmd := tap(m, len([]rune(line[:strings.Index(line, "⏎ go in")])), y)
-	drain(cmd)
-	if len(*ran) != 1 || next.(Model).standIn {
-		t.Fatalf("a tap on ⏎ go in ran %q", *ran)
-	}
-	// The header's count of who waits selects the first one.
-	moved := selectPane(t, m, "%3")
-	head := ansi.Strip(strings.Split(moved.(Model).render(), "\n")[0])
-	next, _ = tap(moved, len([]rune(head[:strings.Index(head, "● 2")])), 0)
-	if s, ok := next.(Model).selectedSession(); !ok || s.Pane != "%1" {
-		t.Fatalf("a tap on who waits selected %+v", s)
 	}
 }
 

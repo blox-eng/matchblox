@@ -13,7 +13,6 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/advice"
@@ -130,33 +129,6 @@ func loaded(t *testing.T, width int) Model {
 	return m
 }
 
-func TestViewFitsWidth(t *testing.T) {
-	t.Skip("replaced by TestBoardFitsItsScreen (Task 12 step 1)")
-	for _, w := range []int{80, 100, 160, 200} {
-		m := loaded(t, w)
-		out := m.render()
-		for i, line := range strings.Split(out, "\n") {
-			if lw := lipgloss.Width(line); lw > w {
-				t.Fatalf("width %d: line %d is %d wide: %q", w, i, lw, line)
-			}
-		}
-		out = ansi.Strip(out)
-		s, _ := m.selectedSession()
-		wants := []string{"app-feature", "app-review", "fresh", "1 without an agent: notes:1.1 zsh"}
-		if w >= 83 {
-			wants = append(wants, m.viewTitle(s)) // the chat of the selected one, 44 columns and more
-		}
-		if w >= 200 {
-			wants = append(wants, "! compact", "▲ clear") // the desk's plan column, from 78 columns of list
-		}
-		for _, want := range wants {
-			if !strings.Contains(out, want) {
-				t.Fatalf("width %d: view lacks %q:\n%s", w, want, out)
-			}
-		}
-	}
-}
-
 // key presses k, named as keyPress names it.
 func key(m tea.Model, k string) (tea.Model, tea.Cmd) {
 	return m.Update(keyPress(k))
@@ -185,16 +157,6 @@ func TestEscCancelsAction(t *testing.T) {
 	drain(cmd) // on the board the cancel is a notice: nothing runs
 	if !strings.Contains(next.(Model).render(), "cancelled") {
 		t.Fatal("esc must cancel without running")
-	}
-}
-
-func TestDestructiveNeedsTypedYes(t *testing.T) {
-	t.Skip("replaced by TestXOnlyEverKills (Task 12 step 1)")
-	m := loaded(t, 100)
-	m.opt.Run = func([]string) error { t.Fatal("enter must not confirm a destructive action"); return nil }
-	m.pending = &action{steps: [][]string{{"kill", "123"}}, destructive: true}
-	if _, cmd := key(m, "enter"); cmd != nil {
-		t.Fatal("enter ran a destructive action")
 	}
 }
 
@@ -284,26 +246,6 @@ func TestBeforeTheFirstStateTheViewSaysWhy(t *testing.T) {
 	m := New(Options{NoMotion: true, Conn: newFake()})
 	if out := m.render(); !strings.Contains(out, "waiting for the service") {
 		t.Fatalf("an empty screen is a dead end:\n%s", out)
-	}
-}
-
-func TestConfirmedRecActIsSentNotRun(t *testing.T) {
-	t.Skip("replaced by TestTheBoardReachesDoorsGhostAndRecommendations (Task 12 step 1)")
-	st := fixtureState()
-	st.Recommendations = []advice.Rec{{ID: "r9", Level: "warn", Title: "Kill it", Second: &advice.Action{
-		Label: "kill", Steps: [][]string{{"kill", "42"}}, Destructive: true}}}
-	m, f := loadedWith(t, 100, st)
-	m.opt.Run = func([]string) error { t.Fatal("a service step ran in the console"); return nil }
-	m.tab, m.recPick = tabSessions, "r9"
-	next, _ := key(m, "x")
-	next, cmd := key(next, "y")
-	if cmd == nil {
-		t.Fatal("confirm returned no command")
-	}
-	next.Update(cmd())
-	acts := f.acts()
-	if len(acts) != 1 || acts[0] != (proto.Act{RecID: "r9", Which: "secondary", Confirm: "y"}) {
-		t.Fatalf("sent %+v", acts)
 	}
 }
 
@@ -471,25 +413,6 @@ func TestSilentAfterReconnectShowsFix(t *testing.T) {
 	next, _ = next.Update(silentMsg{conn: y})
 	if !strings.Contains(next.(Model).render(), "kill 77") {
 		t.Fatalf("a silent service after a reconnect went unnoticed:\n%s", next.(Model).render())
-	}
-}
-
-// Nav steps run here without a typed y, so only tmux moves may run, even
-// if a service sends something else.
-func TestNavRunsOnlyTmuxMoves(t *testing.T) {
-	t.Skip("replaced by TestTheBoardReachesDoorsGhostAndRecommendations (Task 12 step 1)")
-	st := fixtureState()
-	st.Recommendations = []advice.Rec{{ID: "r1", Title: "x", Primary: &advice.Action{Nav: true, Steps: [][]string{{"rm", "-rf", "/tmp/x"}}}}}
-	m, _ := loadedWith(t, 100, st)
-	m.opt.Run = func(argv []string) error { t.Fatalf("ran %v", argv); return nil }
-	m.tab, m.recPick = tabSessions, "r1"
-	next, _ := key(m, "enter")
-	next, cmd := key(next, "enter")
-	if cmd != nil {
-		next, _ = next.Update(cmd())
-	}
-	if !strings.Contains(next.(Model).render(), "refused") {
-		t.Fatalf("no refusal shown:\n%s", next.(Model).render())
 	}
 }
 

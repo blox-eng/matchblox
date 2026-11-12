@@ -7,12 +7,10 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/proto"
-	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
@@ -50,42 +48,6 @@ func consentText(m Model) string {
 	return edge(box[0]) + ": " + strings.Join(out, " ") + " · " + edge(box[len(box)-1])
 }
 
-// TestSlashSearchesTheTab: / starts a search of the open tab; while it is
-// typed every letter is text, q too; Enter keeps it, Esc clears it.
-func TestSlashSearchesTheTab(t *testing.T) {
-	t.Skip("replaced by TestSearchNarrowsEveryColumn (Task 12 step 1)")
-	m, _ := loadedWith(t, 100, fixtureState())
-	var next tea.Model = m
-	next, _ = key(next, "1")
-	next, _ = key(next, "/")
-	next = typeText(next, "review q")
-	if next.(Model).quitting {
-		t.Fatal("q quit while typing a search")
-	}
-	next, _ = key(next, "backspace")
-	next, _ = key(next, "backspace")
-	if out := screen(next); !strings.Contains(out, "app-review") || strings.Contains(out, "app-feature") {
-		t.Fatalf("the search did not narrow the sessions:\n%s", out)
-	}
-	if !strings.Contains(actionLine(next), "/ review") {
-		t.Fatalf("the search is not on the action line: %q", actionLine(next))
-	}
-	next, _ = key(next, "enter")
-	if next.(Model).searching {
-		t.Fatal("enter did not keep the search")
-	}
-	if !strings.Contains(actionLine(next), "/ review") {
-		t.Fatalf("a kept search is not shown: %q", actionLine(next))
-	}
-	if s, ok := next.(Model).selected(); !ok || s.Name != "app-review" {
-		t.Fatalf("the selection is not in the found rows: %+v", s)
-	}
-	next, _ = key(next, "esc")
-	if out := screen(next); !strings.Contains(out, "app-feature") {
-		t.Fatalf("esc did not clear the search:\n%s", out)
-	}
-}
-
 func TestSearchEndsWithTheTab(t *testing.T) {
 	m, _ := loadedWith(t, 100, fixtureState())
 	var next tea.Model = m
@@ -96,16 +58,6 @@ func TestSearchEndsWithTheTab(t *testing.T) {
 	next, _ = key(next, "shift+tab")
 	if out := screen(next); !strings.Contains(out, "app-feature") {
 		t.Fatalf("the search stayed after a tab change:\n%s", out)
-	}
-}
-
-func TestSearchFindsNothingSaysSo(t *testing.T) {
-	t.Skip("replaced by TestTheBoardsStates (Task 12 step 1)")
-	m, _ := loadedWith(t, 100, queueState())
-	next, _ := key(m, "/")
-	next = typeText(next, "zzz")
-	if out := screen(next); !strings.Contains(out, "nothing matches zzz") {
-		t.Fatalf("no empty state for the search:\n%s", out)
 	}
 }
 
@@ -141,44 +93,6 @@ func TestSessionsBusyFirst(t *testing.T) {
 	m, _ := loadedWith(t, 100, sortFixture())
 	if got := order(m); got != "bravo alpha charlie" {
 		t.Fatalf("order %q", got)
-	}
-}
-
-func TestSortCyclesAndReverses(t *testing.T) {
-	t.Skip("dropped (Task 12 step 1): sort goes (step 4, intended change)")
-	m, _ := loadedWith(t, 100, sortFixture())
-	var next tea.Model = m
-	next, _ = key(next, "1")
-	for range 3 {
-		next, _ = key(next, "g") // one flat list
-	}
-	next, _ = key(next, "s") // newest
-	next, _ = key(next, "s") // context
-	if got := order(next); got != "charlie bravo alpha" {
-		t.Fatalf("by context: %q", got)
-	}
-	if out := screen(next); !strings.Contains(out, "3 SESSIONS · by context ▾") || strings.Contains(out, "WORKING") {
-		t.Fatalf("the list does not show the sort, or keeps its groups:\n%s", out)
-	}
-	next, _ = key(next, "S")
-	if got := order(next); got != "alpha bravo charlie" {
-		t.Fatalf("by context, reversed: %q", got)
-	}
-	// The order holds when the next state comes.
-	next, _ = next.Update(stateMsg(sortFixture()))
-	if got := order(next); got != "alpha bravo charlie" {
-		t.Fatalf("a new state undid the sort: %q", got)
-	}
-}
-
-func TestNarrowShowsTheSort(t *testing.T) {
-	t.Skip("dropped (Task 12 step 1): sort goes (step 4, intended change)")
-	m, _ := loadedWith(t, 50, sortFixture())
-	var next tea.Model = m
-	next, _ = key(next, "1")
-	next, _ = key(next, "s")
-	if !strings.Contains(screen(next), "by newest ▾") {
-		t.Fatalf("the phone does not show the sort:\n%s", screen(next))
 	}
 }
 
@@ -354,64 +268,6 @@ func TestSearchKeepsTheMarks(t *testing.T) {
 	got.refresh()
 	if len(got.picked) != 2 {
 		t.Fatal("a state without git dropped the marks")
-	}
-}
-
-// Review 2, #5: the plan cell holds its column at any percent.
-func TestProgressHoldsItsColumn(t *testing.T) {
-	t.Skip("dropped (ruling 29): no plan progress bar on a match card; the room's stoker card holds the plan's place")
-	st := sortFixture()
-	st.Sessions[0].Progress = &sample.Progress{Pct: 5}
-	st.Sessions[1].Progress = &sample.Progress{Pct: 100}
-	m, _ := loadedWith(t, 200, st)
-	next, _ := key(m, "1")
-	lines := strings.Split(screen(next), "\n")
-	a, b := lines[sessLine(t, next, "alpha")], lines[sessLine(t, next, "bravo")]
-	at := func(line, place string) int { return lipgloss.Width(line[:max(strings.Index(line, place), 0)]) }
-	if ia, ib := at(a, "w:alpha"), at(b, "w:bravo"); !strings.Contains(a, "5%") || ia == 0 || ia != ib {
-		t.Fatalf("the place column moved (%d, %d):\n%s\n%s", ia, ib, a, b)
-	}
-}
-
-// Review 2, #9: a tap ends the typing of a search, so a confirm it asks
-// for is on the screen.
-func TestTapEndsTheTypingOfASearch(t *testing.T) {
-	t.Skip("replaced by TestATapEndsTheSearchsTyping (Task 12 step 1)")
-	m, _ := loadedWith(t, 100, queueState())
-	next, _ := key(m, "/")
-	next = typeText(next, "app")
-	y := lineOf(t, next, "Clear app-review")
-	next, _ = tap(next, 5, y)
-	if next.(Model).searching || next.(Model).filter != "app" {
-		t.Fatalf("searching %v filter %q", next.(Model).searching, next.(Model).filter)
-	}
-	if !strings.Contains(actionLine(next), "tap again") {
-		t.Fatalf("line %q", actionLine(next))
-	}
-}
-
-// TestAnOpenPullRequestShowsWhereItsAgentShows: the PR of the worktree an
-// agent works in is on its desk row, and under its row when it opens on a
-// phone.
-func TestAnOpenPullRequestShowsWhereItsAgentShows(t *testing.T) {
-	t.Skip("replaced by TestCardLines (Task 12 step 1)")
-	st := fixtureState()
-	st.Sessions = append(st.Sessions, sample.Session{PID: 950, Pane: "%9", Target: "api:1.1", Name: "cache-work",
-		Status: "idle", Idle: time.Minute, Cwd: "/w/app-cache/internal", Context: "fresh"})
-	st.Queue = []queue.Item{{Pane: "%9", Target: "api:1.1", Name: "cache-work", State: queue.StateQuestion,
-		Since: st.At.Add(-time.Minute), LastLine: "Shall I merge it?"}}
-	st.Git = &proto.GitReport{At: st.At, Repos: []gitscan.Repo{{Path: "/w/app", Main: "main", Worktrees: []gitscan.Worktree{
-		{Path: "/w/app", Branch: "main"},
-		{Path: "/w/app-cache", Branch: "cache", Sessions: 1, PR: &gitscan.PR{Number: 4312, Title: "Add the cache", URL: "https://example.com/pr/4312"}},
-	}}}}
-	m, _ := loadedWith(t, 200, st) // cache-work waits: it is selected
-	if l := rowOf(m.render(), "cache-work"); !strings.Contains(listOf(l, 200), "#4312") {
-		t.Fatalf("the desk row lacks the PR: %q", l)
-	}
-	m.width = 44 // a phone
-	out := strings.Split(ansi.Strip(m.render()), "\n")
-	if at := sessLine(t, m, "cache-work"); !strings.Contains(out[at+2], "#4312 Add the cache") {
-		t.Fatalf("the phone row does not open on its PR:\n%s", strings.Join(out, "\n"))
 	}
 }
 

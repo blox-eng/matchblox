@@ -32,10 +32,6 @@ func jumped(t *testing.T, m Model, k tea.KeyPressMsg) (Model, []string) {
 
 var altS = tea.KeyPressMsg{Code: 's', Mod: tea.ModAlt}
 
-func TestFlipFromASessionOpensItsChainsRoomOnTheNeed(t *testing.T) {
-	t.Skip("replaced by TestARoomOpensOnTheNeedElseTheTalkLine (Task 12 step 1)")
-}
-
 func TestFlipInTheRoomGoesBackToWhereItCameFrom(t *testing.T) {
 	m, _ := headModel(t, 160, headState(t, runningPlan(), true))
 	m = flipFrom(t, m, deskTTY, "%1")

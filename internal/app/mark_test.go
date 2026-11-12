@@ -122,32 +122,3 @@ func TestNoTicksAfterSplash(t *testing.T) {
 		t.Fatal("during the start screen the next tick is asked for")
 	}
 }
-
-func TestSplashWhileWaiting(t *testing.T) {
-	t.Skip("replaced by TestTheBoardsStates (Task 12 step 1): before the first state the board says reading your matches")
-	t0 := time.Now()
-	now := t0.Add(time.Second)
-	m := splashModel(t0, &now)
-	out := ansi.Strip(m.render())
-	if !strings.ContainsAny(out, "▀▄") || !strings.Contains(out, "waiting for the service…") {
-		t.Fatalf("before the first state: the mark and why:\n%s", out)
-	}
-}
-
-func TestWaitingViewFitsShortPane(t *testing.T) {
-	t.Skip("replaced by TestSilentServiceShowsFix (Task 12 step 1): the board says a silent service's fix in its strip's row")
-	t0 := time.Now()
-	for _, past := range []time.Duration{100 * time.Millisecond, time.Second} {
-		now := t0.Add(past)
-		m := splashModel(t0, &now)
-		m.flash = "the service (pid 42) does not answer: kill 42, then start matchblox again"
-		next, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 12})
-		lines := strings.Split(ansi.Strip(next.(Model).render()), "\n")
-		if len(lines) > 12 {
-			t.Fatalf("at %v the waiting view is %d lines in a 12-line pane", past, len(lines))
-		}
-		if !strings.Contains(strings.Join(lines, "\n"), "kill 42, then start matchblox again") {
-			t.Fatalf("at %v the fix fell off a short pane:\n%s", past, strings.Join(lines, "\n"))
-		}
-	}
-}

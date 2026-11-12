@@ -57,10 +57,3 @@ func TestDisabledTabHintAndZeroSkips(t *testing.T) {
 		t.Errorf("boxFrame drew a zero part:\n%s\nwant\n%s", strings.Join(b, "\n"), strings.Join(a, "\n"))
 	}
 }
-
-// TestOneChatHintAndTheWayOutOfListOnly: the key line names the chat once,
-// as ⏎, and only where Enter opens it; a phone in list only keeps the way
-// back to the full view.
-func TestOneChatHintAndTheWayOutOfListOnly(t *testing.T) {
-	t.Skip("dropped (Task 12 step 1): list only goes (step 3, intended change: v is the board's density)")
-}

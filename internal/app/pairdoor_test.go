@@ -43,21 +43,6 @@ func TestEnterOnThePairDoorOpensThePage(t *testing.T) {
 	}
 }
 
-func TestTapOnThePairDoorOpensThePage(t *testing.T) {
-	t.Skip("replaced by TestATapOnTheDoorsLineUnderAHost (Task 12 step 1): a tap on the doors line opens its door")
-	_, m := pairDoorConsole(t)
-	y := lineOf(t, m, "Pair a device")
-	next, _ := tap(m, 5, y)
-	if got := next.(Model); got.pair != nil || got.armed == "" {
-		t.Fatalf("the first tap opened the page (armed %q)", got.armed)
-	}
-	next, cmd := tap(next, 5, y)
-	got := next.(Model)
-	if got.pending != nil || got.pair == nil || cmd == nil {
-		t.Fatalf("pending %v, page %v", got.pending, got.pair)
-	}
-}
-
 func TestPairDoorClosesLayersUnderThePage(t *testing.T) {
 	_, m := pairDoorConsole(t)
 	m.sheet, m.form = &sheet{}, &form{}

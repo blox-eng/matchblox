@@ -393,16 +393,3 @@ func TestSheetSendsStokerNew(t *testing.T) {
 		t.Fatalf("the refusal is not in the sheet:\n%s", s)
 	}
 }
-
-// TestSheetOrdersAUnitWhoseRunIsOff: a chain whose unit rests gets
-// stoker:order-chain.
-func TestSheetOrdersAUnitWhoseRunIsOff(t *testing.T) {
-	t.Skip("replaced by TestTalkToARunningStokerSendsAnOrder (Task 12 step 1): the stoker's agent is no card; the room's talk line orders its chain")
-	m, f := headModel(t, 160, headState(t, proto.StokerView{PaneUp: true}, true))
-	next := typed(sendKey(pick(t, m, stokerPane), "a"), "go")
-	_, cmd := press(next, tea.KeyEnter)
-	cmd()
-	if a := f.acts(); len(a) != 1 || a[0].RecID != "stoker:order-chain" {
-		t.Fatalf("acts %+v", a)
-	}
-}

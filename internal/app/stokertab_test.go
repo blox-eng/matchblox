@@ -100,18 +100,6 @@ func selectStep(t *testing.T, m Model, id string) Model {
 	return m
 }
 
-func TestCOpensTheTab(t *testing.T) {
-	t.Skip("dropped (Task 12 step 1): the STOKER tab goes (step 6b) and c copies (TestCCopiesTheLastMessage")
-	m, _ := loadedWith(t, 100, tabNight(screensState(t)))
-	next, _ := key(m, "c")
-	if got := next.(Model).tab; got != tabStoker {
-		t.Fatalf("c opened tab %d", got)
-	}
-	if next, _ := key(m, "7"); next.(Model).tab != tabStoker {
-		t.Fatal("7 does not open the stoker tab")
-	}
-}
-
 func TestStokerTabShowsWordsPlanAndRules(t *testing.T) {
 	m, _ := loadedWith(t, 100, tabNight(screensState(t)))
 	m.setTab(tabStoker)
@@ -184,39 +172,6 @@ func TestMorningSaysWhatWaitsForYou(t *testing.T) {
 			t.Fatalf("no %q in\n%s", want, out)
 		}
 	}
-}
-
-func TestYGrantsAWaitingStep(t *testing.T) {
-	t.Skip("replaced by TestYOnAWaitingStepGivesItsGo (Task 12 step 1)")
-	m, f := loadedWith(t, 100, tabNight(screensState(t)))
-	m.setTab(tabStoker)
-	if line := actionLine(selectStep(t, m, "g8")); !strings.Contains(line, "y give the go") {
-		t.Fatalf("the key line does not offer the go: %q", line)
-	}
-	sendKey(selectStep(t, m, "g8"), "y")
-	acts := grants(f)
-	if len(acts) != 1 || acts[0].RecID != "stoker:grant" || acts[0].Text != "8" {
-		t.Fatalf("acts %+v", acts)
-	}
-	if line := actionLine(selectStep(t, m, "p5")); strings.Contains(line, "y give the go") {
-		t.Fatalf("a step that waits on an event offers a go: %q", line)
-	}
-	next, _ := key(selectStep(t, m, "p2"), "y") // a step that waits for nothing
-	sendKey(selectStep(t, m, "p2"), "y")
-	if len(grants(f)) != 1 || !strings.Contains(next.(Model).flash, "y gives the go") {
-		t.Fatalf("y on a done step: %+v, %q", grants(f), next.(Model).flash)
-	}
-}
-
-// grants are the go acts a fake connection got.
-func grants(f *fakeConn) []proto.Act {
-	var out []proto.Act
-	for _, a := range f.acts() {
-		if a.RecID == "stoker:grant" {
-			out = append(out, a)
-		}
-	}
-	return out
 }
 
 func TestEnterShowsTheCommand(t *testing.T) {
@@ -587,64 +542,6 @@ func TestQOnAPanelessRunningChainCard(t *testing.T) {
 	_, cmd := key(next, "y")
 	cmd()
 	if a := f.acts(); len(a) != 1 || a[0].RecID != "stoker:quit" || a[0].Text != "s1" {
-		t.Fatalf("acts %+v", a)
-	}
-}
-
-// I3: a go a chain stoker's run waits for is a row of its card: y gives
-// it, with the stoker's id, and the tab's count holds it.
-func TestYGivesAChainStokersGo(t *testing.T) {
-	t.Skip("replaced by TestYOnAWaitingStepGivesItsGo (Task 12 step 1)")
-	st := tabFamily(screensState(t), true)
-	v := &st.Stokers[0].View
-	v.Run = append(v.Run, proto.StokerEntry{ID: "go@1/merge:%3", At: v.Since.Add(time.Hour), Session: "s3", Name: "hearth-api", Pane: "%3",
-		Rule: "go", State: "waits", Needs: "merge:%3", Want: "gh", Text: "hearth-api wants to run gh"})
-	m, f := loadedWith(t, 104, st)
-	before := m.stokerNeeds()
-	m.setTab(tabStoker)
-	if !strings.Contains(screen(m), "waits for you: hearth-api wants to run gh") {
-		t.Fatalf("no go on the chain's card:\n%s", screen(m))
-	}
-	m = selectStep(t, m, "s:s1/ggo@1/merge:%3")
-	_, cmd := key(m, "y")
-	if cmd == nil {
-		t.Fatalf("y sent nothing: %q", m.flash)
-	}
-	cmd()
-	if a := f.acts(); len(a) != 1 || a[0].RecID != "stoker:grant" || a[0].Text != "s1 go@1/merge:%3" {
-		t.Fatalf("acts %+v", a)
-	}
-	st.Stokers[0].View.Run = st.Stokers[0].View.Run[:len(st.Stokers[0].View.Run)-1]
-	without, _ := loadedWith(t, 104, st)
-	if before != without.stokerNeeds()+1 {
-		t.Fatalf("the tab counts %d with the go, %d without", before, without.stokerNeeds())
-	}
-}
-
-// N1: a chain stoker's plan step that waits for your go is a row of its
-// card: y gives it, with the stoker's id.
-func TestYGivesAChainStokersPlanStep(t *testing.T) {
-	t.Skip("replaced by TestYOnAWaitingStepGivesItsGo (Task 12 step 1)")
-	st := tabFamily(screensState(t), true)
-	v := &st.Stokers[0].View
-	v.Run = append(v.Run, proto.StokerEntry{ID: "2", At: v.Since.Add(time.Hour), Session: "ember-billing", Name: "ember-billing", Pane: "%4",
-		Rule: "order", Step: 2, State: "waits", Needs: "merge:%4", Text: "merge #4552"})
-	m, f := loadedWith(t, 104, st)
-	m.setTab(tabStoker)
-	m = selectStep(t, m, "s:s1/p2")
-	if line := actionLine(m); !strings.Contains(line, "y give the go") {
-		t.Fatalf("the key line does not offer the go: %q", line)
-	}
-	before := screen(m)
-	if shown, _ := key(m, "enter"); screen(shown) == before {
-		t.Fatalf("⏎ on the step shows nothing:\n%s", before)
-	}
-	_, cmd := key(m, "y")
-	if cmd == nil {
-		t.Fatalf("y sent nothing: %q", m.flash)
-	}
-	cmd()
-	if a := f.acts(); len(a) != 1 || a[0].RecID != "stoker:grant" || a[0].Text != "s1 2" {
 		t.Fatalf("acts %+v", a)
 	}
 }

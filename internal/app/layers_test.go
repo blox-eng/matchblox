@@ -164,24 +164,6 @@ func TestEnterOpensAHostAndEscComesBack(t *testing.T) {
 	}
 }
 
-func TestEscClearsTheSearchBeforeItLeaves(t *testing.T) {
-	t.Skip("replaced by TestEscClearsTheSearchThenTheChain (Task 12 step 1): esc on the board never leaves it; Hosts opens from Machine at step 6")
-	r := newShell(t, []string{"ws-1"}, nil, "ws-1", false)
-	next, _ := r.sh.Update(stateMsg(fixtureState()))
-	r.sh = next.(Shell)
-	r.key(t, "/")
-	r.key(t, "a")
-	r.key(t, "enter")
-	r.key(t, "esc")
-	if r.sh.layer != layerConsole {
-		t.Fatal("esc left the console while a search was on")
-	}
-	r.key(t, "esc")
-	if r.sh.layer != layerHosts {
-		t.Fatal("the second esc did not go back")
-	}
-}
-
 func TestAHostArgumentOpensItDirectly(t *testing.T) {
 	r := newShell(t, nil, nil, "ws-9", false)
 	if r.sh.layer != layerConsole || !slices.Equal(r.opened, []string{"ws-9"}) {

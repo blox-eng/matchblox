@@ -67,58 +67,6 @@ func TestPeerSessionsJoinTheList(t *testing.T) {
 	}
 }
 
-func TestAWaitOnAPeerSortsAboveHomeWork(t *testing.T) {
-	t.Skip("replaced by TestColumnOf (Task 12 step 1): a wait is in NEEDS YOU, whatever its host")
-	busy := func(s *sample.Session) { s.Busy, s.Status = true, "busy" }
-	home := hostState(sess(1, "api-auth", "%1", busy), sess(3, "web-ui", "%3", busy))
-	peer := hostState(sess(2, "train-loop", "%2", nil))
-	peer.Queue = []queue.Item{{Pane: "%2", Name: "train-loop", State: queue.StateQuestion, Since: peer.At.Add(-time.Minute)}}
-	m, _ := twoHosts(t, home, peer)
-	if got := order(m); got != "train-loop api-auth web-ui" {
-		t.Fatalf("order %q", got)
-	}
-	if w, l := lineOf(t, m, "WAITS FOR YOU · 1"), lineOf(t, m, "WORKING · 2"); w > l {
-		t.Fatalf("the peer's wait is under home's work:\n%s", screen(m))
-	}
-	if it, ok := m.waitOf(m.snap.Sessions[0]); !ok || it.Host != "ws-1" {
-		t.Fatalf("the wait is %+v, %v", it, ok)
-	}
-}
-
-// TestSamePaneOnTwoHostsAreTwoRows: pane ids and PIDs repeat across hosts;
-// the selection is (host, PID) and stays on its host.
-func TestSamePaneOnTwoHostsAreTwoRows(t *testing.T) {
-	t.Skip("replaced by TestThePeekCountsAndNamesTheChildRuns (Task 12 step 1, ruling 35)")
-	home := hostState(sess(4242, "home-12", "%12", nil))
-	m, _ := twoHosts(t, home, hostState(sess(4242, "peer-12", "%12", nil)))
-	if got := order(m); got != "home-12 peer-12" {
-		t.Fatalf("order %q", got)
-	}
-	var next tea.Model = m
-	for range 2 {
-		if s, _ := next.(Model).selectedSession(); s.Name == "peer-12" {
-			break
-		}
-		next, _ = key(next, "down")
-	}
-	if s, _ := next.(Model).selectedSession(); s.Name != "peer-12" || s.Host != "ws-1" {
-		t.Fatalf("selected %s on %q", s.Name, s.Host)
-	}
-	next, _ = next.Update(stateMsg(home))
-	if s, _ := next.(Model).selectedSession(); s.Name != "peer-12" {
-		t.Fatalf("a new home state moved the selection to %s", s.Name)
-	}
-	kids := home
-	kid := kids.Sessions[0]
-	kid.PID, kid.Name, kid.Parent = 5000, "helper", &sample.ProcRef{PID: 4242, Start: kid.Start}
-	kids.Children = []sample.Session{kid}
-	next, _ = next.Update(stateMsg(kids))
-	out := ansi.Strip(next.(Model).render())
-	if n := strings.Count(out, "helper"); n != 1 {
-		t.Fatalf("home's child shows %d times:\n%s", n, out)
-	}
-}
-
 // TestHomeShipsAndFocusStayHome: the ships and the focus are the home
 // host's; a peer's session in the same pane is not theirs.
 func TestHomeShipsAndFocusStayHome(t *testing.T) {

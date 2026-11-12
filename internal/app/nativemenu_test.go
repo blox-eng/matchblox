@@ -3,7 +3,6 @@ package app
 import (
 	"math"
 	"os"
-	"slices"
 	"strings"
 	"testing"
 
@@ -33,42 +32,6 @@ func menuFrom(t *testing.T, text string, w int) []string {
 		t.Fatalf("no question in %q", text)
 	}
 	return fitScreen(text[at:], w, math.MaxInt)
-}
-
-// TestAQuestionDrawsTheAgentsOwnMenu: at each survey size, a live view at a
-// question draws the agent's own menu and no card. One column has no view:
-// the list's opened row shows the question, once, and the menu is answered
-// in the agent's own pane (#351).
-func TestAQuestionDrawsTheAgentsOwnMenu(t *testing.T) {
-	t.Skip("replaced by TestCardLines (Task 12 step 1): the chosen card draws the question's options")
-	for _, size := range slices.Concat(surveyGrids, [][2]int{{44, 31}, {132, 32}, {200, 50}}) {
-		w, h := size[0], size[1]
-		m := flintAt(t, w, h, "enter")
-		out := screen(m)
-		if m.viewFull() {
-			t.Errorf("%dx%d: a view takes the screen outside the demo", w, h)
-		}
-		if _, right := m.panes(w); right == 0 {
-			if n := strings.Count(out, "? Should a refresh"); n != 1 {
-				t.Errorf("%dx%d: the opened row shows the question %d times:\n%s", w, h, n, out)
-			}
-			continue
-		}
-		if h-3 < menuLeast {
-			continue
-		}
-		if strings.Contains(out, "flint-auth asks") || strings.Contains(out, "Type an answer") || strings.Contains(out, "╰─ ⏎") {
-			t.Errorf("%dx%d: a card is drawn:\n%s", w, h, out)
-		}
-		for _, want := range []string{"Should a refresh also rotate the token?", "❯ 1. Rotate it", "2. Rotate, keep the old one a minute", "3. Type something.", "Enter to select"} {
-			if !strings.Contains(out, want) {
-				t.Errorf("%dx%d: the agent's menu lacks %q:\n%s", w, h, want, out)
-			}
-		}
-		if n := strings.Count(out, "Should a refresh also rotate the token?"); n != 1 {
-			t.Errorf("%dx%d: the question shows %d times:\n%s", w, h, n, out)
-		}
-	}
 }
 
 // TestAQuestionResizesNoAgent: no card takes rows from the view, and a

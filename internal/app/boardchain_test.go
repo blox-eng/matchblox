@@ -384,10 +384,6 @@ func TestOnAPhoneTheStokerIsAPage(t *testing.T) {
 	}
 }
 
-func TestACardSaysItsChainMates(t *testing.T) {
-	t.Skip("dropped (Task 12 step 6d, ruling 33): a card shows no chain mate's inbox, repo or also in; the peek shows the inbox")
-}
-
 // itemLabels are the words of a menu's lines.
 func itemLabels(items []menuItem) []string {
 	var out []string

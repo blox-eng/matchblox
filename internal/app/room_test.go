@@ -60,14 +60,6 @@ func twoAsk(st *proto.State) {
 	}
 }
 
-func TestRoomRowsLeadWithTheOldestNeed(t *testing.T) {
-	t.Skip("replaced by TestBoardColumnOrder (Task 12 step 6d): the need row goes; NEEDS YOU, the oldest wait first, is the need")
-}
-
-func TestRoomWithNoNeedHasNoNeedRow(t *testing.T) {
-	t.Skip("replaced by TestEmptyNeedsYouSaysSo (Task 12 step 6d): the need row goes")
-}
-
 func TestRoomCardShowsTheActiveStepAndOneEachSide(t *testing.T) {
 	v := runningPlan()
 	for n := 6; n <= 8; n++ {
@@ -139,26 +131,6 @@ func TestRoomTalkNamesARunningStoker(t *testing.T) {
 	}
 }
 
-func TestOpenRoomPutsTheCursorOnTheNeedElseTheTalkLine(t *testing.T) {
-	t.Skip("replaced by TestARoomOpensOnTheNeedElseTheTalkLine (Task 12 step 1)")
-}
-
-func TestMatchRowCarriesMarkRepoAndInbox(t *testing.T) {
-	t.Skip("dropped (Task 12 step 6d, ruling 33): a card shows no chain mate's inbox or repo; the peek shows the inbox")
-}
-
-func TestMatchRowNamesTheRepoWhenTheTeamSpansTwo(t *testing.T) {
-	t.Skip("dropped (Task 12 step 6d, ruling 33): a card names no repo of its chain")
-}
-
-func TestAnUnseenMateStaysFaint(t *testing.T) {
-	t.Skip("dropped (Task 12 step 6d): the room's match rows go; a mate with no session has no card")
-}
-
-func TestAMatchInTwoTeamsSaysAlsoIn(t *testing.T) {
-	t.Skip("dropped (Task 12 step 6d, ruling 33): a card shows no also in; the card is spec-fixed")
-}
-
 // TestATeamWithOneMatchLeftStillHasItsRoom: chainIx drops a team with one
 // present match; its room still shows it, a card on the narrowed board
 // (eng review correction 5).
@@ -176,14 +148,4 @@ func TestATeamWithOneMatchLeftStillHasItsRoom(t *testing.T) {
 	if !slices.Contains(m.roomKeys(), k) {
 		t.Fatalf("rooms %v lack %v", m.roomKeys(), k)
 	}
-}
-
-// TestRoomGitCountsAMergedWorktreeWithNoSession: a worktree of the team's
-// repo counts, though no session works in it (eng review correction 4).
-func TestRoomGitCountsAMergedWorktreeWithNoSession(t *testing.T) {
-	t.Skip("dropped (Task 12 step 6d): the room's GIT row goes; worktrees are Machine's git (TestMachineOpensGitHistoryAndPanes)")
-}
-
-func TestRoomWithNoShipsOrWorktreesSaysSo(t *testing.T) {
-	t.Skip("dropped (Task 12 step 6d): the room's SHIPS and GIT rows go; ships are on the cards (TestCardLines)")
 }

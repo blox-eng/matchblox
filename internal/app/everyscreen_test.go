@@ -98,80 +98,6 @@ func TestEveryGoldenShowsTheAgentsWholeMenu(t *testing.T) {
 	}
 }
 
-// TestSessionsSplitsFortySixty: where Sessions splits, the list takes 40%
-// of the width (38 to 78 columns) and the chat the rest, full height, with
-// usage and the machine under the list and no dock at the bottom, upright
-// or not. The other tabs keep their splits.
-func TestSessionsSplitsFortySixty(t *testing.T) {
-	t.Skip("replaced by TestBoardWidths (Task 12 step 1)")
-	for _, c := range []struct{ w, h, list int }{{95, 65, 38}, {86, 30, 38}, {132, 32, 52}, {200, 50, 78}, {110, 65, 44}} {
-		m := fullView(flintAt(t, c.w, c.h))
-		sc := m.draw(c.w)
-		if list, right := m.panes(c.w); list != c.list || right != c.w-c.list-1 {
-			t.Errorf("%dx%d: list %d, chat %d; want list %d", c.w, c.h, list, right, c.list)
-			continue
-		}
-		for _, word := range []string{"USAGE", "MACHINE"} {
-			if word == "MACHINE" && !strings.Contains(screen(m), word) {
-				continue // folded for the list
-			}
-			if y := lineOf(t, m, word); !strings.Contains(ansi.Strip(sc.lines[y])[:c.list], word) {
-				t.Errorf("%dx%d: %s is not under the list:\n%s", c.w, c.h, word, screen(m))
-			}
-		}
-	}
-	m := fullView(flintAt(t, 86, 30, "2"))
-	if list, _ := m.panes(86); list != (86-1)/2 {
-		t.Errorf("Ships at 86: list %d, want the middle", list)
-	}
-}
-
-// TestTheListOutranksTheMachine: under the list, the machine folds before
-// the list is cut; usage is never cut, and the list is cut only when
-// usage alone does not leave it room.
-func TestTheListOutranksTheMachine(t *testing.T) {
-	t.Skip("dropped (Task 12 step 1): usage and the machine under the list go with the dock (step 2, intended change)")
-	m := threeHosts(t, screensState(t), 86, 40, "fine")
-	out := strings.Join(frameOf(m), "\n")
-	if !strings.Contains(out, "USAGE") || strings.Contains(out, "MACHINE") || strings.Contains(out, " more") {
-		t.Fatalf("86x40: want the whole list and usage, the machine folded:\n%s", out)
-	}
-	short := threeHosts(t, screensState(t), 86, 30, "fine")
-	out = strings.Join(frameOf(short), "\n")
-	if !strings.Contains(out, "USAGE") || !strings.Contains(out, "OpenAI Plus") || strings.Contains(out, "MACHINE") || !strings.Contains(out, " more") {
-		t.Fatalf("86x30: want usage whole over the cut list:\n%s", out)
-	}
-	night := sized(t, 132, 23, stokerState(runningNight(fixtureState().At)))
-	if out := screen(night); !strings.Contains(out, "STOKER") || strings.Contains(out, "MACHINE") {
-		t.Fatalf("132x23 at night: want the stoker in charge over the cut list, the machine folded:\n%s", out)
-	}
-}
-
-// TestListOnlyFillsItsFreeRowsWithUsage: in list only the list comes first
-// and is never cut for the stats; the rows it leaves free take usage, then
-// the machine, under a hairline, each whole at its fewest lines.
-func TestListOnlyFillsItsFreeRowsWithUsage(t *testing.T) {
-	t.Skip("dropped (Task 12 step 1): list only goes (step 3, intended change)")
-}
-
-// TestAChatBesideTheListHasRoomForAMenu: the split counts the chat's title
-// and its strip as they are drawn (the strip takes two lines on a chat of 44
-// to 59 columns), so a chat beside the list always has menuLeast rows.
-func TestAChatBesideTheListHasRoomForAMenu(t *testing.T) {
-	t.Skip("replaced by TestTheLiveViewBesideTheBoardHasRoomForAMenu (Task 12 step 1)")
-	for _, w := range []int{83, 84, 90, 95, 96, 100, 104, 110, 132} {
-		for h := 8; h <= 34; h++ {
-			m := fullView(flintAt(t, w, h))
-			if _, right := m.panes(w); right == 0 {
-				continue
-			}
-			if _, rows := viewRoom(m); rows < menuLeast {
-				t.Fatalf("%dx%d: the chat beside the list has %d rows:\n%s", w, h, rows, screen(m))
-			}
-		}
-	}
-}
-
 // TestTheSplitHoldsAsTheCursorMoves: Sessions splits by menuLeast and the
 // tallest strip of the sessions, not by the selected one's wait: moving the
 // cursor never flips the screen between one column and the split.
@@ -207,38 +133,6 @@ func TestUsageUnderANarrowListIsNeverCutMidWord(t *testing.T) {
 			case in && strings.Contains(l, "…"):
 				t.Errorf("%v: a usage line is cut: %q", size, l)
 			}
-		}
-	}
-}
-
-// TestUsageOfThreeHostsIsNeverCutSideways: under a narrow list each
-// window's hosts that do not fit after it go whole onto the next lines:
-// every host's percent shows, and no usage line ends cut.
-func TestUsageOfThreeHostsIsNeverCutSideways(t *testing.T) {
-	t.Skip("replaced by TestShortUsageLineKeepsItsWindow (Task 12 step 1)")
-	for _, c := range []struct {
-		w, h int
-		gpu  string
-	}{{132, 32, "fine"}, {86, 30, "blocked"}, {86, 40, "fine"}} {
-		m := threeHosts(t, screensState(t), c.w, c.h, c.gpu)
-		sc := m.draw(c.w)
-		left, _ := sides(sc, c.w)
-		in, usage := false, ""
-		for _, l := range left {
-			switch {
-			case strings.HasPrefix(l, " USAGE"):
-				in = true
-			case strings.HasPrefix(l, "───"):
-				in = false
-			case in:
-				usage += l + "\n"
-				if strings.Contains(l, "…") {
-					t.Errorf("%dx%d: a usage line is cut: %q", c.w, c.h, l)
-				}
-			}
-		}
-		if !strings.Contains(usage, "this machine 84%") {
-			t.Errorf("%dx%d: this machine's percent is gone:\n%s", c.w, c.h, usage)
 		}
 	}
 }

@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 	"testing"
 	"time"
 
@@ -37,57 +36,6 @@ func fullView(m Model) Model {
 
 func keyText(sc drawn) string { return ansi.Strip(sc.lines[sc.keysAt]) }
 
-// opensInPlace: the selected row has more than one line of the list.
-func opensInPlace(m Model, sc drawn) bool {
-	n := 0
-	for _, r := range sc.rows {
-		if r == m.rowIndex() {
-			n++
-		}
-	}
-	return n > 1
-}
-
-// TestVFoldsThePaneAndTheDock: on a desk, v gives the list the whole
-// screen, folds the chat and the stats under the list, and opens the
-// selected row in place; the key line says so, and a tap on its word
-// flips it back.
-func TestVFoldsThePaneAndTheDock(t *testing.T) {
-	t.Skip("dropped (Task 12 step 1): list only goes (step 3, intended change: v is the board's density)")
-}
-
-// TestVFlipsOnlyTheCurrentShape: v on a desk leaves the phone's flag.
-func TestVFlipsOnlyTheCurrentShape(t *testing.T) {
-	t.Skip("replaced by TestBoardPrefsAreKeptForEachShape (Task 12 step 1)")
-}
-
-// TestListOnlyIsKeptAcrossARestart: the next console opens as the last
-// one was left, from view.json.
-func TestListOnlyIsKeptAcrossARestart(t *testing.T) {
-	t.Skip("replaced by TestBoardPrefsAreKeptForEachShape (Task 12 step 1)")
-}
-
-// TestPhoneStartsListOnly: an upright screen wide enough to split opens
-// with no pane and no dock's switch while no view.json says otherwise (R9).
-func TestPhoneStartsListOnly(t *testing.T) {
-	t.Skip("replaced by TestAPhoneStartsVerboseInNeedsYouOnly (Task 12 step 1)")
-	m := demoIn(t, t.TempDir(), 96, 60)
-	if sc := m.draw(96); sc.listW != 96 || strings.Contains(screen(m), "machine ›") {
-		t.Fatalf("list %d:\n%s", sc.listW, screen(m))
-	}
-}
-
-// TestWaitsStillShowInListOnly: the header keeps who waits.
-func TestWaitsStillShowInListOnly(t *testing.T) {
-	t.Skip("replaced by TestTheCountSeesThroughEveryFilter (Task 12 step 1)")
-	m := demoIn(t, "", 92, 40)
-	full := ansi.Strip(m.draw(92).lines[0])
-	next, _ := key(m, "v")
-	if head := ansi.Strip(next.(Model).draw(92).lines[0]); !strings.Contains(head, "● 6 wait for you") || head != full {
-		t.Fatalf("the header lost who waits: %q, was %q", head, full)
-	}
-}
-
 // TestVIsFree: v is the board's density alone; the tabs bind no v.
 func TestVIsFree(t *testing.T) {
 	main, _ := layersOf(defaultKeys())
@@ -98,37 +46,6 @@ func TestVIsFree(t *testing.T) {
 		t.Fatalf("v is not the board's density: %q", defaultKeys().board.Density.Keys())
 	}
 	TestKeymapsHaveNoCollisions(t)
-}
-
-// TestTheSwitchGivesWayOnTheDesk: on the full view list only v is the
-// first spare key to go, so a desk key line keeps every key it had, and
-// shows the switch where room is left.
-func TestTheSwitchGivesWayOnTheDesk(t *testing.T) {
-	t.Skip("replaced by TestTheKeyLineDropsWholeKeysFromTheRight (Task 12 step 1)")
-	m := loaded(t, 100)
-	if k := keyText(m.draw(100)); strings.Contains(k, "list only v") {
-		t.Fatalf("the switch took a key's place: %q", k)
-	}
-	m.tab = tabPanes
-	if k := keyText(m.draw(100)); !strings.Contains(k, "/ find") || !strings.Contains(k, "q quit") || !strings.Contains(k, "list only v") {
-		t.Fatalf("a line with room has no switch, or lost a key: %q", k)
-	}
-	desk := demoIn(t, "", 132, 32)
-	if k := keyText(desk.draw(132)); !strings.Contains(k, "A switch") || !strings.Contains(k, "/ find") {
-		t.Fatalf("the switch took a key's place at 132: %q", k)
-	}
-}
-
-// TestFullViewStaysWhenRoomIsShort: in list only the way back stays; the
-// list only mark goes first, then the age, before a spare key.
-func TestFullViewStaysWhenRoomIsShort(t *testing.T) {
-	t.Skip("replaced by TestTheKeyLineDropsWholeKeysFromTheRight (Task 12 step 3): list only goes; short of room the spare keys go first")
-}
-
-// TestTheMarkKeepsItsGap: the age and the list only mark stand two
-// columns clear of the keys, so they never read as one phrase.
-func TestTheMarkKeepsItsGap(t *testing.T) {
-	t.Skip("dropped (Task 12 step 3): list only goes, and its mark (intended change: v is the board's density)")
 }
 
 // manyRows is one host with n sessions, list only, 200×60.
@@ -191,22 +108,6 @@ func TestFrameCostWithChains(t *testing.T) {
 	plain, chained := frame(false), frame(true)
 	if chained > 20*plain+100*time.Millisecond {
 		t.Fatalf("a frame with chains took %v, one without %v", chained, plain)
-	}
-}
-
-// TestOneColumnOpensTheRowInPlace: wherever Sessions is one column with no
-// right side (a landscape screen of 60 to 82 columns, 96x8, 106x10), the
-// selected row opens in place, as on a phone: its words show before Enter.
-func TestOneColumnOpensTheRowInPlace(t *testing.T) {
-	t.Skip("replaced by TestBoardKeepsTheChosenCardWhole (Task 12 step 1)")
-	for _, size := range [][2]int{{80, 30}, {66, 24}, {96, 8}, {106, 10}} {
-		m := fullView(flintAt(t, size[0], size[1]))
-		if _, right := m.panes(size[0]); right != 0 {
-			t.Fatalf("%v splits", size)
-		}
-		if sc := m.draw(size[0]); !opensInPlace(m, sc) {
-			t.Errorf("%v: the selected row does not open:\n%s", size, screen(m))
-		}
 	}
 }
 

@@ -262,18 +262,6 @@ func TestTheQueueComesFirstWhenSomeoneWaits(t *testing.T) {
 	}
 }
 
-func TestAFoldedDoorPassesToTheNext(t *testing.T) {
-	t.Skip("replaced by TestTheNamedDoorResetsWhenTheDoorsChange (Task 12 step 1): the doors line names its first door again when the doors change")
-	m, _ := doorsBoard(t, 100, doorState(hooksDoor, wayBack, guideDoor))
-	next, _ := key(m, "right")
-	done := wayBack
-	done.Done = true
-	next, _ = next.Update(stateMsg(doorState(hooksDoor, done, guideDoor)))
-	if d, ok := next.(Model).selectedDoor(); !ok || d.ID != doors.Guide {
-		t.Fatalf("selected %+v, want the guide after the way back folded", d)
-	}
-}
-
 func longDoor() doors.Door {
 	d := hooksDoor
 	var b strings.Builder
@@ -336,17 +324,6 @@ func TestTheWhyIsReadInFull(t *testing.T) {
 	next, _ = key(next, "right")
 	if out := strings.Join(strings.Fields(ansi.Strip(next.(Model).render())), " "); !strings.Contains(out, "uses your tokens.") {
 		t.Fatalf("the why is cut:\n%s", out)
-	}
-}
-
-func TestOneBlankLineUnderTheDoors(t *testing.T) {
-	t.Skip("replaced by TestTheBoardReachesDoorsGhostAndRecommendations (Task 12 step 1): the doors are one line over the columns")
-	m, _ := loadedWith(t, 100, doorState(hooksDoor))
-	lines := strings.Split(ansi.Strip(m.render()), "\n")
-	for i := lineOf(t, m, "SET UP"); i < lineOf(t, m, "RECOMMENDATIONS"); i++ {
-		if strings.TrimSpace(lines[i]) == "" && strings.TrimSpace(lines[i+1]) == "" {
-			t.Fatalf("two blank lines at %d:\n%s", i, strings.Join(lines, "\n"))
-		}
 	}
 }
 

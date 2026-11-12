@@ -41,34 +41,6 @@ func emptyState(t *testing.T) proto.State {
 	return st
 }
 
-// With sessions, the ghost row is the last of them, and the cursor still
-// starts on the first session.
-func TestGhostRowIsBelowTheSessions(t *testing.T) {
-	t.Skip("replaced by TestTheBoardReachesDoorsGhostAndRecommendations (Task 12 step 1): the ghost row is under the columns; the detail pane goes")
-	m, _ := loadedWith(t, 100, whereState(t))
-	if _, ok := m.selectedSession(); !ok {
-		t.Fatalf("the cursor is not on a session:\n%s", screen(m))
-	}
-	s := screen(m)
-	at := strings.Index(s, "+ start a new session here")
-	if at < 0 || strings.Count(s, "+ start") != 1 {
-		t.Fatalf("one ghost row:\n%s", s)
-	}
-	for _, ss := range m.snap.Sessions {
-		if i := strings.Index(s, ss.Name); i < 0 || i > at {
-			t.Fatalf("%s is not above the ghost row:\n%s", ss.Name, s)
-		}
-	}
-	next := toGhost(t, m)
-	if g, _ := next.(Model).selectedGhost(); g.repo.path != "/dev/matchblox" {
-		t.Fatalf("here is %+v, not the most recent repo", g)
-	}
-	// One row has the cursor, and the detail is the ghost's.
-	if s := screen(next); strings.Count(s, "▌") != 1 || !strings.Contains(s, "start a new session in ~/dev/matchblox") && !strings.Contains(s, "start a new session in /dev/matchblox") {
-		t.Fatalf("not one selection, or no ghost detail:\n%s", s)
-	}
-}
-
 // ⏎ on the ghost row opens N on its folder, the cursor on agent: nothing
 // starts without the form.
 func TestEnterOnGhostOpensNOnItsFolder(t *testing.T) {
@@ -86,33 +58,6 @@ func TestEnterOnGhostOpensNOnItsFolder(t *testing.T) {
 	}
 	if fm.autoName() != "matchblox" {
 		t.Fatalf("name %q", fm.autoName())
-	}
-}
-
-// With no session the ghost row comes first and has the cursor, and two
-// quick starts follow for the next most recent repos: ⏎ alone opens N.
-func TestEmptySessionsLeadsWithTheGhostRows(t *testing.T) {
-	t.Skip("replaced by TestTheBoardsStates (Task 12 step 1): with no session the board leads with the ghost rows")
-	m, _ := loadedWith(t, 100, emptyState(t))
-	gs := m.ghosts()
-	if len(gs) != 3 || gs[0].repo.path != "/dev/matchblox" || gs[1].repo.path != "/src/r10" || gs[2].repo.path != "/src/r48" {
-		t.Fatalf("ghosts %+v", gs)
-	}
-	s := screen(m)
-	for _, want := range []string{"+ start a new session here", "+ start in r10", "+ start in r48"} {
-		if !strings.Contains(s, want) {
-			t.Fatalf("no %q:\n%s", want, s)
-		}
-	}
-	next, _ := key(m, "enter")
-	if fm := next.(Model).form; fm == nil || fm.where != "/dev/matchblox" || fm.at != fieldAgent {
-		t.Fatalf("form %+v", fm)
-	}
-	// ↓ goes to a quick start.
-	next, _ = key(m, "down")
-	next, _ = key(next, "enter")
-	if fm := next.(Model).form; fm == nil || fm.where != "/src/r10" {
-		t.Fatalf("form %+v", fm)
 	}
 }
 

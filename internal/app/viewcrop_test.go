@@ -3,13 +3,10 @@ package app
 import (
 	"strings"
 	"testing"
-	"time"
 
-	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/proto"
-	"github.com/blox-eng/matchblox/internal/sample"
 )
 
 // A full-screen agent's screen is cut at the view's width, with a › at
@@ -53,33 +50,6 @@ func TestATextAgentWrapsToTheView(t *testing.T) {
 		if ansi.StringWidth(l) > 20 {
 			t.Fatalf("line %q is wider than the view", l)
 		}
-	}
-}
-
-// Browsing Sessions watches each row it rests on once: no second watch of
-// the same row comes later with the view's size, as one did when the view
-// sized the agent's window (#351).
-func TestBrowsingWatchesWithNoSize(t *testing.T) {
-	t.Skip("replaced by TestTheLiveViewFollowsTheChosenCard (Task 12 step 1): the board watches only beside its live view")
-	st := fixtureState()
-	st.Sessions = []sample.Session{{PID: 1, Pane: "%1", Name: "a"}, {PID: 2, Pane: "%2", Name: "b"}, {PID: 3, Pane: "%3", Name: "c"}}
-	f := newFake()
-	next, _ := New(Options{NoMotion: true, Conn: f, Now: func() time.Time { return demoAt }}).Update(tea.WindowSizeMsg{Width: 100, Height: 30})
-	next, cmd := next.Update(stateMsg(st))
-	drain(cmd)
-	for range 2 {
-		next, cmd = key(next, "down")
-		drain(cmd)
-	}
-	var watched []string
-	for _, a := range f.allActs() {
-		if p, ok := strings.CutPrefix(a.RecID, proto.WatchPrefix); ok {
-			watched = append(watched, p)
-		}
-	}
-	sel, _ := next.(Model).selected()
-	if len(watched) != 3 || watched[2] != sel.Pane || watched[0] == watched[1] || watched[1] == watched[2] {
-		t.Fatalf("watched %q, want each of the 3 rows once, %s last", watched, sel.Pane)
 	}
 }
 

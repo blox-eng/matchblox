@@ -9,7 +9,6 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/blox-eng/matchblox/internal/doors"
 	"github.com/blox-eng/matchblox/internal/proto"
 )
 
@@ -119,20 +118,6 @@ func TestOpeningTheTabFoldsStoked(t *testing.T) {
 	m, _ = loadedWith(t, 100, stokerState(seen))
 	if out := ansi.Strip(m.render()); strings.Contains(out, "TODAY") {
 		t.Fatalf("a seen run still shows:\n%s", out)
-	}
-}
-
-func TestNightDoorStartsTheNight(t *testing.T) {
-	t.Skip("replaced by TestTheBoardReachesDoorsGhostAndRecommendations (Task 12 step 1)")
-	night := doors.Door{ID: doors.Night, Title: "Try a night", Why: "Going to sleep? n keeps your sessions lit until morning."}
-	m, f := loadedWith(t, 100, doorState(night))
-	if out := ansi.Strip(m.render()); !strings.Contains(out, "Going to sleep?") {
-		t.Fatalf("no night door:\n%s", out)
-	}
-	next, _ := key(m, "enter")
-	sendKey(next, "enter")
-	if acts := f.acts(); len(acts) != 1 || acts[0].RecID != "stoker:night" {
-		t.Fatalf("acts %+v", acts)
 	}
 }
 

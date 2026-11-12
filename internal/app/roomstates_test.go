@@ -62,7 +62,3 @@ func TestRoomStateTheChainHasNoMatches(t *testing.T) {
 		t.Fatalf("rows:\n%s", rowsText(m.roomRows(k)))
 	}
 }
-
-func TestRoomStateReadingBeforeTheFirstScan(t *testing.T) {
-	t.Skip("replaced by TestTheBoardsStates (Task 12 step 6d): the room's SHIPS and GIT reading… go; the board's reading state holds")
-}

@@ -12,7 +12,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/accounts"
 	"github.com/blox-eng/matchblox/internal/proto"
@@ -416,27 +415,6 @@ func TestSwitchEscSendsNothing(t *testing.T) {
 	next, _ = key(next, "esc")
 	if nm := next.(Model); nm.form != nil || nm.pending != nil || len(f.acts()) != 0 {
 		t.Fatal("esc sent or kept the form")
-	}
-}
-
-// A phone has no A key to hand: the opened row carries A switch, and a
-// tap on it opens the form. Beside the list a desk shows the chat.
-func TestATapOnSwitchOpensTheForm(t *testing.T) {
-	t.Skip("replaced by TestNRAOpenTheirFormOnTheChosenCard (Task 12 step 1): A opens its form on the chosen card; the phone's opened row goes")
-	const w = 50
-	st := lifeState()
-	st.Queue = nil
-	m, _ := loadedWith(t, w, st)
-	next := selectPane(t, m, "%1")
-	out := strings.Split(ansi.Strip(next.(Model).render()), "\n")
-	y := slices.IndexFunc(out[:len(out)-1], func(l string) bool { return strings.Contains(l, "A switch") })
-	if y < 0 {
-		t.Fatalf("%d columns: no A switch above the key line:\n%s", w, strings.Join(out, "\n"))
-	}
-	x := len([]rune(out[y][:strings.Index(out[y], "A switch")]))
-	tapped, _ := tap(next, x, y)
-	if fm := tapped.(Model).form; fm == nil || !fm.swap {
-		t.Fatalf("%d columns: a tap on A switch opened %+v", w, fm)
 	}
 }
 

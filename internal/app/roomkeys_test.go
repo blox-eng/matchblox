@@ -64,25 +64,6 @@ func aGo(v proto.StokerView, needs, want string) proto.StokerView {
 	return v
 }
 
-func TestEnterActsOnTheSelectedRow(t *testing.T) {
-	t.Skip("replaced by TestTheRoomsCursorWalksCardColumnsAndTalk (Task 12 step 1)")
-}
-
-// TestEveryGoAsksInTheConsentBox: each go the stoker knows (merge,
-// release, deploy, kill) acts outside the session, so y on the need line
-// asks for a typed y first.
-func TestEveryGoAsksInTheConsentBox(t *testing.T) {
-	t.Skip("replaced by TestYOnAWaitingStepGivesItsGo (Task 12 step 1)")
-}
-
-func TestTheRoomShowsAGoTheGuardHolds(t *testing.T) {
-	t.Skip("replaced by TestATapOnTheGoArmsItAndASecondGivesIt (Task 12 step 1)")
-}
-
-func TestAGivenGuardGoLeavesTheRoom(t *testing.T) {
-	t.Skip("replaced by TestColumnOf (Task 12 step 6d): the need row goes; a go that was given waits no more (goWaitsOn)")
-}
-
 func TestYOnAWaitingStepGivesItsGo(t *testing.T) {
 	st := headState(t, aGo(runningPlan(), "merge:#4556", ""), true)
 	st.Queue = nil
@@ -285,12 +266,6 @@ func TestASecondFlipKeepsTheRoom(t *testing.T) {
 	}
 }
 
-// TestAFlipLandsTyping: ⌥s from a pane lands on the talk line, typing,
-// when no need waits; on the need line when one does.
-func TestAFlipLandsTyping(t *testing.T) {
-	t.Skip("replaced by TestARoomOpensOnTheNeedElseTheTalkLine (Task 12 step 1)")
-}
-
 // TestTalkToAHostThatIsNotConnectedKeepsTheWords: nothing goes, the line
 // says why, and the words stay.
 func TestTalkToAHostThatIsNotConnectedKeepsTheWords(t *testing.T) {
@@ -333,22 +308,4 @@ func TestAStartThatFailsSaysWhyOnTheCard(t *testing.T) {
 		t.Fatalf("after the refusal: %+v", m.room)
 	}
 	roomRowOf(t, m.roomRows(m.room.k), roomCard, "no agent on the PATH")
-}
-
-// TestTheLiveViewFollowsTheRoomCursor: on a desk the right side shows the
-// match under the cursor, whichever was selected before the room opened.
-func TestTheLiveViewFollowsTheRoomCursor(t *testing.T) {
-	t.Skip("replaced by TestTheLiveViewFollowsTheChosenCard (Task 12 step 1)")
-}
-
-// TestTheRoomCursorStaysOnItsRow: a need line that comes on top leaves the
-// cursor on the match it was on.
-func TestTheRoomCursorStaysOnItsRow(t *testing.T) {
-	t.Skip("replaced by TestTheChoiceFollowsItsMatch (Task 12 step 6d): the room's match rows go; the choice follows its match (R3.1)")
-}
-
-// TestTheRoomScrollsToTheCursor: a room taller than the screen keeps the
-// cursor's row on it.
-func TestTheRoomScrollsToTheCursor(t *testing.T) {
-	t.Skip("replaced by TestBoardKeepsTheChosenCardWhole (Task 12 step 6d): roomView goes with the room's own list")
 }
