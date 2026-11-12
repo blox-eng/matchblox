@@ -2,7 +2,6 @@ package app
 
 import (
 	"errors"
-	"image/color"
 	"strings"
 	"testing"
 	"time"
@@ -65,37 +64,6 @@ func TestTheHeaderHasNoLimits(t *testing.T) {
 // stacked under the list on Sessions, side by side in the dock of Ships.
 func TestTheDockSaysUsageAndTheMachine(t *testing.T) {
 	t.Skip("dropped (Task 12 step 1): the dock goes (step 2, intended change)")
-	drawer, _ := loadedWith(t, 86, limitsState())
-	if drawer.setTab(tabShips); !strings.Contains(strings.Split(screen(drawer), "\n")[lineOf(t, drawer, "USAGE")], "MACHINE") {
-		t.Fatalf("Ships: usage and the machine are not side by side:\n%s", screen(drawer))
-	}
-	m, _ := loadedWith(t, 200, limitsState())
-	out := screen(m)
-	if lineOf(t, m, "USAGE") >= lineOf(t, m, "MACHINE") {
-		t.Fatalf("the machine is not under usage:\n%s", out)
-	}
-	until := limitsState().At.Add(26 * time.Hour).Local().Format("Mon")
-	for _, want := range []string{
-		"✻ Claude builder  5h   ▰▰▰▰▰▱▱▱ 62%", "wk   ▰▰▰▱▱▱▱▱ 41%", "lasts the week",
-		"✻ Claude work     not measured · open the door “Show your limits”",
-		"❋ OpenAI Plus     5h   ▰▱▱▱▱▱▱▱ 12%", "92%", "out " + until,
-		"cpu", "mem", "runs 3 claude",
-	} {
-		if !strings.Contains(out, want) {
-			t.Errorf("the dock lacks %q:\n%s", want, out)
-		}
-	}
-	fg := func(pct float64) color.Color { return m.useStyle(pct).GetForeground() }
-	if fg(59) != m.st.theme.Muted || fg(60) != m.st.theme.Warn || fg(90) != m.st.theme.Neg {
-		t.Error("a window's bar is warn from 60% and neg from 90%")
-	}
-	// Nothing measured says so.
-	none := queueState()
-	none.Limits = nil
-	plain, _ := loadedWith(t, 132, none)
-	if !strings.Contains(screen(plain), "no session runs under a plan") {
-		t.Fatalf("an empty usage panel:\n%s", screen(plain))
-	}
 }
 
 // TestAPhoneDockShowsOnePanel: on a phone the dock is usage, the machine

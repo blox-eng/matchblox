@@ -336,7 +336,6 @@ type Model struct {
 	gitSel     int
 	shipReport *proto.Ships
 	allShips   []proto.Ship // every host's ships, as merge joins them
-	shipSel    int
 	tab        int
 	pending    *action
 	flash      string
@@ -1504,8 +1503,6 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.move(1)
 	case bkey.Matches(k, mk.Open):
 		switch m.tab {
-		case tabShips:
-			return m.toDriver(), nil
 		case tabStoker:
 			if r, ok := m.stokerSelected(); ok && r.kind == rowAgent {
 				return m.openAgent()
@@ -1553,8 +1550,6 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	case bkey.Matches(k, mk.Into):
 		switch m.tab {
-		case tabShips:
-			return m.shipInto()
 		case tabStoker:
 			return m.stokerInto()
 		}

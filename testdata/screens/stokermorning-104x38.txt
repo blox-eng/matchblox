@@ -1,5 +1,5 @@
  ▰ matchblox                                                               ● 6 wait for you  stoker off
- sessions 7    ships 3    machine    git    history    panes    STOKER 2
+ sessions 7    machine    git    history    panes    STOKER 2
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
 
  NIGHT · 19:50 → 22:50                                                                      ended 22:50

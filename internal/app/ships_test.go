@@ -99,16 +99,6 @@ func TestASessionShowsItsShip(t *testing.T) {
 // A tap selects a ship; a tap on the selected one goes to its session.
 func TestATapOnAShipGoesToItsSession(t *testing.T) {
 	t.Skip("dropped (Task 12 step 1): the Ships tab goes (step 6a)")
-	m, _ := shipsAt(t, 44, screensState(t))
-	y := lineOf(t, m, "#4552")
-	next, _ := tap(m, 5, y)
-	if sh, _ := next.(Model).selectedShip(); sh.Number != 4552 || next.(Model).tab != tabShips {
-		t.Fatalf("the first tap: ship %d tab %d", sh.Number, next.(Model).tab)
-	}
-	next, _ = tap(next, 5, lineOf(t, next, "#4552"))
-	if s, ok := next.(Model).selectedSession(); next.(Model).tab != tabSessions || !ok || s.Name != "ember-billing" {
-		t.Fatalf("the second tap: tab %d session %q", next.(Model).tab, s.Name)
-	}
 }
 
 // withShips is st with more ships for the session named name, after the

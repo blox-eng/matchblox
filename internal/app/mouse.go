@@ -169,14 +169,6 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	if m.tab == tabShips {
-		// A tap on the selected ship goes to its session, as Enter does.
-		m.armed, m.flash = "", ""
-		if picked {
-			return m.toDriver(), nil
-		}
-		return m, nil
-	}
 	if host, pane := m.tapTarget(); pane != "" {
 		// On one column, as on a phone, a tap goes into the session's pane,
 		// as Enter does (#351, #352). Beside the view, a tap selects the

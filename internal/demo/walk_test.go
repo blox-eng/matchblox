@@ -206,49 +206,41 @@ func (w *walker) press(keys ...string) {
 	}
 }
 
-// tabWords are the tabs as the tab row names the open one, by digit.
-var tabWords = map[string]string{"1": "SESSIONS", "2": "SHIPS", "3": "MACHINE", "4": "GIT", "5": "HISTORY", "6": "PANES", "7": "STOKER"}
+// tabWords are the tabs in the tab row's order, each as the row names it
+// while it is open.
+var tabWords = []string{"SESSIONS", "MACHINE", "GIT", "HISTORY", "PANES", "STOKER"}
 
-// toTab opens tab n, "1" to "7": a tap on its name on the tab row, as a
+// toTab opens the tab want names: a tap on its name on the tab row, as a
 // person on a phone does, then one wait for the redraw. A digit on the board
 // answers its card (ruling 37). With no tab row on screen, or a box on top
 // that takes the tap, it walks by Tab.
-func (w *walker) toTab(n string) {
+func (w *walker) toTab(want string) {
 	w.t.Helper()
-	want := tabWords[n]
 	_, frame := w.term.wholeFrame()
 	open := w.openTab()
 	if open == want {
 		return
 	}
-	if x, ok := tabCell(frame, n); ok && open != "" {
+	if x, ok := tabCell(frame, want); ok && open != "" {
 		w.tap(x, 2)
 		if w.tabIs(want, 300*time.Millisecond) {
 			return
 		}
 	}
-	w.tabByKey(n) // no tab row, or a box on top that takes the tap
+	w.tabByKey(want) // no tab row, or a box on top that takes the tap
 }
 
-// tabCell is the column, counted from 1, of tab n's name on the tab row of
-// frame: the row's cells are the tabs in order, two spaces or more apart.
-func tabCell(frame, n string) (int, bool) {
+// tabCell is the column, counted from 1, of the tab want names on the tab
+// row of frame, in any case; a name shortened to its number is not found.
+func tabCell(frame, want string) (int, bool) {
 	lines := strings.Split(frame, "\n")
 	if len(lines) < 2 {
 		return 0, false
 	}
-	row, cell := lines[1], 0
-	for i := 0; i < len(row); {
-		if row[i] == ' ' {
-			i++
-			continue
-		}
-		cell++
-		if cell == int(n[0]-'0') {
+	row, name := strings.ToLower(lines[1]), strings.ToLower(want)
+	for i := 0; i+len(name) <= len(row); i++ {
+		if row[i:i+len(name)] == name && (i == 0 || row[i-1] == ' ') {
 			return i + 1, true
-		}
-		for i < len(row) && (row[i] != ' ' || i+1 >= len(row) || row[i+1] != ' ') {
-			i++
 		}
 	}
 	return 0, false
@@ -264,34 +256,24 @@ func (w *walker) tabIs(want string, d time.Duration) bool {
 	return false
 }
 
-// tabByKey opens tab n by the Tab key: Tab or Shift+Tab, the shorter way
-// round, one at a time, each after the redraw of the one before, so that the
-// walk never counts on a frame from before its key. The doors walk by it, so
-// the Tab key stays covered end to end.
-func (w *walker) tabByKey(n string) {
+// tabByKey opens the tab want names by the Tab key: Tab or Shift+Tab, the
+// shorter way round, one at a time, each after the redraw of the one
+// before, so that the walk never counts on a frame from before its key. The
+// doors walk by it, so the Tab key stays covered end to end.
+func (w *walker) tabByKey(want string) {
 	w.t.Helper()
-	want := tabWords[n]
+	to, n := slices.Index(tabWords, want), len(tabWords)
 	for i, open := 0, w.openTab(); open != want; i++ {
-		if i == len(tabWords) {
+		if i == n {
 			w.t.Fatalf("Tab never opened %s: the tab row names %q", want, open)
 		}
 		key := "tab"
-		if from := tabDigit(open); from != "" && (int(n[0])-int(from[0])+len(tabWords))%len(tabWords) > len(tabWords)/2 {
+		if from := slices.Index(tabWords, open); from >= 0 && (to-from+n)%n > n/2 {
 			key = "shift+tab"
 		}
 		w.press(key)
 		open = w.tabAfter(open)
 	}
-}
-
-// tabDigit is the digit of the tab the tab row names word, or "".
-func tabDigit(word string) string {
-	for d, wd := range tabWords {
-		if wd == word {
-			return d
-		}
-	}
-	return ""
 }
 
 // openTab is the word of the tab the tab row draws open, or "". A frame
@@ -515,30 +497,30 @@ func (w *walker) scrolls(where string) {
 // the order.
 func (w *walker) walkTheDoors() {
 	w.t.Helper()
-	w.tabByKey("1")
+	w.tabByKey("SESSIONS")
 	w.scrolls("in a chat")
 	w.reset()
 	w.clear()
-	w.tabByKey("6")
+	w.tabByKey("PANES")
 	w.refused("a pane", "enter")
-	w.tabByKey("4")
+	w.tabByKey("GIT")
 	w.refused("a worktree's shell", "enter")
-	w.tabByKey("3")
+	w.tabByKey("MACHINE")
 	w.press(slices.Repeat([]string{"j"}, 9)...)
 	w.refused("Pair a device", "enter")
 
-	w.tabByKey("1")
+	w.tabByKey("SESSIONS")
 	w.press("N")
 	w.send("a repository", "example/cloned")
 	w.refused("a clone", "enter")
-	w.tabByKey("1")
+	w.tabByKey("SESSIONS")
 	w.press("N")
 	w.send("a folder", "/work/flint-auth")
 	w.press("tab")
 	w.send("a branch", "a-branch")
 	w.refused("a new worktree", "enter")
 
-	w.tabByKey("1")
+	w.tabByKey("SESSIONS")
 	w.press("N")
 	w.send("a folder", "/work/flint-auth")
 	w.press("tab", "tab")
@@ -546,7 +528,7 @@ func (w *walker) walkTheDoors() {
 	w.takes("a new session", "new-session", "enter")
 	w.clear()
 
-	w.tabByKey("1")
+	w.tabByKey("SESSIONS")
 	w.press("/")
 	w.send("a search", "spark-docs")
 	w.press("enter", "r", "backspace")
@@ -555,24 +537,27 @@ func (w *walker) walkTheDoors() {
 	w.clear()
 	w.press("esc", "esc")
 
-	w.tabByKey("2")
-	w.press("k", "k", "k", "k", "j")
-	w.takes("a merge", "gh pr merge", "x", "y")
+	w.tabByKey("SESSIONS") // the ship is on its card: #214 waits for its merge
+	w.press("/")
+	w.send("a search", "ember-billing")
+	w.press("enter")
+	w.takes("a merge", "gh pr merge", "p", "y")
 	w.clear()
+	w.press("esc", "esc")
 
-	w.tabByKey("4")
+	w.tabByKey("GIT")
 	w.press("X")
 	w.takes("a merged worktree's removal", "worktree remove", "x", "y")
 	w.clear()
 
-	w.tabByKey("1")
+	w.tabByKey("SESSIONS")
 	w.press("/")
 	w.send("a search", "hearth-api")
 	w.takes("a kill", "kill-pane", "enter", "x", "y", "y")
 	w.press("esc", "esc")
 	w.clear()
 
-	w.tabByKey("7")
+	w.tabByKey("STOKER")
 	w.press("f", "enter")
 	w.clear()
 	w.opens("the order sheet", "How should I run?", "o")
@@ -605,7 +590,7 @@ func walk(t *testing.T) (saw []string) {
 		w.alive()
 		saw = append(saw, w.spy.seen()...)
 		w.d.Stop()
-		for _, tab := range []string{"1", "2", "3", "4", "5", "6", "7"} {
+		for _, tab := range tabWords {
 			w := startWalk(t, size[0], size[1])
 			if size[0] == 44 {
 				w.walkKeys(tab)
@@ -706,7 +691,7 @@ func TestQAndCtrlCEnd(t *testing.T) {
 		}
 	}
 	w := startWalk(t, 132, 32)
-	w.toTab("1")
+	w.toTab("SESSIONS")
 	w.press("enter")
 	w.flashes("ctrl+c in a chat", "ctrl+c")
 	w.alive()
@@ -1012,25 +997,28 @@ func (w *walker) saysAfter(what, want string, keys ...string) {
 func TestWhatThePhoneCannotDoSaysSo(t *testing.T) {
 	m := newMachine(t)
 	w := startWalk(t, 132, 32)
-	w.toTab("6")
+	w.toTab("PANES")
 	w.flashes("a pane", "enter")
 	w.clear()
-	w.toTab("4")
+	w.toTab("GIT")
 	w.flashes("a worktree's shell", "enter")
 	w.clear()
 
 	// The Machine tab's last row is its device row.
-	w.toTab("3")
+	w.toTab("MACHINE")
 	w.press("j", "j", "j", "j", "j", "j", "j", "j", "j")
 	w.flashes("Pair a device", "enter")
 	w.clear()
 
-	w.toTab("2")
-	w.press("j") // #214 waits for its merge
-	w.flashes("a merge", "x", "y")
+	w.toTab("SESSIONS") // the ship is on its card: #214 waits for its merge
+	w.press("/")
+	w.send("a search", "ember-billing")
+	w.press("enter")
+	w.flashes("a merge", "p", "y")
 	w.clear()
+	w.press("esc", "esc")
 
-	w.toTab("1")
+	w.toTab("SESSIONS")
 	w.press("N")
 	w.send("a folder", "/work/flint-auth")
 	w.press("tab")
@@ -1055,7 +1043,7 @@ func TestWhatThePhoneCannotDoSaysSo(t *testing.T) {
 func TestANightStartsAndRunsNothing(t *testing.T) {
 	m := newMachine(t)
 	w := startWalk(t, 132, 32)
-	w.toTab("7")
+	w.toTab("STOKER")
 	w.press("n")
 	w.saysAfter("a night", "the stoker runs the night", "enter")
 	if saw := w.spy.seen(); len(saw) > 0 {
@@ -1135,9 +1123,9 @@ func TestSessionsCanBeStartedAndKilled(t *testing.T) {
 	// Another tab and back, by the Tab key, draws the board anew: it has the
 	// new session, not the killed one.
 	eventually(t, 5*time.Second, "the drawn board to lose the killed session", func() bool {
-		w.tabByKey("2")
+		w.tabByKey("MACHINE")
 		time.Sleep(200 * time.Millisecond)
-		w.tabByKey("1")
+		w.tabByKey("SESSIONS")
 		return w.finds("fresh-one") && w.findsNothing("renamed-one")
 	})
 	if got := m.spawns(t); got != "" {

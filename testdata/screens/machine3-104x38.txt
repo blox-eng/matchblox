@@ -1,5 +1,5 @@
  ▰ matchblox · 3 hosts · gpu-1 stale                                                   ● 8 wait for you
- sessions 10    ships 3    MACHINE    git    history    panes    stoker
+ sessions 10    MACHINE    git    history    panes    stoker
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
  USAGE
  ✻ Claude Max    5h   this machine 84% · gpu-1 stale · ws-1 84%

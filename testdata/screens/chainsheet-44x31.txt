@@ -1,5 +1,5 @@
  ▰ matchblox                   ● 1 need you
- SESSIONS 5  ships  machine  4  5  6  7
+ SESSIONS 5  machine  git  4  5  6
 ────────────────────────────────────────────
  NEEDS YOU 1 −  work 2  ship 0  quiet 2
 ────────────────────────────────────────────

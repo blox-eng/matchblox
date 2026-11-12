@@ -183,10 +183,6 @@ func (m Model) openNew() (tea.Model, tea.Cmd) {
 		if s, ok := m.selectedSession(); ok {
 			at, host = s.Cwd, s.Host
 		}
-	case tabShips:
-		if sh, ok := m.selectedShip(); ok {
-			at, host = sh.Where, sh.Host
-		}
 	}
 	return m.openNewAt(host, at, ""), nil
 }

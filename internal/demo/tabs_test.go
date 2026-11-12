@@ -10,16 +10,15 @@ import (
 )
 
 // emptyTexts are what a tab says when it has nothing to show.
-var emptyTexts = []string{"No ships yet.", "scanning repositories…", "collecting history", "this service keeps no stoker", "could not read"}
+var emptyTexts = []string{"scanning repositories…", "collecting history", "this service keeps no stoker", "could not read"}
 
 // fillBound is how long a tab may take to fill after its key is pressed.
 const fillBound = 2 * time.Second
 
-// tabs are the seven tabs in Tab's order (a digit on the board answers
-// its card), each with a string only its seeded data
+// tabs are the tabs in Tab's order (a digit on the board answers its
+// card), each with a string only its seeded data
 // draws: a screen that is blank or still loading cannot pass on absence alone.
 var tabs = []struct{ key, name, seeded string }{
-	{"\t", "Ships", "Rate limits on the public API"},
 	{"\t", "Machine", "NETWORK AND DISK"},
 	{"\t", "Git", "9 WORKTREES"},
 	{"\t", "History", "LAST 2H"},

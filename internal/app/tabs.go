@@ -93,7 +93,6 @@ func (st styles) footFor(b bkey.Binding, label, sep string) footPart {
 
 const (
 	tabSessions = iota
-	tabShips
 	tabMachine
 	tabGit
 	tabHistory
@@ -150,20 +149,6 @@ var views = [...]tabView{
 			return nil
 		},
 		body: func(m Model, w int) body { return m.boardPanel(w, m.bodyRows()).body },
-	},
-	tabShips: {
-		keys: func(m Model) []hint {
-			mk := m.keys.main
-			if sh, ok := m.selectedShip(); ok {
-				return append(m.shipKeys(sh), hintFor(mk.Stoke, "stoker"))
-			}
-			return []hint{hintFor(mk.Stoke, "stoker")}
-		},
-		count:     func(m Model) int { return len(m.ships()) },
-		index:     func(m Model) int { return min(m.shipSel, max(len(m.ships())-1, 0)) },
-		pick:      func(m *Model, i int) { m.shipSel = i },
-		secondary: Model.mergeShip,
-		body:      Model.shipsPanel,
 	},
 	tabMachine: {
 		keys: func(m Model) []hint {
@@ -274,7 +259,7 @@ var views = [...]tabView{
 }
 
 // tabNames names the tabs, in the order of their digits.
-var tabNames = []string{tabSessions: "sessions", tabShips: "ships", tabMachine: "machine", tabGit: "git",
+var tabNames = []string{tabSessions: "sessions", tabMachine: "machine", tabGit: "git",
 	tabHistory: "history", tabPanes: "panes", tabStoker: "stoker"}
 
 func (m Model) view() tabView { return views[m.tab] }

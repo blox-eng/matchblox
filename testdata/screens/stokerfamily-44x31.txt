@@ -1,5 +1,5 @@
  ▰ matchblox          ● 6 wait for you  ≋ 2
- 1  2  3  4  history  panes  STOKER
+ 1  2  3  history  panes  STOKER
 ────────────────────────────────────────────
 
   STOKER AGENT  claude ·… ⏎ open the stoker

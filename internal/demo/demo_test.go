@@ -322,7 +322,7 @@ func TestAStartAfterAStopIsFresh(t *testing.T) {
 	if _, err := first.in.Write([]byte("\t")); err != nil {
 		t.Fatal(err)
 	}
-	first.waitFor(t, "SHIPS") // the first one still runs
+	first.waitFor(t, "MACHINE") // the first one still runs
 	d.Stop()
 
 	_, second := start(t)

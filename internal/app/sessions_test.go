@@ -1,7 +1,6 @@
 package app
 
 import (
-	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -82,42 +81,6 @@ func TestSessionsGroupByNeed(t *testing.T) {
 // of room the tabs far from the open one shorten to their digit.
 func TestTabsAndTheirDigits(t *testing.T) {
 	t.Skip("waits for TestTheTabRowIsBoardAndMachine (Task 12 steps 5 and 6c): a digit on the board answers its card")
-	if want := []string{"sessions", "ships", "machine", "git", "history", "panes", "stoker"}; !reflect.DeepEqual(tabNames, want) {
-		t.Fatalf("tabs %q, want %q", tabNames, want)
-	}
-	m, _ := loadedWith(t, 100, queueState())
-	for i := range tabNames {
-		if next, _ := key(m, string(rune('1'+i))); next.(Model).tab != i {
-			t.Fatalf("%d opens tab %d", i+1, next.(Model).tab)
-		}
-	}
-	next, _ := key(m, "p")
-	if next.(Model).tab != tabShips || !strings.Contains(screen(next), "No ships yet.") {
-		t.Fatalf("p does not open Ships:\n%s", screen(next))
-	}
-	if next, _ := m.key(keyPress("tab")); next.(Model).tab != tabShips {
-		t.Fatal("Tab does not open the next tab")
-	}
-	if next, _ := m.key(keyPress("shift+tab")); next.(Model).tab != tabStoker {
-		t.Fatal("Shift+Tab does not open the previous tab")
-	}
-	phone, _ := loadedWith(t, 44, queueState())
-	for tab, want := range map[int]string{
-		tabSessions: " SESSIONS 3  ships  machine  4  5  6",
-		tabHistory:  " 1  2  3  git  HISTORY  panes  7",
-	} {
-		phone.tab = tab
-		if line, _ := phone.tabsLine(44); !strings.HasPrefix(stripped(line), want) {
-			t.Errorf("tab %d on a phone: %q, want %q", tab, stripped(line), want)
-		}
-	}
-	// A detached busy loop marks the Machine tab.
-	st := queueState()
-	st.Orphans = []sample.Orphan{{PID: 4242, Comm: "bash"}}
-	loops, _ := loadedWith(t, 100, st)
-	if line, _ := loops.tabsLine(100); !strings.Contains(stripped(line), "machine !") {
-		t.Fatalf("no alert on the Machine tab: %q", stripped(line))
-	}
 }
 
 // reasonFixture is three sessions at rest, one of them in pane %3.

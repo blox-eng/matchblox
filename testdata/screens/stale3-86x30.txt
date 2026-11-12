@@ -1,5 +1,5 @@
  ▰ matchblox · all hosts ▾ · gpu-1 stale                                 ● 7 need you
- SESSIONS 10    ships 3    machine    git    history    panes    stoker
+ SESSIONS 10    machine    git    history    panes    stoker
 ──────────────────────────────────────────────────────────────────────────────────────
  gpu-1: not reached since 22:49 · ⏎ try again
  NEEDS YOU · 8  −                           WORKING · 2  −        SHIPPING · 0  −

@@ -783,9 +783,6 @@ func (m Model) detailPane(w, rows int) ([]string, bool) {
 
 func (m Model) detailLines(w, rows int) ([]string, bool) {
 	st := m.st
-	if m.tab == tabShips {
-		return m.shipDetail(w), false
-	}
 	if d, ok := m.selectedDoor(); ok {
 		out := []string{"", fit(" "+st.accent.Render(d.Title), w), ""}
 		text, style := d.Why, st.muted

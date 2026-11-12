@@ -1,5 +1,5 @@
  ▰ matchblox      ● 6 wait for you  ☾ night
- 1  2  3  4  history  panes  STOKER 1
+ 1  2  3  history  panes  STOKER 1
 ────────────────────────────────────────────
   “merge them on green, and a new PR gets
   a compact and /review”

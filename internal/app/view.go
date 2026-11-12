@@ -327,7 +327,7 @@ func (m Model) markActKeys(sc *drawn, b, vis body, detail []string, room, detail
 // other tabs have one column, and so has a door's diff while it waits for
 // its y: it shows whole.
 func (m Model) panes(w int) (list, detail int) {
-	if _, preview := m.previewDoor(); m.tab != tabSessions && m.tab != tabShips || m.layoutAt(w) == Narrow || preview {
+	if _, preview := m.previewDoor(); m.tab != tabSessions || m.layoutAt(w) == Narrow || preview {
 		return w, 0
 	}
 	at := splitAt(w, m.layoutAt(w))
@@ -585,10 +585,6 @@ func (m Model) tabLabel(i int, named bool) string {
 	switch i {
 	case tabSessions:
 		count = strconv.Itoa(len(m.all.sessions))
-	case tabShips:
-		if n := m.inFlight(); n > 0 {
-			count = strconv.Itoa(n)
-		}
 	case tabMachine:
 		if len(m.all.orphans) > 0 {
 			count = "!" // a detached busy loop burns

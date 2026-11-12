@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
@@ -100,23 +99,6 @@ type hostShips struct {
 	r    *proto.Ships
 }
 
-// inFlight counts the ships of every host that are not live yet.
-func (m Model) inFlight() int {
-	n := 0
-	for _, h := range m.shipReports() {
-		n += h.r.InFlight
-	}
-	return n
-}
-
-func (m Model) selectedShip() (proto.Ship, bool) {
-	ss := m.ships()
-	if len(ss) == 0 {
-		return proto.Ship{}, false
-	}
-	return ss[min(m.shipSel, len(ss)-1)], true
-}
-
 // shipsOf are the ships a session drives, the one that most needs you
 // first: stuck, waiting for you, in flight, merged, then live (as the
 // service, the CLI and the stoker find them).
@@ -199,16 +181,6 @@ func (m Model) driverName(sh proto.Ship) string {
 		return sh.Session.ID
 	}
 	return "no session"
-}
-
-// driverOn is the driver's name, and with two or more hosts its host:
-// "api-auth on ws-1".
-func (m Model) driverOn(sh proto.Ship) string {
-	by := m.st.text.Render(m.driverName(sh))
-	if m.hostCount() > 1 {
-		by += m.st.faint.Render(" on ") + m.st.text.Render(m.nameOf(sh.Host))
-	}
-	return by
 }
 
 // driverGone is the flash for a ship whose session is no longer there.
@@ -337,27 +309,6 @@ func (m Model) shipCell(sh proto.Ship, note bool) string {
 	return cell
 }
 
-// shipAge is how long the ship has been in its stage.
-func (m Model) shipAge(sh proto.Ship) string {
-	if !sh.Since.IsZero() {
-		return brief(m.now().Sub(sh.Since))
-	}
-	return brief(sh.Age)
-}
-
-// shipsStrip says plainly why the ships may be behind: GitHub's rate limit,
-// gh that cannot read, a repository whose poll failed.
-// With two or more hosts each line starts with its host.
-func (m Model) shipsStrip(w int) []string {
-	var out []string
-	for _, say := range m.shipsBehind() {
-		for _, l := range wrapPlain(say, w-2) {
-			out = append(out, " "+m.st.warn.Render(l))
-		}
-	}
-	return out
-}
-
 // shipsBehind are the reasons the ships may be behind, one each, in plain
 // words; with two or more hosts each starts with its host.
 func (m Model) shipsBehind() []string {
@@ -380,150 +331,6 @@ func (m Model) shipsBehind() []string {
 	return says
 }
 
-// shipsPanel is the Ships tab: each ship's number, title and age, then its
-// track and note. On a phone the selected one adds who drives it and its
-// keys.
-func (m Model) shipsPanel(w int) body {
-	st := m.st
-	var b body
-	b.add(-1, m.shipsStrip(w)...)
-	ss := m.ships()
-	if len(ss) == 0 {
-		b.add(-1, "", fit(" "+st.faint.Render("No ships yet."), w))
-		for _, l := range wrapPlain("A pull request a session creates, pushes or acts on shows here, on its way from open to live.", w-2) {
-			b.add(-1, " "+st.faint.Render(l))
-		}
-		return b
-	}
-	b.add(-1, st.label.Render(fit(" open → ci → green → merged → live", w)))
-	sel := min(m.shipSel, len(ss)-1)
-	for i, sh := range ss {
-		on := i == sel
-		mark := " "
-		if on {
-			mark = st.accent.Render("▌")
-		}
-		right := cutLeft(st.faint.Render(m.shipAge(sh)), 4) + " "
-		if m.hostCount() > 1 {
-			right = st.muted.Render(m.nameOf(sh.Host)) + "  " + right
-		}
-		lines := []string{
-			spread(mark+padTo(st.accent.Render("#"+strconv.Itoa(sh.Number)), m.numW())+" "+st.ink(on).Render(sh.Title), right, w),
-			"   " + m.track(sh) + "  " + m.shipStyle(sh).Render(sh.Note),
-		}
-		if on && m.inPlace() {
-			lines = append(lines, spread("   "+st.faint.Render("by ")+m.driverOn(sh), m.shipKeysLine(sh)+" ", w))
-		}
-		b.addRow(i, on, w, st, lines...)
-		b.add(-1, "")
-	}
-	return b
-}
-
-// shipKeys are the keys of a ship: its session, a merge when it waits for
-// yours, an answer when it is stuck.
-func (m Model) shipKeys(sh proto.Ship) []hint {
-	mk := m.keys.main
-	keys := []hint{hintFor(mk.Open, "session")}
-	if len(sh.Merge) > 0 {
-		keys = append(keys, hintFor(mk.Second, "merge"))
-	}
-	if sh.Kind == shipStuck {
-		keys = append(keys, hintFor(mk.Into, ""))
-	}
-	return keys
-}
-
-func (m Model) shipKeysLine(sh proto.Ship) string {
-	var parts []string
-	for _, h := range m.shipKeys(sh) {
-		parts = append(parts, m.st.accent.Render(h.key)+m.st.muted.Render(" "+h.label))
-	}
-	return strings.Join(parts, "  ")
-}
-
-// shipDetail is the right pane of Ships: the title, who drives it, the
-// five stages with their times and the note of the current one, the URL
-// and the keys.
-func (m Model) shipDetail(w int) []string {
-	st := m.st
-	sh, ok := m.selectedShip()
-	if !ok {
-		return nil
-	}
-	out := []string{"", fit(" "+st.accent.Bold(true).Render("#"+strconv.Itoa(sh.Number))+st.faint.Render("  by ")+m.driverOn(sh)+
-		st.faint.Render(" · "+sh.Repo), w)}
-	for _, l := range wrapPlain(sh.Title, w-2) {
-		out = append(out, " "+st.text.Render(l))
-	}
-	out = append(out, "", " "+st.label.Render("TRACK"))
-	for i, name := range stageNames {
-		glyph, style := "○", st.faint
-		switch {
-		case i < sh.Stage:
-			glyph, style = "●", st.muted
-		case i == sh.Stage && sh.Kind == shipStuck:
-			glyph, style = "✕", st.neg
-		case i == sh.Stage && sh.Kind == shipDone:
-			glyph, style = "●", m.shipStyle(sh)
-		case i == sh.Stage:
-			glyph, style = "◉", m.shipStyle(sh)
-		}
-		nameStyle := st.faint
-		if i <= sh.Stage {
-			nameStyle = st.text
-		}
-		what := ""
-		if at := sh.Stages[i].At; !at.IsZero() && i <= sh.Stage {
-			what = st.muted.Render(m.when(at))
-		}
-		if i == sh.Stage && sh.Note != "" {
-			what = strings.TrimSpace(what + " " + style.Render(sh.Note))
-		}
-		out = append(out, fit("  "+style.Render(glyph)+" "+nameStyle.Render(pad(name, 8))+what, w))
-		if i < len(stageNames)-1 {
-			if i < sh.Stage {
-				out = append(out, "  "+st.muted.Render("┃"))
-			} else {
-				out = append(out, "  "+st.faint.Render("┆"))
-			}
-		}
-	}
-	if sh.URL != "" {
-		out = append(out, "", fit(" "+st.faint.Render(sh.URL), w))
-	}
-	return append(out, "", fit(" "+m.shipKeysLine(sh), w))
-}
-
-// when is a time on the screen: 14:05 today, else Thu 14:05.
-func (m Model) when(t time.Time) string {
-	now := m.now().Local()
-	t = t.Local()
-	if t.YearDay() == now.YearDay() && t.Year() == now.Year() {
-		return t.Format("15:04")
-	}
-	return t.Format("Mon 15:04")
-}
-
-// toDriver selects the session that drives the selected ship in Sessions.
-func (m Model) toDriver() Model {
-	sh, ok := m.selectedShip()
-	if !ok {
-		return m
-	}
-	if sh.Session.ID == "" && sh.Session.Pane == "" {
-		return m.takeShip(sh)
-	}
-	s, ok := m.driver(sh)
-	if !ok {
-		m.flash = m.driverGone(sh)
-		return m
-	}
-	m.setTab(tabSessions)
-	m.doorPick, m.recPick, m.ghostPick, m.chose, m.selPID, m.selHost = "", "", 0, true, s.PID, s.Host
-	return m
-}
-
 // takeShip opens New session in the checkout of a ship no session owns,
 // its first message to take the ship over (#80); with no checkout of it
 // here it says so.
@@ -533,44 +340,6 @@ func (m Model) takeShip(sh proto.Ship) Model {
 		return m
 	}
 	return m.openNewIn(sh.Host, sh.Where, "Take over #"+strconv.Itoa(sh.Number)+" ("+sh.URL+"): read where it stands, then carry it to live.")
-}
-
-// shipInto is a on a stuck ship: the pane of its session, to answer it.
-func (m Model) shipInto() (tea.Model, tea.Cmd) {
-	sh, ok := m.selectedShip()
-	if !ok || sh.Kind != shipStuck {
-		m.flash = "a goes into the session of a stuck ship"
-		return m, nil
-	}
-	host, pane := m.shipTarget()
-	if pane == "" {
-		m.flash = m.driverGone(sh)
-		return m, nil
-	}
-	return m.goInto(host, pane)
-}
-
-// shipTarget is the host and pane of the session that drives the selected
-// stuck ship; no pane when there is none to go into.
-func (m Model) shipTarget() (host, pane string) {
-	sh, ok := m.selectedShip()
-	if !ok || sh.Kind != shipStuck {
-		return "", ""
-	}
-	if s, ok := m.driver(sh); ok {
-		return s.Host, s.Pane
-	}
-	return "", ""
-}
-
-// mergeShip is x on a ship that waits for your merge: the repository's
-// merge, behind a typed y.
-func (m Model) mergeShip() *action {
-	sh, ok := m.selectedShip()
-	if !ok {
-		return nil
-	}
-	return m.mergeAction(sh)
 }
 
 // mergeAction is the merge of sh, behind a typed y; nil when sh has none.

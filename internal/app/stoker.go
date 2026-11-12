@@ -188,9 +188,6 @@ func (m Model) asksTakeOver(k tea.KeyPressMsg) bool {
 	case bkey.Matches(k, m.keys.main.Into) && m.tab == tabStoker:
 		pane, _ := m.stokerTarget()
 		return pane != "" && m.takeOverOn(m.opt.Host)
-	case bkey.Matches(k, m.keys.main.Into) && m.tab == tabShips:
-		host, pane := m.shipTarget()
-		return pane != "" && m.takeOverOn(host)
 	case bkey.Matches(k, m.keys.main.Jump), bkey.Matches(k, m.keys.main.Into):
 		return onSession && s.Pane != "" && on(m.primary())
 	case bkey.Matches(k, m.keys.main.Open):
@@ -216,10 +213,6 @@ func (m Model) hold(k tea.KeyPressMsg) (func(Model) (tea.Model, tea.Cmd), string
 	if bkey.Matches(k, m.keys.main.Into) && m.tab == tabStoker {
 		pane, _ := m.stokerTarget()
 		return heldInto(m.askedBy, m.opt.Host, pane), m.opt.Host
-	}
-	if bkey.Matches(k, m.keys.main.Into) && m.tab == tabShips {
-		host, pane := m.shipTarget()
-		return heldInto(m.askedBy, host, pane), cmp.Or(host, m.opt.Host)
 	}
 	a := m.primary()
 	if _, onSession := m.selectedSession(); onSession && (bkey.Matches(k, m.keys.main.Open) || bkey.Matches(k, m.keys.main.Into) || bkey.Matches(k, m.keys.main.Jump)) {

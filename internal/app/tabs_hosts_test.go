@@ -43,17 +43,6 @@ func TestShipsOfEveryHost(t *testing.T) {
 	if m.ships()[0].Number != 2 {
 		t.Fatalf("the ship that waits for you is not first: %v", m.ships())
 	}
-	if got := m.tabLabel(tabShips, true); !strings.Contains(ansi.Strip(got), "2") {
-		t.Fatalf("the tab counts %q, want both hosts' ships", ansi.Strip(got))
-	}
-	m.setTab(tabShips)
-	frame := frameOf(m)
-	if l := lineWith(frame, "#2"); !strings.Contains(l, "ws-1") {
-		t.Fatalf("the peer's ship does not name its host: %q", l)
-	}
-	if l := lineWith(frame, "#1"); !strings.Contains(l, "this machine") {
-		t.Fatalf("the home ship does not name its host: %q", l)
-	}
 }
 
 func TestOneHostShipsAreToday(t *testing.T) {
@@ -87,20 +76,6 @@ func TestDriverMatchesWithinItsHost(t *testing.T) {
 	}
 }
 
-// selectShip selects the ship numbered n on the Ships tab.
-func selectShip(t *testing.T, m Model, n int) Model {
-	t.Helper()
-	m.setTab(tabShips)
-	for i, sh := range m.ships() {
-		if sh.Number == n {
-			m.shipSel = i
-			return m
-		}
-	}
-	t.Fatalf("no ship #%d", n)
-	return m
-}
-
 // TestPeerRowActsGoToItsHost: a merge on a peer's ship, a worktree's
 // removal and a pane's jump go to that row's host.
 func TestPeerRowActsGoToItsHost(t *testing.T) {
@@ -117,7 +92,9 @@ func TestPeerRowActsGoToItsHost(t *testing.T) {
 	next, _ = next.Update(peerMsg{host: "ws-1", conn: wsConn, msg: stateMsg(peer)})
 	m = next.(Model)
 
-	got := pressAll(selectShip(t, m, 2), "x", "y")
+	onPeer := m
+	chooseCard("peer-12")(&onPeer) // the ship is on its card, and p merges it
+	got := pressAll(onPeer, "p", "y")
 	if acts := wsConn.acts(); len(acts) != 1 || acts[0].RecID != "ship:o/r#2" {
 		t.Fatalf("the peer got %v; flash %q", acts, got.(Model).flash)
 	}
