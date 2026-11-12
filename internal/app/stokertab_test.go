@@ -239,8 +239,11 @@ func TestOpeningTheTabSendsOneAck(t *testing.T) {
 	}
 
 	// A tap on Machine's chosen row stoker opens the screen, and so sees
-	// the steps too, as a phone only taps.
+	// the steps too, as a phone only taps. The clock moves a minute at each
+	// read, so the ack's 10 s throttle cannot hide a second open.
 	m, f = loadedWith(t, 100, tabNight(screensState(t)))
+	clock := m.now()
+	m.opt.Now = func() time.Time { clock = clock.Add(time.Minute); return clock }
 	m.setTab(tabMachine)
 	m.selectRow(0) // the row is chosen already: the first tap opens STOKER, the second lands on it
 	y := lineOf(t, m, "stoker")
