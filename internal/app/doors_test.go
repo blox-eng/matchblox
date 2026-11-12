@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -124,6 +125,42 @@ func TestTheUpdateDoorInstallsTheTagItShowed(t *testing.T) {
 	}
 	if acts := f.acts(); len(acts) != 1 || acts[0] != (proto.Act{RecID: "door:update", Which: "primary", Confirm: "y", Text: "v0.43.0"}) {
 		t.Fatalf("acts %+v", acts)
+	}
+}
+
+// TestConsoleStartsAgainAfterItsUpdate: the install replaced the binary
+// this console runs, so a good result starts the console again on it. A
+// failed one leaves it as it is, and says why.
+func TestConsoleStartsAgainAfterItsUpdate(t *testing.T) {
+	install := func(t *testing.T, r proto.Result) (Model, tea.Cmd, int) {
+		t.Helper()
+		m, _ := loadedWith(t, 100, doorState(updateDoor))
+		restarts := 0
+		m.opt.Local, m.opt.Restart = true, func() error { restarts++; return nil }
+		next, _ := key(m, "enter")
+		next, cmd := key(next, "y")
+		if cmd != nil {
+			next.Update(cmd())
+		}
+		r.ActID = "a" + fmt.Sprint(next.(Model).acts)
+		next, cmd = next.Update(resultMsg(r))
+		if err := next.(Model).Restart(); err != nil {
+			t.Fatal(err)
+		}
+		return next.(Model), cmd, restarts
+	}
+	quits := func(cmd tea.Cmd) bool {
+		return slices.ContainsFunc(cmdMsgs(cmd), func(msg tea.Msg) bool { _, ok := msg.(tea.QuitMsg); return ok })
+	}
+	if _, cmd, n := install(t, proto.Result{Ran: [][]string{{"install", "v0.43.0"}}}); n != 1 || !quits(cmd) {
+		t.Fatalf("a good install started the console again %d times, quit: %v", n, quits(cmd))
+	}
+	m, cmd, n := install(t, proto.Result{Err: "the checksum does not match"})
+	if n != 0 || quits(cmd) {
+		t.Fatalf("a failed install started the console again %d times, quit: %v", n, quits(cmd))
+	}
+	if out := ansi.Strip(m.render()); !strings.Contains(out, "the checksum does not match") {
+		t.Fatalf("the failure is not shown:\n%s", out)
 	}
 }
 

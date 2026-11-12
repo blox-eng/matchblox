@@ -318,6 +318,82 @@ func TestServeOfTheUnitStopsForAnInstallWhileItWaits(t *testing.T) {
 	}
 }
 
+// replaceServed runs serve on a binary of mode, installs over it, and
+// returns the binary, the binaries execFn was asked to run and what serve
+// returned. At each exec the socket is free for the new process to listen on.
+func replaceServed(t *testing.T, mode os.FileMode, execErr error) (exe string, execs []string, err error) {
+	t.Helper()
+	path := isolate(t)
+	exe = filepath.Join(t.TempDir(), "matchblox")
+	if err := os.WriteFile(exe, []byte("v1"), mode); err != nil {
+		t.Fatal(err)
+	}
+	old := execFn
+	execFn = func(argv0 string, argv, _ []string) error {
+		execs = append(execs, argv0)
+		if !slices.Equal(argv, os.Args) {
+			t.Errorf("exec %v, want this process's arguments %v", argv, os.Args)
+		}
+		l, err := transport.Listen(path)
+		if err != nil {
+			t.Errorf("the new binary cannot listen on the socket: %v", err)
+		} else {
+			l.Close()
+		}
+		return execErr
+	}
+	t.Cleanup(func() { execFn = old })
+	s := newService(config.Default(), fixtures(t))
+	s.Exe, s.ExeEvery = exe, 10*time.Millisecond
+	done := make(chan error, 1)
+	go func() { done <- serve(path, nil, func() *service.Service { return s }) }()
+	select {
+	case <-s.Watching():
+	case <-time.After(waitLimit):
+		t.Fatal("the watch did not start")
+	}
+	if err := os.WriteFile(exe, []byte("v2, a new install"), mode); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err = <-done:
+	case <-time.After(waitLimit):
+		t.Fatal("serve kept running")
+	}
+	return exe, execs, err
+}
+
+// TestReplacedServiceRunsAgainWithoutAUnit: no unit starts the new binary,
+// so the service runs it in its own place.
+func TestReplacedServiceRunsAgainWithoutAUnit(t *testing.T) {
+	t.Setenv(unitEnv, "")
+	exe, execs, err := replaceServed(t, 0o700, nil)
+	if err != nil || !slices.Equal(execs, []string{exe}) {
+		t.Fatalf("serve returned %v, ran %v, want %s once", err, execs, exe)
+	}
+}
+
+// TestReplacedServiceUnderAUnitExits: the unit starts the new binary.
+func TestReplacedServiceUnderAUnitExits(t *testing.T) {
+	t.Setenv(unitEnv, "1")
+	_, execs, err := replaceServed(t, 0o700, nil)
+	if !errors.Is(err, errRestart) || len(execs) != 0 {
+		t.Fatalf("serve returned %v, ran %v", err, execs)
+	}
+}
+
+// TestFailedExecFallsBackToExit: a binary that does not run is never run,
+// and an exec that fails exits for a restart as before.
+func TestFailedExecFallsBackToExit(t *testing.T) {
+	t.Setenv(unitEnv, "")
+	if _, execs, err := replaceServed(t, 0o700, errors.New("exec format error")); !errors.Is(err, errRestart) || len(execs) != 1 {
+		t.Fatalf("a failed exec: serve returned %v, ran %v", err, execs)
+	}
+	if _, execs, err := replaceServed(t, 0o600, nil); !errors.Is(err, errRestart) || len(execs) != 0 {
+		t.Fatalf("a binary that does not run: serve returned %v, ran %v", err, execs)
+	}
+}
+
 func serveInProcess(t *testing.T, path string) {
 	t.Helper()
 	l, err := transport.Listen(path)

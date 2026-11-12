@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -390,6 +391,64 @@ func TestReplaceAtMostOnce(t *testing.T) {
 	drain(cmd)
 	if acts := g.acts(); len(acts) != 0 {
 		t.Fatalf("two consoles of two versions would replace each other forever: %+v", acts)
+	}
+}
+
+// TestOldConsoleDoesNotReplaceANewerService: a console left open on an old
+// release never puts that release back over a newer service. It says so,
+// and R starts this console again on the new binary.
+func TestOldConsoleDoesNotReplaceANewerService(t *testing.T) {
+	f := newFake()
+	restarts := 0
+	m := New(Options{NoMotion: true, Conn: f, Local: true, Binary: "v0.42.0",
+		Redial: func() (transport.Conn, error) { return newFake(), nil }, Restart: func() error { restarts++; return nil }})
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	next, cmd := next.Update(helloMsg(proto.Hello{Version: proto.Version, Binary: "v0.43.0", Host: "ws-1"}))
+	drain(cmd)
+	next, _ = next.Update(stateMsg(fixtureState()))
+	if acts := f.acts(); len(acts) != 0 {
+		t.Fatalf("an old console sent %+v to a newer service", acts)
+	}
+	if out := ansi.Strip(next.(Model).render()); !strings.Contains(out, "the service runs v0.43.0, this console v0.42.0 · R: start again") {
+		t.Fatalf("no notice:\n%s", out)
+	}
+	if err := next.(Model).Restart(); err != nil || restarts != 0 {
+		t.Fatalf("started again before R: %d, %v", restarts, err)
+	}
+	next, cmd = key(next, "R")
+	if !slices.ContainsFunc(cmdMsgs(cmd), func(msg tea.Msg) bool { _, ok := msg.(tea.QuitMsg); return ok }) {
+		t.Fatal("R did not end the console")
+	}
+	if err := next.(Model).Restart(); err != nil || restarts != 1 {
+		t.Fatalf("R started again %d times, %v", restarts, err)
+	}
+}
+
+func TestNewConsoleStillReplacesAnOlderService(t *testing.T) {
+	for _, tc := range []struct {
+		console, service string
+		replace          bool
+	}{
+		{"v0.43.0", "v0.42.0", true},
+		{"v0.10.0", "v0.9.0", true}, // by number, not by letter
+		{"v0.42.0", "v0.42.0", false},
+		{"dev", "v0.42.0", false}, // a checkout's build replaces only an older wire
+		{"v0.42.0", "dev", false}, // and a release never puts one back
+		{"v0.43.0", "v0.42.1-0.20261112093000-f15b80c1abcd", false},
+	} {
+		f := newFake()
+		m := New(Options{NoMotion: true, Conn: f, Local: true, Binary: tc.console, Redial: func() (transport.Conn, error) { return newFake(), nil }})
+		_, cmd := m.Update(helloMsg(proto.Hello{Version: proto.Version, Binary: tc.service, Host: "ws-1"}))
+		drain(cmd)
+		n := 0
+		for _, a := range f.acts() {
+			if a.RecID == "service:replace" {
+				n++
+			}
+		}
+		if want := map[bool]int{true: 1, false: 0}[tc.replace]; n != want {
+			t.Errorf("console %s, service %s: %d replaces, want %d", tc.console, tc.service, n, want)
+		}
 	}
 }
 

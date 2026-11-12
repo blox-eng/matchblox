@@ -684,6 +684,9 @@ func (m Model) keyLine(w int) (string, []span) {
 	if m.viewFull() {
 		return m.liveKeyLine(w)
 	}
+	if m.newer != "" {
+		return fit(" "+st.warn.Render(m.newer), w), nil
+	}
 	hints := slices.DeleteFunc(slices.Clone(m.view().keys(m)), func(h hint) bool { return h == (hint{}) })
 	if m.layoutAt(w) == Wide {
 		mk := m.keys.main

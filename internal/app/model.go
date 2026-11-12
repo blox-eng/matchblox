@@ -27,6 +27,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/keycmd"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/queue"
+	"github.com/blox-eng/matchblox/internal/release"
 	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/state"
@@ -147,6 +148,9 @@ type Options struct {
 	// images, which they are, and whether any shows it (logos.Viewers).
 	// Nil: never.
 	Graphics func() (can bool, viewers string, watched bool)
+	// Restart runs this binary again in place of the console, once the
+	// program has ended. Nil: the console cannot start again.
+	Restart func() error
 }
 
 type helloMsg proto.Hello
@@ -430,6 +434,12 @@ type Model struct {
 	scanUp       bool
 	// updateView is the service's update view: the release this host runs.
 	updateView *state.UpdateView
+	// newer says the local service runs a newer release than this console;
+	// R starts the console again on it. updateAct is the act id of the
+	// update door's install. restarting: the program ends to start again.
+	newer      string
+	updateAct  string
+	restarting bool
 	// used is where matchblox started sessions; wrepos the known repos,
 	// for N's where list: built when what it reads changes (wfrom), not
 	// at each snapshot or draw.
@@ -722,6 +732,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.replaced = true
 			m.flash = fmt.Sprintf("replacing the service %s with %s…", m.host.Binary, m.opt.Binary)
 			return m, tea.Batch(m.send(proto.Act{RecID: "service:replace"}), m.recv())
+		}
+		m.newer = ""
+		if m.newerLocal() {
+			m.newer = fmt.Sprintf("the service runs %s, this console %s · %s: start again", m.host.Binary, m.opt.Binary, m.keys.main.StartAgain.Help().Key)
 		}
 		m.mismatch = m.host.Version != proto.Version
 		if m.mismatch {
@@ -1074,6 +1088,12 @@ func (m Model) result(r proto.Result) (Model, tea.Cmd) {
 	if r.ActID != "" && r.ActID == m.jumpAfter.act {
 		return m.switched(r)
 	}
+	if r.ActID != "" && r.ActID == m.updateAct {
+		m.updateAct = ""
+		if r.Err == "" && len(r.Ran) > 0 && m.opt.Restart != nil {
+			return m.startAgain() // the install replaced this console's binary too
+		}
+	}
 	if m.tally(r) {
 		return m, nil
 	}
@@ -1194,13 +1214,47 @@ func (m Model) focusJump(tty, pane string) tea.Cmd {
 }
 
 // olderLocal tells if the local service should give way to this console:
-// an older wire, or another build. Once only, so two consoles of two
+// an older wire, or an older release. Once only, so two consoles of two
 // versions do not replace each other forever.
 func (m Model) olderLocal() bool {
 	if !m.opt.Local || m.replaced || m.opt.Redial == nil {
 		return false
 	}
-	return m.host.Version < proto.Version || (m.opt.Binary != "dev" && m.host.Binary != m.opt.Binary)
+	return m.host.Version < proto.Version || releases(m.host.Binary, m.opt.Binary) && release.Compare(m.host.Binary, m.opt.Binary) < 0
+}
+
+// newerLocal tells if the local service runs a newer release than this
+// console: the console starts again on it, and never puts its own back.
+func (m Model) newerLocal() bool {
+	return m.opt.Local && releases(m.host.Binary, m.opt.Binary) && release.Compare(m.host.Binary, m.opt.Binary) > 0
+}
+
+// releases tells if both builds are releases: a build from a checkout
+// (dev, or the version Go made up for a commit) has no place in the order.
+func releases(a, b string) bool {
+	isRelease := func(v string) bool { return release.IsRelease(v) && !release.IsPseudo(v) }
+	return isRelease(a) && isRelease(b)
+}
+
+// startAgain ends the program so that main runs this binary again
+// (Restart), on a terminal Bubble Tea has given back.
+func (m Model) startAgain() (Model, tea.Cmd) {
+	if m.opt.Restart == nil {
+		return m, nil
+	}
+	next, cmd := m.quit()
+	nm := next.(Model)
+	nm.restarting = true
+	return nm, cmd
+}
+
+// Restart runs this binary again when the console ended to start again;
+// otherwise it does nothing.
+func (m Model) Restart() error {
+	if !m.restarting || m.opt.Restart == nil {
+		return nil
+	}
+	return m.opt.Restart()
 }
 
 func describe(r proto.Result) string {
@@ -1334,6 +1388,8 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	switch {
+	case bkey.Matches(k, mk.StartAgain) && m.newer != "":
+		return m.startAgain()
 	case bkey.Matches(k, mk.Stoker):
 		return m.openStoker(), nil
 	case bkey.Matches(k, mk.Quit):
@@ -1587,6 +1643,9 @@ func (m Model) confirmed(a action) (tea.Model, tea.Cmd) {
 	m.startRec(a, "a"+strconv.Itoa(m.acts))
 	if pane, ok := strings.CutPrefix(a.rec, "switch:"); ok {
 		m.jumpAfter = switchSent{act: "a" + strconv.Itoa(m.acts), host: a.host, pane: pane, done: a.done, tty: a.tty, agent: a.paneAgent}
+	}
+	if a.rec == "door:"+doors.Update && a.which == "primary" && m.opt.Local && host == m.opt.Host {
+		m.updateAct = "a" + strconv.Itoa(m.acts)
 	}
 	if a.agent != "" {
 		m.startAfter.act, m.startAfter.agent, m.startAfter.done = "a"+strconv.Itoa(m.acts), a.agent, a.done
