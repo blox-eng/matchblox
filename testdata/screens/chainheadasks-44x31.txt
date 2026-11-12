@@ -1,7 +1,7 @@
- ▰ matchblox                   ● 1 need you
+ ▰ matchblox                   ● 2 need you
  BOARD 6    machine
 ────────────────────────────────────────────
- NEEDS YOU 1 −  work 2  ship 0  quiet 2
+ NEEDS YOU 2 −  work 2  ship 0  quiet 2
 ────────────────────────────────────────────
 ▌╿ kindle-web                         ✻  1m
   asks Claude needs your permission to use…
@@ -10,10 +10,10 @@
   Bash”
   ⏎ go in
 
-
-
-
-
+ ╿ stoker-s1                          ·  0s
+  idle merge #812 now?
+                                   ─╴hearth
+  ⏎ go in
 
 
 

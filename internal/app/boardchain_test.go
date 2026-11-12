@@ -520,3 +520,38 @@ func TestARoomRowSaysWhyACardKeyRests(t *testing.T) {
 		}
 	}
 }
+
+// TestAnAskingChainStokerIsANeed (ruling 39): a chain stoker whose agent
+// asks is a need: its card is in NEEDS YOU and counts there, as any match
+// that asks, and says the ask; on the whole board and in its chain's room.
+// A stoker that does not ask is no card.
+func TestAnAskingChainStokerIsANeed(t *testing.T) {
+	quiet := headState(t, runningPlan(), true, []string{"hearth-api", "ember-billing"})
+	m, _ := chainBoard(t, 160, quiet, "")
+	if slices.ContainsFunc(m.all.sessions, func(s sample.Session) bool {
+		return s.Pane == stokerPane && slices.ContainsFunc(m.boardIndex()[colNeed], func(c sample.Session) bool { return c.Pane == s.Pane })
+	}) || strings.Contains(plainFrame(m), "stoker-s1") {
+		t.Fatalf("a stoker that does not ask is a card:\n%s", plainFrame(m))
+	}
+	before := m.needCount()
+
+	asks := headState(t, runningPlan(), true, []string{"hearth-api", "ember-billing"})
+	asker(&asks)
+	board, _ := chainBoard(t, 160, asks, "")
+	room, _ := hearthOpen(t, 160, asks)
+	for name, m := range map[string]Model{"board": board, "room": room} {
+		need := m.boardIndex()[colNeed]
+		if !slices.ContainsFunc(need, func(s sample.Session) bool { return s.Pane == stokerPane }) {
+			t.Errorf("%s: the asking stoker is not in NEEDS YOU: %v", name, need)
+		}
+		if n := m.needCount(); n != before+1 {
+			t.Errorf("%s: NEEDS YOU counts %d, want %d", name, n, before+1)
+		}
+		if !strings.Contains(plainFrame(m), "merge #812 now?") {
+			t.Errorf("%s: the card does not say the ask:\n%s", name, plainFrame(m))
+		}
+	}
+	if f := plainFrame(room); !strings.Contains(f, "≋ hearth's stoker asks: merge #812 now?") || strings.Contains(f, "is quiet since") {
+		t.Errorf("the stoker's card in the room does not say it asks:\n%s", f)
+	}
+}

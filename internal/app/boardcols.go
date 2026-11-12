@@ -143,7 +143,7 @@ func (m Model) needSince(s sample.Session) time.Time {
 func (m Model) boardIndex() [4][]sample.Session {
 	var idx [4][]sample.Session
 	for _, s := range append(slices.Clone(m.all.sessions), m.shipCards()...) {
-		if !m.isStoker(s) {
+		if !m.isStoker(s) || m.stokerAsksAsCard(s) {
 			c := m.columnOf(s)
 			idx[c] = append(idx[c], s)
 		}
@@ -272,9 +272,21 @@ func (m Model) inRoomTeam(s sample.Session) bool {
 	return ok && slices.ContainsFunc(c.Members, func(mb chains.Member) bool { return mb.Same(memberOf(s)) })
 }
 
-// chainLabelOf is the name of the chain s is in, "" for none.
+// stokerAsksAsCard: s is a chain stoker's agent that asks. It is a need
+// as any match that asks (ruling 39), so it is a card; one that does not
+// ask is not.
+func (m Model) stokerAsksAsCard(s sample.Session) bool {
+	_, ok := m.stokerChain(s)
+	return ok && m.asksNow(s)
+}
+
+// chainLabelOf is the name of the chain s is in, "" for none: a chain
+// stoker's agent is in its own chain.
 func (m Model) chainLabelOf(s sample.Session) string {
 	if k, ok := m.chainKeyOf(s); ok {
+		return m.chainLabel(k)
+	}
+	if k, ok := m.stokerChain(s); ok {
 		return m.chainLabel(k)
 	}
 	return ""

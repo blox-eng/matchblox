@@ -236,7 +236,7 @@ func (m Model) cardRows(k chainKey) []roomRow {
 const quietFor = 60 * time.Second
 
 // cardState is the card's state line, when it has one: the stoker did not
-// start, it wakes, or it is quiet.
+// start, it wakes, it asks, or it is quiet.
 func (m Model) cardState(k chainKey, v proto.StokerView) []roomRow {
 	if r := m.room; r != nil && r.k == k {
 		u, ok := m.unitOf(k)
@@ -245,6 +245,13 @@ func (m Model) cardState(k chainKey, v proto.StokerView) []roomRow {
 			return []roomRow{{kind: roomCard, text: "the stoker did not start: " + r.failed, tone: "neg"}}
 		case r.woke && (!ok || !chainAlive(u)):
 			return []roomRow{{kind: roomCard, text: "≋ waking…"}}
+		}
+	}
+	if u, ok := m.unitOf(k); ok {
+		if s, ok := m.agentOf(k.host, u.ID); ok {
+			if q, asks := m.headAsks(s); asks {
+				return []roomRow{{kind: roomCard, tone: "warn", text: "≋ " + m.roomStokerWord(k) + " asks: " + q}}
+			}
 		}
 	}
 	o := v.Order

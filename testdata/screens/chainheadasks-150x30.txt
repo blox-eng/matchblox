@@ -1,17 +1,17 @@
- ▰ matchblox                                                                                                                             ● 1 need you
+ ▰ matchblox                                                                                                                             ● 2 need you
  BOARD 6    machine
 ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- NEEDS YOU · 1  −                                     WORKING · 2  −                      SHIPPING · 0  −                     QUIET · 2  −
+ NEEDS YOU · 2  −                                     WORKING · 2  −                      SHIPPING · 0  −                     QUIET · 2  −
 ▌╿ kindle-web                                 ✻  1m   ✦ hearth-api                ✻                                           ╿ ember-billing   ✻  3m
   asks Claude needs your permission to use Bash        busy                                                                   │ spark-docs      ✻  9m
   ctx 56%                                              ctx 79%                 ─╴hearth
   “Claude needs your permission to use Bash”
   ⏎ go in                                             ✦ flint-auth                ✻
                                                        busy The refresh flow works and…
-                                                       ctx 41%
-
-
-
+ ╿ stoker-s1                                  ·  0s    ctx 41%
+  idle merge #812 now?
+                                           ─╴hearth
+  ⏎ go in
 
 
 

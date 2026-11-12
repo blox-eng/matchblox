@@ -141,6 +141,20 @@ func (m Model) hasUnit(k chainKey) bool {
 	return ok
 }
 
+// stokerChain is the chain whose stoker's agent s is: tmux session
+// stoker-<id> on the stoker's server, for a chain stoker id of s's host.
+func (m Model) stokerChain(s sample.Session) (chainKey, bool) {
+	if !m.isStoker(s) {
+		return chainKey{}, false
+	}
+	for _, u := range m.stateOf(s.Host).Stokers {
+		if s.TmuxSession() == sample.StokerSession+"-"+u.ID {
+			return chainKey{s.Host, u.Chain}, true
+		}
+	}
+	return chainKey{}, false
+}
+
 // agentOf is the session of chain stoker id's agent on host: tmux session
 // stoker-<id> on the stoker's server.
 func (m Model) agentOf(host, id string) (sample.Session, bool) {
