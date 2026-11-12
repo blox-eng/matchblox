@@ -428,6 +428,8 @@ type Model struct {
 	scanAsk      *scanAsk
 	scanAskUntil time.Time
 	scanUp       bool
+	// updateView is the service's update view: the release this host runs.
+	updateView *state.UpdateView
 	// used is where matchblox started sessions; wrepos the known repos,
 	// for N's where list: built when what it reads changes (wfrom), not
 	// at each snapshot or draw.
@@ -760,7 +762,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !m.stokerClaims() {
 			m.dockSwitched = false
 		}
-		m.doors = m.shownDoors(st.Doors)
+		m.doors, m.updateView = m.shownDoors(st.Doors), st.Update
 		m.noteChanges(m.opt.Host, st.Sessions, st.Chains)
 		m.snap, m.git, m.recs, m.have, m.answered, m.at = st.Snapshot, st.Git, st.Recommendations, true, true, m.now()
 		m.shipReport = st.Ships

@@ -321,7 +321,7 @@ func TestUpdateDoorShowsForANewerRelease(t *testing.T) {
 	if d.Title != "matchblox v0.43.0 is out" || d.Why != "This machine runs v0.42.0." || d.Sum != "v0.43.0" || d.Problem != "" {
 		t.Fatalf("door %+v", d)
 	}
-	for _, want := range []string{"matchblox v0.42.0 → v0.43.0 (", "checksum", "provenance", exe} {
+	for _, want := range []string{"matchblox v0.42.0 → v0.43.0 (", "checksum", "provenance", "\n  replaces\n    " + exe} {
 		if !strings.Contains(d.Preview, want) {
 			t.Errorf("preview lacks %q:\n%s", want, d.Preview)
 		}
@@ -355,7 +355,7 @@ func TestUpdateDoorAbsentWhenOff(t *testing.T) {
 
 func TestUpdateDoorClosedForThisReleaseOnly(t *testing.T) {
 	s, src, path := offerTest(t, config.UpdateOffer)
-	if r := updateAct(s, "secondary", "y", ""); r.Err != "" {
+	if r := updateAct(s, "secondary", "y", "v0.43.0"); r.Err != "" {
 		t.Fatalf("close: %+v", r)
 	}
 	if d, ok := updateDoorOf(s); ok {
@@ -373,6 +373,28 @@ func TestUpdateDoorClosedForThisReleaseOnly(t *testing.T) {
 	s.checkUpdate(updateT0.Add(24 * time.Hour))
 	if d, ok := updateDoorOf(s); !ok || d.Sum != "v0.44.0" {
 		t.Fatalf("no door for the next release: %+v %v", d, ok)
+	}
+	// Within the act's dedupe window: a close of another release is a new close.
+	if r := updateAct(s, "secondary", "y", "v0.44.0"); r.Err != "" || len(r.Skipped) > 0 {
+		t.Fatalf("close of the next release: %+v", r)
+	}
+	if f := state.ReadUpdate(path); f.Closed != "v0.44.0" {
+		t.Fatalf("update.json after the second close %+v", f)
+	}
+}
+
+func TestUpdateCloseRefusesAStaleTag(t *testing.T) {
+	s, src, path := offerTest(t, config.UpdateOffer)
+	src.set("v0.44.0", nil)
+	s.checkUpdate(updateT0.Add(24 * time.Hour))
+	if r := updateAct(s, "secondary", "y", "v0.43.0"); r.Err != "a newer release came out: look again" {
+		t.Fatalf("result %+v", r)
+	}
+	if d, ok := updateDoorOf(s); !ok || d.Sum != "v0.44.0" {
+		t.Fatalf("a stale close closed the newer release: %+v %v", d, ok)
+	}
+	if f := state.ReadUpdate(path); f.Closed != "" {
+		t.Fatalf("update.json %+v", f)
 	}
 }
 
@@ -409,6 +431,30 @@ func TestUpdateActInstallsTheTagTheDoorShowed(t *testing.T) {
 	if f := state.ReadUpdate(path); f.Last == nil || *f.Last != want {
 		t.Fatalf("update.json last %+v", f.Last)
 	}
+	if d, ok := updateDoorOf(s); ok {
+		t.Fatalf("the door lingers after a good install: %+v", d)
+	}
+}
+
+func TestASkippedUpdateActRunsAgainAtOnce(t *testing.T) {
+	s, src, _ := offerTest(t, config.UpdateOffer)
+	gate := make(chan struct{})
+	src.began, src.gate = make(chan struct{}), gate
+	first := make(chan proto.Result)
+	go func() { first <- s.installUpdate("v0.43.0") }()
+	<-src.began
+	if r := updateAct(s, "primary", "y", "v0.43.0"); !slices.Equal(r.Skipped, []string{"already updating"}) {
+		t.Fatalf("act while an install runs: %+v", r)
+	}
+	src.mu.Lock()
+	src.gate, src.installErr = nil, errors.New("could not download matchblox-linux-amd64 v0.43.0: GitHub answered 502. Nothing was changed")
+	src.mu.Unlock()
+	close(gate)
+	<-first
+	r := updateAct(s, "primary", "y", "v0.43.0")
+	if len(r.Skipped) > 0 || len(src.installed()) != 2 {
+		t.Fatalf("the retry did not run: %+v, installs %v", r, src.installed())
+	}
 }
 
 func TestUpdateActRefusesAStaleTag(t *testing.T) {
@@ -444,7 +490,6 @@ func TestUpdateInstallFailureKeepsTheOffer(t *testing.T) {
 	if f := state.ReadUpdate(path); f.Last == nil || f.Last.Err == "" {
 		t.Fatalf("update.json last %+v", f.Last)
 	}
-	time.Sleep(200 * time.Millisecond) // past replace's delay, were it called
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if stopped != nil {

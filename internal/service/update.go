@@ -178,7 +178,8 @@ func (s *Service) updateDoor() (doors.Door, bool) {
 	closed := s.updates.Closed
 	s.updateMu.Unlock()
 	v := s.currentUpdateView()
-	if closed == tag || v.Mode == config.UpdateOff {
+	installed := v.Last != nil && v.Last.To == tag && v.Last.Err == ""
+	if closed == tag || installed || v.Mode == config.UpdateOff {
 		return doors.Door{}, false
 	}
 	d := doors.Door{ID: doors.Update, Title: "matchblox " + tag + " is out", Why: "This machine runs " + v.Current + ".", Sum: tag}
@@ -196,11 +197,14 @@ func (s *Service) updateDoor() (doors.Door, bool) {
 		if err != nil {
 			path = s.Exe
 		}
-		lines = append(lines, "  replaces    "+path)
+		lines = append(lines, "  replaces", "    "+path) // its own line: a phone still shows the file name
 	}
 	d.Preview = strings.Join(lines, "\n")
 	return d, true
 }
+
+// staleTag is the answer to an act on a release that is no longer the latest.
+const staleTag = "a newer release came out: look again"
 
 // updateAct installs the release the person saw on the door, only while
 // it is still the latest.
@@ -210,17 +214,20 @@ func (s *Service) updateAct(tag string) proto.Result {
 	case !ok:
 		return proto.Result{Err: "no newer release to install"}
 	case tag != latest:
-		return proto.Result{Err: "a newer release came out: look again"}
+		return proto.Result{Err: staleTag}
 	}
 	return s.installUpdate(tag)
 }
 
-// closeUpdate closes the offer of the latest release; a newer one opens
-// it again.
-func (s *Service) closeUpdate() proto.Result {
-	tag, ok := s.newer()
-	if !ok {
+// closeUpdate closes the offer of the release the person saw, only while
+// it is still the latest; a newer one opens it again.
+func (s *Service) closeUpdate(tag string) proto.Result {
+	latest, ok := s.newer()
+	switch {
+	case !ok:
 		return proto.Result{Err: "no newer release to close"}
+	case tag != latest:
+		return proto.Result{Err: staleTag}
 	}
 	s.updateMu.Lock()
 	s.updates.Closed = tag

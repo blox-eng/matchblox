@@ -311,6 +311,9 @@ func (s *Service) dispatch(ctx context.Context, a proto.Act) proto.Result {
 	if door {
 		res := s.door(id, a)
 		ran = res.Err == ""
+		if id == doors.Update {
+			ran = len(res.Ran) > 0 // "already updating" is no install: a retry runs
+		}
 		return res
 	}
 	if pick {
@@ -646,7 +649,7 @@ func (s *Service) door(id string, a proto.Act) proto.Result {
 	if id == doors.Update {
 		defer s.refreshDoors()
 		if a.Which == "secondary" {
-			return s.closeUpdate()
+			return s.closeUpdate(a.Text)
 		}
 		return s.updateAct(a.Text)
 	}

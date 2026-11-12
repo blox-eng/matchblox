@@ -140,9 +140,12 @@ func TestScreens(t *testing.T) {
 	}
 	offer := st
 	offer.Doors = []doors.Door{{ID: doors.Update, Title: "matchblox v0.43.0 is out", Why: "This machine runs v0.42.0.", Sum: "v0.43.0",
-		Preview: "matchblox v0.42.0 → v0.43.0 (linux/amd64)\n  checksum    checked before anything changes\n  provenance  checked when gh can verify it\n  replaces    /home/user/.local/bin/matchblox"}}
+		Preview: "matchblox v0.42.0 → v0.43.0 (linux/amd64)\n  checksum    checked before anything changes\n  provenance  checked when gh can verify it\n  replaces\n    /home/user/.local/bin/matchblox"}}
+	offer.Update = &state.UpdateView{Mode: "offer", Current: "v0.42.0", Latest: "v0.43.0"}
+	toDoor := append(slices.Repeat([]string{"up"}, 12), "enter") // past the sessions to the door, then its preview
 	for _, size := range [][2]int{{44, 31}, {104, 38}} {
 		check(t, offer, "updatedoor", size[0], size[1], nil)
+		check(t, offer, "updatedoorpreview", size[0], size[1], toDoor)
 	}
 	twoChains := tabFamily(st, false)
 	twoChains.Stokers[1].View.PaneUp = true

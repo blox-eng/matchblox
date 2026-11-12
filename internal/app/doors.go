@@ -74,19 +74,23 @@ func (m Model) doorAction(d doors.Door) *action {
 	}
 	say := d.Title + ": write " + tilde(d.Path)
 	if d.ID == doors.Update {
-		say = d.Title + ": install " + d.Sum
+		say = "install " + d.Sum
+		if m.updateView != nil && m.updateView.Current != "" {
+			say += " over " + m.updateView.Current
+		}
 	}
 	return &action{label: d.Title, say: say, destructive: true,
 		rec: "door:" + d.ID, which: "primary", text: d.Sum, door: d.ID}
 }
 
 func closeDoor(d doors.Door) *action {
-	again := "matchblox setup opens it again"
-	if d.ID == doors.Update {
-		again = "the next release opens it again"
-	}
-	return &action{label: "close", say: "close " + d.Title + " (" + again + ")", destructive: true,
+	a := &action{label: "close", say: "close " + d.Title + " (matchblox setup opens it again)", destructive: true,
 		rec: "door:" + d.ID, which: "secondary", door: d.ID}
+	if d.ID == doors.Update {
+		// The release the person saw: the service refuses to close a newer one.
+		a.say, a.text = "close "+d.Title+" (the next release opens it again)", d.Sum
+	}
+	return a
 }
 
 // doorRanMsg: a door's command gave the terminal back.
