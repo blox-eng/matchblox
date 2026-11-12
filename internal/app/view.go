@@ -220,9 +220,6 @@ func (m Model) drawScreen(w int) drawn {
 		}
 		return sc
 	}
-	if m.room != nil && !m.boardShown() {
-		return m.roomScreen(w, sc)
-	}
 	listW, detailW := m.panes(w)
 	if m.boardShown() {
 		listW, detailW = w, 0
@@ -716,7 +713,7 @@ func (m Model) keyLine(w int) (string, []span) {
 	if l := m.lostLine(); l != "" { // a lost host outranks the stand-in's keys, which may not go
 		return fit(" "+st.text.Render(l), w), nil
 	}
-	if m.room != nil && (m.room.typing || !m.boardShown()) {
+	if m.room != nil && m.room.typing && m.boardShown() {
 		return m.roomKeyLine(w), nil
 	}
 	if m.viewFull() {

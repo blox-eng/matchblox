@@ -511,3 +511,18 @@ func TestSearchNarrowsEveryColumn(t *testing.T) {
 		t.Errorf("esc keeps the search %q: %v, want %v", m.filter, drawnNames(m), before)
 	}
 }
+
+// TestTheRoomTurnsTheBoardsChains: ] and [ in a room walk the chains the
+// board draws a card of, as on the board, not every room there is.
+func TestTheRoomTurnsTheBoardsChains(t *testing.T) {
+	m := pressOn(chainsFixture(t), "g")
+	if m.room == nil || m.boardChain != "login" {
+		t.Fatalf("g on flint-auth: room %v, chain %q", m.room, m.boardChain)
+	}
+	m.filter = "flint" // docs draws no card now
+	for _, k := range []string{"]", "["} {
+		if next := pressOn(m, k); next.boardChain != "login" {
+			t.Errorf("%s in the room goes to %q: docs draws no card", k, next.boardChain)
+		}
+	}
+}

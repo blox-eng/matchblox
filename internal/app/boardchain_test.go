@@ -358,3 +358,54 @@ func TestACardSaysItsChainMates(t *testing.T) {
 func TestTheMenuTakesAMatchOutOfItsChain(t *testing.T) {
 	t.Skip("needs Task 12 step 6d: u leaves the room for the card's menu, which has no destructive line today")
 }
+
+// TestATabLeavesTheRoom: off the board the room is only the board's filter.
+// A tap on a tab or Tab draws that tab, not the room, and the room's keys
+// rest until the board is back.
+func TestATabLeavesTheRoom(t *testing.T) {
+	st := headState(t, runningPlan(), true)
+	st.Queue = nil
+	m, _ := hearthOpen(t, 160, st)
+	if roomRowNow(m) != "talk › tell hearth's stoker…" {
+		t.Fatalf("the room's talk line is not chosen: %q", roomRowNow(m))
+	}
+	if m = pressOn(m, "tab"); m.tab == tabSessions {
+		t.Fatal("tab on the room's talk line stays on the board")
+	}
+	back := pressOn(m, "shift+tab")
+	if back.tab != tabSessions || back.room == nil || back.boardChain != "hearth" {
+		t.Errorf("shift+tab back: tab %d, room %v, chain %q", back.tab, back.room, back.boardChain)
+	}
+
+	m, f := hearthOpen(t, 160, st)
+	heads := strings.Split(plainFrame(m), "\n")[1]
+	x := strings.Index(heads, "machine")
+	m = mouse(t, m, tea.MouseClickMsg{X: x + 1, Y: 1, Button: tea.MouseLeft})
+	m = mouse(t, m, tea.MouseReleaseMsg{X: x + 1, Y: 1, Button: tea.MouseLeft})
+	if m.tab != tabMachine {
+		t.Fatalf("a tap on machine: tab %d", m.tab)
+	}
+	if frame := plainFrame(m); strings.Contains(frame, "‹ ≋") || strings.Contains(frame, "tell hearth's stoker") {
+		t.Errorf("the machine tab draws the room:\n%s", frame)
+	}
+	if m = pressOn(m, "y", "y"); len(f.acts()) != 0 || m.pending != nil {
+		t.Errorf("the room's y acts off the board: acts %+v, pending %+v", f.acts(), m.pending)
+	}
+}
+
+// TestARoomRowSaysWhyACardKeyRests: on the room's own rows a card's key
+// acts on nothing and says so.
+func TestARoomRowSaysWhyACardKeyRests(t *testing.T) {
+	st := headState(t, runningPlan(), true)
+	st.Queue = nil
+	m, f := hearthOpen(t, 160, st)
+	if roomRowNow(m) != "talk › tell hearth's stoker…" {
+		t.Fatalf("the room opens on %q", roomRowNow(m))
+	}
+	for _, k := range []string{"x", "p", "c"} {
+		next := pressOn(m, k)
+		if !strings.HasPrefix(next.noticeText, "no card is chosen") || len(f.acts()) != 0 || next.pending != nil {
+			t.Errorf("%s on the talk line: notice %q, acts %+v, pending %+v", k, next.noticeText, f.acts(), next.pending)
+		}
+	}
+}

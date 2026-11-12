@@ -152,47 +152,6 @@ func (m Model) roomSession(pane string) (sample.Session, bool) {
 	return seen[i], true
 }
 
-// roomScreen draws the room in the body: on a desk the left 40%, with the
-// selected match's live view on the right; on a phone the whole width.
-func (m Model) roomScreen(w int, sc drawn) drawn {
-	sc.lines[1] = m.roomTitle(w)
-	rows := m.bodyRows()
-	leftW, rightW := w, 0
-	if _, right := m.panes(w); right > 0 {
-		leftW = max(w*2/5, viewLeast)
-		rightW = w - leftW - 1
-	}
-	left := m.roomView(leftW, rows)
-	var right []string
-	if rightW > 0 {
-		if s, ok := m.selected(); ok && m.roomAtMatch(s.Pane) {
-			right = m.viewLines(rightW, rows)
-		}
-	}
-	for i := range rows {
-		line := ""
-		if i < len(left) {
-			line = left[i]
-		}
-		if rightW > 0 {
-			r := ""
-			if i < len(right) {
-				r = right[i]
-			}
-			line = fit(line, leftW) + m.st.hair.Render("│") + fit(r, rightW)
-		}
-		sc.lines, sc.rows = append(sc.lines, line), append(sc.rows, -1)
-	}
-	sc.listW = leftW
-	hair, keys, keySpans := m.keyRows(w)
-	sc.keysAt, sc.keys = len(sc.lines)+1, keySpans
-	sc.lines = append(sc.lines, hair, keys)
-	if m.consenting() {
-		m.overlayConsent(&sc, w)
-	}
-	return sc
-}
-
 // roomAtMatch tells if the room's cursor is on the match in pane.
 func (m Model) roomAtMatch(pane string) bool {
 	rows := m.roomRows(m.room.k)

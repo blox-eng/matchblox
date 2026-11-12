@@ -1439,7 +1439,7 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.standIn {
 		return m.standInKey(k)
 	}
-	if m.room != nil {
+	if m.room != nil && m.boardShown() && !bkey.Matches(k, mk.NextTab, mk.PrevTab) { // off the board the room only filters it
 		m.flash = ""
 		return m.roomKey(k)
 	}

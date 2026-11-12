@@ -226,10 +226,19 @@ func (m *Model) roomEdge(d int) bool {
 // cards and the talk line. false: the board takes k.
 func (m Model) roomBoardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 	rk, mk, bk := m.keys.room, m.keys.main, m.keys.board
-	if m.room.typing || bkey.Matches(k, rk.Flip, rk.Walk, rk.Next, rk.Prev) {
+	if m.room.typing || bkey.Matches(k, rk.Flip, rk.Walk) {
 		m.flash = ""
 		next, cmd := m.roomKey(k)
 		return next, cmd, true
+	}
+	if bkey.Matches(k, rk.Next, rk.Prev) { // the chains the board draws, as on the board
+		m.flash = ""
+		step := 1
+		if bkey.Matches(k, rk.Prev) {
+			step = -1
+		}
+		m.turnChain(step)
+		return m, nil, true
 	}
 	_, own := m.roomChosen()
 	m.flash = ""
@@ -244,7 +253,7 @@ func (m Model) roomBoardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 		return next, cmd, true
 	case own && bkey.Matches(k, bk.Left, bk.Right):
 		m.roomToCard(1) // back to the open column
-	case own && (isDigit(k) || bkey.Matches(k, bk.Merge, bk.Menu, mk.Second, mk.Into, mk.Jump, bk.Chain,
+	case own && (isDigit(k) || bkey.Matches(k, bk.Merge, bk.Menu, bk.Copy, mk.Second, mk.Into, mk.Jump, bk.Chain,
 		mk.Park, mk.Rename, mk.Switch, mk.Dismiss, mk.Fold, mk.Stoke, mk.StokeChain, mk.Night, mk.Order)):
 		// The room's row is chosen, not a card: never a match the person cannot see.
 		cmd = m.notice("no card is chosen · ↓ goes back to the cards")
