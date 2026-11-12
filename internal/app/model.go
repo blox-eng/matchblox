@@ -1131,12 +1131,12 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.armed = "" // a key between two taps: the next tap shows again
 		var touch tea.Cmd
+		m = m.onChoice() // the touch and the layers act on what the board chose
 		// f and n are stoker acts themselves: a touch sent with them would
 		// race them on the service.
 		if m.pair != nil || m.sheet != nil || m.form != nil || m.searching || m.standIn || !bkey.Matches(msg, m.keys.main.Stoke, m.keys.main.Night) {
 			m, touch = m.touchRest()
 		}
-		m = m.onChoice()
 		f := m.focus(msg)
 		armed := m.backArmed
 		m.backArmed = time.Time{}

@@ -256,6 +256,24 @@ func (m Model) belowRow(line string) int {
 	return at
 }
 
+// boardOnRow: Sessions' selection is what the board chose (onChoice): a
+// card of a session, a line under the columns, or a service's door. A ship
+// card, a host line, the console's own doors, a search that matches nothing,
+// every column hidden and an open menu have no row.
+func (m Model) boardOnRow() bool {
+	if m.menu != nil {
+		return false // the menu takes every key; its go in asks for itself
+	}
+	if s, ok := m.boardSelected(); ok {
+		return !isShipCard(s)
+	}
+	if _, ok := m.belowChosen(); ok {
+		return true
+	}
+	line, ok := m.aboveChosen()
+	return ok && line == "" && m.doorIndex(m.boardDoors()) >= len(m.copyDoors())
+}
+
 // onChoice is m with the selection of Sessions on what the board chose:
 // the layers over the board (the take-over question) read that selection,
 // so they act on the card, or the line, the key was pressed on.
@@ -428,7 +446,9 @@ func (m Model) boardActed() Model {
 // onCard is m with the selection of Sessions on s, so a key that acts on
 // that selection acts on the chosen card.
 func (m Model) onCard(s sample.Session) Model {
-	if i := slices.IndexFunc(m.snap.Sessions, func(x sample.Session) bool { return x.PID == s.PID && x.Host == s.Host }); i >= 0 {
+	if i := slices.IndexFunc(m.snap.Sessions, func(x sample.Session) bool {
+		return paneOf(x) == paneOf(s) && (s.Pane != "" || x.PID == s.PID) // outside tmux the pane names no one
+	}); i >= 0 {
 		m.selectRow(len(m.doors) + i)
 	}
 	return m
