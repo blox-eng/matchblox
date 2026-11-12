@@ -154,6 +154,9 @@ var views = [...]tabView{
 		keys: func(m Model) []hint {
 			mk := m.keys.main
 			stoke := hintFor(mk.Stoke, "stoker")
+			if _, ok := m.selectedMachineView(); ok {
+				return []hint{hintFor(mk.Open, "open"), stoke}
+			}
 			if _, ok := m.selectedHostRow(); ok {
 				return []hint{hintFor(mk.Open, "hosts"), stoke}
 			}
@@ -174,6 +177,9 @@ var views = [...]tabView{
 		primary: func(m Model) *action {
 			if _, ok := m.selectedHostRow(); ok {
 				return nil // ⏎ opens Hosts: no action of a host's
+			}
+			if _, ok := m.selectedMachineView(); ok {
+				return nil // ⏎ opens the view
 			}
 			if r, ok := m.selectedDevice(); ok {
 				if r.plus {
@@ -258,9 +264,10 @@ var views = [...]tabView{
 	},
 }
 
-// tabNames names the tabs, in the order of their digits.
+// tabNames names the tabs of the tab row, in Tab's order. The STOKER
+// screen is no tab: it opens from Machine's row stoker.
 var tabNames = []string{tabSessions: "sessions", tabMachine: "machine", tabGit: "git",
-	tabHistory: "history", tabPanes: "panes", tabStoker: "stoker"}
+	tabHistory: "history", tabPanes: "panes"}
 
 func (m Model) view() tabView { return views[m.tab] }
 

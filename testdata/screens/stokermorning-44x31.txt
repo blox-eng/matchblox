@@ -1,6 +1,7 @@
  ▰ matchblox   ● 6 wait for you  stoker off
- 1  2  3  history  panes  STOKER 2
+ sessions 7  MACHINE  git  history  panes
 ────────────────────────────────────────────
+ 21:50 │ hearth-api  176k → 9k
 
  NIGHT · 19:50 → 22:50          ended 22:50
 
@@ -26,6 +27,5 @@
           its session ended · f starts the
           stoker with a new order
 
- YOUR GO
 ────────────────────────────────────────────
- ⏎ command  f stoker         sampled 0s ago
+ esc machine  ⏎ command      sampled 0s ago

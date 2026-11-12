@@ -161,6 +161,14 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 			return m.startChain(k), nil
 		}
 	}
+	if v, ok := m.selectedMachineView(); ok && m.tab == tabMachine {
+		// A tap on the selected view row opens it, as Enter does.
+		m.armed, m.flash = "", ""
+		if picked {
+			return m.openView(v), nil
+		}
+		return m, nil
+	}
 	if _, ok := m.selectedHostRow(); ok && m.tab == tabMachine {
 		// A tap on the selected host row opens Hosts, as Enter does.
 		m.armed, m.flash = "", ""

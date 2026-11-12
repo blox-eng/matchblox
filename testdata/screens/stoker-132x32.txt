@@ -1,6 +1,9 @@
  ▰ matchblox                                                                                      ● 6 wait for you  ☾ night → 02:50
- sessions 7    machine    git    history    panes    STOKER 1
+ sessions 7    MACHINE    git    history    panes
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ STOKER                                                                                                               night → 02:50
+ watching 0 · 1 compacted · 0 waited · 167k back
+ 21:50 │ hearth-api  176k → 9k
 
  NIGHT · 19:50 → 02:50                                                                                                       sealed
 
@@ -25,8 +28,5 @@
           y gives the go, once
 
  STANDING RULES
-  ✓ 21:20 spark-docs opened #4570: compacted, sent /review
-
- TODAY
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ↑↓ move  y give the go  ⏎ command  n stop night  / find  q quit                                                     sampled 0s ago
+ ↑↓ move  esc machine  y give the go  ⏎ command  n stop night  / find  q quit                                        sampled 0s ago

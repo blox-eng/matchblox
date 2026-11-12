@@ -501,12 +501,19 @@ func unitSession(id string) string { return sample.StokerSession + "-" + id }
 func (m Model) stokerHostCard(w int) body {
 	st, v := m.st, m.stoker
 	var b body
-	b.add(-1, "")
 	order := m.stokerOrder()
 	if v == nil {
-		b.add(-1, st.faint.Render(" this service keeps no stoker"))
+		b.add(-1, "", st.faint.Render(" this service keeps no stoker"))
 		return b
 	}
+	if len(v.Run) > 0 || m.card() != nil || order != nil { // the stoker's panel heads its screen (ruling 28)
+		panel := m.stokerLines(w, false)
+		if v.Unseen {
+			panel = panel[:len(panel)-1] // "c the whole run": this screen is the whole run
+		}
+		b.add(-1, panel...)
+	}
+	b.add(-1, "")
 	rows := m.stokerRows()
 	at := min(m.stokerSel, len(rows)-1)
 	if len(rows) > 0 && rows[0].kind == rowAgent {

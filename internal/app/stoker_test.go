@@ -82,16 +82,13 @@ func TestStatusShowsStokerOrNight(t *testing.T) {
 }
 
 func TestStokedListsRunsWithResume(t *testing.T) {
-	t.Skip("waits for TestMachineOpensTheStoker (Task 12 step 6b): the dock's stoker panel goes to the top of Machine's row stoker (ruling 28)")
 	for _, w := range []int{40, 100} {
 		st := stokerState(stokedRun(fixtureState().At))
 		m0, _ := loadedWith(t, w, st)
-		m0 = fullView(m0)   // list only has no dock
-		m0.tab = tabHistory // the dock, off the board until Machine holds it (Task 12 steps 2 and 6b)
-		if out := ansi.Strip(m0.render()); strings.Contains(out, "TODAY") || !strings.Contains(out, "STOKER") {
-			t.Fatalf("width %d: the run is not in the dock alone:\n%s", w, out)
+		m := fromMachine(t, m0, "stoker") // the stoker's panel heads the screen (ruling 28)
+		if top := strings.Split(screen(m), "\n")[3]; !strings.Contains(top, "STOKER") {
+			t.Fatalf("width %d: the screen's top is %q, not the stoker's panel", w, top)
 		}
-		m := openCard(m0).(Model)
 		out := ansi.Strip(m.render())
 		for _, want := range []string{"TODAY", "app-feature", "176k → 9k", "would pass 80%", "RESUME: run the migration test", "app-review", "skipped: session busy"} {
 			if !strings.Contains(out, want) {
@@ -210,54 +207,29 @@ func sized(t *testing.T, w, h int, st proto.State) Model {
 	return next.(Model)
 }
 
-// TestTheStokerLivesInTheDock: while a run is in charge the stoker's panel
-// takes a phone's dock until u switches it, and the machine's place
-// on Ships; Sessions split stacks all three under the list. A tap
-// on the panel opens the STOKER tab. The phones are in their full view:
-// list only has no dock.
+// TestTheStokerLivesInTheDock: while a run is in charge the stoker's
+// panel (its state, what it watches, its last step) heads the STOKER
+// screen that Machine's row stoker opens, on a phone and on a desk; off,
+// the screen says how to start it (ruling 28). The board has no dock.
 func TestTheStokerLivesInTheDock(t *testing.T) {
-	t.Skip("waits for TestMachineOpensTheStoker (Task 12 step 6b): the dock's stoker panel goes to Machine's row stoker (ruling 28); its stack under the list goes with the list")
 	st := stokerState(runningNight(fixtureState().At))
-	phone := fullView(sized(t, 44, 31, st))
-	phone.tab = tabHistory // the dock, off the board until Machine holds it (Task 12 steps 2 and 6b)
-	out := screen(phone)
-	if !strings.Contains(out, "STOKER") || !strings.Contains(out, "night → ") || strings.Contains(out, "USAGE") ||
-		!strings.Contains(out, "176k → 9k") || !strings.Contains(out, "· watching 3 · 1 compacted") {
-		t.Fatalf("44x31: the stoker does not take the dock:\n%s", out)
+	for _, size := range [][2]int{{44, 31}, {192, 60}} {
+		m := fromMachine(t, sized(t, size[0], size[1], st), "stoker")
+		lines := strings.Split(screen(m), "\n")
+		top := strings.Join(lines[3:3+len(m.stokerLines(size[0], false))], "\n")
+		for _, want := range []string{"STOKER", "night → ", "watching 3 · 1 compacted", "app-review"} {
+			if !strings.Contains(top, want) {
+				t.Fatalf("%dx%d: the screen's top lacks %q:\n%s", size[0], size[1], want, screen(m))
+			}
+		}
+		if strings.Contains(top, "TODAY") {
+			t.Fatalf("%dx%d: the panel is the card:\n%s", size[0], size[1], top)
+		}
+		if board := sized(t, size[0], size[1], st); strings.Contains(screen(board), "watching 3") {
+			t.Fatalf("%dx%d: the board draws the stoker's panel:\n%s", size[0], size[1], screen(board))
+		}
 	}
-	if strings.Contains(out, "TODAY") {
-		t.Fatalf("44x31: the card is on top of Sessions:\n%s", out)
-	}
-	switched, _ := key(phone, "u")
-	if out := screen(switched); !strings.Contains(out, "USAGE") || strings.Contains(out, "STOKER") {
-		t.Fatalf("44x31: u does not switch away from the stoker:\n%s", out)
-	}
-	y := lineOf(t, phone, "STOKER")
-	card, _ := tap(phone, 3, y+1)
-	if cm := card.(Model); cm.tab != tabStoker || !strings.Contains(screen(card), "RESUME: run the migration test") {
-		t.Fatalf("44x31: a tap on the stoker does not open its tab:\n%s", screen(card))
-	}
-
-	drawer := fullView(sized(t, 107, 101, st))
-	if usage, stoker := lineOf(t, drawer, "USAGE"), lineOf(t, drawer, "STOKER"); usage >= stoker {
-		t.Fatalf("107x101: the stoker is not under the list:\n%s", screen(drawer))
-	}
-	card, _ = tap(drawer, 3, lineOf(t, drawer, "STOKER")+1)
-	if cm := card.(Model); cm.tab != tabStoker || !strings.Contains(screen(card), "RESUME: run the migration test") {
-		t.Fatalf("107x101: a tap on the stoker does not open its tab:\n%s", screen(card))
-	}
-
-	desk := sized(t, 192, 60, st)
-	usage, machine, stoker := lineOf(t, desk, "USAGE"), lineOf(t, desk, "MACHINE"), lineOf(t, desk, "STOKER")
-	if usage >= machine || machine >= stoker {
-		t.Fatalf("192x60: the desk does not stack all three under the list:\n%s", screen(desk))
-	}
-	card, _ = tap(desk, 3, stoker+1)
-	if cm := card.(Model); cm.tab != tabStoker {
-		t.Fatalf("192x60: a tap on the stoker does not open its tab:\n%s", screen(card))
-	}
-
-	off := sized(t, 192, 60, stokerState(proto.StokerView{}))
+	off := fromMachine(t, sized(t, 192, 60, stokerState(proto.StokerView{})), "stoker")
 	if out := screen(off); !strings.Contains(out, "off · f starts it · n starts a night") {
 		t.Fatalf("the stoker off says nothing to do:\n%s", out)
 	}

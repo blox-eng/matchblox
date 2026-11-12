@@ -77,12 +77,12 @@ func TestDeviceGetsTheRefusals(t *testing.T) {
 
 	dr, dm := devicesConsole(t, 0)
 	phoneIn(t, r, &dm, &tty)
-	dm.selectRow(2) // the plus row
+	dm.selectRow(len(machineViews) + 2) // the plus row
 	next, _ = key(dm, "enter")
 	if got := next.(Model); got.pair != nil || got.flash != "Pair from the host's own terminal." {
 		t.Fatalf("plus row: page %v, flash %q", got.pair, got.flash)
 	}
-	dm.selectRow(0)
+	dm.selectRow(len(machineViews))
 	keep, _ := key(dm, "x")
 	next, _ = key(keep, "y")
 	got = next.(Model)
@@ -98,7 +98,7 @@ func TestDeviceAfterXGetsTheRefusalAtConfirm(t *testing.T) {
 	r, m := devicesConsole(t, 0)
 	tty := "/dev/ttys001" // the builder at x
 	phoneIn(t, r, &m, &tty)
-	m.selectRow(0)
+	m.selectRow(len(machineViews))
 	keep, _ := key(m, "x")
 	if keep.(Model).pending == nil {
 		t.Fatal("the builder's x built nothing")

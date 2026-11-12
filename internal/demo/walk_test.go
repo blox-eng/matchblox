@@ -208,7 +208,50 @@ func (w *walker) press(keys ...string) {
 
 // tabWords are the tabs in the tab row's order, each as the row names it
 // while it is open.
-var tabWords = []string{"SESSIONS", "MACHINE", "GIT", "HISTORY", "PANES", "STOKER"}
+var tabWords = []string{"SESSIONS", "MACHINE", "GIT", "HISTORY", "PANES"}
+
+// viewWords are the views that open from Machine's first rows, in their
+// order, each with a word only its screen draws.
+var viewWords = []struct{ name, word string }{{"stoker", "STOKER"}}
+
+// open opens a tab of the tab row, or a view of Machine's.
+func (w *walker) open(screen string) {
+	w.t.Helper()
+	if slices.Contains(tabWords, screen) {
+		w.toTab(screen)
+		return
+	}
+	w.toView(screen)
+}
+
+// onView tells if the screen shows the view name: its word, and the way
+// back to Machine on the key line.
+func (w *walker) onView(name string) bool {
+	at := slices.IndexFunc(viewWords, func(v struct{ name, word string }) bool { return v.name == name })
+	_, frame := w.term.wholeFrame()
+	return at >= 0 && strings.Contains(frame, viewWords[at].word) && strings.Contains(frame, "esc machine")
+}
+
+// toView opens the view name from its row on Machine: up to the first
+// row, down to its own, ⏎.
+func (w *walker) toView(name string) {
+	w.t.Helper()
+	at := slices.IndexFunc(viewWords, func(v struct{ name, word string }) bool { return v.name == name })
+	if at < 0 {
+		w.t.Fatalf("Machine has no view %q", name)
+	}
+	if w.onView(name) {
+		return
+	}
+	w.toTab("MACHINE")
+	w.press(slices.Repeat([]string{"k"}, 12)...)
+	w.press(slices.Repeat([]string{"j"}, at)...)
+	w.press("enter")
+	eventually(w.t, 10*time.Second, "the "+name+" view to open", func() bool {
+		w.d.Repaint()
+		return w.onView(name)
+	})
+}
 
 // toTab opens the tab want names: a tap on its name on the tab row, as a
 // person on a phone does, then one wait for the redraw. A digit on the board
@@ -393,14 +436,14 @@ func (w *walker) walkKeys(tab string) {
 	top := slices.Repeat([]string{"k"}, rowsWalked)
 	for _, k := range everyKey() {
 		for _, consent := range []string{"enter", "y"} {
-			w.toTab(tab)
+			w.open(tab)
 			w.press(k, consent, consent)
 			w.reset()
 		}
 	}
 	for _, k := range rowKeys {
 		for row := 1; row < rowsWalked; row++ {
-			w.toTab(tab)
+			w.open(tab)
 			w.press(top...)
 			w.press(slices.Repeat([]string{"j"}, row)...)
 			w.press(k, "y", "y")
@@ -415,14 +458,14 @@ func (w *walker) walkTaps(tab string) {
 	w.t.Helper()
 	for x := 1; x <= w.cols; x += 2 {
 		for _, y := range []int{w.rows, w.rows - 1} {
-			w.toTab(tab)
+			w.open(tab)
 			w.tap(x, y)
 			w.press("y")
 			w.reset()
 		}
 	}
 	for y := 1; y <= w.rows; y++ {
-		w.toTab(tab)
+		w.open(tab)
 		w.tap(20, y)
 		w.tap(20, y)
 		w.press("y")
@@ -557,15 +600,17 @@ func (w *walker) walkTheDoors() {
 	w.press("esc", "esc")
 	w.clear()
 
-	w.tabByKey("STOKER")
+	w.toView("stoker")
 	w.press("f", "enter")
-	w.clear()
+	w.clear() // esc: back to Machine, so the stoker opens again for what it draws
+	w.toView("stoker")
 	w.opens("the order sheet", "How should I run?", "o")
 	w.send("an order", "keep the tests green")
 	w.saysAfter("an order", "“keep the tests green”", "enter")
 	w.clear()
 	w.press("f")
 	w.clear()
+	w.toView("stoker")
 	w.press("n")
 	w.saysAfter("a night", "NIGHT", "enter")
 }
@@ -590,7 +635,7 @@ func walk(t *testing.T) (saw []string) {
 		w.alive()
 		saw = append(saw, w.spy.seen()...)
 		w.d.Stop()
-		for _, tab := range tabWords {
+		for _, tab := range append(slices.Clone(tabWords), "stoker") {
 			w := startWalk(t, size[0], size[1])
 			if size[0] == 44 {
 				w.walkKeys(tab)
@@ -1043,7 +1088,7 @@ func TestWhatThePhoneCannotDoSaysSo(t *testing.T) {
 func TestANightStartsAndRunsNothing(t *testing.T) {
 	m := newMachine(t)
 	w := startWalk(t, 132, 32)
-	w.toTab("STOKER")
+	w.toView("stoker")
 	w.press("n")
 	w.saysAfter("a night", "the stoker runs the night", "enter")
 	if saw := w.spy.seen(); len(saw) > 0 {

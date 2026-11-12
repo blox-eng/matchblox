@@ -16,15 +16,16 @@ var emptyTexts = []string{"scanning repositories…", "collecting history", "thi
 const fillBound = 2 * time.Second
 
 // tabs are the tabs in Tab's order (a digit on the board answers its
-// card), each with a string only its seeded data
+// card), then the stoker, Machine's first row, each with a string only its
+// seeded data
 // draws: a screen that is blank or still loading cannot pass on absence alone.
 var tabs = []struct{ key, name, seeded string }{
 	{"\t", "Machine", "NETWORK AND DISK"},
 	{"\t", "Git", "9 WORKTREES"},
 	{"\t", "History", "LAST 2H"},
 	{"\t", "Panes", "hearth:2.1"},
-	{"\t", "Stoker", "n starts a night"},
 	{"\t", "Sessions", "flint-auth"},
+	{"\t\r", "Stoker", "n starts a night"}, // Machine, then its row stoker
 }
 
 func TestEveryTabHasData(t *testing.T) {
@@ -85,6 +86,9 @@ func TestEveryAgentPaneReads(t *testing.T) {
 // how long a loading text can show.
 func TestATabPressedAtTheFirstDrawFillsAtOnce(t *testing.T) {
 	for _, tab := range tabs {
+		if tab.key != "\t" {
+			continue // a view of Machine opens from its row: no one key to press at the first draw
+		}
 		t.Run(tab.name, func(t *testing.T) {
 			t.Setenv("TMPDIR", t.TempDir())
 			_, term := startAt(t, 44, 31)

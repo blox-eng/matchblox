@@ -157,17 +157,15 @@ func quietNight() proto.StokerView {
 	}
 }
 
-// TestAQuietNightShowsItsCard: the night's score takes the dock's stoker
-// panel until it is seen, and c opens the whole card. The phone shows it
-// in its full view: list only has no dock.
+// TestAQuietNightShowsItsCard: the night's score is in the stoker's panel
+// at the top of the screen Machine's row stoker opens, and c opens the
+// whole card.
 func TestAQuietNightShowsItsCard(t *testing.T) {
-	t.Skip("waits for TestMachineOpensTheStoker (Task 12 step 6b): the dock's stoker panel goes to the top of Machine's row stoker (ruling 28)")
 	for _, w := range []int{40, 120} {
 		m, _ := loadedWith(t, w, stokerState(quietNight()))
-		m = fullView(m)
-		m.tab = tabHistory // the dock, off the board until Machine holds it (Task 12 steps 2 and 6b)
-		if out := ansi.Strip(m.render()); !strings.Contains(out, "STOKER") || !strings.Contains(out, "ready 7/7") || strings.Contains(out, "NIGHT · 01:08") {
-			t.Fatalf("w=%d: the dock does not show the night's score:\n%s", w, out)
+		m = fromMachine(t, m, "stoker")
+		if top := strings.Join(strings.Split(screen(m), "\n")[3:5], "\n"); !strings.Contains(top, "STOKER") || !strings.Contains(top, "ready 7/7") {
+			t.Fatalf("w=%d: the stoker's panel does not head the screen with the night's score:\n%s", w, screen(m))
 		}
 		out := ansi.Strip(openCard(m).(Model).render())
 		for _, want := range []string{"NIGHT · 01:08 → 07:00", "ready 7/7", "7 watched", "0 compacted"} {

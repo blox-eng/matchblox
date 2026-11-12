@@ -1,5 +1,5 @@
  ▰ matchblox
- SESSIONS 0    machine    git    history    panes    stoker
+ SESSIONS 0    machine    git    history    panes
 ────────────────────────────────────────────────────────────────────────────────
 ▌+ start a new session
 

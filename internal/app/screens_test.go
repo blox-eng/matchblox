@@ -126,7 +126,7 @@ func TestScreens(t *testing.T) {
 	for _, size := range [][2]int{{44, 31}, {104, 38}, {132, 32}} {
 		check(t, sheetScreen(st, false), "sheet", size[0], size[1], append(night, "tab", "space", "tab"))
 	}
-	toStokerTab := slices.Repeat([]string{"tab"}, tabStoker) // c copies on the board
+	toStokerTab := []string{"tab", "enter"} // Machine, then its first row: stoker (c copies on the board)
 	for _, size := range [][2]int{{44, 31}, {104, 38}, {132, 32}} {
 		check(t, tabNight(st), "stoker", size[0], size[1], toStokerTab)
 		check(t, tabMorning(st), "stokermorning", size[0], size[1], toStokerTab)

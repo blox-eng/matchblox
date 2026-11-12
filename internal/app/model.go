@@ -415,9 +415,11 @@ type Model struct {
 	devices      []PairDevice // the keys that open this host, read when the Machine tab opens
 	devErr       error        // why the keys could not be read
 	devPick      string       // the selected device row: its fingerprint, or devPlus
-	// hostPicked: a host row of Machine is selected, hostPick its host.
+	// hostPicked: a host row of Machine is selected, hostPick its host;
+	// viewPick: a view row, by its name.
 	hostPicked  bool
 	hostPick    string
+	viewPick    string
 	pair        *pairPage  // the pair page, while it shows
 	pairPolling bool       // a poll of the pair page is on its way
 	pairOffers  *pairWaits // the offers of a key that still run: the end of the program waits for them
@@ -1438,7 +1440,7 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	m.flash = ""
 	if s, ok := m.selectedSession(); ok && bkey.Matches(k, mk.Second, mk.Rename, mk.Switch, mk.Park) {
 		if u, head := m.headRow(s); head { // its agent is the stoker's, not a session of the builder's
-			m.flash = "the stoker of chain " + u.Name + " is no session: quit it on the STOKER tab"
+			m.flash = "the stoker of chain " + u.Name + " is no session: " + m.quitStokerWhere()
 			return m, nil
 		}
 	}
@@ -1448,9 +1450,9 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case bkey.Matches(k, mk.Quit):
 		return m.quit()
 	case bkey.Matches(k, mk.NextTab):
-		m.setTab((m.tab + 1) % len(tabNames))
+		m.setTab((m.openTab() + 1) % len(tabNames))
 	case bkey.Matches(k, mk.PrevTab):
-		m.setTab((m.tab + len(tabNames) - 1) % len(tabNames))
+		m.setTab((m.openTab() + len(tabNames) - 1) % len(tabNames))
 	case bkey.Matches(k, mk.Search):
 		m.searching, m.filter = true, ""
 		m.refresh()
@@ -1460,6 +1462,8 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.refresh()
 		} else if m.opt.Layered && !m.have { // a host that never answered: the way back; else esc stays
 			return m, func() tea.Msg { return layerMsg{} }
+		} else {
+			m = m.backToMachine() // a view of Machine: back to its row
 		}
 	case bkey.Matches(k, mk.Sort):
 		if m.tab == tabPanes {
@@ -1518,6 +1522,9 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		if _, ok := m.selectedHostRow(); ok && m.tab == tabMachine {
 			return m.openHosts()
+		}
+		if v, ok := m.selectedMachineView(); ok && m.tab == tabMachine {
+			return m.openView(v), nil
 		}
 		if s, ok := m.selectedSession(); ok {
 			if u, head := m.headRow(s); head { // a chain's head opens its room

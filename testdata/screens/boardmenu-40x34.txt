@@ -1,5 +1,5 @@
  ▰ matchblox · all hosts ▾ ● 4 need you
- SESSIONS 15  machine  git  4  5  6
+ SESSIONS 15  machine  git  4  5
 ────────────────────────────────────────
  NEEDS YOU 4 −  work 3  ship 3  quiet 5
 ────────────────────────────────────────

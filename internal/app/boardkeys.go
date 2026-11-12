@@ -687,18 +687,24 @@ func (m *Model) boardMerge(s sample.Session) tea.Cmd {
 	return note
 }
 
+// quitStokerWhere says where a stoker's agent quits: its screen opens from
+// Machine's row stoker (ruling 28).
+func (m Model) quitStokerWhere() string {
+	return m.keys.main.QuitAgent.Help().Key + " quits it on Machine › stoker"
+}
+
 // boardKill is x: the kill of the chosen match, behind the consent box. On
 // a card whose ship waits, the first x says once that p merges now.
 func (m *Model) boardKill(s sample.Session) tea.Cmd {
 	if u, head := m.headRow(s); head {
-		return m.notice("the stoker of chain " + u.Name + " is no session: quit it on the STOKER tab")
+		return m.notice("the stoker of chain " + u.Name + " is no session: " + m.quitStokerWhere())
 	}
 	a := m.killAction(s)
 	switch {
 	case a == nil && s.Pane == "":
 		return m.notice(s.Name + " runs outside tmux: no pane to kill")
 	case a == nil: // the stoker's own session
-		return m.notice("the stoker is no session: quit it on the STOKER tab")
+		return m.notice("the stoker is no session: " + m.quitStokerWhere())
 	}
 	var note tea.Cmd
 	if sh, ok := m.mergeable(s); ok {

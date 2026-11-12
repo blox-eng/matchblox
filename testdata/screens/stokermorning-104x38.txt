@@ -1,6 +1,9 @@
  ▰ matchblox                                                               ● 6 wait for you  stoker off
- sessions 7    machine    git    history    panes    STOKER 2
+ sessions 7    MACHINE    git    history    panes
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
+ STOKER                                                                                             off
+ ready 4/5 · 1 compacted · 0 waited · 0k back
+ 21:50 │ hearth-api  176k → 9k
 
  NIGHT · 19:50 → 22:50                                                                      ended 22:50
 
@@ -31,8 +34,5 @@
  TODAY
    21:50  │ hearth-api       %2         176k → 9k
        past 80%
-       RESUME: run the migration test
-
-  THE RUN · ready 4/5
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
- ↑↓ move  ⏎ command  f stoker  / find  q quit                                            sampled 0s ago
+ ↑↓ move  esc machine  ⏎ command  f stoker  / find  q quit                               sampled 0s ago

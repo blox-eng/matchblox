@@ -3,9 +3,11 @@ package app
 import (
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/blox-eng/matchblox/internal/sample"
 )
 
 // devPlus is devPick when the row "+ pair a device" is selected.
@@ -60,9 +62,20 @@ func (m Model) deviceRows() []devRow {
 	return append(rows, devRow{plus: true})
 }
 
-// machineRows are the orphans, the device rows, then the host rows.
+// machineView is a row of Machine that opens a screen of its own: ⏎ opens
+// it, and esc comes back to Machine, on its row.
+type machineView struct {
+	name string
+	tab  int
+}
+
+// machineViews are Machine's first rows.
+var machineViews = []machineView{{"stoker", tabStoker}}
+
+// machineRows are the views, the orphans, the device rows, then the host
+// rows.
 func (m Model) machineRows() int {
-	return len(m.snap.Orphans) + len(m.deviceRows()) + len(m.hostRows())
+	return len(machineViews) + len(m.snap.Orphans) + len(m.deviceRows()) + len(m.hostRows())
 }
 
 // hostRows are Machine's rows of the hosts, in Hosts order: ⏎ on one opens
@@ -75,33 +88,112 @@ func (m Model) hostRows() []string {
 	return m.hosts()
 }
 
-// machineIndex is the selected row of the Machine tab.
+// machineIndex is the selected row of the Machine tab: its first view
+// until another row is chosen.
 func (m Model) machineIndex() int {
+	nv, no := len(machineViews), len(m.snap.Orphans)
 	if m.hostPicked {
 		if i := slices.Index(m.hostRows(), m.hostPick); i >= 0 {
-			return len(m.snap.Orphans) + len(m.deviceRows()) + i
+			return nv + no + len(m.deviceRows()) + i
 		}
 	}
 	if m.devPick != "" {
-		for i, r := range m.deviceRows() {
-			if r.key() == m.devPick {
-				return len(m.snap.Orphans) + i
-			}
+		if i := slices.IndexFunc(m.deviceRows(), func(r devRow) bool { return r.key() == m.devPick }); i >= 0 {
+			return nv + no + i
 		}
 	}
-	return m.orphanIndex()
+	if i := slices.IndexFunc(machineViews, func(v machineView) bool { return v.name == m.viewPick }); i >= 0 {
+		return i
+	}
+	if i := slices.IndexFunc(m.snap.Orphans, func(o sample.Orphan) bool { return o.PID == m.orphanPID }); i >= 0 {
+		return nv + i
+	}
+	return 0
 }
 
 func (m *Model) machinePick(i int) {
-	n, nd := len(m.snap.Orphans), len(m.deviceRows())
-	m.hostPicked = false
+	nv, no, nd := len(machineViews), len(m.snap.Orphans), len(m.deviceRows())
+	m.viewPick, m.orphanPID, m.devPick, m.hostPicked = "", 0, "", false
 	switch {
-	case i < n:
-		m.orphanPID, m.devPick = m.snap.Orphans[i].PID, ""
-	case i < n+nd:
-		m.devPick = m.deviceRows()[i-n].key()
+	case i < nv:
+		m.viewPick = machineViews[i].name
+	case i < nv+no:
+		m.orphanPID = m.snap.Orphans[i-nv].PID
+	case i < nv+no+nd:
+		m.devPick = m.deviceRows()[i-nv-no].key()
 	default:
-		m.devPick, m.hostPicked, m.hostPick = "", true, m.hostRows()[i-n-nd]
+		m.hostPicked, m.hostPick = true, m.hostRows()[i-nv-no-nd]
+	}
+}
+
+// selectedMachineView is the view row under the cursor.
+func (m Model) selectedMachineView() (machineView, bool) {
+	if i := m.machineIndex(); i < len(machineViews) {
+		return machineViews[i], true
+	}
+	return machineView{}, false
+}
+
+// openedView is the view of Machine the screen shows, when it shows one.
+func (m Model) openedView() (machineView, bool) {
+	i := slices.IndexFunc(machineViews, func(v machineView) bool { return v.tab == m.tab })
+	if i < 0 {
+		return machineView{}, false
+	}
+	return machineViews[i], true
+}
+
+// openTab is the tab the tab row names open: Machine for a view of it.
+func (m Model) openTab() int {
+	if _, ok := m.openedView(); ok {
+		return tabMachine
+	}
+	return m.tab
+}
+
+// openView is ⏎ on a view row: its screen, as today.
+func (m Model) openView(v machineView) Model {
+	m.setTab(v.tab)
+	return m
+}
+
+// backToMachine is esc on a view's screen: Machine, on its row.
+func (m Model) backToMachine() Model {
+	v, ok := m.openedView()
+	if !ok {
+		return m
+	}
+	m.setTab(tabMachine)
+	m.machinePick(slices.Index(machineViews, v))
+	return m
+}
+
+// viewsBody is Machine's view rows, then a blank line.
+func (m Model) viewsBody(w int) body {
+	st := m.st
+	var b body
+	sel := m.machineIndex()
+	for i, v := range machineViews {
+		on := i == sel
+		b.addRow(i, on, w, st, " "+st.ink(on).Render(pad(v.name, 10))+st.faint.Render(m.viewNote(v)))
+	}
+	b.add(-1, "")
+	return b
+}
+
+// viewNote is what a view row says after its name: the stoker's state
+// and how many of its steps wait for the builder.
+func (m Model) viewNote(v machineView) string {
+	if v.tab != tabStoker {
+		return ""
+	}
+	switch n := m.stokerNeeds(); n {
+	case 0:
+		return m.stokerWord()
+	case 1:
+		return m.stokerWord() + " · 1 needs you"
+	default:
+		return m.stokerWord() + " · " + strconv.Itoa(n) + " need you"
 	}
 }
 
@@ -122,7 +214,7 @@ func (m Model) hostsBody(w int) body {
 	st := m.st
 	b := plain(m.region(fmt.Sprintf("hosts · %d", len(hs)), w))
 	at, picked := m.selectedHostRow()
-	base := len(m.snap.Orphans) + len(m.deviceRows())
+	base := len(machineViews) + len(m.snap.Orphans) + len(m.deviceRows())
 	for i, h := range hs {
 		on := picked && h == at
 		line := " " + st.ink(on).Render(pad(m.nameOf(h), 24))
@@ -142,7 +234,7 @@ func (m Model) openHosts() (tea.Model, tea.Cmd) {
 // selectedDevice is the device row under the cursor.
 func (m Model) selectedDevice() (devRow, bool) {
 	rows := m.deviceRows()
-	i := m.machineIndex() - len(m.snap.Orphans)
+	i := m.machineIndex() - len(machineViews) - len(m.snap.Orphans)
 	if m.devPick == "" || i < 0 || i >= len(rows) {
 		return devRow{}, false
 	}
@@ -165,10 +257,11 @@ func (m Model) devicesBody(w int) body {
 		b.add(-1, fit(" "+st.warn.Render("cannot read ~/.ssh/authorized_keys: "+m.devErr.Error()+". Check its owner and mode (600)."), w))
 	}
 	_, picked := m.selectedDevice()
-	sel := m.machineIndex() - len(m.snap.Orphans)
+	base := len(machineViews) + len(m.snap.Orphans)
+	sel := m.machineIndex() - base
 	for i, r := range m.deviceRows() {
 		on := picked && i == sel
-		row := len(m.snap.Orphans) + i
+		row := base + i
 		if r.plus {
 			b.addRow(row, on, w, st, " "+st.accent.Render("+ pair a device"))
 			continue

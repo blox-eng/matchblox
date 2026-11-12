@@ -285,7 +285,7 @@ var fixedNotices = []string{
 	"nothing to copy: no card is chosen",
 	"nothing to copy: kindle-legacy said nothing yet",
 	"no ship of kindle-legacy waits for a merge",
-	"the stoker of chain login is no session: quit it on the STOKER tab",
+	"the stoker of chain login is no session: Q quits it on Machine › stoker",
 	"kindle-legacy runs outside tmux: no pane to kill",
 	"no step waits for your go on kindle-legacy",
 	"tap y again to give the go",

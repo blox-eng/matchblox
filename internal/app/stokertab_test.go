@@ -130,8 +130,10 @@ func TestStokerTabShowsWordsPlanAndRules(t *testing.T) {
 			t.Fatalf("no %q in\n%s", want, out)
 		}
 	}
-	if !strings.Contains(strings.Split(out, "\n")[1], "STOKER 1") { // the go, not the plan step that waits on an event
-		t.Fatalf("the tab does not count what waits for the builder:\n%s", out)
+	machine := m
+	machine.setTab(tabMachine)
+	if row := strings.Split(screen(machine), "\n")[3]; !strings.Contains(row, "1 needs you") { // the go, not the plan step that waits on an event
+		t.Fatalf("Machine's row stoker does not count what waits for the builder: %q", row)
 	}
 	for _, w := range []int{44, 132} {
 		m, _ := loadedWith(t, w, tabNight(screensState(t)))
@@ -470,6 +472,7 @@ func selectChain(t *testing.T, m Model, id string) Model {
 func TestTheTabListsTheFamily(t *testing.T) {
 	m, _ := loadedWith(t, 104, tabFamily(screensState(t), false))
 	m.setTab(tabStoker)
+	m.height = 40 // the stoker's panel heads the screen (ruling 28)
 	out := screen(m)
 	host, chain, ended := strings.Index(out, "STOKER AGENT"), strings.Index(out, "CHAIN hearth-api"), strings.Index(out, "CHAIN kindle-web")
 	if host < 0 || chain < host || ended < chain {
@@ -667,5 +670,56 @@ func TestHeaderCountsRunningStokers(t *testing.T) {
 	m, _ = loadedWith(t, 104, none)
 	if head := strings.Split(screen(m), "\n")[0]; !strings.HasSuffix(strings.TrimRight(head, " "), "stoker off") {
 		t.Fatalf("header %q, want stoker off", head)
+	}
+}
+
+// fromMachine is m on Machine, with the row that opens the screen name
+// chosen and ⏎ pressed on it.
+func fromMachine(t *testing.T, m Model, name string) Model {
+	t.Helper()
+	m.setTab(tabMachine)
+	at := slices.IndexFunc(machineViews, func(v machineView) bool { return v.name == name })
+	if at < 0 {
+		t.Fatalf("Machine has no row %q", name)
+	}
+	m.selectRow(at)
+	return pressOn(m, "enter")
+}
+
+// TestMachineOpensTheStoker: the host stoker's screen is Machine's row
+// stoker, its first (ruling 28): ⏎ opens today's STOKER screen, the
+// stoker's panel at its top, and esc comes back to Machine on that row.
+// The tab row has no stoker of its own.
+func TestMachineOpensTheStoker(t *testing.T) {
+	m, _ := loadedWith(t, 100, stokerState(stokedRun(fixtureState().At)))
+	m = pressOn(m, "tab")
+	if m.tab != tabMachine {
+		t.Fatalf("tab from the board opens tab %d", m.tab)
+	}
+	if line, _ := m.tabsLine(100); strings.Contains(strings.ToLower(ansi.Strip(line)), "stoker") {
+		t.Fatalf("the tab row names the stoker: %q", ansi.Strip(line))
+	}
+	if v, ok := m.selectedMachineView(); !ok || v.name != "stoker" {
+		t.Fatalf("Machine opens on %+v, want its row stoker", v)
+	}
+	if row := strings.Split(screen(m), "\n")[3]; !strings.HasPrefix(strings.TrimLeft(row, " ▌"), "stoker") {
+		t.Fatalf("Machine's first row is %q", row)
+	}
+	m = pressOn(m, "enter")
+	lines := strings.Split(screen(m), "\n")
+	if m.tab != tabStoker || !strings.Contains(lines[3], "STOKER") {
+		t.Fatalf("⏎ on the row: tab %d, the screen's top %q", m.tab, lines[3])
+	}
+	for _, want := range []string{"TODAY", "RESUME: run the migration test", "esc machine"} {
+		if !strings.Contains(screen(m), want) {
+			t.Fatalf("the STOKER screen lacks %q:\n%s", want, screen(m))
+		}
+	}
+	if !strings.Contains(strings.Split(screen(m), "\n")[1], "MACHINE") {
+		t.Fatalf("the tab row does not name Machine open: %q", strings.Split(screen(m), "\n")[1])
+	}
+	m = pressOn(m, "esc")
+	if v, ok := m.selectedMachineView(); m.tab != tabMachine || !ok || v.name != "stoker" {
+		t.Fatalf("esc: tab %d on %+v", m.tab, v)
 	}
 }

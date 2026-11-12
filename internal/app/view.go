@@ -547,6 +547,7 @@ func (m Model) hostBadge(short bool) string {
 func (m Model) tabsLine(w int) (string, []span) {
 	alert := m.alert()
 	aw := lipgloss.Width(alert)
+	open := m.openTab()
 	try := func(near int, gap string) (string, []span) {
 		line, x := " ", 1
 		var spans []span
@@ -555,7 +556,7 @@ func (m Model) tabsLine(w int) (string, []span) {
 				line += gap
 				x += len(gap)
 			}
-			label := m.tabLabel(i, i-m.tab <= near && m.tab-i <= near)
+			label := m.tabLabel(i, i-open <= near && open-i <= near)
 			spans = append(spans, span{x, x + lipgloss.Width(label), strconv.Itoa(i + 1)})
 			line += label
 			x += lipgloss.Width(label)
@@ -589,18 +590,14 @@ func (m Model) tabLabel(i int, named bool) string {
 		if len(m.all.orphans) > 0 {
 			count = "!" // a detached busy loop burns
 		}
-	case tabStoker:
-		if n := m.stokerNeeds(); n > 0 {
-			count = strconv.Itoa(n)
-		}
 	}
 	if !named {
 		name = strconv.Itoa(i + 1)
 	}
 	switch {
-	case i == m.tab && count == "":
+	case i == m.openTab() && count == "":
 		return st.tabActive.Render(strings.ToUpper(name))
-	case i == m.tab:
+	case i == m.openTab():
 		return st.tabActive.Render(strings.ToUpper(name)) + st.accent.Render(" "+count)
 	case count == "!":
 		return st.faint.Render(name) + st.neg.Render(" !")
@@ -678,6 +675,9 @@ func (m Model) keyLine(w int) (string, []span) {
 		return m.boardKeyLine(w)
 	}
 	hints := slices.DeleteFunc(slices.Clone(m.view().keys(m)), func(h hint) bool { return h == (hint{}) })
+	if _, ok := m.openedView(); ok { // esc comes back to Machine
+		hints = append([]hint{hintFor(m.keys.main.Back, "machine")}, hints...)
+	}
 	if m.layoutAt(w) == Wide {
 		mk := m.keys.main
 		hints = append([]hint{noTap(hintFor(mk.Up, ""))}, hints...)

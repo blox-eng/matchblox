@@ -885,7 +885,7 @@ func TestAHeadIsNoSession(t *testing.T) {
 	m = pick(t, m, stokerPane)
 	for _, k := range []string{"x", "r", "A", "z"} {
 		next := sendKey(m, k).(Model)
-		if next.flash != "the stoker of chain kindle-web is no session: quit it on the STOKER tab" || next.pending != nil || next.form != nil || len(f.acts()) != 0 {
+		if next.flash != "the stoker of chain kindle-web is no session: Q quits it on Machine › stoker" || next.pending != nil || next.form != nil || len(f.acts()) != 0 {
 			t.Errorf("%s on the head: flash %q, pending %v, form %v, acts %+v", k, next.flash, next.pending, next.form != nil, f.acts())
 		}
 	}
