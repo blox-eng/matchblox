@@ -403,8 +403,6 @@ func releasePair(host, hostRelease, consoleRelease string) string {
 func (m Model) releaseFix(host string) (act bool, fix string) {
 	newer, v := m.releaseSide(host) == ahead, m.updateOf(host)
 	switch {
-	case newer && m.opt.Local:
-		return false, "this console is older: update it in SETUP"
 	case newer:
 		return false, "this console is older: run matchblox update"
 	case v == nil: // a service older than the act
@@ -480,7 +478,7 @@ func (m Model) behindNotice() string {
 		release.Compare(m.opt.Binary, v.Latest) >= 0 {
 		return ""
 	}
-	return fmt.Sprintf("this console runs %s, the latest is %s · run: matchblox update", m.opt.Binary, v.Latest)
+	return fmt.Sprintf("run matchblox update · console %s, latest %s", m.opt.Binary, v.Latest) // the command first: a phone cuts the end
 }
 
 // updateNews is what mode auto did on the home host, once for each

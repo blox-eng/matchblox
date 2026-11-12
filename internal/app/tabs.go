@@ -149,7 +149,7 @@ var views = [...]tabView{
 		},
 		secondary: func(m Model) *action {
 			if d, ok := m.selectedDoor(); ok {
-				return closeDoor(d)
+				return closeDoor(d, m.updateView != nil && m.updateView.Mode == "auto")
 			}
 			if r, ok := m.selectedRec(); ok {
 				return fromAdvice(r, "secondary")

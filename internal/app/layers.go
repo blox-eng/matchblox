@@ -222,7 +222,7 @@ func (s Shell) openOn(host string, peers []string, first bool) (Shell, tea.Cmd) 
 		o.Peers = append(o.Peers, s.peer(h))
 	}
 	b := s.opt.Base
-	o.Binary, o.CompactAt, o.CompactTokens, o.NoMotion, o.Now, o.Self, o.StateDir = b.Binary, b.CompactAt, b.CompactTokens, b.NoMotion, b.Now, b.Self, b.StateDir
+	o.Binary, o.CompactAt, o.CompactTokens, o.NoMotion, o.Now, o.Self, o.SelfAt, o.StateDir = b.Binary, b.CompactAt, b.CompactTokens, b.NoMotion, b.Now, b.Self, b.SelfAt, b.StateDir
 	o.Clip = b.Clip
 	if host == "" {
 		o.Restart = b.Restart // a remote host's update leaves this console's binary as it is

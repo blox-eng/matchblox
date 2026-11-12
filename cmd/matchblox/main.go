@@ -649,7 +649,7 @@ func console(path string, cfg config.Config, root string, noMotion bool, host st
 // again when it ended for that.
 func runConsole(path string, cfg config.Config, root string, noMotion bool, host string) (func() error, error) {
 	base := app.Options{Binary: version, CompactAt: cfg.Sessions.CompactAt, CompactTokens: cfg.Sessions.CompactTokens, NoMotion: noMotion,
-		OutsideTmux: os.Getenv("TMUX") == "", Pane: os.Getenv("TMUX_PANE"), Self: invokedPath(os.Args[0]), StateDir: filepath.Dir(state.Path())}
+		OutsideTmux: os.Getenv("TMUX") == "", Pane: os.Getenv("TMUX_PANE"), Self: invokedPath(os.Args[0]), SelfAt: exeAt, StateDir: filepath.Dir(state.Path())}
 	if !base.OutsideTmux {
 		base.Prefix, base.Home, base.LocalTmux = localTmux()
 		base.NoPrefixM = !panes.NamedConsole(os.Args[0])

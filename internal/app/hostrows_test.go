@@ -557,7 +557,7 @@ func TestOldHostGetsTheCommandNotTheKey(t *testing.T) {
 func TestNewerHostPointsAtThisMachine(t *testing.T) {
 	r := releaseRig(t, "v0.42.0", "v0.43.0", viewOn("v0.43.0"))
 	out := r.view()
-	if !strings.Contains(r.rowOf("ws-1"), "v0.43.0, ahead of this console (v0.42.0)") || !strings.Contains(out, "this console is older: update it in SETUP") {
+	if !strings.Contains(r.rowOf("ws-1"), "v0.43.0, ahead of this console (v0.42.0)") || !strings.Contains(out, "this console is older: run matchblox update") {
 		t.Fatalf("a newer host:\n%s", out)
 	}
 	r.key(t, "u")
@@ -581,7 +581,7 @@ func TestRemoteHomeConsoleGetsTheCommand(t *testing.T) {
 		st := fixtureState()
 		st.Update = behind
 		m = upd(t, m, stateMsg(st))
-		notice := "this console runs v0.41.0, the latest is v0.43.0 · run: matchblox update"
+		notice := "run matchblox update · console v0.41.0, latest v0.43.0"
 		if got := strings.Contains(strings.Join(frameOf(m), "\n"), notice); got != c.say {
 			t.Errorf("local %v, console %s: notice %v, want %v\n%s", c.local, c.console, got, c.say, strings.Join(frameOf(m), "\n"))
 		}

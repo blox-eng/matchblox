@@ -83,12 +83,17 @@ func (m Model) doorAction(d doors.Door) *action {
 		rec: "door:" + d.ID, which: "primary", text: d.Sum, door: d.ID}
 }
 
-func closeDoor(d doors.Door) *action {
+// closeDoor is x on a door. auto: the host's update mode is auto, which
+// installs a release whose offer is closed.
+func closeDoor(d doors.Door, auto bool) *action {
 	a := &action{label: "close", say: "close " + d.Title + " (matchblox setup opens it again)", destructive: true,
 		rec: "door:" + d.ID, which: "secondary", door: d.ID}
 	if d.ID == doors.Update {
 		// The release the person saw: the service refuses to close a newer one.
 		a.say, a.text = "close "+d.Title+" (the next release opens it again)", d.Sum
+		if auto {
+			a.say = "close " + d.Title + " (auto still installs it)"
+		}
 	}
 	if d.ID == doors.UpdateCheck {
 		a.say = "close " + d.Title + " (after a look that works, three days of failed looks open it again)"

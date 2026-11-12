@@ -394,13 +394,34 @@ func TestReplaceAtMostOnce(t *testing.T) {
 	}
 }
 
+// selfOver is a console binary, stamped as the console started on it, then
+// installed over when over is true.
+func selfOver(t *testing.T, over bool) (string, os.FileInfo) {
+	t.Helper()
+	self := filepath.Join(t.TempDir(), "matchblox")
+	if err := os.WriteFile(self, []byte("v0.42.0"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	at, err := os.Stat(self)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if over {
+		if err := os.WriteFile(self, []byte("v0.43.0, a new install"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return self, at
+}
+
 // TestOldConsoleDoesNotReplaceANewerService: a console left open on an old
 // release never puts that release back over a newer service. It says so,
 // and R starts this console again on the new binary.
 func TestOldConsoleDoesNotReplaceANewerService(t *testing.T) {
 	f := newFake()
 	restarts := 0
-	m := New(Options{NoMotion: true, Conn: f, Local: true, Binary: "v0.42.0",
+	self, at := selfOver(t, true)
+	m := New(Options{NoMotion: true, Conn: f, Local: true, Binary: "v0.42.0", Self: self, SelfAt: at,
 		Redial: func() (transport.Conn, error) { return newFake(), nil }, Restart: func() error { restarts++; return nil }})
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	next, cmd := next.Update(helloMsg(proto.Hello{Version: proto.Version, Binary: "v0.43.0", Host: "ws-1"}))
@@ -409,7 +430,7 @@ func TestOldConsoleDoesNotReplaceANewerService(t *testing.T) {
 	if acts := f.acts(); len(acts) != 0 {
 		t.Fatalf("an old console sent %+v to a newer service", acts)
 	}
-	if out := ansi.Strip(next.(Model).render()); !strings.Contains(out, "the service runs v0.43.0, this console v0.42.0 · R: start again") {
+	if out := ansi.Strip(next.(Model).render()); !strings.Contains(out, "R start again · service v0.43.0, console v0.42.0") {
 		t.Fatalf("no notice:\n%s", out)
 	}
 	if err := next.(Model).Restart(); err != nil || restarts != 0 {
@@ -457,21 +478,32 @@ func TestNewConsoleStillReplacesAnOlderService(t *testing.T) {
 	}
 }
 
-// TestAConsoleThatCannotStartAgainAsksThePerson: without Restart the
-// notice offers no key, and R does nothing.
+// TestAConsoleThatCannotStartAgainAsksThePerson: without Restart, or when
+// the binary this console started on was not installed over (R would
+// start the same release into the same notice), the notice offers no key,
+// and R does nothing.
 func TestAConsoleThatCannotStartAgainAsksThePerson(t *testing.T) {
-	f := newFake()
-	m := New(Options{NoMotion: true, Conn: f, Local: true, Binary: "v0.42.0", Redial: func() (transport.Conn, error) { return newFake(), nil }})
-	next, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
-	next, cmd := next.Update(helloMsg(proto.Hello{Version: proto.Version, Binary: "v0.43.0", Host: "ws-1"}))
-	drain(cmd)
-	next, _ = next.Update(stateMsg(fixtureState()))
-	out := ansi.Strip(next.(Model).render())
-	if !strings.Contains(out, "the service runs v0.43.0, this console v0.42.0 · quit and open matchblox again") || strings.Contains(out, "start again") {
-		t.Fatalf("notice:\n%s", out)
-	}
-	if _, cmd := key(next, "R"); slices.ContainsFunc(cmdMsgs(cmd), func(msg tea.Msg) bool { _, ok := msg.(tea.QuitMsg); return ok }) {
-		t.Fatal("R ended a console that cannot start again")
+	self, at := selfOver(t, false)
+	for name, opt := range map[string]Options{
+		"no Restart":        {Self: self, SelfAt: at},
+		"the same binary":   {Self: self, SelfAt: at, Restart: func() error { return nil }},
+		"no binary stamped": {Self: self, Restart: func() error { return nil }},
+	} {
+		f := newFake()
+		opt.NoMotion, opt.Conn, opt.Local, opt.Binary = true, f, true, "v0.42.0"
+		opt.Redial = func() (transport.Conn, error) { return newFake(), nil }
+		m := New(opt)
+		next, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+		next, cmd := next.Update(helloMsg(proto.Hello{Version: proto.Version, Binary: "v0.43.0", Host: "ws-1"}))
+		drain(cmd)
+		next, _ = next.Update(stateMsg(fixtureState()))
+		out := ansi.Strip(next.(Model).render())
+		if !strings.Contains(out, "quit and reopen · service v0.43.0, console v0.42.0") || strings.Contains(out, "start again") {
+			t.Fatalf("%s: notice:\n%s", name, out)
+		}
+		if _, cmd := key(next, "R"); slices.ContainsFunc(cmdMsgs(cmd), func(msg tea.Msg) bool { _, ok := msg.(tea.QuitMsg); return ok }) {
+			t.Fatalf("%s: R ended the console", name)
+		}
 	}
 }
 

@@ -4,8 +4,8 @@
  SET UP · 1
  ▌ matchblox v0.43.0 is … This machine runs v0.42.0.
  matchblox v0.42.0 → v0.43.0 (linux/amd64)
-   checksum    checked before anything changes
-   provenance  checked when gh can verify it
+   checksum    checked first
+   provenance  checked when gh can
    replaces
      /home/user/.local/bin/matchblox
 

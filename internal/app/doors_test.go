@@ -22,7 +22,7 @@ var (
 	wayBack    = doors.Door{ID: doors.WayBack, Title: "Add the way back", Why: "prefix m comes back here.", Path: home + "/.tmux.conf", Sum: "s2", Preview: "+bind m switch-client -t =matchblox"}
 	guideDoor  = doors.Door{ID: doors.Guide, Title: "Open a guide session", Why: "This starts Claude Code and uses your tokens.", Term: doors.GuideArgv(false), Preview: "claude '...'"}
 	updateDoor = doors.Door{ID: doors.Update, Title: "matchblox v0.43.0 is out", Why: "This machine runs v0.42.0.", Sum: "v0.43.0",
-		Preview: "matchblox v0.42.0 → v0.43.0 (linux/amd64)\n  checksum    checked before anything changes\n  provenance  checked when gh can verify it\n  replaces\n    " + home + "/.local/bin/matchblox"}
+		Preview: "matchblox v0.42.0 → v0.43.0 (linux/amd64)\n  checksum    checked first\n  provenance  checked when gh can\n  replaces\n    " + home + "/.local/bin/matchblox"}
 	brokenDoor = doors.Door{ID: doors.Hooks, Title: "Add the queue hooks", Problem: "~/.claude/settings.json is not valid JSON: fix it, then this door opens"}
 )
 
@@ -179,8 +179,23 @@ func TestConsoleStartsAgainAfterItsUpdate(t *testing.T) {
 	if n != 0 || quits(cmd) {
 		t.Fatalf("a failed install started the console again %d times, quit: %v", n, quits(cmd))
 	}
+	if m.updateAct != "" || m.updateTag != "" || m.selfAt != nil {
+		t.Fatalf("a failed install left its act: %q %q %v", m.updateAct, m.updateTag, m.selfAt)
+	}
 	if out := ansi.Strip(m.render()); !strings.Contains(out, "the checksum does not match") {
 		t.Fatalf("the failure is not shown:\n%s", out)
+	}
+}
+
+// Under mode auto, closing the offer does not stop auto, and the close
+// says so.
+func TestClosingTheOfferUnderAutoSaysAutoStillInstalls(t *testing.T) {
+	st := doorState(updateDoor)
+	st.Update = &state.UpdateView{Mode: "auto", Current: "v0.42.0", Latest: "v0.43.0"}
+	m, _ := loadedWith(t, 100, st)
+	next, _ := key(m, "x")
+	if out := ansi.Strip(next.(Model).render()); !strings.Contains(out, "close matchblox v0.43.0 is out (auto still installs it)") {
+		t.Fatalf("close confirm:\n%s", out)
 	}
 }
 
@@ -487,7 +502,7 @@ func TestUpdateCheckRowOnlyCloses(t *testing.T) {
 	if a := m.doorAction(d); a != nil {
 		t.Fatalf("an action %+v", a)
 	}
-	if a := closeDoor(d); a.say != "close matchblox cannot look for a new release (after a look that works, three days of failed looks open it again)" {
+	if a := closeDoor(d, false); a.say != "close matchblox cannot look for a new release (after a look that works, three days of failed looks open it again)" {
 		t.Fatalf("close says %q", a.say)
 	}
 }
@@ -501,7 +516,7 @@ func TestInstalledRowClosesItsRelease(t *testing.T) {
 	if a := m.doorAction(d); a != nil {
 		t.Fatalf("an install action %+v", a)
 	}
-	if a := closeDoor(d); a.rec != "door:"+doors.Update || a.which != "secondary" || a.text != "v0.43.0" {
+	if a := closeDoor(d, false); a.rec != "door:"+doors.Update || a.which != "secondary" || a.text != "v0.43.0" {
 		t.Fatalf("close %+v", a)
 	}
 }

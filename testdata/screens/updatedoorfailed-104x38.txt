@@ -1,0 +1,38 @@
+ ▰ matchblox                                                                           ● 6 wait for you
+ SESSIONS 7    ships 3    machine    git    history    panes    stoker
+────────────────────────────────────────────────────────────────────────────────────────────────────────
+ SET UP · 1                              │
+ ▌ matchblox v0.43.0 is out              │ matchblox v0.43.0 is out
+   This machine runs v0.42.0. The        │
+   install failed: checksum mismatch for │ This machine runs v0.42.0. The install failed: checksum
+   matchblox_linux_amd64 · published     │ mismatch for matchblox_linux_amd64 · published
+   3f9a3f9a3f9a3f9a3f9a3f9a3f9a3f9a3f9a  │ 3f9a3f9a3f9a3f9a3f9a3f9a3f9a3f9a3f9a3f9a3f9a3f9a3f9a3f9a3f9a
+   3f9a3f9a3f9a3f9a3f9a3f9a3f9a ·        │ 3f9a · download
+   download                              │ c2e1c2e1c2e1c2e1c2e1c2e1c2e1c2e1c2e1c2e1c2e1c2e1c2e1c2e1c2e1
+   c2e1c2e1c2e1c2e1c2e1c2e1c2e1c2e1c2e1  │ c2e1 · Nothing was changed. Try again, or run: matchblox
+   c2e1c2e1c2e1c2e1c2e1c2e1c2e1 ·        │ update.
+   Nothing was changed. Try again, or    │
+   run: matchblox update.                │ ⏎ open   x close
+                                         │
+ WAITS FOR YOU · 6                       │
+ │ spark-docs        done       9m   88% │
+ ╿ ember-billing     done       4m   32% │
+ ╿ flint-auth        asks       2m   41% │
+ ╿ kindle-web        asks       1m   56% │
+ ╿ cinder-ci         done       0s   55% │
+ ╿ wick-mobile       done       0s    6% │
+ WORKING · 1                             │
+ ✦ hearth-api        busy            79% │
+ + start a new session                   │
+                                         │
+ 1 without an agent: shell:1.1 zsh       │
+                                         │
+ ↓ 7 more                                │
+─────────────────────────────────────────│
+ USAGE                                   │
+ ✻ Claude        5h   ▰▰▰ 84%            │
+                 wk   ▰▰▱ 82%            │
+ · Google login  not measured            │
+ ❋ OpenAI        5h ▰▱▱ 40% · wk 12%     │
+────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ↑↓ move  ⏎ open  x close  / find  q quit  list only v                                   sampled 0s ago

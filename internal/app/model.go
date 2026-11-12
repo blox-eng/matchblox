@@ -116,7 +116,10 @@ type Options struct {
 	// Peers are the other ticked hosts, in Hosts order.
 	Peers []Peer
 	// Self is this binary, which connects a host (`matchblox connect`).
-	Self string
+	// SelfAt is the file at Self as this process started on it: R starts
+	// the console again only on a binary installed over since. Nil: never.
+	Self   string
+	SelfAt os.FileInfo
 	// Gen tells this console's redial messages from those of a console the
 	// shell closed.
 	Gen int
@@ -437,15 +440,16 @@ type Model struct {
 	// updateView is the service's update view: the release this host runs.
 	updateView *state.UpdateView
 	// newer says the local service runs a newer release than this console;
-	// R starts the console again on it. updateAct is the act id of the
-	// update door's install, updateTag its release and selfAt this
-	// console's binary when it was sent. restarting: the program ends to
-	// start again.
-	newer      string
-	updateAct  string
-	updateTag  string
-	selfAt     os.FileInfo
-	restarting bool
+	// R starts the console again on it when startsAgain. updateAct is the
+	// act id of the update door's install, updateTag its release and
+	// selfAt this console's binary when it was sent. restarting: the
+	// program ends to start again.
+	newer       string
+	startsAgain bool
+	updateAct   string
+	updateTag   string
+	selfAt      os.FileInfo
+	restarting  bool
 	// hostAct is the act id of the update of a host on Hosts, hostActOn
 	// that host. behindSaid is the notice of a remote home's newer
 	// release, said once.
@@ -744,13 +748,15 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.flash = fmt.Sprintf("replacing the service %s with %s…", m.host.Binary, m.opt.Binary)
 			return m, tea.Batch(m.send(proto.Act{RecID: "service:replace"}), m.recv())
 		}
-		m.newer = ""
+		m.newer, m.startsAgain = "", false
 		if m.newerLocal() {
-			again := m.keys.main.StartAgain.Help().Key + ": start again"
-			if m.opt.Restart == nil {
-				again = reopen
+			// The key first: a phone cuts the end of the line.
+			m.startsAgain = m.opt.Restart != nil && filestamp.Changed(m.opt.SelfAt, m.opt.Self)
+			again := "quit and reopen"
+			if m.startsAgain {
+				again = m.keys.main.StartAgain.Help().Key + " start again"
 			}
-			m.newer = fmt.Sprintf("the service runs %s, this console %s · %s", m.host.Binary, m.opt.Binary, again)
+			m.newer = fmt.Sprintf("%s · service %s, console %s", again, m.host.Binary, m.opt.Binary)
 		}
 		m.mismatch = m.host.Version != proto.Version
 		if m.mismatch {
@@ -1110,9 +1116,11 @@ func (m Model) result(r proto.Result) (Model, tea.Cmd) {
 	if r.ActID != "" && r.ActID == m.jumpAfter.act {
 		return m.switched(r)
 	}
-	if mm, cmd, ok := m.updated(r); ok {
+	mm, cmd, ok := m.updated(r)
+	if ok {
 		return mm, cmd
 	}
+	m = mm // a failed install lets go of its act
 	if r.ActID != "" && r.ActID == m.hostAct {
 		m.flash, m.hostAct = m.hostUpdated(r), ""
 		return m, nil
@@ -1269,15 +1277,16 @@ func (m Model) updated(r proto.Result) (Model, tea.Cmd, bool) {
 	if r.ActID == "" || r.ActID != m.updateAct {
 		return m, nil, false
 	}
-	m.updateAct = ""
+	tag, selfAt := m.updateTag, m.selfAt
+	m.updateAct, m.updateTag, m.selfAt = "", "", nil
 	if r.Err != "" || len(r.Ran) == 0 {
 		return m, nil, false
 	}
-	if m.opt.Restart != nil && filestamp.Changed(m.selfAt, m.opt.Self) {
+	if m.opt.Restart != nil && filestamp.Changed(selfAt, m.opt.Self) {
 		mm, cmd := m.startAgain()
 		return mm, cmd, true
 	}
-	m.flash = "updated to " + m.updateTag + " · " + reopen
+	m.flash = "updated to " + tag + " · " + reopen
 	return m, nil, true
 }
 
@@ -1433,7 +1442,7 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	switch {
-	case bkey.Matches(k, mk.StartAgain) && m.newer != "" && m.opt.Restart != nil:
+	case bkey.Matches(k, mk.StartAgain) && m.newer != "" && m.startsAgain:
 		return m.startAgain()
 	case bkey.Matches(k, mk.Stoker):
 		return m.openStoker(), nil
