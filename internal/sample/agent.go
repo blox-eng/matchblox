@@ -20,6 +20,7 @@ type registryEntry struct {
 	Name            string `json:"name"`
 	Cwd             string `json:"cwd"`
 	Status          string `json:"status"`
+	WaitingFor      string `json:"waitingFor"` // why a waiting session waits
 	StartedAt       int64  `json:"startedAt"`
 	StatusUpdatedAt int64  `json:"statusUpdatedAt"`
 	Tmux            string `json:"tmux"` // session:@window.%pane

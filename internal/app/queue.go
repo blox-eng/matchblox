@@ -44,6 +44,9 @@ func (m Model) stateWord(s sample.Session) string {
 	} else if ok {
 		return m.queueWordOf(it)
 	}
+	if s.ReportsWait() {
+		return "asks"
+	}
 	return "idle"
 }
 

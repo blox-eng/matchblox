@@ -276,8 +276,19 @@ func (m Model) cardSaid(s sample.Session) (word, says string) {
 		}
 		return word, ""
 	}
-	if q, ok := m.headAsks(s); ok {
-		return word, q
+	switch {
+	case s.Status == sample.StatusRetry:
+		return word, "retrying · attempt " + strconv.Itoa(s.Retry)
+	case s.ReportsWork():
+		return word, s.LastLine // the queue's line is of a wait the agent says is over
+	case s.ReportsWait() && s.Ask != nil && len(s.Ask.Questions) > 0:
+		return word, s.Ask.Questions[0].Question
+	case s.ReportsWait() && s.WaitingFor != "":
+		return word, s.WaitingFor
+	default:
+		if q, ok := m.headAsks(s); ok {
+			return word, q
+		}
 	}
 	if sh, ok := m.shipOf(s, shipWaits, shipStuck, shipRunning); ok && !s.Works() {
 		switch sh.Kind {

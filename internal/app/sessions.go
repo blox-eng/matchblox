@@ -57,11 +57,11 @@ func (m Model) groupOf(s sample.Session) int {
 		return groupWaits
 	}
 	switch _, waits := m.waitOf(s); {
-	case s.Busy:
+	case s.Works():
 		return groupWorking
 	case s.Age() != "idle" || s.Stopped():
 		return groupQuiet
-	case waits:
+	case waits || s.ReportsWait():
 		return groupWaits
 	case len(s.Shells) > 0:
 		return groupWorking

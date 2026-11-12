@@ -1,4 +1,4 @@
- ▰ matchblox                                                                                     ● 2 need you
+ ▰ matchblox                                                                                     ● 1 need you
  BOARD 6    machine                                                                chain hearth · 3   esc all
 ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ≋ "ship the chain"
@@ -8,17 +8,17 @@
      step
    ↓ 2 more
 ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
- NEEDS YOU · 2  −                        WORKING · 0  −            SHIPPING · 0  −           QUIET · 1  −
-▌✦ hearth-api                    ✻                                                           ╿ kindle-… ✻  2m
-  busy may I force-push the rebase?
-  ctx 79%                     ━╸hearth
-  “may I force-push the rebase?”
-  ⏎ go in
+ NEEDS YOU · 1  −                        WORKING · 1  −            SHIPPING · 0  −           QUIET · 1  −
+ ╿ ember-billing                 ✻  8h  ▌✦ hearth-api      ✻                                 ╿ kindle-… ✻  2m
+  waits which branch?                     busy
+  ctx 32%                     ━╸hearth    ctx 79%       ━╸hearth
+  ⏎ go in                                 “may I force-push the
+                                          rebase?”
+                                          ⏎ go in
 
- ╿ ember-billing                 ✻  8h
-  waits which branch?
-  ctx 32%                     ━╸hearth
-  ⏎ go in
+
+
+
 
 
 

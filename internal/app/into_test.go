@@ -123,9 +123,7 @@ func TestAOnAStuckShipAtNightAsksToTakeOver(t *testing.T) {
 	st.Ships, st.Sessions = full.Ships, full.Sessions
 	m := sized(t, 86, 30, st)
 	ran := recordRuns(&m)
-	next, _ := key(m, "p")
-	next, _ = key(next, "down")
-	next, _ = key(next, "down") // #4545 is stuck
+	next, _ := key(m, "p") // flint-auth leads NEEDS YOU: its #4545 is stuck
 	asked, cmd := key(next, "a")
 	drain(cmd)
 	if asked.(Model).held == nil || len(*ran) != 0 {

@@ -21,6 +21,11 @@ func TestASessionWorkingThroughSubagentsSaysAgents(t *testing.T) {
 		}
 		m, _ := loadedWith(t, w, st)
 		next, _ := key(m, "1")
+		if w < 80 {
+			// The agent says it works, so its old permission does not
+			// count: it is in WORKING, the phone's next page.
+			next, _ = key(next, "right")
+		}
 		out := screen(next)
 		var row string
 		for _, l := range strings.Split(out, "\n") {

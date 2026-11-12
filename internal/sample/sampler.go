@@ -53,11 +53,21 @@ type Session struct {
 	SigningIn bool `json:"signing_in,omitempty"`
 	// Provider serves the model: anthropic, openai, bedrock, vertex, or an
 	// OpenCode provider id. The console shows it as a mark.
-	Provider   string        `json:"provider,omitempty"`
-	SessionID  string        `json:"session_id"`
-	Cwd        string        `json:"cwd"`
-	Busy       bool          `json:"busy"`
-	Status     string        `json:"status"` // as the agent reports it: busy, idle, ...
+	Provider  string `json:"provider,omitempty"`
+	SessionID string `json:"session_id"`
+	Cwd       string `json:"cwd"`
+	Busy      bool   `json:"busy"`
+	Status    string `json:"status"` // as the agent reports it: busy, idle, ...
+	// Reported: Status is the agent's own report (Claude Code's session
+	// file, the OpenCode plugin's), not a guess from its pane. WaitingFor is
+	// why a waiting agent waits, in its words: "permission prompt", "input
+	// needed", "permission", "question", ...
+	Reported   bool   `json:"reported,omitempty"`
+	WaitingFor string `json:"waiting_for,omitempty"`
+	// Retry is the attempt of a call OpenCode retries, and RetryAt when its
+	// next try starts.
+	Retry      int           `json:"retry,omitempty"`
+	RetryAt    time.Time     `json:"retry_at,omitzero"`
 	Idle       time.Duration `json:"idle_ns"`
 	Started    time.Time     `json:"started"`
 	Model      string        `json:"model,omitempty"`
@@ -177,6 +187,22 @@ type Snapshot struct {
 // busy to the person, since their results start its next turn by itself.
 const StatusAgents = "agents"
 
+// The statuses an agent reports itself, besides busy and idle: Claude
+// Code's turn ended and its background shells or agents run (shell), it
+// waits for the person (waiting); OpenCode retries a failed call (retry).
+const (
+	StatusShell   = "shell"
+	StatusWaiting = "waiting"
+	StatusRetry   = "retry"
+)
+
+// ReportsWork: the agent's own report says it works, so no question from
+// its transcript or the hooks' queue is new.
+func (s Session) ReportsWork() bool { return s.Reported && s.Works() }
+
+// ReportsWait: the agent's own report says it waits for the person.
+func (s Session) ReportsWait() bool { return s.Reported && s.Status == StatusWaiting }
+
 // TmuxSession is the name of the tmux session the pane belongs to.
 func (s Session) TmuxSession() string {
 	name, _, _ := strings.Cut(s.Target, ":")
@@ -189,10 +215,12 @@ func (s Session) Resting() bool {
 	return s.Status == "idle" && !s.Busy || s.Status == StatusAgents
 }
 
-// Works tells if a turn runs, or its subagents do: what a kill confirms
-// twice. Unlike Resting, it holds for an agent with no status of its own
-// (Codex, OpenCode), whose Busy comes from its pane.
-func (s Session) Works() bool { return s.Busy || s.Status == StatusAgents }
+// Works tells if a turn runs, or the subagents or shells it left do: what
+// a kill confirms twice. Unlike Resting, it holds for an agent with no
+// status of its own (Codex, OpenCode), whose Busy comes from its pane.
+func (s Session) Works() bool {
+	return s.Busy || s.Status == StatusAgents || s.Status == StatusShell
+}
 
 // Stopped tells if the plan's limit stops a session the builder would pick
 // up now: idle (not cold or stale) and out.
@@ -701,7 +729,7 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 			sess.EnvAPIKey = env.apiKey
 			s.tag(&sess, agent, env)
 			s.claudeSession(&sess, pid, p, key, env, uptime, now)
-			if sess.Resting() {
+			if sess.Resting() || sess.Status == StatusShell {
 				sess.Shells = s.backgroundShells(pid, procs, children, uptime, now)
 			}
 			if env.cloud == "" && env.claudeDir != "" {
@@ -1281,7 +1309,10 @@ func (s *Sampler) claudeSession(sess *Session, pid int, p procfs.Proc, key procK
 		return
 	}
 	sess.Name, sess.SessionID = e.Name, e.SessionID
-	sess.Busy, sess.Status = e.Status == "busy", e.Status
+	sess.Busy, sess.Status, sess.Reported = e.Status == "busy", e.Status, e.Status != ""
+	if e.Status == StatusWaiting {
+		sess.WaitingFor = e.WaitingFor
+	}
 	if e.StartedAt > 0 {
 		sess.Started = time.UnixMilli(e.StartedAt)
 	}

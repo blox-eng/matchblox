@@ -67,10 +67,15 @@ func (m Model) columnOf(s sample.Session) boardCol {
 }
 
 // asksNow: the match asks a question or a permission. Claude Code's idle
-// prompt after a turn asks nothing: the turn ended.
+// prompt after a turn asks nothing: the turn ended. An agent that reports
+// its own state decides: one that says it works asks nothing, whatever its
+// transcript or the queue still hold.
 func (m Model) asksNow(s sample.Session) bool {
+	if s.ReportsWork() {
+		return false
+	}
 	it, ok := m.waitOf(s)
-	return s.Asks || s.Permits || ok && (it.State == queue.StatePermission || it.State == queue.StateQuestion && !it.Reminder)
+	return s.ReportsWait() || s.Asks || s.Permits || ok && (it.State == queue.StatePermission || it.State == queue.StateQuestion && !it.Reminder)
 }
 
 // goWaitsOn: a stoker step waits for the owner's go on the match's pane.

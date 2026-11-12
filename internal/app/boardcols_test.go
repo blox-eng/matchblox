@@ -18,12 +18,14 @@ var boardAt = demoAt
 
 // boardMatch is a match of the demo fleet on the fixture machine: at rest
 // for ten minutes on its own pane and pid, with no shell, no question, no
-// limit.
+// limit, and no report of its own: its lane is read as for an agent that
+// reports nothing (boardreport_test.go has the reports).
 func boardMatch(name string, started time.Duration) sample.Session {
 	s := fixtureState().Sessions[0]
 	s.PID = 1000 + int(crc32.ChecksumIEEE([]byte(name))%100000)
 	s.Name, s.Pane, s.Target, s.SessionID = name, "%"+name, "w:"+name, "sid-"+name
 	s.Busy, s.Status, s.Idle, s.Out = false, "idle", 10*time.Minute, time.Time{}
+	s.Reported, s.WaitingFor = false, ""
 	s.Shells, s.Agents, s.Asks, s.Permits, s.Ask, s.Progress, s.Do = nil, 0, false, false, nil, nil, ""
 	s.Started = boardAt.Add(-started)
 	return s

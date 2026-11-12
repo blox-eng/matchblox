@@ -1,18 +1,18 @@
- ▰ matchblox               ● 2 need you
+ ▰ matchblox               ● 1 need you
  chain hearth · 3   esc all
 ────────────────────────────────────────
- stoker NEEDS YOU 2 − work 0 ship 0 qui…
+ stoker need 1 WORKING 1 − ship 0 quiet…
 ────────────────────────────────────────
 ▌✦ hearth-api                     ✻
-  busy may I force-push the rebase?
+  busy
   ctx 79%                      ━╸hearth
   “may I force-push the rebase?”
   ⏎ go in
 
- ╿ ember-billing                  ✻  8h
-  waits which branch?
-  ctx 32%                      ━╸hearth
-  ⏎ go in
+
+
+
+
 
 
 
