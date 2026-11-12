@@ -566,8 +566,13 @@ matchblox stoker quit --chain api-auth
   after its end (the morning card). Then its card leaves the tab and
   `matchblox status`. Its run log stays on disk, and the merge guard reads
   it no more.
-- The dock and the header count the chain stokers: `stoker · 2 chains`
-  (`· 1 chain` for one). With no chain stoker, they read as before.
+- The dock counts the chain stokers: `STOKER · 2 chains` (`· 1 chain` for
+  one). The header counts every stoker that runs, the host's while its run
+  is on: `≋ 2`. A host stoker that asks or wears the night keeps its word
+  before the count. With no chain stoker, both read as before.
+- A chain's room talks to its stoker: the first words to a chain with no
+  stoker start one, with no launch sheet, and later ones go to it as a new
+  order (see [the room](console.md#a-chains-room)).
 - In `matchblox sessions --json`, a chain stoker's row has `"stoker": true`,
   its `stoker_id` and its `chain` (the chain's id). The host stoker's row
   has neither.

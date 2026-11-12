@@ -5,6 +5,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/chains"
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/state"
@@ -17,6 +18,25 @@ const MaxAccounts = 4
 // Build is the content state of one state.Doc: the counts, the session the
 // island leads with, the usage of each account, and the stoker. It holds
 // numbers, states, times and percents only.
+// chainState is a chain's word for its neediest session's: a wait asks, a
+// finish waits for the owner to look.
+var chainState = map[string]string{"waits": "asks", "done": "waits", "out": "quiet", "burns": "burns"}
+
+// chainOf is the chain a session is in; its first when it is in several.
+func chainOf(v *state.ChainsView, sessionID string) (chains.Chain, bool) {
+	if v == nil || sessionID == "" {
+		return chains.Chain{}, false
+	}
+	for _, c := range v.Chains {
+		for _, m := range c.Members {
+			if m.SessionID == sessionID {
+				return c, true
+			}
+		}
+	}
+	return chains.Chain{}, false
+}
+
 func Build(doc state.Doc, hostFP string, n *Numbers, now time.Time) ContentState {
 	cs := ContentState{Host: Host8(hostFP), Accounts: []AccountUse{}}
 	if doc.Stoker != nil {
@@ -87,6 +107,22 @@ func Build(doc state.Doc, hostFP string, n *Numbers, now time.Time) ContentState
 			top.Pct = step5(c.s.Progress.Pct)
 		}
 		cs.Top = top
+	}
+	// The neediest session's chain; none when it is in no chain, and the
+	// island shows that session alone.
+	if len(cands) > 0 {
+		if ch, ok := chainOf(doc.Chains, cands[0].s.SessionID); ok {
+			tc := &TopChain{N: n.Chain(ch.ID), State: chainState[cands[0].state]}
+			for _, u := range doc.Stokers {
+				if u.View.On {
+					tc.Stokers++
+				}
+				if u.Chain == ch.ID {
+					tc.Done, tc.Steps = u.View.PlanProgress()
+				}
+			}
+			cs.Chain = tc
+		}
 	}
 
 	for _, a := range doc.Limits {

@@ -379,6 +379,7 @@ type Model struct {
 	holds       []proto.Hold
 	chains      *state.ChainsView
 	chainIx     chainIndex      // worked out in refresh
+	room        *room           // the chain room on screen; nil when none
 	repoMates   map[rowKey]bool // the listed sessions with a repo mate they are not chained with
 	reasons     map[string]proto.IdleReason
 	agents      []string                          // the agents a new session can start on the host
@@ -634,8 +635,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	default:
 		m.askedBy = ""
 	}
+	var anchor roomRow
+	if _, input := msg.(tea.KeyPressMsg); !input && m.room != nil { // the rows may move under the cursor
+		if rows := m.roomRows(m.room.k); m.room.at < len(rows) {
+			anchor = rows[m.room.at]
+		}
+	}
 	next, cmd := m.update(msg)
 	if nm, ok := next.(Model); ok {
+		nm = nm.keepRoomRow(m.room, anchor)
 		nm = nm.scanShows().keepView().inDemo()
 		if watch := nm.watchCmd(); watch != nil {
 			cmd = tea.Batch(cmd, watch)
@@ -677,6 +685,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m.update(msg.msg)
 	case uv.UnknownApcEvent:
+		if next, cmd, ok := m.flipAPC(string(msg)); ok {
+			return next, cmd
+		}
 		switch {
 		case string(msg) != homeKey:
 			return m, nil
@@ -736,6 +747,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		first := !m.have
 		m.watchHeld = ""
 		st := proto.State(msg)
+		var feel tea.Cmd
+		if f := feelOf(m.queue, st.Queue); f != "" && !first {
+			feel = sayAgent(f, m.opt)
+		}
 		m.queue = st.Queue
 		toast := m.stokerNews(st.Stoker)
 		if joined := m.joinNews(st.Chains, st.Sessions); joined != "" {
@@ -806,8 +821,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			news = m.say(toast)
 		}
 		m, order = m.queuedOrder(m.opt.Host)
+		var talk tea.Cmd
+		m, talk = m.roomQueued(m.opt.Host)
 		tick := m.waitTick()
-		return m, tea.Batch(m.recv(), m.animate(), news, order, focus, again, started, tick)
+		return m, tea.Batch(m.recv(), m.animate(), news, order, talk, feel, focus, again, started, tick)
 	case graphicsMsg:
 		return m.graphics(msg)
 	case graphicsTickMsg:
@@ -861,6 +878,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		first := !m.lost
 		m.lost = true
+		m = m.roomLost(m.opt.Host)
 		if blocking(msg.err) {
 			// Trying again cannot help: connecting the host can.
 			m.blocked, m.flash = msg.err, ""
@@ -1040,6 +1058,9 @@ func (m Model) result(r proto.Result) (Model, tea.Cmd) {
 	}
 	if mm, ok := m.scanResult(r); ok {
 		return mm, nil
+	}
+	if mm, cmd, ok := m.roomResult(r); ok {
+		return mm, cmd
 	}
 	if mm, ok := m.sheetResult(r); ok {
 		if r.Err == "" && mm.sheet == nil {
@@ -1299,6 +1320,10 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.standIn {
 		return m.standInKey(k)
 	}
+	if m.room != nil {
+		m.flash = ""
+		return m.roomKey(k)
+	}
 	m.flash = ""
 	if s, ok := m.selectedSession(); ok && bkey.Matches(k, mk.Second, mk.Rename, mk.Switch, mk.Park) {
 		if u, head := m.headRow(s); head { // its agent is the stoker's, not a session of the builder's
@@ -1394,8 +1419,8 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m.unblockHost(b)
 		}
 		if s, ok := m.selectedSession(); ok {
-			if u, head := m.headRow(s); head {
-				return m.headAct(s, u)
+			if u, head := m.headRow(s); head { // a chain's head opens its room
+				return m.openRoom(chainKey{s.Host, u.Chain}), nil
 			}
 		}
 		if s, ok := m.selectedSession(); ok && s.Host == m.opt.Host {
@@ -1461,6 +1486,8 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.stokerKey(true)
 	case bkey.Matches(k, mk.Order):
 		return m.orderKey()
+	case bkey.Matches(k, m.keys.room.Flip):
+		return m.flipHere()
 	case bkey.Matches(k, mk.Rename):
 		if m.tab == tabSessions {
 			return m.openRename()

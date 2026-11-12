@@ -41,6 +41,49 @@ the bottom shows the keys of the open tab. A tap on a key presses it.
 | `h` | Folds the recommendations to one line, or shows them again (Sessions). |
 | `Esc` | Clears the search. With nothing to clear, goes back to Hosts. `Ctrl+M`, prefix `m` and the phone's back button do the same in the console. |
 | `q` or `Ctrl+C` | Quits the console. The service keeps running. |
+| `⌥s` | Opens the room of the selected session's chain (Sessions). A session in no chain opens its chain of one, which the host's stoker drives. `Enter` on a chain's head row opens its room too. |
+
+## A chain's room
+
+A room shows one chain: what waits for you first, the stoker's card with its
+plan, the chain's matches, its ships and worktrees, and the talk line. On a
+desk the selected match's live view is on the right. The key line shows the
+keys of the selected row.
+
+| Key | What it does |
+|---|---|
+| `↑` or `k` | Selects the row above. |
+| `↓` or `j` | Selects the row below. |
+| `Enter` | On the need line or a match, goes into the match's pane. On `↓ N more`, unfolds the plan. On the talk line, starts typing. On a quiet stoker's line, starts typing to it. On `+ start one here`, opens New session. |
+| `y` | Gives the go a step waits for (the need line `▸ … waits for your go · y`, or the step). Every go (a merge, a release, a deploy, a kill) acts outside the session: it shows its command first and runs on a typed `y`. |
+| `]` | Opens the next chain's room. |
+| `[` | Opens the previous chain's room. |
+| `⌥s` | Goes back to the session you flipped from. With none, starts typing on the talk line. |
+| `⌥n` | Goes into the chain's first match. |
+| `u` | Takes the selected match out of the chain, after a typed `y`. Its agent goes on; the chain hears it left. |
+| `Esc` | Stops typing (the words stay). Else closes the room. |
+| `Backspace` | Erases the last character while you type. |
+
+While the talk line types, every key is text until `Enter` sends it to the
+chain's stoker or `Esc` stops. The first words to a chain with no stoker
+start one, with no launch sheet; a refusal keeps the words in the line.
+
+### The flip from a pane
+
+In an agent's pane, `⌥s` goes to the room of its chain, and `⌥s` there comes
+back. `⌥n` walks the chain's matches, then the room, then the first match
+again. Each terminal comes back to its own session: a phone and a desk keep
+theirs apart. In a shell or an editor the keys type as always: matchblox
+binds them only in the panes of the agents it samples.
+
+A terminal that does not send Option as Meta types `ß` for `⌥s`. Use
+prefix `s`, or set Option as Meta: in Terminal.app, Settings
+→ Profiles → Keyboard → **Use Option as Meta key**; in iTerm2, Settings →
+Profiles → Keys → **Left Option key: Esc+**. Ghostty and kitty send it as
+Meta.
+
+matchblox moves tmux's session tree from prefix s to prefix S. Prefix n
+stays tmux's next window: the walk has only `⌥n`.
 
 ## The STOKER tab
 

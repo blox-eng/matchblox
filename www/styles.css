@@ -321,6 +321,16 @@ footer a { color: var(--muted); }
 .chain .beats h3 { margin: 0 0 4px; font-size: 15px; font-weight: 600; }
 .chain .beats p { margin: 0; color: var(--muted); font-size: 14px; }
 @media (max-width: 720px) { .chain .beats { grid-template-columns: minmax(0, 1fr); } }
+/* The chain's room (#326): ⌥s flips to it. The drawing keeps only what the board's narrowed chain shows. */
+.chain .room { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 28px; align-items: center; padding-top: 18px; border-top: 1px solid var(--hair-soft); }
+.chain .room h3 { margin: 0 0 6px; font-size: 15px; font-weight: 600; }
+.chain .room p { margin: 0 0 10px; color: var(--muted); max-width: 52ch; }
+.chain .room kbd { font: 500 12px/1 var(--mono); color: var(--fg); border: 1px solid var(--hair-strong); border-bottom-width: 2px; border-radius: 4px; padding: 3px 6px; }
+.chain .term { min-width: 0; border: 1px solid var(--hair-strong); border-radius: 8px; overflow: hidden; }
+.chain .term .bar { display: flex; justify-content: space-between; padding: 7px 12px; border-bottom: 1px solid var(--hair); font: 400 11.5px var(--mono); color: var(--faint); }
+.chain .term pre { margin: 0; padding: 12px 14px 14px; font: 400 12.5px/19px var(--mono); overflow-x: auto; }
+.chain .term .p { color: var(--primary); } .chain .term .f { color: var(--faint); } .chain .term .o { color: var(--fg); } .chain .term .n { color: var(--flame); }
+@media (max-width: 720px) { .chain .room { grid-template-columns: minmax(0, 1fr); } }
 
 .domino g.beckon:not(.lit) .glow { animation: beckon .6s ease-in-out; }
 @keyframes beckon { 50% { opacity: .5; } }

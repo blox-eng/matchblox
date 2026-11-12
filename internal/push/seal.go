@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/blox-eng/matchblox/internal/queue"
+	"github.com/blox-eng/matchblox/internal/state"
 )
 
 // buzzInfo is the HPKE info string; the phone opens with the same one.
@@ -30,16 +31,22 @@ func Seal(notifyKey, plain []byte) ([]byte, error) {
 	return hpke.Seal(pk, hpke.HKDFSHA256(), hpke.ChaCha20Poly1305(), []byte(buzzInfo), plain)
 }
 
-// BuzzLine is the text of a buzz: `work-1 · api waits: "Run the migration?"`.
+// BuzzLine is the text of a buzz: `work-1 · api waits: "Run the migration?"`,
+// with the session's chain before its name when it is in one:
+// `work-1 · hearth · api asks: …`.
 // A buzz goes only for a wait: the word is asks for a permission, else
 // waits. The last line is cut to 120 characters and left out when the item
 // has none.
-func BuzzLine(hostLabel string, item queue.Item) string {
+func BuzzLine(hostLabel string, item queue.Item, cv *state.ChainsView) string {
 	word := "waits"
 	if item.State == queue.StatePermission {
 		word = "asks"
 	}
-	line := fmt.Sprintf("%s · %s %s", hostLabel, item.Name, word)
+	who := item.Name
+	if c, ok := chainOf(cv, item.SessionID); ok {
+		who = chainName(c) + " · " + who
+	}
+	line := fmt.Sprintf("%s · %s %s", hostLabel, who, word)
 	if item.LastLine == "" {
 		return line
 	}

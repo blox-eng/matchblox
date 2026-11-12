@@ -644,6 +644,9 @@ func TestOutOfTeamAsks(t *testing.T) {
 	if a.label != "take ember-billing out of hearth" || a.rec != "chain:out:"+s.Pane+"@hearth" || !a.destructive {
 		t.Fatalf("%+v", a)
 	}
+	if got := a.String(); got != "take ember-billing out of hearth" { // the confirm shows it: no steps
+		t.Fatalf("confirm says %q", got)
+	}
 }
 
 // TestAClearIsNoJoin: a member renamed by a /clear (a new session id in

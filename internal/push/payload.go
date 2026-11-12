@@ -22,9 +22,23 @@ type ContentState struct {
 	Top      *Top         `json:"top,omitempty"`
 	Accounts []AccountUse `json:"accounts"`
 	Stoker   bool         `json:"stoker"`
+	// Chain is the chain that needs the owner most, by number; nil when
+	// the neediest session is in no chain, and the island shows it alone.
+	Chain *TopChain `json:"chain,omitempty"`
 }
 
 // Top is the session the island leads with, by number.
+// TopChain is a chain on the island: its number (Numbers.Chain), what it
+// needs (asks, waits, burns or quiet), its stoker's plan steps done of
+// all, and the chain stokers that run on the host.
+type TopChain struct {
+	N       int    `json:"n"`
+	State   string `json:"state"`
+	Done    int    `json:"done"`
+	Steps   int    `json:"steps"`
+	Stokers int    `json:"stokers"`
+}
+
 type Top struct {
 	N     int       `json:"n"`
 	State string    `json:"state"` // burns, waits, done, out or quiet
@@ -89,6 +103,7 @@ type RegisterReply struct {
 	Error    string         `json:"error,omitempty"`
 	Sessions map[int]string `json:"sessions"`
 	Accounts map[int]string `json:"accounts"`
+	Chains   map[int]string `json:"chains,omitempty"`
 }
 
 // Host8 is the first 8 hex characters of the SHA-256 in a fingerprint
