@@ -10,6 +10,7 @@ import (
 
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // The board's tests of the chains and their rooms (Task 12 step 0c).
@@ -599,5 +600,26 @@ func TestAFlipIntoAnOpenRoomLandsOnTheNeed(t *testing.T) {
 	}
 	if m.room.draft != "half an order" {
 		t.Errorf("the flip lost the draft: %q", m.room.draft)
+	}
+}
+
+// TestTheAskingStokersCardIsItsChainsStokerEverywhere (ruling 42): the
+// card's menu and its key line's words name it as its card does.
+func TestTheAskingStokersCardIsItsChainsStokerEverywhere(t *testing.T) {
+	asks := headState(t, runningPlan(), true, []string{"hearth-api", "ember-billing"})
+	asker(&asks)
+	m, _ := chainBoard(t, 160, asks, "")
+	s, ok := m.agentOf(asks.Sessions[0].Host, "s1")
+	if !ok {
+		t.Fatal("no stoker agent")
+	}
+	m.boardChooseCard(m.columnOf(s), s)
+	m = pressOn(m, "m")
+	if m.menu == nil {
+		t.Fatal("m opened no menu on the stoker's card")
+	}
+	box, _, _ := m.menuBox(160, 30)
+	if got := ansi.Strip(strings.Join(box, "\n")); !strings.Contains(got, "hearth's stoker") || strings.Contains(got, "stoker-s1") {
+		t.Errorf("the menu does not name hearth's stoker:\n%s", got)
 	}
 }

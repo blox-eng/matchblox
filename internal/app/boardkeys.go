@@ -153,20 +153,20 @@ func (m Model) answerFromPeek(digit string) (tea.Model, tea.Cmd) {
 	case !ok || sent > 0:
 		// no card, or the card says its answer is sent
 	case !m.peekAnswers(s) && m.asksNow(s):
-		said = s.Name + " asks in its pane · " + m.keys.main.Open.Help().Key + " goes in"
+		said = m.cardName(s) + " asks in its pane · " + m.keys.main.Open.Help().Key + " goes in"
 	case !m.peekAnswers(s):
-		said = s.Name + " asks no question"
+		said = m.cardName(s) + " asks no question"
 	case m.lost || m.conn == nil:
 		m.peekArmed, said = 0, "not sent: no service · it redials"
 	case s.Host != m.opt.Host:
-		said = "not sent: " + s.Name + " is on " + m.nameOf(s.Host) + " · " + m.keys.main.Open.Help().Key + " goes in"
+		said = "not sent: " + m.cardName(s) + " is on " + m.nameOf(s.Host) + " · " + m.keys.main.Open.Help().Key + " goes in"
 	case paneOf(s) != m.peekPane || askOf(s) != m.peekAsk:
 		m.startPeek(s) // a question the card has not drawn yet
-		said = "not sent: " + s.Name + " asks something new — look again"
+		said = "not sent: " + m.cardName(s) + " asks something new — look again"
 	case m.now().Sub(m.peekAt) < peekDead && m.peekNew:
-		said = "not sent: " + s.Name + " asks something new — look again"
+		said = "not sent: " + m.cardName(s) + " asks something new — look again"
 	case m.now().Sub(m.peekAt) < peekDead:
-		said = "look at " + s.Name + "'s question first"
+		said = "look at " + m.cardName(s) + "'s question first"
 	case n < 1 || n > len(q.Options):
 		said = "1-" + strconv.Itoa(len(q.Options)) + " only"
 	case n == armed:
@@ -176,7 +176,7 @@ func (m Model) answerFromPeek(digit string) (tea.Model, tea.Cmd) {
 			break
 		}
 		m.peekArmed, m.peekSent, m.peekSentAsk, m.peekSentPane, queued = 0, n, askOf(s), s.Pane, true
-		said = "sent " + digit + " to " + s.Name + " · now in " + colWork.name()
+		said = "sent " + digit + " to " + m.cardName(s) + " · now in " + colWork.name()
 	default:
 		m.peekArmed, m.peekArmedAt = n, m.now()
 	}

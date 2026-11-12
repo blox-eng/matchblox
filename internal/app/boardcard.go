@@ -386,7 +386,7 @@ func (m Model) optionLine(n, j int, text string, w, armed int) string {
 // cardKeys is line 4: what the match needs, and the key that does it.
 func (m Model) cardKeys(s sample.Session, w int, o cardOpts, options int, answers bool) (string, []span) {
 	if answers && o.sent > 0 {
-		return pad("  "+m.st.muted.Render(fmt.Sprintf("sent %d · waits for %s", o.sent, s.Name)), w), nil
+		return pad("  "+m.st.muted.Render(fmt.Sprintf("sent %d · waits for %s", o.sent, m.cardName(s))), w), nil
 	}
 	hs, gap := m.cardHints(s, o, options, answers)
 	ink := m.st.muted

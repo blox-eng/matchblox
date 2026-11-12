@@ -190,7 +190,7 @@ func (m Model) menuBox(w, h int) (lines []string, x, y int) {
 	st, mn := m.st, m.menu
 	name := ""
 	if s, ok := m.menuOn(); ok {
-		name = s.Name
+		name = m.cardName(s)
 	}
 	labelW, keyW := 0, 0
 	for _, it := range mn.items {
