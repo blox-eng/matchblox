@@ -577,7 +577,7 @@ func (m Model) boardDrawer(d *boardDrawn, b *boardDraw, w int) {
 	if len(ss) > 0 {
 		names := make([]string, len(ss))
 		for i, s := range ss {
-			names[i] = s.Name
+			names[i] = m.cardName(s)
 		}
 		line += "   " + strings.Join(names, " · ")
 	}

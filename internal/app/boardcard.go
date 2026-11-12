@@ -155,6 +155,15 @@ func (m Model) peekHead(s sample.Session, w int) []string {
 	return out
 }
 
+// cardName is the name a card goes by: a chain stoker's agent is its
+// chain's stoker (ruling 42), not its tmux session.
+func (m Model) cardName(s sample.Session) string {
+	if k, ok := m.stokerChain(s); ok {
+		return m.roomStokerWord(k)
+	}
+	return s.Name
+}
+
 // mateOf is what s's chain says of s as a mate: its inbox.
 func (m Model) mateOf(s sample.Session) (state.MateView, bool) {
 	cv := m.chainsOf(s.Host)
@@ -226,7 +235,7 @@ func (m Model) cardHead(s sample.Session, w int, o cardOpts, word string) string
 		wait = "as of " + o.asOf
 	}
 	right := m.st.muted.Render(harnessMark(s)) + " " + m.st.faint.Render(wait) + " "
-	title, tag := s.Name, ""
+	title, tag := m.cardName(s), ""
 	if o.otherHost {
 		tag = " @" + m.nameOf(s.Host)
 	}

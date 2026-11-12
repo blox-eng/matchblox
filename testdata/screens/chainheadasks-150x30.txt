@@ -8,7 +8,7 @@
   “Claude needs your permission to use Bash”
   ⏎ go in                                             ✦ flint-auth                ✻
                                                        busy The refresh flow works and…
- ╿ stoker-s1                                  ·  0s    ctx 41%
+ ╿ hearth's stoker                            ·  0s    ctx 41%
   idle merge #812 now?
                                            ─╴hearth
   ⏎ go in

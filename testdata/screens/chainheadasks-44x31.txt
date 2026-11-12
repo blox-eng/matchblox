@@ -10,7 +10,7 @@
   Bash”
   ⏎ go in
 
- ╿ stoker-s1                          ·  0s
+ ╿ hearth's stoker                    ·  0s
   idle merge #812 now?
                                    ─╴hearth
   ⏎ go in

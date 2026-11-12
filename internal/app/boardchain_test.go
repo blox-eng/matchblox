@@ -550,6 +550,9 @@ func TestAnAskingChainStokerIsANeed(t *testing.T) {
 		if !strings.Contains(plainFrame(m), "merge #812 now?") {
 			t.Errorf("%s: the card does not say the ask:\n%s", name, plainFrame(m))
 		}
+		if f := plainFrame(m); !strings.Contains(f, "╿ hearth's stoker") || strings.Contains(f, "stoker-s1") {
+			t.Errorf("%s: the card is not named hearth's stoker (ruling 42):\n%s", name, f)
+		}
 	}
 	if f := plainFrame(room); !strings.Contains(f, "≋ hearth's stoker asks: merge #812 now?") || strings.Contains(f, "is quiet since") {
 		t.Errorf("the stoker's card in the room does not say it asks:\n%s", f)
