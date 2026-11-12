@@ -113,14 +113,6 @@ func TestTheStripSaysWhyShipsAreBehind(t *testing.T) {
 // picked, its first message naming the ship, and sends nothing. With no
 // checkout of it here, ⏎ says so. Its card takes no key that needs a pane.
 func TestAShipWithNoSessionIsACard(t *testing.T) {
-	m0, _ := loadedWith(t, 100, fixtureState())
-	if got := m0.driverName(proto.Ship{Number: 7}); got != "no session" {
-		t.Errorf("a ship with no session is by %q", got)
-	}
-	if got := m0.driverGone(proto.Ship{Number: 7}); got != "no session owns #7" {
-		t.Errorf("%q", got)
-	}
-
 	orphan := func(where string) Model {
 		st := screensState(t)
 		st.Agents = []string{"claude"}

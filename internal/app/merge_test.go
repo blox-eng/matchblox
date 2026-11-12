@@ -78,9 +78,6 @@ func TestHomeShipsAndFocusStayHome(t *testing.T) {
 			t.Errorf("%s on %q drives %d ships", s.Name, s.Host, n)
 		}
 	}
-	if d, _ := m.driver(home.Ships.Ships[0]); d.Host != "" {
-		t.Fatalf("the ship's driver is on %q", d.Host)
-	}
 	focus := home
 	focus.Focus = &proto.Focus{Pane: "%12", At: home.At}
 	next, _ := m.Update(stateMsg(focus))

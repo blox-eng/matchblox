@@ -69,7 +69,9 @@ func TestAShipOfAnEarlierAgentInThePaneIsNotTheSessions(t *testing.T) {
 	if row := rowOf(ansi.Strip(m.render()), "spark-docs"); strings.Contains(row, "+1") {
 		t.Fatalf("spark-docs counts the earlier agent's ship: %q", row)
 	}
-	if s, ok := m.driver(old); ok {
-		t.Fatalf("the earlier agent's ship is driven by %q", s.Name)
+	for _, s := range m.snap.Sessions {
+		if slices.ContainsFunc(m.shipsOf(s), func(sh proto.Ship) bool { return sh.Number == old.Number }) {
+			t.Fatalf("the earlier agent's ship is driven by %q", s.Name)
+		}
 	}
 }

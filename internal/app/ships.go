@@ -136,40 +136,6 @@ func (m Model) shipsMore(ss []proto.Ship, short bool) string {
 	return more + m.st.muted.Render(" "+stageNames[stage])
 }
 
-// driver is the session that drives a ship, on the ship's own host.
-func (m Model) driver(sh proto.Ship) (sample.Session, bool) {
-	for _, s := range m.all.sessions {
-		if s.Host == sh.Host && proto.ShipDrives(sh, s.Pane, s.SessionID) {
-			return s, true
-		}
-	}
-	return sample.Session{}, false
-}
-
-func (m Model) driverName(sh proto.Ship) string {
-	if s, ok := m.driver(sh); ok && s.Name != "" {
-		return s.Name
-	}
-	if sh.Session.Name != "" {
-		return sh.Session.Name
-	}
-	switch {
-	case sh.Session.Pane != "":
-		return sh.Session.Pane
-	case sh.Session.ID != "":
-		return sh.Session.ID
-	}
-	return "no session"
-}
-
-// driverGone is the flash for a ship whose session is no longer there.
-func (m Model) driverGone(sh proto.Ship) string {
-	if sh.Session.ID == "" && sh.Session.Pane == "" {
-		return "no session owns #" + strconv.Itoa(sh.Number)
-	}
-	return m.driverName(sh) + " no longer runs"
-}
-
 // shipStyle is the colour of a ship's current stage and note: warn while
 // it runs, the accent when it waits for you, neg when it is stuck.
 func (m Model) shipStyle(sh proto.Ship) lipgloss.Style {

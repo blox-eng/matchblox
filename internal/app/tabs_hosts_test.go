@@ -62,12 +62,6 @@ func TestDriverMatchesWithinItsHost(t *testing.T) {
 	shipsOfIn(&home, shipOn(1, "%12", "same-id", shipRunning))
 	shipsOfIn(&peer, shipOn(2, "%12", "same-id", shipRunning))
 	m, _ := twoHosts(t, home, peer)
-	for _, sh := range m.ships() {
-		d, ok := m.driver(sh)
-		if !ok || d.Host != sh.Host {
-			t.Fatalf("ship #%d on %q is driven by %s on %q", sh.Number, sh.Host, d.Name, d.Host)
-		}
-	}
 	for _, s := range m.snap.Sessions {
 		ss := m.shipsOf(s)
 		if len(ss) != 1 || ss[0].Host != s.Host {
