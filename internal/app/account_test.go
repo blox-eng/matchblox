@@ -134,27 +134,3 @@ func TestNoCredentialReachesTheScreen(t *testing.T) {
 		t.Fatal("positive control: no account label on any screen, so the check proves nothing")
 	}
 }
-
-// TestAClaudeSessionWithoutAWindowNamesTheStatusLine: for Claude Code the
-// status line gives the window, so the fix names the setup that taps it.
-// The row says the context is not measured instead of leaving it blank.
-func TestAClaudeSessionWithoutAWindowNamesTheStatusLine(t *testing.T) {
-	st := demoState(t)
-	var pid int
-	for i, s := range st.Sessions {
-		if s.Name == "hearth-api" {
-			st.Sessions[i].Context, st.Sessions[i].Window, st.Sessions[i].ContextPct = "unmeasured", 0, 0
-			pid = s.PID
-		}
-	}
-	m, _ := loadedWith(t, 160, st)
-	m.tab = tabSessions
-	choose(&m, pid)
-	s, _ := m.selectedSession()
-	if facts := strings.Join(m.facts(s), " · "); !strings.Contains(facts, "158k tokens · no window known: run matchblox setup, or add the model to [sessions.windows]") {
-		t.Fatalf("facts: %s", facts)
-	}
-	if c := ansi.Strip(m.contextCell(s)); c != "—" {
-		t.Fatalf("an unmeasured row shows %q", c)
-	}
-}

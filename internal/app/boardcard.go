@@ -12,6 +12,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/said"
 	"github.com/blox-eng/matchblox/internal/sample"
+	"github.com/blox-eng/matchblox/internal/state"
 )
 
 // agentMarks name the agent that runs in a card's pane. The account rows
@@ -103,8 +104,10 @@ func (m Model) boardCard(s sample.Session, w int, o cardOpts) (lines []string, t
 
 // peekHead is what the peek adds under the chosen card's own lines, as the
 // detail pane did (ruling 35): an account that is not the default with its
-// provider's mark, the background work, and the child runs, counted on
-// the head and named under it; each shell's command under the head too.
+// provider's mark, the background work, a chain mate's inbox (ruling 40),
+// and the child runs, counted on the head and named under it; the fix for
+// tokens with no window known, and each shell's command, under the head
+// too.
 func (m Model) peekHead(s sample.Session, w int) []string {
 	st := m.st
 	var parts []string
@@ -121,14 +124,28 @@ func (m Model) peekHead(s sample.Session, w int) []string {
 		}
 		parts = append(parts, shells)
 	}
+	if v, ok := m.mateOf(s); ok && v.Inbox > 0 {
+		inbox := "✉ " + strconv.Itoa(v.Inbox) + " in its inbox"
+		if v.Full {
+			inbox += ", the oldest dropped"
+		}
+		parts = append(parts, inbox)
+	}
 	ref := sample.ProcRef{PID: s.PID, Start: s.Start}
 	if n := m.descendants(s.Host, ref); n > 0 {
 		parts = append(parts, plural(n, "child run"))
 	}
-	if len(parts) == 0 {
+	fix := windowFix(s)
+	if len(parts) == 0 && fix == "" {
 		return nil
 	}
-	out := []string{fit("  "+st.muted.Render(strings.Join(parts, " · ")), w)}
+	var out []string
+	if len(parts) > 0 {
+		out = append(out, fit("  "+st.muted.Render(strings.Join(parts, " · ")), w))
+	}
+	for _, l := range wrapPlain(fix, max(w-2, 1)) { // it names the fix whole: it wraps
+		out = append(out, fit("  "+st.muted.Render(l), w))
+	}
 	for _, sh := range s.Shells {
 		out = append(out, fit("  "+st.faint.Render(strconv.Itoa(sh.PID)+"  "+sh.Command), w))
 	}
@@ -136,6 +153,33 @@ func (m Model) peekHead(s sample.Session, w int) []string {
 		out = append(out, pad(l, w))
 	}
 	return out
+}
+
+// mateOf is what s's chain says of s as a mate: its inbox.
+func (m Model) mateOf(s sample.Session) (state.MateView, bool) {
+	cv := m.chainsOf(s.Host)
+	if cv == nil {
+		return state.MateView{}, false
+	}
+	mb := memberOf(s)
+	i := slices.IndexFunc(cv.Mates, func(v state.MateView) bool { return v.Member.Same(mb) })
+	if i < 0 {
+		return state.MateView{}, false
+	}
+	return cv.Mates[i], true
+}
+
+// windowFix is what to do about tokens with no window known, "" when the
+// window is known or nothing is spent. For Claude Code the status line
+// gives the window, so the fix names setup first.
+func windowFix(s sample.Session) string {
+	switch {
+	case s.Tokens == 0 || s.Window > 0:
+		return ""
+	case s.Agent == "claude":
+		return sample.Kilo(s.Tokens) + " tokens · no window known: run matchblox setup, or add the model to [sessions.windows]"
+	}
+	return sample.Kilo(s.Tokens) + " tokens · no window known: add the model to [sessions.windows]"
 }
 
 // washed puts every cell of a chosen card, or one that lands outside

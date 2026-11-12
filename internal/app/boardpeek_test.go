@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/blox-eng/matchblox/internal/sample"
+	"github.com/blox-eng/matchblox/internal/state"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // The peek is the old detail pane (ruling 35): under the chosen card's own
@@ -140,5 +142,61 @@ func TestACardWithNoWindowPrintsNoZero(t *testing.T) {
 	}
 	if out := plainFrame(m); strings.Contains(out, "/ 0") {
 		t.Errorf("a card prints / 0:\n%s", out)
+	}
+}
+
+// TestThePeekOfAChainMateShowsItsInbox (ruling 40): the peek of a chain
+// mate with sends that wait in its inbox counts them; a mate with an empty
+// inbox, and a card that is not chosen, say nothing of it.
+func TestThePeekOfAChainMateShowsItsInbox(t *testing.T) {
+	st := headState(t, runningPlan(), true)
+	for _, s := range st.Sessions {
+		if s.Name == "hearth-api" {
+			st.Chains.Mates = append(st.Chains.Mates, state.MateView{Member: memberOf(s), Inbox: 2})
+		}
+	}
+	for _, w := range []int{44, 160} {
+		m, _ := chainBoard(t, w, st, "hearth-api")
+		if peek := peekOf(t, m, "hearth-api"); !strings.Contains(peek, "✉ 2 in its inbox") {
+			t.Errorf("width %d: the peek does not count the inbox:\n%s", w, peek)
+		}
+		m, _ = chainBoard(t, w, st, "ember-billing")
+		if out := plainFrame(m); strings.Contains(out, "✉") {
+			t.Errorf("width %d: an inbox shows off the chosen card's peek:\n%s", w, out)
+		}
+	}
+}
+
+// TestThePeekSaysWhenNoWindowIsKnown (owner, 2026-11-12, "Peek's head"):
+// tokens with no window known name the fix on the chosen card's peek; for
+// Claude Code the status line gives the window, so the fix names setup.
+func TestThePeekSaysWhenNoWindowIsKnown(t *testing.T) {
+	for _, c := range []struct{ agent, want string }{
+		{"claude", "158k tokens · no window known: run matchblox setup, or add the model to [sessions.windows]"},
+		{"opencode", "158k tokens · no window known: add the model to [sessions.windows]"},
+	} {
+		st := queueState()
+		st.Queue = nil
+		st.Sessions[0].Agent, st.Sessions[0].Tokens = c.agent, 158_000
+		st.Sessions[0].Context, st.Sessions[0].Window, st.Sessions[0].ContextPct = "unmeasured", 0, 0
+		s := st.Sessions[0]
+		m, _ := loadedWith(t, 160, st)
+		m = selectPane(t, m, s.Pane).(Model)
+		if peek := peekOf(t, m, s.Name); !strings.Contains(peek, "window known:") {
+			t.Errorf("%s: the chosen card's peek does not name the fix:\n%s", c.agent, peek)
+		}
+		for _, w := range []int{36, 80} { // a column of NEEDS YOU, a phone's
+			var said []string
+			for _, l := range m.peekHead(sessionOn(t, st, s.Pane), w) {
+				said = append(said, strings.TrimSpace(ansi.Strip(l)))
+			}
+			if got := strings.Join(said, " "); !strings.Contains(got, c.want) {
+				t.Errorf("%s at %d: the peek says %q, want %q whole", c.agent, w, got, c.want)
+			}
+		}
+		m = selectPane(t, m, st.Sessions[1].Pane).(Model)
+		if out := plainFrame(m); strings.Contains(out, "no window known") {
+			t.Errorf("%s: a card that is not chosen names the fix:\n%s", c.agent, out)
+		}
 	}
 }

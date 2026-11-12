@@ -1,7 +1,6 @@
 package app
 
 import (
-	"fmt"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -348,52 +347,6 @@ func (m Model) lastWords(s sample.Session) string {
 		return it.LastLine
 	}
 	return s.LastLine
-}
-
-// contextCell is a session's context use: warn from 70%, neg past the
-// line; fresh before the first turn, a dash when it is not measured.
-func (m Model) contextCell(s sample.Session) string {
-	switch s.Context {
-	case "known":
-	case "fresh":
-		return m.st.faint.Render("fresh")
-	case "unmeasured":
-		return m.st.faint.Render("—")
-	default:
-		return ""
-	}
-	style := m.st.muted
-	switch {
-	case m.full().Reached(s):
-		style = m.st.neg
-	case s.ContextPct >= 70:
-		style = m.st.warn
-	}
-	return style.Render(fmt.Sprintf("%.0f%%", s.ContextPct))
-}
-
-// facts are the figures of a session the rows have no room for.
-func (m Model) facts(s sample.Session) []string {
-	var facts []string
-	if s.Model != "" {
-		facts = append(facts, s.Model)
-	}
-	switch {
-	case s.Tokens > 0 && s.Window > 0:
-		facts = append(facts, fmt.Sprintf("%s / %s tokens", sample.Kilo(s.Tokens), sample.Kilo(s.Window)), "+"+sample.Kilo(s.Burn30m)+" in 30 min")
-	case s.Tokens > 0 && s.Agent == "claude":
-		facts = append(facts, sample.Kilo(s.Tokens)+" tokens · no window known: run matchblox setup, or add the model to [sessions.windows]")
-	case s.Tokens > 0:
-		facts = append(facts, sample.Kilo(s.Tokens)+" tokens · no window known: add the model to [sessions.windows]")
-	}
-	if a := accountCell(s); a != "" {
-		facts = append(facts, a)
-	}
-	facts = append(facts, fmt.Sprintf("pid %d", s.PID), plural(s.Procs, "process"))
-	if !s.Started.IsZero() {
-		facts = append(facts, "started "+sample.Human(m.now().Sub(s.Started))+" ago")
-	}
-	return facts
 }
 
 func (m Model) contextStyle(s sample.Session) lipgloss.Style {
