@@ -16,10 +16,10 @@ import (
 
 // roomKeys are the keys of a chain's room. While the talk line types, every
 // key but ⏎, esc and ⌫ is text.
-type roomKeys struct{ Up, Down, Open, Give, Next, Prev, Back, Erase, Flip, Walk, Out bkey.Binding }
+type roomKeys struct{ Open, Give, Next, Prev, Back, Erase, Flip, Walk bkey.Binding }
 
 func (k roomKeys) bindings() []bkey.Binding {
-	return []bkey.Binding{k.Up, k.Down, k.Open, k.Give, k.Next, k.Prev, k.Back, k.Erase, k.Flip, k.Walk, k.Out}
+	return []bkey.Binding{k.Open, k.Give, k.Next, k.Prev, k.Back, k.Erase, k.Flip, k.Walk}
 }
 
 // goWait is a go room k's stoker waits on: the entry's id, what it says,
@@ -79,13 +79,10 @@ func (m Model) goWaits(k chainKey) []goWait {
 	return out
 }
 
-// goOf is the go row waits on: a need row's by its entry, a step row's by
-// its plan step.
+// goOf is the go a step row waits on, by its plan step.
 func (m Model) goOf(k chainKey, row roomRow) (goWait, bool) {
 	for _, g := range m.goWaits(k) {
-		switch {
-		case row.kind == roomNeed && g.id == row.id,
-			row.kind == roomStep && g.step > 0 && strconv.Itoa(g.step) == row.id:
+		if row.kind == roomStep && g.step > 0 && strconv.Itoa(g.step) == row.id {
 			return g, true
 		}
 	}
@@ -120,20 +117,16 @@ func (m Model) roomKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	rows := m.roomRows(r.k)
-	r.at = min(r.at, len(rows)-1)
-	row := rows[r.at]
+	var row roomRow // none: the cursor is on the board
+	if rows := m.roomRows(r.k); r.at >= 0 {
+		r.at = min(r.at, len(rows)-1)
+		row = rows[r.at]
+	}
 	switch {
 	case bkey.Matches(k, rk.Flip):
 		return m.flipHere()
 	case bkey.Matches(k, rk.Walk):
 		return m.walkHere()
-	case bkey.Matches(k, rk.Up):
-		r.at = max(r.at-1, 0)
-		return m.followCursor()
-	case bkey.Matches(k, rk.Down):
-		r.at = min(r.at+1, len(rows)-1)
-		return m.followCursor()
 	case bkey.Matches(k, rk.Back):
 		return m.closeRoom(), nil
 	case bkey.Matches(k, rk.Next, rk.Prev):
@@ -147,48 +140,19 @@ func (m Model) roomKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	case bkey.Matches(k, rk.Give):
 		return m.give(row)
-	case bkey.Matches(k, rk.Out):
-		s, ok := m.roomSession(row.id)
-		switch {
-		case !ok || row.kind != roomMatch:
-			m.flash = rk.Out.Help().Key + " takes the selected match out of the chain"
-		case r.k.isOne():
-			m.flash = s.Name + " is in no chain"
-		default:
-			a := m.outOfTeam(s, m.roomName(r.k))
-			m.pending = &a
-		}
 	case bkey.Matches(k, rk.Open):
 		switch row.kind {
-		case roomNeed, roomMatch:
-			if row.kind == roomMatch && row.id == "" { // the chain has no matches: + start one here
-				return m.openNew()
-			}
-			if s, ok := m.roomSession(row.id); ok {
-				m.ghostPick, m.chose, m.selPID, m.selHost = 0, true, s.PID, s.Host
-				return m.goInto(s.Host, s.Pane)
-			}
 		case roomMore:
 			r.unfolded = true
 		case roomTalk:
 			r.typing = true
 		case roomCard:
-			if row.id == "quiet" { // ⏎ asks the quiet stoker
+			switch row.id {
+			case "quiet": // ⏎ asks the quiet stoker
 				r.typing = true
+			case roomEmpty: // the chain has no matches: + start one here
+				return m.openNew()
 			}
-		}
-	}
-	return m, nil
-}
-
-// followCursor selects the match under the room's cursor, so the desk's
-// live view and a tap on it go to that match.
-func (m Model) followCursor() (tea.Model, tea.Cmd) {
-	rows := m.roomRows(m.room.k)
-	if row := rows[m.room.at]; row.kind == roomMatch {
-		if s, ok := m.roomSession(row.id); ok {
-			m.ghostPick, m.chose, m.selPID, m.selHost = 0, true, s.PID, s.Host
-			return m, m.watchCmd()
 		}
 	}
 	return m, nil
@@ -349,38 +313,9 @@ func (m Model) roomStokerWord(k chainKey) string {
 	return m.roomName(k) + "'s stoker"
 }
 
-// roomKeyLine is the key line in a room: the talk line's while it types,
-// else the keys of the selected row.
+// roomKeyLine is the key line while the talk line types.
 func (m Model) roomKeyLine(w int) string {
 	st, rk, r := m.st, m.keys.room, m.room
-	if r.typing {
-		return fit(" "+st.text.Render("typing to "+m.roomStokerWord(r.k)+" · ")+
-			keyWord(rk.Open, st.accent, st.muted, " sends · ")+keyWord(rk.Back, st.accent, st.muted, " stops"), w)
-	}
-	rows := m.roomRows(r.k)
-	var hs []hint
-	if r.at < len(rows) {
-		switch row := rows[r.at]; row.kind {
-		case roomNeed:
-			hs = append(hs, hintFor(rk.Open, "go in"))
-			if _, ok := m.goOf(r.k, row); ok {
-				hs = []hint{hintFor(rk.Give, "give")}
-			}
-		case roomMatch:
-			hs = append(hs, hintFor(rk.Open, "go in"))
-			if !r.k.isOne() && row.id != "" {
-				hs = append(hs, hintFor(rk.Out, "out"))
-			}
-		case roomStep:
-			if _, ok := m.goOf(r.k, row); ok {
-				hs = append(hs, hintFor(rk.Give, "give"))
-			}
-		case roomMore:
-			hs = append(hs, hintFor(rk.Open, "unfold"))
-		case roomTalk:
-			hs = append(hs, hintFor(rk.Open, "talk"))
-		}
-	}
-	hs = append(hs, hintFor(rk.Next, "next"), hintFor(rk.Back, "back"))
-	return fit(" "+st.muted.Render(plainHints(hs...)), w)
+	return fit(" "+st.text.Render("typing to "+m.roomStokerWord(r.k)+" · ")+
+		keyWord(rk.Open, st.accent, st.muted, " sends · ")+keyWord(rk.Back, st.accent, st.muted, " stops"), w)
 }

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/chains"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -244,7 +245,7 @@ func (m Model) inBoard(s sample.Session) bool {
 	if r := m.room; r != nil && r.k.isOne() && oneKey(s) != r.k {
 		return false // a chain of one's room is its one match
 	}
-	if m.boardChain != "" && m.chainLabelOf(s) != m.boardChain {
+	if m.boardChain != "" && m.chainLabelOf(s) != m.boardChain && !m.inRoomTeam(s) {
 		return false
 	}
 	if m.boardHost != "" && m.nameOf(s.Host) != m.boardHost {
@@ -257,6 +258,18 @@ func (m Model) inBoard(s sample.Session) bool {
 	text := strings.Join([]string{s.Name, s.Target, s.Pane, s.Tab, s.Cwd, s.Model, m.lastWords(s), m.wordOf(s),
 		word, says, m.chainLabelOf(s)}, " ")
 	return strings.Contains(strings.ToLower(text), strings.ToLower(m.filter))
+}
+
+// inRoomTeam tells if s is a member of the team whose room is open: a team
+// with one match left is in no chain the board knows (chainIx drops it),
+// and its room still draws that match's card (eng review correction 5).
+func (m Model) inRoomTeam(s sample.Session) bool {
+	r := m.room
+	if r == nil || r.k.isOne() || s.Host != r.k.host || m.isStoker(s) {
+		return false
+	}
+	c, ok := m.teamOf(r.k)
+	return ok && slices.ContainsFunc(c.Members, func(mb chains.Member) bool { return mb.Same(memberOf(s)) })
 }
 
 // chainLabelOf is the name of the chain s is in, "" for none.

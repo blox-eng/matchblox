@@ -385,11 +385,60 @@ func TestOnAPhoneTheStokerIsAPage(t *testing.T) {
 }
 
 func TestACardSaysItsChainMates(t *testing.T) {
-	t.Skip("needs Task 12 step 6d: the room's match rows (inbox, repo, also in) leave for the cards")
+	t.Skip("dropped (Task 12 step 6d, ruling 33): a card shows no chain mate's inbox, repo or also in; the peek shows the inbox")
 }
 
+// itemLabels are the words of a menu's lines.
+func itemLabels(items []menuItem) []string {
+	var out []string
+	for _, it := range items {
+		out = append(out, it.label)
+	}
+	return out
+}
+
+// menuLine is the index of the line of s's menu that says label, -1 for
+// none.
+func menuLine(m Model, s sample.Session, label string) int {
+	return slices.IndexFunc(m.menuFor(s), func(it menuItem) bool { return it.label == label })
+}
+
+// outOfChain runs line i of s's menu: the card chosen, the menu open, ↓ to
+// it, ⏎.
+func outOfChain(m Model, s sample.Session, i int) Model {
+	m.boardChooseCard(m.columnOf(s), s)
+	m = m.openMenu(s, 0, 5)
+	for range i {
+		m = pressOn(m, "down")
+	}
+	return pressOn(m, "enter")
+}
+
+// TestTheMenuTakesAMatchOutOfItsChain: in a chain's room the card's menu
+// has "out of <chain>" (the owner, 2026-11-12: "Menu, in the room only").
+// ⏎ on it asks for a typed y, the act named, and sends nothing before it.
+// The full board's menu has no such line (TestTheMenuHasNoDestructiveLine),
+// and nor has a chain of one's room.
 func TestTheMenuTakesAMatchOutOfItsChain(t *testing.T) {
-	t.Skip("needs Task 12 step 6d: u leaves the room for the card's menu, which has no destructive line today")
+	st := headState(t, runningPlan(), true)
+	st.Queue = nil
+	m, f := hearthOpen(t, 160, st)
+	s := matchOf(t, m, "ember-billing")
+	i := menuLine(m, s, "out of hearth")
+	if i < 0 {
+		t.Fatalf("the room's menu lacks out of hearth: %q", itemLabels(m.menuFor(s)))
+	}
+	if full := m.closeRoom(); slices.ContainsFunc(full.menuFor(s), func(it menuItem) bool { return strings.HasPrefix(it.label, "out of") }) {
+		t.Fatalf("the full board's menu takes a match out: %q", itemLabels(full.menuFor(s)))
+	}
+	asked := outOfChain(m, s, i)
+	if len(f.acts()) != 0 || asked.pending == nil || !asked.pending.destructive || asked.pending.label != "take ember-billing out of hearth" {
+		t.Fatalf("⏎ on out of hearth: acts %+v, pending %+v", f.acts(), asked.pending)
+	}
+	pressOn(asked, "y")
+	if a := f.acts(); len(a) != 1 || a[0].RecID != "chain:out:%8@hearth" || a[0].Confirm != "y" {
+		t.Fatalf("y: acts %+v", a)
+	}
 }
 
 // TestATabLeavesTheRoom: off the board the room is only the board's filter.

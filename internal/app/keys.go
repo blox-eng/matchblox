@@ -118,8 +118,6 @@ func defaultKeys() keymaps {
 			Erase: bind(ks("backspace"), "⌫", "erase"),
 		},
 		room: roomKeys{
-			Up:    bind(ks("up", "k"), "↑↓", "move"),
-			Down:  bind(ks("down", "j"), "↑↓", "move"),
 			Open:  bind(ks("enter"), "⏎", ""),
 			Give:  bind(ks("y"), "y", "give"),
 			Next:  bind(ks("]"), "]", "next"),
@@ -128,7 +126,6 @@ func defaultKeys() keymaps {
 			Erase: bind(ks("backspace"), "⌫", "erase"),
 			Flip:  bind(ks("alt+s"), "⌥s", "room"),
 			Walk:  bind(ks("alt+n"), "⌥n", "next match"),
-			Out:   bind(ks("u"), "u", "out"),
 		},
 		search: searchKeys{
 			Clear: bind(ks("esc"), "esc", "clear"),

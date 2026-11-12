@@ -43,7 +43,9 @@ type longPress struct {
 type longPressMsg struct{ id int }
 
 // menuFor are the lines of s's menu (the spec's "The context menu"), each
-// only when it applies. None of them destroys anything.
+// only when it applies. None of them destroys anything, but out of the
+// chain in its room (the owner, 2026-11-12: "Menu, in the room only"),
+// which waits for a typed y.
 func (m Model) menuFor(s sample.Session) []menuItem {
 	bk, mk := m.keys.board, m.keys.main
 	items := []menuItem{{"copy last message", bk.Copy.Help().Key, func(m *Model) tea.Cmd { return m.boardCopy(s, true) }}}
@@ -71,11 +73,32 @@ func (m Model) menuFor(s sample.Session) []menuItem {
 		}
 		return cmd
 	}})
+	if k, ok := m.roomOf(s); ok {
+		name := m.roomName(k)
+		items = append(items, menuItem{"out of " + name, "", func(m *Model) tea.Cmd {
+			a := m.outOfTeam(s, name) // destructive: the consent box waits for a typed y
+			m.pending, m.previewTop = &a, 0
+			return nil
+		}})
+	}
 	c := m.columnOf(s)
 	return append(items, menuItem{"hide " + strings.ToLower(c.name()), "", func(m *Model) tea.Cmd {
 		m.flipHidden(c)
 		return nil
 	}})
+}
+
+// roomOf is the chain whose room is open on the board with s in it: the
+// room's out of line takes s out. A chain of one has none.
+func (m Model) roomOf(s sample.Session) (chainKey, bool) {
+	if m.room == nil || !m.boardShown() || m.room.k.isOne() {
+		return chainKey{}, false
+	}
+	seen, _ := m.members(m.room.k)
+	if !slices.ContainsFunc(seen, func(x sample.Session) bool { return paneOf(x) == paneOf(s) }) {
+		return chainKey{}, false
+	}
+	return m.room.k, true
 }
 
 // questionText is what s asks: each question, then its options, one a line.

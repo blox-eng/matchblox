@@ -64,7 +64,7 @@ func (m Model) flipFrom(tty, pane string) Model {
 	r.from = maps.Clone(r.from)
 	r.from[tty] = pane
 	r.at = m.openRoom(k).room.at
-	r.typing = m.roomRows(k)[r.at].kind == roomTalk
+	r.typing = r.at >= 0 && m.roomRows(k)[r.at].kind == roomTalk
 	m.room = &r
 	return m
 }

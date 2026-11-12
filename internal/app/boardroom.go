@@ -13,13 +13,11 @@ import (
 // A chain's room is the board narrowed to the chain (spec "Chains"): the
 // stoker's card above the columns, the talk line under them, and on a phone
 // the stoker as the first page. m.room keeps the room's state; its cursor
-// (room.at) is on a line of the card, on the talk line, or on the board: a
-// match's row of the room stands for the board's own choice.
+// (room.at) is on a line of the card, on the talk line, or -1: on the
+// board, whose own choice holds.
 
 // roomOwn: a row of kind k is one the room draws on the board itself.
-func roomOwn(k roomKind) bool {
-	return k == roomCard || k == roomStep || k == roomMore || k == roomTalk
-}
+func roomOwn(k roomKind) bool { return k != roomNone }
 
 // roomChosen is the row of the room the cursor is on, when the room draws
 // it: a line of the stoker's card, or the talk line. false: no room is
@@ -62,7 +60,7 @@ func (m Model) roomDraws(w int) (card, talk []roomDrawn) {
 			continue
 		}
 		sel := i == m.room.at
-		for _, l := range m.roomLine(r, w-1, sel, 0) {
+		for _, l := range m.roomLine(r, w-1, sel) {
 			d := roomDrawn{fit(m.chosenMark(sel)+l, w), sel, i}
 			if r.kind == roomTalk {
 				talk = append(talk, d)
@@ -157,15 +155,12 @@ func (m *Model) roomOn(at int) {
 	m.boardAbove, m.boardBelow, m.recPick, m.ghostPick = 0, 0, "", 0
 }
 
-// roomOff gives the cursor back to the board: the room's cursor stands on
-// a match's row.
+// roomOff gives the cursor back to the board: the room's cursor is on no
+// row of its own.
 func (m *Model) roomOff() {
-	rows := m.roomRows(m.room.k)
-	if i := slices.IndexFunc(rows, func(r roomRow) bool { return !roomOwn(r.kind) }); i >= 0 {
-		r := *m.room
-		r.at = i
-		m.room = &r
-	}
+	r := *m.room
+	r.at = -1
+	m.room = &r
 }
 
 // roomToCard gives the cursor to the open column's first (d 1) or last
@@ -303,8 +298,11 @@ func (m Model) roomHints(row roomRow) []hint {
 	case roomTalk:
 		hs = append(hs, hintFor(rk.Open, "talk"))
 	case roomCard:
-		if row.id == "quiet" {
+		switch row.id {
+		case "quiet":
 			hs = append(hs, hintFor(rk.Open, "ask"))
+		case roomEmpty:
+			hs = append(hs, hintFor(rk.Open, "new session"))
 		}
 	}
 	return append(hs, hintFor(rk.Next, "next chain"), hintFor(rk.Back, "all"))
@@ -332,8 +330,8 @@ const stokerMark = "stoker"
 // the need's step, else on the talk line.
 func (m Model) openStokerPage() Model {
 	at := m.roomLanding(m.room.k)
-	if rows := m.roomRows(m.room.k); !roomOwn(rows[at].kind) {
-		at = len(rows) - 1
+	if at < 0 { // the need is on a card: the page opens on the talk line
+		at = len(m.roomRows(m.room.k)) - 1
 	}
 	m.roomOn(at)
 	return m

@@ -34,16 +34,6 @@ var altS = tea.KeyPressMsg{Code: 's', Mod: tea.ModAlt}
 
 func TestFlipFromASessionOpensItsChainsRoomOnTheNeed(t *testing.T) {
 	t.Skip("replaced by TestARoomOpensOnTheNeedElseTheTalkLine (Task 12 step 1)")
-	st := headState(t, runningPlan(), true)
-	twoAsk(&st)
-	m, _ := headModel(t, 160, st)
-	m = flipFrom(t, m, deskTTY, "%1")
-	if m.room == nil || m.room.k.id != "c1" || m.room.from[deskTTY] != "%1" {
-		t.Fatalf("room %+v", m.room)
-	}
-	if m.roomRows(m.room.k)[m.room.at].kind != roomNeed {
-		t.Fatal("the cursor is not on the need")
-	}
 }
 
 func TestFlipInTheRoomGoesBackToWhereItCameFrom(t *testing.T) {

@@ -66,21 +66,6 @@ func aGo(v proto.StokerView, needs, want string) proto.StokerView {
 
 func TestEnterActsOnTheSelectedRow(t *testing.T) {
 	t.Skip("replaced by TestTheRoomsCursorWalksCardColumnsAndTalk (Task 12 step 1)")
-	m, _ := roomWith(t, headState(t, runningPlan(), true), "hearth-api")
-	m = at(t, m, roomMatch, "hearth-api")
-	if next, cmd := send(t, m, "enter"); cmd == nil {
-		t.Fatal("enter on a match does nothing")
-	} else if s, ok := next.selectedSession(); !ok || s.Name != "hearth-api" {
-		t.Fatalf("enter went into %+v, not hearth-api", s)
-	}
-	m = at(t, m, roomMore, "more")
-	if next, _ := send(t, m, "enter"); !next.room.unfolded {
-		t.Fatal("enter on more does not unfold")
-	}
-	m = at(t, m, roomTalk, "›")
-	if next, _ := send(t, m, "enter"); !next.room.typing {
-		t.Fatal("enter on the talk line does not start typing")
-	}
 }
 
 // TestEveryGoAsksInTheConsentBox: each go the stoker knows (merge,
@@ -88,67 +73,14 @@ func TestEnterActsOnTheSelectedRow(t *testing.T) {
 // asks for a typed y first.
 func TestEveryGoAsksInTheConsentBox(t *testing.T) {
 	t.Skip("replaced by TestYOnAWaitingStepGivesItsGo (Task 12 step 1)")
-	st := headState(t, aGo(runningPlan(), "release", ""), true)
-	st.Queue = nil
-	m, f := roomWith(t, st, "hearth-api")
-	rows := m.roomRows(m.room.k)
-	if rows[m.room.at].kind != roomNeed || rows[m.room.at].text != "▸ rebase ember-billing waits for your go · y" {
-		t.Fatalf("need row %+v", rows[m.room.at])
-	}
-	next, _ := send(t, m, "y")
-	if len(f.acts()) != 0 || next.pending == nil || !next.pending.destructive {
-		t.Fatalf("a release go sent %+v, pending %+v", f.acts(), next.pending)
-	}
-	send(t, next, "y")
-	if a := f.acts(); len(a) != 1 || a[0].RecID != "stoker:grant" || a[0].Text != "s1 e9" {
-		t.Fatalf("acts %+v", a)
-	}
-}
-
-// guardGo makes the guard hold a command of hearth-api for a go, as the
-// service logs it: a RuleGo entry with no step.
-func guardGo(t *testing.T, st proto.State, needs, want string) proto.State {
-	t.Helper()
-	for _, s := range st.Sessions {
-		if s.Name == "hearth-api" {
-			st.Stokers[0].View.Run = append(st.Stokers[0].View.Run, proto.StokerEntry{ID: "go@1/" + needs, At: demoAt.Add(-time.Minute),
-				Name: "hearth-api", Pane: s.Pane, Rule: "go", State: "waits", Needs: needs, Want: want, Text: "hearth-api wants to run " + want})
-			return st
-		}
-	}
-	t.Fatal("no hearth-api")
-	return st
 }
 
 func TestTheRoomShowsAGoTheGuardHolds(t *testing.T) {
 	t.Skip("replaced by TestATapOnTheGoArmsItAndASecondGivesIt (Task 12 step 1)")
-	st := guardGo(t, headState(t, runningPlan(), true), "merge:#4552", "gh pr merge 4552 --squash")
-	st.Queue = nil
-	m, f := roomWith(t, st, "hearth-api")
-	rows := m.roomRows(m.room.k)
-	if rows[m.room.at].kind != roomNeed || rows[m.room.at].text != "▸ hearth-api wants to run gh pr merge 4552 --squash waits for your go · y" {
-		t.Fatalf("need row %+v", rows[m.room.at])
-	}
-	next, _ := send(t, m, "y")
-	if next.pending == nil || strings.Join(next.pending.steps[0], " ") != "gh pr merge 4552 --squash" {
-		t.Fatalf("pending %+v", next.pending)
-	}
-	send(t, next, "y")
-	if a := f.acts(); len(a) != 1 || a[0].Text != "s1 go@1/merge:#4552" {
-		t.Fatalf("acts %+v", a)
-	}
 }
 
 func TestAGivenGuardGoLeavesTheRoom(t *testing.T) {
-	st := guardGo(t, headState(t, runningPlan(), true), "kill:%9", "matchblox kill ember-billing")
-	e := st.Stokers[0].View.Run[len(st.Stokers[0].View.Run)-1]
-	e.ID, e.State = "go@2/kill:%9", "done"
-	st.Stokers[0].View.Run = append(st.Stokers[0].View.Run, e)
-	st.Queue = nil
-	m, _ := roomWith(t, st, "hearth-api")
-	if slices.Contains(kinds(m.roomRows(m.room.k)), roomNeed) {
-		t.Fatalf("a given go still waits:\n%s", rowsText(m.roomRows(m.room.k)))
-	}
+	t.Skip("replaced by TestColumnOf (Task 12 step 6d): the need row goes; a go that was given waits no more (goWaitsOn)")
 }
 
 func TestYOnAWaitingStepGivesItsGo(t *testing.T) {
@@ -305,14 +237,15 @@ func TestTalkInAChainOfOneStartsTheHostStoker(t *testing.T) {
 	_ = next
 }
 
-// TestUTakesAMatchOutOfTheChain: u on a match asks first, with the act
-// named, and a typed y takes it out (#359's toast names the key).
+// TestUTakesAMatchOutOfTheChain: out of the chain asks first, with the
+// act named, and a typed y takes it out. u is the board's strip: the act
+// is the room's card menu's (TestTheMenuTakesAMatchOutOfItsChain).
 func TestUTakesAMatchOutOfTheChain(t *testing.T) {
-	t.Skip("waits for TestTheMenuTakesAMatchOutOfItsChain (Task 12 step 6d): u on the board turns the strip; out of the chain moves to the card's menu")
 	st := headState(t, runningPlan(), true)
 	st.Queue = nil
 	m, f := roomWith(t, st, "hearth-api")
-	m, _ = send(t, at(t, m, roomMatch, "ember-billing"), "u")
+	s := matchOf(t, m, "ember-billing")
+	m = outOfChain(m, s, menuLine(m, s, "out of hearth"))
 	if len(f.acts()) != 0 || m.pending == nil || !m.pending.destructive || m.pending.label != "take ember-billing out of hearth" {
 		t.Fatalf("acts %+v pending %+v", f.acts(), m.pending)
 	}
@@ -322,12 +255,16 @@ func TestUTakesAMatchOutOfTheChain(t *testing.T) {
 	}
 }
 
+// TestUOnAChainOfOneSaysThereIsNoChain: a chain of one's room offers no
+// way out of a chain: its card's menu has no out of line.
 func TestUOnAChainOfOneSaysThereIsNoChain(t *testing.T) {
-	t.Skip("waits for TestTheMenuTakesAMatchOutOfItsChain (Task 12 step 6d): u on the board turns the strip; out of the chain moves to the card's menu")
 	m, f := roomWith(t, headState(t, runningPlan(), true), "spark-docs")
-	m, _ = send(t, at(t, m, roomMatch, "spark-docs"), "u")
-	if len(f.acts()) != 0 || m.pending != nil || m.flash == "" {
-		t.Fatalf("acts %+v pending %+v flash %q", f.acts(), m.pending, m.flash)
+	s := matchOf(t, m, "spark-docs")
+	if !m.room.k.isOne() || slices.ContainsFunc(m.menuFor(s), func(it menuItem) bool { return strings.HasPrefix(it.label, "out of") }) {
+		t.Fatalf("a chain of one's menu: %q", itemLabels(m.menuFor(s)))
+	}
+	if len(f.acts()) != 0 {
+		t.Fatalf("acts %+v", f.acts())
 	}
 }
 
@@ -352,19 +289,6 @@ func TestASecondFlipKeepsTheRoom(t *testing.T) {
 // when no need waits; on the need line when one does.
 func TestAFlipLandsTyping(t *testing.T) {
 	t.Skip("replaced by TestARoomOpensOnTheNeedElseTheTalkLine (Task 12 step 1)")
-	st := headState(t, runningPlan(), true)
-	st.Queue = nil
-	m, _ := headModel(t, 160, st)
-	m = m.flipFrom("/dev/pts/1", paneNamed(st, "hearth-api"))
-	if rows := m.roomRows(m.room.k); rows[m.room.at].kind != roomTalk || !m.room.typing {
-		t.Fatalf("landed on %+v, typing %v", rows[m.room.at], m.room.typing)
-	}
-	twoAsk(&st)
-	m, _ = headModel(t, 160, st)
-	m = m.flipFrom("/dev/pts/1", paneNamed(st, "hearth-api"))
-	if rows := m.roomRows(m.room.k); rows[m.room.at].kind != roomNeed || m.room.typing {
-		t.Fatalf("landed on %+v, typing %v", rows[m.room.at], m.room.typing)
-	}
 }
 
 // TestTalkToAHostThatIsNotConnectedKeepsTheWords: nothing goes, the line
@@ -415,42 +339,16 @@ func TestAStartThatFailsSaysWhyOnTheCard(t *testing.T) {
 // match under the cursor, whichever was selected before the room opened.
 func TestTheLiveViewFollowsTheRoomCursor(t *testing.T) {
 	t.Skip("replaced by TestTheLiveViewFollowsTheChosenCard (Task 12 step 1)")
-	st := headState(t, runningPlan(), true)
-	st.Queue = nil
-	m, _ := roomWith(t, st, "hearth-api")
-	m = at(t, m, roomMatch, "kindle-web")
-	m, _ = send(t, m, "down")
-	if s, ok := m.selected(); !ok || s.Name != "hearth-api" || !m.roomAtMatch(s.Pane) {
-		t.Fatalf("selected %+v, ok %v; the cursor is on %+v", s, ok, m.roomRows(m.room.k)[m.room.at])
-	}
 }
 
 // TestTheRoomCursorStaysOnItsRow: a need line that comes on top leaves the
 // cursor on the match it was on.
 func TestTheRoomCursorStaysOnItsRow(t *testing.T) {
-	st := headState(t, runningPlan(), true)
-	st.Queue = nil
-	m, _ := roomWith(t, st, "hearth-api")
-	m = at(t, m, roomMatch, "ember-billing")
-	twoAsk(&st)
-	next, cmd := m.Update(stateMsg(st))
-	drain(cmd)
-	m = next.(Model)
-	if row := m.roomRows(m.room.k)[m.room.at]; row.kind != roomMatch || !strings.Contains(row.text, "ember-billing") {
-		t.Fatalf("the cursor moved to %+v", row)
-	}
+	t.Skip("replaced by TestTheChoiceFollowsItsMatch (Task 12 step 6d): the room's match rows go; the choice follows its match (R3.1)")
 }
 
 // TestTheRoomScrollsToTheCursor: a room taller than the screen keeps the
 // cursor's row on it.
 func TestTheRoomScrollsToTheCursor(t *testing.T) {
-	st := headState(t, runningPlan(), true)
-	st.Queue = nil
-	m, _ := roomWith(t, st, "hearth-api")
-	rows := m.roomRows(m.room.k)
-	m.room.at = len(rows) - 1
-	lines := m.roomView(40, 4)
-	if len(lines) != 4 || !strings.Contains(ansi.Strip(lines[3]), "› tell hearth's stoker…") {
-		t.Fatalf("the talk line is off screen:\n%s", ansi.Strip(strings.Join(lines, "\n")))
-	}
+	t.Skip("replaced by TestBoardKeepsTheChosenCardWhole (Task 12 step 6d): roomView goes with the room's own list")
 }
