@@ -593,6 +593,47 @@ func TestRemoteHomeConsoleGetsTheCommand(t *testing.T) {
 	}
 }
 
+// What mode auto did shows once for each record, on this console and on
+// the next one that starts.
+func TestAutoUpdateNewsShowsOnce(t *testing.T) {
+	dir := t.TempDir()
+	at := time.Date(2026, 11, 12, 3, 12, 0, 0, time.Local)
+	auto := &state.UpdateView{Mode: "auto", Current: "v0.43.0", Latest: "v0.43.0",
+		Last: &state.UpdateRecord{From: "v0.42.0", To: "v0.43.0", At: at, Checksum: true}}
+	console := func() Model {
+		m := New(Options{NoMotion: true, Host: "ws-1", Conn: newFake(), Binary: "v0.43.0", Local: true, StateDir: dir})
+		return upd(t, m, tea.WindowSizeMsg{Width: 104, Height: 38})
+	}
+	stateWith := func(v *state.UpdateView) stateMsg {
+		st := fixtureState()
+		st.Update = v
+		return stateMsg(st)
+	}
+	m := upd(t, console(), stateWith(auto))
+	if out := strings.Join(frameOf(m), "\n"); !strings.Contains(out, "updated to v0.43.0 at 03:12") {
+		t.Fatalf("no news of the update:\n%s", out)
+	}
+	m.flash = ""
+	if m = upd(t, m, stateWith(auto)); m.flash != "" {
+		t.Fatalf("the news shows again: %q", m.flash)
+	}
+	if m = upd(t, console(), stateWith(auto)); m.flash != "" {
+		t.Fatalf("the next console shows it again: %q", m.flash)
+	}
+
+	failed := *auto
+	failed.Current, failed.Last = "v0.42.0", &state.UpdateRecord{From: "v0.42.0", To: "v0.43.0", At: at.Add(24 * time.Hour), Err: "no route to host"}
+	if m = upd(t, m, stateWith(&failed)); m.flash != "the update to v0.43.0 failed: no route to host · run: matchblox update" {
+		t.Fatalf("a failed update: %q", m.flash)
+	}
+
+	offer := *auto
+	offer.Mode, offer.Last = "offer", &state.UpdateRecord{From: "v0.42.0", To: "v0.43.0", At: at.Add(48 * time.Hour)}
+	if m = upd(t, console(), stateWith(&offer)); m.flash != "" {
+		t.Fatalf("a person's own install is news: %q", m.flash)
+	}
+}
+
 func TestClosedReleaseNoteStaysClosedForThatPair(t *testing.T) {
 	r := releaseRig(t, "v0.42.0", "v0.38.1", viewOn("v0.38.1"))
 	dir := t.TempDir()

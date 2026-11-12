@@ -14,6 +14,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/doors"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/state"
+	"github.com/blox-eng/matchblox/internal/stoker"
 	"github.com/blox-eng/matchblox/internal/update"
 )
 
@@ -609,5 +610,167 @@ func TestHostUpdateActNeedsATypedY(t *testing.T) {
 	}
 	if n, got := src.count(), src.installed(); n != 0 || len(got) != 0 {
 		t.Fatalf("Latest calls %d, installs %v", n, got)
+	}
+}
+
+// autoTest is a service on v0.42.0 under mode, which first saw v0.43.0
+// seen before now.
+func autoTest(t *testing.T, mode string, seen time.Duration) (*Service, *fakeUpdates, *fakeClock, string) {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "update.json")
+	if err := state.WriteUpdate(path, state.UpdateFile{Latest: "v0.43.0", FirstSeen: updateT0.Add(-seen)}); err != nil {
+		t.Fatal(err)
+	}
+	s, src, clk := updateTest(t, "v0.42.0", mode, path)
+	return s, src, clk, path
+}
+
+func TestAutoWaitsADayFromFirstSeen(t *testing.T) {
+	s, src, clk, _ := autoTest(t, config.UpdateAuto, 0)
+	tick := startUpdates(t, s)
+	tick()
+	clk.add(23 * time.Hour)
+	tick()
+	if got := src.installed(); len(got) != 0 {
+		t.Fatalf("installs after 23h %v", got)
+	}
+	clk.add(time.Hour)
+	tick()
+	if got := src.installed(); !slices.Equal(got, []string{"v0.43.0"}) {
+		t.Fatalf("installs after 24h %v", got)
+	}
+}
+
+// autoWaits checks that a due install waits while busy holds, makes no
+// request on the wakes it waits, and runs at the first wake after.
+func autoWaits(t *testing.T, busy func(s *Service, on bool)) {
+	t.Helper()
+	s, src, clk, _ := autoTest(t, config.UpdateAuto, 25*time.Hour)
+	busy(s, true)
+	tick := startUpdates(t, s)
+	tick()
+	for range 3 {
+		clk.add(10 * time.Minute)
+		tick()
+	}
+	if n, got := src.count(), src.installed(); n != 1 || len(got) != 0 {
+		t.Fatalf("while busy: Latest calls %d, installs %v", n, got)
+	}
+	busy(s, false)
+	clk.add(time.Minute)
+	tick()
+	if n, got := src.count(), src.installed(); n != 1 || !slices.Equal(got, []string{"v0.43.0"}) {
+		t.Fatalf("once idle: Latest calls %d, installs %v", n, got)
+	}
+}
+
+func TestAutoWaitsForAStokerRun(t *testing.T) {
+	t.Run("host", func(t *testing.T) {
+		autoWaits(t, func(s *Service, on bool) {
+			s.mu.Lock()
+			s.cur.Stoker = &stoker.View{Mode: stoker.Mode{On: on}}
+			s.mu.Unlock()
+		})
+	})
+	t.Run("chain", func(t *testing.T) {
+		autoWaits(t, func(s *Service, on bool) {
+			s.mu.Lock()
+			s.cur.Stokers = []state.ChainStoker{{ID: "c1", View: stoker.View{}}, {ID: "c2", View: stoker.View{Mode: stoker.Mode{On: on}}}}
+			s.mu.Unlock()
+		})
+	})
+}
+
+func TestAutoWaitsForAClone(t *testing.T) {
+	autoWaits(t, func(s *Service, on bool) {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if on {
+			s.clones = map[string]*cloneJob{"/work/api-auth": {c: proto.Clone{Target: "/work/api-auth", Pct: 40}}}
+			return
+		}
+		s.clones["/work/api-auth"].end = s.now() // ended, still listed
+	})
+}
+
+func TestOfferModeNeverInstallsByItself(t *testing.T) {
+	s, src, clk, _ := autoTest(t, config.UpdateOffer, 25*time.Hour)
+	tick := startUpdates(t, s)
+	for range 3 {
+		tick()
+		clk.add(24 * time.Hour)
+	}
+	if got := src.installed(); len(got) != 0 {
+		t.Fatalf("installs %v", got)
+	}
+}
+
+func TestAutoLeavesAManagedInstall(t *testing.T) {
+	s, src, clk, path := autoTest(t, config.UpdateAuto, 25*time.Hour)
+	src.managed = "brew upgrade matchblox"
+	tick := startUpdates(t, s)
+	tick()
+	clk.add(24 * time.Hour)
+	tick()
+	if got := src.installed(); len(got) != 0 {
+		t.Fatalf("installs %v", got)
+	}
+	if f := state.ReadUpdate(path); f.Last != nil {
+		t.Fatalf("a record of an install that did not run: %+v", f.Last)
+	}
+}
+
+func TestAutoInstallsAReleaseWhoseOfferIsClosed(t *testing.T) {
+	s, src, clk, _ := autoTest(t, config.UpdateAuto, 23*time.Hour)
+	tick := startUpdates(t, s)
+	tick()
+	if r := updateAct(s, "secondary", "y", "v0.43.0"); r.Err != "" {
+		t.Fatalf("close %+v", r)
+	}
+	clk.add(time.Hour)
+	tick()
+	if got := src.installed(); !slices.Equal(got, []string{"v0.43.0"}) {
+		t.Fatalf("installs %v", got)
+	}
+}
+
+func TestAutoRecordsItsProofAndSurvivesTheRestart(t *testing.T) {
+	s, src, _, path := autoTest(t, config.UpdateAuto, 25*time.Hour)
+	src.proof = update.Proof{Checksum: true}
+	tick := startUpdates(t, s)
+	tick()
+	if got := src.installed(); len(got) != 1 {
+		t.Fatalf("installs %v", got)
+	}
+	again, _, _ := updateTest(t, "v0.43.0", config.UpdateAuto, path)
+	again.loadUpdate()
+	want := state.UpdateRecord{From: "v0.42.0", To: "v0.43.0", At: updateT0, Checksum: true}
+	if v := updateView(again); v.Last == nil || *v.Last != want {
+		t.Fatalf("the new service sends %+v, want %+v", v.Last, want)
+	}
+}
+
+func TestAutoFailureIsSaidAndTriedTheNextDay(t *testing.T) {
+	s, src, clk, _ := autoTest(t, config.UpdateAuto, 25*time.Hour)
+	src.installErr = errors.New("the checksum of matchblox_0.43.0_linux_amd64.tar.gz does not match")
+	tick := startUpdates(t, s)
+	tick()
+	if v := updateView(s); v.Last == nil || v.Last.To != "v0.43.0" || !strings.Contains(v.Last.Err, "checksum") {
+		t.Fatalf("the failure is not said: %+v", v.Last)
+	}
+	if _, ok := updateDoorOf(s); !ok {
+		t.Fatal("a failed install closed the offer")
+	}
+	for _, d := range []time.Duration{time.Minute, 10 * time.Minute, 23 * time.Hour} {
+		clk.add(d)
+		tick()
+	}
+	if got := src.installed(); len(got) != 1 {
+		t.Fatalf("installs before the next daily look %v", got)
+	}
+	clk.add(time.Hour)
+	tick()
+	if n, got := src.count(), src.installed(); n != 2 || len(got) != 2 {
+		t.Fatalf("at the next daily look: Latest calls %d, installs %v", n, got)
 	}
 }

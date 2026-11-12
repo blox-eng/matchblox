@@ -795,6 +795,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if n := m.behindNotice(); n != "" && n != m.behindSaid {
 			m.flash, m.behindSaid = n, n // once for each release: a key clears it
 		}
+		if news, key := m.updateNews(); news != "" {
+			m.flash, m.recPrefs.Updated = news, key
+			_ = m.recPrefs.save(m.opt.StateDir) // not kept: the next console says it again
+		}
 		m.noteChanges(m.opt.Host, st.Sessions, st.Chains)
 		m.snap, m.git, m.recs, m.have, m.answered, m.at = st.Snapshot, st.Git, st.Recommendations, true, true, m.now()
 		m.shipReport = st.Ships

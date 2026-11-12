@@ -482,3 +482,21 @@ func (m Model) behindNotice() string {
 	}
 	return fmt.Sprintf("this console runs %s, the latest is %s · run: matchblox update", m.opt.Binary, v.Latest)
 }
+
+// updateNews is what mode auto did on the home host, once for each
+// record: it updated, or why it could not. key names the record in the
+// kept prefs.
+func (m Model) updateNews() (news, key string) {
+	v := m.updateView
+	if v == nil || v.Mode != "auto" || v.Last == nil || v.Last.To == "" {
+		return "", ""
+	}
+	key = v.Last.To + "\x00" + v.Last.At.UTC().Format(time.RFC3339Nano)
+	switch {
+	case m.recPrefs.Updated == key:
+		return "", ""
+	case v.Last.Err != "":
+		return fmt.Sprintf("the update to %s failed: %s · run: matchblox update", v.Last.To, v.Last.Err), key
+	}
+	return fmt.Sprintf("updated to %s at %s", v.Last.To, v.Last.At.Local().Format("15:04")), key
+}

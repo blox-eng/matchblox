@@ -62,7 +62,9 @@ func (s *Service) loadUpdate() {
 }
 
 // updateLoop looks for a newer release at start and then every
-// UpdateEvery, until ctx ends. Under mode off it never looks.
+// UpdateEvery, until ctx ends. Under mode off it never looks. Under mode
+// auto, each wake installs a release that is due; one that failed is
+// tried again after the next look.
 func (s *Service) updateLoop(ctx context.Context) {
 	if !s.updating() || s.UpdateMode == config.UpdateOff {
 		return
@@ -78,10 +80,16 @@ func (s *Service) updateLoop(ctx context.Context) {
 		ticks = t.C
 	}
 	var next time.Time
+	tried := false // an auto install ran since the last look
 	for {
-		if now := s.now(); !now.Before(next) {
+		now := s.now()
+		if !now.Before(next) {
 			s.checkUpdate(now)
-			next = now.Add(every)
+			next, tried = now.Add(every), false
+		}
+		if tag, ok := s.newer(); ok && !tried && s.autoDue(now) {
+			s.installUpdate(tag)
+			tried = true
 		}
 		select {
 		case <-ctx.Done():
@@ -89,6 +97,44 @@ func (s *Service) updateLoop(ctx context.Context) {
 		case <-ticks:
 		}
 	}
+}
+
+// autoWait is how long mode auto waits from the first sight of a release
+// before it installs it.
+const autoWait = 24 * time.Hour
+
+// autoDue is true when mode auto installs the newer release now: a day
+// after this machine first saw it, and with no work of its own in flight.
+// A closed offer does not stop it: the person closed the offer only.
+func (s *Service) autoDue(now time.Time) bool {
+	if s.UpdateMode != config.UpdateAuto || !s.updating() || s.Update.Managed() != "" {
+		return false
+	}
+	if _, ok := s.newer(); !ok {
+		return false
+	}
+	return now.Sub(s.currentUpdateView().FirstSeen) >= autoWait && !s.busy()
+}
+
+// busy is true while a stoker run is on, the host's or a chain's, or a
+// clone runs.
+func (s *Service) busy() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.cur.Stoker != nil && s.cur.Stoker.On {
+		return true
+	}
+	for _, c := range s.cur.Stokers {
+		if c.View.On {
+			return true
+		}
+	}
+	for _, j := range s.clones {
+		if j.end.IsZero() {
+			return true
+		}
+	}
+	return false
 }
 
 // checkUpdate looks for the latest release once. A failed look keeps the
