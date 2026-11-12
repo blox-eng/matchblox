@@ -6,6 +6,8 @@ import (
 
 	bkey "charm.land/bubbles/v2/key"
 	"charm.land/lipgloss/v2"
+
+	"github.com/blox-eng/matchblox/internal/config"
 )
 
 // tabView is one tab: its rows and selection, what Enter and x do on the
@@ -149,7 +151,7 @@ var views = [...]tabView{
 		},
 		secondary: func(m Model) *action {
 			if d, ok := m.selectedDoor(); ok {
-				return closeDoor(d, m.updateView != nil && m.updateView.Mode == "auto")
+				return closeDoor(d, m.updateView != nil && m.updateView.Mode == config.UpdateAuto)
 			}
 			if r, ok := m.selectedRec(); ok {
 				return fromAdvice(r, "secondary")

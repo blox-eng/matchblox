@@ -2,11 +2,13 @@
  SESSIONS 7  ships 3  machine  4  5  6  7
 ────────────────────────────────────────────
  SET UP · 1
- ▌ matchblox v0.43.0 is out
-   This machine runs v0.42.0.
+ ▌ Update to v0.43.0
+   matchblox v0.43.0 is out. This machine
+   runs v0.42.0.
  matchblox v0.42.0 → v0.43.0 (linux/amd64)
    checksum    checked first
-   provenance  checked when gh can
+   provenance  checked if gh is installed
+               and logged in
    replaces
      /home/user/.local/bin/matchblox
 
@@ -25,7 +27,5 @@
 
  RECOMMENDATIONS · 7 · h hides
  ▲ The week runs short: compact spark-docs
- ○ Clear spark-docs (%3)
- ○ Clear kindle-web (%5)
 ────────────────────────────────────────────
  RUN install v0.43.0 over v0.42.0   y run  …

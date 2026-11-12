@@ -21,8 +21,8 @@ var (
 	hooksDoor  = doors.Door{ID: doors.Hooks, Title: "Add the queue hooks", Why: "Claude Code tells matchblox when an agent waits for you.", Path: home + "/.claude/settings.json", Sum: "s1", Preview: " {\n+  \"hooks\": {}\n }"}
 	wayBack    = doors.Door{ID: doors.WayBack, Title: "Add the way back", Why: "prefix m comes back here.", Path: home + "/.tmux.conf", Sum: "s2", Preview: "+bind m switch-client -t =matchblox"}
 	guideDoor  = doors.Door{ID: doors.Guide, Title: "Open a guide session", Why: "This starts Claude Code and uses your tokens.", Term: doors.GuideArgv(false), Preview: "claude '...'"}
-	updateDoor = doors.Door{ID: doors.Update, Title: "matchblox v0.43.0 is out", Why: "This machine runs v0.42.0.", Sum: "v0.43.0",
-		Preview: "matchblox v0.42.0 → v0.43.0 (linux/amd64)\n  checksum    checked first\n  provenance  checked when gh can\n  replaces\n    " + home + "/.local/bin/matchblox"}
+	updateDoor = doors.Door{ID: doors.Update, Title: "Update to v0.43.0", Why: "matchblox v0.43.0 is out. This machine runs v0.42.0.", Sum: "v0.43.0",
+		Preview: "matchblox v0.42.0 → v0.43.0 (linux/amd64)\n  checksum    checked first\n  provenance  checked if gh is installed\n              and logged in\n  replaces\n    " + home + "/.local/bin/matchblox"}
 	brokenDoor = doors.Door{ID: doors.Hooks, Title: "Add the queue hooks", Problem: "~/.claude/settings.json is not valid JSON: fix it, then this door opens"}
 )
 
@@ -194,7 +194,7 @@ func TestClosingTheOfferUnderAutoSaysAutoStillInstalls(t *testing.T) {
 	st.Update = &state.UpdateView{Mode: "auto", Current: "v0.42.0", Latest: "v0.43.0"}
 	m, _ := loadedWith(t, 100, st)
 	next, _ := key(m, "x")
-	if out := ansi.Strip(next.(Model).render()); !strings.Contains(out, "close matchblox v0.43.0 is out (auto still installs it)") {
+	if out := ansi.Strip(next.(Model).render()); !strings.Contains(out, "close Update to v0.43.0 (auto still installs it)") {
 		t.Fatalf("close confirm:\n%s", out)
 	}
 }
@@ -202,7 +202,7 @@ func TestClosingTheOfferUnderAutoSaysAutoStillInstalls(t *testing.T) {
 func TestXClosesTheReleaseTheUpdateDoorShowed(t *testing.T) {
 	m, f := loadedWith(t, 100, doorState(updateDoor))
 	next, _ := key(m, "x")
-	if out := ansi.Strip(next.(Model).render()); !strings.Contains(out, "close matchblox v0.43.0 is out (the next release opens it again)") {
+	if out := ansi.Strip(next.(Model).render()); !strings.Contains(out, "close Update to v0.43.0 (the next release opens it again)") {
 		t.Fatalf("close confirm:\n%s", out)
 	}
 	next, cmd := key(next, "y")
@@ -497,12 +497,12 @@ func TestMWithoutAChoiceCancelsAsAnyKey(t *testing.T) {
 // The row of failed release looks has no action, and its close says when
 // it comes back.
 func TestUpdateCheckRowOnlyCloses(t *testing.T) {
-	d := doors.Door{ID: doors.UpdateCheck, Title: "matchblox cannot look for a new release", Why: "Every look since Nov 9 at 14:02 failed: no route to host. Run: matchblox update.", Preview: "matchblox update"}
+	d := doors.Door{ID: doors.UpdateCheck, Title: "Release check fails", Why: "Every look since Nov 9 at 14:02 failed: no route to host. Run: matchblox update.", Preview: "matchblox update"}
 	var m Model
 	if a := m.doorAction(d); a != nil {
 		t.Fatalf("an action %+v", a)
 	}
-	if a := closeDoor(d, false); a.say != "close matchblox cannot look for a new release (after a look that works, three days of failed looks open it again)" {
+	if a := closeDoor(d, false); a.say != "close Release check fails (three more days of failed looks open it again)" {
 		t.Fatalf("close says %q", a.say)
 	}
 }
@@ -510,7 +510,7 @@ func TestUpdateCheckRowOnlyCloses(t *testing.T) {
 // The row of a release installed under a service that still runs the old
 // one closes that release.
 func TestInstalledRowClosesItsRelease(t *testing.T) {
-	d := doors.Door{ID: doors.Update, Title: "matchblox v0.43.0 is installed", Why: "This machine runs v0.42.0.", Sum: "v0.43.0",
+	d := doors.Door{ID: doors.Update, Title: "Restart for v0.43.0", Why: "This machine runs v0.42.0.", Sum: "v0.43.0",
 		Problem: "v0.43.0 is installed, but this service still runs v0.42.0. Quit matchblox and open it again."}
 	var m Model
 	if a := m.doorAction(d); a != nil {

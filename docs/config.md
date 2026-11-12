@@ -155,22 +155,23 @@ checkout) never looks, and a prerelease is never offered. A look that
 fails keeps the release it found before, and never reads as up to date.
 One failed look, or two days of them, stay quiet: `matchblox status` gives
 the reason in `update.err`. After three days of failed looks, counted from
-the first failed look, Sessions shows the step "matchblox cannot look
-for a new release" under `SET UP`, with the reason and
-`Run: matchblox update`. A look that works starts the count again. Closing
+the first failed look, Sessions shows the step "Release check fails" under
+`SET UP`, with the reason and `Run: matchblox update`. A look that works starts the count again. Closing
 the step hides it until a look works and the looks then fail for three more
 days.
 
-**offer.** Sessions shows the step "matchblox v0.43.0 is out" under `SET UP`.
+**offer.** Sessions shows the step "Update to v0.43.0" under `SET UP`, with
+"matchblox v0.43.0 is out. This machine runs v0.42.0."
 `Enter` shows the release it installs and the file it replaces. It also
 says what the install checks first: the checksum always, the build's
-provenance when `gh` can verify it. A typed `y` installs it, with the same
+provenance if `gh` is installed and logged in. A typed `y` installs it, with the same
 checks as `matchblox update`. The service then runs again on the new
 release, and the console starts again on it. When the console cannot start
 itself again, it says `updated to v0.43.0 · quit and open matchblox again`.
 Your sessions run on: they live in tmux. When the install fails, the offer
-keeps the reason and says `Try again, or run: matchblox update.` until the
-next try, and `Enter` tries again. `x` closes the offer of that
+says `The install failed, nothing was changed. Enter tries again, or run: matchblox update.`
+and then the reason, until the next try. The row shows the first 12
+characters of each checksum; `matchblox update` prints them whole. `x` closes the offer of that
 release only, and the next release shows a new one. Until then,
 `matchblox update` installs it. `matchblox setup` does not show it.
 
@@ -188,7 +189,11 @@ machine, use `"offer"` or `"off"`.
 The install makes the same checks as `matchblox update` and records which
 ones it made. The console then says
 once `updated to v0.43.0 at 03:12` (`on Nov 11 at 03:12` when it was not
-today), or why the update failed and the command to run. Auto installs a
+today), or why the update failed and the command to run. The service checks
+the build's provenance only with a `gh` that is installed and logged in for
+its user: without one it installs on the checksum alone, and the console
+adds `· provenance not checked`, as do the step of an install that waits on
+its restart and the result of `u` on a host. Auto installs a
 release once when the install works. A failed install is tried again after
 the next look.
 
@@ -199,10 +204,13 @@ start of any install, from the offer, from auto or from `u`,
 until matchblox runs again on the new release, a new clone is refused: see
 [Limits](limits.md). When the service still runs the old release two
 minutes after the install, or starts again on the old release, Sessions
-shows the step "matchblox v0.43.0 is installed" with
+shows the step "Restart for v0.43.0" with
 `v0.43.0 is installed, but this service still runs v0.42.0. Quit matchblox and open it again.`
 A new clone then says `v0.43.0 is installed. Quit matchblox and open it again.`
-`x` closes that step until a newer release comes out.
+While the service waits for that restart, the step shows under every mode
+and over a newer release, a second install answers with the same words, and
+`x` does not close the step. After a start on the old release, `x` closes it
+until a newer release comes out.
 
 **off.** No look, no request and no offer. A person who presses `u` on this
 host's row in another console still updates it: see

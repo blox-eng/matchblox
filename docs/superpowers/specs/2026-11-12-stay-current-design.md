@@ -280,3 +280,7 @@ Where the build differs from the text above:
   installed over, and `run matchblox update · console v0.42.0, latest
   v0.43.0` for a remote home. A host that is ahead says `this console is
   older: run matchblox update`.
+- The rows are titled as their action, so the title column holds them:
+  "Update to v0.43.0", "Restart for v0.43.0" and "Release check fails". The
+  rows above that quote "is installed" and "cannot look for a new release"
+  as titles are these.

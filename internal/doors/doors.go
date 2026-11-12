@@ -9,6 +9,10 @@ import (
 	"strings"
 )
 
+// TitleCols is how many columns the console gives a door's title on a
+// wide screen: a longer title is cut.
+const TitleCols = 23
+
 // The doors, in the order the console shows them.
 const (
 	Tmux  = "tmux"

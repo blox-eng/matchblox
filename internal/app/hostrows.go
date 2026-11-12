@@ -12,6 +12,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/blox-eng/matchblox/internal/config"
 	"github.com/blox-eng/matchblox/internal/hosts"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/release"
@@ -450,9 +451,23 @@ func (m Model) hostUpdated(r proto.Result) string {
 	case len(r.Skipped) > 0:
 		return m.nameOf(m.hostActOn) + ": " + r.Skipped[0]
 	case len(r.Ran) > 0 && len(r.Ran[0]) == 2:
-		return m.nameOf(m.hostActOn) + " installed " + r.Ran[0][1] + ": its service starts again"
+		tag := r.Ran[0][1]
+		said := m.nameOf(m.hostActOn) + " installed " + tag + ": its service starts again"
+		if v := m.updateOf(m.hostActOn); v != nil && v.Last != nil && v.Last.To == tag && v.Last.Err == "" {
+			said += unproven(v.Last)
+		}
+		return said
 	}
 	return describe(r)
+}
+
+// unproven is said beside a good install whose build provenance no gh
+// checked.
+func unproven(r *state.UpdateRecord) string {
+	if r.Provenance {
+		return ""
+	}
+	return " · provenance not checked"
 }
 
 // closeRelease dismisses host's release note for its pair of releases. A
@@ -486,7 +501,7 @@ func (m Model) behindNotice() string {
 // kept prefs.
 func (m Model) updateNews() (news, key string) {
 	v := m.updateView
-	if v == nil || v.Mode != "auto" || v.Last == nil || v.Last.To == "" {
+	if v == nil || v.Mode != config.UpdateAuto || v.Last == nil || v.Last.To == "" {
 		return "", ""
 	}
 	key = v.Last.To + "\x00" + v.Last.At.UTC().Format(time.RFC3339Nano)
@@ -498,7 +513,7 @@ func (m Model) updateNews() (news, key string) {
 	}
 	at, now := v.Last.At.Local(), m.now().Local()
 	if at.YearDay() != now.YearDay() || at.Year() != now.Year() {
-		return fmt.Sprintf("updated to %s on %s", v.Last.To, at.Format("Jan 2 at 15:04")), key
+		return fmt.Sprintf("updated to %s on %s", v.Last.To, at.Format("Jan 2 at 15:04")) + unproven(v.Last), key
 	}
-	return fmt.Sprintf("updated to %s at %s", v.Last.To, at.Format("15:04")), key
+	return fmt.Sprintf("updated to %s at %s", v.Last.To, at.Format("15:04")) + unproven(v.Last), key
 }

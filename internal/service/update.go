@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -66,16 +67,12 @@ func (s *Service) loadUpdate() {
 }
 
 // updateLoop looks for a newer release at start and then every
-// UpdateEvery, until ctx ends. Under mode off it never looks. Under mode
+// updateEvery, until ctx ends. Under mode off it never looks. Under mode
 // auto, each wake installs a release that is due, or says why it waits;
 // one that failed is tried again after the next look.
 func (s *Service) updateLoop(ctx context.Context) {
 	if !s.updating() || s.UpdateMode == config.UpdateOff {
 		return
-	}
-	every := s.UpdateEvery
-	if every <= 0 {
-		every = 24 * time.Hour
 	}
 	ticks := s.updateTicks
 	if ticks == nil {
@@ -89,7 +86,7 @@ func (s *Service) updateLoop(ctx context.Context) {
 		now := s.now()
 		if !now.Before(next) {
 			s.checkUpdate(now)
-			next, tried = now.Add(every), false
+			next, tried = now.Add(updateEvery), false
 		}
 		due, waiting := false, ""
 		if !tried {
@@ -106,6 +103,9 @@ func (s *Service) updateLoop(ctx context.Context) {
 		}
 	}
 }
+
+// updateEvery is how often the service looks for a newer release.
+const updateEvery = 24 * time.Hour
 
 // autoWait is how long mode auto waits from the first sight of a release
 // before it installs it.
@@ -303,15 +303,45 @@ func oneLine(why string) string {
 	return strings.Join(parts, " · ")
 }
 
+// unproven is said beside an install whose build provenance was not
+// checked: the service installs with no gh, or one not logged in.
+const unproven = " · provenance not checked"
+
+// restartDoor is the row of a release installed on disk that the service
+// does not run. It has no action: the fix is the person's.
+func restartDoor(tag, runs, fix string, last *state.UpdateRecord) doors.Door {
+	if last != nil && !last.Provenance {
+		fix = strings.TrimSuffix(fix, ".") + unproven
+	}
+	return doors.Door{ID: doors.Update, Title: "Restart for " + tag, Why: "This machine runs " + runs + ".", Sum: tag, Problem: fix}
+}
+
+var sha256Hex = regexp.MustCompile(`\b[0-9a-f]{64}\b`)
+
+// failReason is why an install failed, as a sentence for a row: on one
+// line, each checksum cut to its start, and without the words the row
+// leads with.
+func failReason(err string) string {
+	why := oneLine(err)
+	for _, said := range []string{" · Nothing was changed", ". Nothing was changed"} {
+		why = strings.ReplaceAll(why, said, "")
+	}
+	why = sha256Hex.ReplaceAllStringFunc(why, func(h string) string { return h[:12] + "…" })
+	if !strings.HasSuffix(why, "…") {
+		why += "."
+	}
+	return why
+}
+
 // updateDoor offers the newer release, unless a person closed the offer
 // of that same release. A restart that does not come is said first: under
 // mode off, over a closed offer and over a newer release.
 func (s *Service) updateDoor() (doors.Door, bool) {
 	s.updateMu.Lock()
-	closed, stuck := s.updates.Closed, s.stuckLocked()
+	closed, stuck, last := s.updates.Closed, s.stuckLocked(), s.updates.Last
 	s.updateMu.Unlock()
 	if stuck != "" {
-		return doors.Door{ID: doors.Update, Title: "matchblox " + stuck + " is installed", Why: "This machine runs " + s.Binary + ".", Sum: stuck, Problem: restartFix(stuck, s.Binary)}, true
+		return restartDoor(stuck, s.Binary, restartFix(stuck, s.Binary), last), true
 	}
 	tag, ok := s.newer()
 	if !ok {
@@ -323,13 +353,15 @@ func (s *Service) updateDoor() (doors.Door, bool) {
 	case closed == tag || v.Mode == config.UpdateOff:
 		return doors.Door{}, false
 	case installed && v.Restart != "":
-		return doors.Door{ID: doors.Update, Title: "matchblox " + tag + " is installed", Why: "This machine runs " + v.Current + ".", Sum: tag, Problem: v.Restart}, true
+		return restartDoor(tag, v.Current, v.Restart, v.Last), true
 	case installed:
 		return doors.Door{}, false
 	}
-	d := doors.Door{ID: doors.Update, Title: "matchblox " + tag + " is out", Why: "This machine runs " + v.Current + ".", Sum: tag}
+	d := doors.Door{ID: doors.Update, Title: "Update to " + tag, Why: "matchblox " + tag + " is out. This machine runs " + v.Current + ".", Sum: tag}
 	if l := v.Last; l != nil && l.To == tag && l.Err != "" {
-		d.Why += " The install failed: " + oneLine(l.Err) + ". Try again, or run: matchblox update."
+		// The outcome and the fix before the reason, which is long. In Why,
+		// not Problem: a door with a problem has no action, and Enter is the fix.
+		d.Why += " The install failed, nothing was changed. Enter tries again, or run: matchblox update. " + failReason(l.Err)
 	}
 	if at := v.FirstSeen.Add(autoWait); v.Mode == config.UpdateAuto && v.Managed == "" && !v.FirstSeen.IsZero() && s.now().Before(at) {
 		d.Why += " Auto installs it after " + at.Local().Format("Jan 2 at 15:04") + "."
@@ -344,7 +376,8 @@ func (s *Service) updateDoor() (doors.Door, bool) {
 	lines := []string{
 		fmt.Sprintf("matchblox %s → %s (%s/%s)", v.Current, tag, runtime.GOOS, runtime.GOARCH),
 		"  checksum    checked first",
-		"  provenance  checked when gh can",
+		"  provenance  checked if gh is installed", // two lines: a phone shows 43 columns
+		"              and logged in",
 	}
 	if s.Exe != "" {
 		path, err := filepath.EvalSymlinks(s.Exe)
@@ -554,7 +587,7 @@ func (s *Service) checkDoorLocked() (doors.Door, bool) {
 		return doors.Door{}, false
 	}
 	why := fmt.Sprintf("Every look since %s failed: %s. Run: matchblox update.", f.Failed.Local().Format("Jan 2 at 15:04"), strings.TrimSuffix(v.Err, "."))
-	return doors.Door{ID: doors.UpdateCheck, Title: "matchblox cannot look for a new release", Why: why, Preview: "matchblox update"}, true
+	return doors.Door{ID: doors.UpdateCheck, Title: "Release check fails", Why: why, Preview: "matchblox update"}, true
 }
 
 // closeUpdateCheck closes the row of this run of failed looks: a look

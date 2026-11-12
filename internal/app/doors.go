@@ -96,7 +96,7 @@ func closeDoor(d doors.Door, auto bool) *action {
 		}
 	}
 	if d.ID == doors.UpdateCheck {
-		a.say = "close " + d.Title + " (after a look that works, three days of failed looks open it again)"
+		a.say = "close " + d.Title + " (three more days of failed looks open it again)"
 	}
 	return a
 }
@@ -284,7 +284,7 @@ func (m Model) scrollPreview(k tea.KeyPressMsg) (Model, bool) {
 }
 
 // colDoor is the title column of a door row.
-const colDoor = 26
+const colDoor = doors.TitleCols + 3
 
 // preview draws a door's diff: new lines in the accent, removed ones in
 // neg. What does not fit says where to see it all.

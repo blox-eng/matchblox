@@ -233,9 +233,6 @@ type Service struct {
 	Update UpdateSource
 	// UpdateMode is [update] mode: "offer", "auto" or "off".
 	UpdateMode string
-	// UpdateEvery is how often the service looks for a newer release. Zero:
-	// a day.
-	UpdateEvery time.Duration
 	// UpdatePath keeps the latest release found and when it was first seen.
 	// Empty: kept in memory only.
 	UpdatePath string

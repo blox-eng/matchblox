@@ -459,13 +459,14 @@ mode's rules.
 
 | Step | When it shows |
 |---|---|
-| matchblox v0.43.0 is out | The service found a newer release. `Enter` shows what it installs and what it checks first. A typed `y` installs it. The service and the console then start again on it, or the console says `quit and open matchblox again`. A failed install keeps its reason on the row until the next try. With `mode = "auto"` it also says when auto installs it (`Auto installs it after Nov 13 at 09:00.`), or why auto waits: `Auto waits for the stoker run to end.` |
-| matchblox v0.43.0 is installed | The release is installed, and the service still runs the old one two minutes later. Quit matchblox and open it again. |
-| matchblox cannot look for a new release | Every look for three days failed. It names the reason and `Run: matchblox update`. |
+| Update to v0.43.0 | The service found a newer release. `Enter` shows what it installs and what it checks first. A typed `y` installs it. The service and the console then start again on it, or the console says `quit and open matchblox again`. A failed install says so on the row until the next try: nothing was changed, `Enter` tries again, then the reason. With `mode = "auto"` it also says when auto installs it (`Auto installs it after Nov 13 at 09:00.`), or why auto waits: `Auto waits for the stoker run to end.` |
+| Restart for v0.43.0 | The release is installed, and the service still runs the old one two minutes later. Quit matchblox and open it again. It adds `· provenance not checked` when no `gh` checked the build. |
+| Release check fails | Every look for three days failed. It names the reason and `Run: matchblox update`. |
 
 With `[update] mode = "auto"` the service installs a release by itself.
 The console then says once `updated to v0.43.0 at 03:12`, or
-`updated to v0.43.0 on Nov 11 at 03:12` when it was not today.
+`updated to v0.43.0 on Nov 11 at 03:12` when it was not today. It adds
+`· provenance not checked` when no `gh` checked the build.
 
 A console left open never puts its older build back over a newer service.
 The key line says `R start again · service v0.43.0, console v0.42.0`, and

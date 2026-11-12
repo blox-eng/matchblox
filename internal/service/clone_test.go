@@ -22,6 +22,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/state"
 	"github.com/blox-eng/matchblox/internal/transport"
+	"github.com/blox-eng/matchblox/internal/update"
 )
 
 // cloneTest is a service whose home is a temp folder, with clone_root
@@ -1305,7 +1306,7 @@ func TestNoCloneStartsWhileUpdating(t *testing.T) {
 func cloneUpdating(t *testing.T) (*Service, *fakeUpdates, string) {
 	t.Helper()
 	s, root := cloneTest(t)
-	src := &fakeUpdates{latest: "v0.43.0"}
+	src := &fakeUpdates{latest: "v0.43.0", proof: update.Proof{Checksum: true, Provenance: true}}
 	s.Binary, s.UpdateMode, s.Update = "v0.42.0", "offer", src
 	s.cloneRun = func(context.Context, gitremote.Remote, string, func(int)) error { return nil }
 	s.loadUpdate()
@@ -1360,7 +1361,7 @@ func TestARestartThatDoesNotComeIsSaid(t *testing.T) {
 	if r := start(); r.Err != "v0.43.0 is installed. Quit matchblox and open it again." {
 		t.Fatalf("two minutes after the install %+v", r)
 	}
-	if d, ok := updateDoorOf(s); !ok || d.Title != "matchblox v0.43.0 is installed" || d.Problem != stillRuns {
+	if d, ok := updateDoorOf(s); !ok || d.Title != "Restart for v0.43.0" || d.Problem != stillRuns {
 		t.Fatalf("two minutes after the install, SET UP %+v %v", d, ok)
 	}
 }

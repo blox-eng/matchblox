@@ -2,7 +2,7 @@
  SESSIONS 7    ships 3    machine    git    history    panes    stoker
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
  SET UP · 1                              │ spark-docs · done
-   matchblox v0.43.0 is out              │ ✻ team@example.com · Max · #4540 ●━●━●━●━●  live
+   Update to v0.43.0                     │ ✻ team@example.com · Max · #4540 ●━●━●━●━●  live
                                          │
  WAITS FOR YOU · 6                       │
 ▌│ spark-docs        done       9m   88% │

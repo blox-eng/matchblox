@@ -9,6 +9,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/blox-eng/matchblox/internal/config"
 	"github.com/blox-eng/matchblox/internal/doors"
@@ -94,7 +95,7 @@ var updateT0 = time.Date(2026, 11, 12, 9, 0, 0, 0, time.UTC)
 func updateTest(t *testing.T, current, mode, path string) (*Service, *fakeUpdates, *fakeClock) {
 	t.Helper()
 	s := newTest(t, time.Hour)
-	src := &fakeUpdates{latest: "v0.43.0"}
+	src := &fakeUpdates{latest: "v0.43.0", proof: update.Proof{Checksum: true, Provenance: true}}
 	clk := &fakeClock{at: updateT0}
 	s.Binary, s.UpdateMode, s.UpdatePath = current, mode, path
 	s.Update, s.Now = src, clk.now
@@ -298,6 +299,9 @@ func offerTest(t *testing.T, mode string) (*Service, *fakeUpdates, string) {
 	return s, src, path
 }
 
+// isOut is the why of the offer of v0.43.0 on v0.42.0.
+const isOut = "matchblox v0.43.0 is out. This machine runs v0.42.0."
+
 func updateDoorOf(s *Service) (doors.Door, bool) {
 	for _, d := range s.doors() {
 		if d.ID == doors.Update {
@@ -319,7 +323,7 @@ func TestUpdateDoorShowsForANewerRelease(t *testing.T) {
 	if !ok {
 		t.Fatalf("no update door in %+v", s.doors())
 	}
-	if d.Title != "matchblox v0.43.0 is out" || d.Why != "This machine runs v0.42.0." || d.Sum != "v0.43.0" || d.Problem != "" {
+	if d.Title != "Update to v0.43.0" || d.Why != isOut || d.Sum != "v0.43.0" || d.Problem != "" {
 		t.Fatalf("door %+v", d)
 	}
 	for _, want := range []string{"matchblox v0.42.0 → v0.43.0 (", "checksum", "provenance", "\n  replaces\n    " + exe} {
@@ -802,8 +806,10 @@ func TestAutoNeverInstallsAReleaseAgain(t *testing.T) {
 	if v := updateView(s); v.Restart != stillRuns {
 		t.Fatalf("restart %q", v.Restart)
 	}
-	if d, ok := updateDoorOf(s); !ok || d.Problem != stillRuns {
-		t.Fatalf("door %+v %v", d, ok)
+	// The record has no provenance: auto installed with no gh to check it.
+	want := "v0.43.0 is installed, but this service still runs v0.42.0. Quit matchblox and open it again · provenance not checked"
+	if d, ok := updateDoorOf(s); !ok || d.Title != "Restart for v0.43.0" || d.Problem != want {
+		t.Fatalf("door %+v %v, want the problem %q", d, ok, want)
 	}
 }
 
@@ -884,7 +890,7 @@ func TestAutoSaysWhyItWaits(t *testing.T) {
 	if v := updateView(s); v.Waiting != "auto waits for the stoker run to end" {
 		t.Fatalf("waiting %q", v.Waiting)
 	}
-	if d, _ := updateDoorOf(s); d.Why != "This machine runs v0.42.0. Auto waits for the stoker run to end." {
+	if d, _ := updateDoorOf(s); d.Why != isOut+" Auto waits for the stoker run to end." {
 		t.Fatalf("why %q", d.Why)
 	}
 	s.mu.Lock()
@@ -944,7 +950,7 @@ func TestUpdateCheckDoorAfterThreeDaysOfFailures(t *testing.T) {
 	tick()
 	d, ok := checkDoorOf(s)
 	want := "Every look since " + updateT0.Local().Format("Jan 2 at 15:04") + " failed: " + offline + ". Run: matchblox update."
-	if !ok || d.Title != "matchblox cannot look for a new release" || d.Why != want || d.Sum != "" || d.Term != nil {
+	if !ok || d.Title != "Release check fails" || d.Why != want || d.Sum != "" || d.Term != nil {
 		t.Fatalf("door after 3 days %+v %v", d, ok)
 	}
 	if st := s.State(); !slices.ContainsFunc(st.Doors, func(d doors.Door) bool { return d.ID == doors.UpdateCheck }) {
@@ -1120,7 +1126,7 @@ func TestAnInstallAfterAGoodOneSaysItIsDone(t *testing.T) {
 func TestTheInstalledRowCloses(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "update.json")
 	writeUpdates(t, path, state.UpdateFile{Latest: "v0.43.0", FirstSeen: updateT0.Add(-48 * time.Hour),
-		Last: &state.UpdateRecord{From: "v0.42.0", To: "v0.43.0", At: updateT0.Add(-time.Hour)}})
+		Last: &state.UpdateRecord{From: "v0.42.0", To: "v0.43.0", At: updateT0.Add(-time.Hour), Checksum: true, Provenance: true}})
 	s, src, clk := updateTest(t, "v0.42.0", config.UpdateOffer, path)
 	s.loadUpdate()
 	s.checkUpdate(clk.now())
@@ -1141,16 +1147,19 @@ func TestTheInstalledRowCloses(t *testing.T) {
 	}
 }
 
-// A failed install stays on the offer, with its reason on one line and the
-// fix, until the next attempt; the row keeps its action.
+// A failed install stays on the offer until the next attempt: the outcome
+// and the fix first, then its reason on one line with each checksum cut to
+// its start. The row keeps its action.
 func TestAFailedInstallStaysOnTheOffer(t *testing.T) {
 	s, src, _ := offerTest(t, config.UpdateOffer)
-	src.installErr = errors.New("checksum mismatch for matchblox_linux_amd64\n  published aaa\n  download  bbb\nNothing was changed")
-	if r := updateAct(s, "primary", "y", "v0.43.0"); r.Err == "" {
-		t.Fatalf("result %+v", r)
+	pub, got := strings.Repeat("3f9a", 16), strings.Repeat("c2e1", 16)
+	src.installErr = errors.New("checksum mismatch for matchblox_linux_amd64\n  published " + pub + "\n  download  " + got + "\nNothing was changed")
+	if r := updateAct(s, "primary", "y", "v0.43.0"); !strings.Contains(r.Err, pub) || !strings.Contains(r.Err, got) {
+		t.Fatalf("result %+v, want both checksums whole", r)
 	}
 	d, ok := updateDoorOf(s)
-	want := "This machine runs v0.42.0. The install failed: checksum mismatch for matchblox_linux_amd64 · published aaa · download bbb · Nothing was changed. Try again, or run: matchblox update."
+	want := isOut + " The install failed, nothing was changed. Enter tries again, or run: matchblox update. " +
+		"checksum mismatch for matchblox_linux_amd64 · published 3f9a3f9a3f9a… · download c2e1c2e1c2e1…"
 	if !ok || d.Why != want || d.Problem != "" || d.Sum != "v0.43.0" {
 		t.Fatalf("door %+v\nwant why %q", d, want)
 	}
@@ -1209,17 +1218,17 @@ func TestTheOfferSaysWhenAutoInstalls(t *testing.T) {
 	s.loadUpdate()
 	s.checkUpdate(clk.now())
 	at := updateT0.Add(23 * time.Hour).Local().Format("Jan 2 at 15:04")
-	if d, _ := updateDoorOf(s); d.Why != "This machine runs v0.42.0. Auto installs it after "+at+"." {
+	if d, _ := updateDoorOf(s); d.Why != isOut+" Auto installs it after "+at+"." {
 		t.Fatalf("why %q", d.Why)
 	}
 	clk.add(23 * time.Hour)
-	if d, _ := updateDoorOf(s); d.Why != "This machine runs v0.42.0." {
+	if d, _ := updateDoorOf(s); d.Why != isOut {
 		t.Fatalf("due: why %q", d.Why)
 	}
 	s, _, clk, _ = autoTest(t, config.UpdateOffer, time.Hour)
 	s.loadUpdate()
 	s.checkUpdate(clk.now())
-	if d, _ := updateDoorOf(s); d.Why != "This machine runs v0.42.0." {
+	if d, _ := updateDoorOf(s); d.Why != isOut {
 		t.Fatalf("offer: why %q", d.Why)
 	}
 }
@@ -1228,9 +1237,14 @@ func TestTheOfferSaysWhenAutoInstalls(t *testing.T) {
 func TestTheOfferPreviewFitsAPhone(t *testing.T) {
 	s, _, _ := offerTest(t, config.UpdateOffer)
 	d, _ := updateDoorOf(s)
-	for _, want := range []string{"\n  checksum    checked first\n", "\n  provenance  checked when gh can"} {
+	for _, want := range []string{"\n  checksum    checked first\n", "\n  provenance  checked if gh is installed\n              and logged in"} {
 		if !strings.Contains(d.Preview, want) {
 			t.Errorf("preview lacks %q:\n%s", want, d.Preview)
+		}
+	}
+	for l := range strings.SplitSeq(d.Preview, "\n") {
+		if n := utf8.RuneCountInString(l); n > 43 {
+			t.Errorf("the preview line %q is %d columns, over the 43 of a phone", l, n)
 		}
 	}
 }
@@ -1305,4 +1319,60 @@ func TestAnOverdueRestartIsSaidWhenANewerReleaseComes(t *testing.T) {
 		s, _, _ := stuck(t, config.UpdateOff, func(s *Service) proto.Result { return hostUpdateAct(s, "y") })
 		said(t, s)
 	})
+}
+
+// A title that is cut hides the release: no update row's title is wider
+// than the console's title column, for a release as long as v0.100.100.
+func TestUpdateDoorTitlesFitTheTitleColumn(t *testing.T) {
+	const tag = "v0.100.100"
+	path := filepath.Join(t.TempDir(), "update.json")
+	s, src, clk := updateTest(t, "v0.42.0", config.UpdateOffer, path)
+	src.set(tag, nil)
+	s.loadUpdate()
+	s.checkUpdate(clk.now())
+	offer, ok := updateDoorOf(s)
+	if !ok || offer.Title != "Update to "+tag {
+		t.Fatalf("offer %+v %v", offer, ok)
+	}
+	if r := s.installUpdate(tag); r.Err != "" {
+		t.Fatalf("install %+v", r)
+	}
+	clk.add(restartAfter)
+	restart, ok := updateDoorOf(s)
+	if !ok || restart.Title != "Restart for "+tag {
+		t.Fatalf("restart %+v %v", restart, ok)
+	}
+	failing, _, fclk := updateTest(t, "v0.42.0", config.UpdateOffer, filepath.Join(t.TempDir(), "update.json"))
+	failing.Update.(*fakeUpdates).set("", errors.New(offline))
+	failing.loadUpdate()
+	failing.checkUpdate(fclk.now())
+	fclk.add(checkFailFor)
+	failing.checkUpdate(fclk.now())
+	check, ok := checkDoorOf(failing)
+	if !ok || check.Title != "Release check fails" {
+		t.Fatalf("check %+v %v", check, ok)
+	}
+	for _, d := range []doors.Door{offer, restart, check} {
+		if n := utf8.RuneCountInString(d.Title); n > doors.TitleCols {
+			t.Errorf("the title %q is %d columns, over the %d of the title column", d.Title, n, doors.TitleCols)
+		}
+	}
+}
+
+// A release installed with no check of its provenance says so on its row.
+func TestTheRestartRowSaysProvenanceWasNotChecked(t *testing.T) {
+	for _, proven := range []bool{true, false} {
+		s, src, _ := offerTest(t, config.UpdateOffer)
+		src.proof = update.Proof{Checksum: true, Provenance: proven}
+		clk := &fakeClock{at: s.now()}
+		s.Now = clk.now
+		if r := s.installUpdate("v0.43.0"); r.Err != "" {
+			t.Fatalf("install %+v", r)
+		}
+		clk.add(restartAfter)
+		d, _ := updateDoorOf(s)
+		if got := strings.HasSuffix(d.Problem, "open it again · provenance not checked"); got == proven {
+			t.Errorf("provenance checked %v: the row says %q", proven, d.Problem)
+		}
+	}
 }

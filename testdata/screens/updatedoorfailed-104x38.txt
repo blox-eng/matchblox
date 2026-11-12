@@ -2,17 +2,15 @@
  SESSIONS 7    ships 3    machine    git    history    panes    stoker
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
  SET UP · 1                              │
- ▌ matchblox v0.43.0 is out              │ matchblox v0.43.0 is out
-   This machine runs v0.42.0. The        │
-   install failed: checksum mismatch for │ This machine runs v0.42.0. The install failed: checksum
-   matchblox_linux_amd64 · published     │ mismatch for matchblox_linux_amd64 · published
-   3f9a3f9a3f9a3f9a3f9a3f9a3f9a3f9a3f9a  │ 3f9a3f9a3f9a3f9a3f9a3f9a3f9a3f9a3f9a3f9a3f9a3f9a3f9a3f9a3f9a
-   3f9a3f9a3f9a3f9a3f9a3f9a3f9a ·        │ 3f9a · download
-   download                              │ c2e1c2e1c2e1c2e1c2e1c2e1c2e1c2e1c2e1c2e1c2e1c2e1c2e1c2e1c2e1
-   c2e1c2e1c2e1c2e1c2e1c2e1c2e1c2e1c2e1  │ c2e1 · Nothing was changed. Try again, or run: matchblox
-   c2e1c2e1c2e1c2e1c2e1c2e1c2e1 ·        │ update.
-   Nothing was changed. Try again, or    │
-   run: matchblox update.                │ ⏎ open   x close
+ ▌ Update to v0.43.0                     │ Update to v0.43.0
+   matchblox v0.43.0 is out. This        │
+   machine runs v0.42.0. The install     │ matchblox v0.43.0 is out. This machine runs v0.42.0. The
+   failed, nothing was changed. Enter    │ install failed, nothing was changed. Enter tries again, or
+   tries again, or run: matchblox        │ run: matchblox update. checksum mismatch for
+   update. checksum mismatch for         │ matchblox_linux_amd64 · published 3f9a3f9a3f9a… · download
+   matchblox_linux_amd64 · published     │ c2e1c2e1c2e1…
+   3f9a3f9a3f9a… · download              │
+   c2e1c2e1c2e1…                         │ ⏎ open   x close
                                          │
  WAITS FOR YOU · 6                       │
  │ spark-docs        done       9m   88% │
@@ -27,7 +25,9 @@
                                          │
  1 without an agent: shell:1.1 zsh       │
                                          │
- ↓ 7 more                                │
+ RECOMMENDATIONS · 7 · h hides           │
+ ▲ The week runs short: compact spark-do…│
+ ↓ 6 more                                │
 ─────────────────────────────────────────│
  USAGE                                   │
  ✻ Claude        5h   ▰▰▰ 84%            │

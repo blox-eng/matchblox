@@ -10,16 +10,17 @@ All notable changes to matchblox are in this file. The format follows
 
 - **The console offers a new release.** The service looks for the latest
   release when it starts and once a day. When one is newer, Sessions shows
-  "matchblox v0.43.0 is out" under `SET UP`. `Enter` shows what it installs
+  the step "Update to v0.43.0" under `SET UP`. `Enter` shows what it installs
   and what it checks first. A typed `y` installs it with the checks of
   `matchblox update`. The service runs again on it, and the console starts
   again or says `quit and open matchblox again`. Your sessions run on. A
-  failed install stays on the offer with its reason, and `Enter` tries
-  again. While a clone runs, the install says
+  failed install stays on the offer: it says that nothing was changed and
+  that `Enter` tries again, then the reason. When the restart does not come,
+  `SET UP` shows "Restart for v0.43.0" and asks you to quit matchblox and
+  open it again. While a clone runs, the install says
   `a clone of o/r runs. Update when it ends.` A Homebrew install shows
   `brew upgrade matchblox` instead. After three days of failed looks,
-  `SET UP` says "matchblox cannot look for a new release", with the reason
-  and the command.
+  `SET UP` shows "Release check fails", with the reason and the command.
   ([#390](https://github.com/blox-eng/matchblox/issues/390))
 - **`[update] mode` picks `"offer"`, `"auto"` or `"off"`.** `"offer"` is the
   default. `"auto"` installs a release by itself, once. It waits a day after
@@ -28,7 +29,9 @@ All notable changes to matchblox are in this file. The format follows
   During the day, the offer says when auto installs it. While it waits on
   work, the offer says why. Closing the offer does not stop auto. The
   console then says
-  `updated to v0.43.0 at 03:12`. From the start of an install until matchblox
+  `updated to v0.43.0 at 03:12`. The service installs with no person there:
+  when no logged-in `gh` checked the build's provenance, the console adds
+  `· provenance not checked`. From the start of an install until matchblox
   runs again on the new release, a new clone is refused.
   `"off"` never looks. See [Config](https://docs.matchblox.com/config/#update).
   ([#390](https://github.com/blox-eng/matchblox/issues/390))

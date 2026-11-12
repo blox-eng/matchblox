@@ -2,7 +2,7 @@
  SESSIONS 7  ships 3  machine  4  5  6  7
 ────────────────────────────────────────────
  SET UP · 1
-   matchblox v0.43.0 is out
+   Update to v0.43.0
 
  WAITS FOR YOU · 6
 ────────────────────────────────────────────

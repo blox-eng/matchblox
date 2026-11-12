@@ -1006,9 +1006,10 @@ func TestTheHostStokerAskingCountsAsToday(t *testing.T) {
 	}
 }
 
-// TestPeerChainDrawsItsFuse (#389): a chain of a peer's two sessions, as
-// v0.38.1 sent it (no name, no mates), draws its fuse beside both rows in
-// every grouping.
+// TestPeerChainDrawsItsFuse holds the console's side of #389 in place: a
+// chain of a peer's two sessions with no name and no mates, as v0.38.1 sent
+// it, draws its fuse beside both rows in every grouping. It passes without
+// this branch too: the cause of #389 is not known.
 func TestPeerChainDrawsItsFuse(t *testing.T) {
 	peer := hostState(sess(2, "api-auth", "%2", nil), sess(3, "train-loop", "%3", nil))
 	c := chains.Chain{ID: "c1"}

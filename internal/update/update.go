@@ -115,7 +115,7 @@ func (u *Updater) Update() error {
 		return err
 	}
 	u.say("  updated %s", u.Self)
-	u.say("Open matchblox: the console replaces the running service with %s.", latest)
+	u.say("The running service starts again on %s within a minute.", latest)
 	return nil
 }
 

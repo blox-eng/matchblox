@@ -10,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/blox-eng/matchblox/internal/config"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -629,7 +630,7 @@ func TestAutoUpdateNewsShowsOnce(t *testing.T) {
 	}
 
 	yesterday := *auto
-	yesterday.Last = &state.UpdateRecord{From: "v0.42.0", To: "v0.43.0", At: at.Add(-24 * time.Hour), Checksum: true}
+	yesterday.Last = &state.UpdateRecord{From: "v0.42.0", To: "v0.43.0", At: at.Add(-24 * time.Hour), Checksum: true, Provenance: true}
 	if m = upd(t, m, stateWith(&yesterday)); m.flash != "updated to v0.43.0 on Nov 11 at 03:12" {
 		t.Fatalf("a record from another day: %q", m.flash)
 	}
@@ -638,6 +639,56 @@ func TestAutoUpdateNewsShowsOnce(t *testing.T) {
 	offer.Mode, offer.Last = "offer", &state.UpdateRecord{From: "v0.42.0", To: "v0.43.0", At: at.Add(48 * time.Hour)}
 	if m = upd(t, console(), stateWith(&offer)); m.flash != "" {
 		t.Fatalf("a person's own install is news: %q", m.flash)
+	}
+}
+
+// Auto installs with no person there: when no gh checked the build's
+// provenance, the news says so.
+func TestUpdateNewsSaysProvenanceWasNotChecked(t *testing.T) {
+	at := time.Date(2026, 11, 12, 3, 12, 0, 0, time.Local)
+	for _, c := range []struct {
+		proven bool
+		at     time.Time
+		want   string
+	}{
+		{false, at, "updated to v0.43.0 at 03:12 · provenance not checked"},
+		{true, at, "updated to v0.43.0 at 03:12"},
+		{false, at.Add(-24 * time.Hour), "updated to v0.43.0 on Nov 11 at 03:12 · provenance not checked"},
+	} {
+		m := New(Options{NoMotion: true, Host: "ws-1", Conn: newFake(), Binary: "v0.43.0", Local: true, StateDir: t.TempDir(),
+			Now: func() time.Time { return at.Add(time.Hour) }})
+		m = upd(t, m, tea.WindowSizeMsg{Width: 104, Height: 38})
+		st := fixtureState()
+		st.Update = &state.UpdateView{Mode: config.UpdateAuto, Current: "v0.43.0", Latest: "v0.43.0",
+			Last: &state.UpdateRecord{From: "v0.42.0", To: "v0.43.0", At: c.at, Checksum: true, Provenance: c.proven}}
+		if m = upd(t, m, stateMsg(st)); m.flash != c.want {
+			t.Errorf("provenance checked %v: the news %q, want %q", c.proven, m.flash, c.want)
+		}
+	}
+}
+
+// The update of a host says when its build's provenance was not checked.
+func TestAHostUpdateSaysProvenanceWasNotChecked(t *testing.T) {
+	for _, proven := range []bool{false, true} {
+		r := releaseRig(t, "v0.42.0", "v0.38.1", viewOn("v0.38.1"))
+		ws := r.conns["ws-1"]
+		r.key(t, "u")
+		r.key(t, "y")
+		ws.mu.Lock()
+		id := ws.sent[len(ws.sent)-1].ID
+		ws.mu.Unlock()
+		st := hostState(sess(2, "api-auth", "%1", nil))
+		st.Update = viewOn("v0.38.1")
+		st.Update.Last = &state.UpdateRecord{From: "v0.38.1", To: "v0.42.0", Checksum: true, Provenance: proven}
+		r.update(peerMsg{host: "ws-1", conn: ws, msg: stateMsg(st)})
+		r.update(peerMsg{host: "ws-1", conn: ws, msg: resultMsg(proto.Result{ActID: id, Ran: [][]string{{"install", "v0.42.0"}}})})
+		want := "ws-1 installed v0.42.0: its service starts again"
+		if !proven {
+			want += " · provenance not checked"
+		}
+		if got := r.sh.cur.flash; got != want {
+			t.Errorf("provenance checked %v: %q, want %q", proven, got, want)
+		}
 	}
 }
 

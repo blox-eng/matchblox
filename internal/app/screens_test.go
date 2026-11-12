@@ -139,8 +139,8 @@ func TestScreens(t *testing.T) {
 		check(t, tabFamily(st, false), "stokerfamily", size[0], size[1], []string{"c", "down", "down"})
 	}
 	offer := st
-	offer.Doors = []doors.Door{{ID: doors.Update, Title: "matchblox v0.43.0 is out", Why: "This machine runs v0.42.0.", Sum: "v0.43.0",
-		Preview: "matchblox v0.42.0 → v0.43.0 (linux/amd64)\n  checksum    checked first\n  provenance  checked when gh can\n  replaces\n    /home/user/.local/bin/matchblox"}}
+	offer.Doors = []doors.Door{{ID: doors.Update, Title: "Update to v0.43.0", Why: "matchblox v0.43.0 is out. This machine runs v0.42.0.", Sum: "v0.43.0",
+		Preview: "matchblox v0.42.0 → v0.43.0 (linux/amd64)\n  checksum    checked first\n  provenance  checked if gh is installed\n              and logged in\n  replaces\n    /home/user/.local/bin/matchblox"}}
 	offer.Update = &state.UpdateView{Mode: "offer", Current: "v0.42.0", Latest: "v0.43.0"}
 	toDoor := append(slices.Repeat([]string{"up"}, 12), "enter") // past the sessions to the door, then its preview
 	for _, size := range [][2]int{{44, 31}, {104, 38}} {
@@ -149,8 +149,8 @@ func TestScreens(t *testing.T) {
 	}
 	failed := offer
 	failed.Doors = slices.Clone(offer.Doors)
-	failed.Doors[0].Why += " The install failed: checksum mismatch for matchblox_linux_amd64 · published " + strings.Repeat("3f9a", 16) +
-		" · download " + strings.Repeat("c2e1", 16) + " · Nothing was changed. Try again, or run: matchblox update."
+	failed.Doors[0].Why += " The install failed, nothing was changed. Enter tries again, or run: matchblox update. " +
+		"checksum mismatch for matchblox_linux_amd64 · published 3f9a3f9a3f9a… · download c2e1c2e1c2e1…"
 	for _, size := range [][2]int{{44, 31}, {104, 38}} {
 		check(t, failed, "updatedoorfailed", size[0], size[1], slices.Repeat([]string{"up"}, 12))
 		golden(t, newerNotice(t, st, size[0], size[1], true), "startagain", size[0], size[1])
