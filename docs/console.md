@@ -459,8 +459,8 @@ mode's rules.
 
 | Step | When it shows |
 |---|---|
-| matchblox v0.43.0 is out | The service found a newer release. `Enter` shows what it installs and what it checks first. A typed `y` installs it. The service and the console then start again on it, or the console says `quit and open matchblox again`. With `mode = "auto"` it also says why auto waits: `Auto waits for the stoker run to end.` |
-| matchblox v0.43.0 is installed | The release is installed, and the service still runs the old one. Quit matchblox and open it again. |
+| matchblox v0.43.0 is out | The service found a newer release. `Enter` shows what it installs and what it checks first. A typed `y` installs it. The service and the console then start again on it, or the console says `quit and open matchblox again`. A failed install keeps its reason on the row until the next try. With `mode = "auto"` it also says when auto installs it (`Auto installs it after Nov 13 at 09:00.`), or why auto waits: `Auto waits for the stoker run to end.` |
+| matchblox v0.43.0 is installed | The release is installed, and the service still runs the old one two minutes later. Quit matchblox and open it again. |
 | matchblox cannot look for a new release | Every look for three days failed. It names the reason and `Run: matchblox update`. |
 
 With `[update] mode = "auto"` the service installs a release by itself.
@@ -468,9 +468,10 @@ The console then says once `updated to v0.43.0 at 03:12`, or
 `updated to v0.43.0 on Nov 11 at 03:12` when it was not today.
 
 A console left open never puts its older build back over a newer service.
-The key line says
-`the service runs v0.43.0, this console v0.42.0 · R: start again`, and `R`
-starts the console again on the new release.
+The key line says `R start again · service v0.43.0, console v0.42.0`, and
+`R` starts the console again on the new release. When the console's own
+binary is not the new one, it says
+`quit and reopen · service v0.43.0, console v0.42.0` instead.
 
 A host on another release says so on its row in Hosts. See
 [Remote hosts](remote.md#a-host-on-another-release).

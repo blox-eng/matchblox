@@ -237,7 +237,8 @@ Where the build differs from the text above:
   `ahead of this console`. On a narrow screen the row says `ws-1 behind`.
 - `u` updates the selected host, and `d` dismisses its note. `x` stays the
   key that removes a host.
-- The key that starts an old console again on the newer service is `R`.
+- The key that starts an old console again on the newer service is `R`,
+  offered only when the console's own binary was installed over.
 - Auto installs a release once when the install works; a failed install is
   tried again after the next look. When it waits on work in flight, the offer
   says why: `Auto waits for the stoker run to end.` or
@@ -253,4 +254,29 @@ Where the build differs from the text above:
   release, no new clone starts. It says
   `matchblox is updating. Try again in a minute.`
 - Only a person at a console opens a `SET UP` row or updates a host. An
-  agent's session, a session the stoker drives and a script are refused.
+  agent's session, a session the stoker drives and a `matchblox` command
+  are refused. A program of the same user that leaves its session and says
+  it is a console is taken for a person (`docs/limits.md`); `matchblox
+  update` in a shell is not gated.
+- The service runs the new binary in its own place under the keep-running
+  unit too, as it does with no unit: its pid stays, so systemd ends no tmux
+  server the service started. A failed exec still exits 75. The Linux unit
+  text has `KillMode=process`; an older unit file shows the "Keep matchblox
+  running" step again with the change.
+- A person's install, from the offer or from `u`, waits for a clone that
+  runs: `a clone of o/r runs. Update when it ends.` A stoker run does not
+  hold it.
+- A failed install stays on the offer, with its reason on one line and
+  `Try again, or run: matchblox update.`, until the next try; the action
+  stays.
+- Under mode auto, the offer says when auto installs it:
+  `Auto installs it after Nov 13 at 09:00.` Closing the offer under auto
+  says `auto still installs it`.
+- Two minutes after a good install with no restart, `SET UP` shows the
+  "is installed" row and a clone says
+  `v0.43.0 is installed. Quit matchblox and open it again.`
+- The notices put the key first: `R start again · service v0.43.0, console
+  v0.42.0`, `quit and reopen · …` when the console's own binary was not
+  installed over, and `run matchblox update · console v0.42.0, latest
+  v0.43.0` for a remote home. A host that is ahead says `this console is
+  older: run matchblox update`.

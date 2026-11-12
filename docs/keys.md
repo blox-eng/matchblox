@@ -41,7 +41,7 @@ the bottom shows the keys of the open tab. A tap on a key presses it.
 | `h` | Folds the recommendations to one line, or shows them again (Sessions). |
 | `Esc` | Clears the search. With nothing to clear, goes back to Hosts. `Ctrl+M`, prefix `m` and the phone's back button do the same in the console. |
 | `q` or `Ctrl+C` | Quits the console. The service keeps running. |
-| `R` | Starts the console again on the binary the service runs. The key line offers it when the service on this machine runs a newer release than the console. |
+| `R` | Starts the console again on the binary the service runs. The key line offers it first, `R start again · service v0.43.0, console v0.42.0`, when the service on this machine runs a newer release than the console and the console's own binary was installed over. Otherwise the line says `quit and reopen`. |
 | `⌥s` | Opens the room of the selected session's chain (Sessions). A session in no chain opens its chain of one, which the host's stoker drives. `Enter` on a chain's head row opens its room too. |
 
 ## A chain's room

@@ -168,14 +168,18 @@ provenance when `gh` can verify it. A typed `y` installs it, with the same
 checks as `matchblox update`. The service then runs again on the new
 release, and the console starts again on it. When the console cannot start
 itself again, it says `updated to v0.43.0 · quit and open matchblox again`.
-Your sessions run on: they live in tmux. `x` closes the offer of that
+Your sessions run on: they live in tmux. When the install fails, the offer
+keeps the reason and says `Try again, or run: matchblox update.` until the
+next try, and `Enter` tries again. `x` closes the offer of that
 release only, and the next release shows a new one. Until then,
 `matchblox update` installs it. `matchblox setup` does not show it.
 
 **auto.** The service installs the release by itself, with no console
 open. It waits a day from when this machine first saw the release, and for
 a time when no stoker run is on and no clone runs. A newer release during
-the wait starts the day again. The offer shows during the wait. When the day
+the wait starts the day again. The offer shows during the wait, and says
+when auto installs the release: `Auto installs it after Nov 13 at 09:00.`,
+in the time of the host. When the day
 has passed and work is in flight, the offer says why it waits:
 `Auto waits for the stoker run to end.` or `Auto waits for a clone to end.`
 Closing the offer does not stop the install: to skip a release on this
@@ -188,11 +192,16 @@ today), or why the update failed and the command to run. Auto installs a
 release once when the install works. A failed install is tried again after
 the next look.
 
-From the start of any install, from the offer, from auto or from `u`,
+An install from the offer or from `u` waits for a clone that runs, which
+the restart would cut off: it says `a clone of o/r runs. Update when it ends.`
+A stoker run does not hold it: the run goes on after the restart. From the
+start of any install, from the offer, from auto or from `u`,
 until matchblox runs again on the new release, a new clone is refused: see
-[Limits](limits.md). When the service still runs the old release after the
-install, Sessions shows the step "matchblox v0.43.0 is installed" with
+[Limits](limits.md). When the service still runs the old release two
+minutes after the install, or starts again on the old release, Sessions
+shows the step "matchblox v0.43.0 is installed" with
 `v0.43.0 is installed, but this service still runs v0.42.0. Quit matchblox and open it again.`
+A new clone then says `v0.43.0 is installed. Quit matchblox and open it again.`
 `x` closes that step until a newer release comes out.
 
 **off.** No look, no request and no offer. A person who presses `u` on this
@@ -204,4 +213,6 @@ offer says `brew upgrade matchblox`, and `"auto"` does nothing.
 
 Only a person at a console installs from the offer, updates a host or opens
 any step under `SET UP`: on the host, over SSH, or in the phone app. An
-agent's session, a session the stoker drives and a script are refused.
+agent's session, a session the stoker drives and a `matchblox` command are
+refused. `matchblox update` in your own shell is yours, and updates this
+machine as before. See [Limits](limits.md) for what this does not stop.

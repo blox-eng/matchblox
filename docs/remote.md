@@ -171,16 +171,15 @@ list.
 - A host on a release too old to take `u` says
   `on ws-1: matchblox update`: run that on the host.
 - A host that Homebrew installed says `on ws-1: brew upgrade matchblox`.
-- A host that is ahead says `this console is older: update it in SETUP`.
-  A console whose home is another host says `run matchblox update`
-  instead.
+- A host that is ahead says `this console is older: run matchblox update`.
 - `d` dismisses the note until either release changes.
 - Only a person at a console updates a host. An agent's session, a session
-  the stoker drives and a script are refused.
+  the stoker drives and a `matchblox` command are refused. See
+  [Limits](limits.md) for what this does not stop.
 
 A console whose home is another host (`matchblox ws-1`) has no service of
 its own to update it. Once for each release, it says
-`this console runs v0.42.0, the latest is v0.43.0 · run: matchblox update`.
+`run matchblox update · console v0.42.0, latest v0.43.0`.
 
 ## See and remove the devices of a host
 
