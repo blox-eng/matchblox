@@ -66,6 +66,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/state"
 	"github.com/blox-eng/matchblox/internal/stoker"
 	"github.com/blox-eng/matchblox/internal/transport"
+	selfupdate "github.com/blox-eng/matchblox/internal/update"
 )
 
 // version is stamped into a release build (-ldflags -X main.version=vX),
@@ -875,6 +876,12 @@ func newService(cfg config.Config, root string) *service.Service {
 		s.ConsentPath, s.ReposPath = state.ScanPath(), state.ReposPath()
 	}
 	s.UsedPath = state.UsedPath()
+	s.UpdatePath = state.UpdatePath()
+	if u, err := selfupdate.New(version, io.Discard); err == nil {
+		s.Update = u
+	} else {
+		fmt.Fprintln(os.Stderr, "matchblox: the update check is off:", err)
+	}
 	if cfg.Git.CloneRoot != "" {
 		s.CloneRoot = service.ExpandHome(cfg.Git.CloneRoot)
 	}

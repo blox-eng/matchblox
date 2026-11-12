@@ -227,6 +227,17 @@ type Service struct {
 	// Git runs a read-only git command in dir: the HEADs of chained
 	// worktrees. Nil: git, with a short timeout.
 	Git func(dir string, args ...string) (string, error)
+	// Update finds and installs releases. Nil: no update view at all (a
+	// fixture, or an updater that could not start).
+	Update UpdateSource
+	// UpdateMode is [update] mode: "offer", "auto" or "off".
+	UpdateMode string
+	// UpdateEvery is how often the service looks for a newer release. Zero:
+	// a day.
+	UpdateEvery time.Duration
+	// UpdatePath keeps the latest release found and when it was first seen.
+	// Empty: kept in memory only.
+	UpdatePath string
 
 	// alone is when the last console closed; zero while one is open. A new
 	// service starts alone.
@@ -375,6 +386,12 @@ type Service struct {
 	// signInWait and signInEvery are how long the sign-in driver waits for
 	// the agent's screens and how often it looks. Zero: 20 s and 500 ms.
 	signInWait, signInEvery time.Duration
+	// updates is the update file as last read or written, under updateMu,
+	// which orders its writes. updateTicks wakes the update loop (tests).
+	// Nil: a ticker of updateTick.
+	updates     state.UpdateFile
+	updateMu    sync.Mutex
+	updateTicks <-chan time.Time
 }
 
 func New(cfg config.Config, smp *sample.Sampler, git GitSource) *Service {
@@ -402,6 +419,7 @@ func New(cfg config.Config, smp *sample.Sampler, git GitSource) *Service {
 
 		ChainsNotice: cfg.Chains.Notice,
 		ChainsSend:   cfg.Chains.Send,
+		UpdateMode:   cfg.Update.ModeOr(),
 	}
 	if s.interval <= 0 {
 		s.interval = 2 * time.Second
@@ -585,6 +603,8 @@ func (s *Service) Run(ctx context.Context) {
 	}
 	s.loadFound()
 	s.loadUsed()
+	s.loadUpdate()
+	go s.updateLoop(ctx)
 	go s.gitLoop(ctx)
 	go s.shipsLoop(ctx)
 	go s.foundLoop(ctx)
