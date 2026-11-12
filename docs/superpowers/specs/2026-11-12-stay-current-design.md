@@ -226,3 +226,28 @@ HOSTS
 - A test draws a chain of a peer host in the Sessions list (#389).
 - The README, `docs/`, the landing page (`www/`) and the changelog describe
   it (Martin, 2026-11-12).
+
+## As built (2026-11-12)
+
+Where the build differs from the text above:
+
+- A closed offer returns with the next release, not with `matchblox setup`.
+  `matchblox setup` does not show the offer.
+- The host's note reads `v0.38.1, behind this console (v0.42.0)`, or
+  `ahead of this console`. On a narrow screen the row says `ws-1 behind`.
+- `u` updates the selected host, and `d` dismisses its note. `x` stays the
+  key that removes a host.
+- The key that starts an old console again on the newer service is `R`.
+- Auto installs a release once. When it waits on work in flight, the offer
+  says why: `Auto waits for the stoker run to end.` or
+  `Auto waits for a clone to end.`
+- When the service still runs the old release after an install, `SET UP`
+  shows "matchblox v0.43.0 is installed" and asks the person to quit
+  matchblox and open it again.
+- A release check that fails for three days shows the `SET UP` row
+  "matchblox cannot look for a new release", with the reason and
+  `Run: matchblox update`. A shorter run of failed looks stays quiet.
+- While an install runs, no new clone starts. It says
+  `matchblox is updating. Try again in a minute.`
+- Only a person at a console opens a `SET UP` row or updates a host. An
+  agent's session, a session the stoker drives and a script are refused.

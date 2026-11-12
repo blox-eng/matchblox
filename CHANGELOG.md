@@ -12,14 +12,19 @@ All notable changes to matchblox are in this file. The format follows
   release when it starts and once a day. When one is newer, Sessions shows
   "matchblox v0.43.0 is out" under `SET UP`. `Enter` shows what it installs
   and what it checks first. A typed `y` installs it with the checks of
-  `matchblox update`, and the service and the console start again on it.
-  Your sessions run on. A Homebrew install shows `brew upgrade matchblox`
-  instead. ([#390](https://github.com/blox-eng/matchblox/issues/390))
+  `matchblox update`. The service runs again on it, and the console starts
+  again or says `quit and open matchblox again`. Your sessions run on. A
+  Homebrew install shows `brew upgrade matchblox` instead. After three days
+  of failed looks, `SET UP` says "matchblox cannot look for a new release",
+  with the reason and the command.
+  ([#390](https://github.com/blox-eng/matchblox/issues/390))
 - **`[update] mode` picks `"offer"`, `"auto"` or `"off"`.** `"offer"` is the
-  default. `"auto"` installs a release by itself, a day after this machine
-  first saw it, with no stoker run on and no clone running, and the console
-  then says `updated to v0.43.0 at 03:12`. `"off"` never looks. See
-  [Config](https://docs.matchblox.com/config/#update).
+  default. `"auto"` installs a release by itself, once. It waits a day after
+  this machine first saw the release, then until no stoker run is on and no
+  clone runs.
+  While it waits on work, the offer says why. The console then says
+  `updated to v0.43.0 at 03:12`. While an install runs, a new clone waits.
+  `"off"` never looks. See [Config](https://docs.matchblox.com/config/#update).
   ([#390](https://github.com/blox-eng/matchblox/issues/390))
 - **A host on another release says so on its row.** Hosts shows
   `v0.38.1, behind this console (v0.42.0)`. `u` and a typed `y` update a
@@ -38,8 +43,7 @@ All notable changes to matchblox are in this file. The format follows
 ### Security
 
 - **Only a person at a console opens a `SET UP` step or updates a host.**
-  An agent's session, a session the stoker drives and a script are refused:
-  `only you open or close a door, at a console`.
+  An agent's session, a session the stoker drives and a script are refused.
   ([#390](https://github.com/blox-eng/matchblox/issues/390))
 
 ## [0.42.0] - 2026-11-12

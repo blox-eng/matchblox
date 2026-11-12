@@ -454,12 +454,18 @@ back to Sessions, on the next agent that waits.
 
 ### A new release
 
-When the service finds a newer release, `SET UP` shows the step
-"matchblox v0.43.0 is out". `Enter` shows what it installs and what it
-checks first. A typed `y` installs it, and the service and the console start
-again on it. With `[update] mode = "auto"` the service installs it by
-itself, and the console then says once `updated to v0.43.0 at 03:12`. See
-[Config](config.md#update).
+`SET UP` holds the release steps. See [Config](config.md#update) for each
+mode's rules.
+
+| Step | When it shows |
+|---|---|
+| matchblox v0.43.0 is out | The service found a newer release. `Enter` shows what it installs and what it checks first. A typed `y` installs it. The service and the console then start again on it, or the console says `quit and open matchblox again`. With `mode = "auto"` it also says why auto waits: `Auto waits for the stoker run to end.` |
+| matchblox v0.43.0 is installed | The release is installed, and the service still runs the old one. Quit matchblox and open it again. |
+| matchblox cannot look for a new release | Every look for three days failed. It names the reason and `Run: matchblox update`. |
+
+With `[update] mode = "auto"` the service installs a release by itself.
+The console then says once `updated to v0.43.0 at 03:12`, or
+`updated to v0.43.0 on Nov 11 at 03:12` when it was not today.
 
 A console left open never puts its older build back over a newer service.
 The key line says

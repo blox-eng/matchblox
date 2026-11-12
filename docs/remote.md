@@ -160,8 +160,9 @@ jump to a pane uses your own ssh login. See
 Each host looks for a new release on its own, as its `[update] mode` says
 (see [Config](config.md#update)). When a host runs another release than the
 console, its row on Hosts says so: `v0.38.1, behind this console (v0.42.0)`
-or `v0.43.0, ahead of this console (v0.42.0)`. On a phone the row says
-`ws-1 behind`, and the note shows under the list.
+or `v0.43.0, ahead of this console (v0.42.0)`. On a narrow screen the row
+says only `ws-1 behind`, and the note of the selected host shows under the
+list.
 
 - On a host that is behind, `u` and a typed `y` update it. The host's own
   service finds the latest release and installs it with its own checks,
@@ -174,8 +175,8 @@ or `v0.43.0, ahead of this console (v0.42.0)`. On a phone the row says
   A console whose home is another host says `run matchblox update`
   instead.
 - `d` dismisses the note until either release changes.
-- Only a person at a console updates a host. An agent's session and a
-  script are refused.
+- Only a person at a console updates a host. An agent's session, a session
+  the stoker drives and a script are refused.
 
 A console whose home is another host (`matchblox ws-1`) has no service of
 its own to update it. Once for each release, it says

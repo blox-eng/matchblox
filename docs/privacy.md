@@ -58,9 +58,12 @@ This is **on by default**:
   checksum from GitHub. With `gh` logged in, `gh` also asks GitHub for the
   release's build attestation, as your own `gh` login.
 - **How to stop it.** Set `[update] mode = "off"` in
-  `~/.config/matchblox/config.toml` on that host. The service then makes no
-  request, unless you press `u` on that host's row in a console. See
-  [Config](config.md#update).
+  `~/.config/matchblox/config.toml` on that host, then start the service
+  again (see [Config](config.md) for how): it reads the config only when it
+  starts. Until then it keeps its old mode: the daily request goes on, and
+  under `"auto"` an install can run. Once it runs again with `"off"`, it
+  makes no request, unless you press `u` on that host's row in a console.
+  See [Update](config.md#update).
 
 ## What we do not do
 

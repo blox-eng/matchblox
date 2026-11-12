@@ -88,7 +88,8 @@ Sessions shows the setup steps above everything else, under `SET UP`.
 The queue hooks and the guide show only when Claude Code is on this machine. Each
 step says what it gives you. `Enter` shows the exact change before it runs. A
 typed `y` makes the change. `x` closes a step that you do not want. Only
-you open a step, at a console: an agent's session or a script is refused.
+a person at a console opens a step: an agent's session, a session the
+stoker drives and a script are refused.
 
 | Step | What it does |
 |---|---|
@@ -97,7 +98,7 @@ you open a step, at a console: an agent's session or a script is refused.
 | Add the way back | Adds `prefix m` and a tap target `◂ matchblox` to your tmux config (`~/.tmux.conf`), and keeps a backup. From any pane, one key or one tap brings you back to the console. It takes over `prefix m`, the tmux key that marks a pane. The tap needs the tmux mouse: `m` in the preview turns it on too (off unless you press it). |
 | Keep matchblox running | Writes a user unit that runs `matchblox serve`: `~/Library/LaunchAgents/com.blox.matchblox.plist` on macOS (started with `launchctl bootstrap`), `~/.config/systemd/user/matchblox.service` on Linux (started with `systemctl --user enable --now`). The phone buzzes only while `serve` runs, so this keeps it running with no console open, and starts the new binary after an upgrade. On Linux, `loginctl enable-linger` keeps it after you log out. The step shows the file and the command first. |
 | Open a guide session | Starts Claude Code with a prompt that reads this page and walks you through it. It uses your tokens. |
-| matchblox v0.43.0 is out | Shows when the service finds a newer release. Installs it over this binary, with the checks of `matchblox update`. The service and the console then start again on it, and your sessions run on. A closed one shows again at the next release. See [Config](config.md#update). |
+| matchblox v0.43.0 is out | Shows when the service finds a newer release. Installs it over this binary, with the checks of `matchblox update`. The service runs again on it, and the console starts again or asks you to open it again. Your sessions run on. A closed one shows again at the next release. See [Config](config.md#update) and the [other release steps](console.md#a-new-release). |
 
 A step that is done folds away. `matchblox setup` shows every step again,
 done and closed ones too, except the new release.

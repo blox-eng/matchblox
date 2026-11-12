@@ -146,31 +146,47 @@ machine has its own.
 mode = "auto"
 ```
 
+The mode, like every key, is read when the service starts. After you
+change it, start the service again: see the top of this page.
+
 The service looks when it starts and then once a day. The console never
 looks. A build that is not a release (a `dev` build, or one from a
 checkout) never looks, and a prerelease is never offered. A look that
-fails keeps the release it found before, and never reads as up to date:
-`matchblox status` gives the reason in `update.err`.
+fails keeps the release it found before, and never reads as up to date.
+One failed look, or two days of them, stay quiet: `matchblox status` gives
+the reason in `update.err`. After three days of failed looks, counted from
+the last look that worked, Sessions shows the step "matchblox cannot look
+for a new release" under `SET UP`, with the reason and
+`Run: matchblox update`. Closing it hides it until a look works and the
+looks then fail for three more days.
 
-**offer.** Sessions shows the step "matchblox v0.43.0 is out" under
-`SET UP`.
-`Enter` shows what it installs, that the checksum is checked before
-anything changes, that the build's provenance is checked when `gh` can
-verify it, and the file it replaces. A typed `y` installs it, with the same
+**offer.** Sessions shows the step "matchblox v0.43.0 is out" under `SET UP`.
+`Enter` shows the release it installs and the file it replaces. It also
+says what the install checks first: the checksum always, the build's
+provenance when `gh` can verify it. A typed `y` installs it, with the same
 checks as `matchblox update`. The service then runs again on the new
-release, and the console starts again. Your sessions run on: they live in
-tmux. `x` closes the offer of that release only, and the next release shows
-a new one. Until then, `matchblox update` installs it.
+release, and the console starts again on it. When the console cannot start
+itself again, it says `updated to v0.43.0 · quit and open matchblox again`.
+Your sessions run on: they live in tmux. `x` closes the offer of that
+release only, and the next release shows a new one. Until then,
+`matchblox update` installs it. `matchblox setup` does not show it.
 
 **auto.** The service installs the release by itself, with no console
 open. It waits a day from when this machine first saw the release, and for
 a time when no stoker run is on and no clone runs. A newer release during
-the wait starts the day again. The install makes the same checks as
-`matchblox update` and records which ones it made. The console then says
-once `updated to v0.43.0 at 03:12`, or why the update failed and the
-command to run. The offer shows during the day of the wait. Closing it does
-not stop the install: to skip a release on this machine, use `"offer"` or
-`"off"`.
+the wait starts the day again. The offer shows during the wait. When the day
+has passed and work is in flight, the offer says why it waits:
+`Auto waits for the stoker run to end.` or `Auto waits for a clone to end.`
+Closing the offer does not stop the install: to skip a release on this
+machine, use `"offer"` or `"off"`.
+
+The install makes the same checks as `matchblox update` and records which
+ones it made. While it runs, a new clone is refused. The console then says
+once `updated to v0.43.0 at 03:12` (`on Nov 11 at 03:12` when it was not
+today), or why the update failed and the command to run. Auto installs a
+release once. When the service still runs the old release after the
+install, Sessions shows the step "matchblox v0.43.0 is installed" with
+`v0.43.0 is installed, but this service still runs v0.42.0. Quit matchblox and open it again.`
 
 **off.** No look, no request and no offer. A person who presses `u` on this
 host's row in another console still updates it: see
@@ -179,7 +195,6 @@ host's row in another console still updates it: see
 Homebrew owns the binary it installed, so matchblox never replaces it. The
 offer says `brew upgrade matchblox`, and `"auto"` does nothing.
 
-Only a person at a console installs from the offer or updates a host:
-on the host, over SSH, or in the phone app. An agent's session, a session
-the stoker drives and a script are refused. The same holds for every step
-under `SET UP`.
+Only a person at a console installs from the offer, updates a host or opens
+any step under `SET UP`: on the host, over SSH, or in the phone app. An
+agent's session, a session the stoker drives and a script are refused.
