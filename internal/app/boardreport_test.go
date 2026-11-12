@@ -97,3 +97,37 @@ func TestAnIdleReportKeepsTodaysRules(t *testing.T) {
 		t.Fatalf("idle on a question: got %s %q, want NEEDS YOU", col.name(), says)
 	}
 }
+
+// TestAnOpencodeReportDecidesItsLane: OpenCode's plugin reports in the same
+// words, and its lanes are Claude Code's. A retry works: OpenCode tries
+// again by itself, and the card says which attempt.
+func TestAnOpencodeReportDecidesItsLane(t *testing.T) {
+	opencode := func(status, why string) sample.Session {
+		s := reported("wick-mobile", status, why)
+		s.Agent, s.SessionID = "opencode", ""
+		s.Busy = status == "busy" || status == "retry"
+		return s
+	}
+	for _, c := range []struct {
+		status, why string
+		want        boardCol
+		says        string
+	}{
+		{"waiting", "permission", colNeed, "permission"},
+		{"waiting", "question", colNeed, "question"},
+		{"busy", "", colWork, ""},
+		{"idle", "", colQuiet, ""},
+	} {
+		s := opencode(c.status, c.why)
+		s.Asks = c.status == "busy" // an old question while it works is no ask
+		col, _, says := laneOf(t, boardState(s))
+		if col != c.want || c.says != "" && says != c.says {
+			t.Errorf("%s %s: got %s %q, want %s %q", c.status, c.why, col.name(), says, c.want.name(), c.says)
+		}
+	}
+	s := opencode("retry", "")
+	s.Retry = 3
+	if col, word, says := laneOf(t, boardState(s)); col != colWork || word != "busy" || says != "retrying · attempt 3" {
+		t.Fatalf("retry: got %s %q %q, want WORKING busy retrying · attempt 3", col.name(), word, says)
+	}
+}

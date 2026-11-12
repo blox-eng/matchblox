@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -37,10 +38,23 @@ type opencodeMessage struct {
 	} `json:"tokens"`
 }
 
+// opencodeReport is what the plugin `matchblox setup` installs in OpenCode
+// (internal/setup/matchblox.ts) writes at <state dir>/opencode/<pid>.json
+// on each change: the agent's own state, in Claude Code's words.
+type opencodeReport struct {
+	Status          string `json:"status"`     // busy, waiting, retry or idle
+	WaitingFor      string `json:"waitingFor"` // permission or question
+	StartedAt       int64  `json:"startedAt"`  // when the plugin started, Unix ms
+	StatusUpdatedAt int64  `json:"statusUpdatedAt"`
+	Attempt         int    `json:"attempt"` // retry: the attempt, and when the next one starts
+	Next            int64  `json:"next"`
+}
+
 type opencodeReader struct {
 	sessions map[string]cached[opencodeSession]
 	messages map[string]map[string]cached[opencodeMessage] // per session: only the newest ones read
 	windows  map[string]cached[map[string]int]             // models.json: "provider/model" -> limit.context
+	reports  map[string]cached[opencodeReport]
 }
 
 func newOpencodeReader() *opencodeReader {
@@ -48,7 +62,23 @@ func newOpencodeReader() *opencodeReader {
 		sessions: map[string]cached[opencodeSession]{},
 		messages: map[string]map[string]cached[opencodeMessage]{},
 		windows:  map[string]cached[map[string]int]{},
+		reports:  map[string]cached[opencodeReport]{},
 	}
+}
+
+// report is the plugin's report of process pid in dir. A file that is not
+// one, or names a status the plugin never writes, is no report.
+func (r *opencodeReader) report(dir string, pid int) (opencodeReport, bool) {
+	rep := readCached(r.reports, filepath.Join(dir, strconv.Itoa(pid)+".json"), func(b []byte) opencodeReport {
+		var rep opencodeReport
+		_ = json.Unmarshal(b, &rep)
+		return rep
+	})
+	switch rep.Status {
+	case "busy", StatusWaiting, StatusRetry, "idle":
+		return rep, true
+	}
+	return opencodeReport{}, false
 }
 
 // session returns the root session in cwd that was updated after the

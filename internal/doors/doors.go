@@ -17,13 +17,15 @@ const (
 	CursorHooks = "cursorhooks"
 	// CursorLimits taps Cursor's status line for each session's context.
 	CursorLimits = "cursorlimits"
-	Limits       = "limits"
-	SafetyNet    = "safetynet"
-	WayBack      = "wayback"
-	Pair         = "pair"
-	Guide        = "guide"
-	Night        = "night"
-	Ways         = "ways"
+	// OpencodePlugin adds the plugin by which OpenCode reports its state.
+	OpencodePlugin = "opencodeplugin"
+	Limits         = "limits"
+	SafetyNet      = "safetynet"
+	WayBack        = "wayback"
+	Pair           = "pair"
+	Guide          = "guide"
+	Night          = "night"
+	Ways           = "ways"
 	// SSHKeychain keeps a key's passphrase in the macOS Keychain for one
 	// host; the console offers it after it puts a key there.
 	SSHKeychain = "sshkeychain"
