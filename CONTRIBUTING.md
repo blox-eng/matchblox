@@ -26,6 +26,14 @@ Other tools do those well (design/0001-v0.1.md §15).
   what the reader gets and what to do; the why goes in design/
   (DESIGN.md §7).
 
+## Before a feat pull request merges
+
+A `feat` changes what a builder can do, so the landing page (`www/`) says it.
+Change a file under `www/`, or add this line to the pull request's body:
+`Landing page: unchanged because <reason>`, with a reason of 10 characters or
+more. CI's `Landing page` step checks it. Run it locally with
+`.github/scripts/landing-guard.sh "<title>" <body-file> origin/main`.
+
 ## The dev loop
 
 - Write the failing test first, watch it fail, then make it pass.

@@ -1,4 +1,4 @@
- ▰ matchblox                                                        ● 6 wait for you  stoker · 2 chains
+ ▰ matchblox                                                                      ● 6 wait for you  ≋ 3
  SESSIONS 7    ships 3    machine    git    history    panes    stoker
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
  WAITS FOR YOU · 6                       │ spark-docs · done

@@ -516,28 +516,29 @@ func TestQOnAChainCardQuitsThatStoker(t *testing.T) {
 	}
 }
 
-// TestDockCountsChains: the header and the dock count the chain stokers
-// at work, `stoker · 2 chains`, `stoker · 1 chain`. An ended one is not
-// counted, and with none they read as today.
+// TestDockCountsChains: the dock counts the chain stokers at work,
+// `STOKER · 2 chains`, and the header counts every stoker that runs, `≋ 2`
+// (TestHeaderCountsRunningStokers). An ended one is not counted, and with
+// none they read as today.
 func TestDockCountsChains(t *testing.T) {
 	two := tabFamily(screensState(t), false)
 	two.Stokers[1].View.PaneUp = true // kindle-web's agent is up again
 	for _, c := range []struct {
 		st   proto.State
-		want string
+		dock string
 	}{
-		{two, "stoker · 2 chains"},
-		{tabFamily(screensState(t), false), "stoker · 1 chain"},
-		{tabFamily(screensState(t), true), "stoker · 1 chain"},
+		{two, "· 2 chains"},
+		{tabFamily(screensState(t), false), "· 1 chain"},
+		{tabFamily(screensState(t), true), "· 1 chain"},
 	} {
 		m, _ := loadedWith(t, 104, c.st)
 		lines := strings.Split(screen(m), "\n")
-		if !strings.HasSuffix(strings.TrimRight(lines[0], " "), c.want) {
-			t.Errorf("header %q, want %q", lines[0], c.want)
+		if !strings.Contains(lines[0], "≋ ") {
+			t.Errorf("header %q has no stoker count", lines[0])
 		}
 		dock := ansi.Strip(strings.Join(m.stokerLines(40, false, ""), "\n"))
-		if !strings.Contains(dock, "STOKER "+strings.TrimPrefix(c.want, "stoker ")) {
-			t.Errorf("dock %q, want %q", dock, c.want)
+		if !strings.Contains(dock, "STOKER "+c.dock) {
+			t.Errorf("dock %q, want %q", dock, c.dock)
 		}
 	}
 	m, _ := loadedWith(t, 104, sheetScreen(screensState(t), true))
@@ -644,5 +645,23 @@ func TestTheMorningCardsChainLineFits(t *testing.T) {
 		if w := lipgloss.Width(l); w > 44 {
 			t.Fatalf("a line of %d columns: %q", w, ansi.Strip(l))
 		}
+	}
+}
+
+// TestHeaderCountsRunningStokers: two chain stokers at work and the host
+// stoker off read `≋ 2`; none and the host off, `stoker off`.
+func TestHeaderCountsRunningStokers(t *testing.T) {
+	two := tabFamily(screensState(t), false)
+	two.Stokers[1].View.PaneUp = true
+	two.Stoker = &proto.StokerView{}
+	m, _ := loadedWith(t, 104, two)
+	if head := strings.Split(screen(m), "\n")[0]; !strings.HasSuffix(strings.TrimRight(head, " "), "≋ 2") {
+		t.Fatalf("header %q, want ≋ 2", head)
+	}
+	none := sheetScreen(screensState(t), true)
+	none.Stoker = &proto.StokerView{}
+	m, _ = loadedWith(t, 104, none)
+	if head := strings.Split(screen(m), "\n")[0]; !strings.HasSuffix(strings.TrimRight(head, " "), "stoker off") {
+		t.Fatalf("header %q, want stoker off", head)
 	}
 }

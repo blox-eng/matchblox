@@ -91,7 +91,7 @@ func TestANumberThatCannotBeSavedIsNotGiven(t *testing.T) {
 	if n.Session("a") != 1 {
 		t.Fatal("a known number is still given")
 	}
-	ss, _ := n.Names([]sample.Session{{SessionID: "a", Name: "api"}, {SessionID: "b", Name: "web"}}, nil)
+	ss, _, _ := n.Names([]sample.Session{{SessionID: "a", Name: "api"}, {SessionID: "b", Name: "web"}}, nil, nil)
 	if len(ss) != 1 || ss[1] != "api" {
 		t.Fatalf("names with a failed save = %v", ss)
 	}
@@ -132,9 +132,10 @@ func TestNamesNumberEveryCurrentSessionAndAccount(t *testing.T) {
 	live := n.Session("live")
 	acc := n.Account("anthropic", "a@b.c · Max")
 	n.Account("openai", "x")
-	ss, as := n.Names(
+	ss, as, _ := n.Names(
 		[]sample.Session{{SessionID: "live", Name: "api"}, {SessionID: "new", Name: "web"}, {SessionID: ""}},
 		[]limits.Account{{Provider: "anthropic", Account: "a@b.c · Max"}, {Provider: "openai", Account: "y"}},
+		nil,
 	)
 	if len(ss) != 2 || ss[live] != "api" || ss[n.Session("new")] != "web" || n.Session("new") != 3 {
 		t.Fatalf("sessions = %v", ss)

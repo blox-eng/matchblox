@@ -194,3 +194,20 @@ func TestTheChainSectionSaysOneCommandJoins(t *testing.T) {
 		}
 	}
 }
+
+// The chain room (#326): ⌥s in an agent opens its team's room, and ⌥s again
+// goes back. The room shows only what the board (#372) keeps in a narrowed
+// chain: the stoker's card, the matches and the talk line.
+func TestTheChainSectionShowsTheRoom(t *testing.T) {
+	page := string(landingPage(t))
+	for _, want := range []string{"<h3>Every team has a room</h3>", "<kbd>⌥s</kbd>", "tell the stoker"} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the chain section lacks %q", want)
+		}
+	}
+	for _, gone := range []string{"SHIPS</span>", "GIT</span>"} {
+		if strings.Contains(page, gone) {
+			t.Errorf("the room drawing shows %q, which the board moves onto the cards", gone)
+		}
+	}
+}

@@ -2,6 +2,7 @@
 package muxtest
 
 import (
+	"maps"
 	"slices"
 	"sync"
 
@@ -14,6 +15,8 @@ type Fake struct {
 	mu     sync.Mutex
 	Screen map[string]string
 	Mode   map[string]bool
+	marked map[string]bool
+	marks  int
 }
 
 var _ mux.Mux = (*Fake)(nil)
@@ -50,4 +53,33 @@ func (f *Fake) SetScreen(pane, text string) {
 		f.Screen = map[string]string{}
 	}
 	f.Screen[pane] = text
+}
+
+func (f *Fake) Mark(pane string, on bool) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.marked == nil {
+		f.marked = map[string]bool{}
+	}
+	f.marks++
+	if on {
+		f.marked[pane] = true
+	} else {
+		delete(f.marked, pane)
+	}
+	return nil
+}
+
+// Marked are the panes marked now.
+func (f *Fake) Marked() map[string]bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return maps.Clone(f.marked)
+}
+
+// MarkCalls is how many times Mark ran.
+func (f *Fake) MarkCalls() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.marks
 }

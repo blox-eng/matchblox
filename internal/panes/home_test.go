@@ -156,7 +156,7 @@ func TestHomeKeyMatchesTheApp(t *testing.T) {
 // takes another's binding.
 func TestHomeAndCommandKeysDoNotCollide(t *testing.T) {
 	slots := map[string]string{}
-	for _, argv := range [][]string{HomeKeyArgv(), CommandKeysArgv(), MarkKeyArgv()} {
+	for _, argv := range [][]string{HomeKeyArgv(), CommandKeysArgv(), MarkKeyArgv(), FlipKeysArgv()} {
 		for i, a := range argv {
 			if a != "set-option" {
 				continue
@@ -313,4 +313,19 @@ func TestTheWayBackWithNoConsoleSaysHowToOpenOne(t *testing.T) {
 	until("the home key did not go to the console's session", func() bool {
 		return tmux("display-message", "-p", "-c", tty, "#{session_name}") == Home
 	})
+}
+
+// TestChooseTreeMovesToPrefixCapitalS: prefix s flips, so tmux's own
+// session tree moves to prefix S.
+func TestChooseTreeMovesToPrefixCapitalS(t *testing.T) {
+	argv := strings.Join(FlipKeysArgv(), "\x00")
+	if !strings.Contains(argv, "bind-key\x00S\x00choose-tree\x00-Zs") {
+		t.Fatalf("no prefix S choose-tree in %q", FlipKeysArgv())
+	}
+	if !strings.Contains(argv, "bind-key\x00s\x00if-shell") {
+		t.Error("prefix s does not flip")
+	}
+	if strings.Contains(argv, "bind-key\x00n\x00") {
+		t.Error("prefix n is bound: it stays tmux's next window; the walk is ⌥n")
+	}
 }

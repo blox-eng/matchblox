@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/blox-eng/matchblox/internal/chains"
 	"github.com/blox-eng/matchblox/internal/limits"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
@@ -25,8 +26,10 @@ type Numbers struct {
 type numState struct {
 	NextSession int            `json:"next_session"`
 	NextAccount int            `json:"next_account"`
-	Sessions    map[string]int `json:"sessions"` // session id -> number
-	Accounts    map[string]int `json:"accounts"` // provider NUL account -> number
+	NextChain   int            `json:"next_chain,omitempty"`
+	Sessions    map[string]int `json:"sessions"`         // session id -> number
+	Accounts    map[string]int `json:"accounts"`         // provider NUL account -> number
+	Chains      map[string]int `json:"chains,omitempty"` // chain id -> number
 }
 
 func (s *numState) fix() {
@@ -36,13 +39,20 @@ func (s *numState) fix() {
 	if s.Accounts == nil {
 		s.Accounts = map[string]int{}
 	}
+	if s.Chains == nil {
+		s.Chains = map[string]int{}
+	}
 	s.NextSession = max(s.NextSession, 1)
 	s.NextAccount = max(s.NextAccount, 1)
+	s.NextChain = max(s.NextChain, 1)
 	for _, n := range s.Sessions {
 		s.NextSession = max(s.NextSession, n+1)
 	}
 	for _, n := range s.Accounts {
 		s.NextAccount = max(s.NextAccount, n+1)
+	}
+	for _, n := range s.Chains {
+		s.NextChain = max(s.NextChain, n+1)
 	}
 }
 
@@ -114,6 +124,28 @@ func (n *Numbers) account(provider, account string) int {
 	return v
 }
 
+// Chain is the number of a chain, by its id; 0 as for Session.
+func (n *Numbers) Chain(id string) int {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.chain(id)
+}
+
+func (n *Numbers) chain(id string) int {
+	if v, ok := n.st.Chains[id]; ok {
+		return v
+	}
+	v := n.st.NextChain
+	n.st.NextChain++
+	n.st.Chains[id] = v
+	if n.keep() != nil {
+		delete(n.st.Chains, id)
+		n.st.NextChain--
+		return 0
+	}
+	return v
+}
+
 // Err is why the last new number could not be written down, or nil.
 func (n *Numbers) Err() error {
 	n.mu.Lock()
@@ -139,15 +171,15 @@ func (n *Numbers) SessionOf(num int) (string, bool) {
 	return "", false
 }
 
-// Names say what each given session and account is called now, by number:
-// the session's name as the console shows it, and the account's provider and
-// label. Each current session and account gets its number here if it had
+// Names say what each given session, account and chain is called now, by
+// number: the session's name as the console shows it, the account's provider
+// and label, and the chain's name. Each current session and account gets its number here if it had
 // none, so the phone learns every name at one register. A number not in the
 // given lists has no name.
-func (n *Numbers) Names(sessions []sample.Session, accounts []limits.Account) (map[int]string, map[int]string) {
+func (n *Numbers) Names(sessions []sample.Session, accounts []limits.Account, chs []chains.Chain) (ss, as, cs map[int]string) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	ss := map[int]string{}
+	ss = map[int]string{}
 	for _, s := range sessions {
 		if s.SessionID == "" {
 			continue
@@ -156,13 +188,27 @@ func (n *Numbers) Names(sessions []sample.Session, accounts []limits.Account) (m
 			ss[v] = s.Name
 		}
 	}
-	as := map[int]string{}
+	as = map[int]string{}
 	for _, a := range accounts {
 		if v := n.account(a.Provider, a.Account); v != 0 {
 			as[v] = strings.TrimSpace(a.Provider + " " + a.Account)
 		}
 	}
-	return ss, as
+	cs = map[int]string{}
+	for _, c := range chs {
+		if v := n.chain(c.ID); v != 0 {
+			cs[v] = chainName(c)
+		}
+	}
+	return ss, as, cs
+}
+
+// chainName is a chain's name, or its id while an older store has none.
+func chainName(c chains.Chain) string {
+	if c.Name != "" {
+		return c.Name
+	}
+	return c.ID
 }
 
 // save writes numbers.json whole. The caller holds mu.

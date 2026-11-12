@@ -16,4 +16,7 @@ type Mux interface {
 	// InMode tells if pane shows copy mode or another mode, where keys
 	// move a cursor instead of reaching the agent.
 	InMode(pane string) (bool, error)
+	// Mark sets, or with on false takes off, the mark of a pane whose
+	// agent the service samples: the flip key acts only on a marked pane.
+	Mark(pane string, on bool) error
 }

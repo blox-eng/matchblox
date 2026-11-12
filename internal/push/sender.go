@@ -255,7 +255,7 @@ func (s *Sender) buzz(doc state.Doc, regs []Registration, now time.Time) {
 		return // no number kept for it yet: the wait goes with a later doc
 	}
 	s.buzzAt, s.buzzSet = now, set
-	line := BuzzLine(s.HostLabel, *fresh)
+	line := BuzzLine(s.HostLabel, *fresh, doc.Chains)
 	for _, r := range regs {
 		if !r.Buzz || r.DeviceToken == "" {
 			continue

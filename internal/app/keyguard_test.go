@@ -222,7 +222,7 @@ func TestNoKeyGlyphLiteralsInRender(t *testing.T) {
 	glyphs := map[string]bool{}
 	k, s := defaultKeys(), defaultShellKeys()
 	for _, bs := range [][]bkey.Binding{k.global.bindings(), k.main.bindings(), k.form.bindings(),
-		k.sheet.bindings(), k.search.bindings(), k.pair.bindings(), k.takeOver.bindings(), k.confirm.bindings(),
+		k.sheet.bindings(), k.room.bindings(), k.search.bindings(), k.pair.bindings(), k.takeOver.bindings(), k.confirm.bindings(),
 		s.shell.bindings(), s.typing.bindings()} {
 		for _, b := range bs {
 			glyphs[b.Help().Key] = true
@@ -349,7 +349,7 @@ func TestNoKeyLettersInProse(t *testing.T) {
 func TestKeyPressRoundTrips(t *testing.T) {
 	k, s := defaultKeys(), defaultShellKeys()
 	for _, bs := range [][]bkey.Binding{k.global.bindings(), k.main.bindings(), k.form.bindings(),
-		k.sheet.bindings(), k.search.bindings(), k.pair.bindings(), k.takeOver.bindings(), k.confirm.bindings(),
+		k.sheet.bindings(), k.room.bindings(), k.search.bindings(), k.pair.bindings(), k.takeOver.bindings(), k.confirm.bindings(),
 		s.shell.bindings(), s.typing.bindings()} {
 		for _, b := range bs {
 			for _, key := range b.Keys() {

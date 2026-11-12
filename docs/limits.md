@@ -19,7 +19,7 @@ What does not work yet, and what to do until it does.
 | A merge go names a number, not a repository | A go you gave with `y` for `gh pr merge 7` also covers `gh pr merge 7 -R other/repo` and a pull request URL of another repository. Give a merge's go only where the session works on one repository, and protect your branches on GitHub. |
 | Two calls at once can share one go | Each guarded command uses up one go. Two tool calls that reach the guard together, before the service records the first, can both pass on it. The card shows each guarded command that ran. |
 | A go you gave with `y` lasts until it is used | A go that nothing used yet stays in its pane until the run ends. Give the go when the session is about to run the command, and stop the stoker to take back one you no longer want. |
-| A chain stoker starts sessions in its chain's repo only | Chains are one repo each for now. A start in another folder is refused (`a session of chain <name> starts in its repo: <repo>`). Start that session yourself, or give the order to the host stoker. |
+| A chain stoker starts sessions in its chain's repo only | A chain's repo is the repo of the match that formed it. Its matches can work in other repos, but its stoker starts new sessions in that repo only. A start in another folder is refused (`a session of chain <name> starts in its repo: <repo>`). Start that session yourself, or give the order to the host stoker. |
 | A family of stokers lives on one host | A chain lives on one host, and so does its stoker. Each host has its own family. |
 | Each chain stoker is one more agent | It uses tokens on the default sign-in, and each counts its own `max_steps`. `[stoker] max_chains` (4 by default) caps how many run at once. Quit one you no longer need on the STOKER tab: the quit ends its run, and frees its place. |
 | Triggers need the stoker agent running | A trigger's hand runs as an act from the stoker's own pane. With no stoker agent in it, each trigger that fires logs `failed` and does nothing. Keep the stoker pane's agent running while triggers wait. |
@@ -45,7 +45,7 @@ What does not work yet, and what to do until it does.
 | Rename names a Codex, OpenCode or Cursor agent in tmux only | They keep no name of their own: Sessions shows them by their tmux window. Claude Code takes `/rename` at rest, so a busy session is renamed when it rests. |
 | No native Windows | Use Linux or macOS. |
 | One host on a screen | `esc` goes back to Hosts. |
-| A chain is agreed by the two agents, not by you | Across repos, an agent in one repo can chain with an agent in another when that agent says yes, and then send it lines. Sessions shows a chain once it forms, not an ask. Turn chains off for an agent with `matchblox chain --off` from its pane, or every send with `[chains] send = "off"`. |
+| An agent joins a chain without your yes | `matchblox chain <who>` joins the chain of `<who>` at once, from any repo on the host, and then sends its mates lines. Nobody is asked first. Sessions shows the chain once it forms. Turn chains off for an agent with `matchblox chain --off` from its pane, or every send with `[chains] send = "off"`. |
 | Chain news reads each chained worktree one at a time | A chain across many repos reads the HEAD of each worktree in turn, so a slow repo delays the news of the others by a sample. |
 
 ## Soon

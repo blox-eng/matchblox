@@ -39,6 +39,20 @@ func (t Tmux) InMode(pane string) (bool, error) {
 	return strings.TrimSpace(out) != "0", nil
 }
 
+// MatchOption is the pane option that marks an agent pane the service
+// samples.
+const MatchOption = "@matchblox_match"
+
+func (t Tmux) Mark(pane string, on bool) error {
+	tmux, id := sample.Tmux(pane)
+	argv := slices.Concat(tmux, []string{"set-option", "-p", "-t", id, MatchOption, "1"})
+	if !on {
+		argv = slices.Concat(tmux, []string{"set-option", "-p", "-u", "-t", id, MatchOption})
+	}
+	_, err := t.run(argv)
+	return err
+}
+
 func (t Tmux) run(argv []string) (string, error) {
 	if t.Run != nil {
 		return t.Run(argv)
