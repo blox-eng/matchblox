@@ -527,6 +527,10 @@ func TestTheWordOfAShellIsNotNoAgent(t *testing.T) {
 		{Status: ""}:                  "idle",
 		{Status: "agents"}:            "agents",
 		{Status: "shell", Asks: true}: "asks",
+		// An agent's own report wins, as on the board (owner, 2026-11-13).
+		{Status: "waiting", Reported: true, WaitingFor: "permission prompt"}: "asks",
+		{Status: "busy", Busy: true, Reported: true, Asks: true}:             "busy",
+		{Status: "shell", Reported: true, Asks: true}:                        "background",
 	} {
 		if got := stoker.Word(*s); got != want {
 			t.Errorf("status %q: word %q, want %q", s.Status, got, want)

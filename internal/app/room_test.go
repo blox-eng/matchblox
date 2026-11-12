@@ -47,12 +47,16 @@ func rowsText(rows []roomRow) string {
 }
 
 // twoAsk makes hearth-api ask at 14:02 and ember-billing at 14:05.
+// hearth-api's own report says it waits at a permission prompt, as Claude
+// Code's does while the prompt shows.
 func twoAsk(st *proto.State) {
 	at := time.Date(2026, 10, 1, 14, 2, 0, 0, time.UTC)
 	st.Queue = nil
-	for _, s := range st.Sessions {
+	for i, s := range st.Sessions {
 		switch s.Name {
 		case "hearth-api":
+			x := &st.Sessions[i]
+			x.Busy, x.Status, x.Reported, x.WaitingFor = false, sample.StatusWaiting, true, "permission prompt"
 			st.Queue = append(st.Queue, queue.Item{Pane: s.Pane, SessionID: s.SessionID, Name: s.Name, State: queue.StatePermission, Since: at, LastLine: "may I force-push the rebase?"})
 		case "ember-billing":
 			st.Queue = append(st.Queue, queue.Item{Pane: s.Pane, SessionID: s.SessionID, Name: s.Name, State: queue.StateQuestion, Since: at.Add(3 * time.Minute), LastLine: "which branch?"})

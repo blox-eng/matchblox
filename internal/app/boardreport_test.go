@@ -44,6 +44,21 @@ func TestAWaitingReportNeedsYou(t *testing.T) {
 	if col != colNeed || word != "asks" || says != "permission prompt" {
 		t.Fatalf("got %s %q %q, want NEEDS YOU asks permission prompt", col.name(), word, says)
 	}
+	if w := stoker.Word(s); w != "asks" { // matchblox sessions and peek say the board's word
+		t.Fatalf("stoker.Word %q, want asks", w)
+	}
+}
+
+// TestAReportedWaitBeatsAFinishedRow: a queue row of a turn that ended
+// (its word: done) is older than the report that the agent waits: the card
+// says one thing, asks and why.
+func TestAReportedWaitBeatsAFinishedRow(t *testing.T) {
+	s := reported("flint-auth", "waiting", "permission prompt")
+	st := boardState(s)
+	st.Queue = []queue.Item{waitFor(s, queue.StateFinished, 20*time.Minute)}
+	if col, word, says := laneOf(t, st); col != colNeed || word != "asks" || says != "permission prompt" {
+		t.Fatalf("got %s %q %q, want NEEDS YOU asks permission prompt", col.name(), word, says)
+	}
 }
 
 // TestABusyReportBeatsAnOldAsk: the agent says it works; a question in its
