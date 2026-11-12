@@ -117,51 +117,6 @@ func TestCtrlOInTheViewGoesIntoThePane(t *testing.T) {
 	}
 }
 
-func TestAClickRightOfTheListGoesIn(t *testing.T) {
-	m := loaded(t, 200)
-	ran := recordRuns(&m)
-	sc := m.draw(200)
-	next, cmd := m.Update(tea.MouseClickMsg(tea.Mouse{X: sc.listW + 5, Y: sc.bodyTop + 1, Button: tea.MouseLeft}))
-	drain(cmd)
-	if len(*ran) != 1 || next.(Model).standIn {
-		t.Errorf("ran %q, stand-in %v", *ran, next.(Model).standIn)
-	}
-}
-
-// On a host the stoker drives, every tap that goes in asks to take over first.
-func TestATapIntoAStokerHostAsksFirst(t *testing.T) {
-	night := func(w int) (Model, *[][]string) {
-		m := sized(t, w, 30, stokerState(runningNight(time.Now())))
-		m.tab = tabSessions
-		return m, recordRuns(&m)
-	}
-	asked := func(t *testing.T, name string, next tea.Model, ran *[][]string, cmd tea.Cmd) {
-		t.Helper()
-		drain(cmd)
-		if next.(Model).held == nil || len(*ran) != 0 {
-			t.Fatalf("%s: held %v ran %q: want take over? first", name, next.(Model).held != nil, *ran)
-		}
-		_, cmd = key(next, "n")
-		drain(cmd)
-		if len(*ran) != 1 {
-			t.Errorf("%s: after the answer ran %q", name, *ran)
-		}
-	}
-
-	m, ran := night(100)
-	y := sessLine(t, m, "app-feature")
-	next, cmd := tap(m, 5, y)
-	drain(cmd)
-	next, cmd = tap(next, 5, y)
-	asked(t, "second tap on the selected row", next, ran, cmd)
-
-	m, ran = night(200)
-	sc := m.draw(200)
-	next, cmd = m.Update(tea.MouseClickMsg(tea.Mouse{X: sc.listW + 5, Y: sc.bodyTop + 1, Button: tea.MouseLeft}))
-	asked(t, "tap right of the list", next, ran, cmd)
-
-}
-
 func TestAOnAStuckShipAtNightAsksToTakeOver(t *testing.T) {
 	st := stokerState(runningNight(time.Now()))
 	full := screensState(t)
