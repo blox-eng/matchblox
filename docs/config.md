@@ -128,3 +128,19 @@ console goes as before, and one with neither a pane nor a terminal is
 refused. See [chains](agents.md#chains).
 
 One match opts out alone with `matchblox chain --off`.
+
+## Update
+
+`[update] mode` is what the host does about a newer release. It is `"offer"`
+by default. Any other value is an error.
+
+| Mode | What the host does | What leaves the machine |
+| --- | --- | --- |
+| `"offer"` | Finds a release and offers it in the console. You install it. | One request to find the latest release. |
+| `"auto"` | Installs a release a day after it first sees it, with no stoker run on and no clone running. | The same request, then the download of the release. |
+| `"off"` | Does nothing. | Nothing, until you press the key on a host's row. |
+
+```toml
+[update]
+mode = "auto"
+```
