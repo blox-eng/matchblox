@@ -160,6 +160,19 @@ func TestTheTabRowIsBoardAndMachine(t *testing.T) {
 	if pressOn(machine, "tab").tab != tabSessions || pressOn(machine, "shift+tab").tab != tabSessions || pressOn(m, "shift+tab").tab != tabMachine {
 		t.Fatal("Tab and Shift+Tab do not turn between the board and Machine")
 	}
+	// A detached busy loop burns: the tab row says so, Machine's !, on the
+	// board and on a view of Machine.
+	burns, _ := loadedWith(t, 100, orphanState())
+	stoker := burns
+	stoker.setTab(tabStoker)
+	for _, on := range []Model{burns, stoker} {
+		if row := strings.Split(screen(on), "\n")[1]; !strings.Contains(row, "machine !") && !strings.Contains(row, "MACHINE !") {
+			t.Errorf("tab %d: no busy loop on the tab row %q", on.tab, row)
+		}
+	}
+	if row := strings.Split(screen(m), "\n")[1]; strings.Contains(row, "!") {
+		t.Errorf("no busy loop, and the tab row says one burns: %q", row)
+	}
 }
 
 // roomRowNow is the room's row the cursor is on, "" when it is on the

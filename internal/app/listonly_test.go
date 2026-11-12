@@ -122,7 +122,7 @@ func TestTheSwitchGivesWayOnTheDesk(t *testing.T) {
 // TestFullViewStaysWhenRoomIsShort: in list only the way back stays; the
 // list only mark goes first, then the age, before a spare key.
 func TestFullViewStaysWhenRoomIsShort(t *testing.T) {
-	t.Skip("dropped (Task 12 step 3): list only goes (intended change: v is the board's density)")
+	t.Skip("replaced by TestTheKeyLineDropsWholeKeysFromTheRight (Task 12 step 3): list only goes; short of room the spare keys go first")
 }
 
 // TestTheMarkKeepsItsGap: the age and the list only mark stand two

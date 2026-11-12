@@ -206,12 +206,40 @@ func machineHosts(t *testing.T, after time.Duration, w, h int) Model {
 	return upd(t, m, stateMsg(stateAt(cpu(hostState(sess(1, "api-auth", "%1", nil)), 12), now)))
 }
 
+// TestDockMachineLinePerHost: the machine of two or more hosts says each
+// host with its CPU, in Hosts order. The dock's line is the strip's
+// machine face now (Task 12 step 2).
 func TestDockMachineLinePerHost(t *testing.T) {
-	t.Skip("dropped (Task 12 step 3): the dock's machine line per host goes with the dock and list only; Machine's tab has a section per host (TestMachineTabSectionsInHostsOrder)")
+	m := machineHosts(t, 10*time.Second, 132, 40)
+	line := ansi.Strip(m.stripMachine(200))
+	at := 0
+	for _, want := range [][2]string{{"this machine", "12%"}, {"gpu-1", "87%"}, {"ws-1", "55%"}} {
+		i := strings.Index(line[at:], want[0])
+		if i < 0 {
+			t.Fatalf("the machine lacks %s after column %d: %q", want[0], at, line)
+		}
+		at += i
+		part, _, _ := strings.Cut(line[at+len(want[0]):], "%")
+		if !strings.Contains(part+"%", want[1]) {
+			t.Errorf("%s is %q, want %s", want[0], part, want[1])
+		}
+	}
+	if strings.Contains(line, "stale") {
+		t.Errorf("a live host says stale: %q", line)
+	}
 }
 
+// TestStaleMachineLine: a stale host says since when, not its last
+// numbers; a live one keeps its CPU (the strip's machine face).
 func TestStaleMachineLine(t *testing.T) {
-	t.Skip("dropped (Task 12 step 3): the dock's machine line per host goes with the dock and list only; Machine's tab heads a stale host's section with since when (TestMachineTabSectionsInHostsOrder)")
+	m := machineHosts(t, 40*time.Second, 132, 40)
+	line := ansi.Strip(m.stripMachine(200))
+	if !strings.Contains(line, "gpu-1 stale · as of 14:02") || strings.Contains(line, "87%") {
+		t.Fatalf("the stale host's part is not since when: %q", line)
+	}
+	if !strings.Contains(line, "ws-1") || !strings.Contains(line, "55%") {
+		t.Fatalf("a live host lost its CPU: %q", line)
+	}
 }
 
 // heads are the lines of a tab's body that head a host's section, in order.
