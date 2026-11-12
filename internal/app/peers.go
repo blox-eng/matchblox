@@ -276,7 +276,8 @@ func (m Model) peerUpdate(pm peerMsg) (tea.Model, tea.Cmd) {
 		m.merge()
 		m.keepSelection()
 		next, order := m.queuedOrder(p.host)
-		return next, tea.Batch(next.peerRecv(i), order)
+		tick := next.waitTick()
+		return next, tea.Batch(next.peerRecv(i), order, tick)
 	case resultMsg:
 		at := slices.Index(p.acts, msg.ActID)
 		if at < 0 {

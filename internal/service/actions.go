@@ -137,7 +137,7 @@ func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 		if !found {
 			return refuseText("no agent session in " + pane + " any more")
 		}
-		return proto.Result{Preview: s.captureMatch(ctx, x)}
+		return proto.Result{Preview: s.captureMatch(ctx, x, "")}
 	}
 	if a.RecID == NamesAct {
 		// Before the agents-pane gate: it only reads names the socket already
@@ -268,6 +268,9 @@ func (s *Service) dispatch(ctx context.Context, a proto.Act) proto.Result {
 	}
 	if pane, ok := strings.CutPrefix(a.RecID, "rename:"); ok {
 		return s.rename(ctx, pane, a)
+	}
+	if pane, ok := strings.CutPrefix(a.RecID, proto.SwitchNowPrefix); ok {
+		return s.switchNow(pane, a)
 	}
 	if pane, ok := strings.CutPrefix(a.RecID, "switch:"); ok {
 		return s.switchAgent(ctx, pane, a)
@@ -473,6 +476,15 @@ func (s *Service) sessionAt(pane string) (sample.Session, bool) {
 // nil when the agent pid is still the one in pane and it neither asks
 // with the question tool nor waits at a permission prompt.
 func (s *Service) messageable(pane string, pid int) error {
+	return s.messageableFor(pane, pid, nil)
+}
+
+// messageableFor is messageable, except that own, a refresh that types its
+// own request, passes the pane's switching mark.
+func (s *Service) messageableFor(pane string, pid int, own *refreshRun) error {
+	if err := s.switchingErr(pane, own); err != nil {
+		return err
+	}
 	x, ok := s.sessionAt(pane)
 	switch {
 	case !ok:

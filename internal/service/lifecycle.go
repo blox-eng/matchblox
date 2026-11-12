@@ -216,6 +216,9 @@ func (s *Service) kill(ctx context.Context, pane string, a proto.Act) proto.Resu
 	if a.Confirm != "y" {
 		return proto.Result{Err: "needs confirm"}
 	}
+	if s.switching(pane) {
+		return proto.Result{Err: "switching already"}
+	}
 	if _, own := s.unitOf(proto.Act{From: pane}); own {
 		return proto.Result{Err: "the stoker is not killed here: Q on the STOKER tab quits it"}
 	}
@@ -334,6 +337,9 @@ func (s *Service) switchAgent(ctx context.Context, pane string, a proto.Act) pro
 	if a.Confirm != "y" {
 		return refuseText("needs confirm")
 	}
+	if s.switching(pane) {
+		return refuseText("switching already")
+	}
 	var n proto.SwitchAgent
 	if err := json.Unmarshal([]byte(a.Text), &n); err != nil {
 		return refuseText("the switch does not read: " + err.Error())
@@ -377,6 +383,13 @@ func (s *Service) switchAgent(ctx context.Context, pane string, a proto.Act) pro
 	if word != "" && !n.Anyway {
 		return refuseText(x.Name + " " + word + ": y again switches it mid-turn")
 	}
+	// The refresh waits before the account is held: a wait of minutes would
+	// hold up every start on that account.
+	refresh, end, unmark, err := s.refreshRecord(ctx, x, n, word)
+	if err != nil {
+		return refuse(err)
+	}
+	defer unmark()
 	// The account is held before the hold moves: a switch it refuses
 	// leaves the seat as it was.
 	now, acct := s.switchAccount(n.Agent)
@@ -396,18 +409,25 @@ func (s *Service) switchAgent(ctx context.Context, pane string, a proto.Act) pro
 			notes = prepareNotes(acct, rep, err)
 		}
 	}
-	argv, bundle, err := s.matchLaunch(ctx, n.Agent, x.Name, x.Cwd, "", n.Handoff, true, acct, &x)
+	if refresh != "" {
+		notes = append(notes, refresh)
+	}
+	argv, bundle, err := s.matchLaunch(ctx, n.Agent, x.Name, x.Cwd, "", n.Handoff, true, acct, &x, refresh)
 	if err != nil {
 		return refuse(err)
 	}
 	// The capture takes time: a turn the latest state shows started during
 	// it still takes the second y, and a new session there is not the one
-	// the builder chose.
+	// the builder chose. A refresh the limit or a switch now cut short may
+	// still run its own turn.
 	if cur, ok := s.sessionAt(pane); !ok || cur.PID != x.PID || cur.Start != x.Start {
 		_ = os.RemoveAll(bundle) // no match starts from it
 		return refuseText("the session changed while this switch read it: switch again")
-	} else if word == "" && !n.Anyway && (s.waitsOn(pane, cur) || cur.Works()) {
+	} else if end != refreshCut && word == "" && !n.Anyway && (s.waitsOn(pane, cur) || cur.Works()) {
 		_ = os.RemoveAll(bundle)
+		if end == refreshTurnEnded {
+			return refuseText(x.Name + " took your prompt while it wrote its record: switch again")
+		}
 		return refuseText(x.Name + " started a turn while this switch read it: switch again")
 	}
 	if acct != nil {
@@ -792,7 +812,7 @@ func (s *Service) newSession(ctx context.Context, a proto.Act) proto.Result {
 		notes = prepareNotes(acct, rep, err)
 	}
 	if a.Confirm == "y" {
-		prepared, _, err := s.matchLaunch(ctx, n.Agent, name, dir, n.Branch, first, !cloned, acct, nil)
+		prepared, _, err := s.matchLaunch(ctx, n.Agent, name, dir, n.Branch, first, !cloned, acct, nil, "")
 		if err != nil {
 			s.unmake(made, acct.folderOrEmpty())
 			return withKept(refuse(err), kept)

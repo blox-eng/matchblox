@@ -385,20 +385,20 @@ type Model struct {
 	room        *room           // the chain room on screen; nil when none
 	repoMates   map[rowKey]bool // the listed sessions with a repo mate they are not chained with
 	reasons     map[string]proto.IdleReason
-	agents      []string                                           // the agents a new session can start on the host
-	renames     map[string]string                                  // the names sessions take at their next rest, by pane
-	accounts    map[string][]string                                // the accounts each agent can start on: default first
-	skipped     map[string][]accounts.Skip                         // the folders the service did not list, per agent
-	lastAccount map[string]string                                  // the account last started, per agent
-	signIns     map[string]string                                  // how a new account's sign-in goes, by pane: "by hand" when matchblox gave up driving it
-	found       *proto.Found                                       // the host's repositories and the scan's consent; nil: the service scans nothing
-	scanLater   bool                                               // the scan question was closed or answered at this console
-	scanAct     string                                             // the act of the box's yes, for its result
-	form        *form                                              // the open New session, Rename, Switch agent or scan folders form; nil none
-	jumpAfter   struct{ act, host, pane, done, tty, agent string } // a switch sent: the pane to jump to when it runs, its new agent, for the client that asked
-	startAfter  struct{ act, agent, done string }                  // a start on a new account sent: its agent, the last once it runs, and what it says then
-	lastAgent   string                                             // the agent this console last started
-	keptAgent   string                                             // the agent last started, as the service keeps it
+	agents      []string                          // the agents a new session can start on the host
+	renames     map[string]string                 // the names sessions take at their next rest, by pane
+	accounts    map[string][]string               // the accounts each agent can start on: default first
+	skipped     map[string][]accounts.Skip        // the folders the service did not list, per agent
+	lastAccount map[string]string                 // the account last started, per agent
+	signIns     map[string]string                 // how a new account's sign-in goes, by pane: "by hand" when matchblox gave up driving it
+	found       *proto.Found                      // the host's repositories and the scan's consent; nil: the service scans nothing
+	scanLater   bool                              // the scan question was closed or answered at this console
+	scanAct     string                            // the act of the box's yes, for its result
+	form        *form                             // the open New session, Rename, Switch agent or scan folders form; nil none
+	jumpAfter   switchSent                        // a switch sent: the pane to jump to when it runs, its new agent, for the client that asked
+	startAfter  struct{ act, agent, done string } // a start on a new account sent: its agent, the last once it runs, and what it says then
+	lastAgent   string                            // the agent this console last started
+	keptAgent   string                            // the agent last started, as the service keeps it
 	paneSort    sortBy
 	picked      map[wtKey]bool // worktrees x removes
 	batch       *batch
@@ -444,6 +444,11 @@ type Model struct {
 	// clones are the clones the service runs and the ones that ended in
 	// the last minute (#176).
 	clones []proto.Clone
+	// refreshes are the record refreshes the home service waits for,
+	// each before its switch.
+	refreshes []proto.Refresh
+	// waitTicking: a tick of the record wait's clock is due.
+	waitTicking bool
 	// stopAfter are the clone:starts esc came before: each clone stops
 	// when the service takes its start. stopQuiet are the clone:stops
 	// with no answer yet, whose answer says nothing.
@@ -874,7 +879,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.wrepos, m.wfrom = m.whereRepos(m.opt.Host), from
 			m.wghost = m.ghostRepos()
 		}
-		m.clones = st.Clones
+		m.clones, m.refreshes = st.Clones, st.Refreshes
 		m.push = st.Push
 		var again, started tea.Cmd
 		if m.lost { // the clone acts' answers went with the connection
@@ -912,7 +917,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m, order = m.queuedOrder(m.opt.Host)
 		var talk tea.Cmd
 		m, talk = m.roomQueued(m.opt.Host)
-		return m, tea.Batch(m.recv(), m.animate(), news, order, talk, feel, focus, again, started)
+		tick := m.waitTick()
+		return m, tea.Batch(m.recv(), m.animate(), news, order, talk, feel, focus, again, started, tick)
 	case graphicsMsg:
 		return m.graphics(msg)
 	case graphicsTickMsg:
@@ -930,6 +936,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case animMsg:
 		m.animating = false
 		return m, m.animate()
+	case waitTickMsg:
+		m.waitTicking = false
+		tick := m.waitTick()
+		return m, tick
 	case toastMsg:
 		if msg.n == m.toasts {
 			m.toast = ""
@@ -1415,6 +1425,10 @@ func (m Model) pendingKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 // key is k on the tabs, with nothing on top.
 func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	mk := m.keys.main
+	if bkey.Matches(k, mk.Back) && m.waiting() {
+		return m, m.switchNow()
+	}
 	if m.standIn {
 		return m.standInKey(k)
 	}
@@ -1422,7 +1436,6 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.flash = ""
 		return m.roomKey(k)
 	}
-	mk := m.keys.main
 	m.flash = ""
 	if s, ok := m.selectedSession(); ok && bkey.Matches(k, mk.Second, mk.Rename, mk.Switch, mk.Park) {
 		if u, head := m.headRow(s); head { // its agent is the stoker's, not a session of the builder's
@@ -1683,7 +1696,7 @@ func (m Model) confirmed(a action) (tea.Model, tea.Cmd) {
 	cmd := m.sendTo(host, proto.Act{RecID: a.rec, Which: a.which, Confirm: confirm, Text: a.text})
 	m.startRec(a, "a"+strconv.Itoa(m.acts))
 	if pane, ok := strings.CutPrefix(a.rec, "switch:"); ok {
-		m.jumpAfter.act, m.jumpAfter.host, m.jumpAfter.pane, m.jumpAfter.done, m.jumpAfter.tty, m.jumpAfter.agent = "a"+strconv.Itoa(m.acts), a.host, pane, a.done, a.tty, a.paneAgent
+		m.jumpAfter = switchSent{act: "a" + strconv.Itoa(m.acts), host: a.host, pane: pane, done: a.done, tty: a.tty, agent: a.paneAgent}
 	}
 	if a.agent != "" {
 		m.startAfter.act, m.startAfter.agent, m.startAfter.done = "a"+strconv.Itoa(m.acts), a.agent, a.done
@@ -1713,11 +1726,18 @@ func (m Model) started(r proto.Result) (Model, bool) {
 	return m, true
 }
 
+// switchSent is a switch this console sent: the pane to jump to when it
+// runs, and whether esc sent its switch now.
+type switchSent struct {
+	act, host, pane, done, tty, agent string
+	now                               bool
+}
+
 // switched takes the result of a switch: one that ran jumps to its pane,
 // one that did not says why.
 func (m Model) switched(r proto.Result) (Model, tea.Cmd) {
 	j := m.jumpAfter
-	m.jumpAfter.act, m.jumpAfter.host, m.jumpAfter.pane, m.jumpAfter.done, m.jumpAfter.tty, m.jumpAfter.agent = "", "", "", "", "", ""
+	m.jumpAfter = switchSent{}
 	// A switch with notes on what its account shared or skipped ran.
 	notes, ran := proto.StartNotes(r)
 	switch {

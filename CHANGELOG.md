@@ -6,6 +6,20 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+## [0.42.0] - 2026-11-12
+
+### Changed
+
+- **A switch waits for the agent's task record.** Before it captures the
+  evidence, an idle Claude Code or Codex agent is asked to update its task
+  record, and the switch waits for it for up to 3 minutes. The console shows
+  the wait with the time, and `esc` switches now. `matchblox switch` prints
+  the wait to stderr, and Ctrl-C switches now. `--no-refresh` skips it. The
+  capture says whether the record was written for this switch, or why it was
+  not. ([#336](https://github.com/blox-eng/matchblox/issues/336))
+
+## [0.41.0] - 2026-11-12
+
 ### Added
 
 - **Each chain has a room.** `Enter` on a chain's head row, or `⌥s` on any
@@ -1468,7 +1482,9 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.40.3...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.42.0...HEAD
+[0.42.0]: https://github.com/blox-eng/matchblox/compare/v0.41.0...v0.42.0
+[0.41.0]: https://github.com/blox-eng/matchblox/compare/v0.40.3...v0.41.0
 [0.40.3]: https://github.com/blox-eng/matchblox/compare/v0.40.2...v0.40.3
 [0.40.2]: https://github.com/blox-eng/matchblox/compare/v0.40.1...v0.40.2
 [0.40.1]: https://github.com/blox-eng/matchblox/compare/v0.40.0...v0.40.1

@@ -85,7 +85,7 @@ func (m Model) stateOf(host string) *proto.State {
 	used := m.used
 	return &proto.State{Doc: state.Doc{Holds: m.holds, Reasons: m.reasons, Renames: m.renames, Chains: m.chains,
 		SignIns: m.signIns, StokerServer: m.stokerServer, Stokers: m.stokers, Git: m.git, Agents: m.agents, Accounts: m.accounts,
-		AccountsSkipped: m.skipped, LastAccount: m.lastAccount, LastAgent: m.keptAgent}, Found: m.found, Used: &used}
+		AccountsSkipped: m.skipped, LastAccount: m.lastAccount, LastAgent: m.keptAgent}, Found: m.found, Used: &used, Refreshes: m.refreshes}
 }
 
 // sessionsOf are the sessions host sent last.

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -64,6 +65,9 @@ type switchOpts struct {
 	extra   string // added to the default handoff
 	anyway  bool
 	preview bool
+	// noRefresh switches from the evidence, without asking the agent for
+	// its task record first.
+	noRefresh bool
 }
 
 // check refuses flags that cannot go together, before any service call.
@@ -102,7 +106,7 @@ func switchAct(doc state.Doc, words []string, o switchOpts, from string) (proto.
 	if sess.Pane == "" {
 		return proto.Act{}, fmt.Errorf("%s is outside tmux: nothing to switch", words[0])
 	}
-	sw := proto.SwitchAgent{Agent: o.agent, Handoff: proto.DefaultHandoff, Anyway: o.anyway}
+	sw := proto.SwitchAgent{Agent: o.agent, Handoff: proto.DefaultHandoff, Anyway: o.anyway, NoRefresh: o.noRefresh}
 	sw.ExpectedPID, sw.ExpectedStart = sess.PID, sess.Start
 	if err := o.check(); err != nil {
 		return proto.Act{}, err
@@ -277,12 +281,13 @@ func newWait(o newOpts, home string) time.Duration {
 
 // switchWait is how long matchblox switch waits for its result: a switch
 // starts agent on its last account, and a copy account may go on with its
-// copy, as at a start (newWait).
+// copy, as at a start (newWait), and an idle agent may be writing its task
+// record first, up to the service's limit.
 func switchWait(doc state.Doc, agent, home string) time.Duration {
 	if agent == "cursor" {
 		agent = sample.CursorAgent
 	}
-	return newWait(newOpts{agent: agent, account: doc.LastAccount[agent]}, home)
+	return newWait(newOpts{agent: agent, account: doc.LastAccount[agent]}, home) + proto.RefreshLimit
 }
 
 // newOutcome is reportResult for a new session: a start with notes on what
@@ -352,7 +357,10 @@ func cliSwitch(words []string, o switchOpts, w io.Writer, path string, jump func
 		return err
 	}
 	home, _ := os.UserHomeDir()
-	res, err := doActFor(path, a, switchWait(doc, o.agent, home))
+	interrupt := make(chan os.Signal, 1)
+	defer signal.Stop(interrupt)
+	watch := &actWatch{pane: strings.TrimPrefix(a.RecID, "switch:"), w: os.Stderr, interrupt: interrupt, arm: func() { signal.Notify(interrupt, os.Interrupt) }, disarm: func() { signal.Stop(interrupt) }}
+	res, err := doActWatching(path, a, switchWait(doc, o.agent, home), watch)
 	if err == nil && res.Err != "" && !res.Refused {
 		return fmt.Errorf("switch %s: failed: %s", words[0], res.Err)
 	}
@@ -362,8 +370,7 @@ func cliSwitch(words []string, o switchOpts, w io.Writer, path string, jump func
 	if _, err := fmt.Fprintf(w, "switched %s to %s\n", words[0], o.agent); err != nil {
 		return err
 	}
-	notes, _ := proto.StartNotes(res)
-	for _, note := range notes {
+	for _, note := range res.Skipped {
 		if _, err := fmt.Fprintln(w, note); err != nil {
 			return err
 		}
