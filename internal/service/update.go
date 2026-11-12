@@ -304,20 +304,21 @@ func oneLine(why string) string {
 }
 
 // updateDoor offers the newer release, unless a person closed the offer
-// of that same release.
+// of that same release. A restart that does not come is said first: under
+// mode off, over a closed offer and over a newer release.
 func (s *Service) updateDoor() (doors.Door, bool) {
+	s.updateMu.Lock()
+	closed, stuck := s.updates.Closed, s.stuckLocked()
+	s.updateMu.Unlock()
+	if stuck != "" {
+		return doors.Door{ID: doors.Update, Title: "matchblox " + stuck + " is installed", Why: "This machine runs " + s.Binary + ".", Sum: stuck, Problem: restartFix(stuck, s.Binary)}, true
+	}
 	tag, ok := s.newer()
 	if !ok {
 		return doors.Door{}, false
 	}
-	s.updateMu.Lock()
-	closed, stuck := s.updates.Closed, s.stuckLocked()
-	s.updateMu.Unlock()
 	v := s.currentUpdateView()
 	installed := v.Last != nil && v.Last.To == tag && v.Last.Err == ""
-	if v.Restart == "" && installed && stuck == tag {
-		v.Restart = restartFix(tag, v.Current)
-	}
 	switch {
 	case closed == tag || v.Mode == config.UpdateOff:
 		return doors.Door{}, false
@@ -373,8 +374,16 @@ func (s *Service) updateAct(tag string) proto.Result {
 }
 
 // closeUpdate closes the offer of the release the person saw, only while
-// it is still the latest; a newer one opens it again.
+// it is still the latest; a newer one opens it again. The row of a restart
+// that does not come stays: it is the only word of a service that waits to
+// stop.
 func (s *Service) closeUpdate(tag string) proto.Result {
+	s.updateMu.Lock()
+	stuck := s.stuckLocked()
+	s.updateMu.Unlock()
+	if stuck != "" {
+		return proto.Result{Err: restartFix(stuck, s.Binary)}
+	}
 	latest, ok := s.newer()
 	switch {
 	case !ok:
@@ -451,11 +460,15 @@ func (s *Service) installUpdate(tag string) proto.Result {
 }
 
 // notAgain is the answer to an install while another runs, or after a
-// good one: the service is about to start again on it.
+// good one: the service is about to start again on it, or the restart is
+// overdue and the person has to open matchblox again.
 func (s *Service) notAgain() proto.Result {
 	s.updateMu.Lock()
-	done := s.installed
+	done, stuck := s.installed, s.stuckLocked()
 	s.updateMu.Unlock()
+	if stuck != "" {
+		return proto.Result{Err: restartFix(stuck, s.Binary)}
+	}
 	if done != "" {
 		return proto.Result{Skipped: []string{done + " is installed: matchblox starts again in a moment"}}
 	}

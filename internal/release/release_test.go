@@ -14,6 +14,12 @@ func TestCompare(t *testing.T) {
 		{"v0.2.0-rc.1", "v0.2.0", -1},
 		{"v0.2.0", "v0.2.0-rc.1", 1},
 		{"v0.2.1-0.20261022-abc", "v0.2.0", 1},
+		{"v0.2.0-rc.2", "v0.2.0-rc.10", -1},
+		{"v0.2.0-rc.10", "v0.2.0-rc.2", 1},
+		{"v0.2.0-rc.1", "v0.2.0-rc.1", 0},
+		{"v0.2.0-beta.1", "v0.2.0-rc.1", -1},
+		{"v0.2.0-rc", "v0.2.0-rc.1", -1},
+		{"v0.2.0-1", "v0.2.0-rc", -1},
 	} {
 		if got := Compare(c.a, c.b); got != c.want {
 			t.Errorf("Compare(%s, %s) = %d, want %d", c.a, c.b, got, c.want)

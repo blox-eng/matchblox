@@ -1,6 +1,7 @@
 package update
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -58,12 +59,29 @@ func New(current string, out io.Writer) (*Updater, error) {
 		GOOS:     runtime.GOOS,
 		Arch:     runtime.GOARCH,
 		LookPath: exec.LookPath,
-		Run: func(argv []string) (string, error) {
-			out, err := exec.Command(argv[0], argv[1:]...).CombinedOutput() //nolint:gosec // argv built by updater
-			return string(out), err
-		},
-		Out: out,
+		Run:      runWithin(runLimit),
+		Out:      out,
 	}, nil
+}
+
+// runLimit is how long one command of the updater may take: inside the
+// service, a gh that hangs would hold the install for ever.
+const runLimit = 2 * time.Minute
+
+// runWithin runs argv and returns its combined output. A command that takes
+// longer than limit is stopped.
+func runWithin(limit time.Duration) func(argv []string) (string, error) {
+	return func(argv []string) (string, error) {
+		ctx, cancel := context.WithTimeout(context.Background(), limit)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, argv[0], argv[1:]...) //nolint:gosec // argv built by updater
+		cmd.WaitDelay = 5 * time.Second                       // a child that keeps the output open does not hold Wait
+		out, err := cmd.CombinedOutput()
+		if ctx.Err() != nil {
+			return string(out), fmt.Errorf("%s took too long: stopped after %s", strings.Join(argv, " "), limit)
+		}
+		return string(out), err
+	}
 }
 
 func (u *Updater) say(format string, a ...any) { _, _ = fmt.Fprintf(u.Out, format+"\n", a...) }
@@ -111,10 +129,15 @@ func (u *Updater) Managed() string {
 	return ""
 }
 
+// latestLimit is how long the look for the latest release may take: one
+// small answer, not a download.
+const latestLimit = 15 * time.Second
+
 // Latest is the tag of the latest release. github.com/<repo>/releases/latest
 // redirects to it, or to the release list when there is none.
 func (u *Updater) Latest() (string, error) {
 	c := *u.Client
+	c.Timeout = latestLimit
 	c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	resp, err := c.Get(u.Base + "/" + releaseRepo + "/releases/latest")
 	if err != nil {
@@ -165,6 +188,9 @@ func (u *Updater) Install(tag string) (proof Proof, err error) {
 	if _, err = u.fetch(dl, io.MultiWriter(f, h)); err != nil {
 		return Proof{}, fmt.Errorf("could not download %s %s: %w. Nothing was changed", asset, tag, err)
 	}
+	if err = f.Sync(); err != nil {
+		return Proof{}, err
+	}
 	if err = f.Close(); err != nil {
 		return Proof{}, err
 	}
@@ -181,8 +207,13 @@ func (u *Updater) Install(tag string) (proof Proof, err error) {
 	if err = os.Chmod(tmp, 0o755); err != nil { //nolint:gosec // an executable
 		return Proof{}, err
 	}
-	says, _ := u.Run([]string{tmp, "version"})
-	if says = strings.TrimSpace(says); says != tag {
+	says, runErr := u.Run([]string{tmp, "version"})
+	says = strings.TrimSpace(says)
+	if runErr != nil && says == "" {
+		err = fmt.Errorf("could not run the %s binary to check its version: %w. Nothing was changed", tag, runErr)
+		return Proof{}, err
+	}
+	if says != tag {
 		return Proof{}, fmt.Errorf("the %s binary says %q, not %s. Nothing was changed. Please report this: https://github.com/%s/issues", tag, says, tag, releaseRepo)
 	}
 	if err = os.Rename(tmp, u.Self); err != nil {

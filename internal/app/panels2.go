@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
@@ -310,11 +311,15 @@ func wrap(s string, w int, render func(...string) string) []string {
 	var out []string
 	line := ""
 	for _, word := range strings.Fields(s) {
-		for w > 3 && len(word) > w-3 {
+		for w > 3 && ansi.StringWidth(word) > w-3 {
 			if line != "" {
 				out, line = append(out, render(" "+line)), ""
 			}
 			head := ansi.Truncate(word, w-3, "")
+			if head == "" { // one rune is wider than the line
+				_, n := utf8.DecodeRuneInString(word)
+				head = word[:n]
+			}
 			out, word = append(out, render(" "+head)), word[len(head):]
 		}
 		if len(line)+len(word)+1 > w-2 && line != "" {

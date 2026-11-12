@@ -1,6 +1,7 @@
 package release
 
 import (
+	"cmp"
 	"regexp"
 	"strconv"
 	"strings"
@@ -44,7 +45,31 @@ func Compare(a, b string) int {
 	case pb == "":
 		return -1
 	}
-	return strings.Compare(pa, pb)
+	return comparePre(pa, pb)
+}
+
+// comparePre orders two pre-release suffixes one identifier at a time, as
+// semver does: numbers by value and before words, and the shorter of two
+// that start the same first.
+func comparePre(a, b string) int {
+	as, bs := strings.Split(a, "."), strings.Split(b, ".")
+	for i := 0; i < len(as) && i < len(bs); i++ {
+		x, xerr := strconv.Atoi(as[i])
+		y, yerr := strconv.Atoi(bs[i])
+		switch {
+		case xerr == nil && yerr == nil:
+			if x != y {
+				return cmp.Compare(x, y)
+			}
+		case xerr == nil:
+			return -1
+		case yerr == nil:
+			return 1
+		case as[i] != bs[i]:
+			return strings.Compare(as[i], bs[i])
+		}
+	}
+	return cmp.Compare(len(as), len(bs))
 }
 
 func parts(tag string) (n [3]int, pre string) {

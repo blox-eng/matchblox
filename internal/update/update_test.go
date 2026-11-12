@@ -13,6 +13,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 // releaseWorld is a GitHub with one latest release, a gh, and this binary
@@ -25,6 +26,7 @@ type releaseWorld struct {
 	hits    []string
 	gh      string // "" no gh, "old", "out" (not logged in), "ok", "fail"
 	calls   []string
+	runErr  error // what running the downloaded binary returns, with no output
 	out     bytes.Buffer
 	updater *Updater
 }
@@ -97,6 +99,9 @@ func (w *releaseWorld) run(argv []string) (string, error) {
 			return "sigstore: no matching attestation", fail
 		}
 		return "", nil
+	}
+	if w.runErr != nil {
+		return "", w.runErr
 	}
 	out, err := exec.Command(argv[0], argv[1:]...).CombinedOutput() //nolint:gosec // the downloaded test binary
 	return string(out), err
@@ -331,5 +336,41 @@ func TestInstallFailureLeavesTheOldBinary(t *testing.T) {
 	}
 	if got := w.installed(); got != "old" {
 		t.Fatalf("the binary holds %q after a failed install, want the old bytes", got)
+	}
+}
+
+func TestACommandThatHangsIsStopped(t *testing.T) {
+	if _, err := exec.LookPath("sleep"); err != nil {
+		t.Skip("no sleep here")
+	}
+	start := time.Now()
+	_, err := runWithin(50 * time.Millisecond)([]string{"sleep", "30"})
+	if err == nil || !strings.Contains(err.Error(), "sleep 30") || !strings.Contains(err.Error(), "took too long") {
+		t.Fatalf("err = %v, want one that names the command and says it took too long", err)
+	}
+	if took := time.Since(start); took > 10*time.Second {
+		t.Fatalf("the command ran for %s past a limit of 50ms", took)
+	}
+}
+
+func TestACommandInTimeKeepsItsOutputAndError(t *testing.T) {
+	out, err := runWithin(time.Minute)([]string{"sh", "-c", "echo said; exit 3"})
+	if out != "said\n" || err == nil || strings.Contains(err.Error(), "took too long") {
+		t.Fatalf("out %q, err %v", out, err)
+	}
+}
+
+func TestInstallSaysWhyTheNewBinaryDidNotRun(t *testing.T) {
+	w := newReleaseWorld(t, "v0.1.0", "v0.2.0")
+	w.runErr = errors.New("fork/exec: exec format error")
+	_, err := w.updater.Install("v0.2.0")
+	if err == nil || !strings.Contains(err.Error(), "exec format error") || !strings.HasSuffix(err.Error(), "Nothing was changed") {
+		t.Fatalf("err = %v, want the cause and, last, that nothing was changed", err)
+	}
+	if strings.Contains(err.Error(), `says ""`) || strings.Contains(err.Error(), "report this") {
+		t.Errorf("err blames the release for a binary that did not run: %v", err)
+	}
+	if got := w.installed(); got != "old" {
+		t.Fatalf("installed %q", got)
 	}
 }

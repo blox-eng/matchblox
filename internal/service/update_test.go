@@ -1234,3 +1234,75 @@ func TestTheOfferPreviewFitsAPhone(t *testing.T) {
 		}
 	}
 }
+
+// When the restart for a good install is overdue, another install does not
+// say that matchblox starts again in a moment: it says the fix.
+func TestAnInstallAfterAnOverdueRestartSaysToOpenAgain(t *testing.T) {
+	s, src, _ := offerTest(t, config.UpdateOffer)
+	clk := &fakeClock{at: s.now()}
+	s.Now = clk.now
+	if r := s.installUpdate("v0.43.0"); r.Err != "" {
+		t.Fatalf("install %+v", r)
+	}
+	clk.add(restartAfter)
+	for name, r := range map[string]proto.Result{"the door's install": s.installUpdate("v0.43.0"), "update:host": hostUpdateAct(s, "y")} {
+		if r.Err != stillRuns || len(r.Skipped) > 0 || len(r.Ran) > 0 {
+			t.Errorf("%s after an overdue restart: %+v, want the error %q", name, r, stillRuns)
+		}
+	}
+	if got := src.installed(); len(got) != 1 {
+		t.Fatalf("installs %v, want one", got)
+	}
+}
+
+// A restart that does not come is said whatever else is true: a newer
+// release, a closed offer, mode off.
+func TestAnOverdueRestartIsSaidWhenANewerReleaseComes(t *testing.T) {
+	stuck := func(t *testing.T, mode string, install func(s *Service) proto.Result) (*Service, *fakeUpdates, *fakeClock) {
+		t.Helper()
+		s, src, _ := offerTest(t, mode)
+		clk := &fakeClock{at: s.now()}
+		s.Now = clk.now
+		if r := install(s); r.Err != "" || len(r.Ran) == 0 {
+			t.Fatalf("install %+v", r)
+		}
+		clk.add(restartAfter)
+		return s, src, clk
+	}
+	said := func(t *testing.T, s *Service) {
+		t.Helper()
+		d, ok := updateDoorOf(s)
+		if !ok || d.Sum != "v0.43.0" || d.Problem != stillRuns || d.Why != "This machine runs v0.42.0." {
+			t.Fatalf("door %+v %v, want the row of v0.43.0 with %q", d, ok, stillRuns)
+		}
+	}
+	byDoor := func(s *Service) proto.Result { return s.installUpdate("v0.43.0") }
+	t.Run("a newer release", func(t *testing.T) {
+		s, src, clk := stuck(t, config.UpdateOffer, byDoor)
+		src.set("v0.44.0", nil)
+		s.checkUpdate(clk.now())
+		said(t, s)
+	})
+	t.Run("a closed offer", func(t *testing.T) {
+		s, _, _ := offerTest(t, config.UpdateOffer)
+		if r := updateAct(s, "secondary", "y", "v0.43.0"); r.Err != "" {
+			t.Fatalf("close %+v", r)
+		}
+		clk := &fakeClock{at: s.now()}
+		s.Now = clk.now
+		if r := hostUpdateAct(s, "y"); r.Err != "" || len(r.Ran) == 0 {
+			t.Fatalf("install %+v", r)
+		}
+		clk.add(restartAfter)
+		said(t, s)
+		// The row is the only word of a service that waits to stop: it does not close.
+		if r := s.closeUpdate("v0.43.0"); r.Err != stillRuns {
+			t.Fatalf("a close of the row %+v, want the error %q", r, stillRuns)
+		}
+		said(t, s)
+	})
+	t.Run("mode off", func(t *testing.T) {
+		s, _, _ := stuck(t, config.UpdateOff, func(s *Service) proto.Result { return hostUpdateAct(s, "y") })
+		said(t, s)
+	})
+}
