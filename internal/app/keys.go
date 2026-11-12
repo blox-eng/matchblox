@@ -35,6 +35,7 @@ type keymaps struct {
 	form     formKeys
 	view     viewKeymap
 	sheet    sheetKeys
+	room     roomKeys
 	search   searchKeys
 	pair     pairKeys
 	takeOver takeOverKeys
@@ -127,6 +128,19 @@ func defaultKeys() keymaps {
 			Tick:  bind(ks("space"), "space", "toggle"),
 			Erase: bind(ks("backspace"), "⌫", "erase"),
 		},
+		room: roomKeys{
+			Up:    bind(ks("up", "k"), "↑↓", "move"),
+			Down:  bind(ks("down", "j"), "↑↓", "move"),
+			Open:  bind(ks("enter"), "⏎", ""),
+			Give:  bind(ks("y"), "y", "give"),
+			Next:  bind(ks("]"), "]", "next"),
+			Prev:  bind(ks("["), "[", "back"),
+			Back:  bind(ks("esc"), "esc", "back"),
+			Erase: bind(ks("backspace"), "⌫", "erase"),
+			Flip:  bind(ks("alt+s"), "⌥s", "room"),
+			Walk:  bind(ks("alt+n"), "⌥n", "next match"),
+			Out:   bind(ks("u"), "u", "out"),
+		},
 		search: searchKeys{
 			Clear: bind(ks("esc"), "esc", "clear"),
 			Keep:  bind(ks("enter"), "⏎", "keep"),
@@ -182,7 +196,7 @@ func KeyNames() []string {
 	k := defaultKeys()
 	var names []string
 	for _, layer := range [][]bkey.Binding{k.global.bindings(), k.main.bindings(), k.form.bindings(), k.view.bindings(),
-		k.sheet.bindings(), k.search.bindings(), k.pair.bindings(), k.takeOver.bindings(), k.confirm.bindings(),
+		k.sheet.bindings(), k.room.bindings(), k.search.bindings(), k.pair.bindings(), k.takeOver.bindings(), k.confirm.bindings(),
 		k.scan.bindings(), k.ask.bindings()} {
 		for _, b := range layer {
 			names = append(names, b.Keys()...)
@@ -392,6 +406,9 @@ func keyPress(k string) tea.KeyPressMsg {
 	}
 	if r := []rune(k); len(r) == 6 && k[:5] == "ctrl+" {
 		return tea.KeyPressMsg{Code: r[5], Mod: tea.ModCtrl}
+	}
+	if r := []rune(k); len(r) == 5 && k[:4] == "alt+" {
+		return tea.KeyPressMsg{Code: r[4], Mod: tea.ModAlt}
 	}
 	if r := []rune(k); len(r) == 7 && k[:6] == "shift+" {
 		return tea.KeyPressMsg{Code: r[6], Mod: tea.ModShift}

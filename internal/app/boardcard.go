@@ -295,7 +295,7 @@ func (m Model) cardHints(s sample.Session, o cardOpts, options int, answers bool
 		if sh, ok := m.mergeable(s); ok {
 			hs = append(hs, hintFor(m.keys.board.Merge, "merge #"+strconv.Itoa(sh.Number)))
 		}
-		if m.goWaits(s) {
+		if m.goWaitsOn(s) {
 			hs = append(hs, hintFor(mk.Grant, ""))
 		}
 		hs = append(hs, goIn)

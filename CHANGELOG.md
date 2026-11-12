@@ -6,6 +6,49 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Each chain has a room.** `Enter` on a chain's head row, or `⌥s` on any
+  of its sessions, opens it: what waits for you first, the stoker's card
+  and plan, the matches with their inbox, the chain's ships and worktrees,
+  and a talk line to its stoker. The first words to a chain with no stoker
+  start one, with no launch sheet. `y` gives a go, and asks first for a
+  typed `y`: every go acts outside the session. `]` and `[` walk the chains.
+  ([#326](https://github.com/blox-eng/matchblox/issues/326))
+- **⌥s flips between a session and its chain's room.** In an agent's pane,
+  `⌥s` goes to its room and back, and `⌥n` walks the chain's matches. Each
+  terminal comes back to its own session. A shell keeps the keys. Prefix
+  `s` flips where Option is not Meta; tmux's session tree moves to prefix
+  `S`.
+  ([#326](https://github.com/blox-eng/matchblox/issues/326))
+- **A feat pull request changes the landing page or says why not.** CI's
+  `Landing page` step, and a hook before an agent's `gh pr merge`.
+
+### Changed
+
+- **The header counts the stokers that run: `≋ 2`.** It was `stoker · 2
+  chains`; the dock still counts the chains.
+
+## [0.40.3] - 2026-11-11
+
+### Fixed
+
+- **The way back finds a console you started inside tmux.** `Ctrl+M`,
+  prefix `m` and a tap on `◂ matchblox` went only to a session named
+  `matchblox`. A console run in a pane of another session said `No
+  matchblox console here`. It now goes to that pane. The console binds the
+  tap on `◂ matchblox` too, over an older line in your tmux config.
+  ([#354](https://github.com/blox-eng/matchblox/issues/354))
+
+### Changed
+
+- **`Ctrl+M` in the console goes back, as `Esc` does.** What is open
+  closes, a search clears, then the hosts list shows. One back gesture now
+  works everywhere: in a pane it goes to the console, in the console back
+  to the hosts. ([#360](https://github.com/blox-eng/matchblox/issues/360))
+- **Built with Go 1.27.4.** A build from source needs Go 1.27 or later: the
+  install script and the README say so.
+
 ## [0.40.2] - 2026-11-11
 
 ### Security
@@ -1425,7 +1468,8 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.40.2...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.40.3...HEAD
+[0.40.3]: https://github.com/blox-eng/matchblox/compare/v0.40.2...v0.40.3
 [0.40.2]: https://github.com/blox-eng/matchblox/compare/v0.40.1...v0.40.2
 [0.40.1]: https://github.com/blox-eng/matchblox/compare/v0.40.0...v0.40.1
 [0.40.0]: https://github.com/blox-eng/matchblox/compare/v0.39.1...v0.40.0

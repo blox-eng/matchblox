@@ -170,7 +170,7 @@ Nothing was installed. Please report this: https://github.com/$REPO/issues"
 }
 
 from_source() {
-  command -v go >/dev/null 2>&1 || die "matchblox has no release yet, so this builds it from source, and that needs Go 1.26 or later:
+  command -v go >/dev/null 2>&1 || die "matchblox has no release yet, so this builds it from source, and that needs Go 1.27 or later:
   https://go.dev/dl/
 Then run this again, or: go install github.com/$REPO/cmd/matchblox@latest"
   say "matchblox has no release yet: building from source with $(go version | cut -d' ' -f3)"

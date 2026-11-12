@@ -34,10 +34,14 @@ or `d`.
 Prefix `m` from any pane goes to the console. The console binds it on the
 tmux server when it starts in tmux, in any session, in place of the tmux key
 that marks a pane, and the way back that `matchblox setup` adds to your tmux
-config binds it too. On a pane that runs a console, in any session, you stay on the pane. On any other pane it goes to
-the session `matchblox` and the console's pane there, also from another
-window of that session. With no `matchblox` session, it says `No matchblox
-console here: run matchblox in a shell to open one`. A `bind m` of your own wins again when you source
+config binds it too. On a pane that runs a console, in any session, the
+console goes back as `Esc` does: what is open closes, then Hosts shows. On
+any other pane it goes to the session `matchblox` and the console's pane
+there, also from another window of that session. With no `matchblox`
+session, it goes to a console you started inside a tmux pane, in any
+session. With no console at all, it says `No matchblox console here: run
+matchblox in a shell to open one`. A tap on `◂ matchblox` in the status
+line goes the same way. A `bind m` of your own wins again when you source
 your config, until the console starts again. From a jump, prefix `m` goes
 back to the console and ends the jump.
 

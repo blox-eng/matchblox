@@ -42,7 +42,7 @@ func (m Model) columnOf(s sample.Session) boardCol {
 	if age := s.Age(); age == "cold" || age == "stale" || s.Stopped() {
 		return colQuiet
 	}
-	if m.asksNow(s) || m.goWaits(s) {
+	if m.asksNow(s) || m.goWaitsOn(s) {
 		return colNeed
 	}
 	if s.Works() || len(s.Shells) > 0 {
@@ -67,8 +67,8 @@ func (m Model) asksNow(s sample.Session) bool {
 	return s.Asks || s.Permits || ok && (it.State == queue.StatePermission || it.State == queue.StateQuestion && !it.Reminder)
 }
 
-// goWaits: a stoker step waits for the owner's go on the match's pane.
-func (m Model) goWaits(s sample.Session) bool {
+// goWaitsOn: a stoker step waits for the owner's go on the match's pane.
+func (m Model) goWaitsOn(s sample.Session) bool {
 	_, ok := m.goSince(s)
 	return ok
 }

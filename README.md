@@ -8,7 +8,7 @@
 **Light an idea. Keep it burning.**
 
 [![CI](https://github.com/blox-eng/matchblox/actions/workflows/ci.yml/badge.svg)](https://github.com/blox-eng/matchblox/actions/workflows/ci.yml)
-[![Go 1.26](https://img.shields.io/badge/go-1.26-00ADD8.svg)](https://go.dev/dl/)
+[![Go 1.27](https://img.shields.io/badge/go-1.27-00ADD8.svg)](https://go.dev/dl/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-black.svg)](LICENSE)
 
 <p>

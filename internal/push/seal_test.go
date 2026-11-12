@@ -152,7 +152,7 @@ func TestTheBuzzLineSaysWhoWaitsAndWhy(t *testing.T) {
 		{queue.Item{Name: "api", State: queue.StateQuestion, LastLine: strings.Repeat("é", 130)}, `work-1 · api waits: "` + strings.Repeat("é", 120) + `"`},
 	}
 	for _, c := range cases {
-		if got := BuzzLine("work-1", c.item); got != c.want {
+		if got := BuzzLine("work-1", c.item, nil); got != c.want {
 			t.Errorf("BuzzLine = %q, want %q", got, c.want)
 		}
 	}

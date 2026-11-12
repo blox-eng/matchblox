@@ -828,7 +828,7 @@ func (m Model) cardBelt(s sample.Session) []beltKey {
 	if _, ok := m.mergeable(s); ok {
 		ks = append(ks, beltOf(m.keys.board.Merge, "", "merge", true))
 	}
-	if m.goWaits(s) {
+	if m.goWaitsOn(s) {
 		ks = append(ks, beltOf(m.keys.main.Grant, "", "go", true))
 	}
 	for i := range ks {

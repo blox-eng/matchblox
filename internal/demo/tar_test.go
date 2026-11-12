@@ -94,7 +94,7 @@ func TestATarDrawsTheFirstScreenOfTheFolder(t *testing.T) {
 	t.Setenv("TMPDIR", t.TempDir())
 	fromFolder, term := start(t)
 	term.waitFor(t, "SESSIONS 7", "hearth-api", "start a new session")
-	want := firstScreen(term.text())
+	want := firstScreen(term.screen())
 	fromFolder.Stop()
 
 	_, fromTar, err := tryStartTree(t, tarOf(t, tree), 44, 31)
@@ -102,7 +102,7 @@ func TestATarDrawsTheFirstScreenOfTheFolder(t *testing.T) {
 		t.Fatal(err)
 	}
 	fromTar.waitFor(t, "SESSIONS 7", "hearth-api", "start a new session")
-	if got := firstScreen(fromTar.text()); got != want {
+	if got := firstScreen(fromTar.screen()); got != want {
 		t.Errorf("the tar's first screen differs from the folder's.\nfolder:\n%s\ntar:\n%s", want, got)
 	}
 }

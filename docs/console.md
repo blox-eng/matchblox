@@ -192,6 +192,34 @@ before.
   faint `· same repo · chain?` after its name, while the name has room. A
   chain with a match in another repo does not hide it.
 
+## A chain's room
+
+Each chain has a room: `Enter` on its head row, or `⌥s` on any of its
+sessions, opens it, and `⌥s` in an agent's pane flips there and back (see
+[Keys](keys.md#a-chains-room)). Top down, a room shows:
+
+- **The need line**, when something waits for you: `╿ ember-billing asks:
+  may I force-push the rebase?` or `▸ merge #4552 waits for your go · y`.
+  The oldest leads; `+1` counts the rest. It holds the room's one accent.
+- **The stoker's card**: its order in quotes, the active step with one step
+  on each side, then `↓ N more`. `≋ waking…` while a new stoker starts;
+  `the stoker did not start: <why>` when it was refused; `≋ hearth's stoker
+  is quiet since 14:02 · ⏎ asks it` when its run has said nothing for 60 s.
+- **The matches**: the match, the agent's mark, the name, the repo when the
+  chain spans two, the state, `✉ 2` when two lines wait in its inbox, and
+  `· also in web` for a match in another chain. A mate the sampler cannot
+  see stays faint, `not seen · 4m`. With none left: `the chain has no
+  matches · + start one here`.
+- **SHIPS** and **GIT**: the chain's pull requests and worktrees on one
+  line each, `reading…` before the first scan.
+- **The talk line**: `› tell hearth's stoker…`. Your words go to the
+  chain's stoker; to a chain with no stoker they start one
+  (`› what should hearth's stoker do?`). A session in no chain has a room
+  of one, whose talk line goes to the host's stoker.
+
+On a desk the room takes the left 40 %, and the right side shows the live
+view of the selected match. On a phone it takes the screen.
+
 ## Act on a session from a script or an agent
 
 `<who>` is a pane (`%3`), a target (`app:1.1`) or a name; a name two sessions

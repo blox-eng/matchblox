@@ -1,6 +1,6 @@
 module github.com/blox-eng/matchblox
 
-go 1.26.11
+go 1.27.4
 
 require (
 	charm.land/bubbles/v2 v2.2.1
@@ -12,7 +12,7 @@ require (
 	github.com/charmbracelet/x/ansi v0.11.9
 	github.com/charmbracelet/x/term v0.2.2
 	github.com/shirou/gopsutil/v4 v4.26.10
-	golang.org/x/sys v0.49.0
+	golang.org/x/sys v0.50.0
 	rsc.io/qr v0.2.0
 )
 
