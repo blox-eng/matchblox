@@ -106,6 +106,9 @@ func TestExampleLoads(t *testing.T) {
 	if c.Chains != Default().Chains {
 		t.Fatalf("the example must state the chains defaults: %+v", c.Chains)
 	}
+	if c.Update.Mode != UpdateOffer {
+		t.Fatalf("the example must state the update default: %+v", c.Update)
+	}
 }
 
 // TestChainsConfigDefaults: the notice is on and send reaches the chain by
@@ -128,6 +131,24 @@ func TestChainsConfigDefaults(t *testing.T) {
 	_, err = Load(write(t, "[chains]\nsend = \"maybe\"\n"))
 	if err == nil || !strings.Contains(err.Error(), `"chain"`) || !strings.Contains(err.Error(), `"off"`) {
 		t.Fatalf("send = maybe: %v", err)
+	}
+}
+
+// TestUpdateMode: a file with no [update] offers; auto and off load; a mode
+// it does not know is an error that names the three it knows.
+func TestUpdateMode(t *testing.T) {
+	c, err := Load(write(t, ""))
+	if err != nil || c.Update.ModeOr() != UpdateOffer {
+		t.Fatalf("default [update] = %+v, %v", c.Update, err)
+	}
+	for _, mode := range []string{UpdateAuto, UpdateOff} {
+		if c, err := Load(write(t, "[update]\nmode = \""+mode+"\"\n")); err != nil || c.Update.ModeOr() != mode {
+			t.Fatalf("mode = %s: %+v, %v", mode, c.Update, err)
+		}
+	}
+	_, err = Load(write(t, "[update]\nmode = \"always\"\n"))
+	if err == nil || !strings.Contains(err.Error(), `"offer", "auto" or "off"`) {
+		t.Fatalf("mode = always: %v", err)
 	}
 }
 

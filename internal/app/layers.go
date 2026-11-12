@@ -9,9 +9,11 @@ import (
 
 	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/keycmd"
+	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/transport"
 )
@@ -220,8 +222,11 @@ func (s Shell) openOn(host string, peers []string, first bool) (Shell, tea.Cmd) 
 		o.Peers = append(o.Peers, s.peer(h))
 	}
 	b := s.opt.Base
-	o.Binary, o.CompactAt, o.CompactTokens, o.NoMotion, o.Now, o.Self, o.StateDir = b.Binary, b.CompactAt, b.CompactTokens, b.NoMotion, b.Now, b.Self, b.StateDir
+	o.Binary, o.CompactAt, o.CompactTokens, o.NoMotion, o.Now, o.Self, o.SelfAt, o.StateDir = b.Binary, b.CompactAt, b.CompactTokens, b.NoMotion, b.Now, b.Self, b.SelfAt, b.StateDir
 	o.Clip = b.Clip
+	if host == "" {
+		o.Restart = b.Restart // a remote host's update leaves this console's binary as it is
+	}
 	// A jump starts from this machine's tmux, whatever the host.
 	o.OutsideTmux, o.Prefix, o.Home, o.LocalTmux, o.JumpID = b.OutsideTmux, b.Prefix, b.Home, b.LocalTmux, b.JumpID
 	o.Pane, o.ClientList = b.Pane, b.ClientList // the client a jump moves is one of this machine's
@@ -309,8 +314,12 @@ func (s Shell) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	if s.live() {
 		// The streams run under Hosts (R12): the notes stay live.
+		act := s.cur.hostAct
 		next, cmd := s.cur.Update(msg)
 		s.cur = next.(Model)
+		if act != "" && s.cur.hostAct == "" {
+			s.flash = s.cur.flash // how the update of a host went
+		}
 		return s, cmd
 	}
 	if c, ok := msg.(connMsg); ok {
@@ -348,6 +357,8 @@ type row struct {
 	removable   bool
 	tailscale   bool   // Tailscale SSH answers host: the gate does not hold there
 	tick        string // ● ticked, ○ hidden; "" a row with no tick
+	release     string // the host's release and the console's, when they differ
+	side        string // behind or ahead, with a release
 }
 
 func (s Shell) firstRun() bool { return s.opt.FirstRun && len(s.hosts) == 0 }
@@ -393,6 +404,7 @@ func (s Shell) tick(r *row) {
 	case r.tailscale: // its warning stays
 	case s.live():
 		r.note = cmp.Or(s.cur.hostNote(r.host), r.note)
+		r.release, r.side = s.cur.releaseNote(r.host), s.cur.releaseSide(r.host)
 	}
 }
 
@@ -442,6 +454,18 @@ func (s Shell) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case bkey.Matches(k, sk.Connect):
 		if r := rs[min(s.sel, len(rs)-1)]; r.removable {
 			s.pending = s.connect(r.host)
+		}
+	case bkey.Matches(k, sk.Update):
+		if r := rs[min(s.sel, len(rs)-1)]; r.release != "" {
+			if act, _ := s.cur.releaseFix(r.host); act {
+				name := s.cur.nameOf(r.host)
+				s.pending = &action{label: "update", say: "update " + name + ": install the latest release there, then its service starts again",
+					rec: proto.HostUpdateAct, host: r.host, destructive: true}
+			}
+		}
+	case bkey.Matches(k, sk.Dismiss):
+		if r := rs[min(s.sel, len(rs)-1)]; r.release != "" {
+			s.cur, s.flash = s.cur.closeRelease(r.host)
 		}
 	case bkey.Matches(k, sk.Open):
 		return s.enter(rs[min(s.sel, len(rs)-1)])
@@ -516,6 +540,12 @@ func (s Shell) connect(host string) *action {
 }
 
 func (s Shell) confirm(a action) (tea.Model, tea.Cmd) {
+	if a.rec == proto.HostUpdateAct {
+		var cmd tea.Cmd
+		s.cur, cmd = s.cur.updateHost(a.host)
+		s.flash = s.cur.flash
+		return s, cmd
+	}
 	host := a.door
 	if a.connect && s.opt.Base.Ask != nil {
 		// The connect's field takes the prompts: the console under Hosts
@@ -656,6 +686,9 @@ func (s Shell) render() string {
 		line := " " + st.accent.Render(mark) + tick + st.text.Render(label) + st.muted.Render(r.note)
 		if layout(w, s.height) == Narrow {
 			line = " " + st.accent.Render(mark) + tick + st.text.Render(r.label)
+			if r.side != "" { // the row has no room for its note: one word says it
+				line += " " + st.warn.Render(r.side)
+			}
 		}
 		b.addRow(i, i == s.sel, w, st, line)
 	}
@@ -666,6 +699,9 @@ func (s Shell) render() string {
 		for l := range strings.SplitSeq(ansi.Wrap(why, max(w-4, 8), ""), "\n") {
 			out = append(out, " "+st.warn.Render("! ")+st.text.Render(l))
 		}
+	}
+	if s.sel < len(rs) && rs[s.sel].release != "" {
+		out = append(append(out, ""), s.releaseLines(rs[s.sel], w)...)
 	}
 	if s.firstRun() && !s.adding {
 		out = append(out, "", fit(" "+st.faint.Render("You can add a host later: "+defaultKeys().main.Back.Help().Key+" in a console comes back here."), w))
@@ -693,6 +729,29 @@ func (s Shell) render() string {
 		layBox(st, out, w, bw, phone, f.fieldBox(bw, len(out)-3))
 	}
 	return strings.Join(out, "\n")
+}
+
+// releaseLines are the selected row's offer when its host is on another
+// release: its key or its fix, then the key that dismisses the note. A
+// phone's row has no room for the note: it shows here.
+func (s Shell) releaseLines(r row, w int) []string {
+	st, sk := s.st, s.keys.shell
+	var out []string
+	if layout(w, s.height) == Narrow {
+		for l := range strings.SplitSeq(ansi.Wrap(s.cur.nameOf(r.host)+": "+r.release, max(w-2, 8), ""), "\n") {
+			out = append(out, " "+st.muted.Render(l))
+		}
+	}
+	act, fix := s.cur.releaseFix(r.host)
+	line := " " + st.text.Render(fix)
+	if act {
+		line = " " + keyWord(sk.Update, st.accent, st.text, " update "+s.cur.nameOf(r.host))
+	}
+	dismiss := keyWord(sk.Dismiss, st.accent, st.muted, " dismiss")
+	if lipgloss.Width(line)+2+lipgloss.Width(dismiss) > w {
+		return append(out, fit(line, w), fit(" "+dismiss, w))
+	}
+	return append(out, fit(line+"  "+dismiss, w))
 }
 
 // tickMark is a row's tick and its space: blank on a row with none.
@@ -732,6 +791,9 @@ func (s Shell) actionLine(w int) string {
 	}
 	return fit(" "+st.muted.Render(keys), w)
 }
+
+// Restart runs this binary again when the console ended to start again.
+func (s Shell) Restart() error { return s.cur.Restart() }
 
 // Close ends the open console's connection and its pair code when the
 // program ends.

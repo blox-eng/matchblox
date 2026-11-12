@@ -2,6 +2,9 @@ package app
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -10,6 +13,7 @@ import (
 
 	"github.com/blox-eng/matchblox/internal/doors"
 	"github.com/blox-eng/matchblox/internal/proto"
+	"github.com/blox-eng/matchblox/internal/state"
 )
 
 var (
@@ -17,6 +21,8 @@ var (
 	hooksDoor  = doors.Door{ID: doors.Hooks, Title: "Add the queue hooks", Why: "Claude Code tells matchblox when an agent waits for you.", Path: home + "/.claude/settings.json", Sum: "s1", Preview: " {\n+  \"hooks\": {}\n }"}
 	wayBack    = doors.Door{ID: doors.WayBack, Title: "Add the way back", Why: "prefix m comes back here.", Path: home + "/.tmux.conf", Sum: "s2", Preview: "+bind m switch-client -t =matchblox"}
 	guideDoor  = doors.Door{ID: doors.Guide, Title: "Open a guide session", Why: "This starts Claude Code and uses your tokens.", Term: doors.GuideArgv(false), Preview: "claude '...'"}
+	updateDoor = doors.Door{ID: doors.Update, Title: "Update to v0.43.0", Why: "matchblox v0.43.0 is out. This machine runs v0.42.0.", Sum: "v0.43.0",
+		Preview: "matchblox v0.42.0 → v0.43.0 (linux/amd64)\n  checksum    checked first\n  provenance  checked if gh is installed\n              and logged in\n  replaces\n    " + home + "/.local/bin/matchblox"}
 	brokenDoor = doors.Door{ID: doors.Hooks, Title: "Add the queue hooks", Problem: "~/.claude/settings.json is not valid JSON: fix it, then this door opens"}
 )
 
@@ -100,6 +106,110 @@ func TestXClosesADoor(t *testing.T) {
 		next.Update(cmd())
 	}
 	if acts := f.acts(); len(acts) != 1 || acts[0] != (proto.Act{RecID: "door:guide", Which: "secondary", Confirm: "y"}) {
+		t.Fatalf("acts %+v", acts)
+	}
+}
+
+func TestTheUpdateDoorInstallsTheTagItShowed(t *testing.T) {
+	st := doorState(updateDoor)
+	st.Update = &state.UpdateView{Mode: "offer", Current: "v0.42.0", Latest: "v0.43.0"}
+	m, f := loadedWith(t, 100, st)
+	next, _ := key(m, "enter")
+	out := ansi.Strip(next.(Model).render())
+	for _, want := range []string{"RUN install v0.43.0 over v0.42.0", "matchblox v0.42.0 → v0.43.0", "    ~/.local/bin/matchblox"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("no %q:\n%s", want, out)
+		}
+	}
+	next, cmd := key(next, "y")
+	if cmd != nil {
+		next.Update(cmd())
+	}
+	if acts := f.acts(); len(acts) != 1 || acts[0] != (proto.Act{RecID: "door:update", Which: "primary", Confirm: "y", Text: "v0.43.0"}) {
+		t.Fatalf("acts %+v", acts)
+	}
+}
+
+// TestConsoleStartsAgainAfterItsUpdate: the install replaced the binary
+// this console runs, so a good result starts the console again on it. A
+// binary the install did not touch is not run, and a failed install
+// leaves the console as it is and says why.
+func TestConsoleStartsAgainAfterItsUpdate(t *testing.T) {
+	install := func(t *testing.T, r proto.Result, over bool) (Model, tea.Cmd, int) {
+		t.Helper()
+		self := filepath.Join(t.TempDir(), "matchblox")
+		if err := os.WriteFile(self, []byte("v0.42.0"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		m, _ := loadedWith(t, 100, doorState(updateDoor))
+		restarts := 0
+		m.opt.Local, m.opt.Self, m.opt.Restart = true, self, func() error { restarts++; return nil }
+		next, _ := key(m, "enter")
+		next, cmd := key(next, "y")
+		if cmd != nil {
+			next.Update(cmd())
+		}
+		if over {
+			if err := os.WriteFile(self, []byte("v0.43.0, a new install"), 0o700); err != nil {
+				t.Fatal(err)
+			}
+		}
+		r.ActID = "a" + fmt.Sprint(next.(Model).acts)
+		next, cmd = next.Update(resultMsg(r))
+		if err := next.(Model).Restart(); err != nil {
+			t.Fatal(err)
+		}
+		return next.(Model), cmd, restarts
+	}
+	quits := func(cmd tea.Cmd) bool {
+		return slices.ContainsFunc(cmdMsgs(cmd), func(msg tea.Msg) bool { _, ok := msg.(tea.QuitMsg); return ok })
+	}
+	good := proto.Result{Ran: [][]string{{"install", "v0.43.0"}}}
+	if _, cmd, n := install(t, good, true); n != 1 || !quits(cmd) {
+		t.Fatalf("a good install started the console again %d times, quit: %v", n, quits(cmd))
+	}
+	m, cmd, n := install(t, good, false)
+	if n != 0 || quits(cmd) {
+		t.Fatalf("an install beside this console's binary started it again %d times, quit: %v", n, quits(cmd))
+	}
+	if out := ansi.Strip(m.render()); !strings.Contains(out, "updated to v0.43.0 · quit and open matchblox again") {
+		t.Fatalf("no word to open it again:\n%s", out)
+	}
+	m, cmd, n = install(t, proto.Result{Err: "the checksum does not match"}, true)
+	if n != 0 || quits(cmd) {
+		t.Fatalf("a failed install started the console again %d times, quit: %v", n, quits(cmd))
+	}
+	if m.updateAct != "" || m.updateTag != "" || m.selfAt != nil {
+		t.Fatalf("a failed install left its act: %q %q %v", m.updateAct, m.updateTag, m.selfAt)
+	}
+	if out := ansi.Strip(m.render()); !strings.Contains(out, "the checksum does not match") {
+		t.Fatalf("the failure is not shown:\n%s", out)
+	}
+}
+
+// Under mode auto, closing the offer does not stop auto, and the close
+// says so.
+func TestClosingTheOfferUnderAutoSaysAutoStillInstalls(t *testing.T) {
+	st := doorState(updateDoor)
+	st.Update = &state.UpdateView{Mode: "auto", Current: "v0.42.0", Latest: "v0.43.0"}
+	m, _ := loadedWith(t, 100, st)
+	next, _ := key(m, "x")
+	if out := ansi.Strip(next.(Model).render()); !strings.Contains(out, "close Update to v0.43.0 (auto still installs it)") {
+		t.Fatalf("close confirm:\n%s", out)
+	}
+}
+
+func TestXClosesTheReleaseTheUpdateDoorShowed(t *testing.T) {
+	m, f := loadedWith(t, 100, doorState(updateDoor))
+	next, _ := key(m, "x")
+	if out := ansi.Strip(next.(Model).render()); !strings.Contains(out, "close Update to v0.43.0 (the next release opens it again)") {
+		t.Fatalf("close confirm:\n%s", out)
+	}
+	next, cmd := key(next, "y")
+	if cmd != nil {
+		next.Update(cmd())
+	}
+	if acts := f.acts(); len(acts) != 1 || acts[0] != (proto.Act{RecID: "door:update", Which: "secondary", Confirm: "y", Text: "v0.43.0"}) {
 		t.Fatalf("acts %+v", acts)
 	}
 }
@@ -381,5 +491,32 @@ func TestMWithoutAChoiceCancelsAsAnyKey(t *testing.T) {
 	next, _ = key(next, "m")
 	if next.(Model).pending != nil || len(f.acts()) != 0 {
 		t.Fatalf("m on a door without a choice: pending %+v, acts %+v", next.(Model).pending, f.acts())
+	}
+}
+
+// The row of failed release looks has no action, and its close says when
+// it comes back.
+func TestUpdateCheckRowOnlyCloses(t *testing.T) {
+	d := doors.Door{ID: doors.UpdateCheck, Title: "Release check fails", Why: "Every look since Nov 9 at 14:02 failed: no route to host. Run: matchblox update.", Preview: "matchblox update"}
+	var m Model
+	if a := m.doorAction(d); a != nil {
+		t.Fatalf("an action %+v", a)
+	}
+	if a := closeDoor(d, false); a.say != "close Release check fails (three more days of failed looks open it again)" {
+		t.Fatalf("close says %q", a.say)
+	}
+}
+
+// The row of a release installed under a service that still runs the old
+// one closes that release.
+func TestInstalledRowClosesItsRelease(t *testing.T) {
+	d := doors.Door{ID: doors.Update, Title: "Restart for v0.43.0", Why: "This machine runs v0.42.0.", Sum: "v0.43.0",
+		Problem: "v0.43.0 is installed, but this service still runs v0.42.0. Quit matchblox and open it again."}
+	var m Model
+	if a := m.doorAction(d); a != nil {
+		t.Fatalf("an install action %+v", a)
+	}
+	if a := closeDoor(d, false); a.rec != "door:"+doors.Update || a.which != "secondary" || a.text != "v0.43.0" {
+		t.Fatalf("close %+v", a)
 	}
 }

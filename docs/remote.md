@@ -155,6 +155,32 @@ A host that the console cannot reach says why, and shows the connect. A
 jump to a pane uses your own ssh login. See
 [Jump into a session](#jump-into-a-session).
 
+### A host on another release
+
+Each host looks for a new release on its own, as its `[update] mode` says
+(see [Config](config.md#update)). When a host runs another release than the
+console, its row on Hosts says so: `v0.38.1, behind this console (v0.42.0)`
+or `v0.43.0, ahead of this console (v0.42.0)`. On a narrow screen the row
+says only `ws-1 behind`, and the note of the selected host shows under the
+list.
+
+- On a host that is behind, `u` and a typed `y` update it. The host's own
+  service finds the latest release and installs it with its own checks,
+  even with `mode = "off"`. It then runs again, and the console connects
+  again.
+- A host on a release too old to take `u` says
+  `on ws-1: matchblox update`: run that on the host.
+- A host that Homebrew installed says `on ws-1: brew upgrade matchblox`.
+- A host that is ahead says `this console is older: run matchblox update`.
+- `d` dismisses the note until either release changes.
+- Only a person at a console updates a host. An agent's session, a session
+  the stoker drives and a `matchblox` command are refused. See
+  [Limits](limits.md) for what this does not stop.
+
+A console whose home is another host (`matchblox ws-1`) has no service of
+its own to update it. Once for each release, it says
+`run matchblox update · console v0.42.0, latest v0.43.0`.
+
 ## See and remove the devices of a host
 
 ```sh

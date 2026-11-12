@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/config"
 	"github.com/blox-eng/matchblox/internal/doors"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/setup"
@@ -54,7 +55,7 @@ func findDoor(t *testing.T, st proto.State, id string) doors.Door {
 func TestDoorsInTheSnapshot(t *testing.T) {
 	s, _ := doorsTest(t)
 	ctx := run(t, s)
-	c, _ := connect(t, ctx, s)
+	c := connectAs(t, ctx, s, proto.ClientConsole)
 	if got := openDoors(snapshot(t, c)); !slices.Equal(got, []string{doors.Hooks, doors.Limits, doors.SafetyNet, doors.WayBack, doors.Pair, doors.KeepRunning, doors.Guide, doors.Night, doors.Ways}) {
 		t.Fatalf("open doors = %v", got)
 	}
@@ -63,7 +64,7 @@ func TestDoorsInTheSnapshot(t *testing.T) {
 func TestNoSetupNoDoors(t *testing.T) {
 	s := newTest(t, time.Hour)
 	ctx := run(t, s)
-	c, _ := connect(t, ctx, s)
+	c := connectAs(t, ctx, s, proto.ClientConsole)
 	if st := snapshot(t, c); st.Doors != nil {
 		t.Fatalf("doors without a Setup: %+v", st.Doors)
 	}
@@ -72,7 +73,7 @@ func TestNoSetupNoDoors(t *testing.T) {
 func TestDoorActWritesAfterATypedY(t *testing.T) {
 	s, path := doorsTest(t)
 	ctx := run(t, s)
-	c, _ := connect(t, ctx, s)
+	c := connectAs(t, ctx, s, proto.ClientConsole)
 	d := findDoor(t, snapshot(t, c), doors.Hooks)
 	if r := act(t, c, "1", proto.Act{RecID: "door:hooks", Which: "primary", Text: d.Sum}); r.Err == "" {
 		t.Fatalf("no typed y: %+v", r)
@@ -104,7 +105,7 @@ func TestDoorActWritesAfterATypedY(t *testing.T) {
 func TestDoorActRefusesAChangedFile(t *testing.T) {
 	s, path := doorsTest(t)
 	ctx := run(t, s)
-	c, _ := connect(t, ctx, s)
+	c := connectAs(t, ctx, s, proto.ClientConsole)
 	d := findDoor(t, snapshot(t, c), doors.Hooks)
 	_ = os.MkdirAll(filepath.Dir(path), 0o700)
 	if err := os.WriteFile(path, []byte("{}\n"), 0o600); err != nil {
@@ -119,7 +120,7 @@ func TestDoorActRefusesAChangedFile(t *testing.T) {
 func TestDoorCloseAct(t *testing.T) {
 	s, _ := doorsTest(t)
 	ctx := run(t, s)
-	c, _ := connect(t, ctx, s)
+	c := connectAs(t, ctx, s, proto.ClientConsole)
 	snapshot(t, c)
 	if r := act(t, c, "1", proto.Act{RecID: "door:guide", Which: "secondary", Confirm: "y"}); r.Err != "" {
 		t.Fatalf("result %+v", r)
@@ -138,7 +139,7 @@ func TestDoorCloseAct(t *testing.T) {
 func TestATerminalDoorRunsInTheConsole(t *testing.T) {
 	s, _ := doorsTest(t)
 	ctx := run(t, s)
-	c, _ := connect(t, ctx, s)
+	c := connectAs(t, ctx, s, proto.ClientConsole)
 	snapshot(t, c)
 	if r := act(t, c, "1", proto.Act{RecID: "door:guide", Which: "primary", Confirm: "y"}); !strings.Contains(r.Err, "terminal") {
 		t.Fatalf("result %+v", r)
@@ -169,7 +170,7 @@ func TestWayBackActTurnsTheMouseOnOnlyWhenChosen(t *testing.T) {
 	for _, which := range []string{"primary", "also"} {
 		s, _ := doorsTest(t)
 		ctx := run(t, s)
-		c, _ := connect(t, ctx, s)
+		c := connectAs(t, ctx, s, proto.ClientConsole)
 		d := findDoor(t, snapshot(t, c), doors.WayBack)
 		if d.Also == nil {
 			t.Fatalf("no mouse choice: %+v", d)
@@ -181,5 +182,52 @@ func TestWayBackActTurnsTheMouseOnOnlyWhenChosen(t *testing.T) {
 		if on := strings.Contains(string(b), "set -g mouse on"); on != (which == "also") {
 			t.Fatalf("%s: tmux.conf:\n%s", which, b)
 		}
+	}
+}
+
+// TestOnlyAPersonAtAConsoleOpensADoor: a door writes the person's files,
+// and the update door replaces the binary. A command, a session the stoker
+// drives and a session's pane with a console hello are each refused; a
+// console opens both.
+func TestOnlyAPersonAtAConsoleOpensADoor(t *testing.T) {
+	s, ran := handsTest(t)
+	setupS, path := doorsTest(t)
+	s.Setup = setupS.Setup
+	src := &fakeUpdates{latest: "v0.43.0"}
+	s.Binary, s.UpdateMode, s.Update = "v0.42.0", config.UpdateOffer, src
+	s.loadUpdate()
+	s.checkUpdate(s.now())
+	var hooks doors.Door
+	for _, d := range s.doors() {
+		if d.ID == doors.Hooks {
+			hooks = d
+		}
+	}
+	for _, id := range []struct{ rec, text string }{{"door:" + doors.Update, "v0.43.0"}, {"door:" + doors.Hooks, hooks.Sum}} {
+		for _, c := range []struct {
+			who  string
+			a    proto.Act
+			want string
+		}{
+			{"a command", proto.Act{RecID: id.rec, Which: "primary", Confirm: "y", Text: id.text}, "only you do this, at the console"},
+			{"the stoker", fromStokerAct(id.rec, id.text), "the stoker opens no door: the doors are yours"},
+			{"a session's console", proto.Act{RecID: id.rec, Which: "primary", Confirm: "y", Text: id.text, Console: true, From: "%1", FromPlaced: true}, "only you open or close a door, at a console"},
+		} {
+			c.a.Which = "primary"
+			if r := s.act(t.Context(), c.a); r.Err != c.want {
+				t.Errorf("%s, %s: %+v", id.rec, c.who, r)
+			}
+		}
+	}
+	if _, err := os.Stat(path); err == nil || len(src.installed()) != 0 || len(*ran) != 0 {
+		t.Fatalf("refused acts wrote %v, installed %v, ran %q", err == nil, src.installed(), *ran)
+	}
+	for _, id := range []struct{ rec, text string }{{"door:" + doors.Update, "v0.43.0"}, {"door:" + doors.Hooks, hooks.Sum}} {
+		if r := s.act(t.Context(), proto.Act{RecID: id.rec, Which: "primary", Confirm: "y", Text: id.text, Console: true}); r.Err != "" {
+			t.Fatalf("%s from a console: %+v", id.rec, r)
+		}
+	}
+	if _, err := os.Stat(path); err != nil || len(src.installed()) != 1 {
+		t.Fatalf("a console's acts: written %v, installed %v", err, src.installed())
 	}
 }

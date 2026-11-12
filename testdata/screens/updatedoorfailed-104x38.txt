@@ -1,0 +1,38 @@
+ ▰ matchblox                                                                           ● 6 wait for you
+ SESSIONS 7    ships 3    machine    git    history    panes    stoker
+────────────────────────────────────────────────────────────────────────────────────────────────────────
+ SET UP · 1                              │
+ ▌ Update to v0.43.0                     │ Update to v0.43.0
+   matchblox v0.43.0 is out. This        │
+   machine runs v0.42.0. The install     │ matchblox v0.43.0 is out. This machine runs v0.42.0. The
+   failed, nothing was changed. Enter    │ install failed, nothing was changed. Enter tries again, or
+   tries again, or run: matchblox        │ run: matchblox update. checksum mismatch for
+   update. checksum mismatch for         │ matchblox_linux_amd64 · published 3f9a3f9a3f9a… · download
+   matchblox_linux_amd64 · published     │ c2e1c2e1c2e1…
+   3f9a3f9a3f9a… · download              │
+   c2e1c2e1c2e1…                         │ ⏎ open   x close
+                                         │
+ WAITS FOR YOU · 6                       │
+ │ spark-docs        done       9m   88% │
+ ╿ ember-billing     done       4m   32% │
+ ╿ flint-auth        asks       2m   41% │
+ ╿ kindle-web        asks       1m   56% │
+ ╿ cinder-ci         done       0s   55% │
+ ╿ wick-mobile       done       0s    6% │
+ WORKING · 1                             │
+ ✦ hearth-api        busy            79% │
+ + start a new session                   │
+                                         │
+ 1 without an agent: shell:1.1 zsh       │
+                                         │
+ RECOMMENDATIONS · 7 · h hides           │
+ ▲ The week runs short: compact spark-do…│
+ ↓ 6 more                                │
+─────────────────────────────────────────│
+ USAGE                                   │
+ ✻ Claude        5h   ▰▰▰ 84%            │
+                 wk   ▰▰▱ 82%            │
+ · Google login  not measured            │
+ ❋ OpenAI        5h ▰▱▱ 40% · wk 12%     │
+────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ↑↓ move  ⏎ open  x close  / find  q quit  list only v                                   sampled 0s ago

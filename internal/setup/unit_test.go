@@ -99,6 +99,44 @@ func TestTheDoorIsDoneWhenTheUnitIsThere(t *testing.T) {
 	}
 }
 
+// TestTheUnitLeavesTmuxRunning: when the unit's serve exits, systemd ends
+// the serve only, not the tmux server it started.
+func TestTheUnitLeavesTmuxRunning(t *testing.T) {
+	if text := service(exe, ""); !strings.Contains(text, "\nKillMode=process\n") {
+		t.Fatalf("unit lacks KillMode=process:\n%s", text)
+	}
+}
+
+// TestAnOlderUnitOpensTheDoorAgain: a unit written by an earlier release
+// runs, but its text is not this one: the door shows the change again,
+// and a typed y writes it.
+func TestAnOlderUnitOpensTheDoorAgain(t *testing.T) {
+	e, ran := unitEnv(t, "linux")
+	d := door(t, e, doors.KeepRunning)
+	older := strings.Replace(service(exe, e.Getenv("PATH")), "KillMode=process\n", "", 1)
+	if err := os.MkdirAll(filepath.Dir(d.Path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(d.Path, []byte(older), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	d = door(t, e, doors.KeepRunning) // the check runs, and says the unit runs
+	if d.Done || !d.Open() || !strings.Contains(d.Preview, "+KillMode=process") {
+		t.Fatalf("door over an older unit = %+v", d)
+	}
+	*ran = nil
+	if _, err := Open(e, doors.KeepRunning, d.Sum, false); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(d.Path); !strings.Contains(string(b), "KillMode=process") || !door(t, e, doors.KeepRunning).Done {
+		t.Fatalf("after y the unit is:\n%s", b)
+	}
+	// enable reloads systemd's units, so the running unit takes the new text.
+	if want := []string{"systemctl", "--user", "enable", "--now", "matchblox.service"}; len(*ran) == 0 || !slices.Equal((*ran)[0], want) {
+		t.Fatalf("ran = %q, want %q first", *ran, want)
+	}
+}
+
 func TestTheDoorRefusesAFileThatChangedAfterThePreview(t *testing.T) {
 	e, ran := unitEnv(t, "linux")
 	d := door(t, e, doors.KeepRunning)

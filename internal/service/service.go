@@ -22,6 +22,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/chains"
 	"github.com/blox-eng/matchblox/internal/config"
+	"github.com/blox-eng/matchblox/internal/filestamp"
 	"github.com/blox-eng/matchblox/internal/gitremote"
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/history"
@@ -227,6 +228,14 @@ type Service struct {
 	// Git runs a read-only git command in dir: the HEADs of chained
 	// worktrees. Nil: git, with a short timeout.
 	Git func(dir string, args ...string) (string, error)
+	// Update finds and installs releases. Nil: no update view at all (a
+	// fixture, or an updater that could not start).
+	Update UpdateSource
+	// UpdateMode is [update] mode: "offer", "auto" or "off".
+	UpdateMode string
+	// UpdatePath keeps the latest release found and when it was first seen.
+	// Empty: kept in memory only.
+	UpdatePath string
 
 	// alone is when the last console closed; zero while one is open. A new
 	// service starts alone.
@@ -375,6 +384,21 @@ type Service struct {
 	// signInWait and signInEvery are how long the sign-in driver waits for
 	// the agent's screens and how often it looks. Zero: 20 s and 500 ms.
 	signInWait, signInEvery time.Duration
+	// updates is the update file as last read or written, under updateMu,
+	// which orders its writes. updateTicks wakes the update loop (tests).
+	// Nil: a ticker of updateTick.
+	updates     state.UpdateFile
+	updateMu    sync.Mutex
+	updateTicks <-chan time.Time
+	// loadedAt is when loadUpdate read the file: an install recorded
+	// before it is one an earlier service made. Under updateMu.
+	loadedAt time.Time
+	// installing is true while an install runs, and after a good one until
+	// the service stops: one install at a time, and no clone that the
+	// restart would cut off. installed is the release a good install put
+	// on disk, under updateMu.
+	installing atomic.Bool
+	installed  string
 }
 
 func New(cfg config.Config, smp *sample.Sampler, git GitSource) *Service {
@@ -402,6 +426,7 @@ func New(cfg config.Config, smp *sample.Sampler, git GitSource) *Service {
 
 		ChainsNotice: cfg.Chains.Notice,
 		ChainsSend:   cfg.Chains.Send,
+		UpdateMode:   cfg.Update.ModeOr(),
 	}
 	if s.interval <= 0 {
 		s.interval = 2 * time.Second
@@ -489,25 +514,11 @@ func (s *Service) Serve(ctx context.Context, l net.Listener) error {
 // install over it, or a link repointed to a new version) or when its
 // socket file is removed or replaced.
 func (s *Service) watch(ctx context.Context, stop context.CancelCauseFunc, sock string) {
-	stat := func(p string) os.FileInfo {
-		if p == "" {
-			return nil
-		}
-		fi, _ := os.Stat(p)
-		return fi
-	}
-	changed := func(was os.FileInfo, p string) bool {
-		if was == nil {
-			return false
-		}
-		now := stat(p)
-		return now == nil || !os.SameFile(was, now) || now.Size() != was.Size() || !now.ModTime().Equal(was.ModTime())
-	}
-	exe, socket := stat(s.Exe), stat(sock)
+	exe, socket := filestamp.Of(s.Exe), filestamp.Of(sock)
 	if s.ExeAt != nil && s.Exe != "" {
 		was := exe
 		exe = s.ExeAt
-		if was == nil || changed(exe, s.Exe) {
+		if was == nil || filestamp.Changed(exe, s.Exe) {
 			// Installed over or removed since the process started, as while
 			// a unit's serve waits for the socket: not this process's code.
 			s.watchingOnce.Do(func() { close(s.watchingChan()) })
@@ -534,10 +545,10 @@ func (s *Service) watch(ctx context.Context, stop context.CancelCauseFunc, sock 
 			return
 		case <-t.C:
 			switch {
-			case changed(exe, s.Exe):
+			case filestamp.Changed(exe, s.Exe):
 				stop(ErrReplaced)
 				return
-			case changed(socket, sock):
+			case filestamp.Changed(socket, sock):
 				stop(ErrSocketGone)
 				return
 			}
@@ -585,6 +596,8 @@ func (s *Service) Run(ctx context.Context) {
 	}
 	s.loadFound()
 	s.loadUsed()
+	s.loadUpdate()
+	go s.updateLoop(ctx)
 	go s.gitLoop(ctx)
 	go s.shipsLoop(ctx)
 	go s.foundLoop(ctx)

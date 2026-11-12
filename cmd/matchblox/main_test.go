@@ -137,10 +137,15 @@ func TestEnsureServiceGivesUpWithTheFix(t *testing.T) {
 	}
 }
 
-// The user unit starts serve again only after a nonzero exit: a replaced
-// binary or a removed socket says so; a second serve, or a binary removed
-// with nothing in its place (uninstalled), exits 0.
+// The user unit starts serve again only after a nonzero exit: a binary
+// replaced with one that does not run, or a removed socket, says so; a
+// second serve, or a binary removed with nothing in its place
+// (uninstalled), exits 0.
 func TestServeAsksForARestart(t *testing.T) {
+	t.Setenv(unitEnv, "1")
+	old := execFn
+	execFn = func(string, []string, []string) error { t.Error("serve ran a binary that does not run"); return nil }
+	t.Cleanup(func() { execFn = old })
 	for _, tc := range []struct {
 		name    string
 		after   func(exe, sock string) error
@@ -315,6 +320,134 @@ func TestServeOfTheUnitStopsForAnInstallWhileItWaits(t *testing.T) {
 		}
 	case <-time.After(waitLimit):
 		t.Fatal("the unit's serve runs the old code on, after the install")
+	}
+}
+
+// installOver writes a new binary over exe, as an install does.
+func installOver(t *testing.T, exe, _ string) {
+	if err := os.WriteFile(exe, []byte("v2, a new install"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// replaceAct is a newer console's service:replace: the binary stays.
+func replaceAct(t *testing.T, _, sock string) {
+	c, err := transport.Dial(sock, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	if err := c.Send(proto.KindHello, "", proto.Hello{Version: proto.Version}); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Send(proto.KindAct, "r", proto.Act{RecID: "service:replace"}); err != nil {
+		t.Fatal(err)
+	}
+	for {
+		env, err := c.Recv()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if env.Kind == proto.KindResult && env.ID == "r" {
+			return
+		}
+	}
+}
+
+// replaceServed runs serve on a binary of mode, stops it with stop, and
+// returns the binary, the binaries execFn was asked to run, the environment
+// of the last one, and what serve returned. At each exec the socket is free
+// for the new process to listen on.
+func replaceServed(t *testing.T, mode os.FileMode, execErr error, stop func(t *testing.T, exe, sock string)) (exe string, execs, env []string, err error) {
+	t.Helper()
+	path := isolate(t)
+	exe = filepath.Join(t.TempDir(), "matchblox")
+	if err := os.WriteFile(exe, []byte("v1"), mode); err != nil {
+		t.Fatal(err)
+	}
+	old := execFn
+	execFn = func(argv0 string, argv, envv []string) error {
+		execs, env = append(execs, argv0), envv
+		if !slices.Equal(argv, os.Args) {
+			t.Errorf("exec %v, want this process's arguments %v", argv, os.Args)
+		}
+		l, err := transport.Listen(path)
+		if err != nil {
+			t.Errorf("the new binary cannot listen on the socket: %v", err)
+		} else {
+			l.Close()
+		}
+		return execErr
+	}
+	t.Cleanup(func() { execFn = old })
+	at, err := os.Stat(exe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := newService(config.Default(), fixtures(t))
+	s.Exe, s.ExeEvery = exe, 10*time.Millisecond
+	done := make(chan error, 1)
+	go func() { done <- serve(path, at, func() *service.Service { return s }) }()
+	select {
+	case <-s.Watching():
+	case <-time.After(waitLimit):
+		t.Fatal("the watch did not start")
+	}
+	stop(t, exe, path)
+	select {
+	case err = <-done:
+	case <-time.After(waitLimit):
+		t.Fatal("serve kept running")
+	}
+	return exe, execs, env, err
+}
+
+// TestReplacedServiceRunsAgainWithoutAUnit: no unit starts the new binary,
+// so the service runs it in its own place.
+func TestReplacedServiceRunsAgainWithoutAUnit(t *testing.T) {
+	t.Setenv(unitEnv, "")
+	exe, execs, _, err := replaceServed(t, 0o700, nil, installOver)
+	if err != nil || !slices.Equal(execs, []string{exe}) {
+		t.Fatalf("serve returned %v, ran %v, want %s once", err, execs, exe)
+	}
+}
+
+// TestAServiceAConsoleReplacesExits: a newer console's replace leaves the
+// binary as it was; the console starts the next serve.
+func TestAServiceAConsoleReplacesExits(t *testing.T) {
+	t.Setenv(unitEnv, "")
+	if _, execs, _, err := replaceServed(t, 0o700, nil, replaceAct); !errors.Is(err, errRestart) || len(execs) != 0 {
+		t.Fatalf("serve returned %v, ran %v", err, execs)
+	}
+}
+
+// TestReplacedServiceUnderAUnitRunsAgainInPlace: under the unit too, the
+// service runs the new binary in its own place. Its pid stays, so systemd
+// sees no exit and ends none of the tmux servers the service started. The
+// new serve is the unit's again.
+func TestReplacedServiceUnderAUnitRunsAgainInPlace(t *testing.T) {
+	t.Setenv(unitEnv, "1")
+	exe, execs, env, err := replaceServed(t, 0o700, nil, installOver)
+	if err != nil || !slices.Equal(execs, []string{exe}) {
+		t.Fatalf("serve returned %v, ran %v, want %s once", err, execs, exe)
+	}
+	if !slices.Contains(env, unitEnv+"=1") {
+		t.Fatalf("the new serve does not know it is the unit's: %v", env)
+	}
+}
+
+// TestFailedExecFallsBackToExit: a binary that does not run is never run,
+// and an exec that fails exits for a restart as before, with a unit or
+// without one.
+func TestFailedExecFallsBackToExit(t *testing.T) {
+	for _, unit := range []string{"", "1"} {
+		t.Setenv(unitEnv, unit)
+		if _, execs, _, err := replaceServed(t, 0o700, errors.New("exec format error"), installOver); !errors.Is(err, errRestart) || len(execs) != 1 {
+			t.Fatalf("unit %q, a failed exec: serve returned %v, ran %v", unit, err, execs)
+		}
+		if _, execs, _, err := replaceServed(t, 0o600, nil, installOver); !errors.Is(err, errRestart) || len(execs) != 0 {
+			t.Fatalf("unit %q, a binary that does not run: serve returned %v, ran %v", unit, err, execs)
+		}
 	}
 }
 

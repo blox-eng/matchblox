@@ -18,6 +18,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/askpass"
 	"github.com/blox-eng/matchblox/internal/config"
+	"github.com/blox-eng/matchblox/internal/doors"
 	"github.com/blox-eng/matchblox/internal/hooks"
 	"github.com/blox-eng/matchblox/internal/procfs"
 	"github.com/blox-eng/matchblox/internal/proto"
@@ -137,6 +138,25 @@ func TestScreens(t *testing.T) {
 	for _, size := range [][2]int{{44, 31}, {104, 38}} {
 		check(t, tabFamily(st, false), "stokerfamily", size[0], size[1], []string{"c", "down", "down"})
 	}
+	offer := st
+	offer.Doors = []doors.Door{{ID: doors.Update, Title: "Update to v0.43.0", Why: "matchblox v0.43.0 is out. This machine runs v0.42.0.", Sum: "v0.43.0",
+		Preview: "matchblox v0.42.0 → v0.43.0 (linux/amd64)\n  checksum    checked first\n  provenance  checked if gh is installed\n              and logged in\n  replaces\n    /home/user/.local/bin/matchblox"}}
+	offer.Update = &state.UpdateView{Mode: "offer", Current: "v0.42.0", Latest: "v0.43.0"}
+	toDoor := append(slices.Repeat([]string{"up"}, 12), "enter") // past the sessions to the door, then its preview
+	for _, size := range [][2]int{{44, 31}, {104, 38}} {
+		check(t, offer, "updatedoor", size[0], size[1], nil)
+		check(t, offer, "updatedoorpreview", size[0], size[1], toDoor)
+	}
+	failed := offer
+	failed.Doors = slices.Clone(offer.Doors)
+	failed.Doors[0].Why += " The install failed, nothing was changed. Enter tries again, or run: matchblox update. " +
+		"checksum mismatch for matchblox_linux_amd64 · published 3f9a3f9a3f9a… · download c2e1c2e1c2e1…"
+	for _, size := range [][2]int{{44, 31}, {104, 38}} {
+		check(t, failed, "updatedoorfailed", size[0], size[1], slices.Repeat([]string{"up"}, 12))
+		golden(t, newerNotice(t, st, size[0], size[1], true), "startagain", size[0], size[1])
+	}
+	golden(t, newerNotice(t, st, 44, 31, false), "reopen", 44, 31)
+	golden(t, behindConsole(t, st, 44, 31), "behind", 44, 31)
 	twoChains := tabFamily(st, false)
 	twoChains.Stokers[1].View.PaneUp = true
 	check(t, twoChains, "familydock", 104, 38, nil)
@@ -179,6 +199,10 @@ func TestScreens(t *testing.T) {
 	for _, size := range [][2]int{{44, 31}, {86, 30}} {
 		golden(t, hostsTicks(st, size[0], size[1]), "hoststicks", size[0], size[1])
 	}
+	for _, size := range [][2]int{{44, 31}, {104, 38}} {
+		golden(t, hostsRelease(st, size[0], size[1], ""), "hostsrelease", size[0], size[1])
+	}
+	golden(t, hostsRelease(st, 104, 38, "brew upgrade matchblox"), "hostsbrew", 104, 38)
 	golden(t, threeHostShips(t, st, 132, 32), "ships3", 132, 32)
 	machine := threeHosts(t, st, 104, 38, "stale")
 	machine.setTab(tabMachine)
@@ -292,6 +316,61 @@ func hostsTicks(st proto.State, w, h int) Shell {
 		next, _ = next.Update(msg)
 	}
 	return next.(Shell)
+}
+
+// hostsRelease is hostsTicks with ws-1 selected on v0.38.1, a release
+// older than the console's v0.42.0: its note, and the key that updates it,
+// or the command of the package manager that installed it.
+func hostsRelease(st proto.State, w, h int, managed string) Shell {
+	sh := hostsTicks(st, w, h)
+	sh.cur.opt.Binary, sh.cur.opt.Local = "v0.42.0", true
+	ws := sh.cur.peers[0].conn
+	_, peer := peerStates(st)
+	peer.Update = &state.UpdateView{Mode: "offer", Current: "v0.38.1", Managed: managed}
+	var next tea.Model = sh
+	for _, msg := range []tea.Msg{
+		peerMsg{host: "ws-1", conn: ws, msg: helloMsg(proto.Hello{Version: proto.Version, Binary: "v0.38.1"})},
+		peerMsg{host: "ws-1", conn: ws, msg: stateMsg(peer)},
+		keyPress("down"),
+	} {
+		next, _ = next.Update(msg)
+	}
+	return next.(Shell)
+}
+
+// newerNotice is a console on v0.42.0 whose local service runs v0.43.0:
+// R starts it again when its own binary was installed over, else the
+// person quits and opens it again.
+func newerNotice(t *testing.T, st proto.State, w, h int, over bool) Model {
+	t.Helper()
+	self := filepath.Join(t.TempDir(), "matchblox")
+	if err := os.WriteFile(self, []byte("v0.42.0"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	at, _ := os.Stat(self)
+	if over {
+		if err := os.WriteFile(self, []byte("v0.43.0, a new install"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	m := New(Options{NoMotion: true, Conn: newFake(), Local: true, Binary: "v0.42.0", Self: self, SelfAt: at,
+		Restart: func() error { return nil }, Now: func() time.Time { return demoAt }})
+	m = upd(t, m, tea.WindowSizeMsg{Width: w, Height: h})
+	m = upd(t, m, helloMsg(proto.Hello{Version: proto.Version, Binary: "v0.43.0"}))
+	m = upd(t, m, stateMsg(st))
+	m.splashDone = true
+	return m
+}
+
+// behindConsole is a console on v0.41.0 whose home, ws-1, knows v0.43.0.
+func behindConsole(t *testing.T, st proto.State, w, h int) Model {
+	t.Helper()
+	st.Update = &state.UpdateView{Mode: "offer", Current: "v0.43.0", Latest: "v0.43.0"}
+	m := New(Options{NoMotion: true, Host: "ws-1", Conn: newFake(), Binary: "v0.41.0", Now: func() time.Time { return demoAt }})
+	m = upd(t, m, tea.WindowSizeMsg{Width: w, Height: h})
+	m = upd(t, m, stateMsg(st))
+	m.splashDone = true
+	return m
 }
 
 // askScreen is Claude Code asking with its question tool, three options.

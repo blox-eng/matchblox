@@ -1005,3 +1005,30 @@ func TestTheHostStokerAskingCountsAsToday(t *testing.T) {
 		t.Fatalf("header %q, want %q", got, want)
 	}
 }
+
+// TestPeerChainDrawsItsFuse holds the console's side of #389 in place: a
+// chain of a peer's two sessions with no name and no mates, as v0.38.1 sent
+// it, draws its fuse beside both rows in every grouping. It passes without
+// this branch too: the cause of #389 is not known.
+func TestPeerChainDrawsItsFuse(t *testing.T) {
+	peer := hostState(sess(2, "api-auth", "%2", nil), sess(3, "train-loop", "%3", nil))
+	c := chains.Chain{ID: "c1"}
+	for _, s := range peer.Sessions {
+		c.Members = append(c.Members, memberOf(s))
+	}
+	peer.Chains = &state.ChainsView{Chains: []chains.Chain{c}}
+	m, _ := twoHosts(t, hostState(sess(1, "web-ui", "%1", nil)), peer)
+	m.tab = tabSessions
+	for g := groupNeed; g <= groupNone; g++ {
+		m.sessGroup = g
+		m.refresh()
+		lines := listLines(m, 100, 100)
+		for _, name := range []string{"api-auth", "train-loop"} {
+			row := lineWith(lines, " "+name)
+			lead, _, _ := strings.Cut(row, name)
+			if !strings.ContainsAny(lead, "╮╯╴") {
+				t.Errorf("grouping %d: %s has no fuse: %q\n%s", g, name, row, strings.Join(lines, "\n"))
+			}
+		}
+	}
+}

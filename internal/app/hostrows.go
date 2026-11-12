@@ -12,10 +12,13 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/blox-eng/matchblox/internal/config"
 	"github.com/blox-eng/matchblox/internal/hosts"
 	"github.com/blox-eng/matchblox/internal/proto"
+	"github.com/blox-eng/matchblox/internal/release"
 	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/sample"
+	"github.com/blox-eng/matchblox/internal/state"
 )
 
 // staleAfter is how long a lost host of two or more keeps its rows as
@@ -323,8 +326,8 @@ func (m Model) rowName(s sample.Session, ink lipgloss.Style, w int) (string, boo
 	return m.taggedName(name, tag, ink, w), true
 }
 
-// hostNote is host's live note on Hosts: its sessions, and those that
-// wait. "" before its first state.
+// hostNote is host's live note on Hosts: its sessions, those that wait,
+// and its release when it is not the console's. "" before its first state.
 func (m Model) hostNote(host string) string {
 	have := m.have
 	if host != m.opt.Host {
@@ -351,5 +354,166 @@ func (m Model) hostNote(host string) string {
 	if waits > 0 {
 		note += fmt.Sprintf(" · %d waits", waits)
 	}
+	if r := m.releaseNote(host); r != "" {
+		note += " · " + r
+	}
 	return note
+}
+
+// releaseNote names host's release, which side of this console's it is
+// on, and the console's: "v0.38.1, behind this console (v0.42.0)".
+func (m Model) releaseNote(host string) string {
+	switch m.releaseSide(host) {
+	case behind:
+		return m.helloOf(host).Binary + ", behind this console (" + m.opt.Binary + ")"
+	case ahead:
+		return m.helloOf(host).Binary + ", ahead of this console (" + m.opt.Binary + ")"
+	}
+	return ""
+}
+
+// The sides a host's release is on, against this console's.
+const (
+	behind = "behind"
+	ahead  = "ahead"
+)
+
+// releaseSide is behind or ahead when host and this console are on two
+// releases and the person did not dismiss that pair; else "". The
+// console's own service has its own notice.
+func (m Model) releaseSide(host string) string {
+	h, c := m.helloOf(host).Binary, m.opt.Binary
+	if host == m.opt.Host && m.opt.Local || !releases(h, c) || slices.Contains(m.recPrefs.Releases, releasePair(host, h, c)) {
+		return ""
+	}
+	switch release.Compare(h, c) {
+	case -1:
+		return behind
+	case 1:
+		return ahead
+	}
+	return ""
+}
+
+func releasePair(host, hostRelease, consoleRelease string) string {
+	return host + "\x00" + hostRelease + "\x00" + consoleRelease
+}
+
+// releaseFix is what a host row with a release note offers: the update act
+// of an older host that knows it, else the words of the fix.
+func (m Model) releaseFix(host string) (act bool, fix string) {
+	newer, v := m.releaseSide(host) == ahead, m.updateOf(host)
+	switch {
+	case newer:
+		return false, "this console is older: run matchblox update"
+	case v == nil: // a service older than the act
+		return false, "on " + m.nameOf(host) + ": matchblox update"
+	case v.Managed != "": // a package manager's install: its own command
+		return false, "on " + m.nameOf(host) + ": " + v.Managed
+	}
+	return true, ""
+}
+
+// updateOf is the update view host sent last; nil from a service older
+// than it, or a build that is no release.
+func (m Model) updateOf(host string) *state.UpdateView {
+	if host == m.opt.Host {
+		return m.updateView
+	}
+	return m.stateOf(host).Update
+}
+
+// updateHost sends the update act to host. hostAct keeps its id, so the
+// screen that shows says how it went.
+func (m Model) updateHost(host string) (Model, tea.Cmd) {
+	if why := m.refusal(host); why != "" {
+		m.flash = why
+		return m, nil
+	}
+	a := proto.Act{RecID: proto.HostUpdateAct, Confirm: "y"}
+	var cmd tea.Cmd
+	if host == m.opt.Host {
+		m.hostAct, cmd = m.sendOn(m.conn, a)
+	} else {
+		i := m.peerAt(host)
+		cmd = m.sendPeer(i, a)
+		m.hostAct = m.peers[i].acts[len(m.peers[i].acts)-1]
+	}
+	m.hostActOn, m.flash = host, "updating "+m.nameOf(host)+"…"
+	return m, cmd
+}
+
+// hostUpdated is what the update act on a host came to.
+func (m Model) hostUpdated(r proto.Result) string {
+	switch {
+	case r.Err != "":
+		return m.nameOf(m.hostActOn) + " is not updated: " + r.Err
+	case len(r.Skipped) > 0:
+		return m.nameOf(m.hostActOn) + ": " + r.Skipped[0]
+	case len(r.Ran) > 0 && len(r.Ran[0]) == 2:
+		tag := r.Ran[0][1]
+		said := m.nameOf(m.hostActOn) + " installed " + tag + ": its service starts again"
+		if v := m.updateOf(m.hostActOn); v != nil && v.Last != nil && v.Last.To == tag && v.Last.Err == "" {
+			said += unproven(v.Last)
+		}
+		return said
+	}
+	return describe(r)
+}
+
+// unproven is said beside a good install whose build provenance no gh
+// checked.
+func unproven(r *state.UpdateRecord) string {
+	if r.Provenance {
+		return ""
+	}
+	return " · provenance not checked"
+}
+
+// closeRelease dismisses host's release note for its pair of releases. A
+// pair dismissed before for host goes: it can show no more.
+func (m Model) closeRelease(host string) (Model, string) {
+	h := m.helloOf(host).Binary
+	p := m.recPrefs
+	p.Releases = slices.DeleteFunc(slices.Clone(p.Releases), func(e string) bool { return strings.HasPrefix(e, host+"\x00") })
+	p.Releases = append(p.Releases, releasePair(host, h, m.opt.Binary))
+	m.recPrefs = p
+	if err := p.save(m.opt.StateDir); err != nil {
+		return m, "dismissed for now, not kept: " + err.Error()
+	}
+	return m, "dismissed: " + m.nameOf(host) + " on " + h + " · back when a release changes"
+}
+
+// behindNotice: a console whose home is a remote host runs an older
+// release than the latest its home host knows. It has no service of its
+// own to update it: the command does.
+func (m Model) behindNotice() string {
+	v := m.updateView
+	if m.opt.Local || v == nil || !releases(m.opt.Binary, v.Latest) || release.IsPre(v.Latest) ||
+		release.Compare(m.opt.Binary, v.Latest) >= 0 {
+		return ""
+	}
+	return fmt.Sprintf("run matchblox update · console %s, latest %s", m.opt.Binary, v.Latest) // the command first: a phone cuts the end
+}
+
+// updateNews is what mode auto did on the home host, once for each
+// record: it updated, or why it could not. key names the record in the
+// kept prefs.
+func (m Model) updateNews() (news, key string) {
+	v := m.updateView
+	if v == nil || v.Mode != config.UpdateAuto || v.Last == nil || v.Last.To == "" {
+		return "", ""
+	}
+	key = v.Last.To + "\x00" + v.Last.At.UTC().Format(time.RFC3339Nano)
+	switch {
+	case m.recPrefs.Updated == key:
+		return "", ""
+	case v.Last.Err != "":
+		return fmt.Sprintf("the update to %s failed: %s · run: matchblox update", v.Last.To, v.Last.Err), key
+	}
+	at, now := v.Last.At.Local(), m.now().Local()
+	if at.YearDay() != now.YearDay() || at.Year() != now.Year() {
+		return fmt.Sprintf("updated to %s on %s", v.Last.To, at.Format("Jan 2 at 15:04")) + unproven(v.Last), key
+	}
+	return fmt.Sprintf("updated to %s at %s", v.Last.To, at.Format("15:04")) + unproven(v.Last), key
 }

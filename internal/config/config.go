@@ -42,6 +42,26 @@ type Config struct {
 	Ships         Ships    `toml:"ships"`
 	Push          Push     `toml:"push"`
 	Chains        Chains   `toml:"chains"`
+	Update        Update   `toml:"update"`
+}
+
+const (
+	UpdateOffer = "offer"
+	UpdateAuto  = "auto"
+	UpdateOff   = "off"
+)
+
+// Update is what the host does about a newer release.
+type Update struct {
+	Mode string `toml:"mode"` // "offer" (default), "auto" or "off"
+}
+
+// ModeOr is the mode, "offer" when the file names none.
+func (u Update) ModeOr() string {
+	if u.Mode == "" {
+		return UpdateOffer
+	}
+	return u.Mode
 }
 
 // Chains are the matches on one host, in any repo, that hear from each other.
@@ -226,6 +246,9 @@ func Load(path string) (Config, error) {
 	}
 	if c.Chains.Send != "chain" && c.Chains.Send != "off" {
 		return c, errors.New(`chains.send: "` + c.Chains.Send + `" is not "chain" or "off"`)
+	}
+	if m := c.Update.ModeOr(); m != UpdateOffer && m != UpdateAuto && m != UpdateOff {
+		return c, errors.New(`update.mode: "` + m + `" is not "offer", "auto" or "off"`)
 	}
 	for i := range c.Groups {
 		re, err := regexp.Compile(c.Groups[i].Container)

@@ -158,6 +158,10 @@ const WatchPrefix = "watch:"
 // a key name of KeyNames, or LitPrefix and the text to type.
 const KeysPrefix = "keys:"
 
+// HostUpdateAct asks a host's service to look for the latest release and
+// install it, with a typed y. A service older than the act does not know it.
+const HostUpdateAct = "update:host"
+
 // IntoPrefix starts the act a console sends when the person went into the
 // pane after it while the host's stoker rests: they took the session over.
 const IntoPrefix = "into:"

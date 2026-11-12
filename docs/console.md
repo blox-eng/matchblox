@@ -452,6 +452,31 @@ back to Sessions, on the next agent that waits.
 - Agents that exited and wait for their parent are one faint line under the
   sessions. `e` lists them with the command that clears them.
 
+### A new release
+
+`SET UP` holds the release steps. See [Config](config.md#update) for each
+mode's rules.
+
+| Step | When it shows |
+|---|---|
+| Update to v0.43.0 | The service found a newer release. `Enter` shows what it installs and what it checks first. A typed `y` installs it. The service and the console then start again on it, or the console says `quit and open matchblox again`. A failed install says so on the row until the next try: nothing was changed, `Enter` tries again, then the reason. With `mode = "auto"` it also says when auto installs it (`Auto installs it after Nov 13 at 09:00.`), or why auto waits: `Auto waits for the stoker run to end.` |
+| Restart for v0.43.0 | The release is installed, and the service still runs the old one two minutes later. Quit matchblox and open it again. It adds `· provenance not checked` when no `gh` checked the build. |
+| Release check fails | Every look for three days failed. It names the reason and `Run: matchblox update`. |
+
+With `[update] mode = "auto"` the service installs a release by itself.
+The console then says once `updated to v0.43.0 at 03:12`, or
+`updated to v0.43.0 on Nov 11 at 03:12` when it was not today. It adds
+`· provenance not checked` when no `gh` checked the build.
+
+A console left open never puts its older build back over a newer service.
+The key line says `R start again · service v0.43.0, console v0.42.0`, and
+`R` starts the console again on the new release. When the console's own
+binary is not the new one, it says
+`quit and reopen · service v0.43.0, console v0.42.0` instead.
+
+A host on another release says so on its row in Hosts. See
+[Remote hosts](remote.md#a-host-on-another-release).
+
 ## 2 Ships
 
 The pull requests your sessions drive, each on its track from open to

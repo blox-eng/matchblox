@@ -22,6 +22,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/state"
 	"github.com/blox-eng/matchblox/internal/transport"
+	"github.com/blox-eng/matchblox/internal/update"
 )
 
 // cloneTest is a service whose home is a temp folder, with clone_root
@@ -1284,5 +1285,83 @@ func TestABrokenUsedFileIsKept(t *testing.T) {
 	s.addUsed("/b")
 	if b, _ := os.ReadFile(s.UsedPath + ".broken"); string(b) != "{not json" {
 		t.Fatalf("broken: %q", b)
+	}
+}
+
+func TestNoCloneStartsWhileUpdating(t *testing.T) {
+	s, root := cloneTest(t)
+	s.installing.Store(true)
+	r := s.act(t.Context(), startAct(t, "https://github.com/o/r", filepath.Join(root, "r")))
+	if r.Err != "matchblox is updating. Try again in a minute." {
+		t.Fatalf("%+v", r)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.clones) != 0 {
+		t.Fatalf("a clone is listed: %+v", s.clones)
+	}
+}
+
+// cloneUpdating is a clone service on a release, with an updater.
+func cloneUpdating(t *testing.T) (*Service, *fakeUpdates, string) {
+	t.Helper()
+	s, root := cloneTest(t)
+	src := &fakeUpdates{latest: "v0.43.0", proof: update.Proof{Checksum: true, Provenance: true}}
+	s.Binary, s.UpdateMode, s.Update = "v0.42.0", "offer", src
+	s.cloneRun = func(context.Context, gitremote.Remote, string, func(int)) error { return nil }
+	s.loadUpdate()
+	s.checkUpdate(s.now())
+	return s, src, root
+}
+
+func TestNoCloneStartsBetweenAnInstallAndItsRestart(t *testing.T) {
+	s, _, root := cloneUpdating(t)
+	if r := s.installUpdate("v0.43.0"); r.Err != "" {
+		t.Fatalf("install %+v", r)
+	}
+	r := s.act(t.Context(), startAct(t, "https://github.com/o/r", filepath.Join(root, "r")))
+	if r.Err != "matchblox is updating. Try again in a minute." {
+		t.Fatalf("a clone after a good install: %+v", r)
+	}
+}
+
+func TestACloneStartsAfterAFailedInstall(t *testing.T) {
+	s, src, root := cloneUpdating(t)
+	src.installErr = errors.New("checksum mismatch for matchblox-linux-amd64. Nothing was changed")
+	if r := s.installUpdate("v0.43.0"); r.Err == "" {
+		t.Fatalf("install %+v", r)
+	}
+	r := s.act(t.Context(), startAct(t, "https://github.com/o/r", filepath.Join(root, "r")))
+	if r.Err != "" || r.CloneID == 0 {
+		t.Fatalf("a clone after a failed install: %+v", r)
+	}
+	clonesUntil(t, s, "the clone ends", func(cs []proto.Clone) bool { return len(cs) == 1 && (cs[0].Done || cs[0].Err != "") })
+}
+
+// When the restart does not come two minutes after a good install, a clone
+// and SET UP both say to open matchblox again.
+func TestARestartThatDoesNotComeIsSaid(t *testing.T) {
+	s, _, root := cloneUpdating(t)
+	clk := &fakeClock{at: s.now()}
+	s.Now = clk.now
+	if r := s.installUpdate("v0.43.0"); r.Err != "" {
+		t.Fatalf("install %+v", r)
+	}
+	start := func() proto.Result {
+		return s.act(t.Context(), startAct(t, "https://github.com/o/r", filepath.Join(root, "r")))
+	}
+	clk.add(time.Minute)
+	if r := start(); r.Err != "matchblox is updating. Try again in a minute." {
+		t.Fatalf("a minute after the install %+v", r)
+	}
+	if d, ok := updateDoorOf(s); ok {
+		t.Fatalf("a minute after the install, SET UP shows %+v", d)
+	}
+	clk.add(time.Minute)
+	if r := start(); r.Err != "v0.43.0 is installed. Quit matchblox and open it again." {
+		t.Fatalf("two minutes after the install %+v", r)
+	}
+	if d, ok := updateDoorOf(s); !ok || d.Title != "Restart for v0.43.0" || d.Problem != stillRuns {
+		t.Fatalf("two minutes after the install, SET UP %+v %v", d, ok)
 	}
 }

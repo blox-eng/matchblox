@@ -1,0 +1,38 @@
+ ▰ matchblox                                                                           ● 6 wait for you
+ SESSIONS 7    ships 3    machine    git    history    panes    stoker
+────────────────────────────────────────────────────────────────────────────────────────────────────────
+ SET UP · 1
+ ▌ Update to v0.43.0      matchblox v0.43.0 is out. This machine runs v0.42.0.
+ matchblox v0.42.0 → v0.43.0 (linux/amd64)
+   checksum    checked first
+   provenance  checked if gh is installed
+               and logged in
+   replaces
+     /home/user/.local/bin/matchblox
+
+ WAITS FOR YOU · 6
+ │ spark-docs                                         done       9m   88%  ▲ clear      #4540 ●━●━●━●━●
+ ╿ ember-billing                                      done       4m   32%  ▲ clear      #4552 ●━●━◉┄○┄○
+ ╿ flint-auth                                         asks       2m   41%  ▲ clear      #4545 ●━✕┄○┄○┄○
+ ╿ kindle-web                                         asks       1m   56%  ▲ clear
+ ╿ cinder-ci                                          done       0s   55%  ▲ clear
+ ╿ wick-mobile                                        done       0s    6%  ▲ clear
+ WORKING · 1
+ ✦ hearth-api                                         busy            79%  ▰▰▰▱▱ 60%    #4551 ●━◉┄○┄○┄○
+ + start a new session
+
+ 1 without an agent: shell:1.1 zsh
+
+ RECOMMENDATIONS · 7 · h hides
+ ▲ The week runs short: compact spark-docs
+────────────────────────────────────────────────────────────────────────────────────────────────────────
+ USAGE                                                         │ MACHINE                       16 cores
+ ✻ Claude Max    5h   ▰▰▰▰▰▰▰▱ 84%  · Fri 01:20                │ cpu  ▁ 0%   load 6.2
+                 wk   ▰▰▰▰▰▰▰▱ 82%  · Mon 09:00                │ mem  ▰▰▰▱▱▱▱▱ 26 of 64 GB
+                 out Fri ~21:00                                │ disk ▰▰▰▰▰▰▱▱ 71% of 1 TB
+ · Google login  not measured · OpenCode keeps no limits       │ runs 5 claude · 1 codex · 1 opencode
+ ❋ OpenAI Plus   5h   ▰▰▰▱▱▱▱▱ 40%  · 23:59                    │
+                 wk   ▰▱▱▱▱▱▱▱ 12%  · Tue 09:00                │
+                 lasts the week                                │
+────────────────────────────────────────────────────────────────────────────────────────────────────────
+ RUN install v0.43.0 over v0.42.0   y run  any other key cancels
