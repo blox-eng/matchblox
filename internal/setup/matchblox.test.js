@@ -39,6 +39,16 @@ test("TheOpencodePluginTracksPendingByID: each wait clears only by its own id", 
   await send("session.status", { sessionID: "ses_wick", status: { type: "idle" } });
   assert.deepEqual(report(), { status: "idle" });
 
+  // OpenCode drops a wait it cancels (an abort) with no reply event: a
+  // session that goes idle, or is deleted, waits for nothing.
+  await send("session.status", { sessionID: "ses_wick", status: { type: "busy" } });
+  await send("permission.asked", { id: "per_C", sessionID: "ses_wick", permission: "bash", patterns: [] });
+  await send("question.asked", { id: "que_D", sessionID: "ses_sub", questions: [] });
+  await send("session.status", { sessionID: "ses_wick", status: { type: "idle" } });
+  assert.deepEqual(report(), { status: "waiting", waitingFor: "question" }, "only ses_wick's wait goes");
+  await send("session.deleted", { sessionID: "ses_sub", info: { id: "ses_sub" } });
+  assert.deepEqual(report(), { status: "idle" });
+
   await hooks.event({ event: undefined }); // never throws into OpenCode
   await hooks.dispose();
   assert.equal(existsSync(file), false, "an OpenCode that ends takes its report with it");

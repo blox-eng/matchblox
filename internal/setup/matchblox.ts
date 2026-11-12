@@ -12,8 +12,8 @@ export const MatchbloxPlugin = async () => {
   const file = join(dir, `${process.pid}.json`)
   const startedAt = Date.now()
   const working = new Map() // session id -> its status while it is not idle
-  const permissions = new Set() // ids of the permissions that wait for a reply
-  const questions = new Set() // ids of the questions that wait for a reply
+  const permissions = new Map() // id of a permission that waits for a reply -> its session id
+  const questions = new Map() // id of a question that waits for a reply -> its session id
   let last = ""
 
   const state = () => {
@@ -36,21 +36,33 @@ export const MatchbloxPlugin = async () => {
     last = key
   }
 
+  // OpenCode drops a wait it cancels with no reply event: a session that
+  // is idle or deleted waits for nothing.
+  const forget = (session) => {
+    working.delete(session)
+    for (const waits of [permissions, questions]) {
+      for (const [id, s] of waits) if (s === session) waits.delete(id)
+    }
+  }
+
   const apply = (event) => {
     const p = event?.properties ?? {}
     switch (event?.type) {
       case "session.status":
-        if (p.status?.type === "idle") working.delete(p.sessionID)
+        if (p.status?.type === "idle") forget(p.sessionID)
         else if (p.status) working.set(p.sessionID, p.status)
         break
+      case "session.deleted":
+        forget(p.sessionID)
+        break
       case "permission.asked":
-        permissions.add(p.id)
+        permissions.set(p.id, p.sessionID)
         break
       case "permission.replied":
         permissions.delete(p.requestID)
         break
       case "question.asked":
-        questions.add(p.id)
+        questions.set(p.id, p.sessionID)
         break
       case "question.replied":
       case "question.rejected":
