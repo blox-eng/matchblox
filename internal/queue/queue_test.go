@@ -634,3 +634,35 @@ func TestAForgottenSessionIsHeardAgainAfterTheGrace(t *testing.T) {
 		t.Fatalf("the forgotten id is deaf after the grace: %+v", items)
 	}
 }
+
+// TestARestartSeedsWaitsFromReports: the service just started, so no hook
+// says who waits. An agent whose own report says it waits is an ask in
+// the queue at once: a permission by Claude Code's own names for one, a
+// question else. A report of work is not.
+func TestARestartSeedsWaitsFromReports(t *testing.T) {
+	report := func(id, pane, name, status, why string) sample.Session {
+		s := session(id, pane, name, status, 3*time.Minute)
+		s.Agent, s.Reported, s.WaitingFor, s.LastLine = "claude", true, why, "I need to run the migration."
+		return s
+	}
+	q := New()
+	q.Merge([]sample.Session{
+		report("flint", "%2", "flint-auth", "waiting", "permission prompt"),
+		report("spark", "%3", "spark-docs", "waiting", "input needed"),
+		report("wick", "%7", "wick-mobile", "waiting", "permission"),
+		report("hearth", "%1", "hearth-api", "busy", ""),
+	}, at(600))
+	got := map[string]Item{}
+	for _, it := range q.Items() {
+		got[it.Name] = it
+	}
+	if len(got) != 3 {
+		t.Fatalf("items %+v, want the three waits", q.Items())
+	}
+	for name, state := range map[string]string{"flint-auth": StatePermission, "spark-docs": StateQuestion, "wick-mobile": StatePermission} {
+		it := got[name]
+		if it.State != state || it.Estimated || !it.Since.Equal(at(600).Add(-3*time.Minute)) || it.LastLine != "I need to run the migration." {
+			t.Errorf("%s: %+v, want %s since its report", name, it, state)
+		}
+	}
+}

@@ -5,6 +5,7 @@ package queue
 
 import (
 	"path/filepath"
+	"slices"
 	"sort"
 	"time"
 
@@ -276,7 +277,13 @@ func (q *Queue) Merge(sessions []sample.Session, now time.Time) {
 					SessionID: id, Pane: s.Pane, Target: s.Target, Name: s.Name,
 					State: StatePermission, Since: now.Add(-s.Idle), LastLine: s.LastLine, FromPane: true,
 				})
+			} else if s.ReportsWait() {
+				items = append(items, reportedWait(id, s, now))
 			}
+			continue
+		}
+		if s.ReportsWait() {
+			items = append(items, reportedWait(s.SessionID, s, now))
 			continue
 		}
 		if s.Status == "idle" && !s.Busy {
@@ -325,6 +332,21 @@ func (q *Queue) Merge(sessions []sample.Session, now time.Time) {
 		return items[i].Name < items[j].Name
 	})
 	q.items = items
+}
+
+// permissionsFor are the reasons a report gives for a wait that is a
+// permission: Claude Code's own list, and OpenCode's plugin's word. Any
+// other reason is a question.
+var permissionsFor = []string{"permission prompt", "sandbox request", "worker request", "goal proposal", "permission"}
+
+// reportedWait is the ask of a session whose own report says it waits: it
+// holds with no hook, so a restart loses no wait.
+func reportedWait(id string, s sample.Session, now time.Time) Item {
+	state := StateQuestion
+	if slices.Contains(permissionsFor, s.WaitingFor) {
+		state = StatePermission
+	}
+	return Item{SessionID: id, Pane: s.Pane, Target: s.Target, Name: s.Name, State: state, Since: now.Add(-s.Idle), LastLine: s.LastLine}
 }
 
 // byNewer puts id in byPane for pane unless a hooked session that spoke
