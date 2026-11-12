@@ -192,11 +192,11 @@ func sized(t *testing.T, w, h int, st proto.State) Model {
 	return next.(Model)
 }
 
-// TestTheStokerLivesInTheDock: while a run is in charge the stoker's
+// TestTheStokerPanelHeadsItsScreen: while a run is in charge the stoker's
 // panel (its state, what it watches, its last step) heads the STOKER
 // screen that Machine's row stoker opens, on a phone and on a desk; off,
 // the screen says how to start it (ruling 28). The board has no dock.
-func TestTheStokerLivesInTheDock(t *testing.T) {
+func TestTheStokerPanelHeadsItsScreen(t *testing.T) {
 	st := stokerState(runningNight(fixtureState().At))
 	for _, size := range [][2]int{{44, 31}, {192, 60}} {
 		m := fromMachine(t, sized(t, size[0], size[1], st), "stoker")

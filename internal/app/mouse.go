@@ -5,19 +5,17 @@ import (
 )
 
 // tap is a click or a finger on a phone. A tap on a tab opens it, on a key
-// of the key line presses it, on `● N wait for you` selects the first
-// session that waits (on the board `● N need you` clears its filters). A tap
-// on the live view goes into the agent's pane: right of the list, or over
-// the whole screen of a phone, where its title row goes back to Sessions.
-// The demo's stand-in is answered with the belt: a tap on its screen
-// presses nothing. A tap on a session's row selects it, and on a phone
-// opens its live view; a tap on the selected row goes into its pane. A tap
-// on another row selects it and shows the step a second tap runs: an answer for
-// a session that waits, else the row's Enter. The second tap runs it when
-// it only moves this terminal, or asks to confirm it. A tap is never
-// consent to a destructive step, and it cancels a pending one. On the
-// board a right-click on a card opens its menu, and while the menu is open
-// it takes every tap.
+// of the key line presses it, on `● N need you` clears the board's filters
+// (off the board it opens the board on the first match that waits). The
+// board takes every tap on its body (boardTap): a tap on a card chooses
+// it, a second goes in. The demo's stand-in is the whole screen: a tap on
+// its title row goes back to the board, and a tap on its screen presses
+// nothing (the belt answers it). Off the board a tap on a row selects it
+// and shows the step a second tap runs, the row's Enter; the second tap
+// runs it when it only moves this terminal, or asks to confirm it. A tap
+// is never consent to a destructive step, and it cancels a pending one. On
+// the board a right-click on a card opens its menu, and while the menu is
+// open it takes every tap.
 func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	switch {
 	case m.pair.owns() || m.asking(): // the pair page and an ssh prompt take keys only

@@ -240,8 +240,8 @@ func (m Model) viewPlacement() (viewPlace, int) {
 // viewTitle names the chat's session and its state.
 func (m Model) viewTitle(s sample.Session) string { return m.titleOf(s) + " · " + m.wordOf(s) }
 
-// viewPane is the live view beside the list, w by h: its title over the
-// strip and the screen.
+// viewPane is the live view beside the board's columns, w by h: its title
+// over the strip and the screen.
 func (m Model) viewPane(s sample.Session, w, h int) []string {
 	lines := []string{fit(" "+m.st.label.Render(m.viewTitle(s)), w)}
 	strip := m.viewStrip(s, w, h-1)
@@ -439,11 +439,11 @@ func (m Model) leaveStandIn() Model {
 	return m.nextAfter(s.Pane).boardActed()
 }
 
-// keepView closes the live view once Sessions or the selected session's
-// pane on this host is gone, or the screen has no room for its question:
-// the list's opened row shows the question, and the keys are the console's,
-// never a screen's the person cannot see. A new tap or Enter opens it again.
-// A session that ended shows the list again, and the key line says why.
+// keepView closes the stand-in once the board or the chosen session's pane
+// on this host is gone, or the screen has no room for its question: the
+// card shows the question then, and the keys are the console's, never a
+// screen's the person cannot see. A new tap or Enter opens it again. A
+// session that ended shows the board again, and the key line says why.
 func (m Model) keepView() Model {
 	if !m.standIn {
 		return m

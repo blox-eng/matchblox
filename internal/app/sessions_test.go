@@ -12,8 +12,8 @@ import (
 
 // TestTabsAndTheirDigits: two tabs, board and machine, turned by Tab and
 // Shift+Tab; no digit opens one (on the board a digit answers its card,
-// TestTheTabRowIsBoardAndMachine), and p merges and opens none. A phone's
-// Machine names both tabs whole.
+// TestADigitAnswersTheChosenQuestion), and p merges and opens none. A
+// phone's Machine names both tabs whole.
 func TestTabsAndTheirDigits(t *testing.T) {
 	m, _ := loadedWith(t, 100, queueState())
 	machine := m

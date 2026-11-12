@@ -195,7 +195,7 @@ func (m Model) stokerLines(w int, full bool) []string {
 	return out
 }
 
-// openStoker is c: the stoker's tab.
+// openStoker is c off the board: the STOKER screen, Machine's row stoker.
 func (m Model) openStoker() Model {
 	if m.stoker == nil {
 		m.flash = "this service keeps no stoker"

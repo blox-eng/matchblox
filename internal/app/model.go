@@ -296,7 +296,7 @@ func fromAdvice(r advice.Rec, which string) *action {
 
 type Model struct {
 	recPrefs   recPrefs  // dismissed recommendations and the fold
-	viewPrefs  viewPrefs // list only, for a phone and for a desk
+	viewPrefs  viewPrefs // the board's views, for a phone and for a desk
 	opt        Options
 	conn       transport.Conn
 	peers      []link // the other ticked hosts, in Hosts order; copied on write

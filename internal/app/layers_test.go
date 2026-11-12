@@ -139,7 +139,7 @@ func TestHostsListsEveryHost(t *testing.T) {
 	}
 }
 
-func TestEnterOpensAHostAndEscComesBack(t *testing.T) {
+func TestEnterOpensAHostAndEscStaysInTheConsole(t *testing.T) {
 	r := hidingShell(t, []string{"ws-1"}, []string{"this machine"}, "")
 	r.toHosts(t) // ws-1 selected
 	r.key(t, "enter")

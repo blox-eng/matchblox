@@ -14,12 +14,12 @@ import (
 type Layout int
 
 const (
-	// Narrow is a phone: one column, the selected row opens in place.
+	// Narrow is a phone: the board one column, a page at a time.
 	Narrow Layout = iota
-	// Medium is a phone opened up: the list and the detail split at the
-	// middle.
+	// Medium is a phone opened up: the board's columns, QUIET a drawer.
 	Medium
-	// Wide is a desk: the list with every column, the detail beside it.
+	// Wide is a desk: every column, and from liveFrom the chosen card's
+	// live view beside them.
 	Wide
 )
 
@@ -27,7 +27,7 @@ const (
 // about twice as tall as it is wide, so a screen is portrait when
 // rows*2 >= cols: a phone held upright, whatever its font, keeps its
 // layout when its keyboard shrinks the screen. Upright, 90 columns and
-// more split the list and the detail at the middle; fewer are one column.
+// more are Medium; fewer are Narrow.
 // A landscape screen goes by its width.
 func layout(cols, rows int) Layout {
 	if portrait(cols, rows) {
