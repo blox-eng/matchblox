@@ -40,10 +40,12 @@ var (
 	// Run (once) (y) and its workspace trust prompt, Claude Code's folder
 	// trust prompt.
 	permitsRe = regexp.MustCompile(`(?i)^permission required\b|^allow once\b|\(y\)es/\(n\)o|[\[(]y/n[\])]|press enter to confirm|^\d\.\s+yes\b|\brun \(once\) \(y\)|\[a\] trust this workspace|^yes, i trust this folder\b`)
-	// workingRe is the line an agent draws while its turn runs: Claude
-	// Code's and Codex's "esc to interrupt", OpenCode's "esc interrupt".
-	// The lines above it are the turn's transcript, not live.
-	workingRe = regexp.MustCompile(`(?i)\besc (again )?(to )?interrupt\b`)
+	// workingRe is the status line an agent draws while its turn runs:
+	// Claude Code's and Codex's "(12s · esc to interrupt)" in parentheses,
+	// OpenCode's footer that ends in "esc interrupt". The lines above it are
+	// the turn's transcript, not live. Text that only quotes the words is
+	// not one.
+	workingRe = regexp.MustCompile(`(?i)\([^()]*\besc (again )?to interrupt\b[^()]*\)|\besc (again to )?interrupt$`)
 	// midRe is a question with a sentence after it.
 	midRe = regexp.MustCompile(`\pL\?\s+\pL`)
 	// hintRe is a line of key hints or a footer, never what the agent said.

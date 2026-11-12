@@ -249,6 +249,19 @@ func TestThePaneRuleReadsOnlyTheLiveLines(t *testing.T) {
 ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
   ⬝⬝⬝■■■  esc interrupt
 `, None},
+		{"a prompt above a line that quotes the words", `
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. No
+ Tip: press esc to interrupt a long command
+`, Permits},
+		{"claude code works under an old question", `
+⏺ Should I also update the docs?
+✻ Thinking… (12s · ↑ 1.2k tokens · esc to interrupt)
+╭──────────────────────────────────────────╮
+│ >                                        │
+╰──────────────────────────────────────────╯
+`, None},
 		{"the same question in the live lines", `
   Running the suite again.
   Do you want to proceed?
