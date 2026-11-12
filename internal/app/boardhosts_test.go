@@ -170,3 +170,24 @@ func TestABlockedHostSaysWhyAndItsFix(t *testing.T) {
 		t.Errorf("⏎ on the silent host's line says %q, want %q", pressOn(m, "up", "enter").flash, want)
 	}
 }
+
+// TestTheSamePaneOnTwoHostsIsTwoCards: the same pane and PID on two hosts
+// are two cards, and the choice stays on its host's card when the other
+// host sends a new state.
+func TestTheSamePaneOnTwoHostsIsTwoCards(t *testing.T) {
+	next, _, _ := samePane(t, nil)
+	m := next.(Model)
+	got := drawnNames(m)
+	slices.Sort(got)
+	if !slices.Equal(got, []string{"home-12", "peer-12"}) {
+		t.Fatalf("the cards are %v, want home-12 and peer-12", got)
+	}
+	if s, ok := m.boardSelected(); !ok || s.Name != "peer-12" || s.Host != "ws-1" {
+		t.Fatalf("chosen %s on %q, want peer-12 on ws-1", s.Name, s.Host)
+	}
+	home := hostState(sess(4242, "home-12", "%12", func(s *sample.Session) { s.Agent, s.Cwd = "claude", "/src/api" }))
+	next, _ = m.Update(stateMsg(home))
+	if s, ok := next.(Model).boardSelected(); !ok || s.Name != "peer-12" || s.Host != "ws-1" {
+		t.Fatalf("a new home state moved the choice to %s on %q", s.Name, s.Host)
+	}
+}
