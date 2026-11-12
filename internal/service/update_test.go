@@ -1140,3 +1140,97 @@ func TestTheInstalledRowCloses(t *testing.T) {
 		t.Fatalf("a newer release %+v %v", d, ok)
 	}
 }
+
+// A failed install stays on the offer, with its reason on one line and the
+// fix, until the next attempt; the row keeps its action.
+func TestAFailedInstallStaysOnTheOffer(t *testing.T) {
+	s, src, _ := offerTest(t, config.UpdateOffer)
+	src.installErr = errors.New("checksum mismatch for matchblox_linux_amd64\n  published aaa\n  download  bbb\nNothing was changed")
+	if r := updateAct(s, "primary", "y", "v0.43.0"); r.Err == "" {
+		t.Fatalf("result %+v", r)
+	}
+	d, ok := updateDoorOf(s)
+	want := "This machine runs v0.42.0. The install failed: checksum mismatch for matchblox_linux_amd64 · published aaa · download bbb · Nothing was changed. Try again, or run: matchblox update."
+	if !ok || d.Why != want || d.Problem != "" || d.Sum != "v0.43.0" {
+		t.Fatalf("door %+v\nwant why %q", d, want)
+	}
+	if r := updateAct(s, "primary", "y", "v0.43.0"); r.Err == "" || len(src.installed()) != 2 {
+		t.Fatalf("the row's action does not run again: %+v, installs %v", r, src.installed())
+	}
+	src.installErr = nil
+	if r := updateAct(s, "primary", "y", "v0.43.0"); r.Err != "" {
+		t.Fatalf("a good attempt %+v", r)
+	}
+	if d, ok := updateDoorOf(s); ok && strings.Contains(d.Why, "failed") {
+		t.Fatalf("a good attempt still says the failure: %+v", d)
+	}
+}
+
+// A person's install, from the offer or from u on the host's row, waits
+// for a clone, which the restart would cut off; a stoker run does not hold
+// it. A refused install leaves the act free to press again.
+func TestAPersonsInstallWaitsForAClone(t *testing.T) {
+	for _, act := range []struct {
+		name string
+		do   func(s *Service) proto.Result
+	}{
+		{"offer", func(s *Service) proto.Result { return updateAct(s, "primary", "y", "v0.43.0") }},
+		{"host row", func(s *Service) proto.Result { return hostUpdateAct(s, "y") }},
+	} {
+		t.Run(act.name, func(t *testing.T) {
+			s, src, _ := offerTest(t, config.UpdateOffer)
+			s.mu.Lock()
+			s.clones = map[string]*cloneJob{"/work/api-auth": {c: proto.Clone{Target: "/work/api-auth", Repo: "o/api-auth"}}}
+			s.cur.Stoker = &stoker.View{Mode: stoker.Mode{On: true}}
+			s.mu.Unlock()
+			if r := act.do(s); r.Err != "a clone of o/api-auth runs. Update when it ends." {
+				t.Fatalf("under a clone %+v", r)
+			}
+			if got := src.installed(); len(got) != 0 || s.installing.Load() {
+				t.Fatalf("installs %v, installing %v", got, s.installing.Load())
+			}
+			s.mu.Lock()
+			s.clones["/work/api-auth"].end = s.now()
+			s.mu.Unlock()
+			if r := act.do(s); r.Err != "" || len(r.Ran) == 0 {
+				t.Fatalf("after the clone, under a stoker run %+v", r)
+			}
+			if got := src.installed(); !slices.Equal(got, []string{"v0.43.0"}) {
+				t.Fatalf("installs %v", got)
+			}
+		})
+	}
+}
+
+// Under mode auto, the offer says when auto installs the release, in the
+// service's own time; under offer it says nothing of auto.
+func TestTheOfferSaysWhenAutoInstalls(t *testing.T) {
+	s, _, clk, _ := autoTest(t, config.UpdateAuto, time.Hour)
+	s.loadUpdate()
+	s.checkUpdate(clk.now())
+	at := updateT0.Add(23 * time.Hour).Local().Format("Jan 2 at 15:04")
+	if d, _ := updateDoorOf(s); d.Why != "This machine runs v0.42.0. Auto installs it after "+at+"." {
+		t.Fatalf("why %q", d.Why)
+	}
+	clk.add(23 * time.Hour)
+	if d, _ := updateDoorOf(s); d.Why != "This machine runs v0.42.0." {
+		t.Fatalf("due: why %q", d.Why)
+	}
+	s, _, clk, _ = autoTest(t, config.UpdateOffer, time.Hour)
+	s.loadUpdate()
+	s.checkUpdate(clk.now())
+	if d, _ := updateDoorOf(s); d.Why != "This machine runs v0.42.0." {
+		t.Fatalf("offer: why %q", d.Why)
+	}
+}
+
+// The preview's checks read whole on a phone (44 columns).
+func TestTheOfferPreviewFitsAPhone(t *testing.T) {
+	s, _, _ := offerTest(t, config.UpdateOffer)
+	d, _ := updateDoorOf(s)
+	for _, want := range []string{"\n  checksum    checked first\n", "\n  provenance  checked when gh can"} {
+		if !strings.Contains(d.Preview, want) {
+			t.Errorf("preview lacks %q:\n%s", want, d.Preview)
+		}
+	}
+}

@@ -54,7 +54,7 @@ func (s *Service) loadUpdate() {
 		v.Latest, v.FirstSeen, v.Last = f.Latest, f.FirstSeen, f.Last
 		v.Managed = s.Update.Managed()
 		if l := f.Last; l != nil && l.Err == "" && l.At.Before(s.loadedAt) && release.Compare(s.Binary, l.To) < 0 {
-			v.Restart = fmt.Sprintf("%s is installed, but this service still runs %s. Quit matchblox and open it again.", l.To, s.Binary)
+			v.Restart = restartFix(l.To, s.Binary)
 		}
 	}
 	s.updateMu.Lock()
@@ -149,12 +149,20 @@ func (s *Service) busy() string {
 			return "auto waits for the stoker run to end"
 		}
 	}
-	for _, j := range s.clones {
-		if j.end.IsZero() {
-			return "auto waits for a clone to end"
-		}
+	if _, ok := s.cloneRunsLocked(); ok {
+		return "auto waits for a clone to end"
 	}
 	return ""
+}
+
+// cloneRunsLocked is the repo of a clone that runs. Hold s.mu.
+func (s *Service) cloneRunsLocked() (repo string, ok bool) {
+	for _, j := range s.clones {
+		if j.end.IsZero() {
+			return j.c.Repo, true
+		}
+	}
+	return "", false
 }
 
 // setWaiting puts why auto waits in the view; an unchanged view is not
@@ -264,6 +272,37 @@ func (s *Service) newer() (tag string, ok bool) {
 // managedProblem is why a package manager's install has no update act.
 const managedProblem = "Homebrew installed matchblox. Update it with Homebrew."
 
+// restartAfter is how long after a good install the restart may take
+// before the person is asked to open matchblox again: the watch of the
+// binary looks once a minute.
+const restartAfter = 2 * time.Minute
+
+// restartFix is the fix for a release installed on disk that the service
+// does not run.
+func restartFix(to, runs string) string {
+	return fmt.Sprintf("%s is installed, but this service still runs %s. Quit matchblox and open it again.", to, runs)
+}
+
+// stuckLocked is the release this service installed when the restart for
+// it has not come within restartAfter, else "". Hold updateMu.
+func (s *Service) stuckLocked() string {
+	if l := s.updates.Last; s.installed != "" && l != nil && l.To == s.installed && s.now().Sub(l.At) >= restartAfter {
+		return s.installed
+	}
+	return ""
+}
+
+// oneLine is a reason of several lines on one, for a row that wraps.
+func oneLine(why string) string {
+	var parts []string
+	for l := range strings.SplitSeq(why, "\n") {
+		if l = strings.Join(strings.Fields(l), " "); l != "" {
+			parts = append(parts, strings.TrimSuffix(l, "."))
+		}
+	}
+	return strings.Join(parts, " · ")
+}
+
 // updateDoor offers the newer release, unless a person closed the offer
 // of that same release.
 func (s *Service) updateDoor() (doors.Door, bool) {
@@ -272,10 +311,13 @@ func (s *Service) updateDoor() (doors.Door, bool) {
 		return doors.Door{}, false
 	}
 	s.updateMu.Lock()
-	closed := s.updates.Closed
+	closed, stuck := s.updates.Closed, s.stuckLocked()
 	s.updateMu.Unlock()
 	v := s.currentUpdateView()
 	installed := v.Last != nil && v.Last.To == tag && v.Last.Err == ""
+	if v.Restart == "" && installed && stuck == tag {
+		v.Restart = restartFix(tag, v.Current)
+	}
 	switch {
 	case closed == tag || v.Mode == config.UpdateOff:
 		return doors.Door{}, false
@@ -285,6 +327,12 @@ func (s *Service) updateDoor() (doors.Door, bool) {
 		return doors.Door{}, false
 	}
 	d := doors.Door{ID: doors.Update, Title: "matchblox " + tag + " is out", Why: "This machine runs " + v.Current + ".", Sum: tag}
+	if l := v.Last; l != nil && l.To == tag && l.Err != "" {
+		d.Why += " The install failed: " + oneLine(l.Err) + ". Try again, or run: matchblox update."
+	}
+	if at := v.FirstSeen.Add(autoWait); v.Mode == config.UpdateAuto && v.Managed == "" && !v.FirstSeen.IsZero() && s.now().Before(at) {
+		d.Why += " Auto installs it after " + at.Local().Format("Jan 2 at 15:04") + "."
+	}
 	if v.Waiting != "" {
 		d.Why += " " + strings.ToUpper(v.Waiting[:1]) + v.Waiting[1:] + "."
 	}
@@ -294,8 +342,8 @@ func (s *Service) updateDoor() (doors.Door, bool) {
 	}
 	lines := []string{
 		fmt.Sprintf("matchblox %s → %s (%s/%s)", v.Current, tag, runtime.GOOS, runtime.GOARCH),
-		"  checksum    checked before anything changes",
-		"  provenance  checked when gh can verify it",
+		"  checksum    checked first",
+		"  provenance  checked when gh can",
 	}
 	if s.Exe != "" {
 		path, err := filepath.EvalSymlinks(s.Exe)
@@ -384,12 +432,20 @@ func (s *Service) lookNow() (string, error) {
 // notARelease is why a build from a checkout does not update itself.
 const notARelease = "this matchblox is not a release build, so it does not update itself"
 
-// installUpdate installs tag over this binary and records how it went. A
-// good install changes the binary on disk, and the watch of it stops the
-// service (ErrReplaced): the next console starts the new one.
+// installUpdate is a person's install of tag over this binary. It waits
+// for a clone, which the restart would cut off; a stoker run goes on
+// after the restart, so it does not hold the install. A good install
+// changes the binary on disk, and the watch of it runs the new one.
 func (s *Service) installUpdate(tag string) proto.Result {
 	if !s.installing.CompareAndSwap(false, true) {
 		return s.notAgain()
+	}
+	s.mu.Lock()
+	repo, cloning := s.cloneRunsLocked() // no clone starts past the flag
+	s.mu.Unlock()
+	if cloning {
+		s.installing.Store(false)
+		return proto.Result{Err: "a clone of " + repo + " runs. Update when it ends."}
 	}
 	return s.install(tag)
 }

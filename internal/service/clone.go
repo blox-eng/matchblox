@@ -275,9 +275,15 @@ func (s *Service) registerClone(ctx context.Context, r gitremote.Remote, target,
 	if err := os.MkdirAll(root, 0o755); err != nil { //nolint:gosec // the builder's own source folder
 		return nil, tildeIn(fmt.Sprintf("cannot make %s: %v", root, err))
 	}
+	s.updateMu.Lock()
+	stuck := s.stuckLocked()
+	s.updateMu.Unlock()
 	s.mu.Lock()
 	if s.installing.Load() { // the service starts again after it: the clone would be cut off
 		s.mu.Unlock()
+		if stuck != "" {
+			return nil, stuck + " is installed. Quit matchblox and open it again."
+		}
 		return nil, "matchblox is updating. Try again in a minute."
 	}
 	if s.cloningInto(target) {
