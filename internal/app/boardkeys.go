@@ -492,6 +492,9 @@ func (m Model) boardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 	m.flash = ""
 	var cmd tea.Cmd
 	switch {
+	case ok && (isDigit(k) || bkey.Matches(k, cardKeys(bk, mk)...)) && !m.cardDrawn(s):
+		// A screen too short for the chosen card: no key acts on a card it does not show.
+		cmd = m.notice("no card is shown")
 	case m.copyCode != "" && bkey.Matches(k, mk.Back):
 		m.copyCode = "" // the check closes, unchecked
 		if m.noticeText == m.pasteHere() {
@@ -614,6 +617,23 @@ func (m Model) boardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 		return m, nil, false
 	}
 	return m, cmd, true
+}
+
+// cardKeys are the keys that act on the chosen card.
+func cardKeys(bk boardKeys, mk mainKeys) []bkey.Binding {
+	return []bkey.Binding{bk.Merge, bk.Menu, bk.Copy, bk.Chain, mk.Second, mk.Grant, mk.Open, mk.Into, mk.Jump,
+		mk.Park, mk.Rename, mk.Switch, mk.Dismiss, mk.Fold, mk.Stoke, mk.StokeChain, mk.Night, mk.Order}
+}
+
+// cardDrawn: the board draws the card of s on the screen it has now.
+func (m Model) cardDrawn(s sample.Session) bool {
+	d := m.boardPanel(max(m.width, minWidth), m.bodyRows())
+	for _, k := range d.cards {
+		if k == paneOf(s) {
+			return true
+		}
+	}
+	return false
 }
 
 // boardInto is ⏎: into the pane of s, then the first other wait is chosen.
@@ -764,7 +784,7 @@ func (m Model) boardHints(w int) []hint {
 		hs = []hint{hintFor(mk.Open, "try again")}
 	case below:
 		hs = m.belowHints(under)
-	case b.picked:
+	case b.picked && m.cardDrawn(b.chosen):
 		q, answers := m.offersDigits(b.chosen)
 		armed, sent := m.peekMarks(b.chosen)
 		hs, _ = m.cardHints(b.chosen, cardOpts{sel: true, armed: armed}, len(q.Options), answers && sent == 0)

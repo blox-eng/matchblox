@@ -21,9 +21,9 @@
 
 
 
+ › what should login's stoker do?
 ────────────────────────────────────────────────────────────────────────────────
  QUIET · 0   ▴                                                               −
- › what should login's stoker do?
  + start a new session
  RECOMMENDATIONS · 7
  ✻ 5h ▰▰▰▰▰▰▰▱ 84%  wk 82%   ✻ @gpu-1 5h ▰▰▰▰▰▰▰▱ 84%  wk 82%         machine ›

@@ -147,9 +147,7 @@ func (m Model) boardPanel(w, h int) boardDrawn {
 		d.addRow(-1, l.sel, w, st, l.text)
 	}
 	none := m.have && b.none
-	under := m.underLines(w, none)
-	strip, tap, _ := m.strip(w)
-	rows := m.boardRowsUnder(w, h, none, len(strip))
+	under, strip, tap, rows := m.boardFold(w, h, none)
 	top := len(d.lines)
 	switch l := m.layoutAt(w); {
 	case none:
@@ -162,8 +160,11 @@ func (m Model) boardPanel(w, h int) boardDrawn {
 		d.add(-1, m.allHidden(w)...)
 	case l == Narrow:
 		m.boardPage(&d, &b, shown, w, rows)
+	case l == Medium && slices.Contains(shown, colQuiet): // the talk line closes the columns, over the QUIET drawer
+		m.boardColumns(&d, &b, l, shown, w, rows+len(roomBelow), roomBelow)
+		rows, roomBelow = rows+len(roomBelow), nil
 	default:
-		m.boardColumns(&d, &b, l, shown, w, rows)
+		m.boardColumns(&d, &b, l, shown, w, rows, nil)
 	}
 	for len(d.lines) < top+rows {
 		d.add(-1, strings.Repeat(" ", w))
@@ -190,14 +191,34 @@ func (m Model) boardPanel(w, h int) boardDrawn {
 // doors line above, the ghost row and the recommendations under them, and
 // the strip's row. none: no session at all, and no ghost row under.
 func (m Model) boardRows(w, h int, none bool) int {
-	strip, _, _ := m.strip(w)
-	return m.boardRowsUnder(w, h, none, len(strip))
+	_, _, _, rows := m.boardFold(w, h, none)
+	return rows
 }
 
-// boardRowsUnder is boardRows with the strip's lines worked out.
-func (m Model) boardRowsUnder(w, h int, none bool, strip int) int {
+// boardFold is what the board keeps of its lines under the columns and of
+// its strip in h rows, and the rows left to the columns. Short of rows the
+// recommendations fold from the last, then the ghost row, then the strip,
+// so the columns keep the chosen card's head.
+func (m Model) boardFold(w, h int, none bool) (under []boardLine, strip []string, tap span, rows int) {
+	under = m.underLines(w, none)
+	strip, tap, _ = m.strip(w)
 	above, below := m.roomSplit(w)
-	return max(h-strip-len(m.hostLines(w))-len(m.doorsLines(w))-len(above)-len(below)-len(m.underLines(w, none)), 0)
+	fixed := len(m.hostLines(w)) + len(m.doorsLines(w)) + len(above) + len(below)
+	least := 2 // the heads and a card's head
+	switch l := m.layoutAt(w); {
+	case l == Narrow:
+		least = 3 // the marks, their hairline and a card's head
+	case l == Medium && !m.colHidden(colQuiet):
+		least += 2 // the QUIET drawer under the columns
+	}
+	for !none && h-fixed-len(under)-len(strip) < least && len(under)+len(strip) > 0 {
+		if len(under) > 0 {
+			under = under[:len(under)-1]
+		} else {
+			strip = nil
+		}
+	}
+	return under, strip, tap, max(h-fixed-len(under)-len(strip), 0)
 }
 
 // boardLine is a line above or under the columns: its text, chosen or
@@ -457,8 +478,8 @@ func (m Model) boardPage(d *boardDrawn, b *boardDraw, shown []boardCol, w, rows 
 
 // boardColumns is the board on a mid screen and a desk: the heads, the
 // columns side by side, from liveFrom the live view at the right, and on
-// Medium the QUIET drawer under them.
-func (m Model) boardColumns(d *boardDrawn, b *boardDraw, l Layout, shown []boardCol, w, rows int) {
+// Medium the room's talk lines and the QUIET drawer under them.
+func (m Model) boardColumns(d *boardDrawn, b *boardDraw, l Layout, shown []boardCol, w, rows int, talk []roomDrawn) {
 	st := m.st
 	var drawn []boardCol
 	for _, c := range shown {
@@ -474,8 +495,11 @@ func (m Model) boardColumns(d *boardDrawn, b *boardDraw, l Layout, shown []board
 		if b.open == colQuiet {
 			drawer = 2 + quietRows
 		}
+		if b.open != colQuiet && rows-1-drawer-len(talk) < 1 {
+			drawer = 0 // the chosen card's head outranks the shelf
+		}
 	}
-	colH := max(rows-1-drawer, 0)
+	colH := max(rows-1-drawer-len(talk), 0)
 
 	var heads []string
 	x := 0
@@ -512,6 +536,13 @@ func (m Model) boardColumns(d *boardDrawn, b *boardDraw, l Layout, shown []board
 			}
 			d.lines[i] = fit(d.lines[i], w-live-1) + st.hair.Render("│") + fit(right, live)
 		}
+	}
+	for len(d.lines) < first+colH {
+		d.add(-1, strings.Repeat(" ", w))
+	}
+	for _, t := range talk {
+		d.roomAt[len(d.lines)] = t.at
+		d.addRow(-1, t.sel, w, st, t.text)
 	}
 	if drawer > 0 {
 		m.boardDrawer(d, b, w)

@@ -20,9 +20,9 @@
   ctx 32%                    ━╸hearth
   ⏎ go in
 
+ › tell hearth's stoker…
 ────────────────────────────────────────────────────────────────────────────────
  QUIET · 1   kindle-web   ▴                                                  −
- › tell hearth's stoker…
  + start a new session
  RECOMMENDATIONS · 7
  ✻ Claude Max  5h ▰▰▰▰▰▰▰▱ 84%  wk 82%                                machine ›
