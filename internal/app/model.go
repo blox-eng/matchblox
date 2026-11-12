@@ -490,6 +490,9 @@ type Model struct {
 	// boardAbove is the line above the columns that is chosen in place of a
 	// card, counted up from the columns (aboveLines); 0: none.
 	boardAbove int
+	// boardBelow is the line under the columns that is chosen in place of
+	// a card, counted down from the columns (belowLines); 0: none.
+	boardBelow int
 	// menu is the card's menu while it is open. sawRelease: the terminal
 	// reported the release of a press, so a press held is a long press.
 	menu       *boardMenu

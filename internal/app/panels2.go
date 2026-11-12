@@ -237,25 +237,7 @@ func (m Model) recsSection(b *body, w int) {
 	n := len(m.doors) + len(m.snap.Sessions) + len(m.ghosts())
 	sel := m.sessIndex() - n
 	for i, r := range m.recs {
-		mark := st.faint.Render("○ ")
-		switch r.Level {
-		case "crit":
-			mark = st.neg.Render("! ")
-		case "warn":
-			mark = st.warn.Render("▲ ")
-		}
-		lead := " "
-		if i == sel {
-			lead = st.accent.Render("▌")
-		}
-		line := lead + mark + st.ink(i == sel).Render(tilde(r.Title))
-		if mark, out := m.recOutcome(r); mark != "" {
-			line = " " + mark + st.text.Render(out)
-		}
-		if i == sel {
-			line = spread(line, dismissMark(st, m.keys.main.Dismiss)+" ", w)
-		}
-		b.addRow(n+i, i == sel, w, st, line)
+		b.addRow(n+i, i == sel, w, st, m.recLine(r, i == sel, w))
 	}
 	if sel < 0 || sel >= len(m.recs) || !m.inPlace() {
 		return
@@ -263,6 +245,31 @@ func (m Model) recsSection(b *body, w int) {
 	r := m.recs[sel]
 	b.add(-1, wrap(" "+tilde(r.Evidence), w, st.muted.Render)...)
 	b.add(-1, m.recActions(r, w)...)
+}
+
+// recLine is the row of r: its level's mark and its title, or what came
+// of the last act on it; chosen, the dismiss mark at its right.
+func (m Model) recLine(r advice.Rec, sel bool, w int) string {
+	st := m.st
+	mark := st.faint.Render("○ ")
+	switch r.Level {
+	case "crit":
+		mark = st.neg.Render("! ")
+	case "warn":
+		mark = st.warn.Render("▲ ")
+	}
+	lead := " "
+	if sel {
+		lead = st.accent.Render("▌")
+	}
+	line := lead + mark + st.ink(sel).Render(tilde(r.Title))
+	if mark, out := m.recOutcome(r); mark != "" {
+		line = " " + mark + st.text.Render(out)
+	}
+	if sel {
+		line = spread(line, dismissMark(st, m.keys.main.Dismiss)+" ", w)
+	}
+	return line
 }
 
 // recOutcome is what came of the last act on r, and its mark: ✓ it ran,

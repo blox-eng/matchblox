@@ -126,9 +126,12 @@ func TestTheChoiceFollowsItsMatch(t *testing.T) {
 	})
 	m = pressOn(m, "esc") // the first frame lands the peek
 	clock = clock.Add(time.Minute)
-	m = pressOn(m, "down")
-	if got := chosenName(t, m); got != "flint-auth" || !m.peekAt.Equal(demoAt) {
-		t.Errorf("↓ at the bottom: %s, the peek started again at %v", got, m.peekAt)
+	// ↓ at the bottom chooses the ghost row (step 0b), and ↑ comes back.
+	if m = pressOn(m, "down"); reachOf(m) != "ghost" {
+		t.Errorf("↓ at the bottom chose %s, want the ghost row", reachOf(m))
+	}
+	if m = pressOn(m, "up"); chosenName(t, m) != "flint-auth" {
+		t.Errorf("↑ from the ghost row chose %s, want flint-auth", chosenName(t, m))
 	}
 	m = pressOn(m, "up", "down")
 	if m.peekAsk != "toolu_board" {

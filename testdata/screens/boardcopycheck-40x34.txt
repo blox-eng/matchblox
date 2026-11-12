@@ -2,6 +2,8 @@
  SESSIONS 15  ships  3  4  5  6  7
 ────────────────────────────────────────
 ▌SET UP · 1 · Check that copy reaches y…
+  the console copies a code, and you
+  paste it here
  NEEDS YOU 4 −  work 3  ship 3  quiet 5
 ────────────────────────────────────────
  ╿ spark-search                   ✻ 31m
@@ -23,8 +25,6 @@
   asks Which way do we fix the login?
   ctx 62%                       ─╴login
   ⏎ go in
-
-
 
 
  + start a new session

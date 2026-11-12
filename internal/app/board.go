@@ -11,6 +11,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
@@ -70,8 +71,10 @@ type boardDrawn struct {
 	// stripAt is the strip's first line (-1: none), and strip its tap.
 	stripAt int
 	strip   span
-	// doorsAt is the doors line (-1: none).
+	// doorsAt is the doors line (-1: none), and underAt what a tap on a
+	// line under the columns reaches (boardLine.at).
 	doorsAt int
+	underAt map[int]string
 	// colsTo is the line under the columns side by side, and live the
 	// width of the live view at their right (0: none).
 	colsTo, live int
@@ -108,7 +111,7 @@ func (m Model) boardShown() bool { return m.board && m.tab == tabSessions }
 // the ghost row and the recommendations under them, each folded to one
 // line. It draws the tab row too, from the same index.
 func (m Model) boardPanel(w, h int) boardDrawn {
-	d := boardDrawn{headAt: -1, stripAt: -1, doorsAt: -1, cards: map[boardSpot]paneKey{}, taps: map[int][]span{}, hostAt: map[int]string{}}
+	d := boardDrawn{headAt: -1, stripAt: -1, doorsAt: -1, cards: map[boardSpot]paneKey{}, taps: map[int][]span{}, hostAt: map[int]string{}, underAt: map[int]string{}}
 	b, shown := m.boardDrawOf()
 	d.tabRow, d.tabSpans = m.boardTabRow(w, &b)
 
@@ -121,23 +124,14 @@ func (m Model) boardPanel(w, h int) boardDrawn {
 			d.addRow(-1, sel, w, st, l)
 		}
 	}
-	if ds := m.boardDoors(); len(ds) > 0 {
-		sel, i := above && chosen == "", m.doorIndex(ds)
-		count := fmt.Sprintf("SET UP · %d", len(ds))
-		if len(ds) > 1 {
-			count = fmt.Sprintf("SET UP · %d of %d", i+1, len(ds))
-		}
+	if ls := m.doorsLines(w); len(ls) > 0 {
 		d.doorsAt = len(d.lines)
-		d.addRow(-1, sel, w, st, m.chosenMark(sel)+st.label.Render(count)+st.muted.Render(" · "+ds[i].Title))
+		for _, l := range ls {
+			d.addRow(-1, l.sel, w, st, l.text)
+		}
 	}
 	none := m.have && b.none
-	var under []string
-	if !none {
-		under = append(under, m.ghostRow(m.ghosts()[0], false, w))
-	}
-	if len(m.recs) > 0 {
-		under = append(under, st.label.Render(fit(fmt.Sprintf(" RECOMMENDATIONS · %d", len(m.recs)), w)))
-	}
+	under := m.underLines(w, none)
 	strip, tap, _ := m.strip(w)
 	rows := m.boardRowsUnder(w, h, none, len(strip))
 	top := len(d.lines)
@@ -159,7 +153,12 @@ func (m Model) boardPanel(w, h int) boardDrawn {
 		d.add(-1, strings.Repeat(" ", w))
 	}
 	d.lines, d.rows = d.lines[:top+rows], d.rows[:top+rows]
-	d.add(-1, under...)
+	for _, l := range under {
+		if l.at != "" {
+			d.underAt[len(d.lines)] = l.at
+		}
+		d.addRow(-1, l.sel, w, st, l.text)
+	}
 	if len(strip) > 0 {
 		d.stripAt, d.strip = len(d.lines), tap
 	}
@@ -177,17 +176,110 @@ func (m Model) boardRows(w, h int, none bool) int {
 
 // boardRowsUnder is boardRows with the strip's lines worked out.
 func (m Model) boardRowsUnder(w, h int, none bool, strip int) int {
-	rows := h - strip - len(m.hostLines(w))
-	if len(m.boardDoors()) > 0 {
-		rows--
+	return max(h-strip-len(m.hostLines(w))-len(m.doorsLines(w))-len(m.underLines(w, none)), 0)
+}
+
+// boardLine is a line above or under the columns: its text, chosen or
+// not, and what a tap on it reaches (underLines).
+type boardLine struct {
+	text string
+	sel  bool
+	at   string
+}
+
+// doorsLines is the doors line, the door it names counted; while it is
+// chosen it opens in place to the door's why, as its row in Sessions did.
+func (m Model) doorsLines(w int) []boardLine {
+	ds := m.boardDoors()
+	if len(ds) == 0 {
+		return nil
 	}
+	st := m.st
+	chosen, above := m.aboveChosen()
+	sel, i := above && chosen == "", m.doorIndex(ds)
+	count := fmt.Sprintf("SET UP · %d", len(ds))
+	if len(ds) > 1 {
+		count = fmt.Sprintf("SET UP · %d of %d", i+1, len(ds))
+	}
+	out := []boardLine{{text: m.chosenMark(sel) + st.label.Render(count) + st.muted.Render(" · "+ds[i].Title), sel: sel}}
+	if !sel {
+		return out
+	}
+	text, ink := ds[i].Why, st.muted
+	if ds[i].Problem != "" {
+		text, ink = ds[i].Problem, st.warn
+	}
+	for _, l := range wrap(text, w-1, ink.Render) {
+		out = append(out, boardLine{text: fit(" "+l, w), sel: true})
+	}
+	return out
+}
+
+// Taps under the columns (boardLine.at): the ghost row, the
+// recommendations' label, and a recommendation by its id.
+const (
+	atGhost = "+"
+	atRecs  = "RECOMMENDATIONS"
+)
+
+// underLines are the lines under the columns: the ghost row, then the
+// recommendations folded to one line. While a recommendation is chosen it
+// opens in place, as its row in Sessions did: its row, its evidence and
+// its steps with their keys. none: no session at all, and no ghost row.
+func (m Model) underLines(w int, none bool) []boardLine {
+	st := m.st
+	line, below := m.belowChosen()
+	var out []boardLine
 	if !none {
-		rows--
+		sel := below && line == ""
+		out = append(out, boardLine{m.ghostRow(m.ghosts()[0], sel, w), sel, atGhost})
 	}
-	if len(m.recs) > 0 {
-		rows--
+	n := len(m.recs)
+	switch i := slices.IndexFunc(m.recs, func(r advice.Rec) bool { return below && r.ID == line }); {
+	case n == 0:
+	case m.recPrefs.Folded:
+		out = append(out, boardLine{fit(st.label.Render(fmt.Sprintf(" RECOMMENDATIONS · %d hidden", n))+st.faint.Render(" · ")+
+			keyWord(m.keys.main.Fold, st.accent, st.faint, " shows"), w), false, atRecs})
+	case i < 0:
+		out = append(out, boardLine{st.label.Render(fit(fmt.Sprintf(" RECOMMENDATIONS · %d", n), w)), false, atRecs})
+	default:
+		r := m.recs[i]
+		out = append(out,
+			boardLine{fit(st.label.Render(fmt.Sprintf(" RECOMMENDATIONS · %d", n))+st.faint.Render(" · ")+
+				keyWord(m.keys.main.Fold, st.accent, st.faint, " hides"), w), false, atRecs},
+			boardLine{fit(m.recLine(r, true, w), w), true, r.ID})
+		for _, l := range wrap(" "+tilde(r.Evidence), w, st.muted.Render) {
+			out = append(out, boardLine{fit(l, w), true, r.ID})
+		}
+		for _, l := range m.recActions(r, w) {
+			out = append(out, boardLine{l, true, r.ID})
+		}
 	}
-	return max(rows, 0)
+	return out
+}
+
+// belowLines are the lines under the columns that ↓ chooses, top to
+// bottom: the ghost row (""), then each recommendation that shows, by its
+// id. With no session at all the ghost rows lead, and none is under.
+func (m Model) belowLines() []string {
+	if m.have && !slices.ContainsFunc(m.all.sessions, func(s sample.Session) bool { return !m.isStoker(s) }) {
+		return nil
+	}
+	lines := []string{""}
+	for _, r := range m.recs[:m.recRows()] {
+		lines = append(lines, r.ID)
+	}
+	return lines
+}
+
+// belowChosen is the line under the columns that is chosen: "" for the
+// ghost row, or a recommendation's id. false: none is.
+func (m Model) belowChosen() (string, bool) {
+	lines := m.belowLines()
+	if m.boardBelow <= 0 || m.boardBelow > len(lines) {
+		return "", false
+	}
+	return lines[m.boardBelow-1], true
 }
 
 // boardDrawOf is what a draw of the board works out first: every match in
@@ -220,8 +312,9 @@ func (m Model) boardChoose(b *boardDraw, shown []boardCol) {
 		}
 	}
 	ss := b.idx[b.open]
-	if _, above := m.aboveChosen(); above || len(ss) == 0 {
-		return // a line above the columns is chosen in place of a card
+	_, above := m.aboveChosen()
+	if _, below := m.belowChosen(); above || below || len(ss) == 0 {
+		return // a line above or under the columns is chosen in place of a card
 	}
 	i := 0
 	if k, ok := m.boardPick[b.open]; ok {

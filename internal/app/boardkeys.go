@@ -12,6 +12,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/keycmd"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -53,7 +54,7 @@ func (m *Model) boardChooseCard(c boardCol, s sample.Session) {
 		pick = map[boardCol]paneKey{}
 	}
 	pick[c] = paneOf(s)
-	m.boardAt, m.boardPick, m.boardAbove = c, pick, 0
+	m.boardAt, m.boardPick, m.boardAbove, m.boardBelow = c, pick, 0, 0
 }
 
 // startPeek starts the peek of s's card: for peekDead its digits arm
@@ -89,6 +90,7 @@ func (m Model) peekOn() Model {
 	if m.boardAbove > len(m.aboveLines()) {
 		m.boardAbove = 0
 	}
+	m.boardBelow = min(m.boardBelow, len(m.belowLines())) // a folded or dismissed one gives the choice back up
 	m = m.copyCheckOn()
 	if _, ok := m.menuOn(); m.menu != nil && !ok {
 		m.menu = nil
@@ -199,7 +201,8 @@ func isDigit(k tea.KeyPressMsg) bool {
 }
 
 // boardMove chooses the card d cards down the open column.
-// Up from the first card chooses the last line above the columns.
+// Up from the first card chooses the last line above the columns, and down
+// from the last card the first line under them.
 func (m *Model) boardMove(d int) {
 	b, _ := m.boardDrawOf()
 	ss := b.idx[b.open]
@@ -207,6 +210,8 @@ func (m *Model) boardMove(d int) {
 	switch {
 	case d < 0 && i <= 0 && len(m.aboveLines()) > 0:
 		m.boardAbove = 1
+	case d > 0 && b.picked && i == len(ss)-1 && len(m.belowLines()) > 0:
+		m.boardBelow = 1
 	case b.picked:
 		m.boardChooseCard(b.open, ss[clampMove(i, d, len(ss))])
 	}
@@ -223,6 +228,39 @@ func (m *Model) aboveMove(d int) {
 	if b, _ := m.boardDrawOf(); len(b.idx[b.open]) > 0 {
 		m.boardChooseCard(b.open, b.idx[b.open][0])
 	}
+}
+
+// belowMove is ↓ (d 1) and ↑ (d -1) on a line under the columns: down
+// through them, and up from the first one back to the card it left.
+func (m *Model) belowMove(d int) {
+	if m.boardBelow = min(m.boardBelow+d, len(m.belowLines())); m.boardBelow <= 0 {
+		m.boardBelow = 0
+		m.recPick, m.ghostPick = "", 0
+	}
+}
+
+// belowKey is ⏎, x, d or h on a line under the columns: the ghost row and
+// a recommendation take them as their rows in Sessions did.
+func (m Model) belowKey(line string, k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	at := len(m.doors) + len(m.snap.Sessions)
+	if i := slices.IndexFunc(m.recs[:m.recRows()], func(r advice.Rec) bool { return r.ID == line }); line != "" && i >= 0 {
+		at += len(m.ghosts()) + len(m.blockedHosts()) + i
+	}
+	m.selectRow(at)
+	return m.key(k)
+}
+
+// doorKey is x on the doors line: a service's door closes, behind its y,
+// as from its row in Sessions. false: the door is the console's own.
+func (m Model) doorKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
+	ds, own := m.boardDoors(), len(m.copyDoors())
+	i := m.doorIndex(ds)
+	if i < own {
+		return m, nil, false
+	}
+	m.selectRow(i - own)
+	next, cmd := m.key(k)
+	return next, cmd, true
 }
 
 // aboveOpen is ⏎ on a line above the columns: a host that is not reached
@@ -340,8 +378,8 @@ func (m *Model) turnHost() {
 // boardActed chooses, after an act on the chosen card, the first other card
 // of NEEDS YOU; with none, the choice stays.
 func (m Model) boardActed() Model {
-	if !m.boardShown() {
-		return m
+	if _, below := m.belowChosen(); !m.boardShown() || below {
+		return m // an act on a line under the columns keeps it, with what came of it
 	}
 	b, shown := m.boardDrawOf()
 	if !slices.Contains(shown, colNeed) {
@@ -388,6 +426,7 @@ func (m Model) boardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 	}
 	s, ok := m.boardSelected()
 	line, above := m.aboveChosen()
+	under, below := m.belowChosen()
 	m.flash = ""
 	var cmd tea.Cmd
 	switch {
@@ -409,8 +448,22 @@ func (m Model) boardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 	case above && bkey.Matches(k, mk.Open):
 		next, cmd := m.aboveOpen(line, k)
 		return next, cmd, true
-	case above && isDigit(k):
+	case above && line == "" && bkey.Matches(k, mk.Second):
+		if next, cmd, took := m.doorKey(k); took {
+			return next, cmd, true
+		}
+		cmd = m.notice("no card is chosen · ↓ goes back to the cards")
+	case (above || below) && isDigit(k):
 		// a digit answers a card, and no card is chosen
+	case below && bkey.Matches(k, mk.Up):
+		m.belowMove(-1)
+	case below && bkey.Matches(k, mk.Down):
+		m.belowMove(1)
+	case below && bkey.Matches(k, mk.Back):
+		m.belowMove(-m.boardBelow) // back to the card
+	case below && bkey.Matches(k, mk.Open, mk.Second, mk.Dismiss, mk.Fold):
+		next, cmd := m.belowKey(under, k)
+		return next, cmd, true
 	case bkey.Matches(k, mk.Up):
 		m.boardMove(-1)
 		m.chooseByHand()
@@ -457,11 +510,14 @@ func (m Model) boardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 		return next, cmd, true
 	case !ok && len(m.snap.Sessions) > 0 && bkey.Matches(k, bk.Merge, bk.Menu, mk.Second, mk.Grant, mk.Open, mk.Into, mk.Jump,
 		mk.Park, mk.Rename, mk.Switch, mk.Dismiss, mk.Fold, mk.Stoke, mk.StokeChain, mk.Night, mk.Order):
-		// A line above the columns is chosen, or every column is hidden:
+		// A line above or under the columns is chosen, or every column is hidden:
 		// never a row of Sessions the person cannot see.
-		if above {
+		switch {
+		case above:
 			cmd = m.notice("no card is chosen · ↓ goes back to the cards")
-		} else {
+		case below:
+			cmd = m.notice("no card is chosen · ↑ goes back to the cards")
+		default:
 			cmd = m.notice("no card is chosen · tap a + name to show a column")
 		}
 	case !ok && bkey.Matches(k, bk.Merge, bk.Menu, mk.Second, mk.Grant):
@@ -615,13 +671,18 @@ func (m Model) boardHints(w int) []hint {
 	}
 	var hs []hint
 	line, above := m.aboveChosen()
+	under, below := m.belowChosen()
 	switch b, _ := m.boardDrawOf(); {
 	case m.copyCode != "":
 		hs = []hint{cancel}
+	case above && line == "" && m.doorIndex(m.boardDoors()) >= len(m.copyDoors()):
+		hs = []hint{hintFor(mk.Open, "set up"), hintFor(mk.Second, "close")}
 	case above && line == "":
 		hs = []hint{hintFor(mk.Open, "set up")}
 	case above:
 		hs = []hint{hintFor(mk.Open, "try again")}
+	case below:
+		hs = m.belowHints(under)
 	case b.picked:
 		q, answers := m.offersDigits(b.chosen)
 		armed, sent := m.peekMarks(b.chosen)
@@ -632,6 +693,21 @@ func (m Model) boardHints(w int) []hint {
 		right.label = "doors"
 	}
 	return append(append(hs, tail...), right, hintFor(mk.NextTab, ""))
+}
+
+// belowHints are the keys of a line under the columns: the ghost row's,
+// or the recommendation id's.
+func (m Model) belowHints(id string) []hint {
+	mk := m.keys.main
+	i := slices.IndexFunc(m.recs, func(r advice.Rec) bool { return r.ID == id })
+	if id == "" || i < 0 {
+		return []hint{hintFor(mk.Open, "new session")}
+	}
+	hs := []hint{hintFor(mk.Open, "do")}
+	if m.recs[i].Second != nil {
+		hs = append(hs, hintFor(mk.Second, "other"))
+	}
+	return append(hs, hintFor(mk.Dismiss, "dismiss"), hintFor(mk.Fold, "hide"))
 }
 
 // boardKeyLine is the board's key line: its hints, three cells apart. A
@@ -687,6 +763,9 @@ func (m Model) boardTap(x, y int) (tea.Model, tea.Cmd) {
 		m.boardAbove = len(lines) - slices.Index(lines, "") // counted from the columns up
 		return m.openBoardDoor()
 	}
+	if at, ok := d.underAt[y]; ok {
+		return m.underTap(at, x, w)
+	}
 	if sp, ok := spanAt(d.taps[y], x); ok && sp.press == colQuiet.short() {
 		m.flipHidden(colQuiet) // the drawer's name
 		return m, nil
@@ -709,6 +788,23 @@ func (m Model) boardTap(x, y int) (tea.Model, tea.Cmd) {
 		return m.boardTapGo(s)
 	}
 	return m.keyed(keyPress(sp.press))
+}
+
+// underTap is a tap at x on a line under the columns, as on its row in
+// Sessions: the ghost row opens New session, the recommendations' label
+// folds them, and the chosen one's dismiss mark dismisses it.
+func (m Model) underTap(at string, x, w int) (tea.Model, tea.Cmd) {
+	mk := m.keys.main
+	switch line, below := m.belowChosen(); {
+	case at == atGhost:
+		m.boardBelow = 1
+		return m.belowKey("", keyPress(mk.Open.Keys()[0]))
+	case at == atRecs:
+		return m.belowKey("", keyPress(mk.Fold.Keys()[0]))
+	case below && at == line && x >= w-m.dismissWidth():
+		return m.belowKey(line, keyPress(mk.Dismiss.Keys()[0]))
+	}
+	return m, nil
 }
 
 // cardAt is the card at x on line y of the board d draws, and its column.
