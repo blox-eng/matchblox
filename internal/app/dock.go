@@ -411,9 +411,9 @@ func (m Model) runs() string {
 }
 
 // machinePanel is the Machine tab: usage first, then the machine, then
-// the detached busy loops and the top processes. Two or more hosts: a
-// section for each host, in Hosts order, headed by its name; the busy
-// loops and the devices are the home host's.
+// the detached busy loops and the top processes, then the hosts. Two or
+// more hosts: a section for each host, in Hosts order, headed by its name;
+// the busy loops and the devices are the home host's.
 func (m Model) machinePanel(w int) body {
 	var b body
 	b.add(-1, m.usageLines(w, true)...)
@@ -423,7 +423,7 @@ func (m Model) machinePanel(w int) body {
 		b.add(-1, m.machine(w)...)
 		p := m.procs(w)
 		b.lines, b.rows = append(b.lines, p.lines...), append(b.rows, p.rows...)
-		return b
+		return m.withHosts(b, w)
 	}
 	for _, h := range m.statedHosts() {
 		on := m.viewOf(h)
@@ -438,6 +438,13 @@ func (m Model) machinePanel(w int) body {
 		b.add(-1, on.region("top processes", w)...)
 		b.add(-1, on.topRows(w)...)
 	}
+	return m.withHosts(b, w)
+}
+
+// withHosts is b with the host rows under it.
+func (m Model) withHosts(b body, w int) body {
+	h := m.hostsBody(w)
+	b.lines, b.rows = append(b.lines, h.lines...), append(b.rows, h.rows...)
 	return b
 }
 

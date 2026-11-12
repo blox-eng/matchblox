@@ -141,7 +141,7 @@ func (m Model) procs(w int) body {
 	if len(m.snap.Orphans) == 0 {
 		b.add(-1, st.faint.Render(" none"))
 	}
-	sel := m.orphanIndex()
+	sel := m.machineIndex() // past the orphans while a device or a host is selected
 	for i, o := range m.snap.Orphans {
 		var pane string
 		switch {

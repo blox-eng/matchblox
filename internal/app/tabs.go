@@ -169,6 +169,9 @@ var views = [...]tabView{
 		keys: func(m Model) []hint {
 			mk := m.keys.main
 			stoke := hintFor(mk.Stoke, "stoker")
+			if _, ok := m.selectedHostRow(); ok {
+				return []hint{hintFor(mk.Open, "hosts"), stoke}
+			}
 			if r, ok := m.selectedDevice(); ok {
 				if r.plus {
 					return []hint{hintFor(mk.Open, "pair"), stoke}
@@ -184,6 +187,9 @@ var views = [...]tabView{
 		index: Model.machineIndex,
 		pick:  (*Model).machinePick,
 		primary: func(m Model) *action {
+			if _, ok := m.selectedHostRow(); ok {
+				return nil // ⏎ opens Hosts: no action of a host's
+			}
 			if r, ok := m.selectedDevice(); ok {
 				if r.plus {
 					return &action{label: "pair a device", say: "pair a device: show a one-time code", pair: true}
@@ -196,6 +202,9 @@ var views = [...]tabView{
 			return nil
 		},
 		secondary: func(m Model) *action {
+			if _, ok := m.selectedHostRow(); ok {
+				return nil
+			}
 			if r, ok := m.selectedDevice(); ok {
 				if r.plus {
 					return nil

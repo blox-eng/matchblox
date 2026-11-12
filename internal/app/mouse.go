@@ -161,6 +161,14 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 			return m.startChain(k), nil
 		}
 	}
+	if _, ok := m.selectedHostRow(); ok && m.tab == tabMachine {
+		// A tap on the selected host row opens Hosts, as Enter does.
+		m.armed, m.flash = "", ""
+		if picked {
+			return m.openHosts()
+		}
+		return m, nil
+	}
 	if m.tab == tabShips {
 		// A tap on the selected ship goes to its session, as Enter does.
 		m.armed, m.flash = "", ""

@@ -151,9 +151,13 @@ func TestEnterOpensAHostAndEscComesBack(t *testing.T) {
 	if first := strings.Split(r.view(), "\n")[0]; !strings.Contains(first, "matchblox · ws-1 · 1 hidden") {
 		t.Fatalf("header %q", first)
 	}
-	r.key(t, "esc")
+	r.key(t, "esc") // esc stays in the console: Hosts opens from Machine
+	if r.sh.layer != layerConsole {
+		t.Fatalf("esc left the console: layer %v", r.sh.layer)
+	}
+	r.toHosts(t)
 	if r.sh.layer != layerHosts || r.conns["ws-1"].closed {
-		t.Fatalf("esc: layer %v, closed %v", r.sh.layer, r.conns["ws-1"].closed)
+		t.Fatalf("back to Hosts: layer %v, closed %v", r.sh.layer, r.conns["ws-1"].closed)
 	}
 	if r.sh.sel != 1 {
 		t.Fatalf("the hosts layer must keep ws-1 selected, sel %d", r.sh.sel)
@@ -447,11 +451,17 @@ func (r *shellRig) rowOf(host string) string {
 	return ""
 }
 
-// toHosts goes from the console back to Hosts.
+// toHosts goes from the console back to Hosts: esc stays in the console,
+// and Hosts opens from Machine's host rows, the last of its rows.
 func (r *shellRig) toHosts(t *testing.T) {
 	t.Helper()
-	r.key(t, "tab") // esc on the board stays on the board (#360); off it, esc goes back to Hosts
-	r.key(t, "esc")
+	for i := 0; r.sh.cur.tab != tabMachine && i < len(tabNames); i++ {
+		r.key(t, "tab")
+	}
+	for range r.sh.cur.rowCount() {
+		r.key(t, "down")
+	}
+	r.key(t, "enter")
 	if r.sh.layer != layerHosts {
 		t.Fatal("esc did not go back to Hosts")
 	}

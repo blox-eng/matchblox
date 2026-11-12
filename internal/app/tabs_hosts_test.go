@@ -422,3 +422,46 @@ func TestHomeLossKeepsThePeersPartOfABatch(t *testing.T) {
 		t.Fatalf("batch %+v, flash %q, want %q", m.batch, m.flash, want)
 	}
 }
+
+// TestAHostRowOnMachineOpensHosts: a host is a filter on the board, and
+// Hosts, where a host is added or removed, opens from Machine: a row for
+// each host, ⏎ or a second tap on it. esc stays in the console. A console
+// with no Hosts above it has no host rows.
+func TestAHostRowOnMachineOpensHosts(t *testing.T) {
+	toHosts := func(cmd tea.Cmd) bool {
+		return slices.ContainsFunc(cmdMsgs(cmd), func(msg tea.Msg) bool { _, ok := msg.(layerMsg); return ok })
+	}
+	m, _ := twoHosts(t, hostState(sess(1, "api-auth", "%1", nil)), hostState(sess(2, "train", "%2", nil)))
+	alone := m
+	alone.setTab(tabMachine)
+	m.opt.Layered = true
+	m.setTab(tabMachine)
+	if alone.rowCount() != m.rowCount()-2 {
+		t.Fatalf("rows: %d alone, %d under Hosts; want one more for each host", alone.rowCount(), m.rowCount())
+	}
+	if next, cmd := key(m, "esc"); toHosts(cmd) || next.(Model).tab != tabMachine {
+		t.Fatal("esc on Machine left the console")
+	}
+	m.selectRow(m.rowCount() - 1)
+	if keys := plainHints(m.view().keys(m)...); !strings.HasPrefix(keys, "⏎ hosts") {
+		t.Fatalf("a host row's keys are %q", keys)
+	}
+	out := screen(m)
+	if !strings.Contains(out, "HOSTS") || !strings.Contains(lineWith(strings.Split(out, "\n"), "ws-1"), "ws-1") {
+		t.Fatalf("Machine lists no hosts:\n%s", out)
+	}
+	if _, cmd := key(m, "enter"); !toHosts(cmd) {
+		t.Fatal("⏎ on a host row does not open Hosts")
+	}
+	y := lineOf(t, m, "HOSTS") + 1 // the home's row: a tap chooses it, a second opens Hosts
+	if row := strings.Split(out, "\n")[y]; !strings.Contains(row, "this machine") {
+		t.Fatalf("the first host row is %q", row)
+	}
+	once, cmd := tap(m, 3, y)
+	if toHosts(cmd) {
+		t.Fatal("the first tap on a host row opened Hosts")
+	}
+	if _, cmd := tap(once, 3, y); !toHosts(cmd) {
+		t.Fatal("a second tap on a host row does not open Hosts")
+	}
+}

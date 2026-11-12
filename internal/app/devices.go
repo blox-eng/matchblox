@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+
+	tea "charm.land/bubbletea/v2"
 )
 
 // devPlus is devPick when the row "+ pair a device" is selected.
@@ -58,11 +60,28 @@ func (m Model) deviceRows() []devRow {
 	return append(rows, devRow{plus: true})
 }
 
-// machineRows are the orphans, then the device rows.
-func (m Model) machineRows() int { return len(m.snap.Orphans) + len(m.deviceRows()) }
+// machineRows are the orphans, the device rows, then the host rows.
+func (m Model) machineRows() int {
+	return len(m.snap.Orphans) + len(m.deviceRows()) + len(m.hostRows())
+}
+
+// hostRows are Machine's rows of the hosts, in Hosts order: ⏎ on one opens
+// Hosts, where a host is added or removed. A console with no Hosts above
+// it has none.
+func (m Model) hostRows() []string {
+	if !m.opt.Layered {
+		return nil
+	}
+	return m.hosts()
+}
 
 // machineIndex is the selected row of the Machine tab.
 func (m Model) machineIndex() int {
+	if m.hostPicked {
+		if i := slices.Index(m.hostRows(), m.hostPick); i >= 0 {
+			return len(m.snap.Orphans) + len(m.deviceRows()) + i
+		}
+	}
 	if m.devPick != "" {
 		for i, r := range m.deviceRows() {
 			if r.key() == m.devPick {
@@ -74,12 +93,50 @@ func (m Model) machineIndex() int {
 }
 
 func (m *Model) machinePick(i int) {
-	n := len(m.snap.Orphans)
-	if i < n {
+	n, nd := len(m.snap.Orphans), len(m.deviceRows())
+	m.hostPicked = false
+	switch {
+	case i < n:
 		m.orphanPID, m.devPick = m.snap.Orphans[i].PID, ""
-		return
+	case i < n+nd:
+		m.devPick = m.deviceRows()[i-n].key()
+	default:
+		m.devPick, m.hostPicked, m.hostPick = "", true, m.hostRows()[i-n-nd]
 	}
-	m.devPick = m.deviceRows()[i-n].key()
+}
+
+// selectedHostRow is the host of the host row under the cursor.
+func (m Model) selectedHostRow() (string, bool) {
+	if !m.hostPicked || !slices.Contains(m.hostRows(), m.hostPick) {
+		return "", false
+	}
+	return m.hostPick, true
+}
+
+// hostsBody is HOSTS · N: a row for each host, ⏎ opens Hosts.
+func (m Model) hostsBody(w int) body {
+	hs := m.hostRows()
+	if len(hs) == 0 {
+		return body{}
+	}
+	st := m.st
+	b := plain(m.region(fmt.Sprintf("hosts · %d", len(hs)), w))
+	at, picked := m.selectedHostRow()
+	base := len(m.snap.Orphans) + len(m.deviceRows())
+	for i, h := range hs {
+		on := picked && h == at
+		line := " " + st.ink(on).Render(pad(m.nameOf(h), 24))
+		if note := m.staleNote(h); note != "" {
+			line += st.faint.Render(note)
+		}
+		b.addRow(base+i, on, w, st, line)
+	}
+	return b
+}
+
+// openHosts is ⏎ on a host row: Hosts, where a host is added or removed.
+func (m Model) openHosts() (tea.Model, tea.Cmd) {
+	return m, func() tea.Msg { return layerMsg{} }
 }
 
 // selectedDevice is the device row under the cursor.

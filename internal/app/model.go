@@ -416,10 +416,13 @@ type Model struct {
 	devices      []PairDevice // the keys that open this host, read when the Machine tab opens
 	devErr       error        // why the keys could not be read
 	devPick      string       // the selected device row: its fingerprint, or devPlus
-	pair         *pairPage    // the pair page, while it shows
-	pairPolling  bool         // a poll of the pair page is on its way
-	pairOffers   *pairWaits   // the offers of a key that still run: the end of the program waits for them
-	keys         keymaps      // the keys of every layer, as data
+	// hostPicked: a host row of Machine is selected, hostPick its host.
+	hostPicked  bool
+	hostPick    string
+	pair        *pairPage  // the pair page, while it shows
+	pairPolling bool       // a poll of the pair page is on its way
+	pairOffers  *pairWaits // the offers of a key that still run: the end of the program waits for them
+	keys        keymaps    // the keys of every layer, as data
 
 	// scanAsk is the scan question, open at this console; nil none.
 	// scanAskUntil ends its quiet; scanUp: it was on top at the last
@@ -1456,7 +1459,7 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.filter != "" {
 			m.filter = ""
 			m.refresh()
-		} else if m.opt.Layered {
+		} else if m.opt.Layered && !m.have { // a host that never answered: the way back; else esc stays
 			return m, func() tea.Msg { return layerMsg{} }
 		}
 	case bkey.Matches(k, mk.Sort):
@@ -1515,6 +1518,9 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		if b, ok := m.selectedBlocked(); ok {
 			return m.unblockHost(b)
+		}
+		if _, ok := m.selectedHostRow(); ok && m.tab == tabMachine {
+			return m.openHosts()
 		}
 		if s, ok := m.selectedSession(); ok {
 			if u, head := m.headRow(s); head { // a chain's head opens its room
