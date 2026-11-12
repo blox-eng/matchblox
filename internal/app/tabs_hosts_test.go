@@ -446,8 +446,11 @@ func TestAHostRowOnMachineOpensHosts(t *testing.T) {
 		t.Fatalf("a host row's keys are %q", keys)
 	}
 	out := screen(m)
-	if !strings.Contains(out, "HOSTS") || !strings.Contains(lineWith(strings.Split(out, "\n"), "ws-1"), "ws-1") {
-		t.Fatalf("Machine lists no hosts:\n%s", out)
+	lines := strings.Split(out, "\n")
+	hosts := slices.IndexFunc(lines, func(l string) bool { return strings.Contains(l, "HOSTS") })
+	ws := slices.IndexFunc(lines, func(l string) bool { return strings.Contains(l, "ws-1") })
+	if hosts < 0 || ws <= hosts || slices.ContainsFunc(lines[hosts:ws], func(l string) bool { return strings.TrimSpace(l) == "" }) {
+		t.Fatalf("ws-1 is not a host row under HOSTS:\n%s", out)
 	}
 	if _, cmd := key(m, "enter"); !toHosts(cmd) {
 		t.Fatal("⏎ on a host row does not open Hosts")

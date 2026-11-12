@@ -616,14 +616,21 @@ func TestMachineOpensGitHistoryAndPanes(t *testing.T) {
 	for _, c := range []struct {
 		name string
 		tab  int
-		body func(Model, int) body
-	}{{"git", tabGit, Model.gitPanel}, {"history", tabHistory, Model.historyBody}, {"panes", tabPanes, Model.panesPanel}} {
+	}{{"git", tabGit}, {"history", tabHistory}, {"panes", tabPanes}} {
 		open := fromMachine(t, m, c.name)
 		if open.tab != c.tab {
 			t.Fatalf("⏎ on %s opens tab %d", c.name, open.tab)
 		}
-		if got, want := open.body(100).lines, c.body(open, 100).lines; !slices.Equal(got, want) {
-			t.Fatalf("%s is not today's screen:\n%s", c.name, screen(open))
+		// Today's screen: the body the tab draws when set directly, not
+		// through Machine's row.
+		direct := m
+		direct.setTab(c.tab)
+		body := func(m Model) []string {
+			lines := strings.Split(screen(m), "\n")
+			return lines[3 : len(lines)-2] // under the tab row's hairline, over the key line's
+		}
+		if got, want := body(open), body(direct); !slices.Equal(got, want) {
+			t.Fatalf("%s from Machine is not today's screen:\n%s\nwant\n%s", c.name, strings.Join(got, "\n"), strings.Join(want, "\n"))
 		}
 		if !strings.Contains(actionLine(open), "esc machine") {
 			t.Fatalf("%s's key line has no way back: %q", c.name, actionLine(open))
