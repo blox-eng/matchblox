@@ -186,14 +186,19 @@ has passed and work is in flight, the offer says why it waits:
 Closing the offer does not stop the install: to skip a release on this
 machine, use `"offer"` or `"off"`.
 
-The install makes the same checks as `matchblox update` and records which
-ones it made. The console then says
-once `updated to v0.43.0 at 03:12` (`on Nov 11 at 03:12` when it was not
-today), or why the update failed and the command to run. The service checks
-the build's provenance only with a `gh` that is installed and logged in for
-its user: without one it installs on the checksum alone, and the console
-adds `· provenance not checked`, as do the step of an install that waits on
-its restart and the result of `u` on a host. Auto installs a
+The install makes the checks of `matchblox update`, and one more: no person
+is there, so auto installs only a build whose provenance it checked. That
+needs a `gh` that is installed and logged in for the service's user, on the
+service's `PATH`. Without one, auto changes nothing and does not run the
+download. The offer then says why, for example
+`the build's provenance was not checked (gh is not logged in: gh auth login, then run this again)`,
+and auto tries again after the next look. To install it on the checksum
+alone, press `Enter` on the offer or run `matchblox update`: a person's
+install checks the provenance only when `gh` can, and the console then adds
+`· provenance not checked`, as do the step of an install that waits on its
+restart and the result of `u` on a host. After a good auto install the
+console says once `updated to v0.43.0 at 03:12` (`on Nov 11 at 03:12` when
+it was not today). Auto installs a
 release once when the install works. A failed install is tried again after
 the next look.
 

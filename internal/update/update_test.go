@@ -246,6 +246,43 @@ func TestUpdateSaysWhenGhCannotCheck(t *testing.T) {
 	}
 }
 
+// InstallProven is the install with no person there (#394): without a
+// checked provenance it changes nothing and does not run the download.
+func TestInstallProvenRefusesWithoutACheckedProvenance(t *testing.T) {
+	for gh, want := range map[string]string{
+		"":    "install the 'gh' CLI",
+		"old": "gh is too old",
+		"out": "gh is not logged in",
+	} {
+		w := newReleaseWorld(t, "v0.1.0", "v0.2.0")
+		w.gh = gh
+		proof, err := w.updater.InstallProven("v0.2.0")
+		if err == nil || !strings.Contains(err.Error(), "provenance was not checked") ||
+			!strings.Contains(err.Error(), want) || !strings.Contains(err.Error(), "Nothing was changed") || proof != (Proof{}) {
+			t.Fatalf("gh %q: proof %+v, err %v", gh, proof, err)
+		}
+		if got := w.installed(); got != "old" {
+			t.Fatalf("gh %q: installed %q", gh, got)
+		}
+		for _, c := range w.calls {
+			if strings.HasSuffix(c, " version") {
+				t.Fatalf("gh %q: the download ran with no checked provenance: %v", gh, w.calls)
+			}
+		}
+	}
+}
+
+func TestInstallProvenInstallsACheckedBuild(t *testing.T) {
+	w := newReleaseWorld(t, "v0.1.0", "v0.2.0")
+	proof, err := w.updater.InstallProven("v0.2.0")
+	if err != nil || proof != (Proof{Checksum: true, Provenance: true}) {
+		t.Fatalf("proof %+v, err %v", proof, err)
+	}
+	if got := w.installed(); got != string(w.bin) {
+		t.Fatalf("installed %q", got)
+	}
+}
+
 func TestUpdateRefusesABinaryThatNamesAnotherVersion(t *testing.T) {
 	w := newReleaseWorld(t, "v0.1.0", "v0.2.0")
 	w.bin = []byte("#!/bin/sh\necho v0.1.9\n")

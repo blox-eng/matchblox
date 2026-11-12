@@ -23,6 +23,8 @@ import (
 type UpdateSource interface {
 	Latest() (string, error)
 	Install(tag string) (update.Proof, error)
+	// InstallProven also refuses a build whose provenance it did not check.
+	InstallProven(tag string) (update.Proof, error)
 	Managed() string
 }
 
@@ -489,7 +491,7 @@ func (s *Service) installUpdate(tag string) proto.Result {
 		s.installing.Store(false)
 		return proto.Result{Err: "a clone of " + repo + " runs. Update when it ends."}
 	}
-	return s.install(tag)
+	return s.install(tag, false)
 }
 
 // notAgain is the answer to an install while another runs, or after a
@@ -520,14 +522,15 @@ func (s *Service) autoInstall(tag string) bool {
 		s.setWaiting(why)
 		return false
 	}
-	s.install(tag)
+	s.install(tag, true)
 	return true
 }
 
 // install runs with the installing flag held. It lets go of the flag
 // unless the install worked: then the service stops for the new binary,
-// and nothing new may start before it does.
-func (s *Service) install(tag string) (res proto.Result) {
+// and nothing new may start before it does. proven is auto's install: no
+// person is there, so it needs a checked provenance.
+func (s *Service) install(tag string, proven bool) (res proto.Result) {
 	defer func() {
 		if len(res.Ran) == 0 {
 			s.installing.Store(false)
@@ -539,7 +542,11 @@ func (s *Service) install(tag string) (res proto.Result) {
 	if cmd := s.Update.Managed(); cmd != "" {
 		return proto.Result{Err: managedProblem + " Run: " + cmd}
 	}
-	proof, err := s.Update.Install(tag)
+	run := s.Update.Install
+	if proven {
+		run = s.Update.InstallProven
+	}
+	proof, err := run(tag)
 	rec := state.UpdateRecord{From: s.Binary, To: tag, At: s.now(), Checksum: proof.Checksum, Provenance: proof.Provenance}
 	if err != nil {
 		rec.Err = err.Error()

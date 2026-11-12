@@ -164,7 +164,13 @@ func (u *Updater) Latest() (string, error) {
 
 // Install downloads the release beside this binary, checks it, and only
 // then moves it over this binary. Nothing changes when a check fails.
-func (u *Updater) Install(tag string) (proof Proof, err error) {
+func (u *Updater) Install(tag string) (Proof, error) { return u.install(tag, false) }
+
+// InstallProven is Install for a caller with no person there: it also
+// refuses a build whose provenance it could not check, before it runs it.
+func (u *Updater) InstallProven(tag string) (Proof, error) { return u.install(tag, true) }
+
+func (u *Updater) install(tag string, proven bool) (proof Proof, err error) {
 	asset := "matchblox-" + u.GOOS + "-" + u.Arch
 	dl := u.Base + "/" + releaseRepo + "/releases/download/" + tag + "/" + asset
 	dir := filepath.Dir(u.Self)
@@ -204,7 +210,12 @@ func (u *Updater) Install(tag string) (proof Proof, err error) {
 	u.say("  checksum  ok")
 	proof.Checksum = true
 
-	if proof.Provenance, err = u.provenance(tmp, asset); err != nil {
+	var unchecked string
+	if proof.Provenance, unchecked, err = u.provenance(tmp, asset); err != nil {
+		return Proof{}, err
+	}
+	if proven && !proof.Provenance {
+		err = fmt.Errorf("the build's provenance was not checked (%s). Nothing was changed", unchecked)
 		return Proof{}, err
 	}
 
@@ -228,12 +239,15 @@ func (u *Updater) Install(tag string) (proof Proof, err error) {
 
 // provenance checks the build attestation: the checksum comes from the same
 // release as the binary, so only the attestation proves that CI built it.
-// Only a logged-in gh can check it; without one, it says so and goes on,
-// as install.sh does.
-func (u *Updater) provenance(path, asset string) (bool, error) {
+// Only a logged-in gh can check it; without one, it says so, returns why,
+// and leaves the choice to the caller, as install.sh does.
+func (u *Updater) provenance(path, asset string) (ok bool, unchecked string, err error) {
+	skip := func(why string) (bool, string, error) {
+		u.say("  provenance not checked (%s)", why)
+		return false, why, nil
+	}
 	if !u.has("gh") {
-		u.say("  provenance not checked (install the 'gh' CLI to verify the build attestation)")
-		return false, nil
+		return skip("install the 'gh' CLI to verify the build attestation")
 	}
 	for _, c := range []struct {
 		argv []string
@@ -243,23 +257,22 @@ func (u *Updater) provenance(path, asset string) (bool, error) {
 		{[]string{"gh", "auth", "status"}, "gh is not logged in: gh auth login, then run this again"},
 	} {
 		if _, err := u.Run(c.argv); errors.Is(err, errTooLong) {
-			return false, fmt.Errorf("%w. Nothing was changed", err)
+			return false, "", fmt.Errorf("%w. Nothing was changed", err)
 		} else if err != nil {
-			u.say("  provenance not checked (%s)", c.why)
-			return false, nil
+			return skip(c.why)
 		}
 	}
 	log, err := u.Run([]string{"gh", "attestation", "verify", path, "--repo", releaseRepo,
 		"--signer-workflow", releaseRepo + "/.github/workflows/publish.yml"})
 	if errors.Is(err, errTooLong) {
-		return false, fmt.Errorf("%w. Nothing was changed", err)
+		return false, "", fmt.Errorf("%w. Nothing was changed", err)
 	}
 	if err != nil {
-		return false, fmt.Errorf("provenance verification FAILED for %s.\n%s\nThe checksum matched, but the build attestation did not verify against %s.\nNothing was changed. Please report this: https://github.com/%s/security",
+		return false, "", fmt.Errorf("provenance verification FAILED for %s.\n%s\nThe checksum matched, but the build attestation did not verify against %s.\nNothing was changed. Please report this: https://github.com/%s/security",
 			asset, strings.TrimSpace(log), releaseRepo, releaseRepo)
 	}
 	u.say("  provenance ok (built by CI in %s)", releaseRepo)
-	return true, nil
+	return true, "", nil
 }
 
 func (u *Updater) has(name string) bool { _, err := u.LookPath(name); return err == nil }

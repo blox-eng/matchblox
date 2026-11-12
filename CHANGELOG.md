@@ -6,6 +6,20 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Security
+
+- **`"auto"` installs only a build whose provenance it checked.** In v0.43.0,
+  auto installed on the checksum alone when no logged-in `gh` could check
+  the build's provenance, and said `provenance not checked` after. No person
+  is there, and the checksum comes from the same release as the binary. Auto
+  now changes nothing without a checked provenance, and does not run the
+  download. The offer says why, for example `gh is not logged in`, and auto
+  tries again after the next look. For auto, the service's user needs a `gh`
+  that is installed and logged in, on the service's `PATH`. An install that
+  you start (`Enter` on the offer, `u` on a host, `matchblox update`) is as
+  before. See [Config](https://docs.matchblox.com/config/#update).
+  ([#394](https://github.com/blox-eng/matchblox/issues/394))
+
 ## [0.43.0] - 2026-11-12
 
 ### Added
