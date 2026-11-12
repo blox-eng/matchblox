@@ -1220,3 +1220,28 @@ func TestATapBelowTheBoardsBodyChoosesNoCard(t *testing.T) {
 		}
 	}
 }
+
+// TestATabsSpanPressesNoKey: a tap on a tab's name opens the tab, and the
+// span says so without a key: digits answer a card's question on the
+// board (ruling 37), so no tab span may press one.
+func TestATabsSpanPressesNoKey(t *testing.T) {
+	m := boardShot(t, boardFixture(t), 132, 34, nil)
+	sc := m.draw(132)
+	machine := -1
+	for i, s := range sc.tabs {
+		if len(s.press) == 1 && s.press >= "0" && s.press <= "9" {
+			t.Errorf("tab span %d presses the digit %q", i, s.press)
+		}
+		if s.press == tabPress(tabMachine) {
+			machine = i
+		}
+	}
+	if machine < 0 {
+		t.Fatalf("no span opens machine: %+v", sc.tabs)
+	}
+	next, cmd := tap(m, sc.tabs[machine].x0, 1)
+	drain(cmd)
+	if nm := next.(Model); nm.tab != tabMachine || len(boardFake(nm).acts()) != 0 {
+		t.Errorf("a tap on machine: tab %d, sent %+v", nm.tab, boardFake(nm).acts())
+	}
+}

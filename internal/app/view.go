@@ -435,10 +435,24 @@ func (m Model) hostBadge(short bool) string {
 	return st.stoker.Render("stoker")
 }
 
+// tabPress is what a tap on tab i's name presses: no key, since a digit
+// answers a card's question on the board (ruling 37).
+func tabPress(i int) string { return "tab:" + strconv.Itoa(i) }
+
+// tabOfPress is the tab a tab span's press opens.
+func tabOfPress(press string) (int, bool) {
+	n, ok := strings.CutPrefix(press, "tab:")
+	if !ok {
+		return 0, false
+	}
+	i, err := strconv.Atoi(n)
+	return i, err == nil && i >= 0 && i < len(tabNames)
+}
+
 // tabsLine names both tabs: the open one uppercase in the accent with its
 // rule, the other lowercase in faint, a count after a name when it means
 // something. Short of room the gap between them narrows; a tab's span
-// presses its place in tabNames, counted from 1.
+// presses tabPress.
 func (m Model) tabsLine(w int) (string, []span) {
 	alert := m.alert()
 	aw := lipgloss.Width(alert)
@@ -452,7 +466,7 @@ func (m Model) tabsLine(w int) (string, []span) {
 			}
 			label := m.tabLabel(i)
 			x := lipgloss.Width(line)
-			spans = append(spans, span{x, x + lipgloss.Width(label), strconv.Itoa(i + 1)})
+			spans = append(spans, span{x, x + lipgloss.Width(label), tabPress(i)})
 			line += label
 		}
 		if lipgloss.Width(line)+aw+2 <= w {

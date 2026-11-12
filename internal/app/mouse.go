@@ -91,9 +91,11 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 			if next, crumb := m.boardTabTap(s.press); crumb {
 				return next, nil
 			}
-			m.setTab(int(s.press[0] - '1'))
-			m.flash = ""
-			return m.seeStoker()
+			if t, ok := tabOfPress(s.press); ok {
+				m.setTab(t)
+				m.flash = ""
+				return m.seeStoker()
+			}
 		}
 		return m, nil
 	case ms.Y == sc.keysAt:
