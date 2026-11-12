@@ -55,7 +55,7 @@ keys of the selected row.
 | `↑` or `k` | Selects the row above. |
 | `↓` or `j` | Selects the row below. |
 | `Enter` | On the need line or a match, goes into the match's pane. On `↓ N more`, unfolds the plan. On the talk line, starts typing. On a quiet stoker's line, starts typing to it. On `+ start one here`, opens New session. |
-| `y` | Gives the go a step waits for (the need line `▸ … waits for your go · y`, or the step). A go that merges, kills, force-pushes or removes shows its command first and runs on a typed `y`. |
+| `y` | Gives the go a step waits for (the need line `▸ … waits for your go · y`, or the step). Every go (a merge, a release, a deploy, a kill) acts outside the session: it shows its command first and runs on a typed `y`. |
 | `]` | Opens the next chain's room. |
 | `[` | Opens the previous chain's room. |
 | `⌥s` | Goes back to the session you flipped from. With none, starts typing on the talk line. |

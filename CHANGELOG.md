@@ -12,8 +12,8 @@ All notable changes to matchblox are in this file. The format follows
   of its sessions, opens it: what waits for you first, the stoker's card
   and plan, the matches with their inbox, the chain's ships and worktrees,
   and a talk line to its stoker. The first words to a chain with no stoker
-  start one, with no launch sheet. `y` gives a go; a go that merges, kills,
-  force-pushes or removes asks first. `]` and `[` walk the chains.
+  start one, with no launch sheet. `y` gives a go, and asks first for a
+  typed `y`: every go acts outside the session. `]` and `[` walk the chains.
   ([#326](https://github.com/blox-eng/matchblox/issues/326))
 - **⌥s flips between a session and its chain's room.** In an agent's pane,
   `⌥s` goes to its room and back, and `⌥n` walks the chain's matches. Each
@@ -28,6 +28,8 @@ All notable changes to matchblox are in this file. The format follows
 
 - **The header counts the stokers that run: `≋ 2`.** It was `stoker · 2
   chains`; the dock still counts the chains.
+
+## [0.40.3] - 2026-11-11
 
 ### Fixed
 
@@ -1466,7 +1468,8 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.40.2...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.40.3...HEAD
+[0.40.3]: https://github.com/blox-eng/matchblox/compare/v0.40.2...v0.40.3
 [0.40.2]: https://github.com/blox-eng/matchblox/compare/v0.40.1...v0.40.2
 [0.40.1]: https://github.com/blox-eng/matchblox/compare/v0.40.0...v0.40.1
 [0.40.0]: https://github.com/blox-eng/matchblox/compare/v0.39.1...v0.40.0
