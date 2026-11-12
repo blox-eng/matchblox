@@ -265,28 +265,17 @@ func demoSized(t testing.TB, w, h int) Model {
 	return next.(Model)
 }
 
-// sides are the lines of a frame cut at the list's edge: the list, and
-// what is right of its hairline.
-func sides(sc drawn, w int) (left, right []string) {
-	for _, l := range sc.lines {
-		plain := ansi.Strip(l)
-		left = append(left, ansi.Cut(plain, 0, sc.listW))
-		right = append(right, ansi.Cut(plain, sc.listW+1, w))
-	}
-	return left, right
-}
-
 func TestACutListSaysHowManyAreBelow(t *testing.T) {
 	m := demoSized(t, 132, 32)
 	sc := m.draw(132)
-	left, _ := sides(sc, 132)
+	left := plainLines(sc.lines)
 	if !slices.ContainsFunc(left, func(l string) bool {
 		return strings.HasPrefix(strings.TrimSpace(l), "↓ ") && strings.Contains(l, " more")
 	}) {
 		t.Fatalf("the cut list does not say what is below:\n%s", strings.Join(left, "\n"))
 	}
 	last := pressKeys(t, m, slices.Repeat([]string{"down"}, m.rowCount())...)
-	left, _ = sides(last.draw(132), 132)
+	left = plainLines(last.draw(132).lines)
 	if !slices.ContainsFunc(left, func(l string) bool { return strings.Contains(l, "RECOMMENDATIONS") }) {
 		t.Fatalf("the list does not scroll to its recommendations on a desk:\n%s", strings.Join(left, "\n"))
 	}

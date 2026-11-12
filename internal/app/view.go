@@ -133,7 +133,6 @@ type drawn struct {
 	tabs    []span
 	bodyTop int   // the line of the first body row
 	rows    []int // the row each body line shows; -1 none, headerRow
-	listW   int   // the body's columns
 	stripAt int   // the board's strip; -1 when it has none
 	strip   span  // a tap on the strip turns it
 	// boardView is the live view beside the board: from column x0 and line
@@ -183,7 +182,7 @@ func (m Model) drawScreen(w int) drawn {
 	head, waits, stokerAt := m.header(w)
 	tabs, tabSpans := m.tabsLine(w)
 	sc := drawn{lines: []string{head, tabs, m.st.rule.Render(strings.Repeat("─", w))}, waits: waits, stokerAt: stokerAt, tabs: tabSpans,
-		bodyTop: 3, listW: w, stripAt: -1, keysAt: -1, hostAt: m.boardHostHit(head)}
+		bodyTop: 3, stripAt: -1, keysAt: -1, hostAt: m.boardHostHit(head)}
 	switch {
 	case m.hostCount() > 1 && m.shows():
 		// A blocked host of two or more is a row, never the screen.

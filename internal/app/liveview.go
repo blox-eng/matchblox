@@ -328,7 +328,7 @@ func (m Model) viewScreen(w int) drawn {
 	}
 	title = fit(title, w)
 	_, rows := m.viewPlacement()
-	sc := drawn{lines: []string{title}, bodyTop: 1, listW: w, placeFull: true, viewRows: rows, viewAt: 1, viewW: w}
+	sc := drawn{lines: []string{title}, bodyTop: 1, placeFull: true, viewRows: rows, viewAt: 1, viewW: w}
 	sc.lines = append(sc.lines, m.screenLines(w, rows)...)
 	hair, keys, spans := m.keyRows(w)
 	sc.keysAt, sc.keys = len(sc.lines)+1, spans

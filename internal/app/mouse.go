@@ -123,30 +123,16 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		return m.holdPress(next, cmd, ms)
 	}
 	i := ms.Y - sc.bodyTop
-	if i < 0 || i >= len(sc.rows) {
-		return m, nil
-	}
-	if ms.X >= sc.listW {
-		if m.tab == tabSessions {
-			return m.intoSelected()
-		}
-		return m, nil
+	if m.boardShown() || i < 0 || i >= len(sc.rows) {
+		return m, nil // the board took every tap on its body above
 	}
 	if sc.rows[i] == headerRow {
 		return m.tapHeader(ms.X)
 	}
-	if sc.rows[i] == recsLabelRow {
-		m.foldRecs()
-		return m, nil
-	}
-	if _, ok := m.selectedRec(); ok && sc.rows[i] == m.rowIndex() && ms.X >= sc.listW-m.dismissWidth() {
-		m.dismissRec()
-		return m, nil
-	}
 	if sc.rows[i] < 0 {
 		return m, nil
 	}
-	picked := m.view().index != nil && m.rowIndex() == sc.rows[i] && (m.tab != tabSessions || m.chose)
+	picked := m.view().index != nil && m.rowIndex() == sc.rows[i]
 	m.selectRow(sc.rows[i])
 	if v, ok := m.selectedMachineView(); ok && m.tab == tabMachine {
 		// A tap on the selected view row opens it, as Enter does.
@@ -165,11 +151,10 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if host, pane := m.tapTarget(); pane != "" {
-		// On one column, as on a phone, a tap goes into the session's pane,
-		// as Enter does (#351, #352). Beside the view, a tap selects the
-		// session, and a tap on it once it is selected goes in.
+		// A tap selects the row, and a tap on it once it is selected goes
+		// into its pane, as Enter does (#351, #352).
 		m.armed, m.flash = "", ""
-		if !picked && m.tab != tabSessions { // the default selection is not a tap
+		if !picked { // the default selection is not a tap
 			return m, nil
 		}
 		return m.goIntoAsking(host, pane)

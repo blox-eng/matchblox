@@ -84,7 +84,7 @@ func TestUsageUnderANarrowListIsNeverCutMidWord(t *testing.T) {
 	for _, size := range [][2]int{{96, 20}, {104, 38}, {96, 30}} {
 		m := fullView(flintAt(t, size[0], size[1]))
 		sc := m.draw(size[0])
-		left, _ := sides(sc, size[0])
+		left := plainLines(sc.lines)
 		in := false
 		for _, l := range left {
 			switch {
