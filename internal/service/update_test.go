@@ -28,6 +28,7 @@ type fakeUpdates struct {
 	// Install: the tags it was asked for, what it answers, and, when
 	// gate is set, it says it began on began and waits for gate.
 	installs   []string
+	proven     []bool // per install: did the caller need a checked provenance
 	proof      update.Proof
 	installErr error
 	began      chan struct{}
@@ -41,9 +42,14 @@ func (f *fakeUpdates) Latest() (string, error) {
 	return f.latest, f.err
 }
 
-func (f *fakeUpdates) Install(tag string) (update.Proof, error) {
+func (f *fakeUpdates) Install(tag string) (update.Proof, error) { return f.install(tag, false) }
+
+func (f *fakeUpdates) InstallProven(tag string) (update.Proof, error) { return f.install(tag, true) }
+
+func (f *fakeUpdates) install(tag string, proven bool) (update.Proof, error) {
 	f.mu.Lock()
 	f.installs = append(f.installs, tag)
+	f.proven = append(f.proven, proven)
 	began, gate := f.began, f.gate
 	f.mu.Unlock()
 	if gate != nil {
@@ -751,6 +757,27 @@ func TestAutoRecordsItsProofAndSurvivesTheRestart(t *testing.T) {
 	want := state.UpdateRecord{From: "v0.42.0", To: "v0.43.0", At: updateT0, Checksum: true}
 	if v := updateView(again); v.Last == nil || *v.Last != want {
 		t.Fatalf("the new service sends %+v, want %+v", v.Last, want)
+	}
+}
+
+// Auto has no person there, so it installs only a build whose provenance it
+// checked (#394). A person's install keeps the checks of `matchblox update`.
+func TestOnlyAutoNeedsACheckedProvenance(t *testing.T) {
+	s, src, _, _ := autoTest(t, config.UpdateAuto, 25*time.Hour)
+	tick := startUpdates(t, s)
+	tick()
+	p, src2, _ := offerTest(t, config.UpdateOffer)
+	if r := p.installUpdate("v0.43.0"); r.Err != "" {
+		t.Fatalf("a person's install: %+v", r)
+	}
+	src.mu.Lock()
+	auto := slices.Clone(src.proven)
+	src.mu.Unlock()
+	src2.mu.Lock()
+	person := slices.Clone(src2.proven)
+	src2.mu.Unlock()
+	if !slices.Equal(auto, []bool{true}) || !slices.Equal(person, []bool{false}) {
+		t.Fatalf("auto asked %v, a person asked %v", auto, person)
 	}
 }
 

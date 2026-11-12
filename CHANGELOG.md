@@ -29,9 +29,12 @@ All notable changes to matchblox are in this file. The format follows
   During the day, the offer says when auto installs it. While it waits on
   work, the offer says why. Closing the offer does not stop auto. The
   console then says
-  `updated to v0.43.0 at 03:12`. The service installs with no person there:
-  when no logged-in `gh` checked the build's provenance, the console adds
-  `· provenance not checked`. From the start of an install until matchblox
+  `updated to v0.43.0 at 03:12`. No person is there, so auto installs only
+  a build whose provenance a logged-in `gh` checked. Without one it changes
+  nothing, and the offer says why
+  ([#394](https://github.com/blox-eng/matchblox/issues/394)). An install
+  that you start checks the provenance when `gh` can; when it cannot, the
+  console adds `· provenance not checked`. From the start of an install until matchblox
   runs again on the new release, a new clone is refused.
   `"off"` never looks. See [Config](https://docs.matchblox.com/config/#update).
   ([#390](https://github.com/blox-eng/matchblox/issues/390))

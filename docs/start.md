@@ -45,7 +45,8 @@ tells you to run `brew upgrade matchblox`.
 You need not remember to run it. The service looks for a new release once
 a day, and Sessions offers it under `SET UP` (see
 [step 4](#4-open-the-setup-steps)). `[update] mode = "auto"` installs it by
-itself a day later, and `"off"` never looks. See [Config](config.md#update).
+itself a day later, when a logged-in `gh` can check the build's provenance,
+and `"off"` never looks. See [Config](config.md#update).
 
 ## 2. Run it
 
