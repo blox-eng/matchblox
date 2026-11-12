@@ -139,15 +139,14 @@ func (m Model) boardPanel(w, h int) boardDrawn {
 			d.addRow(-1, l.sel, w, st, l.text)
 		}
 	}
-	roomAbove, roomBelow := m.roomSplit(w)
+	none := m.have && b.none
+	roomAbove, roomBelow, under, strip, tap, rows := m.boardFold(w, h, none)
 	for _, l := range roomAbove {
 		if l.at >= 0 {
 			d.roomAt[len(d.lines)] = l.at
 		}
 		d.addRow(-1, l.sel, w, st, l.text)
 	}
-	none := m.have && b.none
-	under, strip, tap, rows := m.boardFold(w, h, none)
 	top := len(d.lines)
 	switch l := m.layoutAt(w); {
 	case none:
@@ -191,7 +190,7 @@ func (m Model) boardPanel(w, h int) boardDrawn {
 // doors line above, the ghost row and the recommendations under them, and
 // the strip's row. none: no session at all, and no ghost row under.
 func (m Model) boardRows(w, h int, none bool) int {
-	_, _, _, rows := m.boardFold(w, h, none)
+	_, _, _, _, _, rows := m.boardFold(w, h, none)
 	return rows
 }
 
@@ -199,11 +198,12 @@ func (m Model) boardRows(w, h int, none bool) int {
 // its strip in h rows, and the rows left to the columns. Short of rows the
 // recommendations fold from the last, then the ghost row, then the strip,
 // so the columns keep the chosen card's head.
-func (m Model) boardFold(w, h int, none bool) (under []boardLine, strip []string, tap span, rows int) {
+func (m Model) boardFold(w, h int, none bool) (above, below []roomDrawn, under []boardLine, strip []string, tap span, rows int) {
 	under = m.underLines(w, none)
 	strip, tap, _ = m.strip(w)
-	above, below := m.roomSplit(w)
-	fixed := len(m.hostLines(w)) + len(m.doorsLines(w)) + len(above) + len(below)
+	fold := 0
+	above, below = m.roomSplit(w, fold)
+	fixed := func() int { return len(m.hostLines(w)) + len(m.doorsLines(w)) + len(above) + len(below) }
 	least := 2 // the heads and a card's head
 	switch l := m.layoutAt(w); {
 	case l == Narrow:
@@ -211,14 +211,18 @@ func (m Model) boardFold(w, h int, none bool) (under []boardLine, strip []string
 	case l == Medium && !m.colHidden(colQuiet):
 		least += 2 // the QUIET drawer under the columns
 	}
-	for !none && h-fixed-len(under)-len(strip) < least && len(under)+len(strip) > 0 {
-		if len(under) > 0 {
+	for !none && h-fixed()-len(under)-len(strip) < least && (len(under)+len(strip) > 0 || fold < roomFolds && len(above) > 0) {
+		switch {
+		case len(under) > 0:
 			under = under[:len(under)-1]
-		} else {
+		case len(strip) > 0:
 			strip = nil
+		default: // then the stoker's card
+			fold++
+			above, below = m.roomSplit(w, fold)
 		}
 	}
-	return under, strip, tap, max(h-fixed-len(under)-len(strip), 0)
+	return above, below, under, strip, tap, max(h-fixed()-len(under)-len(strip), 0)
 }
 
 // boardLine is a line above or under the columns: its text, chosen or

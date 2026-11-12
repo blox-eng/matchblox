@@ -64,3 +64,23 @@ func TestOnMediumTheTalkLineIsAboveTheQuietShelf(t *testing.T) {
 		t.Errorf("the talk line (%d) is not above the QUIET shelf (%d):\n%s", talk, quiet, strings.Join(lines, "\n"))
 	}
 }
+
+// TestAShortRoomKeepsTheWaitingCard: on a short desk the stoker's card folds
+// to its active step, then to its first line, before the columns lose the
+// chosen card; the talk line stays, and no two hairlines meet.
+func TestAShortRoomKeepsTheWaitingCard(t *testing.T) {
+	for _, size := range [][2]int{{100, 10}, {100, 12}, {80, 8}} {
+		m, _ := hearthOpen(t, size[0], headState(t, runningPlan(), true))
+		m = upd(t, m, tea.WindowSizeMsg{Width: size[0], Height: size[1]})
+		frame := plainFrame(m)
+		if !strings.Contains(frame, "kindle-web") || !strings.Contains(frame, "› tell hearth's stoker…") {
+			t.Errorf("%dx%d: the waiting card or the talk line is not drawn:\n%s", size[0], size[1], frame)
+		}
+		lines := strings.Split(frame, "\n")
+		for i := 1; i < len(lines); i++ {
+			if strings.HasPrefix(lines[i], "───") && strings.HasPrefix(lines[i-1], "───") {
+				t.Errorf("%dx%d: two hairlines meet at row %d:\n%s", size[0], size[1], i, frame)
+			}
+		}
+	}
+}

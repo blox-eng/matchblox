@@ -74,15 +74,35 @@ func (m Model) roomDraws(w int) (card, talk []roomDrawn) {
 	return card, talk
 }
 
+// roomFolds is how far a short screen folds the stoker's card (roomSplit).
+const roomFolds = 4
+
 // roomSplit are the room's lines above the columns of a mid screen and a
 // desk, the card and a hairline under it, and under the columns, the talk
-// line. On a phone they are the stoker's page.
-func (m Model) roomSplit(w int) (above, below []roomDrawn) {
+// line. On a phone they are the stoker's page. A short screen folds the card
+// fold steps: 1 keeps its active step, 2 its first line, 3 drops the
+// hairline, 4 the card; the cursor's row always stays.
+func (m Model) roomSplit(w, fold int) (above, below []roomDrawn) {
 	if m.room == nil || m.layoutAt(w) == Narrow {
 		return nil, nil
 	}
 	above, below = m.roomDraws(w)
-	if len(above) > 0 {
+	if fold > 0 && len(above) > 0 {
+		rows := m.roomRows(m.room.k)
+		keep := above[0].at
+		if fold == 1 {
+			if i := slices.IndexFunc(above, func(d roomDrawn) bool {
+				return rows[d.at].kind == roomStep && strings.HasPrefix(rows[d.at].text, "▸")
+			}); i >= 0 {
+				keep = above[i].at
+			}
+		}
+		if fold == roomFolds {
+			keep = -1
+		}
+		above = slices.DeleteFunc(above, func(d roomDrawn) bool { return d.at != keep && !d.sel })
+	}
+	if len(above) > 0 && fold < 3 {
 		above = append(above, roomDrawn{text: m.st.hair.Render(strings.Repeat("─", w)), at: -1})
 	}
 	return above, below
