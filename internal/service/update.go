@@ -29,9 +29,9 @@ type UpdateSource interface {
 const updateTick = time.Minute
 
 // updating is true for a service that looks for releases: one with an
-// updater whose own build is a release.
+// updater whose own build is a release, not a build from a commit.
 func (s *Service) updating() bool {
-	return s.Update != nil && release.IsRelease(s.Binary)
+	return s.Update != nil && release.IsRelease(s.Binary) && !release.IsPseudo(s.Binary)
 }
 
 // loadUpdate puts the update view in the state, before the first sample,
@@ -94,6 +94,9 @@ func (s *Service) updateLoop(ctx context.Context) {
 // latest release found before and says why it failed.
 func (s *Service) checkUpdate(now time.Time) {
 	tag, err := s.Update.Latest()
+	if err == nil && !release.IsRelease(tag) {
+		err = fmt.Errorf("the latest release %q is not a release tag", tag)
+	}
 	s.updateMu.Lock()
 	v := s.currentUpdateView()
 	v.CheckedAt, v.Err = now, ""

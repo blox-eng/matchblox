@@ -12,6 +12,12 @@ var tag = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$`)
 // publish.yml accept it.
 func IsRelease(s string) bool { return tag.MatchString(s) }
 
+var pseudo = regexp.MustCompile(`[-.][0-9]{14}-[0-9a-f]{12}$`)
+
+// IsPseudo reports whether s is a version Go made up for a build from a
+// commit (v0.42.1-0.20261112093000-f15b80c1abcd), not a release.
+func IsPseudo(s string) bool { return IsRelease(s) && pseudo.MatchString(s) }
+
 // Compare orders two release tags by their numbers: -1, 0 or 1. A
 // pre-release of a version comes before the version.
 func Compare(a, b string) int {

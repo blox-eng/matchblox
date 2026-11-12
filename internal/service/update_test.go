@@ -250,16 +250,38 @@ func TestNoOfferForSameOlderOrPrerelease(t *testing.T) {
 }
 
 func TestDevBuildMakesNoRequest(t *testing.T) {
-	s, src, clk := updateTest(t, "dev", config.UpdateOffer, filepath.Join(t.TempDir(), "update.json"))
-	tick := startUpdates(t, s)
-	tick()
-	clk.add(25 * time.Hour)
-	tick()
-	if n := src.count(); n != 0 {
-		t.Fatalf("Latest calls %d, want 0", n)
+	for _, current := range []string{"dev", "v0.42.1-0.20261112093000-f15b80c1abcd"} {
+		t.Run(current, func(t *testing.T) {
+			s, src, clk := updateTest(t, current, config.UpdateAuto, filepath.Join(t.TempDir(), "update.json"))
+			tick := startUpdates(t, s)
+			tick()
+			clk.add(25 * time.Hour)
+			tick()
+			if n := src.count(); n != 0 {
+				t.Fatalf("Latest calls %d, want 0", n)
+			}
+			if v := updateView(s); v != nil {
+				t.Fatalf("a build that is not a release sent a view %+v", v)
+			}
+		})
 	}
-	if v := updateView(s); v != nil {
-		t.Fatalf("a dev build sent a view %+v", v)
+}
+
+func TestEmptyOrBadLatestIsAFailedLook(t *testing.T) {
+	for _, bad := range []string{"", "nightly"} {
+		path := filepath.Join(t.TempDir(), "update.json")
+		s, src, clk := updateTest(t, "v0.42.0", config.UpdateOffer, path)
+		s.loadUpdate()
+		s.checkUpdate(clk.now())
+		src.set(bad, nil)
+		s.checkUpdate(clk.now().Add(24 * time.Hour))
+		v := updateView(s)
+		if v.Err == "" || v.Latest != "v0.43.0" || !v.FirstSeen.Equal(updateT0) {
+			t.Errorf("latest %q: view %+v", bad, v)
+		}
+		if f := state.ReadUpdate(path); f.Latest != "v0.43.0" || !f.FirstSeen.Equal(updateT0) {
+			t.Errorf("latest %q: update.json %+v", bad, f)
+		}
 	}
 }
 

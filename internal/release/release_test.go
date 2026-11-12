@@ -32,3 +32,19 @@ func TestIsRelease(t *testing.T) {
 		}
 	}
 }
+
+func TestIsPseudo(t *testing.T) {
+	for tag, want := range map[string]bool{
+		"v0.42.1-0.20261112093000-f15b80c1abcd":      true,
+		"v0.0.0-20261112093000-f15b80c1abcd":         true,
+		"v0.43.0-rc.1.0.20261112093000-f15b80c1abcd": true,
+		"v0.42.0": false, "v0.43.0-rc.1": false, "dev": false, "": false,
+		"v0.2.1-0.20261022-abc":                       false,
+		"v0.42.1-0.20261112093000-F15B80C1ABCD":       false,
+		"v0.42.1-0.20261112093000-f15b80c1abcd+dirty": false,
+	} {
+		if got := IsPseudo(tag); got != want {
+			t.Errorf("IsPseudo(%q) = %v, want %v", tag, got, want)
+		}
+	}
+}
