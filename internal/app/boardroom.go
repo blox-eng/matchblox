@@ -16,9 +16,6 @@ import (
 // (room.at) is on a line of the card, on the talk line, or -1: on the
 // board, whose own choice holds.
 
-// roomOwn: a row of kind k is one the room draws on the board itself.
-func roomOwn(k roomKind) bool { return k != roomNone }
-
 // roomChosen is the row of the room the cursor is on, when the room draws
 // it: a line of the stoker's card, or the talk line. false: no room is
 // open, or the cursor is on the board.
@@ -27,7 +24,7 @@ func (m Model) roomChosen() (roomRow, bool) {
 		return roomRow{}, false
 	}
 	rows := m.roomRows(m.room.k)
-	if at := min(m.room.at, len(rows)-1); at >= 0 && roomOwn(rows[at].kind) {
+	if at := min(m.room.at, len(rows)-1); at >= 0 {
 		return rows[at], true
 	}
 	return roomRow{}, false
@@ -56,9 +53,6 @@ func (m Model) roomDraws(w int) (card, talk []roomDrawn) {
 	}
 	rows := m.roomRows(m.room.k)
 	for i, r := range rows {
-		if !roomOwn(r.kind) {
-			continue
-		}
 		sel := i == m.room.at
 		for _, l := range m.roomLine(r, w-1, sel) {
 			d := roomDrawn{fit(m.chosenMark(sel)+l, w), sel, i}
@@ -137,7 +131,6 @@ func (m Model) roomOrder() (before, after []int) {
 	rows := m.roomRows(m.room.k)
 	for i, r := range rows {
 		switch {
-		case !roomOwn(r.kind):
 		case r.kind == roomTalk && m.layoutAt(max(m.width, minWidth)) != Narrow:
 			after = append(after, i)
 		default:

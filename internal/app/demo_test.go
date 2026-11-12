@@ -273,8 +273,8 @@ func TestEnterInTheDemoOpensTheStandIn(t *testing.T) {
 // The stand-in is the whole screen at every width, as a jump into a pane is.
 func TestTheStandInIsFullScreenOnADesk(t *testing.T) {
 	m := standIn(t, 132)
-	if _, right := m.panes(132); right == 0 {
-		t.Fatal("132 columns do not split Sessions: the test shows nothing")
+	if m.layoutAt(132) != Wide {
+		t.Fatal("132 columns are no desk: the test shows nothing")
 	}
 	lines := strings.Split(ansi.Strip(m.render()), "\n")
 	if !m.standIn || !strings.HasPrefix(strings.TrimSpace(lines[0]), "‹ Sessions") {

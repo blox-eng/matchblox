@@ -124,16 +124,6 @@ const (
 // minWidth is the narrowest console drawn; a narrower terminal cuts it.
 const minWidth = 30
 
-// progressCell is the bar an agent reported, in n cells and its percent.
-func (m Model) progressCell(p *sample.Progress, n int) string {
-	if p == nil {
-		return ""
-	}
-	full := min(max((p.Pct*n+50)/100, 0), n)
-	return m.st.text.Render(strings.Repeat("▰", full)) + m.st.faint.Render(strings.Repeat("▱", n-full)) +
-		" " + m.st.muted.Render(fmt.Sprintf("%d%%", p.Pct))
-}
-
 // sessionIn is the agent session of a pane of host.
 func (m Model) sessionIn(host, pane string) (sample.Session, bool) {
 	if pane == "" {

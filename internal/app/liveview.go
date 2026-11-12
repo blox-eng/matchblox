@@ -205,18 +205,6 @@ func (m Model) viewLines(w, h int) []string {
 	return append(lines[:len(lines)-len(fit)], fit...)
 }
 
-// viewShown is the session whose chat is the right side of Sessions: the
-// selected one, when it has a pane on the home host and the screen has a
-// right side. Another host's row is list only: its detail shows there.
-func (m Model) viewShown(rightW int) (sample.Session, bool) {
-	s, ok := m.selectedSession()
-	return s, ok && s.Pane != "" && s.Host == m.opt.Host && m.tab == tabSessions && rightW > 0
-}
-
-// viewLeast is the narrowest chat beside the list: an agent's menu reads at
-// 44 columns, as on a folded phone.
-const viewLeast = 44
-
 // menuLeast is the fewest rows a chat at a menu needs for the whole of what
 // the person answers. It is the tallest common Claude Code menu, the question
 // tool's multi-select at its four options with descriptions, from its
@@ -227,70 +215,26 @@ const viewLeast = 44
 // size, and redraws above this.
 const menuLeast = 16
 
-// viewPlace is where Sessions draws the selected session's chat.
+// viewPlace is where the selected session's live view is drawn.
 type viewPlace int
 
 const (
-	placeNone   viewPlace = iota // one column, or no room for the stand-in's menu: the list's opened row shows the session
-	placeBeside                  // the right side of Sessions, beside the list
-	placeFull                    // the whole screen: the demo's stand-in for a pane
+	placeNone viewPlace = iota // no stand-in, or no room for its menu
+	placeFull                  // the whole screen: the demo's stand-in for a pane
 )
 
 // viewPlacement is the one answer to where the selected session's live
-// view is drawn at w columns, and how many rows it has for its title, strip
-// and screen: beside the list where Sessions splits, else the whole screen,
-// unless it waits at a menu and the screen has under menuLeast rows for it.
-// The demo's stand-in is the whole screen at every width.
-func (m Model) viewPlacement(w int) (viewPlace, int) {
-	if m.tab != tabSessions {
+// view is drawn, and how many rows it has for its screen: the demo's
+// stand-in is the whole screen at every width, unless it waits at a menu
+// and the screen has under menuLeast rows for it.
+func (m Model) viewPlacement() (viewPlace, int) {
+	if m.tab != tabSessions || !m.standIn {
 		return placeNone, 0
-	}
-	if _, right := m.panes(w); right > 0 && !m.standIn {
-		return placeBeside, max(m.height-5, 0)
-	}
-	if !m.standIn {
-		return placeNone, 0 // one column: the list's opened row shows the session
 	}
 	if s, ok := m.selectedSession(); ok && m.height > 0 && m.height-3 < menuLeast && m.atMenu(s) {
 		return placeNone, 0
 	}
 	return placeFull, max(m.height-3, 0)
-}
-
-// oneColumn tells if Sessions is one column at w, with no right side: as
-// on a phone, a tap on a row opens its live view over the whole screen.
-func (m Model) oneColumn(w int) bool {
-	_, right := m.panes(w)
-	return m.tab == tabSessions && right == 0
-}
-
-// viewRoom tells if a chat right columns wide fits beside the list: it is
-// at least viewLeast wide, and the body has room for viewReserve.
-func (m Model) viewRoom(right int) bool {
-	if right < viewLeast {
-		return false
-	}
-	if m.height == 0 {
-		return true // no height yet
-	}
-	return m.height-5 >= m.viewReserve(right)
-}
-
-// viewReserve is the most rows the chat right columns wide takes, of any
-// home session the cursor can move to: its title, its strip as drawn (two
-// lines on a narrow chat) and menuLeast. Sessions splits by it, so the split
-// holds as the cursor moves and as a session comes to a menu.
-func (m Model) viewReserve(right int) int {
-	most := 1 + menuLeast
-	for _, s := range m.snap.Sessions {
-		if most == 3+menuLeast { // the strip is two lines at most
-			break
-		}
-		if s.Host == m.opt.Host && s.Pane != "" {
-			most = max(most, 1+len(m.viewStrip(s, right, 2))+menuLeast)
-		}
-	}
-	return most
 }
 
 // viewTitle names the chat's session and its state.
@@ -383,8 +327,8 @@ func (m Model) viewScreen(w int) drawn {
 		title = spread(title, st.accent.Render(ansi.Truncate(m.toast, max(w/2, 1), "…"))+" ", w)
 	}
 	title = fit(title, w)
-	_, rows := m.viewPlacement(w)
-	sc := drawn{lines: []string{title}, bodyTop: 1, listW: w, actKeysAt: -1, placeFull: true, viewRows: rows, viewAt: 1, viewW: w}
+	_, rows := m.viewPlacement()
+	sc := drawn{lines: []string{title}, bodyTop: 1, listW: w, placeFull: true, viewRows: rows, viewAt: 1, viewW: w}
 	sc.lines = append(sc.lines, m.screenLines(w, rows)...)
 	hair, keys, spans := m.keyRows(w)
 	sc.keysAt, sc.keys = len(sc.lines)+1, spans
@@ -465,7 +409,7 @@ const standInHint = "type 2 to answer"
 // viewFull tells if the live view takes the whole screen: opened on one
 // column, with room for its question.
 func (m Model) viewFull() bool {
-	place, _ := m.viewPlacement(max(m.width, minWidth))
+	place, _ := m.viewPlacement()
 	return m.standIn && place == placeFull
 }
 
@@ -505,7 +449,7 @@ func (m Model) keepView() Model {
 		return m
 	}
 	s, ok := m.selectedSession()
-	place, _ := m.viewPlacement(max(m.width, minWidth))
+	place, _ := m.viewPlacement()
 	switch {
 	case !ok || m.tab != tabSessions || s.Pane == "" || s.Host != m.opt.Host || place == placeNone:
 		m.standIn = false

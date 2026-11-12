@@ -215,7 +215,7 @@ func (m Model) previewRoom() int {
 	var rows body
 	mm := m
 	mm.pending = nil
-	w, _ := m.panes(max(m.width, minWidth))
+	w := max(m.width, minWidth)
 	mm.doorsSection(&rows, w)
 	choice := 0
 	if d, ok := m.previewDoor(); ok {

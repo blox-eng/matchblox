@@ -16,7 +16,8 @@ import (
 )
 
 // liveFrom is the narrowest board with the chosen match's live view at its
-// right: the four columns at their base widths, the gaps, and viewLeast.
+// right: the four columns at their base widths, the gaps, and the 44
+// columns at which an agent's menu reads.
 const liveFrom = 152
 
 // boardBase is each column's width: of 80 on Medium, where QUIET is the

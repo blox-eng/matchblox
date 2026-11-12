@@ -48,17 +48,6 @@ func loadViewPrefs(dir string) viewPrefs {
 	return p
 }
 
-// oneLineMin is the narrowest list with no right side that keeps its rows one
-// line.
-const oneLineMin = 107
-
-// inPlace: the selected row opens under itself, as on a phone: on a
-// phone, and wherever Sessions has no right side short of oneLineMin.
-func (m Model) inPlace() bool {
-	w := max(m.width, minWidth)
-	return m.layoutAt(m.width) == Narrow || w < oneLineMin && m.oneColumn(w)
-}
-
 func (m *Model) keepViewPrefs() {
 	m.flash = ""
 	if err := keepState(m.opt.StateDir, viewPrefsFile, m.viewPrefs); err != nil {

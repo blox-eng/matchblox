@@ -41,31 +41,10 @@ func flintAt(t *testing.T, w, h int, keys ...string) Model {
 func viewDrawn(m Model) (drawn, whole bool) {
 	sc := m.draw(m.width)
 	out := ansi.Strip(strings.Join(sc.lines, "\n"))
-	_, right := m.panes(m.width)
-	drawn = sc.placeFull || right > 0 && strings.Contains(out, "flint-auth · ")
+	drawn = sc.placeFull
 	whole = strings.Contains(out, "Should a refresh also rotate") && strings.Contains(out, "❯ 1. Rotate it") &&
 		strings.Contains(out, "3. Type something.") && strings.Contains(out, "Enter to select")
 	return drawn, whole
-}
-
-// TestNoChatWithoutItsQuestion: a screen too short or too narrow for the
-// chat's question draws Sessions in one column, and the chat, when it
-// opens, is whole or not drawn.
-func TestNoChatWithoutItsQuestion(t *testing.T) {
-	for _, size := range [][2]int{{96, 8}, {106, 10}, {60, 21}, {96, 20}} {
-		w, h := size[0], size[1]
-		for _, keys := range [][]string{nil, {"enter"}} {
-			m := flintAt(t, w, h, keys...)
-			if drawn, whole := viewDrawn(m); drawn && !whole {
-				t.Errorf("%dx%d after %v: the chat shows without its whole question:\n%s", w, h, keys, screen(m))
-			}
-		}
-	}
-	for _, size := range [][2]int{{96, 8}, {106, 10}, {60, 21}} {
-		if _, right := flintAt(t, size[0], size[1]).panes(size[0]); right != 0 {
-			t.Errorf("%dx%d: Sessions splits with no room for the question", size[0], size[1])
-		}
-	}
 }
 
 // TestEveryGoldenShowsTheAgentsWholeMenu: on every golden size, a chat at a
@@ -93,23 +72,6 @@ func TestEveryGoldenShowsTheAgentsWholeMenu(t *testing.T) {
 				if !strings.Contains(out, strings.TrimSpace(want)) {
 					t.Errorf("%dx%d after %v: the chat of %dx%d lacks %q:\n%s", w, h, keys, cols, rows, want, out)
 				}
-			}
-		}
-	}
-}
-
-// TestTheSplitHoldsAsTheCursorMoves: Sessions splits by menuLeast and the
-// tallest strip of the sessions, not by the selected one's wait: moving the
-// cursor never flips the screen between one column and the split.
-func TestTheSplitHoldsAsTheCursorMoves(t *testing.T) {
-	for _, size := range [][2]int{{96, 20}, {96, 23}, {96, 24}, {100, 24}, {132, 22}, {132, 23}} {
-		m := fullView(flintAt(t, size[0], size[1]))
-		_, want := m.panes(size[0])
-		for range 8 {
-			m = pressKeys(t, m, "up")
-			if _, right := m.panes(size[0]); right != want {
-				s, _ := m.selectedSession()
-				t.Fatalf("%v: on %s the chat is %d wide, on flint-auth %d", size, s.Name, right, want)
 			}
 		}
 	}

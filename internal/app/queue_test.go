@@ -101,35 +101,6 @@ func TestTabsFit80WithAlert(t *testing.T) {
 	}
 }
 
-func TestSessionMatchGlyphs(t *testing.T) {
-	m := loaded(t, 120) // no motion: each state is one still glyph
-	m.opt.CompactAt = 85
-	for _, tc := range []struct {
-		busy bool
-		pct  float64
-		want matchKind
-		ch   string
-		word string
-	}{
-		{true, 50, matchLit, "✦", "busy"},
-		{false, 50, matchUnlit, "╿", "idle"},
-		{true, 90, matchBurnt, "│", "busy"},
-		{false, 90, matchBurnt, "│", "idle"},
-	} {
-		s := sample.Session{Pane: "%9", Target: "lab:1.9", Name: "api", Busy: tc.busy, Context: "known", ContextPct: tc.pct, Tokens: int(tc.pct * 2000)}
-		if !tc.busy {
-			s.Status = "idle"
-		}
-		if got := m.matchOf(s); got != tc.want {
-			t.Errorf("busy=%v %v%%: %v, want %v", tc.busy, tc.pct, got, tc.want)
-		}
-		plain := ansi.Strip(strings.Join(m.sessionRow(s, false, 78), "\n"))
-		if !strings.Contains(plain, tc.ch+" ") || !strings.Contains(plain, tc.word) {
-			t.Errorf("busy=%v %v%%: row %q lacks %q or the word %q", tc.busy, tc.pct, plain, tc.ch, tc.word)
-		}
-	}
-}
-
 // animated is the console with motion on, past the start screen, on a
 // clock the test moves.
 func animated(t *testing.T, st proto.State, now *time.Time) Model {

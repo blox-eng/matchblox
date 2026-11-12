@@ -110,7 +110,7 @@ func TestNoSessionActionOnTheGhost(t *testing.T) {
 		}
 	}
 	var words []string
-	for _, h := range g.(Model).sessionKeys() {
+	for _, h := range g.(Model).boardHints(100) {
 		words = append(words, h.label)
 	}
 	if len(words) == 0 || slices.Contains(words, "kill") || slices.Contains(words, "rename") {

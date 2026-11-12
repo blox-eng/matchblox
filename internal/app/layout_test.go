@@ -73,11 +73,7 @@ func fitsWidth(t *testing.T, m Model, w int) {
 // spaces, never a recommendation that names it ("Compact x (%1)").
 func sessLine(t *testing.T, m tea.Model, name string) int {
 	t.Helper()
-	lw, _ := m.(Model).panes(max(m.(Model).width, minWidth))
 	for i, line := range strings.Split(ansi.Strip(m.(Model).render()), "\n") {
-		if r := []rune(line); lw > 0 && len(r) > lw {
-			line = string(r[:lw]) // the list, not the detail beside it
-		}
 		if strings.Contains(line+" ", " "+name+" ") && !strings.Contains(line, "(%") {
 			return i
 		}
@@ -233,20 +229,6 @@ func selectPane(t *testing.T, m tea.Model, pane string) tea.Model {
 	return m
 }
 
-// listOf is the list column of a screen line: its first w cells, the list
-// width of Sessions on a console w wide.
-func listOf(line string, w int) string {
-	lw := w
-	if byWidth(w) != Narrow {
-		lw = splitAt(w, byWidth(w))
-	}
-	if byWidth(w) == Wide {
-		lw = min(lw, w*2/5)
-	}
-	r := []rune(line)
-	return string(r[:min(lw, len(r))])
-}
-
 // TestAToastSaysWhatRan: after an action the header's right says what ran,
 // cut before the name is, then goes; a failure stays on the key line.
 func TestAToastSaysWhatRan(t *testing.T) {
@@ -285,38 +267,6 @@ func TestTheDockSaysTheDisk(t *testing.T) {
 	}
 }
 
-// TestRowColumnsLineUp: every session row spans its pane, and its word
-// starts at the same x on every row, at every width and shape.
-func TestRowColumnsLineUp(t *testing.T) {
-	for _, size := range [][2]int{{44, 31}, {86, 30}, {107, 60}, {132, 32}, {192, 60}} {
-		w, h := size[0], size[1]
-		m := loaded(t, w)
-		next, _ := m.Update(tea.WindowSizeMsg{Width: w, Height: h})
-		m = next.(Model)
-		lw, _ := m.panes(w)
-		if lw == 0 {
-			lw = w
-		}
-		x := -1
-		for _, s := range m.all.sessions {
-			line := ansi.Strip(m.sessionRow(s, false, lw)[0])
-			if got := ansi.StringWidth(line); got != lw {
-				t.Fatalf("%dx%d: %s's row is %d wide, want %d: %q", w, h, s.Name, got, lw, line)
-			}
-			word := m.wordOf(s)
-			at := strings.LastIndex(line, " "+word+" ")
-			if at < 0 {
-				t.Fatalf("%dx%d: no word %q in %q", w, h, word, line)
-			}
-			if wx := ansi.StringWidth(line[:at]); x < 0 {
-				x = wx
-			} else if wx != x {
-				t.Fatalf("%dx%d: %s's word is at %d, the others at %d: %q", w, h, s.Name, wx, x, line)
-			}
-		}
-	}
-}
-
 // TestAKeyboardKeepsTheShape: a 60-column screen at 34 rows is upright; a
 // keyboard that takes it to 21 rows keeps it one column, upright. A new
 // width decides afresh (design/0006 §4).
@@ -325,8 +275,8 @@ func TestAKeyboardKeepsTheShape(t *testing.T) {
 	next, _ := fullView(m).Update(tea.WindowSizeMsg{Width: 60, Height: 34})
 	next, _ = next.Update(tea.WindowSizeMsg{Width: 60, Height: 21})
 	nm := next.(Model)
-	if _, right := nm.panes(60); nm.layoutAt(60) != Narrow || !nm.upright() || right != 0 {
-		t.Fatalf("60x21 after 60x34: layout %v, upright %v, right side %d:\n%s", nm.layoutAt(60), nm.upright(), right, screen(nm))
+	if nm.layoutAt(60) != Narrow || !nm.upright() {
+		t.Fatalf("60x21 after 60x34: layout %v, upright %v:\n%s", nm.layoutAt(60), nm.upright(), screen(nm))
 	}
 	next, _ = next.Update(tea.WindowSizeMsg{Width: 100, Height: 21})
 	if l := next.(Model).layoutAt(100); l != Wide {

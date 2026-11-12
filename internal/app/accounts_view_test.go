@@ -4,9 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/x/ansi"
-
 	"github.com/blox-eng/matchblox/internal/limits"
 )
 
@@ -116,28 +113,5 @@ func TestRowSaysByHandForItsSessionName(t *testing.T) {
 	m = selectPane(t, m, st.Sessions[0].Pane).(Model) // the chosen card says what the row said
 	if out := screen(m); !strings.Contains(out, "sign in by hand") {
 		t.Errorf("the row does not say sign in by hand:\n%s", out)
-	}
-}
-
-// TestAccountTagKeepsAGapBeforeTheWord: wide or narrow, a tag cut short or a
-// name longer than its column leaves a space before the state word.
-func TestAccountTagKeepsAGapBeforeTheWord(t *testing.T) {
-	for _, name := range []string{"app-feature", "app-feature-with-a-very-long-name-indeed"} {
-		for w := 40; w <= 110; w += 5 {
-			st := queueState()
-			st.Sessions[0].Name = name
-			st.Sessions[0].AccountDir = "/home/u/.matchblox/accounts/claude/workbench"
-			m, _ := loadedWith(t, w, st)
-			m.tab = tabSessions
-			for _, line := range m.sessionRow(st.Sessions[0], false, w) {
-				row := ansi.Strip(line)
-				if i := strings.Index(row, "asks"); i > 0 && row[i-1] != ' ' {
-					t.Errorf("width %d, %q: no gap before the word: %q", w, name, row)
-				}
-				if lipgloss.Width(row) > w {
-					t.Errorf("width %d: row too wide: %q", w, row)
-				}
-			}
-		}
 	}
 }

@@ -45,11 +45,6 @@ func TestDisabledTabHintAndZeroSkips(t *testing.T) {
 	k := defaultKeys()
 	m := Model{keys: k}
 	m.st = newStyles(true)
-	with, _ := m.hintRow([]hint{hintFor(k.main.Open, "")}, 2)
-	skipped, _ := m.hintRow([]hint{{}, hintFor(k.main.Open, ""), {}}, 2)
-	if with != skipped {
-		t.Errorf("hintRow drew a zero hint: %q, want %q", skipped, with)
-	}
 	part := m.st.footFor(k.form.Enter, "start", "")
 	a, _ := boxFrame(m.st.hair, "t", []string{"x"}, []footPart{part}, 30)
 	b, _ := boxFrame(m.st.hair, "t", []string{"x"}, []footPart{{}, part, {}}, 30)

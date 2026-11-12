@@ -242,18 +242,17 @@ func (m *Model) belowMove(d int) {
 // belowKey is ⏎, x, d or h on a line under the columns: the ghost row and
 // a recommendation take them as their rows in Sessions did.
 func (m Model) belowKey(line string, k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	m.selectRow(m.belowRow(line))
+	m.pickBelow(line)
 	return m.key(k)
 }
 
-// belowRow is the row of Sessions of a line under the columns: the ghost
-// row (""), or the recommendation id.
-func (m Model) belowRow(line string) int {
-	at := len(m.doors) + len(m.snap.Sessions)
-	if i := slices.IndexFunc(m.recs[:m.recRows()], func(r advice.Rec) bool { return r.ID == line }); line != "" && i >= 0 {
-		at += len(m.ghosts()) + len(m.blockedHosts()) + i
+// pickBelow selects a line under the columns: the recommendation with the
+// id line while it shows, else the ghost row.
+func (m *Model) pickBelow(line string) {
+	m.doorPick, m.recPick, m.ghostPick = "", "", 1
+	if line != "" && slices.ContainsFunc(m.recs[:m.recRows()], func(r advice.Rec) bool { return r.ID == line }) {
+		m.recPick, m.ghostPick = line, 0
 	}
-	return at
 }
 
 // boardOnRow: Sessions' selection is what the board chose (onChoice): a
@@ -285,7 +284,7 @@ func (m Model) onChoice() Model {
 		return m.onCard(s)
 	}
 	if line, ok := m.belowChosen(); ok {
-		m.selectRow(m.belowRow(line))
+		m.pickBelow(line)
 	}
 	if line, ok := m.aboveChosen(); ok && line == "" {
 		if i := m.doorIndex(m.boardDoors()) - len(m.copyDoors()); i >= 0 {

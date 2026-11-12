@@ -63,12 +63,11 @@ func outsideTmux(st proto.State) proto.State {
 	return st
 }
 
-// rowOf is the screen line of a session's row: its name in the list
-// column, never a recommendation that names it ("Compact x (%1)").
+// rowOf is the screen line of a session's card: its name, never a
+// recommendation that names it ("Compact x (%1)").
 func rowOf(out, name string) string {
-	lines := strings.Split(ansi.Strip(out), "\n")
-	for _, l := range lines {
-		if left := listOf(l, len([]rune(lines[0]))); strings.Contains(left, " "+name+" ") && !strings.Contains(left, "(%") {
+	for _, l := range strings.Split(ansi.Strip(out), "\n") {
+		if strings.Contains(l, " "+name+" ") && !strings.Contains(l, "(%") {
 			return l
 		}
 	}

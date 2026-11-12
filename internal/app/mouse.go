@@ -5,7 +5,7 @@ import (
 )
 
 // tap is a click or a finger on a phone. A tap on a tab opens it, on a key
-// of the key line, of an opened row or under the detail presses it, on `● N wait for you` selects the first
+// of the key line presses it, on `● N wait for you` selects the first
 // session that waits (on the board `● N need you` clears its filters). A tap
 // on the live view goes into the agent's pane: right of the list, or over
 // the whole screen of a phone, where its title row goes back to Sessions.
@@ -122,12 +122,6 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		}
 		return m.holdPress(next, cmd, ms)
 	}
-	if ms.Y == sc.actKeysAt {
-		if s, ok := spanAt(sc.actKeys, ms.X); ok {
-			m.armed = ""
-			return m.keyed(keyPress(s.press))
-		}
-	}
 	i := ms.Y - sc.bodyTop
 	if i < 0 || i >= len(sc.rows) {
 		return m, nil
@@ -154,13 +148,6 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	}
 	picked := m.view().index != nil && m.rowIndex() == sc.rows[i] && (m.tab != tabSessions || m.chose)
 	m.selectRow(sc.rows[i])
-	if s, ok := m.selectedSession(); ok && m.tab == tabSessions && !m.oneColumn(w) && m.onFuse(ms.X, sc.listW) {
-		// A phone's row tap opens its chat: there F stokes the chain.
-		if k, chained := m.chainKeyOf(s); chained && !m.headed(k) {
-			m.armed = ""
-			return m.startChain(k), nil
-		}
-	}
 	if v, ok := m.selectedMachineView(); ok && m.tab == tabMachine {
 		// A tap on the selected view row opens it, as Enter does.
 		m.armed, m.flash = "", ""
@@ -182,7 +169,7 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		// as Enter does (#351, #352). Beside the view, a tap selects the
 		// session, and a tap on it once it is selected goes in.
 		m.armed, m.flash = "", ""
-		if !picked && !m.oneColumn(w) { // the default selection is not a tap
+		if !picked && m.tab != tabSessions { // the default selection is not a tap
 			return m, nil
 		}
 		return m.goIntoAsking(host, pane)
@@ -238,7 +225,7 @@ func (m Model) wheel(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	if m.boardShown() && !m.standIn && !m.viewFull() {
 		return m.boardWheel(ms)
 	}
-	if m.overView(ms) {
+	if m.overView() {
 		m.armed = ""
 		return m.wheelView(ms.Button == tea.MouseWheelUp)
 	}
@@ -288,9 +275,9 @@ func overBoardViewOf(ms tea.Mouse, sc drawn) bool {
 	return v.x1 > 0 && ms.X >= v.x0 && ms.X < v.x1 && ms.Y >= v.y0 && ms.Y < v.y1
 }
 
-// overView tells if ms is over the live view: the whole screen of a
-// phone's, or the view beside the list.
-func (m Model) overView(ms tea.Mouse) bool {
+// overView tells if the live view is under the finger: the stand-in is
+// the whole screen.
+func (m Model) overView() bool {
 	if !m.have || m.mismatch || m.pair.owns() || m.sheet != nil || m.form != nil || m.pending != nil {
 		return false
 	}
@@ -299,15 +286,5 @@ func (m Model) overView(ms tea.Mouse) bool {
 	if !kept {
 		sc = m.draw(w)
 	}
-	return m.overViewOf(ms, sc)
-}
-
-// overViewOf tells if ms is over the live view of the frame sc.
-func (m Model) overViewOf(ms tea.Mouse, sc drawn) bool {
-	if sc.placeFull {
-		return true
-	}
-	_, detailW := m.panes(max(m.width, minWidth))
-	_, viewing := m.viewShown(detailW)
-	return viewing && ms.X > sc.listW && ms.Y >= sc.bodyTop && ms.Y < sc.bodyTop+len(sc.rows)
+	return sc.placeFull
 }
