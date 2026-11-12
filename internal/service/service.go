@@ -392,6 +392,8 @@ type Service struct {
 	updates     state.UpdateFile
 	updateMu    sync.Mutex
 	updateTicks <-chan time.Time
+	// installing is true while installUpdate runs: one install at a time.
+	installing atomic.Bool
 }
 
 func New(cfg config.Config, smp *sample.Sampler, git GitSource) *Service {

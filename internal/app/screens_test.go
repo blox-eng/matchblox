@@ -18,6 +18,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/askpass"
 	"github.com/blox-eng/matchblox/internal/config"
+	"github.com/blox-eng/matchblox/internal/doors"
 	"github.com/blox-eng/matchblox/internal/hooks"
 	"github.com/blox-eng/matchblox/internal/procfs"
 	"github.com/blox-eng/matchblox/internal/proto"
@@ -136,6 +137,12 @@ func TestScreens(t *testing.T) {
 	check(t, sheetScreen(st, true), "sheetday", 104, 38, []string{"o"})
 	for _, size := range [][2]int{{44, 31}, {104, 38}} {
 		check(t, tabFamily(st, false), "stokerfamily", size[0], size[1], []string{"c", "down", "down"})
+	}
+	offer := st
+	offer.Doors = []doors.Door{{ID: doors.Update, Title: "matchblox v0.43.0 is out", Why: "This machine runs v0.42.0.", Sum: "v0.43.0",
+		Preview: "matchblox v0.42.0 → v0.43.0 (linux/amd64)\n  checksum    checked before anything changes\n  provenance  checked when gh can verify it\n  replaces    /home/user/.local/bin/matchblox"}}
+	for _, size := range [][2]int{{44, 31}, {104, 38}} {
+		check(t, offer, "updatedoor", size[0], size[1], nil)
 	}
 	twoChains := tabFamily(st, false)
 	twoChains.Stokers[1].View.PaneUp = true

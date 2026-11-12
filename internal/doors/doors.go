@@ -30,6 +30,9 @@ const (
 	// KeepRunning writes a user unit, then runs Term: the service writes
 	// the file and runs the command, so the terminal never runs it.
 	KeepRunning = "keeprunning"
+	// Update installs a newer release. The service offers it, not setup,
+	// and closing it closes that one release.
+	Update = "update"
 )
 
 type Door struct {

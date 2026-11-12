@@ -318,3 +318,18 @@ func TestInstallReportsAVerifiedProvenance(t *testing.T) {
 		t.Fatalf("proof = %+v, want %+v", proof, want)
 	}
 }
+
+func TestInstallFailureLeavesTheOldBinary(t *testing.T) {
+	w := newReleaseWorld(t, "v0.1.0", "v0.2.0")
+	w.sum = strings.Repeat("0", 64)
+	proof, err := w.updater.Install("v0.2.0")
+	if err == nil || !strings.Contains(err.Error(), "checksum mismatch") {
+		t.Fatalf("err = %v", err)
+	}
+	if proof != (Proof{}) {
+		t.Errorf("proof of a failed install = %+v", proof)
+	}
+	if got := w.installed(); got != "old" {
+		t.Fatalf("the binary holds %q after a failed install, want the old bytes", got)
+	}
+}

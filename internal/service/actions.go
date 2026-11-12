@@ -624,22 +624,34 @@ func (s *Service) permits(pane string) bool {
 }
 
 // doors reads the machine's doors: a few small files, cheap on each sample.
+// The update door comes last.
 func (s *Service) doors() []doors.Door {
-	if s.Setup == nil {
-		return nil
+	var ds []doors.Door
+	if s.Setup != nil {
+		ds = setup.Doors(*s.Setup)
 	}
-	return setup.Doors(*s.Setup)
+	if d, ok := s.updateDoor(); ok {
+		ds = append(ds, d)
+	}
+	return ds
 }
 
 // door opens a door ("primary", Text = the Sum of the preview the person
 // saw; "also" opens it with the choice of its preview turned on) or closes
 // it ("secondary"). All need a typed y: they change the person's own files.
 func (s *Service) door(id string, a proto.Act) proto.Result {
-	if s.Setup == nil {
-		return proto.Result{Err: "no doors on this machine"}
-	}
 	if a.Confirm != "y" {
 		return proto.Result{Err: "needs a typed y"}
+	}
+	if id == doors.Update {
+		defer s.refreshDoors()
+		if a.Which == "secondary" {
+			return s.closeUpdate()
+		}
+		return s.updateAct(a.Text)
+	}
+	if s.Setup == nil {
+		return proto.Result{Err: "no doors on this machine"}
 	}
 	defer s.refreshDoors()
 	if a.Which == "secondary" {

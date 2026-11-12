@@ -17,6 +17,8 @@ var (
 	hooksDoor  = doors.Door{ID: doors.Hooks, Title: "Add the queue hooks", Why: "Claude Code tells matchblox when an agent waits for you.", Path: home + "/.claude/settings.json", Sum: "s1", Preview: " {\n+  \"hooks\": {}\n }"}
 	wayBack    = doors.Door{ID: doors.WayBack, Title: "Add the way back", Why: "prefix m comes back here.", Path: home + "/.tmux.conf", Sum: "s2", Preview: "+bind m switch-client -t =matchblox"}
 	guideDoor  = doors.Door{ID: doors.Guide, Title: "Open a guide session", Why: "This starts Claude Code and uses your tokens.", Term: doors.GuideArgv(false), Preview: "claude '...'"}
+	updateDoor = doors.Door{ID: doors.Update, Title: "matchblox v0.43.0 is out", Why: "This machine runs v0.42.0.", Sum: "v0.43.0",
+		Preview: "matchblox v0.42.0 → v0.43.0 (linux/amd64)\n  checksum    checked before anything changes\n  provenance  checked when gh can verify it\n  replaces    " + home + "/.local/bin/matchblox"}
 	brokenDoor = doors.Door{ID: doors.Hooks, Title: "Add the queue hooks", Problem: "~/.claude/settings.json is not valid JSON: fix it, then this door opens"}
 )
 
@@ -101,6 +103,29 @@ func TestXClosesADoor(t *testing.T) {
 	}
 	if acts := f.acts(); len(acts) != 1 || acts[0] != (proto.Act{RecID: "door:guide", Which: "secondary", Confirm: "y"}) {
 		t.Fatalf("acts %+v", acts)
+	}
+}
+
+func TestTheUpdateDoorInstallsTheTagItShowed(t *testing.T) {
+	m, f := loadedWith(t, 100, doorState(updateDoor))
+	next, _ := key(m, "enter")
+	out := ansi.Strip(next.(Model).render())
+	for _, want := range []string{"RUN matchblox v0.43.0 is out: install v0.43.0", "matchblox v0.42.0 → v0.43.0", "replaces    ~/.local/bin/matchblox"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("no %q:\n%s", want, out)
+		}
+	}
+	next, cmd := key(next, "y")
+	if cmd != nil {
+		next.Update(cmd())
+	}
+	if acts := f.acts(); len(acts) != 1 || acts[0] != (proto.Act{RecID: "door:update", Which: "primary", Confirm: "y", Text: "v0.43.0"}) {
+		t.Fatalf("acts %+v", acts)
+	}
+	m, _ = loadedWith(t, 100, doorState(updateDoor))
+	closing, _ := key(m, "x")
+	if out := ansi.Strip(closing.(Model).render()); !strings.Contains(out, "close matchblox v0.43.0 is out (the next release opens it again)") {
+		t.Fatalf("close confirm:\n%s", out)
 	}
 }
 

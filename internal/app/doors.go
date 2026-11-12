@@ -72,12 +72,20 @@ func (m Model) doorAction(d doors.Door) *action {
 	if d.Sum == "" {
 		return nil
 	}
-	return &action{label: d.Title, say: d.Title + ": write " + tilde(d.Path), destructive: true,
+	say := d.Title + ": write " + tilde(d.Path)
+	if d.ID == doors.Update {
+		say = d.Title + ": install " + d.Sum
+	}
+	return &action{label: d.Title, say: say, destructive: true,
 		rec: "door:" + d.ID, which: "primary", text: d.Sum, door: d.ID}
 }
 
 func closeDoor(d doors.Door) *action {
-	return &action{label: "close", say: "close " + d.Title + " (matchblox setup opens it again)", destructive: true,
+	again := "matchblox setup opens it again"
+	if d.ID == doors.Update {
+		again = "the next release opens it again"
+	}
+	return &action{label: "close", say: "close " + d.Title + " (" + again + ")", destructive: true,
 		rec: "door:" + d.ID, which: "secondary", door: d.ID}
 }
 
