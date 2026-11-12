@@ -227,8 +227,13 @@ func (w *walker) open(screen string) {
 // onView tells if the screen shows the view name: its word, under the tab
 // row's MACHINE.
 func (w *walker) onView(name string) bool {
-	at := slices.IndexFunc(viewWords, func(v struct{ name, word string }) bool { return v.name == name })
 	_, frame := w.term.wholeFrame()
+	return viewIn(name, frame)
+}
+
+// viewIn tells if frame shows the view name.
+func viewIn(name, frame string) bool {
+	at := slices.IndexFunc(viewWords, func(v struct{ name, word string }) bool { return v.name == name })
 	return at >= 0 && tabOf(0, frame) == "MACHINE" && strings.Contains(frame, viewWords[at].word)
 }
 
@@ -248,10 +253,9 @@ func (w *walker) toView(name string) {
 	w.press(slices.Repeat([]string{"k"}, 12)...)
 	w.press(slices.Repeat([]string{"j"}, at)...)
 	w.press("enter")
-	eventually(w.t, 10*time.Second, "the "+name+" view to open", func() bool {
-		w.d.Repaint()
-		return w.onView(name)
-	})
+	// One repaint at a time, each waited for: a repaint every poll starts a
+	// new whole frame before the last one is read.
+	eventually(w.t, 10*time.Second, "the "+name+" view to open", func() bool { return viewIn(name, w.term.screen()) })
 }
 
 // toTab opens the tab want names: a tap on its name on the tab row, as a
