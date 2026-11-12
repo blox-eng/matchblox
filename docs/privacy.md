@@ -1,6 +1,6 @@
 # Privacy Policy
 
-_Last updated: 29 October 2026_
+_Last updated: 12 November 2026_
 
 matchblox is a console for running and steering your coding agents. **Matchblox
 Pocket** is its app for iPhone and iPad. This policy explains what the app does
@@ -42,6 +42,25 @@ your device holds** (end-to-end encryption). As a result:
 - The relay handles only **delivery metadata** needed to send a push (a push
   token or Live Activity channel id, and the requesting IP address, used to
   rate-limit abuse). It does not store your message content.
+
+## Release checks (the matchblox service)
+
+The matchblox service on each host looks for a newer release of matchblox.
+This is **on by default**:
+
+- **What.** One request when the service starts, then one a day, to GitHub:
+  `https://github.com/blox-eng/matchblox/releases/latest`. It names no
+  session, repository, host or person. GitHub sees what any HTTPS request
+  carries, such as the host's IP address. The request does not go through
+  matchblox servers.
+- **The download.** When you install a release from the console, or with
+  `[update] mode = "auto"`, the service downloads that release and its
+  checksum from GitHub. With `gh` logged in, `gh` also asks GitHub for the
+  release's build attestation, as your own `gh` login.
+- **How to stop it.** Set `[update] mode = "off"` in
+  `~/.config/matchblox/config.toml` on that host. The service then makes no
+  request, unless you press `u` on that host's row in a console. See
+  [Config](config.md#update).
 
 ## What we do not do
 

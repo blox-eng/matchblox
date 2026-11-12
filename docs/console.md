@@ -452,6 +452,23 @@ back to Sessions, on the next agent that waits.
 - Agents that exited and wait for their parent are one faint line under the
   sessions. `e` lists them with the command that clears them.
 
+### A new release
+
+When the service finds a newer release, `SET UP` shows the step
+"matchblox v0.43.0 is out". `Enter` shows what it installs and what it
+checks first. A typed `y` installs it, and the service and the console start
+again on it. With `[update] mode = "auto"` the service installs it by
+itself, and the console then says once `updated to v0.43.0 at 03:12`. See
+[Config](config.md#update).
+
+A console left open never puts its older build back over a newer service.
+The key line says
+`the service runs v0.43.0, this console v0.42.0 · R: start again`, and `R`
+starts the console again on the new release.
+
+A host on another release says so on its row in Hosts. See
+[Remote hosts](remote.md#a-host-on-another-release).
+
 ## 2 Ships
 
 The pull requests your sessions drive, each on its track from open to

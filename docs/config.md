@@ -132,15 +132,54 @@ One match opts out alone with `matchblox chain --off`.
 ## Update
 
 `[update] mode` is what the host does about a newer release. It is `"offer"`
-by default. Any other value is an error.
+by default. Any other value is an error that names the three modes. Each
+machine has its own.
 
 | Mode | What the host does | What leaves the machine |
 | --- | --- | --- |
-| `"offer"` | Finds a release and offers it in the console. You install it. | One request to find the latest release. |
+| `"offer"` | Finds a release and offers it in the console. You install it. | One request a day to find the latest release. The download of the release when you install it. |
 | `"auto"` | Installs a release a day after it first sees it, with no stoker run on and no clone running. | The same request, then the download of the release. |
-| `"off"` | Does nothing. | Nothing, until you press the key on a host's row. |
+| `"off"` | Does nothing. | Nothing, until you press `u` on this host's row in another console. |
 
 ```toml
 [update]
 mode = "auto"
 ```
+
+The service looks when it starts and then once a day. The console never
+looks. A build that is not a release (a `dev` build, or one from a
+checkout) never looks, and a prerelease is never offered. A look that
+fails keeps the release it found before, and never reads as up to date:
+`matchblox status` gives the reason in `update.err`.
+
+**offer.** Sessions shows the step "matchblox v0.43.0 is out" under
+`SET UP`.
+`Enter` shows what it installs, that the checksum is checked before
+anything changes, that the build's provenance is checked when `gh` can
+verify it, and the file it replaces. A typed `y` installs it, with the same
+checks as `matchblox update`. The service then runs again on the new
+release, and the console starts again. Your sessions run on: they live in
+tmux. `x` closes the offer of that release only, and the next release shows
+a new one. Until then, `matchblox update` installs it.
+
+**auto.** The service installs the release by itself, with no console
+open. It waits a day from when this machine first saw the release, and for
+a time when no stoker run is on and no clone runs. A newer release during
+the wait starts the day again. The install makes the same checks as
+`matchblox update` and records which ones it made. The console then says
+once `updated to v0.43.0 at 03:12`, or why the update failed and the
+command to run. The offer shows during the day of the wait. Closing it does
+not stop the install: to skip a release on this machine, use `"offer"` or
+`"off"`.
+
+**off.** No look, no request and no offer. A person who presses `u` on this
+host's row in another console still updates it: see
+[A host on another release](remote.md#a-host-on-another-release).
+
+Homebrew owns the binary it installed, so matchblox never replaces it. The
+offer says `brew upgrade matchblox`, and `"auto"` does nothing.
+
+Only a person at a console installs from the offer or updates a host:
+on the host, over SSH, or in the phone app. An agent's session, a session
+the stoker drives and a script are refused. The same holds for every step
+under `SET UP`.

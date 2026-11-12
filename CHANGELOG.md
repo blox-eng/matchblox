@@ -6,6 +6,42 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **The console offers a new release.** The service looks for the latest
+  release when it starts and once a day. When one is newer, Sessions shows
+  "matchblox v0.43.0 is out" under `SET UP`. `Enter` shows what it installs
+  and what it checks first. A typed `y` installs it with the checks of
+  `matchblox update`, and the service and the console start again on it.
+  Your sessions run on. A Homebrew install shows `brew upgrade matchblox`
+  instead. ([#390](https://github.com/blox-eng/matchblox/issues/390))
+- **`[update] mode` picks `"offer"`, `"auto"` or `"off"`.** `"offer"` is the
+  default. `"auto"` installs a release by itself, a day after this machine
+  first saw it, with no stoker run on and no clone running, and the console
+  then says `updated to v0.43.0 at 03:12`. `"off"` never looks. See
+  [Config](https://docs.matchblox.com/config/#update).
+  ([#390](https://github.com/blox-eng/matchblox/issues/390))
+- **A host on another release says so on its row.** Hosts shows
+  `v0.38.1, behind this console (v0.42.0)`. `u` and a typed `y` update a
+  host that is behind, and `d` dismisses the note. A host too old for `u`
+  shows the command to run on it.
+  ([#390](https://github.com/blox-eng/matchblox/issues/390),
+  [#389](https://github.com/blox-eng/matchblox/issues/389))
+
+### Changed
+
+- **A console never puts its older build back over a newer service.** It
+  says `the service runs v0.43.0, this console v0.42.0 · R: start again`,
+  and `R` starts the console again on the new release.
+  ([#390](https://github.com/blox-eng/matchblox/issues/390))
+
+### Security
+
+- **Only a person at a console opens a `SET UP` step or updates a host.**
+  An agent's session, a session the stoker drives and a script are refused:
+  `only you open or close a door, at a console`.
+  ([#390](https://github.com/blox-eng/matchblox/issues/390))
+
 ## [0.42.0] - 2026-11-12
 
 ### Changed

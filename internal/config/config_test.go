@@ -106,6 +106,9 @@ func TestExampleLoads(t *testing.T) {
 	if c.Chains != Default().Chains {
 		t.Fatalf("the example must state the chains defaults: %+v", c.Chains)
 	}
+	if c.Update.Mode != UpdateOffer {
+		t.Fatalf("the example must state the update default: %+v", c.Update)
+	}
 }
 
 // TestChainsConfigDefaults: the notice is on and send reaches the chain by

@@ -44,6 +44,11 @@ What does not work yet, and what to do until it does.
 | New session finds an agent on the service's `PATH` | An agent that is a shell alias, or on a `PATH` only your shell sets, is not offered. Put it on the `PATH` the service runs with, or start it yourself. |
 | Rename names a Codex, OpenCode or Cursor agent in tmux only | They keep no name of their own: Sessions shows them by their tmux window. Claude Code takes `/rename` at rest, so a busy session is renamed when it rests. |
 | No native Windows | Use Linux or macOS. |
+| `mode = "auto"` does not update a Homebrew install | Homebrew owns that binary, and matchblox never replaces it. Run `brew upgrade matchblox`: the offer names it too. |
+| `mode = "auto"` waits a day | It installs a release a day after this machine first sees it, and only with no stoker run on and no clone running. To install sooner, open the offer under `SET UP`, or run `matchblox update`. |
+| A host on an older release has no `u` | A release from before the offer cannot be updated from another console. Its row on Hosts says `on ws-1: matchblox update`: run that on the host once, and later releases take `u`. |
+| The app updates through Apple | matchblox updates the binary on your hosts only. Matchblox Pocket gets its updates from TestFlight or the App Store. |
+| No downgrade, no pinned release | matchblox offers and installs the latest release only. To stay on the release you have, set `[update] mode = "off"`: then only `matchblox update` on the host, or `u` on its row in a console, changes it. |
 | One host on a screen | `esc` goes back to Hosts. |
 | An agent joins a chain without your yes | `matchblox chain <who>` joins the chain of `<who>` at once, from any repo on the host, and then sends its mates lines. Nobody is asked first. Sessions shows the chain once it forms. Turn chains off for an agent with `matchblox chain --off` from its pane, or every send with `[chains] send = "off"`. |
 | Chain news reads each chained worktree one at a time | A chain across many repos reads the HEAD of each worktree in turn, so a slow repo delays the news of the others by a sample. |
