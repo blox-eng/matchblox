@@ -1174,3 +1174,49 @@ func TestATapOnPocketChoosesTheCard(t *testing.T) {
 		}
 	}
 }
+
+// TestATapBelowTheBoardsBodyChoosesNoCard: a tap under the body (the key
+// line's hairline, the key line off its keys, the strip off its words,
+// past the frame where the belt is) chooses no card and opens nothing, on
+// a desk and on Pocket, at 40 and 132 columns.
+func TestATapBelowTheBoardsBodyChoosesNoCard(t *testing.T) {
+	for _, w := range []int{40, 132} {
+		for _, pocket := range []bool{false, true} {
+			var edit func(*Model)
+			if pocket {
+				edit = pocketOnly
+			}
+			m := boardShot(t, boardFixture(t), w, 34, edit)
+			ran := recordRuns(&m)
+			sc := m.draw(w)
+			chosen := chosenName(t, m)
+			ys := []int{len(sc.lines), len(sc.lines) + 3}
+			if sc.keysAt >= 0 {
+				ys = append(ys, sc.keysAt-1, sc.keysAt)
+			}
+			if sc.stripAt > 0 {
+				ys = append(ys, sc.stripAt)
+			}
+			for _, y := range ys {
+				for _, x := range []int{0, w / 2, w - 1} {
+					if _, onKey := spanAt(sc.keys, x); y == sc.keysAt && onKey {
+						continue
+					}
+					if _, onStrip := spanAt([]span{sc.strip}, x); y == sc.stripAt && onStrip {
+						continue
+					}
+					next, cmd := tap(m, x, y)
+					drain(cmd)
+					nm := next.(Model)
+					if s, ok := nm.boardSelected(); !ok || s.Name != chosen {
+						t.Errorf("w %d pocket %v: a tap at %d,%d chose %s", w, pocket, x, y, s.Name)
+					}
+					if nm.pending != nil || nm.menu != nil || nm.form != nil || nm.sheet != nil || nm.standIn || nm.room != nil ||
+						len(boardFake(nm).acts()) != 0 || len(*ran) != 0 {
+						t.Errorf("w %d pocket %v: a tap at %d,%d opened or sent something", w, pocket, x, y)
+					}
+				}
+			}
+		}
+	}
+}
