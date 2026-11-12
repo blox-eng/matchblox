@@ -24,6 +24,7 @@ func shipsAt(t *testing.T, w int, st proto.State) (Model, *fakeConn) {
 // TestShipsShowTheirTrack: each ship's number, title and age, its track
 // and its note; the tab counts the ships in flight.
 func TestShipsShowTheirTrack(t *testing.T) {
+	t.Skip("replaced by TestCardLines (Task 12 step 1)")
 	for _, w := range []int{44, 86} {
 		m, _ := shipsAt(t, w, screensState(t))
 		out := ansi.Strip(m.render())
@@ -40,6 +41,7 @@ func TestShipsShowTheirTrack(t *testing.T) {
 // Sessions; x on one that waits for your merge shows its merge and runs it
 // only after a typed y (a on a stuck one: TestAOnAStuckShipJumps).
 func TestShipKeys(t *testing.T) {
+	t.Skip("replaced by TestPMergesThroughTheConsentBox (Task 12 step 1)")
 	st := screensState(t)
 	m, f := shipsAt(t, 86, st)
 	next, _ := key(m, "enter")
@@ -66,6 +68,7 @@ func TestShipKeys(t *testing.T) {
 // limit pauses the reading, when gh cannot read, and which repository
 // failed.
 func TestShipsSayWhyTheyAreBehind(t *testing.T) {
+	t.Skip("replaced by TestTheStripSaysWhyShipsAreBehind (Task 12 step 1)")
 	st := screensState(t)
 	r := *st.Ships
 	r.Paused, r.Unknown, r.Errors = time.Date(2026, 10, 1, 23, 33, 0, 0, time.Local), "gh not signed in", []string{"hearth/hearth-api: HTTP 502"}
@@ -95,6 +98,7 @@ func TestASessionShowsItsShip(t *testing.T) {
 
 // A tap selects a ship; a tap on the selected one goes to its session.
 func TestATapOnAShipGoesToItsSession(t *testing.T) {
+	t.Skip("dropped (Task 12 step 1): the Ships tab goes (step 6a)")
 	m, _ := shipsAt(t, 44, screensState(t))
 	y := lineOf(t, m, "#4552")
 	next, _ := tap(m, 5, y)
@@ -144,6 +148,7 @@ func twoShipsState(t *testing.T) proto.State {
 // A session that drives two ships leads its row with the one in flight
 // and counts the other by its stage.
 func TestARowCountsTheOtherShipsOfItsSession(t *testing.T) {
+	t.Skip("replaced by TestACardCountsItsOtherShips (Task 12 step 1)")
 	m, _ := loadedWith(t, 200, twoShipsState(t))
 	out := ansi.Strip(m.render())
 	if row := rowOf(out, "hearth-api"); !strings.Contains(row, "#4551 ●━◉┄○┄○┄○ +1 merged") {
@@ -157,6 +162,7 @@ func TestARowCountsTheOtherShipsOfItsSession(t *testing.T) {
 // A stuck ship leads its session's row over one in flight, wherever the
 // report puts it.
 func TestAStuckShipLeadsTheRow(t *testing.T) {
+	t.Skip("replaced by TestACardCountsItsOtherShips (Task 12 step 1)")
 	st := withShips(screensState(t), "hearth-api",
 		proto.Ship{Number: 4561, Title: "Retry the webhook", Kind: shipStuck, Note: "CI failed · lint", Stage: 1})
 	m, _ := loadedWith(t, 200, st)
@@ -223,6 +229,7 @@ func TestTheCountFoldsBeforeTheTrack(t *testing.T) {
 // (stuck, waits for you, in flight, merged, live): the first three, then
 // how many more. A desk shows the chat beside the list, and the Ships tab.
 func TestTheOpenedRowListsEveryShipOfTheSession(t *testing.T) {
+	t.Skip("dropped (Task 12 step 1): the phone's opened row goes with the list")
 	st := withShips(screensState(t), "spark-docs",
 		proto.Ship{Number: 4549, Title: "Changelog", Kind: shipRunning, Note: "merged · deploying", Stage: 3},
 		proto.Ship{Number: 4548, Title: "Search", Kind: shipRunning, Note: "CI · 2 of 5 jobs", Stage: 1},
@@ -260,6 +267,7 @@ func TestTheOpenedRowListsEveryShipOfTheSession(t *testing.T) {
 
 // A ship whose stage the console does not know is counted, not a crash.
 func TestACountWithAnUnknownStageDraws(t *testing.T) {
+	t.Skip("replaced by TestACardCountsItsOtherShips (Task 12 step 1)")
 	st := withShips(screensState(t), "hearth-api", proto.Ship{Number: 219, Title: "Future", Kind: shipRunning, Stage: 7})
 	m, _ := loadedWith(t, 200, st)
 	if row := rowOf(ansi.Strip(m.render()), "hearth-api"); !strings.Contains(row, "#4551 ●━◉┄○┄○┄○ +1") {
@@ -270,6 +278,7 @@ func TestACountWithAnUnknownStageDraws(t *testing.T) {
 // The count names a need before a stage: another ship that waits for you
 // says so.
 func TestTheCountNamesWhatTheOthersNeed(t *testing.T) {
+	t.Skip("replaced by TestACardCountsItsOtherShips (Task 12 step 1)")
 	st := withShips(screensState(t), "hearth-api",
 		proto.Ship{Number: 4561, Title: "Retry the webhook", Kind: shipStuck, Note: "CI failed · lint", Stage: 1},
 		proto.Ship{Number: 4562, Title: "Docs", Kind: shipWaits, Note: "green · waits for your merge", Stage: 2})
@@ -327,6 +336,7 @@ func drawnAt(t *testing.T, st proto.State, w, h int) (drawn, []string) {
 // more, and the session's keys stay where a tap finds them, on the line
 // that shows them.
 func TestManyShipsKeepTheSessionsKeys(t *testing.T) {
+	t.Skip("dropped (Task 12 step 1): the phone's opened row goes with the list")
 	var more []proto.Ship
 	for i := range 5 {
 		more = append(more, proto.Ship{Number: 4600 + i, Title: "Page " + strconv.Itoa(i), Kind: shipRunning, Note: "CI", Stage: 1})
@@ -346,6 +356,7 @@ func TestManyShipsKeepTheSessionsKeys(t *testing.T) {
 // Ships of one rank keep the report's order: two in flight list as the
 // report has them.
 func TestShipsOfARankKeepTheReportsOrder(t *testing.T) {
+	t.Skip("replaced by TestACardCountsItsOtherShips (Task 12 step 1)")
 	st := withShips(screensState(t), "spark-docs",
 		proto.Ship{Number: 4550, Title: "First", Kind: shipRunning, Note: "CI", Stage: 1},
 		proto.Ship{Number: 4549, Title: "Second", Kind: shipRunning, Note: "green", Stage: 2})
@@ -360,6 +371,7 @@ func TestShipsOfARankKeepTheReportsOrder(t *testing.T) {
 // is gone is no dead end. Enter opens New session in the checkout the ship
 // names, its first message about the PR, and sends nothing on its own.
 func TestEnterOnAShipNobodyOwnsStartsASessionThere(t *testing.T) {
+	t.Skip("replaced by TestAShipWithNoSessionIsACard (Task 12 step 1)")
 	st := screensState(t)
 	r := *st.Ships
 	r.Ships = slices.Clone(r.Ships)

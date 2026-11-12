@@ -54,7 +54,7 @@ func TestTheHeaderHasNoLimits(t *testing.T) {
 		if !strings.Contains(lines[1], "SESSIONS") || strings.Contains(strings.Join(lines[:3], "\n"), "62%") {
 			t.Fatalf("width %d: the header is not one line:\n%s", w, strings.Join(lines[:4], "\n"))
 		}
-		if !strings.Contains(lines[0], "● 2 wait for you") {
+		if !strings.Contains(lines[0], "● 2 need you") { // the board's words
 			t.Fatalf("width %d: the header does not say who waits: %q", w, lines[0])
 		}
 	}
@@ -64,6 +64,7 @@ func TestTheHeaderHasNoLimits(t *testing.T) {
 // says them, with the forecast on its block, and the machine; on a desk
 // stacked under the list on Sessions, side by side in the dock of Ships.
 func TestTheDockSaysUsageAndTheMachine(t *testing.T) {
+	t.Skip("dropped (Task 12 step 1): the dock goes (step 2, intended change)")
 	drawer, _ := loadedWith(t, 86, limitsState())
 	if drawer.setTab(tabShips); !strings.Contains(strings.Split(screen(drawer), "\n")[lineOf(t, drawer, "USAGE")], "MACHINE") {
 		t.Fatalf("Ships: usage and the machine are not side by side:\n%s", screen(drawer))
@@ -102,6 +103,7 @@ func TestTheDockSaysUsageAndTheMachine(t *testing.T) {
 // Anthropic's takes one line. The phone starts list only, with no dock
 // and so no switch: v shows it.
 func TestAPhoneDockShowsOnePanel(t *testing.T) {
+	t.Skip("replaced by TestTheStripTurnsOnUAndOnATap (Task 12 step 1)")
 	m, _ := loadedWith(t, 44, limitsState())
 	if strings.Contains(screen(m), "machine ›") {
 		t.Fatalf("list only shows the dock's switch:\n%s", screen(m))
@@ -138,6 +140,7 @@ func TestAPhoneDockShowsOnePanel(t *testing.T) {
 // it folds into the Machine tab, which has usage first. This is the
 // phone's full view: list only has no dock.
 func TestTheDockFoldsWhenItDoesNotFit(t *testing.T) {
+	t.Skip("replaced by TestAHiddenStripGivesItsRowToTheBody (Task 12 step 1)")
 	m, _ := loadedWith(t, 44, limitsState())
 	m = fullView(m)
 	tall := len(m.body(44).lines)
@@ -164,6 +167,7 @@ func TestTheDockFoldsWhenItDoesNotFit(t *testing.T) {
 // step, a second Enter runs it, and the row then says what happened: done,
 // or what failed and that Enter tries again.
 func TestARecommendationShowsItsResult(t *testing.T) {
+	t.Skip("replaced by TestTheBoardReachesDoorsGhostAndRecommendations (Task 12 step 1)")
 	st := limitsState()
 	st.Recommendations = []advice.Rec{{ID: "wk", Level: "warn", Title: "The week runs out Wed ~19:00: compact app-feature",
 		Evidence: "builder@example.org · Plus: 92% of the week used",
@@ -272,6 +276,7 @@ func TestCursorsAccountIsInTheDock(t *testing.T) {
 	st := limitsState()
 	st.Limits = append(st.Limits, limits.Account{Provider: "cursor", Account: "builder@example.com · Acme", State: limits.Unmeasured, Fix: "Cursor's plan usage is not read yet"})
 	m, _ := loadedWith(t, 200, st)
+	m.tab = tabMachine // read on Machine, the dock off the board (Task 12 step 2)
 	if out := screen(m); !strings.Contains(out, "⬢ Cursor Acme") || !strings.Contains(out, "not measured · Cursor's plan usage is not read yet") {
 		t.Errorf("the dock lacks Cursor's account:\n%s", out)
 	}

@@ -15,16 +15,17 @@ var emptyTexts = []string{"No ships yet.", "scanning repositories…", "collecti
 // fillBound is how long a tab may take to fill after its key is pressed.
 const fillBound = 2 * time.Second
 
-// tabs are the seven tabs by key, each with a string only its seeded data
+// tabs are the seven tabs in Tab's order (a digit on the board answers
+// its card), each with a string only its seeded data
 // draws: a screen that is blank or still loading cannot pass on absence alone.
 var tabs = []struct{ key, name, seeded string }{
-	{"2", "Ships", "Rate limits on the public API"},
-	{"3", "Machine", "NETWORK AND DISK"},
-	{"4", "Git", "9 WORKTREES"},
-	{"5", "History", "LAST 2H"},
-	{"6", "Panes", "hearth:2.1"},
-	{"7", "Stoker", "n starts a night"},
-	{"1", "Sessions", "hearth-api"},
+	{"\t", "Ships", "Rate limits on the public API"},
+	{"\t", "Machine", "NETWORK AND DISK"},
+	{"\t", "Git", "9 WORKTREES"},
+	{"\t", "History", "LAST 2H"},
+	{"\t", "Panes", "hearth:2.1"},
+	{"\t", "Stoker", "n starts a night"},
+	{"\t", "Sessions", "flint-auth"},
 }
 
 func TestEveryTabHasData(t *testing.T) {
@@ -33,7 +34,7 @@ func TestEveryTabHasData(t *testing.T) {
 			t.Setenv("TMPDIR", t.TempDir())
 			started := time.Now()
 			_, term := startAt(t, size[0], size[1])
-			term.waitFor(t, "hearth-api")
+			term.waitFor(t, "flint-auth")
 			t.Logf("Sessions drew the machine %v after Start", time.Since(started).Round(10*time.Millisecond))
 			for _, tab := range tabs {
 				from := len(term.text())

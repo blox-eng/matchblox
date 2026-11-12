@@ -1,30 +1,30 @@
- ▰ matchblox · 3 hosts                                               ● 8 wait for you
+ ▰ matchblox · all hosts ▾                                               ● 8 need you
  SESSIONS 10    ships 3    machine    git    history    panes    stoker
 ──────────────────────────────────────────────────────────────────────────────────────
- WAITS FOR YOU · 8                    │ spark-docs · done
-▌│ spark-do… thi… done       9m   88% │ ✻ team@example.com · Max
- ╿ ember-bi… thi… done       4m   32% │ #4540 ●━●━●━●━●  live
- │ train-lo… gpu… asks       4m   88% │
- ╿ flint-au… thi… asks       2m   41% │
- ╿ kindle-w… thi… asks       1m   56% │
- ╿ cinder-ci thi… done       0s   55% │
- ╿ wick-mob… thi… done       0s    6% │
- │ api-auth ws-1  waits      1m   88% │
- WORKING · 2                          │
- │ docs-swe… ws-1 busy            88% │
- ✦ hearth-a… thi… busy            79% │
- + start a new session                │
- ↓ 7 more                             │
-──────────────────────────────────────│
- USAGE                                │
- ✻ Claude Max    5h   this machine 84%│
-   gpu-1 84% · ws-1 84%               │
-                 wk   this machine 82%│
-   gpu-1 82% · ws-1 82%               │
- · Google login  not measured         │
- ❋ OpenAI Plus   5h   this machine 40%│
-   gpu-1 40% · ws-1 40%               │
-                 wk   this machine 12%│
-   gpu-1 12% · ws-1 12%               │
+ NEEDS YOU · 8  −                           WORKING · 2  −        SHIPPING · 0  −
+▌╿ flint-auth                       ✻  2m   ✦ hearth-api  ✻
+  stuck conflicts with main                  busy
+  #4545 ●━✕┄○┄○┄○  ctx 41%                   #4551 ●━◉  ctx 79%
+  “The refresh flow works and the tests
+  pass. One choice is yours before I wire   │ docs-sweep… ✻
+  the rotation.”                             busy I rewrote th…
+  ⏎ go in                                    ctx 88%
+
+ │ spark-docs                       ✻  9m
+  done I rewrote the quick start and the…
+  #4540 ●━●━●━●━●  ctx 88%
+  ⏎ go in
+
+ ╿ ember-billing                    ✻  4m
+  green #4552 waits for your merge
+  #4552 ●━●━◉┄○┄○  ctx 32%
+  p merge #4552   ⏎ go in
+
+  ↓ 5 more
 ──────────────────────────────────────────────────────────────────────────────────────
- enter goes into spark-docs  x kill  r rename  z park  N new  f stoker sampled 0s ago
+ QUIET · 0   ▴                                                                     −
+ + start a new session
+ RECOMMENDATIONS · 7
+ ✻ 5h 84% · wk 82%   ✻ @gpu-1 5h 84% · wk 82%   ✻ @ws-1 5h 84% · wk 82%     machine ›
+──────────────────────────────────────────────────────────────────────────────────────
+ ⏎ go in   c copy   v one line   s hosts   u strip   ←→ columns   tab next

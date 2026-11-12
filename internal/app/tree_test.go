@@ -29,6 +29,7 @@ func twoChildren(p sample.Session) []sample.Session {
 
 // A child shows right under its parent with a branch, wide and on a phone.
 func TestAChildShowsUnderItsParent(t *testing.T) {
+	t.Skip("replaced by TestThePeekCountsAndNamesTheChildRuns (Task 12 step 1, ruling 35)")
 	for _, w := range []int{120, 46} {
 		st := queueState()
 		p := sessionOn(t, st, "%1")
@@ -47,6 +48,7 @@ func TestAChildShowsUnderItsParent(t *testing.T) {
 // Under a last child the indent is blank; under one with siblings below, a
 // bar; a child with no status shows its name alone.
 func TestGrandchildrenIndentLikeATree(t *testing.T) {
+	t.Skip("replaced by TestThePeekCountsAndNamesTheChildRuns (Task 12 step 1, ruling 35)")
 	st := queueState()
 	p := sessionOn(t, st, "%1")
 	top := &sample.ProcRef{PID: p.PID, Start: p.Start}
@@ -74,6 +76,7 @@ func TestGrandchildrenIndentLikeATree(t *testing.T) {
 
 // No key acts on a child: down from a parent lands on the next session.
 func TestTheCursorSkipsChildren(t *testing.T) {
+	t.Skip("replaced by TestThePeekCountsAndNamesTheChildRuns (Task 12 step 1, ruling 35)")
 	st := queueState()
 	st.Children = twoChildren(sessionOn(t, st, "%1"))
 	m, _ := loadedWith(t, 120, st)
@@ -88,6 +91,7 @@ func TestTheCursorSkipsChildren(t *testing.T) {
 // The detail names a session's children. A session in a pane shows its
 // chat there; this one runs outside tmux.
 func TestTheOpenedRowNamesChildren(t *testing.T) {
+	t.Skip("replaced by TestThePeekCountsAndNamesTheChildRuns (Task 12 step 1, ruling 35)")
 	st := queueState()
 	p := sessionOn(t, st, "%1")
 	st.Children = twoChildren(p)
@@ -107,6 +111,7 @@ func TestTheOpenedRowNamesChildren(t *testing.T) {
 }
 
 func TestDeepChildrenFold(t *testing.T) {
+	t.Skip("replaced by TestThePeekCountsAndNamesTheChildRuns (Task 12 step 1, ruling 35)")
 	st := queueState()
 	p := sessionOn(t, st, "%1")
 	parent := &sample.ProcRef{PID: p.PID, Start: p.Start}

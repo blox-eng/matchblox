@@ -394,7 +394,7 @@ func TestATakeOverIsAskedFromTheBoard(t *testing.T) {
 	}
 
 	hosts, _, conns := stokedHosts(t, nil, nightView(), nil)
-	hosts.splashDone, hosts.board = true, true
+	hosts.splashDone = true
 	hosts.boardChooseCard(hosts.columnOf(matchOf(t, hosts, "home-1")), matchOf(t, hosts, "home-1"))
 	if next := pressOn(hosts, "x"); next.held != nil || next.pending == nil {
 		t.Errorf("x on a card of a host with no stoker: held %v pending %+v, want its box at once", next.held != nil, next.pending)
@@ -511,7 +511,7 @@ func TestBoardFrameCostGrowsWithRows(t *testing.T) {
 			}
 		}
 		m, _ := loadedWith(t, 200, st)
-		m.splashDone, m.board = true, true
+		m.splashDone = true
 		m.viewPrefs.CopyCheckedPhone, m.viewPrefs.CopyCheckedDesk = true, true
 		return m
 	}

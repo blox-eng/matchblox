@@ -1,32 +1,32 @@
- ▰ matchblox                                                                                                       ● 6 wait for you
+ ▰ matchblox                                                                                                           ● 6 need you
  SESSIONS 7    ships 3    machine    git    history    panes    stoker
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- WAITS FOR YOU · 6                                  │ spark-docs · done
-▌│ spark-docs                   done       9m   88% │ ✻ team@example.com · Max · #4540 ●━●━●━●━●  live
- ╿ ember-billing                done       4m   32% │
- ╿ flint-auth                   asks       2m   41% │
- ╿ kindle-web                   asks       1m   56% │
- ╿ cinder-ci                    done       0s   55% │
- ╿ wick-mobile                  done       0s    6% │
- WORKING · 1                                        │
- ✦ hearth-api                   busy            79% │
- + start a new session                      ╭─ Kill spark-docs ────────────────────────╮
+ NEEDS YOU · 6  −                              WORKING · 1  −                  SHIPPING · 0  −                 QUIET · 0  −
+▌╿ flint-auth                          ✻  2m   ✦ hearth-api            ✻
+  stuck conflicts with main                     busy
+  #4545 ●━✕┄○┄○┄○  ctx 41%                      #4551 ●━◉┄○┄○┄○  ctx 79%
+  “The refresh flow works and the tests
+  pass. One choice is yours before I wire
+  the rotation.”
+  ⏎ go in
+
+ │ spark-docs                          ✻  9m╭─ Kill flint-auth ────────────────────────╮
+  done I rewrote the quick start and the in…│                                          │
+  #4540 ●━●━●━●━●  ctx 88%                  │   tmux kill-pane -t %2                   │
+  ⏎ go in                                   │   then kill -TERM 1310                   │
                                             │                                          │
- 1 without an agent: shell:1.1 zsh          │   tmux kill-pane -t %3                   │
-                                            │   then kill -TERM 1400                   │
- RECOMMENDATIONS · 7 · h hides              │                                          │
- ▲ The week runs short: compact spark-docs  ╰─ y run ─ any other key cancels ──────────╯
- ○ Clear spark-docs (%3)                            │
- ○ Clear kindle-web (%5)                            │
- ↓ 4 more                                           │
-────────────────────────────────────────────────────│
- USAGE                                              │
- ✻ Claude Max    5h   ▰▰▰▰▰▰▰▱ 84%  · Fri 01:20     │
-                 wk   ▰▰▰▰▰▰▰▱ 82%  · Mon 09:00     │
-                 out Fri ~21:00                     │
- · Google login  not measured                       │
- ❋ OpenAI Plus   5h   ▰▰▰▱▱▱▱▱ 40%  · 23:59         │
-                 wk   ▰▱▱▱▱▱▱▱ 12%  · Tue 09:00     │
-                 lasts the week                     │
+ ╿ ember-billing                       ✻  4m╰─ y run ─ any other key cancels ──────────╯
+  green #4552 waits for your merge
+  #4552 ●━●━◉┄○┄○  ctx 32%
+  p merge #4552   ⏎ go in
+
+  ↓ 3 more
+
+
+
+
+ + start a new session
+ RECOMMENDATIONS · 7
+ ✻ Claude Max  5h ▰▰▰▰▰▰▰▱ 84% · Fri 01:20   wk ▰▰▰▰▰▰▰▱ 82% · Mon 09:00                                                  machine ›
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 

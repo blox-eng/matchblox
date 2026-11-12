@@ -48,6 +48,7 @@ func typeText(m tea.Model, s string) tea.Model {
 // TestSessionsIsTheDefaultTab: the console opens on Sessions, on the first
 // session that waits; its chat is beside the list.
 func TestSessionsIsTheDefaultTab(t *testing.T) {
+	t.Skip("replaced by TestTheConsoleOpensOnTheBoard (Task 12 step 1)")
 	m, _ := loadedWith(t, 132, queueState())
 	out := ansi.Strip(m.render())
 	if m.tab != tabSessions {
@@ -321,7 +322,7 @@ func TestAWaitingSessionsMatch(t *testing.T) {
 
 func TestPanesTabListsEveryPane(t *testing.T) {
 	m, _ := loadedWith(t, 100, queueState())
-	next, _ := key(m, "6")
+	next := toTab(m, tabPanes)
 	out := ansi.Strip(next.(Model).render())
 	for _, want := range []string{"work:1.1", "notes:1.1", "zsh", "/work/notes"} {
 		if !strings.Contains(out, want) {
@@ -334,6 +335,7 @@ func TestPanesTabListsEveryPane(t *testing.T) {
 // question from its pane, says where that came from, shows "not measured"
 // for context use, and takes an answer like any other.
 func TestAnAgentWithoutHooksIsReadFromThePane(t *testing.T) {
+	t.Skip("replaced by TestTheCardSaysWhatTheRowSaid (Task 12 step 1)")
 	st := fixtureState()
 	q := "Would you like to run the following command?"
 	st.Sessions = append(st.Sessions, sample.Session{PID: 900, Pane: "%9", Target: "api:1.1", Tab: "api", Name: "codex",
@@ -366,6 +368,7 @@ func TestAnAgentWithoutHooksIsReadFromThePane(t *testing.T) {
 // word in Sessions, not idle; a turn that ended under 100% progress, with
 // no question, is paused on both tabs.
 func TestSessionsSayWhatTheQueueSays(t *testing.T) {
+	t.Skip("replaced by TestTheCardSaysWhatTheRowSaid (Task 12 step 1)")
 	st := fixtureState()
 	st.Sessions = append(st.Sessions,
 		sample.Session{PID: 901, Pane: "%8", Target: "app:1.1", Name: "slice-one", Status: "idle", Idle: time.Minute, Context: "fresh",
@@ -470,6 +473,7 @@ func TestAnEstimatedRowShowsWhatTheAgentAsked(t *testing.T) {
 // A finished turn of a session the plan's limit stops says out on its
 // queue row: there is nothing to answer before the reset.
 func TestAQueueRowOfAnOutSessionSaysOut(t *testing.T) {
+	t.Skip("replaced by TestTheCardSaysWhatTheRowSaid (Task 12 step 1)")
 	st := fixtureState()
 	st.Sessions = append(st.Sessions, sample.Session{PID: 901, Pane: "%8", Target: "app:1.1", Name: "slice-x",
 		Status: "idle", Idle: time.Minute, Context: "fresh", Out: st.At.Add(time.Hour)})

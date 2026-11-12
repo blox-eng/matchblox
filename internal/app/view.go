@@ -137,8 +137,11 @@ type drawn struct {
 	dockAt  int   // the dock's first line; -1 when it is folded
 	stripAt int   // the board's strip; -1 when it has none
 	strip   span  // a tap on the strip turns it
-	keysAt  int   // the key line; -1 when there is none
-	keys    []span
+	// boardView is the live view beside the board: from column x0 and line
+	// y0 to line y1 (x1 0: none).
+	boardView struct{ x0, x1, y0, y1 int }
+	keysAt    int // the key line; -1 when there is none
+	keys      []span
 	// A box over the screen (the sheet, a form): its first line and
 	// column, its width, the key a tap on each of its lines presses, and
 	// the keys of its footer.
@@ -217,7 +220,7 @@ func (m Model) drawScreen(w int) drawn {
 		}
 		return sc
 	}
-	if m.room != nil {
+	if m.room != nil && !m.boardShown() {
 		return m.roomScreen(w, sc)
 	}
 	listW, detailW := m.panes(w)
@@ -233,6 +236,10 @@ func (m Model) drawScreen(w int) drawn {
 	if m.boardShown() { // the board draws its tab row from the body's index
 		p := m.boardPanel(listW, full)
 		b, sc.lines[1], sc.tabs = p.body, p.tabRow, p.tabSpans
+		if p.live > 0 {
+			sc.boardView.x0, sc.boardView.x1 = listW-p.live, listW
+			sc.boardView.y0, sc.boardView.y1 = sc.bodyTop+p.headAt, sc.bodyTop+p.colsTo
+		}
 		if p.stripAt >= 0 {
 			sc.stripAt, sc.strip = sc.bodyTop+p.stripAt, p.strip
 		}
@@ -587,7 +594,7 @@ func (m Model) tabsLine(w int) (string, []span) {
 	try := func(near int, gap string) (string, []span) {
 		line, x := " ", 1
 		var spans []span
-		for i := range views {
+		for i := range tabNames {
 			if i > 0 {
 				line += gap
 				x += len(gap)
@@ -604,7 +611,7 @@ func (m Model) tabsLine(w int) (string, []span) {
 	for _, t := range []struct {
 		near int
 		gap  string
-	}{{len(views), "    "}, {len(views), "   "}, {len(views), "  "}, {2, "  "}, {1, "  "}, {0, "  "}, {-1, "  "}} {
+	}{{len(tabNames), "    "}, {len(tabNames), "   "}, {len(tabNames), "  "}, {2, "  "}, {1, "  "}, {0, "  "}, {-1, "  "}} {
 		if line, spans = try(t.near, t.gap); lipgloss.Width(line)+aw+2 <= w {
 			break
 		}
@@ -618,7 +625,7 @@ func (m Model) tabsLine(w int) (string, []span) {
 // tabLabel is a tab's name and count, or its digit when it is shortened.
 func (m Model) tabLabel(i int, named bool) string {
 	st := m.st
-	name, count := views[i].name, ""
+	name, count := tabNames[i], ""
 	switch i {
 	case tabSessions:
 		count = strconv.Itoa(len(m.all.sessions))
@@ -709,7 +716,7 @@ func (m Model) keyLine(w int) (string, []span) {
 	if l := m.lostLine(); l != "" { // a lost host outranks the stand-in's keys, which may not go
 		return fit(" "+st.text.Render(l), w), nil
 	}
-	if m.room != nil {
+	if m.room != nil && (m.room.typing || !m.boardShown()) {
 		return m.roomKeyLine(w), nil
 	}
 	if m.viewFull() {

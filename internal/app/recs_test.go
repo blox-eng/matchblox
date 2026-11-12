@@ -18,6 +18,7 @@ import (
 // sessions, on the Sessions tab (owner 2026-10-12); ↓ walks from the
 // sessions into them.
 func TestRecommendationsSitUnderTheSessions(t *testing.T) {
+	t.Skip("replaced by TestTheBoardReachesDoorsGhostAndRecommendations (Task 12 step 1)")
 	st := queueState()
 	st.Recommendations = []advice.Rec{{ID: "r1", Level: "warn", Title: "Compact app-feature", Evidence: "context 91%",
 		Primary: &advice.Action{Label: "jump", Nav: true, Steps: [][]string{{"tmux", "switch-client", "-t", "%1"}}}}}
@@ -72,6 +73,7 @@ func TestHistoryWithAFlatSeries(t *testing.T) {
 // TestProgressShowsWhereThePersonLooks: the bar an agent reported shows
 // under its opened row on a phone and on its desk row.
 func TestProgressShowsWhereThePersonLooks(t *testing.T) {
+	t.Skip("dropped (Task 12 step 1): no plan progress bar on a match card")
 	m, _ := loadedWith(t, 50, queueState())
 	if out := screen(m); !strings.Contains(out, "▰▰▰▰▱ plan 75%") {
 		t.Fatalf("the opened row has no plan:\n%s", out)
@@ -114,6 +116,7 @@ func loadedIn(t *testing.T, dir string, st proto.State) Model {
 // dismiss mark too; it stays hidden in the next console until its
 // evidence changes.
 func TestDismissARecommendation(t *testing.T) {
+	t.Skip("replaced by TestTheBoardReachesDoorsGhostAndRecommendations (Task 12 step 1)")
 	dir := t.TempDir()
 	m := loadedIn(t, dir, twoRecs())
 	next, _ := key(selectRec(t, m, "r1"), "d")
@@ -148,6 +151,7 @@ func TestDismissARecommendation(t *testing.T) {
 // leave the selection, h unfolds it, a tap on the label does the same,
 // and the next console remembers.
 func TestFoldTheRecommendations(t *testing.T) {
+	t.Skip("replaced by TestTheBoardReachesDoorsGhostAndRecommendations (Task 12 step 1)")
 	dir := t.TempDir()
 	m := loadedIn(t, dir, twoRecs())
 	sel := selectRec(t, m, "r2")

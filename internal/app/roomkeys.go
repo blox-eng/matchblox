@@ -26,9 +26,9 @@ func (k roomKeys) bindings() []bkey.Binding {
 // the go it needs, the command it runs, and its plan step (0 for a go the
 // guard holds).
 type goWait struct {
-	id, text, needs, want string
-	step                  int
-	at                    int64
+	id, text, needs, want, pane string
+	step                        int
+	at                          int64
 }
 
 // goWaits are the gos room k's stoker waits on, oldest first: each plan
@@ -67,7 +67,7 @@ func (m Model) goWaits(k chainKey) []goWait {
 	var out []goWait
 	for _, key := range gos {
 		if e := held[key]; e.State == "waits" && e.Needs != "" {
-			out = append(out, goWait{id: e.ID, text: e.Text, needs: e.Needs, want: e.Want, at: e.At.UnixNano()})
+			out = append(out, goWait{id: e.ID, text: e.Text, needs: e.Needs, want: e.Want, pane: e.Pane, at: e.At.UnixNano()})
 		}
 	}
 	for _, n := range steps {
@@ -135,7 +135,7 @@ func (m Model) roomKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		r.at = min(r.at+1, len(rows)-1)
 		return m.followCursor()
 	case bkey.Matches(k, rk.Back):
-		m.room = nil
+		return m.closeRoom(), nil
 	case bkey.Matches(k, rk.Next, rk.Prev):
 		keys := m.roomKeys()
 		if i := slices.Index(keys, r.k); i >= 0 && len(keys) > 1 {

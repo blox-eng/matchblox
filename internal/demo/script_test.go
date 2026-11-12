@@ -60,7 +60,7 @@ var oldAge = regexp.MustCompile(`stale|\b31d\b`)
 func TestAgesAreRecent(t *testing.T) {
 	t.Setenv("TMPDIR", t.TempDir())
 	_, term := start(t)
-	term.waitFor(t, "SESSIONS 7", "hearth-api")
+	term.waitFor(t, "SESSIONS 7", "flint-auth")
 	time.Sleep(500 * time.Millisecond) // more samples
 	if m := oldAge.FindString(term.text()); m != "" {
 		t.Errorf("an age reads %q:\n%s", m, term.text())
@@ -70,8 +70,8 @@ func TestAgesAreRecent(t *testing.T) {
 func TestTheAgentWaitsFirst(t *testing.T) {
 	t.Setenv("TMPDIR", t.TempDir())
 	_, term := start(t)
-	term.waitFor(t, "WAITS FOR YOU", "flint-auth")
-	_, after, _ := strings.Cut(term.text(), "WAITS FOR YOU")
+	term.waitFor(t, "NEEDS YOU", "flint-auth")
+	_, after, _ := strings.Cut(term.text(), "NEEDS YOU")
 	if i, j := strings.Index(after, "flint-auth"), strings.Index(after, "kindle-"); i < 0 || j >= 0 && j < i {
 		t.Errorf("flint-auth is not the first that waits:\n%s", after)
 	}
@@ -101,14 +101,14 @@ func transcript(t *testing.T) string {
 	return string(b)
 }
 
-const flintRow = 6 // flint-auth's row on the first screen at 44x31
+const flintRow = 7 // flint-auth's card on the board's first screen at 44x31, under the doors line and the page marks
 
 // openQuestion opens the stand-in for flint-auth's pane, which asks.
 func openQuestion(t *testing.T) (*demo.Demo, *terminal) {
 	t.Helper()
 	t.Setenv("TMPDIR", t.TempDir())
 	d, term := start(t)
-	term.waitFor(t, "WAITS FOR YOU", "flint-auth")
+	term.waitFor(t, "NEEDS YOU", "flint-auth")
 	term.send(t, "\r")
 	term.waitFor(t, "Rotate it", "type 2 to answer")
 	return d, term
@@ -146,7 +146,7 @@ func TestTheStandInGoesBackToSessions(t *testing.T) {
 	d, term := openQuestion(t)
 	term.reset()
 	term.send(t, "\x1b_matchblox\x1b\\")
-	term.waitFor(t, "WAITS FOR YOU")
+	term.waitFor(t, "NEEDS YOU")
 	if d.Done() {
 		t.Fatal("going back answered the question")
 	}
@@ -157,7 +157,7 @@ func TestTheStandInGoesBackToSessions(t *testing.T) {
 func TestALineFeedGoesBackToTheFirstColumn(t *testing.T) {
 	t.Setenv("TMPDIR", t.TempDir())
 	_, term := startAt(t, 44, 31)
-	term.waitFor(t, "hearth-api")
+	term.waitFor(t, "flint-auth")
 	raw := term.raw()
 	if !strings.Contains(raw, "\n") {
 		t.Fatal("the first frame has no line feed to check")
@@ -208,7 +208,7 @@ func TestTheDemoSurvivesATurn(t *testing.T) {
 	// the console's, never a menu's the person cannot see.
 	term.reset()
 	d.Resize(106, 10)
-	term.waitFor(t, "flint-auth", "go in")
+	term.waitFor(t, "NEEDS YOU", "go in") // ten rows leave the board no room for a card
 	from := len(d.Ran())
 	term.send(t, "2")
 	term.send(t, "1")
@@ -219,7 +219,7 @@ func TestTheDemoSurvivesATurn(t *testing.T) {
 
 	term.reset()
 	d.Resize(44, 31)
-	term.waitFor(t, "WAITS FOR YOU", "flint-auth")
+	term.waitFor(t, "NEEDS YOU", "flint-auth")
 	time.Sleep(settled)
 	if d.Done() {
 		t.Fatal("a resize answered the question")
@@ -231,12 +231,14 @@ func TestTheDemoSurvivesATurn(t *testing.T) {
 	eventually(t, 6*time.Second, "Done", d.Done)
 }
 
-// TestTapsOpenTheStandIn: on a phone's one column a tap on the agent's row
-// goes into the stand-in, as Enter does, and the belt's 2 answers (#351).
+// TestTapsOpenTheStandIn: on a phone's one column a tap on the agent's card
+// chooses it and a second goes into the stand-in, as Enter does, and the
+// belt's 2 answers (#351).
 func TestTapsOpenTheStandIn(t *testing.T) {
 	t.Setenv("TMPDIR", t.TempDir())
 	d, term := start(t)
-	term.waitFor(t, "WAITS FOR YOU", "flint-auth")
+	term.waitFor(t, "NEEDS YOU", "flint-auth")
+	term.tap(t, flintRow)
 	term.tap(t, flintRow)
 	term.waitFor(t, "type 2 to answer")
 	if d.Done() {

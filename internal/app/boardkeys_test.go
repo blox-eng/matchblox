@@ -624,7 +624,7 @@ func TestPocketHasNoKeyLine(t *testing.T) {
 		t.Error("with a desk also viewing, the key line goes")
 	}
 	off := pocket
-	off.board = false
+	off.tab = tabHistory
 	if off.draw(40).keysAt < 0 {
 		t.Error("with the board off, Pocket loses the key line")
 	}
@@ -708,7 +708,7 @@ func TestPocketIsTheAppThatAnswered(t *testing.T) {
 		t.Error("a new client on the app's tty is on Pocket before it answered")
 	}
 
-	off := boardShot(t, st, 40, 34, func(m *Model) { m.board = false })
+	off := boardShot(t, st, 40, 34, func(m *Model) { m.tab = tabHistory })
 	next, _ := off.Update(viewers("/dev/pts/7:105@here"))
 	next, _ = next.Update(answer)
 	if next.(Model).onPocket() {
@@ -868,7 +868,7 @@ func TestTheBeltSignalSaysTheBoardsKeys(t *testing.T) {
 	}
 
 	off := kindle
-	off.board = false
+	off.tab = tabHistory
 	if got := value(off); got != "" {
 		t.Errorf("the board off: %q", got)
 	}
@@ -891,7 +891,7 @@ func TestTheBeltSignalSaysTheBoardsKeys(t *testing.T) {
 		t.Errorf("a terminal that came got %q, want p;g", got)
 	}
 	nm := next.(Model)
-	nm.board = false
+	nm.tab = tabHistory
 	next, cmd = nm.Update(noticeMsg{})
 	if got := boardSaid(cmd); !slices.Equal(got, []string{""}) {
 		t.Errorf("leaving the board wrote %q, want one empty value", got)
@@ -901,10 +901,8 @@ func TestTheBeltSignalSaysTheBoardsKeys(t *testing.T) {
 			t.Errorf("the board is off, yet the console wrote %q", boardSaid(cmd))
 		}
 	}
-	never := boardShot(t, st, 80, 34, func(m *Model) { m.board = false })
-	if _, cmd := never.Update(graphicsMsg{gen: never.opt.Gen, watched: true, key: "/dev/pts/7:105@here"}); len(boardSaid(cmd)) != 0 {
-		t.Errorf("a console with no board wrote %q", boardSaid(cmd))
-	}
+	// Every console opens on the board now (Task 12 step 1): none is
+	// without one.
 }
 
 // TestTheBeltValueKeepsItsLimit: a value never passes beltMax bytes; the

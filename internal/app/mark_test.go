@@ -2,6 +2,7 @@ package app
 
 import (
 	"image/color"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -91,7 +92,7 @@ func TestSplashEndsOnKey(t *testing.T) {
 	if got := next.(Model); got.tab != 0 || got.splashing() {
 		t.Fatalf("a key during the start screen ends it and does nothing else (tab %d, splashing %v)", got.tab, got.splashing())
 	}
-	next, _ = key(next, "2")
+	next, _ = key(next, "tab") // a digit on the board answers its card
 	if next.(Model).tab != 1 {
 		t.Fatal("after the start screen, keys work")
 	}
@@ -103,7 +104,7 @@ func TestNoMotionNoTicks(t *testing.T) {
 		t.Fatal("with no motion there is no start screen tick")
 	}
 	out := m.render()
-	if !strings.Contains(out, "▀") && !strings.Contains(out, "▄") {
+	if !strings.Contains(ansi.Strip(out), "reading your matches…") { // the board's first frame (TestTheBoardsStates)
 		t.Fatalf("with no motion the last frame shows at once:\n%s", ansi.Strip(out))
 	}
 }
@@ -112,8 +113,9 @@ func TestNoTicksAfterSplash(t *testing.T) {
 	t0 := time.Now()
 	now := t0.Add(600 * time.Millisecond)
 	m := splashModel(t0, &now)
-	if _, cmd := m.Update(splashMsg{}); cmd != nil {
-		t.Fatal("after the start screen no tick is asked for")
+	_, cmd := m.Update(splashMsg{})
+	if slices.ContainsFunc(msgsWithin(cmd, time.Second), func(msg tea.Msg) bool { _, ok := msg.(splashMsg); return ok }) {
+		t.Fatal("after the start screen no tick is asked for") // the board's belt may come
 	}
 	now = t0.Add(100 * time.Millisecond)
 	if _, cmd := m.Update(splashMsg{}); cmd == nil {
@@ -122,6 +124,7 @@ func TestNoTicksAfterSplash(t *testing.T) {
 }
 
 func TestSplashWhileWaiting(t *testing.T) {
+	t.Skip("replaced by TestTheBoardsStates (Task 12 step 1): before the first state the board says reading your matches")
 	t0 := time.Now()
 	now := t0.Add(time.Second)
 	m := splashModel(t0, &now)
@@ -132,6 +135,7 @@ func TestSplashWhileWaiting(t *testing.T) {
 }
 
 func TestWaitingViewFitsShortPane(t *testing.T) {
+	t.Skip("replaced by TestSilentServiceShowsFix (Task 12 step 1): the board says a silent service's fix in its strip's row")
 	t0 := time.Now()
 	for _, past := range []time.Duration{100 * time.Millisecond, time.Second} {
 		now := t0.Add(past)

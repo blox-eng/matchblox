@@ -164,6 +164,7 @@ func TestAQuietNightShowsItsCard(t *testing.T) {
 	for _, w := range []int{40, 120} {
 		m, _ := loadedWith(t, w, stokerState(quietNight()))
 		m = fullView(m)
+		m.tab = tabHistory // the dock, off the board until Machine holds it (Task 12 steps 2 and 6b)
 		if out := ansi.Strip(m.render()); !strings.Contains(out, "STOKER") || !strings.Contains(out, "ready 7/7") || strings.Contains(out, "NIGHT · 01:08") {
 			t.Fatalf("w=%d: the dock does not show the night's score:\n%s", w, out)
 		}
@@ -176,10 +177,7 @@ func TestAQuietNightShowsItsCard(t *testing.T) {
 	}
 }
 
-func openCard(m tea.Model) tea.Model {
-	next, _ := key(m, "c")
-	return next
-}
+func openCard(m tea.Model) tea.Model { return toStoker(m) }
 
 func TestTheCardNamesWhatIsNotReady(t *testing.T) {
 	v := quietNight()
@@ -208,7 +206,7 @@ func TestADayRunCardIsStoked(t *testing.T) {
 
 func TestOpeningTheTabMarksTheStepsSeen(t *testing.T) {
 	m, f := loadedWith(t, 120, stokerState(quietNight()))
-	sendKey(m, "c")
+	toStoker(m)
 	if a := f.acts(); len(a) != 1 || a[0].RecID != "stoker:ack" {
 		t.Fatalf("acts %+v", a)
 	}

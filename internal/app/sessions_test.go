@@ -19,6 +19,7 @@ import (
 // quiet ones, the newest first. One that waits since yesterday is quiet.
 // Another sort is one flat list.
 func TestSessionsGroupByNeed(t *testing.T) {
+	t.Skip("replaced by TestColumnOf (Task 12 step 1)")
 	st := fixtureState()
 	mk := func(pid int, name string, f func(*sample.Session)) sample.Session {
 		s := st.Sessions[0]
@@ -80,6 +81,7 @@ func TestSessionsGroupByNeed(t *testing.T) {
 // the digits in that order; p opens Ships, Tab and Shift+Tab cycle. Short
 // of room the tabs far from the open one shorten to their digit.
 func TestTabsAndTheirDigits(t *testing.T) {
+	t.Skip("waits for TestTheTabRowIsBoardAndMachine (Task 12 steps 5 and 6c): a digit on the board answers its card")
 	if want := []string{"sessions", "ships", "machine", "git", "history", "panes", "stoker"}; !reflect.DeepEqual(tabNames, want) {
 		t.Fatalf("tabs %q, want %q", tabNames, want)
 	}
@@ -130,6 +132,7 @@ func reasonFixture() proto.State {
 }
 
 func TestIdleReasonInRow(t *testing.T) {
+	t.Skip("replaced by TestTheCardSaysWhatTheRowSaid (Task 12 step 1)")
 	for _, w := range []int{44, 132, 200} {
 		m, _ := loadedWith(t, w, reasonFixture())
 		out := screen(m)
@@ -143,6 +146,7 @@ func TestIdleReasonInRow(t *testing.T) {
 }
 
 func TestZParksAndHeldIsLast(t *testing.T) {
+	t.Skip("replaced by TestZParksAndFreesTheChosenCard (Task 12 step 1)")
 	st := reasonFixture()
 	m, f := loadedWith(t, 100, st)
 	m.selPID, m.chose = st.Sessions[2].PID, true
@@ -167,6 +171,7 @@ func TestZParksAndHeldIsLast(t *testing.T) {
 }
 
 func TestGCyclesGrouping(t *testing.T) {
+	t.Skip("dropped (Task 12 step 1): group modes go with Sessions (step 4, intended change: the columns are the grouping)")
 	m, _ := loadedWith(t, 120, sortFixture())
 	var next tea.Model = m
 	next, _ = key(next, "1")
@@ -197,6 +202,7 @@ func TestGCyclesGrouping(t *testing.T) {
 }
 
 func TestSortSaysNewest(t *testing.T) {
+	t.Skip("dropped (Task 12 step 1): sort goes (step 4, intended change)")
 	m, _ := loadedWith(t, 100, sortFixture())
 	var next tea.Model = m
 	next, _ = key(next, "1")
@@ -237,6 +243,7 @@ func TestTheStokersSessionStaysOutOfSessions(t *testing.T) {
 }
 
 func TestASessionOutsideTmuxSaysSo(t *testing.T) {
+	t.Skip("replaced by TestTheCardSaysWhatTheRowSaid (Task 12 step 1)")
 	st := lifeState()
 	st.Sessions = []sample.Session{{Name: "loose", Cwd: "/work/app", Status: "idle"}}
 	m, f := loadedWith(t, 100, st)

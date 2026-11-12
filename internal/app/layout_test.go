@@ -55,6 +55,7 @@ func TestLayoutBreakpoints(t *testing.T) {
 // in place; its dock shows two panels side by side. Upright under 90
 // columns is one column. The phone starts list only: this is its full view.
 func TestAnUprightPhoneGetsTheDrawer(t *testing.T) {
+	t.Skip("replaced by TestBoardWidths (Task 12 step 1)")
 	for _, h := range []int{60, 101} {
 		m, _ := loadedWith(t, 107, limitsState())
 		next, _ := fullView(m).Update(tea.WindowSizeMsg{Width: 107, Height: h})
@@ -130,6 +131,7 @@ func sessLine(t *testing.T, m tea.Model, name string) int {
 // selected one grows by what its agent said, then its plan and its keys.
 // Who waits comes before the quiet ones. Every tab fits.
 func TestAPhoneRowOpensInPlace(t *testing.T) {
+	t.Skip("replaced by TestAPhoneStartsVerboseInNeedsYouOnly (Task 12 step 1)")
 	m, _ := loadedWith(t, 50, queueState())
 	fitsWidth(t, m, 50)
 	out := strings.Split(ansi.Strip(m.render()), "\n")
@@ -171,6 +173,7 @@ func tap(m tea.Model, x, y int) (tea.Model, tea.Cmd) {
 
 // On a desk; a phone taps as TestATapOnARowJumps does.
 func TestTapSelectsThenActs(t *testing.T) {
+	t.Skip("replaced by TestOnlyACardYouChoseGoesIn (Task 12 step 1)")
 	const w = 100
 	m, f := loadedWith(t, w, queueState())
 	var ran [][]string
@@ -254,6 +257,7 @@ func TestTapNeverRunsADestructiveStep(t *testing.T) {
 }
 
 func TestTapWhilePendingCancels(t *testing.T) {
+	t.Skip("replaced by TestATapNeverRunsADestructiveAct (Task 12 step 1)")
 	m, _ := loadedWith(t, 100, queueState())
 	next, _ := key(m, "x")
 	if next.(Model).pending == nil {
@@ -347,6 +351,7 @@ func TestNarrowScrollsToTheSelection(t *testing.T) {
 // is not a tap; the step shows before a tap runs it, and a key in between
 // disarms.
 func TestFirstTapOnTheSelectedRowOnlyShows(t *testing.T) {
+	t.Skip("replaced by TestOnlyACardYouChoseGoesIn (Task 12 step 1)")
 	m, _ := loadedWith(t, 100, queueState())
 	ran := recordRuns(&m)
 	y := sessLine(t, m, "app-feature")
@@ -374,6 +379,7 @@ func TestFirstTapOnTheSelectedRowOnlyShows(t *testing.T) {
 }
 
 func TestWheelMovesTheSelection(t *testing.T) {
+	t.Skip("replaced by TestTheWheelMovesTheChosenCard (Task 12 step 1)")
 	m, _ := loadedWith(t, 50, queueState())
 	next, _ := m.Update(tea.MouseWheelMsg{X: 5, Y: 6, Button: tea.MouseWheelDown})
 	if it, _ := next.(Model).selectedSession(); it.Pane != "%2" {
@@ -389,6 +395,7 @@ func TestWheelMovesTheSelection(t *testing.T) {
 // answer being typed are all on the last line, under a hairline
 // (design/0006 §11.1).
 func TestTheKeyLineIsAtTheBottom(t *testing.T) {
+	t.Skip("replaced by TestTheKeyLineDropsWholeKeysFromTheRight (Task 12 step 1)")
 	for _, w := range []int{50, 100} {
 		m, _ := loadedWith(t, w, queueState())
 		last := func(m tea.Model) string {
@@ -426,6 +433,7 @@ func TestTheKeyLineIsAtTheBottom(t *testing.T) {
 
 // TestATapOnAKeyPressesIt: each key of the key line is a tap target.
 func TestATapOnAKeyPressesIt(t *testing.T) {
+	t.Skip("replaced by TestATapOnABoardKeyPressesIt (Task 12 step 1)")
 	st := queueState()
 	st.Agents = []string{"claude"}
 	m, _ := loadedWith(t, 50, st)
@@ -460,18 +468,15 @@ func (m Model) head(w int) string {
 	return h
 }
 
-// selectPane goes to the top, then presses ↓ until the session of pane
-// is selected.
+// selectPane chooses the card of the session in pane.
 func selectPane(t *testing.T, m tea.Model, pane string) tea.Model {
 	t.Helper()
-	for range m.(Model).rowCount() {
-		m, _ = key(m, "up")
-	}
-	for range m.(Model).rowCount() {
-		if s, ok := m.(Model).selectedSession(); ok && s.Pane == pane {
-			return m
+	nm := m.(Model)
+	for _, s := range nm.snap.Sessions {
+		if s.Pane == pane {
+			choose(&nm, s.PID)
+			return nm
 		}
-		m, _ = key(m, "down")
 	}
 	t.Fatalf("no session in %s to select", pane)
 	return m
@@ -497,6 +502,7 @@ func stripped(s string) string { return ansi.Strip(s) }
 // cut before the name is, then goes; a failure stays on the key line.
 func TestAToastSaysWhatRan(t *testing.T) {
 	m, _ := loadedWith(t, 44, queueState())
+	m.tab = tabMachine // the board says what ran in its strip's row (TestEveryNoticeKeepsItsFix)
 	next, cmd := m.Update(resultMsg(proto.Result{Ran: [][]string{{"tmux", "send-keys", "-t", "%2", "-l", "--", "a long answer for a narrow screen"}}}))
 	head := strings.Split(screen(next), "\n")[0]
 	if !strings.HasPrefix(head, " ▰ matchblox") || !strings.Contains(head, "ran: tmux") || !strings.Contains(head, "…") {

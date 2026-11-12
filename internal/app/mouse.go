@@ -274,12 +274,22 @@ func (m Model) boardWheel(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	return next, cmd
 }
 
-// overBoardView tells if ms is over the live view beside the board.
+// overBoardView tells if ms is over the live view beside the board, in
+// the frame View drew last: a swipe's ticks draw nothing again.
 func (m Model) overBoardView(ms tea.Mouse) bool {
 	w := max(m.width, minWidth)
-	d := m.boardPanel(w, m.bodyRows())
-	y := ms.Y - m.drawScreen(w).bodyTop
-	return d.live > 0 && ms.X >= w-d.live && y >= d.headAt && y < d.colsTo
+	sc, kept := m.onScreen(w)
+	if !kept {
+		sc = m.draw(w)
+	}
+	return overBoardViewOf(ms, sc)
+}
+
+// overBoardViewOf tells if ms is over the live view beside the board of
+// the frame sc.
+func overBoardViewOf(ms tea.Mouse, sc drawn) bool {
+	v := sc.boardView
+	return v.x1 > 0 && ms.X >= v.x0 && ms.X < v.x1 && ms.Y >= v.y0 && ms.Y < v.y1
 }
 
 // overView tells if ms is over the live view: the whole screen of a

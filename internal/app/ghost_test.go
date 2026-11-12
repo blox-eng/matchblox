@@ -24,11 +24,9 @@ func loadedHere(t *testing.T, width int, st proto.State, here string) (Model, *f
 // toGhost moves the selection down to the first ghost row.
 func toGhost(t *testing.T, m tea.Model) tea.Model {
 	t.Helper()
-	for range m.(Model).rowCount() {
-		if _, ok := m.(Model).selectedGhost(); ok {
-			return m
-		}
-		m, _ = key(m, "down")
+	if mm := m.(Model); mm.have && len(mm.snap.Sessions) > 0 {
+		mm.boardBelow = 1 // the board's ghost row, under the columns
+		m = mm.onChoice()
 	}
 	if _, ok := m.(Model).selectedGhost(); !ok {
 		t.Fatalf("no ghost row:\n%s", screen(m))
@@ -46,6 +44,7 @@ func emptyState(t *testing.T) proto.State {
 // With sessions, the ghost row is the last of them, and the cursor still
 // starts on the first session.
 func TestGhostRowIsBelowTheSessions(t *testing.T) {
+	t.Skip("replaced by TestTheBoardReachesDoorsGhostAndRecommendations (Task 12 step 1): the ghost row is under the columns; the detail pane goes")
 	m, _ := loadedWith(t, 100, whereState(t))
 	if _, ok := m.selectedSession(); !ok {
 		t.Fatalf("the cursor is not on a session:\n%s", screen(m))
@@ -76,7 +75,7 @@ func TestEnterOnGhostOpensNOnItsFolder(t *testing.T) {
 	m, f := loadedWith(t, 100, whereState(t))
 	next, cmd := key(toGhost(t, m), "enter")
 	if cmd != nil {
-		cmd()
+		drain(cmd)
 	}
 	fm := next.(Model).form
 	if fm == nil || fm.where != "/dev/matchblox" || !fm.picked || fm.listOpen || fm.at != fieldAgent || next.(Model).pending != nil {
@@ -93,6 +92,7 @@ func TestEnterOnGhostOpensNOnItsFolder(t *testing.T) {
 // With no session the ghost row comes first and has the cursor, and two
 // quick starts follow for the next most recent repos: ⏎ alone opens N.
 func TestEmptySessionsLeadsWithTheGhostRows(t *testing.T) {
+	t.Skip("replaced by TestTheBoardsStates (Task 12 step 1): with no session the board leads with the ghost rows")
 	m, _ := loadedWith(t, 100, emptyState(t))
 	gs := m.ghosts()
 	if len(gs) != 3 || gs[0].repo.path != "/dev/matchblox" || gs[1].repo.path != "/src/r10" || gs[2].repo.path != "/src/r48" {

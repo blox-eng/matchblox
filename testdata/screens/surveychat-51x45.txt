@@ -1,45 +1,45 @@
- ▰ matchblox                      ● 6 wait for you
+ ▰ matchblox                          ● 6 need you
  SESSIONS 7  ships 3  machine  4  5  6  7
 ───────────────────────────────────────────────────
- WAITS FOR YOU · 6
- │ spark-docs                   done      9m   88%
- ╿ ember-billing                done      4m   32%
+ NEEDS YOU 6 −  work 1  ship 0  quiet 0
 ───────────────────────────────────────────────────
-▌╿ flint-auth                   asks      2m   41%
-   ? Should a refresh also rotate the token?
-   “The refresh flow works and the tests pass. One
-   choice is yours before I wire the rotation.”
-   #4545 ●━✕┄○┄○┄○  conflicts with main
-    ▲ clear                      A switch  ⏎ go in
-───────────────────────────────────────────────────
- ╿ kindle-web                   asks      1m   56%
- ╿ cinder-ci                    done      0s   55%
- ╿ wick-mobile                  done      0s    6%
- WORKING · 1
- ✦ hearth-api                   busy           79%
+▌╿ flint-auth                                ✻  2m
+  stuck conflicts with main
+  #4545 ●━✕┄○┄○┄○  ctx 41%
+  “The refresh flow works and the tests pass. One
+  choice is yours before I wire the rotation.”
+  ⏎ go in
+
+ │ spark-docs                                ✻  9m
+  done I rewrote the quick start and the install …
+  #4540 ●━●━●━●━●  ctx 88%
+  ⏎ go in
+
+ ╿ ember-billing                             ✻  4m
+  green #4552 waits for your merge
+  #4552 ●━●━◉┄○┄○  ctx 32%
+  p merge #4552   ⏎ go in
+
+ ╿ kindle-web                                ✻  1m
+  asks Claude needs your permission to use Bash
+  ctx 56%
+  ⏎ go in
+
+ ╿ cinder-ci                                 ❋  0s
+  done I am moving the cache key to the go.sum ha…
+  ctx 55%
+  ⏎ go in
+
+ ╿ wick-mobile                               ▣  0s
+  done ⠙ Working
+  ctx 6%
+  ⏎ go in
+
+
+
+
  + start a new session
-
- 1 without an agent: shell:1.1 zsh
-
- RECOMMENDATIONS · 7 · h hides
- ▲ The week runs short: compact spark-docs
- ○ Clear spark-docs (%3)
- ○ Clear kindle-web (%5)
- ○ Clear cinder-ci (%6)
- ○ Clear flint-auth (%2)
- ○ Clear ember-billing (%8)
- ○ Clear wick-mobile (%7)
-
-
-
+ RECOMMENDATIONS · 7
+ ✻ Claude Max  5h ▰▰▰▰▰▰▰▱ 84%  wk 82%   machine ›
 ───────────────────────────────────────────────────
- USAGE
- ✻ Claude Max    5h   ▰▰▰▰▰▰▰▱ 84%  · Fri 01:20
-                 wk   ▰▰▰▰▰▰▰▱ 82%  · Mon 09:00
-                 out Fri ~21:00
- · Google login  not measured
- ❋ OpenAI Plus   5h   ▰▰▰▱▱▱▱▱ 40%  · 23:59
-                 wk   ▰▱▱▱▱▱▱▱ 12%  · Tue 09:00
-                 lasts the week
-───────────────────────────────────────────────────
- ⏎ go in  x kill  r rename  N new  full view v
+ c copy   v one line   s hosts   u strip

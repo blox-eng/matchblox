@@ -1,38 +1,38 @@
- ▰ matchblox                                                                           ● 6 wait for you
+ ▰ matchblox                                                                               ● 6 need you
  SESSIONS 7    ships 3    machine    git    history    panes    stoker
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
- WAITS FOR YOU · 6                       │ flint-auth · asks
- │ spark-docs        done       9m   88% │ ✻ team@example.com · Max
- ╿ ember-billing     done       4m   32% │ #4545 ●━✕┄○┄○┄○  conflicts with main
-▌╿ flint-auth        asks       2m   41% │
- ╿ kindle-web        asks       1m   56% │
- ╿ cinder-ci         done       0s   55% │
- ╿ wick-mobile       done       0s    6% │
- WORKING · 1                             │
- ✦ hearth-api        busy            79% │
- + start a new session                   │
-                                         │
- 1 without an agent: shell:1.1 zsh       │
-                                         │
- RECOMMENDATIONS · 7 · h hides           │
- ▲ The week runs short: compact spark-do…│
- ○ Clear spark-docs (%3)                 │
- ○ Clear kindle-web (%5)                 │
- ○ Clear cinder-ci (%6)                  │
- ○ Clear flint-auth (%2)                 │
- ○ Clear ember-billing (%8)              │
- ○ Clear wick-mobile (%7)                │ ⏺ The refresh endpoint is in and its tests pass.
-─────────────────────────────────────────│
- USAGE                                   │ ─────────────────────────────────────────────────────────────
- ✻ Claude        5h   ▰▰▰ 84%            │  ☐ Rotate
-                 wk   ▰▰▱ 82%            │
- · Google login  not measured            │ Should a refresh also rotate the token?
- ❋ OpenAI        5h ▰▱▱ 40% · wk 12%     │
-─────────────────────────────────────────│ ❯ 1. Rotate it
- MACHINE                        16 cores │      The old one stops at once.
- cpu  ▁ 0%   load 6.2                    │   2. Rotate, keep the old one a minute
- mem  ▰▰▰▱▱▱▱▱ 26 of 64 GB               │   3. Type something.
- disk ▰▰▰▰▰▰▱▱ 71% of 1 TB               │
- runs 5 claude · 1 codex · 1 opencode    │ Enter to select · ↑/↓ to navigate · Esc to cancel
+ NEEDS YOU · 6  −                     WORKING · 1  −           SHIPPING · 0  −          QUIET · 0  −
+▌╿ flint-auth                 ✻  2m   ✦ hearth-api     ✻
+  stuck conflicts with main            busy
+  #4545 ●━✕┄○┄○┄○  ctx 41%             #4551 ●━◉┄○┄○  ctx 79%
+  “The refresh flow works and the
+  tests pass. One choice is yours
+  before I wire the rotation.”
+  ⏎ go in
+
+ │ spark-docs                 ✻  9m
+  done I rewrote the quick start a…
+  #4540 ●━●━●━●━●  ctx 88%
+  ⏎ go in
+
+ ╿ ember-billing              ✻  4m
+  green #4552 waits for your merge
+  #4552 ●━●━◉┄○┄○  ctx 32%
+  p merge #4552   ⏎ go in
+
+ ╿ kindle-web                 ✻  1m
+  asks Claude needs your permissio…
+  ctx 56%
+  ⏎ go in
+
+ ╿ cinder-ci                  ❋  0s
+  done I am moving the cache key t…
+  ctx 55%
+  ⏎ go in
+
+  ↓ 1 more
+ + start a new session
+ RECOMMENDATIONS · 7
+ ✻ Claude Max  5h ▰▰▰▰▰▰▰▱ 84% · Fri 01:20   wk ▰▰▰▰▰▰▰▱ 82% · Mon 09:00                      machine ›
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
- enter goes into flint-auth  x kill  r rename  z park  N new  p ships  f stoker  / find  sampled 0s ago
+ ⏎ go in   c copy   v one line   s hosts   u strip   ←→ columns   tab next

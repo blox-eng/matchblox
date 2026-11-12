@@ -78,7 +78,7 @@ func viewModel(t *testing.T) (Model, *fakeConn) {
 		{PID: 1, Pane: "%1", Name: "a"},
 		{PID: 2, Pane: "%2", Name: "b"},
 	}
-	return loadedWith(t, 100, st)
+	return loadedWith(t, 160, st) // the board watches its chosen card beside its live view
 }
 
 func TestScreenOfAnotherPaneIsIgnored(t *testing.T) {
@@ -92,9 +92,10 @@ func TestScreenOfAnotherPaneIsIgnored(t *testing.T) {
 }
 
 func TestSelectionChangeWatches(t *testing.T) {
+	// the two matches are in two columns of the board: → moves between them
 	m, f := viewModel(t)
 	first, _ := m.selected()
-	next, cmd := key(m, "down")
+	next, cmd := key(m, "right")
 	drain(cmd)
 	second, _ := next.(Model).selected()
 	if first.Pane == second.Pane {
@@ -157,7 +158,7 @@ func TestRefusedWatchRetriesOnTheNextSnapshotAndSaysNothing(t *testing.T) {
 	if mm.flash != "" || mm.watching != "" {
 		t.Fatalf("flash %q watching %q", mm.flash, mm.watching)
 	}
-	next, cmd = mm.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	next, cmd = mm.Update(tea.WindowSizeMsg{Width: 160, Height: 30})
 	drain(cmd)
 	n := len(f.allActs())
 	next, cmd = next.Update(stateMsg(fixtureStateWith(sel)))
@@ -184,9 +185,10 @@ func TestChatLinesTakeNoNegativeHeight(t *testing.T) {
 }
 
 func TestRefusalOfAnOldWatchHoldsNothing(t *testing.T) {
+	// the two matches are in two columns of the board: → moves between them
 	m, _ := viewModel(t)
 	a, _ := m.selected()
-	next, cmd := key(m, "down")
+	next, cmd := key(m, "right")
 	drain(cmd)
 	b, _ := next.(Model).selected()
 	next, _ = next.Update(screenMsg{Pane: b.Pane, Text: "kept"})
@@ -200,15 +202,9 @@ func TestRefusalOfAnOldWatchHoldsNothing(t *testing.T) {
 // onPane is m with the session in pane selected.
 func onPane(t *testing.T, m Model, pane string) Model {
 	t.Helper()
-	for _, k := range []string{"up", "down", "down"} {
-		if s, _ := m.selected(); s.Pane == pane {
-			return m
-		}
-		next, _ := key(m, k)
-		m = next.(Model)
-	}
-	t.Fatalf("no session in %s to select", pane)
-	return m
+	next, cmd := selectPane(t, m, pane).Update(noticeMsg{}) // the board watches its chosen card
+	drain(cmd)
+	return next.(Model)
 }
 
 // keyActs are the keys the console sent, in order.
@@ -286,6 +282,7 @@ func sides(sc drawn, w int) (left, right []string) {
 }
 
 func TestWideStacksStatsLeft(t *testing.T) {
+	t.Skip("replaced by TestTheLiveViewBesideTheBoardHasRoomForAMenu (Task 12 step 1): the board's columns and its live view; usage is the strip's")
 	m := demoSized(t, 200, 50)
 	sc := m.draw(200)
 	if sc.listW > 200*2/5 {
@@ -312,6 +309,7 @@ func TestWideStacksStatsLeft(t *testing.T) {
 }
 
 func TestMediumSplitsListAndChat(t *testing.T) {
+	t.Skip("replaced by TestTheLiveViewBesideTheBoardHasRoomForAMenu (Task 12 step 1): the live view beside the home starts at 152 columns")
 	m := demoSized(t, 86, 30)
 	sc := m.draw(86)
 	if sc.listW != 38 {
@@ -378,6 +376,7 @@ func everyFact(s *sample.Session) {
 // account, its PR and its background work, on one line where it fits.
 // The screen gives the strip its rows.
 func TestTheChatStripSaysTheSessionsFacts(t *testing.T) {
+	t.Skip("replaced by TestTheLiveViewSaysTheCardsWord (Task 12 step 1): the live view's head says the card's word; the card holds the facts")
 	m := flintSized(t, 200, 50, everyFact)
 	sc := m.draw(200)
 	_, right := sides(sc, 200)
@@ -417,6 +416,7 @@ func TestTheChatStripTakesNoRowsWithoutFacts(t *testing.T) {
 
 // A strip too long for one line takes two, never more.
 func TestTheChatStripWrapsToTwoLinesAtMost(t *testing.T) {
+	t.Skip("replaced by TestTheLiveViewSaysTheCardsWord (Task 12 step 1): the live view's head is one line")
 	m := flintSized(t, 104, 38, func(s *sample.Session) {
 		everyFact(s)
 		s.Account = "a-long-account-name@example.com · Max"
@@ -441,6 +441,7 @@ func TestTheChatStripWrapsToTwoLinesAtMost(t *testing.T) {
 // its rows and the list gives way to it alone, down to 3 rows and the
 // hint under them; shorter, usage folds too.
 func TestAShortDeskKeepsItsStats(t *testing.T) {
+	t.Skip("replaced by TestShortUsageLineKeepsItsWindow (Task 12 step 1): usage is the strip's, not a stack under the list")
 	m := demoSized(t, 132, 32)
 	left, _ := sides(m.draw(132), 132)
 	all := strings.Join(left, "\n")
@@ -486,6 +487,7 @@ func TestAGoneScreenSaysTheSessionEnded(t *testing.T) {
 // The hint under a cut list never covers the selection: every row the
 // selection moves through is drawn, selected, and a tap on it hits it.
 func TestTheMoreHintNeverCoversTheSelection(t *testing.T) {
+	t.Skip("replaced by TestBoardKeepsTheChosenCardWhole (Task 12 step 1)")
 	for _, h := range []int{32, 24} { // 24: the list keeps its fewest rows
 		theMoreHintNeverCoversTheSelection(t, demoSized(t, 132, h))
 	}
@@ -662,6 +664,7 @@ func (m Model) sessionPane() string {
 
 // T26 (owner, 2026-11-08): on one column the first tap opens the view, the second jumps.
 func TestOneColumnShowsTheLiveViewThenJumps(t *testing.T) {
+	t.Skip("replaced by TestOnlyACardYouChoseGoesIn (Task 12 step 1)")
 	m, f := loadedWith(t, 44, fixtureState()) // a phone: one column
 	var ran [][]string
 	m.opt.Run = func(argv []string) error { ran = append(ran, argv); return nil }
@@ -702,6 +705,7 @@ func TestTheLiveViewTakesNoKeys(t *testing.T) { // T6
 }
 
 func TestTheLiveViewNamesTheWayIn(t *testing.T) {
+	t.Skip("replaced by TestAClickOnTheLiveViewGoesIn (Task 12 step 1)")
 	m := loaded(t, 100)
 	if out := ansi.Strip(m.render()); !strings.Contains(out, "enter goes into app-feature") {
 		t.Errorf("no way in on the key line:\n%s", out)

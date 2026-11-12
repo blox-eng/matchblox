@@ -84,6 +84,8 @@ type boardDrawn struct {
 	// colsTo is the line under the columns side by side, and live the
 	// width of the live view at their right (0: none).
 	colsTo, live int
+	// roomAt is the room's row on each line the room draws.
+	roomAt map[int]int
 }
 
 // boardSpot is a line of one column.
@@ -109,15 +111,16 @@ func (b boardDraw) empty() bool {
 	return !slices.ContainsFunc(b.idx[:], func(ss []sample.Session) bool { return len(ss) > 0 })
 }
 
-// boardShown: the board is drawn in Sessions' place.
-func (m Model) boardShown() bool { return m.board && m.tab == tabSessions }
+// boardShown: the board is the open tab, the console's home.
+func (m Model) boardShown() bool { return m.tab == tabSessions }
 
 // boardPanel is the board in w by h (the spec's "Layout"): the lines of
 // the hosts that are not reached and the setup doors above, the columns,
 // the ghost row and the recommendations under them, each folded to one
 // line. It draws the tab row too, from the same index.
 func (m Model) boardPanel(w, h int) boardDrawn {
-	d := boardDrawn{headAt: -1, stripAt: -1, doorsAt: -1, cards: map[boardSpot]paneKey{}, taps: map[int][]span{}, hostAt: map[int]string{}, underAt: map[int]string{}}
+	d := boardDrawn{headAt: -1, stripAt: -1, doorsAt: -1, cards: map[boardSpot]paneKey{}, taps: map[int][]span{}, hostAt: map[int]string{},
+		underAt: map[int]string{}, roomAt: map[int]int{}}
 	b, shown := m.boardDrawOf()
 	d.tabRow, d.tabSpans = m.boardTabRow(w, &b)
 
@@ -135,6 +138,13 @@ func (m Model) boardPanel(w, h int) boardDrawn {
 		for _, l := range ls {
 			d.addRow(-1, l.sel, w, st, l.text)
 		}
+	}
+	roomAbove, roomBelow := m.roomSplit(w)
+	for _, l := range roomAbove {
+		if l.at >= 0 {
+			d.roomAt[len(d.lines)] = l.at
+		}
+		d.addRow(-1, l.sel, w, st, l.text)
 	}
 	none := m.have && b.none
 	under := m.underLines(w, none)
@@ -159,6 +169,10 @@ func (m Model) boardPanel(w, h int) boardDrawn {
 		d.add(-1, strings.Repeat(" ", w))
 	}
 	d.lines, d.rows = d.lines[:top+rows], d.rows[:top+rows]
+	for _, l := range roomBelow {
+		d.roomAt[len(d.lines)] = l.at
+		d.addRow(-1, l.sel, w, st, l.text)
+	}
 	for _, l := range under {
 		if l.at != "" {
 			d.underAt[len(d.lines)] = l.at
@@ -182,7 +196,8 @@ func (m Model) boardRows(w, h int, none bool) int {
 
 // boardRowsUnder is boardRows with the strip's lines worked out.
 func (m Model) boardRowsUnder(w, h int, none bool, strip int) int {
-	return max(h-strip-len(m.hostLines(w))-len(m.doorsLines(w))-len(m.underLines(w, none)), 0)
+	above, below := m.roomSplit(w)
+	return max(h-strip-len(m.hostLines(w))-len(m.doorsLines(w))-len(above)-len(below)-len(m.underLines(w, none)), 0)
 }
 
 // boardLine is a line above or under the columns: its text, chosen or
@@ -208,15 +223,21 @@ func (m Model) doorsLines(w int) []boardLine {
 		count = fmt.Sprintf("SET UP · %d of %d", i+1, len(ds))
 	}
 	out := []boardLine{{text: m.chosenMark(sel) + st.label.Render(count) + st.muted.Render(" · "+ds[i].Title), sel: sel}}
-	if !sel {
-		return out
+	if sel {
+		text, ink := ds[i].Why, st.muted
+		if ds[i].Problem != "" {
+			text, ink = ds[i].Problem, st.warn
+		}
+		for _, l := range wrap(text, w-1, ink.Render) {
+			out = append(out, boardLine{text: fit(" "+l, w), sel: true})
+		}
 	}
-	text, ink := ds[i].Why, st.muted
-	if ds[i].Problem != "" {
-		text, ink = ds[i].Problem, st.warn
-	}
-	for _, l := range wrap(text, w-1, ink.Render) {
-		out = append(out, boardLine{text: fit(" "+l, w), sel: true})
+	if d, ok := m.previewDoor(); ok { // the diff a y writes, read before the y
+		var b body
+		m.preview(&b, d, w)
+		for _, l := range b.lines {
+			out = append(out, boardLine{text: l})
+		}
 	}
 	return out
 }
@@ -324,8 +345,9 @@ func (m Model) boardChoose(b *boardDraw, shown []boardCol) {
 	}
 	ss := b.idx[b.open]
 	_, above := m.aboveChosen()
-	if _, below := m.belowChosen(); above || below || len(ss) == 0 {
-		return // a line above or under the columns is chosen in place of a card
+	_, own := m.roomChosen()
+	if _, below := m.belowChosen(); above || below || own || len(ss) == 0 {
+		return // a line above or under the columns, or of the room, is chosen in place of a card
 	}
 	i := 0
 	if k, ok := m.boardPick[b.open]; ok {
@@ -372,6 +394,14 @@ func (m Model) boardPage(d *boardDrawn, b *boardDraw, shown []boardCol, w, rows 
 		c    boardCol
 	}
 	var marks []mark
+	page := m.stokerPage(w)
+	if m.room != nil {
+		if page {
+			marks = append(marks, mark{"STOKER", st.text.Bold(true), -1})
+		} else {
+			marks = append(marks, mark{stokerMark, st.faint, -1})
+		}
+	}
 	count := func(c boardCol) string {
 		if !m.have {
 			return "" // before the first state, never a zero
@@ -379,7 +409,7 @@ func (m Model) boardPage(d *boardDrawn, b *boardDraw, shown []boardCol, w, rows 
 		return " " + strconv.Itoa(len(b.idx[c]))
 	}
 	for _, c := range shown {
-		if c == b.open {
+		if c == b.open && !page {
 			marks = append(marks, mark{c.name() + count(c) + " −", st.text.Bold(true), c})
 		} else {
 			marks = append(marks, mark{c.short() + count(c), st.faint, c})
@@ -402,11 +432,19 @@ func (m Model) boardPage(d *boardDrawn, b *boardDraw, shown []boardCol, w, rows 
 		if i > 0 {
 			line, x = line+gap, x+len(gap)
 		}
-		d.heads = append(d.heads, span{x, min(x+lipgloss.Width(mk.text), w), mk.c.short()})
+		press := stokerMark
+		if mk.c >= 0 {
+			press = mk.c.short()
+		}
+		d.heads = append(d.heads, span{x, min(x+lipgloss.Width(mk.text), w), press})
 		line, x = line+mk.ink.Render(mk.text), x+lipgloss.Width(mk.text)
 	}
 	d.headAt = len(d.lines)
 	d.add(-1, fit(line, w), st.hair.Render(strings.Repeat("─", w)))
+	if page {
+		m.roomPage(d, w)
+		return
+	}
 	if len(shown) == 0 {
 		d.add(-1, m.allHidden(w)...)
 		return
@@ -805,19 +843,23 @@ func (m Model) boardHostHit(head string) span {
 // after it. The spans press esc, or a hidden column's short name.
 func (m Model) boardCrumb(w int, b *boardDraw) (string, []span) {
 	phone := m.layoutAt(w) == Narrow
-	if m.boardChain == "" && (phone || !slices.ContainsFunc(boardCols[:], m.colHidden)) {
+	chain := m.boardChain
+	if m.room != nil && m.room.k.isOne() {
+		chain = "of one"
+	}
+	if chain == "" && (phone || !slices.ContainsFunc(boardCols[:], m.colHidden)) {
 		return "", nil
 	}
 	st := m.st
 	type part struct{ text, press, gap string }
 	var parts []part
-	if m.boardChain != "" {
+	if chain != "" {
 		n := 0
 		for _, ss := range b.idx {
 			n += len(ss)
 		}
 		back := m.keys.main.Back.Help().Key
-		parts = append(parts, part{st.text.Render("chain " + m.boardChain + " · " + strconv.Itoa(n)), "", ""},
+		parts = append(parts, part{st.text.Render("chain " + chain + " · " + strconv.Itoa(n)), "", ""},
 			part{st.text.Render(back) + st.muted.Render(" all"), back, "   "})
 	}
 	if !phone {

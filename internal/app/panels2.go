@@ -215,38 +215,6 @@ func (m Model) gitHost(b *body, g hostGit, rows []wtRow, i, sel, w int) int {
 	return i
 }
 
-// recsSection is what to do next, under the sessions: its rows follow
-// theirs. On a phone the selected one shows its evidence and its steps
-// under the list; wider, the detail pane does. h folds the section to its
-// label; d dismisses the selected one until its evidence changes.
-func (m Model) recsSection(b *body, w int) {
-	if len(m.recs) == 0 {
-		return
-	}
-	st := m.st
-	if len(b.lines) > 0 {
-		b.add(-1, "")
-	}
-	if m.recPrefs.Folded {
-		b.add(recsLabelRow, st.label.Render(fmt.Sprintf(" RECOMMENDATIONS · %d hidden", len(m.recs)))+st.faint.Render(" · ")+
-			keyWord(m.keys.main.Fold, st.accent, st.faint, " shows"))
-		return
-	}
-	b.add(recsLabelRow, st.label.Render(fmt.Sprintf(" RECOMMENDATIONS · %d", len(m.recs)))+st.faint.Render(" · ")+
-		keyWord(m.keys.main.Fold, st.accent, st.faint, " hides"))
-	n := len(m.doors) + len(m.snap.Sessions) + len(m.ghosts())
-	sel := m.sessIndex() - n
-	for i, r := range m.recs {
-		b.addRow(n+i, i == sel, w, st, m.recLine(r, i == sel, w))
-	}
-	if sel < 0 || sel >= len(m.recs) || !m.inPlace() {
-		return
-	}
-	r := m.recs[sel]
-	b.add(-1, wrap(" "+tilde(r.Evidence), w, st.muted.Render)...)
-	b.add(-1, m.recActions(r, w)...)
-}
-
 // recLine is the row of r: its level's mark and its title, or what came
 // of the last act on it; chosen, the dismiss mark at its right.
 func (m Model) recLine(r advice.Rec, sel bool, w int) string {

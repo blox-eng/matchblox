@@ -56,6 +56,11 @@ func (m Model) boardCard(s sample.Session, w int, o cardOpts) (lines []string, t
 	word, says := m.cardSays(s)
 	if o.quietRow {
 		add(m.cardHead(s, w, o, word), nil)
+		if o.sel {
+			for _, l := range m.peekHead(s, w) {
+				add(l, nil)
+			}
+		}
 		if last := m.lastWords(s); o.sel && last != "" {
 			add(pad("   "+m.st.muted.Render("“"+last+"”"), w), nil)
 		}
@@ -68,6 +73,11 @@ func (m Model) boardCard(s sample.Session, w int, o cardOpts) (lines []string, t
 	}
 	if whole {
 		add(m.cardTrack(s, w, o))
+	}
+	if o.sel {
+		for _, l := range m.peekHead(s, w) {
+			add(l, nil)
+		}
 	}
 	q, answers := m.offersDigits(s)
 	if last := m.lastWords(s); o.sel && !o.bare && last != "" {
@@ -89,6 +99,43 @@ func (m Model) boardCard(s sample.Session, w int, o cardOpts) (lines []string, t
 		add(m.cardKeys(s, w, o, len(q.Options), answers))
 	}
 	return m.washed(lines, w, o), taps
+}
+
+// peekHead is what the peek adds under the chosen card's own lines, as the
+// detail pane did (ruling 35): an account that is not the default with its
+// provider's mark, the background work, and the child runs, counted on
+// the head and named under it; each shell's command under the head too.
+func (m Model) peekHead(s sample.Session, w int) []string {
+	st := m.st
+	var parts []string
+	if tag := m.accountTag(s); tag != "" {
+		parts = append(parts, strings.TrimSpace(providerMarks[s.Provider]+" "+tag))
+	}
+	if s.Agents > 0 && s.Status != sample.StatusAgents { // the card's word says agents already
+		parts = append(parts, plural(s.Agents, "subagent")+" running")
+	}
+	if len(s.Shells) > 0 {
+		shells := plural(len(s.Shells), "shell")
+		if old := s.Shells[0].Started; !old.IsZero() {
+			shells += " · oldest " + sample.Human(m.now().Sub(old))
+		}
+		parts = append(parts, shells)
+	}
+	ref := sample.ProcRef{PID: s.PID, Start: s.Start}
+	if n := m.descendants(s.Host, ref); n > 0 {
+		parts = append(parts, plural(n, "child run"))
+	}
+	if len(parts) == 0 {
+		return nil
+	}
+	out := []string{fit("  "+st.muted.Render(strings.Join(parts, " · ")), w)}
+	for _, sh := range s.Shells {
+		out = append(out, fit("  "+st.faint.Render(strconv.Itoa(sh.PID)+"  "+sh.Command), w))
+	}
+	for _, l := range m.childRows(s.Host, ref, "  ", 1, w) {
+		out = append(out, pad(l, w))
+	}
+	return out
 }
 
 // washed puts every cell of a chosen card, or one that lands outside

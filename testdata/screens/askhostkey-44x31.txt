@@ -1,11 +1,11 @@
- ▰ matchblox               ● 6 wait for you
+ ▰ matchblox                   ● 6 need you
  SESSIONS 7  ships 3  machine  4  5  6  7
 ────────────────────────────────────────────
- WAITS FOR YOU · 6
+ NEEDS YOU 6 −  work 1  ship 0  quiet 0
 ────────────────────────────────────────────
-▌│ spark-docs            done      9m   88%
-   “I rewrote the quick start and the
-   install page.”
+▌╿ flint-auth                         ✻  2m
+  stuck conflicts with main
+  #4545 ●━✕┄○┄○┄○  ctx 41%
 ╭─ ssh ws-1 asks ──────────────────────────╮
 │                                          │
 │   The authenticity of host 'ws-1'        │
@@ -28,4 +28,4 @@
 │                                          │
 ╰─ ⏎ answer ─ esc cancel the ssh ──────────╯
 ────────────────────────────────────────────
- ⏎ go in  x kill  r rename  N new
+ c copy   v one line   s hosts   u strip

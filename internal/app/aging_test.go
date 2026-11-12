@@ -57,6 +57,7 @@ func agingState() proto.State {
 // TestIdleSessionsAge: who waits for the person, then who works, then idle
 // by the newest; a day makes a session cold, a week makes it stale.
 func TestIdleSessionsAge(t *testing.T) {
+	t.Skip("replaced by TestBoardColumnOrder (Task 12 step 1): who waits, works and rests are the columns; a cold or stale match is QUIET (TestColumnOf)")
 	for _, w := range []int{50, 120} {
 		m, _ := loadedWith(t, w, agingState())
 		next, _ := key(m, "1")
@@ -76,6 +77,7 @@ func TestIdleSessionsAge(t *testing.T) {
 // the exact commands on the RUN line; one that waits for you asks for a
 // second y and says why.
 func TestXKillsASession(t *testing.T) {
+	t.Skip("replaced by TestXOnlyEverKills (Task 12 step 1)")
 	st := agingState()
 	st.Sessions[4].Status = "idle" // echo rests: one y kills it
 	m, f := loadedWith(t, 160, st)
@@ -87,7 +89,7 @@ func TestXKillsASession(t *testing.T) {
 	}
 	next, cmd := key(next, "y")
 	if cmd != nil {
-		cmd()
+		drain(cmd)
 	}
 	if line := actionLine(next); len(f.acts()) != 0 || !strings.Contains(line, "charlie waits for you: y again kills it all the same") {
 		t.Fatalf("one y killed a session that waits: %q %+v", line, f.acts())
@@ -96,20 +98,17 @@ func TestXKillsASession(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("y sent nothing")
 	}
-	cmd()
+	drain(cmd)
 	if acts := f.acts(); len(acts) != 1 || acts[0] != (proto.Act{RecID: "kill:%charlie", Which: "secondary", Confirm: "y", Text: "anyway"}) {
 		t.Fatalf("sent %+v", acts)
 	}
-	next = selectPane(t, next, "%echo")
-	if !strings.Contains(actionLine(next), "x kill") {
-		t.Fatalf("the keys of a session lack x: %q", actionLine(next))
-	}
+	next = selectPane(t, next, "%echo") // the card's keys hold x in its menu (TestXOnlyEverKills)
 	next, _ = key(next, "x")
 	if line := actionLine(next); !strings.Contains(line, "Kill echo: tmux kill-pane -t %echo then kill -TERM 5") {
 		t.Fatalf("x on echo: %q", line)
 	}
 	_, cmd = key(next, "y")
-	cmd()
+	drain(cmd)
 	if acts := f.acts(); len(acts) != 2 || acts[1] != (proto.Act{RecID: "kill:%echo", Which: "secondary", Confirm: "y"}) {
 		t.Fatalf("sent %+v", acts)
 	}
@@ -150,16 +149,18 @@ func TestTheFixFitsTheParent(t *testing.T) {
 func TestAnOutSessionSaysUntilWhen(t *testing.T) {
 	st := fixtureState()
 	back := st.At.Add(2 * time.Hour)
+	out := ""
 	for i := range st.Sessions {
 		if !st.Sessions[i].Busy {
 			st.Sessions[i].Out, st.Sessions[i].Idle = back, 10*time.Minute
+			out = st.Sessions[i].Pane
 			break
 		}
 	}
-	m, _ := loadedWith(t, 120, st)
-	m.tab = tabSessions
+	m, _ := loadedWith(t, 160, st)
+	m = selectPane(t, m, out).(Model) // the chosen card says what the row said
 	at := back.Local().Format("15:04")
-	if out := ansi.Strip(m.render()); !regexp.MustCompile(`out +` + at).MatchString(out) {
+	if out := ansi.Strip(m.render()); !strings.Contains(out, "· out") || !regexp.MustCompile(`✻ +`+at).MatchString(out) { // the card's word and its age
 		t.Fatalf("no out %s in\n%s", at, out)
 	}
 	if g := m.groupOf(sample.Session{Out: back}); g != groupQuiet {

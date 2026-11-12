@@ -12,6 +12,7 @@ import (
 // subagents, the shells, how long the oldest has run, and each command.
 // A session in a pane shows its chat there; this one runs outside tmux.
 func TestTheDetailShowsTheBackgroundWork(t *testing.T) {
+	t.Skip("replaced by TestThePeekSaysTheBackgroundWork (Task 12 step 1, ruling 35)")
 	st := queueState()
 	pid := 0
 	for i := range st.Sessions {

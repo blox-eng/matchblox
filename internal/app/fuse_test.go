@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"os"
 	"path/filepath"
 	"slices"
@@ -253,6 +254,7 @@ func TestTwoChainsNeverTouch(t *testing.T) {
 // TestAFilterSaysHowManyAreHidden: the fuse joins the matches the filter
 // leaves, and the label counts the rest.
 func TestAFilterSaysHowManyAreHidden(t *testing.T) {
+	t.Skip("replaced by TestTheCountSeesThroughEveryFilter (Task 12 step 1)")
 	st := fuseState(t, mockupChain)
 	for i := range st.Sessions {
 		if st.Sessions[i].Name != "hearth-api" {
@@ -273,6 +275,7 @@ func TestAFilterSaysHowManyAreHidden(t *testing.T) {
 // chain count, but a filter that hides chain-mates still says how many, on
 // the group of the chain's first match in view.
 func TestAFilterSaysHowManyAreHiddenInEveryGrouping(t *testing.T) {
+	t.Skip("dropped (Task 12 step 1): the groupings go (step 4)")
 	st := fuseState(t, mockupChain)
 	for i := range st.Sessions {
 		st.Sessions[i].Cwd = "/home/user/src/hearth"
@@ -529,6 +532,7 @@ func TestAChainWithOneMatchHereIsNoChain(t *testing.T) {
 // blanks; and a tap on the opened keys of a chained row on a phone presses
 // the key it shows.
 func TestOpenedLinesStartWithTwoBlanks(t *testing.T) {
+	t.Skip("dropped (Task 12 step 1): the fuse's two cells go")
 	m := fuseModel(t, 44, fuseState(t, mockupChain), "hearth-api")
 	s, _ := m.selectedSession()
 	for _, l := range m.opened(s, 44) {
@@ -609,20 +613,24 @@ func joinModel(t *testing.T, width int, next ...[]string) Model {
 }
 
 func TestJoinToastAndSpark(t *testing.T) {
-	if m := joinModel(t, 160, mockupChain); m.toast != "ember-billing joined hearth · u in its room takes it out" {
-		t.Fatalf("toast = %q", m.toast)
+	if m := joinModel(t, 160, mockupChain); saidNow(m) != "ember-billing joined hearth · u in its room takes it out" { // u moves to the menu at step 6d
+		t.Fatalf("toast = %q", saidNow(m))
 	}
 }
 
 func TestJoinToastNarrow(t *testing.T) {
-	if m := joinModel(t, 40, mockupChain); m.toast != "ember-billing joined hearth · u: out" {
-		t.Fatalf("toast = %q", m.toast)
+	if m := joinModel(t, 40, mockupChain); saidNow(m) != "ember-billing joined hearth · u: out" {
+		t.Fatalf("toast = %q", saidNow(m))
 	}
 }
 
+// saidNow is the news the console said last: the header's toast, or on the
+// board the notice in the strip's row.
+func saidNow(m Model) string { return cmp.Or(m.toast, m.noticeText) }
+
 func TestNewTeamToast(t *testing.T) {
-	if m := joinModel(t, 160, mockupChain[:2], []string{"flint-auth", "spark-docs"}); m.toast != "web formed: flint-auth, spark-docs" {
-		t.Fatalf("toast = %q", m.toast)
+	if m := joinModel(t, 160, mockupChain[:2], []string{"flint-auth", "spark-docs"}); saidNow(m) != "web formed: flint-auth, spark-docs" {
+		t.Fatalf("toast = %q", saidNow(m))
 	}
 }
 
@@ -823,6 +831,7 @@ func wentInto(t *testing.T, m Model, k string) (Model, [][]string) {
 // TestAOnHeadOpensStokerPane: a on the head of a run that is on opens the
 // stoker's own pane in a popup: it is on matchblox's tmux server (#346).
 func TestAOnHeadOpensStokerPane(t *testing.T) {
+	t.Skip("replaced by TestEnterOpensTheStokerInAPopup (Task 12 step 1)")
 	m, _ := headModel(t, 160, headState(t, runningPlan(), true))
 	m = pick(t, m, stokerPane)
 	next, _ := wentInto(t, m, "a")
@@ -834,6 +843,7 @@ func TestAOnHeadOpensStokerPane(t *testing.T) {
 // TestAOnHeadWithoutRunOpensSheet: with its run off, a on the head opens
 // the start sheet of its chain.
 func TestAOnHeadWithoutRunOpensSheet(t *testing.T) {
+	t.Skip("replaced by TestTalkStartsAStokerWithNoSheet (Task 12 step 1)")
 	m, f := headModel(t, 160, headState(t, proto.StokerView{PaneUp: true}, true))
 	m = pick(t, m, stokerPane)
 	next := sendKey(m, "a")
@@ -851,6 +861,7 @@ func TestAOnHeadWithoutRunOpensSheet(t *testing.T) {
 // TestAOnHeadAtNightOpensItsPane: a sealed night takes no order, so a on
 // the head opens its pane, to answer its prompts.
 func TestAOnHeadAtNightOpensItsPane(t *testing.T) {
+	t.Skip("replaced by TestEnterOpensTheStokerInAPopup (Task 12 step 1)")
 	st := headState(t, proto.StokerView{PaneUp: true}, true)
 	host := proto.StokerView{}
 	host.On, host.Nightly, host.Until = true, true, demoAt.Add(8*time.Hour)
@@ -866,6 +877,7 @@ func TestAOnHeadAtNightOpensItsPane(t *testing.T) {
 // its chain; a opens the sheet, whose order starts the agent again. At
 // night it says the night is sealed.
 func TestAOnAPanelessHead(t *testing.T) {
+	t.Skip("replaced by TestTalkToARunningStokerSendsAnOrder (Task 12 step 1)")
 	v := runningPlan()
 	v.PaneUp = false
 	m, f := headModel(t, 160, headState(t, v, false))
@@ -879,7 +891,7 @@ func TestAOnAPanelessHead(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("enter sent nothing")
 	}
-	cmd()
+	drain(cmd)
 	if a := f.acts(); len(a) != 1 || a[0].RecID != "stoker:order-chain" || a[0].Text != `{"chain":"c1","words":"go on","grants":[]}` {
 		t.Fatalf("acts %+v", a)
 	}
@@ -910,6 +922,7 @@ func TestAOnAMemberStaysItsChat(t *testing.T) {
 // opens its start sheet, and the key line offers it; F on a session in
 // no chain opens nothing.
 func TestFOnABareChainOpensSheet(t *testing.T) {
+	t.Skip("replaced by TestFOnACardOfABareChainOpensTheSheet (Task 12 step 1)")
 	m := fuseModel(t, 160, fuseState(t, mockupChain), "hearth-api")
 	if line := actionLine(m); !strings.Contains(line, "F stoke chain") {
 		t.Fatalf("no F on the key line: %q", line)
@@ -944,6 +957,7 @@ func tapFuse(t *testing.T, m Model, name string) Model {
 // opens its start sheet. On a chain with a head it is a row tap, and on a
 // phone, with no fuse column, it is a row tap too.
 func TestTapOnBareFuseOpensSheet(t *testing.T) {
+	t.Skip("dropped (Task 12 step 1): the fuse goes")
 	m := fuseModel(t, 160, fuseState(t, mockupChain), "")
 	if next := tapFuse(t, m, "hearth-api"); next.sheet == nil || next.sheet.chain != "c1" {
 		t.Fatalf("a tap on the fuse opened no sheet: %+v", next.sheet)
@@ -963,6 +977,7 @@ func TestTapOnBareFuseOpensSheet(t *testing.T) {
 // TestABareChainStartsNothingAtNight: F, or a tap on the fuse, of a chain
 // with no head says the night is sealed and sends nothing.
 func TestABareChainStartsNothingAtNight(t *testing.T) {
+	t.Skip("replaced by TestFOnACardOfABareChainOpensTheSheet (Task 12 step 1)")
 	st := fuseState(t, mockupChain)
 	host := proto.StokerView{}
 	host.On, host.Nightly = true, true
@@ -979,6 +994,7 @@ func TestABareChainStartsNothingAtNight(t *testing.T) {
 // TestAHeadIsNoSession: x, r, A and z on a head row send nothing and say
 // where its agent quits.
 func TestAHeadIsNoSession(t *testing.T) {
+	t.Skip("dropped (Task 12 step 1): head rows go with Sessions (re-plan)")
 	m, f := headModel(t, 160, headState(t, runningPlan(), true))
 	m = pick(t, m, stokerPane)
 	for _, k := range []string{"x", "r", "A", "z"} {

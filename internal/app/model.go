@@ -479,9 +479,8 @@ type Model struct {
 	// Model: a tap and a wheel tick find what they hit in it.
 	shown *shownFrame
 
-	// board draws the board in Sessions' place until it is the home (R1):
-	// its open column, and the chosen card of each column.
-	board     bool
+	// boardAt is the board's open column, and boardPick the chosen card of
+	// each column.
 	boardAt   boardCol
 	boardPick map[boardCol]paneKey
 	// boardChain and boardHost narrow the board to one chain and one host,
@@ -730,7 +729,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	next, cmd := m.update(msg)
 	if nm, ok := next.(Model); ok {
 		nm = nm.keepRoomRow(m.room, anchor)
-		nm = nm.scanShows().keepView().inDemo().peekOn()
+		nm = nm.scanShows().keepView().inDemo().peekOn().onChoice() // what reads Sessions' selection reads the board's choice
 		again := nm.beltPoll(msg)
 		nm, belt := nm.tellBelt(again)
 		cmd = tea.Batch(cmd, belt)
@@ -953,7 +952,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if strings.HasPrefix(msg.ActID, keyActID) {
 			var note tea.Cmd
 			switch {
-			case msg.Err != "" && m.boardShown():
+			case msg.Err != "" && m.boardShown() && !m.viewFull(): // the stand-in says it on its own key line
 				if msg.ActID == keyActID+m.peekSentPane { // the answer was not sent: its card takes digits again
 					m.peekSent, m.peekSentAsk, m.peekSentPane = 0, "", ""
 				}

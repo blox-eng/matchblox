@@ -185,7 +185,7 @@ func boardShot(t testing.TB, st proto.State, w, h int, edit func(*Model)) Model 
 		next, _ = next.Update(peerMsg{host: "gpu-1", conn: peer, msg: stateMsg(gpu)})
 	}
 	m := next.(Model)
-	m.splashDone, m.board = true, true
+	m.splashDone = true
 	// The screens are checked: the copy check's door has its own test.
 	m.viewPrefs.CopyCheckedPhone, m.viewPrefs.CopyCheckedDesk = true, true
 	if edit != nil {
@@ -335,7 +335,7 @@ func TestTheBoardsStates(t *testing.T) {
 		var next tea.Model = New(Options{NoMotion: true, Conn: newFake(), Now: func() time.Time { return demoAt }})
 		next, _ = next.Update(tea.WindowSizeMsg{Width: 80, Height: 31})
 		m := next.(Model)
-		m.splashDone, m.board = true, true
+		m.splashDone = true
 		// The tab row and the key line are not the board's yet: its body.
 		f := strings.Join(plainLines(m.boardPanel(80, m.bodyRows()).lines), "\n")
 		if !strings.Contains(f, "reading your matches…") || !strings.Contains(f, "NEEDS YOU") {

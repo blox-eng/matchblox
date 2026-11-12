@@ -208,7 +208,7 @@ func tempCopies(t *testing.T) []string {
 func TestTheConsoleDrawsTheMachine(t *testing.T) {
 	t.Setenv("TMPDIR", t.TempDir())
 	_, term := start(t)
-	term.waitFor(t, "SESSIONS 7", "hearth-api")
+	term.waitFor(t, "SESSIONS 7", "flint-auth")
 }
 
 // late holds back the console's first state until the start mark has played,
@@ -242,13 +242,13 @@ func TestAStateAfterTheStartMarkStillDrawsTheCount(t *testing.T) {
 	}
 	t.Cleanup(d.Stop)
 	term.d = d
-	term.waitFor(t, "SESSIONS 7", "hearth-api")
+	term.waitFor(t, "SESSIONS 7", "flint-auth")
 }
 
 func TestStopLeavesNothing(t *testing.T) {
 	t.Setenv("TMPDIR", t.TempDir())
 	d, term := start(t)
-	term.waitFor(t, "hearth-api")
+	term.waitFor(t, "flint-auth")
 	if len(tempCopies(t)) != 1 {
 		t.Fatalf("while it runs, want one temp copy, got %v", tempCopies(t))
 	}
@@ -273,7 +273,7 @@ func TestStopLeavesNothing(t *testing.T) {
 func TestAStopWithNoOneReadingStillEnds(t *testing.T) {
 	t.Setenv("TMPDIR", t.TempDir())
 	d, term := start(t)
-	term.waitFor(t, "hearth-api")
+	term.waitFor(t, "flint-auth")
 	// The app has gone: nothing reads the terminal or writes to it any more.
 	term.close()
 
@@ -319,7 +319,7 @@ func TestAStartAfterAStopIsFresh(t *testing.T) {
 	if left := tempCopies(t); len(left) != 1 {
 		t.Errorf("the refused Start touched the running copy: %v", left)
 	}
-	if _, err := first.in.Write([]byte("2")); err != nil {
+	if _, err := first.in.Write([]byte("\t")); err != nil {
 		t.Fatal(err)
 	}
 	first.waitFor(t, "SHIPS") // the first one still runs

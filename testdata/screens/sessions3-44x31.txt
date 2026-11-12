@@ -1,31 +1,31 @@
- ▰ matchblox · 3 hosts     ● 8 wait for you
+ ▰ matchblox · all hosts ▾     ● 8 need you
  SESSIONS 10  ships 3  machine  4  5  6  7
 ────────────────────────────────────────────
- WAITS FOR YOU · 8
+ NEEDS YOU 8 −  work 2  ship 0  quiet 0
 ────────────────────────────────────────────
-▌│ spark-docs this mach… done      9m   88%
-   “I rewrote the quick start and the
-   install page.”
-   #4540 ●━●━●━●━●  live
-   ▰▰▰▰▰ plan 100%  ▲ clear
-                          A switch  ⏎ go in
-────────────────────────────────────────────
- ╿ ember-billing this m… done      4m   32%
- │ train-loop gpu-1      asks      4m   88%
- ╿ flint-auth this mach… asks      2m   41%
- ╿ kindle-web this mach… asks      1m   56%
- ╿ cinder-ci this machi… done      0s   55%
- ╿ wick-mobile this mac… done      0s    6%
- │ api-auth ws-1 · work  waits     1m   88%
- WORKING · 2
- │ docs-sweep ws-1       busy           88%
- ✦ hearth-api this mach… busy           79%
+▌╿ flint-auth                         ✻  2m
+  stuck conflicts with main
+  #4545 ●━✕┄○┄○┄○  ctx 41%
+  “The refresh flow works and the tests
+  pass. One choice is yours before I wire
+  the rotation.”
+  ⏎ go in
+
+ │ spark-docs                         ✻  9m
+  done I rewrote the quick start and the i…
+  #4540 ●━●━●━●━●  ctx 88%
+  ⏎ go in
+
+ ╿ ember-billing                      ✻  4m
+  green #4552 waits for your merge
+  #4552 ●━●━◉┄○┄○  ctx 32%
+  p merge #4552   ⏎ go in
+
+  ↓ 5 more
+
+
  + start a new session
-
- 1 without an agent: shell:1.1 zsh
-
- RECOMMENDATIONS · 7 · h hides
- ▲ The week runs short: compact spark-docs
- ○ Clear spark-docs (%3)
+ RECOMMENDATIONS · 7
+ ✻ 5h 84% · wk 82%                machine ›
 ────────────────────────────────────────────
- ⏎ go in  x kill  r rename  N new
+ c copy   v one line   s hosts   u strip

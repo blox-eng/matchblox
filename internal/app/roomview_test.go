@@ -73,6 +73,7 @@ func TestRoomAt40ColumnsTruncatesLongNames(t *testing.T) {
 }
 
 func TestRoomShowsInPlaceOfTheList(t *testing.T) {
+	t.Skip("replaced by TestANarrowedChainIsItsRoom (Task 12 step 1)")
 	st := headState(t, runningPlan(), true)
 	twoAsk(&st)
 	m, k := roomOf(t, st, "hearth-api")

@@ -161,6 +161,7 @@ func TestEnterOpensAHostAndEscComesBack(t *testing.T) {
 }
 
 func TestEscClearsTheSearchBeforeItLeaves(t *testing.T) {
+	t.Skip("replaced by TestEscClearsTheSearchThenTheChain (Task 12 step 1): esc on the board never leaves it; Hosts opens from Machine at step 6")
 	r := newShell(t, []string{"ws-1"}, nil, "ws-1", false)
 	next, _ := r.sh.Update(stateMsg(fixtureState()))
 	r.sh = next.(Shell)
@@ -295,7 +296,7 @@ func TestOldConsoleMessagesDoNotReachTheNewOne(t *testing.T) {
 	next, cmd := r.sh.Update(redialMsg{})
 	r.sh = next.(Shell)
 	if cmd != nil {
-		cmd()
+		drain(cmd)
 	}
 	if redials != 0 {
 		t.Fatal("a redial tick of the closed console dialed again")
@@ -449,6 +450,7 @@ func (r *shellRig) rowOf(host string) string {
 // toHosts goes from the console back to Hosts.
 func (r *shellRig) toHosts(t *testing.T) {
 	t.Helper()
+	r.key(t, "tab") // esc on the board stays on the board (#360); off it, esc goes back to Hosts
 	r.key(t, "esc")
 	if r.sh.layer != layerHosts {
 		t.Fatal("esc did not go back to Hosts")
@@ -556,7 +558,7 @@ func TestHidingAPeerClosesItAndItsTick(t *testing.T) {
 		t.Fatalf("a hidden host's rows stay:\n%s", r.view())
 	}
 	if cmd := r.update(late); cmd != nil {
-		cmd()
+		drain(cmd)
 	}
 	before := r.view()
 	r.update(staleMsg{})
@@ -574,7 +576,7 @@ func TestHidingAPeerClosesItAndItsTick(t *testing.T) {
 	}
 	r.update(peerMsg{host: "ws-1", conn: again, msg: lostMsg{err: io.EOF, conn: again}})
 	if cmd := r.update(late); cmd != nil {
-		cmd()
+		drain(cmd)
 	}
 	if r.redials["ws-1"] != 0 {
 		t.Fatal("the old link's tick dialed the new one")
@@ -589,7 +591,7 @@ func TestHeaderCountsHidden(t *testing.T) {
 	r := hidingShell(t, []string{"ws-1", "gpu-1"}, []string{"gpu-1"}, "")
 	r.update(stateMsg(fixtureState()))
 	r.sh.cur.splashDone = true
-	if head := strings.Split(r.view(), "\n")[0]; !strings.Contains(head, "2 hosts · 1 hidden") {
+	if head := strings.Split(r.view(), "\n")[0]; !strings.Contains(head, "all hosts ▾ · 1 hidden") { // the board's host filter
 		t.Fatalf("header %q", head)
 	}
 	one := newShell(t, nil, nil, "", false)
@@ -740,7 +742,7 @@ func TestEnterWithNoneTickedSaysSo(t *testing.T) {
 	if !strings.Contains(lines[0], "ws-1 · 1 hidden") {
 		t.Fatalf("header %q", lines[0])
 	}
-	if last := strings.TrimSpace(lines[len(lines)-1]); last != "No host is ticked: ws-1 opens alone." {
-		t.Fatalf("key line %q", last)
+	if row := strings.TrimSpace(lines[len(lines)-3]); row != "No host is ticked: ws-1 opens alone." { // the board's strip row
+		t.Fatalf("notice %q", row)
 	}
 }

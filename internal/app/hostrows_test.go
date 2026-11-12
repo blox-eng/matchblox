@@ -63,6 +63,7 @@ func lineWith(lines []string, s string) string {
 func work(s *sample.Session) { s.AccountDir = "/home/user/.matchblox/accounts/claude/work" }
 
 func TestHostWordOnlyWithTwoHosts(t *testing.T) {
+	t.Skip("replaced by TestACardNamesAnotherHost (Task 12 step 1)")
 	now := lostAt
 	one, _, _ := hostsAt(t, &now, "", 196, 30)
 	one = upd(t, one, stateMsg(hostState(sess(1, "api-auth", "%1", work))))
@@ -91,6 +92,7 @@ func TestHostWordOnlyWithTwoHosts(t *testing.T) {
 const hosts1 = "this machine"
 
 func TestHeaderSaysThreeHosts(t *testing.T) {
+	t.Skip("board rule: TestANoticeNeverHidesTheCount")
 	now := lostAt
 	m, _, conns := hostsAt(t, &now, "", 196, 30, "gpu-1", "ws-1")
 	m = upd(t, m, stateMsg(hostState(sess(1, "api-auth", "%1", nil))))
@@ -116,6 +118,7 @@ func lostPeer(t *testing.T, after time.Duration) Model {
 }
 
 func TestStaleRowSaysAsOf(t *testing.T) {
+	t.Skip("replaced by TestAHostThatIsNotReachedKeepsItsCards (Task 12 step 1)")
 	m := lostPeer(t, 40*time.Second)
 	l := lineWith(frameOf(m), "train-loop")
 	for _, want := range []string{"stale", "40s", "as of 14:02"} {
@@ -126,6 +129,7 @@ func TestStaleRowSaysAsOf(t *testing.T) {
 }
 
 func TestStaleStartsAt30s(t *testing.T) {
+	t.Skip("replaced by TestAStaleHostsCardsSayTheirAge (Task 12 step 1)")
 	now := lostAt.Add(-time.Second)
 	m, _, conns := hostsAt(t, &now, "", 196, 12, "ws-1") // no dock: home's graph moves with each sample
 	home, peer := hostState(sess(1, "api-auth", "%1", nil)), hostState(sess(2, "train-loop", "%2", nil))
@@ -170,6 +174,7 @@ func TestStaleStartsAt30s(t *testing.T) {
 }
 
 func TestStaleAgeTurnsAmberAtAMinute(t *testing.T) {
+	t.Skip("replaced by TestAStaleHostsCardsSayTheirAge (Task 12 step 1)")
 	m := lostPeer(t, 59*time.Second)
 	if row := lineWith(strings.Split(m.render(), "\n"), "train-loop"); !strings.Contains(row, m.st.faint.Render("59s")) {
 		t.Fatalf("under a minute the age is faint: %q", row)
@@ -212,6 +217,7 @@ func TestTwoLostHostsLine(t *testing.T) {
 // TestHomeLostPeersWork (Review Focus 4): the home host blocked while a
 // peer is fine is one row; the peer's rows still act.
 func TestHomeLostPeersWork(t *testing.T) {
+	t.Skip("replaced by TestEnterOnAnotherHostsCardGoesIntoItsPane (Task 12 step 1)")
 	now := lostAt
 	m, home, conns := hostsAt(t, &now, "home-1", 196, 30, "ws-1")
 	m = upd(t, m, peerMsg{host: "ws-1", conn: conns["ws-1"], msg: stateMsg(hostState(sess(2, "train-loop", "%2", nil)))})
@@ -272,6 +278,7 @@ func TestOneHostStaleIsToday(t *testing.T) {
 // TestPeerOlderVersionIsABlockedRow: a peer that runs another matchblox
 // is a blocked row with today's words, not a stream.
 func TestPeerOlderVersionIsABlockedRow(t *testing.T) {
+	t.Skip("replaced by TestABlockedHostSaysWhyAndItsFix (Task 12 step 1)")
 	now := lostAt
 	m, _, conns := hostsAt(t, &now, "", 196, 30, "ws-1")
 	m = upd(t, m, stateMsg(hostState(sess(1, "api-auth", "%1", nil))))
@@ -290,6 +297,7 @@ func TestPeerOlderVersionIsABlockedRow(t *testing.T) {
 }
 
 func TestEnterOnABlockedPeerConnectsIt(t *testing.T) {
+	t.Skip("replaced by TestABlockedHostSaysWhyAndItsFix (Task 12 step 1)")
 	now := lostAt
 	m, _, conns := hostsAt(t, &now, "", 196, 30, "ws-1")
 	m = upd(t, m, stateMsg(hostState(sess(1, "api-auth", "%1", nil))))
@@ -321,11 +329,14 @@ func TestThreeHostFrames(t *testing.T) {
 		w, h int
 		want []string
 	}{
-		{"fine", 86, 30, []string{"matchblox · 3 hosts", "train-lo… gpu…", "api-auth ws-1", "docs-swe… ws-1"}},
-		{"fine", 132, 32, []string{"api-auth ws-1 · work"}},
-		{"stale", 86, 30, []string{"· gpu-1 stale", "stale", "40s", "gpu-1: connection lost. Tries again in 8s."}},
-		{"stale", 132, 50, []string{"as of 22:49"}},
-		{"blocked", 86, 30, []string{"gpu-1  is not connected  ⏎ connect"}},
+		// On the board (Task 12 step 1): the header names the host filter, a
+		// card another host's, a host that is not reached is a line over the
+		// columns in the service's own words (ruling 30).
+		{"fine", 86, 30, []string{"matchblox · all hosts ▾", "docs-sweep…"}},
+		{"fine", 132, 32, []string{"docs-sweep @ws-1"}},
+		{"stale", 86, 30, []string{"· gpu-1 stale", "gpu-1: not reached since 22:49 · ⏎ try again", "gpu-1: connection lost. Tries again in 8s."}},
+		{"stale", 132, 50, []string{"gpu-1: not reached since 22:49"}},
+		{"blocked", 86, 30, []string{"gpu-1: is not connected · ⏎ connect"}},
 	} {
 		all := strings.Join(frameOf(threeHosts(t, st, c.w, c.h, c.gpu)), "\n")
 		for _, w := range c.want {
@@ -339,6 +350,7 @@ func TestThreeHostFrames(t *testing.T) {
 // TestHomeGoesByItsOwnName: the home row's word is the name in its
 // hello; this machine is only for before it.
 func TestHomeGoesByItsOwnName(t *testing.T) {
+	t.Skip("replaced by TestACardNamesAnotherHost (Task 12 step 1)")
 	now := lostAt
 	m, _, conns := hostsAt(t, &now, "", 196, 30, "ws-1")
 	m = upd(t, m, stateMsg(hostState(sess(1, "api", "%1", nil))))
@@ -358,6 +370,7 @@ func TestHomeGoesByItsOwnName(t *testing.T) {
 // TestShortHomeLossStaysQuiet: with a peer, a home loss and reconnect
 // under 30 s leaves the frame as it was (anti-goal 5).
 func TestShortHomeLossStaysQuiet(t *testing.T) {
+	t.Skip("board rule: TestTheBoardsStates")
 	now := lostAt
 	m, home, conns := hostsAt(t, &now, "", 196, 12, "ws-1")
 	m = upd(t, m, stateMsg(stateAt(hostState(sess(1, "api", "%1", nil)), now)))
@@ -373,6 +386,7 @@ func TestShortHomeLossStaysQuiet(t *testing.T) {
 // TestSilentPeerSaysWhy: a peer whose service never sends a state is a
 // row with today's words, until its first state comes.
 func TestSilentPeerSaysWhy(t *testing.T) {
+	t.Skip("replaced by TestABlockedHostSaysWhyAndItsFix (Task 12 step 1)")
 	now := lostAt
 	m, _, conns := hostsAt(t, &now, "", 196, 30, "ws-1")
 	m = upd(t, m, stateMsg(hostState(sess(1, "api-auth", "%1", nil))))
@@ -431,6 +445,7 @@ func TestPeerStartWatchesForSilence(t *testing.T) {
 // TestLongNameKeepsHostWord: the same long name on two hosts is two rows
 // that say whose they are: the name is cut before the host word goes.
 func TestLongNameKeepsHostWord(t *testing.T) {
+	t.Skip("replaced by TestACardNamesAnotherHost (Task 12 step 1)")
 	const long = "matchblox-feat-198-every-host-review"
 	for _, w := range []int{60, 92, 132} {
 		now := lostAt

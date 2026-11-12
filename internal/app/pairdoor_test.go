@@ -22,7 +22,9 @@ func pairDoorConsole(t *testing.T) (*pairRig, Model) {
 	r, m := newPairRig(t)
 	next, _ := m.Update(stateMsg(doorState(pairDoorRow)))
 	m = next.(Model)
-	if d, ok := m.selectedDoor(); !ok || d.ID != doors.Pair {
+	m.viewPrefs.CopyCheckedDesk, m.viewPrefs.CopyCheckedPhone = true, true
+	m = onDoors(m).(Model) // the board's doors line
+	if ds := m.boardDoors(); len(ds) == 0 || ds[m.doorIndex(ds)].ID != doors.Pair {
 		t.Fatalf("the pair door is not selected:\n%s", screen(m))
 	}
 	return r, m
@@ -42,6 +44,7 @@ func TestEnterOnThePairDoorOpensThePage(t *testing.T) {
 }
 
 func TestTapOnThePairDoorOpensThePage(t *testing.T) {
+	t.Skip("replaced by TestATapOnTheDoorsLineUnderAHost (Task 12 step 1): a tap on the doors line opens its door")
 	_, m := pairDoorConsole(t)
 	y := lineOf(t, m, "Pair a device")
 	next, _ := tap(m, 5, y)

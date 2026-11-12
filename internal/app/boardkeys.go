@@ -383,8 +383,8 @@ func (m *Model) boardChainOf(s sample.Session, ok bool) tea.Cmd {
 		}
 	}
 	cmd := m.once("chain", m.keys.board.Chain.Help().Key+" shows one chain now. "+m.keys.main.Back.Help().Key+" shows all.", said)
-	if name != "" {
-		m.boardChain, m.peekAt = name, m.now()
+	if k, in := m.chainKeyOf(s); ok && in {
+		*m = m.openRoom(k)
 	}
 	return cmd
 }
@@ -405,7 +405,9 @@ func (m *Model) turnChain(d int) {
 	default:
 		i = (i + d + len(names)) % len(names)
 	}
-	m.boardChain, m.peekAt = names[i], m.now()
+	if k := slices.IndexFunc(m.roomKeys(), func(k chainKey) bool { return m.chainLabel(k) == names[i] }); k >= 0 {
+		*m = m.openRoom(m.roomKeys()[k])
+	}
 }
 
 // turnHost is s: the next host, then all hosts again.
@@ -476,6 +478,14 @@ func (m Model) boardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 		cmd := m.switchNow()
 		return m, cmd, true
 	}
+	if !m.have && m.opt.Layered && bkey.Matches(k, mk.Back) {
+		return m, nil, false // a host that never answered: esc goes back to Hosts
+	}
+	if m.room != nil && m.copyCode == "" {
+		if next, cmd, took := m.roomBoardKey(k); took {
+			return next, cmd, true
+		}
+	}
 	s, ok := m.boardSelected()
 	line, above := m.aboveChosen()
 	under, below := m.belowChosen()
@@ -537,6 +547,8 @@ func (m Model) boardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 		case m.filter != "":
 			m.filter, m.peekAt = "", m.now()
 			m.refresh()
+		case m.room != nil:
+			m = m.closeRoom()
 		case m.boardChain != "":
 			m.boardChain, m.peekAt = "", m.now()
 		}
@@ -612,8 +624,8 @@ func (m Model) boardInto(s sample.Session) (tea.Model, tea.Cmd) {
 		return next, cmd
 	}
 	next, cmd := m.onCard(s).intoSelected()
-	if nm, ok := next.(Model); ok && nm.pending == nil {
-		next = nm.boardActed() // a jump that waits for its y chooses on the y
+	if nm, ok := next.(Model); ok && nm.pending == nil && !nm.standIn {
+		next = nm.boardActed() // a jump that waits for its y chooses on the y; the stand-in keeps its match
 	}
 	return next, cmd
 }
@@ -720,6 +732,9 @@ func (m Model) boardHints(w int) []hint {
 	if m.oneLine() {
 		density.label = "verbose"
 	}
+	if !m.have && m.opt.Layered { // a host that never answered: the way back
+		return []hint{hintFor(mk.Back, "hosts"), hintFor(mk.Quit, "")}
+	}
 	tail := []hint{hintFor(bk.Copy, ""), density, hintFor(bk.Host, ""), hintFor(bk.Strip, "")}
 	cancel := hintFor(mk.Back, "cancel") // the copy check waits for its paste
 	if b, _ := m.boardDrawOf(); m.have && b.none && m.copyCode == "" && m.boardAbove == 0 {
@@ -735,9 +750,12 @@ func (m Model) boardHints(w int) []hint {
 	var hs []hint
 	line, above := m.aboveChosen()
 	under, below := m.belowChosen()
+	row, own := m.roomChosen()
 	switch b, _ := m.boardDrawOf(); {
 	case m.copyCode != "":
 		hs = []hint{cancel}
+	case own:
+		hs = m.roomHints(row)
 	case above && line == "" && m.doorIndex(m.boardDoors()) >= len(m.copyDoors()):
 		hs = []hint{hintFor(mk.Open, "set up"), hintFor(mk.Second, "close")}
 	case above && line == "":
@@ -807,6 +825,12 @@ func (m Model) boardTap(x, y int) (tea.Model, tea.Cmd) {
 	w := max(m.width, minWidth)
 	d := m.boardPanel(w, m.bodyRows())
 	b, _ := m.boardDrawOf()
+	if h, ok := spanAt(d.heads, x); ok && y == d.headAt && h.press == stokerMark {
+		return m.openStokerPage(), nil
+	}
+	if at, ok := d.roomAt[y]; ok {
+		return m.roomTap(at)
+	}
 	if h, ok := spanAt(d.heads, x); ok && y == d.headAt {
 		c := boardCols[slices.IndexFunc(boardCols[:], func(c boardCol) bool { return c.short() == h.press })]
 		if m.colHidden(c) || m.layoutAt(w) == Narrow && c != b.open {
@@ -1009,7 +1033,7 @@ const beltMax = 48
 // the board, "box" under the consent box, "menu" under the menu.
 func (m Model) beltValue() string {
 	switch {
-	case !m.board || m.standIn || m.viewFull() || m.tab != tabSessions && m.tab != tabMachine:
+	case m.standIn || m.viewFull() || m.tab != tabSessions && m.tab != tabMachine:
 		return ""
 	case m.yesBox():
 		return "box"

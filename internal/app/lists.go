@@ -182,10 +182,6 @@ func (m *Model) refresh() {
 	switch m.tab {
 	case tabSessions:
 		m.recs = slices.DeleteFunc(m.recs, func(r advice.Rec) bool { return !keep(r.Title, r.Evidence) })
-		sessions = slices.DeleteFunc(sessions, func(s sample.Session) bool {
-			// The board searches its own cards (inBoard): every match stays a row it can act on.
-			return !m.board && !keep(s.Name, s.Target, s.Pane, s.Tab, s.Cwd, s.Model, m.lastWords(s), m.wordOf(s))
-		})
 	case tabMachine:
 		m.snap.Orphans = slices.DeleteFunc(slices.Clone(m.all.orphans), func(o sample.Orphan) bool {
 			return !keep(strconv.Itoa(o.PID), o.Comm, o.Cmdline, o.Cwd, o.Target)

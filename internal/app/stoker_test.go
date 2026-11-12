@@ -85,7 +85,8 @@ func TestStokedListsRunsWithResume(t *testing.T) {
 	for _, w := range []int{40, 100} {
 		st := stokerState(stokedRun(fixtureState().At))
 		m0, _ := loadedWith(t, w, st)
-		m0 = fullView(m0) // list only has no dock
+		m0 = fullView(m0)   // list only has no dock
+		m0.tab = tabHistory // the dock, off the board until Machine holds it (Task 12 steps 2 and 6b)
 		if out := ansi.Strip(m0.render()); strings.Contains(out, "TODAY") || !strings.Contains(out, "STOKER") {
 			t.Fatalf("width %d: the run is not in the dock alone:\n%s", w, out)
 		}
@@ -111,7 +112,7 @@ func TestStokedListsRunsWithResume(t *testing.T) {
 
 func TestOpeningTheTabFoldsStoked(t *testing.T) {
 	m, f := loadedWith(t, 100, stokerState(stokedRun(fixtureState().At)))
-	sendKey(m, "c")
+	toStoker(m)
 	if acts := f.acts(); len(acts) != 1 || acts[0] != (proto.Act{RecID: "stoker:ack", Which: "primary"}) {
 		t.Fatalf("acts %+v", acts)
 	}
@@ -124,6 +125,7 @@ func TestOpeningTheTabFoldsStoked(t *testing.T) {
 }
 
 func TestNightDoorStartsTheNight(t *testing.T) {
+	t.Skip("replaced by TestTheBoardReachesDoorsGhostAndRecommendations (Task 12 step 1)")
 	night := doors.Door{ID: doors.Night, Title: "Try a night", Why: "Going to sleep? n keeps your sessions lit until morning."}
 	m, f := loadedWith(t, 100, doorState(night))
 	if out := ansi.Strip(m.render()); !strings.Contains(out, "Going to sleep?") {
@@ -136,22 +138,22 @@ func TestNightDoorStartsTheNight(t *testing.T) {
 	}
 }
 
-// sendKey presses k and runs the command it returns, each of a batch.
+// toStoker opens the STOKER screen as c did before c copied on the board
+// (Machine's row stoker opens it at Task 12 step 6b), and sends its ack.
+func toStoker(m tea.Model) tea.Model {
+	next, cmd := m.(Model).openStoker().seeStoker()
+	drain(cmd)
+	return next
+}
+
+// sendKey presses k and runs the command it returns, each of a batch. A
+// command that waits longer than a step of the service, as a notice's
+// tick does, gives up.
 func sendKey(m tea.Model, k string) tea.Model {
 	next, cmd := key(m, k)
-	if cmd == nil {
-		return next
+	for _, msg := range msgsWithin(cmd, 250*time.Millisecond) {
+		next.Update(msg)
 	}
-	msg := cmd()
-	if batch, ok := msg.(tea.BatchMsg); ok {
-		for _, c := range batch {
-			if c != nil {
-				next.Update(c())
-			}
-		}
-		return next
-	}
-	next.Update(msg)
 	return next
 }
 
@@ -213,8 +215,10 @@ func sized(t *testing.T, w, h int, st proto.State) Model {
 // on the panel opens the STOKER tab. The phones are in their full view:
 // list only has no dock.
 func TestTheStokerLivesInTheDock(t *testing.T) {
+	t.Skip("waits for TestMachineOpensTheStoker (Task 12 step 6b): the dock's stoker panel goes to Machine's row stoker (ruling 28); its stack under the list goes with the list")
 	st := stokerState(runningNight(fixtureState().At))
 	phone := fullView(sized(t, 44, 31, st))
+	phone.tab = tabHistory // the dock, off the board until Machine holds it (Task 12 steps 2 and 6b)
 	out := screen(phone)
 	if !strings.Contains(out, "STOKER") || !strings.Contains(out, "night → ") || strings.Contains(out, "USAGE") ||
 		!strings.Contains(out, "176k → 9k") || !strings.Contains(out, "· watching 3 · 1 compacted") {
@@ -280,7 +284,7 @@ func TestStokerNewsIsAToast(t *testing.T) {
 	} {
 		m, _ := loadedWith(t, 100, stokerState(c.was))
 		next, _ := m.Update(stateMsg(stokerState(c.next)))
-		if got := next.(Model).toast; c.want == "" && got != "" || !strings.HasPrefix(got, c.want) {
+		if got := saidNow(next.(Model)); c.want == "" && got != "" || !strings.HasPrefix(got, c.want) {
 			t.Errorf("%q, want %q", got, c.want)
 		}
 	}

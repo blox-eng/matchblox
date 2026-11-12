@@ -1,16 +1,16 @@
- ▰ matchblox               ● 6 wait for you
+ ▰ matchblox                   ● 6 need you
  SESSIONS 7  ships 3  machine  4  5  6  7
 ────────────────────────────────────────────
- WAITS FOR YOU · 6
+ NEEDS YOU 6 −  work 1  ship 0  quiet 0
 ────────────────────────────────────────────
-▌│ spark-docs            done      9m   88%
-   “I rewrote the quick start and the
-   install page.”
-   #4540 ●━●━●━●━●  live
-   ▰▰▰▰▰ plan 100%  ▲ clear
-                          A switch  ⏎ go in
+▌╿ flint-auth                         ✻  2m
+  stuck conflicts with main
+  #4545 ●━✕┄○┄○┄○  ctx 41%
+  “The refresh flow works and the tests
+  pass. One choice is yours before I wire
+  the rotation.”
+ + start a new session
+ RECOMMENDATIONS · 7
+ ✻ 5h ▰▰▰▰▰▰▰▱ 84%  wk 82%        machine ›
 ────────────────────────────────────────────
- ╿ ember-billing         done      4m   32%
- ╿ flint-auth            asks      2m   41%
-────────────────────────────────────────────
- ⏎ go in  x kill  r rename  N new  f stoker
+ c copy   v one line   s hosts   u strip

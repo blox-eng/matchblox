@@ -165,6 +165,7 @@ func TestKeysKeepTheRestOnceAMinute(t *testing.T) {
 }
 
 func TestASecondTapAsksAndYRunsIt(t *testing.T) {
+	t.Skip("replaced by TestATakeOverIsAskedFromTheBoard (Task 12 step 1): a recommendation is a line under the columns")
 	m, f := loadedWith(t, 100, nightState())
 	var ran []string
 	m.opt.Run = func(argv []string) error { ran = argv; return nil }

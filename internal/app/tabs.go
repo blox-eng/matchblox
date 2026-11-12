@@ -12,7 +12,6 @@ import (
 // selected row, its keys and its body. The selection itself stays in the
 // Model, so it lives across tab changes and new states.
 type tabView struct {
-	name      string
 	keys      func(m Model) []hint // the key line, for the selected row
 	count     func(m Model) int
 	index     func(m Model) int
@@ -112,8 +111,7 @@ const (
 
 var views = [...]tabView{
 	tabSessions: {
-		name: "sessions",
-		keys: Model.sessionKeys,
+		keys: func(m Model) []hint { return m.boardHints(max(m.width, minWidth)) },
 		count: func(m Model) int {
 			return len(m.doors) + len(m.snap.Sessions) + len(m.ghosts()) + len(m.blockedHosts()) + m.recRows()
 		},
@@ -159,10 +157,9 @@ var views = [...]tabView{
 			}
 			return nil
 		},
-		body: Model.sessionsPanel,
+		body: func(m Model, w int) body { return m.boardPanel(w, m.bodyRows()).body },
 	},
 	tabShips: {
-		name: "ships",
 		keys: func(m Model) []hint {
 			mk := m.keys.main
 			if sh, ok := m.selectedShip(); ok {
@@ -177,7 +174,6 @@ var views = [...]tabView{
 		body:      Model.shipsPanel,
 	},
 	tabMachine: {
-		name: "machine",
 		keys: func(m Model) []hint {
 			mk := m.keys.main
 			stoke := hintFor(mk.Stoke, "stoker")
@@ -223,7 +219,6 @@ var views = [...]tabView{
 		body: Model.machinePanel,
 	},
 	tabGit: {
-		name: "git",
 		keys: func(m Model) []hint {
 			mk := m.keys.main
 			return []hint{hintFor(mk.Open, "shell"), hintFor(mk.Mark, ""), hintFor(mk.MarkSafe, ""), hintFor(mk.Second, "remove"), hintFor(mk.Rename, "rescan")}
@@ -250,14 +245,12 @@ var views = [...]tabView{
 		body: Model.gitPanel,
 	},
 	tabHistory: {
-		name: "history",
 		keys: func(m Model) []hint {
 			return []hint{hintFor(m.keys.main.Ships, "ships"), hintFor(m.keys.main.Stoke, "stoker")}
 		},
 		body: Model.historyBody,
 	},
 	tabPanes: {
-		name:  "panes",
 		keys:  func(m Model) []hint { return []hint{hintFor(m.keys.main.Open, "go"), hintFor(m.keys.main.Sort, "")} },
 		count: func(m Model) int { return len(m.paneRows()) },
 		index: func(m Model) int { return min(m.paneSel, max(len(m.paneRows())-1, 0)) },
@@ -271,7 +264,6 @@ var views = [...]tabView{
 		body: Model.panesPanel,
 	},
 	tabStoker: {
-		name:  "stoker",
 		keys:  Model.stokerKeys,
 		count: func(m Model) int { return len(m.stokerRows()) },
 		index: func(m Model) int { return min(m.stokerSel, max(len(m.stokerRows())-1, 0)) },
@@ -281,13 +273,8 @@ var views = [...]tabView{
 }
 
 // tabNames names the tabs, in the order of their digits.
-var tabNames = func() []string {
-	var names []string
-	for _, v := range views {
-		names = append(names, v.name)
-	}
-	return names
-}()
+var tabNames = []string{tabSessions: "sessions", tabShips: "ships", tabMachine: "machine", tabGit: "git",
+	tabHistory: "history", tabPanes: "panes", tabStoker: "stoker"}
 
 func (m Model) view() tabView { return views[m.tab] }
 
@@ -334,9 +321,4 @@ func (m Model) onRowHost(a *action) *action {
 	return m.forHost(m.hostOf(*a), a)
 }
 
-func (m Model) body(w int) body {
-	if m.boardShown() {
-		return m.boardPanel(w, m.bodyRows()).body
-	}
-	return m.view().body(m, w)
-}
+func (m Model) body(w int) body { return m.view().body(m, w) }

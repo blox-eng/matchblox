@@ -148,9 +148,9 @@ func (m *Model) watchCmd() tea.Cmd {
 	want := ""
 	if m.conn != nil && !m.lost && !m.mismatch && !m.away {
 		s, ok := m.selected()
-		if m.boardShown() { // the board watches its chosen card, and only beside the live view
+		if m.boardShown() { // the board watches its chosen card beside the live view, or in the stand-in
 			s, ok = m.boardSelected()
-			ok = ok && m.boardLive()
+			ok = ok && (m.boardLive() || m.standIn)
 		}
 		if ok && s.Host == m.opt.Host && !isShipCard(s) { // another host's pane id names another pane here
 			want = s.Pane
@@ -491,7 +491,8 @@ func (m Model) leaveStandIn() Model {
 	s, _ := m.selectedSession()
 	m.standIn = false
 	m.keysOut.queue = nil // typed at a screen that is gone; the key in flight still answers
-	return m.nextAfter(s.Pane)
+	// On the board, the first other wait is chosen.
+	return m.nextAfter(s.Pane).boardActed()
 }
 
 // keepView closes the live view once Sessions or the selected session's

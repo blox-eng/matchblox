@@ -100,7 +100,8 @@ func TestWhatLeavesTheDemoSaysSoAndRunsNothing(t *testing.T) {
 			m := demoConsole(t, 100, o)
 			m.doors = []doors.Door{{ID: doors.Tmux, Title: "Install tmux", Term: []string{"sh", "-c", "true"}}}
 			m.doorPick = doors.Tmux
-			return pressKeys(t, m, "enter")
+			m.viewPrefs.CopyCheckedDesk = true
+			return pressKeys(t, onDoors(m).(Model), "enter") // the board's doors line
 		},
 		"a confirm that got past the words": func(t *testing.T) Model {
 			next, _ := demoConsole(t, 100, o).confirm(action{label: "connect", connect: true, remote: true, steps: [][]string{{"matchblox", "connect", "ws-1"}}})
@@ -230,7 +231,7 @@ func onSession(t *testing.T, m Model, name string) Model {
 	t.Helper()
 	for _, s := range m.snap.Sessions {
 		if s.Name == name {
-			m.chose, m.selPID, m.selHost = true, s.PID, s.Host
+			choose(&m, s.PID)
 			return m
 		}
 	}

@@ -40,6 +40,7 @@ func menuFrom(t *testing.T, text string, w int) []string {
 // the list's opened row shows the question, once, and the menu is answered
 // in the agent's own pane (#351).
 func TestAQuestionDrawsTheAgentsOwnMenu(t *testing.T) {
+	t.Skip("replaced by TestCardLines (Task 12 step 1): the chosen card draws the question's options")
 	for _, size := range slices.Concat(surveyGrids, [][2]int{{44, 31}, {132, 32}, {200, 50}}) {
 		w, h := size[0], size[1]
 		m := flintAt(t, w, h, "enter")

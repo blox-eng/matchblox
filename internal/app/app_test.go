@@ -116,6 +116,7 @@ func loadedWith(t *testing.T, width int, st proto.State) (Model, *fakeConn) {
 	t.Helper()
 	f := newFake()
 	m := New(Options{NoMotion: true, Conn: f})
+	m.viewPrefs.CopyCheckedPhone, m.viewPrefs.CopyCheckedDesk = true, true // the copy check is the board's first-run door
 	next, _ := m.Update(tea.WindowSizeMsg{Width: width, Height: 30})
 	next, _ = next.Update(stateMsg(st))
 	return next.(Model), f
@@ -130,6 +131,7 @@ func loaded(t *testing.T, width int) Model {
 }
 
 func TestViewFitsWidth(t *testing.T) {
+	t.Skip("replaced by TestBoardFitsItsScreen (Task 12 step 1)")
 	for _, w := range []int{80, 100, 160, 200} {
 		m := loaded(t, w)
 		out := m.render()
@@ -180,12 +182,14 @@ func TestEscCancelsAction(t *testing.T) {
 	m.opt.Run = func([]string) error { t.Fatal("must not run"); return nil }
 	next, _ := key(m, "x")
 	next, cmd := key(next, "esc")
-	if cmd != nil || !strings.Contains(next.(Model).render(), "cancelled") {
+	drain(cmd) // on the board the cancel is a notice: nothing runs
+	if !strings.Contains(next.(Model).render(), "cancelled") {
 		t.Fatal("esc must cancel without running")
 	}
 }
 
 func TestDestructiveNeedsTypedYes(t *testing.T) {
+	t.Skip("replaced by TestXOnlyEverKills (Task 12 step 1)")
 	m := loaded(t, 100)
 	m.opt.Run = func([]string) error { t.Fatal("enter must not confirm a destructive action"); return nil }
 	m.pending = &action{steps: [][]string{{"kill", "123"}}, destructive: true}
@@ -236,15 +240,16 @@ func TestSmoke(t *testing.T) {
 	done := make(chan error, 1)
 	go func() { _, err := p.Run(); done <- err }()
 
+	// app-feature is the card the board chooses, whole at 100 columns.
 	deadline := time.Now().Add(5 * time.Second)
-	for !strings.Contains(out.String(), "app-review") && time.Now().Before(deadline) {
+	for !strings.Contains(out.String(), "app-feature") && time.Now().Before(deadline) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	p.Quit()
 	if err := <-done; err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), "app-review") {
+	if !strings.Contains(out.String(), "app-feature") {
 		t.Fatalf("rendered output lacks the fixture session:\n%q", out.String())
 	}
 	f.mu.Lock()
@@ -275,6 +280,7 @@ func TestVersionMismatchShowsFix(t *testing.T) {
 }
 
 func TestBeforeTheFirstStateTheViewSaysWhy(t *testing.T) {
+	t.Skip("board rule: TestTheBoardsStates")
 	m := New(Options{NoMotion: true, Conn: newFake()})
 	if out := m.render(); !strings.Contains(out, "waiting for the service") {
 		t.Fatalf("an empty screen is a dead end:\n%s", out)
@@ -282,6 +288,7 @@ func TestBeforeTheFirstStateTheViewSaysWhy(t *testing.T) {
 }
 
 func TestConfirmedRecActIsSentNotRun(t *testing.T) {
+	t.Skip("replaced by TestTheBoardReachesDoorsGhostAndRecommendations (Task 12 step 1)")
 	st := fixtureState()
 	st.Recommendations = []advice.Rec{{ID: "r9", Level: "warn", Title: "Kill it", Second: &advice.Action{
 		Label: "kill", Steps: [][]string{{"kill", "42"}}, Destructive: true}}}
@@ -307,7 +314,7 @@ func TestPanelKillNamesTheOrphan(t *testing.T) {
 	m.tab = tabMachine
 	next, _ := key(m, "x")
 	_, cmd := key(next, "y")
-	cmd()
+	drain(cmd)
 	if acts := f.acts(); len(acts) != 1 || acts[0].RecID != "orphan:4242" || acts[0].Confirm != "y" {
 		t.Fatalf("sent %+v", acts)
 	}
@@ -324,11 +331,11 @@ func TestResultShowsInTheFooter(t *testing.T) {
 func TestConnectionLostKeepsStateAndRedials(t *testing.T) {
 	again := newFake()
 	m := New(Options{NoMotion: true, Conn: newFake(), Redial: func() (transport.Conn, error) { return again, nil }})
-	next, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 160, Height: 30})
 	next, _ = next.Update(stateMsg(fixtureState()))
 	next, cmd := next.Update(lostMsg{err: io.EOF})
 	out := next.(Model).render()
-	if !strings.Contains(out, "connection lost") || !strings.Contains(out, "app-review") {
+	if !strings.Contains(out, "connection lost") || !strings.Contains(out, "app-feature") { // the card the board chose
 		t.Fatalf("lost connection must keep the last state and say so:\n%s", out)
 	}
 	if cmd == nil {
@@ -348,7 +355,7 @@ func TestGitRescanAsksTheService(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("r sent nothing")
 	}
-	cmd()
+	drain(cmd)
 	if acts := f.acts(); len(acts) != 1 || acts[0].RecID != "rescan:git" {
 		t.Fatalf("sent %+v", acts)
 	}
@@ -469,6 +476,7 @@ func TestSilentAfterReconnectShowsFix(t *testing.T) {
 // Nav steps run here without a typed y, so only tmux moves may run, even
 // if a service sends something else.
 func TestNavRunsOnlyTmuxMoves(t *testing.T) {
+	t.Skip("replaced by TestTheBoardReachesDoorsGhostAndRecommendations (Task 12 step 1)")
 	st := fixtureState()
 	st.Recommendations = []advice.Rec{{ID: "r1", Title: "x", Primary: &advice.Action{Nav: true, Steps: [][]string{{"rm", "-rf", "/tmp/x"}}}}}
 	m, _ := loadedWith(t, 100, st)
@@ -529,6 +537,7 @@ func TestHeaderShowsHost(t *testing.T) {
 }
 
 func TestFooterUsesClock(t *testing.T) {
+	t.Skip("board rule: TestOldDataSaysSo")
 	st := fixtureState()
 	f := newFake()
 	m := New(Options{NoMotion: true, Conn: f, Now: func() time.Time { return st.At.Add(5 * time.Second) }})

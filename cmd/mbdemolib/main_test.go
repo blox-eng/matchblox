@@ -56,7 +56,7 @@ func startDemo(t *testing.T) (*syncBuffer, chan struct{}) {
 	}
 	t.Cleanup(stop)
 	b, ended := drawn()
-	b.waitFor(t, "hearth-api")
+	b.waitFor(t, "flint-auth") // the board's first card on a phone
 	return b, ended
 }
 
@@ -129,5 +129,5 @@ func TestAfterAConsoleQuitsAWriteReturnsAndAStartWorks(t *testing.T) {
 		t.Fatalf("start after a quit: %d: %s", code, errorText())
 	}
 	again, _ := drawn()
-	again.waitFor(t, "hearth-api")
+	again.waitFor(t, "flint-auth")
 }

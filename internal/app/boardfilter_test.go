@@ -276,7 +276,7 @@ func TestSTurnsThroughTheHosts(t *testing.T) {
 
 func TestAHostThatIsNotReachedKeepsItsCards(t *testing.T) {
 	m := lostPeer(t, 40*time.Second)
-	m.splashDone, m.board = true, true
+	m.splashDone = true
 	m.viewPrefs.CopyCheckedPhone, m.viewPrefs.CopyCheckedDesk = true, true // the copy check has its own test
 	m = upd(t, m, tea.WindowSizeMsg{Width: 40, Height: 34})
 	m = openOn(m, "api-auth")
@@ -336,7 +336,7 @@ func firstCard(m Model) Model {
 // is.
 func TestTheLinesAboveTheColumnsTakeTheArrows(t *testing.T) {
 	m := lostPeer(t, 40*time.Second)
-	m.splashDone, m.board = true, true
+	m.splashDone = true
 	m.viewPrefs.CopyCheckedPhone, m.viewPrefs.CopyCheckedDesk = true, true // the copy check has its own test
 	m.doors = []doors.Door{{ID: doors.Tmux, Title: "Install tmux", Term: []string{"sh", "-c", "true"}}}
 	m = firstCard(upd(t, m, tea.WindowSizeMsg{Width: 80, Height: 31}))
@@ -388,7 +388,7 @@ func TestTheLinesAboveTheColumnsTakeTheArrows(t *testing.T) {
 func TestAWaitOnAHostNotReachedIsNotCounted(t *testing.T) {
 	now := lostAt
 	m, _, conns := hostsAt(t, &now, "", 104, 30, "ws-1")
-	m.splashDone, m.board = true, true
+	m.splashDone = true
 	home := hostState(sess(1, "api-auth", "%1", nil))
 	asks := hostState(sess(2, "train-loop", "%2", func(s *sample.Session) { s.Permits = true }))
 	m = upd(t, m, stateMsg(stateAt(home, now)))

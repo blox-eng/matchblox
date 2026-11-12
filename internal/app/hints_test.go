@@ -71,6 +71,7 @@ func TestDisabledTabHintAndZeroSkips(t *testing.T) {
 // as ⏎, and only where Enter opens it; a phone in list only keeps the way
 // back to the full view.
 func TestOneChatHintAndTheWayOutOfListOnly(t *testing.T) {
+	t.Skip("dropped (Task 12 step 1): list only goes (step 3, intended change: v is the board's density)")
 	m := flintAt(t, 51, 31)
 	if !m.listOnly() {
 		t.Fatal("51x31 does not start list only")

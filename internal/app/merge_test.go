@@ -68,6 +68,7 @@ func TestPeerSessionsJoinTheList(t *testing.T) {
 }
 
 func TestAWaitOnAPeerSortsAboveHomeWork(t *testing.T) {
+	t.Skip("replaced by TestColumnOf (Task 12 step 1): a wait is in NEEDS YOU, whatever its host")
 	busy := func(s *sample.Session) { s.Busy, s.Status = true, "busy" }
 	home := hostState(sess(1, "api-auth", "%1", busy), sess(3, "web-ui", "%3", busy))
 	peer := hostState(sess(2, "train-loop", "%2", nil))
@@ -87,6 +88,7 @@ func TestAWaitOnAPeerSortsAboveHomeWork(t *testing.T) {
 // TestSamePaneOnTwoHostsAreTwoRows: pane ids and PIDs repeat across hosts;
 // the selection is (host, PID) and stays on its host.
 func TestSamePaneOnTwoHostsAreTwoRows(t *testing.T) {
+	t.Skip("replaced by TestThePeekCountsAndNamesTheChildRuns (Task 12 step 1, ruling 35)")
 	home := hostState(sess(4242, "home-12", "%12", nil))
 	m, _ := twoHosts(t, home, hostState(sess(4242, "peer-12", "%12", nil)))
 	if got := order(m); got != "home-12 peer-12" {

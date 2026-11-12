@@ -86,7 +86,7 @@ func TestRightClickOpensTheMenuOnThatCard(t *testing.T) {
 	}
 
 	off, _, _ := menuBoard(t, 80, 31, nil)
-	off.board = false
+	off.tab = tabMachine
 	for _, msg := range []tea.Msg{tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseRight},
 		tea.MouseReleaseMsg{X: x, Y: y, Button: tea.MouseLeft}, tea.MouseMotionMsg{X: x + 3, Y: y, Button: tea.MouseLeft}} {
 		was := plainFrame(off)
@@ -284,7 +284,7 @@ func TestTheMenuMovesAndCloses(t *testing.T) {
 	}
 
 	m = pressOn(m, "m")
-	m.board = false
+	m.tab = tabMachine
 	if m = upd(t, m, noticeMsg{}); m.menu != nil {
 		t.Error("the menu stays with the board off")
 	}

@@ -10,6 +10,7 @@ import (
 // goes back as Esc does: a filter clears first, then the hosts list shows
 // (#360).
 func TestTheHomeKeyGoesBackAsEscDoes(t *testing.T) {
+	t.Skip("replaced by TestTheHomeKeyActsAsTheBoardsEsc (Task 12 step 1): on the board the home key clears the search, then the chain, and stays")
 	m, _ := loadedWith(t, 100, fixtureState())
 	m.opt.Layered = true
 	m.filter = "app"

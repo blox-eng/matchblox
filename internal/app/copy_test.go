@@ -576,7 +576,7 @@ func TestTheCopyDoorsStayOffTheOldConsole(t *testing.T) {
 	m, clipped, _ := uncheckedBoard(t, 80, 31, t.TempDir(), func(m *Model) {
 		m.opt.Pane, m.opt.Tmux = "%1", tmuxSays("off", &ran)
 	})
-	m.board = false
+	m.tab = tabMachine
 	was := plainFrame(m)
 	if strings.Contains(was, "copy") || len(m.doors) != 0 {
 		t.Errorf("the old console shows a copy door: %v\n%s", m.doors, was)
@@ -862,7 +862,7 @@ func TestALostReleaseRunsNoOldTap(t *testing.T) {
 
 func TestATapOnTheDoorsLineUnderAHost(t *testing.T) {
 	m := lostPeer(t, 40*time.Second)
-	m.splashDone, m.board = true, true
+	m.splashDone = true
 	m = upd(t, m, tea.WindowSizeMsg{Width: 80, Height: 31})
 	if len(m.unreached()) != 1 {
 		t.Fatalf("unreached hosts: %q", m.unreached())

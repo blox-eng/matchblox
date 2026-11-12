@@ -31,7 +31,7 @@ func demoIn(t *testing.T, dir string, w, h int) Model {
 
 // fullView is m with list only off on both shapes.
 func fullView(m Model) Model {
-	m.viewPrefs = viewPrefs{}
+	m.viewPrefs = viewPrefs{CopyCheckedPhone: true, CopyCheckedDesk: true}
 	return m
 }
 
@@ -53,6 +53,7 @@ func opensInPlace(m Model, sc drawn) bool {
 // selected row in place; the key line says so, and a tap on its word
 // flips it back.
 func TestVFoldsThePaneAndTheDock(t *testing.T) {
+	t.Skip("dropped (Task 12 step 1): list only goes (step 3, intended change: v is the board's density)")
 	m := demoIn(t, "", 92, 40)
 	sc := m.draw(92)
 	if sc.listW >= 92 || !strings.Contains(screen(m), "USAGE") || opensInPlace(m, sc) {
@@ -93,6 +94,7 @@ func TestVFoldsThePaneAndTheDock(t *testing.T) {
 
 // TestVFlipsOnlyTheCurrentShape: v on a desk leaves the phone's flag.
 func TestVFlipsOnlyTheCurrentShape(t *testing.T) {
+	t.Skip("replaced by TestBoardPrefsAreKeptForEachShape (Task 12 step 1)")
 	m := demoIn(t, "", 92, 40)
 	next, _ := key(m, "v")
 	next, _ = next.Update(tea.WindowSizeMsg{Width: 60, Height: 40})
@@ -109,6 +111,7 @@ func TestVFlipsOnlyTheCurrentShape(t *testing.T) {
 // TestListOnlyIsKeptAcrossARestart: the next console opens as the last
 // one was left, from view.json.
 func TestListOnlyIsKeptAcrossARestart(t *testing.T) {
+	t.Skip("replaced by TestBoardPrefsAreKeptForEachShape (Task 12 step 1)")
 	dir := t.TempDir()
 	next, _ := key(demoIn(t, dir, 92, 40), "v")
 	if !next.(Model).listOnly() {
@@ -126,6 +129,7 @@ func TestListOnlyIsKeptAcrossARestart(t *testing.T) {
 // TestPhoneStartsListOnly: an upright screen wide enough to split opens
 // with no pane and no dock's switch while no view.json says otherwise (R9).
 func TestPhoneStartsListOnly(t *testing.T) {
+	t.Skip("replaced by TestAPhoneStartsVerboseInNeedsYouOnly (Task 12 step 1)")
 	m := demoIn(t, t.TempDir(), 96, 60)
 	if sc := m.draw(96); sc.listW != 96 || strings.Contains(screen(m), "machine ›") {
 		t.Fatalf("list %d:\n%s", sc.listW, screen(m))
@@ -134,6 +138,7 @@ func TestPhoneStartsListOnly(t *testing.T) {
 
 // TestWaitsStillShowInListOnly: the header keeps who waits.
 func TestWaitsStillShowInListOnly(t *testing.T) {
+	t.Skip("replaced by TestTheCountSeesThroughEveryFilter (Task 12 step 1)")
 	m := demoIn(t, "", 92, 40)
 	full := ansi.Strip(m.draw(92).lines[0])
 	next, _ := key(m, "v")
@@ -155,6 +160,7 @@ func TestVIsFree(t *testing.T) {
 // first spare key to go, so a desk key line keeps every key it had, and
 // shows the switch where room is left.
 func TestTheSwitchGivesWayOnTheDesk(t *testing.T) {
+	t.Skip("replaced by TestTheKeyLineDropsWholeKeysFromTheRight (Task 12 step 1)")
 	m := loaded(t, 100)
 	if k := keyText(m.draw(100)); strings.Contains(k, "list only v") {
 		t.Fatalf("the switch took a key's place: %q", k)
@@ -270,6 +276,7 @@ func TestFrameCostWithChains(t *testing.T) {
 // right side (a landscape screen of 60 to 82 columns, 96x8, 106x10), the
 // selected row opens in place, as on a phone: its words show before Enter.
 func TestOneColumnOpensTheRowInPlace(t *testing.T) {
+	t.Skip("replaced by TestBoardKeepsTheChosenCardWhole (Task 12 step 1)")
 	for _, size := range [][2]int{{80, 30}, {66, 24}, {96, 8}, {106, 10}} {
 		m := fullView(flintAt(t, size[0], size[1]))
 		if _, right := m.panes(size[0]); right != 0 {

@@ -18,6 +18,15 @@ import (
 
 func screen(m tea.Model) string { return ansi.Strip(m.(Model).render()) }
 
+// toTab opens tab t, as its digit did before the board was the home: a
+// digit on the board answers its card, and Git and Panes open from
+// Machine's rows at Task 12 step 6c.
+func toTab(m tea.Model, t int) tea.Model {
+	mm := m.(Model)
+	mm.setTab(t)
+	return mm
+}
+
 // actionLine is the key line, at the bottom.
 func actionLine(m tea.Model) string {
 	if mm, ok := m.(Model); ok && mm.consenting() {
@@ -44,6 +53,7 @@ func consentText(m Model) string {
 // TestSlashSearchesTheTab: / starts a search of the open tab; while it is
 // typed every letter is text, q too; Enter keeps it, Esc clears it.
 func TestSlashSearchesTheTab(t *testing.T) {
+	t.Skip("replaced by TestSearchNarrowsEveryColumn (Task 12 step 1)")
 	m, _ := loadedWith(t, 100, fixtureState())
 	var next tea.Model = m
 	next, _ = key(next, "1")
@@ -79,18 +89,18 @@ func TestSlashSearchesTheTab(t *testing.T) {
 func TestSearchEndsWithTheTab(t *testing.T) {
 	m, _ := loadedWith(t, 100, fixtureState())
 	var next tea.Model = m
-	next, _ = key(next, "1")
 	next, _ = key(next, "/")
 	next = typeText(next, "review")
 	next, _ = key(next, "enter")
-	next, _ = key(next, "3")
-	next, _ = key(next, "1")
+	next, _ = key(next, "tab") // a digit on the board answers its card
+	next, _ = key(next, "shift+tab")
 	if out := screen(next); !strings.Contains(out, "app-feature") {
 		t.Fatalf("the search stayed after a tab change:\n%s", out)
 	}
 }
 
 func TestSearchFindsNothingSaysSo(t *testing.T) {
+	t.Skip("replaced by TestTheBoardsStates (Task 12 step 1)")
 	m, _ := loadedWith(t, 100, queueState())
 	next, _ := key(m, "/")
 	next = typeText(next, "zzz")
@@ -135,6 +145,7 @@ func TestSessionsBusyFirst(t *testing.T) {
 }
 
 func TestSortCyclesAndReverses(t *testing.T) {
+	t.Skip("dropped (Task 12 step 1): sort goes (step 4, intended change)")
 	m, _ := loadedWith(t, 100, sortFixture())
 	var next tea.Model = m
 	next, _ = key(next, "1")
@@ -161,6 +172,7 @@ func TestSortCyclesAndReverses(t *testing.T) {
 }
 
 func TestNarrowShowsTheSort(t *testing.T) {
+	t.Skip("dropped (Task 12 step 1): sort goes (step 4, intended change)")
 	m, _ := loadedWith(t, 50, sortFixture())
 	var next tea.Model = m
 	next, _ = key(next, "1")
@@ -173,7 +185,7 @@ func TestNarrowShowsTheSort(t *testing.T) {
 func TestTapOnAHeaderSorts(t *testing.T) {
 	m, _ := loadedWith(t, 100, queueState())
 	var next tea.Model = m
-	next, _ = key(next, "6")
+	next = toTab(next, tabPanes)
 	y := lineOf(t, next, "PATH")
 	x := strings.Index(strings.Split(screen(next), "\n")[y], "RUNS")
 	next, _ = tap(next, x+1, y)
@@ -189,7 +201,7 @@ func TestTapOnAHeaderSorts(t *testing.T) {
 func TestPanesSort(t *testing.T) {
 	m, _ := loadedWith(t, 100, queueState())
 	var next tea.Model = m
-	next, _ = key(next, "6")
+	next = toTab(next, tabPanes)
 	next, _ = key(next, "s")
 	rows := next.(Model).paneRows()
 	for i := 1; i < len(rows); i++ {
@@ -215,7 +227,7 @@ func gitState() proto.State {
 func TestRemoveEverySafeWorktree(t *testing.T) {
 	m, f := loadedWith(t, 100, gitState())
 	var next tea.Model = m
-	next, _ = key(next, "4")
+	next = toTab(next, tabGit)
 	next, _ = key(next, "X")
 	if n := strings.Count(screen(next), "●"); n != 2 {
 		t.Fatalf("%d marked, want the 2 safe ones:\n%s", n, screen(next))
@@ -249,7 +261,7 @@ func TestRemoveEverySafeWorktree(t *testing.T) {
 func TestSpaceMarksOnlyASafeWorktree(t *testing.T) {
 	m, _ := loadedWith(t, 100, gitState())
 	var next tea.Model = m
-	next, _ = key(next, "4")
+	next = toTab(next, tabGit)
 	for range 3 {
 		next, _ = key(next, "down")
 	}
@@ -292,7 +304,7 @@ func collect(cmd tea.Cmd) []tea.Msg {
 func TestBatchWithoutAConnectionIsNotSent(t *testing.T) {
 	m, f := loadedWith(t, 100, gitState())
 	var next tea.Model = m
-	next, _ = key(next, "4")
+	next = toTab(next, tabGit)
 	next, _ = key(next, "X")
 	got := next.(Model)
 	got.lost = true
@@ -323,7 +335,7 @@ func TestBatchWithoutAConnectionIsNotSent(t *testing.T) {
 func TestSearchKeepsTheMarks(t *testing.T) {
 	m, _ := loadedWith(t, 100, gitState())
 	var next tea.Model = m
-	next, _ = key(next, "4")
+	next = toTab(next, tabGit)
 	next, _ = key(next, "down")
 	next, _ = key(next, " ")
 	next, _ = key(next, "/")
@@ -347,6 +359,7 @@ func TestSearchKeepsTheMarks(t *testing.T) {
 
 // Review 2, #5: the plan cell holds its column at any percent.
 func TestProgressHoldsItsColumn(t *testing.T) {
+	t.Skip("dropped (Task 12 step 1): no plan progress bar on a match card")
 	st := sortFixture()
 	st.Sessions[0].Progress = &sample.Progress{Pct: 5}
 	st.Sessions[1].Progress = &sample.Progress{Pct: 100}
@@ -363,6 +376,7 @@ func TestProgressHoldsItsColumn(t *testing.T) {
 // Review 2, #9: a tap ends the typing of a search, so a confirm it asks
 // for is on the screen.
 func TestTapEndsTheTypingOfASearch(t *testing.T) {
+	t.Skip("replaced by TestATapEndsTheSearchsTyping (Task 12 step 1)")
 	m, _ := loadedWith(t, 100, queueState())
 	next, _ := key(m, "/")
 	next = typeText(next, "app")
@@ -380,6 +394,7 @@ func TestTapEndsTheTypingOfASearch(t *testing.T) {
 // agent works in is on its desk row, and under its row when it opens on a
 // phone.
 func TestAnOpenPullRequestShowsWhereItsAgentShows(t *testing.T) {
+	t.Skip("replaced by TestCardLines (Task 12 step 1)")
 	st := fixtureState()
 	st.Sessions = append(st.Sessions, sample.Session{PID: 950, Pane: "%9", Target: "api:1.1", Name: "cache-work",
 		Status: "idle", Idle: time.Minute, Cwd: "/w/app-cache/internal", Context: "fresh"})
@@ -405,8 +420,8 @@ func TestRemovingOneWorktreeSaysWorktree(t *testing.T) {
 	wts := st.Git.Repos[0].Worktrees
 	st.Git.Repos[0].Worktrees = append(wts[:2:2], wts[3])
 	m, _ := loadedWith(t, 100, st)
-	var next tea.Model = m
-	for _, k := range []string{"4", "X", "x", "y"} {
+	next := toTab(m, tabGit)
+	for _, k := range []string{"X", "x", "y"} {
 		next, _ = key(next, k)
 	}
 	if line := actionLine(next); !strings.Contains(line, "removing 1 worktree…") {

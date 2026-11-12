@@ -13,6 +13,7 @@ import (
 // every other session's name is muted. On a one-column phone the opened
 // block stands between hairlines.
 func TestTheSelectionIsUnmistakable(t *testing.T) {
+	t.Skip("replaced by TestCardLines (Task 12 step 1): the chosen card is on the wash, every cell")
 	for _, sz := range [][2]int{{44, 31}, {86, 30}, {107, 60}, {132, 32}} {
 		w, h := sz[0], sz[1]
 		m := loaded(t, w)

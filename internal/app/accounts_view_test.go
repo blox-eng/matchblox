@@ -62,21 +62,21 @@ func TestDefaultBlocksKeepTheirNames(t *testing.T) {
 }
 
 func TestRowSaysSigningIn(t *testing.T) {
-	for _, w := range []int{44, 80, 132} {
+	for _, w := range []int{44, 160} { // the chosen card says what the row said
 		st := queueState()
 		st.Queue = nil // no ask or wait: the row says the sign-in
 		st.Sessions[0].AccountDir = "/home/u/.matchblox/accounts/claude/work"
 		st.Sessions[0].SigningIn = true
 		pane := st.Sessions[0].Pane
 		m, _ := loadedWith(t, w, st)
-		m.tab = tabSessions
+		m = selectPane(t, m, pane).(Model)
 		out := screen(m)
 		if !strings.Contains(out, "signing in") {
 			t.Errorf("width %d: the row does not say signing in:\n%s", w, out)
 		}
 		st.SignIns = map[string]string{pane: "by hand"}
 		m, _ = loadedWith(t, w, st)
-		m.tab = tabSessions
+		m = selectPane(t, m, pane).(Model)
 		if out := screen(m); !strings.Contains(out, "sign in by hand") || strings.Contains(out, "signing in") {
 			t.Errorf("width %d: a sign-in by hand says so:\n%s", w, out)
 		}
@@ -86,7 +86,7 @@ func TestRowSaysSigningIn(t *testing.T) {
 // TestAsksWinsOverSigningIn: a session that signs in and asks or waits
 // shows the ask, so a wait is never hidden.
 func TestAsksWinsOverSigningIn(t *testing.T) {
-	for _, w := range []int{44, 132} {
+	for _, w := range []int{44, 160} {
 		st := queueState()
 		for i := range st.Sessions {
 			if st.Sessions[i].Pane == "%1" {
@@ -95,8 +95,8 @@ func TestAsksWinsOverSigningIn(t *testing.T) {
 			}
 		}
 		m, _ := loadedWith(t, w, st)
-		m.tab = tabSessions
-		row := rowOf(m.render(), "app-feature")
+		m = selectPane(t, m, "%1").(Model) // the chosen card says what the row said
+		row := screen(m)
 		if !strings.Contains(row, "asks") || strings.Contains(row, "signing in") {
 			t.Errorf("width %d: the row hides its ask: %q", w, row)
 		}
@@ -112,14 +112,15 @@ func TestRowSaysByHandForItsSessionName(t *testing.T) {
 	st.Sessions[0].SigningIn = true
 	st.Sessions[0].Target = "fresh:1.1"
 	st.SignIns = map[string]string{"fresh": "by hand"}
-	m, _ := loadedWith(t, 132, st)
-	m.tab = tabSessions
+	m, _ := loadedWith(t, 160, st)
+	m = selectPane(t, m, st.Sessions[0].Pane).(Model) // the chosen card says what the row said
 	if out := screen(m); !strings.Contains(out, "sign in by hand") {
 		t.Errorf("the row does not say sign in by hand:\n%s", out)
 	}
 }
 
 func TestRowNamesANonDefaultAccount(t *testing.T) {
+	t.Skip("replaced by TestThePeekNamesAnAccountThatIsNotTheDefault (Task 12 step 1, ruling 35)")
 	st := queueState()
 	st.Sessions[0].AccountDir = "/home/u/.matchblox/accounts/claude/work"
 	m, _ := loadedWith(t, 132, st)

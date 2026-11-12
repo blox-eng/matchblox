@@ -17,6 +17,9 @@ func TestNoBlankRowsWhileThereIsMore(t *testing.T) {
 	for _, size := range [][2]int{{44, 31}, {107, 60}, {107, 101}, {132, 32}} {
 		w, h := size[0], size[1]
 		for tab := range tabNames {
+			if tab == tabSessions {
+				continue // the board's columns end where their cards do (TestBoardKeepsTheChosenCardWhole)
+			}
 			m := New(Options{NoMotion: true, Conn: newFake(), Now: func() time.Time { return demoAt }})
 			next, _ := m.Update(tea.WindowSizeMsg{Width: w, Height: h})
 			next, _ = next.Update(stateMsg(st))

@@ -33,20 +33,17 @@ func nightView() *proto.StokerView {
 	return &proto.StokerView{Mode: proto.StokerMode{On: true, Until: lostAt.Add(8 * time.Hour)}}
 }
 
-// selectRow selects the row of the session name, from the top.
+// selectRow chooses the card of the session name.
 func selectRow(t *testing.T, m Model, name string) Model {
 	t.Helper()
 	m.pending = nil
-	for range m.rowCount() {
-		m = upd(t, m, keyPress("up"))
-	}
-	for range m.rowCount() {
-		if s, ok := m.selectedSession(); ok && s.Name == name {
+	for _, s := range m.snap.Sessions {
+		if s.Name == name {
+			choose(&m, s.PID)
 			return m
 		}
-		m = upd(t, m, keyPress("down"))
 	}
-	t.Fatalf("no row %s", name)
+	t.Fatalf("no card %s", name)
 	return m
 }
 

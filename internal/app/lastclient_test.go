@@ -69,9 +69,9 @@ func TestDeviceGetsTheRefusals(t *testing.T) {
 	r, m := pairDoorConsole(t)
 	tty := "/dev/ttys009"
 	phoneIn(t, r, &m, &tty)
-	next, cmd := key(m, "enter")
+	next, _ := key(m, "enter") // the board says the refusal in its strip's row too
 	got := next.(Model)
-	if got.pair != nil || cmd != nil || got.flash != "Pair from the host's own terminal." {
+	if got.pair != nil || got.flash != "Pair from the host's own terminal." {
 		t.Fatalf("page %v, flash %q", got.pair, got.flash)
 	}
 
@@ -117,8 +117,8 @@ func TestDeviceRetryOnAnExpiredPageIsRefused(t *testing.T) {
 	m, _ = m.openPairDoor()
 	m.pair.failed = true
 	tty = "/dev/ttys009"
-	next, cmd := key(m, "enter")
-	if got := next.(Model); got.pair == nil || cmd != nil || got.flash != "Pair from the host's own terminal." {
+	next, _ := key(m, "enter") // the board's belt may come in the batch
+	if got := next.(Model); got.pair == nil || !got.pair.failed || got.flash != "Pair from the host's own terminal." {
 		t.Fatalf("page %v, flash %q", got.pair, got.flash)
 	}
 }

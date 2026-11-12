@@ -110,7 +110,7 @@ func TestScreens(t *testing.T) {
 	}
 	shots := []shot{
 		{"sessions", nil},
-		{"ships", []string{"2"}},
+		{"ships", []string{"tab"}}, // a digit on the board answers its card
 	}
 	sizes := [][2]int{{44, 31}, {86, 30}, {107, 60}, {132, 32}}
 	for _, size := range sizes {
@@ -129,13 +129,14 @@ func TestScreens(t *testing.T) {
 	for _, size := range [][2]int{{44, 31}, {104, 38}, {132, 32}} {
 		check(t, sheetScreen(st, false), "sheet", size[0], size[1], append(night, "tab", "space", "tab"))
 	}
+	toStokerTab := slices.Repeat([]string{"tab"}, tabStoker) // c copies on the board
 	for _, size := range [][2]int{{44, 31}, {104, 38}, {132, 32}} {
-		check(t, tabNight(st), "stoker", size[0], size[1], []string{"c"})
-		check(t, tabMorning(st), "stokermorning", size[0], size[1], []string{"c"})
+		check(t, tabNight(st), "stoker", size[0], size[1], toStokerTab)
+		check(t, tabMorning(st), "stokermorning", size[0], size[1], toStokerTab)
 	}
 	check(t, sheetScreen(st, true), "sheetday", 104, 38, []string{"o"})
 	for _, size := range [][2]int{{44, 31}, {104, 38}} {
-		check(t, tabFamily(st, false), "stokerfamily", size[0], size[1], []string{"c", "down", "down"})
+		check(t, tabFamily(st, false), "stokerfamily", size[0], size[1], append(slices.Clone(toStokerTab), "down", "down"))
 	}
 	twoChains := tabFamily(st, false)
 	twoChains.Stokers[1].View.PaneUp = true
@@ -234,6 +235,7 @@ func threeHosts(t *testing.T, st proto.State, w, h int, gpu string) Model {
 	conns := map[string]*fakeConn{"gpu-1": newFake(), "ws-1": newFake()}
 	m := New(Options{NoMotion: true, Conn: newFake(), Now: func() time.Time { return now },
 		Peers: []Peer{{Host: "gpu-1", Conn: conns["gpu-1"]}, {Host: "ws-1", Conn: conns["ws-1"]}}})
+	m.viewPrefs.CopyCheckedPhone, m.viewPrefs.CopyCheckedDesk = true, true // the copy check is the board's first-run door
 	next, _ := m.Update(tea.WindowSizeMsg{Width: w, Height: h})
 	next, _ = next.Update(stateMsg(st))
 	gpuState, wsState := peerStates(st)
@@ -369,10 +371,11 @@ func check(t *testing.T, st proto.State, name string, w, h int, keys []string, m
 	next, _ = next.Update(stateMsg(st))
 	nm := next.(Model)
 	nm.splashDone = true
+	nm.viewPrefs.CopyCheckedPhone, nm.viewPrefs.CopyCheckedDesk = true, true  // the copy check is the board's first-run door
 	if strings.HasPrefix(name, "chat") || strings.HasPrefix(name, "survey") { // flint-auth, which asks
 		for i, s := range nm.snap.Sessions {
 			if s.Name == "flint-auth" {
-				nm.chose, nm.selPID = true, nm.snap.Sessions[i].PID
+				choose(&nm, nm.snap.Sessions[i].PID)
 			}
 		}
 		nm.watchCmd() // the watch follows the selection; the fake answers nothing

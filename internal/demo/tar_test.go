@@ -93,7 +93,7 @@ func tarWith(t *testing.T, entries ...tar.Header) string {
 func TestATarDrawsTheFirstScreenOfTheFolder(t *testing.T) {
 	t.Setenv("TMPDIR", t.TempDir())
 	fromFolder, term := start(t)
-	term.waitFor(t, "SESSIONS 7", "hearth-api", "start a new session")
+	term.waitFor(t, "SESSIONS 7", "flint-auth", "start a new session")
 	want := firstScreen(term.screen())
 	fromFolder.Stop()
 
@@ -101,7 +101,7 @@ func TestATarDrawsTheFirstScreenOfTheFolder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fromTar.waitFor(t, "SESSIONS 7", "hearth-api", "start a new session")
+	fromTar.waitFor(t, "SESSIONS 7", "flint-auth", "start a new session")
 	if got := firstScreen(fromTar.screen()); got != want {
 		t.Errorf("the tar's first screen differs from the folder's.\nfolder:\n%s\ntar:\n%s", want, got)
 	}

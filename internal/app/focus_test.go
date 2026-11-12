@@ -54,7 +54,7 @@ func TestFocusOrder(t *testing.T) {
 	main := func(t *testing.T) Model { return routeAt(t, queueState()) }
 	night := func(t *testing.T) Model { return routeAt(t, nightState()) }
 	preview := func(t *testing.T) Model {
-		m := routeAt(t, doorState(longDoor()), "enter")
+		m := sendKey(onDoors(routeAt(t, doorState(longDoor()))), "enter").(Model) // the board's doors line
 		if m.pending == nil || m.previewSeen() {
 			t.Fatal("no unread diff")
 		}

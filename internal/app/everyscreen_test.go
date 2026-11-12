@@ -107,6 +107,7 @@ func TestEveryGoldenShowsTheAgentsWholeMenu(t *testing.T) {
 // usage and the machine under the list and no dock at the bottom, upright
 // or not. The other tabs keep their splits.
 func TestSessionsSplitsFortySixty(t *testing.T) {
+	t.Skip("replaced by TestBoardWidths (Task 12 step 1)")
 	for _, c := range []struct{ w, h, list int }{{95, 65, 38}, {86, 30, 38}, {132, 32, 52}, {200, 50, 78}, {110, 65, 44}} {
 		m := fullView(flintAt(t, c.w, c.h))
 		sc := m.draw(c.w)
@@ -133,6 +134,7 @@ func TestSessionsSplitsFortySixty(t *testing.T) {
 // the list is cut; usage is never cut, and the list is cut only when
 // usage alone does not leave it room.
 func TestTheListOutranksTheMachine(t *testing.T) {
+	t.Skip("dropped (Task 12 step 1): usage and the machine under the list go with the dock (step 2, intended change)")
 	m := threeHosts(t, screensState(t), 86, 40, "fine")
 	out := strings.Join(frameOf(m), "\n")
 	if !strings.Contains(out, "USAGE") || strings.Contains(out, "MACHINE") || strings.Contains(out, " more") {
@@ -153,6 +155,7 @@ func TestTheListOutranksTheMachine(t *testing.T) {
 // and is never cut for the stats; the rows it leaves free take usage, then
 // the machine, under a hairline, each whole at its fewest lines.
 func TestListOnlyFillsItsFreeRowsWithUsage(t *testing.T) {
+	t.Skip("dropped (Task 12 step 1): list only goes (step 3, intended change)")
 	at := func(st proto.State) Model {
 		t.Helper()
 		m := New(Options{NoMotion: true, Conn: newFake(), Now: func() time.Time { return demoAt }})
@@ -186,6 +189,7 @@ func TestListOnlyFillsItsFreeRowsWithUsage(t *testing.T) {
 // and its strip as they are drawn (the strip takes two lines on a chat of 44
 // to 59 columns), so a chat beside the list always has menuLeast rows.
 func TestAChatBesideTheListHasRoomForAMenu(t *testing.T) {
+	t.Skip("replaced by TestTheLiveViewBesideTheBoardHasRoomForAMenu (Task 12 step 1)")
 	for _, w := range []int{83, 84, 90, 95, 96, 100, 104, 110, 132} {
 		for h := 8; h <= 34; h++ {
 			m := fullView(flintAt(t, w, h))
@@ -242,6 +246,7 @@ func TestUsageUnderANarrowListIsNeverCutMidWord(t *testing.T) {
 // window's hosts that do not fit after it go whole onto the next lines:
 // every host's percent shows, and no usage line ends cut.
 func TestUsageOfThreeHostsIsNeverCutSideways(t *testing.T) {
+	t.Skip("replaced by TestShortUsageLineKeepsItsWindow (Task 12 step 1)")
 	for _, c := range []struct {
 		w, h int
 		gpu  string

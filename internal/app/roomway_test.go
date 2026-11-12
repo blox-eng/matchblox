@@ -7,6 +7,7 @@ import (
 )
 
 func TestEnterOnAChainHeadOpensItsRoom(t *testing.T) {
+	t.Skip("replaced by TestGNarrowsToTheChain (Task 12 step 1)")
 	m, _ := headModel(t, 160, headState(t, runningPlan(), true))
 	m = pick(t, m, stokerPane)
 	next, _ := press(m, tea.KeyEnter)

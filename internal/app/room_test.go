@@ -151,6 +151,7 @@ func TestRoomTalkNamesARunningStoker(t *testing.T) {
 }
 
 func TestOpenRoomPutsTheCursorOnTheNeedElseTheTalkLine(t *testing.T) {
+	t.Skip("replaced by TestARoomOpensOnTheNeedElseTheTalkLine (Task 12 step 1)")
 	st := headState(t, runningPlan(), true)
 	twoAsk(&st)
 	m, k := roomOf(t, st, "hearth-api")

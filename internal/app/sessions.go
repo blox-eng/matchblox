@@ -349,23 +349,6 @@ func (m Model) sessionKeys() []hint {
 	return append(keys, hintFor(mk.New, ""), hintFor(mk.Ships, ""), hintFor(mk.Stoke, "stoker"))
 }
 
-func (m Model) sessionsPanel(w int) body {
-	var b body
-	m.doorsSection(&b, w)
-	m.sessionRows(&b, w)
-	st := m.st
-	if n := len(m.snap.IdlePanes); n > 0 {
-		var ids []string
-		for _, p := range m.snap.IdlePanes {
-			ids = append(ids, place(p.Target, p.Pane)+" "+p.Command)
-		}
-		b.add(-1, "", st.faint.Render(fit(fmt.Sprintf(" %d without an agent: %s", n, strings.Join(ids, ", ")), w)))
-	}
-	b.add(-1, m.exitedLines(w)...)
-	m.recsSection(&b, w)
-	return b
-}
-
 // sessionRows are the sessions under a faint label for each group, or
 // under the sort when another one is on.
 func (m Model) sessionRows(b *body, w int) {

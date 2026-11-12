@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -71,10 +72,42 @@ const passwordRefusal = "builder@ws-1: Permission denied (publickey,password).\r
 // settle runs cmd and the messages it starts until nothing is left.
 func settle(t *testing.T, m tea.Model, cmd tea.Cmd) Model {
 	t.Helper()
-	for cmd != nil {
-		m, cmd = m.Update(cmd())
+	queue := []tea.Cmd{cmd} // each of a batch: the board batches its belt and notices
+	for n := 0; len(queue) > 0 && n < 200; n++ {
+		c := queue[0]
+		queue = queue[1:]
+		for _, msg := range msgsWithin(c, 250*time.Millisecond) {
+			var then tea.Cmd
+			if m, then = m.Update(msg); then != nil {
+				queue = append(queue, then)
+			}
+		}
 	}
 	return m.(Model)
+}
+
+// msgsWithin is cmdMsgs with a wait of d for each command: a key's ssh
+// step takes longer than a frame; a notice's tick gives up.
+func msgsWithin(cmd tea.Cmd, d time.Duration) []tea.Msg {
+	if cmd == nil {
+		return nil
+	}
+	out := make(chan tea.Msg, 1)
+	go func() { out <- cmd() }()
+	var msg tea.Msg
+	select {
+	case msg = <-out:
+	case <-time.After(d):
+		return nil
+	}
+	if batch, ok := msg.(tea.BatchMsg); ok {
+		var got []tea.Msg
+		for _, c := range batch {
+			got = append(got, msgsWithin(c, d)...)
+		}
+		return got
+	}
+	return []tea.Msg{msg}
 }
 
 // jumpOffer confirms a jump to %1 and runs it up to the ladder's offer.

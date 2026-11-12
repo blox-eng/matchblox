@@ -76,14 +76,22 @@ func rowOf(out, name string) string {
 	return ""
 }
 
-// choose selects the session with pid, as a pick on its row does.
+// choose selects the session with pid, as a tap on its card does.
 func choose(m *Model, pid int) {
 	m.chose, m.selPID, m.doorPick, m.recPick = true, pid, "", ""
+	for _, s := range m.snap.Sessions {
+		if s.PID == pid {
+			m.selHost = s.Host
+			m.boardChooseCard(m.columnOf(s), s)
+			return
+		}
+	}
 }
 
 // TestTheDetailNamesTheAccountWithItsProviderMark: the detail of a session
 // names its account; the provider is a mark, not a name.
 func TestTheDetailNamesTheAccountWithItsProviderMark(t *testing.T) {
+	t.Skip("replaced by TestThePeekNamesAnAccountThatIsNotTheDefault (Task 12 step 1, ruling 35)")
 	for name, want := range map[string]string{
 		"hearth-api": "✻ team@example.com · Max",
 		"codex":      "❋ team@example.com · Plus",
@@ -123,6 +131,7 @@ func TestTheDetailNamesTheAccountWithItsProviderMark(t *testing.T) {
 // TestRowsLeaveTheAccountToTheDetail: no row carries the account, and
 // every line fits, at every width.
 func TestRowsLeaveTheAccountToTheDetail(t *testing.T) {
+	t.Skip("replaced by TestThePeekNamesAnAccountThatIsNotTheDefault (Task 12 step 1, ruling 35)")
 	for _, w := range []int{50, 100, 160} {
 		out := demoSessions(t, w).render()
 		if l := rowOf(out, "hearth-api"); l == "" || strings.Contains(listOf(l, w), "team@example.com") {
@@ -153,6 +162,7 @@ func TestAProviderWithoutAMarkKeepsItsName(t *testing.T) {
 // TestSessionsSortByAccount: s reaches the account, so the sessions of one
 // login sit together.
 func TestSessionsSortByAccount(t *testing.T) {
+	t.Skip("dropped (Task 12 step 1): sort goes (step 4, intended change)")
 	m := demoSessions(t, 160)
 	m.sessGroup = groupNone
 	m.sortOn(sortAccount)
@@ -209,6 +219,7 @@ func TestNoCredentialReachesTheScreen(t *testing.T) {
 // TestADetailWithoutAWindowShowsNoFigureForIt: tokens without a window
 // (a model OpenCode's cache does not know) never print "/ 0".
 func TestADetailWithoutAWindowShowsNoFigureForIt(t *testing.T) {
+	t.Skip("replaced by TestACardWithNoWindowPrintsNoZero (Task 12 step 1, ruling 35)")
 	st := outsideTmux(demoState(t))
 	for i, s := range st.Sessions {
 		if s.Agent == "opencode" {
@@ -233,6 +244,7 @@ func TestADetailWithoutAWindowShowsNoFigureForIt(t *testing.T) {
 // TestTheDetailShowsTheAccount: on an opened phone the detail names the
 // selected session's account too.
 func TestTheDetailShowsTheAccount(t *testing.T) {
+	t.Skip("replaced by TestThePeekNamesAnAccountThatIsNotTheDefault (Task 12 step 1, ruling 35)")
 	m := demoDetails(t, 86)
 	for _, s := range m.snap.Sessions {
 		if s.Agent == "codex" {

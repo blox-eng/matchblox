@@ -33,6 +33,7 @@ func jumped(t *testing.T, m Model, k tea.KeyPressMsg) (Model, []string) {
 var altS = tea.KeyPressMsg{Code: 's', Mod: tea.ModAlt}
 
 func TestFlipFromASessionOpensItsChainsRoomOnTheNeed(t *testing.T) {
+	t.Skip("replaced by TestARoomOpensOnTheNeedElseTheTalkLine (Task 12 step 1)")
 	st := headState(t, runningPlan(), true)
 	twoAsk(&st)
 	m, _ := headModel(t, 160, st)
@@ -82,8 +83,8 @@ func TestFlipBackToAGonePaneStays(t *testing.T) {
 	m.room.from[deskTTY] = "%77"
 	m.marked = clientMark{deskTTY, m.now()}
 	next, ran := jumped(t, m, altS)
-	if len(ran) != 0 || next.room == nil || next.toast != "That session ended." {
-		t.Fatalf("ran %q room %v toast %q", ran, next.room != nil, next.toast)
+	if len(ran) != 0 || next.room == nil || saidNow(next) != "That session ended." {
+		t.Fatalf("ran %q room %v toast %q", ran, next.room != nil, saidNow(next))
 	}
 }
 

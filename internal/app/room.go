@@ -443,21 +443,65 @@ func (m Model) roomKeyOf(s sample.Session) chainKey {
 	return oneKey(s)
 }
 
-// openRoom opens room k with the cursor on its need, else on its talk line.
+// openRoom opens room k on the board: the board narrows to the chain, and
+// the cursor lands on the need (the card that asks, or the step that
+// waits for a go), else on the talk line.
 func (m Model) openRoom(k chainKey) Model {
-	rows := m.roomRows(k)
-	at := len(rows) - 1
-	if i := slices.IndexFunc(rows, func(r roomRow) bool { return r.kind == roomNeed }); i >= 0 {
-		at = i
+	m.room = &room{k: k, from: map[string]string{}}
+	m.tab, m.boardAbove, m.boardBelow = tabSessions, 0, 0
+	m.boardChain, m.peekAt = "", m.now()
+	if !k.isOne() {
+		m.boardChain = m.chainLabel(k)
 	}
-	m.room = &room{k: k, at: at, from: map[string]string{}}
+	m.room.at = m.roomLanding(k)
 	return m
 }
 
+// roomLanding is the row the cursor lands on in room k: the step of the
+// need's go, or the row of the match whose card the need is on, chosen;
+// with no need, the talk line.
+func (m *Model) roomLanding(k chainKey) int {
+	rows := m.roomRows(k)
+	talk := len(rows) - 1
+	need, _, ok := m.needOf(k)
+	if !ok {
+		return talk
+	}
+	pane := need.id
+	if g, ok := m.goOf(k, need); ok {
+		if g.step > 0 {
+			step := strconv.Itoa(g.step)
+			if i := slices.IndexFunc(rows, func(r roomRow) bool { return r.kind == roomStep && r.id == step }); i >= 0 {
+				return i
+			}
+			r := *m.room
+			r.unfolded = true // the step is folded away: the card opens to it
+			m.room = &r
+			rows = m.roomRows(k)
+			if i := slices.IndexFunc(rows, func(r roomRow) bool { return r.kind == roomStep && r.id == step }); i >= 0 {
+				return i
+			}
+			return len(rows) - 1
+		}
+		pane = g.pane
+	}
+	seen, _ := m.members(k)
+	if i := slices.IndexFunc(seen, func(s sample.Session) bool { return s.Pane == pane }); i >= 0 {
+		m.boardChooseCard(m.columnOf(seen[i]), seen[i])
+	}
+	if i := slices.IndexFunc(rows, func(r roomRow) bool { return r.kind == roomMatch && r.id == pane }); i >= 0 {
+		return i
+	}
+	if i := slices.IndexFunc(rows, func(r roomRow) bool { return r.kind == roomMatch }); i >= 0 {
+		return i
+	}
+	return talk
+}
+
 // keepRoomRow keeps the room's cursor on the row it was on, by its kind and
-// id, when rows come or go under it.
+// id, when rows come or go under it. A tap that moved it moved it.
 func (m Model) keepRoomRow(was *room, anchor roomRow) Model {
-	if was == nil || m.room == nil || m.room.k != was.k || anchor.kind == 0 && anchor.id == "" {
+	if was == nil || m.room == nil || m.room.k != was.k || m.room.at != was.at || anchor.kind == 0 && anchor.id == "" {
 		return m
 	}
 	rows := m.roomRows(m.room.k)

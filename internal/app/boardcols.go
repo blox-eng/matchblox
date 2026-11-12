@@ -241,6 +241,9 @@ func (m Model) needCount() int {
 
 // inBoard: the chain filter, the host filter and the search show s.
 func (m Model) inBoard(s sample.Session) bool {
+	if r := m.room; r != nil && r.k.isOne() && oneKey(s) != r.k {
+		return false // a chain of one's room is its one match
+	}
 	if m.boardChain != "" && m.chainLabelOf(s) != m.boardChain {
 		return false
 	}

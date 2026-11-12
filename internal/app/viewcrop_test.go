@@ -60,6 +60,7 @@ func TestATextAgentWrapsToTheView(t *testing.T) {
 // the same row comes later with the view's size, as one did when the view
 // sized the agent's window (#351).
 func TestBrowsingWatchesWithNoSize(t *testing.T) {
+	t.Skip("replaced by TestTheLiveViewFollowsTheChosenCard (Task 12 step 1): the board watches only beside its live view")
 	st := fixtureState()
 	st.Sessions = []sample.Session{{PID: 1, Pane: "%1", Name: "a"}, {PID: 2, Pane: "%2", Name: "b"}, {PID: 3, Pane: "%3", Name: "c"}}
 	f := newFake()

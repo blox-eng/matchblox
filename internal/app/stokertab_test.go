@@ -101,6 +101,7 @@ func selectStep(t *testing.T, m Model, id string) Model {
 }
 
 func TestCOpensTheTab(t *testing.T) {
+	t.Skip("dropped (Task 12 step 1): the STOKER tab goes (step 6b) and c copies (TestCCopiesTheLastMessage")
 	m, _ := loadedWith(t, 100, tabNight(screensState(t)))
 	next, _ := key(m, "c")
 	if got := next.(Model).tab; got != tabStoker {
@@ -184,6 +185,7 @@ func TestMorningSaysWhatWaitsForYou(t *testing.T) {
 }
 
 func TestYGrantsAWaitingStep(t *testing.T) {
+	t.Skip("replaced by TestYOnAWaitingStepGivesItsGo (Task 12 step 1)")
 	m, f := loadedWith(t, 100, tabNight(screensState(t)))
 	m.setTab(tabStoker)
 	if line := actionLine(selectStep(t, m, "g8")); !strings.Contains(line, "y give the go") {
@@ -267,7 +269,7 @@ func TestAOnAFailedStepAtNightAsksToTakeOver(t *testing.T) {
 
 func TestOpeningTheTabSendsOneAck(t *testing.T) {
 	m, f := loadedWith(t, 100, tabNight(screensState(t)))
-	next := sendKey(m, "7")
+	next := toStoker(m)
 	sendKey(next, "down")
 	var acks int
 	for _, a := range f.acts() {
@@ -572,6 +574,7 @@ func TestQOnAPanelessRunningChainCard(t *testing.T) {
 // I3: a go a chain stoker's run waits for is a row of its card: y gives
 // it, with the stoker's id, and the tab's count holds it.
 func TestYGivesAChainStokersGo(t *testing.T) {
+	t.Skip("replaced by TestYOnAWaitingStepGivesItsGo (Task 12 step 1)")
 	st := tabFamily(screensState(t), true)
 	v := &st.Stokers[0].View
 	v.Run = append(v.Run, proto.StokerEntry{ID: "go@1/merge:%3", At: v.Since.Add(time.Hour), Session: "s3", Name: "hearth-api", Pane: "%3",
@@ -601,6 +604,7 @@ func TestYGivesAChainStokersGo(t *testing.T) {
 // N1: a chain stoker's plan step that waits for your go is a row of its
 // card: y gives it, with the stoker's id.
 func TestYGivesAChainStokersPlanStep(t *testing.T) {
+	t.Skip("replaced by TestYOnAWaitingStepGivesItsGo (Task 12 step 1)")
 	st := tabFamily(screensState(t), true)
 	v := &st.Stokers[0].View
 	v.Run = append(v.Run, proto.StokerEntry{ID: "2", At: v.Since.Add(time.Hour), Session: "ember-billing", Name: "ember-billing", Pane: "%4",

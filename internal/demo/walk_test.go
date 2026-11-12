@@ -172,7 +172,7 @@ func startWalk(t *testing.T, cols, rows int) *walker {
 		_ = d.Wait()
 		close(w.ended)
 	}()
-	term.waitFor(t, "hearth-api")
+	term.waitFor(t, "flint-auth")
 	return w
 }
 
@@ -204,6 +204,23 @@ func (w *walker) press(keys ...string) {
 	for _, k := range keys {
 		w.send(k, bytesOf(w.t, k))
 	}
+}
+
+// tabWords are the tabs as the tab row names the open one, by digit.
+var tabWords = map[string]string{"1": "SESSIONS", "2": "SHIPS", "3": "MACHINE", "4": "GIT", "5": "HISTORY", "6": "PANES", "7": "STOKER"}
+
+// toTab opens tab n, "1" to "7": Tab walks the tabs until the tab row names
+// it. A digit on the board answers its card (Task 12 step 1).
+func (w *walker) toTab(n string) {
+	w.t.Helper()
+	want := tabWords[n]
+	for range 2 * len(tabWords) {
+		if lines := strings.Split(w.term.screen(), "\n"); len(lines) > 1 && strings.Contains(lines[1], want) {
+			return
+		}
+		w.press("tab")
+	}
+	w.t.Fatalf("Tab never opened %s", want)
 }
 
 // pressLast presses a key that ends the program: the end may come before
@@ -284,13 +301,14 @@ func (w *walker) walkKeys(tab string) {
 	top := slices.Repeat([]string{"k"}, rowsWalked)
 	for _, k := range everyKey() {
 		for _, consent := range []string{"enter", "y"} {
-			w.press(tab, k, consent, consent)
+			w.toTab(tab)
+			w.press(k, consent, consent)
 			w.reset()
 		}
 	}
 	for _, k := range rowKeys {
 		for row := 1; row < rowsWalked; row++ {
-			w.press(tab)
+			w.toTab(tab)
 			w.press(top...)
 			w.press(slices.Repeat([]string{"j"}, row)...)
 			w.press(k, "y", "y")
@@ -305,14 +323,14 @@ func (w *walker) walkTaps(tab string) {
 	w.t.Helper()
 	for x := 1; x <= w.cols; x += 2 {
 		for _, y := range []int{w.rows, w.rows - 1} {
-			w.press(tab)
+			w.toTab(tab)
 			w.tap(x, y)
 			w.press("y")
 			w.reset()
 		}
 	}
 	for y := 1; y <= w.rows; y++ {
-		w.press(tab)
+		w.toTab(tab)
 		w.tap(20, y)
 		w.tap(20, y)
 		w.press("y")
@@ -387,33 +405,39 @@ func (w *walker) scrolls(where string) {
 // the order.
 func (w *walker) walkTheDoors() {
 	w.t.Helper()
-	w.press("1")
+	w.toTab("1")
 	w.scrolls("in a chat")
 	w.reset()
 	w.clear()
-	w.refused("a pane", "6", "enter")
-	w.refused("a worktree's shell", "4", "enter")
-	w.press("3")
+	w.toTab("6")
+	w.refused("a pane", "enter")
+	w.toTab("4")
+	w.refused("a worktree's shell", "enter")
+	w.toTab("3")
 	w.press(slices.Repeat([]string{"j"}, 9)...)
 	w.refused("Pair a device", "enter")
 
-	w.press("1", "N")
+	w.toTab("1")
+	w.press("N")
 	w.send("a repository", "example/cloned")
 	w.refused("a clone", "enter")
-	w.press("1", "N")
+	w.toTab("1")
+	w.press("N")
 	w.send("a folder", "/work/flint-auth")
 	w.press("tab")
 	w.send("a branch", "a-branch")
 	w.refused("a new worktree", "enter")
 
-	w.press("1", "N")
+	w.toTab("1")
+	w.press("N")
 	w.send("a folder", "/work/flint-auth")
 	w.press("tab", "tab")
 	w.send("a name", "walked-one")
 	w.takes("a new session", "new-session", "enter")
 	w.clear()
 
-	w.press("1", "/")
+	w.toTab("1")
+	w.press("/")
 	w.send("a search", "spark-docs")
 	w.press("enter", "r", "backspace")
 	w.send("a name", "walked-two")
@@ -421,21 +445,25 @@ func (w *walker) walkTheDoors() {
 	w.clear()
 	w.press("esc", "esc")
 
-	w.press("2", "k", "k", "k", "k", "j")
+	w.toTab("2")
+	w.press("k", "k", "k", "k", "j")
 	w.takes("a merge", "gh pr merge", "x", "y")
 	w.clear()
 
-	w.press("4", "X")
+	w.toTab("4")
+	w.press("X")
 	w.takes("a merged worktree's removal", "worktree remove", "x", "y")
 	w.clear()
 
-	w.press("1", "/")
+	w.toTab("1")
+	w.press("/")
 	w.send("a search", "hearth-api")
 	w.takes("a kill", "kill-pane", "enter", "x", "y", "y")
 	w.press("esc", "esc")
 	w.clear()
 
-	w.press("7", "f", "enter")
+	w.toTab("7")
+	w.press("f", "enter")
 	w.clear()
 	w.opens("the order sheet", "How should I run?", "o")
 	w.send("an order", "keep the tests green")
@@ -568,7 +596,8 @@ func TestQAndCtrlCEnd(t *testing.T) {
 		}
 	}
 	w := startWalk(t, 132, 32)
-	w.press("1", "enter")
+	w.toTab("1")
+	w.press("enter")
 	w.flashes("ctrl+c in a chat", "ctrl+c")
 	w.alive()
 }
@@ -845,21 +874,26 @@ func (w *walker) saysAfter(what, want string, keys ...string) {
 func TestWhatThePhoneCannotDoSaysSo(t *testing.T) {
 	m := newMachine(t)
 	w := startWalk(t, 132, 32)
-	w.flashes("a pane", "6", "enter")
+	w.toTab("6")
+	w.flashes("a pane", "enter")
 	w.clear()
-	w.flashes("a worktree's shell", "4", "enter")
+	w.toTab("4")
+	w.flashes("a worktree's shell", "enter")
 	w.clear()
 
 	// The Machine tab's last row is its device row.
-	w.press("3", "j", "j", "j", "j", "j", "j", "j", "j", "j")
+	w.toTab("3")
+	w.press("j", "j", "j", "j", "j", "j", "j", "j", "j")
 	w.flashes("Pair a device", "enter")
 	w.clear()
 
-	w.press("2", "j") // #214 waits for its merge
+	w.toTab("2")
+	w.press("j") // #214 waits for its merge
 	w.flashes("a merge", "x", "y")
 	w.clear()
 
-	w.press("1", "N")
+	w.toTab("1")
+	w.press("N")
 	w.send("a folder", "/work/flint-auth")
 	w.press("tab")
 	w.send("a branch", "a-branch")
@@ -883,7 +917,8 @@ func TestWhatThePhoneCannotDoSaysSo(t *testing.T) {
 func TestANightStartsAndRunsNothing(t *testing.T) {
 	m := newMachine(t)
 	w := startWalk(t, 132, 32)
-	w.press("7", "n")
+	w.toTab("7")
+	w.press("n")
 	w.saysAfter("a night", "the stoker runs the night", "enter")
 	if saw := w.spy.seen(); len(saw) > 0 {
 		t.Errorf("commands reached the console's seams: %v", saw)
@@ -965,13 +1000,13 @@ func TestSessionsCanBeStartedAndKilled(t *testing.T) {
 	// Another tab and back draws the list anew: it has the new session, not the
 	// killed one.
 	eventually(t, 5*time.Second, "the drawn list to lose the killed session", func() bool {
-		w.press("2")
+		w.toTab("2")
 		time.Sleep(200 * time.Millisecond)
 		from := len(w.term.text())
-		w.press("1")
+		w.toTab("1")
 		time.Sleep(200 * time.Millisecond)
 		drawn := w.term.text()[from:]
-		return strings.Contains(drawn, "fresh-one") && !strings.Contains(drawn, "renamed-one")
+		return strings.Contains(drawn, "fresh-o") && !strings.Contains(drawn, "renamed-o") // a column may cut a name
 	})
 	if got := m.spawns(t); got != "" {
 		t.Errorf("a real command ran:\n%s", got)

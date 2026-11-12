@@ -45,9 +45,10 @@ func (m *Model) noticeEnded() tea.Cmd {
 
 // flashNotice puts a new flash in the strip's row while the board shows,
 // so the board's key line keeps its keys. was: the flash before the
-// update. A take-over question keeps its flash on the key line.
+// update. A take-over question keeps its flash on the key line, and the
+// pair page on its own.
 func (m *Model) flashNotice(was string) tea.Cmd {
-	if !m.boardShown() || m.viewFull() || m.held != nil || m.flash == "" || m.flash == was {
+	if !m.boardShown() || m.viewFull() || m.held != nil || m.pair.owns() || m.flash == "" || m.flash == was {
 		return nil
 	}
 	return m.notice(m.flash)
@@ -67,13 +68,17 @@ func (m Model) noticeRows(text string, w int) []string {
 	return lines
 }
 
-// cutNotice breaks text into lines of w cells: at its last " · " where
-// both halves fit, else at its spaces.
+// cutNotice breaks text into lines of w cells: at its last " · ", else
+// at the end of its last sentence, where both halves fit; else at its
+// spaces.
 func cutNotice(text string, w int) []string {
-	for i := strings.LastIndex(text, " · "); i >= 0; i = strings.LastIndex(text[:i], " · ") {
-		first, rest := text[:i+len(" ·")], text[i+len(" · "):]
-		if ansi.StringWidth(first) <= w && ansi.StringWidth(rest) <= w {
-			return []string{first, rest}
+	for _, sep := range []string{" · ", ". "} {
+		keep := len(strings.TrimRight(sep, " "))
+		for i := strings.LastIndex(text, sep); i >= 0; i = strings.LastIndex(text[:i], sep) {
+			first, rest := text[:i+keep], text[i+len(sep):]
+			if ansi.StringWidth(first) <= w && ansi.StringWidth(rest) <= w {
+				return []string{first, rest}
+			}
 		}
 	}
 	return wrapPlain(text, w)

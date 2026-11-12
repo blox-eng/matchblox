@@ -25,6 +25,7 @@ func recordRuns(m *Model) *[][]string {
 }
 
 func TestEveryWayInJumps(t *testing.T) {
+	t.Skip("replaced by TestCtrlOGoesIntoTheChosenCard (Task 12 step 1)")
 	for _, k := range []string{"enter", "right", "a", "ctrl+o"} {
 		m := loaded(t, 100)
 		ran := recordRuns(&m)
@@ -44,6 +45,7 @@ func TestEveryWayInJumps(t *testing.T) {
 // beside the list: the first tap selects the row, and a second tap on it
 // goes in.
 func TestATapOnARowJumps(t *testing.T) {
+	t.Skip("replaced by TestOnlyACardYouChoseGoesIn (Task 12 step 1)")
 	m, _ := loadedWith(t, 44, fixtureState())
 	ran := recordRuns(&m)
 	_, cmd := tap(m, 5, sessLine(t, m, "app-review"))
@@ -67,6 +69,7 @@ func TestATapOnARowJumps(t *testing.T) {
 }
 
 func TestAPanelessRowSaysSo(t *testing.T) {
+	t.Skip("replaced by TestTheCardSaysWhatTheRowSaid (Task 12 step 1)")
 	m, _ := loadedWith(t, 100, outsideTmux(fixtureState()))
 	m.tab = tabSessions
 	s, _ := m.selectedSession()
@@ -93,6 +96,7 @@ func TestEnterOnAStokerHostAsksToTakeOver(t *testing.T) {
 }
 
 func TestAOnAStuckShipJumps(t *testing.T) {
+	t.Skip("dropped (Task 12 step 1): the Ships tab goes (step 6a)")
 	m, _ := shipsAt(t, 86, screensState(t))
 	ran := recordRuns(&m)
 	next, _ := key(m, "down")
@@ -424,6 +428,7 @@ func TestTakeOverAnsweredFromTheDeskJumpsThePhone(t *testing.T) {
 }
 
 func TestTheSelectionMovesOnWhenNoOneElseWatches(t *testing.T) {
+	t.Skip("replaced by TestAfterAnActTheFirstWaitIsChosen (Task 12 step 1)")
 	m, _ := loadedWith(t, 100, queueState())
 	next, _ := m.Update(ranMsg{cmd: "tmux switch-client -c /dev/pts/7 -t %1", jumped: "%1", tty: "/dev/pts/7"})
 	if s, _ := next.(Model).selectedSession(); s.Pane != "%2" {
@@ -540,7 +545,7 @@ func TestTheConsoleAnnouncesTheMarks(t *testing.T) {
 		t.Errorf("a phone that attached got %q, want %q", raws(cmd), marks)
 	}
 	// tmux tells the console the moment a terminal comes to show it.
-	if _, cmd = next.Update(uv.UnknownApcEvent(keycmd.ViewerKey)); !slices.Equal(raws(cmd), []string{marks}) {
+	if _, cmd = next.Update(uv.UnknownApcEvent(keycmd.ViewerKey)); !slices.Contains(raws(cmd), marks) { // with the board's keys
 		t.Errorf("a terminal that came got %q, want %q at once", raws(cmd), marks)
 	}
 }
@@ -675,7 +680,7 @@ func TestTheSignalGoesTheWayTheTerminalReadsIt(t *testing.T) {
 // reads no hidden pane while the person types in the agent's. The watch
 // comes back when a screen shows the console again, or the person acts there.
 func TestAJumpWithNoOneLeftStopsTheWatch(t *testing.T) {
-	m, f := loadedWith(t, 100, fixtureState())
+	m, f := loadedWith(t, 160, fixtureState()) // the board watches beside its live view
 	m, _ = rigged(m, "1794089220 /dev/pts/1 %99")
 	s, _ := m.selectedSession()
 	next, cmd := key(m, "enter")
@@ -685,11 +690,14 @@ func TestAJumpWithNoOneLeftStopsTheWatch(t *testing.T) {
 	}
 	_, cmd = next.Update(uv.UnknownApcEvent(keycmd.ViewerKey))
 	drain(cmd)
+	if c, ok := next.(Model).boardSelected(); ok {
+		s = c // after the jump the board chose the first wait (R3.2)
+	}
 	if a := lastWatch(t, f); a.RecID != proto.WatchPrefix+s.Pane {
 		t.Errorf("back on the console the watch is %q, want %s", a.RecID, s.Pane)
 	}
 
-	m, f = loadedWith(t, 100, fixtureState())
+	m, f = loadedWith(t, 160, fixtureState()) // the board watches beside its live view
 	m, _ = rigged(m, deskAndPad)
 	next, cmd = key(m, "enter")
 	settled(next, cmd)
