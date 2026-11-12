@@ -135,9 +135,9 @@ func (m Model) members(k chainKey) ([]sample.Session, []chains.Member) {
 	return seen, unseen
 }
 
-// roomNeed is what room k waits on the person for: an ask of one of its
+// chainNeed is what room k waits on the person for: an ask of one of its
 // matches (the pane), or a go its stoker waits for.
-type roomNeed struct {
+type chainNeed struct {
 	pane string
 	g    goWait
 	isGo bool
@@ -146,21 +146,21 @@ type roomNeed struct {
 
 // needOf is the oldest need of room k: an ask of one of its matches, or a
 // step of its stoker that waits for a go.
-func (m Model) needOf(k chainKey) (roomNeed, bool) {
-	var needs []roomNeed
+func (m Model) needOf(k chainKey) (chainNeed, bool) {
+	var needs []chainNeed
 	seen, _ := m.members(k)
 	for _, s := range seen {
 		if it, ok := m.waitOf(s); ok && (it.State == queue.StatePermission || it.State == queue.StateQuestion) {
-			needs = append(needs, roomNeed{pane: it.Pane, at: it.Since.UnixNano()})
+			needs = append(needs, chainNeed{pane: it.Pane, at: it.Since.UnixNano()})
 		}
 	}
 	for _, g := range m.goWaits(k) {
-		needs = append(needs, roomNeed{pane: g.pane, g: g, isGo: true, at: g.at})
+		needs = append(needs, chainNeed{pane: g.pane, g: g, isGo: true, at: g.at})
 	}
 	if len(needs) == 0 {
-		return roomNeed{}, false
+		return chainNeed{}, false
 	}
-	slices.SortStableFunc(needs, func(a, b roomNeed) int { return cmp.Compare(a.at, b.at) })
+	slices.SortStableFunc(needs, func(a, b chainNeed) int { return cmp.Compare(a.at, b.at) })
 	return needs[0], true
 }
 
