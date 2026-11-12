@@ -6,6 +6,8 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+## [0.43.0] - 2026-11-12
+
 ### Added
 
 - **The console offers a new release.** The service looks for the latest
@@ -1551,7 +1553,8 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.42.0...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.43.0...HEAD
+[0.43.0]: https://github.com/blox-eng/matchblox/compare/v0.42.0...v0.43.0
 [0.42.0]: https://github.com/blox-eng/matchblox/compare/v0.41.0...v0.42.0
 [0.41.0]: https://github.com/blox-eng/matchblox/compare/v0.40.3...v0.41.0
 [0.40.3]: https://github.com/blox-eng/matchblox/compare/v0.40.2...v0.40.3
