@@ -111,6 +111,10 @@ func (m Model) wordInk(o cardOpts) lipgloss.Style {
 	return m.st.muted
 }
 
+// hostKeep is the fewest cells a card's host word keeps (" @ws-1"), and
+// nameKeep the fewest its name is cut to for it.
+const hostKeep, nameKeep = 6, 8
+
 // cardHead is line 1: the selection mark, the match, the name and its
 // host; at the right the harness mark and the wait, or when a host that is
 // not reached sent its last state. A quiet row adds its
@@ -126,15 +130,24 @@ func (m Model) cardHead(s sample.Session, w int, o cardOpts, word string) string
 	if match == "" {
 		match = m.matchCell(s)
 	}
-	left := mark + match + name.Render(s.Name)
-	if o.otherHost {
-		left += m.st.faint.Render(" @" + m.nameOf(s.Host))
-	}
 	wait := padLeft(m.waitCell(s), 3)
 	if o.asOf != "" {
 		wait = "as of " + o.asOf
 	}
 	right := m.st.muted.Render(harnessMark(s)) + " " + m.st.faint.Render(wait) + " "
+	title, tag := s.Name, ""
+	if o.otherHost {
+		tag = " @" + m.nameOf(s.Host)
+	}
+	// A card's name that leaves the host word under four cells is cut
+	// before it, so the host word keeps hostKeep cells; where the name
+	// would get under nameKeep, and on a quiet row, the host word goes.
+	room := w - lipgloss.Width(mark+match+right) - 1
+	if cut := room - min(lipgloss.Width(tag), hostKeep); tag != "" && !o.quietRow && room-lipgloss.Width(title) < 4 && cut >= nameKeep {
+		title = ansi.Truncate(title, cut, "…")
+		tag = ansi.Truncate(tag, room-lipgloss.Width(title), "…")
+	}
+	left := mark + match + name.Render(title) + m.st.faint.Render(tag)
 	// The word lines up after a short name, and is shown whole or not at
 	// all: short of room the name is cut, never the word.
 	if lw := max(lipgloss.Width(left), 17); word != "" && lw+1+lipgloss.Width(word)+1+lipgloss.Width(right) <= w {
@@ -143,8 +156,18 @@ func (m Model) cardHead(s sample.Session, w int, o cardOpts, word string) string
 	return spread(left, right, w)
 }
 
-// cardSays is line 2: the state word and what it says.
+// cardSays is line 2: the state word and what it says. A match outside
+// tmux says so first: it has no pane to go into.
 func (m Model) cardSays(s sample.Session) (word, says string) {
+	word, says = m.cardSaid(s)
+	if s.Pane == "" {
+		says = strings.TrimSuffix("outside tmux · "+says, " · ")
+	}
+	return word, says
+}
+
+// cardSaid is cardSays for a match in a pane.
+func (m Model) cardSaid(s sample.Session) (word, says string) {
 	w, _ := m.rowWord(s)
 	word = ansi.Strip(w)
 	if h, held := m.holdOf(s); held {
@@ -168,12 +191,15 @@ func (m Model) cardSays(s sample.Session) (word, says string) {
 	return word, m.lastWords(s)
 }
 
-// cardTrack is line 3: the ship and its track, the context, and at the
-// right the chain's stub. Short of room it drops the stub, then a context
-// under 70%, then the track's undone stages from the right.
+// cardTrack is line 3: the ship and its track, the count of the other
+// ships it drives (shipsMore), the context, and at the right the chain's
+// stub. Short of room it drops the stub, then a context under 70%, then
+// the count's word and the count, then the track's undone stages from the
+// right.
 func (m Model) cardTrack(s sample.Session, w int, o cardOpts) (string, []span) {
 	ship, undone := "", 0
 	ships := m.shipsOf(s)
+	mores := []string{m.shipsMore(ships, false), m.shipsMore(ships, true), ""}
 	if len(ships) > 0 {
 		sh := ships[0]
 		ship = m.st.muted.Render("#"+strconv.Itoa(sh.Number)) + " " + m.trackAt(sh, m.shipSpark(sh))
@@ -192,10 +218,11 @@ func (m Model) cardTrack(s sample.Session, w int, o cardOpts) (string, []span) {
 		}
 		stub = ink.Render(glyph + m.chainLabel(k))
 	}
+	more := 0 // the count as it shows: whole, short, gone
 	left := func(cut int, withCtx bool) string {
 		var parts []string
 		if ship != "" {
-			parts = append(parts, ansi.Truncate(ship, lipgloss.Width(ship)-2*cut, ""))
+			parts = append(parts, ansi.Truncate(ship, lipgloss.Width(ship)-2*cut, "")+mores[more])
 		}
 		if withCtx && ctx != "" {
 			parts = append(parts, ctx)
@@ -216,6 +243,8 @@ func (m Model) cardTrack(s sample.Session, w int, o cardOpts) (string, []span) {
 			withStub = false
 		case withCtx && ctx != "" && !keepCtx:
 			withCtx = false
+		case mores[more] != "":
+			more++
 		case cut < undone:
 			cut++
 		default:
@@ -283,6 +312,9 @@ func (m Model) cardKeys(s sample.Session, w int, o cardOpts, options int, answer
 func (m Model) cardHints(s sample.Session, o cardOpts, options int, answers bool) ([]hint, int) {
 	mk := m.keys.main
 	goIn := hintFor(mk.Open, "go in")
+	if isShipCard(s) {
+		goIn.label = "new session"
+	}
 	var hs []hint
 	gap := 3
 	switch {

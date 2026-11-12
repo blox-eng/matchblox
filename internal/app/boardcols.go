@@ -1,7 +1,9 @@
 package app
 
 import (
+	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -36,6 +38,9 @@ func (c boardCol) short() string {
 // else is true; a question, a permission or a go waits even while the
 // match works; a busy match is on its stuck ship.
 func (m Model) columnOf(s sample.Session) boardCol {
+	if isShipCard(s) {
+		return colShip // ruling 31: a ship no session owns ships
+	}
 	if h, held := m.holdOf(s); held && h.By == holdByYou {
 		return colQuiet
 	}
@@ -136,7 +141,7 @@ func (m Model) needSince(s sample.Session) time.Time {
 // stoker's own agent is not a match.
 func (m Model) boardIndex() [4][]sample.Session {
 	var idx [4][]sample.Session
-	for _, s := range m.all.sessions {
+	for _, s := range append(slices.Clone(m.all.sessions), m.shipCards()...) {
 		if !m.isStoker(s) {
 			c := m.columnOf(s)
 			idx[c] = append(idx[c], s)
@@ -284,4 +289,52 @@ func (m Model) boardChains() []string {
 		}
 	}
 	return out
+}
+
+// shipCards are the ships in flight that no session owns (ruling 31, #80),
+// each a card of its own: named by its branch, its pane the ship's mark.
+func (m Model) shipCards() []sample.Session {
+	var out []sample.Session
+	for _, sh := range m.ships() {
+		if sh.Kind == shipDone || sh.Session.ID != "" || sh.Session.Pane != "" {
+			continue
+		}
+		out = append(out, sample.Session{Host: sh.Host, Name: m.shipCardName(sh), Pane: shipCardPane(sh), Cwd: sh.Where,
+			Status: "idle", Started: sh.Since})
+	}
+	return out
+}
+
+// shipCardPane is the pane of a ship's card: "#4570@hearth/hearth-api". A
+// tmux pane's id starts with %, so it is never a pane's.
+func shipCardPane(sh proto.Ship) string { return "#" + strconv.Itoa(sh.Number) + "@" + sh.Repo }
+
+// isShipCard: s is the card of a ship no session owns, and has no pane.
+func isShipCard(s sample.Session) bool { return strings.HasPrefix(s.Pane, "#") }
+
+// shipCardName is the name of a ship's card: the branch of its checkout,
+// else its repository and number.
+func (m Model) shipCardName(sh proto.Ship) string {
+	if r := m.gitOf(sh.Host); r != nil && sh.Where != "" {
+		for _, repo := range r.Repos {
+			for _, wt := range repo.Worktrees {
+				if wt.Path == sh.Where && wt.Branch != "" {
+					return wt.Branch
+				}
+			}
+		}
+	}
+	return filepath.Base(sh.Repo) + " #" + strconv.Itoa(sh.Number)
+}
+
+// shipOfCard is the ship of a ship's card.
+func (m Model) shipOfCard(s sample.Session) (proto.Ship, bool) {
+	if !isShipCard(s) {
+		return proto.Ship{}, false
+	}
+	i := slices.IndexFunc(m.ships(), func(sh proto.Ship) bool { return sh.Host == s.Host && shipCardPane(sh) == s.Pane })
+	if i < 0 {
+		return proto.Ship{}, false
+	}
+	return m.ships()[i], true
 }

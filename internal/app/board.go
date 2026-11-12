@@ -28,6 +28,12 @@ var boardBase = map[Layout][4]int{Medium: {38, 20, 20, 0}, Wide: {36, 25, 25, 18
 // column gives its room to the others in their proportions; on Wide from
 // liveFrom the columns keep their base widths and the live view takes it.
 func boardWidths(l Layout, w int, shown []boardCol) (cols []int, live int) {
+	return boardWidthsAt(l, w, shown, true)
+}
+
+// boardWidthsAt is boardWidths; roomy: the live view has the rows for a
+// menu (menuLeast), else the columns take its room.
+func boardWidthsAt(l Layout, w int, shown []boardCol, roomy bool) (cols []int, live int) {
 	if l == Narrow {
 		return []int{w}, 0
 	}
@@ -37,7 +43,7 @@ func boardWidths(l Layout, w int, shown []boardCol) (cols []int, live int) {
 			cols, sum = append(cols, x), sum+x
 		}
 	}
-	if l == Wide && w >= liveFrom {
+	if l == Wide && w >= liveFrom && roomy {
 		return cols, w - sum - len(cols)
 	}
 	if len(cols) == 0 {
@@ -222,8 +228,8 @@ const (
 	atRecs  = "RECOMMENDATIONS"
 )
 
-// underLines are the lines under the columns: the ghost row, then the
-// recommendations folded to one line. While a recommendation is chosen it
+// underLines are the lines under the columns: the ghost row, the agents
+// that exited (e shows them), then the recommendations folded to one line. While a recommendation is chosen it
 // opens in place, as its row in Sessions did: its row, its evidence and
 // its steps with their keys. none: no session at all, and no ghost row.
 func (m Model) underLines(w int, none bool) []boardLine {
@@ -233,6 +239,11 @@ func (m Model) underLines(w int, none bool) []boardLine {
 	if !none {
 		sel := below && line == ""
 		out = append(out, boardLine{m.ghostRow(m.ghosts()[0], sel, w), sel, atGhost})
+	}
+	if ex := m.exitedLines(w); len(ex) > 1 {
+		for _, l := range ex[1:] { // under the ghost row, with no blank line
+			out = append(out, boardLine{text: l})
+		}
 	}
 	n := len(m.recs)
 	switch i := slices.IndexFunc(m.recs, func(r advice.Rec) bool { return below && r.ID == line }); {
@@ -336,7 +347,8 @@ func (m Model) boardWords(b *boardDraw) string {
 }
 
 // boardStateNotice is what the strip's row says of the board's state: the
-// service lost, data older than the stale limit, or nothing.
+// service lost, data older than the stale limit, why the ships may be
+// behind, or nothing.
 func (m Model) boardStateNotice() string {
 	switch age := m.now().Sub(m.snap.At); {
 	case !m.have:
@@ -347,7 +359,7 @@ func (m Model) boardStateNotice() string {
 	case age >= staleAfter:
 		return fmt.Sprintf("data is %d min old · the service is slow", int(age.Minutes()))
 	}
-	return ""
+	return strings.Join(m.shipsBehind(), " · ")
 }
 
 // boardPage is the board on a phone: the page marks, a hairline, and the
@@ -416,7 +428,7 @@ func (m Model) boardColumns(d *boardDrawn, b *boardDraw, l Layout, shown []board
 			drawn = append(drawn, c)
 		}
 	}
-	widths, live := boardWidths(l, w, shown)
+	widths, live := boardWidthsAt(l, w, shown, rows >= menuLeast)
 	b.live, d.live = live, live
 	drawer := 0
 	if l == Medium && slices.Contains(shown, colQuiet) {
@@ -678,16 +690,32 @@ func (m Model) allHidden(w int) []string {
 	return lines
 }
 
-// unreached are the hosts besides this one that are not reached: what
-// shows of each is its last state.
+// unreached are the hosts of the lines above the columns: each host the
+// console cannot read (blockedHosts), then each other host that is not
+// reached, whose last state shows. An unnamed home host has no line: ""
+// is the doors line's.
 func (m Model) unreached() []string {
 	var out []string
+	for _, b := range m.blockedHosts() {
+		if b.host != "" {
+			out = append(out, b.host)
+		}
+	}
 	for _, h := range m.hosts()[1:] {
-		if m.stale(h) {
+		if m.stale(h) && !slices.Contains(out, h) {
 			out = append(out, h)
 		}
 	}
 	return out
+}
+
+// blockedOf is host's blocked row, when the console cannot read it.
+func (m Model) blockedOf(host string) (blockedHost, bool) {
+	bs := m.blockedHosts()
+	if i := slices.IndexFunc(bs, func(b blockedHost) bool { return b.host == host }); i >= 0 {
+		return bs[i], true
+	}
+	return blockedHost{}, false
 }
 
 // hostLines are the board's top lines, one for each host that is not
@@ -700,17 +728,26 @@ func (m Model) hostLines(w int) []string {
 	return out
 }
 
-// hostLine says since when host is not reached, and the key that dials it
-// again: one line, two on a phone when it does not fit.
+// hostLine says why host is not read, and the key that fixes it (ruling
+// 30): a blocked host's own words and fix, else since when it is not
+// reached and that ⏎ dials it again. One line, two on a phone when it does
+// not fit.
 func (m Model) hostLine(host string, w int, sel bool) []string {
 	st := m.st
-	since := m.nameOf(host) + ": not reached since " + m.stateAt(host).Format("15:04")
-	again := st.text.Render(m.keys.main.Open.Help().Key) + st.muted.Render(" try again")
+	says := m.nameOf(host) + ": not reached since " + m.stateAt(host).Format("15:04")
+	fix := st.text.Render(m.keys.main.Open.Help().Key) + st.muted.Render(" try again")
+	if b, ok := m.blockedOf(host); ok {
+		why, how := m.blockedWords(b)
+		says, fix = m.nameOf(host)+": "+why, st.muted.Render(how)
+		if b.fixable() {
+			fix = st.text.Render(m.keys.main.Open.Help().Key) + st.muted.Render(" "+how)
+		}
+	}
 	lead := m.chosenMark(sel)
-	if line := lead + st.muted.Render(since+" · ") + again; lipgloss.Width(line) <= w {
+	if line := lead + st.muted.Render(says+" · ") + fix; lipgloss.Width(line) <= w {
 		return []string{fit(line, w)}
 	}
-	return []string{fit(lead+st.muted.Render(since), w), fit("   "+again, w)}
+	return []string{fit(lead+st.muted.Render(says), w), fit("   "+fix, w)}
 }
 
 // chosenMark is the first cell of a line: ▌ in the accent when it is

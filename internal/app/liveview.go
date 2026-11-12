@@ -152,7 +152,7 @@ func (m *Model) watchCmd() tea.Cmd {
 			s, ok = m.boardSelected()
 			ok = ok && m.boardLive()
 		}
-		if ok && s.Host == m.opt.Host { // another host's pane id names another pane here
+		if ok && s.Host == m.opt.Host && !isShipCard(s) { // another host's pane id names another pane here
 			want = s.Pane
 		}
 	}

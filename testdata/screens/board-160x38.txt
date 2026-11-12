@@ -6,7 +6,7 @@
   stuck CI failed · lint, twice        busy Writing the test…    merged deploying         ╿ hearth-… ✻  1h │
   #4548 ●━✕┄○┄○┄○  ctx 77%             ctx 40%        ─╴login    #4549 ●━●━●━◉┄○          ╿ ember-r… ⬢  3h │
   ⏎ go in                                                                                 ╿ kindle-… ✻  5h │
-                                      ✦ ember-billing … ✻       ╿ flint-api       ✻ 40m   ╿ tinder-… ·  2d │
+                                      ✦ ember-bi… @gpu… ✻       ╿ flint-api       ✻ 40m   ╿ tinder-… ·  2d │
  ╿ kindle-web                 ✻  9m    agents Three subagent…    ci waits for review                       │
   green #4556 waits for your merge     ctx 71%                   #4560 ●━◉┄○┄○┄○                           │
   #4556 ●━●━◉┄○┄○  ctx 48%                                                                                 │

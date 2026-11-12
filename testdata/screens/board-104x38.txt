@@ -6,7 +6,7 @@
   stuck CI failed · lint, twice        busy Writing the tes…    merged deploying        ╿ hearth… ✻  1h
   #4548 ●━✕┄○┄○┄○  ctx 77%             ctx 40%       ─╴login    #4549 ●━●━●━◉┄○         ╿ ember-… ⬢  3h
   “Lint fails on a file I did not                                                       ╿ kindle… ✻  5h
-  change. I tried twice and           ✦ ember-billing… ✻       ╿ flint-api      ✻ 40m   ╿ tinder… ·  2d
+  change. I tried twice and           ✦ ember-b… @gpu… ✻       ╿ flint-api      ✻ 40m   ╿ tinder… ·  2d
   stopped.”                            agents Three subagen…    ci waits for review
   ⏎ go in                              ctx 71%                  #4560 ●━◉┄○┄○┄○
 

@@ -1136,6 +1136,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.pair != nil || m.sheet != nil || m.form != nil || m.searching || m.standIn || !bkey.Matches(msg, m.keys.main.Stoke, m.keys.main.Night) {
 			m, touch = m.touchRest()
 		}
+		m = m.onChoice()
 		f := m.focus(msg)
 		armed := m.backArmed
 		m.backArmed = time.Time{}
@@ -1238,6 +1239,9 @@ func (m Model) takeFocus(f *proto.Focus) (Model, tea.Cmd) {
 	m.setTab(tabSessions)
 	m.pending = nil
 	m.doorPick, m.recPick, m.ghostPick, m.chose, m.selPID, m.selHost = "", "", 0, true, s.PID, s.Host
+	if c, card, ok := m.boardCardOf(paneOf(s)); ok && m.boardShown() {
+		m.boardChooseCard(c, card)
+	}
 	if s.Pane == "" {
 		return m, nil // outside tmux: no pane to open
 	}
@@ -1334,6 +1338,7 @@ func describe(r proto.Result) string {
 // keyed is a key a tap on a key hint presses: it reaches the layers under
 // the overlays, as a key does.
 func (m Model) keyed(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	m = m.onChoice()
 	return m.press(m.under(k), k)
 }
 

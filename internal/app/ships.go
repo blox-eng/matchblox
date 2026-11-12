@@ -121,6 +121,9 @@ func (m Model) selectedShip() (proto.Ship, bool) {
 // first: stuck, waiting for you, in flight, merged, then live (as the
 // service, the CLI and the stoker find them).
 func (m Model) shipsOf(s sample.Session) []proto.Ship {
+	if sh, ok := m.shipOfCard(s); ok {
+		return []proto.Ship{sh}
+	}
 	// A pane and a session id can repeat on another host.
 	return slices.DeleteFunc(proto.ShipsOf(m.ships(), s.Pane, s.SessionID), func(sh proto.Ship) bool { return sh.Host != s.Host })
 }
@@ -350,6 +353,18 @@ func (m Model) shipAge(sh proto.Ship) string {
 // gh that cannot read, a repository whose poll failed.
 // With two or more hosts each line starts with its host.
 func (m Model) shipsStrip(w int) []string {
+	var out []string
+	for _, say := range m.shipsBehind() {
+		for _, l := range wrapPlain(say, w-2) {
+			out = append(out, " "+m.st.warn.Render(l))
+		}
+	}
+	return out
+}
+
+// shipsBehind are the reasons the ships may be behind, one each, in plain
+// words; with two or more hosts each starts with its host.
+func (m Model) shipsBehind() []string {
 	var says []string
 	for _, h := range m.shipReports() {
 		on, r := "", h.r
@@ -366,13 +381,7 @@ func (m Model) shipsStrip(w int) []string {
 			says = append(says, on+"not read: "+e)
 		}
 	}
-	var out []string
-	for _, say := range says {
-		for _, l := range wrapPlain(say, w-2) {
-			out = append(out, " "+m.st.warn.Render(l))
-		}
-	}
-	return out
+	return says
 }
 
 // shipsPanel is the Ships tab: each ship's number, title and age, then its
@@ -507,11 +516,7 @@ func (m Model) toDriver() Model {
 		return m
 	}
 	if sh.Session.ID == "" && sh.Session.Pane == "" {
-		if sh.Where == "" {
-			m.flash = "no session owns #" + strconv.Itoa(sh.Number) + ", and no checkout of " + sh.Repo + " is here"
-			return m
-		}
-		return m.openNewIn(sh.Host, sh.Where, "Take over #"+strconv.Itoa(sh.Number)+" ("+sh.URL+"): read where it stands, then carry it to live.")
+		return m.takeShip(sh)
 	}
 	s, ok := m.driver(sh)
 	if !ok {
@@ -521,6 +526,17 @@ func (m Model) toDriver() Model {
 	m.setTab(tabSessions)
 	m.doorPick, m.recPick, m.ghostPick, m.chose, m.selPID, m.selHost = "", "", 0, true, s.PID, s.Host
 	return m
+}
+
+// takeShip opens New session in the checkout of a ship no session owns,
+// its first message to take the ship over (#80); with no checkout of it
+// here it says so.
+func (m Model) takeShip(sh proto.Ship) Model {
+	if sh.Where == "" {
+		m.flash = "no session owns #" + strconv.Itoa(sh.Number) + ", and no checkout of " + sh.Repo + " is here"
+		return m
+	}
+	return m.openNewIn(sh.Host, sh.Where, "Take over #"+strconv.Itoa(sh.Number)+" ("+sh.URL+"): read where it stands, then carry it to live.")
 }
 
 // shipInto is a on a stuck ship: the pane of its session, to answer it.

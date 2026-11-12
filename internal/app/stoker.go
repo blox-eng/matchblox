@@ -182,6 +182,9 @@ func (m Model) asksTakeOver(k tea.KeyPressMsg) bool {
 	if m.standIn { // the demo's world, which has no stoker
 		return false
 	}
+	if s, ok := m.boardSelected(); ok && m.boardShown() && isShipCard(s) {
+		return false // a ship no session owns: a new session takes nothing from the stoker
+	}
 	s, onSession := m.selectedSession()
 	if _, head := m.headRow(s); onSession && head && bkey.Matches(k, m.keys.main.Open, m.keys.main.Into, m.keys.main.Jump) {
 		return false // the stoker's own pane or its sheet: no session is taken from it
