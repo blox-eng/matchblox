@@ -262,8 +262,8 @@ func TestEnterInTheDemoOpensTheStandIn(t *testing.T) {
 		t.Fatal("enter opened no stand-in")
 	}
 	lines := strings.Split(ansi.Strip(m.render()), "\n")
-	if !strings.HasPrefix(strings.TrimSpace(lines[0]), "‹ Sessions") {
-		t.Errorf("row 0 is %q, want the way back to Sessions", lines[0])
+	if !strings.HasPrefix(strings.TrimSpace(lines[0]), "‹ board") {
+		t.Errorf("row 0 is %q, want the way back to the board", lines[0])
 	}
 	if last := lines[len(lines)-1]; !strings.Contains(last, standInHint) {
 		t.Errorf("the key line is %q, want %q", last, standInHint)
@@ -277,7 +277,7 @@ func TestTheStandInIsFullScreenOnADesk(t *testing.T) {
 		t.Fatal("132 columns are no desk: the test shows nothing")
 	}
 	lines := strings.Split(ansi.Strip(m.render()), "\n")
-	if !m.standIn || !strings.HasPrefix(strings.TrimSpace(lines[0]), "‹ Sessions") {
+	if !m.standIn || !strings.HasPrefix(strings.TrimSpace(lines[0]), "‹ board") {
 		t.Fatalf("stand-in %v, row 0 is %q", m.standIn, lines[0])
 	}
 	if sc := m.draw(132); !sc.placeFull || sc.viewW != 132 {

@@ -310,14 +310,14 @@ func (m Model) screenLines(w, h int) []string {
 }
 
 // viewScreen is the live view on an upright phone: the whole screen under a
-// title row that goes back to Sessions and says a toast, over the key
+// title row that goes back to the board and says a toast, over the key
 // line, with a step that asks to confirm on top. Its title, hairline and
 // key line always show: a screen under 4 rows has no room for the agent's
 // lines.
 func (m Model) viewScreen(w int) drawn {
 	st := m.st
 	s, _ := m.selectedSession()
-	title := " " + st.accent.Render("‹ Sessions") + st.muted.Render(" · ")
+	title := " " + st.accent.Render("‹ board") + st.muted.Render(" · ")
 	head := m.viewTitle(s)
 	if room := w - lipgloss.Width(title); lipgloss.Width(head) > room {
 		head = ansi.Truncate(s.Name, max(room, 1), "…") // the state, then the name, give way
@@ -340,7 +340,7 @@ func (m Model) viewScreen(w int) drawn {
 }
 
 // homeKey is the app's home gesture (panes.HomeKey, which the console may
-// not import): it leaves the live view, and the stand-in, for Sessions.
+// not import): it leaves the live view, and the stand-in, for the board.
 const homeKey = "\x1b_matchblox\x1b\\"
 
 // menuWait tells if a wait is answered on a menu: a digit or Enter there
@@ -429,7 +429,7 @@ func (m Model) openStandIn(pane string) Model {
 	return m
 }
 
-// leaveStandIn goes back from the stand-in to Sessions, on the session that
+// leaveStandIn goes back from the stand-in to the board, on the session that
 // waits next, as a jump back from a real pane does.
 func (m Model) leaveStandIn() Model {
 	s, _ := m.selectedSession()
