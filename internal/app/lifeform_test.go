@@ -2262,6 +2262,25 @@ func TestASecondEscDuringTheRecordWaitSendsNothing(t *testing.T) {
 	}
 }
 
+// TestEscOnTheBoardDuringTheRecordWaitSwitchesNow: the board takes esc
+// for its search and chain, but a record wait takes it first.
+func TestEscOnTheBoardDuringTheRecordWaitSwitchesNow(t *testing.T) {
+	next, f := recordWait(t, 80)
+	m := next.(Model)
+	m.board, m.filter, m.boardChain = true, "api", "login"
+	if !m.boardShown() {
+		t.Fatal("the board is not shown")
+	}
+	next, cmd := key(m, "esc")
+	drain(cmd) // the board's belt comes in the same batch
+	if acts := f.acts(); len(acts) != 2 || acts[1] != (proto.Act{RecID: proto.SwitchNowPrefix + "%1"}) {
+		t.Fatalf("sent %+v", acts)
+	}
+	if nm := next.(Model); nm.filter != "api" || nm.boardChain != "login" {
+		t.Fatalf("esc changed the board: search %q chain %q", nm.filter, nm.boardChain)
+	}
+}
+
 // clocked is m on a clock the test moves.
 func clocked(m Model) (Model, *time.Time) {
 	// From m's own time, never back: a menu drawn on the wall clock stays

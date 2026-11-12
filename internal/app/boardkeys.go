@@ -382,6 +382,10 @@ func (m Model) boardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 		return next, cmd, true
 	}
 	bk, mk := m.keys.board, m.keys.main
+	if bkey.Matches(k, mk.Back) && m.waiting() { // the record wait takes esc before the board
+		cmd := m.switchNow()
+		return m, cmd, true
+	}
 	s, ok := m.boardSelected()
 	line, above := m.aboveChosen()
 	m.flash = ""
