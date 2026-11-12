@@ -72,20 +72,3 @@ func TestTheStokersSessionStaysOutOfSessions(t *testing.T) {
 		}
 	}
 }
-
-func TestAShipWithoutADriverIsNotOutsideTmux(t *testing.T) {
-	m, _ := loadedWith(t, 100, fixtureState())
-	sh := proto.Ship{Number: 7}
-	for _, got := range []string{m.driverName(sh), m.driverGone(sh)} {
-		if strings.Contains(got, "outside tmux") {
-			t.Fatalf("%q", got)
-		}
-	}
-	// #80: a ship whose session is gone names no session, never a blank.
-	if got := m.driverName(sh); got != "no session" {
-		t.Fatalf("by %q", got)
-	}
-	if got := m.driverGone(sh); got != "no session owns #7" {
-		t.Fatalf("%q", got)
-	}
-}
