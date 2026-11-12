@@ -324,9 +324,7 @@ func (m Model) chainsIn(label string, ss []sample.Session) string {
 			continue
 		}
 		shown, all := m.chainIx.shown[k], max(m.chainIx.present[k], m.chainIx.shown[k])
-		if m.sessGroup == groupNeed {
-			out += fmt.Sprintf(" · chain of %d", all)
-		}
+		out += fmt.Sprintf(" · chain of %d", all)
 		if all > shown {
 			out += fmt.Sprintf(" · %d hidden", all-shown)
 		}
@@ -349,9 +347,6 @@ func (m Model) fuseWidth(w int) int {
 // fuseRuns tells if the fuse of row i runs up to the row above and down to
 // the row below: by need and by repo, between chain-mates in one group.
 func (m Model) fuseRuns(i int, ss []sample.Session) (up, down bool) {
-	if m.sessGroup != groupNeed && m.sessGroup != groupRepo {
-		return false, false
-	}
 	k, ok := m.chainKeyOf(ss[i])
 	if !ok {
 		return false, false
@@ -475,9 +470,6 @@ func (m Model) sparkStyle() lipgloss.Style { return lipgloss.NewStyle().Foregrou
 // mayChain tells if a row offers a chain: by need or in one list, a
 // session with a repo mate on its host that it is not chained with.
 func (m Model) mayChain(s sample.Session) bool {
-	if m.sessGroup != groupNeed && m.sessGroup != groupNone {
-		return false
-	}
 	return m.repoMates[keyOf(s)]
 }
 

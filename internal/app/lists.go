@@ -128,24 +128,12 @@ type rowKey struct {
 
 func keyOf(s sample.Session) rowKey { return rowKey{s.Host, s.PID} }
 
-// sortBy is a column and its direction: rev is the other way from the
-// column's own (busy first, longest wait first, A to Z).
+// sortBy is Panes' column and its direction: rev is the other way from
+// the column's own (A to Z).
 type sortBy struct {
 	col int
 	rev bool
 }
-
-const (
-	sortState = iota
-	sortIdle
-	sortContext
-	sortCPU
-	sortName
-	sortPlace
-	sortAccount
-)
-
-var sessCols = []string{"state", "newest", "context", "cpu", "name", "tmux", "account"}
 
 const (
 	paneByPlace = iota
@@ -200,13 +188,11 @@ func (m *Model) refresh() {
 	rank := m.groupRanks(sessions, need)
 	slices.SortStableFunc(sessions, func(a, b sample.Session) int {
 		if c := rank[keyOf(a)] - rank[keyOf(b)]; c != 0 {
-			return c // the groups keep their order; the sort works inside them
+			return c // the groups keep their order; the order works inside them
 		}
-		return m.sessSort.compare(a, b, need, since, m.hostOrder)
+		return needOrder(a, b, need, since, m.hostOrder)
 	})
-	if m.sessGroup == groupNeed || m.sessGroup == groupRepo {
-		sessions = m.together(sessions)
-	}
+	sessions = m.together(sessions)
 	m.snap.Sessions = sessions
 	m.indexChainRows()
 	m.repoMates = m.sharingRepos(sessions)
@@ -217,9 +203,8 @@ func (m *Model) refresh() {
 	}
 }
 
-// groupRanks is the place of each session's group in the list: by need
-// the groups' own order, by state the needier first, by repo the names
-// A to Z.
+// groupRanks is the place of each session's group in the list: the
+// groups' own order.
 func (m Model) groupRanks(sessions []sample.Session, need map[rowKey]int) map[rowKey]int {
 	first := map[string]int{}
 	for _, s := range sessions {
@@ -229,7 +214,7 @@ func (m Model) groupRanks(sessions []sample.Session, need map[rowKey]int) map[ro
 		}
 	}
 	labels := slices.SortedFunc(maps.Keys(first), func(a, b string) int {
-		if c := first[a] - first[b]; c != 0 && m.sessGroup != groupRepo {
+		if c := first[a] - first[b]; c != 0 {
 			return c
 		}
 		return strings.Compare(a, b)
@@ -241,48 +226,25 @@ func (m Model) groupRanks(sessions []sample.Session, need map[rowKey]int) map[ro
 	return rank
 }
 
-// compare orders two sessions inside a group. group holds the need of
-// each session, since when it waits; a tie goes by host, in hostOrder.
-func (s sortBy) compare(a, b sample.Session, group map[rowKey]int, since map[rowKey]time.Time, hostOrder func(string) int) int {
-	if s.rev {
-		a, b = b, a
-	}
-	desc := func(x, y float64) int { return -cmpF(x, y) }
-	c := 0
-	switch s.col {
-	case sortState:
-		// Who waits for the person, the oldest wait first; who works; then
-		// the quiet ones, the newest first: the oldest sink to the bottom.
-		ga := group[keyOf(a)]
-		c = ga - group[keyOf(b)]
-		switch {
-		case c != 0:
-		case ga == groupWaits:
-			c = since[keyOf(a)].Compare(since[keyOf(b)])
-		case ga == groupQuiet, ga == groupHeld:
-			c = cmpF(float64(a.Idle), float64(b.Idle))
-		}
-	case sortIdle:
+// needOrder orders two sessions inside a group: who waits for the person,
+// the oldest wait first; who works; then the quiet ones, the newest first:
+// the oldest sink to the bottom. group holds the need of each session,
+// since when it waits; a tie goes by name, then by host in hostOrder.
+func needOrder(a, b sample.Session, group map[rowKey]int, since map[rowKey]time.Time, hostOrder func(string) int) int {
+	ga := group[keyOf(a)]
+	c := ga - group[keyOf(b)]
+	switch {
+	case c != 0:
+	case ga == groupWaits:
+		c = since[keyOf(a)].Compare(since[keyOf(b)])
+	case ga == groupQuiet, ga == groupHeld:
 		c = cmpF(float64(a.Idle), float64(b.Idle))
-	case sortContext:
-		c = desc(a.ContextPct, b.ContextPct)
-	case sortCPU:
-		c = desc(a.CPU, b.CPU)
-	case sortName:
-		c = strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
-	case sortPlace:
-		c = strings.Compare(a.Target, b.Target)
-	case sortAccount:
-		c = strings.Compare(accountCell(a), accountCell(b))
 	}
 	if c == 0 {
 		c = strings.Compare(a.Name, b.Name)
 	}
 	if c == 0 {
 		c = hostOrder(a.Host) - hostOrder(b.Host)
-		if s.rev {
-			c = -c // home first both ways
-		}
 	}
 	if c == 0 {
 		c = a.PID - b.PID
@@ -317,29 +279,16 @@ func (s sortBy) panes(a, b paneRow) int {
 	return c
 }
 
-// sortable is the sort of the open tab, when it has one.
-func (m *Model) sortable() (*sortBy, []string) {
-	switch m.tab {
-	case tabSessions:
-		return &m.sessSort, sessCols
-	case tabPanes:
-		return &m.paneSort, paneCols
-	}
-	return nil, nil
-}
-
-// sortBy sets the column, or turns it around when it is already the one.
+// sortOn sorts Panes by the column, or turns it around when it is already
+// the one.
 func (m *Model) sortOn(col int) {
-	s, names := m.sortable()
-	if s == nil {
-		return
-	}
+	s := &m.paneSort
 	if s.col == col {
 		s.rev = !s.rev
 	} else {
 		*s = sortBy{col: col}
 	}
-	m.flash = "sort: " + names[s.col]
+	m.flash = "sort: " + paneCols[s.col]
 	if s.rev {
 		m.flash += ", reversed"
 	}

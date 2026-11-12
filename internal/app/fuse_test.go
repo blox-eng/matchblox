@@ -128,37 +128,7 @@ func TestFuseJoinsAChainUnderNeed(t *testing.T) {
 // TestFuseStubsInStatus: status splits the chain; each match keeps a stub,
 // and selecting one lights its chain-mates'.
 func TestFuseStubsInStatus(t *testing.T) {
-	m := fuseModel(t, 160, fuseState(t, mockupChain), "hearth-api")
-	m.sessGroup = groupStatus
-	m.refresh()
-	got := listLines(m, 100, 20)
-	sameLines(t, got, []string{
-		" ASKS · 1",
-		" ╿─╴ kindle-web",
-		" BUSY · 2",
-		" ✦   flint-auth",
-		"▌✦━╸ hearth-api",
-		" IDLE · 2",
-		" ╿─╴ ember-billing",
-		" │   spark-docs",
-	})
-	var b body
-	m.sessionRows(&b, 100)
-	lit := m.st.accent.Render("─╴")
-	for _, name := range []string{"kindle-web", "ember-billing"} {
-		if l := lineWith(b.lines, name); !strings.Contains(l, lit) {
-			t.Errorf("%s's stub is not lit: %q", name, l)
-		}
-	}
-	if l := lineWith(b.lines, "hearth-api"); !strings.Contains(l, m.st.accent.Render("━╸")) {
-		t.Errorf("the selected row's own stub: %q", l)
-	}
-	choose(&m, pidOf(m, "flint-auth"))
-	b = body{}
-	m.sessionRows(&b, 100)
-	if l := lineWith(b.lines, "kindle-web"); strings.Contains(l, lit) || !strings.Contains(l, m.st.faint.Render("─╴")) {
-		t.Errorf("a stub of a chain not selected is faint: %q", l)
-	}
+	t.Skip("dropped (Task 12 step 4): the groupings go (intended change: the columns are the grouping)")
 }
 
 func pidOf(m Model, name string) int {
@@ -173,66 +143,14 @@ func pidOf(m Model, name string) int {
 // TestFuseIsWholeInRepo: a chain in one repo has its matches side by side
 // there, whatever the sort puts between them.
 func TestFuseIsWholeInRepo(t *testing.T) {
-	st := fuseState(t, []string{"kindle-web", "ember-billing"})
-	for i := range st.Sessions {
-		st.Sessions[i].Cwd = "/home/user/src/hearth"
-		if st.Sessions[i].Name == "flint-auth" {
-			st.Sessions[i].Cwd = "/home/user/src/flint"
-		}
-	}
-	m := fuseModel(t, 160, st, "")
-	m.sessGroup = groupRepo
-	m.refresh()
-	got := listLines(m, 100, 20)
-	sameLines(t, got[:1], []string{" flint · 1"})
-	sameLines(t, got[2:], []string{
-		" hearth · 4",
-		"▌╿─╮ kindle-web",
-		" ╿─╯ ember-billing",
-		" ✦   hearth-api",
-		" │   spark-docs",
-	})
+	t.Skip("dropped (Task 12 step 4): the groupings go (intended change: the columns are the grouping)")
 }
 
 // TestFuseSplitsAcrossRepos: by repo, a chain across two repos keeps each
 // match in its own repo's group, with a stub that lights with the selected
 // chain-mate, on a desk and on a phone.
 func TestFuseSplitsAcrossRepos(t *testing.T) {
-	st := fuseState(t, []string{"kindle-web", "flint-auth"})
-	for i := range st.Sessions {
-		st.Sessions[i].Cwd = "/home/user/src/hearth"
-		if st.Sessions[i].Name == "flint-auth" {
-			st.Sessions[i].Cwd = "/home/user/src/flint"
-		}
-	}
-	for _, c := range []struct {
-		w          int
-		stub, mine string // flint-auth's stub, and the picked row's own
-	}{{160, "─╴", "━╸"}, {44, "╴", "╸"}} {
-		m := fuseModel(t, c.w, st, "kindle-web")
-		m.sessGroup = groupRepo
-		m.refresh()
-		list := min(c.w, 100)
-		if c.w == 160 {
-			sameLines(t, listLines(m, list, 20), []string{
-				" flint · 1",
-				" ✦─╴ flint-auth",
-				" hearth · 4",
-				"▌╿━╸ kindle-web",
-				" ✦   hearth-api",
-				" ╿   ember-billing",
-				" │   spark-docs",
-			})
-		}
-		var b body
-		m.sessionRows(&b, list)
-		if l := lineWith(b.lines, "flint-auth"); !strings.Contains(l, m.st.accent.Render(c.stub)) {
-			t.Errorf("%d columns: flint-auth's stub is not lit with kindle-web picked: %q", c.w, l)
-		}
-		if l := ansi.Strip(lineWith(b.lines, "kindle-web")); !strings.Contains(l, c.mine) {
-			t.Errorf("%d columns: kindle-web has no stub: %q", c.w, l)
-		}
-	}
+	t.Skip("dropped (Task 12 step 4): the groupings go (intended change: the columns are the grouping)")
 }
 
 // TestTwoChainsNeverTouch: two chains next to each other each open with ╮
@@ -276,23 +194,6 @@ func TestAFilterSaysHowManyAreHidden(t *testing.T) {
 // the group of the chain's first match in view.
 func TestAFilterSaysHowManyAreHiddenInEveryGrouping(t *testing.T) {
 	t.Skip("dropped (Task 12 step 1): the groupings go (step 4)")
-	st := fuseState(t, mockupChain)
-	for i := range st.Sessions {
-		st.Sessions[i].Cwd = "/home/user/src/hearth"
-		if st.Sessions[i].Name != "hearth-api" {
-			st.Sessions[i].Tab = "chainlook"
-		}
-	}
-	for g, want := range map[int][]string{
-		groupStatus: {" ASKS · 1 · 1 hidden", "▌╿━╸ kindle-web", " BUSY · 1", " ✦   flint-auth", " IDLE · 2", " ╿─╴ ember-billing"},
-		groupRepo:   {" hearth · 4 · 1 hidden", "▌╿─╮ kindle-web", " ╿─╯ ember-billing"},
-	} {
-		m := fuseModel(t, 160, st, "")
-		m.sessGroup = g
-		m.filter = "chainlook"
-		m.refresh()
-		sameLines(t, listLines(m, 100, 20), want)
-	}
 }
 
 // TestFuseOnAPhone: one column; the opened block carries the fuse and its
@@ -404,33 +305,18 @@ func TestSameRepoHint(t *testing.T) {
 			t.Errorf("chained in another repo, %s lacks the hint for its repo mate: %q", name, l)
 		}
 	}
-	st.Chains = nil
-	m = fuseModel(t, 160, st, "")
-	m.sessGroup = groupStatus
-	m.refresh()
-	b = body{}
-	m.sessionRows(&b, 100)
-	if l := ansi.Strip(lineWith(b.lines, "kindle-web")); strings.Contains(l, hint) {
-		t.Errorf("status has no hint: %q", l)
-	}
 }
 
 // TestNoChainNoFuse: with no chain in the view the list is today's, byte
-// for byte, in every grouping, wide and on a phone.
+// for byte, wide and on a phone.
 func TestNoChainNoFuse(t *testing.T) {
 	rows := func(width, list int, cv *state.ChainsView) []string {
-		var out []string
-		for g := groupNeed; g <= groupNone; g++ {
-			st := fuseState(t)
-			st.Chains = cv
-			m := fuseModel(t, width, st, "hearth-api")
-			m.sessGroup = g
-			m.refresh()
-			var b body
-			m.sessionRows(&b, list)
-			out = append(out, b.lines...)
-		}
-		return out
+		st := fuseState(t)
+		st.Chains = cv
+		m := fuseModel(t, width, st, "hearth-api")
+		var b body
+		m.sessionRows(&b, list)
+		return b.lines
 	}
 	got := append(rows(160, 100, nil), rows(44, 44, nil)...)
 	path := filepath.Join("..", "..", "testdata", "screens", "nofuse.ansi")

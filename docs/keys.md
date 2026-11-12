@@ -26,9 +26,8 @@ the bottom shows the keys of the open tab. A tap on a key presses it.
 | `v` | Folds the detail pane and the dock, so the list takes the screen. The selected row opens in place. The rows the list leaves free show usage, then the machine, each whole at its fewest lines; the list is never cut for them. `v` again shows them. A phone and a desk each keep their own choice. A phone starts with list only. |
 | `c` | Opens the STOKER tab: your words and the gos, the plan with each step's outcome, the goes that wait for you, the triggers, the standing rules, today's compacts with their RESUME lines. Opening it marks the steps seen. |
 | `/` | Searches the open tab. |
-| `s` | Sorts Sessions and Panes by the next column. |
-| `S` | Turns the sort around. |
-| `g` | Groups Sessions by need, by state, by repo, or not at all. The sort works inside each group. |
+| `s` | Sorts Panes by the next column. |
+| `g` | Narrows the board to the chain of the chosen card. |
 | `z` | Parks the selected session (Sessions): nothing types into it, and the stoker leaves it alone. `z` again lets it go. |
 | `Space` | Marks a worktree that is safe to remove (Git). |
 | `X` | Marks every worktree that is safe to remove (Git). |

@@ -377,8 +377,6 @@ type Model struct {
 	homeAll     lists  // what the home host sent
 	filter      string // the search of the open tab
 	searching   bool   // the search line takes the keys
-	sessSort    sortBy
-	sessGroup   int // what Sessions is grouped by: groupNeed .. groupNone
 	holds       []proto.Hold
 	chains      *state.ChainsView
 	chainIx     chainIndex      // worked out in refresh
@@ -1462,19 +1460,8 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, func() tea.Msg { return layerMsg{} }
 		}
 	case bkey.Matches(k, mk.Sort):
-		if s, _ := m.sortable(); s != nil {
-			_, names := m.sortable()
-			m.sortOn((s.col + 1) % len(names))
-		}
-	case bkey.Matches(k, mk.SortBack):
-		if s, _ := m.sortable(); s != nil {
-			m.sortOn(s.col)
-		}
-	case bkey.Matches(k, mk.Group):
-		if m.tab == tabSessions {
-			m.sessGroup = (m.sessGroup + 1) % len(groupModes)
-			m.flash = "group: " + groupModes[m.sessGroup]
-			m.refresh()
+		if m.tab == tabPanes {
+			m.sortOn((m.paneSort.col + 1) % len(paneCols))
 		}
 	case bkey.Matches(k, mk.Park):
 		if s, ok := m.selectedSession(); ok {

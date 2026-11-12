@@ -302,7 +302,7 @@ func (m Model) cardTrack(s sample.Session, w int, o cardOpts) (string, []span) {
 		return fit(left(cut, withCtx), w), nil
 	}
 	sw := lipgloss.Width(stub)
-	return spread(left(cut, withCtx), stub+" ", w), []span{{w - 1 - sw, w - 1, hintFor(m.keys.main.Group, "").press}}
+	return spread(left(cut, withCtx), stub+" ", w), []span{{w - 1 - sw, w - 1, hintFor(m.keys.board.Chain, "").press}}
 }
 
 // chainLabel is the name a chain goes by: its own, else its first match's.

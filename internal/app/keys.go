@@ -62,7 +62,7 @@ var shadowsMain = map[string]map[string]bool{
 	"confirm":  {"y": true, "enter": true, "up": true, "k": true, "down": true, "j": true},
 	"scan":     {"y": true, "n": true, "p": true, "esc": true},
 	"ask":      {"esc": true, "enter": true, "c": true},
-	"board":    {"right": true, "c": true, "s": true, "g": true, "p": true},
+	"board":    {"right": true, "c": true, "s": true, "p": true},
 }
 
 func defaultKeys() keymaps {
@@ -77,8 +77,6 @@ func defaultKeys() keymaps {
 			Search:     bind(ks("/"), "/", "find"),
 			Back:       bind(ks("esc"), "esc", "clear"),
 			Sort:       bind(ks("s"), "s", "sort"),
-			SortBack:   bind(ks("S", "shift+s"), "S", "sort back"),
-			Group:      bind(ks("g"), "g", "group by"),
 			Park:       bind(ks("z"), "z", "park"),
 			Mark:       bind(ks("space", " "), "␣", "mark"),
 			Exited:     bind(ks("e"), "e", "show exited"),
@@ -233,15 +231,15 @@ func (k globalKeys) bindings() []bkey.Binding { return []bkey.Binding{k.Quit} }
 
 // mainKeys are the console's own keys: the tabs, with nothing on top.
 type mainKeys struct {
-	Stoker, Quit, NextTab, PrevTab, Tabs, Search, Back, Sort, SortBack bkey.Binding
-	Group, Park, Mark, Exited, MarkSafe, QuitAgent, Up, Down, Open     bkey.Binding
-	Second, New, Switch, Grant, Dismiss, Fold, Ships                   bkey.Binding
-	Stoke, StokeChain, Night, Order, Rename, Into, Jump                bkey.Binding
+	Stoker, Quit, NextTab, PrevTab, Tabs, Search, Back, Sort bkey.Binding
+	Park, Mark, Exited, MarkSafe, QuitAgent, Up, Down, Open  bkey.Binding
+	Second, New, Switch, Grant, Dismiss, Fold, Ships         bkey.Binding
+	Stoke, StokeChain, Night, Order, Rename, Into, Jump      bkey.Binding
 }
 
 func (k mainKeys) bindings() []bkey.Binding {
-	return []bkey.Binding{k.Stoker, k.Quit, k.NextTab, k.PrevTab, k.Tabs, k.Search, k.Back, k.Sort, k.SortBack,
-		k.Group, k.Park, k.Mark, k.Exited, k.MarkSafe, k.QuitAgent, k.Up, k.Down, k.Open,
+	return []bkey.Binding{k.Stoker, k.Quit, k.NextTab, k.PrevTab, k.Tabs, k.Search, k.Back, k.Sort,
+		k.Park, k.Mark, k.Exited, k.MarkSafe, k.QuitAgent, k.Up, k.Down, k.Open,
 		k.Second, k.New, k.Switch, k.Grant, k.Dismiss, k.Fold, k.Ships,
 		k.Stoke, k.StokeChain, k.Night, k.Order, k.Rename, k.Into, k.Jump}
 }

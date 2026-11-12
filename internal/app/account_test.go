@@ -163,22 +163,6 @@ func TestAProviderWithoutAMarkKeepsItsName(t *testing.T) {
 // login sit together.
 func TestSessionsSortByAccount(t *testing.T) {
 	t.Skip("dropped (Task 12 step 1): sort goes (step 4, intended change)")
-	m := demoSessions(t, 160)
-	m.sessGroup = groupNone
-	m.sortOn(sortAccount)
-	m.refresh()
-	var got []string
-	for _, s := range m.snap.Sessions {
-		got = append(got, accountCell(s))
-	}
-	for i := 1; i < len(got); i++ {
-		if got[i] < got[i-1] {
-			t.Fatalf("not sorted by account: %q", got)
-		}
-	}
-	if !strings.Contains(ansi.Strip(m.render()), "SESSIONS · by account ▾") {
-		t.Fatal("the list does not name the sort")
-	}
 }
 
 // TestNoCredentialReachesTheScreen: the demo's auth files hold tokens next

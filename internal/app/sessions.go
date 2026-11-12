@@ -32,18 +32,8 @@ const (
 
 var groupNames = [...]string{"WAITS FOR YOU", "WORKING", "QUIET", "HELD"}
 
-// What the list is grouped by: g cycles them.
-const (
-	groupNeed = iota
-	groupStatus
-	groupRepo
-	groupNone
-)
-
 // holdByYou is the hold of the builder; the stoker's are the others.
 const holdByYou = "you"
-
-var groupModes = [...]string{"need", "status", "repo", "none"}
 
 // waitOf is the queue row of a session that waits: by its pane, or by its
 // id outside tmux, where no pane tells sessions apart.
@@ -100,25 +90,8 @@ func (m Model) holdOf(s sample.Session) (proto.Hold, bool) {
 	return proto.Hold{}, false
 }
 
-// groupLabel is the group a session is listed under: its need, its state
-// word, its repo; a held one is HELD whatever else is true of it.
-func (m Model) groupLabel(s sample.Session) string {
-	switch m.sessGroup {
-	case groupStatus:
-		if _, held := m.holdOf(s); held {
-			return groupNames[groupHeld]
-		}
-		return strings.ToUpper(m.wordOf(s))
-	case groupRepo:
-		if _, ok := m.headRow(s); ok {
-			return m.chainIx.repo[m.chainIx.of[keyOf(s)]]
-		}
-		return m.repoOf(s)
-	case groupNone:
-		return ""
-	}
-	return groupNames[m.needGroup(s)]
-}
+// groupLabel is the group a session is listed under: its need.
+func (m Model) groupLabel(s sample.Session) string { return groupNames[m.needGroup(s)] }
 
 // repoOf is the repository a session works in: the checkout its directory
 // is in, else the directory's own name.
@@ -372,24 +345,16 @@ func (m Model) sessionRows(b *body, w int) {
 	}
 	count := map[string]int{}
 	for _, s := range ss {
-		if g := m.groupLabel(s); m.sessGroup != groupNeed || g == groupNames[m.groupOf(s)] {
+		if g := m.groupLabel(s); g == groupNames[m.groupOf(s)] {
 			count[g]++ // a chain-mate brought in from another group is not this group's own
 		}
-	}
-	by := ""
-	if m.sessSort != (sortBy{}) {
-		by = "  ·  by " + sessCols[m.sessSort.col] + " " + m.sessSort.arrow()
-	}
-	if m.sessGroup == groupNone {
-		b.add(-1, st.label.Render(fit(fmt.Sprintf(" %d SESSIONS · by %s %s", len(ss), sessCols[m.sessSort.col], m.sessSort.arrow()), w)))
 	}
 	group := ""
 	t := m.sessTracks(w) // the columns are every row's: worked out once
 	for i, s := range ss {
-		if g := m.groupLabel(s); m.sessGroup != groupNone && (g != group || i == 0) {
+		if g := m.groupLabel(s); g != group || i == 0 {
 			group = g
-			b.add(-1, st.label.Render(fit(fmt.Sprintf(" %s · %d", g, count[g])+m.chainsIn(g, ss)+by, w)))
-			by = ""
+			b.add(-1, st.label.Render(fit(fmt.Sprintf(" %s · %d", g, count[g])+m.chainsIn(g, ss), w)))
 		}
 		fuse, up, down := "", false, false
 		if t.fuse > 0 {

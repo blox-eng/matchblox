@@ -445,10 +445,7 @@ back to Sessions, on the next agent that waits.
   it. See [Agents](agents.md#accounts).
 - An agent can draw a progress bar in its last reply:
   `Progress [████░░░░] <step>`. The console shows it as `▰▰▰▱▱ 75%`.
-- `s` sorts by another column (`newest` is the one with the least idle
-  time first) inside each group; `S` turns it around.
-- `g` groups the list by need (the groups above), by state word, by repo or
-  not at all (one flat list). `z` parks the selected session, or lets it go.
+- `z` parks the selected session, or lets it go.
 - Agents that exited and wait for their parent are one faint line under the
   sessions. `e` lists them with the command that clears them.
 
