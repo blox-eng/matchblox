@@ -1152,3 +1152,25 @@ func TestADigitThatCannotActSaysWhy(t *testing.T) {
 		}
 	}
 }
+
+// TestATapOnPocketChoosesTheCard: Pocket is worked by touch alone, so a
+// tap on a card chooses it there as on a desk.
+func TestATapOnPocketChoosesTheCard(t *testing.T) {
+	for _, w := range []int{40, 132} {
+		m := boardShot(t, boardFixture(t), w, 34, pocketOnly)
+		if !m.beltOnly() {
+			t.Fatalf("%d: the fixture is not on Pocket", w)
+		}
+		lines := strings.Split(plainFrame(m), "\n")
+		y := slices.IndexFunc(lines, func(l string) bool { return strings.Contains(l, " flint-auth ") })
+		if y < 0 || chosenName(t, m) == "flint-auth" {
+			t.Fatalf("%d: flint-auth is not an unchosen card on the frame:\n%s", w, strings.Join(lines, "\n"))
+		}
+		x := strings.Index(lines[y], "flint-auth")
+		next, cmd := tap(m, len([]rune(lines[y][:x]))+1, y)
+		drain(cmd)
+		if got := chosenName(t, next.(Model)); got != "flint-auth" {
+			t.Errorf("%d: a tap on flint-auth chose %s", w, got)
+		}
+	}
+}

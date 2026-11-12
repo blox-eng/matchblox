@@ -110,7 +110,7 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 			return m.keyed(keyPress(s.press)) // as u
 		}
 		return m, nil
-	case m.boardShown() && ms.Y >= sc.bodyTop && ms.Y < sc.keysAt-1:
+	case m.boardShown() && ms.Y >= sc.bodyTop && ms.Y < sc.bodyTop+len(sc.rows): // on Pocket no key line closes the body
 		if m.tapWaits(ms.X, ms.Y-sc.bodyTop) {
 			m.tapLater = &point{ms.X, ms.Y} // a drag may start here: the tap waits for the release
 			return m.holdPress(m, nil, ms)
