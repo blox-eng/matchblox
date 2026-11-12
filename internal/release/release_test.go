@@ -33,6 +33,17 @@ func TestIsRelease(t *testing.T) {
 	}
 }
 
+func TestIsPre(t *testing.T) {
+	for tag, want := range map[string]bool{
+		"v0.43.0-rc.1": true, "v0.42.1-0.20261112093000-f15b80c1abcd": true, "v1.0.0-beta": true,
+		"v0.42.0": false, "v10.20.30": false, "dev": false, "": false, "v0.1": false,
+	} {
+		if got := IsPre(tag); got != want {
+			t.Errorf("IsPre(%q) = %v, want %v", tag, got, want)
+		}
+	}
+}
+
 func TestIsPseudo(t *testing.T) {
 	for tag, want := range map[string]bool{
 		"v0.42.1-0.20261112093000-f15b80c1abcd":      true,

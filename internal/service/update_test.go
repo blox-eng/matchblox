@@ -600,11 +600,11 @@ func TestHostUpdateActSaysWhenUpToDate(t *testing.T) {
 func TestHostUpdateActNeedsATypedY(t *testing.T) {
 	s, src, _ := updateTest(t, "v0.42.0", config.UpdateOff, filepath.Join(t.TempDir(), "update.json"))
 	s.loadUpdate()
-	if r := hostUpdateAct(s, ""); r.Err == "" {
+	if r := hostUpdateAct(s, ""); r.Err != "needs a typed y" {
 		t.Fatalf("without a typed y: %+v", r)
 	}
 	cli := s.act(context.Background(), proto.Act{RecID: proto.HostUpdateAct, Confirm: "y"})
-	if cli.Err == "" {
+	if cli.Err != "only you do this, at the console" {
 		t.Fatalf("from no console: %+v", cli)
 	}
 	if n, got := src.count(), src.installed(); n != 0 || len(got) != 0 {

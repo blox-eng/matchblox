@@ -156,7 +156,7 @@ func (s *Service) newer() (tag string, ok bool) {
 	s.mu.Lock()
 	v := s.cur.Update
 	s.mu.Unlock()
-	if v == nil || !release.IsRelease(v.Latest) || strings.Contains(v.Latest, "-") {
+	if v == nil || !release.IsRelease(v.Latest) || release.IsPre(v.Latest) {
 		return "", false
 	}
 	if release.Compare(v.Current, v.Latest) >= 0 {
@@ -250,7 +250,7 @@ func (s *Service) hostUpdate(a proto.Act) proto.Result {
 	if err != nil {
 		return proto.Result{Err: err.Error()}
 	}
-	if strings.Contains(tag, "-") || release.Compare(s.Binary, tag) >= 0 {
+	if release.IsPre(tag) || release.Compare(s.Binary, tag) >= 0 {
 		return proto.Result{Skipped: []string{tag + " is the latest release"}}
 	}
 	return s.installUpdate(tag)

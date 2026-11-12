@@ -90,6 +90,9 @@ func (s *Service) orderable(u *stokerUnit, a proto.Act) error {
 	if a.RecID == proto.HostUpdateAct {
 		return errors.New("the stoker does not update matchblox: u on Hosts is yours")
 	}
+	if strings.HasPrefix(a.RecID, "door:") {
+		return errors.New("the stoker opens no door: the doors are yours")
+	}
 	if a.RecID == RecoverID {
 		return errors.New("the stoker does not reopen sessions: matchblox recover is yours")
 	}

@@ -184,6 +184,14 @@ func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 			return proto.Result{Err: scanRefused}
 		}
 	}
+	if personsOwn(a.RecID) && !agent { // likewise for a door and an update: they change the person's files
+		if _, ok := s.sessionAt(a.From); ok {
+			if a.RecID == proto.HostUpdateAct {
+				return proto.Result{Err: noHostUpdate}
+			}
+			return proto.Result{Err: noDoor}
+		}
+	}
 	if a.RecID == NewSessionID && a.Console && picksAccount(a.Text) { // likewise for an account
 		if _, ok := s.sessionAt(a.From); ok {
 			return proto.Result{Err: accountRefused}
@@ -209,15 +217,27 @@ func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 }
 
 // yours are the acts only the person at a console sends: the launch
-// sheet's and the stoker tab's verbs, z, and the update of a host. The
-// stoker's own plan and steps come from its CLI.
+// sheet's and the stoker tab's verbs, z, the doors and the update of a
+// host. The stoker's own plan and steps come from its CLI.
 func yours(recID string) bool {
 	if verb, ok := strings.CutPrefix(recID, "stoker:"); ok {
 		// matchblox stoker quit, new and order are the builder's in a shell too.
 		return verb != "plan" && verb != "step" && verb != "when" && verb != "quit" && verb != "new" && verb != "order-chain"
 	}
-	return strings.HasPrefix(recID, "park:") || recID == proto.HostUpdateAct
+	return strings.HasPrefix(recID, "park:") || personsOwn(recID)
 }
+
+// personsOwn are the acts that change the person's own files or binary: a
+// door, and the update of a host. No agent's pane sends them, whatever
+// its hello says.
+func personsOwn(recID string) bool {
+	return strings.HasPrefix(recID, "door:") || recID == proto.HostUpdateAct
+}
+
+const (
+	noDoor       = "only you open or close a door, at a console"
+	noHostUpdate = "only you update matchblox, at a console"
+)
 
 func (s *Service) dispatch(ctx context.Context, a proto.Act) proto.Result {
 	switch a.RecID {

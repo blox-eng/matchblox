@@ -359,16 +359,39 @@ func (m Model) hostNote(host string) string {
 	return note
 }
 
-// releaseNote names host's release and this console's when both are
-// releases and differ, and the person did not dismiss that pair. The
-// console's own service has its own notice.
+// releaseNote names host's release, which side of this console's it is
+// on, and the console's: "v0.38.1, behind this console (v0.42.0)".
 func (m Model) releaseNote(host string) string {
+	switch m.releaseSide(host) {
+	case behind:
+		return m.helloOf(host).Binary + ", behind this console (" + m.opt.Binary + ")"
+	case ahead:
+		return m.helloOf(host).Binary + ", ahead of this console (" + m.opt.Binary + ")"
+	}
+	return ""
+}
+
+// The sides a host's release is on, against this console's.
+const (
+	behind = "behind"
+	ahead  = "ahead"
+)
+
+// releaseSide is behind or ahead when host and this console are on two
+// releases and the person did not dismiss that pair; else "". The
+// console's own service has its own notice.
+func (m Model) releaseSide(host string) string {
 	h, c := m.helloOf(host).Binary, m.opt.Binary
-	if host == m.opt.Host && m.opt.Local || !releases(h, c) || release.Compare(h, c) == 0 ||
-		slices.Contains(m.recPrefs.Releases, releasePair(host, h, c)) {
+	if host == m.opt.Host && m.opt.Local || !releases(h, c) || slices.Contains(m.recPrefs.Releases, releasePair(host, h, c)) {
 		return ""
 	}
-	return h + " · this console " + c
+	switch release.Compare(h, c) {
+	case -1:
+		return behind
+	case 1:
+		return ahead
+	}
+	return ""
 }
 
 func releasePair(host, hostRelease, consoleRelease string) string {
@@ -378,13 +401,16 @@ func releasePair(host, hostRelease, consoleRelease string) string {
 // releaseFix is what a host row with a release note offers: the update act
 // of an older host that knows it, else the words of the fix.
 func (m Model) releaseFix(host string) (act bool, fix string) {
-	switch newer := release.Compare(m.helloOf(host).Binary, m.opt.Binary) > 0; {
+	newer, v := m.releaseSide(host) == ahead, m.updateOf(host)
+	switch {
 	case newer && m.opt.Local:
 		return false, "this console is older: update it in SETUP"
 	case newer:
 		return false, "this console is older: run matchblox update"
-	case m.updateOf(host) == nil: // a service older than the act
+	case v == nil: // a service older than the act
 		return false, "on " + m.nameOf(host) + ": matchblox update"
+	case v.Managed != "": // a package manager's install: its own command
+		return false, "on " + m.nameOf(host) + ": " + v.Managed
 	}
 	return true, ""
 }
@@ -450,7 +476,7 @@ func (m Model) closeRelease(host string) (Model, string) {
 // own to update it: the command does.
 func (m Model) behindNotice() string {
 	v := m.updateView
-	if m.opt.Local || v == nil || !releases(m.opt.Binary, v.Latest) || strings.Contains(v.Latest, "-") ||
+	if m.opt.Local || v == nil || !releases(m.opt.Binary, v.Latest) || release.IsPre(v.Latest) ||
 		release.Compare(m.opt.Binary, v.Latest) >= 0 {
 		return ""
 	}

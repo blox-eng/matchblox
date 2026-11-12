@@ -12,6 +12,11 @@ var tag = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$`)
 // publish.yml accept it.
 func IsRelease(s string) bool { return tag.MatchString(s) }
 
+// IsPre reports whether s is a release tag with a pre-release suffix
+// (v0.43.0-rc.1, or a pseudo-version): one never offered or installed by
+// itself.
+func IsPre(s string) bool { return IsRelease(s) && strings.Contains(s, "-") }
+
 var pseudo = regexp.MustCompile(`[-.][0-9]{14}-[0-9a-f]{12}$`)
 
 // IsPseudo reports whether s is a version Go made up for a build from a

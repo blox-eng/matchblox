@@ -481,7 +481,7 @@ func viewOn(current string) *state.UpdateView {
 
 func TestHostRowNamesBothReleases(t *testing.T) {
 	r := releaseRig(t, "v0.42.0", "v0.38.1", viewOn("v0.38.1"))
-	if row := r.rowOf("ws-1"); !strings.HasSuffix(strings.TrimSpace(row), "1 sessions · v0.38.1 · this console v0.42.0") {
+	if row := r.rowOf("ws-1"); !strings.HasSuffix(strings.TrimSpace(row), "1 sessions · v0.38.1, behind this console (v0.42.0)") {
 		t.Fatalf("the ws-1 row: %q", row)
 	}
 	if row := r.rowOf("this machine"); strings.Contains(row, "this console") {
@@ -557,7 +557,7 @@ func TestOldHostGetsTheCommandNotTheKey(t *testing.T) {
 func TestNewerHostPointsAtThisMachine(t *testing.T) {
 	r := releaseRig(t, "v0.42.0", "v0.43.0", viewOn("v0.43.0"))
 	out := r.view()
-	if !strings.Contains(r.rowOf("ws-1"), "v0.43.0 · this console v0.42.0") || !strings.Contains(out, "this console is older: update it in SETUP") {
+	if !strings.Contains(r.rowOf("ws-1"), "v0.43.0, ahead of this console (v0.42.0)") || !strings.Contains(out, "this console is older: update it in SETUP") {
 		t.Fatalf("a newer host:\n%s", out)
 	}
 	r.key(t, "u")
@@ -609,12 +609,12 @@ func TestClosedReleaseNoteStaysClosedForThatPair(t *testing.T) {
 	}
 	ws := r.conns["ws-1"]
 	r.update(peerMsg{host: "ws-1", conn: ws, msg: helloMsg(proto.Hello{Version: proto.Version, Binary: "v0.39.0"})})
-	if row := r.rowOf("ws-1"); !strings.Contains(row, "v0.39.0 · this console v0.42.0") {
+	if row := r.rowOf("ws-1"); !strings.Contains(row, "v0.39.0, behind this console (v0.42.0)") {
 		t.Fatalf("a new release of the host: %q", row)
 	}
 	r.update(peerMsg{host: "ws-1", conn: ws, msg: helloMsg(proto.Hello{Version: proto.Version, Binary: "v0.38.1"})})
 	r.sh.cur.opt.Binary = "v0.43.0"
-	if row := r.rowOf("ws-1"); !strings.Contains(row, "v0.38.1 · this console v0.43.0") {
+	if row := r.rowOf("ws-1"); !strings.Contains(row, "v0.38.1, behind this console (v0.43.0)") {
 		t.Fatalf("a new release of the console: %q", row)
 	}
 }
@@ -639,5 +639,32 @@ func TestAnUpdatedHostShowsItsNewRelease(t *testing.T) {
 	}
 	if out := r.view(); strings.Contains(out, "lost") || strings.Contains(out, "stale") || strings.Contains(out, "update ws-1") {
 		t.Fatalf("Hosts after the update:\n%s", out)
+	}
+}
+
+// A Homebrew host is updated by Homebrew: its row gives the command, and
+// u does nothing.
+func TestHomebrewHostGetsItsOwnCommand(t *testing.T) {
+	view := viewOn("v0.38.1")
+	view.Managed = "brew upgrade matchblox"
+	r := releaseRig(t, "v0.42.0", "v0.38.1", view)
+	if out := r.view(); !strings.Contains(out, "on ws-1: brew upgrade matchblox") || strings.Contains(out, "u update") {
+		t.Fatalf("a Homebrew host's fix:\n%s", out)
+	}
+	r.key(t, "u")
+	if r.sh.pending != nil || len(r.conns["ws-1"].acts()) != 0 {
+		t.Fatalf("u on a Homebrew host: pending %+v, acts %+v", r.sh.pending, r.conns["ws-1"].acts())
+	}
+}
+
+// On a phone the row has no room for its note: one word marks it.
+func TestNarrowHostRowSaysWhichSide(t *testing.T) {
+	for rel, want := range map[string]string{"v0.38.1": "ws-1 behind", "v0.43.0": "ws-1 ahead", "v0.42.0": "ws-1"} {
+		r := releaseRig(t, "v0.42.0", rel, viewOn(rel))
+		r.update(tea.WindowSizeMsg{Width: 44, Height: 31})
+		r.key(t, "up") // the mark is on the row, selected or not
+		if row := strings.TrimSpace(r.rowOf("ws-1")); !strings.HasSuffix(row, want) || rel == "v0.42.0" && strings.HasSuffix(row, "d") {
+			t.Errorf("ws-1 on %s: the row %q, want it to end %q", rel, row, want)
+		}
 	}
 }

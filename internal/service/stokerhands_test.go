@@ -329,3 +329,17 @@ func TestStokerCannotUpdateAHost(t *testing.T) {
 		t.Fatalf("Latest calls %d, installs %v", n, got)
 	}
 }
+
+// A session's pane that says hello as a console is no person at one.
+func TestASessionCannotUpdateAHost(t *testing.T) {
+	s, _ := handsTest(t)
+	src := &fakeUpdates{latest: "v0.43.0"}
+	s.Binary, s.UpdateMode, s.Update = "v0.42.0", config.UpdateOffer, src
+	a := proto.Act{RecID: proto.HostUpdateAct, Confirm: "y", Console: true, From: "%1", FromPlaced: true}
+	if res := s.act(t.Context(), a); res.Err != "only you update matchblox, at a console" {
+		t.Fatalf("a session's update: %+v", res)
+	}
+	if n, got := src.count(), src.installed(); n != 0 || len(got) != 0 {
+		t.Fatalf("Latest calls %d, installs %v", n, got)
+	}
+}

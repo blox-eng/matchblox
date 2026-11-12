@@ -358,6 +358,7 @@ type row struct {
 	tailscale   bool   // Tailscale SSH answers host: the gate does not hold there
 	tick        string // ● ticked, ○ hidden; "" a row with no tick
 	release     string // the host's release and the console's, when they differ
+	side        string // behind or ahead, with a release
 }
 
 func (s Shell) firstRun() bool { return s.opt.FirstRun && len(s.hosts) == 0 }
@@ -403,7 +404,7 @@ func (s Shell) tick(r *row) {
 	case r.tailscale: // its warning stays
 	case s.live():
 		r.note = cmp.Or(s.cur.hostNote(r.host), r.note)
-		r.release = s.cur.releaseNote(r.host)
+		r.release, r.side = s.cur.releaseNote(r.host), s.cur.releaseSide(r.host)
 	}
 }
 
@@ -685,6 +686,9 @@ func (s Shell) render() string {
 		line := " " + st.accent.Render(mark) + tick + st.text.Render(label) + st.muted.Render(r.note)
 		if layout(w, s.height) == Narrow {
 			line = " " + st.accent.Render(mark) + tick + st.text.Render(r.label)
+			if r.side != "" { // the row has no room for its note: one word says it
+				line += " " + st.warn.Render(r.side)
+			}
 		}
 		b.addRow(i, i == s.sel, w, st, line)
 	}
