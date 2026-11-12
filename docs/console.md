@@ -11,8 +11,9 @@ you`; a tap selects the first) and [the stoker](stoker.md): `stoker off`,
 ran instead.
 
 The tabs are `sessions`, `ships`, `machine`, `git`, `history`, `panes` and `stoker`,
-opened by the digits `1-7`. The open one is uppercase. A narrow screen shortens the
-tabs far from the open one to their digit. `machine !` has a problem.
+opened by `Tab` and `Shift+Tab`, or a tap on the name. The digits answer a
+card's question. The open one is uppercase. A narrow screen shortens the
+tabs far from the open one to their number. `machine !` has a problem.
 
 The key line at the bottom shows the keys of the open tab, and how old the
 sample is. A tap on a key presses it. It is also where you confirm a step
@@ -452,7 +453,7 @@ back to Sessions, on the next agent that waits.
 ## 2 Ships
 
 The pull requests your sessions drive, each on its track from open to
-live. `p` opens it. See [Ships](ships.md).
+live. See [Ships](ships.md).
 
 ## 3 Machine
 

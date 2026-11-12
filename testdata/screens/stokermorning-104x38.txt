@@ -35,4 +35,4 @@
 
   THE RUN · ready 4/5
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
- ↑↓ move  ⏎ command  1 sessions  p ships  f stoker  / find  q quit                       sampled 0s ago
+ ↑↓ move  ⏎ command  f stoker  / find  q quit                                            sampled 0s ago

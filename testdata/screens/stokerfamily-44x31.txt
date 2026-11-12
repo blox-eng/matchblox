@@ -28,4 +28,4 @@
    its chain joined hearth-api
   THE RUN · ready 2/2
 ────────────────────────────────────────────
- ⏎ open the stoker  Q quit it  1 sessions
+ ⏎ open the stoker  Q quit it  f stoker

@@ -281,10 +281,10 @@ func TestNoCtrlKeysNeeded(t *testing.T) {
 				t.Fatalf("width %d tab %d: footer names a Ctrl key: %q", w, tab, footer)
 			}
 		}
-		for tab := range tabNames {
-			next, _ := key(m, string(rune('1'+tab)))
-			if next.(Model).tab != tab {
-				t.Fatalf("digit %d does not open its tab", tab+1)
+		for tab := range tabNames { // Tab, not a digit: a digit answers a card
+			m.tab = tab
+			if next, _ := key(m, "tab"); next.(Model).tab != (tab+1)%len(tabNames) {
+				t.Fatalf("tab on tab %d does not open the next one", tab)
 			}
 		}
 		m.tab = tabSessions

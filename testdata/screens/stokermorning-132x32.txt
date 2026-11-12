@@ -29,4 +29,4 @@
   ✓ 21:20 spark-docs opened #4570: compacted, sent /review
 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ↑↓ move  ⏎ command  1 sessions  p ships  f stoker  / find  q quit                                                   sampled 0s ago
+ ↑↓ move  ⏎ command  f stoker  / find  q quit                                                                        sampled 0s ago

@@ -137,7 +137,7 @@ More in [The console](https://docs.matchblox.com/console/).
 | `x` | The destructive action. It runs only after a typed `y`. |
 | `N` | Starts a new session: where, the agent, its account and a first message (none on a new account). |
 | `A` | Switches the selected session to another agent in the same pane. |
-| `1-7` | Opens a tab: Sessions, Ships, Machine, Git, History, Panes, Stoker. |
+| `Tab` | Opens the next tab. |
 | `u` | Cycles the dock of a narrow screen: usage, the machine, the stoker. |
 | `/` | Searches the open tab. |
 | `f`, `n` | The stoker on or off; a night that ends in the morning. |

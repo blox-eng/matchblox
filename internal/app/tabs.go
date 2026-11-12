@@ -38,14 +38,6 @@ func hintFor(b bkey.Binding, label string) hint {
 	return hint{b.Help().Key, label, b.Keys()[0]}
 }
 
-// tabHint is the hint of tab i: its own digit, as the tabs binding has it.
-func tabHint(b bkey.Binding, i int, label string) hint {
-	if !b.Enabled() || i >= len(b.Keys()) {
-		return hint{}
-	}
-	return hint{b.Keys()[i], label, b.Keys()[i]}
-}
-
 // noTap is the hint without the key a tap presses: a key the line shows
 // but does not take.
 func noTap(h hint) hint {
@@ -165,7 +157,7 @@ var views = [...]tabView{
 			if sh, ok := m.selectedShip(); ok {
 				return append(m.shipKeys(sh), hintFor(mk.Stoke, "stoker"))
 			}
-			return []hint{tabHint(mk.Tabs, tabSessions, "sessions"), hintFor(mk.Stoke, "stoker")}
+			return []hint{hintFor(mk.Stoke, "stoker")}
 		},
 		count:     func(m Model) int { return len(m.ships()) },
 		index:     func(m Model) int { return min(m.shipSel, max(len(m.ships())-1, 0)) },
@@ -184,7 +176,7 @@ var views = [...]tabView{
 				return []hint{hintFor(mk.Second, "remove"), stoke}
 			}
 			if len(m.snap.Orphans) == 0 {
-				return []hint{hintFor(mk.Ships, "ships"), stoke}
+				return []hint{stoke}
 			}
 			return []hint{hintFor(mk.Open, "jump"), hintFor(mk.Second, "kill"), stoke}
 		},
@@ -246,7 +238,7 @@ var views = [...]tabView{
 	},
 	tabHistory: {
 		keys: func(m Model) []hint {
-			return []hint{hintFor(m.keys.main.Ships, "ships"), hintFor(m.keys.main.Stoke, "stoker")}
+			return []hint{hintFor(m.keys.main.Stoke, "stoker")}
 		},
 		body: Model.historyBody,
 	},

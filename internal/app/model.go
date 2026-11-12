@@ -1572,8 +1572,6 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.tab == tabSessions {
 			m.foldRecs()
 		}
-	case bkey.Matches(k, mk.Ships):
-		m.setTab(tabShips)
 	case bkey.Matches(k, mk.Stoke):
 		return m.stokerKey(false)
 	case bkey.Matches(k, mk.Night):
@@ -1589,8 +1587,6 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.tab == tabGit {
 			return m.rescan()
 		}
-	case bkey.Matches(k, mk.Tabs):
-		m.setTab(int(k.String()[0] - '1'))
 	}
 	return m, nil
 }

@@ -35,4 +35,4 @@
 
 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
- ↑↓ move  ⏎ open the stoker  Q quit it  1 sessions  p ships  f stoker  / find  q quit    sampled 0s ago
+ ↑↓ move  ⏎ open the stoker  Q quit it  f stoker  / find  q quit                         sampled 0s ago

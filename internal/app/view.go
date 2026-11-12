@@ -727,7 +727,7 @@ func (m Model) keyLine(w int) (string, []span) {
 // each one is reached another way (a tab tap, the dock, the docs).
 var spareKeys = func() []string {
 	k := defaultKeys().main
-	return []string{k.Switch.Help().Key, k.Up.Help().Key, k.Quit.Help().Key, k.Search.Help().Key, k.Ships.Help().Key, k.Park.Help().Key, k.Stoke.Help().Key}
+	return []string{k.Switch.Help().Key, k.Up.Help().Key, k.Quit.Help().Key, k.Search.Help().Key, k.Park.Help().Key, k.Stoke.Help().Key}
 }()
 
 // fitHints drops spare keys until the hints fit in room columns. The

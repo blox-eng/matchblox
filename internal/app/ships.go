@@ -170,13 +170,9 @@ func (m Model) moreW(short bool) int {
 const shipsShown = 3
 
 // shipsLeft is the line under the ships listed when there are more:
-// "+2 more · p ships", or "+2 more" when no key opens Ships.
+// "+2 more".
 func (m Model) shipsLeft(n int) string {
-	left := m.st.muted.Render("+" + strconv.Itoa(n) + " more")
-	if h := hintFor(m.keys.main.Ships, "ships"); h.key != "" {
-		left += m.st.muted.Render(" · ") + m.st.accent.Render(h.key) + m.st.muted.Render(" "+h.label)
-	}
-	return left
+	return m.st.muted.Render("+" + strconv.Itoa(n) + " more")
 }
 
 // driver is the session that drives a ship, on the ship's own host.

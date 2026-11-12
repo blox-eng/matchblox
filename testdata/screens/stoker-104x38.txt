@@ -35,4 +35,4 @@
 
 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
- ↑↓ move  y give the go  ⏎ command  1 sessions  p ships  n stop night  / find  q quit    sampled 0s ago
+ ↑↓ move  y give the go  ⏎ command  n stop night  / find  q quit                         sampled 0s ago

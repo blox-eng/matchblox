@@ -256,7 +256,6 @@ func (m Model) stokerKeys() []hint {
 			keys = append(keys, hintFor(mk.Open, "command"))
 		}
 	}
-	keys = append(keys, tabHint(mk.Tabs, tabSessions, "sessions"), hintFor(mk.Ships, ""))
 	if m.stoker != nil && m.stoker.On && !m.stoker.Until.IsZero() {
 		return append(keys, hintFor(mk.Night, ""))
 	}

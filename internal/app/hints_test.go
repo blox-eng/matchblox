@@ -17,7 +17,6 @@ func TestHintForUsesBinding(t *testing.T) {
 		{"mark", hintFor(k.main.Mark, ""), hint{"␣", "mark", "space"}},
 		{"upper", hintFor(k.main.New, ""), hint{"N", "new", "N"}},
 		{"esc without a word", hintFor(k.form.Close, ""), hint{"esc", "", "esc"}},
-		{"tab digit", tabHint(k.main.Tabs, 0, "sessions"), hint{"1", "sessions", "1"}},
 	} {
 		if c.got != c.want {
 			t.Errorf("%s: got %+v, want %+v", c.name, c.got, c.want)
@@ -44,14 +43,6 @@ func TestFootForSkipsDisabled(t *testing.T) {
 
 func TestDisabledTabHintAndZeroSkips(t *testing.T) {
 	k := defaultKeys()
-	off := k.main.Tabs
-	off.SetEnabled(false)
-	if h := tabHint(off, 0, "sessions"); h != (hint{}) {
-		t.Errorf("a disabled tabs binding gave %+v", h)
-	}
-	if h := tabHint(k.main.Tabs, len(k.main.Tabs.Keys()), "x"); h != (hint{}) {
-		t.Errorf("a tab past the last gave %+v", h)
-	}
 	m := Model{keys: k}
 	m.st = newStyles(true)
 	with, _ := m.hintRow([]hint{hintFor(k.main.Open, "")}, 2)

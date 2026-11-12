@@ -292,7 +292,7 @@ func (m Model) sessionKeys() []hint {
 		return []hint{hintFor(mk.Open, "do"), hintFor(mk.Second, "other"), hintFor(mk.Stoke, "stoker")}
 	}
 	if _, ok := m.selectedGhost(); ok {
-		return []hint{hintFor(mk.Open, "new session"), hintFor(mk.Ships, ""), hintFor(mk.Stoke, "stoker")}
+		return []hint{hintFor(mk.Open, "new session"), hintFor(mk.Stoke, "stoker")}
 	}
 	if b, ok := m.selectedBlocked(); ok {
 		if _, fix := m.blockedWords(b); b.fixable() {
@@ -303,7 +303,7 @@ func (m Model) sessionKeys() []hint {
 	var keys []hint
 	s, ok := m.selectedSession()
 	if u, head := m.headRow(s); ok && head {
-		return []hint{hintFor(mk.Into, m.headVerb(s, u)), hintFor(mk.New, ""), hintFor(mk.Ships, ""), hintFor(mk.Stoke, "stoker")}
+		return []hint{hintFor(mk.Into, m.headVerb(s, u)), hintFor(mk.New, ""), hintFor(mk.Stoke, "stoker")}
 	}
 	if ok && (s.Pane != "" || s.Host != m.opt.Host) {
 		keys = []hint{hintFor(mk.Open, "go in")}
@@ -319,7 +319,7 @@ func (m Model) sessionKeys() []hint {
 	if k, chained := m.chainKeyOf(s); ok && chained && !m.headed(k) {
 		keys = append(keys, hintFor(mk.StokeChain, ""))
 	}
-	return append(keys, hintFor(mk.New, ""), hintFor(mk.Ships, ""), hintFor(mk.Stoke, "stoker"))
+	return append(keys, hintFor(mk.New, ""), hintFor(mk.Stoke, "stoker"))
 }
 
 // sessionRows are the sessions under a faint label for each group, or
