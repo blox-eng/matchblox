@@ -579,3 +579,25 @@ func TestAChainStokerWhoseRunIsOffIsNoCard(t *testing.T) {
 		}
 	}
 }
+
+// TestAFlipIntoAnOpenRoomLandsOnTheNeed: ⌥s into the room that is open
+// already lands as into a new one: on the card of the match that asks,
+// though the cursor was on another card; the draft stays.
+func TestAFlipIntoAnOpenRoomLandsOnTheNeed(t *testing.T) {
+	m, _ := hearthOpen(t, 160, headState(t, runningPlan(), true))
+	if chosenName(t, m) != "kindle-web" {
+		t.Fatalf("the room opens on %s, want kindle-web", chosenName(t, m))
+	}
+	hearth := matchOf(t, m, "hearth-api")
+	m.boardChooseCard(m.columnOf(hearth), hearth)
+	r := *m.room
+	r.draft = "half an order"
+	m.room = &r
+	m = m.flipFrom("/dev/pts/2", hearth.Pane)
+	if got := chosenName(t, m); got != "kindle-web" || m.room.at != -1 {
+		t.Errorf("a flip into the open room chose %s (room row %d), want kindle-web", got, m.room.at)
+	}
+	if m.room.draft != "half an order" {
+		t.Errorf("the flip lost the draft: %q", m.room.draft)
+	}
+}
