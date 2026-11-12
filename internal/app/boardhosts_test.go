@@ -55,13 +55,13 @@ func TestACardNamesAnotherHost(t *testing.T) {
 	if l := lineWith(f, "hearth-api"); strings.Contains(l, "@") {
 		t.Errorf("two hosts: the home card is %q, want no host word", l)
 	}
-	// A Medium screen's 20 cells of a column leave a long name under
+	// A name too long for the column beside its host word is cut before
+	// it. A Medium screen's 20 cells of a column leave the name under
 	// nameKeep: there the host word goes.
-	const long = "matchblox-feat-198-every-host-review"
-	for _, w := range []int{60, 132, 200} {
-		m, _ := twoHostBoard(t, w, long)
+	for _, w := range []int{60, 104, 160} {
+		m, _ := twoHostBoard(t, w, "ember-billing")
 		f := frameOf(m)
-		if l := lineWith(f, "✦ matchblo"); !strings.Contains(l, "@ws-1") && !strings.Contains(l, "@ws…") {
+		if l := lineWith(f, "✦ ember-b"); !strings.Contains(l, "@ws-1") && !strings.Contains(l, "@ws…") {
 			t.Errorf("%d columns: the long name's card lost its host word: %q\n%s", w, l, strings.Join(f, "\n"))
 		}
 	}

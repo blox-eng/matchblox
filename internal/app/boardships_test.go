@@ -130,12 +130,12 @@ func TestAShipWithNoSessionIsACard(t *testing.T) {
 			URL: "https://github.com/hearth/hearth-api/pull/4570"})
 		st.Ships = &r
 		st.Git = &proto.GitReport{Repos: []gitscan.Repo{{Path: "/w/hearth-api", Worktrees: []gitscan.Worktree{
-			{Path: "/w/hearth-api", Branch: "main"}, {Path: "/w/hearth-api-cache", Branch: "cache-store"}}}}}
+			{Path: "/w/hearth-api", Branch: "main"}, {Path: "/w/wick-mobile", Branch: "wick-mobile"}}}}}
 		return boardShot(t, st, 120, 40, nil)
 	}
-	m := orphan("/w/hearth-api-cache")
+	m := orphan("/w/wick-mobile")
 	b, _ := m.boardDrawOf()
-	i := slices.IndexFunc(b.idx[colShip], func(s sample.Session) bool { return s.Name == "cache-store" })
+	i := slices.IndexFunc(b.idx[colShip], func(s sample.Session) bool { return s.Name == "wick-mobile" })
 	if i < 0 {
 		t.Fatalf("no card of the ship nobody owns in SHIPPING:\n%s", plainFrame(m))
 	}
@@ -143,7 +143,8 @@ func TestAShipWithNoSessionIsACard(t *testing.T) {
 	if word, says := m.cardSays(card); strings.Contains(says, "outside tmux") || word == "" || says == "" {
 		t.Errorf("the ship's card says %q %q", word, says)
 	}
-	if got := trackOf(t, m, "cache-store"); !strings.HasPrefix(got, "#4570 ") {
+	lines, _ := m.boardCard(card, 60, cardOpts{}) // wick-mobile is a session too: the ship's card by itself
+	if got := strings.TrimSpace(plainLines(lines)[2]); !strings.HasPrefix(got, "#4570 ") {
 		t.Errorf("the ship's card's track is %q", got)
 	}
 	m.boardChooseCard(colShip, card)
@@ -158,7 +159,7 @@ func TestAShipWithNoSessionIsACard(t *testing.T) {
 	switch {
 	case nm.form == nil:
 		t.Fatalf("⏎ did not open New session: %q", nm.flash)
-	case nm.whereSelectedIn(nm.form).path() != "/w/hearth-api-cache":
+	case nm.whereSelectedIn(nm.form).path() != "/w/wick-mobile":
 		t.Errorf("New session opens in %q", nm.whereSelectedIn(nm.form).path())
 	case nm.form.at != fieldAgent || !nm.form.picked:
 		t.Errorf("the folder is not picked with the cursor on agent: at %v", nm.form.at)
