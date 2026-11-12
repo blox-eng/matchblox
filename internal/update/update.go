@@ -68,6 +68,10 @@ func New(current string, out io.Writer) (*Updater, error) {
 // service, a gh that hangs would hold the install for ever.
 const runLimit = 2 * time.Minute
 
+// errTooLong marks a command that was stopped at its limit: it did not
+// answer, which is not the same as answering no.
+var errTooLong = errors.New("took too long")
+
 // runWithin runs argv and returns its combined output. A command that takes
 // longer than limit is stopped.
 func runWithin(limit time.Duration) func(argv []string) (string, error) {
@@ -78,7 +82,7 @@ func runWithin(limit time.Duration) func(argv []string) (string, error) {
 		cmd.WaitDelay = 5 * time.Second                       // a child that keeps the output open does not hold Wait
 		out, err := cmd.CombinedOutput()
 		if ctx.Err() != nil {
-			return string(out), fmt.Errorf("%s took too long: stopped after %s", strings.Join(argv, " "), limit)
+			return string(out), fmt.Errorf("%s %w: stopped after %s", strings.Join(argv, " "), errTooLong, limit)
 		}
 		return string(out), err
 	}
@@ -209,7 +213,7 @@ func (u *Updater) Install(tag string) (proof Proof, err error) {
 	}
 	says, runErr := u.Run([]string{tmp, "version"})
 	says = strings.TrimSpace(says)
-	if runErr != nil && says == "" {
+	if runErr != nil && says != tag {
 		err = fmt.Errorf("could not run the %s binary to check its version: %w. Nothing was changed", tag, runErr)
 		return Proof{}, err
 	}
@@ -227,28 +231,38 @@ func (u *Updater) Install(tag string) (proof Proof, err error) {
 // Only a logged-in gh can check it; without one, it says so and goes on,
 // as install.sh does.
 func (u *Updater) provenance(path, asset string) (bool, error) {
-	switch {
-	case !u.has("gh"):
+	if !u.has("gh") {
 		u.say("  provenance not checked (install the 'gh' CLI to verify the build attestation)")
-	case !u.ok("gh", "attestation", "verify", "--help"):
-		u.say("  provenance not checked (gh is too old to verify attestations: update gh, then run this again)")
-	case !u.ok("gh", "auth", "status"):
-		u.say("  provenance not checked (gh is not logged in: gh auth login, then run this again)")
-	default:
-		if log, err := u.Run([]string{"gh", "attestation", "verify", path, "--repo", releaseRepo,
-			"--signer-workflow", releaseRepo + "/.github/workflows/publish.yml"}); err != nil {
-			return false, fmt.Errorf("provenance verification FAILED for %s.\n%s\nThe checksum matched, but the build attestation did not verify against %s.\nNothing was changed. Please report this: https://github.com/%s/security",
-				asset, strings.TrimSpace(log), releaseRepo, releaseRepo)
-		}
-		u.say("  provenance ok (built by CI in %s)", releaseRepo)
-		return true, nil
+		return false, nil
 	}
-	return false, nil
+	for _, c := range []struct {
+		argv []string
+		why  string
+	}{
+		{[]string{"gh", "attestation", "verify", "--help"}, "gh is too old to verify attestations: update gh, then run this again"},
+		{[]string{"gh", "auth", "status"}, "gh is not logged in: gh auth login, then run this again"},
+	} {
+		if _, err := u.Run(c.argv); errors.Is(err, errTooLong) {
+			return false, fmt.Errorf("%w. Nothing was changed", err)
+		} else if err != nil {
+			u.say("  provenance not checked (%s)", c.why)
+			return false, nil
+		}
+	}
+	log, err := u.Run([]string{"gh", "attestation", "verify", path, "--repo", releaseRepo,
+		"--signer-workflow", releaseRepo + "/.github/workflows/publish.yml"})
+	if errors.Is(err, errTooLong) {
+		return false, fmt.Errorf("%w. Nothing was changed", err)
+	}
+	if err != nil {
+		return false, fmt.Errorf("provenance verification FAILED for %s.\n%s\nThe checksum matched, but the build attestation did not verify against %s.\nNothing was changed. Please report this: https://github.com/%s/security",
+			asset, strings.TrimSpace(log), releaseRepo, releaseRepo)
+	}
+	u.say("  provenance ok (built by CI in %s)", releaseRepo)
+	return true, nil
 }
 
 func (u *Updater) has(name string) bool { _, err := u.LookPath(name); return err == nil }
-
-func (u *Updater) ok(argv ...string) bool { _, err := u.Run(argv); return err == nil }
 
 // fetch GETs url into w, or returns the body when w is nil (a small file).
 func (u *Updater) fetch(url string, w io.Writer) ([]byte, error) {

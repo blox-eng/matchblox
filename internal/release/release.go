@@ -54,23 +54,27 @@ func Compare(a, b string) int {
 func comparePre(a, b string) int {
 	as, bs := strings.Split(a, "."), strings.Split(b, ".")
 	for i := 0; i < len(as) && i < len(bs); i++ {
-		x, xerr := strconv.Atoi(as[i])
-		y, yerr := strconv.Atoi(bs[i])
-		switch {
-		case xerr == nil && yerr == nil:
-			if x != y {
-				return cmp.Compare(x, y)
+		x, y := as[i], bs[i]
+		switch nx, ny := numeric(x), numeric(y); {
+		case x == y:
+		case nx && ny: // no leading zeros in a release tag: the longer number is the larger
+			if len(x) != len(y) {
+				return cmp.Compare(len(x), len(y))
 			}
-		case xerr == nil:
+			return strings.Compare(x, y)
+		case nx:
 			return -1
-		case yerr == nil:
+		case ny:
 			return 1
-		case as[i] != bs[i]:
-			return strings.Compare(as[i], bs[i])
+		default:
+			return strings.Compare(x, y)
 		}
 	}
 	return cmp.Compare(len(as), len(bs))
 }
+
+// numeric says whether a pre-release identifier is a number: digits only.
+func numeric(s string) bool { return s != "" && strings.Trim(s, "0123456789") == "" }
 
 func parts(tag string) (n [3]int, pre string) {
 	core, pre, _ := strings.Cut(strings.TrimPrefix(tag, "v"), "-")

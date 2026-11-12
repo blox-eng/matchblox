@@ -970,8 +970,10 @@ func TestUpdateCheckDoorCountsFromTheFirstFailure(t *testing.T) {
 	s, src, clk := updateTest(t, "v0.42.0", config.UpdateOffer, filepath.Join(t.TempDir(), "update.json"))
 	tick := startUpdates(t, s)
 	tick()
-	clk.add(7 * 24 * time.Hour)
+	// The source fails before the clock moves: a pass of the loop that is
+	// still running must not see a good look a week on.
 	src.set("", errors.New(offline))
+	clk.add(7 * 24 * time.Hour)
 	first := clk.now()
 	tick()
 	for range 2 {

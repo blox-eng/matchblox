@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -94,6 +95,9 @@ func (w *releaseWorld) run(argv []string) (string, error) {
 	line := strings.Join(argv, " ")
 	w.calls = append(w.calls, line)
 	fail := errors.New("exit status 1")
+	if argv[0] == "gh" && w.gh == "hangs:"+line {
+		return "", fmt.Errorf("%s %w: stopped after 2m0s", line, errTooLong)
+	}
 	switch {
 	case line == "gh attestation verify --help":
 		if w.gh == "old" {
@@ -204,6 +208,23 @@ func TestUpdateRefusesAFailedProvenance(t *testing.T) {
 	}
 	if got := w.installed(); got != "old" {
 		t.Fatalf("installed %q", got)
+	}
+}
+
+// A gh that does not answer is not a gh that says no: the install stops and
+// says which command hung, and it is no provenance alarm.
+func TestAGhThatHangsStopsTheInstallAndSaysSo(t *testing.T) {
+	for _, line := range []string{"gh attestation verify --help", "gh auth status"} {
+		w := newReleaseWorld(t, "v0.1.0", "v0.2.0")
+		w.gh = "hangs:" + line
+		err := w.updater.Update()
+		if err == nil || !strings.Contains(err.Error(), line+" took too long") ||
+			!strings.Contains(err.Error(), "Nothing was changed") || strings.Contains(err.Error(), "FAILED") {
+			t.Fatalf("%s: err = %v", line, err)
+		}
+		if got := w.installed(); got != "old" {
+			t.Fatalf("%s: installed %q", line, got)
+		}
 	}
 }
 
