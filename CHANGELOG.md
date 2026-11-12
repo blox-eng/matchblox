@@ -6,6 +6,20 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Security
+
+- **`"auto"` installs only a build whose provenance it checked.** In v0.43.0,
+  auto installed on the checksum alone when no logged-in `gh` could check
+  the build's provenance, and said `provenance not checked` after. No person
+  is there, and the checksum comes from the same release as the binary. Auto
+  now changes nothing without a checked provenance, and does not run the
+  download. The offer says why, for example `gh is not logged in`, and auto
+  tries again after the next look. For auto, the service's user needs a `gh`
+  that is installed and logged in, on the service's `PATH`. An install that
+  you start (`Enter` on the offer, `u` on a host, `matchblox update`) is as
+  before. See [Config](https://docs.matchblox.com/config/#update).
+  ([#394](https://github.com/blox-eng/matchblox/issues/394))
+
 ## [0.43.0] - 2026-11-12
 
 ### Added
@@ -31,12 +45,9 @@ All notable changes to matchblox are in this file. The format follows
   During the day, the offer says when auto installs it. While it waits on
   work, the offer says why. Closing the offer does not stop auto. The
   console then says
-  `updated to v0.43.0 at 03:12`. No person is there, so auto installs only
-  a build whose provenance a logged-in `gh` checked. Without one it changes
-  nothing, and the offer says why
-  ([#394](https://github.com/blox-eng/matchblox/issues/394)). An install
-  that you start checks the provenance when `gh` can; when it cannot, the
-  console adds `· provenance not checked`. From the start of an install until matchblox
+  `updated to v0.43.0 at 03:12`. The service installs with no person there:
+  when no logged-in `gh` checked the build's provenance, the console adds
+  `· provenance not checked`. From the start of an install until matchblox
   runs again on the new release, a new clone is refused.
   `"off"` never looks. See [Config](https://docs.matchblox.com/config/#update).
   ([#390](https://github.com/blox-eng/matchblox/issues/390))
