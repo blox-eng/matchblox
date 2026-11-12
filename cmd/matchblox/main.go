@@ -723,7 +723,7 @@ func startAgain(self string) error {
 			return fmt.Errorf("start the console again: %w", err)
 		}
 	}
-	if err := runAgain(self); err != nil {
+	if err := runAgain(self, os.Environ()); err != nil {
 		return fmt.Errorf("start the console again: %w", err)
 	}
 	return nil
@@ -962,8 +962,8 @@ const unitEnv = "MATCHBLOX_UNIT"
 var socketWait = time.Second
 
 // serve runs the service on the socket until a signal, or until the binary
-// on disk is replaced or the socket removed (the user unit or the next
-// console starts the new one).
+// on disk is installed over (serve runs the new one in its place) or the
+// socket removed (the user unit or the next console starts a new one).
 //
 // mk builds the service once the socket is this serve's: a unit's serve may
 // wait long for it, and the state it reads (numbers, holds, the stoker) is
@@ -975,18 +975,23 @@ func serve(path string, exeAt os.FileInfo, mk func() *service.Service) error {
 	if again == "" {
 		return err
 	}
-	// No unit starts the new binary: this process becomes it, now that the
-	// socket, its lock and the push sender are let go.
-	if err := runAgain(again); err != nil {
+	// This process becomes the new binary, now that the socket, its lock and
+	// the push sender are let go. Under the unit too: its pid stays, so
+	// systemd sees no exit and ends no tmux server this serve started.
+	env := os.Environ()
+	if unit {
+		env = append(env, unitEnv+"=1")
+	}
+	if err := runAgain(again, env); err != nil {
 		fmt.Fprintln(os.Stderr, "matchblox: the new binary did not start:", err)
 		return errRestart
 	}
 	return nil
 }
 
-// runAgain runs exe in place of this process, with its arguments and its
-// environment. A file that cannot run is never run.
-func runAgain(exe string) error {
+// runAgain runs exe in place of this process, with its arguments and env.
+// A file that cannot run is never run.
+func runAgain(exe string, env []string) error {
 	fi, err := os.Stat(exe)
 	if err != nil {
 		return err
@@ -995,11 +1000,11 @@ func runAgain(exe string) error {
 		return fmt.Errorf("%s is not executable", exe)
 	}
 	pprof.StopCPUProfile()
-	return execFn(exe, os.Args, os.Environ())
+	return execFn(exe, os.Args, env)
 }
 
-// serveOn is serve, told whether the unit runs it. A binary replaced under
-// a serve no unit runs is again: the binary to run in its place.
+// serveOn is serve, told whether the unit runs it. A binary installed over
+// is again: the binary to run in its place.
 func serveOn(path string, exeAt os.FileInfo, mk func() *service.Service, unit bool) (again string, err error) {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -1037,7 +1042,7 @@ func serveOn(path string, exeAt os.FileInfo, mk func() *service.Service, unit bo
 		// fail to start, again and again.
 		fmt.Fprintln(os.Stderr, "matchblox: stopping, the binary is gone")
 		return "", nil
-	case errors.Is(err, service.ErrReplaced) && !unit && filestamp.Changed(exeAt, s.Exe):
+	case errors.Is(err, service.ErrReplaced) && filestamp.Changed(exeAt, s.Exe):
 		// Installed over: the binary on disk is not this process's. A console's
 		// replace leaves it as it was, and the console starts the next serve.
 		fmt.Fprintln(os.Stderr, "matchblox: replaced by a newer binary: starting it")

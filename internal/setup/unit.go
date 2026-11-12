@@ -128,7 +128,9 @@ func service(exe, path string) string {
 	}
 	env += "Environment=MATCHBLOX_UNIT=1\n"
 	// The start limit ends a loop of failed starts (the binary removed, the
-	// unit kept): 5 within the minute and systemd stops trying.
+	// unit kept): 5 within the minute and systemd stops trying. KillMode
+	// process: when serve exits, the tmux server it started, and every
+	// session in it, runs on.
 	return `[Unit]
 Description=matchblox serve: the phone buzzes with no console open
 StartLimitIntervalSec=60
@@ -138,6 +140,7 @@ StartLimitBurst=5
 ExecStart=` + exe + ` serve
 Restart=on-failure
 RestartSec=5
+KillMode=process
 ` + env + `
 [Install]
 WantedBy=default.target
