@@ -205,11 +205,3 @@ func (m Model) topRows(w int) []string {
 	}
 	return out
 }
-
-// topLines are the dock's machine grown into free rows: the top processes.
-func (m Model) topLines(w int) []string {
-	if len(m.snap.Top) == 0 {
-		return nil
-	}
-	return append([]string{""}, m.topRows(w)...)
-}

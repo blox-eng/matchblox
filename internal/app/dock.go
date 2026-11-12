@@ -16,53 +16,6 @@ import (
 // Usage and the machine: the strip says them on the board, and the Machine
 // tab has them all (design/0006 §7).
 
-// The panels of usage and the machine.
-const (
-	panelUsage = iota
-	panelMachine
-)
-
-// docked is usage and the machine drawn: their lines, and whether every
-// panel shows all it has.
-type docked struct {
-	lines []string
-	full  bool
-}
-
-// panel is one panel in w columns: its fewest lines, and all it has to
-// say.
-func (m Model) panel(p, w int) (least, most []string) {
-	if p == panelUsage {
-		return m.usageLines(w, false), m.usageLines(w, true)
-	}
-	if m.hostCount() > 1 {
-		least = m.machineHosts(w)
-		return least, least
-	}
-	least = m.machineLines(w, false)
-	return least, append(slices.Clone(least), m.topLines(w)...)
-}
-
-// listOnlyStats is what list only shows in the free rows its list leaves:
-// usage, then the machine, under a hairline each, at their fewest lines
-// and only whole. The list is never cut for them.
-func (m Model) listOnlyStats(w, free int) docked {
-	d := docked{full: true}
-	for _, p := range []int{panelUsage, panelMachine} {
-		least, _ := m.panel(p, w)
-		next := slices.Clone(d.lines)
-		if len(next) > 0 {
-			next = append(next, m.st.hair.Render(strings.Repeat("─", w)))
-		}
-		next = append(next, least...)
-		if len(next)+1 > free { // and the hairline over them
-			break
-		}
-		d.lines = next
-	}
-	return d
-}
-
 // usageLines are the limits of each account a session runs under, as
 // /usage says them: each window's name, a bar (warn from 60%, neg from
 // 90%), the percent and its reset; the forecast and an old reading on the
@@ -402,35 +355,6 @@ func memUse(mc sample.Machine) (uint64, float64) {
 		return used, 0
 	}
 	return used, float64(used) / float64(mc.MemTotal) * 100
-}
-
-// machineHosts is the machine with two or more hosts: a line for each
-// host with a state, in Hosts order; a stale host's says since when.
-func (m Model) machineHosts(w int) []string {
-	st := m.st
-	right := st.faint.Render(plural(m.hostCount(), "host") + " ")
-	out := []string{spread(st.label.Render(" MACHINE"), right, w)}
-	hosts := m.statedHosts()
-	nameW := 0
-	for _, h := range hosts {
-		nameW = max(nameW, lipgloss.Width(m.nameOf(h)))
-	}
-	for _, h := range hosts {
-		line := " " + st.text.Render(pad(m.nameOf(h), nameW+1))
-		if note := m.staleNote(h); note != "" {
-			out = append(out, fit(line+st.faint.Render(note), w))
-			continue
-		}
-		mc := m.machineOf(h)
-		_, memPct := memUse(mc)
-		line += st.label.Render("cpu ") + st.accent.Render(spark(m.viewOf(h).history.cpu, 8, 100)) + st.text.Render(pad(fmt.Sprintf(" %.0f%%", mc.CPU), 6)) +
-			st.label.Render("mem ") + st.text.Render(pad(fmt.Sprintf("%.0f%%", memPct), 5))
-		if len(mc.Disks) > 0 {
-			line += st.label.Render("disk ") + m.useStyle(mc.Disks[0].Pct()).Render(fmt.Sprintf("%.0f%%", mc.Disks[0].Pct()))
-		}
-		out = append(out, fit(line, w))
-	}
-	return out
 }
 
 // diskCell is the use of the home's file system, "▰▰▰▰▰▱▱▱ 71% of 1 TB",

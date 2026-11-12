@@ -8,9 +8,11 @@ import (
 )
 
 // viewPrefs is how the person views the console, kept in the state
-// directory: list only, one flag for each shape class, so a phone and a
-// laptop on the same console do not fight (R9).
+// directory: one value for each shape class, so a phone and a laptop on
+// the same console do not fight (R9).
 type viewPrefs struct {
+	// List only went with the Sessions list; an old file's flags still
+	// load, and a save keeps them.
 	ListOnlyPhone bool `json:"list_only_phone"`
 	ListOnlyDesk  bool `json:"list_only_desk"`
 
@@ -34,9 +36,9 @@ type viewPrefs struct {
 
 const viewPrefsFile = "view.json"
 
-// loadViewPrefs reads the views; with no file, a phone starts list only.
+// loadViewPrefs reads the views.
 func loadViewPrefs(dir string) viewPrefs {
-	p := viewPrefs{ListOnlyPhone: true}
+	var p viewPrefs
 	if dir == "" {
 		return p
 	}
@@ -46,36 +48,15 @@ func loadViewPrefs(dir string) viewPrefs {
 	return p
 }
 
-// listOnly: the list takes the whole screen, with no detail pane and no
-// dock, and the selected row opens in place. It is the flag of the shape
-// the screen has now.
-func (m Model) listOnly() bool {
-	if m.upright() {
-		return m.viewPrefs.ListOnlyPhone
-	}
-	return m.viewPrefs.ListOnlyDesk
-}
-
 // oneLineMin is the narrowest list with no right side that keeps its rows one
 // line.
 const oneLineMin = 107
 
 // inPlace: the selected row opens under itself, as on a phone: on a
-// phone, in list only, and wherever Sessions has no right side short of
-// oneLineMin.
+// phone, and wherever Sessions has no right side short of oneLineMin.
 func (m Model) inPlace() bool {
 	w := max(m.width, minWidth)
-	return m.layoutAt(m.width) == Narrow || m.listOnly() || w < oneLineMin && m.oneColumn(w)
-}
-
-// flipListOnly turns list only on or off for the shape the screen has now.
-func (m *Model) flipListOnly() {
-	if m.upright() {
-		m.viewPrefs.ListOnlyPhone = !m.viewPrefs.ListOnlyPhone
-	} else {
-		m.viewPrefs.ListOnlyDesk = !m.viewPrefs.ListOnlyDesk
-	}
-	m.keepViewPrefs()
+	return m.layoutAt(m.width) == Narrow || w < oneLineMin && m.oneColumn(w)
 }
 
 func (m *Model) keepViewPrefs() {
@@ -188,12 +169,4 @@ func (m *Model) tell(key string) {
 	}
 	m.viewPrefs.Told = append(slices.Clone(m.viewPrefs.Told), key)
 	m.keepViewPrefs()
-}
-
-// listOnlyHint is the key line's switch: the word, then its key.
-func (m Model) listOnlyHint() hint {
-	if m.listOnly() {
-		return hintFor(m.keys.main.ListOnly, "full view")
-	}
-	return hintFor(m.keys.main.ListOnly, "")
 }

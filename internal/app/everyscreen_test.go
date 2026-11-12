@@ -1,7 +1,6 @@
 package app
 
 import (
-	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -9,9 +8,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
-
-	"github.com/blox-eng/matchblox/internal/proto"
-	"github.com/blox-eng/matchblox/internal/sample"
 )
 
 // flintAt is the demo machine at w by h with flint-auth selected, its
@@ -156,33 +152,6 @@ func TestTheListOutranksTheMachine(t *testing.T) {
 // the machine, under a hairline, each whole at its fewest lines.
 func TestListOnlyFillsItsFreeRowsWithUsage(t *testing.T) {
 	t.Skip("dropped (Task 12 step 1): list only goes (step 3, intended change)")
-	at := func(st proto.State) Model {
-		t.Helper()
-		m := New(Options{NoMotion: true, Conn: newFake(), Now: func() time.Time { return demoAt }})
-		next, _ := m.Update(tea.WindowSizeMsg{Width: 107, Height: 60})
-		next, _ = next.Update(stateMsg(st))
-		nm := next.(Model)
-		nm.splashDone = true
-		if !nm.listOnly() {
-			t.Fatal("107x60 does not start list only")
-		}
-		return nm
-	}
-	short := at(screensState(t))
-	if out := screen(short); !strings.Contains(out, "USAGE") || strings.Contains(out, " more") {
-		t.Fatalf("a short list leaves usage behind its blank rows:\n%s", out)
-	}
-	var many []func(sample.Session) sample.Session
-	for i := range 60 {
-		many = append(many, sess(100+i, fmt.Sprintf("agent-%02d", i), fmt.Sprintf("%%%d", 100+i), nil))
-	}
-	st := hostState(many...)
-	st.At = demoAt // the age on the key line does not move with the wall clock
-	full := at(st)
-	if out := screen(full); strings.Contains(out, "USAGE") || strings.Contains(out, "MACHINE") {
-		t.Fatalf("a list that fills the screen gave way to the stats:\n%s", out)
-	}
-	golden(t, full, "listonlyfull", 107, 60)
 }
 
 // TestAChatBesideTheListHasRoomForAMenu: the split counts the chat's title

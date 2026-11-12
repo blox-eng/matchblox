@@ -230,28 +230,11 @@ func machineHosts(t *testing.T, after time.Duration, w, h int) Model {
 }
 
 func TestDockMachineLinePerHost(t *testing.T) {
-	m := machineHosts(t, 10*time.Second, 132, 40)
-	least, _ := m.panel(panelMachine, 60)
-	if len(least) != 4 {
-		t.Fatalf("the machine panel has %d lines, want its label and one per host:\n%s", len(least), ansi.Strip(strings.Join(least, "\n")))
-	}
-	for i, want := range [][2]string{{"this machine", "12%"}, {"gpu-1", "87%"}, {"ws-1", "55%"}} {
-		l := ansi.Strip(least[i+1])
-		if !strings.Contains(l, want[0]) || !strings.Contains(l, want[1]) || strings.Contains(l, "stale") {
-			t.Errorf("line %d is %q, want %s at %s", i+1, l, want[0], want[1])
-		}
-	}
+	t.Skip("dropped (Task 12 step 3): the dock's machine line per host goes with the dock and list only; Machine's tab has a section per host (TestMachineTabSectionsInHostsOrder)")
 }
 
 func TestStaleMachineLine(t *testing.T) {
-	m := machineHosts(t, 40*time.Second, 132, 40)
-	least, _ := m.panel(panelMachine, 60)
-	if l := ansi.Strip(lineWith(least, "gpu-1")); !strings.Contains(l, "stale · as of 14:02") || strings.Contains(l, "87%") {
-		t.Fatalf("the stale host's line is %q", l)
-	}
-	if l := ansi.Strip(lineWith(least, "ws-1")); strings.Contains(l, "stale") {
-		t.Fatalf("a live host's line is %q", l)
-	}
+	t.Skip("dropped (Task 12 step 3): the dock's machine line per host goes with the dock and list only; Machine's tab heads a stale host's section with since when (TestMachineTabSectionsInHostsOrder)")
 }
 
 // heads are the lines of a tab's body that head a host's section, in order.
@@ -287,10 +270,6 @@ func TestOneHostMachineTabHasNoSections(t *testing.T) {
 	m, _ := loadedWith(t, 104, hostState(sess(1, "api-auth", "%1", nil)))
 	if got := heads(m.machinePanel(104).lines); len(got) != 0 {
 		t.Fatalf("one host's Machine tab has sections %q", got)
-	}
-	least, _ := m.panel(panelMachine, 60)
-	if len(least) != 5 {
-		t.Fatalf("one host's dock machine has %d lines", len(least))
 	}
 }
 

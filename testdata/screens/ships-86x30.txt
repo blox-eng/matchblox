@@ -27,4 +27,4 @@
                                           │
                                           │
 ──────────────────────────────────────────────────────────────────────────────────────
- ⏎ session  f stoker  list only v                                      sampled 0s ago
+ ⏎ session  f stoker                                                   sampled 0s ago

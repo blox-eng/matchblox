@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -54,76 +54,17 @@ func opensInPlace(m Model, sc drawn) bool {
 // flips it back.
 func TestVFoldsThePaneAndTheDock(t *testing.T) {
 	t.Skip("dropped (Task 12 step 1): list only goes (step 3, intended change: v is the board's density)")
-	m := demoIn(t, "", 92, 40)
-	sc := m.draw(92)
-	if sc.listW >= 92 || !strings.Contains(screen(m), "USAGE") || opensInPlace(m, sc) {
-		t.Fatalf("the full view: list %d, opened %v:\n%s", sc.listW, opensInPlace(m, sc), screen(m))
-	}
-	if k := keyText(sc); strings.HasSuffix(strings.TrimSpace(k), "list only") {
-		t.Fatalf("the full view's key line: %q", k)
-	}
-	next, _ := key(m, "v")
-	lo := next.(Model)
-	sc = lo.draw(92)
-	if !lo.listOnly() || sc.listW != 92 || strings.Contains(screen(lo), " more") || !opensInPlace(lo, sc) {
-		t.Fatalf("list only: on %v, list %d, opened %v\n%s", lo.listOnly(), sc.listW, opensInPlace(lo, sc), screen(lo))
-	}
-	k := keyText(sc)
-	if !strings.Contains(k, "full view v") {
-		t.Fatalf("list only's key line: %q", k)
-	}
-	panes := lo
-	panes.setTab(tabPanes) // fewer keys: room for the mark
-	if k := keyText(panes.draw(92)); !strings.HasSuffix(strings.TrimSpace(k), "list only") {
-		t.Fatalf("list only's key line has no mark: %q", k)
-	}
-	var at span
-	for _, s := range sc.keys {
-		if s.press == "v" {
-			at = s
-		}
-	}
-	if at == (span{}) {
-		t.Fatalf("full view v is no tap target: %q", k)
-	}
-	back, _ := tap(lo, at.x0, sc.keysAt)
-	if back.(Model).listOnly() {
-		t.Fatal("a tap on full view v did not bring the full view back")
-	}
 }
 
 // TestVFlipsOnlyTheCurrentShape: v on a desk leaves the phone's flag.
 func TestVFlipsOnlyTheCurrentShape(t *testing.T) {
 	t.Skip("replaced by TestBoardPrefsAreKeptForEachShape (Task 12 step 1)")
-	m := demoIn(t, "", 92, 40)
-	next, _ := key(m, "v")
-	next, _ = next.Update(tea.WindowSizeMsg{Width: 60, Height: 40})
-	if nm := next.(Model); !nm.upright() || !nm.listOnly() || !nm.viewPrefs.ListOnlyDesk {
-		t.Fatalf("upright %v, list only %v, %+v", nm.upright(), nm.listOnly(), nm.viewPrefs)
-	}
-	next, _ = key(next, "v")
-	next, _ = next.Update(tea.WindowSizeMsg{Width: 92, Height: 40})
-	if nm := next.(Model); !nm.listOnly() || nm.viewPrefs.ListOnlyPhone {
-		t.Fatalf("v on the phone changed the desk: %+v", nm.viewPrefs)
-	}
 }
 
 // TestListOnlyIsKeptAcrossARestart: the next console opens as the last
 // one was left, from view.json.
 func TestListOnlyIsKeptAcrossARestart(t *testing.T) {
 	t.Skip("replaced by TestBoardPrefsAreKeptForEachShape (Task 12 step 1)")
-	dir := t.TempDir()
-	next, _ := key(demoIn(t, dir, 92, 40), "v")
-	if !next.(Model).listOnly() {
-		t.Fatal("v did not turn list only on")
-	}
-	if _, err := os.Stat(filepath.Join(dir, "view.json")); err != nil {
-		t.Fatal(err)
-	}
-	again := demoIn(t, dir, 92, 40)
-	if !again.listOnly() || !again.viewPrefs.ListOnlyPhone {
-		t.Fatalf("the next console lost the views: %+v", again.viewPrefs)
-	}
 }
 
 // TestPhoneStartsListOnly: an upright screen wide enough to split opens
@@ -147,11 +88,14 @@ func TestWaitsStillShowInListOnly(t *testing.T) {
 	}
 }
 
-// TestVIsFree: v is list only's alone.
+// TestVIsFree: v is the board's density alone; the tabs bind no v.
 func TestVIsFree(t *testing.T) {
 	main, _ := layersOf(defaultKeys())
-	if got := owners(t, main)["v"]; got != "ListOnly" {
-		t.Fatalf("v is %q", got)
+	if got := owners(t, main)["v"]; got != "" {
+		t.Fatalf("v is %q on the tabs", got)
+	}
+	if !slices.Contains(defaultKeys().board.Density.Keys(), "v") {
+		t.Fatalf("v is not the board's density: %q", defaultKeys().board.Density.Keys())
 	}
 	TestKeymapsHaveNoCollisions(t)
 }
@@ -178,35 +122,13 @@ func TestTheSwitchGivesWayOnTheDesk(t *testing.T) {
 // TestFullViewStaysWhenRoomIsShort: in list only the way back stays; the
 // list only mark goes first, then the age, before a spare key.
 func TestFullViewStaysWhenRoomIsShort(t *testing.T) {
-	m, _ := loadedWith(t, 50, queueState())
-	m.tab = tabPanes
-	k := keyText(m.draw(50))
-	if !m.listOnly() || !strings.Contains(k, "full view v") || !strings.Contains(k, "s sort") || strings.HasSuffix(strings.TrimSpace(k), "list only") {
-		t.Fatalf("list only on a short line: %q", k)
-	}
-	if !strings.Contains(k, "sampled") {
-		t.Fatalf("the age went before the mark: %q", k)
-	}
+	t.Skip("dropped (Task 12 step 3): list only goes (intended change: v is the board's density)")
 }
 
 // TestTheMarkKeepsItsGap: the age and the list only mark stand two
 // columns clear of the keys, so they never read as one phrase.
 func TestTheMarkKeepsItsGap(t *testing.T) {
-	gap := regexp.MustCompile(`\S {2,}(sampled \S+ ago  )?list only $`)
-	for w := 40; w <= 140; w++ {
-		m := demoIn(t, "", w, 40)
-		if !m.listOnly() {
-			m = fullView(m)
-			m.viewPrefs.ListOnlyDesk = true
-		}
-		for _, tab := range []int{tabSessions, tabPanes, tabMachine} {
-			m.setTab(tab)
-			k := keyText(m.draw(w))
-			if strings.HasSuffix(k, "list only ") && !gap.MatchString(k) {
-				t.Fatalf("w=%d %s: the mark has no gap: %q", w, tabNames[tab], k)
-			}
-		}
-	}
+	t.Skip("dropped (Task 12 step 3): list only goes, and its mark (intended change: v is the board's density)")
 }
 
 // manyRows is one host with n sessions, list only, 200×60.

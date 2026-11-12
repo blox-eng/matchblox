@@ -1587,8 +1587,6 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	case bkey.Matches(k, mk.Ships):
 		m.setTab(tabShips)
-	case bkey.Matches(k, mk.ListOnly):
-		m.flipListOnly()
 	case bkey.Matches(k, mk.Stoke):
 		return m.stokerKey(false)
 	case bkey.Matches(k, mk.Night):

@@ -29,4 +29,4 @@
                                                                               │
                                                                               │
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ↑↓ move  ⏎ session  f stoker  / find  q quit  list only v                                                           sampled 0s ago
+ ↑↓ move  ⏎ session  f stoker  / find  q quit                                                                        sampled 0s ago

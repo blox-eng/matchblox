@@ -147,9 +147,8 @@ type drawn struct {
 	boxAt, boxX, boxW int
 	boxRows           []string
 	boxKeys           []span
-	// full: list only's usage and machine show all they have; paneFull:
-	// so does the right pane.
-	full, paneFull bool
+	// paneFull: the right pane shows all it has.
+	paneFull bool
 	// The launch sheet's go chips: their line, and the key a tap on each
 	// one presses.
 	sheetGoesAt int
@@ -248,14 +247,6 @@ func (m Model) drawScreen(w int) drawn {
 		return lines
 	}
 	room := full
-	d := docked{full: true}
-	if m.listOnly() && m.tab != tabMachine && m.tab != tabStoker {
-		d = m.listOnlyStats(w, full-len(b.lines))
-		if len(d.lines) > 0 {
-			room -= len(d.lines) + 1
-		}
-	}
-	sc.full = d.full || m.tab == tabMachine || m.tab == tabStoker || m.listOnly() // list only has no more to show
 	detail := paneLines(room)
 	sc.paneFull = paneFull && len(detail) <= room
 	if viewing {
@@ -280,9 +271,6 @@ func (m Model) drawScreen(w int) drawn {
 		sc.lines, sc.rows = append(sc.lines, line), append(sc.rows, row)
 	}
 	m.markActKeys(&sc, b, vis, detail, room, detailW, viewing)
-	if len(d.lines) > 0 {
-		sc.lines = append(append(sc.lines, m.st.hair.Render(strings.Repeat("─", w))), d.lines...)
-	}
 	if !m.beltOnly() { // Pocket's belt has the keys
 		hair, keys, keySpans := m.keyRows(w)
 		sc.keysAt, sc.keys = len(sc.lines)+1, keySpans
@@ -339,7 +327,7 @@ func (m Model) markActKeys(sc *drawn, b, vis body, detail []string, room, detail
 // other tabs have one column, and so has a door's diff while it waits for
 // its y: it shows whole.
 func (m Model) panes(w int) (list, detail int) {
-	if _, preview := m.previewDoor(); m.tab != tabSessions && m.tab != tabShips || m.layoutAt(w) == Narrow || m.listOnly() || preview {
+	if _, preview := m.previewDoor(); m.tab != tabSessions && m.tab != tabShips || m.layoutAt(w) == Narrow || preview {
 		return w, 0
 	}
 	at := splitAt(w, m.layoutAt(w))
@@ -705,39 +693,13 @@ func (m Model) keyLine(w int) (string, []span) {
 		line += st.muted.Render(lead)
 		x += lipgloss.Width(lead)
 	}
-	// List only's switch names its key after its word. On the full view
-	// it is the first spare key to go, before every other one and the age.
-	// In list only it is the way back, so it stays: the list only mark goes
-	// first, then the age, then a spare key; a key of the row outranks it.
-	on := m.listOnly()
-	var flip hint
-	flipW := 0
-	if m.tab != tabMachine && m.tab != tabStoker {
-		flip = m.listOnlyHint()
-		flipW = lipgloss.Width(flip.label+" "+flip.key) + 2
-	}
 	age := st.faint.Render("sampled " + sample.Human(m.now().Sub(m.snap.At)) + " ago ")
 	ageW := lipgloss.Width("sampled 59m ago ")
 	room := w - x
-	switch {
-	case on:
-		hints = fitHints(hints, room-flipW)
-		if hintsWidth(hints)+flipW > room {
-			flip = hint{}
-		}
-	default:
-		if fit := fitHints(hints, room-ageW); hintsWidth(fit) <= room-ageW {
-			hints = fit
-		} else {
-			hints = fitHints(hints, room)
-		}
-		rest := room - hintsWidth(hints)
-		if x+hintsWidth(hints)+lipgloss.Width(age)+1 <= w {
-			rest -= lipgloss.Width(age) + 1 // the age stays before the switch
-		}
-		if flipW > rest {
-			flip = hint{}
-		}
+	if fit := fitHints(hints, room-ageW); hintsWidth(fit) <= room-ageW {
+		hints = fit
+	} else {
+		hints = fitHints(hints, room)
 	}
 	var spans []span
 	parts := 0
@@ -755,24 +717,10 @@ func (m Model) keyLine(w int) (string, []span) {
 	for _, h := range hints {
 		add(st.accent.Render(h.key)+st.muted.Render(" "+h.label), h.press)
 	}
-	if flip != (hint{}) {
-		add(st.muted.Render(flip.label+" ")+st.accent.Render(flip.key), flip.press)
-	}
-	right, gap := age, 1
-	if on {
-		// The mark keeps two columns from the keys, as every key does.
-		mark := st.accent.Render("list only") + " "
-		right, gap = age+" "+mark, 2
-		if lipgloss.Width(line)+lipgloss.Width(right)+gap > w {
-			right = age
-		} else {
-			spans = append(spans, span{w - lipgloss.Width(mark), w - 1, m.keys.main.ListOnly.Keys()[0]})
-		}
-	}
-	if lipgloss.Width(line)+lipgloss.Width(right)+gap > w {
+	if lipgloss.Width(line)+lipgloss.Width(age)+1 > w {
 		return fit(line, w), spans // the keys matter more than the age
 	}
-	return line + strings.Repeat(" ", w-lipgloss.Width(line)-lipgloss.Width(right)) + right, spans
+	return line + strings.Repeat(" ", w-lipgloss.Width(line)-lipgloss.Width(age)) + age, spans
 }
 
 // spareKeys are the keys a short key line drops first, in that order:

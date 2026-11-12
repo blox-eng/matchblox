@@ -15,17 +15,17 @@
  #4540 The 1.0 docs                      2h
    ●━●━●━●━●  live
 
+
+
+
+
+
+
+
+
+
+
+
+
 ────────────────────────────────────────────
- USAGE
- ✻ Claude        5h   ▰▰▰▰▱ 84%  · Fri 01:20
-                 wk   ▰▰▰▰▱ 82%  · Mon 09:00
- · Google login  not measured
- ❋ OpenAI        5h ▰▱▱ 40% · wk 12%
-────────────────────────────────────────────
- MACHINE                           16 cores
- cpu  ▁ 0%   load 6.2
- mem  ▰▰▰▱▱▱▱▱ 26 of 64 GB
- disk ▰▰▰▰▰▰▱▱ 71% of 1 TB
- runs 5 claude · 1 codex · 1 opencode
-────────────────────────────────────────────
- ⏎ session  f stoker  full view v
+ ⏎ session  f stoker         sampled 0s ago

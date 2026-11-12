@@ -42,7 +42,7 @@ func boundKeys() map[string]*keyLayer {
 	k, s := defaultKeys(), defaultShellKeys()
 	screens := map[string][][]bkey.Binding{
 		"Model": {k.global.bindings(), k.main.bindings(), k.form.bindings(), k.view.bindings(), k.sheet.bindings(), k.room.bindings(),
-			k.search.bindings(), k.pair.bindings(), k.takeOver.bindings(), k.confirm.bindings(), k.scan.bindings()},
+			k.search.bindings(), k.pair.bindings(), k.takeOver.bindings(), k.confirm.bindings(), k.scan.bindings(), k.board.bindings()},
 		"Shell": {s.shell.bindings(), s.typing.bindings()},
 	}
 	layers := map[string]*keyLayer{}

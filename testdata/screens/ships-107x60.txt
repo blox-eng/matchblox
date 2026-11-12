@@ -1,60 +1,60 @@
  ▰ matchblox                                                                              ● 6 wait for you
  sessions 7    SHIPS 3    machine    git    history    panes    stoker
 ───────────────────────────────────────────────────────────────────────────────────────────────────────────
- open → ci → green → merged → live
-▌#4551 Rate limits on the public API                                                                    4m
-   ●━◉┄○┄○┄○  CI · 6 of 9 jobs
-   by hearth-api                                                                                 ⏎ session
-
- #4552 Invoice export as CSV and PDF                                                                    6m
-   ●━●━◉┄○┄○  green · waits for your merge
-
- #4545 Refresh tokens that rotate                                                                      40m
-   ●━✕┄○┄○┄○  conflicts with main
-
- #4540 The 1.0 docs                                                                                     2h
-   ●━●━●━●━●  live
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+ open → ci → green → merged → live                   │
+▌#4551 Rate limits on the public API              4m │ #4551  by hearth-api · hearth/hearth-api
+   ●━◉┄○┄○┄○  CI · 6 of 9 jobs                       │ Rate limits on the public API
+                                                     │
+ #4552 Invoice export as CSV and PDF              6m │ TRACK
+   ●━●━◉┄○┄○  green · waits for your merge           │  ● open    22:21
+                                                     │  ┃
+ #4545 Refresh tokens that rotate                40m │  ◉ ci      22:46 CI · 6 of 9 jobs
+   ●━✕┄○┄○┄○  conflicts with main                    │  ┆
+                                                     │  ○ green
+ #4540 The 1.0 docs                               2h │  ┆
+   ●━●━●━●━●  live                                   │  ○ merged
+                                                     │  ┆
+                                                     │  ○ live
+                                                     │
+                                                     │ https://github.com/hearth/hearth-api/pull/4551
+                                                     │
+                                                     │ ⏎ session
+                                                     │
+                                                     │
+                                                     │
+                                                     │
+                                                     │
+                                                     │
+                                                     │
+                                                     │
+                                                     │
+                                                     │
+                                                     │
+                                                     │
+                                                     │
+                                                     │
+                                                     │
+                                                     │
+                                                     │
+                                                     │
+                                                     │
+                                                     │
+                                                     │
+                                                     │
+                                                     │
+                                                     │
+                                                     │
+                                                     │
+                                                     │
+                                                     │
+                                                     │
+                                                     │
+                                                     │
+                                                     │
+                                                     │
+                                                     │
+                                                     │
+                                                     │
+                                                     │
 ───────────────────────────────────────────────────────────────────────────────────────────────────────────
- USAGE
- ✻ Claude Max    5h   ▰▰▰▰▰▰▰▱ 84%  · Fri 01:20
-                 wk   ▰▰▰▰▰▰▰▱ 82%  · Mon 09:00 · out Fri ~21:00
- · Google login  not measured · OpenCode keeps no limits
- ❋ OpenAI Plus   5h   ▰▰▰▱▱▱▱▱ 40%  · 23:59
-                 wk   ▰▱▱▱▱▱▱▱ 12%  · Tue 09:00 · lasts the week
-───────────────────────────────────────────────────────────────────────────────────────────────────────────
- MACHINE                                                                                          16 cores
- cpu  ▁ 0%   load 6.2
- mem  ▰▰▰▱▱▱▱▱ 26 of 64 GB
- disk ▰▰▰▰▰▰▱▱ 71% of 1 TB
- runs 5 claude · 1 codex · 1 opencode
-───────────────────────────────────────────────────────────────────────────────────────────────────────────
- ⏎ session  f stoker  full view v                                                sampled 0s ago  list only
+ ⏎ session  f stoker                                                                        sampled 0s ago
