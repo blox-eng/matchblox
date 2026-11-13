@@ -110,7 +110,7 @@ func TestKillNeverTheStokersSession(t *testing.T) {
 	snap.Sessions = append(snap.Sessions, sample.Session{Agent: "claude", PID: 109, Pane: "%9@mbtest", Name: "stoker", Status: "idle"})
 	s.publish(snap, func(state.Doc) {})
 	res := s.act(t.Context(), consoleAct("kill:%9@mbtest", KillAnyway))
-	if res.Err != "the stoker is not killed here: Q on the STOKER tab quits it" || len(*ran) != 0 {
+	if res.Err != "the stoker is not killed here: Q on Machine › stoker quits it" || len(*ran) != 0 {
 		t.Fatalf("err %q ran %q", res.Err, *ran)
 	}
 }

@@ -128,7 +128,7 @@ func spanAt(spans []span, x int) (span, bool) {
 // hit: the header, the tabs, the body rows and the key line.
 type drawn struct {
 	lines   []string
-	waits   span // the header's "● N wait for you"
+	waits   span // the header's "● N need you"
 	hostAt  span // the board's host filter in the header: a tap turns it
 	tabs    []span
 	bodyTop int   // the line of the first body row
@@ -333,16 +333,7 @@ func (m Model) header(w int) (string, span, span) {
 		room := max(w-lipgloss.Width(left+lost)-3, 1)
 		return spread(left+lost, st.accent.Render(ansi.Truncate(m.toast, room, "…"))+" ", w), span{}, span{}
 	}
-	n, count := 0, "● %d wait for you"
-	if m.boardShown() {
-		n, count = m.needCount(), "● %d need you"
-	} else {
-		for _, s := range m.all.sessions {
-			if m.groupOf(s) == groupWaits {
-				n++
-			}
-		}
-	}
+	n, count := m.needCount(), "● %d need you"
 	stoker := m.stokerBadge(m.layoutAt(w) == Narrow)
 	// Short of room the host goes first (a phone), then the words of who
 	// waits; the count stays.
@@ -420,9 +411,9 @@ func (m Model) hostBadge(short bool) string {
 	case m.stoker == nil:
 		return ""
 	case m.stokerAsks() && short:
-		return st.accent.Render("stoker waits")
+		return st.accent.Render("stoker asks")
 	case m.stokerAsks():
-		return st.accent.Render("stoker waits for you")
+		return st.accent.Render("stoker needs you")
 	case !m.stoker.On:
 		return st.faint.Render("stoker off")
 	case m.resting():

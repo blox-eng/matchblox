@@ -111,7 +111,7 @@ func TestStokerTabShowsWordsPlanAndRules(t *testing.T) {
 	for _, want := range []string{
 		"NIGHT · 19:50 → 02:50", "sealed", "“merge them on green", "✓ merges", "! releases, deploys and kills still ask you", "PLAN 3 of 5",
 		"✓", "◐", "⏸", "spark-docs", "hold: not priority", "told 02:05, CI 6 of 9 jobs",
-		"YOUR GO", "waits for you: kindle-web wants to run gh release create v1.4", "y gives the go, once",
+		"YOUR GO", "waits for your go: kindle-web wants to run gh release create v1.4", "y gives the go, once",
 		"STANDING RULES", "opened #4570", "TODAY", "RESUME: run the migration test",
 	} {
 		if !strings.Contains(out, want) {
@@ -167,7 +167,7 @@ func TestMorningSaysWhatWaitsForYou(t *testing.T) {
 		next, _ = key(next, "down")
 	}
 	out := screen(m) + screen(next)
-	for _, want := range []string{"NIGHT · 19:50 → 22:50", "ended 22:50", "DONE 4 of 5 · 1 WAITS FOR YOU", "✕", "the release asks which tag to cut", "THE RUN · ready 4/5"} {
+	for _, want := range []string{"NIGHT · 19:50 → 22:50", "ended 22:50", "DONE 4 of 5 · 1 NEED YOU", "✕", "the release asks which tag to cut", "THE RUN · ready 4/5"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("no %q in\n%s", want, out)
 		}
@@ -373,14 +373,14 @@ func TestEnterOpensTheStokerInAPopup(t *testing.T) {
 	}
 }
 
-// TestATapOnTheHeadersStokerOpensIt: the stoker waits for you (its trust
+// TestATapOnTheHeadersStokerOpensIt: the stoker needs you (its trust
 // prompt, a permission): a tap on the header's word opens it.
 func TestATapOnTheHeadersStokerOpensIt(t *testing.T) {
 	st := agentState(proto.StokerView{Mode: proto.StokerMode{On: true}, PaneUp: true})
 	st.Sessions = append(st.Sessions, sample.Session{Agent: "claude", Pane: "%0@matchblox", Target: "stoker:0.0", Name: "stoker", Permits: true})
 	m, _ := loadedWith(t, 100, st)
 	sc := m.draw(100)
-	if !strings.Contains(sc.lines[0], "stoker waits for you") || sc.stokerAt.press == "" {
+	if !strings.Contains(sc.lines[0], "stoker needs you") || sc.stokerAt.press == "" {
 		t.Fatalf("header %q, span %+v", sc.lines[0], sc.stokerAt)
 	}
 	next, _ := tap(m, sc.stokerAt.x0+1, 0)

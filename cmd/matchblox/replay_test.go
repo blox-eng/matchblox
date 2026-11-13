@@ -765,7 +765,7 @@ func TestSkeletonCatchesAChangedScreen(t *testing.T) {
 		t.Fatalf("figures and sparklines change between runs; the skeletons must match:\n%q\n%q", skeleton(a), skeleton(b))
 	}
 	// A figure one digit wider cuts the line one cell earlier.
-	cut := []string{" ╿ done, waits for you · 9m · hearth:1.…", " ╿ done, waits for you · 10m · hearth:1…"}
+	cut := []string{" ╿ done, needs you · 9m · hearth:1.…", " ╿ done, needs you · 10m · hearth:1…"}
 	if skeleton(cut[:1]) != skeleton(cut[1:]) {
 		t.Fatalf("a cut that moves with a figure must not change the skeleton:\n%q\n%q", skeleton(cut[:1]), skeleton(cut[1:]))
 	}

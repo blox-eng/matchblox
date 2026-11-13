@@ -387,7 +387,7 @@ func TestSheetSendsStokerNew(t *testing.T) {
 	if len(a) != 1 || a[0].RecID != "stoker:new" || a[0].Text != `{"chain":"c1","words":"merge on green","grants":["merge"]}` {
 		t.Fatalf("acts %+v", a)
 	}
-	refused := "the family has its 4 chain stokers: max_chains. Quit one on the STOKER tab first."
+	refused := "the family has its 4 chain stokers: max_chains. Quit one on Machine › stoker first."
 	next, _ = next.Update(resultMsg(proto.Result{ActID: next.(Model).sheet.act, Err: refused}))
 	if s := screen(next); next.(Model).sheet == nil || !strings.Contains(strings.Join(strings.Fields(s), " "), "the family has its 4 chain stokers") {
 		t.Fatalf("the refusal is not in the sheet:\n%s", s)

@@ -1,4 +1,4 @@
- ▰ matchblox · 3 hosts · gpu-1 stale                                                   ● 8 wait for you
+ ▰ matchblox · 3 hosts · gpu-1 stale                                                       ● 7 need you
  board 10    MACHINE
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
  stoker    off

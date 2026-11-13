@@ -303,7 +303,7 @@ func TestNoRefreshWhen(t *testing.T) {
 		},
 		"it waits": {
 			change: func(x *sample.Session) { x.Permits = true },
-			n:      proto.SwitchAgent{Anyway: true}, note: "not refreshed: work waits for you",
+			n:      proto.SwitchAgent{Anyway: true}, note: "not refreshed: work needs you",
 		},
 		"out of usage": {
 			change: func(x *sample.Session) { x.Out = time.Date(2026, 11, 9, 15, 4, 0, 0, time.Local) },

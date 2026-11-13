@@ -44,7 +44,7 @@ func usesOpencode(e Env) bool {
 func opencodeDoor(e Env) doors.Door {
 	path := opencodePluginPath(e)
 	d := doors.Door{ID: doors.OpencodePlugin, Title: "Add the OpenCode plugin", Path: path,
-		Why: "OpenCode tells matchblox when an agent works or waits for you. Without the plugin the board reads its pane. Delete the file to stop it."}
+		Why: "OpenCode tells matchblox when an agent works or needs you. Without the plugin the board reads its pane. Delete the file to stop it."}
 	_, old, _, err := read(path)
 	if err != nil {
 		d.Problem = err.Error()

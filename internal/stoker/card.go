@@ -162,7 +162,7 @@ func (m Mode) Score(ss []sample.Session, waiting map[string]bool, full sample.Fu
 		case !alive:
 			why = append(why, "gone")
 		case waits(s, waiting):
-			why = append(why, "waits for you")
+			why = append(why, "needs you")
 		case !s.Out.IsZero() && !s.Busy:
 			out = s.Out
 			why = append(why, "out until "+limits.Until(s.Out, m.Ended))

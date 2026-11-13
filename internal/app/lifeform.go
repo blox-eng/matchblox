@@ -1193,7 +1193,7 @@ func (m Model) formResult(r proto.Result) (Model, tea.Cmd, bool) {
 		if !f.named {
 			name = f.autoName()
 		}
-		m.flash = "started " + name + ": it shows in Sessions in a few seconds"
+		m.flash = "started " + name + ": it shows on the board in a few seconds"
 		if r.Note != "" { // what its where came to
 			m.flash = tilde(r.Note) + " · " + m.flash
 		}
@@ -1343,7 +1343,7 @@ func (m Model) formBox(bw int) (box, press []string, spans []span, agentsAt int,
 		if f.newAccount {
 			field(fieldFirst, "", "after sign-in")
 		} else {
-			field(fieldFirst, f.first, "blank: it waits for you")
+			field(fieldFirst, f.first, "blank: it waits for your first prompt")
 		}
 	}
 	if !f.rename && !f.pick {
@@ -1609,7 +1609,7 @@ func (m Model) killAction(s sample.Session) *action {
 func (m Model) againFor(s sample.Session, verb string) string {
 	switch {
 	case s.Ask != nil || s.Permits || m.waitsFor(s):
-		return s.Name + " waits for you: " + m.keys.main.Grant.Help().Key + " again " + verb + " it all the same"
+		return s.Name + " needs you: " + m.keys.main.Grant.Help().Key + " again " + verb + " it all the same"
 	case s.Works():
 		return s.Name + " works: " + m.keys.main.Grant.Help().Key + " again " + verb + " it mid-turn"
 	}

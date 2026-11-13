@@ -102,7 +102,7 @@ work too. The command must be on the service's `PATH`.
 each chain. It is 4 by default, and 0 or less means 4. Each chain stoker is
 one more agent that uses tokens, and each one counts its own `max_steps`.
 A start past the cap is refused with
-`the family has its 4 chain stokers: max_chains. Quit one on the STOKER tab first.`
+`the family has its 4 chain stokers: max_chains. Quit one on Machine › stoker first.`
 A chain stoker runs the agent of `[stoker] agent`, on the default sign-in.
 See [A family of stokers](stoker.md#a-family-of-stokers).
 

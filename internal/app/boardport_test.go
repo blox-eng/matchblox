@@ -187,7 +187,7 @@ func TestTheCardSaysWhatTheRowSaid(t *testing.T) {
 }
 
 // TestTheStokersAgentIsNoCard (#81): the stoker's own agent is no card and
-// no count, and the header still says the stoker waits.
+// no count, and the header still says the stoker needs you.
 func TestTheStokersAgentIsNoCard(t *testing.T) {
 	for _, w := range []int{44, 132} {
 		edit := func(asks bool) func(*proto.State) {
@@ -213,8 +213,8 @@ func TestTheStokersAgentIsNoCard(t *testing.T) {
 			t.Errorf("width %d: %d cards for %d matches and the stoker's agent", w, n, len(m.all.sessions))
 		}
 		m = portShot(t, w, 40, "", edit(true))
-		if h := ansi.Strip(m.head(w)); !strings.Contains(h, "stoker waits") {
-			t.Errorf("width %d: the header does not say the stoker waits: %q", w, h)
+		if h := ansi.Strip(m.head(w)); !strings.Contains(h, "stoker needs you") && !strings.Contains(h, "stoker asks") {
+			t.Errorf("width %d: the header does not say the stoker needs you: %q", w, h)
 		}
 	}
 }

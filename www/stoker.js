@@ -265,13 +265,13 @@
         ...step("◐", W, "02:31", "hearth-api: merge #4551 on green", "CI 6 of 9 jobs"),
         ...step("○", F, "", "flint-auth: rebase #4545, merge on green"),
         [], text(" YOUR GO", F, HALF),
-        ...step("⏸", W, "02:40", "waits for you: kindle-web wants to run gh release create v2.1", "y gives the go, once"),
+        ...step("⏸", W, "02:40", "waits for your go: kindle-web wants to run gh release create v2.1", "y gives the go, once"),
         [], text(" TRIGGERS", F, HALF),
         ...step("✓", A, "02:31", "when #4552 merged → sent hearth-api: rebase on main"),
         text(" WAITING ON", F, HALF),
         cut([["  ○ ", F], ["t2 when #4551 merged → send flint-auth", M]], HALF));
     } else if (at === "morning") {
-      L.push(text(" DONE 3 of 4 · 1 WAITS FOR YOU", A, HALF),
+      L.push(text(" DONE 3 of 4 · 1 NEED YOU", A, HALF),
         ...step("✓", A, "01:58", "ember-billing merged #4552", "live 02:31"),
         ...step("✓", A, "03:40", "hearth-api merged #4551", "live 04:12"),
         ...step("✕", N, "04:15", "flint-auth: #4545 still conflicts after rebase", "auth/rotate.go, both sides changed expires_at. flint-auth asks you which to keep"),

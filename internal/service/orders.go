@@ -270,7 +270,7 @@ func goesFromAShell(a proto.Act, grants []string) string {
 	if a.Console || len(grants) == 0 {
 		return ""
 	}
-	return "goes are given at the console: drop --go here, and grant them on the STOKER tab"
+	return "goes are given at the console: drop --go here, and grant them on Machine › stoker"
 }
 
 // notThePersons refuses an act from an agent's pane, whatever its console

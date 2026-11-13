@@ -352,7 +352,7 @@ func (m Model) sheetBox(bw int) (box, press []string, spans []span, goesAt int, 
 			add(lead + st.text.Render(l))
 		}
 	case m.stokerAsks():
-		add("", st.warn.Render("! ")+st.text.Render("the stoker waits for you: tap its word at the top to answer it"))
+		add("", st.warn.Render("! ")+st.text.Render("the stoker needs you: tap its word at the top to answer it"))
 	case !v.Ready && v.PaneUp && !v.Starting:
 		// Up and mid-turn, started long ago: the order waits for its rest.
 		add("")

@@ -77,9 +77,9 @@ func TestScore(t *testing.T) {
 		{"a gone session is not ready", []sample.Session{calm("%1"), calm("%2"), gone}, nil, nil,
 			Card{Watched: 3, Ready: 2, Of: 3, NotReady: []Miss{{Name: "work%3", Why: "gone"}}}},
 		{"a session that asks is not ready", []sample.Session{calm("%1"), calm("%2"), asks}, nil, nil,
-			Card{Watched: 3, Waited: 1, Ready: 2, Of: 3, NotReady: []Miss{{Name: "work%3", Why: "waits for you"}}}},
+			Card{Watched: 3, Waited: 1, Ready: 2, Of: 3, NotReady: []Miss{{Name: "work%3", Why: "needs you"}}}},
 		{"a session in the queue is not ready", []sample.Session{calm("%1"), calm("%2"), calm("%3")}, map[string]bool{"%1": true}, nil,
-			Card{Watched: 3, Waited: 1, Ready: 2, Of: 3, NotReady: []Miss{{Name: "work%1", Why: "waits for you"}}}},
+			Card{Watched: 3, Waited: 1, Ready: 2, Of: 3, NotReady: []Miss{{Name: "work%1", Why: "needs you"}}}},
 		{"a full session is not ready", []sample.Session{calm("%1"), full("%2"), calm("%3")}, nil, nil,
 			Card{Watched: 3, Full: 1, Ready: 2, Of: 3, NotReady: []Miss{{Name: "work%2", Why: "needs a compact · past 85% · 176k"}}}},
 		{"compacts read back count, with the tokens they gave back", []sample.Session{calm("%1"), calm("%2"), calm("%3")}, nil,
@@ -271,7 +271,7 @@ func TestWhyASessionIsNotReady(t *testing.T) {
 	m = m.Off(t0.Add(time.Hour)).Score(ss, nil, at85, nil)
 	want := []Miss{
 		{Name: "work%1", Why: "out until " + back.Format("15:04") + " · needs a compact · past 85% · 176k", Out: back},
-		{Name: "work%2", Why: "waits for you"},
+		{Name: "work%2", Why: "needs you"},
 	}
 	if !reflect.DeepEqual(m.Card.NotReady, want) || m.Card.Ready != 1 {
 		t.Fatalf("not ready %+v ready %d", m.Card.NotReady, m.Card.Ready)

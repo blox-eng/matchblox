@@ -578,7 +578,7 @@ func (m Model) stokerHostCard(w int) body {
 		if !v.On && !v.Ended.IsZero() {
 			head = fmt.Sprintf("DONE %d of %d", done, len(order.Plan))
 			if needs > 0 {
-				head += fmt.Sprintf(" · %d WAITS FOR YOU", needs)
+				head += fmt.Sprintf(" · %d NEED YOU", needs)
 			}
 		}
 		section(rowPlan, head)
@@ -622,7 +622,7 @@ func (m Model) agentLine(v *proto.StokerView, asks bool, off string, sel bool, w
 	case !v.PaneUp:
 		word, style = off, st.faint
 	case asks:
-		word, style = "waits for you", st.accent
+		word, style = "needs you", st.accent
 	case v.Ready:
 		word, style = "rests", st.muted
 	}
@@ -745,7 +745,7 @@ func (m Model) stokerRowLines(r stokerRow, sel bool, w int) []string {
 		case rowGo:
 			text = r.e.Text
 			if r.state() == "waits" {
-				text = "waits for you: " + text
+				text = "waits for your go: " + text
 			}
 		case rowWhen:
 			text = r.e.Text

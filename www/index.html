@@ -92,7 +92,7 @@
   <main>
     <section class="agents box" id="console" aria-labelledby="box-h">
       <h2 id="box-h">Every agent, one box</h2>
-      <p class="lede">Enter takes you into the agent's own pane, on your desk or your phone, and leaves the other screen where it was.</p>
+      <p class="lede">Four columns: needs you, working, shipping, quiet. Tap a card to peek, mark an answer, send it with a second tap. Hide a column, or show one chain.</p>
     <section class="stage" aria-label="The matchblox board on a demo machine: four columns, NEEDS YOU, WORKING, SHIPPING and QUIET. A digit marks an answer from the agent's own options, the same digit sends it, and the card strikes into WORKING. p and a typed y merge a pull request. A tap hides the WORKING column and brings it back, and g shows one chain">
       <div class="fold open">
         <div class="body">
@@ -145,14 +145,6 @@
       <div class="foldswitch" role="group" aria-label="The console's phone" hidden><button type="button" aria-pressed="true" data-fold="phone"><svg viewBox="0 0 18 14" aria-hidden="true" focusable="false"><rect x="5.5" y="1" width="7" height="12" rx="1.5"/></svg>Folded</button><button type="button" aria-pressed="false" data-fold="duo"><svg viewBox="0 0 18 14" aria-hidden="true" focusable="false"><rect x="1.5" y="1" width="7" height="12" rx="1.5"/><rect x="9.5" y="1" width="7" height="12" rx="1.5"/></svg>Open</button></div>
       <p class="say">Open: the board, its four columns side by side.</p>
     </section>
-      <div class="beats">
-        <div><h3>Four columns</h3><p>Needs you, working, shipping, quiet. Each match has one card, and the header counts what needs you.</p></div>
-        <div><h3>Peek, then answer</h3><p>The chosen card shows what the agent said and its question. A digit marks an option; the same digit sends it.</p></div>
-        <div><h3>Merge on the card</h3><p>A green pull request waits on its card. <kbd>p</kbd> and a typed <kbd>y</kbd> merge it.</p></div>
-        <div><h3>Less on the board</h3><p>Tap a column's name to hide it. <kbd>g</kbd> shows one chain, <kbd>s</kbd> one host.</p></div>
-        <div><h3>Copy, checked</h3><p><kbd>c</kbd> copies what the agent said. One paste proves the copy reaches your screen, through tmux and SSH.</p></div>
-        <div><h3>The board on the belt</h3><p>In Matchblox Pocket the key belt follows the board: the chosen card's keys come first.</p></div>
-      </div>
       <p class="note">Claude Code, Codex, OpenCode and Cursor also show their context and account. Add any other agent by its command in <code>agents</code>.</p>
     </section>
     <section class="agents chain" aria-labelledby="chain-h">
@@ -178,7 +170,7 @@
       <div class="room">
         <div>
           <h3>Every team has a room</h3>
-          <p><kbd>g</kbd> or <kbd>⌥s</kbd> shows only your team on the board: the stoker's next step above its cards, and a line to the stoker under them. Type to the stoker; <kbd>esc</kbd> shows every card again.</p>
+          <p><kbd>⌥s</kbd> or <kbd>g</kbd> shows your team: the stoker's next step, its cards, a line to it. <kbd>esc</kbd> shows all.</p>
         </div>
         <div class="term" role="img" aria-label="The board narrowed to the web-cart chain: the stoker is on step 3 of its order, api asks you a question in NEEDS YOU, web-cart works, docs is quiet, and a line at the bottom talks to the stoker.">
           <div class="bar" aria-hidden="true"><span>chain web-cart · 3</span><span>esc all</span></div>

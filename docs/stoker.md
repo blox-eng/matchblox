@@ -41,7 +41,7 @@ agent = "codex"
 
 The stoker agent is not one of your lanes, so the board leaves it out. It
 shows in the header and on Machine's row `stoker`. When it needs you (a
-question, an approval), the header says `stoker waits for you`.
+question, an approval), the header says `stoker needs you`.
 `matchblox sessions --json` keeps its row, with `"stoker": true`.
 matchblox compacts its context like any other session's. What matters is
 in the run log, not in its context.
@@ -141,7 +141,7 @@ stoker (`the stoker starts on default only`).
 `matchblox rename <session> <name>` names a session, its tmux session and
 its agent alike. `matchblox kill <session>` ends a session at rest that you
 did not park: with the `kills` go it runs at once; without it, the card
-shows `⏸ waits for you: stoker wants to kill api-gw`, `y` gives the go
+shows `⏸ waits for your go: stoker wants to kill api-gw`, `y` gives the go
 for that one kill, and the stoker runs it again. It never kills a session
 that works or needs you.
 
@@ -284,7 +284,7 @@ matchblox puts it on the stoker's view by itself, under `YOUR GO`, and the
 card of that session goes into `NEEDS YOU` with `y go` among its keys:
 
 ```text
- ⏸ 02:40 waits for you: api-gw wants to run gh pr merge 4556 --squash
+ ⏸ 02:40 waits for your go: api-gw wants to run gh pr merge 4556 --squash
          y gives the go, once
 ```
 
@@ -427,7 +427,7 @@ No chain stoker starts by itself. Each one starts when you start it, or
 when the host stoker gives its chain an order. Each one is one more agent,
 and it uses tokens. `[stoker] max_chains` (4 by default) caps how many run
 at once. A fifth start is refused:
-`the family has its 4 chain stokers: max_chains. Quit one on the STOKER tab first.`
+`the family has its 4 chain stokers: max_chains. Quit one on Machine › stoker first.`
 
 ### Talk to a chain
 
@@ -479,7 +479,7 @@ matchblox stoker quit --chain api-auth
   that runs needs words: `an order needs words`.
 - From your shell, a chain's stoker gets no go: `--go` there is refused
   with `goes are given at the console: drop --go here, and grant them on
-  the STOKER tab`. A pane with no agent seen in it yet counts as yours, so
+  Machine › stoker`. A pane with no agent seen in it yet counts as yours, so
   an agent there must not grant itself merges. Grant gos on the stoker's view.
 - From the host stoker's pane, `--go merges,releases,deploys,kills` gives
   the chain's stoker those gos; with no `--go`, it has the host stoker's.
@@ -641,7 +641,7 @@ end of the run its score:
   ✓ merges
   ! releases and deploys still ask you
 
- DONE 3 of 4 · 1 WAITS FOR YOU
+ DONE 3 of 4 · 1 NEED YOU
  ▌✓ 23:41 api-gw  merge #4556 when green
           merged #4556, CI green
   ✓ 03:40 app-docs  merge #4551 on green
@@ -664,7 +664,7 @@ end of the run its score:
 
   THE RUN · ready 5/7
     7 watched · 1 was full · 1 compacted · 1 waited · 386k tokens given back
-    api-gw           waits for you
+    api-gw           needs you
     app-docs         out until 09:10
     billing          69% · finishes ~79% · left alone
 ```
@@ -704,7 +704,7 @@ Until you have seen it, `matchblox status` shows the card too:
 ```text
 stoker: night 23:10 → 07:00 · ready 5/7 · 7 watched · 1 was full · 1 compacted · 1 waited · 386k tokens given back
   limit out 04:12 → 06:40
-  not ready: api-gw (waits for you)
+  not ready: api-gw (needs you)
   not ready: app-docs (out until 09:10)
   left alone: billing (69% · finishes ~79%)
 ```

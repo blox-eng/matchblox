@@ -130,9 +130,9 @@ func (m Model) stokersBadge(short bool) string {
 	case !kept:
 		return ""
 	case m.stokerAsks() && short:
-		return st.accent.Render("stoker waits")
+		return st.accent.Render("stoker asks")
 	case m.stokerAsks():
-		return st.accent.Render("stoker waits for you")
+		return st.accent.Render("stoker needs you")
 	case runs == 0:
 		return st.faint.Render("stoker off")
 	}

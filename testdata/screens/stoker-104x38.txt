@@ -1,4 +1,4 @@
- ▰ matchblox                                                          ● 6 wait for you  ☾ night → 02:50
+ ▰ matchblox                                                              ● 7 need you  ☾ night → 02:50
  board 7    MACHINE
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
  STOKER                                                                                   night → 02:50
@@ -24,7 +24,7 @@
           the build is green, waits for the release
 
  YOUR GO
- ▌⏸ 21:31 waits for you: kindle-web wants to run gh release create v1.4
+ ▌⏸ 21:31 waits for your go: kindle-web wants to run gh release create v1.4
           y gives the go, once
 
  STANDING RULES

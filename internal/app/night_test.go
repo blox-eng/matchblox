@@ -182,12 +182,12 @@ func TestTheCardNamesWhatIsNotReady(t *testing.T) {
 	v := quietNight()
 	c := *v.Card
 	c.Ready, c.Full, c.Compacted, c.Waited, c.Given = 5, 2, 1, 1, 166600
-	c.NotReady = []proto.StokerMiss{{Name: "api-gw", Why: "waits for you"}, {Name: "billing", Why: "full · 91%"}}
+	c.NotReady = []proto.StokerMiss{{Name: "api-gw", Why: "needs you"}, {Name: "billing", Why: "full · 91%"}}
 	c.Left = []proto.StokerMiss{{Name: "Billed", Why: "69% · finishes ~79% · left alone"}}
 	v.Card = &c
 	m, _ := loadedWith(t, 160, stokerState(v))
 	out := ansi.Strip(openCard(m).(Model).render())
-	for _, want := range []string{"ready 5/7", "2 were full", "1 compacted", "1 waited", "167k tokens given back", "api-gw", "waits for you", "billing", "full · 91%", "Billed", "69% · finishes ~79% · left alone"} {
+	for _, want := range []string{"ready 5/7", "2 were full", "1 compacted", "1 waited", "167k tokens given back", "api-gw", "needs you", "billing", "full · 91%", "Billed", "69% · finishes ~79% · left alone"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("no %q in\n%s", want, out)
 		}
@@ -221,14 +221,14 @@ func TestSummaryCarriesTheCard(t *testing.T) {
 	v := quietNight()
 	c := *v.Card
 	c.Ready, c.Compacted, c.Given = 6, 1, 166600
-	c.NotReady = []proto.StokerMiss{{Name: "api-gw", Why: "waits for you"}}
+	c.NotReady = []proto.StokerMiss{{Name: "api-gw", Why: "needs you"}}
 	c.Left = []proto.StokerMiss{{Name: "Billed", Why: "69% · finishes ~79% · left alone"}}
 	v.Card = &c
 	out := Summary(stokerState(v).Doc)
 	for _, want := range []string{
 		"  left alone: Billed (69% · finishes ~79%)\n",
 		"stoker: night 01:08 → 07:00 · ready 6/7 · 7 watched · 0 were full · 1 compacted · 0 waited · 167k tokens given back\n",
-		"  not ready: api-gw (waits for you)\n",
+		"  not ready: api-gw (needs you)\n",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("no %q in\n%s", want, out)

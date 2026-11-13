@@ -101,13 +101,13 @@ func joinModel(t *testing.T, width int, next ...[]string) Model {
 }
 
 func TestJoinToastAndSpark(t *testing.T) {
-	if m := joinModel(t, 160, mockupChain); saidNow(m) != "ember-billing joined hearth · u in its room takes it out" { // u moves to the menu at step 6d
+	if m := joinModel(t, 160, mockupChain); saidNow(m) != "ember-billing joined hearth · out of hearth is in its menu, in the room" {
 		t.Fatalf("toast = %q", saidNow(m))
 	}
 }
 
 func TestJoinToastNarrow(t *testing.T) {
-	if m := joinModel(t, 40, mockupChain); saidNow(m) != "ember-billing joined hearth · u: out" {
+	if m := joinModel(t, 40, mockupChain); saidNow(m) != "ember-billing joined hearth · m: out" {
 		t.Fatalf("toast = %q", saidNow(m))
 	}
 }

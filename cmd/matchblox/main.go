@@ -439,7 +439,7 @@ func newFlags() (*flag.FlagSet, flags) {
 		rest:       fl.String("rest", "", "stoker when: the session whose turn's end fires the trigger"),
 		drop:       fl.String("drop", "", "stoker when: drop the trigger with this id"),
 		list:       fl.Bool("list", false, "stoker when: print the run's triggers"),
-		anyway:     fl.Bool("anyway", false, "kill, switch: act on a session that works or waits for you"),
+		anyway:     fl.Bool("anyway", false, "kill, switch: act on a session that works or needs you"),
 		where:      fl.String("where", "", "new: the directory, or the repository of --branch (default: here)"),
 		agent:      fl.String("agent", "claude", "new, switch: the agent to start: claude, codex, opencode or cursor-agent"),
 		handoff:    fl.String("handoff", "", "switch: the new agent's task (default: continue from captured handover evidence; empty: no task)"),

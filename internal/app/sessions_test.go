@@ -67,8 +67,8 @@ func TestTheStokersSessionStaysOutOfSessions(t *testing.T) {
 		st.Sessions[0].Asks = true
 		st.Stoker = &proto.StokerView{Mode: proto.StokerMode{On: true}}
 		m, _ = loadedWith(t, w, st)
-		if h := ansi.Strip(m.head(w)); !strings.Contains(h, "stoker waits") {
-			t.Fatalf("width %d: the stoker waits for you and the header does not say so: %q", w, h)
+		if h := ansi.Strip(m.head(w)); !strings.Contains(h, "stoker needs you") && !strings.Contains(h, "stoker asks") {
+			t.Fatalf("width %d: the stoker needs you and the header does not say so: %q", w, h)
 		}
 	}
 }

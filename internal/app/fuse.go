@@ -369,9 +369,9 @@ func (m Model) joinNews(next *state.ChainsView, sessions []sample.Session) strin
 		for _, mb := range c.Members {
 			// a /clear or switch renames a member in its pane: no join
 			if !slices.ContainsFunc(old.Members, func(o chains.Member) bool { return o.Same(mb) || o.Pane == mb.Pane }) {
-				out := " · u in its room takes it out"
+				out := " · out of " + c.Name + " is in its menu, in the room"
 				if m.width < 50 {
-					out = " · u: out"
+					out = " · m: out"
 				}
 				return name(mb) + " joined " + c.Name + out
 			}
