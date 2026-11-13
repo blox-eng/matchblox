@@ -16,6 +16,9 @@ import (
 // read in 2026.10.19). A clear without the last part is not a replay.
 const ClearCodes = "\x1b[H\x1b[2J\x1b[3J"
 
+// Notice is the one line the pane shows while the agent replays.
+const Notice = "Cursor redraws for the new width…"
+
 // SessionEnv names the session a guard runs for, for the words that say
 // how to start it again.
 const SessionEnv = "MATCHBLOX_SESSION"
@@ -25,25 +28,27 @@ const SessionEnv = "MATCHBLOX_SESSION"
 // console to the way back.
 const LinkName = "matchblox-guard"
 
-// pendWait is how long output that could be the start of ClearCodes waits
-// for its next byte before it passes as it is.
-const pendWait = 20 * time.Millisecond
-
-// Notice is the one line the pane shows while the agent replays.
-const Notice = "Cursor redraws for the new width…"
-
 const (
 	// tailLines and tailBytes bound what the pane gets of a replay: its
 	// last lines.
 	tailLines = 1000
 	tailBytes = 4 << 20
-	// A replay is a burst. It has ended when an endWindow brings under
-	// endBytes: Cursor's own drawing and a streamed answer are far slower.
-	endWindow = 250 * time.Millisecond
-	endBytes  = 16 << 10
-	// holdCap ends a hold that never slows: the pane then shows what
+	// armFor is how long after the agent's start, or a change of width, its
+	// clear starts a hold. A clear at another time is the agent's own (a
+	// new chat), with no replay behind it.
+	armFor = 3 * time.Second
+	// quietFor without output ends a hold: the replay is over. A rate tells
+	// nothing: a renderer at work on a long chat can be slow.
+	quietFor = 300 * time.Millisecond
+	// holdCap ends a hold that never goes quiet: the pane then shows what
 	// comes, as without a guard.
 	holdCap = 60 * time.Second
+	// pendWait is how long output that could be the start of ClearCodes
+	// waits for its next byte before it passes as it is.
+	pendWait = 20 * time.Millisecond
+	// seqMax is the longest escape sequence the hold reads as one: a longer
+	// one is the chat's (an image), not a query.
+	seqMax = 4 << 10
 )
 
 // Filter writes an agent's output to out: unchanged, but for a replay.
@@ -53,16 +58,25 @@ type Filter struct {
 	now     func() time.Time
 	pend    []byte    // output held back: it could be the start of ClearCodes
 	pendAt  time.Time // when pend last grew
+	armed   time.Time // until when a clear starts a hold
 	holding bool
 	tail    []byte    // the end of the replay so far
+	seq     []byte    // an escape sequence of the replay, not yet whole
 	heldAt  time.Time // when the hold began
-	winAt   time.Time // when the window that counts winBytes began
-	winSize int       // bytes of the replay in that window
+	lastAt  time.Time // when the replay last printed
 }
 
 // NewFilter is a Filter that writes to out and reads the time from now.
 func NewFilter(out io.Writer, now func() time.Time) *Filter {
 	return &Filter{out: out, now: now}
+}
+
+// Arm tells the filter that the agent starts, or that its terminal's width
+// changed: a clear in the next armFor is a replay.
+func (f *Filter) Arm() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.armed = f.now().Add(armFor)
 }
 
 // Holding tells if the agent replays now.
@@ -81,35 +95,51 @@ func (f *Filter) Write(p []byte) (int, error) {
 
 func (f *Filter) write(p []byte) error {
 	if f.holding {
-		f.hold(p)
-		return nil
+		return f.hold(p)
 	}
 	data := append(f.pend, p...)
 	f.pend = nil
-	if i := bytes.Index(data, []byte(ClearCodes)); i >= 0 {
+	now := f.now()
+	if i := bytes.Index(data, []byte(ClearCodes)); i >= 0 && !now.After(f.armed) {
 		if _, err := f.out.Write(append(data[:i:i], ClearCodes+Notice...)); err != nil {
 			return err
 		}
-		f.holding, f.tail, f.winSize = true, nil, 0
-		f.heldAt = f.now()
-		f.winAt = f.heldAt
-		f.hold(data[i+len(ClearCodes):])
-		return nil
+		f.holding, f.tail, f.seq = true, nil, nil
+		f.heldAt = now
+		return f.hold(data[i+len(ClearCodes):])
 	}
 	keep := codesPrefix(data)
 	if keep > 0 {
 		f.pend = append([]byte(nil), data[len(data)-keep:]...)
-		f.pendAt = f.now()
+		f.pendAt = now
 	}
 	_, err := f.out.Write(data[:len(data)-keep])
 	return err
 }
 
-// hold keeps the end of a replay: its last tailLines lines, from its last
-// clear on.
-func (f *Filter) hold(p []byte) {
-	f.winSize += len(p)
-	f.tail = append(f.tail, p...)
+// hold takes more of a replay. What the agent asks of the terminal or sets
+// in it passes at once; the rest is kept, its last tailLines lines, from
+// its last clear on.
+func (f *Filter) hold(p []byte) error {
+	f.lastAt = f.now()
+	var pass []byte
+	for _, b := range p {
+		if len(f.seq) == 0 && b != 0x1b {
+			f.tail = append(f.tail, b)
+			continue
+		}
+		f.seq = append(f.seq, b)
+		whole, known := sequence(f.seq)
+		if !whole && known && len(f.seq) < seqMax {
+			continue
+		}
+		if whole && toTerminal(f.seq) {
+			pass = append(pass, f.seq...)
+		} else {
+			f.tail = append(f.tail, f.seq...)
+		}
+		f.seq = f.seq[:0]
+	}
 	if i := bytes.LastIndex(f.tail, []byte(ClearCodes)); i >= 0 {
 		f.tail = f.tail[i+len(ClearCodes):]
 	}
@@ -133,28 +163,74 @@ func (f *Filter) hold(p []byte) {
 	if from > 0 {
 		f.tail = append(f.tail[:0], f.tail[from:]...)
 	}
+	if len(pass) == 0 {
+		return nil
+	}
+	_, err := f.out.Write(pass)
+	return err
+}
+
+// sequence reads seq, which starts with ESC, as an escape sequence: whole
+// when its last byte ends it, and known while it can still be one. A
+// sequence that is not known is plain bytes.
+func sequence(seq []byte) (whole, known bool) {
+	if len(seq) < 2 {
+		return false, true
+	}
+	last := seq[len(seq)-1]
+	switch seq[1] {
+	case '[': // CSI: parameters and intermediates, then one final byte
+		if len(seq) == 2 {
+			return false, true
+		}
+		if last >= 0x40 && last <= 0x7e {
+			return true, true
+		}
+		return false, last >= 0x20 && last <= 0x3f
+	case ']', 'P', '_', '^', 'X': // a string: to BEL (OSC) or to ESC \
+		if len(seq) == 2 {
+			return false, true
+		}
+		if last == 0x07 && seq[1] == ']' {
+			return true, true
+		}
+		return last == '\\' && seq[len(seq)-2] == 0x1b && len(seq) > 3, true
+	}
+	return true, true // ESC and one byte
+}
+
+// toTerminal tells if a whole escape sequence asks the terminal something
+// or sets a mode in it, and is no part of what the chat looks like: a
+// private CSI (modes, the keyboard protocol), a status, attributes or
+// window report, an OSC that asks, a DCS that asks.
+func toTerminal(seq []byte) bool {
+	body, final := seq[2:len(seq)-1], seq[len(seq)-1]
+	switch seq[1] {
+	case '[':
+		if len(body) > 0 && bytes.IndexByte([]byte("?><="), body[0]) >= 0 {
+			return true
+		}
+		return final == 'n' || final == 'c' || final == 't'
+	case ']':
+		return bytes.Contains(seq, []byte(";?"))
+	case 'P':
+		return bytes.HasPrefix(body, []byte("+q")) || bytes.HasPrefix(body, []byte("$q"))
+	}
+	return false
 }
 
 // Tick lets time pass. Output that waited for the rest of ClearCodes, and
-// got none, passes. A replay that has ended, or runs over holdCap, gives
+// got none, passes. A replay that went quiet, or runs over holdCap, gives
 // the pane its end.
 func (f *Filter) Tick() error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	now := f.now()
 	if f.holding {
-		ended := false
-		if now.Sub(f.winAt) >= endWindow {
-			ended = f.winSize < endBytes
-			f.winAt, f.winSize = now, 0
-		}
-		if !ended && now.Sub(f.heldAt) < holdCap {
+		if now.Sub(f.lastAt) < quietFor && now.Sub(f.heldAt) < holdCap {
 			return nil
 		}
-		tail := f.tail
-		f.holding, f.tail = false, nil
-		_, err := f.out.Write(append([]byte(ClearCodes+"\x1b[0m"), tail...))
-		return err
+		return f.release()
 	}
 	if len(f.pend) == 0 || now.Sub(f.pendAt) < pendWait {
 		return nil
@@ -165,20 +241,28 @@ func (f *Filter) Tick() error {
 	return err
 }
 
+// release ends a hold: the pane gets the clear and the end of the replay.
+func (f *Filter) release() error {
+	end := append(append([]byte(ClearCodes+"\x1b[0m"), f.tail...), f.seq...)
+	f.holding, f.tail, f.seq = false, nil, nil
+	_, err := f.out.Write(end)
+	return err
+}
+
 // Flush writes what the filter still holds, at the agent's end: the end of
 // a replay, or output that waited for the rest of ClearCodes.
 func (f *Filter) Flush() error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	held := f.pend
 	if f.holding {
-		held = append([]byte(ClearCodes+"\x1b[0m"), f.tail...)
+		return f.release()
 	}
-	f.holding, f.tail, f.pend = false, nil, nil
-	if len(held) == 0 {
+	pend := f.pend
+	f.pend = nil
+	if len(pend) == 0 {
 		return nil
 	}
-	_, err := f.out.Write(held)
+	_, err := f.out.Write(pend)
 	return err
 }
 

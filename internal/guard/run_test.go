@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -471,5 +472,40 @@ func TestGuardWritesNoFile(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestGuardEndsWhenPaneGoes: when the pane goes, an agent that ignores the
+// hangup does not live on behind its guard. With no guard its terminal
+// would be gone; the guard takes its terminal away too, and ends it.
+func TestGuardEndsWhenPaneGoes(t *testing.T) {
+	wait := killWait
+	killWait = 200 * time.Millisecond
+	t.Cleanup(func() { killWait = wait })
+	pidFile := filepath.Join(t.TempDir(), "pid")
+	s := newScreen(t, 100, 30)
+	done := s.run("sh", "-c", "trap '' HUP; echo $$ > "+pidFile+"; printf ready; while :; do sleep 1; done")
+	s.waitFor("ready", func(text string) bool { return strings.Contains(text, "ready") })
+	if err := syscall.Kill(os.Getpid(), syscall.SIGHUP); err != nil { // as tmux sends the pane's program
+		t.Fatal(err)
+	}
+	began := time.Now()
+	done()
+	if took := time.Since(began); took > 3*time.Second {
+		t.Fatalf("the guard took %v to end after the hangup", took)
+	}
+	b, err := os.ReadFile(pidFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for deadline := time.Now().Add(2 * time.Second); syscall.Kill(pid, 0) == nil; time.Sleep(20 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			_ = syscall.Kill(pid, syscall.SIGKILL)
+			t.Fatalf("the agent (pid %d) lives on after its pane went", pid)
+		}
 	}
 }

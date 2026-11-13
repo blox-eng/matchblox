@@ -55,6 +55,7 @@ func TestFilterHalfCodes(t *testing.T) {
 	for _, cut := range [][]string{{"\x1b[H\x1b[2J\x1b[3J"}, {"\x1b", "[H\x1b[2", "J\x1b[3J"}, {"\x1b[H", "\x1b[2J", "\x1b[3J"}} {
 		out.Reset()
 		f := NewFilter(&out, newClock().now)
+		f.Arm()
 		for _, part := range cut {
 			if _, err := f.Write([]byte(part)); err != nil {
 				t.Fatal(err)
@@ -109,6 +110,7 @@ func TestFilterKeepsTail(t *testing.T) {
 	var out bytes.Buffer
 	c := newClock()
 	f := NewFilter(&out, c.now)
+	f.Arm()
 	in := replay(50000)
 	writeIn(t, f, in[:len(ClearCodes)], 3)
 	if got, want := out.String(), ClearCodes+Notice; got != want {
@@ -119,11 +121,9 @@ func TestFilterKeepsTail(t *testing.T) {
 		t.Fatalf("during the replay: holding=%v, %d bytes out; want a hold and no more than the notice", f.Holding(), out.Len())
 	}
 	out.Reset()
-	for range 2 { // one window that saw the burst, one that saw nothing
-		c.t = c.t.Add(endWindow)
-		if err := f.Tick(); err != nil {
-			t.Fatal(err)
-		}
+	c.t = c.t.Add(quietFor)
+	if err := f.Tick(); err != nil {
+		t.Fatal(err)
 	}
 	got := out.String()
 	if f.Holding() {
@@ -150,32 +150,97 @@ func TestFilterKeepsTail(t *testing.T) {
 	}
 }
 
-// TestFilterTrickle: Cursor also clears for its own reasons (a new chat, a
-// /clear), with little after it. That hold ends within one window, and
-// what follows passes as it comes.
-func TestFilterTrickle(t *testing.T) {
+// TestFilterOwnClear: Cursor also clears for its own reasons (a /clear, a
+// new chat). No width changed, so nothing is held: every byte passes as it
+// comes, and no notice shows.
+func TestFilterOwnClear(t *testing.T) {
 	var out bytes.Buffer
 	c := newClock()
 	f := NewFilter(&out, c.now)
+	f.Arm()
+	c.t = c.t.Add(armFor + time.Millisecond) // the start is long past
+	in := replay(40)
+	writeIn(t, f, in, 7)
+	if f.Holding() || !bytes.Equal(out.Bytes(), in) {
+		t.Fatalf("a clear with no width change before it: holding=%v, %d bytes out of %d; want all of them, unchanged", f.Holding(), out.Len(), len(in))
+	}
+}
+
+// TestFilterSlowReplay: a replay is held however slowly Cursor prints it,
+// as long as it keeps printing. 60 kB/s for 20 s is a renderer at work on a
+// long chat.
+func TestFilterSlowReplay(t *testing.T) {
+	var out bytes.Buffer
+	c := newClock()
+	f := NewFilter(&out, c.now)
+	f.Arm()
 	writeIn(t, f, []byte(ClearCodes), 9)
-	word := bytes.Repeat([]byte("w"), 200)
-	for at := 100 * time.Millisecond; at <= 300*time.Millisecond; at += 100 * time.Millisecond {
-		c.t = c.t.Add(100 * time.Millisecond)
-		writeIn(t, f, word, 200)
+	line := 0
+	for at := time.Duration(0); at < 20*time.Second; at += 25 * time.Millisecond {
+		var b bytes.Buffer
+		for b.Len() < 1500 {
+			line++
+			fmt.Fprintf(&b, "line %d| %s\r\n", line, strings.Repeat("chat ", 12))
+		}
+		writeIn(t, f, b.Bytes(), b.Len())
+		c.t = c.t.Add(25 * time.Millisecond)
 		if err := f.Tick(); err != nil {
 			t.Fatal(err)
 		}
+		if !f.Holding() {
+			t.Fatalf("the hold ended %v into a replay that still prints", at)
+		}
 	}
-	if f.Holding() {
-		t.Fatal("300 ms after a clear with 600 bytes behind it, the hold goes on")
+	c.t = c.t.Add(quietFor)
+	if err := f.Tick(); err != nil {
+		t.Fatal(err)
 	}
-	if want := ClearCodes + Notice + ClearCodes + "\x1b[0m" + strings.Repeat("w", 600); out.String() != want {
-		t.Fatalf("after a small clear the pane got %d bytes, want %d: the clear and all 600 bytes", out.Len(), len(want))
+	got := out.String()
+	if f.Holding() || strings.Contains(got, "line 1|") || !strings.Contains(got, fmt.Sprintf("line %d|", line)) {
+		t.Fatalf("after a slow replay of %d lines: holding=%v, first line shown=%v, last line shown=%v", line, f.Holding(), strings.Contains(got, "line 1|"), strings.Contains(got, fmt.Sprintf("line %d|", line)))
 	}
-	before := out.Len()
-	writeIn(t, f, word, 200)
-	if out.Len() != before+200 {
-		t.Fatalf("after the hold, 200 bytes in gave %d out at once", out.Len()-before)
+}
+
+// TestFilterHoldPassesModesAndQueries: what Cursor asks of the terminal or
+// sets in it during a replay is not text of the chat. It passes at once, in
+// order and once: a query held back gets its answer late, and a mode set
+// that is cut off with the start of the chat is never set.
+func TestFilterHoldPassesModesAndQueries(t *testing.T) {
+	asked := []string{
+		"\x1b[?2004h",       // bracketed paste on
+		"\x1b[>1u",          // the kitty keyboard protocol, pushed
+		"\x1b[?1004h",       // focus events on
+		"\x1b]11;?\x07",     // the background colour, asked
+		"\x1b[6n",           // the cursor's position, asked
+		"\x1b[c",            // the terminal's attributes, asked
+		"\x1bP+q544e\x1b\\", // a terminfo name, asked
+	}
+	for _, chunk := range []int{1, 5, 4096} {
+		var out bytes.Buffer
+		c := newClock()
+		f := NewFilter(&out, c.now)
+		f.Arm()
+		in := []byte(ClearCodes + "\x1b[1mbold\x1b[0m " + strings.Join(asked, "text between ") + "\r\n")
+		for i := 1; i <= 1500; i++ {
+			in = fmt.Appendf(in, "\x1b[32mline %d|\x1b[0m\r\n", i)
+		}
+		writeIn(t, f, in, chunk)
+		if got, want := out.String(), ClearCodes+Notice+strings.Join(asked, ""); got != want {
+			t.Fatalf("in chunks of %d, during the replay the pane got %q, want the notice and then each query and mode set at once: %q", chunk, got, want)
+		}
+		c.t = c.t.Add(quietFor)
+		if err := f.Tick(); err != nil {
+			t.Fatal(err)
+		}
+		got := out.String()
+		for _, seq := range asked {
+			if n := strings.Count(got, seq); n != 1 {
+				t.Errorf("in chunks of %d, %q reached the terminal %d times, want once", chunk, seq, n)
+			}
+		}
+		if !strings.HasSuffix(got, "\x1b[32mline 1500|\x1b[0m\r\n") || strings.Contains(got, "line 1|") {
+			t.Errorf("in chunks of %d, the end of the replay is wrong: ends %q", chunk, got[max(len(got)-40, 0):])
+		}
 	}
 }
 
@@ -184,6 +249,7 @@ func TestFilterCap(t *testing.T) {
 	var out bytes.Buffer
 	c := newClock()
 	f := NewFilter(&out, c.now)
+	f.Arm()
 	writeIn(t, f, []byte(ClearCodes), 9)
 	chunk := bytes.Repeat([]byte("0123456789abcde\n"), 4096) // 64 KiB each 100 ms
 	for at := time.Duration(0); at < holdCap; at += 100 * time.Millisecond {
@@ -215,8 +281,9 @@ func TestFilterShortReplay(t *testing.T) {
 	var out bytes.Buffer
 	c := newClock()
 	f := NewFilter(&out, c.now)
+	f.Arm()
 	writeIn(t, f, []byte(ClearCodes+"\nfirst\r\nlast"), 64)
-	c.t = c.t.Add(endWindow)
+	c.t = c.t.Add(quietFor)
 	if err := f.Tick(); err != nil {
 		t.Fatal(err)
 	}

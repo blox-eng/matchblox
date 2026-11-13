@@ -19,6 +19,10 @@ import (
 // tickEvery is how often the filter hears that time passes.
 const tickEvery = 25 * time.Millisecond
 
+// killWait is how long an agent has to end after a hangup or a stop
+// passed on to it, before the guard takes its terminal away and ends it.
+var killWait = 3 * time.Second
+
 // drainWait is how long the guard reads on after the agent ends, for the
 // last of its output.
 const drainWait = 500 * time.Millisecond
@@ -90,10 +94,19 @@ func Run(argv []string, in, out *os.File) (int, error) {
 		return 0, &noTerminalError{err}
 	}
 	defer func() { _ = master.Close() }()
+	f := NewFilter(out, time.Now)
+	f.Arm() // the agent's first screen: a resumed chat is a replay too
+	cols := uint16(0)
 	resize := func() {
-		if ws, err := unix.IoctlGetWinsize(int(in.Fd()), unix.TIOCGWINSZ); err == nil { //nolint:gosec // a file descriptor fits
-			_ = unix.IoctlSetWinsize(int(master.Fd()), unix.TIOCSWINSZ, ws) //nolint:gosec // a file descriptor fits
+		ws, err := unix.IoctlGetWinsize(int(in.Fd()), unix.TIOCGWINSZ) //nolint:gosec // a file descriptor fits
+		if err != nil {
+			return
 		}
+		if cols != 0 && ws.Col != cols {
+			f.Arm() // before the agent hears of it
+		}
+		cols = ws.Col
+		_ = unix.IoctlSetWinsize(int(master.Fd()), unix.TIOCSWINSZ, ws) //nolint:gosec // a file descriptor fits
 	}
 	resize()
 
@@ -112,7 +125,6 @@ func Run(argv []string, in, out *os.File) (int, error) {
 	sigs := make(chan os.Signal, 8)
 	signal.Notify(sigs, syscall.SIGWINCH, syscall.SIGHUP, syscall.SIGTERM)
 	defer signal.Stop(sigs)
-	f := NewFilter(out, time.Now)
 	drained, ended := make(chan struct{}), make(chan struct{})
 	broke, waited := make(chan string, 1), make(chan error, 1)
 	go func() { _, _ = io.Copy(master, in) }()
@@ -140,6 +152,10 @@ func Run(argv []string, in, out *os.File) (int, error) {
 					resize()
 				} else {
 					_ = cmd.Process.Signal(sig)
+					time.AfterFunc(killWait, func() {
+						_ = master.Close() // its terminal goes, as its pane did
+						_ = cmd.Process.Kill()
+					})
 				}
 			}
 		}
