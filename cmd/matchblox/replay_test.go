@@ -494,6 +494,10 @@ func replayAt(t *testing.T, z replaySize) {
 		return worldRun(argv)
 	}
 	s.Ships = demoShips(clk, &merged)
+	// The ship reads merged at the next read of the pull requests: every
+	// 15 s of the wall's time, a long wait for a replay that moves 40 times
+	// faster. A read every 300 ms keeps the step to a beat of the replay.
+	s.ShipsEvery = 300 * time.Millisecond
 	// hearth-api, kindle-web and ember-billing are one chain, hearth.
 	s.Chains = &chains.Store{Chains: []chains.Chain{{ID: "c1", Name: "hearth", Repo: "/work/hearth", Members: []chains.Member{
 		{SessionID: "5ea1c0de-0000-4000-8000-000000000001"}, {SessionID: "5ea1c0de-0000-4000-8000-000000000004"},
@@ -742,11 +746,11 @@ func replayAt(t *testing.T, z replaySize) {
 			t.Fatalf("the replay lacks a %s match; has %v", want, matches)
 		}
 	}
-	words, err := repoWords("../../internal", "../../testdata/demo")
+	mine, err := machineNames()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := private(frames, identifying(thisMachine(), words)); err != nil {
+	if err := private(frames, mine); err != nil {
 		t.Fatal(err)
 	}
 	// The story goes into no pane: it answers flint-auth's question with its
