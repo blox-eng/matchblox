@@ -153,6 +153,9 @@ type walker struct {
 	steps      []string
 }
 
+// walkNotice is how long a notice shows in a walk.
+const walkNotice = 400 * time.Millisecond
+
 func startWalk(t *testing.T, cols, rows int) *walker {
 	t.Helper()
 	inR, inW := io.Pipe()
@@ -161,7 +164,13 @@ func startWalk(t *testing.T, cols, rows int) *walker {
 	go term.read()
 	t.Cleanup(term.close)
 	spy := &spies{}
-	d, err := demo.Start(demo.WithConsole(demo.Options{Tree: tree, In: inR, Out: outW, Cols: cols, Rows: rows}, spy.on))
+	// A walk waits out each refusal before the next (clear): a notice of
+	// 2.5 s was most of the time of a walk of doors.
+	console := func(o *app.Options) {
+		spy.on(o)
+		o.NoticeFor = walkNotice
+	}
+	d, err := demo.Start(demo.WithConsole(demo.Options{Tree: tree, In: inR, Out: outW, Cols: cols, Rows: rows}, console))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -349,7 +358,7 @@ func tabOf(_ int, frame string) string {
 // tabAfter waits for the tab row to name a tab other than was.
 func (w *walker) tabAfter(was string) string {
 	w.t.Helper()
-	deadline, repaint := time.Now().Add(10*time.Second), time.Now().Add(time.Second)
+	deadline, repaint := time.Now().Add(10*time.Second), time.Now().Add(repaintAfter)
 	for {
 		if open := tabOf(w.term.wholeFrame()); open != was && open != "" {
 			return open
@@ -359,7 +368,7 @@ func (w *walker) tabAfter(was string) string {
 		}
 		if time.Now().After(repaint) {
 			w.d.Repaint()
-			repaint = time.Now().Add(time.Second)
+			repaint = time.Now().Add(repaintAfter)
 		}
 		time.Sleep(5 * time.Millisecond)
 	}

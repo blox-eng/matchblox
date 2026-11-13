@@ -30,14 +30,22 @@ type noticeMsg struct{}
 // noticeEnds is the command that says a notice ended. The notice's life
 // runs on the console's clock (m.now), so tests, which set that clock,
 // make this one come at once rather than wait noticeFor of wall time.
-var noticeEnds = func() tea.Cmd { return tea.Tick(noticeFor, func(time.Time) tea.Msg { return noticeMsg{} }) }
+var noticeEnds = func(d time.Duration) tea.Cmd { return tea.Tick(d, func(time.Time) tea.Msg { return noticeMsg{} }) }
+
+// noticeLife is how long a notice shows: noticeFor, or Options.NoticeFor.
+func (m Model) noticeLife() time.Duration {
+	if m.opt.NoticeFor > 0 {
+		return m.opt.NoticeFor
+	}
+	return noticeFor
+}
 
 // notice is the one way to show a toast, a refusal or the data's age on
-// the board: text takes the strip's row for noticeFor. The header never
+// the board: text takes the strip's row for noticeLife. The header never
 // shows it.
 func (m *Model) notice(text string) tea.Cmd {
-	m.noticeText, m.noticeUntil, m.goArmed, m.noticeNext = text, m.now().Add(noticeFor), paneKey{}, ""
-	return noticeEnds()
+	m.noticeText, m.noticeUntil, m.goArmed, m.noticeNext = text, m.now().Add(m.noticeLife()), paneKey{}, ""
+	return noticeEnds(m.noticeLife())
 }
 
 // noticeEnded shows the notice that waits for the one that ends.

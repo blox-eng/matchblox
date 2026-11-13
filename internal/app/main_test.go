@@ -22,6 +22,6 @@ import (
 func TestMain(m *testing.M) {
 	time.Local = time.UTC
 	setup.SetPairProbe(setup.PairProbe{LookPath: func(string) (string, error) { return "", errors.New("not found") }})
-	noticeEnds = func() tea.Cmd { return func() tea.Msg { return noticeMsg{} } }
+	noticeEnds = func(time.Duration) tea.Cmd { return func() tea.Msg { return noticeMsg{} } }
 	os.Exit(testhome.Run(m))
 }

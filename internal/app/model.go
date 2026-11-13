@@ -64,6 +64,9 @@ type Options struct {
 	// Now is the clock for ages on the screen. Nil: time.Now. The replay
 	// sets a fixed clock.
 	Now func() time.Time
+	// NoticeFor is how long a notice shows. Zero: noticeFor (2.5 s). The
+	// demo's walks, which wait out each refusal, set a short one.
+	NoticeFor time.Duration
 	// NoMotion makes every motion an instant change.
 	NoMotion bool
 	// OutsideTmux: the console does not run in tmux, so going to a pane

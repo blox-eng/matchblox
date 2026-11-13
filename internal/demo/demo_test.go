@@ -147,6 +147,12 @@ func (term *terminal) wholeFrame() (int, string) {
 	return strings.Count(raw, clear), ansi.Strip(raw[i:])
 }
 
+// repaintAfter is how long a wait reads what the console wrote before it
+// asks for a whole frame: a frame writes only the cells that change, so
+// what changed may never be written whole. A second was most of a walk's
+// time on the board, whose tabs and searches change a few cells each.
+const repaintAfter = 150 * time.Millisecond
+
 // waitFor waits until the console drew every want, in what it wrote or in a
 // whole frame. The console writes only the cells that change, so a count it
 // drew while it waited for the service turns from "BOARD 0" to "BOARD 7"
@@ -154,7 +160,7 @@ func (term *terminal) wholeFrame() (int, string) {
 func (term *terminal) waitFor(t *testing.T, want ...string) {
 	t.Helper()
 	deadline := time.Now().Add(30 * time.Second)
-	repaint := time.Now().Add(time.Second)
+	repaint := time.Now().Add(repaintAfter)
 	for {
 		text := term.text()
 		_, frame := term.wholeFrame()
@@ -176,7 +182,7 @@ func (term *terminal) waitFor(t *testing.T, want ...string) {
 		}
 		if term.d != nil && time.Now().After(repaint) {
 			term.d.Repaint()
-			repaint = time.Now().Add(time.Second)
+			repaint = time.Now().Add(repaintAfter)
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
