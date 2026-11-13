@@ -70,7 +70,8 @@ All notable changes to matchblox are in this file. The format follows
   - A digit marks an answer, and the same digit sends it. The digits
     opened tabs.
   - `Esc` closes the menu, clears a mark, the search and the chain. It
-    never leaves the console: it went back to Hosts.
+    goes back to Hosts only from a host that has not answered yet. It
+    went back to Hosts.
   - `S`, and `Space` and `X` outside Machine's git view, go.
   ([#372](https://github.com/blox-eng/matchblox/issues/372))
 

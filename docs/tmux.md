@@ -36,7 +36,8 @@ tmux server when it starts in tmux, in any session, in place of the tmux key
 that marks a pane, and the way back that `matchblox setup` adds to your tmux
 config binds it too. On a pane that runs a console, in any session, the
 console goes back as `Esc` does: what is open closes, then the search and
-the chain clear. It never leaves the console. On
+the chain clear. It leaves the console only on a host that has not
+answered yet, for Hosts. On
 any other pane it goes to the session `matchblox` and the console's pane
 there, also from another window of that session. With no `matchblox`
 session, it goes to a console you started inside a tmux pane, in any

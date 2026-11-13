@@ -274,7 +274,7 @@ No destructive act is in the menu. `x` keeps its consent box.
 | `Tab` | The board, or Machine. |
 | `/` | Search the board. A search narrows every column. |
 | `z` `N` `r` `A` `e` `d` `h` `f` `F` `n` `o` | As today, on the chosen card. |
-| `esc` | Close the menu, then clear the search, then the chain filter. It never leaves the console. |
+| `esc` | Close the menu, then clear the search, then the chain filter. It never leaves the console, except on a host that has not answered yet: then it goes back to Hosts. |
 | `q`, `Ctrl+C` | Quit the console. |
 
 Keys that change their job: `c` (was: open the STOKER tab), `v` (was: list only), `s` (was: sort), `g` (was: group), `u` (was: cycle the dock). `p` (was: open Ships) now merges, and `x` no longer merges. Keys that go: `1-7` as tabs, `S`, and `Space` and `X` outside Machine's repo view.
