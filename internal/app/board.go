@@ -757,7 +757,7 @@ func (m Model) boardBlockOf(b *boardDraw, c boardCol, s sample.Session, w int, q
 // allHidden is what the body says when every column is hidden: the + names
 // are on the tab row, and on a phone in the page marks.
 func (m Model) allHidden(w int) []string {
-	lines := wrapPlain("Every column is hidden. Tap a + name to show it.", w-3)
+	lines := wrapPlain("Every column is hidden. → or a tap on a + name shows one.", w-3)
 	for i, l := range lines {
 		lines[i] = fit("  "+m.st.faint.Render(l), w)
 	}

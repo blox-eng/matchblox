@@ -135,8 +135,10 @@ After an answer, a merge or a go, the board chooses the first card of
 A tap or a click on a column's name hides the column, and the other
 columns take its room. The tab row then shows it as `+ work 3`: a tap
 there shows it again and chooses it. The card's menu also hides its
-column. A phone and a desk each keep their own hidden columns. When every
-column is hidden, the board says how to show one again.
+column. A phone and a desk each keep their own hidden columns. With no
+mouse, `→` past the last column shows the first hidden one, and `←` past
+the first column shows the last hidden one. When every column is hidden,
+the board says how to show one again.
 
 ### One chain, one host
 

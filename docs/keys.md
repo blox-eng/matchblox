@@ -16,7 +16,7 @@ the right.
 | Key | What it does |
 |---|---|
 | `↑` or `k`, `↓` or `j` | Chooses the card above or below. The chosen card is the peek. From a column's first card, `↑` chooses the setup steps above the board; from its last card, `↓` chooses the ghost row, then the recommendations. |
-| `←` or `→` | Goes to the column at the left or the right, past a hidden or an empty column. On the setup steps' line, moves through the steps. |
+| `←` or `→` | Goes to the column at the left or the right, past a hidden or an empty column. Past the last column, shows a hidden column again. On the setup steps' line, moves through the steps. |
 | `Enter` or `a` | Goes into the match's pane. On a ship that no session drives, opens New session in its worktree. On a setup step, the ghost row or a recommendation, shows its action. On a phone, a tap on the chosen card does it too. |
 | `Ctrl+O` | Goes into the chosen agent's pane, from every tab. |
 | A digit, 1 to 9 | Marks that option of the chosen card's question. The same digit again sends it. Another digit moves the mark, and `Esc` clears it. See [the peek](console.md#the-peek). |

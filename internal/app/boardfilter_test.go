@@ -113,7 +113,7 @@ func TestAllHiddenSaysHowToComeBack(t *testing.T) {
 			}
 		})
 		f := plainFrame(m)
-		if !strings.Contains(strings.Join(strings.Fields(f), " "), "Every column is hidden. Tap a + name to show it.") {
+		if !strings.Contains(strings.Join(strings.Fields(f), " "), "Every column is hidden. → or a tap on a + name shows one.") {
 			t.Errorf("%d: the body does not say how to come back:\n%s", size[0], f)
 		}
 		for _, mark := range []string{"+ need 4", "+ work 3", "+ ship 3", "+ quiet 5"} {

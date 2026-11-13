@@ -84,12 +84,45 @@ func TestArrowsSkipHiddenAndEmptyColumns(t *testing.T) {
 		if m.boardAt != colQuiet {
 			t.Errorf("w=%d: → over a hidden and an empty column lands on %v", w, m.boardAt)
 		}
-		if m = pressOn(m, "right"); m.boardAt != colQuiet {
-			t.Errorf("w=%d: → at the last column moves to %v", w, m.boardAt)
+		if m = pressOn(m, "right"); m.boardAt != colWork || m.colHidden(colWork) {
+			t.Errorf("w=%d: → at the last column does not show the hidden WORKING: %v", w, m.boardAt)
 		}
 		if m = pressOn(m, "left"); m.boardAt != colNeed {
 			t.Errorf("w=%d: ← from QUIET lands on %v", w, m.boardAt)
 		}
+	}
+}
+
+// TestAKeyShowsAHiddenColumn: a keyboard with no mouse brings a hidden
+// column back: → past the last shown column shows the first hidden one,
+// and with every column hidden → shows NEEDS YOU.
+func TestAKeyShowsAHiddenColumn(t *testing.T) {
+	st := boardFixture(t)
+	m := boardShot(t, st, 104, 38, nil)
+	for range boardCols {
+		m = pressOn(m, "m")
+		for m.menu != nil && !strings.HasPrefix(m.menu.items[m.menu.at].label, "hide") {
+			m = pressOn(m, "down")
+		}
+		m = pressOn(m, "enter")
+	}
+	if _, shown := m.boardDrawOf(); len(shown) != 0 {
+		t.Fatalf("the menu left %v shown", shown)
+	}
+	if f := strings.Join(strings.Fields(plainFrame(m)), " "); !strings.Contains(f, "→ or a tap on a + name shows one") {
+		t.Errorf("the body does not name the key:\n%s", plainFrame(m))
+	}
+	m = pressOn(m, "right")
+	if s, ok := m.boardSelected(); m.colHidden(colNeed) || m.boardAt != colNeed || !ok || m.columnOf(s) != colNeed {
+		t.Errorf("→ with every column hidden: need hidden %v, open %s, a card of it chosen %v", m.colHidden(colNeed), m.boardAt.name(), ok)
+	}
+
+	m = pressOn(boardShot(t, st, 104, 38, func(m *Model) { m.flipHidden(colWork) }), "right", "right")
+	if m.boardAt != colQuiet {
+		t.Fatalf("→ → from NEEDS YOU lands on %s", m.boardAt.name())
+	}
+	if m = pressOn(m, "right"); m.colHidden(colWork) || m.boardAt != colWork {
+		t.Errorf("→ past QUIET: work hidden %v, open %s", m.colHidden(colWork), m.boardAt.name())
 	}
 }
 

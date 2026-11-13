@@ -324,13 +324,27 @@ func (m Model) aboveOpen(host string, k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 // boardSide opens the next shown column that has a card, at the left (d -1)
-// or the right (d 1), on the card it had chosen.
+// or the right (d 1), on the card it had chosen. Past the last one it shows
+// a hidden column, so a keyboard alone brings one back: the first of them
+// at the right (their + names end the tab row), the last at the left.
 func (m *Model) boardSide(d int) {
 	b, shown := m.boardDrawOf()
-	for i := slices.Index(shown, b.open) + d; i >= 0 && i < len(shown); i += d {
+	at := slices.Index(shown, b.open)
+	if len(shown) == 0 {
+		at = -1
+	}
+	for i := at + d; i >= 0 && i < len(shown); i += d {
 		if m.boardOpen(shown[i]) {
 			return
 		}
+	}
+	hidden := slices.DeleteFunc(slices.Clone(boardCols[:]), func(c boardCol) bool { return !m.colHidden(c) })
+	switch {
+	case len(hidden) == 0:
+	case d > 0:
+		m.boardShowCol(hidden[0])
+	default:
+		m.boardShowCol(hidden[len(hidden)-1])
 	}
 }
 
