@@ -489,8 +489,12 @@ final class ConsoleConnection {
 
     var isDemo: Bool { host.isDemo }
 
-    /// How long the agent's closing text shows before the invite rises.
-    private static let readingTime: Duration = .seconds(2)
+    /// How long the agent's closing text shows before the invite rises. The UI tests stretch it
+    /// (`-demoSlowInvite`): a busy runner reads the screen about once a second, too seldom to
+    /// see the text in 2 seconds.
+    private static var readingTime: Duration {
+        ProcessInfo.processInfo.arguments.contains("-demoSlowInvite") ? .seconds(15) : .seconds(2)
+    }
 
     init(host: Host, open: Int?, onFailure: @escaping (ConnectFailure) -> Void) {
         self.host = host

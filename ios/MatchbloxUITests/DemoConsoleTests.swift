@@ -231,8 +231,10 @@ final class DemoConsoleTests: XCTestCase {
     }
 
     /// The second option of flint-auth's question, in its card's peek, tapped by the terminal's
-    /// cells as a thumb does: the first tap marks it, and the second sends it. Returns the invite's
-    /// heading, once it shows.
+    /// cells as a thumb does: the first tap marks it, and the second sends it. The send moves the
+    /// choice to the first card of NEEDS YOU, so once the turn ends and flint-auth is back there
+    /// under its stuck ship, a tap chooses its card and the peek shows its last words. Returns the
+    /// invite's heading, once it shows.
     @MainActor
     private func answerTheAgent(in app: XCUIApplication) -> XCUIElement {
         expect(in: app, "label CONTAINS %@ AND label CONTAINS %@", "NEEDS YOU", "2. Rotate, keep")
@@ -240,6 +242,8 @@ final class DemoConsoleTests: XCTestCase {
         expect(in: app, step: "the mark on the second option", "label CONTAINS %@", "2 again sends")
         waitUntilSteady(app.descendants(matching: .any)["demo-terminal"])
         tapRow(in: app, containing: "2. Rotate, keep")
+        expect(in: app, step: "flint-auth back in NEEDS YOU after its turn", "label CONTAINS %@", "stuck conflicts with main")
+        tapRow(in: app, containing: "flint-auth", until: closingText)
         return expectTheAnswer(in: app)
     }
 
@@ -251,7 +255,7 @@ final class DemoConsoleTests: XCTestCase {
     }
 
     /// The closing text shows first, and the invite rises over it after. The stand-in shows the
-    /// agent's reply in its pane; the board shows its card with the turn's last words.
+    /// agent's reply in its pane; the board shows the turn's last words in the chosen card's peek.
     @MainActor
     private func expectTheAnswer(in app: XCUIApplication) -> XCUIElement {
         let heading = app.staticTexts["Your agents wait the same way."]
@@ -352,7 +356,9 @@ final class DemoConsoleTests: XCTestCase {
     @MainActor
     private func launched(extra: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-openDemoHost"] + extra
+        // The invite waits 15 s, not 2, after the turn ends: this runner reads the screen about
+        // once a second, and the closing text must be seen before the invite covers it.
+        app.launchArguments = ["-openDemoHost", "-demoSlowInvite"] + extra
         app.launch()
         return app
     }
