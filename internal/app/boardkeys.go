@@ -819,15 +819,20 @@ func (m Model) belowHints(id string) []hint {
 	return append(hs, hintFor(mk.Dismiss, "dismiss"), hintFor(mk.Fold, "hide"))
 }
 
-// boardKeyLine is the board's key line: its hints, three cells apart. A
-// hint that does not fit leaves whole, with every one after it.
+// boardKeyLine is the board's key line: the notice of a newer service
+// first, then its hints, three cells apart. A hint that does not fit
+// leaves whole, with every one after it.
 func (m Model) boardKeyLine(w int) (string, []span) {
 	st := m.st
 	line, x := " ", 1
+	if m.newer != "" { // first: its key stays when the line is cut
+		line += st.warn.Render(m.newer)
+		x += lipgloss.Width(m.newer)
+	}
 	var spans []span
 	for i, h := range m.boardHints(w) {
 		gap := ""
-		if i > 0 {
+		if i > 0 || m.newer != "" {
 			gap = "   "
 		}
 		part := st.text.Render(h.key) + st.muted.Render(" "+h.label)

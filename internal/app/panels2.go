@@ -6,10 +6,13 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
+
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/history"
 	"github.com/blox-eng/matchblox/internal/proto"
@@ -277,10 +280,23 @@ func (m Model) recActions(r advice.Rec, w int) []string {
 	return out
 }
 
+// wrap fits s in lines of w columns, each with a space before it. A word
+// no line holds (a checksum, a long path) breaks across lines.
 func wrap(s string, w int, render func(...string) string) []string {
 	var out []string
 	line := ""
 	for _, word := range strings.Fields(s) {
+		for w > 3 && ansi.StringWidth(word) > w-3 {
+			if line != "" {
+				out, line = append(out, render(" "+line)), ""
+			}
+			head := ansi.Truncate(word, w-3, "")
+			if head == "" { // one rune is wider than the line
+				_, n := utf8.DecodeRuneInString(word)
+				head = word[:n]
+			}
+			out, word = append(out, render(" "+head)), word[len(head):]
+		}
 		if len(line)+len(word)+1 > w-2 && line != "" {
 			out = append(out, render(" "+line))
 			line = ""

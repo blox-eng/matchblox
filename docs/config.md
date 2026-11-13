@@ -128,3 +128,104 @@ console goes as before, and one with neither a pane nor a terminal is
 refused. See [chains](agents.md#chains).
 
 One match opts out alone with `matchblox chain --off`.
+
+## Update
+
+`[update] mode` is what the host does about a newer release. It is `"offer"`
+by default. Any other value is an error that names the three modes. Each
+machine has its own.
+
+| Mode | What the host does | What leaves the machine |
+| --- | --- | --- |
+| `"offer"` | Finds a release and offers it in the console. You install it. | One request a day to find the latest release. The download of the release when you install it. |
+| `"auto"` | Installs a release a day after it first sees it, with no stoker run on and no clone running. | The same request, then the download of the release. |
+| `"off"` | Does nothing. | Nothing, until you press `u` on this host's row in another console. |
+
+```toml
+[update]
+mode = "auto"
+```
+
+The mode, like every key, is read when the service starts. After you
+change it, start the service again: see the top of this page.
+
+The service looks when it starts and then once a day. The console never
+looks. A build that is not a release (a `dev` build, or one from a
+checkout) never looks, and a prerelease is never offered. A look that
+fails keeps the release it found before, and never reads as up to date.
+One failed look, or two days of them, stay quiet: `matchblox status` gives
+the reason in `update.err`. After three days of failed looks, counted from
+the first failed look, the board shows the step "Release check fails" under
+`SET UP`, with the reason and `Run: matchblox update`. A look that works starts the count again. Closing
+the step hides it until a look works and the looks then fail for three more
+days.
+
+**offer.** The board shows the step "Update to v0.43.0" under `SET UP`, with
+"matchblox v0.43.0 is out. This machine runs v0.42.0."
+`Enter` shows the release it installs and the file it replaces. It also
+says what the install checks first: the checksum always, the build's
+provenance if `gh` is installed and logged in. A typed `y` installs it, with the same
+checks as `matchblox update`. The service then runs again on the new
+release, and the console starts again on it. When the console cannot start
+itself again, it says `updated to v0.43.0 · quit and open matchblox again`.
+Your sessions run on: they live in tmux. When the install fails, the offer
+says `The install failed, nothing was changed. Enter tries again, or run: matchblox update.`
+and then the reason, until the next try. The row shows the first 12
+characters of each checksum; `matchblox update` prints them whole. `x` closes the offer of that
+release only, and the next release shows a new one. Until then,
+`matchblox update` installs it. `matchblox setup` does not show it.
+
+**auto.** The service installs the release by itself, with no console
+open. It waits a day from when this machine first saw the release, and for
+a time when no stoker run is on and no clone runs. A newer release during
+the wait starts the day again. The offer shows during the wait, and says
+when auto installs the release: `Auto installs it after Nov 13 at 09:00.`,
+in the time of the host. When the day
+has passed and work is in flight, the offer says why it waits:
+`Auto waits for the stoker run to end.` or `Auto waits for a clone to end.`
+Closing the offer does not stop the install: to skip a release on this
+machine, use `"offer"` or `"off"`.
+
+The install makes the checks of `matchblox update`, and one more: no person
+is there, so auto installs only a build whose provenance it checked. That
+needs a `gh` that is installed and logged in for the service's user, on the
+service's `PATH`. Without one, auto changes nothing and does not run the
+download. The offer then says why, for example
+`the build's provenance was not checked (gh is not logged in: gh auth login, then run this again)`,
+and auto tries again after the next look. To install it on the checksum
+alone, press `Enter` on the offer or run `matchblox update`: a person's
+install checks the provenance only when `gh` can, and the console then adds
+`· provenance not checked`, as do the step of an install that waits on its
+restart and the result of `u` on a host. After a good auto install the
+console says once `updated to v0.43.0 at 03:12` (`on Nov 11 at 03:12` when
+it was not today). Auto installs a
+release once when the install works. A failed install is tried again after
+the next look.
+
+An install from the offer or from `u` waits for a clone that runs, which
+the restart would cut off: it says `a clone of o/r runs. Update when it ends.`
+A stoker run does not hold it: the run goes on after the restart. From the
+start of any install, from the offer, from auto or from `u`,
+until matchblox runs again on the new release, a new clone is refused: see
+[Limits](limits.md). When the service still runs the old release two
+minutes after the install, or starts again on the old release, the board
+shows the step "Restart for v0.43.0" with
+`v0.43.0 is installed, but this service still runs v0.42.0. Quit matchblox and open it again.`
+A new clone then says `v0.43.0 is installed. Quit matchblox and open it again.`
+While the service waits for that restart, the step shows under every mode
+and over a newer release, a second install answers with the same words, and
+`x` does not close the step. After a start on the old release, `x` closes it
+until a newer release comes out.
+
+**off.** No look, no request and no offer. A person who presses `u` on this
+host's row in another console still updates it: see
+[A host on another release](remote.md#a-host-on-another-release).
+
+Homebrew owns the binary it installed, so matchblox never replaces it. The
+offer says `brew upgrade matchblox`, and `"auto"` does nothing.
+
+Only a person at a console installs from the offer, updates a host or opens
+any step under `SET UP`: on the host, over SSH, or in the phone app. An
+agent's session, a session the stoker drives and a `matchblox` command are
+refused. `matchblox update` in your own shell is yours, and updates this
+machine as before. See [Limits](limits.md) for what this does not stop.

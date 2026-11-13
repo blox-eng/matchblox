@@ -1,0 +1,31 @@
+ ▰ matchblox                   ● 6 need you
+ BOARD 7    machine
+────────────────────────────────────────────
+▌SET UP · 1 · Update to v0.43.0
+  matchblox v0.43.0 is out. This machine
+  runs v0.42.0. The install failed, nothing
+  was changed. Enter tries again, or run:
+  matchblox update. checksum mismatch for
+  matchblox_linux_amd64 · published
+  3f9a3f9a3f9a… · download
+  c2e1c2e1c2e1…
+ NEEDS YOU 6 −  work 1  ship 0  quiet 0
+────────────────────────────────────────────
+ ╿ flint-auth                         ✻  2m
+  stuck conflicts with main
+  #4545 ●━✕┄○┄○┄○  ctx 41%
+  ⏎ go in
+
+ │ spark-docs                         ✻  9m
+  done I rewrote the quick start and the i…
+  #4540 ●━●━●━●━●  ctx 88%
+  ⏎ go in
+
+  ↓ 4 more
+
+
+ + start a new session
+ RECOMMENDATIONS · 7
+ ✻ 5h ▰▰▰▰▰▰▰▱ 84%  wk 82%        machine ›
+────────────────────────────────────────────
+ c copy   v one line   s hosts   u strip

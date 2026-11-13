@@ -72,13 +72,33 @@ func (m Model) doorAction(d doors.Door) *action {
 	if d.Sum == "" {
 		return nil
 	}
-	return &action{label: d.Title, say: d.Title + ": write " + tilde(d.Path), destructive: true,
+	say := d.Title + ": write " + tilde(d.Path)
+	if d.ID == doors.Update {
+		say = "install " + d.Sum
+		if m.updateView != nil && m.updateView.Current != "" {
+			say += " over " + m.updateView.Current
+		}
+	}
+	return &action{label: d.Title, say: say, destructive: true,
 		rec: "door:" + d.ID, which: "primary", text: d.Sum, door: d.ID}
 }
 
-func closeDoor(d doors.Door) *action {
-	return &action{label: "close", say: "close " + d.Title + " (matchblox setup opens it again)", destructive: true,
+// closeDoor is x on a door. auto: the host's update mode is auto, which
+// installs a release whose offer is closed.
+func closeDoor(d doors.Door, auto bool) *action {
+	a := &action{label: "close", say: "close " + d.Title + " (matchblox setup opens it again)", destructive: true,
 		rec: "door:" + d.ID, which: "secondary", door: d.ID}
+	if d.ID == doors.Update {
+		// The release the person saw: the service refuses to close a newer one.
+		a.say, a.text = "close "+d.Title+" (the next release opens it again)", d.Sum
+		if auto {
+			a.say = "close " + d.Title + " (auto still installs it)"
+		}
+	}
+	if d.ID == doors.UpdateCheck {
+		a.say = "close " + d.Title + " (three more days of failed looks open it again)"
+	}
+	return a
 }
 
 // doorRanMsg: a door's command gave the terminal back.
@@ -266,7 +286,7 @@ func (m Model) scrollPreview(k tea.KeyPressMsg) (Model, bool) {
 }
 
 // colDoor is the title column of a door row.
-const colDoor = 26
+const colDoor = doors.TitleCols + 3
 
 // preview draws a door's diff: new lines in the accent, removed ones in
 // neg. What does not fit says where to see it all.

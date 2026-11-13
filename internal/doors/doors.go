@@ -9,6 +9,10 @@ import (
 	"strings"
 )
 
+// TitleCols is how many columns the console gives a door's title on a
+// wide screen: a longer title is cut.
+const TitleCols = 23
+
 // The doors, in the order the console shows them.
 const (
 	Tmux  = "tmux"
@@ -36,6 +40,12 @@ const (
 	// it shows on: no service finds them.
 	CopyCheck   = "copy-check"
 	CopyThrough = "copy-through"
+	// Update installs a newer release. The service offers it, not setup,
+	// and closing it closes that one release.
+	Update = "update"
+	// UpdateCheck says the looks for a release have failed for days. It
+	// has no action; closing it closes that run of failures.
+	UpdateCheck = "updatecheck"
 )
 
 type Door struct {

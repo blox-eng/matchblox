@@ -81,6 +81,40 @@ type Doc struct {
 	SignIns map[string]string `json:"sign_ins,omitempty"`
 	// Chains are the teams of this host and their members. Nil: none.
 	Chains *ChainsView `json:"chains,omitempty"`
+	// Update is what the service knows of a newer release. A console reads
+	// its presence as "this host knows the update act". Nil: a build that
+	// is not a release, or a service older than the update.
+	Update *UpdateView `json:"update,omitempty"`
+}
+
+// UpdateView is the [update] mode, this build's release and the latest one
+// found. Err is why the last look failed; Latest stays the last one found.
+// Managed is the command of the package manager that installed matchblox.
+type UpdateView struct {
+	Mode      string        `json:"mode"`
+	Current   string        `json:"current"`
+	Latest    string        `json:"latest,omitempty"`
+	CheckedAt time.Time     `json:"checked_at,omitzero"`
+	FirstSeen time.Time     `json:"first_seen,omitzero"`
+	Err       string        `json:"err,omitempty"`
+	Managed   string        `json:"managed,omitempty"`
+	Last      *UpdateRecord `json:"last,omitempty"`
+	// Waiting is why mode auto waits to install a release that is due.
+	Waiting string `json:"waiting,omitempty"`
+	// Restart: the last install put the latest release on disk, but this
+	// service started on the old one. It says so, with the fix.
+	Restart string `json:"restart,omitempty"`
+}
+
+// UpdateRecord is the last install: from which release to which, what it
+// checked, and why it failed.
+type UpdateRecord struct {
+	From       string    `json:"from,omitempty"`
+	To         string    `json:"to,omitempty"`
+	At         time.Time `json:"at,omitzero"`
+	Checksum   bool      `json:"checksum,omitempty"`
+	Provenance bool      `json:"provenance,omitempty"`
+	Err        string    `json:"err,omitempty"`
 }
 
 // ChainsView is what consoles and the CLI see of the chains.

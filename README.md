@@ -57,6 +57,10 @@ session needs you, and answer from anywhere. In beta on TestFlight.
    brew install blox-eng/tap/matchblox
    ```
 
+   matchblox looks for a new release once a day and offers it on the board.
+   `[update] mode` makes it install by itself, or never look: see
+   [Update](https://docs.matchblox.com/config/#update).
+
 2. Run `matchblox` outside tmux (the script starts it for you). Answer
    "Where do your agents run?", then open the setup steps above the board:
    tmux, the queue hooks, the way back.

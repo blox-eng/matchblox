@@ -287,3 +287,23 @@ func TestTheHostStokerAskingCountsAsToday(t *testing.T) {
 		t.Fatalf("header %q, want %q", got, want)
 	}
 }
+
+// TestPeerChainDrawsItsFuse holds the console's side of #389 in place: a
+// chain of a peer's two sessions with no name and no mates, as v0.38.1 sent
+// it, draws its stub on both cards of the board. It passes without this
+// branch too: the cause of #389 is not known.
+func TestPeerChainDrawsItsFuse(t *testing.T) {
+	peer := hostState(sess(2, "flint-auth", "%2", nil), sess(3, "spark-docs", "%3", nil))
+	c := chains.Chain{ID: "c1"}
+	for _, s := range peer.Sessions {
+		c.Members = append(c.Members, memberOf(s))
+	}
+	peer.Chains = &state.ChainsView{Chains: []chains.Chain{c}}
+	m, _ := twoHosts(t, hostState(sess(1, "hearth-api", "%1", nil)), peer)
+	m = boardOn(m)
+	for _, name := range []string{"flint-auth", "spark-docs"} {
+		if stub := stubOf(t, m, name); stub == "" {
+			t.Errorf("%s's card in a peer's chain has no stub", name)
+		}
+	}
+}

@@ -72,6 +72,10 @@ off = false              # true: no buzz, no island, and no connection to the re
 notice = true            # the same-repo line between its steps
 send = "chain"           # who send reaches: "chain" or "off"
 
+[update]                 # a newer release of matchblox: one request a day to GitHub finds it
+mode = "offer"           # "offer" in the console, "auto" installs it a day later, "off" never looks
+                         # ("auto" needs a logged-in gh: it installs only a build whose provenance it checked)
+
 [hooks]
 alert = []               # argv run on each new alert, title and evidence appended,
                          # e.g. ["notify-send", "matchblox"]

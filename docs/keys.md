@@ -46,6 +46,7 @@ the right.
 | `⌥s` | Opens the room of the chosen card's chain, as `g` does. A session in no chain opens its chain of one, which the host's stoker drives. |
 | `Esc` | Closes the menu, then clears a marked answer, then the search, then the chain. It never leaves the console. `Ctrl+M`, prefix `m` and the phone's back button do the same in the console. |
 | `q` or `Ctrl+C` | Quits the console. The service keeps running. |
+| `R` | Starts the console again on the binary the service runs. The key line offers it first, `R start again · service v0.43.0, console v0.42.0`, when the service on this machine runs a newer release than the console and the console's own binary was installed over. Otherwise the line says `quit and reopen`. |
 
 A key that changed its job with the board says so once, the first time
 you press it: `c`, `v`, `s`, `g`, `u`, `p`, `x` on a card whose ship waits
@@ -242,7 +243,9 @@ On the chips:
 | `Enter` | Opens one console of the ticked hosts, or adds a host. With no host ticked, it opens the selected host. |
 | `c` | Connects the host again with `matchblox connect`. |
 | `x` | Removes a host from the list. matchblox stays on that host. |
-| `y` | Confirms the remove or the connect. |
+| `u` | Updates a host on an older release than the console. The host looks for the latest release and installs it, even with `mode = "off"`. |
+| `d` | Dismisses the note of a host on another release, until either release changes. |
+| `y` | Confirms the remove, the connect or the update. |
 | `Backspace` | Deletes the last character of a host you type. |
 | `Esc` | Leaves the list of hosts to add. |
 | `q` or `Ctrl+C` | Quits. |

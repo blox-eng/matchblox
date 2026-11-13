@@ -1,0 +1,31 @@
+ ▰ matchblox                   ● 6 need you
+ BOARD 7    machine
+────────────────────────────────────────────
+ SET UP · 1 · Check that copy reaches you
+ NEEDS YOU 6 −  work 1  ship 0  quiet 0
+────────────────────────────────────────────
+▌╿ flint-auth                         ✻  2m
+  stuck conflicts with main
+  #4545 ●━✕┄○┄○┄○  ctx 41%
+  “The refresh flow works and the tests
+  pass. One choice is yours before I wire
+  the rotation.”
+  ⏎ go in
+
+ │ spark-docs                         ✻  9m
+  done I rewrote the quick start and the i…
+  #4540 ●━●━●━●━●  ctx 88%
+  ⏎ go in
+
+ ╿ ember-billing                      ✻  4m
+  green #4552 waits for your merge
+  #4552 ●━●━◉┄○┄○  ctx 32%
+  p merge #4552   ⏎ go in
+
+  ↓ 3 more
+
+ + start a new session
+ RECOMMENDATIONS · 7
+ ✻ 5h ▰▰▰▰▰▰▰▱ 84%  wk 82%        machine ›
+────────────────────────────────────────────
+ quit and reopen · service v0.43.0, console…

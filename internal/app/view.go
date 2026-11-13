@@ -572,6 +572,10 @@ func (m Model) keyLine(w int) (string, []span) {
 		hints = append(hints, hintFor(mk.Search, ""), noTap(hintFor(mk.Quit, "")))
 	}
 	line, x := " ", 1
+	if m.newer != "" { // first: its key stays when the line is cut
+		line += st.warn.Render(m.newer) + "  "
+		x += lipgloss.Width(m.newer) + 2
+	}
 	if m.filter != "" {
 		lead := m.keys.main.Search.Help().Key + " " + m.filter + " · " + m.keys.main.Back.Help().Key + " clears  "
 		line += st.muted.Render(lead)
@@ -584,6 +588,9 @@ func (m Model) keyLine(w int) (string, []span) {
 		hints = fit
 	} else {
 		hints = fitHints(hints, room)
+	}
+	for m.newer != "" && len(hints) > 0 && hintsWidth(hints) > room {
+		hints = hints[:len(hints)-1] // whole keys after the notice, never one cut in half
 	}
 	var spans []span
 	parts := 0
