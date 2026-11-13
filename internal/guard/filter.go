@@ -204,6 +204,9 @@ func sequence(seq []byte) (whole, known bool) {
 // private CSI (modes, the keyboard protocol), a status, attributes or
 // window report, an OSC that asks, a DCS that asks.
 func toTerminal(seq []byte) bool {
+	if len(seq) < 3 {
+		return false // ESC and one byte: a cursor save, a reverse index
+	}
 	body, final := seq[2:len(seq)-1], seq[len(seq)-1]
 	switch seq[1] {
 	case '[':

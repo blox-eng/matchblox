@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"math/rand"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -289,5 +290,62 @@ func TestFilterShortReplay(t *testing.T) {
 	}
 	if want := ClearCodes + Notice + ClearCodes + "\x1b[0m\nfirst\r\nlast"; out.String() != want {
 		t.Fatalf("a short replay came out as %q, want %q", out.String(), want)
+	}
+}
+
+// TestFilterHoldShortEscapes: a two-byte escape in a replay (save and
+// restore the cursor, reverse index, a lone ESC at its end) is part of the
+// chat's drawing. It is kept in place, and the guard does not break on it.
+func TestFilterHoldShortEscapes(t *testing.T) {
+	for _, chunk := range []int{1, 64} {
+		var out bytes.Buffer
+		c := newClock()
+		f := NewFilter(&out, c.now)
+		f.Arm()
+		const body = "\x1b7saved\x1b8 \x1bMup\r\nlast\x1b"
+		writeIn(t, f, []byte(ClearCodes+body), chunk)
+		c.t = c.t.Add(quietFor)
+		if err := f.Tick(); err != nil {
+			t.Fatal(err)
+		}
+		if want := ClearCodes + Notice + ClearCodes + "\x1b[0m" + body; out.String() != want {
+			t.Fatalf("in chunks of %d the pane got %q, want %q", chunk, out.String(), want)
+		}
+	}
+}
+
+// TestFilterHoldLosesNoByte: whatever a replay holds, escape sequences cut
+// and malformed in every way, the guard does not break, and each byte
+// reaches the pane once: at once when the terminal must have it, else with
+// the end of the replay.
+func TestFilterHoldLosesNoByte(t *testing.T) {
+	rng := rand.New(rand.NewSource(7))
+	alphabet := []byte("\x1b\x1b\x1b[]P_^X?><=;0123456789 $+qhlunctm\\\x07ab\r")
+	for round := range 2000 {
+		in := make([]byte, 1+rng.Intn(300))
+		for i := range in {
+			in[i] = alphabet[rng.Intn(len(alphabet))]
+		}
+		if bytes.Contains(in, []byte(ClearCodes)) {
+			continue
+		}
+		var out bytes.Buffer
+		c := newClock()
+		f := NewFilter(&out, c.now)
+		f.Arm()
+		writeIn(t, f, []byte(ClearCodes), 9)
+		writeIn(t, f, in, 1+rng.Intn(16))
+		c.t = c.t.Add(quietFor)
+		if err := f.Tick(); err != nil {
+			t.Fatal(err)
+		}
+		got := bytes.Replace(out.Bytes(), []byte(ClearCodes+Notice), nil, 1)
+		got = bytes.Replace(got, []byte(ClearCodes+"\x1b[0m"), nil, 1)
+		a, b := slices.Clone(in), slices.Clone(got)
+		slices.Sort(a)
+		slices.Sort(b)
+		if !bytes.Equal(a, b) {
+			t.Fatalf("round %d: %q went in, %q came out: a byte was lost or made", round, in, got)
+		}
 	}
 }
