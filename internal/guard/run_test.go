@@ -9,33 +9,102 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/signal"
+	"path/filepath"
 	"strings"
 	"sync"
 	"syscall"
 	"testing"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/testhome"
+	"github.com/blox-eng/matchblox/internal/tmuxtest"
 	"github.com/charmbracelet/x/term"
 	"golang.org/x/sys/unix"
 )
 
-// helperEnv names what this test binary does when the guard runs it in
-// place of an agent.
+// helperEnv makes this test binary stand in for an agent, or for the
+// matchblox command: its first argument names which.
 const helperEnv = "MATCHBLOX_GUARD_HELPER"
 
 func TestMain(m *testing.M) {
-	switch os.Getenv(helperEnv) {
-	case "":
-		os.Exit(m.Run())
+	if os.Getenv(helperEnv) == "" {
+		os.Exit(testhome.Run(m))
+	}
+	switch os.Args[1] {
 	case "flood":
-		helperFlood()
+		helperFlood(os.Args[2])
+	case "cursor":
+		helperCursor()
+	case "guard":
+		os.Exit(Main(os.Args[2:], "web", os.Stdin, os.Stdout))
 	}
 	os.Exit(0)
 }
 
+// standInLines is how long the stand-in's chat is: over 1 MiB a replay.
+const standInLines = 20000
+
+// helperCursor stands in for Cursor with a long chat. It prints the clear
+// codes, every line and its input box at its start and at each change of
+// columns, and nothing at a change of rows. It shows each key in its box.
+func helperCursor() {
+	if _, err := term.MakeRaw(os.Stdin.Fd()); err != nil {
+		os.Exit(2)
+	}
+	var mu sync.Mutex
+	var input []byte
+	replaying := false
+	replay := func() {
+		mu.Lock()
+		replaying = true
+		mu.Unlock()
+		var b bytes.Buffer
+		b.WriteString(ClearCodes)
+		for i := 1; i <= standInLines; i++ {
+			fmt.Fprintf(&b, "line %d| %s\r\n", i, strings.Repeat("chat ", 12))
+			if i%200 == 0 { // a burst, not one write: as a renderer at work
+				_, _ = os.Stdout.Write(b.Bytes())
+				b.Reset()
+				time.Sleep(time.Millisecond)
+			}
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		fmt.Fprintf(&b, "╭── ask ──╮\r\n│ → %s", input)
+		_, _ = os.Stdout.Write(b.Bytes())
+		replaying = false
+	}
+	go func() {
+		key := make([]byte, 64)
+		for {
+			n, err := os.Stdin.Read(key)
+			if err != nil {
+				os.Exit(0)
+			}
+			mu.Lock()
+			input = append(input, key[:n]...)
+			if !replaying {
+				_, _ = os.Stdout.Write(key[:n])
+			}
+			mu.Unlock()
+		}
+	}()
+	winch := make(chan os.Signal, 8)
+	signal.Notify(winch, syscall.SIGWINCH)
+	cols, _, _ := term.GetSize(os.Stdout.Fd())
+	replay()
+	for range winch {
+		if now, _, _ := term.GetSize(os.Stdout.Fd()); now != cols {
+			cols = now
+			replay()
+		}
+	}
+}
+
 // helperFlood replays without end, as a Cursor with a very long chat, and
 // writes the first three keys it reads to the file named in its argument.
-func helperFlood() {
+func helperFlood(keysFile string) {
 	if _, err := term.MakeRaw(os.Stdin.Fd()); err != nil {
 		os.Exit(2)
 	}
@@ -54,7 +123,7 @@ func helperFlood() {
 		}
 		n += k
 	}
-	if err := os.WriteFile(os.Args[1], keys, 0o600); err != nil {
+	if err := os.WriteFile(keysFile, keys, 0o600); err != nil {
 		os.Exit(4)
 	}
 }
@@ -152,9 +221,9 @@ func (s *screen) run(argv ...string) func() int {
 // builder types reaches the agent at once, and the replay does not scroll by.
 func TestRunKeysDuringHold(t *testing.T) {
 	keysFile := t.TempDir() + "/keys"
-	t.Setenv(helperEnv, "flood")
+	t.Setenv(helperEnv, "1")
 	s := newScreen(t, 100, 30)
-	wait := s.run(os.Args[0], keysFile)
+	wait := s.run(os.Args[0], "flood", keysFile)
 	s.waitFor("the notice", func(text string) bool { return strings.Contains(text, Notice) })
 	typed := time.Now()
 	s.typeKeys("abc")
@@ -260,4 +329,96 @@ func TestGuardStops(t *testing.T) {
 	}
 	want := "matchblox's redraw guard stopped: boom. Start again: matchblox switch web --agent cursor-agent"
 	s.waitFor("the words", func(text string) bool { return strings.Contains(text, want) })
+}
+
+// TestGuardInTmux: in a tmux window, behind the guard, a change of width
+// shows the agent's last screen and never its chat; a change of rows shows
+// nothing new; a key typed during the replay is in the agent's input box.
+// The same agent with no guard is the measure beside it.
+func TestGuardInTmux(t *testing.T) {
+	server, dir := tmuxtest.Server(t), t.TempDir()
+	tmux := func(args ...string) string {
+		t.Helper()
+		out, err := exec.Command("tmux", append([]string{"-L", server, "-f", os.DevNull}, args...)...).CombinedOutput() //nolint:gosec // a test's own server
+		if err != nil {
+			t.Fatalf("tmux %v: %v %s", args, err, out)
+		}
+		return string(out)
+	}
+	// Each pane waits a moment before its agent starts, so its pipe sees
+	// every byte from the first.
+	start := func(name string, argv ...string) {
+		t.Helper()
+		cmd := "sleep 0.5; exec env " + helperEnv + "=1 " + os.Args[0] + " " + strings.Join(argv, " ")
+		tmux("new-session", "-d", "-s", name, "-x", "216", "-y", "71", "sh", "-c", cmd)
+		tmux("pipe-pane", "-O", "-t", name, "cat >> "+filepath.Join(dir, name))
+	}
+	start("direct", "cursor")
+	start("guarded", "guard", os.Args[0], "cursor")
+	printed := func(name string) []byte {
+		b, _ := os.ReadFile(filepath.Join(dir, name))
+		return b
+	}
+	// settled waits until both panes show the input box with typed in it and
+	// print no more, and gives each one's screen.
+	settled := func(typed string) (direct, guarded string) {
+		t.Helper()
+		deadline := time.Now().Add(20 * time.Second)
+		for last := -1; ; {
+			time.Sleep(400 * time.Millisecond) // over the guard's end window
+			direct, guarded = tmux("capture-pane", "-p", "-t", "direct"), tmux("capture-pane", "-p", "-t", "guarded")
+			size := len(printed("direct")) + len(printed("guarded"))
+			box := strings.TrimRight("│ → "+typed, " ")
+			if size == last && strings.HasSuffix(strings.TrimRight(direct, "\n "), box) && strings.HasSuffix(strings.TrimRight(guarded, "\n "), box) {
+				return direct, guarded
+			}
+			if last = size; time.Now().After(deadline) {
+				t.Fatalf("the panes never settled on %q.\ndirect ends: %q\nguarded ends: %q", box, tail(direct), tail(guarded))
+			}
+		}
+	}
+	same := func(when, direct, guarded string) {
+		t.Helper()
+		if direct != guarded {
+			t.Fatalf("%s the guarded pane does not show the agent's own last screen.\ndirect ends: %q\nguarded ends: %q", when, tail(direct), tail(guarded))
+		}
+	}
+	direct, guarded := settled("")
+	same("at the start", direct, guarded)
+
+	typed := ""
+	for _, cols := range []string{"180", "216"} {
+		d0, g0 := len(printed("direct")), len(printed("guarded"))
+		for _, name := range []string{"direct", "guarded"} {
+			tmux("resize-window", "-t", name, "-x", cols, "-y", "71")
+			tmux("send-keys", "-t", name, "-l", "ab") // typed while the agent replays
+		}
+		typed += "ab"
+		direct, guarded = settled(typed)
+		same("at "+cols+" columns", direct, guarded)
+		d, g := len(printed("direct"))-d0, len(printed("guarded"))-g0
+		t.Logf("to %s columns: the agent alone printed %d bytes, behind the guard %d", cols, d, g)
+		if d < 1<<20 {
+			t.Fatalf("to %s columns the stand-in printed %d bytes: not the replay this test is about", cols, d)
+		}
+		if g > 200<<10 {
+			t.Fatalf("to %s columns the guarded pane got %d bytes, want under 200 KiB: the replay scrolled by", cols, g)
+		}
+	}
+	if bytes.Contains(printed("guarded"), []byte("line 1|")) || !bytes.Contains(printed("direct"), []byte("line 1|")) {
+		t.Fatal("the guarded pane got the first line of the chat, or the measure beside it did not")
+	}
+
+	g0 := len(printed("guarded"))
+	tmux("resize-window", "-t", "guarded", "-x", "216", "-y", "70")
+	time.Sleep(600 * time.Millisecond)
+	if g := len(printed("guarded")) - g0; g != 0 {
+		t.Fatalf("a change of rows alone printed %d bytes in the guarded pane, want 0", g)
+	}
+}
+
+// tail is the end of a screen, for a failure's words.
+func tail(screen string) string {
+	screen = strings.TrimRight(screen, "\n ")
+	return screen[max(len(screen)-200, 0):]
 }
