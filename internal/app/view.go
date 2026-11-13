@@ -167,6 +167,8 @@ type drawn struct {
 
 // draw is the screen, with an ssh prompt over everything.
 func (m Model) draw(w int) drawn {
+	idx := m.boardIndex()
+	m.frameIdx = &idx
 	sc := m.drawScreen(w)
 	if m.asking() {
 		m.overlayAsk(&sc, w)

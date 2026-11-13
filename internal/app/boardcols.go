@@ -147,6 +147,12 @@ func (m Model) needSince(s sample.Session) time.Time {
 // stoker's own agent is not a match.
 func (m Model) boardIndex() [4][]sample.Session {
 	var idx [4][]sample.Session
+	if m.frameIdx != nil {
+		for c := range idx {
+			idx[c] = slices.Clone(m.frameIdx[c]) // its readers cut theirs in place
+		}
+		return idx
+	}
 	for _, s := range append(slices.Clone(m.all.sessions), m.shipCards()...) {
 		if !m.isStoker(s) || m.stokerAsksAsCard(s) {
 			c := m.columnOf(s)

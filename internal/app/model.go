@@ -557,6 +557,10 @@ type Model struct {
 	// changes.
 	peekSent                  int
 	peekSentAsk, peekSentPane string
+	// frameIdx is the board's index while one frame draws (draw sets it
+	// on its own copy): a frame asks for it five times, and each read of it
+	// is a copy.
+	frameIdx *[4][]sample.Session
 	// noticeText shows in the board's notice row until noticeUntil.
 	noticeText  string
 	noticeNext  string // the notice that shows when this one ends
