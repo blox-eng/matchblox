@@ -134,7 +134,8 @@ struct ConsoleView: View {
         hostsButton
     }
 
-    /// Hosts (with more than one host) and Island (for a real host), beside the console's actions.
+    /// Hosts (whenever a host is paired, so the only one can be removed too) and Island
+    /// (for a real host), beside the console's actions.
     private var hostsButton: some View {
         HStack(spacing: 24) {
             if let onHosts {

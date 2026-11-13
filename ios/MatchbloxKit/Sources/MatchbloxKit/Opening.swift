@@ -20,6 +20,11 @@ public enum Opening {
         }
     }
 
+    /// The console offers the Hosts screen while any host is paired, so the only host can be
+    /// removed there too. Before, Hosts showed with two or more, and a single host could not be
+    /// unpaired from the app: it opened straight into its console with no list to swipe.
+    public static func consoleOffersHosts(hostCount: Int) -> Bool { hostCount >= 1 }
+
     /// The texts for a host that was paired before. Pairing.message keeps the texts for the pairing itself.
     public static func message(for failure: ConnectFailure, host: String) -> String {
         switch failure {
