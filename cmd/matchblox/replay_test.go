@@ -637,7 +637,12 @@ func replayAt(t *testing.T, z replaySize) {
 				p.Send(keyMsg(k))
 			}
 		}
-		screen, err := waitFor(capture, st.ok, st.name, stepTimeout)
+		// A slow (-race) run can draw a frame before the sample reaches the
+		// console: the strip then says the data is old in place of what it
+		// shows. The demo clock runs 40 times faster than the wall's, so
+		// 750 ms behind is 30 s. A frame is kept only once the data is fresh.
+		fresh := func(s string) bool { return st.ok(s) && !strings.Contains(s, "the service is slow") }
+		screen, err := waitFor(capture, fresh, st.name, stepTimeout)
 		if err != nil {
 			t.Fatal(err)
 		}
