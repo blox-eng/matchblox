@@ -679,3 +679,40 @@ func TestAHookedSessionWithNoWaitRowSeedsItsReportedWait(t *testing.T) {
 		t.Fatalf("items %+v, want flint-auth's permission", items)
 	}
 }
+
+// TestAReportOfWorkHidesAHookedAsk (spec "A live report beats an old
+// guess"): a turn ended on a question, then its shells or agents work on
+// with no new prompt. A report of busy or shell means the hook's ask is no
+// wait: the phone, the buzz, peek and kill read no ask.
+func TestAReportOfWorkHidesAHookedAsk(t *testing.T) {
+	for _, status := range []string{"shell", "busy"} {
+		q := New()
+		q.Apply(hooks.Event{Name: "Stop", SessionID: "flint", Pane: "%2", Asks: true, At: at(0)})
+		s := session("flint", "%2", "flint-auth", status, 0)
+		s.Agent, s.Reported = "claude", true
+		q.Merge([]sample.Session{s}, at(60))
+		if items := q.Items(); len(items) != 0 {
+			t.Errorf("report %s: items %+v, want no ask", status, items)
+		}
+		idle := session("flint", "%2", "flint-auth", "idle", 0)
+		idle.Agent, idle.Reported = "claude", true
+		q.Merge([]sample.Session{idle}, at(120))
+		if items := q.Items(); len(items) != 1 || items[0].State != StateQuestion || !items[0].Since.Equal(at(0)) {
+			t.Errorf("report %s then idle: items %+v, want the ask back from when it began", status, items)
+		}
+	}
+}
+
+// TestAReportedWaitBeatsAFinishedHook: a hooked turn finished, then a turn
+// its background work started asks, and no hook fires for it. The
+// agent's own report of a wait is the ask.
+func TestAReportedWaitBeatsAFinishedHook(t *testing.T) {
+	q := New()
+	q.Apply(hooks.Event{Name: "Stop", SessionID: "flint", Pane: "%2", At: at(0)})
+	s := session("flint", "%2", "flint-auth", "waiting", time.Minute)
+	s.Agent, s.Reported, s.WaitingFor = "claude", true, "input needed"
+	q.Merge([]sample.Session{s}, at(600))
+	if items := q.Items(); len(items) != 1 || items[0].State != StateQuestion || items[0].SessionID != "flint" {
+		t.Fatalf("items %+v, want flint-auth's question", items)
+	}
+}

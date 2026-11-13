@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/hooks"
 	"github.com/blox-eng/matchblox/internal/limits"
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -235,5 +236,35 @@ func TestWaitAtIsTheNewestWait(t *testing.T) {
 	}
 	if got := Build(doc([]sample.Session{sess("a", true, t0)}, nil), fp, n, t0); !got.WaitAt.IsZero() {
 		t.Fatalf("no wait, WaitAt = %v", got.WaitAt)
+	}
+}
+
+// TestThePhoneReadsTheAgentsReport (spec "A live report beats an old
+// guess"): the phone counts what the board shows. A hooked ask under a
+// report of work is no wait, and peek reads no ask; a report of a wait
+// after a finished hook is one.
+func TestThePhoneReadsTheAgentsReport(t *testing.T) {
+	n := openNumbers(t, t.TempDir())
+	for _, status := range []string{"shell", "busy"} {
+		q := queue.New()
+		q.Apply(hooks.Event{Name: "Stop", SessionID: "flint", Pane: "%2", Asks: true, At: t0.Add(-time.Minute)})
+		s := sample.Session{SessionID: "flint", Pane: "%2", Name: "flint-auth", Status: status, Busy: status == "busy",
+			Reported: true, Asks: true, Said: "Done.\n\nShall I open the PR?", Started: t0.Add(-time.Hour)}
+		q.Merge([]sample.Session{s}, t0)
+		if got := Build(doc([]sample.Session{s}, q.Items()), fp, n, t0); got.Wait != 0 {
+			t.Errorf("report %s: the phone counts %d waits", status, got.Wait)
+		}
+		if p := stoker.PeekOf(s, q.Items()); p.Asks != "" {
+			t.Errorf("report %s: peek asks %q", status, p.Asks)
+		}
+	}
+
+	q := queue.New()
+	q.Apply(hooks.Event{Name: "Stop", SessionID: "flint", Pane: "%2", At: t0.Add(-time.Hour)})
+	s := sample.Session{SessionID: "flint", Pane: "%2", Name: "flint-auth", Status: "waiting", Reported: true,
+		WaitingFor: "input needed", Idle: time.Minute, Started: t0.Add(-2 * time.Hour)}
+	q.Merge([]sample.Session{s}, t0)
+	if got := Build(doc([]sample.Session{s}, q.Items()), fp, n, t0); got.Wait != 1 {
+		t.Errorf("a reported wait after a finished hook: the phone counts %d waits", got.Wait)
 	}
 }

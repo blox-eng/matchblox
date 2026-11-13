@@ -256,6 +256,25 @@ func (q *Queue) Merge(sessions []sample.Session, now time.Time) {
 			}
 			if it, ok := q.waiting[id]; ok {
 				it.Pane, it.Target, it.Name = s.Pane, s.Target, s.Name
+				if s.ReportsWork() {
+					// A live report beats an old guess: an agent that says it
+					// works asks nothing and waits for nothing, whatever its
+					// last hook said. An ask is back, from when it began, if
+					// the work ends with it still open; a finished turn waits
+					// from the end of the work.
+					if it.State == StateFinished || it.Reminder {
+						it.Since = time.Time{}
+					}
+					q.waiting[id] = it
+					continue
+				}
+				if s.ReportsWait() && (it.State == StateFinished || it.Reminder) {
+					// A turn its background work started asks, and no hook
+					// fires for it: the agent's own report is the ask.
+					q.waiting[id] = it
+					items = append(items, reportedWait(id, s, now))
+					continue
+				}
 				if working(s, it.Since, now) && (it.State == StateFinished || it.Reminder) {
 					// A turn that ended asking nothing does not wait while the
 					// session works: its subagents, or the turn their results
