@@ -19,6 +19,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/accounts"
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/chains"
+	"github.com/blox-eng/matchblox/internal/guard"
 	"github.com/blox-eng/matchblox/internal/holds"
 	"github.com/blox-eng/matchblox/internal/hooks"
 	"github.com/blox-eng/matchblox/internal/panes"
@@ -2183,47 +2184,72 @@ func TestASwitchTheGuardStopsKeepsNoMove(t *testing.T) {
 // and a service that does not know its binary start as before.
 func TestGuardArgv(t *testing.T) {
 	cursor := []string{"cursor-agent", "--trust", "go"}
-	guarded := []string{"env", "MATCHBLOX_SESSION=web", "/opt/matchblox", "guard", "--", "cursor-agent", "--trust", "go"}
+	guarded := []string{"env", "MATCHBLOX_SESSION=web", "/state/matchblox-guard", "guard", "--", "cursor-agent", "--trust", "go"}
 	for _, tc := range []struct {
-		self, goos, agent string
+		link, goos, agent string
 		argv, want        []string
 	}{
-		{"/opt/matchblox", "linux", sample.CursorAgent, cursor, guarded},
-		{"/opt/matchblox", "darwin", sample.CursorAgent, cursor, guarded},
-		{"/opt/matchblox", "windows", sample.CursorAgent, cursor, cursor},
+		{"/state/matchblox-guard", "linux", sample.CursorAgent, cursor, guarded},
+		{"/state/matchblox-guard", "darwin", sample.CursorAgent, cursor, guarded},
+		{"/state/matchblox-guard", "windows", sample.CursorAgent, cursor, cursor},
 		{"", "linux", sample.CursorAgent, cursor, cursor},
-		{"/opt/matchblox", "linux", "claude", []string{"claude", "--name", "web"}, []string{"claude", "--name", "web"}},
-		{"/opt/matchblox", "linux", "codex", []string{"codex", "go"}, []string{"codex", "go"}},
-		{"/opt/matchblox", "linux", "opencode", []string{"opencode"}, []string{"opencode"}},
+		{"/state/matchblox-guard", "linux", "claude", []string{"claude", "--name", "web"}, []string{"claude", "--name", "web"}},
+		{"/state/matchblox-guard", "linux", "codex", []string{"codex", "go"}, []string{"codex", "go"}},
+		{"/state/matchblox-guard", "linux", "opencode", []string{"opencode"}, []string{"opencode"}},
 	} {
-		if got := guardArgv(tc.self, tc.goos, tc.agent, "web", tc.argv); !slices.Equal(got, tc.want) {
-			t.Errorf("guardArgv(%q, %q, %q): %q, want %q", tc.self, tc.goos, tc.agent, got, tc.want)
+		if got := guardArgv(tc.link, tc.goos, tc.agent, "web", tc.argv); !slices.Equal(got, tc.want) {
+			t.Errorf("guardArgv(%q, %q, %q): %q, want %q", tc.link, tc.goos, tc.agent, got, tc.want)
+		}
+	}
+}
+
+// TestGuardLink: the guard runs under its own name, a link to this binary
+// beside the state file: tmux names a pane after its program, and a pane
+// named matchblox is a console to the way back. The link follows the binary.
+func TestGuardLink(t *testing.T) {
+	s, _ := switchTest(t)
+	dir := t.TempDir()
+	s.StatePath = filepath.Join(dir, "state.json")
+	if got := s.guardLink(); got != "" {
+		t.Fatalf("a service that does not know its binary gives the link %q", got)
+	}
+	for _, exe := range []string{"/opt/matchblox", "/usr/local/bin/matchblox"} {
+		s.Exe = exe
+		link := s.guardLink()
+		if link != filepath.Join(dir, guard.LinkName) {
+			t.Fatalf("the link is %q, want %q", link, filepath.Join(dir, guard.LinkName))
+		}
+		if to, err := os.Readlink(link); err != nil || to != exe {
+			t.Fatalf("the link goes to %q (%v), want %q", to, err, exe)
 		}
 	}
 }
 
 // TestNewAndRecoverStartCursorBehindTheGuard: the two ways matchblox starts
-// Cursor both go through the guard.
+// Cursor both go through the guard, under the guard's own name.
 func TestNewAndRecoverStartCursorBehindTheGuard(t *testing.T) {
 	s, _ := switchTest(t)
 	s.Home, s.GOOS, s.Exe = t.TempDir(), "linux", "/opt/matchblox"
+	s.StatePath = filepath.Join(t.TempDir(), "state.json")
 	args, _, err := s.matchLaunch(t.Context(), sample.CursorAgent, "work", t.TempDir(), "", "", true, nil, nil, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := strings.Join(args, " "); !strings.Contains(got, "env MATCHBLOX_SESSION=work /opt/matchblox guard -- cursor-agent ") {
+	link := filepath.Join(filepath.Dir(s.StatePath), guard.LinkName)
+	if got := strings.Join(args, " "); !strings.Contains(got, "env MATCHBLOX_SESSION=work "+link+" guard -- cursor-agent ") {
 		t.Errorf("a new Cursor session starts as %q, want it behind the guard", got)
 	}
 
 	r, ran := recoverTest(t)
 	r.GOOS, r.Exe = "linux", "/opt/matchblox"
+	r.StatePath = filepath.Join(t.TempDir(), "state.json")
 	ui := agentIn(t, r, sample.CursorAgent, "u1", "ui", "%5")
 	publishOn(r, "100", ui)
 	loseServer(r)
 	if res := recoverAct(t, r, proto.Recover{All: true}, ""); res.Err != "" {
 		t.Fatal(res.Err)
 	}
-	want := "-c " + ui.Cwd + " env MATCHBLOX_SESSION=ui /opt/matchblox guard -- cursor-agent --resume u1"
+	want := "-c " + ui.Cwd + " env MATCHBLOX_SESSION=ui " + filepath.Join(filepath.Dir(r.StatePath), guard.LinkName) + " guard -- cursor-agent --resume u1"
 	if len(*ran) != 1 || !strings.HasSuffix(strings.Join((*ran)[0], " "), want) {
 		t.Errorf("recover ran %q, want it to end with %q", *ran, want)
 	}

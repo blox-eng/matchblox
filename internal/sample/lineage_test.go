@@ -298,13 +298,13 @@ func TestChildName(t *testing.T) {
 }
 
 // TestCursorUnderGuard: matchblox starts Cursor behind its redraw guard
-// (#399), so the pane's own process is matchblox and Cursor is its child.
+// (#399), so the pane's own process is the guard and Cursor is its child.
 // The session is still Cursor's, in that pane, and the guard is no session.
 func TestCursorUnderGuard(t *testing.T) {
 	root := copyFixture(t)
-	addProc(t, root, 930, 1, "matchblox", []string{"/usr/local/bin/matchblox", "guard", "--", "cursor-agent", "--resume", "x"}, "%30")
+	addProc(t, root, 930, 1, "matchblox-guard", []string{"/home/user/.local/state/matchblox/matchblox-guard", "guard", "--", "cursor-agent", "--resume", "x"}, "%30")
 	addProc(t, root, 931, 930, "node", []string{"/home/user/.local/bin/cursor-agent", "--use-system-ca", cursorJS, "--resume", "x"}, "%30")
-	addPane(t, root, "%30\tcur:1.1\tw\t930\tmatchblox\t/work")
+	addPane(t, root, "%30\tcur:1.1\tw\t930\tmatchblox-guard\t/work")
 	smp := newFixtureSampler(root)
 	smp.Agents = []string{"claude", CursorAgent}
 	snap := smp.Sample()

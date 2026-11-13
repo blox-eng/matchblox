@@ -106,13 +106,37 @@ func launchArgv(bin, agent, name, first string, trust bool, extra []string) []st
 // guardArgv is argv, an agent's own command for the session name, behind
 // matchblox's redraw guard when the agent is Cursor: its CLI prints the
 // whole chat again at each change of the terminal's width, and the guard
-// shows the end of that only (#399). self is this binary; the guard runs on
-// Linux and macOS. Any other agent, system or an unknown self: argv as it is.
-func guardArgv(self, goos, agent, name string, argv []string) []string {
-	if agent != sample.CursorAgent || self == "" || (goos != "linux" && goos != "darwin") {
+// shows the end of that only (#399). link is guardLink's; the guard runs on
+// Linux and macOS. Any other agent or system, or no link: argv as it is.
+func guardArgv(link, goos, agent, name string, argv []string) []string {
+	if agent != sample.CursorAgent || link == "" || (goos != "linux" && goos != "darwin") {
 		return argv
 	}
-	return slices.Concat([]string{"env", guard.SessionEnv + "=" + name, self, "guard", "--"}, argv)
+	return slices.Concat([]string{"env", guard.SessionEnv + "=" + name, link, "guard", "--"}, argv)
+}
+
+// guardLink is the path the guard runs by: a link named guard.LinkName to
+// this binary, beside the state file, made or pointed again here. tmux
+// names a pane after its program, and the way back takes a pane named
+// matchblox for a console: a guard under that name would get the home key
+// typed into its agent. "" when the binary is not known or the link cannot
+// be made: the agent then starts with no guard.
+func (s *Service) guardLink() string {
+	if s.Exe == "" || s.StatePath == "" {
+		return ""
+	}
+	link := filepath.Join(filepath.Dir(s.StatePath), guard.LinkName)
+	if to, err := os.Readlink(link); err == nil && to == s.Exe {
+		return link
+	}
+	_ = os.Remove(link)
+	if err := os.MkdirAll(filepath.Dir(link), 0o700); err != nil {
+		return ""
+	}
+	if err := os.Symlink(s.Exe, link); err != nil {
+		return ""
+	}
+	return link
 }
 
 func (s *Service) tmuxOut(argv []string) (string, error) {

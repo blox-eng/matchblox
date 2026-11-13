@@ -20,6 +20,11 @@ const ClearCodes = "\x1b[H\x1b[2J\x1b[3J"
 // how to start it again.
 const SessionEnv = "MATCHBLOX_SESSION"
 
+// LinkName is the name the guard runs under: a link to matchblox. tmux
+// names a pane's command after its program, and a pane named matchblox is a
+// console to the way back.
+const LinkName = "matchblox-guard"
+
 // pendWait is how long output that could be the start of ClearCodes waits
 // for its next byte before it passes as it is.
 const pendWait = 20 * time.Millisecond
