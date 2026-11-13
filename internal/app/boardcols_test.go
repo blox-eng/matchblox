@@ -3,6 +3,7 @@ package app
 import (
 	"hash/crc32"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -16,12 +17,17 @@ import (
 // boardAt is the clock of the board's fixtures.
 var boardAt = demoAt
 
+// fixtureSession is the first session of the fixture machine, sampled
+// once: a board fixture makes fifteen matches of it, and a sample of the
+// machine reads its files (minutes a test on macOS under -race).
+var fixtureSession = sync.OnceValue(func() sample.Session { return fixtureState().Sessions[0] })
+
 // boardMatch is a match of the demo fleet on the fixture machine: at rest
 // for ten minutes on its own pane and pid, with no shell, no question, no
 // limit, and no report of its own: its lane is read as for an agent that
 // reports nothing (boardreport_test.go has the reports).
 func boardMatch(name string, started time.Duration) sample.Session {
-	s := fixtureState().Sessions[0]
+	s := fixtureSession()
 	s.PID = 1000 + int(crc32.ChecksumIEEE([]byte(name))%100000)
 	s.Name, s.Pane, s.Target, s.SessionID = name, "%"+name, "w:"+name, "sid-"+name
 	s.Busy, s.Status, s.Idle, s.Out = false, "idle", 10*time.Minute, time.Time{}
