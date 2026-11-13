@@ -79,6 +79,14 @@ func (c *clock) Set(t time.Time)       { c.mu.Lock(); c.t = t; c.mu.Unlock() }
 func (c *clock) Add(d time.Duration)   { c.mu.Lock(); c.t = c.t.Add(d); c.mu.Unlock() }
 func (c *clock) Ahead(d time.Duration) { c.mu.Lock(); c.ahead += d; c.mu.Unlock() }
 
+// Hold stops the clock where it reads now; Follow starts it again.
+func (c *clock) Hold() {
+	now := c.Now()
+	c.mu.Lock()
+	c.t, c.follow = now, nil
+	c.mu.Unlock()
+}
+
 // demoHost is testdata/demo with a pulse: CPU counters move, the busy loop
 // burns one core, and a killed process goes away. Nothing runs on the real
 // machine.
@@ -339,6 +347,10 @@ type step struct {
 	keys []string
 	key  string
 	ok   func(screen string) bool
+	// hold stops the console's clock until the step's screen shows: the
+	// demo clock runs 40 times faster than the wall's, so a notice of
+	// 2.5 s lives some 60 ms, less than one read of a slow (-race) run.
+	hold bool
 }
 
 func has(s ...string) func(string) bool {
@@ -575,11 +587,15 @@ func replayAt(t *testing.T, z replaySize) {
 		}},
 		// A digit arms the answer; nothing is sent.
 		{name: "an answer armed", at: 4200 * time.Millisecond, do: settle, key: "2", ok: has("❯ 2.", "again sends")},
-		// The same digit sends it: the card strikes into WORKING.
-		{name: "sent", at: 5800 * time.Millisecond, key: "2", ok: func(s string) bool {
-			return has("sent 2 to flint-auth")(s) && !chosen("flint-auth")(s)
+		// The same digit sends it: the card strikes into WORKING. The frame
+		// is the one where it left NEEDS YOU (4 need you before): the ones
+		// before it race the samples that carry the answer.
+		{name: "sent", at: 5800 * time.Millisecond, key: "2", hold: true, ok: func(s string) bool {
+			return has("sent 2 to flint-auth", "● 3 need you")(s) && !chosen("flint-auth")(s)
 		}},
-		{name: "it works", at: 7400 * time.Millisecond, ok: has("✦ flint-auth")},
+		{name: "it works", at: 7400 * time.Millisecond, ok: func(s string) bool {
+			return has("✦ flint-auth")(s) && !strings.Contains(s, "sent 2 to flint-auth")
+		}},
 		// p merges the ship that waits for its merge, after a typed y.
 		{name: "a ship waits", at: 9 * time.Second, do: choose("ember-billing"), ok: func(s string) bool {
 			return chosen("ember-billing")(s) && has("p merge #4552")(s)
@@ -613,16 +629,22 @@ func replayAt(t *testing.T, z replaySize) {
 		if st.do != nil {
 			st.do()
 		}
+		if st.hold {
+			view.Hold()
+		}
 		for _, k := range append(st.keys, st.key) {
 			if k != "" {
 				p.Send(keyMsg(k))
 			}
 		}
-		view, err := waitFor(capture, st.ok, st.name, stepTimeout)
+		screen, err := waitFor(capture, st.ok, st.name, stepTimeout)
 		if err != nil {
 			t.Fatal(err)
 		}
-		keep(st.name, st.at, view)
+		if st.hold {
+			view.Follow(clk)
+		}
+		keep(st.name, st.at, screen)
 		if st.name == "the board" {
 			still = frames[len(frames)-1]
 		}
