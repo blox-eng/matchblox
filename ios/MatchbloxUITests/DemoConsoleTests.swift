@@ -243,8 +243,26 @@ final class DemoConsoleTests: XCTestCase {
         waitUntilSteady(app.descendants(matching: .any)["demo-terminal"])
         tapRow(in: app, containing: "2. Rotate, keep")
         expect(in: app, step: "flint-auth back in NEEDS YOU after its turn", "label CONTAINS %@", "stuck conflicts with main")
-        tapRow(in: app, containing: "flint-auth", until: closingText)
+        chooseBeforeTheInvite(app, row: "flint-auth")
         return expectTheAnswer(in: app)
+    }
+
+    /// Chooses the card at once, with no wait for a steady screen: a working spinner keeps the
+    /// screen from ever being steady, so that wait takes its whole 30 s, and the invite rises in
+    /// the meantime. A tap outside the invite's sheet closes it, and it never rises again. A
+    /// second tap goes only to a card the first did not choose: on a chosen card it goes in.
+    @MainActor
+    private func chooseBeforeTheInvite(_ app: XCUIApplication, row text: String) {
+        let terminal = app.descendants(matching: .any)["demo-terminal"]
+        let isChosen = {
+            terminal.label.components(separatedBy: "\n").first(where: { $0.contains(text) })?.contains("▌") == true
+        }
+        tapRow(in: app, containing: text)
+        let deadline = Date().addingTimeInterval(4)
+        while !isChosen(), Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.3)
+        }
+        if !isChosen() { tapRow(in: app, containing: text) }
     }
 
     @MainActor
@@ -356,7 +374,7 @@ final class DemoConsoleTests: XCTestCase {
     @MainActor
     private func launched(extra: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
-        // The invite waits 15 s, not 2, after the turn ends: this runner reads the screen about
+        // The invite waits 20 s, not 2, after the turn ends: this runner reads the screen about
         // once a second, and the closing text must be seen before the invite covers it.
         app.launchArguments = ["-openDemoHost", "-demoSlowInvite"] + extra
         app.launch()

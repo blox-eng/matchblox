@@ -493,7 +493,7 @@ final class ConsoleConnection {
     /// (`-demoSlowInvite`): a busy runner reads the screen about once a second, too seldom to
     /// see the text in 2 seconds.
     private static var readingTime: Duration {
-        ProcessInfo.processInfo.arguments.contains("-demoSlowInvite") ? .seconds(15) : .seconds(2)
+        ProcessInfo.processInfo.arguments.contains("-demoSlowInvite") ? .seconds(20) : .seconds(2)
     }
 
     init(host: Host, open: Int?, onFailure: @escaping (ConnectFailure) -> Void) {
