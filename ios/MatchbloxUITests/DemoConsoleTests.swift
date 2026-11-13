@@ -184,20 +184,27 @@ final class DemoConsoleTests: XCTestCase {
         return Int(counts.components(separatedBy: " ").first?.dropFirst("press=".count) ?? "") ?? 0
     }
 
-    /// A real host's tap, on the demo's screens: the tap on the chosen card clicks once and goes
-    /// into the stand-in (#351), its question is not clicked through, and the keyboard rises.
+    /// A real host's tap, on the demo's screens: the console chose flint-auth by itself, so the
+    /// first tap only chooses it (ruling 19). The tap on the card the person chose clicks once and
+    /// goes into the stand-in (#351), its question is not clicked through, and the keyboard rises.
     @MainActor
-    func testARealHostsFirstTapClicksOnceAndRaisesTheKeyboard() {
+    func testATapOnTheChosenCardClicksOnceAndRaisesTheKeyboard() {
         let app = launched(extra: ["-demoTapRaisesKeyboard"])
         expect(in: app, "label CONTAINS %@", "NEEDS YOU")
         let terminal = app.descendants(matching: .any)["demo-terminal"]
         waitUntilSteady(terminal)
-        goInto(app, row: "flint-auth")
-        expect(in: app, step: "the stand-in after the tap on flint-auth", "label CONTAINS %@", "type 2 to answer")
+        tapRow(in: app, containing: "flint-auth")
+        dismissKeyboardTip(in: app)
+        waitUntilSteady(terminal)
+        XCTAssertFalse(terminal.label.contains("‹ board"), "the first tap on a card the console chose went in")
+        let before = presses(on: terminal)
+        XCTAssertEqual(terminal.value as? String, "press=\(before) release=\(before)", "the first tap did not release")
+        tapRow(in: app, containing: "flint-auth")
+        expect(in: app, step: "the stand-in after the second tap on flint-auth", "label CONTAINS %@", "type 2 to answer")
         dismissKeyboardTip(in: app)
         XCTAssertTrue(app.buttons["Hide keyboard"].firstMatch.waitForExistence(timeout: 10), "the taps did not raise the keyboard. " + app.debugDescription)
         Thread.sleep(forTimeInterval: 1)
-        XCTAssertEqual(terminal.value as? String, "press=1 release=1", "the tap did not click exactly once")
+        XCTAssertEqual(terminal.value as? String, "press=\(before + 1) release=\(before + 1)", "the tap on the chosen card did not click exactly once")
         waitUntilSteady(terminal)
         XCTAssertFalse(terminal.label.contains("I rotate the token on each refresh"), "the tap clicked through to the answer: \(terminal.label)")
         keep(app, "9 real host tap")
@@ -273,6 +280,12 @@ final class DemoConsoleTests: XCTestCase {
     /// here (#351). A card that is not chosen takes two taps: the first chooses it.
     @MainActor
     private func goInto(_ app: XCUIApplication, row text: String) {
+        // A card the console chose by itself takes two taps (ruling 19): the first chooses it.
+        let terminal = app.descendants(matching: .any)["demo-terminal"]
+        waitUntilSteady(terminal)
+        tapRow(in: app, containing: text)
+        waitUntilSteady(terminal)
+        if terminal.label.contains("‹ board") { return }
         tapRow(in: app, containing: text, until: "‹ board")
     }
 
