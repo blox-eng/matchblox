@@ -482,11 +482,20 @@ func (w *walker) walkTaps(tab string) {
 	}
 	for y := 1; y <= w.rows; y++ {
 		w.open(tab)
-		w.tap(20, y)
-		w.tap(20, y)
+		w.tapTwice(20, y)
 		w.press("y")
 		w.reset()
 	}
+}
+
+// tapTwice is two taps at a cell in one write: the console reads them
+// together, so the second comes while the first one's notice shows, as a
+// go armed by the first tap needs (the arm ends with its notice, which a
+// walk shows walkNotice).
+func (w *walker) tapTwice(x, y int) {
+	w.t.Helper()
+	one := fmt.Sprintf("\x1b[<0;%d;%dM\x1b[<0;%d;%dm", x, y, x, y)
+	w.send(fmt.Sprintf("two taps %d,%d", x, y), one+one)
 }
 
 // refused presses keys, waits for the line and clears it.
@@ -1169,8 +1178,10 @@ func TestSessionsCanBeStartedAndKilled(t *testing.T) {
 	w.press("enter")
 	eventually(t, 3*time.Second, "the rename to reach tmux's list", func() bool { return strings.Contains(paneList(t), "renamed-one") })
 	w.press("esc")
-	w.saysAfter("the list", "renamed-one", "/")
-	w.press("esc")
+	// The board shows the new name once a sample has read it, and its card
+	// may be under a column's "↓ n more": a search finds it, as a person
+	// looks for a card that is off the screen.
+	eventually(t, 30*time.Second, "the board to show renamed-one", func() bool { return w.finds("renamed-one") })
 
 	// The search finds the new name once a sample has read it: until then it finds
 	// no row, and x does nothing.
