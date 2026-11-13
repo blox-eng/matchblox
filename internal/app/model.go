@@ -563,6 +563,9 @@ type Model struct {
 	noticeUntil time.Time
 	// goArmed is the card whose go a first tap armed; a second tap gives it.
 	goArmed paneKey
+	// goArmedTap is the go armed when the tap now running began: every tap
+	// disarms, and only a tap on that card's go gives it.
+	goArmedTap paneKey
 	// drafts are the words typed to a chain's stoker in its room when the
 	// room closed; the room shows them again when it opens.
 	drafts map[chainKey]string

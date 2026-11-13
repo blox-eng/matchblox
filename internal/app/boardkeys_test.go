@@ -594,6 +594,38 @@ func TestTheBeltsGoArmsThenGives(t *testing.T) {
 	}
 }
 
+// TestAnyTapDisarmsTheBeltsGo: on Pocket a tap anywhere disarms an armed
+// go, not only a tap on a card; and y on a card with no go arms nothing.
+func TestAnyTapDisarmsTheBeltsGo(t *testing.T) {
+	now := demoAt
+	pocket := func(m *Model) { chooseCard("hearth-api")(m); pocketOnly(m) }
+	for name, tapAway := range map[string]func(Model) Model{
+		"a column's name": func(m Model) Model { return tapHead(t, m, colShip) },
+		"the header":      func(m Model) Model { next, _ := tap(m, m.width-1, 0); return next.(Model) },
+		"a blank row":     func(m Model) Model { next, _ := tap(m, m.width-1, m.height-2); return next.(Model) },
+	} {
+		now = demoAt
+		m := pressOn(goBoard(t, &now, pocket), "y")
+		if m.goArmed == (paneKey{}) {
+			t.Fatalf("%s: the first y armed nothing", name)
+		}
+		m = tapAway(m)
+		m.belt.pocket[0].n = m.belt.n // the app answers the new board= value
+		if m.goArmed != (paneKey{}) {
+			t.Errorf("a tap on %s kept the go armed", name)
+		}
+		if m = pressOn(m, "y"); len(boardFake(m).acts()) != 0 {
+			t.Errorf("y, a tap on %s, y gave the go: %+v", name, boardFake(m).acts())
+		}
+	}
+
+	now = demoAt
+	m := pressOn(goBoard(t, &now, func(m *Model) { chooseCard("kindle-web")(m); pocketOnly(m) }), "y")
+	if m.goArmed != (paneKey{}) || m.noticeText != "no step waits for your go on kindle-web" {
+		t.Errorf("y on a card with no go: armed %v, notice %q", m.goArmed, m.noticeText)
+	}
+}
+
 func TestCtrlOGoesIntoTheChosenCard(t *testing.T) {
 	st := boardFixture(t)
 	var ran []string

@@ -624,7 +624,7 @@ func (m Model) boardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 		cmd = m.boardMerge(s)
 	case bkey.Matches(k, mk.Second):
 		cmd = m.boardKill(s)
-	case bkey.Matches(k, mk.Grant) && m.onPocket(): // the belt's y is a tap: arm, then give
+	case bkey.Matches(k, mk.Grant) && m.onPocket() && m.goWaitsHere(s): // the belt's y is a tap: arm, then give
 		next, cmd := m.armGo(s, mk.Grant.Help().Key+" again gives the go: "+m.goWhat(s))
 		return next, cmd, true
 	case bkey.Matches(k, mk.Grant):
@@ -751,6 +751,12 @@ func (m Model) goStep(s sample.Session) (stokerRow, bool) {
 		}
 	}
 	return stokerRow{}, false
+}
+
+// goWaitsHere: a step of this host's stoker waits for the owner's go on s.
+func (m Model) goWaitsHere(s sample.Session) bool {
+	_, ok := m.goStep(s)
+	return ok
 }
 
 // goWhat is what the go that waits on s lets run, in words: "merge #4556"
@@ -949,8 +955,6 @@ func (m Model) boardTap(x, y int) (tea.Model, tea.Cmd) {
 	if !ok {
 		return m, nil
 	}
-	armed := m.goArmed
-	m.goArmed = paneKey{} // any tap but the armed go's disarms it
 	again := m.chosenByHand(s)
 	m.boardChooseCard(c, s)
 	m.boardMine = paneOf(s) // a tap chooses by hand
@@ -962,7 +966,7 @@ func (m Model) boardTap(x, y int) (tea.Model, tea.Cmd) {
 	case !ok || sp.press == "" || goIn: // a tap goes in only on a card the person chose
 		return m, nil
 	case sp.press == m.keys.main.Grant.Keys()[0]:
-		m.goArmed = armed
+		m.goArmed = m.goArmedTap // the tap disarmed it; a tap on its own go gives it
 		return m.boardTapGo(s)
 	}
 	return m.keyed(keyPress(sp.press))

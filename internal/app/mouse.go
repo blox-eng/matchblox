@@ -17,6 +17,7 @@ import (
 // the board a right-click on a card opens its menu, and while the menu is
 // open it takes every tap.
 func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
+	m.goArmedTap, m.goArmed = m.goArmed, paneKey{} // any tap disarms a go; boardTap gives it on its own go
 	switch {
 	case m.pair.owns() || m.asking(): // the pair page and an ssh prompt take keys only
 		return m, nil
