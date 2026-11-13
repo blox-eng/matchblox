@@ -27,12 +27,17 @@ const noticeLines = 3
 // noticeMsg comes when a notice ends: the frame drops it.
 type noticeMsg struct{}
 
+// noticeEnds is the command that says a notice ended. The notice's life
+// runs on the console's clock (m.now), so tests, which set that clock,
+// make this one come at once rather than wait noticeFor of wall time.
+var noticeEnds = func() tea.Cmd { return tea.Tick(noticeFor, func(time.Time) tea.Msg { return noticeMsg{} }) }
+
 // notice is the one way to show a toast, a refusal or the data's age on
 // the board: text takes the strip's row for noticeFor. The header never
 // shows it.
 func (m *Model) notice(text string) tea.Cmd {
 	m.noticeText, m.noticeUntil, m.goArmed, m.noticeNext = text, m.now().Add(noticeFor), paneKey{}, ""
-	return tea.Tick(noticeFor, func(time.Time) tea.Msg { return noticeMsg{} })
+	return noticeEnds()
 }
 
 // noticeEnded shows the notice that waits for the one that ends.
