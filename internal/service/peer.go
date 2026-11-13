@@ -57,7 +57,8 @@ func (s *Service) paneOfTTY(pid int) (string, bool) {
 
 // paneOfTerminal is the tmux pane, on the builder's server or the
 // stoker's, whose terminal (dev of its #{pane_tty}) is pid's controlling
-// terminal (tty): "" for none, as when tmux runs no server. ok is false
+// terminal (tty), or else the pane of the agent that runs on that terminal:
+// "" for none, as when tmux runs no server. ok is false
 // when pid has no terminal, or tmux fails another way: then nothing
 // tells whose the terminal is.
 func (s *Service) paneOfTerminal(pid int, tty func(int) (ttyDevice, bool), dev func(string) (ttyDevice, bool)) (pane string, ok bool) {
@@ -88,6 +89,17 @@ func (s *Service) paneOfTerminal(pid int, tty func(int) (ttyDevice, bool), dev f
 				}
 				return id, true
 			}
+		}
+	}
+	// An agent behind matchblox's redraw guard (#399) runs on the guard's
+	// terminal, which is no pane's: a process on it belongs to that agent's
+	// pane, also after it left the agent's tree.
+	s.mu.Lock()
+	sessions := slices.Clone(s.cur.Sessions)
+	s.mu.Unlock()
+	for _, x := range sessions {
+		if d, ok := tty(x.PID); ok && d == want && x.Pane != "" {
+			return x.Pane, true
 		}
 	}
 	return "", true
