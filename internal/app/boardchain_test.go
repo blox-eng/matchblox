@@ -198,6 +198,30 @@ func hearthOpen(t *testing.T, w int, st proto.State) (Model, *fakeConn) {
 	return m, f
 }
 
+// TestTheCountKeepsTheTalkDraft: a tap on the count closes the room, but
+// the words typed to its stoker wait: the room opens again with them on
+// the talk line.
+func TestTheCountKeepsTheTalkDraft(t *testing.T) {
+	m, _ := hearthOpen(t, 160, headState(t, runningPlan(), true))
+	for i := 0; i < 12 && !strings.HasPrefix(roomRowNow(m), "talk"); i++ {
+		m = pressOn(m, "down")
+	}
+	m = typeText(pressOn(m, "enter"), "ship the login fix").(Model)
+	if m.room == nil || m.room.draft != "ship the login fix" {
+		t.Fatalf("the talk line did not take the words: %+v", m.room)
+	}
+	if m = tapText(t, m, "need you"); m.room != nil {
+		t.Fatal("the count kept the room")
+	}
+	m = pressOn(m, "g")
+	if m.room == nil || m.boardChain != "hearth" {
+		t.Fatalf("g after the count: room %v, chain %q", m.room, m.boardChain)
+	}
+	if m.room.draft != "ship the login fix" || !strings.HasPrefix(roomRowNow(m), "talk") || !strings.Contains(plainFrame(m), "› ship the login fix") {
+		t.Errorf("the room opened again with draft %q on row %q:\n%s", m.room.draft, roomRowNow(m), plainFrame(m))
+	}
+}
+
 // TestARoomOpensOnTheNeedElseTheTalkLine: the room opens on what waits:
 // the card of a match that asks, the step whose go it waits for; with
 // nothing, on the talk line, and a flip lands typing there.

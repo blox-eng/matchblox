@@ -315,6 +315,9 @@ func (m Model) openRoom(k chainKey) Model {
 		m.boardChain = m.chainLabel(k)
 	}
 	m.room.at = m.roomLanding(k)
+	if d := m.drafts[k]; d != "" { // words typed before the room closed: back on the talk line
+		m.room.draft, m.room.at = d, len(m.roomRows(k))-1
+	}
 	return m
 }
 

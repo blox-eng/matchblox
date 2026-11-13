@@ -1,6 +1,7 @@
 package app
 
 import (
+	"maps"
 	"slices"
 	"strings"
 
@@ -30,8 +31,20 @@ func (m Model) roomChosen() (roomRow, bool) {
 	return roomRow{}, false
 }
 
-// closeRoom closes the room: the board shows every chain again.
+// closeRoom closes the room: the board shows every chain again. Words
+// typed to its stoker and not sent wait for the room to open again.
 func (m Model) closeRoom() Model {
+	if r := m.room; r != nil {
+		m.drafts = maps.Clone(m.drafts)
+		if r.draft == "" {
+			delete(m.drafts, r.k)
+		} else {
+			if m.drafts == nil {
+				m.drafts = map[chainKey]string{}
+			}
+			m.drafts[r.k] = r.draft
+		}
+	}
 	m.room = nil
 	m.boardChain, m.peekAt = "", m.now()
 	return m

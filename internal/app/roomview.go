@@ -42,6 +42,9 @@ func (m Model) roomLine(r roomRow, w int, lit bool) []string {
 		if m.room != nil && m.room.typing {
 			return []string{st.accent.Render("›") + st.text.Render(" "+m.room.draft) + st.accent.Render("▏")}
 		}
+		if m.room != nil && m.room.draft != "" { // words typed and not sent: ⏎ types on
+			r.text = "› " + m.room.draft
+		}
 		if lit {
 			return []string{st.accent.Render(r.text)}
 		}
