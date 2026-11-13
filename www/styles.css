@@ -251,7 +251,7 @@ footer a { color: var(--muted); }
 .run .row .t { white-space: normal; flex-basis: 100%; }
 
 /* The stoker takes orders (stoker.js): the same Duo, folded at first, six
-   steps over it, the switch and the Sessions keys under it. */
+   steps over it, the switch and the board's keys under it. */
 .orders .stage { gap: 16px; padding-block: 20px; }
 /* Its lines run to both edges: a margin keeps the glass's corners off them. */
 .orders .glass { padding: 9px 8px; }
@@ -317,10 +317,11 @@ footer a { color: var(--muted); }
 .chain .domino:focus-visible { outline: 2px solid var(--primary); outline-offset: 4px; }
 @media (hover: hover) { .domino g:not(.lit):hover .head { fill: var(--primary); } }
 .strike-row code { font: 400 13px/1 var(--mono); color: var(--muted); }
-.chain .beats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; margin-top: 6px; padding-top: 18px; border-top: 1px solid var(--hair-soft); }
-.chain .beats h3 { margin: 0 0 4px; font-size: 15px; font-weight: 600; }
-.chain .beats p { margin: 0; color: var(--muted); font-size: 14px; }
-@media (max-width: 720px) { .chain .beats { grid-template-columns: minmax(0, 1fr); } }
+.chain .beats, .box .beats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; margin-top: 6px; padding-top: 18px; border-top: 1px solid var(--hair-soft); }
+.chain .beats h3, .box .beats h3 { margin: 0 0 4px; font-size: 15px; font-weight: 600; }
+.chain .beats p, .box .beats p { margin: 0; color: var(--muted); font-size: 14px; }
+@media (max-width: 720px) { .chain .beats, .box .beats { grid-template-columns: minmax(0, 1fr); } }
+.box .beats kbd { font: 500 12px/1 var(--mono); color: var(--fg); border: 1px solid var(--hair-strong); border-bottom-width: 2px; border-radius: 4px; padding: 2px 5px; }
 /* The chain's room (#326): ⌥s flips to it. The drawing keeps only what the board's narrowed chain shows. */
 .chain .room { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 28px; align-items: center; padding-top: 18px; border-top: 1px solid var(--hair-soft); }
 .chain .room h3 { margin: 0 0 6px; font-size: 15px; font-weight: 600; }
