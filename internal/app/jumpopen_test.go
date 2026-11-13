@@ -55,7 +55,7 @@ func askingHost(t *testing.T, up bool, openErr string, openExit int) (Model, *[]
 func confirmJump(t *testing.T, m Model) Model {
 	t.Helper()
 	next, cmd := m.confirm(*m.forHost(m.opt.Host, m.jump("%1")))
-	return settle(t, next, cmd) // each of a batch; a notice's tick gives up
+	return settle(t, next, cmd) // each of a batch, each to its end
 }
 
 func batchJump(m *Model) (remote.Jump, []string) {
