@@ -7,7 +7,7 @@ What does not work yet, and what to do until it does.
 | The way back needs the console's own session | Run `matchblox` outside tmux. The tap on `◂ matchblox` also needs the tmux mouse: press `m` in the way back's preview. |
 | With tmux older than 3.3, a phone's key is taken as the desk's | The console says it reads the marks through tmux's passthrough, which tmux 3.2 and older lack. The app then marks no key: with a desk attached, `Enter` on the phone moves the desk, and the command keys stay dim. Use tmux 3.3 or newer. |
 | An app without the marks has its keys taken as the desk's | An app build from before the marks sends none: with a desk attached, `Enter` on the phone moves the desk. Update the app. |
-| The stoker compacts Claude Code only | Compact Codex, OpenCode and Cursor sessions yourself: their cards say `! compact`. |
+| The stoker compacts Claude Code only | Compact Codex, OpenCode and Cursor sessions yourself: their cards show `ctx N%` in `neg` when the context is full. |
 | The merge guard watches Claude Code only | A Codex, OpenCode or Cursor session has no hook for it. The stoker's view says `no merge guard watches <session>`, with each go the run does not give it (`its merges, releases and deploys go unchecked`): give such a session none of them, or do them yourself. |
 | The guard does not see what you type straight into a pane | Go into the pane from the console while the stoker rests (`y` to `Take over?`): the session is then yours. A pane you reach with your own tmux keys stays the stoker's. |
 | A rest trigger fires for Claude Code only | `matchblox stoker when --rest` waits for the end of a turn, which only Claude Code's transcript tells. For a Codex or OpenCode session, the stoker sets a ship trigger or waits for its wake. |

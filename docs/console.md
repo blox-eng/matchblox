@@ -26,7 +26,7 @@ columns:
 
 | Column | A match is here when |
 |---|---|
-| `NEEDS YOU` | It asks a question or a permission, or a stoker step for it waits for your go. A pull request it drives waits for your merge. Its ship is stuck (`CI failed`, `conflicts`, `changes requested`) and it does not work. Or its turn ended today and it waits for input (`waits`, `paused`, `done`). |
+| `NEEDS YOU` | It asks a question or a permission, or a stoker step for it waits for your go. A pull request it drives waits for your merge, and it does not work. Its ship is stuck (`CI failed`, `conflicts`, `changes requested`) and it does not work. Or its turn ended today and it waits for input (`waits`, `paused`, `done`). |
 | `WORKING` | It is `busy`, `agents`, `tests` or `shell`. |
 | `SHIPPING` | It is at rest, it needs nothing, and a pull request it drives is in flight (`ci`, `green` with auto-merge, `merged` and deploying). |
 | `QUIET` | Everything else: `idle`, `cold`, `stale`, `out`, held and parked. |
@@ -80,7 +80,8 @@ A card has up to four lines:
 2. The state word and what it says: `asks Which way do we fix the
    login?`, `green #4556 waits for your merge`, `busy Writing the tests`.
 3. The ship and its track (`#4551 ●━◉┄○┄○`), or the stoker's step, then the
-   context use (`ctx 62%`, `warn` from 70%). At the right, the chain's
+   context use (`ctx 62%`, `warn` from 70%, `neg` when the context is
+   full). At the right, the chain's
    stub: `─╴login`.
 4. The keys of the card: `p merge #4556   ⏎ go in`. Cards in `NEEDS YOU`
    and the chosen card show them.
@@ -534,7 +535,7 @@ Each card starts with a match:
 | `✦` | busy | The agent works. The match burns. |
 | `✦` | agents | Its turn ended and its subagents still work: their results start its next turn. It does not need you. |
 | `╿` | asks, waits, done, paused | The agent needs you. The match is at rest. |
-| `│` | its state | The context is full (at `compact_tokens`, 350k by default, or `compact_at`, 85% of its window). The match is spent, and its card says `! compact`. |
+| `│` | its state | The context is full (at `compact_tokens`, 350k by default, or `compact_at`, 85% of its window). The match is spent, and its card shows `ctx N%` in `neg`. |
 | `╿` or `│` | out | The plan's limit stops an idle session (`│` when it is also full). The next column says when it can work again: `19:50`, or the weekday when that is more than a day away. A session left a day or more keeps its word: `cold`, `stale`. |
 
 ## Machine
