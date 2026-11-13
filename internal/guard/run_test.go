@@ -4,8 +4,11 @@ package guard
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
+	"io"
 	"os"
+	"os/exec"
 	"strings"
 	"sync"
 	"syscall"
@@ -211,4 +214,50 @@ func TestRunStatus(t *testing.T) {
 	if status := s.run("sh", "-c", "exit 3")(); status != 3 {
 		t.Fatalf("the agent exits 3 and the guard gives %d", status)
 	}
+}
+
+// TestGuardCannotStart: with no terminal to give the agent, the agent still
+// runs, and the pane says why it has no guard.
+func TestGuardCannotStart(t *testing.T) {
+	open := openTerminal
+	openTerminal = func() (*os.File, *os.File, error) { return nil, nil, errors.New("no ptys left") }
+	t.Cleanup(func() { openTerminal = open })
+	s := newScreen(t, 100, 30)
+	if _, err := term.MakeRaw(s.slave.Fd()); err != nil { // as tmux leaves it: what is written is what shows
+		t.Fatal(err)
+	}
+	if status := Main([]string{"sh", "-c", "printf ran; exit 4"}, "web", s.slave, s.slave); status != 4 {
+		t.Fatalf("the agent exits 4 without the guard, and the guard gives %d", status)
+	}
+	want := "Cursor runs without the redraw guard: no ptys left\r\nran"
+	s.waitFor("the words and the agent's output", func(text string) bool { return text == want })
+}
+
+// TestGuardStops: a guard that breaks ends the agent, gives the terminal
+// back as it was, and says how to start again.
+func TestGuardStops(t *testing.T) {
+	cp := copyOutput
+	copyOutput = func(*Filter, io.Reader) { panic("boom") }
+	t.Cleanup(func() { copyOutput = cp })
+	s := newScreen(t, 100, 30)
+	modes := func() string {
+		stty := exec.Command("stty", "-g")
+		stty.Stdin = s.slave
+		out, err := stty.Output()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(out)
+	}
+	before := modes()
+	began := time.Now()
+	status := Main([]string{"sh", "-c", "sleep 30"}, "web", s.slave, s.slave)
+	if status == 0 || time.Since(began) > 5*time.Second {
+		t.Fatalf("a broken guard gave status %d after %v: want a failure, at once", status, time.Since(began))
+	}
+	if after := modes(); after != before {
+		t.Fatalf("the terminal's modes are %q, want them as they were: %q", after, before)
+	}
+	want := "matchblox's redraw guard stopped: boom. Start again: matchblox switch web --agent cursor-agent"
+	s.waitFor("the words", func(text string) bool { return strings.Contains(text, want) })
 }

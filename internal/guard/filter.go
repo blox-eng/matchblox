@@ -16,6 +16,10 @@ import (
 // read in 2026.10.19). A clear without the last part is not a replay.
 const ClearCodes = "\x1b[H\x1b[2J\x1b[3J"
 
+// SessionEnv names the session a guard runs for, for the words that say
+// how to start it again.
+const SessionEnv = "MATCHBLOX_SESSION"
+
 // pendWait is how long output that could be the start of ClearCodes waits
 // for its next byte before it passes as it is.
 const pendWait = 20 * time.Millisecond
