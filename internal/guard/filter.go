@@ -7,6 +7,7 @@ package guard
 import (
 	"bytes"
 	"io"
+	"slices"
 	"sync"
 	"time"
 )
@@ -37,9 +38,13 @@ const (
 	// clear starts a hold. A clear at another time is the agent's own (a
 	// new chat), with no replay behind it.
 	armFor = 3 * time.Second
-	// quietFor without output ends a hold: the replay is over. A rate tells
-	// nothing: a renderer at work on a long chat can be slow.
-	quietFor = 300 * time.Millisecond
+	// quietFor without output ends a hold: the replay is over. So does a
+	// quietFor that brings under replayLines new lines: a replay prints
+	// hundreds, and what follows it is the agent's own slow drawing, a
+	// spinner or an answer as it comes. A rate in bytes tells nothing: a
+	// renderer at work on a long chat can be slow.
+	quietFor    = 300 * time.Millisecond
+	replayLines = 10
 	// holdCap ends a hold that never goes quiet: the pane then shows what
 	// comes, as without a guard.
 	holdCap = 60 * time.Second
@@ -53,17 +58,19 @@ const (
 
 // Filter writes an agent's output to out: unchanged, but for a replay.
 type Filter struct {
-	mu      sync.Mutex
-	out     io.Writer
-	now     func() time.Time
-	pend    []byte    // output held back: it could be the start of ClearCodes
-	pendAt  time.Time // when pend last grew
-	armed   time.Time // until when a clear starts a hold
-	holding bool
-	tail    []byte    // the end of the replay so far
-	seq     []byte    // an escape sequence of the replay, not yet whole
-	heldAt  time.Time // when the hold began
-	lastAt  time.Time // when the replay last printed
+	mu       sync.Mutex
+	out      io.Writer
+	now      func() time.Time
+	pend     []byte    // output held back: it could be the start of ClearCodes
+	pendAt   time.Time // when pend last grew
+	armed    time.Time // until when a clear starts a hold
+	holding  bool
+	tail     []byte    // the end of the replay so far
+	seq      []byte    // an escape sequence of the replay, not yet whole
+	heldAt   time.Time // when the hold began
+	lastAt   time.Time // when the replay last printed
+	winAt    time.Time // when the window that counts winLines began
+	winLines int       // lines of the replay in that window
 }
 
 // NewFilter is a Filter that writes to out and reads the time from now.
@@ -104,8 +111,8 @@ func (f *Filter) write(p []byte) error {
 		if _, err := f.out.Write(append(data[:i:i], ClearCodes+Notice...)); err != nil {
 			return err
 		}
-		f.holding, f.tail, f.seq = true, nil, nil
-		f.heldAt = now
+		f.holding, f.tail, f.seq, f.winLines = true, nil, nil, 0
+		f.heldAt, f.winAt = now, now
 		return f.hold(data[i+len(ClearCodes):])
 	}
 	keep := codesPrefix(data)
@@ -123,8 +130,11 @@ func (f *Filter) write(p []byte) error {
 func (f *Filter) hold(p []byte) error {
 	f.lastAt = f.now()
 	var pass []byte
-	for _, b := range p {
+	for i, b := range p {
 		if len(f.seq) == 0 && b != 0x1b {
+			if b == '\n' {
+				f.winLines++
+			}
 			f.tail = append(f.tail, b)
 			continue
 		}
@@ -132,6 +142,19 @@ func (f *Filter) hold(p []byte) error {
 		whole, known := sequence(f.seq)
 		if !whole && known && len(f.seq) < seqMax {
 			continue
+		}
+		if whole && otherScreen(f.seq) {
+			// The chat belongs on the screen the agent now leaves: the pane
+			// gets its end first, then the switch and what follows.
+			rest := append(slices.Clone(f.seq), p[i+1:]...)
+			f.seq = nil
+			if _, err := f.out.Write(pass); err != nil {
+				return err
+			}
+			if err := f.release(); err != nil {
+				return err
+			}
+			return f.write(rest)
 		}
 		if whole && toTerminal(f.seq) {
 			pass = append(pass, f.seq...)
@@ -214,10 +237,21 @@ func toTerminal(seq []byte) bool {
 			return true
 		}
 		return final == 'n' || final == 'c' || final == 't'
-	case ']':
-		return bytes.Contains(seq, []byte(";?"))
+	case ']': // the question mark is the last parameter: a link's address may hold one
+		return bytes.HasSuffix(seq, []byte(";?\x07")) || bytes.HasSuffix(seq, []byte(";?\x1b\\"))
 	case 'P':
 		return bytes.HasPrefix(body, []byte("+q")) || bytes.HasPrefix(body, []byte("$q"))
+	}
+	return false
+}
+
+// otherScreen tells if a whole escape sequence switches to or from the
+// alternate screen.
+func otherScreen(seq []byte) bool {
+	for _, mode := range []string{"\x1b[?1049", "\x1b[?1047", "\x1b[?47"} {
+		if string(seq) == mode+"h" || string(seq) == mode+"l" {
+			return true
+		}
 	}
 	return false
 }
@@ -230,7 +264,12 @@ func (f *Filter) Tick() error {
 	defer f.mu.Unlock()
 	now := f.now()
 	if f.holding {
-		if now.Sub(f.lastAt) < quietFor && now.Sub(f.heldAt) < holdCap {
+		slow := false
+		if now.Sub(f.winAt) >= quietFor {
+			slow = f.winLines < replayLines
+			f.winAt, f.winLines = now, 0
+		}
+		if !slow && now.Sub(f.lastAt) < quietFor && now.Sub(f.heldAt) < holdCap {
 			return nil
 		}
 		return f.release()

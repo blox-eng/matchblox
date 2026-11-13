@@ -134,7 +134,10 @@ func (s *Service) guardLink() string {
 		return ""
 	}
 	if err := os.Symlink(s.Exe, link); err != nil {
-		return ""
+		// Another launch made it in the same moment: that link serves too.
+		if to, rerr := os.Readlink(link); rerr != nil || to != s.Exe {
+			return ""
+		}
 	}
 	return link
 }

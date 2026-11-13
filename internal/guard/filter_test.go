@@ -349,3 +349,65 @@ func TestFilterHoldLosesNoByte(t *testing.T) {
 		}
 	}
 }
+
+// TestFilterHoldEndsUnderSlowStream: Cursor may stream an answer when the
+// width changes. Its replay is a burst of hundreds of lines; the stream
+// after it is a spinner and a few words a second. The hold ends with the
+// burst, not with the stream.
+func TestFilterHoldEndsUnderSlowStream(t *testing.T) {
+	var out bytes.Buffer
+	c := newClock()
+	f := NewFilter(&out, c.now)
+	f.Arm()
+	writeIn(t, f, replay(5000), 4096)
+	for at := time.Duration(0); at < 5*time.Second; at += 100 * time.Millisecond {
+		c.t = c.t.Add(100 * time.Millisecond)
+		writeIn(t, f, []byte("\r\x1b[2K⠋ Generating…"), 64)
+		if at%time.Second == 0 {
+			writeIn(t, f, []byte(" a few words of the answer\r\n"), 64)
+		}
+		if err := f.Tick(); err != nil {
+			t.Fatal(err)
+		}
+		if !f.Holding() {
+			if at > time.Second {
+				t.Fatalf("the hold ended %v after the replay's burst, want within 1 s", at)
+			}
+			return
+		}
+	}
+	t.Fatal("5 s after the replay's burst, under a slow stream, the pane still shows only the notice")
+}
+
+// TestFilterAltScreenEndsHold: when the agent opens a full-screen view
+// during a replay, the chat belongs on the screen below it. The pane gets
+// the end of the chat first, then the switch.
+func TestFilterAltScreenEndsHold(t *testing.T) {
+	for _, mode := range []string{"\x1b[?1049h", "\x1b[?1047h", "\x1b[?47h"} {
+		var out bytes.Buffer
+		f := NewFilter(&out, newClock().now)
+		f.Arm()
+		writeIn(t, f, []byte(ClearCodes+"chat line\r\n"+mode+"full screen"), 3)
+		if want := ClearCodes + Notice + ClearCodes + "\x1b[0mchat line\r\n" + mode + "full screen"; out.String() != want || f.Holding() {
+			t.Fatalf("with %q the pane got %q (holding %v), want the chat, then the switch, then its view: %q", mode, out.String(), f.Holding(), want)
+		}
+	}
+}
+
+// TestFilterHyperlinkStaysInPlace: a link whose address holds ";?" is text
+// of the chat, not a question to the terminal: it stays where it is.
+func TestFilterHyperlinkStaysInPlace(t *testing.T) {
+	var out bytes.Buffer
+	c := newClock()
+	f := NewFilter(&out, c.now)
+	f.Arm()
+	const body = "before\r\n\x1b]8;;https://x.dev/a;?b=1\x1b\\link\x1b]8;;\x1b\\"
+	writeIn(t, f, []byte(ClearCodes+body), 5)
+	c.t = c.t.Add(quietFor)
+	if err := f.Tick(); err != nil {
+		t.Fatal(err)
+	}
+	if want := ClearCodes + Notice + ClearCodes + "\x1b[0m" + body; out.String() != want {
+		t.Fatalf("the pane got %q, want the link in its place: %q", out.String(), want)
+	}
+}

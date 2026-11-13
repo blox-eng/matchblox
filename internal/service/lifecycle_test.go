@@ -2254,3 +2254,22 @@ func TestNewAndRecoverStartCursorBehindTheGuard(t *testing.T) {
 		t.Errorf("recover ran %q, want it to end with %q", *ran, want)
 	}
 }
+
+// TestGuardLinkAtOnce: two Cursor sessions started at the same moment both
+// get the guard: neither loses the link to the other making it.
+func TestGuardLinkAtOnce(t *testing.T) {
+	s, _ := switchTest(t)
+	s.Exe = "/opt/matchblox"
+	for round := range 300 {
+		s.StatePath = filepath.Join(t.TempDir(), "state.json")
+		var wg sync.WaitGroup
+		var got [2]string
+		for i := range got {
+			wg.Go(func() { got[i] = s.guardLink() })
+		}
+		wg.Wait()
+		if got[0] == "" || got[1] == "" {
+			t.Fatalf("round %d: two launches at once got the links %q", round, got)
+		}
+	}
+}
