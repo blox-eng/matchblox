@@ -422,3 +422,54 @@ func tail(screen string) string {
 	screen = strings.TrimRight(screen, "\n ")
 	return screen[max(len(screen)-200, 0):]
 }
+
+// TestGuardWritesNoFile: what passes through the guard, a token the agent
+// prints in a replay and outside one and a password the builder types,
+// lands in no file and in no line of the guard's own.
+func TestGuardWritesNoFile(t *testing.T) {
+	const printed, typedSecret = "tok-9f3c-SECRET", "pw-77aa-SECRET"
+	home := t.TempDir()
+	for _, v := range []string{"HOME", "XDG_STATE_HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME", "TMPDIR"} {
+		t.Setenv(v, home)
+	}
+	s := newScreen(t, 100, 30)
+	stderr, err := os.Create(filepath.Join(t.TempDir(), "stderr")) // outside home: read apart from it
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := os.Stderr
+	os.Stderr = stderr
+	t.Cleanup(func() { os.Stderr = old })
+	agent := fmt.Sprintf(`stty raw -echo; printf '%s before\r\n'; printf '\033[H\033[2J\033[3J%s in a replay\r\n'; printf ready; head -c %d >/dev/null`, printed, printed, len(typedSecret))
+	done := make(chan int, 1)
+	go func() { done <- Main([]string{"sh", "-c", agent}, "web", s.slave, s.slave) }()
+	s.waitFor("ready", func(text string) bool { return strings.Contains(text, "ready") })
+	s.typeKeys(typedSecret)
+	if status := <-done; status != 0 {
+		t.Fatalf("the agent ended with status %d", status)
+	}
+	if !strings.Contains(s.text(), printed+" in a replay") {
+		t.Fatalf("the pane did not get the agent's output: %q", s.text())
+	}
+	said, _ := os.ReadFile(stderr.Name())
+	for _, secret := range []string{printed, typedSecret} {
+		if bytes.Contains(said, []byte(secret)) {
+			t.Fatalf("the guard's own output holds %q", secret)
+		}
+	}
+	err = filepath.WalkDir(home, func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		b, err := os.ReadFile(path)
+		for _, secret := range []string{printed, typedSecret} {
+			if bytes.Contains(b, []byte(secret)) {
+				t.Errorf("%s holds %q", path, secret)
+			}
+		}
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
