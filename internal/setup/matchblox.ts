@@ -30,8 +30,8 @@ export const MatchbloxPlugin = async () => {
     const key = JSON.stringify(now)
     if (key === last) return
     const tmp = `${file}.tmp`
-    mkdirSync(dir, { recursive: true })
-    writeFileSync(tmp, JSON.stringify({ pid: process.pid, startedAt, ...now, statusUpdatedAt: Date.now() }))
+    mkdirSync(dir, { recursive: true, mode: 0o700 }) // only the owner reads the state folder
+    writeFileSync(tmp, JSON.stringify({ pid: process.pid, startedAt, ...now, statusUpdatedAt: Date.now() }), { mode: 0o600 })
     renameSync(tmp, file)
     last = key
   }

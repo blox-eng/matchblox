@@ -3,7 +3,7 @@
 // shapes OpenCode 1.19.3 sends (session.status, permission.*, question.*).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -11,6 +11,7 @@ test("TheOpencodePluginTracksPendingByID: each wait clears only by its own id", 
   const state = mkdtempSync(join(tmpdir(), "matchblox-state-"));
   t.after(() => rmSync(state, { recursive: true, force: true }));
   process.env.XDG_STATE_HOME = state;
+  process.umask(0o022);
   const { MatchbloxPlugin } = await import("./matchblox.ts");
   const hooks = await MatchbloxPlugin({ directory: "/work/wick-mobile" });
   const file = join(state, "matchblox", "opencode", `${process.pid}.json`);
@@ -23,6 +24,11 @@ test("TheOpencodePluginTracksPendingByID: each wait clears only by its own id", 
   const send = (type, properties) => hooks.event({ event: { id: "evt", type, properties } });
 
   assert.deepEqual(report(), { status: "idle" });
+  // Only the owner reads the state folder and the reports, whatever the umask.
+  const mode = (p) => statSync(p).mode & 0o777;
+  assert.equal(mode(join(state, "matchblox")), 0o700, "the state folder");
+  assert.equal(mode(join(state, "matchblox", "opencode")), 0o700, "the reports' folder");
+  assert.equal(mode(file), 0o600, "a report");
   await send("session.status", { sessionID: "ses_wick", status: { type: "busy" } });
   assert.deepEqual(report(), { status: "busy" });
   await send("permission.asked", { id: "per_A", sessionID: "ses_wick", permission: "bash", patterns: ["rm -rf build"] });
