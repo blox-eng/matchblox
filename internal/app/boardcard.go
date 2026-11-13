@@ -434,6 +434,9 @@ func (m Model) cardHints(s sample.Session, o cardOpts, options int, answers bool
 		hs, gap = []hint{{n, "again sends ·", n}, hintFor(mk.Back, "clears")}, 1
 	case answers && o.sel:
 		hs = []hint{{"1-" + strconv.Itoa(options), "mark an answer", ""}, goIn}
+	case o.sel && m.goArmedOn(s):
+		y := mk.Grant.Keys()[0]
+		hs, gap = []hint{{y, "again: " + m.goWhat(s) + " ·", y}, hintFor(mk.Back, "clears")}, 1
 	default:
 		if sh, ok := m.mergeable(s); ok {
 			hs = append(hs, hintFor(m.keys.board.Merge, "merge #"+strconv.Itoa(sh.Number)))

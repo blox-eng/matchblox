@@ -291,7 +291,7 @@ The key line shows the keys of the chosen card first, then `c`, `v`, `s`, `u`, t
 | go in | Tap the chosen card again. |
 | answer | Tap an option in the peek. |
 | open the menu | Long-press a card. |
-| act | Tap a key on the card or on the belt. A destructive act still waits for a typed `y`. |
+| act | Tap a key on the card or on the belt. A destructive act still waits for a typed `y`. A go is armed by the first tap on its `y` (on the card, or on the belt's `y go`), and given by a second (owner, 2026-11-13). |
 | come back | The belt's `◂`, or the edge swipe. |
 | turn the strip | Tap the strip. |
 
@@ -307,6 +307,7 @@ On Pocket the console draws no key line and no hairline over it. The cards take 
 - **Home** is `◂`, then the keys of the chosen card in the accent (at most three, each with its word under it: `1 answer`, `2 answer`, or `p merge`, or `y go`), then `↑ ↓ ⏎` (owner, 2026-11-11). So what the owner does most needs no drag, and `◂` and `↑ ↓ ⏎` are where every layout has them. The tail, in this order: `c copy`, `m menu`, `g chain`, `v one line`, `s hosts`, `u strip`, `⇥ machine`, `x kill`, `←`, `→`, `]`, `[`, `/`, `z park`. Every key of the board is on the belt.
 - **A key that does not apply is dim** and sends nothing, as a command key is in a pane that is not its agent's.
 - **The consent box** still rises in the console, with its `RUN` line. While it shows, the belt is `◂`, `y runs`, `esc cancels`. A tap is never consent: `y` on the belt is the typed `y`.
+- **A go: arm, then send** (owner, 2026-11-13). The console cannot tell the belt's `y` from a typed one, so on Pocket the first `y` on a card whose stoker step waits for a go only arms it. The card's key line then says what the go does (`y again: merge #4556 · esc clears`), and the belt lights `y`. A second `y` gives the go. Any other key or tap disarms it, as does the end of its notice. A desk's typed `y` still gives the go at once.
 - **What the console tells the app.** The app must know the chosen card's keys. The console sends them when they change, the way it tells the app today which agent a pane runs (`@matchblox_agent`, `internal/panes/home.go`) and that it is at the top (the terminal title, #326). The builder picks the one channel that is already there; no new protocol.
 - **A terminal that is not Pocket** (an SSH app, a narrow tmux pane) keeps the key line, because it has no belt. The console knows Pocket by what the app says when it connects.
 

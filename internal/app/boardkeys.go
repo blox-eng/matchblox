@@ -605,6 +605,9 @@ func (m Model) boardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 		cmd = m.boardMerge(s)
 	case bkey.Matches(k, mk.Second):
 		cmd = m.boardKill(s)
+	case bkey.Matches(k, mk.Grant) && m.onPocket(): // the belt's y is a tap: arm, then give
+		next, cmd := m.armGo(s, mk.Grant.Help().Key+" again gives the go: "+m.goWhat(s))
+		return next, cmd, true
 	case bkey.Matches(k, mk.Grant):
 		next, cmd := m.boardGo(s)
 		return next, cmd, true
@@ -717,35 +720,67 @@ func (m *Model) boardKill(s sample.Session) tea.Cmd {
 	return note
 }
 
+// goStep is the step of this host's stoker that waits for the owner's go
+// on the pane of s.
+func (m Model) goStep(s sample.Session) (stokerRow, bool) {
+	if s.Host != m.opt.Host {
+		return stokerRow{}, false
+	}
+	for _, r := range m.stokerRows() {
+		if (r.kind == rowGo || r.kind == rowPlan) && r.state() == "waits" && r.e.Needs != "" && r.e.Pane == s.Pane {
+			return r, true
+		}
+	}
+	return stokerRow{}, false
+}
+
+// goWhat is what the go that waits on s lets run, in words: "merge #4556"
+// for the step that needs merge:#4556.
+func (m Model) goWhat(s sample.Session) string {
+	if r, ok := m.goStep(s); ok {
+		return strings.ReplaceAll(r.e.Needs, ":", " ")
+	}
+	return m.keys.main.Grant.Help().Desc
+}
+
 // boardGo is y: the go that a stoker step waits for on the chosen match.
 // Once the go is sent, the choice moves on.
 func (m Model) boardGo(s sample.Session) (tea.Model, tea.Cmd) {
-	if s.Host == m.opt.Host {
-		for _, r := range m.stokerRows() {
-			if (r.kind == rowGo || r.kind == rowPlan) && r.state() == "waits" && r.e.Needs != "" && r.e.Pane == s.Pane {
-				next, cmd := m.grant(r)
-				if nm, ok := next.(Model); ok && cmd != nil {
-					next = nm.boardActed()
-				}
-				return next, cmd
-			}
-		}
+	r, ok := m.goStep(s)
+	if !ok {
+		return m, m.notice("no step waits for your go on " + s.Name)
 	}
-	return m, m.notice("no step waits for your go on " + s.Name)
+	next, cmd := m.grant(r)
+	if nm, ok := next.(Model); ok && cmd != nil {
+		next = nm.boardActed()
+	}
+	return next, cmd
 }
 
-// boardTapGo is a tap on a card's go: a tap is not consent, so the first
-// tap arms it and a second tap on the same card's go, while the notice
-// shows, gives it. A move, esc or the notice's end disarms it.
-func (m Model) boardTapGo(s sample.Session) (tea.Model, tea.Cmd) {
-	if m.goArmed == paneOf(s) && m.now().Before(m.noticeUntil) {
+// goArmedOn: a first tap, or a first y on Pocket, armed the go of s, and
+// its notice still shows.
+func (m Model) goArmedOn(s sample.Session) bool {
+	return m.goArmed == paneOf(s) && m.goArmed != (paneKey{}) && m.now().Before(m.noticeUntil)
+}
+
+// armGo is a tap on a card's go, or y on Pocket, whose belt y is a tap: a
+// tap is not consent, so the first arms the go and says first, and a
+// second on the same card's go, while the notice shows, gives it. Any
+// other key or tap, and the notice's end, disarms it.
+func (m Model) armGo(s sample.Session, first string) (tea.Model, tea.Cmd) {
+	if m.goArmedOn(s) {
 		m.goArmed = paneKey{}
 		return m.boardGo(s)
 	}
-	g := m.keys.main.Grant
-	cmd := m.notice("tap " + g.Help().Key + " again to " + g.Help().Desc)
+	cmd := m.notice(first)
 	m.goArmed = paneOf(s)
 	return m, cmd
+}
+
+// boardTapGo is a tap on a card's go (armGo).
+func (m Model) boardTapGo(s sample.Session) (tea.Model, tea.Cmd) {
+	g := m.keys.main.Grant
+	return m.armGo(s, "tap "+g.Help().Key+" again to "+g.Help().Desc)
 }
 
 // boardHints are the board's keys on the key line: the chosen card's, then
@@ -895,6 +930,8 @@ func (m Model) boardTap(x, y int) (tea.Model, tea.Cmd) {
 	if !ok {
 		return m, nil
 	}
+	armed := m.goArmed
+	m.goArmed = paneKey{} // any tap but the armed go's disarms it
 	again := m.chosenByHand(s)
 	m.boardChooseCard(c, s)
 	m.boardMine = paneOf(s) // a tap chooses by hand
@@ -906,6 +943,7 @@ func (m Model) boardTap(x, y int) (tea.Model, tea.Cmd) {
 	case !ok || sp.press == "" || goIn: // a tap goes in only on a card the person chose
 		return m, nil
 	case sp.press == m.keys.main.Grant.Keys()[0]:
+		m.goArmed = armed
 		return m.boardTapGo(s)
 	}
 	return m.keyed(keyPress(sp.press))
@@ -1076,6 +1114,8 @@ func (m Model) beltValue() string {
 	if s, ok := m.boardSelected(); ok && m.boardShown() {
 		if a, _ := m.peekMarks(s); a > 0 {
 			armed = strconv.Itoa(a)
+		} else if m.goArmedOn(s) {
+			armed = m.keys.main.Grant.Keys()[0]
 		}
 	}
 	return beltWord(m.beltKeys(), armed)

@@ -22,7 +22,7 @@ the right.
 | A digit, 1 to 9 | Marks that option of the chosen card's question. The same digit again sends it. Another digit moves the mark, and `Esc` clears it. See [the peek](console.md#the-peek). |
 | `p` | Merges the card's leading pull request when it waits for your merge: a box shows `gh pr merge <n> --squash --match-head-commit <sha>`, and it runs on a typed `y`. On any other card it says `no ship of <name> waits for a merge`. |
 | `x` | Kills the match: a box shows `tmux kill-pane -t <pane>`, then `kill -TERM <pid>` for an agent still running, and runs them on a typed `y`. A session that works or needs you asks for a second `y`. Its worktree and its transcript stay. On a setup step, closes it; on a recommendation, shows its second action. |
-| `y` | Gives the go that a stoker step waits for. |
+| `y` | Gives the go that a stoker step waits for. On Pocket the first `y` only arms it, and the card says what it does (`y again: merge #4556`). A second `y` gives it. |
 | `c` | Copies what the agent said last. |
 | `m` | Opens the card's menu: copy, show its chain, go in, hide its column. |
 | `v` | Shows every card whole, or as one line. A phone and a desk each keep their own choice. |

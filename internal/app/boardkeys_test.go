@@ -452,6 +452,9 @@ func TestATapOnTheGoArmsItAndASecondGivesIt(t *testing.T) {
 			if x := strings.Index(l, "y give the go"); x >= 0 {
 				return x, y
 			}
+			if x := strings.Index(l, "y again: merge #4556"); x >= 0 { // the armed card says what the go does
+				return x, y
+			}
 		}
 		t.Fatalf("no y on a card:\n%s", plainFrame(m))
 		return 0, 0
@@ -487,6 +490,48 @@ func TestATapOnTheGoArmsItAndASecondGivesIt(t *testing.T) {
 	m = pressOn(goBoard(t, &now, chooseCard("hearth-api")), "y")
 	if !slices.Equal(boardFake(m).acts(), []proto.Act{grantAct}) {
 		t.Errorf("a typed y sent %+v", boardFake(m).acts())
+	}
+}
+
+// TestTheBeltsGoArmsThenGives (owner, 2026-11-13: "Arm then send"): on
+// Pocket the belt's y is a tap, so the first y arms the go and the card
+// says what it does; a second y gives it, and any other key between them
+// disarms it.
+func TestTheBeltsGoArmsThenGives(t *testing.T) {
+	now := demoAt
+	pocket := func(m *Model) { chooseCard("hearth-api")(m); pocketOnly(m) }
+
+	m := pressOn(goBoard(t, &now, pocket), "y")
+	if !m.onPocket() {
+		t.Fatal("the board is not on Pocket")
+	}
+	if len(boardFake(m).acts()) != 0 || m.pending != nil {
+		t.Fatalf("one belt y gave the go: acts %+v, pending %v", boardFake(m).acts(), m.pending)
+	}
+	if f := plainFrame(m); !strings.Contains(f, "y again: merge #4556") {
+		t.Errorf("the armed card does not say what the go does:\n%s", f)
+	}
+	if v := m.beltValue(); !strings.Contains(v, "y*") {
+		t.Errorf("the belt does not light the armed y: %q", v)
+	}
+	if m = pressOn(m, "y"); !slices.Equal(boardFake(m).acts(), []proto.Act{grantAct}) {
+		t.Fatalf("the second y sent %+v", boardFake(m).acts())
+	}
+
+	answered := func(m Model, k string) Model { // the app answers each new board= value
+		m = pressOn(m, k)
+		m.belt.pocket[0].n = m.belt.n
+		return m
+	}
+	for _, between := range []string{"v", "c", "u", "esc"} {
+		now = demoAt
+		m = answered(answered(answered(goBoard(t, &now, pocket), "y"), between), "y")
+		if !m.onPocket() {
+			t.Fatalf("y %s y: the board left Pocket", between)
+		}
+		if len(boardFake(m).acts()) != 0 {
+			t.Errorf("y %s y gave the go: %+v", between, boardFake(m).acts())
+		}
 	}
 }
 

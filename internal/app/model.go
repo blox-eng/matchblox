@@ -1447,6 +1447,9 @@ func (m Model) keyed(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // press gives k to the layer f, the one focus chose. A layer under the
 // overlays marks the stoker's steps seen when the tab shows them.
 func (m Model) press(f layerID, k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if !bkey.Matches(k, m.keys.main.Grant) {
+		m.goArmed = paneKey{} // any other key disarms an armed go
+	}
 	var next tea.Model = m
 	var cmd tea.Cmd
 	switch f {

@@ -109,9 +109,11 @@ terminal.`
   key of the board: `c copy`, `m menu`, `g chain`, `v one line`, `s hosts`,
   `u strip`, `⇥ machine`, `x kill`, `←`, `→`, `]`, `[`, `/`, `z park`. A
   key that does not apply is dim and sends nothing. In a pane, the belt
-  goes back to the layout it had there. While the consent box shows, the
-  belt is `◂`, `y runs` and `esc cancels`: a tap on a card is never
-  consent.
+  goes back to the layout it had there. A tap on `y go` does not give the
+  go. The first tap arms it: the card says what the go does, for example
+  `y again: merge #4556`. Tap `y` again to give the go. Any other key or
+  tap disarms it. While the consent box shows, the belt is `◂`, `y runs`
+  and `esc cancels`: a tap on a card is never consent.
 - A swipe on a host in the list removes the host and its key from the
   device. It does not remove the key on the host. Run
   `matchblox devices rm <name>` on the host for that.
