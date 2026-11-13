@@ -31,6 +31,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/hooks"
 	"github.com/blox-eng/matchblox/internal/procfs"
+	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/replay"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/service"
@@ -63,13 +64,21 @@ type clock struct {
 	t      time.Time
 	follow *clock        // set: this clock reads that one
 	ahead  time.Duration // how far ahead of the one it follows
+	// upTo, when set, is the latest the clock may read while it follows.
+	upTo func() (time.Time, bool)
 }
 
 func (c *clock) Now() time.Time {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.follow != nil {
-		return c.follow.Now().Add(c.ahead)
+		now := c.follow.Now().Add(c.ahead)
+		if c.upTo != nil {
+			if most, ok := c.upTo(); ok && now.After(most) {
+				return most
+			}
+		}
+		return now
 	}
 	return c.t
 }
@@ -78,6 +87,45 @@ func (c *clock) Follow(o *clock)       { c.mu.Lock(); c.follow = o; c.mu.Unlock(
 func (c *clock) Set(t time.Time)       { c.mu.Lock(); c.t = t; c.mu.Unlock() }
 func (c *clock) Add(d time.Duration)   { c.mu.Lock(); c.t = c.t.Add(d); c.mu.Unlock() }
 func (c *clock) Ahead(d time.Duration) { c.mu.Lock(); c.ahead += d; c.mu.Unlock() }
+
+// heardConn is the console's end of the service, noting the time of the
+// last snapshot the console has taken in: when it asks for the next
+// message, it is done with the one before.
+type heardConn struct {
+	transport.Conn
+	mu        sync.Mutex
+	last, had time.Time
+}
+
+func (c *heardConn) Recv() (proto.Envelope, error) {
+	c.mu.Lock()
+	c.had = c.last
+	c.mu.Unlock()
+	env, err := c.Conn.Recv()
+	if err == nil && env.Kind == proto.KindSnapshot {
+		var snap struct {
+			At time.Time `json:"at"`
+		}
+		if json.Unmarshal(env.Body, &snap) == nil {
+			c.mu.Lock()
+			c.last = snap.At
+			c.mu.Unlock()
+		}
+	}
+	return env, err
+}
+
+// fresh is the latest a console clock may read so that the console's data
+// is never older than within: the demo clock runs 40 times faster than the
+// wall's, and a slow (-race) console a second behind its samples would
+// show them as stale.
+func (c *heardConn) fresh(within time.Duration) func() (time.Time, bool) {
+	return func() (time.Time, bool) {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		return c.had.Add(within), !c.had.IsZero()
+	}
+}
 
 // Hold stops the clock where it reads now; Follow starts it again.
 func (c *clock) Hold() {
@@ -480,8 +528,10 @@ func replayAt(t *testing.T, z replaySize) {
 		[]byte(`{"told":["chain","copy","density","digit","host","kill","merge","strip"],"copy_checked_phone":true,"copy_checked_desk":true}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	heard := &heardConn{Conn: transport.NewConn(a)}
+	view.upTo = heard.fresh(20 * time.Second) // under staleAfter (30 s)
 	m := app.New(app.Options{
-		Conn: transport.NewConn(a), Binary: version, CompactAt: cfg.Sessions.CompactAt, Now: view.Now, StateDir: views,
+		Conn: heard, Binary: version, CompactAt: cfg.Sessions.CompactAt, Now: view.Now, StateDir: views,
 		Run: func(argv []string) error { // a jump: the demo moves no terminal
 			mu.Lock()
 			jumps = append(jumps, argv)
