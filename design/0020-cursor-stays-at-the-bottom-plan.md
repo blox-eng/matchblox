@@ -180,3 +180,5 @@ Architecture lens: the guard is the terminal of an agent. It adds no command to 
 
 - 2026-11-14, Task 1: the issue is #399. Work on is 2026-11-14, the day the build began.
 - 2026-11-14, Task 2: `Filter` gets `Tick()` and `Holding()`, and `NewFilter` takes `now func() time.Time`. Reason: output that ends on a start of the clear codes (a lone `ESC[H`) must pass when no more output comes, and a `Write` alone cannot see time pass. `Run` calls `Tick` on a timer (Task 4). The tests assert it: a held-back `ESC[H` comes out after the wait.
+- 2026-11-14, Task 3: one more test, `TestFilterShortReplay`. Reason: a replay shorter than the tail lost its first blank line; the test fails with the first trim rule.
+- 2026-11-14, Task 4: `Filter` gets `Flush()`, which `Run` calls when the agent ends. Reason: an agent that ends during a replay must still leave its last screen. The runner's files build on Linux and macOS only (`linux || darwin`), not on every Unix: the pty code exists for those two.

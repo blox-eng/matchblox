@@ -156,6 +156,23 @@ func (f *Filter) Tick() error {
 	return err
 }
 
+// Flush writes what the filter still holds, at the agent's end: the end of
+// a replay, or output that waited for the rest of ClearCodes.
+func (f *Filter) Flush() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	held := f.pend
+	if f.holding {
+		held = append([]byte(ClearCodes+"\x1b[0m"), f.tail...)
+	}
+	f.holding, f.tail, f.pend = false, nil, nil
+	if len(held) == 0 {
+		return nil
+	}
+	_, err := f.out.Write(held)
+	return err
+}
+
 // codesPrefix is how many bytes at the end of data are a start of
 // ClearCodes, and not all of it.
 func codesPrefix(data []byte) int {
