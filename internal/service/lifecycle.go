@@ -20,6 +20,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/accounts"
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/gitremote"
+	"github.com/blox-eng/matchblox/internal/guard"
 	"github.com/blox-eng/matchblox/internal/holds"
 	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/proto"
@@ -100,6 +101,18 @@ func launchArgv(bin, agent, name, first string, trust bool, extra []string) []st
 		argv = append(argv, first)
 	}
 	return argv
+}
+
+// guardArgv is argv, an agent's own command for the session name, behind
+// matchblox's redraw guard when the agent is Cursor: its CLI prints the
+// whole chat again at each change of the terminal's width, and the guard
+// shows the end of that only (#399). self is this binary; the guard runs on
+// Linux and macOS. Any other agent, system or an unknown self: argv as it is.
+func guardArgv(self, goos, agent, name string, argv []string) []string {
+	if agent != sample.CursorAgent || self == "" || (goos != "linux" && goos != "darwin") {
+		return argv
+	}
+	return slices.Concat([]string{"env", guard.SessionEnv + "=" + name, self, "guard", "--"}, argv)
 }
 
 func (s *Service) tmuxOut(argv []string) (string, error) {

@@ -146,7 +146,7 @@ After compaction, read this brief again through MATCHBLOX_CONTEXT, then read you
 		}
 		extra = append(extra, "--add-dir", bundle, "--plugin-dir", bundle)
 	}
-	argv = launchArgv(s.agentBin(agent), agent, name, first, trust, extra)
+	argv = guardArgv(s.Exe, s.goos(), agent, name, launchArgv(s.agentBin(agent), agent, name, first, trust, extra))
 	if agent == "opencode" {
 		inline := map[string]any{}
 		if raw := os.Getenv("OPENCODE_CONFIG_CONTENT"); raw != "" {

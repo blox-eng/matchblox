@@ -2177,3 +2177,54 @@ func TestASwitchTheGuardStopsKeepsNoMove(t *testing.T) {
 		t.Fatalf("a stopped switch left %d moves", moves)
 	}
 }
+
+// TestGuardArgv: matchblox starts Cursor behind its redraw guard (#399) on
+// Linux and macOS, when it knows its own binary. Every other agent, Windows
+// and a service that does not know its binary start as before.
+func TestGuardArgv(t *testing.T) {
+	cursor := []string{"cursor-agent", "--trust", "go"}
+	guarded := []string{"env", "MATCHBLOX_SESSION=web", "/opt/matchblox", "guard", "--", "cursor-agent", "--trust", "go"}
+	for _, tc := range []struct {
+		self, goos, agent string
+		argv, want        []string
+	}{
+		{"/opt/matchblox", "linux", sample.CursorAgent, cursor, guarded},
+		{"/opt/matchblox", "darwin", sample.CursorAgent, cursor, guarded},
+		{"/opt/matchblox", "windows", sample.CursorAgent, cursor, cursor},
+		{"", "linux", sample.CursorAgent, cursor, cursor},
+		{"/opt/matchblox", "linux", "claude", []string{"claude", "--name", "web"}, []string{"claude", "--name", "web"}},
+		{"/opt/matchblox", "linux", "codex", []string{"codex", "go"}, []string{"codex", "go"}},
+		{"/opt/matchblox", "linux", "opencode", []string{"opencode"}, []string{"opencode"}},
+	} {
+		if got := guardArgv(tc.self, tc.goos, tc.agent, "web", tc.argv); !slices.Equal(got, tc.want) {
+			t.Errorf("guardArgv(%q, %q, %q): %q, want %q", tc.self, tc.goos, tc.agent, got, tc.want)
+		}
+	}
+}
+
+// TestNewAndRecoverStartCursorBehindTheGuard: the two ways matchblox starts
+// Cursor both go through the guard.
+func TestNewAndRecoverStartCursorBehindTheGuard(t *testing.T) {
+	s, _ := switchTest(t)
+	s.Home, s.GOOS, s.Exe = t.TempDir(), "linux", "/opt/matchblox"
+	args, _, err := s.matchLaunch(t.Context(), sample.CursorAgent, "work", t.TempDir(), "", "", true, nil, nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(args, " "); !strings.Contains(got, "env MATCHBLOX_SESSION=work /opt/matchblox guard -- cursor-agent ") {
+		t.Errorf("a new Cursor session starts as %q, want it behind the guard", got)
+	}
+
+	r, ran := recoverTest(t)
+	r.GOOS, r.Exe = "linux", "/opt/matchblox"
+	ui := agentIn(t, r, sample.CursorAgent, "u1", "ui", "%5")
+	publishOn(r, "100", ui)
+	loseServer(r)
+	if res := recoverAct(t, r, proto.Recover{All: true}, ""); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	want := "-c " + ui.Cwd + " env MATCHBLOX_SESSION=ui /opt/matchblox guard -- cursor-agent --resume u1"
+	if len(*ran) != 1 || !strings.HasSuffix(strings.Join((*ran)[0], " "), want) {
+		t.Errorf("recover ran %q, want it to end with %q", *ran, want)
+	}
+}
