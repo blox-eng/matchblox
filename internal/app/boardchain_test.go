@@ -222,6 +222,43 @@ func TestTheCountKeepsTheTalkDraft(t *testing.T) {
 	}
 }
 
+// TestASentDraftDoesNotComeBack: a draft put back on the talk line is no
+// longer kept: once sent, no later open of the room shows it again, and
+// another chain's room in between keeps a draft that was not sent.
+func TestASentDraftDoesNotComeBack(t *testing.T) {
+	m, f := hearthOpen(t, 160, headState(t, runningPlan(), true, mockupChain, []string{"flint-auth", "spark-docs"}))
+	toTalk := func(m Model) Model {
+		for i := 0; i < 12 && !strings.HasPrefix(roomRowNow(m), "talk"); i++ {
+			m = pressOn(m, "down")
+		}
+		return m
+	}
+	m = typeText(pressOn(toTalk(m), "enter"), "ship the login fix").(Model)
+	m = pressOn(tapText(t, m, "need you"), "g")
+	if m.room == nil || m.room.draft != "ship the login fix" {
+		t.Fatalf("g after the count: room %+v", m.room)
+	}
+	m = pressOn(m, "enter", "enter")
+	if len(f.acts()) == 0 || m.room.draft != "" {
+		t.Fatalf("⏎ ⏎ did not send the draft: acts %+v, draft %q", f.acts(), m.room.draft)
+	}
+	for _, keys := range [][]string{{"esc", "]", "["}, {"esc", "esc", "g"}} {
+		if m = pressOn(m, keys...); m.room == nil || m.room.draft != "" || strings.Contains(plainFrame(m), "› ship the login fix") {
+			t.Errorf("after %v the sent draft is back: room %+v", keys, m.room)
+		}
+	}
+
+	m, _ = hearthOpen(t, 160, headState(t, runningPlan(), true, mockupChain, []string{"flint-auth", "spark-docs"}))
+	m = typeText(pressOn(toTalk(m), "enter"), "rebase on main").(Model)
+	m = pressOn(m, "esc", "]")
+	if m.room == nil || m.boardChain == "hearth" {
+		t.Fatalf("] did not turn to another chain: chain %q", m.boardChain)
+	}
+	if m = pressOn(m, "["); m.room == nil || m.boardChain != "hearth" || m.room.draft != "rebase on main" {
+		t.Errorf("] then [: chain %q, draft %+v", m.boardChain, m.room)
+	}
+}
+
 // TestARoomOpensOnTheNeedElseTheTalkLine: the room opens on what waits:
 // the card of a match that asks, the step whose go it waits for; with
 // nothing, on the talk line, and a flip lands typing there.

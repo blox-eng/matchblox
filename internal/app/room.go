@@ -2,6 +2,7 @@ package app
 
 import (
 	"cmp"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -308,6 +309,7 @@ func (m Model) roomKeyOf(s sample.Session) chainKey {
 // the cursor lands on the need (the card that asks, or the step that
 // waits for a go), else on the talk line.
 func (m Model) openRoom(k chainKey) Model {
+	m.keepDraft() // a room this one replaces keeps its words
 	m.room = &room{k: k, from: map[string]string{}}
 	m.tab, m.boardAbove, m.boardBelow = tabSessions, 0, 0
 	m.boardChain, m.peekAt = "", m.now()
@@ -315,8 +317,10 @@ func (m Model) openRoom(k chainKey) Model {
 		m.boardChain = m.chainLabel(k)
 	}
 	m.room.at = m.roomLanding(k)
-	if d := m.drafts[k]; d != "" { // words typed before the room closed: back on the talk line
+	if d := m.drafts[k]; d != "" { // words typed before the room closed: back on the talk line, and no longer kept
 		m.room.draft, m.room.at = d, len(m.roomRows(k))-1
+		m.drafts = maps.Clone(m.drafts)
+		delete(m.drafts, k)
 	}
 	return m
 }
