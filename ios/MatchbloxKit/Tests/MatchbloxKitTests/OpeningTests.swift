@@ -13,6 +13,15 @@ final class OpeningTests: XCTestCase {
         XCTAssertEqual(Opening.first(hosts: [host("ws-1"), host("ws-2")]), .hosts)
     }
 
+    func testConsoleOffersHostsForASingleHostToo() {
+        // A single host used to have no way to be removed: the console offered
+        // the Hosts screen (where a swipe removes one) only with two or more.
+        // The console now offers it while any host is paired.
+        XCTAssertTrue(Opening.consoleOffersHosts(hostCount: 1))
+        XCTAssertTrue(Opening.consoleOffersHosts(hostCount: 2))
+        XCTAssertFalse(Opening.consoleOffersHosts(hostCount: 0))
+    }
+
     func testReconnectMessages() {
         XCTAssertEqual(Opening.message(for: .unreachable, host: "ws-1"), "Can't reach ws-1.")
         XCTAssertEqual(

@@ -132,7 +132,7 @@ struct MatchbloxApp: App {
                         host: host,
                         open: session,
                         onFailure: { go(.reach(host, $0)) },
-                        onHosts: store.all().count > 1 ? { go(.hosts) } : nil,
+                        onHosts: Opening.consoleOffersHosts(hostCount: store.all().count) ? { go(.hosts) } : nil,
                         onIsland: { go(.island) },
                         onScanAgain: { go(.scan) }
                     )
