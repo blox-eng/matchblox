@@ -52,9 +52,12 @@ type Usage struct {
 	Failed string `json:"failed,omitempty"`
 }
 
+// fileKey tells a file's change: its size and mtime, and its inode, which a
+// rename over it changes even within one clock tick.
 type fileKey struct {
 	size  int64
 	mtime time.Time
+	ino   uint64
 }
 
 // agentReader caches everything keyed on file size and mtime, so an idle
@@ -95,7 +98,7 @@ func statKey(path string) (fileKey, bool) {
 	if err != nil {
 		return fileKey{}, false
 	}
-	return fileKey{st.Size(), st.ModTime()}, true
+	return fileKey{st.Size(), st.ModTime(), inodeOf(st)}, true
 }
 
 func (r *agentReader) entry(dir string, pid int) (registryEntry, bool) {

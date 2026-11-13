@@ -117,3 +117,34 @@ func TestTheReportsOfGoneProcessesAreForgotten(t *testing.T) {
 		t.Fatalf("reports %v after 930 is gone", smp.opencode.reports)
 	}
 }
+
+// TestAReportRewrittenInOneTickIsReadAgain: the plugin's busy and idle
+// reports are the same size, and two renames in one clock tick keep the
+// mtime. The rename's new file is read again all the same.
+func TestAReportRewrittenInOneTickIsReadAgain(t *testing.T) {
+	dir := t.TempDir()
+	r := newOpencodeReader()
+	path := filepath.Join(dir, "930.json")
+	write := func(status string, at time.Time) {
+		t.Helper()
+		tmp := path + ".tmp"
+		if err := os.WriteFile(tmp, []byte(`{"pid":930,"startedAt":1790000000000,"status":"`+status+`","statusUpdatedAt":1790003300000}`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(tmp, at, at); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Rename(tmp, path); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tick := time.Unix(1790003300, 0)
+	write("busy", tick)
+	if rep, ok := r.report(dir, 930); !ok || rep.Status != "busy" {
+		t.Fatalf("first read: %+v", rep)
+	}
+	write("idle", tick)
+	if rep, ok := r.report(dir, 930); !ok || rep.Status != "idle" {
+		t.Errorf("the report said idle in the same tick, yet the reader kept %q", rep.Status)
+	}
+}
