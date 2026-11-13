@@ -268,3 +268,26 @@ func TestThePhoneReadsTheAgentsReport(t *testing.T) {
 		t.Errorf("a reported wait after a finished hook: the phone counts %d waits", got.Wait)
 	}
 }
+
+// TestThePhoneCountsOpencodesNewStatuses (owner, 2026-11-13: "Allow
+// them"): OpenCode's plugin can say waiting and retry. A wait counts as a
+// wait, and a retry as a burn: OpenCode retries by itself.
+func TestThePhoneCountsOpencodesNewStatuses(t *testing.T) {
+	n := openNumbers(t, t.TempDir())
+	retry := sample.Session{SessionID: "ses_wick", Pane: "%7", Name: "wick-mobile", Agent: "opencode", Status: "retry", Busy: true,
+		Reported: true, Retry: 2, Started: t0.Add(-time.Hour)}
+	wait := sample.Session{SessionID: "ses_ember", Pane: "%8", Name: "ember-billing", Agent: "opencode", Status: "waiting",
+		Reported: true, WaitingFor: "permission", Idle: time.Minute, Started: t0.Add(-time.Hour)}
+	q := queue.New()
+	q.Merge([]sample.Session{retry, wait}, t0)
+	got := Build(doc([]sample.Session{retry, wait}, q.Items()), fp, n, t0)
+	if got.Burn != 1 || got.Wait != 1 {
+		t.Errorf("burn %d wait %d, want the retry burning and the wait waiting", got.Burn, got.Wait)
+	}
+	if w := stoker.Word(retry); w != "busy" {
+		t.Errorf("the stoker reads a retry as %q", w)
+	}
+	if w := stoker.Word(wait); w != "asks" {
+		t.Errorf("the stoker reads a wait as %q", w)
+	}
+}

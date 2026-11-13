@@ -69,6 +69,32 @@ func TestSessionsJSONCarriesReasonAndHold(t *testing.T) {
 	}
 }
 
+// TestSessionsJSONOpencodeStatus (owner, 2026-11-13: "Allow them"): an
+// OpenCode with the plugin says waiting or retry in status, as it reports
+// it; word says what it does.
+func TestSessionsJSONOpencodeStatus(t *testing.T) {
+	var d state.Doc
+	d.Sessions = []sample.Session{
+		{Name: "wick-mobile", Pane: "%7", Agent: "opencode", Status: "retry", Busy: true, Reported: true, Retry: 2},
+		{Name: "ember-billing", Pane: "%8", Agent: "opencode", Status: "waiting", Reported: true, WaitingFor: "permission"},
+	}
+	var buf bytes.Buffer
+	if err := writeSessions(&buf, d, true); err != nil {
+		t.Fatal(err)
+	}
+	var rows []map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &rows); err != nil {
+		t.Fatalf("%v: %s", err, buf.String())
+	}
+	got := map[string][2]any{}
+	for _, r := range rows {
+		got[r["name"].(string)] = [2]any{r["status"], r["word"]}
+	}
+	if got["wick-mobile"] != [2]any{"retry", "busy"} || got["ember-billing"] != [2]any{"waiting", "asks"} {
+		t.Errorf("status and word: %v", got)
+	}
+}
+
 func TestSessionsJSONMarksTheStokerPane(t *testing.T) {
 	d := cliDoc()
 	d.StokerServer = "mbtest"

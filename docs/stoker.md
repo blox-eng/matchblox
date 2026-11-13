@@ -129,7 +129,8 @@ the card, and `stoker when` for a trigger. Each field of
 `matchblox sessions --json` is in
 [Read it from a script or an agent](console.md#read-it-from-a-script-or-an-agent):
 the stoker reads `word`, not `status`, which is the agent's own word
-(Claude Code's `shell` is a session at rest with a background shell).
+(Claude Code's `shell` is a session at rest with a background shell, and
+OpenCode's `retry` is a call it tries again by itself).
 
 `matchblox new --where <path> --agent claude "<first message>"` starts a
 session in a tmux session of its own on your tmux server, never on
