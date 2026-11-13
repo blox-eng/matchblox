@@ -365,7 +365,11 @@ func reportedWait(id string, s sample.Session, now time.Time) Item {
 	if slices.Contains(permissionsFor, s.WaitingFor) {
 		state = StatePermission
 	}
-	return Item{SessionID: id, Pane: s.Pane, Target: s.Target, Name: s.Name, State: state, Since: now.Add(-s.Idle), LastLine: s.LastLine}
+	since := s.StatusAt // the report's own time: the same at every merge
+	if since.IsZero() {
+		since = now.Add(-s.Idle)
+	}
+	return Item{SessionID: id, Pane: s.Pane, Target: s.Target, Name: s.Name, State: state, Since: since, LastLine: s.LastLine}
 }
 
 // byNewer puts id in byPane for pane unless a hooked session that spoke

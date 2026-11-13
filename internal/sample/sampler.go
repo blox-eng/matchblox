@@ -64,6 +64,9 @@ type Session struct {
 	// needed", "permission", "question", ...
 	Reported   bool   `json:"reported,omitempty"`
 	WaitingFor string `json:"waiting_for,omitempty"`
+	// StatusAt is when the agent's report last changed its status: a
+	// reported wait began then, the same at every sample.
+	StatusAt time.Time `json:"status_at,omitzero"`
 	// Retry is the attempt of a call OpenCode retries, and RetryAt when its
 	// next try starts.
 	Retry      int           `json:"retry,omitempty"`
@@ -1326,6 +1329,9 @@ func (s *Sampler) claudeSession(sess *Session, pid int, p procfs.Proc, key procK
 	if e.StartedAt > 0 {
 		sess.Started = time.UnixMilli(e.StartedAt)
 	}
+	if e.StatusUpdatedAt > 0 {
+		sess.StatusAt = time.UnixMilli(e.StatusUpdatedAt)
+	}
 	if !sess.Busy && e.StatusUpdatedAt > 0 {
 		sess.Idle = now.Sub(time.UnixMilli(e.StatusUpdatedAt)).Truncate(time.Second)
 	}
@@ -1487,6 +1493,9 @@ func reportOpencode(sess *Session, rep opencodeReport, now time.Time) {
 		sess.WaitingFor = rep.WaitingFor
 	case StatusRetry:
 		sess.Retry, sess.RetryAt = rep.Attempt, time.UnixMilli(rep.Next)
+	}
+	if rep.StatusUpdatedAt > 0 {
+		sess.StatusAt = time.UnixMilli(rep.StatusUpdatedAt)
 	}
 	if !sess.Busy && rep.StatusUpdatedAt > 0 {
 		sess.Idle = now.Sub(time.UnixMilli(rep.StatusUpdatedAt)).Truncate(time.Second)

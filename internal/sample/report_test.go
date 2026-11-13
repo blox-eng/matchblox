@@ -26,7 +26,8 @@ func TestClaudeCodesReportIsRead(t *testing.T) {
 	root := copyFixture(t)
 	claudeReport(t, root, "waiting", "permission prompt")
 	s := byPane(newFixtureSampler(root).Sample())["%1"]
-	if !s.Reported || s.Status != "waiting" || s.WaitingFor != "permission prompt" || s.Busy || s.Works() {
+	if !s.Reported || s.Status != "waiting" || s.WaitingFor != "permission prompt" || s.Busy || s.Works() ||
+		!s.StatusAt.Equal(time.UnixMilli(1790003000000)) {
 		t.Fatalf("waiting: %+v", s)
 	}
 
@@ -62,7 +63,7 @@ func TestTheOpencodeReportIsRead(t *testing.T) {
 	s := byPane(opencodeAt(t, copyFixture(t),
 		`{"pid":930,"startedAt":1790000000000,"status":"waiting","waitingFor":"question","statusUpdatedAt":1790003300000}`).Sample())["%23"]
 	if !s.Reported || s.Status != "waiting" || s.WaitingFor != "question" || s.Busy || s.Asks || s.FromPane ||
-		s.Idle != 310*time.Second || s.LastLine != "Should I also update the docs?" {
+		s.Idle != 310*time.Second || !s.StatusAt.Equal(time.UnixMilli(1790003300000)) || s.LastLine != "Should I also update the docs?" {
 		t.Fatalf("waiting: %+v", s)
 	}
 	s = byPane(opencodeAt(t, copyFixture(t),

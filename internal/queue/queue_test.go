@@ -716,3 +716,23 @@ func TestAReportedWaitBeatsAFinishedHook(t *testing.T) {
 		t.Fatalf("items %+v, want flint-auth's question", items)
 	}
 }
+
+// TestAReportedWaitKeepsItsStart: a reported wait starts when the report
+// says, the same at every merge, whatever the clock of the sample.
+func TestAReportedWaitKeepsItsStart(t *testing.T) {
+	q := New()
+	began := at(0).Add(300 * time.Millisecond)
+	var since []time.Time
+	for _, d := range []time.Duration{10 * time.Second, 11500 * time.Millisecond, 13200 * time.Millisecond} {
+		now := began.Add(d)
+		s := session("flint", "%2", "flint-auth", "waiting", now.Sub(began).Truncate(time.Second))
+		s.Agent, s.Reported, s.WaitingFor, s.StatusAt = "claude", true, "input needed", began
+		q.Merge([]sample.Session{s}, now)
+		if items := q.Items(); len(items) == 1 {
+			since = append(since, items[0].Since)
+		}
+	}
+	if len(since) != 3 || !since[0].Equal(began) || !since[1].Equal(began) || !since[2].Equal(began) {
+		t.Errorf("the wait began at %v, want %v each time", since, began)
+	}
+}
