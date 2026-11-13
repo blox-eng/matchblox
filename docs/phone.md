@@ -98,6 +98,20 @@ terminal.`
 - When you quit the console, the app says that the console ended. Tap
   `Open again` to open it. With two or more hosts, tap `Hosts` to go to
   the list.
+- The console opens on the board, one column a page. Swipe sideways, or tap
+  a page's mark at the top, to see the next column. Tap a card to see its
+  peek, and tap it again to go into its pane. Tap an option of its question
+  to mark it, and tap it again to send it. Long-press a card for its menu.
+  See [The board](console.md#the-board).
+- While the console shows the board or Machine, the key belt is on its
+  Board layout. Home is `◂`, then the keys of the chosen card (`1 answer`,
+  `p merge`, `y go`), then `↑ ↓ ⏎`. The rest of the belt has every other
+  key of the board: `c copy`, `m menu`, `g chain`, `v one line`, `s hosts`,
+  `u strip`, `⇥ machine`, `x kill`, `←`, `→`, `]`, `[`, `/`, `z park`. A
+  key that does not apply is dim and sends nothing. In a pane, the belt
+  goes back to the layout it had there. While the consent box shows, the
+  belt is `◂`, `y runs` and `esc cancels`: a tap on a card is never
+  consent.
 - A swipe on a host in the list removes the host and its key from the
   device. It does not remove the key on the host. Run
   `matchblox devices rm <name>` on the host for that.
@@ -112,8 +126,10 @@ The demo's own scan turns on no camera and asks for no permission. Then the app
 saves a host called `demo`.
 
 The demo runs the real console on a made-up machine inside the app. It needs no
-network and starts fresh each time it opens. Tap the session that waits at the
-top, then tap an option in its question. When that agent finishes, a sheet says
+network and starts fresh each time it opens. The board opens on the card of
+flint-auth in `NEEDS YOU`, with the options of its question. Tap an option to
+mark it, then tap it again to send it. The card strikes into `WORKING`. When
+that agent finishes, a sheet says
 `Your agents wait the same way.` It shows the line
 `curl -fsSL https://matchblox.sh | sh` with `Copy`, and these buttons:
 
@@ -243,22 +259,20 @@ starts it. A second phone or laptop attaches to the same session.
 
 ## Go into an agent
 
-Enter goes into the agent's own tmux pane, and moves only the phone. Sessions
-keeps a read-only live view of the selected agent. See
+Enter goes into the agent's own tmux pane, and moves only the phone. From
+152 columns the board keeps a read-only live view of the chosen agent. See
 [the live view](console.md#the-live-view).
 
-1. Tap an agent in Sessions, or press Return on the selected one, to go
-   into its pane. The selected row shows the question the agent asks and
-   its last words. Held wide with room for an agent's menu, the live view
-   sits beside the list, and the first tap selects: tap the row again to
-   go in.
+1. Tap an agent's card to choose it, then tap it again, or press Return,
+   to go into its pane. The chosen card shows the question the agent asks
+   and its last words.
 2. On a host the stoker drives, the console asks `take over?` first. A
    session with no pane says `<name> runs outside tmux: no pane to go into`.
 3. Type in the pane. The belt's keys (`Esc`, `Ctrl`, arrows, `Tab`, the
    prefix) reach the agent unchanged.
 4. To come back, tap `◂` on the belt, tap `◂ matchblox` in the tmux status
-   line, or press `prefix m`. The console then selects the next agent that
-   waits.
+   line, or press `prefix m`. The console then chooses the next card that
+   needs you.
 
 The demo has no tmux. There Return opens a full-screen stand-in for the
 pane, and the belt answers it: at a question the key line says `type 2 to
@@ -284,7 +298,7 @@ and stops with a key at the left side.
   you send.
 
 - `◂` goes back. In a tmux pane it goes to the console. In the demo's
-  stand-in it goes to Sessions.
+  stand-in it goes to the board.
 - `^C` interrupts. `^C` twice stops Claude Code. A second `^C` within 1 s
   is held, and the key line says so.
 - `⇞` and `⇟` send `PgUp` and `PgDn` (`ESC [ 5 ~` and `ESC [ 6 ~`). In the
@@ -302,7 +316,7 @@ down. The keyboard icon never opens the tray.
 #### Layouts and the matchbox tray
 
 Tap the grip or the name, or pull up on the handle row, to open the
-matchbox tray. Pull down to close it. Four matches lie in the tray, one for
+matchbox tray. Pull down to close it. Five matches lie in the tray, one for
 each layout:
 
 | Layout | Keys |
@@ -311,12 +325,15 @@ each layout:
 | Commands | `◂ ↑ ↓ ⏎`, then the commands of the agent you are in |
 | tmux | `◂ ↑ ↓ ⏎ ⇞ ⇟ Tab ⇧Tab ^B` |
 | Mine | The keys you chose |
+| Board | `◂`, the chosen card's keys, `↑ ↓ ⏎`, then every other key of the board |
 
 The match of the layout in use burns. Tap another match: it strikes, and
 the match you leave goes out. The tray closes 0.9 s after your tap. The
 next time it opens, every match is new, and the one in use burns. The
 screen does not change size while the tray is open. The app keeps the
-layout you chose, and opens on it the next time.
+layout you chose, and opens on it the next time. Board follows the console:
+the app is on Board while the console shows the board or Machine, as
+Commands follows the agent of the pane you are in.
 
 #### Command keys
 
@@ -350,8 +367,8 @@ program does not read the mouse, the terminal scrolls its own history.
 
 ## Go to an agent's pane and back
 
-`Enter`, `→`, `a` and `Ctrl+O` go into the agent's pane. A phone has no
-`Ctrl+O`: a tap on the selected row, or Return, does it. In Panes, a tap on
+`Enter`, `a` and `Ctrl+O` go into the agent's pane. A phone has no
+`Ctrl+O`: a tap on the chosen card, or Return, does it. In Panes, a tap on
 a row goes into it the same way.
 
 To come back in the matchblox app, tap `◂` on the belt, swipe in from
@@ -364,15 +381,14 @@ then m). There the tap needs the tmux mouse on: press `m` in the preview of
 "Add the way back" to turn it on with it, or add `set -g mouse on` to your
 tmux config. Without it, use `prefix m`.
 
-The console then selects the next agent that waits, unless another screen
-still shows the console. The iOS app marks its own Return and taps, so a
+The console then chooses the next card that needs you, unless another
+screen still shows the console. The iOS app marks its own Return and taps, so a
 jump moves only the phone.
 
 ## Switch an agent from the phone
 
-The selected agent's keys are under it: on a one-column phone at the foot
-of its opened row, held upright with a small font at the foot of the
-drawer. Tap `A switch` to open Switch agent. Tap the agent you want, then
+Press `A` on the chosen card, or tap `A` on the key line, to open Switch
+agent. Tap the agent you want, then
 `Enter`; the plan rises in a box above the key line. A typed `y` runs it (a
 tap is never consent). The new agent starts in the same pane with the same name, on the account you last
 started that agent on, and the console jumps to it.
@@ -381,55 +397,39 @@ See [`A` in Keys](keys.md).
 ## The phone layout
 
 A phone is read by its shape at the tallest height seen at its width, so
-the keyboard coming and going never changes the layout. In the full view,
-with a small font that makes it 90 columns or more upright, Sessions
-splits: the list takes 40% of the width (38 to 78 columns), the selected
-agent's live view the rest, and usage and the machine sit under the list. On
-its side it goes by its width. Sessions splits only when the view gets 44
-columns and the body has 16 rows for an agent's menu; short of
-that, and under 60 columns, the console has one column. Each agent is one line, grouped by what it needs from you: who waits first. The selected one opens
-in place: what it said last, its ships, its plan and its keys. Only
-the selected setup step shows its detail.
+the keyboard coming and going never changes the layout. Upright under 90
+columns, or under 60 columns, the board is one column a page. The page
+marks at the top name the open column in capitals with its count, and the
+others short: `NEEDS YOU 4 −  work 3  ship 3  quiet 5`. A tap on a mark
+opens its page, and a tap on the open page's mark hides the page. A hidden
+page waits at the end of the marks as `+ work 3`.
 
-Under the list, when there is room, the dock shows usage, the machine or
-the stoker (where Sessions splits they sit in the left column instead). `u`, or a
-tap on the word at its right, goes to the next. While
-the stoker runs, its panel shows by itself until you switch; a tap on it
-opens the Stoker tab. With the keyboard up the dock
-folds away; the Machine tab has it.
+A phone starts with whole cards in `NEEDS YOU` and one line for each card
+elsewhere. `v` turns every card whole, or every card to one line. The
+chosen card is always whole, with its peek: what the agent said last and
+the options of its question.
+
+The strip, one line above the key line, shows usage or the machine. `u`,
+or a tap on it, turns it, and a third turn hides it. Machine has all of
+it.
 
 The key line is at the bottom: an SSH app that shrinks the terminal for
-its keyboard keeps it above the keys. A tap on a key presses it.
+its keyboard keeps it above the keys. A tap on a key presses it. In
+Matchblox Pocket the key belt takes its place.
 
-Turn the phone on its side, at 83 columns or more with room for the
-question, and the list and the live view of the selected agent sit side by
-side.
+With a small font that makes the screen 60 columns or more, three columns
+show side by side, and `QUIET` is a drawer under them. From 100 columns the
+board has four columns.
 
 Every key is on the key bar of an SSH app: letters, digits, arrows, `Enter`
 and `Esc`. The matchblox app adds its key belt. See [Keys](keys.md).
-
-## List only
-
-On a tall screen, such as a phone held upright, the console starts in list
-only. The detail pane
-and the dock fold, and the list takes the screen. The key line says
-`full view v`, and `list only` stays at its right edge. The selected row
-opens in place under itself. `Enter` or `a` goes into its pane.
-The header still says who waits. The rows the list leaves free show
-usage, then the machine, each whole at its fewest lines; the list is never
-cut for them.
-
-Press `v`, or tap the word `full view v`, to show the detail pane and the
-dock. Press `v` again, or tap `list only v`, to fold them. The phone and
-your desk each keep their own choice, so one does not change the other.
-matchblox keeps the choice when the console restarts.
 
 ## The hosts on the phone
 
 The phone shows what the console of its host can open. If you connected
 `ws-1` to `gpu-1` yourself, a phone paired to `ws-1` sees `gpu-1` in the
-combined console and acts on it. The same phone reaches `gpu-1` today with
-`esc`, then Hosts, then `gpu-1`. matchblox sets up no key between hosts, so
+combined console and acts on it. The same phone reaches `gpu-1` today from
+Hosts: on Machine, `Enter` on a host's row opens it. matchblox sets up no key between hosts, so
 a phone never sees a host that its host cannot open.
 
 The phone does not combine the hosts that you paired in the app. Each host

@@ -65,7 +65,7 @@ A repository shows once, by its real path (symlinks resolved, letter case
 as on disk), and its remote never shows a password or token.
 
 The answer is in `~/.local/state/matchblox/scan.json` and the list in
-`repos.json` beside it. The repositories found never show in the Git tab.
+`repos.json` beside it. The repositories found never show in Machine's git view.
 `matchblox scan` scans now; `matchblox scan off` stops and forgets the list.
 
 ## Where N clones

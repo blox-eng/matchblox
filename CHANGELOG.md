@@ -6,6 +6,84 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **The console opens on a board.** Each match has one card in one of four
+  columns: `NEEDS YOU`, `WORKING`, `SHIPPING` and `QUIET`. The header
+  counts what needs you on every host and in every chain: `● 3 need you`.
+  A card says what the match does, its pull request on its track, its
+  context use and its chain. A card that changes its column lands: into
+  `WORKING` its match strikes.
+  ([#372](https://github.com/blox-eng/matchblox/issues/372))
+- **The peek answers a question in two presses.** The chosen card shows
+  what the agent said last and the options of its question. A digit, or a
+  tap on an option, marks the option. The same press again sends it.
+  `Esc`, a move to another card or a new question clears the mark.
+  ([#372](https://github.com/blox-eng/matchblox/issues/372))
+- **Hide a column, show one chain or one host.** A tap on a column's name
+  hides it, and a tap on its `+ name` brings it back. `g` shows only the
+  chosen card's chain, with its stoker's card and its talk line: the
+  chain's room. `s` shows the next host, then all hosts.
+  ([#372](https://github.com/blox-eng/matchblox/issues/372))
+- **A menu on each card, and copy.** `m`, a right-click or a long-press
+  opens it: copy the last message, the question, the pull request's link
+  or the name, show its chain, go in, hide its column. `c` copies the last
+  message. A drag on a desk copies the text under it. The setup steps "Let
+  copy through" and "Check that copy reaches you" fix and prove the way to
+  your clipboard.
+  ([#372](https://github.com/blox-eng/matchblox/issues/372))
+- **The strip.** One line under the board shows usage or the machine. `u`,
+  or a tap on it, turns it. Every notice shows in its row for 2.5 seconds;
+  the header never shows one.
+  ([#372](https://github.com/blox-eng/matchblox/issues/372))
+- **Matchblox Pocket has a Board layout on its key belt.** It follows the
+  console: `◂`, the chosen card's keys, then `↑ ↓ ⏎`, and every other key
+  of the board after them. A sideways swipe turns the board's page, and a
+  long-press opens a card's menu.
+  ([#372](https://github.com/blox-eng/matchblox/issues/372))
+- **OpenCode reports its own state.** `matchblox setup` offers "Add the
+  OpenCode plugin": it writes `matchblox.ts` into OpenCode's global plugin
+  folder, and each OpenCode then writes its state to
+  `~/.local/state/matchblox/opencode/<pid>.json`. The board then knows
+  when OpenCode works, retries, or waits for a permission or a question.
+  ([#372](https://github.com/blox-eng/matchblox/issues/372))
+
+### Changed
+
+- **Two tabs: `board` and `machine`.** `Tab` turns them. The Ships tab
+  goes: a ship is on its card. The stoker, Git, History and Panes are rows
+  on Machine: `Enter` opens one, and `Esc` comes back. The dock goes: the
+  strip and Machine show usage and the machine. Hosts opens from a host's
+  row on Machine.
+  ([#372](https://github.com/blox-eng/matchblox/issues/372))
+- **Keys that changed their job.** Your hands must learn them; scripts and
+  commands do not change. Each says so once, the first time you press it.
+  - `c` copies the last message. It opened the STOKER tab: the stoker is a
+    row on Machine.
+  - `v` shows the cards whole, or one line each. It was list only.
+  - `s` shows the next host. It sorted the list: a column's order is fixed.
+  - `g` shows one chain. It grouped the list.
+  - `u` turns the strip. It turned the dock.
+  - `p` merges the card's pull request, after a typed `y`. It opened the
+    Ships tab.
+  - `x` kills. It no longer merges.
+  - A digit marks an answer, and the same digit sends it. The digits
+    opened tabs.
+  - `Esc` closes the menu, clears a mark, the search and the chain. It
+    never leaves the console: it went back to Hosts.
+  - `S`, and `Space` and `X` outside Machine's git view, go.
+  ([#372](https://github.com/blox-eng/matchblox/issues/372))
+
+### Fixed
+
+- **An agent's own report decides its column.** A session that showed a
+  question menu could sit in `QUIET`, and one that ran shells could sit in
+  `NEEDS YOU` on an old question. Now the state that Claude Code, and
+  OpenCode with its plugin, report wins: `waiting` needs you, `busy` and
+  `shell` work. A restart of the service loses no wait. An agent with no
+  report is read from the last lines of its pane only.
+  ([#372](https://github.com/blox-eng/matchblox/issues/372))
+
 ## [0.42.0] - 2026-11-12
 
 ### Changed

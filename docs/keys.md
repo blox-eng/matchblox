@@ -7,60 +7,89 @@ digits, arrows, `Enter` and `Esc`. No key of the console needs `Ctrl`.
 interrupts, and a swipe scrolls. The key line at
 the bottom shows the keys of the open tab. A tap on a key presses it.
 
-## The console
+## The board
+
+The key line shows the keys of the chosen card first, then `c`, `v`, `s`
+and `u`, then `←→` and `Tab`. A key that does not fit leaves whole, from
+the right.
 
 | Key | What it does |
 |---|---|
-| `↑` or `k` | Selects the row above. |
-| `↓` or `j` | Selects the row below. |
-| `Enter` | Shows the safe action of the row: go into the agent's pane (Sessions, Machine, Panes), open New session on the folder of `+ start a new session` (Sessions), open a shell in the worktree (Git), do a recommendation, show a setup step. On Ships, selects the session that drives the ship in Sessions. |
-| `x` | Shows the other action of the row: the second action of a recommendation, close a setup step or kill the session (Sessions), kill a detached busy loop (Machine), remove the marked worktrees (Git), merge a ship that waits for your merge (Ships). Kill shows its commands, `tmux kill-pane -t <pane>`, then `kill -TERM <pid>` for an agent still running, and runs them on a typed `y`. A session that works or waits for you asks for a second `y`. Its worktree and its transcript stay. |
-| `N` | Opens **New session** (Sessions, Git): where it starts (a path, or `←` `→` through the Git tab's repositories and worktrees, then the ones found on the host, the most recent first), a branch for a new worktree beside the repository (blank: none), its name, the agent (`←` `→`, from the installed Claude Code, Codex, OpenCode and Cursor), for Claude Code, Codex and Cursor the account (see below), and a first message (blank: it waits for you; a new account has none). `Tab` goes to the next line, `⏎` starts it in a tmux session of its own, `Esc` sends nothing. The row shows in Sessions within seconds. |
-| `r` | Renames the session (Sessions): its tmux window, its tmux session when it is that session's one window, and Claude Code's own name (`/rename`), all alike. A Claude Code session that works takes its new name when it rests. On Git, `r` scans the git checkouts again. |
-| `A` | Switches the agent of the session (Sessions): choose another installed agent (`←` `→`), how it starts (`←` `→` or a tap: **continue** from the handover, or **no task**), and any extra instructions for this switch. The confirm names the switch, its account and its launch settings. A session that works or waits needs a second `y`. A switch that continues first asks an idle Claude Code or Codex agent to write its task record and waits up to 3 minutes, showing the wait in the bottom rows; `esc` switches now, from the evidence. It then saves the latest evidence before replacing the agent. The console jumps to the pane after. |
-| `a` or `→` | Goes into the selected agent's pane (Sessions). `→` does it where it has no other use. On Ships, goes into the pane of the session of a stuck ship. On the head row of a chain, goes into the pane of the chain's stoker. |
-| `p` | Merges the chosen card's ship that waits for your merge. It runs only after a typed `y`. |
-| `Tab` or `Shift+Tab` | Opens the next or the previous tab. |
-| `u` | Cycles the dock of a narrow screen: usage, the machine, the stoker. Where Sessions splits, all three stack under the list, and the machine folds before the list is cut; while a run is in charge, its stoker keeps its place as usage does, and the machine folds first. While a run is in charge, or has steps you have not seen, the stoker's panel takes the dock until you press `u`. |
-| `v` | Folds the detail pane and the dock, so the list takes the screen. The selected row opens in place. The rows the list leaves free show usage, then the machine, each whole at its fewest lines; the list is never cut for them. `v` again shows them. A phone and a desk each keep their own choice. A phone starts with list only. |
-| `c` | Opens the STOKER tab: your words and the gos, the plan with each step's outcome, the goes that wait for you, the triggers, the standing rules, today's compacts with their RESUME lines. Opening it marks the steps seen. |
-| `/` | Searches the open tab. |
-| `s` | Sorts Panes by the next column. |
-| `g` | Narrows the board to the chain of the chosen card. |
-| `z` | Parks the selected session (Sessions): nothing types into it, and the stoker leaves it alone. `z` again lets it go. |
-| `Space` | Marks a worktree that is safe to remove (Git). |
-| `X` | Marks every worktree that is safe to remove (Git). |
+| `↑` or `k`, `↓` or `j` | Chooses the card above or below. The chosen card is the peek. From a column's first card, `↑` chooses the setup steps above the board; from its last card, `↓` chooses the ghost row, then the recommendations. |
+| `←` or `→` | Goes to the column at the left or the right, past a hidden or an empty column. On the setup steps' line, moves through the steps. |
+| `Enter` or `a` | Goes into the match's pane. On a ship that no session drives, opens New session in its worktree. On a setup step, the ghost row or a recommendation, shows its action. On a phone, a tap on the chosen card does it too. |
+| `Ctrl+O` | Goes into the chosen agent's pane, from every tab. |
+| A digit, 1 to 9 | Marks that option of the chosen card's question. The same digit again sends it. Another digit moves the mark, and `Esc` clears it. See [the peek](console.md#the-peek). |
+| `p` | Merges the card's leading pull request when it waits for your merge: a box shows `gh pr merge <n> --squash --match-head-commit <sha>`, and it runs on a typed `y`. On any other card it says `no ship of <name> waits for a merge`. |
+| `x` | Kills the match: a box shows `tmux kill-pane -t <pane>`, then `kill -TERM <pid>` for an agent still running, and runs them on a typed `y`. A session that works or needs you asks for a second `y`. Its worktree and its transcript stay. On a setup step, closes it; on a recommendation, shows its second action. |
+| `y` | Gives the go that a stoker step waits for. |
+| `c` | Copies what the agent said last. |
+| `m` | Opens the card's menu: copy, show its chain, go in, hide its column. |
+| `v` | Shows every card whole, or as one line. A phone and a desk each keep their own choice. |
+| `g` | Shows only the chain of the chosen card: its room. `Esc` shows all. |
+| `]`, `[` | Shows the next or the previous chain. |
+| `s` | Shows the next host, then all hosts. |
+| `u` | Turns the strip: usage, the machine, hidden. |
+| `Tab` or `Shift+Tab` | Goes to the board, or to Machine. |
+| `/` | Searches the board. A search narrows every column. |
+| `N` | Opens **New session**: where it starts (a path, or `←` `→` through your repositories and worktrees, then the ones found on the host, the most recent first), a branch for a new worktree beside the repository (blank: none), its name, the agent (`←` `→`, from the installed Claude Code, Codex, OpenCode and Cursor), for Claude Code, Codex and Cursor the account (see below), and a first message (blank: it waits for your first prompt; a new account has none). `Tab` goes to the next line. |
+| `r` | Renames the session: its tmux window, its tmux session when it is that session's one window, and Claude Code's own name (`/rename`), all alike. A Claude Code session that works takes its new name when it rests. |
+| `A` | Switches the agent of the session: choose another installed agent (`←` `→`), how it starts (`←` `→` or a tap: **continue** from the handover, or **no task**), and any extra instructions for this switch. The confirm names the switch, its account and its launch settings. A session that works or waits needs a second `y`. A switch that continues first asks an idle Claude Code or Codex agent to write its task record and waits up to 3 minutes, showing the wait in the bottom rows; `Esc` switches now. |
+| `z` | Parks the chosen session: nothing types into it, and the stoker leaves it alone. Its card goes to `QUIET`. `z` again lets it go. |
 | `f` | Turns [the stoker](stoker.md) off while it is on. While it rests, turns it back on. Otherwise opens the launch sheet for a day run. |
-| `F` | Stokes the chain of the selected row (Sessions): the start sheet, `Stoke the chain <name> (<n> matches)?`, takes the order and the gos of a stoker for that chain. On a chain with a stoker, `F` does what `a` does on its head row. On a desk, a tap on the fuse does the same. See [A family of stokers](stoker.md#a-family-of-stokers). |
+| `F` | Stokes the chain of the chosen card: the start sheet, `Stoke the chain <name> (<n> matches)?`, takes the order and the gos of a stoker for that chain. See [A family of stokers](stoker.md#a-family-of-stokers). |
 | `n` | Opens the launch sheet for a night: the stoker runs until the morning, then turns itself off. While a night runs, `n` ends it. |
 | `o` | Gives a new order while a day run is on: the launch sheet opens with the run's gos, and the order goes to the stoker as one line. The run goes on, and done steps stay done. A night is sealed: `n` stops it first. |
-| `e` | Shows or hides the agents that exited and wait for their parent (Sessions). |
-| `d` | Dismisses the selected recommendation until its evidence changes (Sessions). |
-| `h` | Folds the recommendations to one line, or shows them again (Sessions). |
-| `Esc` | Clears the search. With nothing to clear, goes back to Hosts. `Ctrl+M`, prefix `m` and the phone's back button do the same in the console. |
+| `e` | Shows or hides the agents that exited and wait for their parent. |
+| `d` | Dismisses the chosen recommendation until its evidence changes. |
+| `h` | Folds the recommendations to one line, or shows them again. |
+| `⌥s` | Opens the room of the chosen card's chain, as `g` does. A session in no chain opens its chain of one, which the host's stoker drives. |
+| `Esc` | Closes the menu, then clears a marked answer, then the search, then the chain. It never leaves the console. `Ctrl+M`, prefix `m` and the phone's back button do the same in the console. |
 | `q` or `Ctrl+C` | Quits the console. The service keeps running. |
-| `⌥s` | Opens the room of the selected session's chain (Sessions). A session in no chain opens its chain of one, which the host's stoker drives. `Enter` on a chain's head row opens its room too. |
+
+A key that changed its job with the board says so once, the first time
+you press it: `c`, `v`, `s`, `g`, `u`, `p`, `x` on a card whose ship waits
+for its merge, and a digit.
+
+## Machine
+
+`Tab` opens it. The rows are the stoker, git, history and panes, then the
+detached busy loops, the devices and, over several hosts, the hosts.
+
+| Key | What it does |
+|---|---|
+| `↑` or `k`, `↓` or `j` | Chooses the row above or below. |
+| `Enter` | Opens the view of the row: the stoker, git, history or panes. On a busy loop, goes to the pane that started it. On `+ pair a device`, opens the pair page. On a host, opens Hosts. On Git, opens a shell in the worktree. On Panes, goes to the pane. |
+| `Esc` | Goes back from a view to Machine, on its row. |
+| `x` | Kills a detached busy loop, removes a device, or removes the marked worktrees (Git), after a typed `y`. |
+| `Space` | Marks a worktree that is safe to remove (Git). |
+| `X` | Marks every worktree that is safe to remove (Git). |
+| `r` | Scans the git checkouts again (Git). |
+| `s` | Sorts Panes by the next column. |
+| `Q` | Quits the stoker agent, on the stoker's view (see below). |
 
 ## A chain's room
 
-A room shows one chain: what waits for you first, the stoker's card with its
-plan, the chain's matches, its ships and worktrees, and the talk line. On a
-desk the selected match's live view is on the right. The key line shows the
-keys of the selected row.
+A room is the board narrowed to one chain: `g`, `⌥s` or a tap on a card's
+stub opens it. It adds the stoker's card above the columns and the talk
+line under them. The board's keys work on its cards. The key line shows
+the keys of the chosen line.
 
 | Key | What it does |
 |---|---|
-| `↑` or `k` | Selects the row above. |
-| `↓` or `j` | Selects the row below. |
-| `Enter` | On the need line or a match, goes into the match's pane. On `↓ N more`, unfolds the plan. On the talk line, starts typing. On a quiet stoker's line, starts typing to it. On `+ start one here`, opens New session. |
-| `y` | Gives the go a step waits for (the need line `▸ … waits for your go · y`, or the step). Every go (a merge, a release, a deploy, a kill) acts outside the session: it shows its command first and runs on a typed `y`. |
+| `↑` or `k`, `↓` or `j` | Chooses the line above or below: the stoker's steps, the cards, the talk line. |
+| `Enter` | On a card, goes into the match's pane. On `↓ N more`, unfolds the plan. On the talk line, starts typing. On a quiet stoker's line, starts typing to it. |
+| `y` | Gives the go a step waits for. Every go (a merge, a release, a deploy, a kill) acts outside the session: it shows its command first and runs on a typed `y`. |
 | `]` | Opens the next chain's room. |
 | `[` | Opens the previous chain's room. |
 | `⌥s` | Goes back to the session you flipped from. With none, starts typing on the talk line. |
 | `⌥n` | Goes into the chain's first match. |
-| `u` | Takes the selected match out of the chain, after a typed `y`. Its agent goes on; the chain hears it left. |
-| `Esc` | Stops typing (the words stay). Else closes the room. |
+| `Esc` | Stops typing (the words stay). Else closes the room and shows every chain. |
 | `Backspace` | Erases the last character while you type. |
+
+`out of <chain>` in a card's menu (`m`) takes the match out of the chain,
+after a typed `y`. Its agent goes on, and the chain hears that it left.
+The menu has it only while the board shows that chain.
 
 While the talk line types, every key is text until `Enter` sends it to the
 chain's stoker or `Esc` stops. The first words to a chain with no stoker
@@ -83,9 +112,9 @@ Meta.
 matchblox moves tmux's session tree from prefix s to prefix S. Prefix n
 stays tmux's next window: the walk has only `⌥n`.
 
-## The STOKER tab
+## The stoker's view
 
-`c` opens it, and so does its digit. The first row is the stoker agent,
+The row `stoker` on Machine opens it. The first row is the stoker agent,
 which matchblox runs on a tmux server of its own. Every other row is a
 step the stoker took or planned, a command that waits for your go, or a
 trigger that fired. The key line shows the keys of the selected row.
@@ -151,29 +180,23 @@ A start on a new account is a destructive action: the plan shows `RUN` and waits
 
 ## The live view
 
-The right side of Sessions is the live view: the selected agent's own
-screen, read-only. Sessions splits 40/60 (the list at least 38 columns, at
-most 78) when the view gets at least 44 columns and the body has room for
-its title, its account line and 16 rows for an agent's menu. On a phone, in
-list only, or on a screen on its side with the keyboard up, there is no
-view: a tap on a row goes into its pane, and the selected row opens in
-place, with the question the agent asks. The view never resizes the agent's window. A keyboard never changes the layout: the shape goes by the
-tallest height seen at the width. The view is the console's own host's:
-another host's row is list only.
+From 152 columns, the right side of the board is the live view: the chosen
+agent's own screen, read-only. Under 152 columns there is no view: a
+second tap on the chosen card goes into its pane. The view never resizes
+the agent's window. A keyboard never changes the layout: the shape goes by
+the tallest height seen at the width. The view shows only a session of
+the console's own host.
 
-The view takes no keys: to answer or type, go into the agent's pane. The key
-line names the way in: `enter goes into <name>`.
+The view takes no keys: to answer or type, go into the agent's pane.
 
 | Key | What it does |
 |---|---|
-| `Enter`, `a` or `→` | Goes into the selected agent's tmux pane (help `go in`). A tap on the view, a second tap on the selected row, or on one column the first tap, does it too. |
-| `Ctrl+O` | Goes into the selected agent's tmux pane, from every tab. |
-| `ctrl+a m` | In the iOS demo, which has no tmux, `Enter` opens a stand-in for the pane: the agent's screen over the whole screen, and every key goes to the agent. `ctrl+a`, then `m` within 1 s, goes back to Sessions, on the next agent that waits. |
+| `Enter` or `a` | Goes into the chosen agent's tmux pane (help `go in`). A tap on the view, or a second tap on the chosen card, does it too. |
+| `ctrl+a m` | In the iOS demo, which has no tmux, `Enter` opens a stand-in for the pane: the agent's screen over the whole screen, and every key goes to the agent. Its title is `‹ board`. `ctrl+a`, then `m` within 1 s, goes back to the board. |
 
-The mouse wheel over the view, or a swipe on a phone, scrolls it back
-through the pane's history, 3 lines for each wheel step. The key line says
-how far back you are: `↑ 12 lines back`. Scrolling only looks: it types
-nothing into the pane.
+The mouse wheel over the view scrolls it back through the pane's history,
+3 lines for each wheel step. The key line says how far back you are:
+`↑ 12 lines back`. Scrolling only looks: it types nothing into the pane.
 
 If the pane is gone, the key line says `That session ended.`
 
@@ -226,20 +249,32 @@ On the chips:
 
 ## A phone
 
-A tap selects a row. A swipe over the list moves the selection. A swipe
-over the live view scrolls it back (see [The live view](#the-live-view)). On a
-narrow screen, a tap on an agent goes into its pane. Where the view sits beside the
-list, a second tap on the selected agent, or a tap on the view, goes into
-its pane. On any other row the key line says `tap again: <command>`, and a
-second tap on the same row runs it. On Ships, a tap on the selected ship
-selects its session in Sessions. Any other action (a
-recommendation, a setup step, a destructive step) then shows `RUN` and
-waits for `Enter` or a typed `y`, as from the keys. A tap on a tab opens
-it, a tap on a key of the key line presses it, and a tap on `● N wait for
-you` selects the first agent that waits. A tap on the header's stoker word
-(`stoker waits for you` among them) opens the stoker agent, as `Enter` on
-its row does. A tap on `machine ›` or `usage ›`
-switches the dock. On Panes, a tap on a column header sorts by it.
+The board is one column a page. A tap on a page's mark at the top opens
+that page, and a tap on the open page's mark hides it. In Matchblox
+Pocket, a sideways swipe turns the page too.
+
+| The owner wants to | By hand |
+|---|---|
+| see the next column | Swipe sideways, or tap the column's mark at the top. |
+| hide a column | Tap the name of the column on the screen. Tap `+ name` to bring it back. |
+| peek | Tap a card. |
+| go in | Tap the chosen card again. |
+| answer | Tap an option in the peek, then tap it again to send it. |
+| open the menu | Long-press a card, or press `m`. |
+| act | Tap a key on the card or on the key line. A destructive act still waits for a typed `y`. |
+| come back | The belt's `◂`, or the edge swipe. |
+| turn the strip | Tap the strip. |
+
+A vertical swipe scrolls the column. On a phone a drag never selects text:
+the menu copies. A tap is never consent: a tap on a card's `y go` marks
+the go, and a second tap gives it. A tap on a key of the key line presses
+it, and a tap on `● N need you` shows `NEEDS YOU` and chooses the first
+card that needs you. A tap on the header's stoker word opens the stoker
+agent. On Panes, a tap on a column header sorts by it.
+
+A long-press and a sideways swipe need Matchblox Pocket, or a terminal
+that reports the release of a press. Elsewhere, `m` opens the menu and
+`←` `→` turn the page.
 
 The app's command keys type a command of the agent into its pane, for
 example `/compact`, with no Return: you send it. The console marks the

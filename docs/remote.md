@@ -27,17 +27,18 @@ nothing. `matchblox connect` typed in a shell asks in that terminal.
 matchblox
 ```
 
-With hosts added, this opens one console over the ticked hosts. Sessions
-is one queue. A wait on any host is at the top. `matchblox ws-1` opens
-`ws-1` alone.
+With hosts added, this opens one console over the ticked hosts. The board
+is one board over all of them: a wait on any host is in `NEEDS YOU`, and
+the header counts it. `s` shows one host, then the next, then all again.
+`matchblox ws-1` opens `ws-1` alone.
 
 The home host is the first ticked host. It is `this machine`, unless you
 hide `this machine`. Then it is the first ticked host after it.
 
 ### Tick the hosts
 
-`esc` goes back to Hosts: `this machine`, each host you added, and
-`+ add a host`. The header says `HOSTS · 3 · 2 SHOWN`.
+On Machine, `Enter` on a host's row opens Hosts: `this machine`, each host
+you added, and `+ add a host`. The header says `HOSTS · 3 · 2 SHOWN`.
 
 - `space` ticks or unticks the selected host.
 - matchblox keeps the hidden hosts in `~/.config/matchblox/hidden`, one per
@@ -52,48 +53,44 @@ hide `this machine`. Then it is the first ticked host after it.
 - `esc` and `Enter` again keep the hosts that stay ticked. They keep the
   selection too.
 
-### Read the rows
+### Read the cards
 
-- The header says `3 hosts`.
-- When a host is hidden, the header adds `· 1 hidden`.
-- A row names its host after the session: `train-loop gpu-1`.
-- A row with an account says `api-auth ws-1 · work`.
-- A long host name ends in `…`. The detail shows it whole.
-- `N` and the ghost row start a session on the host of the selected row.
-  With no row selected, they start it on the home host.
+- The header shows the host filter: `all hosts ▾`, or the one host shown.
+- A card of another host names its host after the name: `train-loop
+  @gpu-1`.
+- A long host name ends in `…`.
+- `N` and the ghost row start a session on the host of the chosen card.
+  With no card chosen, they start it on the home host.
 
 ### A host is lost
 
 Each host connects, reconnects and fails on its own. One lost host does not
 stop the others.
 
-- A lost host keeps its rows, in their groups.
+- A lost host keeps its cards, in their columns, faint, with `as of 14:02`.
+  The header does not count their waits.
 - A reconnect of a few seconds changes nothing on the screen.
 - After 30 seconds, the header says `· gpu-1 stale`.
-- After 30 seconds, each row of that host says `stale` and shows the age
-  since the host last spoke.
-- The detail and the dock say `stale · as of 14:02`.
 - The key line names the lost host: `gpu-1: connection lost. Tries again in
   8s.`
 - With two lost hosts, it says `2 hosts lost: gpu-1, ws-1. Tries again in
   8s.`
-- A host that the console cannot reach is one row at the end of the list.
-  The row shows its fix: `gpu-1  is not connected  ⏎ connect`.
-- `Enter` on that row runs the connect.
-- A host that connects and sends no state in 3 seconds is one row too:
-  `ws-1  does not answer  run ssh ws-1 matchblox status to see why`.
-  `Enter` on it shows that command again: the console cannot fix the
-  service. The row goes when the host sends its first state.
+- A host that the console cannot reach is one line at the top of the
+  board, with why and its fix. A host that was there says
+  `gpu-1: not reached since 14:02 · ⏎ try again`.
+- `Enter` on that line runs the fix.
+- A host that connects and sends no state in 3 seconds has a line too,
+  with the command that shows why. The console cannot fix the service. The
+  line goes when the host sends its first state.
 - The other hosts keep going.
 
-### Acts go to the row's host
+### Acts go to the card's host
 
-- Each key on a row goes to the host of that row. This holds for
-  `Enter`, `x`, `r`, park and pick.
-- Another host's row is list only. The live view watches only a
-  session of the console's own host. On a remote row `Enter` goes into its
-  pane, and the right side shows its detail with a line that names its
-  host.
+- Each key on a card goes to the host of that card. This holds for
+  `Enter`, `x`, `p`, `r`, park and pick.
+- The live view watches only a session of the console's own host. On a
+  card of another host `Enter` goes into its pane. A digit does not answer
+  it: `not sent: <name> is on <host> · ⏎ goes in`.
 - Two hosts can have the same pane id. The console never mixes them.
 - The console refuses an act on a lost host: `gpu-1 is not connected. It
   tries again in 8s.`
@@ -103,29 +100,28 @@ stop the others.
   no answer`.
 - A jump to a lost host works. It uses your own ssh, not the stream.
 
-### The dock and the tabs
+### The strip and Machine
 
-- Ships and Panes list the rows of every ticked host. Each row names its
-  host.
+- Panes lists the rows of every ticked host. Each row names its host.
 - Git names the host on each repository heading, not on each worktree row.
-- Machine, History and Stoker show one section for each ticked host, in
-  Hosts order. Each section has the name of its host.
-- The dock shows one usage row for each account label.
-- Each host adds a short cell to that row, in Hosts order: `work  5h  ws-1
-  58% · gpu-1 61%`.
+- Machine, History and the stoker's view show one section for each ticked
+  host, in Hosts order. Each section has the name of its host.
+- Machine shows one usage row for each account label. Each host adds a
+  short cell to that row, in Hosts order: `work  5h  ws-1 58% · gpu-1
+  61%`.
 - matchblox never adds or averages the readings of two hosts.
 - A short line drops whole cells and ends in ` …`.
-- The dock shows one machine line for each host.
+- The strip's machine face shows the CPU of each host, or of the one host
+  that `s` shows.
 
 ### The stoker, for each host
 
 - The stoker is one for each host. The header counts the hosts where it
   runs: `stoker 2/3`.
-- A key on a row asks about the stoker of that row's host.
+- A key on a card asks about the stoker of that card's host.
 - `y` rests that stoker only.
-- `f` starts, wakes or turns off the stoker of the selected row's host.
-- The Stoker tab shows the section of another host for reading only.
-- The dock claims the stoker of the home host.
+- `f` starts, wakes or turns off the stoker of the chosen card's host.
+- The stoker's view shows the section of another host for reading only.
 
 ### What stays with the home host
 
@@ -146,8 +142,8 @@ A host that runs an older matchblox works in the combined console when
 its protocol version is the console's. No service changes, and matchblox
 adds no key between hosts.
 
-A host at another protocol version is one row at the end of the list. The
-row shows the version of the host and of the console. An older host shows
+A host at another protocol version is one line at the top of the board.
+The line shows the version of the host and of the console. An older host shows
 `⏎ connect`. `Enter` runs the connect, and the connect updates the host. A
 newer host shows `update the console`.
 
