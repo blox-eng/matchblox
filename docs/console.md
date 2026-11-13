@@ -267,7 +267,9 @@ A console left open never puts its older build back over a newer service.
 The key line says `R start again · service v0.43.0, console v0.42.0`, and
 `R` starts the console again on the new release. When the console's own
 binary is not the new one, it says
-`quit and reopen · service v0.43.0, console v0.42.0` instead.
+`quit and reopen · service v0.43.0, console v0.42.0` instead. On Pocket,
+which has no key line, the row above the belt says it, and a tap on
+`R start again` starts the console again.
 
 A host on another release says so on its row in Hosts. See
 [Remote hosts](remote.md#a-host-on-another-release).

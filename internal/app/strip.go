@@ -96,6 +96,13 @@ func (m Model) strip(w int) (lines []string, tap span, ok bool) {
 	if m.copyCode != "" {
 		return m.noticeRows(m.pasteHere(), w), span{}, true
 	}
+	if m.newer != "" && !m.lost && m.beltOnly() { // Pocket has no key line to say it
+		tap := span{}
+		if m.startsAgain {
+			tap = span{0, w, m.keys.main.StartAgain.Keys()[0]}
+		}
+		return m.noticeRows(m.newer, w), tap, true
+	}
 	if text := m.boardStateNotice(); text != "" {
 		return m.noticeRows(text, w), turn, true
 	}

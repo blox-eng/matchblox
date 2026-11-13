@@ -654,6 +654,29 @@ func pocketOnly(m *Model) {
 	m.belt.pocket = []pocketClient{{"/dev/pts/7:105", 1}}
 }
 
+// TestPocketSeesANewerService: Pocket has no key line, so the strip's row
+// says that the service is newer, and a tap on it starts the console again.
+func TestPocketSeesANewerService(t *testing.T) {
+	st := boardFixture(t)
+	for _, w := range []int{40, 44} {
+		m := boardShot(t, st, w, 34, func(m *Model) {
+			pocketOnly(m)
+			m.newer, m.startsAgain = "R start again · service v0.43.0, console v0.42.0", true
+			m.opt.Restart = func() error { return nil }
+		})
+		if !m.onPocket() {
+			t.Fatal("the board is not on Pocket")
+		}
+		if f := strings.Join(strings.Fields(plainFrame(m)), " "); !strings.Contains(f, "R start again · service v0.43.0, console v0.42.0") {
+			t.Fatalf("%d: Pocket does not say the service is newer:\n%s", w, plainFrame(m))
+		}
+		next := tapText(t, m, "R start again")
+		if !next.restarting {
+			t.Errorf("%d: a tap on the notice did not start the console again", w)
+		}
+	}
+}
+
 // boardSaid are the board= values in what cmd writes to the terminal.
 func boardSaid(cmd tea.Cmd) []string {
 	var got []string
