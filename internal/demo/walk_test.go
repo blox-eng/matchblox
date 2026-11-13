@@ -1173,8 +1173,10 @@ func TestSessionsCanBeStartedAndKilled(t *testing.T) {
 		return !strings.Contains(paneList(t), "renamed-one")
 	})
 	// Another tab and back, by the Tab key, draws the board anew: it has the
-	// new session, not the killed one.
-	eventually(t, 5*time.Second, "the drawn board to lose the killed session", func() bool {
+	// new session, not the killed one, once a sample has read tmux's list.
+	// Each look turns two tabs and runs two searches, seconds under -race,
+	// so the wait is the one the new session's card has.
+	eventually(t, 30*time.Second, "the drawn board to lose the killed session", func() bool {
 		w.tabByKey("MACHINE")
 		time.Sleep(200 * time.Millisecond)
 		w.tabByKey("BOARD")
