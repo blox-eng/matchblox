@@ -126,6 +126,32 @@ func TestAKeyShowsAHiddenColumn(t *testing.T) {
 	}
 }
 
+// TestAKeyOnAnEmptySearchSaysEscClears: a card key with no card says the
+// fix that is true: esc clears a search, s turns a host, and a + name
+// shows a column only when one is hidden.
+func TestAKeyOnAnEmptySearchSaysEscClears(t *testing.T) {
+	st := boardFixture(t)
+	m := typeText(pressOn(boardShot(t, st, 104, 38, nil), "/"), "zzzz").(Model)
+	m = pressOn(m, "enter")
+	for _, k := range []string{"x", "p", "m"} {
+		if got := noticeRow(pressOn(m, k)); got != `nothing matches "zzzz" · esc clears` {
+			t.Errorf("%s on an empty search says %q", k, got)
+		}
+	}
+	m = boardShot(t, st, 104, 38, func(m *Model) { m.boardHost = "macbook" })
+	if got := noticeRow(pressOn(m, "x")); got != "no match on macbook · s turns the host" {
+		t.Errorf("x on a host with no match says %q", got)
+	}
+	m = boardShot(t, st, 104, 38, func(m *Model) {
+		for _, c := range boardCols {
+			m.flipHidden(c)
+		}
+	})
+	if got := noticeRow(pressOn(m, "x")); got != "no card is chosen · tap a + name to show a column" {
+		t.Errorf("x with every column hidden says %q", got)
+	}
+}
+
 func TestTheChoiceFollowsItsMatch(t *testing.T) {
 	st := boardFixture(t)
 	m := pressOn(boardShot(t, st, 80, 31, nil), "down")

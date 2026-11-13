@@ -593,13 +593,18 @@ func (m Model) boardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 		return next, cmd, true
 	case !ok && len(m.snap.Sessions) > 0 && bkey.Matches(k, bk.Merge, bk.Menu, mk.Second, mk.Grant, mk.Open, mk.Into, mk.Jump,
 		mk.Park, mk.Rename, mk.Switch, mk.Dismiss, mk.Fold, mk.Stoke, mk.StokeChain, mk.Night, mk.Order):
-		// A line above or under the columns is chosen, or every column is hidden:
-		// never a row of Sessions the person cannot see.
+		// A line above or under the columns is chosen, a search or a host leaves
+		// no card, or every column is hidden: never a row of Sessions the person
+		// cannot see. The notice names the fix that is true.
 		switch {
 		case above:
 			cmd = m.notice("no card is chosen · ↓ goes back to the cards")
 		case below:
 			cmd = m.notice("no card is chosen · ↑ goes back to the cards")
+		case m.filter != "":
+			cmd = m.notice(`nothing matches "` + m.filter + `" · ` + mk.Back.Help().Key + " clears")
+		case m.boardHost != "" && !slices.ContainsFunc(boardCols[:], m.colHidden):
+			cmd = m.notice("no match on " + m.boardHost + " · " + bk.Host.Help().Key + " turns the host")
 		default:
 			cmd = m.notice("no card is chosen · tap a + name to show a column")
 		}
