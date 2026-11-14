@@ -36,7 +36,7 @@ All dated 2026-11-14.
 The work fails, even if it runs, when:
 
 - A wait is not on the screen at 80×31 with up to 4 waits and the chosen card open.
-- A section moves while the count of `NEEDS YOU`, the count of ships and the chosen card stay the same: a match that starts or stops work, a scroll.
+- A section moves while the waits, the count of ships, the chosen card and the hidden sections stay the same: a match that starts or stops work, a scroll.
 - A section's name is not on the screen while it has cards and is not hidden.
 
 ## The design
@@ -58,7 +58,7 @@ A section's head is its own line, with its tap span over the name and the `−`.
 
 `NEEDS YOU` gets the rows of all its cards first, with the chosen card open. When `NEEDS YOU` alone does not fit, it takes all rows but 4 and scrolls; `WORKING` and `SHIPPING` keep 2 rows each. `SHIPPING` sits at the bottom of the rows. It gets its head and one row for each ship, 3 rows at most (Ruling, 2026-11-14). `WORKING` gets the rest, between `NEEDS YOU` and `SHIPPING`; its blank rows are under its cards (owner, 2026-11-14). A section that does not fit ends in `↓ N more`, and scrolls so that the chosen card is whole, as a column does today. A section of one row and more cards shows the chosen card, else the first, and its head counts the others: `SHIPPING · 3  ↓ 2  −`.
 
-So the head of `WORKING` moves only when the rows of `NEEDS YOU` change: a change the owner makes, or the news the owner wants. The head of `SHIPPING` moves also when the count of ships changes under 4. A match that starts work or stops it moves nothing.
+So the head of `WORKING` moves only when the rows of `NEEDS YOU` change: a change the owner makes, or the news the owner wants. The head of `SHIPPING` moves also when the count of ships changes under 4, and when `QUIET` opens: the open drawer takes rows from the bottom. A match that starts work or stops it moves nothing.
 
 A hidden section gives its rows to the others. A blank row goes first when rows are short, then the gap under the heads. On a short screen the heads come first: the heads of the sections with cards, then the chosen card's head (its row in its own section, before `NEEDS YOU` takes a second row; a wait in one row is its head line, and its section's head counts the others), then the heads of empty sections, then the `QUIET` drawer, whose foot is cut. With fewer rows than heads, one line names the sections with their counts, as the column heads did.
 

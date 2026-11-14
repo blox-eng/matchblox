@@ -47,7 +47,7 @@ The work fails, even if it runs, when:
 - A card moves to another column and the owner cannot see where it went.
 - A host that cannot be reached loses its cards with no word.
 - The console says `copied` when the text did not reach a clipboard.
-- A column moves or changes width by itself while the owner reads. At Medium a section may move when the count of `NEEDS YOU` changes or the owner chooses another wait. `SHIPPING` may also move when the count of ships changes under 4 (owner, 2026-11-14).
+- A column moves or changes width by itself while the owner reads. At Medium a section may move when the waits or the chosen card change, when `QUIET` opens, or when the owner hides or shows a section. `SHIPPING` may also move when the count of ships changes under 4 (owner, 2026-11-14).
 
 ## Owner's decisions
 
