@@ -19,7 +19,7 @@ All dated 2026-11-14.
 
 - `←` `→` go to the section above and below. The owner's rule "the left and right arrows move between columns" stays: at Medium the sections are the columns. `]` `[` keep their job: the next and the previous chain. (The issue draft said `]` `[`; that clashed with chains.)
 - `↑` `↓` stay in the open section, as they stay in a column today. From the last row of a section, `↓` goes to the first row of the next section; from the first, `↑` goes to the last row of the section above. So `↑` `↓` reach every card in order, as the mockup showed.
-- `QUIET` stays the drawer under the sections, as today.
+- `QUIET` stays the drawer under the sections, as today. Ruling (2026-11-14): at Medium the drawer is the last stop of `↓`. From the last card of the last section shown, `↓` goes to the first card of `QUIET`, and `↑` from that card goes back. From the last line above the sections, `↓` goes to the first card of the top section.
 - The chosen card in `NEEDS YOU` opens its peek, so a move of the selection there moves the sections under it. That move is the owner's own act, not one "by itself". The mockup did the same.
 - `SHIPPING` sits at the bottom and gets its own rows: its head and one row for each ship (owner, 2026-11-14). This replaces a fixed 3 to 2 split, which left rows blank in one section while the other was cut.
 - Ruling (2026-11-14): the rows of `SHIPPING` do not depend on `WORKING`. `SHIPPING` always takes its head and one row for each ship, 3 rows at most. With more than 3 ships, the third row is `↓ N more`. Rows that `WORKING` does not use stay blank under its cards. So the head of `SHIPPING` moves only when the rows of `NEEDS YOU` change, or when the count of ships changes under 4.
