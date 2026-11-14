@@ -180,8 +180,12 @@ func (m *Model) roomOff() {
 // roomToCard gives the cursor to the open column's first (d 1) or last
 // (d -1) card. false: the column has no card.
 func (m *Model) roomToCard(d int) bool {
-	b, _ := m.boardDrawOf()
-	ss := b.idx[b.open]
+	b, shown := m.boardDrawOf()
+	c := b.open
+	if end, ok := m.stackEnd(b, shown, d); ok { // at Medium the stack's first or last card
+		c = end
+	}
+	ss := b.idx[c]
 	if len(ss) == 0 {
 		return false
 	}
@@ -190,7 +194,7 @@ func (m *Model) roomToCard(d int) bool {
 	if d < 0 {
 		s = ss[len(ss)-1]
 	}
-	m.boardChooseCard(b.open, s)
+	m.boardChooseCard(c, s)
 	m.chooseByHand()
 	return true
 }
@@ -230,9 +234,12 @@ func (m *Model) roomEdge(d int) bool {
 	before, after := m.roomOrder()
 	_, above := m.aboveChosen()
 	_, below := m.belowChosen()
-	b, _ := m.boardDrawOf()
+	b, shown := m.boardDrawOf()
 	ss := b.idx[b.open]
 	i := slices.IndexFunc(ss, func(s sample.Session) bool { return b.picked && paneOf(s) == paneOf(b.chosen) })
+	if _, on := m.nextSection(b, shown, d); on && b.picked && !above && !below {
+		return false // at Medium ↑ ↓ cross the sections first (boardMove)
+	}
 	switch {
 	case above && d > 0 && m.boardAbove == 1 && len(before) > 0:
 		m.roomOn(before[0])
