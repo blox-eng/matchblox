@@ -49,7 +49,12 @@ func TestFootHidesSetupWhenNoStepIsOpen(t *testing.T) {
 	m.recs = fixtureState().Recommendations[:1]
 	m.doors = []doors.Door{{ID: "tmux", Title: "tmux"}}
 	lines = plainLines(m.sidePanel(60, 6))
-	if got := strings.TrimSpace(lines[len(lines)-1]); got != "+ new · ✧ 1 tips · ! 1 setup" {
+	if got := strings.TrimSpace(lines[len(lines)-1]); got != "+ new · ✧ 1 tip · ! 1 setup" {
+		t.Fatalf("foot %q", got)
+	}
+	m.recs = fixtureState().Recommendations[:2]
+	lines = plainLines(m.sidePanel(60, 6))
+	if got := strings.TrimSpace(lines[len(lines)-1]); got != "+ new · ✧ 2 tips · ! 1 setup" {
 		t.Fatalf("foot %q", got)
 	}
 }
@@ -85,5 +90,78 @@ func TestStatesWordsShow(t *testing.T) {
 	m.filter = "x"
 	if got := panelText(m, 60, 5); !strings.Contains(got, `Nothing matches "x". esc clears the search.`) {
 		t.Fatalf("search:\n%s", got)
+	}
+}
+
+func TestHeadCountsWhatTheSearchShows(t *testing.T) {
+	var ss []sample.Session
+	for i := range 8 {
+		ss = append(ss, boardMatch(fmt.Sprintf("m%02d", i), time.Hour))
+	}
+	ss[3].Name = "kindle-web"
+	m := boardModel(t, boardState(ss...))
+	m.filter = "kindle"
+	if got := panelText(m, 50, 10); !strings.Contains(got, "IDLE · 1") {
+		t.Fatalf("panel:\n%s", got)
+	}
+}
+
+func TestPanelOfNoWidthDrawsNothing(t *testing.T) {
+	m := boardModel(t, boardState(boardMatch("hearth-api", time.Hour)))
+	for _, w := range []int{0, -3} {
+		if got := m.sidePanel(w, 8); got != nil {
+			t.Fatalf("w=%d drew %q", w, got)
+		}
+	}
+}
+
+func TestNoChoiceMeansTheFirstInOrder(t *testing.T) {
+	a, b := boardMatch("flint-auth", time.Hour), boardMatch("hearth-api", time.Hour)
+	st := boardState(a, b)
+	st.Queue = append(st.Queue, waitFor(b, queue.StatePermission, time.Minute))
+	m := boardModel(t, st)
+	first := m.sideOrder()[0]
+	if m.sideAt != (paneKey{}) || first != paneOf(b) {
+		t.Fatalf("fixture: sideAt %v, first %v", m.sideAt, first)
+	}
+	for _, l := range plainLines(m.sidePanel(50, 12)) {
+		if strings.HasPrefix(l, "▌") {
+			if !strings.Contains(l, "hearth-api") {
+				t.Fatalf("chosen row %q, want hearth-api", l)
+			}
+			return
+		}
+	}
+	t.Fatal("no row is chosen")
+}
+
+func TestChainLinksLightWhenAMemberIsChosen(t *testing.T) {
+	m := loginChain(t, nil)
+	other := boardMatch("spark-docs", time.Hour)
+	m.all.sessions = append(m.all.sessions, other)
+	lit := func(at paneKey) string {
+		m.sideAt = at
+		return strings.Join(m.sidePanel(60, 20), "\n")
+	}
+	var flint sample.Session
+	for _, s := range m.all.sessions {
+		if s.Name == "flint-auth" {
+			flint = s
+		}
+	}
+	on, off := lit(paneOf(flint)), lit(paneOf(other))
+	head := func(out string) string {
+		for _, l := range strings.Split(out, "\n") {
+			if strings.Contains(l, "≋ login") {
+				return l
+			}
+		}
+		return ""
+	}
+	if head(on) == "" || head(on) == head(off) {
+		t.Fatalf("head not lit by a member:\n%q\n%q", head(on), head(off))
+	}
+	if !strings.Contains(on, m.st.accent.Render("├")) || strings.Contains(off, m.st.accent.Render("├")) {
+		t.Fatalf("links: on has accent %v, off has accent %v", strings.Contains(on, m.st.accent.Render("├")), strings.Contains(off, m.st.accent.Render("├")))
 	}
 }

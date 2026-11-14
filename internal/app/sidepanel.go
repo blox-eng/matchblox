@@ -40,7 +40,11 @@ func (m Model) sideFoot(w int) string {
 	st := m.st
 	parts := []string{st.accent.Render("+ new")}
 	if n := len(m.recs); n > 0 {
-		parts = append(parts, st.muted.Render("✧ "+strconv.Itoa(n)+" tips"))
+		word := " tips"
+		if n == 1 {
+			word = " tip"
+		}
+		parts = append(parts, st.muted.Render("✧ "+strconv.Itoa(n)+word))
 	}
 	if n := len(m.boardDoors()); n > 0 {
 		parts = append(parts, st.warn.Render("! "+strconv.Itoa(n)+" setup"))
@@ -52,7 +56,7 @@ func (m Model) sideFoot(w int) string {
 // a thin line between groups, and the foot on the last line. The list
 // scrolls to keep the chosen row in view.
 func (m Model) sidePanel(w, h int) []string {
-	if h <= 0 {
+	if w <= 0 || h <= 0 {
 		return nil
 	}
 	st := m.st
@@ -77,7 +81,7 @@ func (m Model) sidePanel(w, h int) []string {
 		if len(lines) > 0 {
 			add(st.hair.Render(strings.Repeat("─", w)), false)
 		}
-		add(fit(" "+st.label.Render(g.state.head()+" · "+strconv.Itoa(g.count))+st.faint.Render("  −"), w), false)
+		add(fit(" "+st.label.Render(g.state.head()+" · "+strconv.Itoa(m.sideCount(g, units)))+st.faint.Render("  −"), w), false)
 		for _, u := range units {
 			lit := slices.ContainsFunc(u.members, func(s sample.Session) bool { return paneOf(s) == chosen })
 			if u.chain != (chainKey{}) {
@@ -124,4 +128,21 @@ func (m Model) sideWords(w int) []string {
 		return []string{fit(" "+st.muted.Render(ansi.Truncate(text, max(w-1, 1), "…")), w)}
 	}
 	return nil
+}
+
+// sideCount is the sessions of units in the state of g: all of g.count
+// while no search narrows the list.
+func (m Model) sideCount(g sideGroup, units []sideUnit) int {
+	if m.filter == "" {
+		return g.count
+	}
+	n := 0
+	for _, u := range units {
+		for _, s := range u.members {
+			if m.inBoard(s) && m.sideStateOf(s) == g.state {
+				n++
+			}
+		}
+	}
+	return n
 }
