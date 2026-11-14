@@ -27,7 +27,7 @@ The owner tested the board in v0.45.0 on 2026-11-14 and judged it worse than the
 
 - No change to `matchblox sessions --json`, `peek` or `send`.
 - No new agent integration, and no parser of an agent's chat.
-- No edit of `www/` by this work: matchbloxrelease owns it and gets a brief (see "What else changes").
+- No edit of the landing page's words or layout in `www/`: matchbloxrelease owns them and gets a brief (see "What else changes"). The replay frames that `TestReplay -update` writes in `www/demo/` and the still frame in `www/index.html` are test output, and the PR carries them, as every console PR from #262 to #380 did (owner, 2026-11-15).
 
 ## Anti-goals
 
@@ -74,7 +74,7 @@ Two places. The key line names the one that has them.
 
 - **The line** (the default): choosing a session puts the keys here. Letters type; `⏎` sends; a paste goes in as one piece. With the line empty: a digit marks an option and the same digit sends it; `↑` `↓` choose the session above or below in the list's order. `esc` clears a mark, then moves the keys to the list. The board's guards against a stray digit carry over (my call). A digit with no question on screen types into the line. Options past 9 are answered by typing (my call).
 - **The list**: `↑` `↓` choose; `⏎` goes back to the line; `s` next host; `g` only this chain (with the stoker's steps over the chat); `/` search; `m` the menu; `c` copy the last message; `z` park or let go; `n` a new session; `⇥` Machine. Any other letter goes back to the line and is typed there.
-- **Always**: one key hides or shows the list (`⌃b` in the mockup; the builder picks a key that is not tmux's prefix, my call). `⌃o` expands into the agent's own pane, in place of today's `⏎` into the pane, and `⌃o` again comes back, so `esc` reaches the agent inside.
+- **Always**: one key hides or shows the list (`⌃b` in the mockup; the builder picks a key that is not tmux's prefix, my call). `⌃o` expands into the agent's own pane, in place of today's `⏎` into the pane. `ctrl+a m` comes back, as today, so `⌃o` and `esc` reach the agent inside (plan call 5).
 
 ### Hosts
 
@@ -126,6 +126,18 @@ The app draws the console, so it gets the sidebar console. It changes where the 
 ### What stays from the board
 
 `● N need you`; answering in two presses; the fixed order inside a group; `s` `g` `/` `z` `m` `c`; the menu; the stoker's card and talk line in `g`; Machine as its own tab.
+
+## Calls made in the plan (2026-11-15)
+
+1. A peer's chat: the chat watches a peer's pane through that peer's own connection.
+2. A multi-line paste: a new act, `paste:<pane>`, puts it in as one bracketed paste (cap 16384 bytes, control characters except newline and tab taken out). `send` does not change.
+3. A busy agent: where an agent does not take typed input while it works, the console holds the message until the turn ends.
+4. A hidden host gets a link too. All hosts, the counts and the list leave it out, and nothing more.
+5. `⌃o` expands. `ctrl+a m` comes back, because Claude Code uses `⌃o` itself.
+6. `h` unhides a hidden host. "Fold recs" goes, because the tips move to the foot.
+7. A new session stays `N`, because `n` stops the night run.
+8. `ctrl+l` hides or shows the list.
+9. The PR badge shows the number and the stage (no CI count exists). In `step N of M`, N is the place of the chain's most urgent member in team order.
 
 ## Left to the builder
 
