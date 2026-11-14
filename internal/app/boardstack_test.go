@@ -7,43 +7,66 @@ import (
 	"testing"
 	"time"
 
+	"charm.land/lipgloss/v2"
+
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
-func TestStackRowsSplitsTheRestThreeToTwo(t *testing.T) {
+func TestStackRowsGivesShippingItsShips(t *testing.T) {
 	tests := []struct {
 		name                          string
-		need, rows                    int
+		need, works, ships, rows      int
 		work, ship                    bool
 		needH, workH, shipH, wantGaps int
 	}{
-		{"rest splits three to two", 9, 21, true, true, 10, 6, 3, 2},
-		{"needs you that does not fit leaves two rows each", 30, 21, true, true, 17, 2, 2, 0},
-		{"one shown section takes the rest", 9, 21, true, false, 10, 10, 0, 1},
-		{"only shipping shown takes the rest", 9, 21, false, true, 10, 0, 10, 1},
-		{"hidden needs you gives its rows away", 0, 21, true, true, 0, 12, 8, 1},
-		{"neither section shown leaves needs you the rows", 30, 21, false, false, 21, 0, 0, 0},
-		{"one shown section keeps two rows when needs you is long", 30, 21, true, false, 19, 2, 0, 0},
+		{"every section fits: shipping takes a row a ship", 9, 3, 3, 21, true, true, 10, 5, 4, 2},
+		{"working does not fit: shipping keeps its 3 ships", 9, 13, 3, 21, true, true, 10, 5, 4, 2},
+		{"working does not fit: shipping stops at 3 rows", 9, 13, 6, 21, true, true, 10, 5, 4, 2},
+		{"working fits: shipping takes all its ships", 9, 1, 6, 21, true, true, 10, 2, 7, 2},
+		{"an empty shipping keeps its head and a row", 9, 3, 0, 21, true, true, 10, 7, 2, 2},
+		{"needs you that does not fit leaves two rows each", 30, 13, 3, 21, true, true, 17, 2, 2, 0},
+		{"one shown section takes the rest", 9, 3, 0, 21, true, false, 10, 10, 0, 1},
+		{"only shipping shown takes the rest", 9, 0, 3, 21, false, true, 10, 0, 10, 1},
+		{"hidden needs you gives its rows to working", 0, 3, 3, 21, true, true, 0, 16, 4, 1},
+		{"neither section shown leaves needs you the rows", 30, 0, 0, 21, false, false, 21, 0, 0, 0},
+		{"one shown section keeps two rows when needs you is long", 30, 3, 0, 21, true, false, 19, 2, 0, 0},
+		{"short of rows each section keeps what it can", 9, 3, 3, 5, true, true, 2, 2, 1, 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			needH, workH, shipH, gaps := stackRows(tt.need, tt.rows, tt.work, tt.ship)
+			needH, workH, shipH, gaps := stackRows(tt.need, tt.works, tt.ships, tt.rows, tt.work, tt.ship)
 			if needH != tt.needH || workH != tt.workH || shipH != tt.shipH || gaps != tt.wantGaps {
-				t.Fatalf("stackRows(%d, %d, %v, %v) = %d, %d, %d, %d; want %d, %d, %d, %d",
-					tt.need, tt.rows, tt.work, tt.ship, needH, workH, shipH, gaps,
+				t.Fatalf("stackRows(%d, %d, %d, %d, %v, %v) = %d, %d, %d, %d; want %d, %d, %d, %d",
+					tt.need, tt.works, tt.ships, tt.rows, tt.work, tt.ship, needH, workH, shipH, gaps,
 					tt.needH, tt.workH, tt.shipH, tt.wantGaps)
+			}
+			if sum := needH + workH + shipH + gaps; tt.work || tt.ship {
+				if sum != tt.rows {
+					t.Errorf("the sections take %d of %d rows", sum, tt.rows)
+				}
 			}
 		})
 	}
 }
 
-func TestStackRowsIgnoresHowManyMatchesTheSectionsHold(t *testing.T) {
-	aN, aW, aS, aG := stackRows(9, 21, true, true)
-	bN, bW, bS, bG := stackRows(9, 21, true, true)
-	if aN != bN || aW != bW || aS != bS || aG != bG {
-		t.Fatal("the split changed between two calls with the same inputs")
+func TestStackRowsMovesWorkingOnlyWithNeedsYou(t *testing.T) {
+	for _, works := range []int{0, 1, 3, 13, 40} {
+		for _, ships := range []int{0, 1, 3, 6} {
+			needH, _, _, gaps := stackRows(9, works, ships, 21, true, true)
+			if needH != 10 || gaps != 2 {
+				t.Errorf("%d working, %d ships: WORKING's head moved (%d, %d)", works, ships, needH, gaps)
+			}
+		}
+	}
+	for _, ships := range []int{0, 1, 3} { // up to 3 ships, the count at work moves nothing
+		_, _, want, _ := stackRows(9, 0, ships, 21, true, true)
+		for _, works := range []int{1, 3, 13, 40} {
+			if _, _, shipH, _ := stackRows(9, works, ships, 21, true, true); shipH != want {
+				t.Errorf("%d ships: SHIPPING's rows moved with %d working: %d, want %d", ships, works, shipH, want)
+			}
+		}
 	}
 }
 
@@ -90,7 +113,7 @@ func TestMediumStacksTheSections(t *testing.T) {
 			t.Errorf("%s is not in WORKING:\n%s", name, body)
 		}
 	}
-	if row := plain[work+1]; !strings.Contains(row, "busy Writing the test for a token that") || !strings.Contains(row, "ctx 40%") {
+	if row := plain[work+1]; !strings.Contains(row, "busy Writing the test for a token") || !strings.Contains(row, "ctx 40%") {
 		t.Errorf("a working match's row does not say what it does at the full width: %q", row)
 	}
 }
@@ -141,6 +164,9 @@ func TestMediumShowsEveryWait(t *testing.T) {
 	}
 }
 
+// TestMediumHeadsHoldStill (owner, 2026-11-14): WORKING's head moves only
+// with NEEDS YOU's rows; SHIPPING's head moves with them and with the
+// count of ships, and only then.
 func TestMediumHeadsHoldStill(t *testing.T) {
 	base := boardFixture(t)
 	heads := func(st proto.State, edit func(*Model)) map[boardCol]int {
@@ -173,17 +199,23 @@ func TestMediumHeadsHoldStill(t *testing.T) {
 	extra := boardMatch("hearth-queue", time.Hour)
 	extra.Busy, extra.Status, extra.LastLine, extra.Context, extra.ContextPct = true, "busy", "Draining the retry queue.", "known", 28
 	more.Sessions = append(slices.Clone(base.Sessions), extra)
+	fewer := base
+	fewer.Sessions = slices.DeleteFunc(slices.Clone(base.Sessions), func(s sample.Session) bool { return s.Name == "spark-docs" })
 	for _, c := range []struct {
 		name string
 		st   proto.State
 	}{
 		{"a working match's text changes", says},
-		{"a match moves from WORKING to SHIPPING", ships},
 		{"WORKING gains a match", more},
+		{"WORKING loses a match", fewer},
 	} {
 		if got := heads(c.st, nil); !maps.Equal(got, want) {
 			t.Errorf("%s: the heads moved from %v to %v", c.name, want, got)
 		}
+	}
+	got := heads(ships, nil)
+	if got[colNeed] != want[colNeed] || got[colWork] != want[colWork] || got[colShip] != want[colShip]-1 {
+		t.Errorf("a match moves from WORKING to SHIPPING: the heads are %v, want %v with SHIPPING a row up for its new ship", got, want)
 	}
 	if a, b := heads(base, chooseCard("flint-ui")), heads(base, chooseCard("spark-docs")); !maps.Equal(a, b) {
 		t.Errorf("the selection moved in WORKING: the heads moved from %v to %v", a, b)
@@ -259,4 +291,31 @@ func TestMediumBusyFleet(t *testing.T) {
 		t.Errorf("WORKING does not end in ↓ N more:\n%s", body)
 	}
 	golden(t, m, "board-busy", 80, 31)
+}
+
+func TestMediumOneRowSectionShowsACard(t *testing.T) {
+	m := boardShot(t, boardFixture(t), 80, 31, chooseCard("flint-auth")) // the open question leaves WORKING two rows
+	d, plain, at := sectionHeads(t, m)
+	work := at[colWork]
+	if work < 0 || strings.TrimSpace(plain[work]) != "WORKING · 3  ↓ 2  −" {
+		t.Fatalf("WORKING's head does not count the cards that do not show:\n%s", strings.Join(plain, "\n"))
+	}
+	if !strings.Contains(plain[work+1], "flint-ui") || d.cards[boardSpot{work + 1, colWork}] != paneOf(paneSession(boardFixture(t), "flint-ui")) {
+		t.Errorf("WORKING's one row is not its first card: %q", plain[work+1])
+	}
+	if sp, ok := spanAt(d.taps[work], lipgloss.Width(" WORKING · 3  ↓ 2  ")); !ok || sp.press != colWork.short() {
+		t.Errorf("a tap on WORKING's − does not hide it: %+v", d.taps[work])
+	}
+	if m = tapHead(t, m, colWork); !m.colHidden(colWork) {
+		t.Error("a tap on WORKING's head does not hide it")
+	}
+
+	m = boardShot(t, boardFixture(t), 80, 24, chooseCard("spark-docs")) // a short screen leaves WORKING two rows
+	_, plain, at = sectionHeads(t, m)
+	if work = at[colWork]; work < 0 || strings.TrimSpace(plain[work]) != "WORKING · 3  ↓ 2  −" {
+		t.Fatalf("WORKING's head does not count the cards that do not show:\n%s", strings.Join(plain, "\n"))
+	}
+	if row := plain[work+1]; !strings.HasPrefix(row, "▌✦ spark-docs") || !strings.Contains(row, "busy Running the suite.") {
+		t.Errorf("WORKING's one row is not the chosen card's row: %q", row)
+	}
 }

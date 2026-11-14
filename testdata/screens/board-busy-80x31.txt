@@ -12,16 +12,16 @@
   1-2 mark an answer   ⏎ go in
 
  WORKING · 13  −
- ✦ hearth-api     ✻  busy Migrating the session table to the new key.   ctx 31%
- ✦ spark-search   ✻  busy Running 412 tests in internal/search.         ctx 77%
- ✦ flint-ui       ✻  busy Writing the test for a token that e… ctx 40%  ━╸login
- ✦ hearth-search  ✻  busy Tuning the ranking weights.                   ctx 39%
+ ✦ hearth-api           ✻  busy Migrating the session table to the new… ctx 31%
+ ✦ spark-search         ✻  busy Running 412 tests in internal/search.   ctx 77%
+ ✦ flint-ui             ✻  busy Writing the test for a token … ctx 40%  ━╸login
+ ✦ hearth-search        ✻  busy Tuning the ranking weights.             ctx 39%
   ↓ 9 more
 
  SHIPPING · 3  −
  ╿ cinder-ci @gpu-1 ❋  merged deploying                    #4549 ●━●━●━◉┄○   2h
- ╿ flint-api      ✻  ci waits for review                   #4560 ●━◉┄○┄○┄○  40m
- ╿ hearth-limits  ✻  ci CI · 6 of 9 jobs                   #4551 ●━◉┄○┄○┄○   4m
+ ╿ flint-api        ✻  ci waits for review                 #4560 ●━◉┄○┄○┄○  40m
+ ╿ hearth-limits    ✻  ci CI · 6 of 9 jobs                 #4551 ●━◉┄○┄○┄○   4m
 ────────────────────────────────────────────────────────────────────────────────
  QUIET · 5   wick-mobile · hearth-notes · ember-reports · kindle-legacy · t… −
  + start a new session

@@ -15,8 +15,8 @@
 
  SHIPPING · 3  −
  ╿ cinder-ci @gpu-1 ❋  merged deploying                    #4549 ●━●━●━◉┄○   2h
- ╿ flint-api      ✻  ci waits for review                   #4560 ●━◉┄○┄○┄○  40m
- ╿ hearth-limits  ✻  ci CI · 6 of 9 jobs                   #4551 ●━◉┄○┄○┄○   4m
+ ╿ flint-api        ✻  ci waits for review                 #4560 ●━◉┄○┄○┄○  40m
+ ╿ hearth-limits    ✻  ci CI · 6 of 9 jobs                 #4551 ●━◉┄○┄○┄○   4m
 
 
 

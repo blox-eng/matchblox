@@ -990,10 +990,10 @@ func TestAFirstPressThatOpensABoxStartsNoDrag(t *testing.T) {
 
 func TestADragCopiesNoCutMark(t *testing.T) {
 	m, clipped, _ := menuBoard(t, 80, 31, func(m *Model) { m.sawRelease = true })
-	x, y := cardOn(t, m, "busy Writing the test for a token that e…")
-	to := point{x + 40, y} // the … of the cut text, at Medium in the row
+	x, y := cardOn(t, m, "busy Writing the test for a token …")
+	to := point{x + 34, y} // the … of the cut text, at Medium in the row
 	letGo(t, drag(t, m, point{x, y}, to), to)
-	if len(*clipped) != 1 || (*clipped)[0] != "busy Writing the test for a token that e" {
+	if len(*clipped) != 1 || strings.TrimRight((*clipped)[0], " ") != "busy Writing the test for a token" {
 		t.Errorf("the drag copied %q, want the text without the … of the cut", *clipped)
 	}
 }

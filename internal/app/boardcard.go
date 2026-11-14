@@ -32,12 +32,13 @@ func harnessMark(s sample.Session) string {
 // is not reached, "" for one that is. land: how a card that changed column
 // lands. match: the match cell drawn, "" for the match of this moment.
 // stacked: the card is in the stack at Medium (boardStacked); ship: it is
-// in SHIPPING.
+// in SHIPPING; nameW: the cells its section's names and host words take;
+// oneRow: its section has one row, so even the chosen card is its row.
 type cardOpts struct {
-	sel, lit, oneLine, need, quietRow, otherHost, bare, stacked, ship bool
-	armed, sent                                                       int
-	asOf, match                                                       string
-	land                                                              landing
+	sel, lit, oneLine, need, quietRow, otherHost, bare, stacked, ship, oneRow bool
+	armed, sent, nameW                                                        int
+	asOf, match                                                               string
+	land                                                                      landing
 }
 
 // landing is how a card that changed column lands, for landGlow (design
@@ -69,7 +70,7 @@ func (m Model) boardCard(s sample.Session, w int, o cardOpts) (lines []string, t
 		}
 		return m.washed(lines, w, o), taps
 	}
-	if o.stacked && !o.need && !o.sel {
+	if o.stacked && !o.need && (!o.sel || o.oneRow) {
 		add(m.stackRow(s, w, o, word, says))
 		return m.washed(lines, w, o), taps
 	}
@@ -418,6 +419,14 @@ func (m Model) stateTrack(s sample.Session, state string, w int, o cardOpts) (st
 	return spread(state, right+" ", w), taps
 }
 
+// hostTag is the host word after a card's name, "" for this host.
+func (m Model) hostTag(s sample.Session, o cardOpts) string {
+	if !o.otherHost {
+		return ""
+	}
+	return " @" + m.nameOf(s.Host)
+}
+
 // stackRow is a card of WORKING or SHIPPING in the stack, on one row: the
 // match, the name, the harness, the state word and what it says; at the
 // right the context and the chain's stub in WORKING, the track and the
@@ -431,12 +440,8 @@ func (m Model) stackRow(s sample.Session, w int, o cardOpts, word, says string) 
 	if match == "" {
 		match = m.matchCell(s)
 	}
-	tag := ""
-	if o.otherHost {
-		tag = " @" + m.nameOf(s.Host)
-	}
-	who := match + name.Render(m.cardName(s)) + st.faint.Render(tag) // the names line up, and a long one is whole
-	left := " " + who + strings.Repeat(" ", max(16-lipgloss.Width(who), 0)) + " " + st.muted.Render(harnessMark(s)) +
+	who := name.Render(m.cardName(s)) + st.faint.Render(m.hostTag(s, o)) // the names line up, and a long one is whole
+	left := m.chosenMark(o.sel) + match + who + strings.Repeat(" ", max(o.nameW-lipgloss.Width(who), 0)) + " " + st.muted.Render(harnessMark(s)) +
 		"  " + m.wordInk(o).Render(word) + st.muted.Render(strings.TrimRight(" "+says, " "))
 	var parts []string
 	var taps []span

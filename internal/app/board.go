@@ -107,6 +107,14 @@ type boardDraw struct {
 	live    int
 	none    bool
 	stacked bool
+	nameW   [4]int  // the stack's widest name and host word in each section
+	oneRow  [4]bool // the stack's section has one row: its chosen card is its row
+}
+
+// otherHost: a card of s names its host, as the board shows every host and
+// s is not on this one.
+func (m Model) otherHost(s sample.Session) bool {
+	return m.hostCount() > 1 && m.boardHost == "" && s.Host != m.opt.Host
 }
 
 // empty: no column has a card.
@@ -496,7 +504,7 @@ func (m Model) boardColumns(d *boardDrawn, b *boardDraw, shown []boardCol, w, ro
 	var heads []string
 	x := 0
 	for i, c := range shown {
-		heads = append(heads, m.boardHead(c, len(b.idx[c]), widths[i], c == b.open))
+		heads = append(heads, m.boardHead(c, len(b.idx[c]), 0, widths[i], c == b.open))
 		d.heads = append(d.heads, span{x, x + widths[i], c.short()})
 		x += widths[i] + 1
 	}
@@ -549,7 +557,7 @@ func (m Model) boardDrawer(d *boardDrawn, b *boardDraw, w int) {
 	}
 	if b.open == colQuiet {
 		d.taps[len(d.lines)] = []span{{0, lipgloss.Width(name) + 3, colQuiet.short()}} // with its −
-		d.add(-1, m.boardHead(colQuiet, len(ss), w, true))
+		d.add(-1, m.boardHead(colQuiet, len(ss), 0, w, true))
 		m.boardStack(d, b, colQuiet, len(d.lines), 0, w, quietRows, true)
 		return
 	}
@@ -566,8 +574,9 @@ func (m Model) boardDrawer(d *boardDrawn, b *boardDraw, w int) {
 }
 
 // boardHead is a column's head: its name, its count once the first state
-// came, and the mark that hides it. The open column's name is fg bold.
-func (m Model) boardHead(c boardCol, n, w int, open bool) string {
+// came, how many cards do not show (more, 0 for none), and the mark that
+// hides it. The open column's name is fg bold.
+func (m Model) boardHead(c boardCol, n, more, w int, open bool) string {
 	name := m.st.faint
 	if open {
 		name = m.st.text.Bold(true)
@@ -575,6 +584,9 @@ func (m Model) boardHead(c boardCol, n, w int, open bool) string {
 	count := ""
 	if m.have {
 		count = " · " + strconv.Itoa(n)
+	}
+	if more > 0 {
+		count += "  ↓ " + strconv.Itoa(more)
 	}
 	return fit(" "+name.Render(c.name())+m.st.faint.Render(count+"  −"), w)
 }
@@ -693,9 +705,11 @@ func (m Model) boardBlockOf(b *boardDraw, c boardCol, s sample.Session, w int, q
 		oneLine:   m.oneLineIn(c),
 		need:      c == colNeed,
 		quietRow:  quietRow,
-		otherHost: m.hostCount() > 1 && m.boardHost == "" && s.Host != m.opt.Host,
+		otherHost: m.otherHost(s),
 		bare:      b.live > 0,
 		stacked:   b.stacked,
+		nameW:     b.nameW[c],
+		oneRow:    b.oneRow[c],
 		ship:      c == colShip,
 	}
 	if armed, sent := m.peekMarks(s); o.sel {

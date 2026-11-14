@@ -17,8 +17,8 @@
   asks Claude needs your permission to use Bash                               ctx 56%
   ↓ 3 more
 
- WORKING · 2  −
-  ↓ 2 more
+ WORKING · 2  ↓ 1  −
+ ✦ hearth-api       ✻  busy                                                   ctx 79%
  SHIPPING · 0  −
 
 ──────────────────────────────────────────────────────────────────────────────────────

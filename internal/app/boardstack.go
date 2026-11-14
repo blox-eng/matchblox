@@ -2,18 +2,22 @@ package app
 
 import (
 	"slices"
-	"strconv"
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
+
+	"github.com/blox-eng/matchblox/internal/sample"
 )
 
-// stackRows splits the body rows of the stacked board. NEEDS YOU takes its
-// cards and its head first, but leaves 2 rows to each other section shown.
-// A blank row sits between sections and is the first to go when rows are
-// short. WORKING and SHIPPING split the rest 3 to 2, WORKING taking the odd
-// row; a lone section takes all of it.
-func stackRows(need, rows int, work, ship bool) (needH, workH, shipH, gaps int) {
+// stackRows splits the body rows of the stacked board (owner,
+// 2026-11-14). NEEDS YOU takes its cards and its head first, but leaves 2
+// rows to each other section shown. A blank row sits between sections and
+// is the first to go when rows are short. SHIPPING sits at the bottom with
+// its head and a row for each of its ships matches, but only 3 rows when
+// WORKING's works matches do not fit too. WORKING takes the rest, so its
+// head moves only with NEEDS YOU, and SHIPPING's only with ships as well.
+func stackRows(need, works, ships, rows int, work, ship bool) (needH, workH, shipH, gaps int) {
 	shown := 0
 	if work {
 		shown++
@@ -35,7 +39,11 @@ func stackRows(need, rows int, work, ship bool) (needH, workH, shipH, gaps int) 
 		workH = min(rest, 2)
 		shipH = rest - workH
 	case work && ship:
-		shipH = max(2, rest-(rest*3+4)/5)
+		shipH = 1 + max(ships, 1)
+		if 1+max(works, 1)+shipH > rest {
+			shipH = min(shipH, 4) // WORKING does not fit: SHIPPING keeps 3 rows
+		}
+		shipH = min(shipH, rest-2)
 		workH = rest - shipH
 	case work:
 		workH = rest
@@ -73,7 +81,13 @@ func (m Model) boardStacked(d *boardDrawn, b *boardDraw, shown []boardCol, w, ro
 			}
 		}
 	}
-	needH, workH, shipH, gaps := stackRows(need, sec, slices.Contains(shown, colWork), slices.Contains(shown, colShip))
+	needH, workH, shipH, gaps := stackRows(need, len(b.idx[colWork]), len(b.idx[colShip]), sec, slices.Contains(shown, colWork), slices.Contains(shown, colShip))
+	for _, c := range []boardCol{colWork, colShip} {
+		b.nameW[c] = 14
+		for _, s := range b.idx[c] {
+			b.nameW[c] = max(b.nameW[c], min(lipgloss.Width(m.cardName(s)+m.hostTag(s, cardOpts{otherHost: m.otherHost(s)})), w/3))
+		}
+	}
 	top := len(d.lines)
 	for _, sc := range []struct {
 		c boardCol
@@ -86,17 +100,25 @@ func (m Model) boardStacked(d *boardDrawn, b *boardDraw, shown []boardCol, w, ro
 			d.add(-1, strings.Repeat(" ", w))
 			gaps--
 		}
-		n := len(b.idx[sc.c])
-		name := " " + sc.c.name()
-		if m.have {
-			name += " · " + strconv.Itoa(n)
+		ss := b.idx[sc.c]
+		on, more := b, 0
+		if sc.h == 2 && len(ss) > 1 { // one row: the chosen card, else the first, and the head counts the rest
+			one := *b
+			card := ss[0]
+			if b.picked && b.open == sc.c {
+				card = b.chosen
+			}
+			one.idx[sc.c] = []sample.Session{card}
+			one.oneRow[sc.c] = true
+			on, more = &one, len(ss)-1
 		}
 		if d.headAt < 0 {
 			d.headAt = len(d.lines)
 		}
-		d.taps[len(d.lines)] = []span{{0, lipgloss.Width(name) + 3, sc.c.short()}} // with its −
-		d.add(-1, m.boardHead(sc.c, n, w, sc.c == b.open))
-		m.boardStack(d, b, sc.c, len(d.lines), 0, w, sc.h-1, false)
+		head := m.boardHead(sc.c, len(ss), more, w, sc.c == b.open)
+		d.taps[len(d.lines)] = []span{{0, lipgloss.Width(strings.TrimRight(ansi.Strip(head), " ")), sc.c.short()}} // the name, the count and the −
+		d.add(-1, head)
+		m.boardStack(d, on, sc.c, len(d.lines), 0, w, sc.h-1, false)
 	}
 	for len(d.lines) < top+sec {
 		d.add(-1, strings.Repeat(" ", w))

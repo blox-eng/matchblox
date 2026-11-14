@@ -4,7 +4,7 @@
 
 **Goal:** At Medium (60–99 columns) the board draws `NEEDS YOU`, `WORKING` and `SHIPPING` stacked from top to bottom at full width, so the owner can read every wait and what each match does at 80 columns.
 
-**Architecture:** A new `boardStacked` in `internal/app/boardstack.go` replaces `boardColumns` for `l == Medium` in `boardPanel`. It draws each section's head on its own line (tap span in `d.taps`) and its cards with the existing `boardStack` at x=0, full width. A pure `stackRows` gives each section its rows: `NEEDS YOU` its cards, then a fixed 3:2 split of the rest. `WORKING` and `SHIPPING` cards are one line at Medium. Keys reuse the column moves: `←` `→` move between sections; `↓` `↑` cross a section's end.
+**Architecture:** A new `boardStacked` in `internal/app/boardstack.go` replaces `boardColumns` for `l == Medium` in `boardPanel`. It draws each section's head on its own line (tap span in `d.taps`) and its cards with the existing `boardStack` at x=0, full width. A pure `stackRows` gives each section its rows: `NEEDS YOU` its cards, then `SHIPPING` its ships at the bottom and `WORKING` the rest (owner, 2026-11-14). `WORKING` and `SHIPPING` cards are one line at Medium. Keys reuse the column moves: `←` `→` move between sections; `↓` `↑` cross a section's end.
 
 **Tech Stack:** Go, bubbletea v2, lipgloss v2, the golden screens in `testdata/screens/`.
 
@@ -15,7 +15,7 @@
 - Narrow and Wide do not change: every golden of another width stays byte for byte.
 - No change to `matchblox sessions --json`, `peek` or `send`.
 - No new key, no setting for the layout.
-- `NEEDS YOU` takes all its cards' rows first. `WORKING`:`SHIPPING` split the rest 3:2, fixed, `WORKING` takes the odd row. When `NEEDS YOU` does not fit, it takes all rows but 4; `WORKING` and `SHIPPING` keep 2 each (head and one row).
+- `NEEDS YOU` takes all its cards' rows first. When `NEEDS YOU` does not fit, it takes all rows but 4; `WORKING` and `SHIPPING` keep 2 each (head and one row). `SHIPPING` sits at the bottom: its head and one row for each ship, at most its head and 3 rows when the cards of `WORKING` do not all fit too. `WORKING` takes the rest; its blank rows are under its cards (owner, 2026-11-14, in place of a fixed 3:2 split).
 - One blank row between sections when rows allow; a blank row goes first when rows are short.
 - The key line says `←→ sections` at Medium, `←→ columns` elsewhere.
 - Fixtures use the canon's names (DESIGN.md §7). `go test ./...` passes before every commit. Signed Conventional Commits, no `--no-verify`, deny-list check on the staged diff.
@@ -37,7 +37,7 @@
 - Test: `internal/app/boardstack_test.go`
 
 **Interfaces:**
-- Produces: `func stackRows(need, rows int, work, ship bool) (needH, workH, shipH, gaps int)` — `need` is the rows `NEEDS YOU`'s cards take (0 when hidden), `rows` the body rows for the sections, `work`/`ship` whether each is shown. Each height includes the section's head line. `gaps` is how many blank separator rows to draw (0, 1 or 2).
+- Produces: `func stackRows(need, works, ships, rows int, work, ship bool) (needH, workH, shipH, gaps int)` — `need` is the rows `NEEDS YOU`'s cards take (0 when hidden), `works` and `ships` the counts of `WORKING` and `SHIPPING` (owner, 2026-11-14), `rows` the body rows for the sections, `work`/`ship` whether each is shown. Each height includes the section's head line. `gaps` is how many blank separator rows to draw (0, 1 or 2).
 
 - [ ] **Step 1: Write the failing test** `TestStackRowsSplitsTheRestThreeToTwo`, table-driven:
   - `stackRows(9, 21, true, true)` → needH 10, workH 6, shipH 3, gaps 2 (rest = rows − needH − gaps = 9; workH = ceil(rest·3/5); shipH = rest − workH).

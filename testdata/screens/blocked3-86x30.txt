@@ -17,8 +17,8 @@
  │ api-auth @ws-1                                                               ✻  1m
   waits I rewrote the quick start and the install page.                       ctx 88%
   ↓ 2 more
- WORKING · 2  −
-  ↓ 2 more
+ WORKING · 2  ↓ 1  −
+ ✦ hearth-api       ✻  busy                                                   ctx 79%
  SHIPPING · 0  −
 
 ──────────────────────────────────────────────────────────────────────────────────────

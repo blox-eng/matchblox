@@ -13,7 +13,7 @@ All dated 2026-11-14.
 
 - At Medium the board stacks its states from top to bottom. Narrow and Wide do not change.
 - One layout. No setting switches back to columns at this width. If the stack is wrong, a revert brings the columns back.
-- The anti-goal "a column moves or changes width by itself while the owner reads" changes for Medium: a section may move, and only when the count of matches in `NEEDS YOU` changes.
+- The anti-goal "a column moves or changes width by itself while the owner reads" changes for Medium: a section may move, and only when the count of matches in `NEEDS YOU` changes. `SHIPPING` may also move when the count of ships changes (owner, 2026-11-14).
 
 ## My calls
 
@@ -21,7 +21,7 @@ All dated 2026-11-14.
 - `↑` `↓` stay in the open section, as they stay in a column today. From the last row of a section, `↓` goes to the first row of the next section; from the first, `↑` goes to the last row of the section above. So `↑` `↓` reach every card in order, as the mockup showed.
 - `QUIET` stays the drawer under the sections, as today.
 - The chosen card in `NEEDS YOU` opens its peek, so a move of the selection there moves the sections under it. That move is the owner's own act, not one "by itself". The mockup did the same.
-- `WORKING` and `SHIPPING` split their rows 3 to 2, fixed. The mockup gave `SHIPPING` only its own rows; then a new working match would push it down, against the owner's ruling.
+- `SHIPPING` sits at the bottom and gets its own rows: its head and one row for each ship (owner, 2026-11-14). This replaces a fixed 3 to 2 split, which left rows blank in one section while the other was cut.
 
 ## Non-goals
 
@@ -35,7 +35,7 @@ All dated 2026-11-14.
 The work fails, even if it runs, when:
 
 - A wait is not on the screen at 80×31 with up to 4 waits and the chosen card open.
-- A section moves while the count of `NEEDS YOU` and the chosen card stay the same: a match that starts or stops work, a new ship, a scroll.
+- A section moves while the count of `NEEDS YOU`, the count of ships and the chosen card stay the same: a match that starts or stops work, a scroll.
 - A section's name is not on the screen while it has cards and is not hidden.
 
 ## The design
@@ -44,7 +44,7 @@ The work fails, even if it runs, when:
 
 Top to bottom, in the rows that the columns take today (`boardRows`):
 
-1. `NEEDS YOU · N  −`, then each card. A card has its verbose lines as today (name with harness and wait; the state word and its text; the track, `ctx` and chain stub), drawn the full width. Only the chosen card opens its peek: the quote, the options and its keys. In one-line density each card is one row.
+1. `NEEDS YOU · N  −`, then each card in two lines, the full width: the name with harness and wait; then the state word and its text, with the track, `ctx` and chain stub at its right. The owner chose this card (proposal B of the mockup, owner, 2026-11-14). Only the chosen card opens its peek: the quote, the options and its keys. A card that is not chosen has no key line, and no blank row is between two cards. In one-line density a card is its head and its state line, as today.
 2. A blank row, then `WORKING · N  −`, then one row a match: glyph, name, harness, the state word and its text, and at the right `ctx` and the chain stub. This is the row that QUIET draws on Wide (`boardBlockOf` with `quietRow`), with the state text.
 3. A blank row, then `SHIPPING · N  −`, then one row a match: glyph, name, harness, the state word and its text, and at the right the track and the wait.
 4. The `QUIET` drawer, as today.
@@ -53,9 +53,9 @@ A section's head is its own line, with its tap span over the name and the `−`.
 
 ### Who gets the rows
 
-`NEEDS YOU` gets the rows of all its cards first, with the chosen card open. The rest goes to `WORKING` and `SHIPPING` in a fixed split, 3 to 2 (`WORKING` takes the odd row), whatever their counts: as a column keeps its width today. A section that does not fit ends in `↓ N more`, and scrolls so that the chosen card is whole, as a column does today. A section with fewer cards than rows leaves them blank. When `NEEDS YOU` alone does not fit, it takes the rows but 4 and scrolls; `WORKING` and `SHIPPING` keep 2 rows each: the head and one row.
+`NEEDS YOU` gets the rows of all its cards first, with the chosen card open. When `NEEDS YOU` alone does not fit, it takes all rows but 4 and scrolls; `WORKING` and `SHIPPING` keep 2 rows each. `SHIPPING` sits at the bottom of the rows. It gets its head and one row for each ship. When the cards of `WORKING` do not all fit too, `SHIPPING` gets its head and 3 rows at most. `WORKING` gets the rest, between `NEEDS YOU` and `SHIPPING`; its blank rows are under its cards (owner, 2026-11-14). So no section has blank rows while the other ends in `↓ N more`. A section that does not fit ends in `↓ N more`, and scrolls so that the chosen card is whole, as a column does today. A section of one row and more cards shows the chosen card, else the first, and its head counts the others: `SHIPPING · 3  ↓ 2  −`.
 
-So a section's place depends only on the count of matches in `NEEDS YOU` and on the chosen card: a change the owner makes, or the news the owner wants. A match that starts work, stops it or ships moves nothing.
+So the head of `WORKING` moves only when the rows of `NEEDS YOU` change: a change the owner makes, or the news the owner wants. The head of `SHIPPING` moves also when the count of ships changes. A match that starts work or stops it moves nothing.
 
 A hidden section gives its rows to the others. A blank row goes first when rows are short, then the gap under the heads.
 
@@ -71,7 +71,7 @@ A hidden section gives its rows to the others. A blank row goes first when rows 
 - Goldens at 80×31 of the fixed fleet, in both densities, with each section hidden, narrowed to the chain, and narrowed to a host. They replace the 80×31 board goldens.
 - A golden at 80×31 of a fleet with 2 waits and 13 working matches: every `NEEDS YOU` card whole, and `WORKING` ending in `↓ N more`.
 - `NEEDS YOU` never ends in `↓ N more` at 80×31 with 1 to 4 waits, each with the chosen card open.
-- No section's head moves when a working match's text changes, when a match moves between `WORKING` and `SHIPPING`, when `WORKING` gains or loses a match, or when the selection moves in `WORKING` or `SHIPPING`.
+- No section's head moves when a working match's text changes, when `WORKING` gains or loses a match, or when the selection moves in `WORKING` or `SHIPPING`. A match that moves from `WORKING` to `SHIPPING` moves only the head of `SHIPPING`.
 - `←` `→` move between sections and skip a hidden one; `↓` from a section's last row reaches the next section's first.
 - A tap on each section's name hides it.
 - Narrow and Wide goldens do not change.
