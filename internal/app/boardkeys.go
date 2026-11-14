@@ -243,6 +243,24 @@ func (m Model) nextSection(b boardDraw, shown []boardCol, d int) (boardCol, bool
 	return 0, false
 }
 
+// stackEnd is the stack's first section with cards (d 1) or its last
+// (d -1). false: none, or no stack.
+func (m Model) stackEnd(b boardDraw, shown []boardCol, d int) (boardCol, bool) {
+	if m.layoutAt(max(m.width, minWidth)) != Medium {
+		return 0, false
+	}
+	at, step := colNeed, boardCol(1)
+	if d < 0 {
+		at, step = colShip, -1
+	}
+	for c := at; c >= colNeed && c <= colShip; c += step {
+		if slices.Contains(shown, c) && len(b.idx[c]) > 0 {
+			return c, true
+		}
+	}
+	return 0, false
+}
+
 // aboveMove is ↑ (d -1) and ↓ (d 1) on a line above the columns: up
 // through them, and down from the last one to the first card of the open
 // column.

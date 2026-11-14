@@ -1425,6 +1425,23 @@ func TestMediumDownCrossesIntoTheNextSection(t *testing.T) {
 		t.Errorf("↓ from the last wait with WORKING hidden chooses %s, want cinder-ci", chosenName(t, m))
 	}
 
+	onLogin := func(m *Model) {
+		chooseCard("flint-auth")(m)
+		m.viewPrefs.Told = []string{"chain"}
+	}
+	m = pressOn(boardShot(t, boardFixture(t), 80, 31, onLogin), "esc", "g") // the chain's room: its talk line closes the sections
+	for _, want := range []string{"flint-ui", "flint-api"} {
+		if m = pressOn(m, "down"); !m.boardSelectedOK() || chosenName(t, m) != want {
+			t.Fatalf("with the chain narrowed ↓ does not choose %s", want)
+		}
+	}
+	if m = pressOn(m, "down"); !m.roomOwn() {
+		t.Errorf("↓ from SHIPPING's last card does not reach the talk line")
+	}
+	if m = pressOn(m, "up"); !m.boardSelectedOK() || chosenName(t, m) != "flint-api" {
+		t.Errorf("↑ from the talk line does not come back to flint-api")
+	}
+
 	w := pressOn(boardShot(t, boardFixture(t), 104, 38, chooseCard("flint-auth")), "down")
 	if w.boardAt != colNeed || w.boardBelow != 1 {
 		t.Errorf("on Wide ↓ from a column's last card leaves its column: open %s, below %d", w.boardAt.name(), w.boardBelow)
@@ -1476,3 +1493,7 @@ func TestMediumKeyLineSaysSections(t *testing.T) {
 		t.Errorf("the key line at 104x38 is %q, want ←→ columns", got)
 	}
 }
+
+func (m Model) boardSelectedOK() bool { _, ok := m.boardSelected(); return ok }
+
+func (m Model) roomOwn() bool { _, own := m.roomChosen(); return own }
