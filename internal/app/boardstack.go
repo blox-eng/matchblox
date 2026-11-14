@@ -14,12 +14,13 @@ import (
 // stackRows splits the body rows of the stacked board (owner,
 // 2026-11-14). NEEDS YOU takes its cards and its head first, but leaves 2
 // rows to each other section shown; short of rows each section keeps its
-// head before NEEDS YOU keeps a card. A blank row sits between sections and
-// is the first to go when rows are short. SHIPPING sits at the bottom with
-// its head and a row for each of its ships, 3 at most. WORKING
-// takes the rest, so its head moves only with NEEDS YOU, and SHIPPING's
-// only with NEEDS YOU and a count of ships under 4.
-func stackRows(need, ships, rows int, needs, work, ship bool) (needH, workH, shipH, gaps int) {
+// head, then the section of the chosen card (pick) keeps a row, before
+// NEEDS YOU keeps a card. A blank row sits between sections and is the
+// first to go when rows are short. SHIPPING sits at the bottom with its
+// head and a row for each of its ships, 3 at most. WORKING takes the rest,
+// so its head moves only with NEEDS YOU, and SHIPPING's only with NEEDS
+// YOU and a count of ships under 4.
+func stackRows(need, ships, rows int, needs, work, ship bool, pick boardCol) (needH, workH, shipH, gaps int) {
 	shown := 0
 	if work {
 		shown++
@@ -29,7 +30,11 @@ func stackRows(need, ships, rows int, needs, work, ship bool) (needH, workH, shi
 	}
 	if needs {
 		if needH = min(need+1, rows-2*shown); needH < 2 {
-			needH = max(min(need+1, 2, rows-shown), min(rows, 1)) // the heads first, then a card
+			card := 0 // the chosen card's row, in a section under NEEDS YOU
+			if pick == colWork && work || pick == colShip && ship {
+				card = 1
+			}
+			needH = max(min(need+1, 2, rows-shown-card), min(rows, 1)) // the heads first, then a card
 		}
 	}
 	sections := shown
@@ -41,6 +46,9 @@ func stackRows(need, ships, rows int, needs, work, ship bool) (needH, workH, shi
 	switch {
 	case work && ship && rest < 4:
 		workH = max(min(rest-1, 2), 0)
+		if pick == colShip && rest == 3 {
+			workH = 1 // the chosen ship keeps its row
+		}
 		shipH = rest - workH
 	case work && ship:
 		shipH = min(1+max(min(ships, 3), 1), rest-2)
@@ -99,7 +107,11 @@ func (m Model) boardStacked(d *boardDrawn, b *boardDraw, shown []boardCol, w, ro
 	case m.boardWords(b) != "":
 		need = 1 // the row that says why there is no card
 	}
-	needH, workH, shipH, gaps := stackRows(need, len(b.idx[colShip]), sec, slices.Contains(stack, colNeed), slices.Contains(stack, colWork), slices.Contains(stack, colShip))
+	pick := colQuiet // no section of the stack
+	if b.picked {
+		pick = b.open
+	}
+	needH, workH, shipH, gaps := stackRows(need, len(b.idx[colShip]), sec, slices.Contains(stack, colNeed), slices.Contains(stack, colWork), slices.Contains(stack, colShip), pick)
 	for _, c := range []boardCol{colWork, colShip} {
 		b.nameW[c] = 14
 		for _, s := range b.idx[c] {
@@ -128,7 +140,7 @@ func (m Model) boardStacked(d *boardDrawn, b *boardDraw, shown []boardCol, w, ro
 			opened, row = m.stackNeeds(b, sc.c, w)
 		}
 		switch {
-		case sc.h == 2 && len(ss) > 1, sc.h > 2 && row > sc.h-1: // one row: the chosen card, else the first, and the head counts the rest
+		case sc.h == 2 && (len(ss) > 1 || sc.c == colNeed && len(ss) == 1), sc.h > 2 && row > sc.h-1: // one row: the chosen card, else the first, and the head counts the rest
 			one := *b
 			card := ss[0]
 			if b.picked && b.open == sc.c {

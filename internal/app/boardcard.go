@@ -74,6 +74,10 @@ func (m Model) boardCard(s sample.Session, w int, o cardOpts) (lines []string, t
 		add(m.stackRow(s, w, o, word, says))
 		return m.washed(lines, w, o), taps
 	}
+	if o.stacked && o.need && o.oneRow { // a wait in one row is its head line
+		add(m.cardHead(s, w, o, ""), nil)
+		return m.washed(lines, w, o), taps
+	}
 	whole := o.sel || !o.oneLine
 	add(m.cardHead(s, w, o, ""), nil)
 	state := "  " + m.wordInk(o).Render(word) + m.st.muted.Render(strings.TrimRight(" "+says, " "))
