@@ -50,6 +50,12 @@ All notable changes to matchblox are in this file. The format follows
 
 ### Changed
 
+- **At 60 to 99 columns the board stacks its states.** `NEEDS YOU`,
+  `WORKING` and `SHIPPING` go from top to bottom, each the full width.
+  A card that needs you has two lines, and only the chosen one opens its
+  quote and its keys. `WORKING` and `SHIPPING` have one row a match, and
+  `SHIPPING` stays at the bottom. `←` `→` move between sections.
+  ([#406](https://github.com/blox-eng/matchblox/issues/406))
 - **Two tabs: `board` and `machine`.** `Tab` turns them. The Ships tab
   goes: a ship is on its card. The stoker, Git, History and Panes are rows
   on Machine: `Enter` opens one, and `Esc` comes back. The dock goes: the
