@@ -68,25 +68,26 @@ const (
 
 // Filter writes an agent's output to out: unchanged, but for a replay.
 type Filter struct {
-	mu       sync.Mutex
-	out      io.Writer
-	now      func() time.Time
-	pend     []byte    // output held back: it could be the start of ClearCodes
-	pendAt   time.Time // when pend last grew
-	armed    time.Time // until when a clear starts a hold
-	holding  bool      // a replay: the pane shows the notice
-	quiet    bool      // a hold that a width change starts, with no clear yet: the pane shows nothing new
-	clearAt  time.Time // when the replay's last clear came
-	tail     []byte    // the end of the replay so far
-	seq      []byte    // an escape sequence of the replay, not yet whole
-	heldAt   time.Time // when the hold began
-	lastAt   time.Time // when the replay last printed
-	winAt    time.Time // when the window that counts winLines began
-	winLines int       // lines of the replay in that window
-	winText  int       // bytes of text, not of escape sequences, in that window
-	printed  int       // lines since the replay's last clear
-	text     int       // bytes of text, not of escape sequences, since then
-	modes    []mode    // the modes set in a quiet hold, where they are in its tail
+	mu        sync.Mutex
+	out       io.Writer
+	now       func() time.Time
+	pend      []byte    // output held back: it could be the start of ClearCodes
+	pendAt    time.Time // when pend last grew
+	armed     time.Time // until when a clear starts a hold
+	resizedAt time.Time // when the width last changed
+	holding   bool      // a replay: the pane shows the notice
+	quiet     bool      // a hold that a width change starts, with no clear yet: the pane shows nothing new
+	clearAt   time.Time // when the replay's last clear came
+	tail      []byte    // the end of the replay so far
+	seq       []byte    // an escape sequence of the replay, not yet whole
+	heldAt    time.Time // when the hold began
+	lastAt    time.Time // when the replay last printed
+	winAt     time.Time // when the window that counts winLines began
+	winLines  int       // lines of the replay in that window
+	winText   int       // bytes of text, not of escape sequences, in that window
+	printed   int       // lines since the replay's last clear
+	text      int       // bytes of text, not of escape sequences, since then
+	modes     []mode    // the modes set in a quiet hold, where they are in its tail
 }
 
 // mode is a mode the agent set in a quiet hold, and where in the hold's
@@ -98,8 +99,8 @@ func NewFilter(out io.Writer, now func() time.Time) *Filter {
 	return &Filter{out: out, now: now}
 }
 
-// Arm tells the filter that the agent starts, or that its terminal's width
-// changed: a clear in the next armFor is a replay.
+// Arm tells the filter that the agent starts: a clear in the next armFor is
+// a replay. A change of width goes through Resized.
 func (f *Filter) Arm() {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -114,11 +115,20 @@ func (f *Filter) Resized() {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	now := f.now()
-	f.armed = now.Add(armFor)
-	if f.holding || f.quiet {
-		return
+	f.armed, f.resizedAt = now.Add(armFor), now
+	switch {
+	case f.quiet: // the hold waits for this change's print, from now
+		f.winAt, f.lastAt, f.winLines, f.winText = now, now, 0, 0
+	case !f.holding:
+		f.startQuiet(now)
 	}
-	f.quiet, f.tail, f.seq, f.modes, f.winLines, f.winText, f.text = true, nil, nil, nil, 0, 0, 0
+	// In a replay: its release starts the quiet hold, as this change's print
+	// has no clear before it (release).
+}
+
+// startQuiet begins the hold that a change of width starts.
+func (f *Filter) startQuiet(now time.Time) {
+	f.quiet, f.tail, f.seq, f.modes, f.winLines, f.winText, f.text, f.printed = true, nil, nil, nil, 0, 0, 0, 0
 	f.heldAt, f.winAt, f.lastAt = now, now, now
 	pend := f.pend
 	f.pend = nil
@@ -202,20 +212,20 @@ func (f *Filter) hold(p []byte) error {
 			return f.write(rest)
 		}
 		switch {
-		case whole && toTerminal(f.seq) && f.quiet && setsMode(f.seq): // a question passes at once: the agent waits for its answer
-			// In its place: the hold may hold no replay, and then it comes
-			// out as it went in.
+		case whole && toTerminal(f.seq) && f.quiet && setsMode(f.seq):
+			// A mode stays in its place: the hold may hold no replay, and
+			// then it comes out as it went in.
 			f.modes = append(f.modes, mode{int32(len(f.tail)), int32(len(f.seq))}) //nolint:gosec // the tail stops at quietCap
 			f.tail = append(f.tail, f.seq...)
-		case whole && toTerminal(f.seq):
+		case whole && toTerminal(f.seq): // a question passes at once: the agent waits for its answer
 			pass = append(pass, f.seq...)
 		default:
 			f.tail = append(f.tail, f.seq...)
 		}
 		f.seq = f.seq[:0]
 	}
-	if i := bytes.LastIndex(f.tail[min(scan, len(f.tail)):], []byte(ClearCodes)); i >= 0 {
-		i += min(scan, len(f.tail))
+	if i := bytes.LastIndex(f.tail[scan:], []byte(ClearCodes)); i >= 0 {
+		i += scan
 		from := i + len(ClearCodes)
 		kept := f.tail[from:]
 		if f.quiet {
@@ -353,16 +363,16 @@ func plainLen(b []byte) int {
 }
 
 // setsMode tells if a whole escape sequence sets a mode of the terminal and
-// asks nothing: a DEC private mode (h, l), a key mode (m), or the kitty
-// keyboard protocol pushed, popped or set (u with no ?).
+// asks nothing: a DEC private mode (h, l), a key mode (m with no ?), or
+// the kitty keyboard protocol pushed, popped or set (u with no ?).
 func setsMode(seq []byte) bool {
 	if len(seq) < 3 || seq[1] != '[' {
 		return false
 	}
 	switch final := seq[len(seq)-1]; final {
-	case 'h', 'l', 'm':
+	case 'h', 'l':
 		return true
-	case 'u':
+	case 'm', 'u': // with ? it asks: XTQMODKEYS, the kitty keyboard query
 		return seq[2] != '?'
 	}
 	return false
@@ -398,9 +408,14 @@ func (f *Filter) Tick() error {
 		wait := quietFor
 		if f.quiet {
 			wait = settleFor
+			// A trickle ends a quiet hold only while it is a small redraw:
+			// the last lines of a long print, alone in a window, are no
+			// trickle.
+			slow = slow && f.printed < replayLines
 		}
 		switch {
 		case now.Sub(f.heldAt) >= holdCap:
+		case f.quiet && now.Sub(f.resizedAt) >= printWait: // no clear came: no replay, and a long stream must not freeze the pane
 		case before && f.text == 0 && len(f.seq) == 0: // no text yet: codes are no print
 			return nil
 		case before && now.Sub(f.lastAt) < quietFor && (!slow || f.printed == 0): // lines printed, then a trickle, is a short chat
@@ -422,13 +437,22 @@ func (f *Filter) Tick() error {
 // release ends a hold: the pane gets the clear and the end of the replay,
 // or, from a hold with no clear in it, what was held, as it came.
 func (f *Filter) release() error {
-	end := append(slices.Clone(f.tail), f.seq...)
+	var end []byte
 	if f.holding {
-		end = append([]byte(ClearCodes+"\x1b[0m"), end...)
+		end = make([]byte, 0, len(ClearCodes)+4+len(f.tail)+len(f.seq))
+		end = append(append(append(end, ClearCodes+"\x1b[0m"...), f.tail...), f.seq...)
+	} else {
+		end = append(f.tail, f.seq...) // the tail is let go here
 	}
+	again := f.holding && f.resizedAt.After(f.clearAt) // the width changed during the replay
 	f.holding, f.quiet, f.tail, f.seq, f.modes = false, false, nil, nil, nil
-	_, err := f.out.Write(end)
-	return err
+	if _, err := f.out.Write(end); err != nil {
+		return err
+	}
+	if now := f.now(); again && now.Sub(f.resizedAt) < armFor {
+		f.startQuiet(now)
+	}
+	return nil
 }
 
 // Flush writes what the filter still holds, at the agent's end: the end of

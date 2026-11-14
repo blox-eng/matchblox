@@ -526,6 +526,7 @@ func TestFilterQuietHoldKeepsOrder(t *testing.T) {
 	for _, in := range []string{
 		"abc\x1b[?25ldef\x1b[?25hghi",
 		"abc\x1b[?25ldef\x1b[?1049hpicker",
+		"abc\x1b[>1udef\x1b[<ughi\x1b[=1;1ujkl\x1b[>4;1mmno", // the kitty keyboard protocol, modifyOtherKeys
 	} {
 		var out bytes.Buffer
 		c := newClock()
@@ -626,16 +627,16 @@ func TestFilterQuietHoldOnePass(t *testing.T) {
 		}
 		return best
 	}
-	small, big := took(2), took(12)
+	small, big := took(4), took(24)
 	if ratio := float64(big) / float64(small); ratio > 18 {
-		t.Fatalf("2 MiB in a quiet hold took %v, 12 MiB %v: %.0f times as long for six times the bytes; each write scans all the hold holds", small, big, ratio)
+		t.Fatalf("4 MiB in a quiet hold took %v, 24 MiB %v: %.0f times as long for six times the bytes; each write scans all the hold holds", small, big, ratio)
 	}
 }
 
 // TestFilterQuietPassesQueries: what asks the terminal for an answer passes
 // at once in a quiet hold too, also the questions that look like modes.
 func TestFilterQuietPassesQueries(t *testing.T) {
-	for _, q := range []string{"\x1b[?u", "\x1b[?2026$p", "\x1b[>q", "\x1b[>0q", "\x1b[6n", "\x1b]11;?\x07"} {
+	for _, q := range []string{"\x1b[?u", "\x1b[?2026$p", "\x1b[>q", "\x1b[>0q", "\x1b[6n", "\x1b]11;?\x07", "\x1b[?4m"} {
 		var out bytes.Buffer
 		f := NewFilter(&out, newClock().now)
 		f.Resized()
@@ -667,4 +668,176 @@ func TestFilterShortChatSpinnerEnds(t *testing.T) {
 		}
 	}
 	t.Fatal("2 s after a short chat's lines, under a spinner, the pane still shows only the notice")
+}
+
+// TestFilterResizeDuringReplayHoldsNextPrint: a second width change while
+// the first one's replay is held (a pane edge dragged on) holds the print
+// Cursor makes for it, though no clear comes before that print.
+func TestFilterResizeDuringReplayHoldsNextPrint(t *testing.T) {
+	var out bytes.Buffer
+	c := newClock()
+	f := NewFilter(&out, c.now)
+	f.Resized()
+	writeIn(t, f, burst("a1", 1600), 8190)
+	tickFor(t, f, c, 250*time.Millisecond)
+	writeIn(t, f, []byte(ClearCodes), 11)
+	tickFor(t, f, c, 500*time.Millisecond)
+	writeIn(t, f, burst("a2", 1600), 8190)
+	f.Resized()
+	tickFor(t, f, c, 400*time.Millisecond)
+	writeIn(t, f, burst("b1", 1600), 8190)
+	tickFor(t, f, c, 250*time.Millisecond)
+	writeIn(t, f, []byte(ClearCodes), 11)
+	tickFor(t, f, c, 500*time.Millisecond)
+	writeIn(t, f, burst("b2", 1600), 8190)
+	tickFor(t, f, c, time.Second)
+	if got := out.String(); strings.Contains(got, "b1 ") || !strings.Contains(got, "b2 1600|") {
+		t.Fatalf("after a resize during a replay the pane got the next print with no clear: %d lines of it; the last print's end shown: %v", strings.Count(got, "b1 "), strings.Contains(got, "b2 1600|"))
+	}
+}
+
+// TestFilterResizeDuringQuietHoldRestartsIt: two width changes 550 ms apart
+// with Cursor's print for each: the second one's print still never shows.
+func TestFilterResizeDuringQuietHoldRestartsIt(t *testing.T) {
+	var out bytes.Buffer
+	c := newClock()
+	f := NewFilter(&out, c.now)
+	f.Resized()
+	writeIn(t, f, burst("a", 50), 8190)
+	tickFor(t, f, c, 550*time.Millisecond)
+	f.Resized()
+	writeIn(t, f, burst("first", 1600), 8190)
+	tickFor(t, f, c, 250*time.Millisecond)
+	writeIn(t, f, []byte(ClearCodes), 11)
+	tickFor(t, f, c, 500*time.Millisecond)
+	writeIn(t, f, burst("second", 1600), 8190)
+	tickFor(t, f, c, time.Second)
+	if got := out.String(); strings.Contains(got, "first ") {
+		t.Fatalf("%d lines of the second width change's first print reached the pane", strings.Count(got, "first "))
+	}
+}
+
+// TestFilterQuietHoldFastStreamEnds: a resize while the agent streams fast
+// output with no clear, such as a long log: the pane is not frozen; within
+// printWait it gets every byte, in order.
+func TestFilterQuietHoldFastStreamEnds(t *testing.T) {
+	var out bytes.Buffer
+	c := newClock()
+	f := NewFilter(&out, c.now)
+	f.Resized()
+	var in []byte
+	for i := range 40 {
+		b := burst(fmt.Sprintf("log%d", i), 20)
+		in = append(in, b...)
+		writeIn(t, f, b, 4096)
+		tickFor(t, f, c, 100*time.Millisecond)
+	}
+	if f.Holding() || !bytes.Equal(out.Bytes(), in) {
+		t.Fatalf("4 s of a fast stream after a resize with no clear: holding %v, the pane got %d of %d bytes", f.Holding(), out.Len(), len(in))
+	}
+}
+
+// TestFilterQuietHoldFooterInNewWindow: the last few lines of Cursor's first
+// print (its input box) can land in a window of their own; that is no
+// trickle, and the print still never shows.
+func TestFilterQuietHoldFooterInNewWindow(t *testing.T) {
+	var out bytes.Buffer
+	c := newClock()
+	f := NewFilter(&out, c.now)
+	f.Resized()
+	tickFor(t, f, c, 25*time.Millisecond)
+	writeIn(t, f, burst("first", 1600), 8190)
+	tickFor(t, f, c, 350*time.Millisecond)
+	writeIn(t, f, []byte("╭── ask ──╮\r\n│ → \r\n╰─────────╯\r\n"), 64)
+	tickFor(t, f, c, 250*time.Millisecond)
+	writeIn(t, f, append([]byte(ClearCodes), burst("second", 1600)...), 8190)
+	tickFor(t, f, c, time.Second)
+	if got := out.String(); strings.Contains(got, "first ") {
+		t.Fatalf("with the footer in a window of its own, %d lines of the first print reached the pane", strings.Count(got, "first "))
+	}
+}
+
+// TestFilterQuietCapPassesAll: past quietCap with no clear, a quiet hold
+// gives the pane every byte as it came, with no Tick.
+func TestFilterQuietCapPassesAll(t *testing.T) {
+	var out bytes.Buffer
+	f := NewFilter(&out, newClock().now)
+	f.Resized()
+	in := burst("out", quietCap/70+1000)
+	writeIn(t, f, in, 65536)
+	if !bytes.Equal(out.Bytes(), in) || f.Holding() {
+		t.Fatalf("past quietCap: the pane got %d of %d bytes, holding %v", out.Len(), len(in), f.Holding())
+	}
+}
+
+// TestFilterQuietHoldModeAfterClear: modes set before and after the clear,
+// in the one write that turns a quiet hold into a replay, each reach the
+// terminal once; the print before the clear never shows.
+func TestFilterQuietHoldModeAfterClear(t *testing.T) {
+	var out bytes.Buffer
+	c := newClock()
+	f := NewFilter(&out, c.now)
+	f.Resized()
+	in := append([]byte("\x1b[?2004h"), burst("first", 50)...)
+	in = append(append(in, ClearCodes...), "\x1b[?1004h"...)
+	in = append(in, burst("second", 1200)...)
+	writeIn(t, f, in, len(in))
+	tickFor(t, f, c, 3*time.Second)
+	got := out.String()
+	if strings.Count(got, "\x1b[?2004h") != 1 || strings.Count(got, "\x1b[?1004h") != 1 || strings.Contains(got, "first ") {
+		t.Fatalf("modes before and after the clear reached the pane %d and %d times, the first print shows: %v", strings.Count(got, "\x1b[?2004h"), strings.Count(got, "\x1b[?1004h"), strings.Contains(got, "first "))
+	}
+}
+
+// TestFilterCells: each state of the filter at each event that the other
+// tests do not reach.
+func TestFilterCells(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		run  func(f *Filter, c *fakeClock)
+		want string
+		hold bool
+	}{
+		{"quiet, then the agent ends", func(f *Filter, c *fakeClock) {
+			f.Resized()
+			writeIn(t, f, []byte("abc\x1b[?25lx"), 3)
+			_ = f.Flush()
+		}, "abc\x1b[?25lx", false},
+		{"replay, then the agent ends", func(f *Filter, c *fakeClock) {
+			f.Arm()
+			writeIn(t, f, []byte(ClearCodes+"a\r\nb"), 64)
+			_ = f.Flush()
+		}, ClearCodes + Notice + ClearCodes + "\x1b[0ma\r\nb", false},
+		{"passing, then the agent ends on a start of the clear", func(f *Filter, c *fakeClock) {
+			writeIn(t, f, []byte("ab\x1b[H"), 64)
+			_ = f.Flush()
+		}, "ab\x1b[H", false},
+		{"passing, a switch of screen", func(f *Filter, c *fakeClock) {
+			f.Arm()
+			writeIn(t, f, []byte("x\x1b[?1049hview"), 64)
+		}, "x\x1b[?1049hview", false},
+		{"quiet, armed again", func(f *Filter, c *fakeClock) {
+			f.Resized()
+			writeIn(t, f, []byte("text"), 64)
+			f.Arm()
+		}, "", true},
+		{"replay, armed again", func(f *Filter, c *fakeClock) {
+			f.Arm()
+			writeIn(t, f, []byte(ClearCodes+"text"), 64)
+			f.Arm()
+		}, ClearCodes + Notice, true},
+		{"replay, a second clear", func(f *Filter, c *fakeClock) {
+			f.Arm()
+			writeIn(t, f, append(append([]byte(ClearCodes), burst("one", 2000)...), append([]byte(ClearCodes), burst("two", 20)...)...), 8190)
+			tickFor(t, f, c, time.Second)
+		}, ClearCodes + Notice + ClearCodes + "\x1b[0m" + string(burst("two", 20)), false},
+	} {
+		var out bytes.Buffer
+		c := newClock()
+		f := NewFilter(&out, c.now)
+		tc.run(f, c)
+		if out.String() != tc.want || f.Holding() != tc.hold {
+			t.Errorf("%s: the pane got %q, holding %v; want %q, holding %v", tc.name, out.String()[:min(out.Len(), 120)], f.Holding(), tc.want[:min(len(tc.want), 120)], tc.hold)
+		}
+	}
 }
