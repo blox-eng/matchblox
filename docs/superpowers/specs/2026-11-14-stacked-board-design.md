@@ -49,7 +49,7 @@ Top to bottom, in the rows that the columns take today (`boardRows`):
 2. A blank row, then `WORKING · N  −`, then one row a match: glyph, name, harness, the state word and its text, and at the right `ctx` and the chain stub. This is the row that QUIET draws on Wide (`boardBlockOf` with `quietRow`), with the state text.
 3. A blank row, then `SHIPPING · N  −`, then one row a match: glyph, name, harness, the state word and its text, and at the right the track and the wait.
 
-In `WORKING` and `SHIPPING` the chosen match opens to its full card, as in one-line density today. The names and host words of a section have one width, so the harness marks line up. A section of one row shows the chosen card, else the first, and its head counts the others: `WORKING · 3  ↓ 2  −`. A section with no row for a card is its head, and the head counts every card.
+In `WORKING` and `SHIPPING` the chosen match opens to its full card, as in one-line density today. Ruling (2026-11-14): when the section does not have rows for the opened card and for its other cards (or their `↑ N more` and `↓ N more`), the chosen match stays its row, with `▌`. Each card of a section is on the screen or counted by a `↑` or `↓` mark. The names and host words of a section have one width, so the harness marks line up. A section of one row shows the chosen card, else the first, and its head counts the others: `WORKING · 3  ↓ 2  −`. A section with no row for a card is its head, and the head counts every card.
 4. The `QUIET` drawer, as today.
 
 A section's head is its own line, with its tap span over the name and the `−`. The open section's name is fg bold, as a column's head is.
