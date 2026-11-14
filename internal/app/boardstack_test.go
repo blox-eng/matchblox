@@ -87,7 +87,7 @@ func TestMediumStacksTheSections(t *testing.T) {
 	d, plain, at := sectionHeads(t, m)
 	body := strings.Join(plain, "\n")
 	need, work, ship := at[colNeed], at[colWork], at[colShip]
-	if need < 0 || work < 0 || ship < 0 || !(need < work && work < ship) {
+	if need < 0 || work < 0 || ship < 0 || need >= work || work >= ship {
 		t.Fatalf("the sections are not NEEDS YOU, WORKING, SHIPPING from the top (%d, %d, %d):\n%s", need, work, ship, body)
 	}
 	for c, want := range map[boardCol]string{colNeed: "NEEDS YOU · 4  −", colWork: "WORKING · 3  −", colShip: "SHIPPING · 3  −"} {
