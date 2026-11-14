@@ -22,7 +22,9 @@ func pairDoorConsole(t *testing.T) (*pairRig, Model) {
 	r, m := newPairRig(t)
 	next, _ := m.Update(stateMsg(doorState(pairDoorRow)))
 	m = next.(Model)
-	if d, ok := m.selectedDoor(); !ok || d.ID != doors.Pair {
+	m.viewPrefs.CopyCheckedDesk, m.viewPrefs.CopyCheckedPhone = true, true
+	m = onDoors(m).(Model) // the board's doors line
+	if ds := m.boardDoors(); len(ds) == 0 || ds[m.doorIndex(ds)].ID != doors.Pair {
 		t.Fatalf("the pair door is not selected:\n%s", screen(m))
 	}
 	return r, m
@@ -38,20 +40,6 @@ func TestEnterOnThePairDoorOpensThePage(t *testing.T) {
 	got = offered(t, got, cmd)
 	if got.pair.link == "" {
 		t.Fatal("the page made no code")
-	}
-}
-
-func TestTapOnThePairDoorOpensThePage(t *testing.T) {
-	_, m := pairDoorConsole(t)
-	y := lineOf(t, m, "Pair a device")
-	next, _ := tap(m, 5, y)
-	if got := next.(Model); got.pair != nil || got.armed == "" {
-		t.Fatalf("the first tap opened the page (armed %q)", got.armed)
-	}
-	next, cmd := tap(next, 5, y)
-	got := next.(Model)
-	if got.pending != nil || got.pair == nil || cmd == nil {
-		t.Fatalf("pending %v, page %v", got.pending, got.pair)
 	}
 }
 

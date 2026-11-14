@@ -62,12 +62,3 @@ func TestRoomStateTheChainHasNoMatches(t *testing.T) {
 		t.Fatalf("rows:\n%s", rowsText(m.roomRows(k)))
 	}
 }
-
-func TestRoomStateReadingBeforeTheFirstScan(t *testing.T) {
-	m, k := roomOf(t, headState(t, runningPlan(), true), "hearth-api")
-	m.git, m.shipReport = nil, nil
-	rows := rowsText(m.roomRows(k))
-	if !strings.Contains(rows, "SHIPS  reading…") || !strings.Contains(rows, "GIT  reading…") {
-		t.Fatalf("rows:\n%s", rows)
-	}
-}

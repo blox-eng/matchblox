@@ -335,7 +335,7 @@ func (s *Service) stokableFor(pane, typed string, own *refreshRun) error {
 		return err
 	}
 	if it, ok := s.queued(pane); ok && stoker.Waits(it) {
-		return fmt.Errorf("the session in %s waits for you", pane)
+		return fmt.Errorf("the session in %s needs you", pane)
 	}
 	screen, ok := s.Capture([]string{pane})[pane]
 	if !ok {

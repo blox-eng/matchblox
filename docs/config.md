@@ -65,7 +65,7 @@ A repository shows once, by its real path (symlinks resolved, letter case
 as on disk), and its remote never shows a password or token.
 
 The answer is in `~/.local/state/matchblox/scan.json` and the list in
-`repos.json` beside it. The repositories found never show in the Git tab.
+`repos.json` beside it. The repositories found never show in Machine's git view.
 `matchblox scan` scans now; `matchblox scan off` stops and forgets the list.
 
 ## Where N clones
@@ -102,7 +102,7 @@ work too. The command must be on the service's `PATH`.
 each chain. It is 4 by default, and 0 or less means 4. Each chain stoker is
 one more agent that uses tokens, and each one counts its own `max_steps`.
 A start past the cap is refused with
-`the family has its 4 chain stokers: max_chains. Quit one on the STOKER tab first.`
+`the family has its 4 chain stokers: max_chains. Quit one on Machine › stoker first.`
 A chain stoker runs the agent of `[stoker] agent`, on the default sign-in.
 See [A family of stokers](stoker.md#a-family-of-stokers).
 
@@ -155,12 +155,12 @@ checkout) never looks, and a prerelease is never offered. A look that
 fails keeps the release it found before, and never reads as up to date.
 One failed look, or two days of them, stay quiet: `matchblox status` gives
 the reason in `update.err`. After three days of failed looks, counted from
-the first failed look, Sessions shows the step "Release check fails" under
+the first failed look, the board shows the step "Release check fails" under
 `SET UP`, with the reason and `Run: matchblox update`. A look that works starts the count again. Closing
 the step hides it until a look works and the looks then fail for three more
 days.
 
-**offer.** Sessions shows the step "Update to v0.43.0" under `SET UP`, with
+**offer.** The board shows the step "Update to v0.43.0" under `SET UP`, with
 "matchblox v0.43.0 is out. This machine runs v0.42.0."
 `Enter` shows the release it installs and the file it replaces. It also
 says what the install checks first: the checksum always, the build's
@@ -208,7 +208,7 @@ A stoker run does not hold it: the run goes on after the restart. From the
 start of any install, from the offer, from auto or from `u`,
 until matchblox runs again on the new release, a new clone is refused: see
 [Limits](limits.md). When the service still runs the old release two
-minutes after the install, or starts again on the old release, Sessions
+minutes after the install, or starts again on the old release, the board
 shows the step "Restart for v0.43.0" with
 `v0.43.0 is installed, but this service still runs v0.42.0. Quit matchblox and open it again.`
 A new clone then says `v0.43.0 is installed. Quit matchblox and open it again.`

@@ -238,7 +238,7 @@ func (s *Service) restsFor(pane, cmd string, a proto.Act) (sample.Session, error
 		return x, err
 	}
 	if it, ok := s.queued(pane); ok && stoker.Waits(it) {
-		return x, errors.New(x.Name + " waits for you")
+		return x, errors.New(x.Name + " needs you")
 	}
 	if !s.resting(pane) {
 		return x, fmt.Errorf("%s is not at rest: a %s waits for the end of its turn", x.Name, cmd)

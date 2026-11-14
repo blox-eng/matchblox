@@ -1,7 +1,6 @@
 package app
 
 import (
-	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -42,7 +41,7 @@ func boundKeys() map[string]*keyLayer {
 	k, s := defaultKeys(), defaultShellKeys()
 	screens := map[string][][]bkey.Binding{
 		"Model": {k.global.bindings(), k.main.bindings(), k.form.bindings(), k.view.bindings(), k.sheet.bindings(), k.room.bindings(),
-			k.search.bindings(), k.pair.bindings(), k.takeOver.bindings(), k.confirm.bindings(), k.scan.bindings()},
+			k.search.bindings(), k.pair.bindings(), k.takeOver.bindings(), k.confirm.bindings(), k.scan.bindings(), k.board.bindings()},
 		"Shell": {s.shell.bindings(), s.typing.bindings()},
 	}
 	layers := map[string]*keyLayer{}
@@ -78,7 +77,6 @@ func TestTheDocsNameEveryKeyAndOnlyRealOnes(t *testing.T) {
 	if len(layers["Model"].groups) < 10 || len(layers["Shell"].groups) < 4 {
 		t.Fatalf("read %d console and %d Hosts key groups: the keymaps are broken", len(layers["Model"].groups), len(layers["Shell"].groups))
 	}
-	tabs := fmt.Sprintf("1-%d", len(tabNames))
 	named := map[string]map[string]bool{"Model": {}, "Shell": {}}
 	for _, r := range refs {
 		k := docKeyName(r.Text)
@@ -101,9 +99,6 @@ func TestTheDocsNameEveryKeyAndOnlyRealOnes(t *testing.T) {
 		if !ok {
 			t.Errorf("%s:%d (%s): the docs name the key %q, and %s does not handle it", r.File, r.Line, r.Section, r.Text, strings.Join(screens, " or "))
 		}
-	}
-	if !named["Model"][tabs] {
-		t.Errorf("no Key table names %q, the tab keys", tabs)
 	}
 	for sc, l := range layers {
 		seen := map[string]bool{}

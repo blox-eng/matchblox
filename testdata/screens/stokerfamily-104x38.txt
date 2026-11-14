@@ -1,6 +1,9 @@
- ▰ matchblox                                                                      ● 6 wait for you  ≋ 2
- sessions 7    ships 3    machine    git    history    panes    STOKER
+ ▰ matchblox                                                                          ● 6 need you  ≋ 2
+ board 7    MACHINE
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
+ STOKER · 1 chain                                                                                    on
+ watching 0 · 0 compacted · 0 waited · 0k back
+ no session full yet
 
   STOKER AGENT  claude · rests                                                        ⏎ open the stoker
 
@@ -31,8 +34,5 @@
 
 
 
-
-
-
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
- ↑↓ move  ⏎ open the stoker  Q quit it  1 sessions  p ships  f stoker  / find  q quit    sampled 0s ago
+ ↑↓ move  esc machine  ⏎ open the stoker  Q quit it  f stoker  / find  q quit            sampled 0s ago

@@ -1,6 +1,6 @@
 import Foundation
 
-/// The matchbox tray: the four layouts lie in it as matches. The match of the layout in use
+/// The matchbox tray: the five layouts lie in it as matches. The match of the layout in use
 /// burns; picking another strikes it, and the one it leaves goes out. A closed box comes back
 /// fresh: every match is ready again but the one in use.
 public struct MatchTray: Equatable, Sendable {

@@ -1,31 +1,31 @@
- ▰ matchblox               ● 2 wait for you
- SESSIONS 6  ships  machine  4  5  6  7
+ ▰ matchblox                   ● 2 need you
+ BOARD 6    machine
 ────────────────────────────────────────────
- WAITS FOR YOU · 2 · chain of 2
-   ─────────────────────────────────────────
-▌╿╮ stoker   kindle-web · plan 2/5 · asks: …
-  │ “merge #812 now?”
-  │                                 a go in
-  │─────────────────────────────────────────
- ✦┤ hearth-api           busy           79%
- ╿╯ ember-billing        idle      3m   32%
- ╿  kindle-web           asks      1m   56%
- WORKING · 1
- ✦  flint-auth           busy           41%
- QUIET · 1
- │  spark-docs           idle      9m   88%
+ NEEDS YOU 2 −  work 2  ship 0  quiet 2
+────────────────────────────────────────────
+▌╿ kindle-web                         ✻  1m
+  asks Claude needs your permission to use…
+  ctx 56%
+  “Claude needs your permission to use
+  Bash”
+  ⏎ go in
+
+ ╿ hearth's stoker                    ·  0s
+  idle merge #812 now?
+                                   ─╴hearth
+  ⏎ go in
+
+
+
+
+
+
+
+
+
+
  + start a new session
-
- 1 without an agent: shell:1.1 zsh
-
- RECOMMENDATIONS · 7 · h hides
- ▲ The week runs short: compact spark-docs
- ○ Clear spark-docs (%3)
- ○ Clear kindle-web (%5)
- ○ Clear cinder-ci (%6)
- ○ Clear flint-auth (%2)
- ○ Clear ember-billing (%8)
- ○ Clear wick-mobile (%7)
-
+ RECOMMENDATIONS · 7
+ ✻ 5h ▰▰▰▰▰▰▰▱ 84%  wk 82%        machine ›
 ────────────────────────────────────────────
- a go in  N new  f stoker  full view v
+ c copy   v one line   s hosts   u strip

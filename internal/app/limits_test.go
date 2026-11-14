@@ -2,7 +2,6 @@ package app
 
 import (
 	"errors"
-	"image/color"
 	"strings"
 	"testing"
 	"time"
@@ -51,170 +50,13 @@ func TestTheHeaderHasNoLimits(t *testing.T) {
 	for _, w := range []int{44, 86, 132} {
 		m, _ := loadedWith(t, w, limitsState())
 		lines := strings.Split(screen(m), "\n")
-		if !strings.Contains(lines[1], "SESSIONS") || strings.Contains(strings.Join(lines[:3], "\n"), "62%") {
+		if !strings.Contains(lines[1], "BOARD") || strings.Contains(strings.Join(lines[:3], "\n"), "62%") {
 			t.Fatalf("width %d: the header is not one line:\n%s", w, strings.Join(lines[:4], "\n"))
 		}
-		if !strings.Contains(lines[0], "● 2 wait for you") {
+		if !strings.Contains(lines[0], "● 2 need you") { // the board's words
 			t.Fatalf("width %d: the header does not say who waits: %q", w, lines[0])
 		}
 	}
-}
-
-// TestTheDockSaysUsageAndTheMachine: each account's windows as /usage
-// says them, with the forecast on its block, and the machine; on a desk
-// stacked under the list on Sessions, side by side in the dock of Ships.
-func TestTheDockSaysUsageAndTheMachine(t *testing.T) {
-	drawer, _ := loadedWith(t, 86, limitsState())
-	if drawer.setTab(tabShips); !strings.Contains(strings.Split(screen(drawer), "\n")[lineOf(t, drawer, "USAGE")], "MACHINE") {
-		t.Fatalf("Ships: usage and the machine are not side by side:\n%s", screen(drawer))
-	}
-	m, _ := loadedWith(t, 200, limitsState())
-	out := screen(m)
-	if lineOf(t, m, "USAGE") >= lineOf(t, m, "MACHINE") {
-		t.Fatalf("the machine is not under usage:\n%s", out)
-	}
-	until := limitsState().At.Add(26 * time.Hour).Local().Format("Mon")
-	for _, want := range []string{
-		"✻ Claude builder  5h   ▰▰▰▰▰▱▱▱ 62%", "wk   ▰▰▰▱▱▱▱▱ 41%", "lasts the week",
-		"✻ Claude work     not measured · open the door “Show your limits”",
-		"❋ OpenAI Plus     5h   ▰▱▱▱▱▱▱▱ 12%", "92%", "out " + until,
-		"cpu", "mem", "runs 3 claude",
-	} {
-		if !strings.Contains(out, want) {
-			t.Errorf("the dock lacks %q:\n%s", want, out)
-		}
-	}
-	fg := func(pct float64) color.Color { return m.useStyle(pct).GetForeground() }
-	if fg(59) != m.st.theme.Muted || fg(60) != m.st.theme.Warn || fg(90) != m.st.theme.Neg {
-		t.Error("a window's bar is warn from 60% and neg from 90%")
-	}
-	// Nothing measured says so.
-	none := queueState()
-	none.Limits = nil
-	plain, _ := loadedWith(t, 132, none)
-	if !strings.Contains(screen(plain), "no session runs under a plan") {
-		t.Fatalf("an empty usage panel:\n%s", screen(plain))
-	}
-}
-
-// TestAPhoneDockShowsOnePanel: on a phone the dock is usage, the machine
-// or the stoker; u, or a tap on its switch, cycles it. An account other than
-// Anthropic's takes one line. The phone starts list only, with no dock
-// and so no switch: v shows it.
-func TestAPhoneDockShowsOnePanel(t *testing.T) {
-	m, _ := loadedWith(t, 44, limitsState())
-	if strings.Contains(screen(m), "machine ›") {
-		t.Fatalf("list only shows the dock's switch:\n%s", screen(m))
-	}
-	next, _ := key(m, "v")
-	m = next.(Model)
-	m.height = len(m.body(44).lines) + len(m.dock(44, -1).lines) + 1 + 5 // no row to grow into
-	out := screen(m)
-	if !strings.Contains(out, "USAGE") || !strings.Contains(out, "machine ›") || strings.Contains(out, "MACHINE") {
-		t.Fatalf("the phone dock is not usage alone:\n%s", out)
-	}
-	if !strings.Contains(out, "❋ OpenAI          5h ▱▱▱ 12% · wk 92%") {
-		t.Fatalf("Codex does not fold to one line:\n%s", out)
-	}
-	fitsWidth(t, m, 44)
-	next, _ = key(m, "u")
-	if out := screen(next); !strings.Contains(out, "MACHINE") || !strings.Contains(out, "stoker ›") || strings.Contains(out, "USAGE") {
-		t.Fatalf("u does not show the machine:\n%s", out)
-	}
-	y := lineOf(t, next, "stoker ›")
-	x := strings.Index(strings.Split(screen(next), "\n")[y], "stoker ›")
-	st, _ := tap(next, len([]rune(strings.Split(screen(next), "\n")[y][:x])), y)
-	if out := screen(st); !strings.Contains(out, "STOKER") || !strings.Contains(out, "usage ›") || !strings.Contains(out, "f starts it") {
-		t.Fatalf("a tap on stoker › does not show the stoker:\n%s", out)
-	}
-	if back, _ := key(st, "u"); !strings.Contains(screen(back), "USAGE") {
-		t.Fatalf("u does not come back to usage:\n%s", screen(back))
-	}
-}
-
-// TestTheDockFoldsWhenItDoesNotFit: the dock shows when the body, the
-// dock and one blank row fit; a few rows short it stays at its fewest and
-// the body scrolls; when folding it leaves fewer than minBlank rows blank,
-// it folds into the Machine tab, which has usage first. This is the
-// phone's full view: list only has no dock.
-func TestTheDockFoldsWhenItDoesNotFit(t *testing.T) {
-	m, _ := loadedWith(t, 44, limitsState())
-	m = fullView(m)
-	tall := len(m.body(44).lines)
-	need := tall + len(m.dock(44, -1).lines) + 1 + 5 // the header, the tabs, two hairlines, the key line
-	fold := tall + 5 + minBlank - 1
-	if fold >= need-1 {
-		t.Fatalf("the dock is too short to test: needs %d, folds at %d", need, fold)
-	}
-	for h, docked := range map[int]bool{need: true, need - 1: true, fold + 1: true, fold: false} {
-		m.height = h
-		if got := strings.Contains(screen(m), "USAGE"); got != docked {
-			t.Errorf("height %d (needs %d, folds at %d): docked %v, want %v:\n%s", h, need, fold, got, docked, screen(m))
-		}
-	}
-	m.height = fold
-	next, _ := key(m, "3")
-	lines := strings.Split(screen(next), "\n")
-	if !strings.Contains(lines[3], "USAGE") || !strings.Contains(screen(next), "MACHINE") {
-		t.Fatalf("the Machine tab does not start with usage:\n%s", screen(next))
-	}
-}
-
-// TestARecommendationShowsItsResult: Enter on a recommendation shows the
-// step, a second Enter runs it, and the row then says what happened: done,
-// or what failed and that Enter tries again.
-func TestARecommendationShowsItsResult(t *testing.T) {
-	st := limitsState()
-	st.Recommendations = []advice.Rec{{ID: "wk", Level: "warn", Title: "The week runs out Wed ~19:00: compact app-feature",
-		Evidence: "builder@example.org · Plus: 92% of the week used",
-		Primary:  &advice.Action{Label: "jump to the session", Nav: true, Steps: [][]string{{"tmux", "switch-client", "-t", "%1"}}},
-		Second: &advice.Action{Label: "send /compact", Destructive: true, Steps: [][]string{{"tmux", "send-keys", "-t", "%1", "/compact", "Enter"}},
-			Guards: []advice.Guard{{IdlePane: "%1"}}}}}
-	m, f := loadedWith(t, 100, st)
-	var next tea.Model = m
-	next = selectRec(t, next, "wk")
-	next, _ = key(next, "x")
-	if p := next.(Model).pending; p == nil || p.String() != "tmux send-keys -t %1 /compact Enter" {
-		t.Fatalf("x shows %+v", p)
-	}
-	next = runCmd(key(next, "y"))
-	sent := f.lastAct(t)
-	next, _ = next.Update(resultMsg(proto.Result{ActID: sent, Skipped: []string{"%1 is busy now"}}))
-	if out := screen(next); !strings.Contains(out, "✗ skipped: %1 is busy now · x tries again") {
-		t.Fatalf("a skipped step does not say so on the row:\n%s", out)
-	}
-	next, _ = key(next, "x")
-	next = runCmd(key(next, "y"))
-	next, _ = next.Update(resultMsg(proto.Result{ActID: f.lastAct(t), Ran: [][]string{{"tmux", "send-keys", "-t", "%1", "/compact", "Enter"}}}))
-	if out := screen(next); !strings.Contains(out, "✓ ran: tmux send-keys -t %1 /compact Enter") {
-		t.Fatalf("a step that ran does not say so on the row:\n%s", out)
-	}
-	next, _ = next.Update(resultMsg(proto.Result{ActID: "a-other", Err: "nope"}))
-	if out := screen(next); strings.Contains(out, "✗ failed: nope") {
-		t.Fatalf("another act's result landed on the row:\n%s", out)
-	}
-	next, _ = key(next, "x")
-	next = runCmd(key(next, "y"))
-	next, _ = next.Update(resultMsg(proto.Result{ActID: f.lastAct(t), Err: "the pane is gone"}))
-	if out := screen(next); !strings.Contains(out, "✗ failed: the pane is gone · x tries again") {
-		t.Fatalf("a failure does not say so on the row:\n%s", out)
-	}
-	// The rec goes, and comes back later: it shows its title, not an old result.
-	gone := st
-	gone.Recommendations = nil
-	next, _ = next.Update(stateMsg(gone))
-	next, _ = next.Update(stateMsg(st))
-	if out := screen(next); strings.Contains(out, "✗ failed") || !strings.Contains(out, "The week runs out Wed ~19:00") { // its row, or its detail beside a narrow list
-		t.Fatalf("an old result came back with the rec:\n%s", out)
-	}
-}
-
-// runCmd runs the command a key returned, as the program would.
-func runCmd(m tea.Model, cmd tea.Cmd) tea.Model {
-	if cmd != nil {
-		cmd()
-	}
-	return m
 }
 
 func (f *fakeConn) lastAct(t *testing.T) string {
@@ -272,6 +114,7 @@ func TestCursorsAccountIsInTheDock(t *testing.T) {
 	st := limitsState()
 	st.Limits = append(st.Limits, limits.Account{Provider: "cursor", Account: "builder@example.com · Acme", State: limits.Unmeasured, Fix: "Cursor's plan usage is not read yet"})
 	m, _ := loadedWith(t, 200, st)
+	m.tab = tabMachine // read on Machine, the dock off the board (Task 12 step 2)
 	if out := screen(m); !strings.Contains(out, "⬢ Cursor Acme") || !strings.Contains(out, "not measured · Cursor's plan usage is not read yet") {
 		t.Errorf("the dock lacks Cursor's account:\n%s", out)
 	}

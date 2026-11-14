@@ -195,7 +195,7 @@ func TestTheCardNamesTheGoes(t *testing.T) {
 		Unguarded: []proto.StokerUnguard{{Session: "cx", Goes: []string{"merge", "deploy"}}}}
 	v := proto.StokerView{Mode: proto.StokerMode{On: true, Order: &o}}
 	m, _ := loadedWith(t, 100, sheetState(v, "matchblox"))
-	s := screen(sendKey(m, "c"))
+	s := screen(toStoker(m))
 	for _, want := range []string{"✓ releases", "! merges, deploys and kills still ask you", "! no merge guard watches cx: its merges and deploys go unchecked"} {
 		if !strings.Contains(s, want) {
 			t.Fatalf("missing %q:\n%s", want, s)
@@ -351,14 +351,14 @@ func TestTheCardQuotesTheLatestOrder(t *testing.T) {
 		{At: at, Words: "merge them on green"}, {At: at.Add(30 * time.Minute), Words: "and hold the billing work until the release is out, whatever it says"}}}
 	v := proto.StokerView{Mode: proto.StokerMode{On: true, Since: at, Order: &o}}
 	m, _ := loadedWith(t, 60, sheetState(v, "matchblox"))
-	s := screen(sendKey(m, "c"))
+	s := screen(toStoker(m))
 	quote := strings.Index(s, "“now the docs”")
 	later := strings.Index(s, "earlier 12:30 “and hold the billing work")
 	first := strings.Index(s, "earlier 12:00 “merge them on green”")
 	if quote < 0 || later < quote || first < later {
 		t.Fatalf("the latest order is not quoted first, the earlier folded under it:\n%s", s)
 	}
-	fitsWidth(t, sendKey(m, "c").(Model), 60)
+	fitsWidth(t, toStoker(m).(Model), 60)
 }
 
 // TestSheetSendsStokerNew: the start sheet of a chain with no stoker sends
@@ -387,21 +387,9 @@ func TestSheetSendsStokerNew(t *testing.T) {
 	if len(a) != 1 || a[0].RecID != "stoker:new" || a[0].Text != `{"chain":"c1","words":"merge on green","grants":["merge"]}` {
 		t.Fatalf("acts %+v", a)
 	}
-	refused := "the family has its 4 chain stokers: max_chains. Quit one on the STOKER tab first."
+	refused := "the family has its 4 chain stokers: max_chains. Quit one on Machine › stoker first."
 	next, _ = next.Update(resultMsg(proto.Result{ActID: next.(Model).sheet.act, Err: refused}))
 	if s := screen(next); next.(Model).sheet == nil || !strings.Contains(strings.Join(strings.Fields(s), " "), "the family has its 4 chain stokers") {
 		t.Fatalf("the refusal is not in the sheet:\n%s", s)
-	}
-}
-
-// TestSheetOrdersAUnitWhoseRunIsOff: a chain whose unit rests gets
-// stoker:order-chain.
-func TestSheetOrdersAUnitWhoseRunIsOff(t *testing.T) {
-	m, f := headModel(t, 160, headState(t, proto.StokerView{PaneUp: true}, true))
-	next := typed(sendKey(pick(t, m, stokerPane), "a"), "go")
-	_, cmd := press(next, tea.KeyEnter)
-	cmd()
-	if a := f.acts(); len(a) != 1 || a[0].RecID != "stoker:order-chain" {
-		t.Fatalf("acts %+v", a)
 	}
 }

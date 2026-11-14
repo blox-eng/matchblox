@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -71,10 +72,59 @@ const passwordRefusal = "builder@ws-1: Permission denied (publickey,password).\r
 // settle runs cmd and the messages it starts until nothing is left.
 func settle(t *testing.T, m tea.Model, cmd tea.Cmd) Model {
 	t.Helper()
-	for cmd != nil {
-		m, cmd = m.Update(cmd())
+	queue := []tea.Cmd{cmd} // each of a batch: the board batches its belt and notices
+	for n := 0; len(queue) > 0 && n < 200; n++ {
+		c := queue[0]
+		queue = queue[1:]
+		msgs, ended := msgsUpTo(c, settleCap)
+		if !ended {
+			// A command left running would go on writing what the test reads.
+			t.Fatalf("a command did not end within %v", settleCap)
+		}
+		for _, msg := range msgs {
+			var then tea.Cmd
+			if m, then = m.Update(msg); then != nil {
+				queue = append(queue, then)
+			}
+		}
 	}
 	return m.(Model)
+}
+
+// settleCap is how long settle waits for one command: a real ssh-keygen
+// under -race on a busy runner takes far more than a frame.
+const settleCap = 30 * time.Second
+
+// msgsWithin is cmdMsgs with a wait of d for each command; a command still
+// running after d gives no message.
+func msgsWithin(cmd tea.Cmd, d time.Duration) []tea.Msg {
+	msgs, _ := msgsUpTo(cmd, d)
+	return msgs
+}
+
+// msgsUpTo is msgsWithin that says whether every command ended within d.
+func msgsUpTo(cmd tea.Cmd, d time.Duration) ([]tea.Msg, bool) {
+	if cmd == nil {
+		return nil, true
+	}
+	out := make(chan tea.Msg, 1)
+	go func() { out <- cmd() }()
+	var msg tea.Msg
+	select {
+	case msg = <-out:
+	case <-time.After(d):
+		return nil, false
+	}
+	if batch, ok := msg.(tea.BatchMsg); ok {
+		var got []tea.Msg
+		ended := true
+		for _, c := range batch {
+			msgs, ok := msgsUpTo(c, d)
+			got, ended = append(got, msgs...), ended && ok
+		}
+		return got, ended
+	}
+	return []tea.Msg{msg}, true
 }
 
 // jumpOffer confirms a jump to %1 and runs it up to the ladder's offer.

@@ -14,7 +14,6 @@ import (
 // selected row, its keys and its body. The selection itself stays in the
 // Model, so it lives across tab changes and new states.
 type tabView struct {
-	name      string
 	keys      func(m Model) []hint // the key line, for the selected row
 	count     func(m Model) int
 	index     func(m Model) int
@@ -39,14 +38,6 @@ func hintFor(b bkey.Binding, label string) hint {
 		label = b.Help().Desc
 	}
 	return hint{b.Help().Key, label, b.Keys()[0]}
-}
-
-// tabHint is the hint of tab i: its own digit, as the tabs binding has it.
-func tabHint(b bkey.Binding, i int, label string) hint {
-	if !b.Enabled() || i >= len(b.Keys()) {
-		return hint{}
-	}
-	return hint{b.Keys()[i], label, b.Keys()[i]}
 }
 
 // noTap is the hint without the key a tap presses: a key the line shows
@@ -104,7 +95,6 @@ func (st styles) footFor(b bkey.Binding, label, sep string) footPart {
 
 const (
 	tabSessions = iota
-	tabShips
 	tabMachine
 	tabGit
 	tabHistory
@@ -114,8 +104,7 @@ const (
 
 var views = [...]tabView{
 	tabSessions: {
-		name: "sessions",
-		keys: Model.sessionKeys,
+		keys: func(m Model) []hint { return m.boardHints(max(m.width, minWidth)) },
 		count: func(m Model) int {
 			return len(m.doors) + len(m.snap.Sessions) + len(m.ghosts()) + len(m.blockedHosts()) + m.recRows()
 		},
@@ -161,28 +150,18 @@ var views = [...]tabView{
 			}
 			return nil
 		},
-		body: Model.sessionsPanel,
-	},
-	tabShips: {
-		name: "ships",
-		keys: func(m Model) []hint {
-			mk := m.keys.main
-			if sh, ok := m.selectedShip(); ok {
-				return append(m.shipKeys(sh), hintFor(mk.Stoke, "stoker"))
-			}
-			return []hint{tabHint(mk.Tabs, tabSessions, "sessions"), hintFor(mk.Stoke, "stoker")}
-		},
-		count:     func(m Model) int { return len(m.ships()) },
-		index:     func(m Model) int { return min(m.shipSel, max(len(m.ships())-1, 0)) },
-		pick:      func(m *Model, i int) { m.shipSel = i },
-		secondary: Model.mergeShip,
-		body:      Model.shipsPanel,
+		body: func(m Model, w int) body { return m.boardPanel(w, m.bodyRows()).body },
 	},
 	tabMachine: {
-		name: "machine",
 		keys: func(m Model) []hint {
 			mk := m.keys.main
 			stoke := hintFor(mk.Stoke, "stoker")
+			if _, ok := m.selectedMachineView(); ok {
+				return []hint{hintFor(mk.Open, "open"), stoke}
+			}
+			if _, ok := m.selectedHostRow(); ok {
+				return []hint{hintFor(mk.Open, "hosts"), stoke}
+			}
 			if r, ok := m.selectedDevice(); ok {
 				if r.plus {
 					return []hint{hintFor(mk.Open, "pair"), stoke}
@@ -190,7 +169,7 @@ var views = [...]tabView{
 				return []hint{hintFor(mk.Second, "remove"), stoke}
 			}
 			if len(m.snap.Orphans) == 0 {
-				return []hint{hintFor(mk.Ships, "ships"), stoke}
+				return []hint{stoke}
 			}
 			return []hint{hintFor(mk.Open, "jump"), hintFor(mk.Second, "kill"), stoke}
 		},
@@ -198,6 +177,12 @@ var views = [...]tabView{
 		index: Model.machineIndex,
 		pick:  (*Model).machinePick,
 		primary: func(m Model) *action {
+			if _, ok := m.selectedHostRow(); ok {
+				return nil // ⏎ opens Hosts: no action of a host's
+			}
+			if _, ok := m.selectedMachineView(); ok {
+				return nil // ⏎ opens the view
+			}
 			if r, ok := m.selectedDevice(); ok {
 				if r.plus {
 					return &action{label: "pair a device", say: "pair a device: show a one-time code", pair: true}
@@ -210,6 +195,9 @@ var views = [...]tabView{
 			return nil
 		},
 		secondary: func(m Model) *action {
+			if _, ok := m.selectedHostRow(); ok {
+				return nil
+			}
 			if r, ok := m.selectedDevice(); ok {
 				if r.plus {
 					return nil
@@ -225,7 +213,6 @@ var views = [...]tabView{
 		body: Model.machinePanel,
 	},
 	tabGit: {
-		name: "git",
 		keys: func(m Model) []hint {
 			mk := m.keys.main
 			return []hint{hintFor(mk.Open, "shell"), hintFor(mk.Mark, ""), hintFor(mk.MarkSafe, ""), hintFor(mk.Second, "remove"), hintFor(mk.Rename, "rescan")}
@@ -252,14 +239,12 @@ var views = [...]tabView{
 		body: Model.gitPanel,
 	},
 	tabHistory: {
-		name: "history",
 		keys: func(m Model) []hint {
-			return []hint{hintFor(m.keys.main.Ships, "ships"), hintFor(m.keys.main.Stoke, "stoker")}
+			return []hint{hintFor(m.keys.main.Stoke, "stoker")}
 		},
 		body: Model.historyBody,
 	},
 	tabPanes: {
-		name:  "panes",
 		keys:  func(m Model) []hint { return []hint{hintFor(m.keys.main.Open, "go"), hintFor(m.keys.main.Sort, "")} },
 		count: func(m Model) int { return len(m.paneRows()) },
 		index: func(m Model) int { return min(m.paneSel, max(len(m.paneRows())-1, 0)) },
@@ -273,7 +258,6 @@ var views = [...]tabView{
 		body: Model.panesPanel,
 	},
 	tabStoker: {
-		name:  "stoker",
 		keys:  Model.stokerKeys,
 		count: func(m Model) int { return len(m.stokerRows()) },
 		index: func(m Model) int { return min(m.stokerSel, max(len(m.stokerRows())-1, 0)) },
@@ -282,14 +266,10 @@ var views = [...]tabView{
 	},
 }
 
-// tabNames names the tabs, in the order of their digits.
-var tabNames = func() []string {
-	var names []string
-	for _, v := range views {
-		names = append(names, v.name)
-	}
-	return names
-}()
+// tabNames names the tabs of the tab row, in Tab's order: the board and
+// Machine. The stoker, Git, History and Panes are no tabs: they open from
+// Machine's rows (machineViews).
+var tabNames = []string{tabSessions: "board", tabMachine: "machine"}
 
 func (m Model) view() tabView { return views[m.tab] }
 

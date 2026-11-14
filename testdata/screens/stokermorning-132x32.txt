@@ -1,6 +1,9 @@
- ▰ matchblox                                                                                           ● 6 wait for you  stoker off
- sessions 7    ships 3    machine    git    history    panes    STOKER 2
+ ▰ matchblox                                                                                               ● 6 need you  stoker off
+ board 7    MACHINE
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ STOKER                                                                                                                         off
+ ready 4/5 · 1 compacted · 0 waited · 0k back
+ 21:50 │ hearth-api  176k → 9k
 
  NIGHT · 19:50 → 22:50                                                                                                  ended 22:50
 
@@ -8,7 +11,7 @@
   ✓ merges
   ! releases, deploys and kills still ask you
 
- DONE 4 of 5 · 1 WAITS FOR YOU
+ DONE 4 of 5 · 1 NEED YOU
   ✓ 19:51 spark-docs hold: not priority
           held
   ✓ 21:10 hearth-api merge #4551 when green
@@ -25,8 +28,5 @@
   ✕ 21:31 the run ended before your go: gh release create v1.4
           its session ended · f starts the stoker with a new order
 
- STANDING RULES
-  ✓ 21:20 spark-docs opened #4570: compacted, sent /review
-
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ↑↓ move  ⏎ command  1 sessions  p ships  f stoker  / find  q quit                                                   sampled 0s ago
+ ↑↓ move  esc machine  ⏎ command  f stoker  / find  q quit                                                           sampled 0s ago

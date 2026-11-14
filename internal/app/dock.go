@@ -13,284 +13,17 @@ import (
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
-// The dock is usage, the machine and the stoker, between the body and the
-// key line, when the body leaves room for it and one blank row
-// (design/0006 §7). It is never scrolled: when it does not fit it folds
-// away, and the Machine tab has it all. Rows the body leaves free beyond
-// its minimum, it grows into: usage its forecasts and resets, the machine
-// its top processes, the stoker its recent steps.
-
-// The panels of the dock, in the order u cycles them on a phone.
-const (
-	panelUsage = iota
-	panelMachine
-	panelStoker
-	panels
-)
-
-var panelWords = [panels]string{"usage ›", "machine ›", "stoker ›"}
-
-// stokerClaims: a run is in charge, or has steps the builder has not
-// seen; the stoker's panel takes the dock until the builder switches.
-func (m Model) stokerClaims() bool {
-	return m.stoker != nil && (m.stoker.On || m.stokedShows())
-}
-
-// dockShows is the panel a phone's dock shows.
-func (m Model) dockShows() int {
-	if m.stokerClaims() && !m.dockSwitched {
-		return panelStoker
-	}
-	return m.dockPanel
-}
-
-// cycleDock is u: the next panel of a phone's dock.
-func (m *Model) cycleDock() {
-	m.dockPanel = (m.dockShows() + 1) % panels
-	m.dockSwitched = m.stokerClaims()
-}
-
-// docked is the dock drawn: its lines, whether every panel shows all it
-// has, and the columns of the stoker's panel (a tap there opens its card;
-// x1 0: no stoker panel).
-type docked struct {
-	lines      []string
-	full       bool
-	stx0, stx1 int
-}
-
-// panel is one panel of the dock in w columns: its fewest lines, and all
-// it has to say. A cut keeps the fewest lines and never cuts usage.
-func (m Model) panel(p, w int, toggle string) (least, most []string) {
-	switch p {
-	case panelUsage:
-		return m.usageLines(w, false, toggle), m.usageLines(w, true, toggle)
-	case panelMachine:
-		if m.hostCount() > 1 {
-			least = m.machineHosts(w, toggle)
-			return least, least
-		}
-		least = m.machineLines(w, false, toggle)
-		return least, append(slices.Clone(least), m.topLines(w)...)
-	}
-	return m.stokerLines(w, false, toggle), m.stokerLines(w, true, toggle)
-}
-
-// dock is the dock in w columns and at most rows lines (rows < 0: its
-// fewest). A phone shows one panel, the one u picks; an opened phone, an
-// upright drawer and a desk short of room two, usage and the machine
-// (the stoker in the machine's place while it claims the dock); a wide
-// desk all three.
-func (m Model) dock(w, rows int) docked {
-	type col struct {
-		p, w   int
-		toggle string
-	}
-	var cols []col
-	switch {
-	case m.phoneDock(w):
-		p := m.dockShows()
-		cols = []col{{p, w, panelWords[(p+1)%panels]}}
-	case w >= 152 && m.layoutAt(w) == Wide:
-		third := (w - 2) / 3
-		cols = []col{{panelUsage, third, ""}, {panelMachine, third, ""}, {panelStoker, w - 2 - 2*third, ""}}
-	default:
-		split := splitAt(w, m.layoutAt(w))
-		right := panelMachine
-		if m.stokerClaims() {
-			right = panelStoker
-		}
-		cols = []col{{panelUsage, split, ""}, {right, w - split - 1, ""}}
-	}
-	d := docked{full: true}
-	var parts [][]string
-	x := 0
-	for i, c := range cols {
-		least, most := m.panel(c.p, c.w, c.toggle)
-		lines := least
-		switch {
-		case rows < 0:
-			d.full = d.full && len(most) <= len(least)
-		case len(most) <= rows:
-			lines = most
-		case c.p != panelUsage:
-			lines = most[:max(rows, len(least))]
-			d.full = false
-		default:
-			d.full = false
-		}
-		if c.p == panelStoker {
-			d.stx0, d.stx1 = x, x+c.w
-		}
-		x += c.w
-		if i < len(cols)-1 {
-			x++
-		}
-		parts = append(parts, lines)
-	}
-	n := 0
-	for _, p := range parts {
-		n = max(n, len(p))
-	}
-	for i := range n {
-		line := ""
-		for j, c := range cols {
-			cell := ""
-			if i < len(parts[j]) {
-				cell = parts[j][i]
-			}
-			if j > 0 {
-				line += m.st.hair.Render("│")
-			}
-			line += fit(cell, c.w)
-		}
-		d.lines = append(d.lines, line)
-	}
-	return d
-}
-
-// listAbove is the part of the list that fits in h lines of w columns.
-// When rows are cut below, the window takes one line less and the line
-// under it says how many: the hint never covers the selection.
-func (m Model) listAbove(b body, w, h int) body {
-	sel := m.rowIndex()
-	if h <= 1 || len(b.lines) <= h {
-		vis := windowed(b, h, sel)
-		return body{lines: slices.Clone(vis.lines), rows: slices.Clone(vis.rows)}
-	}
-	start := windowStart(b, h-1, sel)
-	below := map[int]bool{}
-	for _, r := range b.rows[start+h-1:] {
-		if r >= 0 {
-			below[r] = true
-		}
-	}
-	if len(below) == 0 { // the window is at the list's end: nothing to say
-		vis := windowed(b, h, sel)
-		return body{lines: slices.Clone(vis.lines), rows: slices.Clone(vis.rows)}
-	}
-	col := body{lines: slices.Clone(b.lines[start : start+h-1]), rows: slices.Clone(b.rows[start : start+h-1])}
-	col.add(-1, fit(m.st.faint.Render(fmt.Sprintf(" ↓ %d more", len(below))), w))
-	return col
-}
-
-// stokerPanelRow marks the stoker's panel in a desk's left column: a tap
-// there opens its tab.
-const stokerPanelRow = -4
-
-// minListRows are the fewest rows of the list a desk's left column keeps
-// over its panels, with the hint under them.
-const minListRows = 3
-
-// leftColumn is Sessions on a desk, h lines of w columns: the list, and
-// under it usage, the machine and the stoker, each below a hairline. The
-// stoker is there while it claims the dock, in the machine's place when
-// the rows are short, or when the list leaves it room. The panels take
-// their fewest lines and grow into the rows the list leaves free. The
-// list outranks them: the machine folds before the list is cut; usage is
-// never cut, and the list gives way only to it and a stoker in charge,
-// while it keeps minListRows rows and the hint; short of that all fold. The Machine
-// tab has it all. A list cut short says how many rows are below it. All:
-// the panels show all they have.
-func (m Model) leftColumn(b body, w, h int) (col body, all bool) {
-	least, most := map[int][]string{}, map[int][]string{}
-	for p := range panels {
-		least[p], most[p] = m.panel(p, w, "")
-	}
-	height := func(ps []int) int {
-		n := 0
-		for _, p := range ps {
-			n += 1 + len(least[p])
-		}
-		return n
-	}
-	tall := len(b.lines)
-	every := []int{panelUsage, panelMachine, panelStoker}
-	type try struct {
-		ps  []int
-		cut bool // the list may give way to them
-	}
-	tries := []try{{every, false}, {[]int{panelUsage, panelMachine}, false}, {[]int{panelUsage}, false}, {[]int{panelUsage}, true}}
-	if m.stokerClaims() { // a stoker in charge keeps its place, as usage does
-		tries = []try{{every, false}, {[]int{panelUsage, panelStoker}, false}, {[]int{panelUsage, panelStoker}, true}, {[]int{panelUsage}, true}}
-	}
-	var set []int
-	for _, t := range tries {
-		if n := height(t.ps); tall+n <= h || t.cut && h-n >= minListRows+1 {
-			set = t.ps
-			break
-		}
-	}
-	if set == nil {
-		return m.listAbove(b, w, h), false
-	}
-	spare := max(h-len(b.lines)-height(set), 0)
-	all = len(set) == len(every)
-	var stats body
-	for _, p := range set {
-		lines, grow := least[p], len(most[p])-len(least[p])
-		switch {
-		case grow <= spare:
-			lines, spare = most[p], spare-grow
-		case p != panelUsage: // usage shows whole or at its fewest, never cut
-			lines, spare = most[p][:len(least[p])+spare], 0
-			all = false
-		default:
-			all = false
-		}
-		row := -1
-		if p == panelStoker {
-			row = stokerPanelRow
-		}
-		stats.add(row, m.st.hair.Render(strings.Repeat("─", w)))
-		stats.add(row, lines...)
-	}
-	col = m.listAbove(b, w, h-len(stats.lines))
-	for len(col.lines) < h-len(stats.lines) {
-		col.add(-1, "")
-	}
-	col.lines, col.rows = append(col.lines, stats.lines...), append(col.rows, stats.rows...)
-	return col, all
-}
-
-// dockToggle is where the phone dock's switch sits on its first line.
-func (m Model) dockToggle(w int) (x0, x1 int) {
-	word := panelWords[(m.dockShows()+1)%panels]
-	return w - lipgloss.Width(word) - 1, w - 1
-}
-
-// listOnlyStats is what list only shows in the free rows its list leaves:
-// usage, then the machine, under a hairline each, at their fewest lines
-// and only whole. The list is never cut for them.
-func (m Model) listOnlyStats(w, free int) docked {
-	d := docked{full: true}
-	for _, p := range []int{panelUsage, panelMachine} {
-		least, _ := m.panel(p, w, "")
-		next := slices.Clone(d.lines)
-		if len(next) > 0 {
-			next = append(next, m.st.hair.Render(strings.Repeat("─", w)))
-		}
-		next = append(next, least...)
-		if len(next)+1 > free { // and the hairline over them
-			break
-		}
-		d.lines = next
-	}
-	return d
-}
+// Usage and the machine: the strip says them on the board, and the Machine
+// tab has them all (design/0006 §7).
 
 // usageLines are the limits of each account a session runs under, as
 // /usage says them: each window's name, a bar (warn from 60%, neg from
 // 90%), the percent and its reset; the forecast and an old reading on the
 // account's last line. Short of room (a phone's dock) an account takes
 // two lines, and one of another provider than Anthropic one.
-func (m Model) usageLines(w int, full bool, toggle string) []string {
+func (m Model) usageLines(w int, full bool) []string {
 	st := m.st
-	right := ""
-	if toggle != "" {
-		right = st.accent.Render(toggle) + " "
-	}
-	out := []string{spread(st.label.Render(" USAGE"), right, w)}
+	out := []string{spread(st.label.Render(" USAGE"), "", w)}
 	tight := !full && w < 50
 	rows, nameW := m.usageRows(tight)
 	if len(rows) == 0 {
@@ -580,13 +313,13 @@ func accountNames(ls []limits.Account, tight bool) ([]string, int) {
 
 // machineLines are the machine in a few lines: cpu with its last minute
 // and the load, memory, disk, and the agents that run.
-func (m Model) machineLines(w int, full bool, toggle string) []string {
-	return m.machineAbout(w, full, toggle, cmp.Or(m.opt.Host, m.host.Host))
+func (m Model) machineLines(w int, full bool) []string {
+	return m.machineAbout(w, full, cmp.Or(m.opt.Host, m.host.Host))
 }
 
 // machineAbout is machineLines with host named on its first line ("":
 // none).
-func (m Model) machineAbout(w int, full bool, toggle, host string) []string {
+func (m Model) machineAbout(w int, full bool, host string) []string {
 	st, mc := m.st, m.snap.Machine
 	about := ""
 	if host != "" {
@@ -594,9 +327,6 @@ func (m Model) machineAbout(w int, full bool, toggle, host string) []string {
 	}
 	about += plural(len(mc.Cores), "core")
 	right := st.faint.Render(about + " ")
-	if toggle != "" {
-		right = st.accent.Render(toggle) + " "
-	}
 	sp := max(min(w-30, 24), 8)
 	if full {
 		sp = 24
@@ -625,38 +355,6 @@ func memUse(mc sample.Machine) (uint64, float64) {
 		return used, 0
 	}
 	return used, float64(used) / float64(mc.MemTotal) * 100
-}
-
-// machineHosts is the dock's machine with two or more hosts: a line for
-// each host with a state, in Hosts order; a stale host's says since when.
-func (m Model) machineHosts(w int, toggle string) []string {
-	st := m.st
-	right := st.faint.Render(plural(m.hostCount(), "host") + " ")
-	if toggle != "" {
-		right = st.accent.Render(toggle) + " "
-	}
-	out := []string{spread(st.label.Render(" MACHINE"), right, w)}
-	hosts := m.statedHosts()
-	nameW := 0
-	for _, h := range hosts {
-		nameW = max(nameW, lipgloss.Width(m.nameOf(h)))
-	}
-	for _, h := range hosts {
-		line := " " + st.text.Render(pad(m.nameOf(h), nameW+1))
-		if note := m.staleNote(h); note != "" {
-			out = append(out, fit(line+st.faint.Render(note), w))
-			continue
-		}
-		mc := m.machineOf(h)
-		_, memPct := memUse(mc)
-		line += st.label.Render("cpu ") + st.accent.Render(spark(m.viewOf(h).history.cpu, 8, 100)) + st.text.Render(pad(fmt.Sprintf(" %.0f%%", mc.CPU), 6)) +
-			st.label.Render("mem ") + st.text.Render(pad(fmt.Sprintf("%.0f%%", memPct), 5))
-		if len(mc.Disks) > 0 {
-			line += st.label.Render("disk ") + m.useStyle(mc.Disks[0].Pct()).Render(fmt.Sprintf("%.0f%%", mc.Disks[0].Pct()))
-		}
-		out = append(out, fit(line, w))
-	}
-	return out
 }
 
 // diskCell is the use of the home's file system, "▰▰▰▰▰▱▱▱ 71% of 1 TB",
@@ -712,25 +410,26 @@ func (m Model) runs() string {
 	return strings.Join(parts, " · ")
 }
 
-// machinePanel is the Machine tab: usage first, then the machine, then
-// the detached busy loops and the top processes. Two or more hosts: a
-// section for each host, in Hosts order, headed by its name; the busy
-// loops and the devices are the home host's.
+// machinePanel is the Machine tab: the rows that open its views, usage,
+// then the machine, then the detached busy loops and the top processes,
+// then the hosts. Two or
+// more hosts: a section for each host, in Hosts order, headed by its name;
+// the busy loops and the devices are the home host's.
 func (m Model) machinePanel(w int) body {
-	var b body
-	b.add(-1, m.usageLines(w, true, "")...)
+	b := m.viewsBody(w)
+	b.add(-1, m.usageLines(w, true)...)
 	if m.hostCount() == 1 {
 		b.add(-1, "")
-		b.add(-1, m.machineLines(w, true, "")...)
+		b.add(-1, m.machineLines(w, true)...)
 		b.add(-1, m.machine(w)...)
 		p := m.procs(w)
 		b.lines, b.rows = append(b.lines, p.lines...), append(b.rows, p.rows...)
-		return b
+		return m.withHosts(b, w)
 	}
 	for _, h := range m.statedHosts() {
 		on := m.viewOf(h)
 		b.add(-1, "", m.hostHead(h, w))
-		b.add(-1, on.machineAbout(w, true, "", "")...)
+		b.add(-1, on.machineAbout(w, true, "")...)
 		b.add(-1, on.machine(w)...)
 		if h == m.opt.Host {
 			p := on.procs(w)
@@ -740,6 +439,13 @@ func (m Model) machinePanel(w int) body {
 		b.add(-1, on.region("top processes", w)...)
 		b.add(-1, on.topRows(w)...)
 	}
+	return m.withHosts(b, w)
+}
+
+// withHosts is b with the host rows under it.
+func (m Model) withHosts(b body, w int) body {
+	h := m.hostsBody(w)
+	b.lines, b.rows = append(b.lines, h.lines...), append(b.rows, h.rows...)
 	return b
 }
 

@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/blox-eng/matchblox/internal/replay"
@@ -127,22 +128,36 @@ func identifying(names []string, words map[string]bool) []string {
 // private fails when a frame names this machine: a name as a whole word,
 // on any line.
 func private(frames []replay.Frame, names []string) error {
-	var res []*regexp.Regexp
-	for _, n := range names {
-		res = append(res, regexp.MustCompile(`(^|[^\w-])`+regexp.QuoteMeta(n)+`($|[^\w-])`))
+	if len(names) == 0 {
+		return nil
 	}
+	// One pattern for every name: a frame line is read once, not once a name.
+	quoted := make([]string, len(names))
+	for i, n := range names {
+		quoted[i] = regexp.QuoteMeta(n)
+	}
+	re := regexp.MustCompile(`(?:^|[^\w-])(` + strings.Join(quoted, "|") + `)(?:$|[^\w-])`)
 	for _, f := range frames {
 		for _, l := range f.Lines {
 			var b strings.Builder
 			for _, sp := range l {
 				b.WriteString(sp.Text)
 			}
-			for i, re := range res {
-				if re.MatchString(b.String()) {
-					return fmt.Errorf("the frame at %v names this machine (%q): %q", f.At, names[i], b.String())
-				}
+			if m := re.FindStringSubmatch(b.String()); m != nil {
+				return fmt.Errorf("the frame at %v names this machine (%q): %q", f.At, m[1], b.String())
 			}
 		}
 	}
 	return nil
 }
+
+// machineNames is identifying(thisMachine(), the repository's words), read
+// once for every size of the replay: the words are every file of internal
+// and of the demo's tree.
+var machineNames = sync.OnceValues(func() ([]string, error) {
+	words, err := repoWords("../../internal", "../../testdata/demo")
+	if err != nil {
+		return nil, err
+	}
+	return identifying(thisMachine(), words), nil
+})

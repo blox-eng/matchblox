@@ -109,10 +109,7 @@ func TestScreens(t *testing.T) {
 		name string
 		keys []string
 	}
-	shots := []shot{
-		{"sessions", nil},
-		{"ships", []string{"2"}},
-	}
+	shots := []shot{{"sessions", nil}}
 	sizes := [][2]int{{44, 31}, {86, 30}, {107, 60}, {132, 32}}
 	for _, size := range sizes {
 		for _, sh := range shots {
@@ -130,19 +127,20 @@ func TestScreens(t *testing.T) {
 	for _, size := range [][2]int{{44, 31}, {104, 38}, {132, 32}} {
 		check(t, sheetScreen(st, false), "sheet", size[0], size[1], append(night, "tab", "space", "tab"))
 	}
+	toStokerTab := []string{"tab", "enter"} // Machine, then its first row: stoker (c copies on the board)
 	for _, size := range [][2]int{{44, 31}, {104, 38}, {132, 32}} {
-		check(t, tabNight(st), "stoker", size[0], size[1], []string{"c"})
-		check(t, tabMorning(st), "stokermorning", size[0], size[1], []string{"c"})
+		check(t, tabNight(st), "stoker", size[0], size[1], toStokerTab)
+		check(t, tabMorning(st), "stokermorning", size[0], size[1], toStokerTab)
 	}
 	check(t, sheetScreen(st, true), "sheetday", 104, 38, []string{"o"})
 	for _, size := range [][2]int{{44, 31}, {104, 38}} {
-		check(t, tabFamily(st, false), "stokerfamily", size[0], size[1], []string{"c", "down", "down"})
+		check(t, tabFamily(st, false), "stokerfamily", size[0], size[1], append(slices.Clone(toStokerTab), "down", "down"))
 	}
 	offer := st
 	offer.Doors = []doors.Door{{ID: doors.Update, Title: "Update to v0.43.0", Why: "matchblox v0.43.0 is out. This machine runs v0.42.0.", Sum: "v0.43.0",
 		Preview: "matchblox v0.42.0 → v0.43.0 (linux/amd64)\n  checksum    checked first\n  provenance  checked if gh is installed\n              and logged in\n  replaces\n    /home/user/.local/bin/matchblox"}}
 	offer.Update = &state.UpdateView{Mode: "offer", Current: "v0.42.0", Latest: "v0.43.0"}
-	toDoor := append(slices.Repeat([]string{"up"}, 12), "enter") // past the sessions to the door, then its preview
+	toDoor := append(slices.Repeat([]string{"up"}, 12), "enter") // up from the cards to the doors line, then its preview
 	for _, size := range [][2]int{{44, 31}, {104, 38}} {
 		check(t, offer, "updatedoor", size[0], size[1], nil)
 		check(t, offer, "updatedoorpreview", size[0], size[1], toDoor)
@@ -203,33 +201,25 @@ func TestScreens(t *testing.T) {
 		golden(t, hostsRelease(st, size[0], size[1], ""), "hostsrelease", size[0], size[1])
 	}
 	golden(t, hostsRelease(st, 104, 38, "brew upgrade matchblox"), "hostsbrew", 104, 38)
-	golden(t, threeHostShips(t, st, 132, 32), "ships3", 132, 32)
 	machine := threeHosts(t, st, 104, 38, "stale")
 	machine.setTab(tabMachine)
 	golden(t, machine, "machine3", 104, 38)
-}
-
-// threeHostShips is Ships over three hosts: the demo machine's four, the
-// one gpu-1's train-loop drives and waits for your merge, and the one
-// ws-1's api-auth drives through CI.
-func threeHostShips(t *testing.T, st proto.State, w, h int) Model {
-	t.Helper()
-	m := threeHosts(t, st, w, h, "fine")
-	gpu, ws := peerStates(st)
-	ship := func(repo string, n int, title, pane, name, kind, note string, stage int, age time.Duration) *proto.Ships {
-		sh := proto.Ship{Repo: repo, Number: n, Title: title, Session: proto.ShipSession{Pane: pane, Name: name},
-			Stage: stage, Kind: kind, Note: note, Since: demoAt.Add(-age)}
-		for i := 0; i <= stage; i++ {
-			sh.Stages[i].At = demoAt.Add(-age - time.Duration(stage-i)*20*time.Minute)
-		}
-		return &proto.Ships{At: demoAt, InFlight: 1, Ships: []proto.Ship{sh}}
+	board := boardFixture(t)
+	for _, size := range [][2]int{{40, 34}, {80, 31}, {104, 38}, {160, 38}} {
+		golden(t, boardShot(t, board, size[0], size[1], nil), "board", size[0], size[1])
 	}
-	gpu.Ships = ship("hearth/train", 88, "Mixed precision for the train loop", "%1", "train-loop", shipWaits, "green · waits for your merge", 2, 3*time.Minute)
-	ws.Ships = ship("hearth/hearth-api", 4560, "Token refresh on the edge", "%1", "api-auth", shipRunning, "CI · 2 of 9 jobs", 1, 2*time.Minute)
-	m = upd(t, m, peerMsg{host: "gpu-1", conn: m.peers[0].conn, msg: stateMsg(gpu)})
-	m = upd(t, m, peerMsg{host: "ws-1", conn: m.peers[1].conn, msg: stateMsg(ws)})
-	m.setTab(tabShips)
-	return m
+	for _, size := range [][2]int{{40, 34}, {160, 38}} { // v, before the board takes its keys
+		golden(t, boardShot(t, board, size[0], size[1], oneLineBoard), "boardoneline", size[0], size[1])
+	}
+	onLogin := func(m *Model) {
+		chooseCard("flint-auth")(m)
+		m.viewPrefs.Told = []string{"chain"} // the shot is of the chain, not of g's once-notice
+	}
+	for _, size := range [][2]int{{80, 31}, {40, 34}} {
+		golden(t, pressOn(boardShot(t, board, size[0], size[1], onLogin), "g"), "boardchain", size[0], size[1])
+		golden(t, boardShot(t, board, size[0], size[1], func(m *Model) { m.flipHidden(colWork) }), "boardhidden", size[0], size[1])
+		golden(t, pressOn(boardShot(t, board, size[0], size[1], chooseCard("flint-auth")), "m"), "boardmenu", size[0], size[1])
+	}
 }
 
 // threeHosts is the demo machine with two peers: gpu-1, whose train-loop
@@ -242,6 +232,7 @@ func threeHosts(t *testing.T, st proto.State, w, h int, gpu string) Model {
 	conns := map[string]*fakeConn{"gpu-1": newFake(), "ws-1": newFake()}
 	m := New(Options{NoMotion: true, Conn: newFake(), Now: func() time.Time { return now },
 		Peers: []Peer{{Host: "gpu-1", Conn: conns["gpu-1"]}, {Host: "ws-1", Conn: conns["ws-1"]}}})
+	m.viewPrefs.CopyCheckedPhone, m.viewPrefs.CopyCheckedDesk = true, true // the copy check is the board's first-run door
 	next, _ := m.Update(tea.WindowSizeMsg{Width: w, Height: h})
 	next, _ = next.Update(stateMsg(st))
 	gpuState, wsState := peerStates(st)
@@ -432,10 +423,11 @@ func check(t *testing.T, st proto.State, name string, w, h int, keys []string, m
 	next, _ = next.Update(stateMsg(st))
 	nm := next.(Model)
 	nm.splashDone = true
+	nm.viewPrefs.CopyCheckedPhone, nm.viewPrefs.CopyCheckedDesk = true, true  // the copy check is the board's first-run door
 	if strings.HasPrefix(name, "chat") || strings.HasPrefix(name, "survey") { // flint-auth, which asks
 		for i, s := range nm.snap.Sessions {
 			if s.Name == "flint-auth" {
-				nm.chose, nm.selPID = true, nm.snap.Sessions[i].PID
+				choose(&nm, nm.snap.Sessions[i].PID)
 			}
 		}
 		nm.watchCmd() // the watch follows the selection; the fake answers nothing

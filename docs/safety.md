@@ -15,7 +15,7 @@ command.
   `y`. The stoker's compact and the messages of its agent are the steps that
   run without it: `n` or `f`, and the order you send with `Enter`, are your
   yes. A merge, a release or a deploy in a session the stoker messaged
-  needs its chip on the launch sheet, or your `y` on the STOKER tab.
+  needs its chip on the launch sheet, or your `y` on its card or on the stoker's view.
 - Each step checks its facts again just before it runs: the same process
   and start time, a worktree still clean and unused, a session still idle,
   a pane with no prompt, question or draft.

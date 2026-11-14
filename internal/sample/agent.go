@@ -20,6 +20,7 @@ type registryEntry struct {
 	Name            string `json:"name"`
 	Cwd             string `json:"cwd"`
 	Status          string `json:"status"`
+	WaitingFor      string `json:"waitingFor"` // why a waiting session waits
 	StartedAt       int64  `json:"startedAt"`
 	StatusUpdatedAt int64  `json:"statusUpdatedAt"`
 	Tmux            string `json:"tmux"` // session:@window.%pane
@@ -51,9 +52,12 @@ type Usage struct {
 	Failed string `json:"failed,omitempty"`
 }
 
+// fileKey tells a file's change: its size and mtime, and its inode, which a
+// rename over it changes even within one clock tick.
 type fileKey struct {
 	size  int64
 	mtime time.Time
+	ino   uint64
 }
 
 // agentReader caches everything keyed on file size and mtime, so an idle
@@ -94,7 +98,7 @@ func statKey(path string) (fileKey, bool) {
 	if err != nil {
 		return fileKey{}, false
 	}
-	return fileKey{st.Size(), st.ModTime()}, true
+	return fileKey{st.Size(), st.ModTime(), inodeOf(st)}, true
 }
 
 func (r *agentReader) entry(dir string, pid int) (registryEntry, bool) {

@@ -302,7 +302,7 @@ func TestStartChainStokerAtCap(t *testing.T) {
 	}
 	*ran = nil
 	_, err = s.startChainStoker(t.Context(), "api-auth", "", nil, "person")
-	if err == nil || err.Error() != "the family has its 1 chain stokers: max_chains. Quit one on the STOKER tab first." {
+	if err == nil || err.Error() != "the family has its 1 chain stokers: max_chains. Quit one on Machine › stoker first." {
 		t.Fatalf("err %v", err)
 	}
 	if len(*ran) != 0 || s.unitOfChain("c1") != nil {
@@ -1072,7 +1072,7 @@ func TestAShellGivesAChainNoGoes(t *testing.T) {
 	s, u, _ := familyTest(t)
 	s.deliverBriefs(t.Context())
 	a := orderChain(t, "", "api-auth", "merge it", []string{"merge"})
-	if res := s.act(t.Context(), a); res.Err != "goes are given at the console: drop --go here, and grant them on the STOKER tab" {
+	if res := s.act(t.Context(), a); res.Err != "goes are given at the console: drop --go here, and grant them on Machine › stoker" {
 		t.Fatalf("a shell's goes: %q", res.Err)
 	}
 	if got := s.grantsOf(u); slices.Contains(got, "merge") {
@@ -1214,7 +1214,7 @@ func TestOrderAtCapIsRefusedAndLogged(t *testing.T) {
 	if err := s.loadFamily(); err != nil {
 		t.Fatal(err)
 	}
-	const want = "the family has its 1 chain stokers: max_chains. Quit one on the STOKER tab first."
+	const want = "the family has its 1 chain stokers: max_chains. Quit one on Machine › stoker first."
 	if res := s.act(t.Context(), orderChain(t, hostPane, "api-auth", "go", nil)); res.Err != want {
 		t.Fatalf("err %q", res.Err)
 	}

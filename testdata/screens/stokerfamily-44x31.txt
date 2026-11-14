@@ -1,6 +1,9 @@
- ▰ matchblox          ● 6 wait for you  ≋ 2
- 1  2  3  4  history  panes  STOKER
+ ▰ matchblox              ● 6 need you  ≋ 2
+ board 7    MACHINE
 ────────────────────────────────────────────
+ STOKER · 1 chain                        on
+ watching 0 · 0 compacted · 0 waited · 0k b…
+ no session full yet
 
   STOKER AGENT  claude ·… ⏎ open the stoker
 
@@ -24,8 +27,5 @@
   ○       ember-billing rebase on main,
           then merge #4552
 
- CHAIN kindle-web               ended 22:20
-   its chain joined hearth-api
-  THE RUN · ready 2/2
 ────────────────────────────────────────────
- ⏎ open the stoker  Q quit it  1 sessions
+ esc machine  ⏎ open the stoker  Q quit it

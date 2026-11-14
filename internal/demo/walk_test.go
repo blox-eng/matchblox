@@ -153,6 +153,9 @@ type walker struct {
 	steps      []string
 }
 
+// walkNotice is how long a notice shows in a walk.
+const walkNotice = 400 * time.Millisecond
+
 func startWalk(t *testing.T, cols, rows int) *walker {
 	t.Helper()
 	inR, inW := io.Pipe()
@@ -161,7 +164,13 @@ func startWalk(t *testing.T, cols, rows int) *walker {
 	go term.read()
 	t.Cleanup(term.close)
 	spy := &spies{}
-	d, err := demo.Start(demo.WithConsole(demo.Options{Tree: tree, In: inR, Out: outW, Cols: cols, Rows: rows}, spy.on))
+	// A walk waits out each refusal before the next (clear): a notice of
+	// 2.5 s was most of the time of a walk of doors.
+	console := func(o *app.Options) {
+		spy.on(o)
+		o.NoticeFor = walkNotice
+	}
+	d, err := demo.Start(demo.WithConsole(demo.Options{Tree: tree, In: inR, Out: outW, Cols: cols, Rows: rows}, console))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -172,7 +181,7 @@ func startWalk(t *testing.T, cols, rows int) *walker {
 		_ = d.Wait()
 		close(w.ended)
 	}()
-	term.waitFor(t, "hearth-api")
+	term.waitFor(t, "flint-auth")
 	return w
 }
 
@@ -203,6 +212,165 @@ func (w *walker) press(keys ...string) {
 	w.t.Helper()
 	for _, k := range keys {
 		w.send(k, bytesOf(w.t, k))
+	}
+}
+
+// tabWords are the tabs in the tab row's order, each as the row names it
+// while it is open.
+var tabWords = []string{"BOARD", "MACHINE"}
+
+// viewWords are the views that open from Machine's first rows, in their
+// order, each with a word only its screen draws.
+var viewWords = []struct{ name, word string }{{"stoker", "STOKER"}, {"git", "WORKTREES"}, {"history", "PEAK PER COLUMN"}, {"panes", "PANES"}}
+
+// open opens a tab of the tab row, or a view of Machine's.
+func (w *walker) open(screen string) {
+	w.t.Helper()
+	if slices.Contains(tabWords, screen) {
+		w.toTab(screen)
+		return
+	}
+	w.toView(screen)
+}
+
+// onView tells if the screen shows the view name: its word, under the tab
+// row's MACHINE.
+func (w *walker) onView(name string) bool {
+	_, frame := w.term.wholeFrame()
+	return viewIn(name, frame)
+}
+
+// viewIn tells if frame shows the view name.
+func viewIn(name, frame string) bool {
+	at := slices.IndexFunc(viewWords, func(v struct{ name, word string }) bool { return v.name == name })
+	return at >= 0 && tabOf(0, frame) == "MACHINE" && strings.Contains(frame, viewWords[at].word)
+}
+
+// toView opens the view name from its row on Machine: up to the first
+// row, down to its own, ⏎.
+func (w *walker) toView(name string) {
+	w.t.Helper()
+	at := slices.IndexFunc(viewWords, func(v struct{ name, word string }) bool { return v.name == name })
+	if at < 0 {
+		w.t.Fatalf("Machine has no view %q", name)
+	}
+	if w.onView(name) {
+		return
+	}
+	w.toTab("MACHINE")
+	w.press("esc") // from another view, back to Machine; on Machine it stays
+	w.press(slices.Repeat([]string{"k"}, 12)...)
+	w.press(slices.Repeat([]string{"j"}, at)...)
+	w.press("enter")
+	// One repaint at a time, each waited for: a repaint every poll starts a
+	// new whole frame before the last one is read.
+	eventually(w.t, 10*time.Second, "the "+name+" view to open", func() bool { return viewIn(name, w.term.screen()) })
+}
+
+// toTab opens the tab want names: a tap on its name on the tab row, as a
+// person on a phone does, then one wait for the redraw. A digit on the board
+// answers its card (ruling 37). With no tab row on screen, or a box on top
+// that takes the tap, it walks by Tab.
+func (w *walker) toTab(want string) {
+	w.t.Helper()
+	_, frame := w.term.wholeFrame()
+	open := w.openTab()
+	if open == want {
+		return
+	}
+	if x, ok := tabCell(frame, want); ok && open != "" {
+		w.tap(x, 2)
+		if w.tabIs(want, 300*time.Millisecond) {
+			return
+		}
+	}
+	w.tabByKey(want) // no tab row, or a box on top that takes the tap
+}
+
+// tabCell is the column, counted from 1, of the tab want names on the tab
+// row of frame, in any case; a name shortened to its number is not found.
+func tabCell(frame, want string) (int, bool) {
+	lines := strings.Split(frame, "\n")
+	if len(lines) < 2 {
+		return 0, false
+	}
+	row, name := strings.ToLower(lines[1]), strings.ToLower(want)
+	for i := 0; i+len(name) <= len(row); i++ {
+		if row[i:i+len(name)] == name && (i == 0 || row[i-1] == ' ') {
+			return i + 1, true
+		}
+	}
+	return 0, false
+}
+
+// tabIs waits up to d for the tab row to name want, in a frame drawn
+// whole after the wait began: the console writes only the cells that
+// change, so an old whole frame still names the tab before a tap.
+func (w *walker) tabIs(want string, d time.Duration) bool {
+	for until := time.Now().Add(d); time.Now().Before(until); {
+		if tabOf(0, w.term.screen()) == want {
+			return true
+		}
+	}
+	return false
+}
+
+// tabByKey opens the tab want names by the Tab key: Tab or Shift+Tab, the
+// shorter way round, one at a time, each after the redraw of the one
+// before, so that the walk never counts on a frame from before its key. The
+// doors walk by it, so the Tab key stays covered end to end.
+func (w *walker) tabByKey(want string) {
+	w.t.Helper()
+	to, n := slices.Index(tabWords, want), len(tabWords)
+	for i, open := 0, tabOf(0, w.term.screen()); open != want; i++ { // a fresh frame: a tap before may have turned it
+		if i == n {
+			w.t.Fatalf("Tab never opened %s: the tab row names %q", want, open)
+		}
+		key := "tab"
+		if from := slices.Index(tabWords, open); from >= 0 && (to-from+n)%n > n/2 {
+			key = "shift+tab"
+		}
+		w.press(key)
+		open = w.tabAfter(open)
+	}
+}
+
+// openTab is the word of the tab the tab row draws open, or "". A frame
+// that names none, or no whole frame yet, asks for a repaint.
+func (w *walker) openTab() string {
+	if open := tabOf(w.term.wholeFrame()); open != "" {
+		return open
+	}
+	return tabOf(0, w.term.screen())
+}
+
+func tabOf(_ int, frame string) string {
+	if lines := strings.Split(frame, "\n"); len(lines) > 1 {
+		for _, word := range tabWords {
+			if strings.Contains(lines[1], word) {
+				return word
+			}
+		}
+	}
+	return ""
+}
+
+// tabAfter waits for the tab row to name a tab other than was.
+func (w *walker) tabAfter(was string) string {
+	w.t.Helper()
+	deadline, repaint := time.Now().Add(10*time.Second), time.Now().Add(repaintAfter)
+	for {
+		if open := tabOf(w.term.wholeFrame()); open != was && open != "" {
+			return open
+		}
+		if time.Now().After(deadline) {
+			w.t.Fatalf("Tab from %s drew no other tab", was)
+		}
+		if time.Now().After(repaint) {
+			w.d.Repaint()
+			repaint = time.Now().Add(repaintAfter)
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
 }
 
@@ -284,13 +452,14 @@ func (w *walker) walkKeys(tab string) {
 	top := slices.Repeat([]string{"k"}, rowsWalked)
 	for _, k := range everyKey() {
 		for _, consent := range []string{"enter", "y"} {
-			w.press(tab, k, consent, consent)
+			w.open(tab)
+			w.press(k, consent, consent)
 			w.reset()
 		}
 	}
 	for _, k := range rowKeys {
 		for row := 1; row < rowsWalked; row++ {
-			w.press(tab)
+			w.open(tab)
 			w.press(top...)
 			w.press(slices.Repeat([]string{"j"}, row)...)
 			w.press(k, "y", "y")
@@ -305,19 +474,28 @@ func (w *walker) walkTaps(tab string) {
 	w.t.Helper()
 	for x := 1; x <= w.cols; x += 2 {
 		for _, y := range []int{w.rows, w.rows - 1} {
-			w.press(tab)
+			w.open(tab)
 			w.tap(x, y)
 			w.press("y")
 			w.reset()
 		}
 	}
 	for y := 1; y <= w.rows; y++ {
-		w.press(tab)
-		w.tap(20, y)
-		w.tap(20, y)
+		w.open(tab)
+		w.tapTwice(20, y)
 		w.press("y")
 		w.reset()
 	}
+}
+
+// tapTwice is two taps at a cell in one write: the console reads them
+// together, so the second comes while the first one's notice shows, as a
+// go armed by the first tap needs (the arm ends with its notice, which a
+// walk shows walkNotice).
+func (w *walker) tapTwice(x, y int) {
+	w.t.Helper()
+	one := fmt.Sprintf("\x1b[<0;%d;%dM\x1b[<0;%d;%dm", x, y, x, y)
+	w.send(fmt.Sprintf("two taps %d,%d", x, y), one+one)
 }
 
 // refused presses keys, waits for the line and clears it.
@@ -387,33 +565,39 @@ func (w *walker) scrolls(where string) {
 // the order.
 func (w *walker) walkTheDoors() {
 	w.t.Helper()
-	w.press("1")
+	w.tabByKey("BOARD")
 	w.scrolls("in a chat")
 	w.reset()
 	w.clear()
-	w.refused("a pane", "6", "enter")
-	w.refused("a worktree's shell", "4", "enter")
-	w.press("3")
-	w.press(slices.Repeat([]string{"j"}, 9)...)
+	w.toView("panes")
+	w.refused("a pane", "enter")
+	w.toView("git")
+	w.refused("a worktree's shell", "enter")
+	w.tabByKey("MACHINE") // its last row is the device row, under its views
+	w.press(slices.Repeat([]string{"j"}, 15)...)
 	w.refused("Pair a device", "enter")
 
-	w.press("1", "N")
+	w.tabByKey("BOARD")
+	w.press("N")
 	w.send("a repository", "example/cloned")
 	w.refused("a clone", "enter")
-	w.press("1", "N")
+	w.tabByKey("BOARD")
+	w.press("N")
 	w.send("a folder", "/work/flint-auth")
 	w.press("tab")
 	w.send("a branch", "a-branch")
 	w.refused("a new worktree", "enter")
 
-	w.press("1", "N")
+	w.tabByKey("BOARD")
+	w.press("N")
 	w.send("a folder", "/work/flint-auth")
 	w.press("tab", "tab")
 	w.send("a name", "walked-one")
 	w.takes("a new session", "new-session", "enter")
 	w.clear()
 
-	w.press("1", "/")
+	w.tabByKey("BOARD")
+	w.press("/")
 	w.send("a search", "spark-docs")
 	w.press("enter", "r", "backspace")
 	w.send("a name", "walked-two")
@@ -421,28 +605,37 @@ func (w *walker) walkTheDoors() {
 	w.clear()
 	w.press("esc", "esc")
 
-	w.press("2", "k", "k", "k", "k", "j")
-	w.takes("a merge", "gh pr merge", "x", "y")
+	w.tabByKey("BOARD") // the ship is on its card: #214 waits for its merge
+	w.press("/")
+	w.send("a search", "ember-billing")
+	w.press("enter")
+	w.takes("a merge", "gh pr merge", "p", "y")
 	w.clear()
+	w.press("esc", "esc")
 
-	w.press("4", "X")
+	w.toView("git")
+	w.press("X")
 	w.takes("a merged worktree's removal", "worktree remove", "x", "y")
 	w.clear()
 
-	w.press("1", "/")
+	w.tabByKey("BOARD")
+	w.press("/")
 	w.send("a search", "hearth-api")
 	w.takes("a kill", "kill-pane", "enter", "x", "y", "y")
 	w.press("esc", "esc")
 	w.clear()
 
-	w.press("7", "f", "enter")
-	w.clear()
+	w.toView("stoker")
+	w.press("f", "enter")
+	w.clear() // esc: back to Machine, so the stoker opens again for what it draws
+	w.toView("stoker")
 	w.opens("the order sheet", "How should I run?", "o")
 	w.send("an order", "keep the tests green")
 	w.saysAfter("an order", "“keep the tests green”", "enter")
 	w.clear()
 	w.press("f")
 	w.clear()
+	w.toView("stoker")
 	w.press("n")
 	w.saysAfter("a night", "NIGHT", "enter")
 }
@@ -467,7 +660,7 @@ func walk(t *testing.T) (saw []string) {
 		w.alive()
 		saw = append(saw, w.spy.seen()...)
 		w.d.Stop()
-		for _, tab := range []string{"1", "2", "3", "4", "5", "6", "7"} {
+		for _, tab := range append(slices.Clone(tabWords), "stoker", "git", "history", "panes") {
 			w := startWalk(t, size[0], size[1])
 			if size[0] == 44 {
 				w.walkKeys(tab)
@@ -568,7 +761,8 @@ func TestQAndCtrlCEnd(t *testing.T) {
 		}
 	}
 	w := startWalk(t, 132, 32)
-	w.press("1", "enter")
+	w.toTab("BOARD")
+	w.press("enter")
 	w.flashes("ctrl+c in a chat", "ctrl+c")
 	w.alive()
 }
@@ -828,6 +1022,34 @@ func (w *walker) opens(what, want, key string) {
 	}
 }
 
+// searched is the screen with the board searched for name, then esc
+// clears the search.
+func (w *walker) searched(name string) string {
+	w.t.Helper()
+	w.press("/")
+	w.send("a search", name)
+	w.press("enter")
+	time.Sleep(200 * time.Millisecond)
+	screen := w.term.screen()
+	w.press("esc")
+	return screen
+}
+
+// finds tells if the board, searched for name, shows its card: a line
+// with name that is not the strip's "started name".
+func (w *walker) finds(name string) bool {
+	w.t.Helper()
+	return slices.ContainsFunc(strings.Split(w.searched(name), "\n"), func(l string) bool {
+		return strings.Contains(l, name) && !strings.Contains(l, "started "+name) && !strings.Contains(l, "nothing matches")
+	})
+}
+
+// findsNothing tells if the board, searched for name, says nothing matches.
+func (w *walker) findsNothing(name string) bool {
+	w.t.Helper()
+	return strings.Contains(w.searched(name), `nothing matches "`+name+`"`)
+}
+
 // saysAfter presses keys and waits for want in what the console then draws.
 func (w *walker) saysAfter(what, want string, keys ...string) {
 	w.t.Helper()
@@ -845,21 +1067,29 @@ func (w *walker) saysAfter(what, want string, keys ...string) {
 func TestWhatThePhoneCannotDoSaysSo(t *testing.T) {
 	m := newMachine(t)
 	w := startWalk(t, 132, 32)
-	w.flashes("a pane", "6", "enter")
+	w.toView("panes")
+	w.flashes("a pane", "enter")
 	w.clear()
-	w.flashes("a worktree's shell", "4", "enter")
+	w.toView("git")
+	w.flashes("a worktree's shell", "enter")
 	w.clear()
 
-	// The Machine tab's last row is its device row.
-	w.press("3", "j", "j", "j", "j", "j", "j", "j", "j", "j")
+	// The Machine tab's last row is its device row, under its views.
+	w.toTab("MACHINE")
+	w.press(slices.Repeat([]string{"j"}, 15)...)
 	w.flashes("Pair a device", "enter")
 	w.clear()
 
-	w.press("2", "j") // #214 waits for its merge
-	w.flashes("a merge", "x", "y")
+	w.toTab("BOARD") // the ship is on its card: #214 waits for its merge
+	w.press("/")
+	w.send("a search", "ember-billing")
+	w.press("enter")
+	w.flashes("a merge", "p", "y")
 	w.clear()
+	w.press("esc", "esc")
 
-	w.press("1", "N")
+	w.toTab("BOARD")
+	w.press("N")
 	w.send("a folder", "/work/flint-auth")
 	w.press("tab")
 	w.send("a branch", "a-branch")
@@ -883,7 +1113,8 @@ func TestWhatThePhoneCannotDoSaysSo(t *testing.T) {
 func TestANightStartsAndRunsNothing(t *testing.T) {
 	m := newMachine(t)
 	w := startWalk(t, 132, 32)
-	w.press("7", "n")
+	w.toView("stoker")
+	w.press("n")
 	w.saysAfter("a night", "the stoker runs the night", "enter")
 	if saw := w.spy.seen(); len(saw) > 0 {
 		t.Errorf("commands reached the console's seams: %v", saw)
@@ -917,12 +1148,9 @@ func TestSessionsCanBeStartedAndKilled(t *testing.T) {
 		t.Errorf("tmux's list has no new session:\n%s", got)
 	}
 	// The search finds the session only once the console's list holds it: on
-	// a slow machine its sample comes after the word that it started.
-	eventually(t, 30*time.Second, "the list to show fresh-one", func() bool {
-		return slices.ContainsFunc(strings.Split(w.term.screen(), "\n"), func(l string) bool {
-			return strings.Contains(l, "fresh-one") && !strings.Contains(l, "started fresh-one")
-		})
-	})
+	// a slow machine its sample comes after the word that it started. A new
+	// busy match may land under a column's "↓ n more": the search shows it.
+	eventually(t, 30*time.Second, "the board to show fresh-one", func() bool { return w.finds("fresh-one") })
 
 	// The new session takes a message like any other.
 	w.press("/")
@@ -950,8 +1178,10 @@ func TestSessionsCanBeStartedAndKilled(t *testing.T) {
 	w.press("enter")
 	eventually(t, 3*time.Second, "the rename to reach tmux's list", func() bool { return strings.Contains(paneList(t), "renamed-one") })
 	w.press("esc")
-	w.saysAfter("the list", "renamed-one", "/")
-	w.press("esc")
+	// The board shows the new name once a sample has read it, and its card
+	// may be under a column's "↓ n more": a search finds it, as a person
+	// looks for a card that is off the screen.
+	eventually(t, 30*time.Second, "the board to show renamed-one", func() bool { return w.finds("renamed-one") })
 
 	// The search finds the new name once a sample has read it: until then it finds
 	// no row, and x does nothing.
@@ -962,16 +1192,15 @@ func TestSessionsCanBeStartedAndKilled(t *testing.T) {
 		time.Sleep(300 * time.Millisecond)
 		return !strings.Contains(paneList(t), "renamed-one")
 	})
-	// Another tab and back draws the list anew: it has the new session, not the
-	// killed one.
-	eventually(t, 5*time.Second, "the drawn list to lose the killed session", func() bool {
-		w.press("2")
+	// Another tab and back, by the Tab key, draws the board anew: it has the
+	// new session, not the killed one, once a sample has read tmux's list.
+	// Each look turns two tabs and runs two searches, seconds under -race,
+	// so the wait is the one the new session's card has.
+	eventually(t, 30*time.Second, "the drawn board to lose the killed session", func() bool {
+		w.tabByKey("MACHINE")
 		time.Sleep(200 * time.Millisecond)
-		from := len(w.term.text())
-		w.press("1")
-		time.Sleep(200 * time.Millisecond)
-		drawn := w.term.text()[from:]
-		return strings.Contains(drawn, "fresh-one") && !strings.Contains(drawn, "renamed-one")
+		w.tabByKey("BOARD")
+		return w.finds("fresh-one") && w.findsNothing("renamed-one")
 	})
 	if got := m.spawns(t); got != "" {
 		t.Errorf("a real command ran:\n%s", got)

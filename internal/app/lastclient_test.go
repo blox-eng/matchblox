@@ -69,20 +69,20 @@ func TestDeviceGetsTheRefusals(t *testing.T) {
 	r, m := pairDoorConsole(t)
 	tty := "/dev/ttys009"
 	phoneIn(t, r, &m, &tty)
-	next, cmd := key(m, "enter")
+	next, _ := key(m, "enter") // the board says the refusal in its strip's row too
 	got := next.(Model)
-	if got.pair != nil || cmd != nil || got.flash != "Pair from the host's own terminal." {
+	if got.pair != nil || got.flash != "Pair from the host's own terminal." {
 		t.Fatalf("page %v, flash %q", got.pair, got.flash)
 	}
 
 	dr, dm := devicesConsole(t, 0)
 	phoneIn(t, r, &dm, &tty)
-	dm.selectRow(2) // the plus row
+	dm.selectRow(len(machineViews) + 2) // the plus row
 	next, _ = key(dm, "enter")
 	if got := next.(Model); got.pair != nil || got.flash != "Pair from the host's own terminal." {
 		t.Fatalf("plus row: page %v, flash %q", got.pair, got.flash)
 	}
-	dm.selectRow(0)
+	dm.selectRow(len(machineViews))
 	keep, _ := key(dm, "x")
 	next, _ = key(keep, "y")
 	got = next.(Model)
@@ -98,7 +98,7 @@ func TestDeviceAfterXGetsTheRefusalAtConfirm(t *testing.T) {
 	r, m := devicesConsole(t, 0)
 	tty := "/dev/ttys001" // the builder at x
 	phoneIn(t, r, &m, &tty)
-	m.selectRow(0)
+	m.selectRow(len(machineViews))
 	keep, _ := key(m, "x")
 	if keep.(Model).pending == nil {
 		t.Fatal("the builder's x built nothing")
@@ -117,8 +117,8 @@ func TestDeviceRetryOnAnExpiredPageIsRefused(t *testing.T) {
 	m, _ = m.openPairDoor()
 	m.pair.failed = true
 	tty = "/dev/ttys009"
-	next, cmd := key(m, "enter")
-	if got := next.(Model); got.pair == nil || cmd != nil || got.flash != "Pair from the host's own terminal." {
+	next, _ := key(m, "enter") // the board's belt may come in the batch
+	if got := next.(Model); got.pair == nil || !got.pair.failed || got.flash != "Pair from the host's own terminal." {
 		t.Fatalf("page %v, flash %q", got.pair, got.flash)
 	}
 }

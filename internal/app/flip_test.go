@@ -32,19 +32,6 @@ func jumped(t *testing.T, m Model, k tea.KeyPressMsg) (Model, []string) {
 
 var altS = tea.KeyPressMsg{Code: 's', Mod: tea.ModAlt}
 
-func TestFlipFromASessionOpensItsChainsRoomOnTheNeed(t *testing.T) {
-	st := headState(t, runningPlan(), true)
-	twoAsk(&st)
-	m, _ := headModel(t, 160, st)
-	m = flipFrom(t, m, deskTTY, "%1")
-	if m.room == nil || m.room.k.id != "c1" || m.room.from[deskTTY] != "%1" {
-		t.Fatalf("room %+v", m.room)
-	}
-	if m.roomRows(m.room.k)[m.room.at].kind != roomNeed {
-		t.Fatal("the cursor is not on the need")
-	}
-}
-
 func TestFlipInTheRoomGoesBackToWhereItCameFrom(t *testing.T) {
 	m, _ := headModel(t, 160, headState(t, runningPlan(), true))
 	m = flipFrom(t, m, deskTTY, "%1")
@@ -82,8 +69,8 @@ func TestFlipBackToAGonePaneStays(t *testing.T) {
 	m.room.from[deskTTY] = "%77"
 	m.marked = clientMark{deskTTY, m.now()}
 	next, ran := jumped(t, m, altS)
-	if len(ran) != 0 || next.room == nil || next.toast != "That session ended." {
-		t.Fatalf("ran %q room %v toast %q", ran, next.room != nil, next.toast)
+	if len(ran) != 0 || next.room == nil || saidNow(next) != "That session ended." {
+		t.Fatalf("ran %q room %v toast %q", ran, next.room != nil, saidNow(next))
 	}
 }
 

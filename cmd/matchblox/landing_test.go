@@ -133,7 +133,7 @@ func TestTheChainHoverFindsTheMatchUnderThePointer(t *testing.T) {
 // account of what it shows.
 func TestTheConsoleSaysWhatItShows(t *testing.T) {
 	m := regexp.MustCompile(`class="stage" aria-label="([^"]*)"`).FindSubmatch(landingPage(t))
-	if m == nil || !bytes.Contains(m[1], []byte("who waits for you")) {
+	if m == nil || !bytes.Contains(m[1], []byte("NEEDS YOU")) {
 		t.Errorf("the console's label does not say what the replay shows: %q", m)
 	}
 }

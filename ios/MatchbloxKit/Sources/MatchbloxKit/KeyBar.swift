@@ -36,6 +36,7 @@ public enum KeyBar {
     public static func bytes(for id: String) -> [UInt8]? {
         if id == ctrl { return [] }
         if let bytes = fixed[id] { return bytes }
+        if let bytes = BoardBelt.bytes(for: id) { return bytes }
         guard isCommandID(id) else { return nil }
         return Array("\u{1b}_matchblox;cmd=\(id)\u{1b}\\".utf8)
     }

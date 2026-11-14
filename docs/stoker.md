@@ -39,20 +39,20 @@ Claude Code is the default. To use another agent, name its command:
 agent = "codex"
 ```
 
-The stoker agent is not one of your lanes, so Sessions leaves it out. It
-shows in the header, the dock and the STOKER tab. When it waits for you (a
-question, an approval), the header says `stoker waits for you`.
+The stoker agent is not one of your lanes, so the board leaves it out. It
+shows in the header and on Machine's row `stoker`. When it needs you (a
+question, an approval), the header says `stoker needs you`.
 `matchblox sessions --json` keeps its row, with `"stoker": true`.
 matchblox compacts its context like any other session's. What matters is
 in the run log, not in its context.
 
-- **Look at it:** `Enter` on the STOKER tab's first row, or a tap on the
-  header's stoker word, opens it in a tmux popup. Answer its prompts
+- **Look at it:** `Enter` on the first row of the stoker's view (Machine ›
+  stoker), or a tap on the header's stoker word, opens it in a tmux popup. Answer its prompts
   there; prefix `d` closes the popup. Outside tmux the console names the
   command: `tmux -L matchblox attach -t stoker`.
 - **Turn it off:** `f` stops the run. The agent stays and rests, so the
   next order finds its context.
-- **Quit it:** `Q` on the STOKER tab, then a typed `y`, ends the agent and
+- **Quit it:** `Q` on the stoker's view, then a typed `y`, ends the agent and
   its session. The next `f` starts a new one. From a shell,
   `matchblox stoker quit` does the same.
 
@@ -111,7 +111,7 @@ opens the sheet with the run's gos and an empty line, and `Enter` types
 one line into the stoker pane, `New order: <your words>` (a longer one
 goes to `stoker-order.md`, which the stoker is told to read). The run goes
 on: no new brief, and done steps stay done. The run's goes become the
-sheet's chips. The STOKER tab quotes the newest order, with the earlier
+sheet's chips. The stoker's view quotes the newest order, with the earlier
 ones folded under it.
 
 With no stoker pane configured, the sheet starts today's run at once.
@@ -129,7 +129,8 @@ the card, and `stoker when` for a trigger. Each field of
 `matchblox sessions --json` is in
 [Read it from a script or an agent](console.md#read-it-from-a-script-or-an-agent):
 the stoker reads `word`, not `status`, which is the agent's own word
-(Claude Code's `shell` is a session at rest with a background shell).
+(Claude Code's `shell` is a session at rest with a background shell, and
+OpenCode's `retry` is a call it tries again by itself).
 
 `matchblox new --where <path> --agent claude "<first message>"` starts a
 session in a tmux session of its own on your tmux server, never on
@@ -141,14 +142,14 @@ stoker (`the stoker starts on default only`).
 `matchblox rename <session> <name>` names a session, its tmux session and
 its agent alike. `matchblox kill <session>` ends a session at rest that you
 did not park: with the `kills` go it runs at once; without it, the card
-shows `⏸ waits for you: stoker wants to kill api-gw`, `y` gives the go
+shows `⏸ waits for your go: stoker wants to kill api-gw`, `y` gives the go
 for that one kill, and the stoker runs it again. It never kills a session
-that works or waits for you.
+that works or needs you.
 
 `matchblox hold` queues one message, `finish this step, then stop and
 wait`, and marks the session held. It never sends `Esc` or `Ctrl+C`: a
 session in the middle of a turn finishes its step first. `release` tells it
-`carry on`. Held sessions show in the HELD group of Sessions.
+`carry on`. A held session's card says `⏸ held by stoker` and its reason.
 
 matchblox wakes the stoker agent when something it may care about
 happens, and only when the stoker pane is at rest:
@@ -204,8 +205,8 @@ billing: …`), or a failed one with why when the hand is refused (a guard,
 a parked session, a prompt up), and the stoker hears what fired at its
 next wake. While you have taken over, triggers wait. They end with the
 run. `matchblox stoker when --list` prints the run's triggers, `--drop
-<id>` drops one, and the STOKER tab shows those that wait under `WAITING
-ON`.
+<id>` drops one, and the stoker's view shows those that wait under
+`WAITING ON`.
 
 
 ## While it runs
@@ -243,7 +244,7 @@ meanwhile (`back on: ...`).
 
 A merge, a release and a deploy keep their confirms during a run. The
 gos are yours: the chips on the launch sheet (`merges`, `releases`,
-`deploys`), and nothing the stoker reads in your words. The STOKER tab
+`deploys`), and nothing the stoker reads in your words. The stoker's view
 shows them under your order (`✓ merges`, `! releases and deploys still ask
 you`).
 
@@ -280,10 +281,11 @@ record of the panes it drove, the session reads that cause instead.
 
 In a session the stoker messaged, a guarded command runs when its chip is
 on, or when you gave the go for it. Off, the command is denied, and
-matchblox puts it on the STOKER tab by itself, under `YOUR GO`:
+matchblox puts it on the stoker's view by itself, under `YOUR GO`, and the
+card of that session goes into `NEEDS YOU` with `y go` among its keys:
 
 ```text
- ⏸ 02:40 waits for you: api-gw wants to run gh pr merge 4556 --squash
+ ⏸ 02:40 waits for your go: api-gw wants to run gh pr merge 4556 --squash
          y gives the go, once
 ```
 
@@ -316,7 +318,7 @@ The guard has limits:
   the stoker's until you go into it from the console while the stoker
   rests.
 - Codex, OpenCode and Cursor have no such hook. A session of those agents is
-  unguarded. When the plan names one, the STOKER tab says so, with each
+  unguarded. When the plan names one, the stoker's view says so, with each
   go the run does not give (`! no merge guard watches api-gw: its merges,
   releases and deploys go unchecked`), and the brief tells the stoker
   never to ask such a session for one of them.
@@ -403,7 +405,7 @@ The guard has limits:
   turn. It ends a session only with `matchblox kill`, only one at rest that
   you did not park, and only with the `kills` go or your `y` (`the kill
   waits for the builder's go: it is on the card, y gives it`). A session
-  that works or waits for you is refused (`api-gw works: the stoker kills
+  that works or needs you is refused (`api-gw works: the stoker kills
   only a session at rest`).
 - It starts sessions only in a run, only on your tmux server, and only
   Claude Code, Codex, OpenCode or Cursor.
@@ -426,35 +428,27 @@ No chain stoker starts by itself. Each one starts when you start it, or
 when the host stoker gives its chain an order. Each one is one more agent,
 and it uses tokens. `[stoker] max_chains` (4 by default) caps how many run
 at once. A fifth start is refused:
-`the family has its 4 chain stokers: max_chains. Quit one on the STOKER tab first.`
+`the family has its 4 chain stokers: max_chains. Quit one on Machine › stoker first.`
 
 ### Talk to a chain
 
-A chain with a stoker has a head row at the top of its fuse in Sessions:
-the stoker's name and the steps of its plan that are done.
+A chain's room shows its stoker: `g` on a card of the chain opens it. The
+stoker's card sits above the columns, with its order and the steps of its
+plan, and the talk line sits under them.
 
-```text
- WAITS FOR YOU · 1 · chain of 3
- ✦─╮ stoker   kindle-web · plan 2/5
-▌╿─┤ kindle-web
- ✦─┤ hearth-api
- ╿─╯ ember-billing
-```
-
-- `a` or `Enter` on the head row opens the chain's stoker in a popup. It
-  runs on matchblox's own tmux server. Type an order in your own words, or
-  answer its prompts; prefix `d` closes the popup. By day, a later order
-  goes in as `New order: <your words>` and goes onto its card.
-- `a` on a member row goes into that member's pane. Answer one match
+- The talk line takes your words to the chain's stoker. By day, a later
+  order goes in as `New order: <your words>` and goes onto its card.
+- A chain stoker that asks you has a card of its own in `NEEDS YOU`,
+  named `<chain>'s stoker`, and the header counts it. `⏎` on it opens the
+  chain's stoker in a popup. It runs on matchblox's own tmux server.
+  Answer its prompts; prefix `d` closes the popup.
+- `⏎` on a member's card goes into that member's pane. Answer one match
   yourself when you want to.
-- `F` on a member of a chain with no stoker opens the start sheet. On a
-  desk, a tap on the fuse does the same. When the stoker's run is off,
-  `a` on its head row opens the start sheet too: a new run needs an order
-  and its gos.
-- A head row is no session. `x`, `r`, `A` and `z` on it say
-  `the stoker of chain <name> is no session: quit it on the STOKER tab`.
-- The chain moves into the group of its neediest row, the head row too. A
-  stoker that asks you puts its chain in WAITS FOR YOU.
+- `F` on a member of a chain with no stoker opens the start sheet: a new
+  run needs an order and its gos.
+- A stoker's card is no session. `x`, `r`, `A` and `z` on it say
+  `the stoker of chain <name> is no session: Q quits it on Machine ›
+  stoker`.
 
 The start sheet is the launch sheet for one chain:
 
@@ -486,8 +480,8 @@ matchblox stoker quit --chain api-auth
   that runs needs words: `an order needs words`.
 - From your shell, a chain's stoker gets no go: `--go` there is refused
   with `goes are given at the console: drop --go here, and grant them on
-  the STOKER tab`. A pane with no agent seen in it yet counts as yours, so
-  an agent there must not grant itself merges. Grant gos on the STOKER tab.
+  Machine › stoker`. A pane with no agent seen in it yet counts as yours, so
+  an agent there must not grant itself merges. Grant gos on the stoker's view.
 - From the host stoker's pane, `--go merges,releases,deploys,kills` gives
   the chain's stoker those gos; with no `--go`, it has the host stoker's.
 - `matchblox stoker quit --chain <who>` quits the stoker of that chain:
@@ -554,20 +548,18 @@ matchblox stoker quit --chain api-auth
 
 ### See the family
 
-- The STOKER tab lists the family: the host stoker's card first, then a
+- The stoker's view lists the family: the host stoker's card first, then a
   `CHAIN <name>` card for each chain stoker. `Enter` on a chain card opens
   that stoker's pane. `Q` and a typed `y` quit that stoker only, and end
   its run. `Q` shows on a card whose run is on, even when its agent is
   gone.
 - A go that a chain stoker's run waits for shows on its card under
-  `YOUR GO`. `y` on it gives that go, once, as on the host's card. The
-  tab's name counts it with the host's.
+  `YOUR GO`. `y` on it gives that go, once, as on the host's card.
 - An ended chain stoker keeps its card until you look at the host's card
-  after its end (the morning card). Then its card leaves the tab and
+  after its end (the morning card). Then its card leaves the view and
   `matchblox status`. Its run log stays on disk, and the merge guard reads
   it no more.
-- The dock counts the chain stokers: `STOKER · 2 chains` (`· 1 chain` for
-  one). The header counts every stoker that runs, the host's while its run
+- The header counts every stoker that runs, the host's while its run
   is on: `≋ 2`. A host stoker that asks or wears the night keeps its word
   before the count. With no chain stoker, both read as before.
 - A chain's room talks to its stoker: the first words to a chain with no
@@ -586,7 +578,7 @@ A Claude Code session in tmux that is:
 
 - at rest: its turn ended, even while subagents or background shells it
   started still run (the transcript says so, not Claude Code's busy flag).
-  Sessions shows one whose subagents still work as `agents`, not idle,
+  Its card shows one whose subagents still work as `agents`, not idle,
 - due, at the moment that suits it (below),
 - not stopped by its plan's limit (`out`): a compact needs the model too,
 - not waiting for you: no question, no permission prompt,
@@ -633,15 +625,12 @@ It never answers a question or a permission prompt, never sends
 
 ## In the morning
 
-The stoker lives in the dock at the bottom of the screen. While a run is
-in charge, or has steps you have not seen, its panel takes the dock: its
-state, `ready 5/7` once it ended, the last step, and `1 compacted · 1
-waited · 386k back`. With room to spare it lists the recent steps too. What
-it does also shows for a moment in the header: it started, it compacted a
-session, it rests, the run ended.
+The header's stoker word says how the stoker is: `stoker`, `☾ night →
+07:00`, `stoker rests`. What it does shows for a moment in the strip's
+row: it started, it compacted a session, it rests, the run ended.
 
-`c`, or a tap on the panel, opens the STOKER tab, even after a
-night with nothing to do. It holds your words, the plan with the outcome
+The row `stoker` on Machine opens the stoker's view, even after a night
+with nothing to do. It holds your words, the plan with the outcome
 of each step, the standing rules and the steps the stoker took, and at the
 end of the run its score:
 
@@ -653,7 +642,7 @@ end of the run its score:
   ✓ merges
   ! releases and deploys still ask you
 
- DONE 3 of 4 · 1 WAITS FOR YOU
+ DONE 3 of 4 · 1 NEED YOU
  ▌✓ 23:41 api-gw  merge #4556 when green
           merged #4556, CI green
   ✓ 03:40 app-docs  merge #4551 on green
@@ -676,7 +665,7 @@ end of the run its score:
 
   THE RUN · ready 5/7
     7 watched · 1 was full · 1 compacted · 1 waited · 386k tokens given back
-    api-gw           waits for you
+    api-gw           needs you
     app-docs         out until 09:10
     billing          69% · finishes ~79% · left alone
 ```
@@ -686,15 +675,15 @@ failed, `○` not begun. `Enter` on a step shows the exact command the
 stoker ran for it, or the one a go step waits to run. `y` on a step under
 `YOUR GO` gives it the go, once. `a` on a failed step goes into
 its session's pane; a go the run ended before you gave reads `the run ended
-before your go`, and nothing guards that command any more. The tab's name counts the steps that wait for you. Opening the
-tab marks the steps seen.
+before your go`, and nothing guards that command any more. Opening the
+view marks the steps seen.
 
 - `NIGHT · 23:10 → 07:00` and `sealed`: a night's orders are sealed until
   it ends (`n` stops it). By day the line reads `STOKER · since 13:05`.
 - `limit out 04:12 → 06:40`: your plan's limit stopped the sessions, from
   then until its reset. It comes first, because nothing worked in between.
 - `ready 5/7`: of the sessions at work when the night began, how many can
-  go on now: still there, not stopped by the limit, not waiting for you,
+  go on now: still there, not stopped by the limit, not needing you,
   and not full. Each one that is not ready is named, with what it needs.
   One that is `out until 09:10` can work after its reset: a turn
   the limit cut off, Claude Code continues by itself; one you left idle
@@ -710,13 +699,13 @@ tab marks the steps seen.
 - `typed, not sent: …`: the compact is in the prompt without its `Enter`.
   Send it or clear it.
 
-A stoker run during the day ends with the same tab, headed `STOKER`.
+A stoker run during the day ends with the same view, headed `STOKER`.
 Until you have seen it, `matchblox status` shows the card too:
 
 ```text
 stoker: night 23:10 → 07:00 · ready 5/7 · 7 watched · 1 was full · 1 compacted · 1 waited · 386k tokens given back
   limit out 04:12 → 06:40
-  not ready: api-gw (waits for you)
+  not ready: api-gw (needs you)
   not ready: app-docs (out until 09:10)
   left alone: billing (69% · finishes ~79%)
 ```
@@ -739,13 +728,12 @@ compact_at = 80
 
 ## Background work
 
-A session whose turn ended with subagents still working reads `agents` in
-Sessions: it works through them, and their results start its next turn, so
-it does not wait for you. One whose turn ended with only shells running
-reads `tests` or `shell`. Either says what still runs in its detail
-(`agents 1 subagent running`, `shells 2 shells · oldest 1d13h`), with each
-shell's pid and command. A background shell that has run for an hour or
-more is a recommendation in Sessions: `Enter` jumps to its session, `x` and a typed
+A session whose turn ended with subagents still working reads `agents` on
+its card, in `WORKING`: it works through them, and their results start its
+next turn, so it does not need you. One whose turn ended with only shells
+running reads `tests` or `shell`. A background shell that has run for an
+hour or more is a recommendation under the board: `Enter` jumps to its
+session, `x` and a typed
 `y` end it. A wait loop such as `while pgrep -f "node walk.mjs"` finds its
 own command line and never ends.
 

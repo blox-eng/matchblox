@@ -100,7 +100,8 @@ func TestWhatLeavesTheDemoSaysSoAndRunsNothing(t *testing.T) {
 			m := demoConsole(t, 100, o)
 			m.doors = []doors.Door{{ID: doors.Tmux, Title: "Install tmux", Term: []string{"sh", "-c", "true"}}}
 			m.doorPick = doors.Tmux
-			return pressKeys(t, m, "enter")
+			m.viewPrefs.CopyCheckedDesk = true
+			return pressKeys(t, onDoors(m).(Model), "enter") // the board's doors line
 		},
 		"a confirm that got past the words": func(t *testing.T) Model {
 			next, _ := demoConsole(t, 100, o).confirm(action{label: "connect", connect: true, remote: true, steps: [][]string{{"matchblox", "connect", "ws-1"}}})
@@ -230,7 +231,7 @@ func onSession(t *testing.T, m Model, name string) Model {
 	t.Helper()
 	for _, s := range m.snap.Sessions {
 		if s.Name == name {
-			m.chose, m.selPID, m.selHost = true, s.PID, s.Host
+			choose(&m, s.PID)
 			return m
 		}
 	}
@@ -261,8 +262,8 @@ func TestEnterInTheDemoOpensTheStandIn(t *testing.T) {
 		t.Fatal("enter opened no stand-in")
 	}
 	lines := strings.Split(ansi.Strip(m.render()), "\n")
-	if !strings.HasPrefix(strings.TrimSpace(lines[0]), "‹ Sessions") {
-		t.Errorf("row 0 is %q, want the way back to Sessions", lines[0])
+	if !strings.HasPrefix(strings.TrimSpace(lines[0]), "‹ board") {
+		t.Errorf("row 0 is %q, want the way back to the board", lines[0])
 	}
 	if last := lines[len(lines)-1]; !strings.Contains(last, standInHint) {
 		t.Errorf("the key line is %q, want %q", last, standInHint)
@@ -272,11 +273,11 @@ func TestEnterInTheDemoOpensTheStandIn(t *testing.T) {
 // The stand-in is the whole screen at every width, as a jump into a pane is.
 func TestTheStandInIsFullScreenOnADesk(t *testing.T) {
 	m := standIn(t, 132)
-	if _, right := m.panes(132); right == 0 {
-		t.Fatal("132 columns do not split Sessions: the test shows nothing")
+	if m.layoutAt(132) != Wide {
+		t.Fatal("132 columns are no desk: the test shows nothing")
 	}
 	lines := strings.Split(ansi.Strip(m.render()), "\n")
-	if !m.standIn || !strings.HasPrefix(strings.TrimSpace(lines[0]), "‹ Sessions") {
+	if !m.standIn || !strings.HasPrefix(strings.TrimSpace(lines[0]), "‹ board") {
 		t.Fatalf("stand-in %v, row 0 is %q", m.standIn, lines[0])
 	}
 	if sc := m.draw(132); !sc.placeFull || sc.viewW != 132 {

@@ -1,0 +1,31 @@
+ ▰ matchblox
+ BOARD 0    machine
+────────────────────────────────────────────────────────────────────────────────
+ NEEDS YOU  −                           WORKING  −           SHIPPING  −
+  reading your matches…
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────
+ QUIET   ▴                                                                   −
+ + start a new session
+                                                                      machine ›
+────────────────────────────────────────────────────────────────────────────────
+ c copy   v one line   s hosts   u strip   ←→ columns   tab next

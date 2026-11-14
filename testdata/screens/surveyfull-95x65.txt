@@ -1,65 +1,65 @@
- ▰ matchblox                                                                  ● 6 wait for you
- SESSIONS 7    ships 3    machine    git    history    panes    stoker
+ ▰ matchblox                                                                      ● 6 need you
+ BOARD 7    machine
 ───────────────────────────────────────────────────────────────────────────────────────────────
- WAITS FOR YOU · 6                    │ flint-auth · asks
- │ spark-docs     done       9m   88% │ ✻ team@example.com · Max
- ╿ ember-billing  done       4m   32% │ #4545 ●━✕┄○┄○┄○  conflicts with main
-▌╿ flint-auth     asks       2m   41% │
- ╿ kindle-web     asks       1m   56% │
- ╿ cinder-ci      done       0s   55% │
- ╿ wick-mobile    done       0s    6% │
- WORKING · 1                          │
- ✦ hearth-api     busy            79% │
- + start a new session                │
-                                      │
- 1 without an agent: shell:1.1 zsh    │
-                                      │
- RECOMMENDATIONS · 7 · h hides        │
- ▲ The week runs short: compact spark…│
- ○ Clear spark-docs (%3)              │
- ○ Clear kindle-web (%5)              │
- ○ Clear cinder-ci (%6)               │
- ○ Clear flint-auth (%2)              │
- ○ Clear ember-billing (%8)           │
- ○ Clear wick-mobile (%7)             │
-                                      │
-                                      │
-                                      │
-                                      │
-                                      │
-                                      │
-                                      │
-                                      │
-──────────────────────────────────────│
- USAGE                                │
- ✻ Claude Max    5h   ▰▰▰ 84%         │
-                 wk   ▰▰▱ 82%         │
-                 out Fri ~21:00       │
- · Google login  not measured         │
- ❋ OpenAI Plus   5h   ▰▱▱ 40%  · 23:59│
-                 wk   ▱▱▱ 12%         │
-                 lasts the week       │
-──────────────────────────────────────│
- MACHINE                     16 cores │
- cpu  ▁ 0%   load 6.2                 │
- mem  ▰▰▰▱▱▱▱▱ 26 of 64 GB            │
- disk ▰▰▰▰▰▰▱▱ 71% of 1 TB            │
- runs 5 claude · 1 codex · 1 opencode │
-                                      │
- PID      COMMAND           CPU    ME…│
- 1        systemd             0%   9.…│
- 1200     claude              0%   9.…│ ⏺ The refresh endpoint is in and its tests pass.
- 1300     zsh                 0%   9.…│
- 1310     claude              0%   9.…│ ───────────────────────────────────────────────────────
- 1400     claude              0%   9.…│  ☐ Rotate
- 1500     zsh                 0%   9.…│
- 1600     claude              0%   9.…│ Should a refresh also rotate the token?
- 1700     codex               0%   9.…│
- 1800     MainThread          0%   9.…│ ❯ 1. Rotate it
- 1900     claude              0%   9.…│      The old one stops at once.
- 4242     bash                0%   9.…│   2. Rotate, keep the old one a minute
-──────────────────────────────────────│   3. Type something.
- STOKER                           off │
- off · f starts it · n starts a night │ Enter to select · ↑/↓ to navigate · Esc to cancel
+ NEEDS YOU · 6  −                                WORKING · 1  −          SHIPPING · 0  −
+▌╿ flint-auth                            ✻  2m   ✦ hearth-api    ✻
+  stuck conflicts with main
+  #4545 ●━✕┄○┄○┄○  ctx 41%
+  “The refresh flow works and the tests pass.
+  One choice is yours before I wire the
+  rotation.”
+  ⏎ go in
+
+ │ spark-docs                            ✻  9m
+  done I rewrote the quick start and the inst…
+ ╿ ember-billing                         ✻  4m
+  green #4552 waits for your merge
+ ╿ kindle-web                            ✻  1m
+  asks Claude needs your permission to use Ba…
+ ╿ cinder-ci                             ❋  0s
+  done I am moving the cache key to the go.su…
+ ╿ wick-mobile                           ▣  0s
+  done ⠙ Working
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ───────────────────────────────────────────────────────────────────────────────────────────────
- enter goes into flint-auth  x kill  r rename  z park  N new  p ships  f stoker sampled 0s ago
+ QUIET · 0   ▴                                                                              −
+ + start a new session
+ RECOMMENDATIONS · 7
+ v changes the cards now: verbose, or one line.
+───────────────────────────────────────────────────────────────────────────────────────────────
+ ⏎ go in   c copy   v verbose   s hosts   u strip   ←→ columns   tab next

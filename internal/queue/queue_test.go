@@ -634,3 +634,105 @@ func TestAForgottenSessionIsHeardAgainAfterTheGrace(t *testing.T) {
 		t.Fatalf("the forgotten id is deaf after the grace: %+v", items)
 	}
 }
+
+// TestARestartSeedsWaitsFromReports: the service just started, so no hook
+// says who waits. An agent whose own report says it waits is an ask in
+// the queue at once: a permission by Claude Code's own names for one, a
+// question else. A report of work is not.
+func TestARestartSeedsWaitsFromReports(t *testing.T) {
+	report := func(id, pane, name, status, why string) sample.Session {
+		s := session(id, pane, name, status, 3*time.Minute)
+		s.Agent, s.Reported, s.WaitingFor, s.LastLine = "claude", true, why, "I need to run the migration."
+		return s
+	}
+	q := New()
+	q.Merge([]sample.Session{
+		report("flint", "%2", "flint-auth", "waiting", "permission prompt"),
+		report("spark", "%3", "spark-docs", "waiting", "input needed"),
+		report("wick", "%7", "wick-mobile", "waiting", "permission"),
+		report("hearth", "%1", "hearth-api", "busy", ""),
+	}, at(600))
+	got := map[string]Item{}
+	for _, it := range q.Items() {
+		got[it.Name] = it
+	}
+	if len(got) != 3 {
+		t.Fatalf("items %+v, want the three waits", q.Items())
+	}
+	for name, state := range map[string]string{"flint-auth": StatePermission, "spark-docs": StateQuestion, "wick-mobile": StatePermission} {
+		it := got[name]
+		if it.State != state || it.Estimated || !it.Since.Equal(at(600).Add(-3*time.Minute)) || it.LastLine != "I need to run the migration." {
+			t.Errorf("%s: %+v, want %s since its report", name, it, state)
+		}
+	}
+}
+
+// TestAHookedSessionWithNoWaitRowSeedsItsReportedWait: a session the hooks
+// know but whose wait hook was lost is an ask by its own report.
+func TestAHookedSessionWithNoWaitRowSeedsItsReportedWait(t *testing.T) {
+	q := New()
+	q.Apply(hooks.Event{Name: "SessionStart", SessionID: "flint", Pane: "%2", At: at(0)})
+	s := session("flint", "%2", "flint-auth", "waiting", time.Minute)
+	s.Agent, s.Reported, s.WaitingFor = "claude", true, "permission prompt"
+	q.Merge([]sample.Session{s}, at(600))
+	if items := q.Items(); len(items) != 1 || items[0].State != StatePermission || items[0].SessionID != "flint" {
+		t.Fatalf("items %+v, want flint-auth's permission", items)
+	}
+}
+
+// TestAReportOfWorkHidesAHookedAsk (spec "A live report beats an old
+// guess"): a turn ended on a question, then its shells or agents work on
+// with no new prompt. A report of busy or shell means the hook's ask is no
+// wait: the phone, the buzz, peek and kill read no ask.
+func TestAReportOfWorkHidesAHookedAsk(t *testing.T) {
+	for _, status := range []string{"shell", "busy"} {
+		q := New()
+		q.Apply(hooks.Event{Name: "Stop", SessionID: "flint", Pane: "%2", Asks: true, At: at(0)})
+		s := session("flint", "%2", "flint-auth", status, 0)
+		s.Agent, s.Reported = "claude", true
+		q.Merge([]sample.Session{s}, at(60))
+		if items := q.Items(); len(items) != 0 {
+			t.Errorf("report %s: items %+v, want no ask", status, items)
+		}
+		idle := session("flint", "%2", "flint-auth", "idle", 0)
+		idle.Agent, idle.Reported = "claude", true
+		q.Merge([]sample.Session{idle}, at(120))
+		if items := q.Items(); len(items) != 1 || items[0].State != StateQuestion || !items[0].Since.Equal(at(0)) {
+			t.Errorf("report %s then idle: items %+v, want the ask back from when it began", status, items)
+		}
+	}
+}
+
+// TestAReportedWaitBeatsAFinishedHook: a hooked turn finished, then a turn
+// its background work started asks, and no hook fires for it. The
+// agent's own report of a wait is the ask.
+func TestAReportedWaitBeatsAFinishedHook(t *testing.T) {
+	q := New()
+	q.Apply(hooks.Event{Name: "Stop", SessionID: "flint", Pane: "%2", At: at(0)})
+	s := session("flint", "%2", "flint-auth", "waiting", time.Minute)
+	s.Agent, s.Reported, s.WaitingFor = "claude", true, "input needed"
+	q.Merge([]sample.Session{s}, at(600))
+	if items := q.Items(); len(items) != 1 || items[0].State != StateQuestion || items[0].SessionID != "flint" {
+		t.Fatalf("items %+v, want flint-auth's question", items)
+	}
+}
+
+// TestAReportedWaitKeepsItsStart: a reported wait starts when the report
+// says, the same at every merge, whatever the clock of the sample.
+func TestAReportedWaitKeepsItsStart(t *testing.T) {
+	q := New()
+	began := at(0).Add(300 * time.Millisecond)
+	var since []time.Time
+	for _, d := range []time.Duration{10 * time.Second, 11500 * time.Millisecond, 13200 * time.Millisecond} {
+		now := began.Add(d)
+		s := session("flint", "%2", "flint-auth", "waiting", now.Sub(began).Truncate(time.Second))
+		s.Agent, s.Reported, s.WaitingFor, s.StatusAt = "claude", true, "input needed", began
+		q.Merge([]sample.Session{s}, now)
+		if items := q.Items(); len(items) == 1 {
+			since = append(since, items[0].Since)
+		}
+	}
+	if len(since) != 3 || !since[0].Equal(began) || !since[1].Equal(began) || !since[2].Equal(began) {
+		t.Errorf("the wait began at %v, want %v each time", since, began)
+	}
+}

@@ -4,7 +4,9 @@ import UIKit
 
 /// The console's terminal, with three ways back to matchblox: a swipe in from the left edge,
 /// a tap on "◂ matchblox" in the tmux status line, and ⌘M or ctrl+M. Each one sends `HomeKey`.
-/// While the program reads the mouse, a vertical swipe sends wheel steps (`WheelScroll`).
+/// While the program reads the mouse, a vertical swipe sends wheel steps (`WheelScroll`). While
+/// the console shows the board, a sideways swipe sends `←` or `→` and a long-press a right click
+/// (`BoardTouch`), and each step of a swipe, in any direction, ticks once.
 final class ConsoleTerminalView: TerminalView {
     private struct Coast {
         let link: CADisplayLink
@@ -17,6 +19,10 @@ final class ConsoleTerminalView: TerminalView {
     var onHome: @MainActor () -> Void = {}
     /// Called when the terminal takes or gives up the keyboard.
     var onFocus: @MainActor (Bool) -> Void = { _ in }
+    /// The console shows the board (`BoardFollow`): a sideways swipe turns its page, and a
+    /// long-press opens the card's menu. Otherwise the terminal's own pans and long-press act.
+    var turnsPages = false
+    var opensMenu = false
     /// False on the demo: a tap only clicks, and the keyboard comes from the belt's key, so it does
     /// not cover the question the demo shows.
     var tapRaisesKeyboard = true
@@ -25,6 +31,8 @@ final class ConsoleTerminalView: TerminalView {
     @objc var inlinePredictionType: UITextInlinePredictionType = .no
 
     private let haptic = UIImpactFeedbackGenerator(style: .light)
+    /// The board's tick: one for each card or page a swipe moves.
+    private let tick = UISelectionFeedbackGenerator()
     private var edge: UIScreenEdgePanGestureRecognizer?
     private var labelTap: UITapGestureRecognizer?
     private var clickTap: UITapGestureRecognizer?
@@ -34,6 +42,8 @@ final class ConsoleTerminalView: TerminalView {
     private var wheelPan: UIPanGestureRecognizer?
     private var wheel = WheelScroll(cellHeight: 0)
     private var coast: Coast?
+    private var pagePan: UIPanGestureRecognizer?
+    private var hold: UILongPressGestureRecognizer?
 
     init(font: UIFont) {
         super.init(frame: .zero, font: font)
@@ -76,18 +86,41 @@ final class ConsoleTerminalView: TerminalView {
         panGestureRecognizer.require(toFail: wheelPan)
         addGestureRecognizer(wheelPan)
         self.wheelPan = wheelPan
+
+        // A sideways swipe turns the board's page. Like the wheel pan, it goes before the
+        // scroll view's pan and SwiftTerm's own.
+        let pagePan = UIPanGestureRecognizer(target: self, action: #selector(pagePanned))
+        pagePan.maximumNumberOfTouches = 1
+        panGestureRecognizer.require(toFail: pagePan)
+        addGestureRecognizer(pagePan)
+        self.pagePan = pagePan
+
+        // SwiftTerm's long-press (its copy menu, at 0.7 s) waits for this one, which a program
+        // that reads no clicks fails at once.
+        let hold = UILongPressGestureRecognizer(target: self, action: #selector(held))
+        hold.minimumPressDuration = BoardTouch.longPress
+        hold.cancelsTouchesInView = false
+        for other in gestureRecognizers ?? [] where other is UILongPressGestureRecognizer {
+            other.require(toFail: hold)
+        }
+        addGestureRecognizer(hold)
+        self.hold = hold
     }
 
     required init?(coder: NSCoder) { nil }
 
     /// SwiftTerm adds its mouse and selection pans only once it needs them: they wait for the
-    /// edge swipe and the wheel pan too, or a swipe with the tmux mouse on would drag in the pane.
+    /// edge swipe, the wheel pan and the page pan too, or a swipe with the tmux mouse on would
+    /// drag in the pane.
     override func addGestureRecognizer(_ gesture: UIGestureRecognizer) {
         super.addGestureRecognizer(gesture)
         guard let edge, gesture is UIPanGestureRecognizer, gesture !== edge else { return }
         gesture.require(toFail: edge)
         if let wheelPan, gesture !== wheelPan {
             gesture.require(toFail: wheelPan)
+        }
+        if let pagePan, gesture !== pagePan {
+            gesture.require(toFail: pagePan)
         }
     }
 
@@ -144,6 +177,15 @@ final class ConsoleTerminalView: TerminalView {
             let velocity = pan.velocity(in: self)
             return readsMouse && !selection.active && abs(velocity.y) > abs(velocity.x)
         }
+        if gesture === pagePan, let pan = gesture as? UIPanGestureRecognizer {
+            let velocity = pan.velocity(in: self)
+            let start = pan.location(in: self).x - pan.translation(in: self).x
+            return turnsPages && readsMouse && !selection.active && !inTmuxPane
+                && BoardTouch.isSideways(dx: velocity.x, dy: velocity.y) && !BoardTouch.fromEdge(x: start)
+        }
+        if gesture === hold {
+            return opensMenu && sendsClicks && !inTmuxPane && !tapsLabel(at: gesture.location(in: self))
+        }
         return super.gestureRecognizerShouldBegin(gesture)
     }
 
@@ -162,6 +204,7 @@ final class ConsoleTerminalView: TerminalView {
         switch pan.state {
         case .began, .changed:
             if pan.state == .began {
+                if turnsPages { tick.prepare() }
                 stopCoast()
                 wheel = WheelScroll(cellHeight: cellSize.height, linesPerStep: inTmuxPane ? WheelScroll.tmuxLines : 1)
             }
@@ -175,6 +218,21 @@ final class ConsoleTerminalView: TerminalView {
         default:
             break
         }
+    }
+
+    /// The page turns once, as the finger lifts.
+    @objc private func pagePanned(_ pan: UIPanGestureRecognizer) {
+        if pan.state == .began { tick.prepare() }
+        guard pan.state == .ended,
+              let key = BoardTouch.page(dx: pan.translation(in: self).x, velocity: pan.velocity(in: self).x) else { return }
+        tick.selectionChanged()
+        send(key)
+    }
+
+    @objc private func held(_ hold: UILongPressGestureRecognizer) {
+        guard hold.state == .began, let spot = cell(at: hold.location(in: self)) else { return }
+        haptic.impactOccurred()
+        send(BoardTouch.rightClick(col: spot.col, row: spot.row))
     }
 
     @objc private func coasted(_ link: CADisplayLink) {
@@ -209,17 +267,25 @@ final class ConsoleTerminalView: TerminalView {
 
     /// Each step at the touch's cell, encoded by SwiftTerm for the program's mouse protocol.
     private func sendWheel(_ steps: [WheelScroll.Step], at point: CGPoint) {
+        guard readsMouse, !steps.isEmpty, let spot = cell(at: point) else { return }
+        if turnsPages { tick.selectionChanged() }
         let terminal = getTerminal()
-        guard readsMouse, !steps.isEmpty, terminal.cols > 0, terminal.rows > 0 else { return }
-        let cell = cellSize
-        let col = min(max(Int(point.x / cell.width), 0), terminal.cols - 1)
-        let row = min(max(Int(point.y / cell.height) - terminal.buffer.yDisp, 0), terminal.rows - 1)
         let pixelX = Int(point.x)
         let pixelY = Int(point.y - contentOffset.y)
         for step in steps {
             let flags = terminal.encodeButton(button: step.button, release: false, shift: false, meta: false, control: false)
-            terminal.sendEvent(buttonFlags: flags, x: col, y: row, pixelX: pixelX, pixelY: pixelY)
+            terminal.sendEvent(buttonFlags: flags, x: spot.col, y: spot.row, pixelX: pixelX, pixelY: pixelY)
         }
+    }
+
+    /// The visible cell under `point`, kept on the screen; nil before the terminal has a size.
+    private func cell(at point: CGPoint) -> (col: Int, row: Int)? {
+        let terminal = getTerminal()
+        guard terminal.cols > 0, terminal.rows > 0 else { return nil }
+        let size = cellSize
+        let col = min(max(Int(point.x / size.width), 0), terminal.cols - 1)
+        let row = min(max(Int(point.y / size.height) - terminal.buffer.yDisp, 0), terminal.rows - 1)
+        return (col, row)
     }
 
     /// The press and release at the touch's cell, then the keyboard on a first tap.
@@ -230,16 +296,13 @@ final class ConsoleTerminalView: TerminalView {
     }
 
     private func sendClick(at point: CGPoint) {
+        guard sendsClicks, let spot = cell(at: point) else { return }
         let terminal = getTerminal()
-        guard sendsClicks, terminal.cols > 0, terminal.rows > 0 else { return }
-        let cell = cellSize
-        let col = min(max(Int(point.x / cell.width), 0), terminal.cols - 1)
-        let row = min(max(Int(point.y / cell.height) - terminal.buffer.yDisp, 0), terminal.rows - 1)
         let pixelX = Int(point.x)
         let pixelY = Int(point.y - contentOffset.y)
         for release in [false, true] {
             let flags = terminal.encodeButton(button: 0, release: release, shift: false, meta: false, control: false)
-            terminal.sendEvent(buttonFlags: flags, x: col, y: row, pixelX: pixelX, pixelY: pixelY)
+            terminal.sendEvent(buttonFlags: flags, x: spot.col, y: spot.row, pixelX: pixelX, pixelY: pixelY)
         }
     }
 

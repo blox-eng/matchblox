@@ -198,10 +198,12 @@ func TestTheCLIsPaneComesFromItsProcess(t *testing.T) {
 // event only for that pane: the same hook from a process in another pane
 // changes nothing.
 func TestTheHookProcessSpeaksForItsOwnPane(t *testing.T) {
+	// %2 runs an agent whose own report says idle: in %1 its report of work
+	// would hide the ask (spec "A live report beats an old guess").
 	sock := isolate(t)
 	s := newService(config.Default(), fixtures(t))
 	var agentIn atomic.Value // the pane this test process runs in
-	agentIn.Store("%1")
+	agentIn.Store("%2")
 	var asked atomic.Int64
 	s.PeerPane = func(pid int) string {
 		asked.Add(1)
@@ -215,7 +217,7 @@ func TestTheHookProcessSpeaksForItsOwnPane(t *testing.T) {
 	hookOfShell := func(name, event string) {
 		t.Helper()
 		cmd := exec.Command("sh", "-c", `"$0" hook "$1"; exit $?`, os.Args[0], name)
-		cmd.Env = append(os.Environ(), "MATCHBLOX_TEST_ARGS=hook\x1f"+name, "TMUX_PANE=%1")
+		cmd.Env = append(os.Environ(), "MATCHBLOX_TEST_ARGS=hook\x1f"+name, "TMUX_PANE=%2")
 		cmd.Stdin = strings.NewReader(event)
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("hook %s: %v\n%s", name, err, out)
@@ -223,7 +225,7 @@ func TestTheHookProcessSpeaksForItsOwnPane(t *testing.T) {
 	}
 	permission := func() bool {
 		for _, it := range s.State().Queue {
-			if it.SessionID == "s9" && it.Pane == "%1" && it.State == "permission" {
+			if it.SessionID == "s9" && it.Pane == "%2" && it.State == "permission" {
 				return true
 			}
 		}
@@ -241,7 +243,7 @@ func TestTheHookProcessSpeaksForItsOwnPane(t *testing.T) {
 	until("the agent's own hook reached the queue", permission)
 
 	// The same UserPromptSubmit, from a process that runs in the stoker's
-	// pane while it claims TMUX_PANE=%1.
+	// pane while it claims TMUX_PANE=%2.
 	agentIn.Store("%9")
 	before := asked.Load()
 	submit := `{"session_id":"s9","cwd":"/work/app","hook_event_name":"UserPromptSubmit","prompt":"1"}`
@@ -256,7 +258,7 @@ func TestTheHookProcessSpeaksForItsOwnPane(t *testing.T) {
 		t.Fatal("a hook from another pane cleared the permission prompt")
 	}
 
-	agentIn.Store("%1")
+	agentIn.Store("%2")
 	hookOfShell("UserPromptSubmit", submit)
 	until("the agent's own UserPromptSubmit cleared its prompt", func() bool { return !permission() })
 }

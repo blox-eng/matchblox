@@ -9,11 +9,9 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/proto"
-	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/said"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
@@ -78,7 +76,7 @@ func viewModel(t *testing.T) (Model, *fakeConn) {
 		{PID: 1, Pane: "%1", Name: "a"},
 		{PID: 2, Pane: "%2", Name: "b"},
 	}
-	return loadedWith(t, 100, st)
+	return loadedWith(t, 160, st) // the board watches its chosen card beside its live view
 }
 
 func TestScreenOfAnotherPaneIsIgnored(t *testing.T) {
@@ -92,9 +90,10 @@ func TestScreenOfAnotherPaneIsIgnored(t *testing.T) {
 }
 
 func TestSelectionChangeWatches(t *testing.T) {
+	// the two matches are in two columns of the board: → moves between them
 	m, f := viewModel(t)
 	first, _ := m.selected()
-	next, cmd := key(m, "down")
+	next, cmd := key(m, "right")
 	drain(cmd)
 	second, _ := next.(Model).selected()
 	if first.Pane == second.Pane {
@@ -157,7 +156,7 @@ func TestRefusedWatchRetriesOnTheNextSnapshotAndSaysNothing(t *testing.T) {
 	if mm.flash != "" || mm.watching != "" {
 		t.Fatalf("flash %q watching %q", mm.flash, mm.watching)
 	}
-	next, cmd = mm.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	next, cmd = mm.Update(tea.WindowSizeMsg{Width: 160, Height: 30})
 	drain(cmd)
 	n := len(f.allActs())
 	next, cmd = next.Update(stateMsg(fixtureStateWith(sel)))
@@ -184,9 +183,10 @@ func TestChatLinesTakeNoNegativeHeight(t *testing.T) {
 }
 
 func TestRefusalOfAnOldWatchHoldsNothing(t *testing.T) {
+	// the two matches are in two columns of the board: → moves between them
 	m, _ := viewModel(t)
 	a, _ := m.selected()
-	next, cmd := key(m, "down")
+	next, cmd := key(m, "right")
 	drain(cmd)
 	b, _ := next.(Model).selected()
 	next, _ = next.Update(screenMsg{Pane: b.Pane, Text: "kept"})
@@ -200,15 +200,9 @@ func TestRefusalOfAnOldWatchHoldsNothing(t *testing.T) {
 // onPane is m with the session in pane selected.
 func onPane(t *testing.T, m Model, pane string) Model {
 	t.Helper()
-	for _, k := range []string{"up", "down", "down"} {
-		if s, _ := m.selected(); s.Pane == pane {
-			return m
-		}
-		next, _ := key(m, k)
-		m = next.(Model)
-	}
-	t.Fatalf("no session in %s to select", pane)
-	return m
+	next, cmd := selectPane(t, m, pane).Update(noticeMsg{}) // the board watches its chosen card
+	drain(cmd)
+	return next.(Model)
 }
 
 // keyActs are the keys the console sent, in order.
@@ -271,72 +265,17 @@ func demoSized(t testing.TB, w, h int) Model {
 	return next.(Model)
 }
 
-// askLast is the last line of askScreen.
-const askLast = "Enter to select · ↑/↓ to navigate · Esc to cancel"
-
-// sides are the lines of a frame cut at the list's edge: the list, and
-// what is right of its hairline.
-func sides(sc drawn, w int) (left, right []string) {
-	for _, l := range sc.lines {
-		plain := ansi.Strip(l)
-		left = append(left, ansi.Cut(plain, 0, sc.listW))
-		right = append(right, ansi.Cut(plain, sc.listW+1, w))
-	}
-	return left, right
-}
-
-func TestWideStacksStatsLeft(t *testing.T) {
-	m := demoSized(t, 200, 50)
-	sc := m.draw(200)
-	if sc.listW > 200*2/5 {
-		t.Fatalf("the left column is %d of 200 columns", sc.listW)
-	}
-	if sc.dockAt >= 0 {
-		t.Fatal("the dock is drawn on a desk")
-	}
-	left, right := sides(sc, 200)
-	at := map[string]int{}
-	for y, l := range left {
-		for _, title := range []string{"SESSIONS", "USAGE", "MACHINE"} {
-			if _, seen := at[title]; !seen && strings.Contains(l, title) {
-				at[title] = y
-			}
-		}
-	}
-	if len(at) != 3 || at["SESSIONS"] >= at["USAGE"] || at["USAGE"] >= at["MACHINE"] {
-		t.Fatalf("titles at %v:\n%s", at, strings.Join(left, "\n"))
-	}
-	if !slices.ContainsFunc(right, func(l string) bool { return strings.Contains(l, askLast) }) {
-		t.Fatalf("the right side has no screen:\n%s", strings.Join(right, "\n"))
-	}
-}
-
-func TestMediumSplitsListAndChat(t *testing.T) {
-	m := demoSized(t, 86, 30)
-	sc := m.draw(86)
-	if sc.listW != 38 {
-		t.Fatalf("the list is %d of 86 columns", sc.listW)
-	}
-	if sc.dockAt >= 0 {
-		t.Fatal("a dock under the chat: usage goes under the list")
-	}
-	_, right := sides(sc, 86)
-	if !slices.ContainsFunc(right, func(l string) bool { return strings.Contains(l, "Esc to") }) {
-		t.Fatalf("the right half has no screen:\n%s", strings.Join(right, "\n"))
-	}
-}
-
 func TestACutListSaysHowManyAreBelow(t *testing.T) {
 	m := demoSized(t, 132, 32)
 	sc := m.draw(132)
-	left, _ := sides(sc, 132)
+	left := plainLines(sc.lines)
 	if !slices.ContainsFunc(left, func(l string) bool {
 		return strings.HasPrefix(strings.TrimSpace(l), "↓ ") && strings.Contains(l, " more")
 	}) {
 		t.Fatalf("the cut list does not say what is below:\n%s", strings.Join(left, "\n"))
 	}
 	last := pressKeys(t, m, slices.Repeat([]string{"down"}, m.rowCount())...)
-	left, _ = sides(last.draw(132), 132)
+	left = plainLines(last.draw(132).lines)
 	if !slices.ContainsFunc(left, func(l string) bool { return strings.Contains(l, "RECOMMENDATIONS") }) {
 		t.Fatalf("the list does not scroll to its recommendations on a desk:\n%s", strings.Join(left, "\n"))
 	}
@@ -367,34 +306,6 @@ func flintSized(t *testing.T, w, h int, edit func(*sample.Session)) Model {
 	return next.(Model)
 }
 
-// everyFact gives a session an account, background work and, with its
-// ship, all three facts of the chat's strip.
-func everyFact(s *sample.Session) {
-	s.Provider, s.Account, s.Agents = "anthropic", "work", 1
-	s.Shells = []sample.Shell{{PID: 2240632, Started: demoAt.Add(-37 * time.Hour), Command: "sleep 15"}}
-}
-
-// The strip between the chat's title and its screen says the session's
-// account, its PR and its background work, on one line where it fits.
-// The screen gives the strip its rows.
-func TestTheChatStripSaysTheSessionsFacts(t *testing.T) {
-	m := flintSized(t, 200, 50, everyFact)
-	sc := m.draw(200)
-	_, right := sides(sc, 200)
-	strip := right[sc.bodyTop+1]
-	for _, want := range []string{"✻ work", "#4545", "conflicts with main", "1 subagent running", "1 shell · oldest 1d13h"} {
-		if !strings.Contains(strip, want) {
-			t.Fatalf("no %q in the strip %q:\n%s", want, strip, strings.Join(right, "\n"))
-		}
-	}
-	if strings.Contains(right[sc.bodyTop+2], "work") {
-		t.Fatalf("the strip takes two lines where one fits:\n%s", strings.Join(right, "\n"))
-	}
-	if len(sc.lines) != 50 || !slices.ContainsFunc(right, func(l string) bool { return strings.Contains(l, "Enter to select") }) {
-		t.Fatalf("%d lines, or the agent's menu is gone:\n%s", len(sc.lines), strings.Join(right, "\n"))
-	}
-}
-
 // A session with no account, no PR and no background work has no strip:
 // the screen starts under the title.
 func TestTheChatStripTakesNoRowsWithoutFacts(t *testing.T) {
@@ -415,57 +326,6 @@ func TestTheChatStripTakesNoRowsWithoutFacts(t *testing.T) {
 	}
 }
 
-// A strip too long for one line takes two, never more.
-func TestTheChatStripWrapsToTwoLinesAtMost(t *testing.T) {
-	m := flintSized(t, 104, 38, func(s *sample.Session) {
-		everyFact(s)
-		s.Account = "a-long-account-name@example.com · Max"
-	})
-	sc := m.draw(104)
-	_, right := sides(sc, 104)
-	first, second, third := right[sc.bodyTop+1], right[sc.bodyTop+2], right[sc.bodyTop+3]
-	if !strings.Contains(first, "a-long-account") || !strings.Contains(second, "#4545") && !strings.Contains(second, "subagent") {
-		t.Fatalf("the strip is not on two lines:\n%s", strings.Join(right, "\n"))
-	}
-	if strings.Contains(third, "subagent") || strings.Contains(third, "shell") {
-		t.Fatalf("the strip takes a third line:\n%s", strings.Join(right, "\n"))
-	}
-	for _, l := range right[sc.bodyTop+1 : sc.bodyTop+3] {
-		if lipgloss.Width(l) > 104-sc.listW-1 {
-			t.Fatalf("a strip line is wider than the chat: %q", l)
-		}
-	}
-}
-
-// On a short desk the machine folds before the list is cut; usage keeps
-// its rows and the list gives way to it alone, down to 3 rows and the
-// hint under them; shorter, usage folds too.
-func TestAShortDeskKeepsItsStats(t *testing.T) {
-	m := demoSized(t, 132, 32)
-	left, _ := sides(m.draw(132), 132)
-	all := strings.Join(left, "\n")
-	if !strings.Contains(all, "USAGE") || strings.Contains(all, "MACHINE") || !strings.Contains(all, "↓ ") {
-		t.Fatalf("132x32: want usage over a cut list, the machine folded:\n%s", all)
-	}
-	folded := false
-	for h := 10; h <= 40; h++ {
-		m := demoSized(t, 132, h)
-		sc := m.draw(132)
-		left, _ := sides(sc, 132)
-		hair := slices.IndexFunc(left[sc.bodyTop:], func(l string) bool { return strings.HasPrefix(l, "───") })
-		if hair < 0 || hair >= len(sc.rows) {
-			folded = true
-			continue
-		}
-		if hair < 4 {
-			t.Fatalf("132x%d: the list keeps %d lines over the stats:\n%s", h, hair, strings.Join(left, "\n"))
-		}
-	}
-	if !folded {
-		t.Fatal("no desk from 10 to 40 rows is short enough to fold the stats")
-	}
-}
-
 // inView is a phone with the first session's screen in its live view.
 func inView(t *testing.T) Model {
 	t.Helper()
@@ -480,36 +340,6 @@ func TestAGoneScreenSaysTheSessionEnded(t *testing.T) {
 	m := next.(Model)
 	if out := ansi.Strip(screen(m)); !strings.Contains(out, "That session ended.") {
 		t.Fatalf("the view does not say the session ended:\n%s", out)
-	}
-}
-
-// The hint under a cut list never covers the selection: every row the
-// selection moves through is drawn, selected, and a tap on it hits it.
-func TestTheMoreHintNeverCoversTheSelection(t *testing.T) {
-	for _, h := range []int{32, 24} { // 24: the list keeps its fewest rows
-		theMoreHintNeverCoversTheSelection(t, demoSized(t, 132, h))
-	}
-}
-
-func theMoreHintNeverCoversTheSelection(t *testing.T, m Model) {
-	t.Helper()
-	for range m.rowCount() {
-		sc := m.draw(132)
-		lines := strings.Split(ansi.Strip(strings.Join(sc.lines, "\n")), "\n")
-		at := slices.Index(sc.rows, m.rowIndex())
-		if at < 0 || !strings.HasPrefix(lines[sc.bodyTop+at], "▌") {
-			t.Fatalf("row %d is not drawn as selected:\n%s", m.rowIndex(), strings.Join(lines, "\n"))
-		}
-		for i, l := range lines {
-			if strings.Contains(l, "↓ ") && strings.Contains(l, " more") && i-sc.bodyTop >= 0 && i-sc.bodyTop < len(sc.rows) && sc.rows[i-sc.bodyTop] >= 0 {
-				t.Fatalf("the hint is on row %d:\n%s", sc.rows[i-sc.bodyTop], strings.Join(lines, "\n"))
-			}
-		}
-		next, _ := tap(m, 3, sc.bodyTop+at)
-		if next.(Model).rowIndex() != m.rowIndex() {
-			t.Fatalf("a tap on the selected row %d selected %d", m.rowIndex(), next.(Model).rowIndex())
-		}
-		m = pressKeys(t, m, "down")
 	}
 }
 
@@ -636,52 +466,6 @@ func TestOnlyColoursReachTheConsole(t *testing.T) {
 	}
 }
 
-// moveDown presses down once.
-func moveDown(m Model) Model {
-	next, cmd := key(m, "down")
-	drain(cmd)
-	return next.(Model)
-}
-
-// watches tells if the last watch act named pane.
-func (f *fakeConn) watches(pane string) bool {
-	acts := f.allActs()
-	for i := len(acts) - 1; i >= 0; i-- {
-		if w, ok := strings.CutPrefix(acts[i].RecID, proto.WatchPrefix); ok {
-			return w == pane
-		}
-	}
-	return false
-}
-
-// sessionPane is the selected session's pane.
-func (m Model) sessionPane() string {
-	s, _ := m.selectedSession()
-	return s.Pane
-}
-
-// T26 (owner, 2026-11-08): on one column the first tap opens the view, the second jumps.
-func TestOneColumnShowsTheLiveViewThenJumps(t *testing.T) {
-	m, f := loadedWith(t, 44, fixtureState()) // a phone: one column
-	var ran [][]string
-	m.opt.Run = func(argv []string) error { ran = append(ran, argv); return nil }
-	m = moveDown(m) // select the second session: the view follows the selection
-	if !f.watches(m.sessionPane()) || len(ran) != 0 {
-		t.Fatalf("selecting: watch %v, ran %q; want its live view and no jump", f.watches(m.sessionPane()), ran)
-	}
-	sc := m.draw(44)
-	i := slices.Index(sc.rows, m.rowIndex())
-	if i < 0 {
-		t.Fatal("the selected row is not on the screen")
-	}
-	_, cmd := tap(m, 2, sc.bodyTop+i) // the selected row: go into its pane
-	drain(cmd)
-	// No client asked here: the jump moves the desk (Task 4), not a FocusArgv.
-	if len(ran) != 1 || !remote.NavAllowed(ran[0]) || ran[0][3] != m.sessionPane() {
-		t.Fatalf("second tap ran %q, want a jump into %s", ran, m.sessionPane())
-	}
-}
-
 func TestTheLiveViewTakesNoKeys(t *testing.T) { // T6
 	for _, w := range []int{100, 44} {
 		m, f := loadedWith(t, w, fixtureState())
@@ -698,13 +482,6 @@ func TestTheLiveViewTakesNoKeys(t *testing.T) { // T6
 				t.Errorf("width %d: a key reached the agent: %+v", w, a)
 			}
 		}
-	}
-}
-
-func TestTheLiveViewNamesTheWayIn(t *testing.T) {
-	m := loaded(t, 100)
-	if out := ansi.Strip(m.render()); !strings.Contains(out, "enter goes into app-feature") {
-		t.Errorf("no way in on the key line:\n%s", out)
 	}
 }
 

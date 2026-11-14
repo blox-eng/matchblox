@@ -1,40 +1,40 @@
- ▰ matchblox                                                                                                                    ● 6 wait for you
- SESSIONS 7    ships 3    machine    git    history    panes    stoker
+ ▰ matchblox                                                                                                                        ● 6 need you
+ BOARD 7    machine
 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- WAITS FOR YOU · 6                                        │ flint-auth · asks
- │ spark-docs                         done       9m   88% │ ✻ team@example.com · Max · #4545 ●━✕┄○┄○┄○  conflicts with main
- ╿ ember-billing                      done       4m   32% │
-▌╿ flint-auth                         asks       2m   41% │
- ╿ kindle-web                         asks       1m   56% │
- ╿ cinder-ci                          done       0s   55% │
- ╿ wick-mobile                        done       0s    6% │
- WORKING · 1                                              │
- ✦ hearth-api                         busy            79% │
- + start a new session                                    │
-                                                          │
- 1 without an agent: shell:1.1 zsh                        │
-                                                          │
- RECOMMENDATIONS · 7 · h hides                            │
- ▲ The week runs short: compact spark-docs                │
- ○ Clear spark-docs (%3)                                  │
- ○ Clear kindle-web (%5)                                  │
- ○ Clear cinder-ci (%6)                                   │
- ○ Clear flint-auth (%2)                                  │
- ○ Clear ember-billing (%8)                               │
- ○ Clear wick-mobile (%7)                                 │
-                                                          │
-                                                          │ ⏺ The refresh endpoint is in and its tests pass.
-                                                          │
-                                                          │ ────────────────────────────────────────────────────────────────────────────────
-                                                          │  ☐ Rotate
-──────────────────────────────────────────────────────────│
- USAGE                                                    │ Should a refresh also rotate the token?
- ✻ Claude Max    5h   ▰▰▰▰▰▰▰▱ 84%  · Fri 01:20           │
-                 wk   ▰▰▰▰▰▰▰▱ 82%  · Mon 09:00           │ ❯ 1. Rotate it
-                 out Fri ~21:00                           │      The old one stops at once.
- · Google login  not measured · OpenCode keeps no limits  │   2. Rotate, keep the old one a minute
- ❋ OpenAI Plus   5h   ▰▰▰▱▱▱▱▱ 40%  · 23:59               │   3. Type something.
-                 wk   ▰▱▱▱▱▱▱▱ 12%  · Tue 09:00           │
-                 lasts the week                           │ Enter to select · ↑/↓ to navigate · Esc to cancel
+ NEEDS YOU · 6  −                                   WORKING · 1  −                     SHIPPING · 0  −                    QUIET · 0  −
+▌╿ flint-auth                               ✻  2m   ✦ hearth-api               ✻
+  stuck conflicts with main                          busy
+  #4545 ●━✕┄○┄○┄○  ctx 41%                           #4551 ●━◉┄○┄○┄○  ctx 79%
+  “The refresh flow works and the tests pass. One
+  choice is yours before I wire the rotation.”
+  ⏎ go in
+
+ │ spark-docs                               ✻  9m
+  done I rewrote the quick start and the install…
+  #4540 ●━●━●━●━●  ctx 88%
+  ⏎ go in
+
+ ╿ ember-billing                            ✻  4m
+  green #4552 waits for your merge
+  #4552 ●━●━◉┄○┄○  ctx 32%
+  p merge #4552   ⏎ go in
+
+ ╿ kindle-web                               ✻  1m
+  asks Claude needs your permission to use Bash
+  ctx 56%
+  ⏎ go in
+
+ ╿ cinder-ci                                ❋  0s
+  done I am moving the cache key to the go.sum h…
+  ctx 55%
+  ⏎ go in
+
+ ╿ wick-mobile                              ▣  0s
+  done ⠙ Working
+  ctx 6%
+  ⏎ go in
+ + start a new session
+ RECOMMENDATIONS · 7
+ ✻ Claude Max  5h ▰▰▰▰▰▰▰▱ 84% · Fri 01:20   wk ▰▰▰▰▰▰▰▱ 82% · Mon 09:00                                                               machine ›
 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ↑↓ move  enter goes into flint-auth  x kill  r rename  A switch  z park  N new  p ships  f stoker  / find  q quit  list only v   sampled 0s ago
+ ⏎ go in   c copy   v one line   s hosts   u strip   ←→ columns   tab next

@@ -14,12 +14,12 @@ import (
 type Layout int
 
 const (
-	// Narrow is a phone: one column, the selected row opens in place.
+	// Narrow is a phone: the board one column, a page at a time.
 	Narrow Layout = iota
-	// Medium is a phone opened up: the list and the detail split at the
-	// middle.
+	// Medium is a phone opened up: the board's columns, QUIET a drawer.
 	Medium
-	// Wide is a desk: the list with every column, the detail beside it.
+	// Wide is a desk: every column, and from liveFrom the chosen card's
+	// live view beside them.
 	Wide
 )
 
@@ -27,7 +27,7 @@ const (
 // about twice as tall as it is wide, so a screen is portrait when
 // rows*2 >= cols: a phone held upright, whatever its font, keeps its
 // layout when its keyboard shrinks the screen. Upright, 90 columns and
-// more split the list and the detail at the middle; fewer are one column.
+// more are Medium; fewer are Narrow.
 // A landscape screen goes by its width.
 func layout(cols, rows int) Layout {
 	if portrait(cols, rows) {
@@ -72,12 +72,8 @@ func (m Model) shapeRows() int {
 	return m.height
 }
 
-// upright is a portrait screen: its dock shows one panel at a time and its
-// boxes sit at the bottom, as on a phone.
+// upright is a portrait screen: its boxes sit at the bottom, as on a phone.
 func (m Model) upright() bool { return portrait(m.width, m.shapeRows()) }
-
-// phoneDock is a dock of one panel, u cycling it: a one-column phone.
-func (m Model) phoneDock(w int) bool { return m.layoutAt(w) == Narrow }
 
 // body is a panel: its lines, and for each line the row it shows (-1 for
 // none), so a tap knows what it hit.
@@ -127,16 +123,6 @@ const (
 
 // minWidth is the narrowest console drawn; a narrower terminal cuts it.
 const minWidth = 30
-
-// progressCell is the bar an agent reported, in n cells and its percent.
-func (m Model) progressCell(p *sample.Progress, n int) string {
-	if p == nil {
-		return ""
-	}
-	full := min(max((p.Pct*n+50)/100, 0), n)
-	return m.st.text.Render(strings.Repeat("▰", full)) + m.st.faint.Render(strings.Repeat("▱", n-full)) +
-		" " + m.st.muted.Render(fmt.Sprintf("%d%%", p.Pct))
-}
 
 // sessionIn is the agent session of a pane of host.
 func (m Model) sessionIn(host, pane string) (sample.Session, bool) {

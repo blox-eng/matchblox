@@ -100,17 +100,6 @@ func selectStep(t *testing.T, m Model, id string) Model {
 	return m
 }
 
-func TestCOpensTheTab(t *testing.T) {
-	m, _ := loadedWith(t, 100, tabNight(screensState(t)))
-	next, _ := key(m, "c")
-	if got := next.(Model).tab; got != tabStoker {
-		t.Fatalf("c opened tab %d", got)
-	}
-	if next, _ := key(m, "7"); next.(Model).tab != tabStoker {
-		t.Fatal("7 does not open the stoker tab")
-	}
-}
-
 func TestStokerTabShowsWordsPlanAndRules(t *testing.T) {
 	m, _ := loadedWith(t, 100, tabNight(screensState(t)))
 	m.setTab(tabStoker)
@@ -122,15 +111,17 @@ func TestStokerTabShowsWordsPlanAndRules(t *testing.T) {
 	for _, want := range []string{
 		"NIGHT · 19:50 → 02:50", "sealed", "“merge them on green", "✓ merges", "! releases, deploys and kills still ask you", "PLAN 3 of 5",
 		"✓", "◐", "⏸", "spark-docs", "hold: not priority", "told 02:05, CI 6 of 9 jobs",
-		"YOUR GO", "waits for you: kindle-web wants to run gh release create v1.4", "y gives the go, once",
+		"YOUR GO", "waits for your go: kindle-web wants to run gh release create v1.4", "y gives the go, once",
 		"STANDING RULES", "opened #4570", "TODAY", "RESUME: run the migration test",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("no %q in\n%s", want, out)
 		}
 	}
-	if !strings.Contains(strings.Split(out, "\n")[1], "STOKER 1") { // the go, not the plan step that waits on an event
-		t.Fatalf("the tab does not count what waits for the builder:\n%s", out)
+	machine := m
+	machine.setTab(tabMachine)
+	if row := strings.Split(screen(machine), "\n")[3]; !strings.Contains(row, "1 needs you") { // the go, not the plan step that waits on an event
+		t.Fatalf("Machine's row stoker does not count what waits for the builder: %q", row)
 	}
 	for _, w := range []int{44, 132} {
 		m, _ := loadedWith(t, w, tabNight(screensState(t)))
@@ -176,43 +167,11 @@ func TestMorningSaysWhatWaitsForYou(t *testing.T) {
 		next, _ = key(next, "down")
 	}
 	out := screen(m) + screen(next)
-	for _, want := range []string{"NIGHT · 19:50 → 22:50", "ended 22:50", "DONE 4 of 5 · 1 WAITS FOR YOU", "✕", "the release asks which tag to cut", "THE RUN · ready 4/5"} {
+	for _, want := range []string{"NIGHT · 19:50 → 22:50", "ended 22:50", "DONE 4 of 5 · 1 NEED YOU", "✕", "the release asks which tag to cut", "THE RUN · ready 4/5"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("no %q in\n%s", want, out)
 		}
 	}
-}
-
-func TestYGrantsAWaitingStep(t *testing.T) {
-	m, f := loadedWith(t, 100, tabNight(screensState(t)))
-	m.setTab(tabStoker)
-	if line := actionLine(selectStep(t, m, "g8")); !strings.Contains(line, "y give the go") {
-		t.Fatalf("the key line does not offer the go: %q", line)
-	}
-	sendKey(selectStep(t, m, "g8"), "y")
-	acts := grants(f)
-	if len(acts) != 1 || acts[0].RecID != "stoker:grant" || acts[0].Text != "8" {
-		t.Fatalf("acts %+v", acts)
-	}
-	if line := actionLine(selectStep(t, m, "p5")); strings.Contains(line, "y give the go") {
-		t.Fatalf("a step that waits on an event offers a go: %q", line)
-	}
-	next, _ := key(selectStep(t, m, "p2"), "y") // a step that waits for nothing
-	sendKey(selectStep(t, m, "p2"), "y")
-	if len(grants(f)) != 1 || !strings.Contains(next.(Model).flash, "y gives the go") {
-		t.Fatalf("y on a done step: %+v, %q", grants(f), next.(Model).flash)
-	}
-}
-
-// grants are the go acts a fake connection got.
-func grants(f *fakeConn) []proto.Act {
-	var out []proto.Act
-	for _, a := range f.acts() {
-		if a.RecID == "stoker:grant" {
-			out = append(out, a)
-		}
-	}
-	return out
 }
 
 func TestEnterShowsTheCommand(t *testing.T) {
@@ -267,7 +226,7 @@ func TestAOnAFailedStepAtNightAsksToTakeOver(t *testing.T) {
 
 func TestOpeningTheTabSendsOneAck(t *testing.T) {
 	m, f := loadedWith(t, 100, tabNight(screensState(t)))
-	next := sendKey(m, "7")
+	next := toStoker(m)
 	sendKey(next, "down")
 	var acks int
 	for _, a := range f.acts() {
@@ -277,6 +236,26 @@ func TestOpeningTheTabSendsOneAck(t *testing.T) {
 	}
 	if acks != 1 {
 		t.Fatalf("%d acks: %+v", acks, f.acts())
+	}
+
+	// A tap on Machine's chosen row stoker opens the screen, and so sees
+	// the steps too, as a phone only taps. The clock moves a minute at each
+	// read, so the ack's 10 s throttle cannot hide a second open.
+	m, f = loadedWith(t, 100, tabNight(screensState(t)))
+	clock := m.now()
+	m.opt.Now = func() time.Time { clock = clock.Add(time.Minute); return clock }
+	m.setTab(tabMachine)
+	m.selectRow(0) // the row is chosen already: the first tap opens STOKER, the second lands on it
+	y := lineOf(t, m, "stoker")
+	once, cmd := tap(m, 3, y)
+	drain(cmd)
+	opened, cmd := tap(once, 3, y)
+	drain(cmd)
+	if opened.(Model).tab != tabStoker {
+		t.Fatalf("a tap on the row stoker opens tab %d", opened.(Model).tab)
+	}
+	if acts := f.acts(); len(acts) != 1 || acts[0].RecID != "stoker:ack" {
+		t.Fatalf("a tap on the row stoker: acts %+v, want one ack", acts)
 	}
 }
 
@@ -394,14 +373,14 @@ func TestEnterOpensTheStokerInAPopup(t *testing.T) {
 	}
 }
 
-// TestATapOnTheHeadersStokerOpensIt: the stoker waits for you (its trust
+// TestATapOnTheHeadersStokerOpensIt: the stoker needs you (its trust
 // prompt, a permission): a tap on the header's word opens it.
 func TestATapOnTheHeadersStokerOpensIt(t *testing.T) {
 	st := agentState(proto.StokerView{Mode: proto.StokerMode{On: true}, PaneUp: true})
 	st.Sessions = append(st.Sessions, sample.Session{Agent: "claude", Pane: "%0@matchblox", Target: "stoker:0.0", Name: "stoker", Permits: true})
 	m, _ := loadedWith(t, 100, st)
 	sc := m.draw(100)
-	if !strings.Contains(sc.lines[0], "stoker waits for you") || sc.stokerAt.press == "" {
+	if !strings.Contains(sc.lines[0], "stoker needs you") || sc.stokerAt.press == "" {
 		t.Fatalf("header %q, span %+v", sc.lines[0], sc.stokerAt)
 	}
 	next, _ := tap(m, sc.stokerAt.x0+1, 0)
@@ -468,6 +447,7 @@ func selectChain(t *testing.T, m Model, id string) Model {
 func TestTheTabListsTheFamily(t *testing.T) {
 	m, _ := loadedWith(t, 104, tabFamily(screensState(t), false))
 	m.setTab(tabStoker)
+	m.height = 40 // the stoker's panel heads the screen (ruling 28)
 	out := screen(m)
 	host, chain, ended := strings.Index(out, "STOKER AGENT"), strings.Index(out, "CHAIN hearth-api"), strings.Index(out, "CHAIN kindle-web")
 	if host < 0 || chain < host || ended < chain {
@@ -536,7 +516,7 @@ func TestDockCountsChains(t *testing.T) {
 		if !strings.Contains(lines[0], "≋ ") {
 			t.Errorf("header %q has no stoker count", lines[0])
 		}
-		dock := ansi.Strip(strings.Join(m.stokerLines(40, false, ""), "\n"))
+		dock := ansi.Strip(strings.Join(m.stokerLines(40, false), "\n"))
 		if !strings.Contains(dock, "STOKER "+c.dock) {
 			t.Errorf("dock %q, want %q", dock, c.dock)
 		}
@@ -569,68 +549,12 @@ func TestQOnAPanelessRunningChainCard(t *testing.T) {
 	}
 }
 
-// I3: a go a chain stoker's run waits for is a row of its card: y gives
-// it, with the stoker's id, and the tab's count holds it.
-func TestYGivesAChainStokersGo(t *testing.T) {
-	st := tabFamily(screensState(t), true)
-	v := &st.Stokers[0].View
-	v.Run = append(v.Run, proto.StokerEntry{ID: "go@1/merge:%3", At: v.Since.Add(time.Hour), Session: "s3", Name: "hearth-api", Pane: "%3",
-		Rule: "go", State: "waits", Needs: "merge:%3", Want: "gh", Text: "hearth-api wants to run gh"})
-	m, f := loadedWith(t, 104, st)
-	before := m.stokerNeeds()
-	m.setTab(tabStoker)
-	if !strings.Contains(screen(m), "waits for you: hearth-api wants to run gh") {
-		t.Fatalf("no go on the chain's card:\n%s", screen(m))
-	}
-	m = selectStep(t, m, "s:s1/ggo@1/merge:%3")
-	_, cmd := key(m, "y")
-	if cmd == nil {
-		t.Fatalf("y sent nothing: %q", m.flash)
-	}
-	cmd()
-	if a := f.acts(); len(a) != 1 || a[0].RecID != "stoker:grant" || a[0].Text != "s1 go@1/merge:%3" {
-		t.Fatalf("acts %+v", a)
-	}
-	st.Stokers[0].View.Run = st.Stokers[0].View.Run[:len(st.Stokers[0].View.Run)-1]
-	without, _ := loadedWith(t, 104, st)
-	if before != without.stokerNeeds()+1 {
-		t.Fatalf("the tab counts %d with the go, %d without", before, without.stokerNeeds())
-	}
-}
-
-// N1: a chain stoker's plan step that waits for your go is a row of its
-// card: y gives it, with the stoker's id.
-func TestYGivesAChainStokersPlanStep(t *testing.T) {
-	st := tabFamily(screensState(t), true)
-	v := &st.Stokers[0].View
-	v.Run = append(v.Run, proto.StokerEntry{ID: "2", At: v.Since.Add(time.Hour), Session: "ember-billing", Name: "ember-billing", Pane: "%4",
-		Rule: "order", Step: 2, State: "waits", Needs: "merge:%4", Text: "merge #4552"})
-	m, f := loadedWith(t, 104, st)
-	m.setTab(tabStoker)
-	m = selectStep(t, m, "s:s1/p2")
-	if line := actionLine(m); !strings.Contains(line, "y give the go") {
-		t.Fatalf("the key line does not offer the go: %q", line)
-	}
-	before := screen(m)
-	if shown, _ := key(m, "enter"); screen(shown) == before {
-		t.Fatalf("⏎ on the step shows nothing:\n%s", before)
-	}
-	_, cmd := key(m, "y")
-	if cmd == nil {
-		t.Fatalf("y sent nothing: %q", m.flash)
-	}
-	cmd()
-	if a := f.acts(); len(a) != 1 || a[0].RecID != "stoker:grant" || a[0].Text != "s1 2" {
-		t.Fatalf("acts %+v", a)
-	}
-}
-
 // M1: with no chain stoker the dock's head line is today's, byte for byte.
 func TestTheDockWithNoChainIsTodaysBytes(t *testing.T) {
 	m, _ := loadedWith(t, 104, sheetScreen(screensState(t), true))
 	st := m.st
 	want := spread(st.label.Render(" STOKER"), st.stoker.Render(m.stokerWord())+" ", 40)
-	if got := m.stokerLines(40, false, "")[0]; got != want {
+	if got := m.stokerLines(40, false)[0]; got != want {
 		t.Fatalf("dock head %q, want %q", got, want)
 	}
 }
@@ -663,5 +587,101 @@ func TestHeaderCountsRunningStokers(t *testing.T) {
 	m, _ = loadedWith(t, 104, none)
 	if head := strings.Split(screen(m), "\n")[0]; !strings.HasSuffix(strings.TrimRight(head, " "), "stoker off") {
 		t.Fatalf("header %q, want stoker off", head)
+	}
+}
+
+// fromMachine is m on Machine, with the row that opens the screen name
+// chosen and ⏎ pressed on it.
+func fromMachine(t *testing.T, m Model, name string) Model {
+	t.Helper()
+	m.setTab(tabMachine)
+	at := slices.IndexFunc(machineViews, func(v machineView) bool { return v.name == name })
+	if at < 0 {
+		t.Fatalf("Machine has no row %q", name)
+	}
+	m.selectRow(at)
+	return pressOn(m, "enter")
+}
+
+// TestMachineOpensGitHistoryAndPanes: Git, History and Panes are Machine's
+// rows, under the stoker's (the owner, 2026-11-12: "Rows on Machine"): ⏎
+// on each opens today's screen, and esc comes back to Machine on its row.
+func TestMachineOpensGitHistoryAndPanes(t *testing.T) {
+	m, _ := loadedWith(t, 100, fixtureState())
+	machine := m
+	machine.setTab(tabMachine)
+	rows := strings.Split(screen(machine), "\n")[3:7]
+	for i, name := range []string{"stoker", "git", "history", "panes"} {
+		if !strings.HasPrefix(strings.TrimLeft(rows[i], " ▌"), name) {
+			t.Fatalf("Machine's row %d is %q, want %s", i, rows[i], name)
+		}
+	}
+	for _, c := range []struct {
+		name string
+		tab  int
+	}{{"git", tabGit}, {"history", tabHistory}, {"panes", tabPanes}} {
+		open := fromMachine(t, m, c.name)
+		if open.tab != c.tab {
+			t.Fatalf("⏎ on %s opens tab %d", c.name, open.tab)
+		}
+		// Today's screen: the body the tab draws when set directly, not
+		// through Machine's row.
+		direct := m
+		direct.setTab(c.tab)
+		body := func(m Model) []string {
+			lines := strings.Split(screen(m), "\n")
+			return lines[3 : len(lines)-2] // under the tab row's hairline, over the key line's
+		}
+		if got, want := body(open), body(direct); !slices.Equal(got, want) {
+			t.Fatalf("%s from Machine is not today's screen:\n%s\nwant\n%s", c.name, strings.Join(got, "\n"), strings.Join(want, "\n"))
+		}
+		if !strings.Contains(actionLine(open), "esc machine") {
+			t.Fatalf("%s's key line has no way back: %q", c.name, actionLine(open))
+		}
+		back := pressOn(open, "esc")
+		if v, ok := back.selectedMachineView(); back.tab != tabMachine || !ok || v.name != c.name {
+			t.Fatalf("esc on %s: tab %d on %+v", c.name, back.tab, v)
+		}
+	}
+}
+
+// TestMachineOpensTheStoker: the host stoker's screen is Machine's row
+// stoker, its first (ruling 28): ⏎ opens today's STOKER screen, the
+// stoker's panel at its top, and esc comes back to Machine on that row.
+// The tab row has no stoker of its own.
+func TestMachineOpensTheStoker(t *testing.T) {
+	m, _ := loadedWith(t, 100, stokerState(stokedRun(fixtureState().At)))
+	m = pressOn(m, "tab")
+	if m.tab != tabMachine {
+		t.Fatalf("tab from the board opens tab %d", m.tab)
+	}
+	if line, _ := m.tabsLine(100); strings.Contains(strings.ToLower(ansi.Strip(line)), "stoker") {
+		t.Fatalf("the tab row names the stoker: %q", ansi.Strip(line))
+	}
+	if v, ok := m.selectedMachineView(); !ok || v.name != "stoker" {
+		t.Fatalf("Machine opens on %+v, want its row stoker", v)
+	}
+	if row := strings.Split(screen(m), "\n")[3]; !strings.HasPrefix(strings.TrimLeft(row, " ▌"), "stoker") {
+		t.Fatalf("Machine's first row is %q", row)
+	}
+	m = pressOn(m, "enter")
+	lines := strings.Split(screen(m), "\n")
+	if m.tab != tabStoker || !strings.Contains(lines[3], "STOKER") {
+		t.Fatalf("⏎ on the row: tab %d, the screen's top %q", m.tab, lines[3])
+	}
+	for _, want := range []string{"TODAY", "RESUME: run the migration test", "esc machine", "app-review"} {
+		if !strings.Contains(screen(m), want) {
+			t.Fatalf("the STOKER screen lacks %q:\n%s", want, screen(m))
+		}
+	}
+	if strings.Contains(screen(m), "the whole run") { // this screen is the whole run
+		t.Fatalf("the STOKER screen points to itself:\n%s", screen(m))
+	}
+	if !strings.Contains(strings.Split(screen(m), "\n")[1], "MACHINE") {
+		t.Fatalf("the tab row does not name Machine open: %q", strings.Split(screen(m), "\n")[1])
+	}
+	m = pressOn(m, "esc")
+	if v, ok := m.selectedMachineView(); m.tab != tabMachine || !ok || v.name != "stoker" {
+		t.Fatalf("esc: tab %d on %+v", m.tab, v)
 	}
 }

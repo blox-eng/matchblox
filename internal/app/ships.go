@@ -7,9 +7,7 @@ import (
 	"strings"
 	"time"
 
-	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -100,27 +98,13 @@ type hostShips struct {
 	r    *proto.Ships
 }
 
-// inFlight counts the ships of every host that are not live yet.
-func (m Model) inFlight() int {
-	n := 0
-	for _, h := range m.shipReports() {
-		n += h.r.InFlight
-	}
-	return n
-}
-
-func (m Model) selectedShip() (proto.Ship, bool) {
-	ss := m.ships()
-	if len(ss) == 0 {
-		return proto.Ship{}, false
-	}
-	return ss[min(m.shipSel, len(ss)-1)], true
-}
-
 // shipsOf are the ships a session drives, the one that most needs you
 // first: stuck, waiting for you, in flight, merged, then live (as the
 // service, the CLI and the stoker find them).
 func (m Model) shipsOf(s sample.Session) []proto.Ship {
+	if sh, ok := m.shipOfCard(s); ok {
+		return []proto.Ship{sh}
+	}
 	// A pane and a session id can repeat on another host.
 	return slices.DeleteFunc(proto.ShipsOf(m.ships(), s.Pane, s.SessionID), func(sh proto.Ship) bool { return sh.Host != s.Host })
 }
@@ -152,74 +136,6 @@ func (m Model) shipsMore(ss []proto.Ship, short bool) string {
 	return more + m.st.muted.Render(" "+stageNames[stage])
 }
 
-// moreW is the room the rows' counts take: the widest full count, or the
-// widest short one when short is set.
-func (m Model) moreW(short bool) int {
-	w := 0
-	for _, s := range m.snap.Sessions {
-		w = max(w, lipgloss.Width(m.shipsMore(m.shipsOf(s), short)))
-	}
-	return w
-}
-
-// shipsShown is how many of a session's ships its detail and a phone's
-// opened row list; the rest are a count, and the Ships tab lists them all.
-const shipsShown = 3
-
-// shipsLeft is the line under the ships listed when there are more:
-// "+2 more · p ships", or "+2 more" when no key opens Ships.
-func (m Model) shipsLeft(n int) string {
-	left := m.st.muted.Render("+" + strconv.Itoa(n) + " more")
-	if h := hintFor(m.keys.main.Ships, "ships"); h.key != "" {
-		left += m.st.muted.Render(" · ") + m.st.accent.Render(h.key) + m.st.muted.Render(" "+h.label)
-	}
-	return left
-}
-
-// driver is the session that drives a ship, on the ship's own host.
-func (m Model) driver(sh proto.Ship) (sample.Session, bool) {
-	for _, s := range m.all.sessions {
-		if s.Host == sh.Host && proto.ShipDrives(sh, s.Pane, s.SessionID) {
-			return s, true
-		}
-	}
-	return sample.Session{}, false
-}
-
-func (m Model) driverName(sh proto.Ship) string {
-	if s, ok := m.driver(sh); ok && s.Name != "" {
-		return s.Name
-	}
-	if sh.Session.Name != "" {
-		return sh.Session.Name
-	}
-	switch {
-	case sh.Session.Pane != "":
-		return sh.Session.Pane
-	case sh.Session.ID != "":
-		return sh.Session.ID
-	}
-	return "no session"
-}
-
-// driverOn is the driver's name, and with two or more hosts its host:
-// "api-auth on ws-1".
-func (m Model) driverOn(sh proto.Ship) string {
-	by := m.st.text.Render(m.driverName(sh))
-	if m.hostCount() > 1 {
-		by += m.st.faint.Render(" on ") + m.st.text.Render(m.nameOf(sh.Host))
-	}
-	return by
-}
-
-// driverGone is the flash for a ship whose session is no longer there.
-func (m Model) driverGone(sh proto.Ship) string {
-	if sh.Session.ID == "" && sh.Session.Pane == "" {
-		return "no session owns #" + strconv.Itoa(sh.Number)
-	}
-	return m.driverName(sh) + " no longer runs"
-}
-
 // shipStyle is the colour of a ship's current stage and note: warn while
 // it runs, the accent when it waits for you, neg when it is stuck.
 func (m Model) shipStyle(sh proto.Ship) lipgloss.Style {
@@ -234,8 +150,6 @@ func (m Model) shipStyle(sh proto.Ship) lipgloss.Style {
 	return m.st.faint
 }
 
-// track is a ship's five stages, ●━●━◉┄○┄○: done muted, the current one in
-// its colour (✕ when stuck), the rest faint.
 // trackW is the width of a ship's track: a mark for each stage and a line
 // between two.
 var trackW = 2*len(stageNames) - 1
@@ -250,31 +164,85 @@ func (m Model) numW() int {
 	return n
 }
 
-func (m Model) track(sh proto.Ship) string {
+// track is a ship's five stages, ●━●━◉┄○┄○: done muted, the current one in
+// its colour (✕ when stuck), the rest faint.
+func (m Model) track(sh proto.Ship) string { return m.trackAt(sh, -1) }
+
+// trackAt is the track with its cell spark lit in flame-core, -1 for none.
+func (m Model) trackAt(sh proto.Ship, spark int) string {
 	st := m.st
 	var b strings.Builder
+	x := 0
+	put := func(ink lipgloss.Style, cell string) {
+		if x == spark {
+			ink = m.sparkStyle()
+		}
+		b.WriteString(ink.Render(cell))
+		x++
+	}
 	for i := range stageNames {
 		switch {
 		case i < sh.Stage:
-			b.WriteString(st.muted.Render("●"))
+			put(st.muted, "●")
 		case i == sh.Stage && sh.Kind == shipStuck:
-			b.WriteString(st.neg.Render("✕"))
+			put(st.neg, "✕")
 		case i == sh.Stage && sh.Kind == shipDone:
-			b.WriteString(m.shipStyle(sh).Render("●"))
+			put(m.shipStyle(sh), "●")
 		case i == sh.Stage:
-			b.WriteString(m.shipStyle(sh).Render("◉"))
+			put(m.shipStyle(sh), "◉")
 		default:
-			b.WriteString(st.faint.Render("○"))
+			put(st.faint, "○")
 		}
 		switch {
 		case i == len(stageNames)-1:
 		case i < sh.Stage:
-			b.WriteString(st.muted.Render("━"))
+			put(st.muted, "━")
 		default:
-			b.WriteString(st.faint.Render("┄"))
+			put(st.faint, "┄")
 		}
 	}
 	return b.String()
+}
+
+// shipKey is where a ship's spark is kept among the changes: apart from
+// every pane and chain.
+func shipKey(sh proto.Ship) paneKey {
+	return paneKey{sh.Host, "ship:" + sh.Repo + "#" + strconv.Itoa(sh.Number)}
+}
+
+// noteShipSparks plays the spark of each ship that passed a stage since
+// the console last saw it.
+func (m *Model) noteShipSparks(next []proto.Ship) {
+	if m.opt.NoMotion {
+		return
+	}
+	was := map[paneKey]int{}
+	for _, sh := range m.allShips {
+		was[shipKey(sh)] = sh.Stage
+	}
+	now := m.now()
+	for _, sh := range next {
+		if stage, ok := was[shipKey(sh)]; ok && sh.Stage > stage {
+			if m.changes == nil {
+				m.changes = map[paneKey]change{}
+			}
+			m.changes[shipKey(sh)] = change{kind: changeSpark, at: now}
+		}
+	}
+}
+
+// shipSpark is the cell of sh's track the spark is on now, -1 for none:
+// it runs along the track once, in sparkFor.
+func (m Model) shipSpark(sh proto.Ship) int {
+	c, ok := m.changes[shipKey(sh)]
+	if m.opt.NoMotion || !ok || c.kind != changeSpark {
+		return -1
+	}
+	e := m.now().Sub(c.at)
+	if e < 0 || e >= sparkFor {
+		return -1
+	}
+	return int(e * time.Duration(trackW) / sparkFor)
 }
 
 // shipCell is "#4551 ●━◉┄○┄○", with the note when note is set.
@@ -286,18 +254,9 @@ func (m Model) shipCell(sh proto.Ship, note bool) string {
 	return cell
 }
 
-// shipAge is how long the ship has been in its stage.
-func (m Model) shipAge(sh proto.Ship) string {
-	if !sh.Since.IsZero() {
-		return brief(m.now().Sub(sh.Since))
-	}
-	return brief(sh.Age)
-}
-
-// shipsStrip says plainly why the ships may be behind: GitHub's rate limit,
-// gh that cannot read, a repository whose poll failed.
-// With two or more hosts each line starts with its host.
-func (m Model) shipsStrip(w int) []string {
+// shipsBehind are the reasons the ships may be behind, one each, in plain
+// words; with two or more hosts each starts with its host.
+func (m Model) shipsBehind() []string {
 	var says []string
 	for _, h := range m.shipReports() {
 		on, r := "", h.r
@@ -314,280 +273,25 @@ func (m Model) shipsStrip(w int) []string {
 			says = append(says, on+"not read: "+e)
 		}
 	}
-	var out []string
-	for _, say := range says {
-		for _, l := range wrapPlain(say, w-2) {
-			out = append(out, " "+m.st.warn.Render(l))
-		}
-	}
-	return out
+	return says
 }
 
-// shipsPanel is the Ships tab: each ship's number, title and age, then its
-// track and note. On a phone the selected one adds who drives it and its
-// keys.
-func (m Model) shipsPanel(w int) body {
-	st := m.st
-	var b body
-	b.add(-1, m.shipsStrip(w)...)
-	ss := m.ships()
-	if len(ss) == 0 {
-		b.add(-1, "", fit(" "+st.faint.Render("No ships yet."), w))
-		for _, l := range wrapPlain("A pull request a session creates, pushes or acts on shows here, on its way from open to live.", w-2) {
-			b.add(-1, " "+st.faint.Render(l))
-		}
-		return b
-	}
-	b.add(-1, st.label.Render(fit(" open → ci → green → merged → live", w)))
-	sel := min(m.shipSel, len(ss)-1)
-	for i, sh := range ss {
-		on := i == sel
-		mark := " "
-		if on {
-			mark = st.accent.Render("▌")
-		}
-		right := cutLeft(st.faint.Render(m.shipAge(sh)), 4) + " "
-		if m.hostCount() > 1 {
-			right = st.muted.Render(m.nameOf(sh.Host)) + "  " + right
-		}
-		lines := []string{
-			spread(mark+padTo(st.accent.Render("#"+strconv.Itoa(sh.Number)), m.numW())+" "+st.ink(on).Render(sh.Title), right, w),
-			"   " + m.track(sh) + "  " + m.shipStyle(sh).Render(sh.Note),
-		}
-		if on && m.inPlace() {
-			lines = append(lines, spread("   "+st.faint.Render("by ")+m.driverOn(sh), m.shipKeysLine(sh)+" ", w))
-		}
-		b.addRow(i, on, w, st, lines...)
-		b.add(-1, "")
-	}
-	return b
-}
-
-// shipKeys are the keys of a ship: its session, a merge when it waits for
-// yours, an answer when it is stuck.
-func (m Model) shipKeys(sh proto.Ship) []hint {
-	mk := m.keys.main
-	keys := []hint{hintFor(mk.Open, "session")}
-	if len(sh.Merge) > 0 {
-		keys = append(keys, hintFor(mk.Second, "merge"))
-	}
-	if sh.Kind == shipStuck {
-		keys = append(keys, hintFor(mk.Into, ""))
-	}
-	return keys
-}
-
-func (m Model) shipKeysLine(sh proto.Ship) string {
-	var parts []string
-	for _, h := range m.shipKeys(sh) {
-		parts = append(parts, m.st.accent.Render(h.key)+m.st.muted.Render(" "+h.label))
-	}
-	return strings.Join(parts, "  ")
-}
-
-// shipDetail is the right pane of Ships: the title, who drives it, the
-// five stages with their times and the note of the current one, the URL
-// and the keys.
-func (m Model) shipDetail(w int) []string {
-	st := m.st
-	sh, ok := m.selectedShip()
-	if !ok {
-		return nil
-	}
-	out := []string{"", fit(" "+st.accent.Bold(true).Render("#"+strconv.Itoa(sh.Number))+st.faint.Render("  by ")+m.driverOn(sh)+
-		st.faint.Render(" · "+sh.Repo), w)}
-	for _, l := range wrapPlain(sh.Title, w-2) {
-		out = append(out, " "+st.text.Render(l))
-	}
-	out = append(out, "", " "+st.label.Render("TRACK"))
-	for i, name := range stageNames {
-		glyph, style := "○", st.faint
-		switch {
-		case i < sh.Stage:
-			glyph, style = "●", st.muted
-		case i == sh.Stage && sh.Kind == shipStuck:
-			glyph, style = "✕", st.neg
-		case i == sh.Stage && sh.Kind == shipDone:
-			glyph, style = "●", m.shipStyle(sh)
-		case i == sh.Stage:
-			glyph, style = "◉", m.shipStyle(sh)
-		}
-		nameStyle := st.faint
-		if i <= sh.Stage {
-			nameStyle = st.text
-		}
-		what := ""
-		if at := sh.Stages[i].At; !at.IsZero() && i <= sh.Stage {
-			what = st.muted.Render(m.when(at))
-		}
-		if i == sh.Stage && sh.Note != "" {
-			what = strings.TrimSpace(what + " " + style.Render(sh.Note))
-		}
-		out = append(out, fit("  "+style.Render(glyph)+" "+nameStyle.Render(pad(name, 8))+what, w))
-		if i < len(stageNames)-1 {
-			if i < sh.Stage {
-				out = append(out, "  "+st.muted.Render("┃"))
-			} else {
-				out = append(out, "  "+st.faint.Render("┆"))
-			}
-		}
-	}
-	if sh.URL != "" {
-		out = append(out, "", fit(" "+st.faint.Render(sh.URL), w))
-	}
-	return append(out, "", fit(" "+m.shipKeysLine(sh), w))
-}
-
-// when is a time on the screen: 14:05 today, else Thu 14:05.
-func (m Model) when(t time.Time) string {
-	now := m.now().Local()
-	t = t.Local()
-	if t.YearDay() == now.YearDay() && t.Year() == now.Year() {
-		return t.Format("15:04")
-	}
-	return t.Format("Mon 15:04")
-}
-
-// toDriver selects the session that drives the selected ship in Sessions.
-func (m Model) toDriver() Model {
-	sh, ok := m.selectedShip()
-	if !ok {
+// takeShip opens New session in the checkout of a ship no session owns,
+// its first message to take the ship over (#80); with no checkout of it
+// here it says so.
+func (m Model) takeShip(sh proto.Ship) Model {
+	if sh.Where == "" {
+		m.flash = "no session owns #" + strconv.Itoa(sh.Number) + ", and no checkout of " + sh.Repo + " is here"
 		return m
 	}
-	if sh.Session.ID == "" && sh.Session.Pane == "" {
-		if sh.Where == "" {
-			m.flash = "no session owns #" + strconv.Itoa(sh.Number) + ", and no checkout of " + sh.Repo + " is here"
-			return m
-		}
-		return m.openNewIn(sh.Host, sh.Where, "Take over #"+strconv.Itoa(sh.Number)+" ("+sh.URL+"): read where it stands, then carry it to live.")
-	}
-	s, ok := m.driver(sh)
-	if !ok {
-		m.flash = m.driverGone(sh)
-		return m
-	}
-	m.setTab(tabSessions)
-	m.doorPick, m.recPick, m.ghostPick, m.chose, m.selPID, m.selHost = "", "", 0, true, s.PID, s.Host
-	return m
+	return m.openNewIn(sh.Host, sh.Where, "Take over #"+strconv.Itoa(sh.Number)+" ("+sh.URL+"): read where it stands, then carry it to live.")
 }
 
-// shipInto is a on a stuck ship: the pane of its session, to answer it.
-func (m Model) shipInto() (tea.Model, tea.Cmd) {
-	sh, ok := m.selectedShip()
-	if !ok || sh.Kind != shipStuck {
-		m.flash = "a goes into the session of a stuck ship"
-		return m, nil
-	}
-	host, pane := m.shipTarget()
-	if pane == "" {
-		m.flash = m.driverGone(sh)
-		return m, nil
-	}
-	return m.goInto(host, pane)
-}
-
-// shipTarget is the host and pane of the session that drives the selected
-// stuck ship; no pane when there is none to go into.
-func (m Model) shipTarget() (host, pane string) {
-	sh, ok := m.selectedShip()
-	if !ok || sh.Kind != shipStuck {
-		return "", ""
-	}
-	if s, ok := m.driver(sh); ok {
-		return s.Host, s.Pane
-	}
-	return "", ""
-}
-
-// mergeShip is x on a ship that waits for your merge: the repository's
-// merge, behind a typed y.
-func (m Model) mergeShip() *action {
-	sh, ok := m.selectedShip()
-	if !ok || len(sh.Merge) == 0 {
+// mergeAction is the merge of sh, behind a typed y; nil when sh has none.
+func (m Model) mergeAction(sh proto.Ship) *action {
+	if len(sh.Merge) == 0 {
 		return nil
 	}
 	return &action{label: "merge", steps: [][]string{sh.Merge}, destructive: true,
 		rec: "ship:" + sh.Repo + "#" + strconv.Itoa(sh.Number), which: "secondary", host: sh.Host}
-}
-
-// shipField is a session's ships in its detail, in the row's order: each
-// one's track and note, then its title and URL; past three, how many more.
-func (m Model) shipField(s sample.Session, w int) []string {
-	st := m.st
-	if ss := m.shipsOf(s); len(ss) > 0 {
-		var out []string
-		for i, sh := range ss[:min(len(ss), shipsShown)] {
-			label := ""
-			if i == 0 {
-				label = "ship"
-			}
-			out = append(out, fit(" "+st.label.Render(pad(label, 9))+m.shipCell(sh, true), w),
-				fit(" "+pad("", 9)+st.text.Render(sh.Title), w))
-			if sh.URL != "" {
-				out = append(out, fit(" "+pad("", 9)+st.faint.Render(sh.URL), w))
-			}
-		}
-		if len(ss) > shipsShown {
-			out = append(out, fit(" "+pad("", 9)+m.shipsLeft(len(ss)-shipsShown), w))
-		}
-		return out
-	}
-	p := m.prOf(s.Cwd)
-	if p == nil {
-		return nil
-	}
-	title := p.Title
-	if p.Draft {
-		title = "draft " + title
-	}
-	out := []string{fit(" "+st.label.Render(pad("ship", 9))+st.accent.Render("#"+strconv.Itoa(p.Number))+" "+st.text.Render(title), w)}
-	if p.URL != "" {
-		out = append(out, fit(" "+pad("", 9)+st.faint.Render(p.URL), w))
-	}
-	return out
-}
-
-// shipRowCell is the desk row's ship in w cells: "#4551 ●━◉┄○┄○ +1
-// merged", the count shorter or gone when w is narrow, or the number of
-// the worktree's open PR when no ship is read.
-func (m Model) shipRowCell(s sample.Session, w int) string {
-	if ss := m.shipsOf(s); len(ss) > 0 {
-		cell := m.shipCell(ss[0], false)
-		for _, short := range []bool{false, true} {
-			if more := m.shipsMore(ss, short); more != "" && lipgloss.Width(cell+more) <= w {
-				return cell + more
-			}
-		}
-		return cell
-	}
-	if p := m.prOf(s.Cwd); p != nil {
-		return m.st.accent.Render("#" + strconv.Itoa(p.Number))
-	}
-	return ""
-}
-
-// shipOpened is a phone's opened row's ships: "#4545 ●━✕┄○┄○ conflicts
-// with main", a line each in the row's order and past three how many more,
-// or the worktree's PR and its title.
-func (m Model) shipOpened(s sample.Session, w int) []string {
-	st := m.st
-	if ss := m.shipsOf(s); len(ss) > 0 {
-		var out []string
-		for _, sh := range ss[:min(len(ss), shipsShown)] {
-			out = append(out, ansi.Truncate("   "+m.shipCell(sh, true), w, "…"))
-		}
-		if len(ss) > shipsShown {
-			out = append(out, ansi.Truncate("   "+m.shipsLeft(len(ss)-shipsShown), w, "…"))
-		}
-		return out
-	}
-	p := m.prOf(s.Cwd)
-	if p == nil {
-		return nil
-	}
-	title := p.Title
-	if p.Draft {
-		title = "draft " + title
-	}
-	return []string{"   " + st.accent.Render("#"+strconv.Itoa(p.Number)) + " " + st.muted.Render(title)}
 }

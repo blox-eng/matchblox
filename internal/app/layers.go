@@ -230,6 +230,7 @@ func (s Shell) openOn(host string, peers []string, first bool) (Shell, tea.Cmd) 
 	// A jump starts from this machine's tmux, whatever the host.
 	o.OutsideTmux, o.Prefix, o.Home, o.LocalTmux, o.JumpID = b.OutsideTmux, b.Prefix, b.Home, b.LocalTmux, b.JumpID
 	o.Pane, o.ClientList = b.Pane, b.ClientList // the client a jump moves is one of this machine's
+	o.Tmux = b.Tmux                             // a copy goes through this machine's tmux, whatever the host
 	// The builder's own ssh login goes from this machine, whatever the host.
 	o.Check, o.MasterBase, o.SSH = b.Check, b.MasterBase, b.SSH
 	o.Ask, o.NoAsk = b.Ask, b.NoAsk // the prompts of this machine's ssh
@@ -521,7 +522,7 @@ func (s Shell) enterTicked(host string) (Shell, tea.Cmd) {
 		s, cmd := s.open(host, false)
 		s.cur.hidden = s.hiddenCount() - 1 // all but the one that opens
 		s.cur.flash = "No host is ticked: " + s.cur.nameOf(host) + " opens alone."
-		return s, cmd
+		return s, tea.Batch(cmd, s.cur.flashNotice("")) // the board says it in its strip's row
 	case s.live() && t[0] == s.curHost:
 		return s.keep(t[1:])
 	}
@@ -704,7 +705,7 @@ func (s Shell) render() string {
 		out = append(append(out, ""), s.releaseLines(rs[s.sel], w)...)
 	}
 	if s.firstRun() && !s.adding {
-		out = append(out, "", fit(" "+st.faint.Render("You can add a host later: "+defaultKeys().main.Back.Help().Key+" in a console comes back here."), w))
+		out = append(out, "", fit(" "+st.faint.Render("You can add a host later: a host row on a console's Machine comes back here."), w))
 	}
 	// The action line is at the bottom, as in a console (design/0006 §11.1);
 	// a step to confirm is a box over the dimmed list (#158).

@@ -53,11 +53,24 @@ type Session struct {
 	SigningIn bool `json:"signing_in,omitempty"`
 	// Provider serves the model: anthropic, openai, bedrock, vertex, or an
 	// OpenCode provider id. The console shows it as a mark.
-	Provider   string        `json:"provider,omitempty"`
-	SessionID  string        `json:"session_id"`
-	Cwd        string        `json:"cwd"`
-	Busy       bool          `json:"busy"`
-	Status     string        `json:"status"` // as the agent reports it: busy, idle, ...
+	Provider  string `json:"provider,omitempty"`
+	SessionID string `json:"session_id"`
+	Cwd       string `json:"cwd"`
+	Busy      bool   `json:"busy"`
+	Status    string `json:"status"` // as the agent reports it: busy, idle, ...
+	// Reported: Status is the agent's own report (Claude Code's session
+	// file, the OpenCode plugin's), not a guess from its pane. WaitingFor is
+	// why a waiting agent waits, in its words: "permission prompt", "input
+	// needed", "permission", "question", ...
+	Reported   bool   `json:"reported,omitempty"`
+	WaitingFor string `json:"waiting_for,omitempty"`
+	// StatusAt is when the agent's report last changed its status: a
+	// reported wait began then, the same at every sample.
+	StatusAt time.Time `json:"status_at,omitzero"`
+	// Retry is the attempt of a call OpenCode retries, and RetryAt when its
+	// next try starts.
+	Retry      int           `json:"retry,omitempty"`
+	RetryAt    time.Time     `json:"retry_at,omitzero"`
 	Idle       time.Duration `json:"idle_ns"`
 	Started    time.Time     `json:"started"`
 	Model      string        `json:"model,omitempty"`
@@ -177,6 +190,22 @@ type Snapshot struct {
 // busy to the person, since their results start its next turn by itself.
 const StatusAgents = "agents"
 
+// The statuses an agent reports itself, besides busy and idle: Claude
+// Code's turn ended and its background shells or agents run (shell), it
+// waits for the person (waiting); OpenCode retries a failed call (retry).
+const (
+	StatusShell   = "shell"
+	StatusWaiting = "waiting"
+	StatusRetry   = "retry"
+)
+
+// ReportsWork: the agent's own report says it works, so no question from
+// its transcript or the hooks' queue is new.
+func (s Session) ReportsWork() bool { return s.Reported && s.Works() }
+
+// ReportsWait: the agent's own report says it waits for the person.
+func (s Session) ReportsWait() bool { return s.Reported && s.Status == StatusWaiting }
+
 // TmuxSession is the name of the tmux session the pane belongs to.
 func (s Session) TmuxSession() string {
 	name, _, _ := strings.Cut(s.Target, ":")
@@ -189,10 +218,12 @@ func (s Session) Resting() bool {
 	return s.Status == "idle" && !s.Busy || s.Status == StatusAgents
 }
 
-// Works tells if a turn runs, or its subagents do: what a kill confirms
-// twice. Unlike Resting, it holds for an agent with no status of its own
-// (Codex, OpenCode), whose Busy comes from its pane.
-func (s Session) Works() bool { return s.Busy || s.Status == StatusAgents }
+// Works tells if a turn runs, or the subagents or shells it left do: what
+// a kill confirms twice. Unlike Resting, it holds for an agent with no
+// status of its own (Codex, OpenCode), whose Busy comes from its pane.
+func (s Session) Works() bool {
+	return s.Busy || s.Status == StatusAgents || s.Status == StatusShell
+}
 
 // Stopped tells if the plan's limit stops a session the builder would pick
 // up now: idle (not cold or stale) and out.
@@ -284,7 +315,7 @@ type Sampler struct {
 	Rules         Rules
 	LatencyTarget string // host:port, empty disables
 	// OwnEntries compares each ~/.claude/sessions/<pid>.json with its
-	// process's start time (see ownEntry). On the live machine only: a
+	// process's start time (see ownReport). On the live machine only: a
 	// fixture tree has fixed uptimes and a real clock.
 	OwnEntries bool
 	// ProcEvery is how often the process table, tmux and sessions are
@@ -701,7 +732,7 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 			sess.EnvAPIKey = env.apiKey
 			s.tag(&sess, agent, env)
 			s.claudeSession(&sess, pid, p, key, env, uptime, now)
-			if sess.Resting() {
+			if sess.Resting() || sess.Status == StatusShell {
 				sess.Shells = s.backgroundShells(pid, procs, children, uptime, now)
 			}
 			if env.cloud == "" && env.claudeDir != "" {
@@ -834,6 +865,11 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 			}
 		case "opencode":
 			sess.Context = "unmeasured"
+			if s.LimitsDir != "" {
+				if rep, ok := s.opencode.report(filepath.Join(s.LimitsDir, "opencode"), pid); ok && s.ownReport(rep.StartedAt, p, uptime, now) {
+					reportOpencode(&sess, rep, now)
+				}
+			}
 			if opencodeIn[sess.Cwd] != 1 {
 				break
 			}
@@ -889,6 +925,7 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 			delete(s.longCtx, key)
 		}
 	}
+	s.opencode.pruneReports(alive)
 	for key := range s.screens {
 		if !alive[key] {
 			delete(s.screens, key)
@@ -1110,7 +1147,8 @@ type screen struct {
 // readPanes fills the sessions that have no adapter from their panes: busy
 // while the pane changes (every agent animates while it works), idle since
 // the last change, and what the agent said last. A pane seen for the first
-// time has no state yet.
+// time has no state yet. An agent that reports its own state takes only
+// what it said last.
 func (s *Sampler) readPanes(sessions []Session, idx []int, now time.Time) {
 	if len(idx) == 0 {
 		return
@@ -1126,6 +1164,11 @@ func (s *Sampler) readPanes(sessions []Session, idx []int, now time.Time) {
 		if !ok {
 			continue
 		}
+		var kind said.Kind
+		sess.LastLine, kind = said.Screen(t)
+		if sess.Reported {
+			continue // the agent's own report says if it works or what it waits for
+		}
 		key := procKey{sess.PID, sess.Start}
 		prev, seen := s.screens[key]
 		switch {
@@ -1138,8 +1181,6 @@ func (s *Sampler) readPanes(sessions []Session, idx []int, now time.Time) {
 			sess.Status, sess.Idle = "idle", now.Sub(prev.changed).Truncate(time.Second)
 		}
 		sess.FromPane = true
-		var kind said.Kind
-		sess.LastLine, kind = said.Screen(t)
 		sess.Asks, sess.Permits = kind == said.Asks, kind == said.Permits
 	}
 }
@@ -1277,13 +1318,19 @@ func (s *Sampler) claudeSession(sess *Session, pid int, p procfs.Proc, key procK
 		return
 	}
 	e, ok := s.agents.entry(env.claudeDir, pid)
-	if !ok || !s.ownEntry(e, p, uptime, now) {
+	if !ok || !s.ownReport(e.StartedAt, p, uptime, now) {
 		return
 	}
 	sess.Name, sess.SessionID = e.Name, e.SessionID
-	sess.Busy, sess.Status = e.Status == "busy", e.Status
+	sess.Busy, sess.Status, sess.Reported = e.Status == "busy", e.Status, e.Status != ""
+	if e.Status == StatusWaiting {
+		sess.WaitingFor = e.WaitingFor
+	}
 	if e.StartedAt > 0 {
 		sess.Started = time.UnixMilli(e.StartedAt)
+	}
+	if e.StatusUpdatedAt > 0 {
+		sess.StatusAt = time.UnixMilli(e.StatusUpdatedAt)
 	}
 	if !sess.Busy && e.StatusUpdatedAt > 0 {
 		sess.Idle = now.Sub(time.UnixMilli(e.StatusUpdatedAt)).Truncate(time.Second)
@@ -1422,16 +1469,37 @@ func Human(d time.Duration) string {
 // round.
 const registrySlack = 30 * time.Second
 
-// ownEntry tells if a registry file belongs to this process. An agent that
-// died without removing ~/.claude/sessions/<pid>.json leaves its status
-// there, and a new process with the same pid must not take it: the console
-// would show a fresh agent as stale and offer to end it.
-func (s *Sampler) ownEntry(e registryEntry, p procfs.Proc, uptime float64, now time.Time) bool {
-	if !s.OwnEntries || e.StartedAt == 0 || uptime == 0 {
+// ownReport tells if a report by pid, one that says it started at
+// startedAt (Unix ms), belongs to this process. An agent that died without
+// removing ~/.claude/sessions/<pid>.json (or its OpenCode plugin's report)
+// leaves its status there, and a new process with the same pid must not
+// take it: the console would show a fresh agent as stale and offer to end
+// it.
+func (s *Sampler) ownReport(startedAt int64, p procfs.Proc, uptime float64, now time.Time) bool {
+	if !s.OwnEntries || startedAt == 0 || uptime == 0 {
 		return true // nothing to compare: the file is the only evidence
 	}
 	started := now.Add(-time.Duration((uptime - float64(p.StartTime)/procfs.ClockTicks) * float64(time.Second)))
-	return !time.UnixMilli(e.StartedAt).Before(started.Add(-registrySlack))
+	return !time.UnixMilli(startedAt).Before(started.Add(-registrySlack))
+}
+
+// reportOpencode takes an OpenCode's state from its plugin's report: it
+// decides over the pane, which still gives what the agent said last.
+func reportOpencode(sess *Session, rep opencodeReport, now time.Time) {
+	sess.Reported, sess.Status = true, rep.Status
+	sess.Busy = rep.Status == "busy" || rep.Status == StatusRetry
+	switch rep.Status {
+	case StatusWaiting:
+		sess.WaitingFor = rep.WaitingFor
+	case StatusRetry:
+		sess.Retry, sess.RetryAt = rep.Attempt, time.UnixMilli(rep.Next)
+	}
+	if rep.StatusUpdatedAt > 0 {
+		sess.StatusAt = time.UnixMilli(rep.StatusUpdatedAt)
+	}
+	if !sess.Busy && rep.StatusUpdatedAt > 0 {
+		sess.Idle = now.Sub(time.UnixMilli(rep.StatusUpdatedAt)).Truncate(time.Second)
+	}
 }
 
 // How long a session sits idle before its state word ages.

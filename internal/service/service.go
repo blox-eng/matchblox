@@ -180,6 +180,8 @@ type Service struct {
 	Now func() time.Time
 	// Ships follows the pull requests sessions drive. Nil: no ships.
 	Ships ShipsSource
+	// ShipsEvery is how often Ships runs. Zero: shipsEvery.
+	ShipsEvery time.Duration
 	// Find scans the host from roots, after a yes, never touching skip.
 	// named are the roots the builder picked, as walked: one that is no
 	// folder is said. Nil: no scan, and no Found sent (fixtures).
@@ -876,7 +878,11 @@ func (s *Service) shipsLoop(ctx context.Context) {
 		return
 	case <-s.shipKick:
 	}
-	t := time.NewTicker(shipsEvery)
+	every := shipsEvery
+	if s.ShipsEvery > 0 {
+		every = s.ShipsEvery
+	}
+	t := time.NewTicker(every)
 	defer t.Stop()
 	for {
 		s.mu.Lock()

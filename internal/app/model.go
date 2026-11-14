@@ -64,6 +64,9 @@ type Options struct {
 	// Now is the clock for ages on the screen. Nil: time.Now. The replay
 	// sets a fixed clock.
 	Now func() time.Time
+	// NoticeFor is how long a notice shows. Zero: noticeFor (2.5 s). The
+	// demo's walks, which wait out each refusal, set a short one.
+	NoticeFor time.Duration
 	// NoMotion makes every motion an instant change.
 	NoMotion bool
 	// OutsideTmux: the console does not run in tmux, so going to a pane
@@ -149,6 +152,9 @@ type Options struct {
 	ClientList func() (string, error)
 	// Clip copies text to the builder's clipboard. Nil: OSC 52 with the output.
 	Clip func(text string)
+	// Tmux runs a command of the console's own tmux and gives its output.
+	// Nil: tmux. Outside tmux the console runs none.
+	Tmux func(args ...string) (string, error)
 	// Graphics says whether every terminal that shows the console draws
 	// images, which they are, and whether any shows it (logos.Viewers).
 	// Nil: never.
@@ -302,7 +308,7 @@ func fromAdvice(r advice.Rec, which string) *action {
 
 type Model struct {
 	recPrefs   recPrefs  // dismissed recommendations and the fold
-	viewPrefs  viewPrefs // list only, for a phone and for a desk
+	viewPrefs  viewPrefs // the board's views, for a phone and for a desk
 	opt        Options
 	conn       transport.Conn
 	peers      []link // the other ticked hosts, in Hosts order; copied on write
@@ -342,7 +348,6 @@ type Model struct {
 	gitSel     int
 	shipReport *proto.Ships
 	allShips   []proto.Ship // every host's ships, as merge joins them
-	shipSel    int
 	tab        int
 	pending    *action
 	flash      string
@@ -383,13 +388,10 @@ type Model struct {
 	homeAll     lists  // what the home host sent
 	filter      string // the search of the open tab
 	searching   bool   // the search line takes the keys
-	sessSort    sortBy
-	sessGroup   int // what Sessions is grouped by: groupNeed .. groupNone
 	holds       []proto.Hold
 	chains      *state.ChainsView
-	chainIx     chainIndex      // worked out in refresh
-	room        *room           // the chain room on screen; nil when none
-	repoMates   map[rowKey]bool // the listed sessions with a repo mate they are not chained with
+	chainIx     chainIndex // worked out in refresh
+	room        *room      // the chain room on screen; nil when none
 	reasons     map[string]proto.IdleReason
 	agents      []string                          // the agents a new session can start on the host
 	renames     map[string]string                 // the names sessions take at their next rest, by pane
@@ -409,11 +411,9 @@ type Model struct {
 	picked      map[wtKey]bool // worktrees x removes
 	batch       *batch
 	showExited  bool // e: the exited agents, one by one
-	// dockPanel is the panel a phone's dock shows (usage, the machine, the
-	// stoker), u cycling it; dockSwitched: u was pressed while the stoker
-	// claimed the dock, so it no longer takes it by itself.
-	dockPanel    int
-	dockSwitched bool
+	// stripTurned: u turned the board's strip while a warning lasts, so the
+	// warning no longer turns it.
+	stripTurned bool
 	// stokerSel is the selected row of the STOKER tab, stokerShown the row
 	// whose command it shows, ackSent when the steps were last marked seen.
 	stokerSel    int
@@ -426,10 +426,15 @@ type Model struct {
 	devices      []PairDevice // the keys that open this host, read when the Machine tab opens
 	devErr       error        // why the keys could not be read
 	devPick      string       // the selected device row: its fingerprint, or devPlus
-	pair         *pairPage    // the pair page, while it shows
-	pairPolling  bool         // a poll of the pair page is on its way
-	pairOffers   *pairWaits   // the offers of a key that still run: the end of the program waits for them
-	keys         keymaps      // the keys of every layer, as data
+	// hostPicked: a host row of Machine is selected, hostPick its host;
+	// viewPick: a view row, by its name.
+	hostPicked  bool
+	hostPick    string
+	viewPick    string
+	pair        *pairPage  // the pair page, while it shows
+	pairPolling bool       // a poll of the pair page is on its way
+	pairOffers  *pairWaits // the offers of a key that still run: the end of the program waits for them
+	keys        keymaps    // the keys of every layer, as data
 
 	// scanAsk is the scan question, open at this console; nil none.
 	// scanAskUntil ends its quiet; scanUp: it was on top at the last
@@ -489,6 +494,8 @@ type Model struct {
 	// marked is the client the tmux binding named for the next input
 	// event; askedBy is the client of the event being handled, "" unmarked.
 	marked clientMark
+	// belt is what Pocket's belt was told (board=), and who answered.
+	belt beltSaid
 	// away: a jump left no screen on the console, so it watches no pane
 	// until a screen shows it again or the person acts there.
 	away    bool
@@ -497,6 +504,78 @@ type Model struct {
 	// shown is the frame View drew last, shared by every copy of this
 	// Model: a tap and a wheel tick find what they hit in it.
 	shown *shownFrame
+
+	// boardAt is the board's open column, and boardPick the chosen card of
+	// each column.
+	boardAt   boardCol
+	boardPick map[boardCol]paneKey
+	// boardChain and boardHost narrow the board to one chain and one host,
+	// each by its name; "" shows all.
+	boardChain, boardHost string
+	// boardAbove is the line above the columns that is chosen in place of a
+	// card, counted up from the columns (aboveLines); 0: none.
+	boardAbove int
+	// boardBelow is the line under the columns that is chosen in place of
+	// a card, counted down from the columns (belowLines); 0: none.
+	boardBelow int
+	// menu is the card's menu while it is open. sawRelease: the terminal
+	// reported the release of a press, so a press held is a long press.
+	menu       *boardMenu
+	sawRelease bool
+	longPress  longPress
+	// copyCode is the code the copy check copied, while it waits for its
+	// paste. clipOK, clipKnown: the console's tmux passes a copy on, as it
+	// was read last. dragFrom, dragTo: a drag over the board's text, from
+	// the press to the pointer; dragTo is nil until it is a drag.
+	copyCode          string
+	clipOK, clipKnown bool
+	dragFrom, dragTo  *point
+	// dragLines is the frame at the press, which the drag copies from, and
+	// dragWithin the cells of a row it may cover: its column's. tapLater
+	// is a press whose tap waits for its release. boardDoor is the door
+	// the board's doors line names.
+	dragLines  []string
+	dragWithin [2]int
+	tapLater   *point
+	boardDoor  int
+	// boardDoorsOf names the doors boardDoor counts in. boardMine is the
+	// card the person chose, by a key or a tap: a tap on it again goes in.
+	boardDoorsOf string
+	boardMine    paneKey
+	// peekAt is when the peek last started, and peekAsk the question
+	// (Ask.ID) its card drew then, on the card peekPane. peekNew: a new
+	// question on the same card started it.
+	peekAt   time.Time
+	peekAsk  string
+	peekPane paneKey
+	peekNew  bool
+	// peekReached: at the last message a digit reached the chosen card.
+	peekReached bool
+	// peekArmed is the option a first digit marked, at peekArmedAt; a mark
+	// from before the peek started holds no more.
+	peekArmed   int
+	peekArmedAt time.Time
+	// peekSent is the option sent to the question peekSentAsk in the pane
+	// peekSentPane: the digits of its card are dead until the question
+	// changes.
+	peekSent                  int
+	peekSentAsk, peekSentPane string
+	// frameIdx is the board's index while one frame draws (draw sets it
+	// on its own copy): a frame asks for it five times, and each read of it
+	// is a copy.
+	frameIdx *[4][]sample.Session
+	// noticeText shows in the board's notice row until noticeUntil.
+	noticeText  string
+	noticeNext  string // the notice that shows when this one ends
+	noticeUntil time.Time
+	// goArmed is the card whose go a first tap armed; a second tap gives it.
+	goArmed paneKey
+	// goArmedTap is the go armed when the tap now running began: every tap
+	// disarms, and only a tap on that card's go gives it.
+	goArmedTap paneKey
+	// drafts are the words typed to a chain's stoker in its room when the
+	// room closed; the room shows them again when it opens.
+	drafts map[chainKey]string
 }
 
 func New(opt Options) Model {
@@ -542,7 +621,7 @@ func (m Model) Init() tea.Cmd {
 	if err := m.opt.DialErr; err != nil && m.conn == nil {
 		return tea.Batch(tea.RequestBackgroundColor, func() tea.Msg { return lostMsg{err: err} }, m.splashCmd(), m.waitAsk(), peers)
 	}
-	return tea.Batch(tea.RequestBackgroundColor, m.hello(), m.recv(), m.watchSilence(), m.splashCmd(), m.graphicsTick(0), m.waitAsk(), peers)
+	return tea.Batch(tea.RequestBackgroundColor, m.hello(), m.recv(), m.watchSilence(), m.splashCmd(), m.graphicsTick(0), m.waitAsk(), m.clipRead(), peers)
 }
 
 func (m Model) watchSilence() tea.Cmd {
@@ -647,9 +726,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		if tty, ok := strings.CutPrefix(string(apc), keycmd.BeltFromPrefix); ok { // the app's belt took the board's keys
+			if tty, ok = strings.CutSuffix(tty, "\x1b\\"); ok && remote.ClientTTY(tty) {
+				m.belt = m.heardFrom(tty)
+			}
+			return m, nil
+		}
 		if string(apc) == keycmd.ViewerKey {
 			m.away = false // a terminal came to show the console
-			return m, tea.Batch(sayAgent(keycmd.MarksSignal(), m.opt), m.watchCmd())
+			// It may be a desk: the app answers again once the viewers are known.
+			var ask, belt tea.Cmd
+			m, ask = m.waitViewers()
+			m, belt = m.tellBelt(true)
+			return m, tea.Batch(sayAgent(keycmd.MarksSignal(), m.opt), belt, ask, m.watchCmd())
 		}
 		if string(apc) == homeKey {
 			m.away = false
@@ -659,19 +748,33 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg.(type) {
 	case tea.KeyPressMsg, tea.MouseClickMsg, tea.MouseWheelMsg, tea.PasteMsg:
 		m.askedBy, m.marked, m.away = m.marked.spend(m.now()), clientMark{}, false
+		m = m.dragDropped(msg)
+		if _, wheel := msg.(tea.MouseWheelMsg); m.boardShown() && m.held == nil && !wheel {
+			m.flash = "" // a flash after the key is new: it goes to the strip's row
+		}
 	default:
 		m.askedBy = ""
 	}
+	was := m.flash
 	var anchor roomRow
 	if _, input := msg.(tea.KeyPressMsg); !input && m.room != nil { // the rows may move under the cursor
-		if rows := m.roomRows(m.room.k); m.room.at < len(rows) {
+		if rows := m.roomRows(m.room.k); m.room.at >= 0 && m.room.at < len(rows) {
 			anchor = rows[m.room.at]
 		}
 	}
 	next, cmd := m.update(msg)
 	if nm, ok := next.(Model); ok {
 		nm = nm.keepRoomRow(m.room, anchor)
-		nm = nm.scanShows().keepView().inDemo()
+		nm = nm.scanShows().keepView().inDemo().peekOn().onChoice() // what reads Sessions' selection reads the board's choice
+		again := nm.beltPoll(msg)
+		nm, belt := nm.tellBelt(again)
+		cmd = tea.Batch(cmd, belt)
+		if nm.stripTurned && nm.stripWarn() == "" {
+			nm.stripTurned = false // the warning ended: the next one turns the strip
+		}
+		if note := nm.flashNotice(was); note != nil {
+			cmd = tea.Batch(cmd, note)
+		}
 		if watch := nm.watchCmd(); watch != nil {
 			cmd = tea.Batch(cmd, watch)
 		}
@@ -724,6 +827,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Elsewhere the home key goes back as Esc does: what is open
 		// closes, a filter clears, then the hosts show (#360).
 		return m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	case noticeMsg:
+		return m, m.noticeEnded() // the frame drops it, or the next one shows
 	case screenMsg:
 		if msg.Pane == m.watching && msg.Err != "" {
 			m.flash = msg.Err // a read that failed: the session and its last screen stay
@@ -784,6 +889,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		first := !m.have
 		m.watchHeld = ""
 		st := proto.State(msg)
+		m.noteChanges(m.opt.Host, st.Sessions, st.Chains) // before the state: a card's column before the change
 		var feel tea.Cmd
 		if f := feelOf(m.queue, st.Queue); f != "" && !first {
 			feel = sayAgent(f, m.opt)
@@ -794,9 +900,6 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			toast = joined
 		}
 		m.stoker, m.stokerServer, m.stokers = st.Stoker, st.StokerServer, st.Stokers
-		if !m.stokerClaims() {
-			m.dockSwitched = false
-		}
 		m.doors, m.updateView = m.shownDoors(st.Doors), st.Update
 		if n := m.behindNotice(); n != "" && n != m.behindSaid {
 			m.flash, m.behindSaid = n, n // once for each release: a key clears it
@@ -805,7 +908,6 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.flash, m.recPrefs.Updated = news, key
 			_ = m.recPrefs.save(m.opt.StateDir) // not kept: the next console says it again
 		}
-		m.noteChanges(m.opt.Host, st.Sessions, st.Chains)
 		m.snap, m.git, m.recs, m.have, m.answered, m.at = st.Snapshot, st.Git, st.Recommendations, true, true, m.now()
 		m.shipReport = st.Ships
 		m.holds, m.reasons, m.chains = st.Holds, st.Reasons, st.Chains
@@ -898,11 +1000,18 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.planTick(msg)
 	case resultMsg:
 		if strings.HasPrefix(msg.ActID, keyActID) {
-			if msg.Err != "" {
+			var note tea.Cmd
+			switch {
+			case msg.Err != "" && m.boardShown() && !m.viewFull(): // the stand-in says it on its own key line
+				if msg.ActID == keyActID+m.peekSentPane { // the answer was not sent: its card takes digits again
+					m.peekSent, m.peekSentAsk, m.peekSentPane = 0, "", ""
+				}
+				note = m.notice(msg.Err)
+			case msg.Err != "":
 				m.flash = msg.Err
 			}
 			next := m.nextKey()
-			return m, tea.Batch(m.recv(), next)
+			return m, tea.Batch(m.recv(), next, note)
 		}
 		if pane, ok := strings.CutPrefix(msg.ActID, watchActID); ok && msg.Err != "" {
 			// A pane that went before the watch came is a race, not the builder's error.
@@ -1047,6 +1156,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.focus(tea.KeyPressMsg{}) == layerForm {
 			return m.formPaste(msg.Content)
 		}
+		if m.copyCode != "" && m.boardShown() { // the check's answer, never an agent's
+			return m.copyPasted(msg.Content)
+		}
 		return m, nil
 	case tea.MouseClickMsg:
 		m, touch := m.touchRest()
@@ -1056,6 +1168,11 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m, touch := m.touchRest()
 		next, cmd := m.wheel(msg.Mouse())
 		return next, tea.Batch(touch, cmd)
+	case tea.MouseReleaseMsg, tea.MouseMotionMsg, longPressMsg:
+		return m.pointer(msg)
+	case clipMsg:
+		m.clipOK, m.clipKnown = msg.ok, msg.known
+		return m, nil
 	case tea.KeyPressMsg:
 		if m.splashing() {
 			m.splashDone = true // any key stops the start screen, and does nothing else
@@ -1063,6 +1180,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.armed = "" // a key between two taps: the next tap shows again
 		var touch tea.Cmd
+		m = m.onChoice() // the touch and the layers act on what the board chose
 		// f and n are stoker acts themselves: a touch sent with them would
 		// race them on the service.
 		if m.pair != nil || m.sheet != nil || m.form != nil || m.searching || m.standIn || !bkey.Matches(msg, m.keys.main.Stoke, m.keys.main.Night) {
@@ -1179,6 +1297,9 @@ func (m Model) takeFocus(f *proto.Focus) (Model, tea.Cmd) {
 	m.setTab(tabSessions)
 	m.pending = nil
 	m.doorPick, m.recPick, m.ghostPick, m.chose, m.selPID, m.selHost = "", "", 0, true, s.PID, s.Host
+	if c, card, ok := m.boardCardOf(paneOf(s)); ok && m.boardShown() {
+		m.boardChooseCard(c, card)
+	}
 	if s.Pane == "" {
 		return m, nil // outside tmux: no pane to open
 	}
@@ -1332,12 +1453,16 @@ func describe(r proto.Result) string {
 // keyed is a key a tap on a key hint presses: it reaches the layers under
 // the overlays, as a key does.
 func (m Model) keyed(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	m = m.onChoice()
 	return m.press(m.under(k), k)
 }
 
 // press gives k to the layer f, the one focus chose. A layer under the
 // overlays marks the stoker's steps seen when the tab shows them.
 func (m Model) press(f layerID, k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if !bkey.Matches(k, m.keys.main.Grant) {
+		m.goArmed = paneKey{} // any other key disarms an armed go
+	}
 	var next tea.Model = m
 	var cmd tea.Cmd
 	switch f {
@@ -1368,7 +1493,10 @@ func (m Model) press(f layerID, k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case layerPending:
 		next, cmd = m.pendingKey(k)
 	case layerMain:
-		next, cmd = m.key(k)
+		var took bool
+		if next, cmd, took = m.boardKey(k); !took {
+			next, cmd = m.key(k)
+		}
 	}
 	if f.underOverlays() {
 		return stokerSeen(next, cmd)
@@ -1415,7 +1543,7 @@ func (m Model) pendingKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	// A destructive action needs a typed y; Enter alone is not consent.
 	if yes || (bkey.Matches(k, m.keys.confirm.Enter) && !a.destructive) {
-		return m.confirm(a)
+		return m.boardActed().confirm(a)
 	}
 	m.flash = "cancelled: " + a.String()
 	return m, nil
@@ -1430,14 +1558,14 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.standIn {
 		return m.standInKey(k)
 	}
-	if m.room != nil {
+	if m.room != nil && m.boardShown() && !bkey.Matches(k, mk.NextTab, mk.PrevTab) { // off the board the room only filters it
 		m.flash = ""
 		return m.roomKey(k)
 	}
 	m.flash = ""
 	if s, ok := m.selectedSession(); ok && bkey.Matches(k, mk.Second, mk.Rename, mk.Switch, mk.Park) {
 		if u, head := m.headRow(s); head { // its agent is the stoker's, not a session of the builder's
-			m.flash = "the stoker of chain " + u.Name + " is no session: quit it on the STOKER tab"
+			m.flash = "the stoker of chain " + u.Name + " is no session: " + m.quitStokerWhere()
 			return m, nil
 		}
 	}
@@ -1449,9 +1577,9 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case bkey.Matches(k, mk.Quit):
 		return m.quit()
 	case bkey.Matches(k, mk.NextTab):
-		m.setTab((m.tab + 1) % len(tabNames))
+		m.setTab((m.openTab() + 1) % len(tabNames))
 	case bkey.Matches(k, mk.PrevTab):
-		m.setTab((m.tab + len(tabNames) - 1) % len(tabNames))
+		m.setTab((m.openTab() + len(tabNames) - 1) % len(tabNames))
 	case bkey.Matches(k, mk.Search):
 		m.searching, m.filter = true, ""
 		m.refresh()
@@ -1459,23 +1587,14 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.filter != "" {
 			m.filter = ""
 			m.refresh()
-		} else if m.opt.Layered {
+		} else if m.opt.Layered && !m.have { // a host that never answered: the way back; else esc stays
 			return m, func() tea.Msg { return layerMsg{} }
+		} else {
+			m = m.backToMachine() // a view of Machine: back to its row
 		}
 	case bkey.Matches(k, mk.Sort):
-		if s, _ := m.sortable(); s != nil {
-			_, names := m.sortable()
-			m.sortOn((s.col + 1) % len(names))
-		}
-	case bkey.Matches(k, mk.SortBack):
-		if s, _ := m.sortable(); s != nil {
-			m.sortOn(s.col)
-		}
-	case bkey.Matches(k, mk.Group):
-		if m.tab == tabSessions {
-			m.sessGroup = (m.sessGroup + 1) % len(groupModes)
-			m.flash = "group: " + groupModes[m.sessGroup]
-			m.refresh()
+		if m.tab == tabPanes {
+			m.sortOn((m.paneSort.col + 1) % len(paneCols))
 		}
 	case bkey.Matches(k, mk.Park):
 		if s, ok := m.selectedSession(); ok {
@@ -1515,8 +1634,6 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.move(1)
 	case bkey.Matches(k, mk.Open):
 		switch m.tab {
-		case tabShips:
-			return m.toDriver(), nil
 		case tabStoker:
 			if r, ok := m.stokerSelected(); ok && r.kind == rowAgent {
 				return m.openAgent()
@@ -1529,6 +1646,12 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		if b, ok := m.selectedBlocked(); ok {
 			return m.unblockHost(b)
+		}
+		if _, ok := m.selectedHostRow(); ok && m.tab == tabMachine {
+			return m.openHosts()
+		}
+		if v, ok := m.selectedMachineView(); ok && m.tab == tabMachine {
+			return m.openView(v), nil
 		}
 		if s, ok := m.selectedSession(); ok {
 			if u, head := m.headRow(s); head { // a chain's head opens its room
@@ -1561,8 +1684,6 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	case bkey.Matches(k, mk.Into):
 		switch m.tab {
-		case tabShips:
-			return m.shipInto()
 		case tabStoker:
 			return m.stokerInto()
 		}
@@ -1586,12 +1707,6 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.tab == tabSessions {
 			m.foldRecs()
 		}
-	case bkey.Matches(k, mk.Ships):
-		m.setTab(tabShips)
-	case bkey.Matches(k, mk.Dock):
-		m.cycleDock()
-	case bkey.Matches(k, mk.ListOnly):
-		m.flipListOnly()
 	case bkey.Matches(k, mk.Stoke):
 		return m.stokerKey(false)
 	case bkey.Matches(k, mk.Night):
@@ -1607,8 +1722,6 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.tab == tabGit {
 			return m.rescan()
 		}
-	case bkey.Matches(k, mk.Tabs):
-		m.setTab(int(k.String()[0] - '1'))
 	}
 	return m, nil
 }
@@ -1872,6 +1985,9 @@ const toastFor = 2500 * time.Millisecond
 
 // say shows what an action did on the header's right, for toastFor.
 func (m *Model) say(text string) tea.Cmd {
+	if m.boardShown() {
+		return m.notice(text)
+	}
 	m.toasts++
 	m.toast = text
 	n := m.toasts

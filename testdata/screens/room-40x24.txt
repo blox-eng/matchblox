@@ -1,24 +1,24 @@
- ▰ matchblox           ● 1 wait for you
- ‹ ≋ hearth
+ ▰ matchblox               ● 2 need you
+ chain hearth · 3   esc all
 ────────────────────────────────────────
-▌╿ hearth-api asks: may I force-push the
-   rebase?  +2
- ≋ "ship the chain"
- ≋ hearth's stoker is quiet since 22:49…
-   ✓ step
-   ▸ step · waits for your go
-     step
-   ↓ 2 more
- ╿ ✻ kindle-web  idle
- ✦ ✻ hearth-api  busy
- ╿ ✻ ember-billing  waits
- SHIPS reading…
- GIT   reading…
- › tell hearth's stoker…
-
-
-
-
-
+ stoker NEEDS YOU 2 − work 0 ship 0 qui…
 ────────────────────────────────────────
- ⏎ go in  ] next  esc back
+▌╿ hearth-api                     ✻  8h
+  asks permission prompt
+  ctx 79%                      ━╸hearth
+  “may I force-push the rebase?”
+  ⏎ go in
+
+ ╿ ember-billing                  ✻  8h
+  waits which branch?
+  ctx 32%                      ━╸hearth
+  ⏎ go in
+
+
+
+
+ + start a new session
+ RECOMMENDATIONS · 7
+ ✻ 5h ▰▰▰▰▰▰▰▱ 84%  wk 82%    machine ›
+────────────────────────────────────────
+ c copy   v one line   s hosts   u strip

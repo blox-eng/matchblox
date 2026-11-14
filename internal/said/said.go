@@ -37,8 +37,15 @@ var (
 	// permitsRe is an approval prompt, in the agents' own words: OpenCode's
 	// permission box and its choices, aider's (Y)es/(N)o, a [y/n], Codex's
 	// confirm hint, a numbered Yes choice (Claude Code, Codex), Cursor's
-	// Run (once) (y) and its workspace trust prompt.
-	permitsRe = regexp.MustCompile(`(?i)^permission required\b|^allow once\b|\(y\)es/\(n\)o|[\[(]y/n[\])]|press enter to confirm|^\d\.\s+yes\b|\brun \(once\) \(y\)|\[a\] trust this workspace`)
+	// Run (once) (y) and its workspace trust prompt, Claude Code's folder
+	// trust prompt.
+	permitsRe = regexp.MustCompile(`(?i)^permission required\b|^allow once\b|\(y\)es/\(n\)o|[\[(]y/n[\])]|press enter to confirm|^\d\.\s+yes\b|\brun \(once\) \(y\)|\[a\] trust this workspace|^yes, i trust this folder\b`)
+	// workingRe is the status line an agent draws while its turn runs:
+	// Claude Code's and Codex's "(12s · esc to interrupt)" in parentheses,
+	// OpenCode's footer that ends in "esc interrupt". The lines above it are
+	// the turn's transcript, not live. Text that only quotes the words is
+	// not one.
+	workingRe = regexp.MustCompile(`(?i)\([^()]*\besc (again )?to interrupt\b[^()]*\)|\besc (again to )?interrupt$`)
 	// midRe is a question with a sentence after it.
 	midRe = regexp.MustCompile(`\pL\?\s+\pL`)
 	// hintRe is a line of key hints or a footer, never what the agent said.
@@ -55,10 +62,18 @@ type line struct {
 
 // Screen reads an agent's pane. When it asks or wants an approval, the line
 // is the question; else it is the last line with words outside the input
-// box and the key hints.
+// box and the key hints. Only the live lines at the bottom ask: those under
+// the line that says the agent works, when it draws one.
 func Screen(screen string) (string, Kind) {
 	ls := lines(screen)
-	win := ls[max(len(ls)-screenWithin, 0):]
+	from := max(len(ls)-screenWithin, 0)
+	for i := len(ls) - 1; i >= from; i-- {
+		if workingRe.MatchString(ls[i].text) {
+			from = i + 1
+			break
+		}
+	}
+	win := ls[from:]
 	for _, l := range win {
 		if permitsRe.MatchString(l.text) {
 			for i := len(win) - 1; i >= 0; i-- {

@@ -1,0 +1,34 @@
+ ▰ matchblox · all hosts ▾ ● 4 need you
+ BOARD 15    machine
+────────────────────────────────────────
+ NEEDS YOU 4 −  work 3  ship 3  quiet 5
+────────────────────────────────────────
+▌╿ spark-search                   ✻ 31m
+  stuck CI failed · lint, twice
+  #4548 ●━✕┄○┄○┄○  ctx 77%
+  “Lint fails on a file I did not
+  change. I tried twice and stopped.”
+  ⏎ go in
+
+ ╿ kindle-web                     ✻  9m
+  green #4556 waits for your merge
+  #4556 ●━●━◉┄○┄○  ctx 48%
+  p merge #4556   ⏎ go in
+
+ ╿ hearth-api                     ✻  4m
+  asks The plan changes 2 records and …
+  ctx 31%
+  ⏎ go in
+
+ ╿ flint-auth                     ✻  2m
+  asks Which way do we fix the login?
+  ctx 62%                       ─╴login
+  ⏎ go in
+
+
+
+ + start a new session
+ RECOMMENDATIONS · 7
+ ✻ 5h 84% · wk 82%            machine ›
+────────────────────────────────────────
+ c copy   v one line   s hosts   u strip

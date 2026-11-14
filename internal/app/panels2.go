@@ -218,54 +218,29 @@ func (m Model) gitHost(b *body, g hostGit, rows []wtRow, i, sel, w int) int {
 	return i
 }
 
-// recsSection is what to do next, under the sessions: its rows follow
-// theirs. On a phone the selected one shows its evidence and its steps
-// under the list; wider, the detail pane does. h folds the section to its
-// label; d dismisses the selected one until its evidence changes.
-func (m Model) recsSection(b *body, w int) {
-	if len(m.recs) == 0 {
-		return
-	}
+// recLine is the row of r: its level's mark and its title, or what came
+// of the last act on it; chosen, the dismiss mark at its right.
+func (m Model) recLine(r advice.Rec, sel bool, w int) string {
 	st := m.st
-	if len(b.lines) > 0 {
-		b.add(-1, "")
+	mark := st.faint.Render("○ ")
+	switch r.Level {
+	case "crit":
+		mark = st.neg.Render("! ")
+	case "warn":
+		mark = st.warn.Render("▲ ")
 	}
-	if m.recPrefs.Folded {
-		b.add(recsLabelRow, st.label.Render(fmt.Sprintf(" RECOMMENDATIONS · %d hidden", len(m.recs)))+st.faint.Render(" · ")+
-			keyWord(m.keys.main.Fold, st.accent, st.faint, " shows"))
-		return
+	lead := " "
+	if sel {
+		lead = st.accent.Render("▌")
 	}
-	b.add(recsLabelRow, st.label.Render(fmt.Sprintf(" RECOMMENDATIONS · %d", len(m.recs)))+st.faint.Render(" · ")+
-		keyWord(m.keys.main.Fold, st.accent, st.faint, " hides"))
-	n := len(m.doors) + len(m.snap.Sessions) + len(m.ghosts())
-	sel := m.sessIndex() - n
-	for i, r := range m.recs {
-		mark := st.faint.Render("○ ")
-		switch r.Level {
-		case "crit":
-			mark = st.neg.Render("! ")
-		case "warn":
-			mark = st.warn.Render("▲ ")
-		}
-		lead := " "
-		if i == sel {
-			lead = st.accent.Render("▌")
-		}
-		line := lead + mark + st.ink(i == sel).Render(tilde(r.Title))
-		if mark, out := m.recOutcome(r); mark != "" {
-			line = " " + mark + st.text.Render(out)
-		}
-		if i == sel {
-			line = spread(line, dismissMark(st, m.keys.main.Dismiss)+" ", w)
-		}
-		b.addRow(n+i, i == sel, w, st, line)
+	line := lead + mark + st.ink(sel).Render(tilde(r.Title))
+	if mark, out := m.recOutcome(r); mark != "" {
+		line = " " + mark + st.text.Render(out)
 	}
-	if sel < 0 || sel >= len(m.recs) || !m.inPlace() {
-		return
+	if sel {
+		line = spread(line, dismissMark(st, m.keys.main.Dismiss)+" ", w)
 	}
-	r := m.recs[sel]
-	b.add(-1, wrap(" "+tilde(r.Evidence), w, st.muted.Render)...)
-	b.add(-1, m.recActions(r, w)...)
+	return line
 }
 
 // recOutcome is what came of the last act on r, and its mark: ✓ it ran,

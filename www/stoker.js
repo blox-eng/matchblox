@@ -1,8 +1,8 @@
 // The stoker takes orders: six screens of the console, drawn as the replay
 // draws its frames ([text, fg, bg, flags] spans in the site's colour
 // tokens). Folded they fill the phone's 44 columns; open, the Duo lays the
-// sessions on the left and the step's own pane on the right. The Sessions
-// step answers g, o, z, the arrows and n, as the console does. Every name
+// board's page on the left and the step's own pane on the right. The board
+// step answers ← →, z, the arrows and n, as the console does. Every name
 // is the demo machine's. TestStokerSVG (cmd/matchblox) loads this file in
 // Node and draws the README's animation from tour().
 (() => {
@@ -95,42 +95,36 @@
       "kindle-web": { st: "busy", mins: 0 }, "flint-auth": { mins: 20 }, "spark-docs": held("on review"), codex: held("on review"),
     },
   };
-  const GROUPS = ["need", "status", "repo", "none"];
-  const SORTS = ["state", "newest", "context", "name"]; // the console's columns, s the next, S turns it around
-  const fresh = () => ({ step: 0, group: 0, sort: 1, back: false, sel: "kindle-web", parked: new Set(["wick-mobile"]) });
+  // The board's columns (DESIGN §6), as a phone pages them: the open page
+  // in capitals, the others short.
+  const COLS = [["NEEDS YOU", "need"], ["WORKING", "work"], ["SHIPPING", "ship"], ["QUIET", "quiet"]];
+  const fresh = () => ({ step: 0, page: 3, sel: "spark-docs", parked: new Set(["wick-mobile"]) });
 
   const sessions = (S, at) => SESSIONS.map((s) => Object.assign({}, s, at && AT[at][s.name]));
   const age = (m) => (!m ? "" : m < 60 ? m + "m" : m < 1440 ? Math.round(m / 60) + "h" : Math.round(m / 1440) + "d");
-  const groups = (S, list) => {
-    const parked = (s) => S.parked.has(s.name) || s.held;
-    const key = {
-      need: (s) => (parked(s) ? "HELD" : s.st === "asks" ? "WAITS FOR YOU" : s.st === "busy" ? "WORKING" : "QUIET"),
-      status: (s) => (parked(s) ? "PARKED" : s.st.toUpperCase()),
-      repo: (s) => s.repo.toUpperCase(),
-      none: () => "ALL",
-    }[GROUPS[S.group]];
-    const order = S.group === 0 ? ["WAITS FOR YOU", "WORKING", "QUIET", "HELD"] : null;
-    const rank = { asks: 0, busy: 1, idle: 2 };
-    const by = {
-      state: (a, b) => rank[a.st] - rank[b.st] || a.mins - b.mins, newest: (a, b) => a.mins - b.mins,
-      context: (a, b) => b.ctx - a.ctx, name: (a, b) => a.name.localeCompare(b.name),
-    }[SORTS[S.sort]];
-    const cmp = S.back ? (a, b) => by(b, a) : by;
-    const m = new Map();
-    for (const s of [...list].sort(cmp)) {
-      const k = key(s);
-      if (!m.has(k)) m.set(k, []);
-      m.get(k).push(s);
-    }
-    const keys = order ? order.filter((k) => m.has(k)) : [...m.keys()].sort();
-    return keys.map((k) => [k, m.get(k)]);
+  // column is the board's rule, for the sessions of this page: a parked or
+  // held match is quiet; one that asks, or whose ship waits for the merge,
+  // needs you; a busy one works; a merge that deploys ships.
+  const column = (S, s) => {
+    if (S.parked.has(s.name) || s.held) return 3;
+    if (s.st === "asks" || /waits your merge/.test(s.why || "")) return 0;
+    if (s.st === "busy") return 1;
+    if (/deploying/.test(s.why || "")) return 2;
+    return 3;
+  };
+  const pages = (S, at) => {
+    const out = COLS.map(() => []);
+    for (const s of sessions(S, at)) out[column(S, s)].push(s);
+    out[0].sort((a, b) => b.mins - a.mins); // the oldest wait first
+    out[3].sort((a, b) => a.mins - b.mins); // the newest first
+    return out;
   };
   const state = (S, s) => {
-    if (S.parked.has(s.name)) return ["⏸", M, "parked by you", M];
-    if (s.held) return ["⏸", M, "held · " + s.held, M];
-    if (s.st === "asks") return ["●", A, "asks", A];
-    if (s.st === "busy") return ["◐", T, "busy", M];
-    return ["○", F, s.why, s.wc || F];
+    if (S.parked.has(s.name)) return ["⏸", F, "parked", M];
+    if (s.held) return ["⏸", F, "held · " + s.held, M];
+    if (s.st === "asks") return ["╿", "match-head", "asks", A];
+    if (s.st === "busy") return ["✦", "flame", "busy", M];
+    return ["╿", s.mins >= 1440 ? "match-ember" : "match-head", s.why, s.wc || F];
   };
   const row = (S, s, sel) => {
     const [g, gc, word, wc] = state(S, s);
@@ -140,22 +134,36 @@
     if (sel) l.bg = "wash";
     return l;
   };
-  // The list's own lines: how it is grouped and sorted, then the rows.
+  // The page marks, then the open page's cards: one line each, and the
+  // chosen card adds what its agent said last.
   const list = (S, at, sel) => {
-    const L = [cut([[" g ", A, 0, "g"], ["by " + GROUPS[S.group], T, 0, "g"], ["   s ", A, 0, "s"], [SORTS[S.sort] + (S.back ? " ↑" : ""), T, 0, "s"]], HALF)];
-    for (const [k, rows] of groups(S, sessions(S, at))) {
-      L.push(text(` ${k} · ${rows.length}`, F, HALF));
-      for (const s of rows) L.push(row(S, s, s.name === sel));
+    const all = pages(S, at);
+    const marks = [[" ", ""]];
+    COLS.forEach(([name, short], i) => {
+      const open = i === S.page;
+      marks.push([(i ? "  " : "") + (open ? name + " " + all[i].length + " −" : short + " " + all[i].length), open ? T : F, open ? BOLD : 0, "page:" + i]);
+    });
+    const L = [cut(marks, HALF), hair(HALF)];
+    if (!all[S.page].length) L.push(text(S.page === 0 ? "  nothing needs you" : "  " + COLS[S.page][0] + " · 0", F, HALF));
+    for (const s of all[S.page]) {
+      L.push(row(S, s, s.name === sel));
+      if (s.name === sel) {
+        wrap("“" + s.said + "”", HALF - 4).forEach((t) => {
+          const l = text("   " + t, M, HALF);
+          l.bg = "wash";
+          L.push(l);
+        });
+      }
     }
     return L;
   };
-  const header = (on, w) => {
-    const right = on === "night" ? [["night → 07:00 ", NK]] : on === "on" ? [["stoker ", A]] : [["● 2 wait ", A]];
+  const header = (on, need, w) => {
+    const right = on === "night" ? [["night → 07:00 ", NK]] : on === "on" ? [["stoker ", A]] : [["● " + need + " need you ", A]];
     return lr([[" ▰ ", A], ["matchblox", T, BOLD]], right, w);
   };
   const tabs = (active, w) => {
     const t = (label, n, on) => (on ? [[label, A, UNDER], [n ? " " + n : "", A]] : [[label.toLowerCase(), F], [n ? " " + n : "", F]]);
-    return cut([[" ", ""], ...t("SESSIONS", 12, active === "s"), ["   ", ""], ...t("SHIPS", 4, active === "p"), ["   ", ""], ...t("STOKER", "", active === "k")], w);
+    return cut([[" ", ""], ...t("BOARD", 12, active === "s"), ["    ", ""], ...t("MACHINE", "", active === "k")], w);
   };
   const keys = (list, w) => {
     const l = [[" ", ""]];
@@ -257,13 +265,13 @@
         ...step("◐", W, "02:31", "hearth-api: merge #4551 on green", "CI 6 of 9 jobs"),
         ...step("○", F, "", "flint-auth: rebase #4545, merge on green"),
         [], text(" YOUR GO", F, HALF),
-        ...step("⏸", W, "02:40", "waits for you: kindle-web wants to run gh release create v2.1", "y gives the go, once"),
+        ...step("⏸", W, "02:40", "waits for your go: kindle-web wants to run gh release create v2.1", "y gives the go, once"),
         [], text(" TRIGGERS", F, HALF),
         ...step("✓", A, "02:31", "when #4552 merged → sent hearth-api: rebase on main"),
         text(" WAITING ON", F, HALF),
         cut([["  ○ ", F], ["t2 when #4551 merged → send flint-auth", M]], HALF));
     } else if (at === "morning") {
-      L.push(text(" DONE 3 of 4 · 1 WAITS FOR YOU", A, HALF),
+      L.push(text(" DONE 3 of 4 · 1 NEED YOU", A, HALF),
         ...step("✓", A, "01:58", "ember-billing merged #4552", "live 02:31"),
         ...step("✓", A, "03:40", "hearth-api merged #4551", "live 04:12"),
         ...step("✕", N, "04:15", "flint-auth: #4545 still conflicts after rebase", "auth/rotate.go, both sides changed expires_at. flint-auth asks you which to keep"),
@@ -315,15 +323,15 @@ Name the sessions or the issues that come first.
   const STEPS = [
     { on: "off", tab: "s", keys: [["⏎", "go in", "Enter"], ["z", "park"], ["n", "night"], ["f", "stoker"]], list: true,
       side: (S) => detail(S, null, S.sel),
-      h: "Every quiet session says why", p: "A parked session leaves the quiet pile." },
+      h: "Every quiet card says why", p: "The board's QUIET column: each match at rest says what it waits on. A parked one says so, and the stoker leaves it alone." },
     { on: "off", tab: "s", keys: [["⏎", "go in", "Enter"], ["z", "park"], ["n", "night"], ["f", "stoker"]], list: true, over: launch,
       side: (S) => detail(S, null, S.sel),
       h: "n asks for tonight’s orders", p: "matchblox starts the stoker agent on a tmux server of its own. Say it in your own words, or tap a recipe from your ways. Turn on the gos you give: merges, releases, deploys. ⏎ and the night starts at once." },
-    { on: "night", tab: "k", keys: [["y", "give the go"], ["⏎", "command"], ["1", "sessions"], ["n", "stop night"]], at: "night", main: () => card("night"), night: true,
+    { on: "night", tab: "k", keys: [["y", "give the go"], ["⏎", "command"], ["esc", "machine", "Escape"], ["n", "stop night"]], at: "night", main: () => card("night"), night: true,
       h: "At 03:12 it works its own plan", p: "Each step is a message to a session. The merge you gave goes through; a release you did not waits for your y. Where it would wait, the stoker sets a trigger, and matchblox fires it." },
-    { on: "off", tab: "k", keys: [["a", "look"], ["⏎", "command"], ["1", "sessions"], ["p", "ships"], ["f", "stoker"]], at: "morning", sel: "flint-auth", main: () => card("morning"),
-      h: "In the morning, the card", p: "c opens it from any tab: your words, then what came of each step. What failed says why, with the one key that resolves it." },
-    { on: "on", tab: "k", keys: [["⏎", "command"], ["1", "sessions"], ["p", "ships"], ["f", "stoker"]], at: "day", main: () => card("day"), over: neworder,
+    { on: "off", tab: "k", keys: [["a", "look"], ["⏎", "command"], ["esc", "machine", "Escape"], ["f", "stoker"]], at: "morning", sel: "flint-auth", main: () => card("morning"),
+      h: "In the morning, the card", p: "The stoker row on Machine opens it: your words, then what came of each step. What failed says why, with the one key that resolves it." },
+    { on: "on", tab: "k", keys: [["⏎", "command"], ["esc", "machine", "Escape"], ["f", "stoker"]], at: "day", main: () => card("day"), over: neworder,
       h: "By day, o gives a new order", p: "One line to the stoker, with the gos you set. The run goes on, and the steps already done stay done." },
     { file: true,
       h: "Your ways, in your words", p: "One markdown file, open in your own editor. The stoker reads it at every launch: standing rules, and recipes an order can call. matchblox writes this starter once; the rest is yours." },
@@ -347,7 +355,7 @@ Name the sessions or the issues that come first.
       const lines = [...pad(ways(w), ROWS - 1), cut([[" ~/.config/matchblox/ways.md", F, BOLD], ["  your editor", F]], w)];
       return lines.map((l) => spans(cut(l, w), false));
     }
-    const top = [header(st.on, w), tabs(st.tab, w)];
+    const top = [header(st.on, pages(S, st.at)[0].length, w), tabs(st.tab, w)];
     const body = ROWS - top.length - 3; // the hairs above and below, the keys
     let lines;
     if (!open) {
@@ -372,14 +380,19 @@ Name the sessions or the issues that come first.
   // A key, as the console takes it. It says whether it did anything.
   const press = (S, k) => {
     if (S.step === 0) {
-      const flat = groups(S, sessions(S)).flatMap((g) => g[1]);
-      const i = flat.findIndex((s) => s.name === S.sel);
-      if (k === "g") S.group = (S.group + 1) % GROUPS.length;
-      else if (k === "s") S.sort = (S.sort + 1) % SORTS.length;
-      else if (k === "S") S.back = !S.back;
+      const turn = (to) => {
+        S.page = (to + COLS.length) % COLS.length;
+        const first = pages(S)[S.page][0];
+        if (first) S.sel = first.name;
+      };
+      const cards = pages(S)[S.page];
+      const i = cards.findIndex((s) => s.name === S.sel);
+      if (k.startsWith("page:")) turn(Number(k.slice(5)));
+      else if (k === "ArrowLeft" || k === "h") turn(S.page - 1);
+      else if (k === "ArrowRight" || k === "l") turn(S.page + 1);
       else if (k === "z") S.parked.has(S.sel) ? S.parked.delete(S.sel) : S.parked.add(S.sel);
-      else if (k === "ArrowDown" || k === "j") S.sel = flat[Math.min(i + 1, flat.length - 1)].name;
-      else if (k === "ArrowUp" || k === "k") S.sel = flat[Math.max(i - 1, 0)].name;
+      else if ((k === "ArrowDown" || k === "j") && cards.length) S.sel = cards[Math.min(i + 1, cards.length - 1)].name;
+      else if ((k === "ArrowUp" || k === "k") && cards.length) S.sel = cards[Math.max(i - 1, 0)].name;
       else if (k === "n") S.step = 1;
       else return false;
     } else if (k === "Escape" && (S.step === 1 || S.step === 5)) S.step = 0;
@@ -494,7 +507,7 @@ Name the sessions or the issues that come first.
     pre.tabIndex = 0;
     pre.removeAttribute("aria-hidden");
     pre.setAttribute("role", "tabpanel");
-    pre.setAttribute("aria-label", "The stoker on the phone. On Sessions: g groups, s sorts, S turns the sort around, z parks, the arrows move, n launches a night");
+    pre.setAttribute("aria-label", "The stoker on the phone. On the board: left and right turn the page, up and down choose a card, z parks, n launches a night");
     stage.querySelector(".steps").hidden = false;
     stage.querySelector(".foldswitch").hidden = false;
 

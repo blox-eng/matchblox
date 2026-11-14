@@ -157,15 +157,15 @@ func quietNight() proto.StokerView {
 	}
 }
 
-// TestAQuietNightShowsItsCard: the night's score takes the dock's stoker
-// panel until it is seen, and c opens the whole card. The phone shows it
-// in its full view: list only has no dock.
+// TestAQuietNightShowsItsCard: the night's score is in the stoker's panel
+// at the top of the screen Machine's row stoker opens, and c opens the
+// whole card.
 func TestAQuietNightShowsItsCard(t *testing.T) {
 	for _, w := range []int{40, 120} {
 		m, _ := loadedWith(t, w, stokerState(quietNight()))
-		m = fullView(m)
-		if out := ansi.Strip(m.render()); !strings.Contains(out, "STOKER") || !strings.Contains(out, "ready 7/7") || strings.Contains(out, "NIGHT · 01:08") {
-			t.Fatalf("w=%d: the dock does not show the night's score:\n%s", w, out)
+		m = fromMachine(t, m, "stoker")
+		if top := strings.Join(strings.Split(screen(m), "\n")[3:5], "\n"); !strings.Contains(top, "STOKER") || !strings.Contains(top, "ready 7/7") {
+			t.Fatalf("w=%d: the stoker's panel does not head the screen with the night's score:\n%s", w, screen(m))
 		}
 		out := ansi.Strip(openCard(m).(Model).render())
 		for _, want := range []string{"NIGHT · 01:08 → 07:00", "ready 7/7", "7 watched", "0 compacted"} {
@@ -176,21 +176,18 @@ func TestAQuietNightShowsItsCard(t *testing.T) {
 	}
 }
 
-func openCard(m tea.Model) tea.Model {
-	next, _ := key(m, "c")
-	return next
-}
+func openCard(m tea.Model) tea.Model { return toStoker(m) }
 
 func TestTheCardNamesWhatIsNotReady(t *testing.T) {
 	v := quietNight()
 	c := *v.Card
 	c.Ready, c.Full, c.Compacted, c.Waited, c.Given = 5, 2, 1, 1, 166600
-	c.NotReady = []proto.StokerMiss{{Name: "api-gw", Why: "waits for you"}, {Name: "billing", Why: "full · 91%"}}
+	c.NotReady = []proto.StokerMiss{{Name: "api-gw", Why: "needs you"}, {Name: "billing", Why: "full · 91%"}}
 	c.Left = []proto.StokerMiss{{Name: "Billed", Why: "69% · finishes ~79% · left alone"}}
 	v.Card = &c
 	m, _ := loadedWith(t, 160, stokerState(v))
 	out := ansi.Strip(openCard(m).(Model).render())
-	for _, want := range []string{"ready 5/7", "2 were full", "1 compacted", "1 waited", "167k tokens given back", "api-gw", "waits for you", "billing", "full · 91%", "Billed", "69% · finishes ~79% · left alone"} {
+	for _, want := range []string{"ready 5/7", "2 were full", "1 compacted", "1 waited", "167k tokens given back", "api-gw", "needs you", "billing", "full · 91%", "Billed", "69% · finishes ~79% · left alone"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("no %q in\n%s", want, out)
 		}
@@ -208,7 +205,7 @@ func TestADayRunCardIsStoked(t *testing.T) {
 
 func TestOpeningTheTabMarksTheStepsSeen(t *testing.T) {
 	m, f := loadedWith(t, 120, stokerState(quietNight()))
-	sendKey(m, "c")
+	toStoker(m)
 	if a := f.acts(); len(a) != 1 || a[0].RecID != "stoker:ack" {
 		t.Fatalf("acts %+v", a)
 	}
@@ -224,14 +221,14 @@ func TestSummaryCarriesTheCard(t *testing.T) {
 	v := quietNight()
 	c := *v.Card
 	c.Ready, c.Compacted, c.Given = 6, 1, 166600
-	c.NotReady = []proto.StokerMiss{{Name: "api-gw", Why: "waits for you"}}
+	c.NotReady = []proto.StokerMiss{{Name: "api-gw", Why: "needs you"}}
 	c.Left = []proto.StokerMiss{{Name: "Billed", Why: "69% · finishes ~79% · left alone"}}
 	v.Card = &c
 	out := Summary(stokerState(v).Doc)
 	for _, want := range []string{
 		"  left alone: Billed (69% · finishes ~79%)\n",
 		"stoker: night 01:08 → 07:00 · ready 6/7 · 7 watched · 0 were full · 1 compacted · 0 waited · 167k tokens given back\n",
-		"  not ready: api-gw (waits for you)\n",
+		"  not ready: api-gw (needs you)\n",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("no %q in\n%s", want, out)

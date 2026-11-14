@@ -52,6 +52,12 @@ func PeekOf(s sample.Session, items []queue.Item) Peek {
 	if p.Said == "" && s.Ask == nil || p.Approval {
 		p.Said = words
 	}
+	if s.ReportsWork() {
+		// A live report beats an old guess: an agent that says it works
+		// asks nothing, whatever its transcript still holds.
+		p.Approval = false
+		return p
+	}
 	switch {
 	case s.Ask != nil && len(s.Ask.Questions) > 0:
 		for _, q := range s.Ask.Questions {

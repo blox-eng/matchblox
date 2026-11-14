@@ -39,9 +39,7 @@ func calm(m tea.Model) Model {
 
 func sendAll(t *testing.T, cmd tea.Cmd) {
 	t.Helper()
-	if cmd != nil {
-		cmd()
-	}
+	drain(cmd) // each of a batch: the board batches its belt
 }
 
 func TestScanBoxShowsOnce(t *testing.T) {

@@ -15,6 +15,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
         let text: CATextLayer
         let shade: CALayer
         let key: KeyFace
+        let id: String
         let width: CGFloat
     }
 
@@ -72,8 +73,24 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
     var layout: BeltLayout {
         didSet {
             guard layout != oldValue else { return }
-            layout.savePick(inDemo: isDemo, to: .standard)
+            if savesLayout { layout.savePick(inDemo: isDemo, to: .standard) }
             runOff()
+        }
+    }
+    /// False while the belt turns as the console's board asks: that turn is no pick.
+    private var savesLayout = true
+
+    /// The keys the console's board says. Board shows them; another layout keeps them.
+    var board = BoardBelt.away {
+        didSet {
+            guard board != oldValue, layout == .board else { return }
+            if Self.catalog.keys(.board, agent: agent, mine: [], board: board) != builtKeys {
+                rebuild()
+            } else {
+                paintKeys()
+                spoken = nil
+                place()
+            }
         }
     }
 
@@ -101,7 +118,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
     var onCtrl: () -> Void = {}
     /// Ctrl is armed: its key stays lit until the next typed key, or a second tap.
     var ctrlArmed = false {
-        didSet { paintCtrl() }
+        didSet { paintKeys() }
     }
     var onKeyboard: () -> Void = {}
     /// The builder picked a layout in the tray.
@@ -370,7 +387,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
         touch = nil
         presses = [:]
         builtWidth = width
-        let keys = Self.catalog.keys(layout, agent: agent, mine: Mine.load(from: .standard).keys)
+        let keys = Self.catalog.keys(layout, agent: agent, mine: Mine.load(from: .standard).keys, board: board)
         builtKeys = keys
         guard !keys.isEmpty else { return }
         let geometry = BeltGeometry(width: width)
@@ -388,7 +405,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
         CATransaction.commit()
 
         self.motion = motion
-        paintCtrl()
+        paintKeys()
         spoken = nil
         place()
         updateName()
@@ -445,7 +462,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
         shade.opacity = 0
         bevel.addSublayer(shade)
 
-        let piece = Piece(layer: layer, face: bevel, text: text, shade: shade, key: face, width: width)
+        let piece = Piece(layer: layer, face: bevel, text: text, shade: shade, key: face, id: key.id, width: width)
         paint(piece, pressed: false)
         return piece
     }
@@ -458,15 +475,29 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
         }
     }
 
-    /// A pressed key is `hair` with its label in `accent`.
-    private func paintCtrl() {
-        guard let motion else { return }
-        for (piece, key) in zip(pieces, motion.keys) where key.id == KeyBar.ctrl {
-            Self.paint(piece, pressed: ctrlArmed)
-        }
+    /// Each key at rest. A pressed key is `hair` with its label in `accent`: so is Ctrl while it
+    /// is armed, and on Board the card key a first press marked. The card's other keys that are
+    /// on are lit: their label is in `accent`.
+    private func paintKeys() {
+        for piece in pieces { paintAtRest(piece) }
     }
 
-    private static func paint(_ piece: Piece, pressed: Bool) {
+    private func paintAtRest(_ piece: Piece) {
+        let onBoard = layout == .board
+        let pressed = piece.id == KeyBar.ctrl ? ctrlArmed : onBoard && board.isArmed(piece.id)
+        Self.paint(piece, pressed: pressed, lit: onBoard && board.isLit(piece.id))
+    }
+
+    /// Dim, and sends nothing: a command off its agent's pane, or a Board key that is off.
+    private func isDim(_ piece: Piece) -> Bool {
+        (piece.key.isCommand && !commandsLive) || isBoardDim(piece)
+    }
+
+    private func isBoardDim(_ piece: Piece) -> Bool {
+        layout == .board && board.isDim(piece.id)
+    }
+
+    private static func paint(_ piece: Piece, pressed: Bool, lit: Bool = false) {
         // No implicit fade: the press is 140 ms, shorter than a layer's default animation.
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -475,7 +506,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
         piece.face.colors = ground.map(\.cgColor)
         piece.text.string = NSAttributedString(string: piece.key.label, attributes: [
             .font: font(for: piece.key.size),
-            .foregroundColor: pressed ? BeltLook.accent : BeltLook.fg,
+            .foregroundColor: pressed || lit ? BeltLook.accent : BeltLook.fg,
         ])
     }
 
@@ -497,7 +528,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
             layer.transform = fold.angle == 0
                 ? CATransform3DIdentity
                 : CATransform3DMakeRotation(fold.angle * .pi / 180, 0, 1, 0)
-            layer.opacity = fold.visible ? (piece.key.isCommand && !commandsLive ? Self.dim : 1) : 0
+            layer.opacity = fold.visible ? (isDim(piece) ? Self.dim : 1) : 0
             piece.shade.opacity = Float(fold.shade)
         }
         CATransaction.commit()
@@ -678,6 +709,10 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
             flash("commands run in an agent's pane")
             return
         }
+        if isBoardDim(piece) {
+            flash("this key is off here")
+            return
+        }
         if motion.keys[i].id == KeyBar.ctrl {
             onCtrl()
             return
@@ -691,7 +726,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
             try? await Task.sleep(for: .seconds(Self.pressTime))
             guard let self, self.presses[id] == press else { return }
             self.presses[id] = nil
-            Self.paint(piece, pressed: false)
+            self.paintAtRest(piece)
         }
         onSend(bytes)
     }
@@ -881,6 +916,13 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
         }
     }
 
+    /// Turns to `layout` as the console's board asks, and keeps the person's pick saved.
+    func turn(to layout: BeltLayout) {
+        savesLayout = false
+        defer { savesLayout = true }
+        self.layout = layout
+    }
+
     // MARK: The other belt
 
     /// Rests where `other` rests, so the belt holds still when the keyboard comes or goes.
@@ -922,7 +964,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
                 let x0 = motion.x(ofKeyAt: i)
                 let key = Element(accessibilityContainer: self)
                 key.accessibilityLabel = piece.key.spoken
-                key.accessibilityTraits = piece.key.isCommand && !commandsLive ? [.button, .notEnabled] : .button
+                key.accessibilityTraits = isDim(piece) ? [.button, .notEnabled] : .button
                 key.accessibilityFrameInContainerSpace = CGRect(
                     x: belt.frame.minX + x0, y: belt.frame.minY + Self.keyTop, width: piece.width, height: BeltGeometry.keyHeight)
                 // A key element outlives its key when the belt rebuilds or pages: it finds its key
@@ -930,7 +972,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
                 let layer = piece.layer
                 key.activate = { [weak self] in
                     guard let self, let i = self.pieces.firstIndex(where: { $0.layer === layer }),
-                          self.motion?.onScreen.contains(i) == true else { return false }
+                          self.motion?.onScreen.contains(i) == true, !self.isBoardDim(self.pieces[i]) else { return false }
                     self.press(i)
                     return true
                 }

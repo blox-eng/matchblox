@@ -3,7 +3,6 @@ package app
 import (
 	"regexp"
 	"slices"
-	"strconv"
 	"strings"
 	"unicode"
 
@@ -25,10 +24,6 @@ func bind(keys []string, helpKey, desc string) bkey.Binding {
 
 func ks(k ...string) []string { return k }
 
-// digits1to9 are the keys 1 to 9: a tab of the console, or an option of a
-// question.
-var digits1to9 = ks("1", "2", "3", "4", "5", "6", "7", "8", "9")
-
 type keymaps struct {
 	global   globalKeys
 	main     mainKeys
@@ -42,6 +37,7 @@ type keymaps struct {
 	confirm  confirmKeys
 	scan     scanKeys
 	ask      askKeys
+	board    boardKeys
 }
 
 type shellKeymaps struct {
@@ -59,8 +55,9 @@ var shadowsMain = map[string]map[string]bool{
 	"pair":     {"c": true, "esc": true, "enter": true},
 	"takeOver": {"y": true, "n": true},
 	"confirm":  {"y": true, "enter": true, "up": true, "k": true, "down": true, "j": true},
-	"scan":     {"y": true, "n": true, "p": true, "esc": true},
+	"scan":     {"y": true, "n": true, "esc": true},
 	"ask":      {"esc": true, "enter": true, "c": true},
+	"board":    {"right": true, "c": true, "s": true},
 }
 
 func defaultKeys() keymaps {
@@ -71,12 +68,9 @@ func defaultKeys() keymaps {
 			Quit:       bind(ks("q"), "q", "quit"), // ctrl+c is global.Quit
 			NextTab:    bind(ks("tab"), "tab", "next"),
 			PrevTab:    bind(ks("shift+tab"), "shift+tab", "back"),
-			Tabs:       bind(slices.Clip(digits1to9[:len(tabNames)]), "1-"+strconv.Itoa(len(tabNames)), "tab"),
 			Search:     bind(ks("/"), "/", "find"),
 			Back:       bind(ks("esc"), "esc", "clear"),
 			Sort:       bind(ks("s"), "s", "sort"),
-			SortBack:   bind(ks("S", "shift+s"), "S", "sort back"),
-			Group:      bind(ks("g"), "g", "group by"),
 			Park:       bind(ks("z"), "z", "park"),
 			Mark:       bind(ks("space", " "), "␣", "mark"),
 			Exited:     bind(ks("e"), "e", "show exited"),
@@ -91,9 +85,6 @@ func defaultKeys() keymaps {
 			Grant:      bind(ks("y"), "y", "give the go"),
 			Dismiss:    bind(ks("d"), "d", "dismiss"),
 			Fold:       bind(ks("h"), "h", "fold recs"),
-			Ships:      bind(ks("p"), "p", "ships"),
-			Dock:       bind(ks("u"), "u", "dock"),
-			ListOnly:   bind(ks("v"), "v", "list only"),
 			Stoke:      bind(ks("f"), "f", "stoker"),
 			StokeChain: bind(ks("F", "shift+f"), "F", "stoke chain"),
 			Night:      bind(ks("n"), "n", "stop night"),
@@ -128,8 +119,6 @@ func defaultKeys() keymaps {
 			Erase: bind(ks("backspace"), "⌫", "erase"),
 		},
 		room: roomKeys{
-			Up:    bind(ks("up", "k"), "↑↓", "move"),
-			Down:  bind(ks("down", "j"), "↑↓", "move"),
 			Open:  bind(ks("enter"), "⏎", ""),
 			Give:  bind(ks("y"), "y", "give"),
 			Next:  bind(ks("]"), "]", "next"),
@@ -138,7 +127,6 @@ func defaultKeys() keymaps {
 			Erase: bind(ks("backspace"), "⌫", "erase"),
 			Flip:  bind(ks("alt+s"), "⌥s", "room"),
 			Walk:  bind(ks("alt+n"), "⌥n", "next match"),
-			Out:   bind(ks("u"), "u", "out"),
 		},
 		search: searchKeys{
 			Clear: bind(ks("esc"), "esc", "clear"),
@@ -172,6 +160,19 @@ func defaultKeys() keymaps {
 			Cancel: bind(ks("esc"), "esc", "cancel the ssh"),
 			Erase:  bind(ks("backspace"), "⌫", "erase"),
 			Copy:   bind(ks("c"), "c", "copy the link"),
+		},
+		board: boardKeys{
+			Left:      bind(ks("left"), "←→", "columns"),
+			Right:     bind(ks("right"), "←→", "columns"),
+			Copy:      bind(ks("c"), "c", "copy"),
+			Density:   bind(ks("v"), "v", "one line"),
+			Chain:     bind(ks("g"), "g", "chain"),
+			Host:      bind(ks("s"), "s", "hosts"),
+			Strip:     bind(ks("u"), "u", "strip"),
+			NextChain: bind(ks("]"), "]", "next chain"),
+			PrevChain: bind(ks("["), "[", "previous chain"),
+			Menu:      bind(ks("m"), "m", "menu"),
+			Merge:     bind(ks("p"), "p", "merge"),
 		},
 	}
 }
@@ -223,18 +224,18 @@ func (k globalKeys) bindings() []bkey.Binding { return []bkey.Binding{k.Quit} }
 
 // mainKeys are the console's own keys: the tabs, with nothing on top.
 type mainKeys struct {
-	Stoker, Quit, NextTab, PrevTab, Tabs, Search, Back, Sort, SortBack bkey.Binding
-	Group, Park, Mark, Exited, MarkSafe, QuitAgent, Up, Down, Open     bkey.Binding
-	Second, New, Switch, Grant, Dismiss, Fold, Ships, Dock             bkey.Binding
-	Stoke, StokeChain, Night, Order, Rename, Into, Jump, ListOnly      bkey.Binding
-	StartAgain                                                         bkey.Binding
+	Stoker, Quit, NextTab, PrevTab, Search, Back, Sort      bkey.Binding
+	Park, Mark, Exited, MarkSafe, QuitAgent, Up, Down, Open bkey.Binding
+	Second, New, Switch, Grant, Dismiss, Fold               bkey.Binding
+	Stoke, StokeChain, Night, Order, Rename, Into, Jump     bkey.Binding
+	StartAgain                                              bkey.Binding
 }
 
 func (k mainKeys) bindings() []bkey.Binding {
-	return []bkey.Binding{k.Stoker, k.Quit, k.NextTab, k.PrevTab, k.Tabs, k.Search, k.Back, k.Sort, k.SortBack,
-		k.Group, k.Park, k.Mark, k.Exited, k.MarkSafe, k.QuitAgent, k.Up, k.Down, k.Open,
-		k.Second, k.New, k.Switch, k.Grant, k.Dismiss, k.Fold, k.Ships, k.Dock,
-		k.Stoke, k.StokeChain, k.Night, k.Order, k.Rename, k.Into, k.Jump, k.ListOnly, k.StartAgain}
+	return []bkey.Binding{k.Stoker, k.Quit, k.NextTab, k.PrevTab, k.Search, k.Back, k.Sort,
+		k.Park, k.Mark, k.Exited, k.MarkSafe, k.QuitAgent, k.Up, k.Down, k.Open,
+		k.Second, k.New, k.Switch, k.Grant, k.Dismiss, k.Fold,
+		k.Stoke, k.StokeChain, k.Night, k.Order, k.Rename, k.Into, k.Jump, k.StartAgain}
 }
 
 // formKeys are the new-session, switch and rename form. Down and Up go to
@@ -286,6 +287,16 @@ func (k scanKeys) bindings() []bkey.Binding { return []bkey.Binding{k.Find, k.Ne
 type askKeys struct{ Send, Cancel, Erase, Copy bkey.Binding }
 
 func (k askKeys) bindings() []bkey.Binding { return []bkey.Binding{k.Send, k.Cancel, k.Erase, k.Copy} }
+
+// boardKeys are the board's own keys, over mainKeys while the board shows:
+// ↑ ↓ ⏎ x y esc and the rest keep their mainKeys bindings.
+type boardKeys struct {
+	Left, Right, Copy, Density, Chain, Host, Strip, NextChain, PrevChain, Menu, Merge bkey.Binding
+}
+
+func (k boardKeys) bindings() []bkey.Binding {
+	return []bkey.Binding{k.Left, k.Right, k.Copy, k.Density, k.Chain, k.Host, k.Strip, k.NextChain, k.PrevChain, k.Menu, k.Merge}
+}
 
 // shellKeys are the Hosts list. Update and Dismiss act on a host on
 // another release than the console.

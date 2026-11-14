@@ -155,9 +155,9 @@ Rules:
 6. `≋` means "has a stoker": a chain's room card and the header's count
    use it, in `muted`, and in the night's ink while that chain's stoker
    runs its order. It is never a match.
-7. Every place that shows an agent uses this match: the queue, the sessions,
-   the replay, the site, STOKED (the stoker's run), the docs, and later the
-   tmux status line. A new place uses the same glyphs and motions.
+7. Every place that shows an agent uses this match: the board's cards, the
+   queue, the replay, the site, STOKED (the stoker's run), the docs, and
+   later the tmux status line. A new place uses the same glyphs and motions.
    A new state is a change to this section first.
 
 ## 5. Motion
@@ -175,6 +175,7 @@ Rules:
 | Stamp | 240 ms | a confirmed destructive action |
 | Heal | 240 ms | a corrected figure shows "was X" |
 | Pulse | 1.6 s | a value that is not measured yet |
+| Land | 1.2 s | a card that changes its column (#372): into `WORKING` the strike plays and the name is `flame-core`; into any other column the going out plays and the card's lines sit on the `wash`, with no fire. The card does not travel across the screen |
 | Knock | 240 ms | a device reached the pair page's code: the box moves one cell left and back, twice |
 | Open | about 1 s | a device claimed the code: the drawer slides out (260 ms), the match comes out (280 ms), strikes (150 ms, ease-in) and stands (320 ms) while the drawer shuts (260 ms) |
 | Lock | 180 ms | the app found a pair code: its outline moves to the corners of the code |
@@ -192,134 +193,195 @@ Reduce Motion.
 
 > **2026-11-10, the chain room (#326):** a chain opens into a room, as
 > [docs/superpowers/specs/2026-11-07-chain-room-design.md](docs/superpowers/specs/2026-11-07-chain-room-design.md)
-> says: the tab row reads `‹ ≋ <chain>`; the body is the need line, the
-> stoker's card, the matches, SHIPS, GIT and the talk line, on a desk the
-> left 40 % beside the selected match's live view. The need line holds the
-> one accent (rule 4); with none, the selected row. ⌥s (prefix s) flips
-> between an agent's pane and its room, ⌥n walks the chain's
-> matches. The header counts the stokers that run, `≋ 2`. A go that
-> merges, kills, force-pushes or removes goes through the consent box.
+> says, with the changes of the board (#372, below): the room is the board
+> narrowed to the chain, with the stoker's card above the columns and the
+> talk line under them; its need line is `NEEDS YOU`, and its SHIPS and
+> GIT lines are gone. ⌥s (prefix s) flips between an agent's pane and its
+> room, ⌥n walks the chain's matches. The header counts the stokers that
+> run, `≋ 2`. A go that merges, kills, force-pushes or removes goes
+> through the consent box.
 
-> **2026-11-01:** Sessions now follows
-> [docs/superpowers/specs/2026-11-01-every-screen-chat-design.md](docs/superpowers/specs/2026-11-01-every-screen-chat-design.md):
-> where it splits, the list takes 40% of the width and the chat the rest;
-> usage, the machine and the stoker stack under the list; Sessions has no
-> bottom dock; the chat takes the place of the bottom peek. Where this
-> section says otherwise of Sessions, that spec stands; the other tabs keep
-> what it says here.
+> **2026-11-10, the board (#372):** the console's home is a board, as
+> [docs/superpowers/specs/2026-11-10-the-board-design.md](docs/superpowers/specs/2026-11-10-the-board-design.md)
+> says. The tabs are `board · machine`; Sessions, Ships, the dock and the
+> chain list are gone, and a chain's room is the board narrowed to the
+> chain. Where this section and that spec differ, the spec stands.
 
-- **Screen** (design/0006, owner 2026-10-12): top to bottom, the header,
-  the tabs, a hairline, the body of the open tab, the dock when it fits,
-  a hairline and the key line.
+- **Screen** (#372): top to bottom, the header, the tab row, a hairline,
+  the body, the strip, a hairline and the key line. On the board the body
+  is the setup doors (one line), the columns, then the ghost row and the
+  recommendations (each one line when the columns need the rows).
 - **Header:** one line. The mark, the name and the host on the left (a
-  phone drops the host when it does not fit); on the right `● N wait for
-  you` in the accent (a tap selects the first one) and the stoker word:
-  `stoker off` in `faint`, `stoker` and `☾ night → 07:00` in the stoker's
-  token, `stoker rests` in `muted`. For 2.5 s after an action a toast
-  takes the right side (`ran: kill 4242`, `sent to flint-auth`).
-- **Tabs:** one row, every tab named: `SESSIONS 14  ships  machine  git
-  history  panes`. The open tab is uppercase in the accent with its rule,
-  the others lowercase in `faint`; Sessions carries its count, Ships the
-  ships in flight, and Machine `!` in `neg` while a detached busy loop
-  burns. When the names do not fit,
-  the tabs far from the open one shorten to their digit, the nearest last.
-  The digits follow the order: `1` Sessions to `6` Panes; `p` opens Ships.
-  The console opens on Sessions.
-- **Sessions** holds what the Queue tab held: the doors on top, then the sessions in three groups,
-  each under a faint label and its count: `WAITS FOR YOU` (asks, waits,
-  done, paused; the oldest wait first), `WORKING` (busy, agents, a shell:
-  `tests` when it runs a test runner) and `QUIET` (idle, cold, stale, out;
-  the newest first). A sort other than the default drops the groups for
-  one flat list named by its sort (`14 SESSIONS · by context ▾`). The
-  Under the sessions a ghost row, `+ start a new session here` (accent `+`,
-  the words `faint`, then the folder and its branch): here is the repo the
-  console was launched in, else the most recent one. `⏎` opens N on it,
-  the cursor on agent. With no session it leads and has the cursor, two
-  quick starts follow (`+ start in <repo>` with its age), and it replaces
-  `no agent sessions found in tmux`. It is no session: no session key acts
-  on it, and the count leaves it out (#175). The
-  recommendations come last (owner 2026-10-12), under
-  `RECOMMENDATIONS · N · h hides`: `d` or a tap on `d dismiss` hides the
-  selected one until its evidence changes, `h` folds the section to
-  `RECOMMENDATIONS · N hidden · h shows`; both are kept in the state
-  directory.
-- **Rows:** the selection mark `▌`, the match, the name, then the state
-  word (accent for who waits), the wait and the context (`warn` from 70%,
-  `neg` past the line). A desk row adds the plan (or `! compact`, `▲
-  clear` when one is due) and the ship with its track (`#4551 ●━◉┄○┄○`);
-  with no ships read, the worktree's pull request and the tmux place. On a
-  phone the selected row opens in place, on the wash: what the agent said
-  last in quotes (two lines at most), its ship with its note, then its plan
-  and its keys.
-  The list scrolls so the opened row is on the screen.
-- **Detail:** on an opened phone (60–99 columns, split at the middle) and
-  a desk (100 and over, the list in ≈78 columns) the selected row's detail
-  sits right of the list: the name, the state in words with the wait and
-  the place, `CLAUDE SAID` and the last message (six lines at most), the
-  context and plan bars, the ship, the subagents and the background
-  shells, the figures (model, tokens, account, pid) and the keys. A door's
-  diff that waits for its `y` takes the full width. A session with a pane
-  shows the chat in its place (see Chat).
-- **Dock** (design/0006 §7; #261 moves it on Wide): on Wide, usage, the
-  machine and the stoker stack in the left column under Sessions, each
-  below a hairline, and fold by the half rule below (the machine first,
-  then all); a list cut short ends in `↓ <n> more`. Elsewhere it is
-  usage, the machine and the stoker, between
-  the body and the key line, when the body, the dock and one blank row fit;
-  a few rows short (folding would leave three blank, and the body keeps
-  half the rows) it stays at its fewest lines and the body scrolls; else
-  it folds away and the Machine tab has it. With rows to spare it
-  grows into them (forecasts and resets, the top processes, the stoker's
-  recent steps): no run of three blank rows while a panel has more to say. Each account leads with
-  its provider: the provider's mark in `muted` (`✻` Anthropic, `❋` OpenAI,
-  `⬢` Cursor, `▣` OpenCode, `·` any other) and its name (`✻ Claude Team`),
-  then the plan, or the email's name when the provider has two accounts;
-  a dock under 50 columns leaves out the plan. Where every terminal that
-  shows the console draws kitty's Unicode placeholders (kitty, Ghostty,
-  #183), the provider's logo takes the mark's place, two cells wide. A
-  logo is the provider's own identity, in its own colours, not a colour of
-  the console: it says no state, so rule 4 holds, and the name next to it
-  carries the meaning (rule 2). Usage is each account's windows
-  as `/usage` says them: `5h`, `wk` (and any other window), a bar (`warn`
-  from 60%, `neg` from 90%), the percent and the reset, then the forecast
-  (`lasts the week` in `muted`, `out Fri ~20:00` in `warn`) and `as of
-  14:02` in `warn` for a reading over an hour old; no reading says `not
-  measured · <the fix>`. The machine is cpu with its last minute and the
-  load, memory, the disk (`▰▰▰▰▰▰▱▱ 71% of 1 TB`: the file system of the
-  home, and `/ 40%` when it is another), and the agents that run. Claude
-  Code's status line has no week per model, so there is no `opus` line
-  (checked 2026-10-12, Claude Code 2.1.296). A phone shows one panel;
-  `u` or a tap on `machine ›` switches. Matches and sparks (#38) are gone
-  (owner, 2026-10-12).
-- **Machine tab:** usage first, then the machine, then the detached busy
-  loops (their rows, `⏎` and `x`) and the top processes.
+  phone drops the host when it does not fit), then the host filter
+  `all hosts ▾` when more than one host shows (a tap does what `s` does);
+  on the right `● N need you` in the accent and the stoker word: `stoker
+  off` in `faint`, `stoker` and `☾ night → 07:00` in the stoker's token,
+  `stoker rests` in `muted`. `● N need you` counts every wait on every
+  host and in every chain, whatever is hidden or filtered; a match the
+  owner parked and a card of a host that is not reached are not counted.
+  A tap on it shows `NEEDS YOU`, clears the chain and host filters and
+  chooses the first wait. The header never shows a notice: a notice shows
+  in the strip's row.
+- **Tabs:** one row: `BOARD 15    machine`. The open tab is uppercase in
+  the accent, the other lowercase in `faint`; the board carries its count,
+  and Machine `!` in `neg` while a detached busy loop burns. `Tab` and
+  `Shift+Tab` turn them, and a tap on a name opens it; the digits answer
+  questions, never tabs. At the right of the row: the chain crumb
+  (`chain login · 3   esc all`) and the hidden columns (`+ work 3`). The
+  console opens on the board.
+- **Columns:** `NEEDS YOU`, `WORKING`, `SHIPPING`, `QUIET`, left to right,
+  by the spec's "Columns" table: a match is in the leftmost whose rule
+  holds, and in exactly one. A parked match is in `QUIET` (`⏸ parked ·
+  asks`). Order: `NEEDS YOU` the oldest wait first, `WORKING` by the
+  session's start, `SHIPPING` by when the ship reached its stage, `QUIET`
+  the newest first; members of one chain in one column sit together. Each
+  head is the name in `muted`, `· N` and `−` (a tap hides the column); the
+  open column's name is `fg` bold. An empty `NEEDS YOU` says `nothing needs
+  you` in `faint`; any other empty column shows `· 0`. Before the first
+  state, the names with no counts and `reading your matches…` with the
+  Pulse (§5), never a zero.
+- **Where a lane comes from** (2026-11-12): an agent that reports its own
+  state decides its column (Claude Code's `<config dir>/sessions/<pid>.json`;
+  OpenCode's `<state dir>/opencode/<pid>.json`, which the plugin that
+  `matchblox setup` installs writes). With a report, `busy` or `shell`
+  beats an old ask; a stoker's go still needs the owner. No report: the
+  live lines at the bottom of the pane decide, never the transcript above.
+- **Card:** up to four lines, each cut with `…`, never wrapped. (1) `▌`
+  when chosen, the match (§4), the name, `@host` when the board shows more
+  than one host; at the right the harness mark in `muted` (`✻` Claude Code,
+  `❋` Codex, `⬢` Cursor, `▣` OpenCode, `·` any other), then the wait. (2)
+  The state word and what it says (`asks Which way do we fix the login?`,
+  `green #4556 waits for your merge`); `retrying · attempt N` for an
+  OpenCode retry. (3) The ship and its track (`#4551 ●━◉┄○┄○`) or the
+  stoker's step (`≋ step 2 of 3`), then `ctx 62%` (`warn` from 70%, `neg`
+  at the compact line); at the right the chain's stub `─╴login` in
+  `faint`. Under 26 columns line 3 drops the stub, then a context under
+  70%, then the track's undone stages from the right. (4) The keys, in
+  `NEEDS YOU` and on the chosen card: `p merge #4556   ⏎ go in`. A card's
+  mark names the agent; an account's mark names the provider of its plan.
+  `v` switches verbose (lines 1–3, and 4 in `NEEDS YOU`) and one line
+  (line 1; `NEEDS YOU` adds line 2); each screen keeps its own; a phone
+  starts verbose in `NEEDS YOU` only. A column that does not fit ends in
+  `↓ N more` and scrolls so the chosen card is whole. A card of a host that
+  is not reached is `faint` with `as of 14:02` and takes no digit.
+- **Peek:** the chosen card, always whole, on the `wash`: under line 3 the
+  agent's last words in quotes (three lines at most) and its question's
+  options, numbered (`1. Patch the token check`), each two lines at most;
+  a chain mate adds `✉ N in its inbox`. From 152 columns the live view
+  shows them and the card leaves them out. Arm, then send: the first digit
+  or tap marks the option (`❯` in the accent, the option on the `wash`,
+  the key line `1 again sends · esc clears`); the same press sends it;
+  another digit moves the mark; `esc`, a move or a new question clears it.
+  After the send the card says `sent 1 · waits for <name>` in `muted`, and
+  the notice `sent 1 to <name> · now in WORKING`. The digits answer only a
+  question with one choice given with its options; every other wait shows
+  `⏎ go in`. For 400 ms after the peek lands, the console opens, or a tab
+  or filter changes, a digit marks nothing. After an answer, a merge or a
+  go, the first card of `NEEDS YOU` is chosen.
+- **The accent on the board** (rule 4 of §1): the chosen card's `▌`, its
+  state word and its keys, the `❯` of an armed option on it, `● N need
+  you` and the open tab. Nothing else takes it. The state word of a
+  waiting card that is not chosen is `fg` bold, and its keys are `muted`.
+  The lit stubs of the chosen card's chain read `━╸login` in `fg`. Text
+  under a drag is on the `wash`.
+- **Hiding:** a tap on a column's name hides it; the others take its room
+  in the same proportions (on Wide the live view takes it). A hidden column
+  waits on the tab row as `+ work 3`; a tap shows it and chooses it. On a
+  phone the hidden names are at the end of the page marks, and a tap on the
+  open page's mark hides that page. With every column hidden the body says
+  how to bring one back. Each screen keeps its own, in the state directory.
+- **Chains:** `g`, a tap on a stub, or `⌥s` narrows the board to the
+  chain: the chain's room, with the stoker's card above the columns
+  (`≋ "<order>"`, the active step and one on each side, `y` gives a go)
+  and the talk line under them (`› tell login's stoker…`). `]` `[` change
+  the chain; `esc` shows all. On Narrow the stoker is a page of its own,
+  first in the marks (`stoker NEEDS YOU 2 −  work 1 …`). The card's menu
+  has `out of <chain>` only in its room. A match is never drawn twice.
+- **Hosts:** a host is a filter: `s`, or a tap on `all hosts ▾`, turns to
+  the next host, then all. A host that is not reached keeps one line at
+  the top of the board, `macbook: not reached since 14:02 · ⏎ try again`,
+  and its cards stay `faint` with `as of`. Hosts, to add and remove a host,
+  opens from a host's row on Machine (`⏎`, or a second tap); `esc` on the
+  board never goes there.
+- **Strip** (replaces the dock): one line above the key line's hairline.
+  `u`, or a tap, turns it: usage (each account's 5-hour window and week),
+  the machine (CPU and memory of the host in the filter; with all hosts,
+  each host's CPU), hidden, usage again. Its right word names the next face
+  (`machine ›`, `hide ›`) in `faint`. Each screen keeps its own. It turns
+  itself to usage while a plan is within 10% of its limit, and to the
+  machine while a detached busy loop burns, until the owner turns it.
+- **Notices:** every toast, refusal and the age of the data show in the
+  strip's row, in place of the strip, for 2.5 s; with the strip hidden the
+  row shows for the notice only. A notice that does not fit wraps, up to
+  three lines. Data older than the stale limit: `data is 40 s old · the
+  service is slow`. A lost service: the board stays in the dimmed inks,
+  with `no service · it redials`, and no key sends. A key that changed its
+  job (`c`, `v`, `s`, `g`, `u`, `p`, `x` on a card whose ship waits, a
+  digit) says so once ever: `c copies now. The stoker is on its card.`
+- **Menu:** `m`, a right-click, or a long-press (480 ms, on a terminal
+  that reports the release) opens a box at the pointer, the kind the forms
+  are; on a phone it rises from the key line. `copy last message`, `copy
+  the question`, `copy the link of #4556`, `copy its name`, `show only the
+  chain login`, `go in`, `out of <chain>` (in its room), `hide <column>`;
+  each only where it applies. No destructive line; `x` keeps its consent
+  box.
+- **Copy:** through the console's one `clip`: the host's, else OSC 52. A
+  drag selects text in the accent on the `wash` and copies it on release
+  (`copied 42 characters`). When the console's tmux drops the copy:
+  `not copied: tmux drops it · tmux set -s set-clipboard on`, and the door
+  "Let copy through". Until a paste of the code from the door "Check that
+  copy reaches you" checks a screen, each copy says `copied: <what> · not
+  checked here`.
+- **Shapes on the board:** Narrow (portrait under 90 columns, or under 60):
+  one column a page; the page marks `NEEDS YOU 4 −  work 3  ship 3  quiet
+  5`, the open one in capitals. Medium (60 to 99, and portrait from 90):
+  `NEEDS YOU`, `WORKING` and `SHIPPING` at 38, 20 and 20 of 80 columns,
+  scaled; `QUIET` a one-line drawer under them that opens to six rows when
+  the choice moves into it. Wide (100 and over): four columns at 36, 25,
+  25 and 18 of 104, scaled up to 151 columns; from 152 the columns keep
+  those widths and the chosen match's live view takes the rest at the right
+  (at least 44 columns). `↑` from a column's first card chooses the line
+  above (the host lines, the doors); `↓` from its last chooses the ghost
+  row, then the recommendations.
+- **Where the match plays on the board** (§5 Land): `NEEDS YOU`, the head
+  of each match that asks breathes; `WORKING`, the flame flickers;
+  `SHIPPING`, still, and a bright cell runs along a ship's track once when
+  it passes a stage; `QUIET`, nothing, the head cooling with age
+  (`match-head` idle, `match-ember` cold, `faint` stale, parked or held).
+  A card that changes column lands where it lands; it never travels.
+- **Key line on the board:** the chosen card's keys first, then `c`, `v`,
+  `s`, `u`, then `←→` and `tab`; a key that does not fit leaves whole from
+  the right. A narrow terminal that is not Pocket shows `c v s u` only.
+  Pocket draws no key line: the keys are on the app's belt, layout Board
+  (home `◂`, the card's keys in the accent with their word under them,
+  `↑ ↓ ⏎`; the tail `c copy`, `m menu`, `g chain`, `v one line`, `s
+  hosts`, `u strip`, `⇥ machine`, `x kill`, `←`, `→`, `]`, `[`, `/`,
+  `z park`). Under the consent box the belt is `◂`, `y runs`, `esc
+  cancels`.
+- **Machine:** the other tab, a list of rows: `stoker`, `git`, `history`,
+  `panes` (`⏎` opens the view over the body, `esc` comes back to its row),
+  then usage, the machine, the detached busy loops (their rows, `⏎` and
+  `x`), the top processes, `DEVICES`, and over several hosts a row for
+  each host (`⏎` opens Hosts).
 - **Regions:** a small uppercase label in `faint`, a hairline and space.
   Panels have no boxes.
 - **Pull requests** (owner, 2026-10-08): the open pull request of an
-  agent's worktree shows as `#N` on its desk row, under its opened row on
-  a phone, and with its title and URL in the detail, while no ship of the
-  session is read (a ship wins). The git scan asks `gh` for the open ones
+  agent's worktree shows as `#N` on its card while no ship of the session
+  is read (a ship wins). The git scan asks `gh` for the open ones
   of each repository; a fork's pull request never marks a branch of ours.
-- **Ships** (design/0006 §8): tab `2`, or `p`. A strip on top says plainly
-  why ships may be behind: `paused · GitHub's rate limit is low, ships read
-  again at 14:33`, `GitHub cannot be read: <why>`, `not read: <repo>:
-  <why>`, in `warn`. Under the faint label `open → ci → green → merged →
-  live`, each ship is two lines and a blank one: `▌#4551 <title>` with its
-  age on the right, then the track `●━●━◉┄○┄○` and the note. Done stages
-  `●` and `━` in `muted`; the current one `◉` in `warn` while it runs, in
-  the accent when it waits for you, `✕` in `neg` when stuck, and `●` in
-  the accent once live; the rest `○` and `┄` in `faint`. The note takes
-  the colour of the current stage. On a phone the selected ship adds `by
-  <session>` and its keys; wider, the detail shows `#N by <session> ·
-  <repo>`, the title, `TRACK` with the five stages down (their times, the
-  note on the current one, `┃` between done stages, `┆` after), the URL and
-  the keys. `⏎` selects the driving session in Sessions; `x` on a ship
-  that waits for your merge asks `gh pr merge <n> --<method> -R
-  <repo>` in the consent box and runs it after a typed `y`; `a` on a stuck ship opens the
-  chat on its session.
+- **Ships** (design/0006 §8, #372): a ship is on the card of the session
+  that drives it, line 3: `#4551 ●━●━◉┄○` with the note on line 2. Done
+  stages `●` and `━` in `muted`; the current one `◉` in `warn` while it
+  runs, in the accent when it waits for the merge, `✕` in `neg` when stuck,
+  and `●` in the accent once live; the rest `○` and `┄` in `faint`. `p` on
+  a card whose leading ship waits for the merge asks `gh pr merge <n>
+  --<method> -R <repo>` in the consent box and runs it after a typed `y`;
+  on any other card it says `no ship of <name> waits for a merge`. `x`
+  never merges. Why the ships may be behind (`paused · GitHub's rate limit
+  is low, ships read again at 14:33`) shows in the strip's row.
 - **Chat** (#261, owner 2026-10-29, replacing the peek of design/0006 §6):
-  the selected session's live screen, drawn inside the console. On Wide
-  and Medium it is the right side of Sessions, always; its frame title is
+  the chosen session's live screen, drawn inside the console. From 152
+  columns it is the right side of the board; its frame title is
   `<name> · <state>`, in the accent while it has the keys. `⏎`, `a` and
   `→` (where `→` has no other use) or a click give it the keys; prefix `m`
   (#274: on any pane that runs `matchblox`, tmux hands that chat the home APC) or a click on the left gives them
@@ -333,8 +395,8 @@ Reduce Motion.
   A second `^C` to one agent within 1 s is held (`^C held: one went 0.6 s
   ago, ^C again stops the agent`; `one waits to go` when it is still
   queued), because two stop Claude Code. On Narrow, `⏎` or a tap on a row
-  replaces the screen with the chat; its title row is `‹ Sessions ·
-  <name> · <state>`, and a tap on `‹ Sessions`, the app's edge swipe, ⌘M or
+  replaces the screen with the chat; its title row is `‹ board ·
+  <name> · <state>`, and a tap on `‹ board`, the app's edge swipe, ⌘M or
   ctrl+M (the home APC), or `ctrl+a m` goes back. Only a console sends keys: `keys
   go only from a console`.
   At a **question or a permission prompt** the chat shows the agent's own
@@ -350,9 +412,9 @@ Reduce Motion.
   A paste with a line break is refused at a menu. At night, the first key
   that sends something to an agent asks "take over?".
 - **Key line** (owner, 2026-10-12, reversing 2026-10-08): the last line,
-  under a hairline. The keys of the open tab and the selected row, each a
-  tap target (`⏎ chat  a chat  x kill  p ships  f stoker`); a desk adds `↑↓
-  move`, `/ find` and `q quit`, and "sampled N ago" on the right. It is
+  under a hairline. The keys of the open tab and the chosen card, each a
+  tap target (`⏎ go in   c copy   v one line   s hosts   u strip`), and
+  "sampled N ago" on the right where it fits. It is
   also where the person acts: a tap shows `tap again: <command>`, and `/`
   the search. A phone app that shrinks the terminal for its keyboard keeps
   the bottom row above it.
@@ -380,7 +442,7 @@ Reduce Motion.
   the defaults in it; `esc` there goes back to the box. `esc`, any other
   key or a tap closes the box until the next console and records nothing.
   An answer at one console closes the box at every other. The repositories
-  found feed N's `where` after the Git tab's, never the Git tab.
+  found feed N's `where` after Machine's git view's, never that view.
 - **The where list** (#174, #176): layout C. While `where` has focus the
   list fills the form box and the other fields fold to one `faint` line,
   `then  branch · name · agent <agent> · first`. Labels `SUGGESTED` and
@@ -392,34 +454,19 @@ Reduce Motion.
   o/r into <folder>` and `clone anew into <folder>`. Colours from the
   tokens only.
 - **Widths:** the shape picks first. A cell is about twice as tall as it
-  is wide, so a screen is portrait when rows × 2 ≥ columns. Portrait under
-  90 columns is a phone: one column, the selected row opens in place; from
-  70 columns its rows add the plan and the ship. Portrait from 90 columns
-  (a phone held upright with a small font: 107×60, 107×101 with the
-  keyboard down) splits the list and the detail at the middle, the detail
-  a drawer on the right, no row opening in place. Every portrait screen
-  has one dock panel at a time (`u` switches, the fold rule unchanged) and
-  the chat full-screen under `‹ Sessions`; its layout holds when the
-  keyboard comes and goes. A landscape screen goes by its width: under
-  60 columns (phone) as above; 60 to 99, the list and the detail split at
-  the middle, usage and the machine side by side; 100 and over, the list
-  with every column and the chat beside it, with usage and the machine
-  under the list.
-- **Rows:** each list row spans its pane, the selection wash too. Its
-  columns are fixed tracks computed once per render from the pane's width
-  (the word, the wait, the context, then the plan and the ship or the
-  place when the row is 70 columns or more), so each starts at the same x
-  on every row; the name takes what is left, cut with `…`. A ship's number
-  is padded to the widest one read, so titles and tracks line up.
-- **Selection:** the selected row is on the `wash` across its whole pane,
-  every cell of it, with `▌` and its name in the accent; every other row's
-  name is `muted`, so the cursor is the brightest thing in a list. On a
-  one-column phone the opened block (the row and what it grows by) stands
-  between two hairlines. At night the wash is `night-wash` and the accent
-  stays.
+  is wide, so a screen is portrait when rows × 2 ≥ columns. The shape goes
+  by the tallest height seen at the width, so a keyboard that comes and
+  goes never changes the layout. The board's three shapes are above
+  ("Shapes on the board"). The other views of Machine keep their lists.
+- **Selection:** the chosen card is on the `wash` across its column, every
+  cell of it, with `▌` and its state word in the accent; every other
+  card's name is `muted`, so the choice is the brightest thing on the
+  board. At night the wash is `night-wash` and the accent stays. A list
+  row of Machine's views is chosen the same way.
 - **Keys:** each key is on a phone SSH key bar: digits, arrows, `Enter`,
   `Esc` and letters. No `Ctrl` combinations. `Enter` never runs a
-  destructive step; that needs `x` and then a typed `y`.
+  destructive step; that needs its key (`x` kills, `p` merges) and then a
+  typed `y`.
 - **Progress** (owner, 2026-10-08): the bar an agent draws in its last reply
   with text (`Progress [████░░░░] <step>`) shows as `▰▰▰▱▱ 75%`: on a desk
   row when no action is due, under the opened row on a phone (`plan 75%`),
@@ -431,15 +478,16 @@ Reduce Motion.
   shows the word of its queue row: `asks`, `waits`, `done`, or `paused`
   when its turn ended with its progress bar under 100% and no question
   (owner, 2026-10-08). A turn that ends on a question waits; it is never
-  `done`. The oldest sink to the bottom of `QUIET`. On a stale session `x` and a typed `y` end the agent;
+  `done`. A wait from before today is cold, in `QUIET`. On a stale session `x` and a typed `y` end the agent;
   on another session `x` says when it works. Agents that exited and wait
-  for their parent (zombies) are one faint line under the sessions
+  for their parent (zombies) are one faint line under the board
   ("137 exited agents · e shows them"); `e` lists them with the parent that
   keeps them and the command that clears them. They never count as sessions.
 - **Layers** (#23, as in k9s): Hosts sits above the console of one host.
   Hosts is `HOSTS · N`, one row each: `this machine`, each added host,
   `+ add a host`; the header says `▰ matchblox · hosts`. `Enter` opens a row.
-  In a console, `esc` with nothing to cancel or clear goes back to Hosts.
+  In a console, Hosts opens from a host's row on Machine; `esc` never
+  leaves the board.
   `+ add a host` lists the hosts of `~/.ssh/config` and `type a host…`; the
   pick shows `matchblox connect <host>` and runs it after a typed `y`. The
   first run asks "Where do your agents run?" (`this machine`, `another
@@ -447,7 +495,8 @@ Reduce Motion.
   in `warn` while the connection is lost, and before its first state only
   the name, never zero figures. A host the console cannot reach says why and
   shows the connect (design/0005-remote-mode.md §3.5).
-- **Doors** (#25): the setup steps sit above the sessions under `SET UP · N`,
+- **Doors** (#25): the setup steps sit above the columns under `SET UP · N`,
+  one line while the columns need the rows,
   one row each: the title, then why in `muted` (a door that cannot open shows
   the fix in `warn`). On a phone only the selected door shows why. `Enter`
   shows the exact diff (`+` in the accent, `-` in `neg`) or the exact argv
@@ -458,19 +507,16 @@ Reduce Motion.
   way back's tmux mouse, owner 2026-10-10). A typed `y` opens it,
   `x` and `y` close it. A door that is done folds away at once. `matchblox
   setup` shows every door, done and closed ones too. An agent that waits is
-  selected before a door; with nobody waiting, the first door is.
+  chosen before a door; with nobody waiting, the first door is.
 - **The stoker** (#24, owner 2026-10-09): `f` turns it on or off, `n`
   starts a night that ends at `night_ends`. The header shows `stoker` or
-  `night → 07:00` in `accent` after the host. The stoker lives in the
-  dock (design/0006 §7, owner 2026-10-12): its panel says its state, the
-  score and the last step, and takes the dock (or the machine's place
-  beside usage) while a run is in charge or has steps the builder has not
-  seen. `c` or a tap on it opens the card `STOKED <since> → <end> · N` in
-  the right pane, or on a phone's Machine tab: one line for each step
+  `night → 07:00` in `accent` after the host. The stoker is Machine's
+  row `stoker` (#372; the dock that held it is gone): `⏎` opens its view,
+  the card `STOKED <since> → <end> · N`: one line for each step
   (time, the session's match, name, pane, then `before → after` or the
   skip reason), the `RESUME:` line under each compact, two lines for each
   step in a pane under 60 columns. `Enter` marks it seen and folds it. Its
-  events show as the header toast. The night door ("Try a
+  events show in the strip's row. The night door ("Try a
   night") sits with the doors and folds after the first run.
   While a run is in charge the whole console wears the night (§2.1) and the
   word takes the `night` token. The first key or second tap that acts on a
@@ -501,11 +547,11 @@ Reduce Motion.
   a session it stops is named `out until <reset>`. Every card is kept in
   `stoker-runs.jsonl`.
 - **Lists** (owner, 2026-10-08): `/` searches the open tab (every key is
-  text until `⏎` keeps it or `esc` clears it; a tab change ends it); an empty
-  result says "nothing matches <text>". `s` sorts Sessions and Panes by the
-  next column and `S` turns it around; on Panes a tap on a column header
-  does both. Sessions start grouped (above); another sort names itself in
-  the list's label (`by context ▾`, `▴` when turned around). On Git, `space` marks a worktree that is
+  text until `⏎` keeps it or `esc` clears it; a tab change ends it). On the
+  board a search narrows every column; an empty result keeps each column's
+  name with `· 0` and says `nothing matches "<text>" · esc clears`. The
+  board has no sort: its columns are the grouping. `s` sorts Panes by the
+  next column, and a tap on a column header does too. On Git, `space` marks a worktree that is
   safe to remove (or says why not), `X` marks every safe one, and `x` with a
   typed `y` removes the marked ones: one guarded act each, then one summary
   ("removed 11, skipped 1: it has changes").
@@ -514,7 +560,7 @@ Reduce Motion.
   shows no diff and no argv: the page is its preview. It folds when one or
   more devices of kind `phone` open this host. `x` and a typed `y` close it,
   as every door. `matchblox setup` shows it with the other doors.
-- **DEVICES · N** (design/0009): on the Machine tab, after the detached busy
+- **DEVICES · N** (design/0009): on Machine, after the detached busy
   loops and before the top processes. One row for each key that opens this
   host, phones first: kind, name, fingerprint. The last row is `+ pair a
   device`, and `Enter` on it opens the pair page. `x` on a device and a
@@ -543,9 +589,9 @@ Reduce Motion.
   a device` says `Pair from the host's own terminal.` and `x` on a device
   says `Remove devices from the host's own terminal.` It guards against a
   mistake, not an attacker.
-- **After a jump** (owner, 2026-10-08): when `Enter` takes the person to an
-  agent, the console selects the next session that waits, else the next
-  idle one, so the way back lands on it.
+- **After a jump** (owner, 2026-10-08; #372): when `Enter` takes the
+  person to an agent, the console chooses the first card of `NEEDS YOU`, so
+  the way back lands on it.
 
 ## 7. Copy
 
@@ -558,7 +604,7 @@ Reduce Motion.
 - A status is a glyph and a word: `✦ busy`, `╿ asks`, `! compact`,
   `▲ 92 °C`.
 - An empty state is one sentence (and the action, when there is one):
-  "nothing waits for you".
+  "nothing needs you".
 - An error tells the fix: "the service (pid 4242) does not answer: kill
   4242, then start matchblox again".
 - Every command the console runs is shown before it runs, as the exact argv.
@@ -628,13 +674,14 @@ Reduce Motion.
   the command, and Copy joined to it; under it the platform and "read the
   script first ↗". On a phone the command wraps; it is never cut.
 - **Replay:** recorded frames of the real console (`TestReplay`), drawn in
-  the site's tokens, so it follows light and dark. It walks one evening
-  into the morning: who waits, an answer typed with `a`, the sessions, the
-  usage and a compact from the week's recommendation, a merged worktree
-  removed, a busy loop killed, then `n`, "Take over?", the stoker's compact
-  at 23:40 and the night's card at 07:00 (#51). The demo service runs on
-  the demo clock, so the night and its card are real. A still frame is in the
-  HTML for no script and for reduced motion.
+  the site's tokens, so it follows light and dark. It shows the board on
+  the demo machine `ws-1` (#372): the console opens on the board with one
+  gold card; a digit marks flint-auth's answer and the same digit sends
+  it; its card strikes into `WORKING`; `p` and a typed `y` merge
+  ember-billing's ship; a tap hides `WORKING` and brings it back; `g`
+  narrows the board to the chain hearth, and `esc` shows all. The demo
+  service runs on the demo clock. A still frame is in the HTML for no
+  script and for reduced motion.
 - **Rules:** everything loads from the site itself: `script-src 'self'`,
   `connect-src 'self'`, no inline script or style, no third-party resource.
   No horizontal scroll at 390 px. Check light and dark at 390 and 1280 px.

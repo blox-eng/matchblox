@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/hooks"
 	"github.com/blox-eng/matchblox/internal/limits"
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -235,5 +236,58 @@ func TestWaitAtIsTheNewestWait(t *testing.T) {
 	}
 	if got := Build(doc([]sample.Session{sess("a", true, t0)}, nil), fp, n, t0); !got.WaitAt.IsZero() {
 		t.Fatalf("no wait, WaitAt = %v", got.WaitAt)
+	}
+}
+
+// TestThePhoneReadsTheAgentsReport (spec "A live report beats an old
+// guess"): the phone counts what the board shows. A hooked ask under a
+// report of work is no wait, and peek reads no ask; a report of a wait
+// after a finished hook is one.
+func TestThePhoneReadsTheAgentsReport(t *testing.T) {
+	n := openNumbers(t, t.TempDir())
+	for _, status := range []string{"shell", "busy"} {
+		q := queue.New()
+		q.Apply(hooks.Event{Name: "Stop", SessionID: "flint", Pane: "%2", Asks: true, At: t0.Add(-time.Minute)})
+		s := sample.Session{SessionID: "flint", Pane: "%2", Name: "flint-auth", Status: status, Busy: status == "busy",
+			Reported: true, Asks: true, Said: "Done.\n\nShall I open the PR?", Started: t0.Add(-time.Hour)}
+		q.Merge([]sample.Session{s}, t0)
+		if got := Build(doc([]sample.Session{s}, q.Items()), fp, n, t0); got.Wait != 0 {
+			t.Errorf("report %s: the phone counts %d waits", status, got.Wait)
+		}
+		if p := stoker.PeekOf(s, q.Items()); p.Asks != "" {
+			t.Errorf("report %s: peek asks %q", status, p.Asks)
+		}
+	}
+
+	q := queue.New()
+	q.Apply(hooks.Event{Name: "Stop", SessionID: "flint", Pane: "%2", At: t0.Add(-time.Hour)})
+	s := sample.Session{SessionID: "flint", Pane: "%2", Name: "flint-auth", Status: "waiting", Reported: true,
+		WaitingFor: "input needed", Idle: time.Minute, Started: t0.Add(-2 * time.Hour)}
+	q.Merge([]sample.Session{s}, t0)
+	if got := Build(doc([]sample.Session{s}, q.Items()), fp, n, t0); got.Wait != 1 {
+		t.Errorf("a reported wait after a finished hook: the phone counts %d waits", got.Wait)
+	}
+}
+
+// TestThePhoneCountsOpencodesNewStatuses (owner, 2026-11-13: "Allow
+// them"): OpenCode's plugin can say waiting and retry. A wait counts as a
+// wait, and a retry as a burn: OpenCode retries by itself.
+func TestThePhoneCountsOpencodesNewStatuses(t *testing.T) {
+	n := openNumbers(t, t.TempDir())
+	retry := sample.Session{SessionID: "ses_wick", Pane: "%7", Name: "wick-mobile", Agent: "opencode", Status: "retry", Busy: true,
+		Reported: true, Retry: 2, Started: t0.Add(-time.Hour)}
+	wait := sample.Session{SessionID: "ses_ember", Pane: "%8", Name: "ember-billing", Agent: "opencode", Status: "waiting",
+		Reported: true, WaitingFor: "permission", Idle: time.Minute, Started: t0.Add(-time.Hour)}
+	q := queue.New()
+	q.Merge([]sample.Session{retry, wait}, t0)
+	got := Build(doc([]sample.Session{retry, wait}, q.Items()), fp, n, t0)
+	if got.Burn != 1 || got.Wait != 1 {
+		t.Errorf("burn %d wait %d, want the retry burning and the wait waiting", got.Burn, got.Wait)
+	}
+	if w := stoker.Word(retry); w != "busy" {
+		t.Errorf("the stoker reads a retry as %q", w)
+	}
+	if w := stoker.Word(wait); w != "asks" {
+		t.Errorf("the stoker reads a wait as %q", w)
 	}
 }

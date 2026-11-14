@@ -1,38 +1,38 @@
- ▰ matchblox                                                                           ● 6 wait for you
- SESSIONS 7    ships 3    machine    git    history    panes    stoker
+ ▰ matchblox                                                                               ● 6 need you
+ BOARD 7    machine
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
- WAITS FOR YOU · 6                       │ spark-docs · done
-▌│ spark-docs        done       9m   88% │ ✻ team@example.com · Max · #4540 ●━●━●━●━●  live
- ╿ ember-billing     done       4m   32% │
- ╿ flint-auth        asks       2m   41% │
- ╿ kindle-web        asks       1m   56% │
- ╿ cinder-ci         done       0s   55% │
- ╿ wick-mobile       done       0s    6% │
- WORKING · 1                             │
- ✦ hearth-api        busy            79% │
- + start a new session                   │
-                                         │
- 1 without an agent: shell:1.1 zsh       │
-                              ╭─ Kill spark-docs ────────────────────────╮
- RECOMMENDATIONS · 7 · h hides│                                          │
- ▲ The week runs short: compac│   tmux kill-pane -t %3                   │
- ○ Clear spark-docs (%3)      │   then kill -TERM 1400                   │
- ○ Clear kindle-web (%5)      │                                          │
- ○ Clear cinder-ci (%6)       ╰─ y run ─ any other key cancels ──────────╯
- ○ Clear flint-auth (%2)                 │
- ○ Clear ember-billing (%8)              │
- ○ Clear wick-mobile (%7)                │
-─────────────────────────────────────────│
- USAGE                                   │
- ✻ Claude        5h   ▰▰▰ 84%            │
-                 wk   ▰▰▱ 82%            │
- · Google login  not measured            │
- ❋ OpenAI        5h ▰▱▱ 40% · wk 12%     │
-─────────────────────────────────────────│
- MACHINE                        16 cores │
- cpu  ▁ 0%   load 6.2                    │
- mem  ▰▰▰▱▱▱▱▱ 26 of 64 GB               │
- disk ▰▰▰▰▰▰▱▱ 71% of 1 TB               │
- runs 5 claude · 1 codex · 1 opencode    │
+ NEEDS YOU · 6  −                     WORKING · 1  −           SHIPPING · 0  −          QUIET · 0  −
+▌╿ flint-auth                 ✻  2m   ✦ hearth-api     ✻
+  stuck conflicts with main            busy
+  #4545 ●━✕┄○┄○┄○  ctx 41%             #4551 ●━◉┄○┄○  ctx 79%
+  “The refresh flow works and the
+  tests pass. One choice is yours
+  before I wire the rotation.”
+  ⏎ go in
+
+ │ spark-docs                 ✻  9m
+  done I rewrote the quick start a…
+  #4540 ●━●━●━●━●  ctx 88%
+  ⏎ go in                     ╭─ Kill flint-auth ────────────────────────╮
+                              │                                          │
+ ╿ ember-billing              │   tmux kill-pane -t %2                   │
+  green #4552 waits for your m│   then kill -TERM 1310                   │
+  #4552 ●━●━◉┄○┄○  ctx 32%    │                                          │
+  p merge #4552   ⏎ go in     ╰─ y run ─ any other key cancels ──────────╯
+
+ ╿ kindle-web                 ✻  1m
+  asks Claude needs your permissio…
+  ctx 56%
+  ⏎ go in
+
+ ╿ cinder-ci                  ❋  0s
+  done I am moving the cache key t…
+  ctx 55%
+  ⏎ go in
+
+  ↓ 1 more
+ + start a new session
+ RECOMMENDATIONS · 7
+ ✻ Claude Max  5h ▰▰▰▰▰▰▰▱ 84% · Fri 01:20   wk ▰▰▰▰▰▰▰▱ 82% · Mon 09:00                      machine ›
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
 

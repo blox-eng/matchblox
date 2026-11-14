@@ -9,9 +9,6 @@ import (
 	"github.com/blox-eng/matchblox/internal/advice"
 )
 
-// recsLabelRow is the RECOMMENDATIONS label: a tap on it folds the section.
-const recsLabelRow = -3
-
 // recPrefs is what the person did to the recommendations, kept in the
 // state directory: the ones dismissed, each with the evidence it was
 // dismissed on, and whether the section is folded. Releases are the

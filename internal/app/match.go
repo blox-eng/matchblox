@@ -33,6 +33,7 @@ const (
 	strikeFor = 800 * time.Millisecond  // flash, spark, catch
 	outFor    = 400 * time.Millisecond  // the flame dies down
 	fadeFor   = 600 * time.Millisecond  // the head burns away
+	landGlow  = 1200 * time.Millisecond // a card that changes column glows where it lands
 )
 
 // changeKind is a change of state that plays once.
@@ -48,6 +49,7 @@ const (
 type change struct {
 	kind changeKind
 	at   time.Time
+	from boardCol // the column the card had before a strike or a going out
 }
 
 type animMsg struct{}
@@ -131,6 +133,58 @@ func (m Model) matchCell(s sample.Session) string {
 	return lipgloss.NewStyle().Foreground(c).Render(ch) + " "
 }
 
+// landed tells if the card of pane k, now in column col, still glows
+// where it landed: for landGlow after the match struck or went out and
+// the card changed column.
+func (m Model) landed(k paneKey, col boardCol) bool {
+	c, ok := m.changes[k]
+	if m.opt.NoMotion || !ok || c.kind != changeStrike && c.kind != changeOut || c.from == col {
+		return false
+	}
+	e := m.now().Sub(c.at)
+	return e >= 0 && e < landGlow
+}
+
+// stillCell is the match of s with no change playing and no motion: a
+// card that strikes outside WORKING lands with no fire.
+func (m Model) stillCell(s sample.Session) string {
+	m.opt.NoMotion = true
+	return m.matchCell(s)
+}
+
+// quietTone is the token of a QUIET head: it cools with age.
+func quietTone(s sample.Session, held bool) string {
+	switch age := s.Age(); {
+	case held || age == "stale":
+		return "faint"
+	case age == "cold":
+		return "match-ember"
+	}
+	return "match-head"
+}
+
+// quietCell is the match of a card in QUIET, where nothing moves: spent
+// is faint, fire stands still, and a head at rest cools with age.
+func (m Model) quietCell(s sample.Session) string {
+	mk := m.marks()
+	ch, c := "╿", mk.Head
+	switch m.matchOf(s) {
+	case matchBurnt:
+		ch, c = "│", m.st.theme.Faint
+	case matchLit:
+		ch, c = "✦", mk.Flame
+	default:
+		_, held := m.holdOf(s)
+		switch quietTone(s, held) {
+		case "faint":
+			c = m.st.theme.Faint
+		case "match-ember":
+			c = mk.Ember
+		}
+	}
+	return lipgloss.NewStyle().Foreground(c).Render(ch) + " "
+}
+
 // paneKey is a pane on a host: pane ids repeat across hosts.
 type paneKey struct{ host, pane string }
 
@@ -151,30 +205,30 @@ func (m *Model) noteChanges(host string, next []sample.Session, chains *state.Ch
 		m.changes = map[paneKey]change{}
 	}
 	now := m.now()
-	was := map[string]matchKind{}
+	was := map[string]sample.Session{}
 	for _, s := range m.snap.Sessions {
 		if s.Host == host {
-			was[s.Pane] = m.matchOf(s)
+			was[s.Pane] = s
 		}
 	}
 	for _, s := range next {
-		old, ok := was[s.Pane]
+		prev, ok := was[s.Pane]
 		if !ok {
 			continue
 		}
-		at := paneKey{host, s.Pane}
+		at, old, from := paneKey{host, s.Pane}, m.matchOf(prev), m.columnOf(prev)
 		switch k := m.matchOf(s); {
 		case k == matchLit && old != matchLit:
-			m.changes[at] = change{changeStrike, now}
+			m.changes[at] = change{changeStrike, now, from}
 		case k == matchUnlit && old == matchLit:
-			m.changes[at] = change{changeOut, now}
+			m.changes[at] = change{changeOut, now, from}
 		case k == matchBurnt && old != matchBurnt:
-			m.changes[at] = change{changeBurn, now}
+			m.changes[at] = change{kind: changeBurn, at: now}
 		}
 	}
 	m.noteSparks(host, chains, now)
 	for at, c := range m.changes {
-		if now.Sub(c.at) > time.Second {
+		if now.Sub(c.at) > landGlow {
 			delete(m.changes, at)
 		}
 	}
@@ -192,7 +246,7 @@ func (m Model) moving() bool {
 		}
 	}
 	for _, c := range m.changes {
-		if m.now().Sub(c.at) < time.Second {
+		if m.now().Sub(c.at) < landGlow {
 			return true
 		}
 	}

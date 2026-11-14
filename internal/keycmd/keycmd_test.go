@@ -107,6 +107,27 @@ func TestTheSignalsNameThePaneAndTheMarks(t *testing.T) {
 	}
 }
 
+func TestTheBoardSignalCarriesTheBeltKeys(t *testing.T) {
+	if got := BoardSignal("1,2*;g"); got != "\x1b_matchblox;board=1,2*;g\x1b\\" {
+		t.Errorf("BoardSignal = %q", got)
+	}
+	if got := BoardSignal(""); got != "\x1b_matchblox;board=\x1b\\" {
+		t.Errorf("BoardSignal(\"\") = %q", got)
+	}
+}
+
+func TestTheAppAnswersTheBoardSignal(t *testing.T) {
+	if BeltKey != "\x1b_matchblox;belt\x1b\\" {
+		t.Errorf("BeltKey = %q", BeltKey)
+	}
+	if BeltFromPrefix != "\x1b_matchblox;belt=" {
+		t.Errorf("BeltFromPrefix = %q", BeltFromPrefix)
+	}
+	if BeltSlot == MarkSlot {
+		t.Errorf("BeltKey shares the mark's slot %d", MarkSlot)
+	}
+}
+
 // A command's text goes unquoted into a tmux binding (panes.CommandKeysArgv):
 // one word, no tmux syntax.
 func TestACommandsTextIsOneSlashWord(t *testing.T) {

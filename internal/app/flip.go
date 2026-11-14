@@ -63,8 +63,11 @@ func (m Model) flipFrom(tty, pane string) Model {
 	r := *m.room
 	r.from = maps.Clone(r.from)
 	r.from[tty] = pane
-	r.at = m.openRoom(k).room.at
-	r.typing = m.roomRows(k)[r.at].kind == roomTalk
+	m.room = &r
+	at := m.roomLanding(k) // on m itself: it chooses the need's card, and may unfold the plan
+	r = *m.room
+	r.at = at
+	r.typing = at >= 0 && m.roomRows(k)[at].kind == roomTalk
 	m.room = &r
 	return m
 }

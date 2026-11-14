@@ -30,6 +30,14 @@ tmux new -s web opencode
 ✦ busy         web        web:1.1   ███░░░░░░░  32%   ▣ API key
 ```
 
+OpenCode tells matchblox its state through a plugin. The setup step "Add
+the OpenCode plugin" writes `matchblox.ts` into OpenCode's global plugin
+folder: `~/.config/opencode/plugins/`, or `$XDG_CONFIG_HOME/opencode/plugins/`.
+Each OpenCode then writes its state to
+`~/.local/state/matchblox/opencode/<pid>.json`: it works, it retries, or a
+permission or a question waits for your answer. Without the plugin, matchblox reads
+its pane. Delete the file to stop it.
+
 **Cursor**
 
 ```sh
@@ -213,8 +221,8 @@ A chain gives a match the right to message its chain-mates, and nothing
 more. It grants no control over them, and every service guard still applies.
 
 A chain can have a stoker of its own. You talk to the chain, and its stoker
-answers: `a` on the head row of its fuse in Sessions, or
-`matchblox stoker order <chain> "<text>"` from a shell. That stoker drives
+answers: the talk line of the chain's room (`g` on a card of the chain),
+or `matchblox stoker order <chain> "<text>"` from a shell. That stoker drives
 the matches of its chain only. `F` on a member of a chain with no stoker
 starts one, and so does `matchblox stoker new --chain <who>`. See
 [A family of stokers](stoker.md#a-family-of-stokers).
@@ -336,8 +344,8 @@ the client selected it needs a new switch confirmation.
 
 Claude Code, Codex and OpenCode show their context use, read from the
 agent's own files: the transcript, the rollout, the session storage.
-Cursor gives it to its status line: open the door "Show Cursor's context"
-in Sessions, or run `matchblox setup`, and each Cursor session shows its
+Cursor gives it to its status line: open the setup step "Show Cursor's
+context" above the board, or run `matchblox setup`, and each Cursor session shows its
 context, model and window from its first turn. A status line of your own
 keeps running inside it; without one, the line shows what Cursor's bar
 showed (`Auto · 5.7%`). Before the first turn a session is "fresh".
@@ -363,7 +371,7 @@ show `—` and "not measured", and have no id:
 A session shows "not measured" while another session in its directory
 writes after it.
 
-A `codex exec` run you start in a pane shows in Sessions, and takes no
+A `codex exec` run you start in a pane shows on the board, and takes no
 other session's rollout. One that another agent starts does not show.
 
 The context use is a share of the session's window. matchblox uses the
@@ -371,20 +379,20 @@ first window it finds, in this order:
 
 1. The window the agent reports for the session. Codex and OpenCode report
    it in their files. Claude Code gives it to its status line: open the
-   door "Show your limits" in Sessions, or run `matchblox setup`, and each
+   setup step "Show your limits" above the board, or run `matchblox setup`, and each
    session reports its window from its first turn.
 2. `[sessions.windows]` in the [config](config.md), by model-name prefix.
 3. The window of a Claude model that matchblox knows, such as 1M for
    `claude-opus-5-5`. A model setting that ends in `[1m]` gives 1M.
 
-When none of them gives a window, matchblox does not guess one. The row
-shows `—` and the detail says "not measured", with what to do. The stoker
+When none of them gives a window, matchblox does not guess one. The card
+shows no context, and its peek says "no window known", with what to do. The stoker
 then compacts the session at `compact_tokens` only, never at a percentage.
 
 ## The account
 
-On a wide screen, Sessions shows the account of each session: the
-provider's mark, then the email and plan, or "API key". Only those two
+The live view's strip shows the account of each session: the provider's
+mark, then the email and plan, or "API key". Only those two
 fields are read from the agent's auth files; no token reaches the console.
 Cursor's is the email and team its CLI keeps in `~/.cursor/cli-config.json`
 (`⬢ you@example.com · Acme`), or in `<folder>/cfg/cli-config.json` for an
@@ -519,7 +527,7 @@ A start on `default` keeps them.
 
 Codex: each account's sessions read their logs and limits from that
 account's home, never from the default's. The app-server process (`codex
-app-server`) is not a session: Sessions does not list it. An agent that
+app-server`) is not a session: the board does not show it. An agent that
 the app-server runs (such as `codex exec`) is not a session either.
 
 A start or a switch on an account says what happened: each link still
@@ -574,7 +582,7 @@ the menu draws: in auto mode Claude Code writes the question to its
 transcript only once it is answered, so the hook is how the console and `matchblox peek` know the question. A second, `PreToolUse` for `Bash`, is the stoker's merge
 guard: in a session the stoker drove, it stops `gh pr merge`, `gh release`
 and `gh workflow run` unless the chip on the launch sheet gave the go, or
-you gave it with `y` on the STOKER tab. The same step adds permission rules
+you gave it with `y` on the card or on the stoker's view. The same step adds permission rules
 (`Bash(matchblox sessions:*)`, `ships`, `usage`, `send`, `compact`, `hold`,
 `release`, `stoker` and `peek`), so the stoker's hands run without a
 prompt. The rules are in your user settings, so every Claude Code session
@@ -584,15 +592,17 @@ neither the stoker's nor one the stoker drives (`only the stoker and the
 sessions it drives act from an agent's pane: this one is neither`). Your
 own shell runs no agent, so the commands work there. `peek` and the
 other reads work from any pane. An install from before these hooks or
-rules shows the step again, with the entries it adds. Every other agent is read from its pane: busy
+rules shows the step again, with the entries it adds. OpenCode with its
+plugin reports its own state. Every other agent is read from its pane: busy
 while the pane changes, waiting when it is idle and its last lines ask.
+Only the last lines count, never the older lines above them.
 
 Cursor tells its turns through its own hooks: the setup step "Add the
 Cursor hooks" adds `matchblox hook --cursor` to `~/.cursor/hooks.json`, for
 `sessionStart`, `sessionEnd`, `beforeSubmitPrompt`, `stop`,
 `afterAgentResponse` and `postToolUse`, and for nothing else: Cursor
 ignores the whole file, without a word, when one event in it is one it
-does not take. A turn that ends waits for you as `done`, or `asks` when its
+does not take. A turn that ends needs you as `done`, or `asks` when its
 reply (from `afterAgentResponse`) ends on a question; one you stop with Esc
 does not. No Cursor hook fires when its approval menu
 (`Run this command?`) draws, so that wait is read from its pane. The hooks

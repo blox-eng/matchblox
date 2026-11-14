@@ -256,7 +256,6 @@ func (m Model) stokerKeys() []hint {
 			keys = append(keys, hintFor(mk.Open, "command"))
 		}
 	}
-	keys = append(keys, tabHint(mk.Tabs, tabSessions, "sessions"), hintFor(mk.Ships, ""))
 	if m.stoker != nil && m.stoker.On && !m.stoker.Until.IsZero() {
 		return append(keys, hintFor(mk.Night, ""))
 	}
@@ -283,6 +282,11 @@ func (m Model) grantStep() (tea.Model, tea.Cmd) {
 		m.flash = m.keys.main.Grant.Help().Key + " gives the go a step waits for"
 		return m, nil
 	}
+	return m.grant(r)
+}
+
+// grant gives the go that step r waits for.
+func (m Model) grant(r stokerRow) (tea.Model, tea.Cmd) {
 	if m.conn == nil || m.lost {
 		m.flash = "not sent, no connection"
 		return m, nil
@@ -497,12 +501,15 @@ func unitSession(id string) string { return sample.StokerSession + "-" + id }
 func (m Model) stokerHostCard(w int) body {
 	st, v := m.st, m.stoker
 	var b body
-	b.add(-1, "")
 	order := m.stokerOrder()
 	if v == nil {
-		b.add(-1, st.faint.Render(" this service keeps no stoker"))
+		b.add(-1, "", st.faint.Render(" this service keeps no stoker"))
 		return b
 	}
+	if len(v.Run) > 0 || m.card() != nil || order != nil { // the stoker's panel heads its screen (ruling 28)
+		b.add(-1, m.stokerLines(w, false)...)
+	}
+	b.add(-1, "")
 	rows := m.stokerRows()
 	at := min(m.stokerSel, len(rows)-1)
 	if len(rows) > 0 && rows[0].kind == rowAgent {
@@ -510,7 +517,7 @@ func (m Model) stokerHostCard(w int) body {
 		b.add(-1, "")
 	}
 	if len(v.Run) == 0 && m.card() == nil && order == nil {
-		b.add(-1, m.stokerLines(w, true, "")...)
+		b.add(-1, m.stokerLines(w, true)...)
 		return b
 	}
 	b.add(-1, spread(st.label.Render(" "+m.stokerHeadline()), st.stoker.Render(m.stokerStatus())+" ", w))
@@ -571,7 +578,7 @@ func (m Model) stokerHostCard(w int) body {
 		if !v.On && !v.Ended.IsZero() {
 			head = fmt.Sprintf("DONE %d of %d", done, len(order.Plan))
 			if needs > 0 {
-				head += fmt.Sprintf(" · %d WAITS FOR YOU", needs)
+				head += fmt.Sprintf(" · %d NEED YOU", needs)
 			}
 		}
 		section(rowPlan, head)
@@ -615,7 +622,7 @@ func (m Model) agentLine(v *proto.StokerView, asks bool, off string, sel bool, w
 	case !v.PaneUp:
 		word, style = off, st.faint
 	case asks:
-		word, style = "waits for you", st.accent
+		word, style = "needs you", st.accent
 	case v.Ready:
 		word, style = "rests", st.muted
 	}
@@ -738,7 +745,7 @@ func (m Model) stokerRowLines(r stokerRow, sel bool, w int) []string {
 		case rowGo:
 			text = r.e.Text
 			if r.state() == "waits" {
-				text = "waits for you: " + text
+				text = "waits for your go: " + text
 			}
 		case rowWhen:
 			text = r.e.Text

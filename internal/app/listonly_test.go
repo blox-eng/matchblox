@@ -4,8 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
-	"strings"
+	"slices"
 	"testing"
 	"time"
 
@@ -31,176 +30,22 @@ func demoIn(t *testing.T, dir string, w, h int) Model {
 
 // fullView is m with list only off on both shapes.
 func fullView(m Model) Model {
-	m.viewPrefs = viewPrefs{}
+	m.viewPrefs = viewPrefs{CopyCheckedPhone: true, CopyCheckedDesk: true}
 	return m
 }
 
 func keyText(sc drawn) string { return ansi.Strip(sc.lines[sc.keysAt]) }
 
-// opensInPlace: the selected row has more than one line of the list.
-func opensInPlace(m Model, sc drawn) bool {
-	n := 0
-	for _, r := range sc.rows {
-		if r == m.rowIndex() {
-			n++
-		}
-	}
-	return n > 1
-}
-
-// TestVFoldsThePaneAndTheDock: on a desk, v gives the list the whole
-// screen, folds the chat and the stats under the list, and opens the
-// selected row in place; the key line says so, and a tap on its word
-// flips it back.
-func TestVFoldsThePaneAndTheDock(t *testing.T) {
-	m := demoIn(t, "", 92, 40)
-	sc := m.draw(92)
-	if sc.listW >= 92 || !strings.Contains(screen(m), "USAGE") || opensInPlace(m, sc) {
-		t.Fatalf("the full view: list %d, opened %v:\n%s", sc.listW, opensInPlace(m, sc), screen(m))
-	}
-	if k := keyText(sc); strings.HasSuffix(strings.TrimSpace(k), "list only") {
-		t.Fatalf("the full view's key line: %q", k)
-	}
-	next, _ := key(m, "v")
-	lo := next.(Model)
-	sc = lo.draw(92)
-	if !lo.listOnly() || sc.listW != 92 || strings.Contains(screen(lo), " more") || !opensInPlace(lo, sc) {
-		t.Fatalf("list only: on %v, list %d, opened %v\n%s", lo.listOnly(), sc.listW, opensInPlace(lo, sc), screen(lo))
-	}
-	k := keyText(sc)
-	if !strings.Contains(k, "full view v") {
-		t.Fatalf("list only's key line: %q", k)
-	}
-	panes := lo
-	panes.setTab(tabPanes) // fewer keys: room for the mark
-	if k := keyText(panes.draw(92)); !strings.HasSuffix(strings.TrimSpace(k), "list only") {
-		t.Fatalf("list only's key line has no mark: %q", k)
-	}
-	var at span
-	for _, s := range sc.keys {
-		if s.press == "v" {
-			at = s
-		}
-	}
-	if at == (span{}) {
-		t.Fatalf("full view v is no tap target: %q", k)
-	}
-	back, _ := tap(lo, at.x0, sc.keysAt)
-	if back.(Model).listOnly() {
-		t.Fatal("a tap on full view v did not bring the full view back")
-	}
-}
-
-// TestVFlipsOnlyTheCurrentShape: v on a desk leaves the phone's flag.
-func TestVFlipsOnlyTheCurrentShape(t *testing.T) {
-	m := demoIn(t, "", 92, 40)
-	next, _ := key(m, "v")
-	next, _ = next.Update(tea.WindowSizeMsg{Width: 60, Height: 40})
-	if nm := next.(Model); !nm.upright() || !nm.listOnly() || !nm.viewPrefs.ListOnlyDesk {
-		t.Fatalf("upright %v, list only %v, %+v", nm.upright(), nm.listOnly(), nm.viewPrefs)
-	}
-	next, _ = key(next, "v")
-	next, _ = next.Update(tea.WindowSizeMsg{Width: 92, Height: 40})
-	if nm := next.(Model); !nm.listOnly() || nm.viewPrefs.ListOnlyPhone {
-		t.Fatalf("v on the phone changed the desk: %+v", nm.viewPrefs)
-	}
-}
-
-// TestListOnlyIsKeptAcrossARestart: the next console opens as the last
-// one was left, from view.json.
-func TestListOnlyIsKeptAcrossARestart(t *testing.T) {
-	dir := t.TempDir()
-	next, _ := key(demoIn(t, dir, 92, 40), "v")
-	if !next.(Model).listOnly() {
-		t.Fatal("v did not turn list only on")
-	}
-	if _, err := os.Stat(filepath.Join(dir, "view.json")); err != nil {
-		t.Fatal(err)
-	}
-	again := demoIn(t, dir, 92, 40)
-	if !again.listOnly() || !again.viewPrefs.ListOnlyPhone {
-		t.Fatalf("the next console lost the views: %+v", again.viewPrefs)
-	}
-}
-
-// TestPhoneStartsListOnly: an upright screen wide enough to split opens
-// with no pane and no dock's switch while no view.json says otherwise (R9).
-func TestPhoneStartsListOnly(t *testing.T) {
-	m := demoIn(t, t.TempDir(), 96, 60)
-	if sc := m.draw(96); sc.listW != 96 || strings.Contains(screen(m), "machine ›") {
-		t.Fatalf("list %d:\n%s", sc.listW, screen(m))
-	}
-}
-
-// TestWaitsStillShowInListOnly: the header keeps who waits.
-func TestWaitsStillShowInListOnly(t *testing.T) {
-	m := demoIn(t, "", 92, 40)
-	full := ansi.Strip(m.draw(92).lines[0])
-	next, _ := key(m, "v")
-	if head := ansi.Strip(next.(Model).draw(92).lines[0]); !strings.Contains(head, "● 6 wait for you") || head != full {
-		t.Fatalf("the header lost who waits: %q, was %q", head, full)
-	}
-}
-
-// TestVIsFree: v is list only's alone.
+// TestVIsFree: v is the board's density alone; the tabs bind no v.
 func TestVIsFree(t *testing.T) {
 	main, _ := layersOf(defaultKeys())
-	if got := owners(t, main)["v"]; got != "ListOnly" {
-		t.Fatalf("v is %q", got)
+	if got := owners(t, main)["v"]; got != "" {
+		t.Fatalf("v is %q on the tabs", got)
+	}
+	if !slices.Contains(defaultKeys().board.Density.Keys(), "v") {
+		t.Fatalf("v is not the board's density: %q", defaultKeys().board.Density.Keys())
 	}
 	TestKeymapsHaveNoCollisions(t)
-}
-
-// TestTheSwitchGivesWayOnTheDesk: on the full view list only v is the
-// first spare key to go, so a desk key line keeps every key it had, and
-// shows the switch where room is left.
-func TestTheSwitchGivesWayOnTheDesk(t *testing.T) {
-	m := loaded(t, 100)
-	if k := keyText(m.draw(100)); strings.Contains(k, "list only v") {
-		t.Fatalf("the switch took a key's place: %q", k)
-	}
-	m.tab = tabPanes
-	if k := keyText(m.draw(100)); !strings.Contains(k, "/ find") || !strings.Contains(k, "q quit") || !strings.Contains(k, "list only v") {
-		t.Fatalf("a line with room has no switch, or lost a key: %q", k)
-	}
-	desk := demoIn(t, "", 132, 32)
-	if k := keyText(desk.draw(132)); !strings.Contains(k, "A switch") || !strings.Contains(k, "/ find") {
-		t.Fatalf("the switch took a key's place at 132: %q", k)
-	}
-}
-
-// TestFullViewStaysWhenRoomIsShort: in list only the way back stays; the
-// list only mark goes first, then the age, before a spare key.
-func TestFullViewStaysWhenRoomIsShort(t *testing.T) {
-	m, _ := loadedWith(t, 50, queueState())
-	m.tab = tabPanes
-	k := keyText(m.draw(50))
-	if !m.listOnly() || !strings.Contains(k, "full view v") || !strings.Contains(k, "s sort") || strings.HasSuffix(strings.TrimSpace(k), "list only") {
-		t.Fatalf("list only on a short line: %q", k)
-	}
-	if !strings.Contains(k, "sampled") {
-		t.Fatalf("the age went before the mark: %q", k)
-	}
-}
-
-// TestTheMarkKeepsItsGap: the age and the list only mark stand two
-// columns clear of the keys, so they never read as one phrase.
-func TestTheMarkKeepsItsGap(t *testing.T) {
-	gap := regexp.MustCompile(`\S {2,}(sampled \S+ ago  )?list only $`)
-	for w := 40; w <= 140; w++ {
-		m := demoIn(t, "", w, 40)
-		if !m.listOnly() {
-			m = fullView(m)
-			m.viewPrefs.ListOnlyDesk = true
-		}
-		for _, tab := range []int{tabSessions, tabPanes, tabMachine} {
-			m.setTab(tab)
-			k := keyText(m.draw(w))
-			if strings.HasSuffix(k, "list only ") && !gap.MatchString(k) {
-				t.Fatalf("w=%d %s: the mark has no gap: %q", w, tabNames[tab], k)
-			}
-		}
-	}
 }
 
 // manyRows is one host with n sessions, list only, 200×60.
@@ -266,17 +111,65 @@ func TestFrameCostWithChains(t *testing.T) {
 	}
 }
 
-// TestOneColumnOpensTheRowInPlace: wherever Sessions is one column with no
-// right side (a landscape screen of 60 to 82 columns, 96x8, 106x10), the
-// selected row opens in place, as on a phone: its words show before Enter.
-func TestOneColumnOpensTheRowInPlace(t *testing.T) {
-	for _, size := range [][2]int{{80, 30}, {66, 24}, {96, 8}, {106, 10}} {
-		m := fullView(flintAt(t, size[0], size[1]))
-		if _, right := m.panes(size[0]); right != 0 {
-			t.Fatalf("%v splits", size)
+// TestBoardPrefsAreKeptForEachShape: a phone and a desk each keep their
+// hidden columns, density and strip; an old view.json still loads.
+func TestBoardPrefsAreKeptForEachShape(t *testing.T) {
+	dir := t.TempDir()
+	m := demoIn(t, dir, 44, 31)
+	if !m.upright() || m.colHidden(colWork) || m.oneLine() || m.stripFace() != "usage" {
+		t.Fatalf("a fresh phone is not plain: %+v", m.viewPrefs)
+	}
+	m.flipHidden(colWork)
+	m.flipOneLine()
+	m.turnStrip()
+
+	again := demoIn(t, dir, 44, 31)
+	if !again.colHidden(colWork) || again.colHidden(colNeed) || !again.oneLine() || again.stripFace() != "machine" {
+		t.Fatalf("the phone lost its board views: %+v", again.viewPrefs)
+	}
+	desk := demoIn(t, dir, 132, 32)
+	if desk.upright() || desk.colHidden(colWork) || desk.oneLine() || desk.stripFace() != "usage" {
+		t.Fatalf("the desk took the phone's board views: %+v", desk.viewPrefs)
+	}
+
+	again.flipHidden(colWork)
+	if again.colHidden(colWork) {
+		t.Fatal("a second flip did not show the column again")
+	}
+	for _, want := range []string{"off", "usage"} {
+		again.turnStrip()
+		if got := again.stripFace(); got != want {
+			t.Fatalf("the strip turned to %q, want %q", got, want)
 		}
-		if sc := m.draw(size[0]); !opensInPlace(m, sc) {
-			t.Errorf("%v: the selected row does not open:\n%s", size, screen(m))
-		}
+	}
+}
+
+// TestAnOldViewFileStillLoads: a view.json with only list_only_phone keeps it
+// and gives the board its defaults.
+func TestAnOldViewFileStillLoads(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "view.json"), []byte(`{"list_only_phone":false}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	p := loadViewPrefs(dir)
+	if p.ListOnlyPhone || p.OneLinePhone != nil || p.StripPhone != "" || len(p.HiddenPhone) != 0 || len(p.Told) != 0 {
+		t.Fatalf("old file: %+v", p)
+	}
+}
+
+// TestTellKeepsANoticeOnce: a told key stays told for the next console.
+func TestTellKeepsANoticeOnce(t *testing.T) {
+	dir := t.TempDir()
+	m := demoIn(t, dir, 44, 31)
+	if m.told("x") {
+		t.Fatal("told before tell")
+	}
+	m.tell("x")
+	m.tell("x")
+	if len(m.viewPrefs.Told) != 1 {
+		t.Fatalf("tell added twice: %v", m.viewPrefs.Told)
+	}
+	if again := demoIn(t, dir, 132, 32); !again.told("x") || again.told("y") {
+		t.Fatalf("the next console lost what it was told: %v", again.viewPrefs.Told)
 	}
 }
