@@ -85,6 +85,29 @@ All notable changes to matchblox are in this file. The format follows
   report is read from the last lines of its pane only.
   ([#372](https://github.com/blox-eng/matchblox/issues/372))
 
+## [0.44.0] - 2026-11-14
+
+### Added
+
+- **Long Cursor chats stay at the bottom on resize.**
+  Cursor's CLI clears the screen and prints its whole chat again each time
+  its terminal's width changes: when a phone or a second terminal shows the
+  pane, or you resize your own. On a long chat that scrolled for minutes.
+  matchblox now starts Cursor behind a guard. During that replay the pane
+  shows one line, `Cursor redraws for the new width…`, then the last 1,000
+  lines of the chat and the input box. Keys you type meanwhile reach Cursor.
+  The pane still takes each terminal's size. The guard is for sessions that
+  matchblox starts, switches or recovers, on Linux and macOS; a session
+  that runs now gets it at its next start. It is measured on a stand-in for
+  Cursor (1.4 MB of replay becomes 74 kB), not yet on a real long chat: if
+  a replay still scrolls by for you, say so in #399.
+
+### Fixed
+
+- **A process that an agent leaves behind on a terminal of its own does not
+  pass for you.** It is placed in that agent's pane, as its other processes
+  are.
+
 ## [0.43.1] - 2026-11-13
 
 ### Security
@@ -1648,7 +1671,8 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.43.1...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.44.0...HEAD
+[0.44.0]: https://github.com/blox-eng/matchblox/compare/v0.43.1...v0.44.0
 [0.43.1]: https://github.com/blox-eng/matchblox/compare/v0.43.0...v0.43.1
 [0.43.0]: https://github.com/blox-eng/matchblox/compare/v0.42.0...v0.43.0
 [0.42.0]: https://github.com/blox-eng/matchblox/compare/v0.41.0...v0.42.0

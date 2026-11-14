@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/guard"
 	"github.com/blox-eng/matchblox/internal/keycmd"
 	"github.com/blox-eng/matchblox/internal/tmuxtest"
 )
@@ -343,5 +344,52 @@ func TestChooseTreeMovesToPrefixCapitalS(t *testing.T) {
 	}
 	if strings.Contains(argv, "bind-key\x00n\x00") {
 		t.Error("prefix n is bound: it stays tmux's next window; the walk is ⌥n")
+	}
+}
+
+// TestAGuardedPaneIsNoConsole: matchblox starts Cursor behind its redraw
+// guard (#399), and the guard is the pane's own program. It runs under
+// another name than matchblox, so its pane is no console: the way back
+// leaves it and types nothing into Cursor, and with no console it says how
+// to open one.
+func TestAGuardedPaneIsNoConsole(t *testing.T) {
+	tmux32(t)
+	sock := tmuxtest.Server(t)
+	tmux := func(args ...string) string {
+		t.Helper()
+		out, err := exec.Command("tmux", append([]string{"-L", sock, "-f", os.DevNull}, args...)...).CombinedOutput() //nolint:gosec // the test's own server
+		if err != nil {
+			t.Fatalf("tmux %q: %v: %s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	shell, err := exec.LookPath("bash")
+	if err != nil {
+		t.Skip("bash is not installed")
+	}
+	// tmux knows a program by its name: a link stands in for each.
+	dir := t.TempDir()
+	for session, name := range map[string]string{"guarded": guard.LinkName, "console": Home} {
+		if err := os.Symlink(shell, filepath.Join(dir, name)); err != nil {
+			t.Fatal(err)
+		}
+		tmux("new-session", "-d", "-s", session, "-x", "80", "-y", "24", filepath.Join(dir, name)+" -c 'sleep 300; :'")
+	}
+	t.Cleanup(func() { _ = exec.Command("tmux", "-L", sock, "kill-server").Run() }) //nolint:gosec // the test's own server
+	for session, want := range map[string][2]string{"guarded": {guard.LinkName, "0"}, "console": {Home, "1"}} {
+		var got string
+		for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
+			if tmux("display-message", "-p", "-t", session+":", "#{pane_current_command}") == want[0] { // the link has started
+				got = tmux("display-message", "-p", "-t", session+":", runsConsole)
+				break
+			}
+		}
+		if got != want[1] {
+			t.Errorf("pane %s: runs a console = %q, want %q", session, got, want[1])
+		}
+	}
+	tmux("kill-session", "-t", "console")
+	if got := tmux("display-message", "-p", "-t", "guarded:", consoleExists); got != "" {
+		t.Errorf("with only a guarded Cursor on the server, a console exists = %q, want none", got)
 	}
 }
