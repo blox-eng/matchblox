@@ -91,10 +91,7 @@ type Filter struct {
 
 // mode is a mode the agent set in a quiet hold, and where in the hold's
 // tail it is: a replay drops what came before its clear, but not the modes.
-type mode struct {
-	at  int
-	seq []byte
-}
+type mode struct{ at, n int32 }
 
 // NewFilter is a Filter that writes to out and reads the time from now.
 func NewFilter(out io.Writer, now func() time.Time) *Filter {
@@ -172,6 +169,9 @@ func (f *Filter) write(p []byte) error {
 func (f *Filter) hold(p []byte) error {
 	f.lastAt = f.now()
 	var pass []byte
+	// Only the bytes this write adds can complete a clear: one pass over a
+	// long hold, not one per write.
+	scan := max(len(f.tail)-len(ClearCodes)+1, 0)
 	for i, b := range p {
 		if len(f.seq) == 0 && b != 0x1b {
 			if b == '\n' {
@@ -202,10 +202,10 @@ func (f *Filter) hold(p []byte) error {
 			return f.write(rest)
 		}
 		switch {
-		case whole && toTerminal(f.seq) && f.quiet && !query(f.seq):
+		case whole && toTerminal(f.seq) && f.quiet && setsMode(f.seq): // a question passes at once: the agent waits for its answer
 			// In its place: the hold may hold no replay, and then it comes
 			// out as it went in.
-			f.modes = append(f.modes, mode{len(f.tail), slices.Clone(f.seq)})
+			f.modes = append(f.modes, mode{int32(len(f.tail)), int32(len(f.seq))}) //nolint:gosec // the tail stops at quietCap
 			f.tail = append(f.tail, f.seq...)
 		case whole && toTerminal(f.seq):
 			pass = append(pass, f.seq...)
@@ -214,7 +214,8 @@ func (f *Filter) hold(p []byte) error {
 		}
 		f.seq = f.seq[:0]
 	}
-	if i := bytes.LastIndex(f.tail, []byte(ClearCodes)); i >= 0 {
+	if i := bytes.LastIndex(f.tail[min(scan, len(f.tail)):], []byte(ClearCodes)); i >= 0 {
+		i += min(scan, len(f.tail))
 		from := i + len(ClearCodes)
 		kept := f.tail[from:]
 		if f.quiet {
@@ -225,11 +226,12 @@ func (f *Filter) hold(p []byte) error {
 			kept = nil
 			at := from
 			for _, m := range f.modes {
-				if m.at >= from {
-					kept = append(kept, f.tail[at:m.at]...)
-					at = m.at + len(m.seq)
+				start, end := int(m.at), int(m.at+m.n)
+				if start >= from {
+					kept = append(kept, f.tail[at:start]...)
+					at = end
 				}
-				head = append(head, m.seq...)
+				head = append(head, f.tail[start:end]...)
 			}
 			kept = append(kept, f.tail[at:]...)
 			f.quiet, f.holding, f.modes = false, true, nil
@@ -350,11 +352,20 @@ func plainLen(b []byte) int {
 	return n
 }
 
-// query tells if a sequence that toTerminal passes asks the terminal for
-// an answer: the agent waits for it, so it passes at once.
-func query(seq []byte) bool {
-	final := seq[len(seq)-1]
-	return seq[1] == ']' || seq[1] == 'P' || (seq[1] == '[' && (final == 'n' || final == 'c' || final == 't'))
+// setsMode tells if a whole escape sequence sets a mode of the terminal and
+// asks nothing: a DEC private mode (h, l), a key mode (m), or the kitty
+// keyboard protocol pushed, popped or set (u with no ?).
+func setsMode(seq []byte) bool {
+	if len(seq) < 3 || seq[1] != '[' {
+		return false
+	}
+	switch final := seq[len(seq)-1]; final {
+	case 'h', 'l', 'm':
+		return true
+	case 'u':
+		return seq[2] != '?'
+	}
+	return false
 }
 
 // otherScreen tells if a whole escape sequence switches to or from the
@@ -392,7 +403,7 @@ func (f *Filter) Tick() error {
 		case now.Sub(f.heldAt) >= holdCap:
 		case before && f.text == 0 && len(f.seq) == 0: // no text yet: codes are no print
 			return nil
-		case before && now.Sub(f.lastAt) < quietFor:
+		case before && now.Sub(f.lastAt) < quietFor && (!slow || f.printed == 0): // lines printed, then a trickle, is a short chat
 			return nil
 		case !before && !slow && now.Sub(f.lastAt) < wait:
 			return nil

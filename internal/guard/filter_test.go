@@ -606,3 +606,55 @@ func TestFilterCodesAfterClearAreNoPrint(t *testing.T) {
 		}
 	}
 }
+
+// TestFilterQuietHoldOnePass: a long chat after a resize costs the guard one
+// pass over its bytes, not a pass per write: the pane does not freeze.
+func TestFilterQuietHoldOnePass(t *testing.T) {
+	var out bytes.Buffer
+	c := newClock()
+	f := NewFilter(&out, c.now)
+	f.Resized()
+	in := bytes.Repeat([]byte("line | chat chat chat chat chat chat chat chat chat chat chat chat\r\n"), quietCap/68)
+	began := time.Now()
+	writeIn(t, f, in, 4096)
+	if took := time.Since(began); took > 5*time.Second {
+		t.Fatalf("a quiet hold of %d MiB took %v to take in, want a few hundred ms at most: each write scans all it holds", len(in)>>20, took)
+	}
+}
+
+// TestFilterQuietPassesQueries: what asks the terminal for an answer passes
+// at once in a quiet hold too, also the questions that look like modes.
+func TestFilterQuietPassesQueries(t *testing.T) {
+	for _, q := range []string{"\x1b[?u", "\x1b[?2026$p", "\x1b[>q", "\x1b[>0q", "\x1b[6n", "\x1b]11;?\x07"} {
+		var out bytes.Buffer
+		f := NewFilter(&out, newClock().now)
+		f.Resized()
+		writeIn(t, f, []byte("chat\r\n"+q+"more"), 64)
+		if out.String() != q {
+			t.Errorf("in a quiet hold, the query %q gave the pane %q at once, want the query alone", q, out.String())
+		}
+	}
+}
+
+// TestFilterShortChatSpinnerEnds: a short chat, then a spinner: the hold
+// ends soon after the chat's lines, not after printWait.
+func TestFilterShortChatSpinnerEnds(t *testing.T) {
+	var out bytes.Buffer
+	c := newClock()
+	f := NewFilter(&out, c.now)
+	f.Resized()
+	writeIn(t, f, []byte(ClearCodes), 11)
+	tickFor(t, f, c, 260*time.Millisecond)
+	writeIn(t, f, []byte("hi\r\nthere\r\n"), 64)
+	for at := time.Duration(0); at < 2*time.Second; at += 100 * time.Millisecond {
+		writeIn(t, f, []byte("\r\x1b[2K⠋"), 64)
+		tickFor(t, f, c, 100*time.Millisecond)
+		if !f.Holding() {
+			if at > 600*time.Millisecond {
+				t.Fatalf("the hold ended %v after a short chat's lines, want within 600 ms", at)
+			}
+			return
+		}
+	}
+	t.Fatal("2 s after a short chat's lines, under a spinner, the pane still shows only the notice")
+}
