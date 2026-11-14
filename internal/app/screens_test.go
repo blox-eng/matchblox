@@ -220,6 +220,7 @@ func TestScreens(t *testing.T) {
 		golden(t, boardShot(t, board, size[0], size[1], func(m *Model) { m.flipHidden(colWork) }), "boardhidden", size[0], size[1])
 		golden(t, pressOn(boardShot(t, board, size[0], size[1], chooseCard("flint-auth")), "m"), "boardmenu", size[0], size[1])
 	}
+	golden(t, boardShot(t, board, 80, 31, func(m *Model) { m.boardHost = "gpu-1" }), "boardhost", 80, 31) // a narrowed empty NEEDS YOU is its head
 }
 
 // threeHosts is the demo machine with two peers: gpu-1, whose train-loop

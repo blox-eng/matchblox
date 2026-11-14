@@ -19,7 +19,7 @@ import (
 // its head and a row for each of its ships, 3 at most. WORKING
 // takes the rest, so its head moves only with NEEDS YOU, and SHIPPING's
 // only with NEEDS YOU and a count of ships under 4.
-func stackRows(need, ships, rows int, work, ship bool) (needH, workH, shipH, gaps int) {
+func stackRows(need, ships, rows int, needs, work, ship bool) (needH, workH, shipH, gaps int) {
 	shown := 0
 	if work {
 		shown++
@@ -27,7 +27,7 @@ func stackRows(need, ships, rows int, work, ship bool) (needH, workH, shipH, gap
 	if ship {
 		shown++
 	}
-	if need > 0 {
+	if needs {
 		if needH = min(need+1, rows-2*shown); needH < 2 {
 			needH = max(min(need+1, 2, rows-shown), min(rows, 1)) // the heads first, then a card
 		}
@@ -89,16 +89,17 @@ func (m Model) boardStacked(d *boardDrawn, b *boardDraw, shown []boardCol, w, ro
 		return
 	}
 	need := 0
-	if slices.Contains(stack, colNeed) {
-		need = 2 // a blank row, and that nothing needs you
-		if ss := b.idx[colNeed]; len(ss) > 0 {
-			need = 0
-			for _, s := range ss {
-				need += len(m.boardBlockOf(b, colNeed, s, w, false).lines)
-			}
+	switch ss := b.idx[colNeed]; {
+	case len(ss) > 0:
+		for _, s := range ss {
+			need += len(m.boardBlockOf(b, colNeed, s, w, false).lines)
 		}
+	case m.filter == "" && m.boardChain == "" && m.boardHost == "":
+		need = 2 // a blank row, and that nothing needs you
+	case m.boardWords(b) != "":
+		need = 1 // the row that says why there is no card
 	}
-	needH, workH, shipH, gaps := stackRows(need, len(b.idx[colShip]), sec, slices.Contains(stack, colWork), slices.Contains(stack, colShip))
+	needH, workH, shipH, gaps := stackRows(need, len(b.idx[colShip]), sec, slices.Contains(stack, colNeed), slices.Contains(stack, colWork), slices.Contains(stack, colShip))
 	for _, c := range []boardCol{colWork, colShip} {
 		b.nameW[c] = 14
 		for _, s := range b.idx[c] {
