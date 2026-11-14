@@ -10,7 +10,7 @@ All notable changes to matchblox are in this file. The format follows
 
 ### Added
 
-- **A long Cursor session stays at the bottom when its pane changes width.**
+- **Long Cursor chats stay at the bottom on resize.**
   Cursor's CLI clears the screen and prints its whole chat again each time
   its terminal's width changes: when a phone or a second terminal shows the
   pane, or you resize your own. On a long chat that scrolled for minutes.
