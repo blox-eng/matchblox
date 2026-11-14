@@ -2,6 +2,7 @@ package app
 
 import (
 	"io"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -29,9 +30,7 @@ func TestBoardWidths(t *testing.T) {
 		cols  []int
 		live  int
 	}{
-		{Medium, 80, []boardCol{colNeed, colWork, colShip}, []int{38, 20, 20}, 0},
-		{Medium, 80, all, []int{38, 20, 20}, 0}, // QUIET is the drawer
-		{Medium, 80, []boardCol{colNeed, colShip}, []int{52, 27}, 0},
+		{Medium, 80, all, nil, 0}, // the sections stack at the full width (TestMediumStacksTheSections)
 		{Wide, 104, all, []int{36, 24, 24, 17}, 0},
 		{Wide, 151, all, []int{53, 35, 35, 25}, 0},
 		{Wide, 152, all, []int{36, 25, 25, 18}, 44},
@@ -42,6 +41,9 @@ func TestBoardWidths(t *testing.T) {
 		cols, live := boardWidths(c.l, c.w, c.shown)
 		if !slices.Equal(cols, c.cols) || live != c.live {
 			t.Errorf("boardWidths(%v, %d, %v) = %v, %d; want %v, %d", c.l, c.w, c.shown, cols, live, c.cols, c.live)
+		}
+		if c.cols == nil {
+			continue
 		}
 		sum := live
 		for _, x := range cols {
@@ -317,6 +319,14 @@ func TestEmptyNeedsYouSaysSo(t *testing.T) {
 			t.Errorf("w=%d: an empty NEEDS YOU does not say so:\n%s", w, f)
 		}
 		m := boardShot(t, noWork, w, 38, nil)
+		if m.layoutAt(w) == Medium { // the stack: WORKING keeps its head and its rows
+			_, plain, at := sectionHeads(t, m)
+			_, _, full := sectionHeads(t, boardShot(t, st, w, 38, nil))
+			if at[colWork] < 0 || !strings.HasPrefix(plain[at[colWork]], " WORKING · 0  −") || !maps.Equal(at, full) {
+				t.Errorf("w=%d: an empty WORKING does not keep its head and rows: %v, want %v\n%s", w, at, full, strings.Join(plain, "\n"))
+			}
+			continue
+		}
 		d := m.boardPanel(w, m.bodyRows())
 		head := ansi.Strip(d.lines[d.headAt])
 		if !strings.Contains(head, "WORKING · 0") {
@@ -452,6 +462,9 @@ func TestQuietIsADrawerOnMedium(t *testing.T) {
 			t.Errorf("the open drawer has no %s:\n%s", name, strings.Join(plain[head:ghost], "\n"))
 		}
 	}
+	if _, _, at := sectionHeads(t, m); slices.Contains(slices.Collect(maps.Values(at)), -1) {
+		t.Errorf("with the drawer open a section has no head: %v\n%s", at, strings.Join(plain, "\n"))
+	}
 }
 
 func TestTheLiveViewFollowsTheChosenCard(t *testing.T) {
@@ -574,6 +587,18 @@ func TestAHiddenColumnGivesItsRoom(t *testing.T) {
 			if strings.Contains(f, name) {
 				t.Errorf("w=%d: the hidden column draws %s:\n%s", w, name, f)
 			}
+		}
+		if m.layoutAt(w) == Medium { // the stack: SHIPPING takes WORKING's rows, and every ship shows
+			_, plain, at := sectionHeads(t, m)
+			if at[colShip] < 0 || at[colWork] >= 0 {
+				t.Fatalf("w=%d: the heads are %v:\n%s", w, at, f)
+			}
+			for _, name := range []string{"cinder-ci", "flint-api", "hearth-limits"} {
+				if !slices.ContainsFunc(plain[at[colShip]:], func(l string) bool { return strings.Contains(l, name) }) {
+					t.Errorf("w=%d: SHIPPING does not take the room: no %s\n%s", w, name, f)
+				}
+			}
+			continue
 		}
 		shown := []boardCol{colNeed, colShip, colQuiet}
 		cols, live := boardWidths(m.layoutAt(w), w, shown)

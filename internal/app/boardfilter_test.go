@@ -39,16 +39,25 @@ func tapText(t *testing.T, m Model, sub string) Model {
 	return m
 }
 
-// tapHead taps the head or the page mark of column c.
+// tapHead taps the head or the page mark of column c, or its section's
+// head in the stack at Medium.
 func tapHead(t *testing.T, m Model, c boardCol) Model {
 	t.Helper()
 	w := max(m.width, minWidth)
 	d := m.boardPanel(w, m.bodyRows())
-	i := slices.IndexFunc(d.heads, func(h span) bool { return h.press == c.short() })
-	if i < 0 {
+	x, y := -1, d.headAt
+	if i := slices.IndexFunc(d.heads, func(h span) bool { return h.press == c.short() }); i >= 0 {
+		x = d.heads[i].x0
+	}
+	for line, sps := range d.taps {
+		if i := slices.IndexFunc(sps, func(h span) bool { return h.press == c.short() }); x < 0 && i >= 0 {
+			x, y = sps[i].x0, line
+		}
+	}
+	if x < 0 {
 		t.Fatalf("no head of %s: %+v", c.name(), d.heads)
 	}
-	next, cmd := tap(m, d.heads[i].x0, m.draw(w).bodyTop+d.headAt)
+	next, cmd := tap(m, x, m.draw(w).bodyTop+y)
 	drain(cmd)
 	return next.(Model)
 }
@@ -216,7 +225,8 @@ func TestGNarrowsToTheChain(t *testing.T) {
 	if m = pressOn(m, "["); m.boardChain != "login" {
 		t.Errorf("[ goes to %q, want login", m.boardChain)
 	}
-	if m = pressOn(m, "esc"); m.boardChain != "" || len(drawnNames(m)) < 10 {
+	if m = pressOn(m, "esc"); m.boardChain != "" || !slices.Contains(drawnNames(m), "kindle-web") ||
+		!slices.Contains(drawnNames(m), "spark-search") || !slices.Contains(drawnNames(m), "ember-billing") { // matches of no chain, and of docs
 		t.Errorf("esc keeps the chain %q: %v", m.boardChain, drawnNames(m))
 	}
 

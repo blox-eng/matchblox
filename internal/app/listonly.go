@@ -87,8 +87,12 @@ func (m Model) oneLine() bool {
 }
 
 // oneLineIn: a card of column c takes one line. A phone with no choice yet
-// keeps NEEDS YOU verbose and every other page one line.
+// keeps NEEDS YOU verbose and every other page one line; at Medium WORKING
+// and SHIPPING are rows of the stack.
 func (m Model) oneLineIn(c boardCol) bool {
+	if (c == colWork || c == colShip) && m.layoutAt(max(m.width, minWidth)) == Medium {
+		return true
+	}
 	if m.upright() && m.viewPrefs.OneLinePhone == nil {
 		return c != colNeed
 	}

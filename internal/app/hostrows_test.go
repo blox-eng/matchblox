@@ -137,8 +137,9 @@ func TestThreeHostFrames(t *testing.T) {
 	}{
 		// On the board (Task 12 step 1): the header names the host filter, a
 		// card another host's, a host that is not reached is a line over the
-		// columns in the service's own words (ruling 30).
-		{"fine", 86, 30, []string{"matchblox · all hosts ▾", "docs-sweep…"}},
+		// columns in the service's own words (ruling 30). At 86 the stack
+		// names the other host whole.
+		{"fine", 86, 30, []string{"matchblox · all hosts ▾", "train-loop @gpu-1"}},
 		{"fine", 132, 32, []string{"docs-sweep @ws-1"}},
 		{"stale", 86, 30, []string{"· gpu-1 stale", "gpu-1: not reached since 22:49 · ⏎ try again", "gpu-1: connection lost. Tries again in 8s."}},
 		{"stale", 132, 50, []string{"gpu-1: not reached since 22:49"}},

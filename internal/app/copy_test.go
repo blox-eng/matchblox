@@ -184,10 +184,15 @@ func cellsIn(frame string, a, b point, x0, x1 int) string {
 	return strings.TrimRight(strings.Join(out, "\n"), "\n")
 }
 
-// columnOn is the cells of the board's column head over x.
+// columnOn is the cells of the board's column head over x: the full
+// width in the stack at Medium, which has no column heads.
 func columnOn(t *testing.T, m Model, x int) (x0, x1 int) {
 	t.Helper()
-	for _, h := range m.boardPanel(max(m.width, minWidth), m.bodyRows()).heads {
+	w := max(m.width, minWidth)
+	if m.layoutAt(w) == Medium {
+		return 0, w
+	}
+	for _, h := range m.boardPanel(w, m.bodyRows()).heads {
 		if x >= h.x0 && x < h.x1 {
 			return h.x0, h.x1
 		}
@@ -207,7 +212,7 @@ func TestADragCopiesOnlyWhatWasUnderThePointer(t *testing.T) {
 		m = drag(t, m, from, point{x + 5, y}, to)
 		x0, x1 := columnOn(t, m, x)
 		want := cellsIn(before, from, to, x0, x1)
-		if !strings.HasPrefix(want, "green #4556 waits for your merge\n") {
+		if !strings.HasPrefix(want, "green #4556 waits for your merge") {
 			t.Fatalf("the press is not where the test thinks: %q", want)
 		}
 		if during := plainFrame(m); cellsIn(during, from, to, x0, x1) != want {
@@ -985,10 +990,10 @@ func TestAFirstPressThatOpensABoxStartsNoDrag(t *testing.T) {
 
 func TestADragCopiesNoCutMark(t *testing.T) {
 	m, clipped, _ := menuBoard(t, 80, 31, func(m *Model) { m.sawRelease = true })
-	x, y := cardOn(t, m, "busy Writing the…")
-	to := point{x + 25, y + 1}
+	x, y := cardOn(t, m, "busy Writing the test for a token that e…")
+	to := point{x + 40, y} // the … of the cut text, at Medium in the row
 	letGo(t, drag(t, m, point{x, y}, to), to)
-	if len(*clipped) != 1 || strings.Contains((*clipped)[0], "…") || !strings.HasPrefix((*clipped)[0], "busy Writing the\n") {
+	if len(*clipped) != 1 || (*clipped)[0] != "busy Writing the test for a token that e" {
 		t.Errorf("the drag copied %q, want the text without the … of the cut", *clipped)
 	}
 }

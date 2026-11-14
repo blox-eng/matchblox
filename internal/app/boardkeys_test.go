@@ -337,7 +337,7 @@ func TestTheBoxKeepsWhatItShowed(t *testing.T) {
 }
 
 func TestATapNeverRunsADestructiveAct(t *testing.T) {
-	m := boardShot(t, boardFixture(t), 80, 31, nil)
+	m := boardShot(t, boardFixture(t), 80, 31, chooseCard("kindle-web")) // at Medium only the chosen wait shows its keys
 	lines := strings.Split(plainFrame(m), "\n")
 	y := slices.IndexFunc(lines, func(l string) bool { return strings.HasPrefix(l, "  p merge #4556") })
 	if y < 0 {
@@ -505,6 +505,7 @@ var grantAct = proto.Act{RecID: "stoker:grant", Which: "primary", Confirm: "y", 
 
 func TestATapOnTheGoArmsItAndASecondGivesIt(t *testing.T) {
 	now := demoAt
+	onHearth := chooseCard("hearth-api") // at Medium only the chosen wait shows its keys
 	goAt := func(m Model) (int, int) {
 		t.Helper()
 		for y, l := range strings.Split(plainFrame(m), "\n") {
@@ -525,7 +526,7 @@ func TestATapOnTheGoArmsItAndASecondGivesIt(t *testing.T) {
 		return next.(Model)
 	}
 
-	m := tapGo(goBoard(t, &now, nil))
+	m := tapGo(goBoard(t, &now, onHearth))
 	if len(boardFake(m).acts()) != 0 || noticeRow(m) != "tap y again to give the go" || chosenName(t, m) != "hearth-api" {
 		t.Fatalf("the first tap: acts %+v, notice %q", boardFake(m).acts(), noticeRow(m))
 	}
@@ -539,7 +540,7 @@ func TestATapOnTheGoArmsItAndASecondGivesIt(t *testing.T) {
 		"the notice's end": func(m Model) Model { now = now.Add(noticeFor); return m },
 	} {
 		now = demoAt
-		m = tapGo(goBoard(t, &now, nil))
+		m = tapGo(goBoard(t, &now, onHearth))
 		if m = tapGo(between(m)); len(boardFake(m).acts()) != 0 {
 			t.Errorf("a tap after %s gave the go: %+v", name, boardFake(m).acts())
 		}
