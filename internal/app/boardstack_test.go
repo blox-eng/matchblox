@@ -475,3 +475,26 @@ func TestMediumDownKeepsTheChosenCardShown(t *testing.T) {
 		}
 	}
 }
+
+// TestMediumRowKeepsTheNameOverALongChain: a long chain name gives way in a
+// WORKING row, so the row keeps the match's name, and a tap on the name
+// chooses the card.
+func TestMediumRowKeepsTheNameOverALongChain(t *testing.T) {
+	st := boardFixture(t)
+	cv := *st.Chains
+	cv.Chains = slices.Clone(cv.Chains)
+	cv.Chains[0].Name = "login-refresh-token-migration-to-the-new-store"
+	st.Chains = &cv
+	m := boardShot(t, st, 60, 29, chooseCard("cinder-ci"))
+	d, plain, at := sectionHeads(t, m)
+	row := at[colWork] + 1
+	if !strings.Contains(plain[row], "flint-ui") || !strings.Contains(plain[row], "busy") {
+		t.Errorf("the long chain name hides the match's name: %q", plain[row])
+	}
+	chain := hintFor(m.keys.board.Chain, "").press
+	for _, sp := range d.taps[row] {
+		if sp.press == chain && sp.x0 < 30 {
+			t.Errorf("the chain's tap reaches over half the row: %+v", sp)
+		}
+	}
+}

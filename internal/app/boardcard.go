@@ -460,10 +460,24 @@ func (m Model) stackRow(s sample.Session, w int, o cardOpts, word, says string) 
 		}
 		parts = append(parts, st.faint.Render(wait))
 	} else {
+		ctx, stub := "", m.chainStub(s, o)
 		if s.Context == "known" {
-			parts = append(parts, m.contextStyle(s).Render(fmt.Sprintf("ctx %.0f%%", s.ContextPct)))
+			ctx = m.contextStyle(s).Render(fmt.Sprintf("ctx %.0f%%", s.ContextPct))
 		}
-		if stub := m.chainStub(s, o); stub != "" {
+		cut := func() bool { // the name side would get under half the row: the stub goes, then ctx
+			right := lipgloss.Width(strings.Join(slices.DeleteFunc([]string{ctx, stub}, func(p string) bool { return p == "" }), "  ")) + 1
+			return w-right-1 < min(lipgloss.Width(left), w/2)
+		}
+		if stub != "" && cut() {
+			stub = ""
+		}
+		if ctx != "" && cut() {
+			ctx = ""
+		}
+		if ctx != "" {
+			parts = append(parts, ctx)
+		}
+		if stub != "" {
 			parts = append(parts, stub)
 			sw := lipgloss.Width(stub)
 			taps = []span{{w - 1 - sw, w - 1, hintFor(m.keys.board.Chain, "").press}}
