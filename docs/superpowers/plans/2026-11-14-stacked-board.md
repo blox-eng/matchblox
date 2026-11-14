@@ -15,7 +15,7 @@
 - Narrow and Wide do not change: every golden of another width stays byte for byte.
 - No change to `matchblox sessions --json`, `peek` or `send`.
 - No new key, no setting for the layout.
-- `NEEDS YOU` takes all its cards' rows first. When `NEEDS YOU` does not fit, it takes all rows but 4; `WORKING` and `SHIPPING` keep 2 each (head and one row). `SHIPPING` sits at the bottom: its head and one row for each ship, at most its head and 3 rows when the cards of `WORKING` do not all fit too. `WORKING` takes the rest; its blank rows are under its cards (owner, 2026-11-14, in place of a fixed 3:2 split).
+- `NEEDS YOU` takes all its cards' rows first. When `NEEDS YOU` does not fit, it takes all rows but 4; `WORKING` and `SHIPPING` keep 2 each (head and one row). `SHIPPING` sits at the bottom: its head and one row for each ship, 3 rows at most, whatever `WORKING` holds (ruling, 2026-11-14). `WORKING` takes the rest; its blank rows are under its cards (owner, 2026-11-14, in place of a fixed 3:2 split).
 - One blank row between sections when rows allow; a blank row goes first when rows are short.
 - The key line says `←→ sections` at Medium, `←→ columns` elsewhere.
 - Fixtures use the canon's names (DESIGN.md §7). `go test ./...` passes before every commit. Signed Conventional Commits, no `--no-verify`, deny-list check on the staged diff.
@@ -37,7 +37,7 @@
 - Test: `internal/app/boardstack_test.go`
 
 **Interfaces:**
-- Produces: `func stackRows(need, works, ships, rows int, work, ship bool) (needH, workH, shipH, gaps int)` — `need` is the rows `NEEDS YOU`'s cards take (0 when hidden), `works` and `ships` the counts of `WORKING` and `SHIPPING` (owner, 2026-11-14), `rows` the body rows for the sections, `work`/`ship` whether each is shown. Each height includes the section's head line. `gaps` is how many blank separator rows to draw (0, 1 or 2).
+- Produces: `func stackRows(need, ships, rows int, work, ship bool) (needH, workH, shipH, gaps int)` — `need` is the rows `NEEDS YOU`'s cards take (0 when hidden), `ships` the count of `SHIPPING` (owner, 2026-11-14), `rows` the body rows for the sections, `work`/`ship` whether each is shown. Each height includes the section's head line. `gaps` is how many blank separator rows to draw (0, 1 or 2).
 
 - [ ] **Step 1: Write the failing test** `TestStackRowsSplitsTheRestThreeToTwo`, table-driven:
   - `stackRows(9, 21, true, true)` → needH 10, workH 6, shipH 3, gaps 2 (rest = rows − needH − gaps = 9; workH = ceil(rest·3/5); shipH = rest − workH).
