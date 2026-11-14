@@ -200,13 +200,25 @@ func isDigit(k tea.KeyPressMsg) bool {
 	return k.Mod == 0 && len(k.Text) == 1 && k.Text[0] >= '0' && k.Text[0] <= '9'
 }
 
-// boardMove chooses the card d cards down the open column.
-// Up from the first card chooses the last line above the columns, and down
-// from the last card the first line under them.
+// boardMove chooses the card d cards down the open column. At Medium a
+// section's end goes on into the next section with cards, down to its
+// first card and up to its last. Up from the first card chooses the last
+// line above the columns, and down from the last card the first line
+// under them.
 func (m *Model) boardMove(d int) {
-	b, _ := m.boardDrawOf()
+	b, shown := m.boardDrawOf()
 	ss := b.idx[b.open]
 	i := slices.IndexFunc(ss, func(s sample.Session) bool { return b.picked && paneOf(s) == paneOf(b.chosen) })
+	if b.picked && (d < 0 && i == 0 || d > 0 && i == len(ss)-1) {
+		if c, ok := m.nextSection(b, shown, d); ok {
+			next := b.idx[c][0]
+			if d < 0 {
+				next = b.idx[c][len(b.idx[c])-1]
+			}
+			m.boardChooseCard(c, next)
+			return
+		}
+	}
 	switch {
 	case d < 0 && i <= 0 && len(m.aboveLines()) > 0:
 		m.boardAbove = 1
@@ -215,6 +227,20 @@ func (m *Model) boardMove(d int) {
 	case b.picked:
 		m.boardChooseCard(b.open, ss[clampMove(i, d, len(ss))])
 	}
+}
+
+// nextSection is the section of the stack at Medium after the open one
+// (d 1) or before it (d -1) that shows cards. false: none, or no stack.
+func (m Model) nextSection(b boardDraw, shown []boardCol, d int) (boardCol, bool) {
+	if m.layoutAt(max(m.width, minWidth)) != Medium || b.open == colQuiet {
+		return 0, false
+	}
+	for c := b.open + boardCol(d); c >= colNeed && c <= colShip; c += boardCol(d) {
+		if slices.Contains(shown, c) && len(b.idx[c]) > 0 {
+			return c, true
+		}
+	}
+	return 0, false
 }
 
 // aboveMove is ↑ (d -1) and ↓ (d 1) on a line above the columns: up
@@ -858,8 +884,11 @@ func (m Model) boardHints(w int) []hint {
 		hs, _ = m.cardHints(b.chosen, cardOpts{sel: true, armed: armed}, len(q.Options), answers && sent == 0)
 	}
 	right := hintFor(bk.Right, "")
-	if above && line == "" && len(m.boardDoors()) > 1 {
+	switch {
+	case above && line == "" && len(m.boardDoors()) > 1:
 		right.label = "doors"
+	case m.layoutAt(max(m.width, minWidth)) == Medium:
+		right.label = "sections" // the stack's sections are its columns
 	}
 	return append(append(hs, tail...), right, hintFor(mk.NextTab, ""))
 }

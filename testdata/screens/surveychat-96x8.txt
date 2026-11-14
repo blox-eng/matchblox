@@ -5,4 +5,4 @@
 ▌╿ flint-auth                                                                             ✻  2m
  WORKING · 1  −
 ────────────────────────────────────────────────────────────────────────────────────────────────
- ⏎ go in   c copy   v one line   s hosts   u strip   ←→ columns   tab next
+ ⏎ go in   c copy   v one line   s hosts   u strip   ←→ sections   tab next
