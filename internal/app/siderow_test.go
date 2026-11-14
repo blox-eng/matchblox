@@ -79,7 +79,7 @@ func TestHeldSessionThatAsksShowsItsQuestion(t *testing.T) {
 	m := boardModel(t, st)
 	s = m.all.sessions[0]
 	if m.sideStateOf(s) != sideNeed {
-		t.Skipf("fixture state is %v, not NEEDS YOU", m.sideStateOf(s))
+		t.Fatalf("fixture state is %v, not NEEDS YOU", m.sideStateOf(s))
 	}
 	got := plainLines(m.sideRow(s, 50, false, sideLink{}))
 	if len(got) != 2 || !strings.Contains(got[1], "Do I skip the lint?") {

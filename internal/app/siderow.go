@@ -103,12 +103,12 @@ func (m Model) chainHead(u sideUnit, w int, lit bool) string {
 
 // askedOf is what a session asks, whether or not a hold covers it.
 func (m Model) askedOf(s sample.Session) string {
-	switch q, _ := m.headAsks(s); {
-	case s.Ask != nil && len(s.Ask.Questions) > 0:
+	if s.Ask != nil && len(s.Ask.Questions) > 0 {
 		return s.Ask.Questions[0].Question
-	case s.WaitingFor != "":
-		return s.WaitingFor
-	default:
-		return q
 	}
+	if s.WaitingFor != "" {
+		return s.WaitingFor
+	}
+	q, _ := m.headAsks(s)
+	return q
 }
