@@ -411,3 +411,87 @@ func TestFilterHyperlinkStaysInPlace(t *testing.T) {
 		t.Fatalf("the pane got %q, want the link in its place: %q", out.String(), want)
 	}
 }
+
+// burst is n lines of a chat, as Cursor prints them, each named by word.
+func burst(word string, n int) []byte {
+	var b bytes.Buffer
+	for i := 1; i <= n; i++ {
+		fmt.Fprintf(&b, "%s %d| %s\r\n", word, i, strings.Repeat("chat ", 12))
+	}
+	return b.Bytes()
+}
+
+// tickFor lets d pass in steps of the guard's own tick.
+func tickFor(t *testing.T, f *Filter, c *fakeClock, d time.Duration) {
+	t.Helper()
+	for end := c.t.Add(d); c.t.Before(end); {
+		c.t = c.t.Add(25 * time.Millisecond)
+		if err := f.Tick(); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// TestFilterNarrowerAsCursorDoes: what Cursor 2026.10.19 printed when its
+// pane went from 216 to 180 columns, measured on a real chat (#402): the
+// whole chat with no clear before it, 0.25 s later the clear alone, 0.5 s
+// after it the whole chat again. The pane gets the notice and the end of the
+// second print only.
+func TestFilterNarrowerAsCursorDoes(t *testing.T) {
+	var out bytes.Buffer
+	c := newClock()
+	f := NewFilter(&out, c.now)
+	f.Resized()
+	writeIn(t, f, burst("first", 1620), 8190)
+	tickFor(t, f, c, 250*time.Millisecond)
+	writeIn(t, f, []byte(ClearCodes), 11)
+	tickFor(t, f, c, 500*time.Millisecond)
+	writeIn(t, f, append(burst("second", 1626), "→ Add a follow-up"...), 8190)
+	tickFor(t, f, c, time.Second)
+	got := out.String()
+	if f.Holding() {
+		t.Fatal("1 s after the second print, the hold goes on")
+	}
+	if strings.Contains(got, "first ") {
+		t.Fatalf("the pane got the first print, which has no clear before it: %d lines of it", strings.Count(got, "first "))
+	}
+	if strings.Count(got, Notice) != 1 || strings.Contains(got, "second 1|") || !strings.HasSuffix(got, "second 1626| "+strings.Repeat("chat ", 12)+"\r\n→ Add a follow-up") {
+		t.Fatalf("the pane got %d notices, the second print's start: %v, its end: %q; want one notice and only the end", strings.Count(got, Notice), strings.Contains(got, "second 1|"), got[max(len(got)-60, 0):])
+	}
+	if n := strings.Count(got, "\n"); n != tailLines {
+		t.Fatalf("the pane got %d lines, want the last %d", n, tailLines)
+	}
+}
+
+// TestFilterWiderAsCursorDoes: what Cursor printed when its pane went from
+// 180 to 216 columns (#402): the clear, 0.26 s of nothing, then the whole
+// chat. The pause is no end of the replay.
+func TestFilterWiderAsCursorDoes(t *testing.T) {
+	var out bytes.Buffer
+	c := newClock()
+	f := NewFilter(&out, c.now)
+	f.Resized()
+	writeIn(t, f, []byte(ClearCodes), 11)
+	tickFor(t, f, c, 360*time.Millisecond) // past quietFor, and still no print
+	writeIn(t, f, burst("chat", 1621), 8190)
+	tickFor(t, f, c, time.Second)
+	got := out.String()
+	if strings.Contains(got, "chat 1|") || !strings.Contains(got, "chat 1621|") || strings.Count(got, "\n") != tailLines {
+		t.Fatalf("after the pause the pane got the chat's start: %v, its end: %v, %d lines; want only its last %d", strings.Contains(got, "chat 1|"), strings.Contains(got, "chat 1621|"), strings.Count(got, "\n"), tailLines)
+	}
+}
+
+// TestFilterSmallRedrawAfterResize: a width change after which the agent
+// redraws only a few lines passes those bytes unchanged, within one window.
+func TestFilterSmallRedrawAfterResize(t *testing.T) {
+	var out bytes.Buffer
+	c := newClock()
+	f := NewFilter(&out, c.now)
+	f.Resized()
+	in := []byte("\x1b[2A\x1b[2K→ ask\r\n\x1b[2KAuto · 79%")
+	writeIn(t, f, in, 7)
+	tickFor(t, f, c, quietFor+50*time.Millisecond)
+	if !bytes.Equal(out.Bytes(), in) || f.Holding() {
+		t.Fatalf("a small redraw after a resize came out as %q (holding %v), want %q", out.Bytes(), f.Holding(), in)
+	}
+}
