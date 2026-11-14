@@ -1,10 +1,11 @@
  ▰ matchblox
  BOARD 0    machine
 ────────────────────────────────────────────────────────────────────────────────
- NEEDS YOU  −                           WORKING  −           SHIPPING  −
+ NEEDS YOU  −
   reading your matches…
 
 
+ WORKING  −
 
 
 
@@ -20,12 +21,11 @@
 
 
 
-
-
+ SHIPPING  −
 
 ────────────────────────────────────────────────────────────────────────────────
  QUIET   ▴                                                                   −
  + start a new session
                                                                       machine ›
 ────────────────────────────────────────────────────────────────────────────────
- c copy   v one line   s hosts   u strip   ←→ columns   tab next
+ c copy   v one line   s hosts   u strip   ←→ sections   tab next

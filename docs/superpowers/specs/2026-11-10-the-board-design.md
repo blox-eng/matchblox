@@ -47,7 +47,7 @@ The work fails, even if it runs, when:
 - A card moves to another column and the owner cannot see where it went.
 - A host that cannot be reached loses its cards with no word.
 - The console says `copied` when the text did not reach a clipboard.
-- A column moves or changes width by itself while the owner reads.
+- A column moves or changes width by itself while the owner reads. At Medium a section may move when the waits or the chosen card change, when `QUIET` opens, or when the owner hides or shows a section. `SHIPPING` may also move when the count of ships changes under 4 (owner, 2026-11-14).
 
 ## Owner's decisions
 
@@ -318,7 +318,7 @@ The console's shape rule decides (DESIGN.md §6, Widths; `layout()` in `internal
 | Shape | The board |
 |---|---|
 | Narrow (portrait under 90 columns, or under 60) | One column a page. The top line is the page marks: the open column in capitals with its count and `−`, the others short (`need 4  WORKING 3 −  ship 3  quiet 5`). No tab row; `Tab` and the key line reach Machine. |
-| Medium (60 to 99, and portrait from 90) | `NEEDS YOU`, `WORKING` and `SHIPPING` side by side, at 38, 20 and 20 of 80 columns, scaled to the width. `QUIET` is a drawer under them: one line with the names, which opens to six rows when the selection moves into it. |
+| Medium (60 to 99, and portrait from 90) | `NEEDS YOU`, `WORKING` and `SHIPPING` stacked from top to bottom, each the full width; `WORKING` and `SHIPPING` one row a match, the chosen one opened (owner, 2026-11-14; see `2026-11-14-stacked-board-design.md`). `QUIET` is a drawer under them: one line with the names, which opens to six rows when the selection moves into it. |
 | Wide (100 and over) | Four columns at 36, 25, 25 and 18 of 104, scaled to the width up to 151 columns. From 152 columns the columns keep those widths and the chosen match's live view takes the rest at the right (at least 44 columns), as #346 draws it. |
 
 A hidden column gives its room to the others in the same proportions. On Wide the live view takes it. A column whose cards do not fit ends in `↓ N more`, and scrolls so that the chosen card is whole.

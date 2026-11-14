@@ -208,7 +208,7 @@ func TestScreens(t *testing.T) {
 	for _, size := range [][2]int{{40, 34}, {80, 31}, {104, 38}, {160, 38}} {
 		golden(t, boardShot(t, board, size[0], size[1], nil), "board", size[0], size[1])
 	}
-	for _, size := range [][2]int{{40, 34}, {160, 38}} { // v, before the board takes its keys
+	for _, size := range [][2]int{{40, 34}, {80, 31}, {160, 38}} { // v, before the board takes its keys
 		golden(t, boardShot(t, board, size[0], size[1], oneLineBoard), "boardoneline", size[0], size[1])
 	}
 	onLogin := func(m *Model) {
@@ -219,6 +219,11 @@ func TestScreens(t *testing.T) {
 		golden(t, pressOn(boardShot(t, board, size[0], size[1], onLogin), "g"), "boardchain", size[0], size[1])
 		golden(t, boardShot(t, board, size[0], size[1], func(m *Model) { m.flipHidden(colWork) }), "boardhidden", size[0], size[1])
 		golden(t, pressOn(boardShot(t, board, size[0], size[1], chooseCard("flint-auth")), "m"), "boardmenu", size[0], size[1])
+	}
+	// A narrowed empty NEEDS YOU is its head; WORKING hidden is boardhidden.
+	golden(t, boardShot(t, board, 80, 31, func(m *Model) { m.boardHost = "gpu-1" }), "boardhost", 80, 31)
+	for _, c := range []boardCol{colNeed, colShip} {
+		golden(t, boardShot(t, board, 80, 31, func(m *Model) { m.flipHidden(c) }), "boardhidden-"+c.short(), 80, 31)
 	}
 }
 

@@ -8,17 +8,17 @@
      step
    ↓ 2 more
 ────────────────────────────────────────────────────────────────────────────────
- NEEDS YOU · 2  −                       WORKING · 0  −       SHIPPING · 0  −
-▌╿ hearth-api                   ✻  8h
-  asks permission prompt
-  ctx 79%                    ━╸hearth
+ NEEDS YOU · 2  −
+▌╿ hearth-api                                                             ✻  8h
+  asks permission prompt                                      ctx 79%  ━╸hearth
   “may I force-push the rebase?”
   ⏎ go in
+ ╿ ember-billing                                                          ✻  8h
+  waits which branch?                                         ctx 32%  ━╸hearth
 
- ╿ ember-billing                ✻  8h
-  waits which branch?
-  ctx 32%                    ━╸hearth
-  ⏎ go in
+ WORKING · 0  −
+
+ SHIPPING · 0  −
 
  › tell hearth's stoker…
 ────────────────────────────────────────────────────────────────────────────────
@@ -27,4 +27,4 @@
  RECOMMENDATIONS · 7
  ✻ Claude Max  5h ▰▰▰▰▰▰▰▱ 84%  wk 82%                                machine ›
 ────────────────────────────────────────────────────────────────────────────────
- ⏎ go in   c copy   v one line   s hosts   u strip   ←→ columns   tab next
+ ⏎ go in   c copy   v one line   s hosts   u strip   ←→ sections   tab next

@@ -200,13 +200,25 @@ func isDigit(k tea.KeyPressMsg) bool {
 	return k.Mod == 0 && len(k.Text) == 1 && k.Text[0] >= '0' && k.Text[0] <= '9'
 }
 
-// boardMove chooses the card d cards down the open column.
-// Up from the first card chooses the last line above the columns, and down
-// from the last card the first line under them.
+// boardMove chooses the card d cards down the open column. At Medium a
+// section's end goes on into the next section with cards, down to its
+// first card and up to its last. Up from the first card chooses the last
+// line above the columns, and down from the last card the first line
+// under them.
 func (m *Model) boardMove(d int) {
-	b, _ := m.boardDrawOf()
+	b, shown := m.boardDrawOf()
 	ss := b.idx[b.open]
 	i := slices.IndexFunc(ss, func(s sample.Session) bool { return b.picked && paneOf(s) == paneOf(b.chosen) })
+	if b.picked && (d < 0 && i == 0 || d > 0 && i == len(ss)-1) {
+		if c, ok := m.nextSection(b, shown, d); ok {
+			next := b.idx[c][0]
+			if d < 0 {
+				next = b.idx[c][len(b.idx[c])-1]
+			}
+			m.boardChooseCard(c, next)
+			return
+		}
+	}
 	switch {
 	case d < 0 && i <= 0 && len(m.aboveLines()) > 0:
 		m.boardAbove = 1
@@ -217,16 +229,54 @@ func (m *Model) boardMove(d int) {
 	}
 }
 
+// nextSection is the section of the stack at Medium after the open one
+// (d 1) or before it (d -1) that shows cards. The QUIET drawer is the last
+// section. false: none, or no stack.
+func (m Model) nextSection(b boardDraw, shown []boardCol, d int) (boardCol, bool) {
+	if m.layoutAt(max(m.width, minWidth)) != Medium {
+		return 0, false
+	}
+	for c := b.open + boardCol(d); c >= colNeed && c <= colQuiet; c += boardCol(d) {
+		if slices.Contains(shown, c) && len(b.idx[c]) > 0 {
+			return c, true
+		}
+	}
+	return 0, false
+}
+
+// stackEnd is the stack's first section with cards (d 1) or its last
+// (d -1). false: none, or no stack.
+func (m Model) stackEnd(b boardDraw, shown []boardCol, d int) (boardCol, bool) {
+	if m.layoutAt(max(m.width, minWidth)) != Medium {
+		return 0, false
+	}
+	at, step := colNeed, boardCol(1)
+	if d < 0 {
+		at, step = colShip, -1
+	}
+	for c := at; c >= colNeed && c <= colShip; c += step {
+		if slices.Contains(shown, c) && len(b.idx[c]) > 0 {
+			return c, true
+		}
+	}
+	return 0, false
+}
+
 // aboveMove is ↑ (d -1) and ↓ (d 1) on a line above the columns: up
 // through them, and down from the last one to the first card of the open
-// column.
+// column, at Medium of the stack.
 func (m *Model) aboveMove(d int) {
 	if m.boardAbove = min(m.boardAbove-d, len(m.aboveLines())); m.boardAbove > 0 {
 		return
 	}
 	m.boardAbove = 0
-	if b, _ := m.boardDrawOf(); len(b.idx[b.open]) > 0 {
-		m.boardChooseCard(b.open, b.idx[b.open][0])
+	b, shown := m.boardDrawOf()
+	c := b.open
+	if top, ok := m.stackEnd(b, shown, 1); ok {
+		c = top
+	}
+	if len(b.idx[c]) > 0 {
+		m.boardChooseCard(c, b.idx[c][0])
 	}
 }
 
@@ -858,8 +908,11 @@ func (m Model) boardHints(w int) []hint {
 		hs, _ = m.cardHints(b.chosen, cardOpts{sel: true, armed: armed}, len(q.Options), answers && sent == 0)
 	}
 	right := hintFor(bk.Right, "")
-	if above && line == "" && len(m.boardDoors()) > 1 {
+	switch {
+	case above && line == "" && len(m.boardDoors()) > 1:
 		right.label = "doors"
+	case m.layoutAt(max(m.width, minWidth)) == Medium:
+		right.label = "sections" // the stack's sections are its columns
 	}
 	return append(append(hs, tail...), right, hintFor(mk.NextTab, ""))
 }
@@ -944,9 +997,11 @@ func (m Model) boardTap(x, y int) (tea.Model, tea.Cmd) {
 	if at, ok := d.underAt[y]; ok {
 		return m.underTap(at, x, w)
 	}
-	if sp, ok := spanAt(d.taps[y], x); ok && sp.press == colQuiet.short() {
-		m.flipHidden(colQuiet) // the drawer's name
-		return m, nil
+	if sp, ok := spanAt(d.taps[y], x); ok {
+		if i := slices.IndexFunc(boardCols[:], func(c boardCol) bool { return c.short() == sp.press }); i >= 0 {
+			m.flipHidden(boardCols[i]) // the drawer's name, or a section's in the stack
+			return m, nil
+		}
 	}
 	if d.live > 0 && x >= w-d.live && y >= d.headAt && y < d.colsTo && b.picked {
 		return m.boardInto(b.chosen) // the live view is the chosen card's pane

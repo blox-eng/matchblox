@@ -1,26 +1,24 @@
  ▰ matchblox                                                                      ● 6 need you
  BOARD 7    machine
 ───────────────────────────────────────────────────────────────────────────────────────────────
- NEEDS YOU · 6  −                                WORKING · 1  −          SHIPPING · 0  −
-▌╿ flint-auth                            ✻  2m   ✦ hearth-api    ✻
-  stuck conflicts with main
-  #4545 ●━✕┄○┄○┄○  ctx 41%
-  “The refresh flow works and the tests pass.
-  One choice is yours before I wire the
-  rotation.”
+ NEEDS YOU · 6  −
+▌╿ flint-auth                                                                            ✻  2m
+  stuck conflicts with main                                           #4545 ●━✕┄○┄○┄○  ctx 41%
+  “The refresh flow works and the tests pass. One choice is yours before I wire the rotation.”
   ⏎ go in
-
- │ spark-docs                            ✻  9m
-  done I rewrote the quick start and the inst…
- ╿ ember-billing                         ✻  4m
+ │ spark-docs                                                                            ✻  9m
+  done I rewrote the quick start and the install page.
+ ╿ ember-billing                                                                         ✻  4m
   green #4552 waits for your merge
- ╿ kindle-web                            ✻  1m
-  asks Claude needs your permission to use Ba…
- ╿ cinder-ci                             ❋  0s
-  done I am moving the cache key to the go.su…
- ╿ wick-mobile                           ▣  0s
+ ╿ kindle-web                                                                            ✻  1m
+  asks Claude needs your permission to use Bash
+ ╿ cinder-ci                                                                             ❋  0s
+  done I am moving the cache key to the go.sum hash.
+ ╿ wick-mobile                                                                           ▣  0s
   done ⠙ Working
 
+ WORKING · 1  −
+ ✦ hearth-api     ✻  busy                                                              ctx 79%
 
 
 
@@ -55,6 +53,8 @@
 
 
 
+
+ SHIPPING · 0  −
 
 ───────────────────────────────────────────────────────────────────────────────────────────────
  QUIET · 0   ▴                                                                              −
@@ -62,4 +62,4 @@
  RECOMMENDATIONS · 7
  v changes the cards now: verbose, or one line.
 ───────────────────────────────────────────────────────────────────────────────────────────────
- ⏎ go in   c copy   v verbose   s hosts   u strip   ←→ columns   tab next
+ ⏎ go in   c copy   v verbose   s hosts   u strip   ←→ sections   tab next

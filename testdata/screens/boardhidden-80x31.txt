@@ -1,25 +1,25 @@
  ▰ matchblox · all hosts ▾                                         ● 4 need you
  BOARD 15    machine                                                   + work 3
 ────────────────────────────────────────────────────────────────────────────────
- NEEDS YOU · 4  −                                     SHIPPING · 3  −
-▌╿ spark-search                               ✻ 31m   ╿ cinder-ci @gpu-1  ❋  2h
-  stuck CI failed · lint, twice                        merged deploying
-  #4548 ●━✕┄○┄○┄○  ctx 77%                             #4549 ●━●━●━◉┄○  ctx 37%
-  “Lint fails on a file I did not change. I tried
-  twice and stopped.”                                 ╿ flint-api         ✻ 40m
-  ⏎ go in                                              ci waits for review
-                                                       #4560 ●━◉┄○┄○┄○  ctx 44%
- ╿ kindle-web                                 ✻  9m
-  green #4556 waits for your merge                    ╿ hearth-limits     ✻  4m
-  #4556 ●━●━◉┄○┄○  ctx 48%                             ci CI · 6 of 9 jobs
-  p merge #4556   ⏎ go in                              #4551 ●━◉┄○┄○┄○  ctx 55%
-
- ╿ hearth-api                                 ✻  4m
-  asks The plan changes 2 records and removes none.
-  ctx 31%
+ NEEDS YOU · 4  −
+▌╿ spark-search                                                           ✻ 31m
+  stuck CI failed · lint, twice                        #4548 ●━✕┄○┄○┄○  ctx 77%
+  “Lint fails on a file I did not change. I tried twice and stopped.”
   ⏎ go in
+ ╿ kindle-web                                                             ✻  9m
+  green #4556 waits for your merge                     #4556 ●━●━◉┄○┄○  ctx 48%
+ ╿ hearth-api                                                             ✻  4m
+  asks The plan changes 2 records and removes none.                     ctx 31%
+ ╿ flint-auth                                                             ✻  2m
+  asks Which way do we fix the login?                          ctx 62%  ─╴login
 
-  ↓ 1 more
+ SHIPPING · 3  −
+ ╿ cinder-ci @gpu-1 ❋  merged deploying                    #4549 ●━●━●━◉┄○   2h
+ ╿ flint-api        ✻  ci waits for review                 #4560 ●━◉┄○┄○┄○  40m
+ ╿ hearth-limits    ✻  ci CI · 6 of 9 jobs                 #4551 ●━◉┄○┄○┄○   4m
+
+
+
 
 
 ────────────────────────────────────────────────────────────────────────────────
@@ -28,4 +28,4 @@
  RECOMMENDATIONS · 7
  ✻ 5h ▰▰▰▰▰▰▰▱ 84%  wk 82%   ✻ @gpu-1 5h ▰▰▰▰▰▰▰▱ 84%  wk 82%         machine ›
 ────────────────────────────────────────────────────────────────────────────────
- ⏎ go in   c copy   v one line   s hosts   u strip   ←→ columns   tab next
+ ⏎ go in   c copy   v one line   s hosts   u strip   ←→ sections   tab next

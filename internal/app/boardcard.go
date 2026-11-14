@@ -31,11 +31,14 @@ func harnessMark(s sample.Session) string {
 // quote and the options. asOf: the time of the last state of a host that
 // is not reached, "" for one that is. land: how a card that changed column
 // lands. match: the match cell drawn, "" for the match of this moment.
+// stacked: the card is in the stack at Medium (boardStacked); ship: it is
+// in SHIPPING; nameW: the cells its section's names and host words take;
+// oneRow: its section has one row, so even the chosen card is its row.
 type cardOpts struct {
-	sel, lit, oneLine, need, quietRow, otherHost, bare bool
-	armed, sent                                        int
-	asOf, match                                        string
-	land                                               landing
+	sel, lit, oneLine, need, quietRow, otherHost, bare, stacked, ship, oneRow bool
+	armed, sent, nameW                                                        int
+	asOf, match                                                               string
+	land                                                                      landing
 }
 
 // landing is how a card that changed column lands, for landGlow (design
@@ -67,12 +70,24 @@ func (m Model) boardCard(s sample.Session, w int, o cardOpts) (lines []string, t
 		}
 		return m.washed(lines, w, o), taps
 	}
+	if o.stacked && !o.need && (!o.sel || o.oneRow) {
+		add(m.stackRow(s, w, o, word, says))
+		return m.washed(lines, w, o), taps
+	}
+	if o.stacked && o.need && o.oneRow { // a wait in one row is its head line
+		add(m.cardHead(s, w, o, ""), nil)
+		return m.washed(lines, w, o), taps
+	}
 	whole := o.sel || !o.oneLine
 	add(m.cardHead(s, w, o, ""), nil)
-	if whole || o.need {
-		add(pad("  "+m.wordInk(o).Render(word)+m.st.muted.Render(strings.TrimRight(" "+says, " ")), w), nil)
+	state := "  " + m.wordInk(o).Render(word) + m.st.muted.Render(strings.TrimRight(" "+says, " "))
+	switch {
+	case whole && o.stacked && o.need: // the track sits at the right of the state line
+		add(m.stateTrack(s, state, w, o))
+	case whole || o.need:
+		add(pad(state, w), nil)
 	}
-	if whole {
+	if whole && (!o.stacked || !o.need) {
 		add(m.cardTrack(s, w, o))
 	}
 	if o.sel {
@@ -96,7 +111,7 @@ func (m Model) boardCard(s sample.Session, w int, o cardOpts) (lines []string, t
 			}
 		}
 	}
-	if o.sel || o.need && !o.oneLine {
+	if o.sel || o.need && !o.oneLine && !o.stacked {
 		add(m.cardKeys(s, w, o, len(q.Options), answers))
 	}
 	return m.washed(lines, w, o), taps
@@ -308,6 +323,18 @@ func (m Model) cardSaid(s sample.Session) (word, says string) {
 // the count's word and the count, then the track's undone stages from the
 // right.
 func (m Model) cardTrack(s sample.Session, w int, o cardOpts) (string, []span) {
+	left, stub := m.trackParts(s, w, o)
+	if stub == "" {
+		return fit(left, w), nil
+	}
+	sw := lipgloss.Width(stub)
+	return spread(left, stub+" ", w), []span{{w - 1 - sw, w - 1, hintFor(m.keys.board.Chain, "").press}}
+}
+
+// trackParts are cardTrack's parts in w cells: the ship, its track and
+// the context after two blanks, and the chain's stub, "" when it does not
+// fit.
+func (m Model) trackParts(s sample.Session, w int, o cardOpts) (left, stub string) {
 	ship, undone := "", 0
 	ships := m.shipsOf(s)
 	mores := []string{m.shipsMore(ships, false), m.shipsMore(ships, true), ""}
@@ -321,16 +348,9 @@ func (m Model) cardTrack(s sample.Session, w int, o cardOpts) (string, []span) {
 		ctx = m.contextStyle(s).Render(fmt.Sprintf("ctx %.0f%%", s.ContextPct))
 		keepCtx = s.ContextPct >= 70 || m.full().Reached(s)
 	}
-	stub := ""
-	if k, ok := m.chainKeyOf(s); ok {
-		glyph, ink := "─╴", m.st.faint
-		if o.lit || o.sel {
-			glyph, ink = "━╸", m.st.text
-		}
-		stub = ink.Render(glyph + m.chainLabel(k))
-	}
+	stub = m.chainStub(s, o)
 	more := 0 // the count as it shows: whole, short, gone
-	left := func(cut int, withCtx bool) string {
+	parts := func(cut int, withCtx bool) string {
 		var parts []string
 		if ship != "" {
 			parts = append(parts, ansi.Truncate(ship, lipgloss.Width(ship)-2*cut, "")+mores[more])
@@ -342,7 +362,7 @@ func (m Model) cardTrack(s sample.Session, w int, o cardOpts) (string, []span) {
 	}
 	cut, withCtx, withStub := 0, true, stub != ""
 	for {
-		l, room := left(cut, withCtx), w
+		l, room := parts(cut, withCtx), w
 		if withStub {
 			room -= lipgloss.Width(stub) + 2
 		}
@@ -359,14 +379,114 @@ func (m Model) cardTrack(s sample.Session, w int, o cardOpts) (string, []span) {
 		case cut < undone:
 			cut++
 		default:
-			return fit(l, w), nil // nothing left to drop: fit cuts it
+			return l, "" // nothing left to drop: fit cuts it
 		}
 	}
 	if !withStub {
-		return fit(left(cut, withCtx), w), nil
+		stub = ""
 	}
-	sw := lipgloss.Width(stub)
-	return spread(left(cut, withCtx), stub+" ", w), []span{{w - 1 - sw, w - 1, hintFor(m.keys.board.Chain, "").press}}
+	return parts(cut, withCtx), stub
+}
+
+// chainStub is the stub of s's chain, "" for a match on no chain: lit
+// while a match of its chain is chosen.
+func (m Model) chainStub(s sample.Session, o cardOpts) string {
+	k, ok := m.chainKeyOf(s)
+	if !ok {
+		return ""
+	}
+	glyph, ink := "─╴", m.st.faint
+	if o.lit || o.sel {
+		glyph, ink = "━╸", m.st.text
+	}
+	return ink.Render(glyph + m.chainLabel(k))
+}
+
+// stateTrack is a NEEDS YOU card's state line in the stack: the state and
+// at its right the track, the context and the chain's stub. The track
+// keeps half the line; the state is cut before it.
+func (m Model) stateTrack(s sample.Session, state string, w int, o cardOpts) (string, []span) {
+	left, stub := m.trackParts(s, w-min(lipgloss.Width(state), w/2)-1, o)
+	right := strings.TrimPrefix(left, "  ")
+	var taps []span
+	if stub != "" {
+		if right != "" {
+			right += "  "
+		}
+		right += stub
+		sw := lipgloss.Width(stub)
+		taps = []span{{w - 1 - sw, w - 1, hintFor(m.keys.board.Chain, "").press}}
+	}
+	if right == "" {
+		return pad(state, w), nil
+	}
+	return spread(state, right+" ", w), taps
+}
+
+// hostTag is the host word after a card's name, "" for this host.
+func (m Model) hostTag(s sample.Session, o cardOpts) string {
+	if !o.otherHost {
+		return ""
+	}
+	return " @" + m.nameOf(s.Host)
+}
+
+// stackRow is a card of WORKING or SHIPPING in the stack, on one row: the
+// match, the name, the harness, the state word and what it says; at the
+// right the context and the chain's stub in WORKING, the track and the
+// wait in SHIPPING.
+func (m Model) stackRow(s sample.Session, w int, o cardOpts, word, says string) (string, []span) {
+	st := m.st
+	name, match := st.text, o.match
+	if o.land == landFire {
+		name = lipgloss.NewStyle().Foreground(m.marks().Core)
+	}
+	if match == "" {
+		match = m.matchCell(s)
+	}
+	who := name.Render(m.cardName(s)) + st.faint.Render(m.hostTag(s, o)) // the names line up, and a long one is whole
+	left := m.chosenMark(o.sel) + match + who + strings.Repeat(" ", max(o.nameW-lipgloss.Width(who), 0)) + " " + st.muted.Render(harnessMark(s)) +
+		"  " + m.wordInk(o).Render(word) + st.muted.Render(strings.TrimRight(" "+says, " "))
+	var parts []string
+	var taps []span
+	if o.ship {
+		if ships := m.shipsOf(s); len(ships) > 0 {
+			sh := ships[0]
+			parts = append(parts, st.muted.Render("#"+strconv.Itoa(sh.Number))+" "+m.trackAt(sh, m.shipSpark(sh)))
+		}
+		wait := padLeft(m.waitCell(s), 3)
+		if o.asOf != "" {
+			wait = "as of " + o.asOf
+		}
+		parts = append(parts, st.faint.Render(wait))
+	} else {
+		ctx, stub := "", m.chainStub(s, o)
+		if s.Context == "known" {
+			ctx = m.contextStyle(s).Render(fmt.Sprintf("ctx %.0f%%", s.ContextPct))
+		}
+		cut := func() bool { // the name side would get under half the row: the stub goes, then ctx
+			right := lipgloss.Width(strings.Join(slices.DeleteFunc([]string{ctx, stub}, func(p string) bool { return p == "" }), "  ")) + 1
+			return w-right-1 < min(lipgloss.Width(left), w/2)
+		}
+		if stub != "" && cut() {
+			stub = ""
+		}
+		if ctx != "" && cut() {
+			ctx = ""
+		}
+		if ctx != "" {
+			parts = append(parts, ctx)
+		}
+		if stub != "" {
+			parts = append(parts, stub)
+			sw := lipgloss.Width(stub)
+			taps = []span{{w - 1 - sw, w - 1, hintFor(m.keys.board.Chain, "").press}}
+		}
+	}
+	if len(parts) == 0 {
+		return pad(left, w), nil
+	}
+	return spread(left, strings.Join(parts, "  ")+" ", w), taps
 }
 
 // chainLabel is the name a chain goes by: its own, else its first match's.

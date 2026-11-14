@@ -1,27 +1,27 @@
  ▰ matchblox · all hosts ▾                                         ● 4 need you
  BOARD 15    machine
 ────────────────────────────────────────────────────────────────────────────────
- NEEDS YOU · 4  −                       WORKING · 3  −       SHIPPING · 3  −
-  ↑ 1 more                              ✦ flint-ui   ✻       ╿ cinder-ci… ❋  2h
- ╿ kindle-web                   ✻  9m    busy Writing the…    merged deploying
-  green #4556 waits for your merge       ctx 40%   ━╸login    #4549 ●━●━●━◉┄○
-  #4556 ●━●━◉┄○┄○  ctx 48%
-  p merge #4556   ⏎ go in               ✦ ember-bil… ✻       ╿ flint-api  ✻ 40m
-                                         agents Three sub…    ci waits for rev…
- ╿ hearth-api                   ✻  4m    ctx 71%              #4560 ●━◉┄○┄○┄○
-  asks The plan changes 2 records an…
-  ctx 31%                               ✦ spark-docs ✻       ╿ hearth-li… ✻  4m
-  ⏎ go in                                busy Running the…    ci CI · 6 of 9 j…
-                                         ctx 22%              #4551 ●━◉┄○┄○┄○
-▌╿ flint-auth                   ✻  2m
-  ╭─ flint-auth ────────────────────╮
-  │ ▌ copy last message           c │
+ NEEDS YOU · 4  −
+ ╿ spark-search                                                           ✻ 31m
+  stuck CI failed · lint, twice                        #4548 ●━✕┄○┄○┄○  ctx 77%
+ ╿ kindle-web                                                             ✻  9m
+  green #4556 waits for your merge                     #4556 ●━●━◉┄○┄○  ctx 48%
+ ╿ hearth-api                                                             ✻  4m
+  asks The plan changes 2 records and removes none.                     ctx 31%
+▌╿ flint-auth                                                             ✻  2m
+  ╭─ flint-auth ────────────────────╮                          ctx 62%  ━╸login
+  │ ▌ copy last message           c │n check is a small patch.”
   │   copy the question             │
   │   copy its name                 │
   │   show only the chain login   g │
   │   go in                       a │
-  │   hide needs you                │
-  ╰─ ⏎ do ─ esc close ──────────────╯
+ W│   hide needs you                │
+ ✦╰─ ⏎ do ─ esc close ──────────────╯ng the test for a token … ctx 40%  ━╸login
+
+ SHIPPING · 3  −
+ ╿ cinder-ci @gpu-1 ❋  merged deploying                    #4549 ●━●━●━◉┄○   2h
+ ╿ flint-api        ✻  ci waits for review                 #4560 ●━◉┄○┄○┄○  40m
+ ╿ hearth-limits    ✻  ci CI · 6 of 9 jobs                 #4551 ●━◉┄○┄○┄○   4m
 ────────────────────────────────────────────────────────────────────────────────
  QUIET · 5   wick-mobile · hearth-notes · ember-reports · kindle-legacy · t… −
  + start a new session

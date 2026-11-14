@@ -350,7 +350,7 @@ func (m Model) tapWaits(x, y int) bool {
 		return true
 	}
 	sp, onSpan := spanAt(d.taps[y], x)
-	return onSpan && sp.press == colQuiet.short()
+	return onSpan && slices.ContainsFunc(boardCols[:], func(c boardCol) bool { return c.short() == sp.press }) // the drawer's name, or a section's
 }
 
 // chosenByHand: s is the chosen card, and the person chose it, by a key

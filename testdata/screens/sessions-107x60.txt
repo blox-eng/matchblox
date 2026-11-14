@@ -1,38 +1,24 @@
  ▰ matchblox                                                                                  ● 6 need you
  BOARD 7    machine
 ───────────────────────────────────────────────────────────────────────────────────────────────────────────
- NEEDS YOU · 6  −                                      WORKING · 1  −             SHIPPING · 0  −
-▌╿ flint-auth                                  ✻  2m   ✦ hearth-api       ✻
-  stuck conflicts with main
-  #4545 ●━✕┄○┄○┄○  ctx 41%
-  “The refresh flow works and the tests pass. One
-  choice is yours before I wire the rotation.”
+ NEEDS YOU · 6  −
+▌╿ flint-auth                                                                                        ✻  2m
+  stuck conflicts with main                                                       #4545 ●━✕┄○┄○┄○  ctx 41%
+  “The refresh flow works and the tests pass. One choice is yours before I wire the rotation.”
   ⏎ go in
+ │ spark-docs                                                                                        ✻  9m
+  done I rewrote the quick start and the install page.                            #4540 ●━●━●━●━●  ctx 88%
+ ╿ ember-billing                                                                                     ✻  4m
+  green #4552 waits for your merge                                                #4552 ●━●━◉┄○┄○  ctx 32%
+ ╿ kindle-web                                                                                        ✻  1m
+  asks Claude needs your permission to use Bash                                                    ctx 56%
+ ╿ cinder-ci                                                                                         ❋  0s
+  done I am moving the cache key to the go.sum hash.                                               ctx 55%
+ ╿ wick-mobile                                                                                       ▣  0s
+  done ⠙ Working                                                                                    ctx 6%
 
- │ spark-docs                                  ✻  9m
-  done I rewrote the quick start and the install pa…
-  #4540 ●━●━●━●━●  ctx 88%
-  ⏎ go in
-
- ╿ ember-billing                               ✻  4m
-  green #4552 waits for your merge
-  #4552 ●━●━◉┄○┄○  ctx 32%
-  p merge #4552   ⏎ go in
-
- ╿ kindle-web                                  ✻  1m
-  asks Claude needs your permission to use Bash
-  ctx 56%
-  ⏎ go in
-
- ╿ cinder-ci                                   ❋  0s
-  done I am moving the cache key to the go.sum hash.
-  ctx 55%
-  ⏎ go in
-
- ╿ wick-mobile                                 ▣  0s
-  done ⠙ Working
-  ctx 6%
-  ⏎ go in
+ WORKING · 1  −
+ ✦ hearth-api     ✻  busy                                                                          ctx 79%
 
 
 
@@ -50,6 +36,20 @@
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+ SHIPPING · 0  −
 
 ───────────────────────────────────────────────────────────────────────────────────────────────────────────
  QUIET · 0   ▴                                                                                          −
@@ -57,4 +57,4 @@
  RECOMMENDATIONS · 7
  ✻ Claude Max  5h ▰▰▰▰▰▰▰▱ 84% · Fri 01:20   wk ▰▰▰▰▰▰▰▱ 82% · Mon 09:00                         machine ›
 ───────────────────────────────────────────────────────────────────────────────────────────────────────────
- ⏎ go in   c copy   v one line   s hosts   u strip   ←→ columns   tab next
+ ⏎ go in   c copy   v one line   s hosts   u strip   ←→ sections   tab next

@@ -1,0 +1,31 @@
+ ▰ matchblox · gpu-1 ▾                                             ● 4 need you
+ BOARD 15    machine
+────────────────────────────────────────────────────────────────────────────────
+ NEEDS YOU · 0  −
+
+ WORKING · 1  −
+▌✦ ember-billing                                                          ✻
+  agents Three subagents read the invoice paths.
+  ctx 71%
+  “Three subagents read the invoice paths.”
+  ⏎ go in
+
+
+
+
+
+
+
+
+
+
+
+ SHIPPING · 1  −
+ ╿ cinder-ci      ❋  merged deploying                      #4549 ●━●━●━◉┄○   2h
+────────────────────────────────────────────────────────────────────────────────
+ QUIET · 2   hearth-notes · tinder-scratch   ▴                               −
+ + start a new session
+ RECOMMENDATIONS · 7
+ ✻ Claude Max @gpu-1  5h ▰▰▰▰▰▰▰▱ 84%  wk 82%                         machine ›
+────────────────────────────────────────────────────────────────────────────────
+ ⏎ go in   c copy   v one line   s hosts   u strip   ←→ sections   tab next

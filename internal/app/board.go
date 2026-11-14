@@ -20,31 +20,28 @@ import (
 // columns at which an agent's menu reads.
 const liveFrom = 152
 
-// boardBase is each column's width: of 80 on Medium, where QUIET is the
-// drawer, and of 104 on Wide.
-var boardBase = map[Layout][4]int{Medium: {38, 20, 20, 0}, Wide: {36, 25, 25, 18}}
+// boardBase is each column's width of 104 on Wide, the only layout with
+// columns side by side: Medium stacks its sections (boardStacked), and a
+// phone shows one column a page.
+var boardBase = [4]int{36, 25, 25, 18}
 
-// boardWidths is the width of each shown column at w, with one cell
-// between two, and the live view's at the right (0 for none). A hidden
-// column gives its room to the others in their proportions; on Wide from
+// boardWidths is the width of each shown column at w on Wide, with one
+// cell between two, and the live view's at the right (0 for none). A
+// hidden column gives its room to the others in their proportions; from
 // liveFrom the columns keep their base widths and the live view takes it.
-func boardWidths(l Layout, w int, shown []boardCol) (cols []int, live int) {
-	return boardWidthsAt(l, w, shown, true)
+func boardWidths(w int, shown []boardCol) (cols []int, live int) {
+	return boardWidthsAt(w, shown, true)
 }
 
 // boardWidthsAt is boardWidths; roomy: the live view has the rows for a
 // menu (menuLeast), else the columns take its room.
-func boardWidthsAt(l Layout, w int, shown []boardCol, roomy bool) (cols []int, live int) {
-	if l == Narrow {
-		return []int{w}, 0
-	}
+func boardWidthsAt(w int, shown []boardCol, roomy bool) (cols []int, live int) {
 	sum := 0
 	for _, c := range shown {
-		if x := boardBase[l][c]; x > 0 {
-			cols, sum = append(cols, x), sum+x
-		}
+		x := boardBase[c]
+		cols, sum = append(cols, x), sum+x
 	}
-	if l == Wide && w >= liveFrom && roomy {
+	if w >= liveFrom && roomy {
 		return cols, w - sum - len(cols)
 	}
 	if len(cols) == 0 {
@@ -82,8 +79,9 @@ type boardDrawn struct {
 	// line under the columns reaches (boardLine.at).
 	doorsAt int
 	underAt map[int]string
-	// colsTo is the line under the columns side by side, and live the
-	// width of the live view at their right (0: none).
+	// colsTo is the line under the columns side by side, or at Medium under
+	// the sections, and live the width of the live view at their right (0:
+	// none).
 	colsTo, live int
 	// roomAt is the room's row on each line the room draws.
 	roomAt map[int]int
@@ -97,14 +95,24 @@ type boardSpot struct {
 
 // boardDraw is what one draw of the board works out once: the columns of
 // the matches the filters show, the open column and its chosen card.
-// none: no match at all, whatever the filters.
+// none: no match at all, whatever the filters. stacked: the columns are
+// the stack at Medium (boardStacked).
 type boardDraw struct {
-	idx    [4][]sample.Session
-	open   boardCol
-	chosen sample.Session
-	picked bool
-	live   int
-	none   bool
+	idx     [4][]sample.Session
+	open    boardCol
+	chosen  sample.Session
+	picked  bool
+	live    int
+	none    bool
+	stacked bool
+	nameW   [4]int  // the stack's widest name and host word in each section
+	oneRow  [4]bool // the stack's section has one row: its chosen card is its row
+}
+
+// otherHost: a card of s names its host, as the board shows every host and
+// s is not on this one.
+func (m Model) otherHost(s sample.Session) bool {
+	return m.hostCount() > 1 && m.boardHost == "" && s.Host != m.opt.Host
 }
 
 // empty: no column has a card.
@@ -160,11 +168,13 @@ func (m Model) boardPanel(w, h int) boardDrawn {
 		d.add(-1, m.allHidden(w)...)
 	case l == Narrow:
 		m.boardPage(&d, &b, shown, w, rows)
-	case l == Medium && slices.Contains(shown, colQuiet): // the talk line closes the columns, over the QUIET drawer
-		m.boardColumns(&d, &b, l, shown, w, rows+len(roomBelow), roomBelow)
+	case l == Medium && slices.Contains(shown, colQuiet): // the talk line closes the sections, over the QUIET drawer
+		m.boardStacked(&d, &b, shown, w, rows+len(roomBelow), roomBelow)
 		rows, roomBelow = rows+len(roomBelow), nil
+	case l == Medium:
+		m.boardStacked(&d, &b, shown, w, rows, nil)
 	default:
-		m.boardColumns(&d, &b, l, shown, w, rows, nil)
+		m.boardColumns(&d, &b, shown, w, rows)
 	}
 	for len(d.lines) < top+rows {
 		d.add(-1, strings.Repeat(" ", w))
@@ -481,35 +491,18 @@ func (m Model) boardPage(d *boardDrawn, b *boardDraw, shown []boardCol, w, rows 
 	}
 }
 
-// boardColumns is the board on a mid screen and a desk: the heads, the
-// columns side by side, from liveFrom the live view at the right, and on
-// Medium the room's talk lines and the QUIET drawer under them.
-func (m Model) boardColumns(d *boardDrawn, b *boardDraw, l Layout, shown []boardCol, w, rows int, talk []roomDrawn) {
+// boardColumns is the board on a desk: the heads, the columns side by
+// side, and from liveFrom the live view at the right.
+func (m Model) boardColumns(d *boardDrawn, b *boardDraw, shown []boardCol, w, rows int) {
 	st := m.st
-	var drawn []boardCol
-	for _, c := range shown {
-		if l == Wide || c != colQuiet {
-			drawn = append(drawn, c)
-		}
-	}
-	widths, live := boardWidthsAt(l, w, shown, rows >= menuLeast)
+	widths, live := boardWidthsAt(w, shown, rows >= menuLeast)
 	b.live, d.live = live, live
-	drawer := 0
-	if l == Medium && slices.Contains(shown, colQuiet) {
-		drawer = 2
-		if b.open == colQuiet {
-			drawer = 2 + quietRows
-		}
-		if b.open != colQuiet && rows-1-drawer-len(talk) < 1 {
-			drawer = 0 // the chosen card's head outranks the shelf
-		}
-	}
-	colH := max(rows-1-drawer-len(talk), 0)
+	colH := max(rows-1, 0)
 
 	var heads []string
 	x := 0
-	for i, c := range drawn {
-		heads = append(heads, m.boardHead(c, len(b.idx[c]), widths[i], c == b.open))
+	for i, c := range shown {
+		heads = append(heads, m.boardHead(c, len(b.idx[c]), 0, widths[i], c == b.open))
 		d.heads = append(d.heads, span{x, x + widths[i], c.short()})
 		x += widths[i] + 1
 	}
@@ -518,8 +511,8 @@ func (m Model) boardColumns(d *boardDrawn, b *boardDraw, l Layout, shown []board
 	first := len(d.lines)
 	d.colsTo = first + colH
 	x = 0
-	for i, c := range drawn {
-		m.boardStack(d, b, c, first, x, widths[i], colH, l == Wide && c == colQuiet)
+	for i, c := range shown {
+		m.boardStack(d, b, c, first, x, widths[i], colH, c == colQuiet)
 		x += widths[i] + 1
 	}
 	if words := m.boardWords(b); words != "" && colH > 0 {
@@ -545,19 +538,12 @@ func (m Model) boardColumns(d *boardDrawn, b *boardDraw, l Layout, shown []board
 	for len(d.lines) < first+colH {
 		d.add(-1, strings.Repeat(" ", w))
 	}
-	for _, t := range talk {
-		d.roomAt[len(d.lines)] = t.at
-		d.addRow(-1, t.sel, w, st, t.text)
-	}
-	if drawer > 0 {
-		m.boardDrawer(d, b, w)
-	}
 }
 
 // quietRows is how many rows the QUIET drawer opens to.
 const quietRows = 6
 
-// boardDrawer is QUIET on Medium, under the columns: one line with the
+// boardDrawer is QUIET on Medium, under the sections: one line with the
 // names, which opens to quietRows rows when the selection is in it.
 func (m Model) boardDrawer(d *boardDrawn, b *boardDraw, w int) {
 	st := m.st
@@ -569,7 +555,7 @@ func (m Model) boardDrawer(d *boardDrawn, b *boardDraw, w int) {
 	}
 	if b.open == colQuiet {
 		d.taps[len(d.lines)] = []span{{0, lipgloss.Width(name) + 3, colQuiet.short()}} // with its −
-		d.add(-1, m.boardHead(colQuiet, len(ss), w, true))
+		d.add(-1, m.boardHead(colQuiet, len(ss), 0, w, true))
 		m.boardStack(d, b, colQuiet, len(d.lines), 0, w, quietRows, true)
 		return
 	}
@@ -586,8 +572,9 @@ func (m Model) boardDrawer(d *boardDrawn, b *boardDraw, w int) {
 }
 
 // boardHead is a column's head: its name, its count once the first state
-// came, and the mark that hides it. The open column's name is fg bold.
-func (m Model) boardHead(c boardCol, n, w int, open bool) string {
+// came, how many cards do not show (more, 0 for none), and the mark that
+// hides it. The open column's name is fg bold.
+func (m Model) boardHead(c boardCol, n, more, w int, open bool) string {
 	name := m.st.faint
 	if open {
 		name = m.st.text.Bold(true)
@@ -595,6 +582,9 @@ func (m Model) boardHead(c boardCol, n, w int, open bool) string {
 	count := ""
 	if m.have {
 		count = " · " + strconv.Itoa(n)
+	}
+	if more > 0 {
+		count += "  ↓ " + strconv.Itoa(more)
 	}
 	return fit(" "+name.Render(c.name())+m.st.faint.Render(count+"  −"), w)
 }
@@ -713,8 +703,12 @@ func (m Model) boardBlockOf(b *boardDraw, c boardCol, s sample.Session, w int, q
 		oneLine:   m.oneLineIn(c),
 		need:      c == colNeed,
 		quietRow:  quietRow,
-		otherHost: m.hostCount() > 1 && m.boardHost == "" && s.Host != m.opt.Host,
+		otherHost: m.otherHost(s),
 		bare:      b.live > 0,
+		stacked:   b.stacked,
+		nameW:     b.nameW[c],
+		oneRow:    b.oneRow[c],
+		ship:      c == colShip,
 	}
 	if armed, sent := m.peekMarks(s); o.sel {
 		o.armed, o.sent = armed, sent
@@ -748,7 +742,7 @@ func (m Model) boardBlockOf(b *boardDraw, c boardCol, s sample.Session, w int, q
 		lines = m.washed(lines, w, o)
 	}
 	bl := boardBlock{key: paneOf(s), lines: lines, taps: taps, n: len(lines)}
-	if !quietRow && (o.sel || !o.oneLine) {
+	if !quietRow && (!o.stacked || !o.need) && (o.sel && !o.oneRow || !o.oneLine) { // the waits sit close, so each one fits; a row has no blank under it
 		bl.lines, bl.taps = append(bl.lines, ""), append(bl.taps, nil)
 	}
 	return bl
