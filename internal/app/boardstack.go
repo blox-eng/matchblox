@@ -123,7 +123,12 @@ func (m Model) boardStacked(d *boardDrawn, b *boardDraw, shown []boardCol, w, ro
 		if sc.h == 1 {
 			more = len(ss) // the head alone: it counts every card
 		}
-		if sc.h == 2 && len(ss) > 1 { // one row: the chosen card, else the first, and the head counts the rest
+		opened, row := 0, 0
+		if sc.c != colNeed {
+			opened, row = m.stackNeeds(b, sc.c, w)
+		}
+		switch {
+		case sc.h == 2 && len(ss) > 1, sc.h > 2 && row > sc.h-1: // one row: the chosen card, else the first, and the head counts the rest
 			one := *b
 			card := ss[0]
 			if b.picked && b.open == sc.c {
@@ -132,6 +137,10 @@ func (m Model) boardStacked(d *boardDrawn, b *boardDraw, shown []boardCol, w, ro
 			one.idx[sc.c] = []sample.Session{card}
 			one.oneRow[sc.c] = true
 			on, more = &one, len(ss)-1
+		case sc.h > 1 && opened > sc.h-1: // the chosen card opened would push a card out uncounted: it is its row
+			one := *b
+			one.oneRow[sc.c] = true
+			on = &one
 		}
 		if d.headAt < 0 {
 			d.headAt = len(d.lines)
@@ -149,6 +158,26 @@ func (m Model) boardStacked(d *boardDrawn, b *boardDraw, shown []boardCol, w, ro
 		d.lines[d.headAt+1] = fit("  "+st.faint.Render(words), w)
 	}
 	m.stackFoot(d, b, w, talk, drawer)
+}
+
+// stackNeeds are the rows the chosen card of section c needs, with the ↑
+// and ↓ marks that count the cards above and under it: opened, and as its
+// row. 0, 0: the section holds no chosen card.
+func (m Model) stackNeeds(b *boardDraw, c boardCol, w int) (opened, row int) {
+	ss := b.idx[c]
+	sel := slices.IndexFunc(ss, func(s sample.Session) bool { return b.picked && b.open == c && paneOf(s) == paneOf(b.chosen) })
+	if sel < 0 {
+		return 0, 0
+	}
+	bl := m.boardBlockOf(b, c, ss[sel], w, false)
+	opened, row = bl.n, 1 // the last card has no blank row under it
+	if sel < len(ss)-1 {
+		opened, row = len(bl.lines)+1, row+1
+	}
+	if sel > 0 {
+		opened, row = opened+1, row+1
+	}
+	return opened, row
 }
 
 // stackFoot is what closes the stack: the room's talk lines, then the

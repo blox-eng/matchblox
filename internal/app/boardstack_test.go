@@ -3,6 +3,7 @@ package app
 import (
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -360,6 +361,69 @@ func TestMediumShortScreensKeepTheNames(t *testing.T) {
 			for _, c := range []boardCol{colNeed, colWork, colShip} {
 				if !strings.Contains(f, c.name()+" · ") {
 					t.Errorf("80x%d, %s chosen: no %s on the screen:\n%s", h, chosen, c.name(), f)
+				}
+			}
+		}
+	}
+}
+
+// stackCounted is how many cards of section c the stack accounts for: each
+// card whose name is on a row under c's head, and each card a ↑ or ↓ mark
+// counts, on the head or on a row.
+func stackCounted(m Model, plain []string, at map[boardCol]int, end int, c boardCol) int {
+	head := at[c]
+	if head < 0 {
+		return 0
+	}
+	to := end
+	for _, other := range at {
+		if other > head && other < to {
+			to = other
+		}
+	}
+	marks := func(l string) int {
+		n := 0
+		f := strings.Fields(l)
+		for i := 0; i+1 < len(f); i++ {
+			if f[i] == "↑" || f[i] == "↓" {
+				k, _ := strconv.Atoi(f[i+1])
+				n += k
+			}
+		}
+		return n
+	}
+	n := marks(plain[head])
+	for _, l := range plain[head+1 : to] {
+		n += marks(l)
+	}
+	for _, s := range m.boardIndex()[c] {
+		if slices.ContainsFunc(plain[head+1:to], func(l string) bool { return strings.Contains(l, s.Name) }) {
+			n++
+		}
+	}
+	return n
+}
+
+// TestMediumCountsEveryCard: whichever card of WORKING or SHIPPING is
+// chosen, each card of each section is on the screen or counted by a ↑ or
+// ↓ mark.
+func TestMediumCountsEveryCard(t *testing.T) {
+	for _, st := range []struct {
+		name string
+		st   proto.State
+	}{{"the fixed fleet", boardFixture(t)}, {"no wait", fewerWaits(boardFixture(t), 0)}} {
+		for _, h := range []int{24, 31} {
+			idx := boardShot(t, st.st, 80, h, nil).boardIndex()
+			for _, c := range []boardCol{colWork, colShip} {
+				for _, s := range idx[c] {
+					m := boardShot(t, st.st, 80, h, chooseCard(s.Name))
+					d, plain, at := sectionHeads(t, m)
+					for _, sc := range []boardCol{colNeed, colWork, colShip} {
+						if got, want := stackCounted(m, plain, at, d.colsTo, sc), len(idx[sc]); got != want {
+							t.Errorf("%s at 80x%d, %s chosen: %s accounts for %d of %d cards:\n%s",
+								st.name, h, s.Name, sc.name(), got, want, strings.Join(plain[:d.colsTo], "\n"))
+						}
+					}
 				}
 			}
 		}

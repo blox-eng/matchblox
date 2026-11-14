@@ -54,8 +54,8 @@ All notable changes to matchblox are in this file. The format follows
   `WORKING` and `SHIPPING` go from top to bottom, each the full width.
   A card that needs you has two lines, and only the chosen one opens its
   quote and its keys. `WORKING` and `SHIPPING` have one row a match, and
-  the chosen one opens. `SHIPPING` stays at the bottom. A section of one
-  row counts its other cards on its head. `←` `→` move between sections.
+  the chosen one opens when its section has the rows. `SHIPPING` stays
+  at the bottom. A section of one row counts its other cards on its head. `←` `→` move between sections.
   ([#406](https://github.com/blox-eng/matchblox/issues/406))
 - **Two tabs: `board` and `machine`.** `Tab` turns them. The Ships tab
   goes: a ship is on its card. The stoker, Git, History and Panes are rows

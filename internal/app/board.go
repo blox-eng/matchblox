@@ -742,7 +742,7 @@ func (m Model) boardBlockOf(b *boardDraw, c boardCol, s sample.Session, w int, q
 		lines = m.washed(lines, w, o)
 	}
 	bl := boardBlock{key: paneOf(s), lines: lines, taps: taps, n: len(lines)}
-	if !quietRow && !(o.stacked && o.need) && (o.sel || !o.oneLine) { // the waits sit close, so each one fits
+	if !quietRow && !(o.stacked && o.need) && (o.sel && !o.oneRow || !o.oneLine) { // the waits sit close, so each one fits; a row has no blank under it
 		bl.lines, bl.taps = append(bl.lines, ""), append(bl.taps, nil)
 	}
 	return bl
