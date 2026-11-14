@@ -226,7 +226,7 @@ func TestGNarrowsToTheChain(t *testing.T) {
 		t.Errorf("[ goes to %q, want login", m.boardChain)
 	}
 	if m = pressOn(m, "esc"); m.boardChain != "" || !slices.Contains(drawnNames(m), "kindle-web") ||
-		!slices.Contains(drawnNames(m), "spark-search") || !slices.Contains(drawnNames(m), "ember-billing") { // matches of no chain, and of docs
+		!slices.Contains(drawnNames(m), "spark-search") || !slices.Contains(drawnNames(m), "cinder-ci") { // matches of no chain, and of docs
 		t.Errorf("esc keeps the chain %q: %v", m.boardChain, drawnNames(m))
 	}
 
