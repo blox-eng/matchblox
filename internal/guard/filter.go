@@ -52,6 +52,9 @@ const (
 	// a hold waits up to printWait after a clear, for its print to begin.
 	settleFor = 600 * time.Millisecond
 	printWait = 2 * time.Second
+	// quietCap bounds a hold that a width change starts. It keeps every
+	// byte, as it may hold no replay; past the cap it passes them.
+	quietCap = 16 << 20
 	// holdCap ends a hold that never goes quiet: the pane then shows what
 	// comes, as without a guard.
 	holdCap = 60 * time.Second
@@ -81,6 +84,16 @@ type Filter struct {
 	winAt    time.Time // when the window that counts winLines began
 	winLines int       // lines of the replay in that window
 	winText  int       // bytes of text, not of escape sequences, in that window
+	printed  int       // lines since the replay's last clear
+	text     int       // bytes of text, not of escape sequences, since then
+	modes    []mode    // the modes set in a quiet hold, where they are in its tail
+}
+
+// mode is a mode the agent set in a quiet hold, and where in the hold's
+// tail it is: a replay drops what came before its clear, but not the modes.
+type mode struct {
+	at  int
+	seq []byte
 }
 
 // NewFilter is a Filter that writes to out and reads the time from now.
@@ -108,7 +121,7 @@ func (f *Filter) Resized() {
 	if f.holding || f.quiet {
 		return
 	}
-	f.quiet, f.tail, f.seq, f.winLines, f.winText = true, nil, nil, 0, 0
+	f.quiet, f.tail, f.seq, f.modes, f.winLines, f.winText, f.text = true, nil, nil, nil, 0, 0, 0
 	f.heldAt, f.winAt, f.lastAt = now, now, now
 	pend := f.pend
 	f.pend = nil
@@ -140,7 +153,7 @@ func (f *Filter) write(p []byte) error {
 		if _, err := f.out.Write(append(data[:i:i], ClearCodes+Notice...)); err != nil {
 			return err
 		}
-		f.holding, f.tail, f.seq, f.winLines, f.winText = true, nil, nil, 0, 0
+		f.holding, f.tail, f.seq, f.winLines, f.winText, f.printed, f.text = true, nil, nil, 0, 0, 0, 0
 		f.heldAt, f.winAt, f.clearAt = now, now, now
 		return f.hold(data[i+len(ClearCodes):])
 	}
@@ -163,8 +176,10 @@ func (f *Filter) hold(p []byte) error {
 		if len(f.seq) == 0 && b != 0x1b {
 			if b == '\n' {
 				f.winLines++
+				f.printed++
 			}
 			f.winText++
+			f.text++
 			f.tail = append(f.tail, b)
 			continue
 		}
@@ -186,20 +201,55 @@ func (f *Filter) hold(p []byte) error {
 			}
 			return f.write(rest)
 		}
-		if whole && toTerminal(f.seq) {
+		switch {
+		case whole && toTerminal(f.seq) && f.quiet && !query(f.seq):
+			// In its place: the hold may hold no replay, and then it comes
+			// out as it went in.
+			f.modes = append(f.modes, mode{len(f.tail), slices.Clone(f.seq)})
+			f.tail = append(f.tail, f.seq...)
+		case whole && toTerminal(f.seq):
 			pass = append(pass, f.seq...)
-		} else {
+		default:
 			f.tail = append(f.tail, f.seq...)
 		}
 		f.seq = f.seq[:0]
 	}
 	if i := bytes.LastIndex(f.tail, []byte(ClearCodes)); i >= 0 {
-		f.tail = f.tail[i+len(ClearCodes):]
-		f.clearAt = f.now()
-		if f.quiet { // the hold a width change started is a replay: what came before the clear, the clear erases
-			f.quiet, f.holding = false, true
-			pass = append([]byte(ClearCodes+Notice), pass...)
+		from := i + len(ClearCodes)
+		kept := f.tail[from:]
+		if f.quiet {
+			// The hold a width change started is a replay. What came before
+			// the clear, the clear erases, but not the modes set in it; those
+			// set after it pass at once, as in any replay.
+			head := []byte(ClearCodes + Notice)
+			kept = nil
+			at := from
+			for _, m := range f.modes {
+				if m.at >= from {
+					kept = append(kept, f.tail[at:m.at]...)
+					at = m.at + len(m.seq)
+				}
+				head = append(head, m.seq...)
+			}
+			kept = append(kept, f.tail[at:]...)
+			f.quiet, f.holding, f.modes = false, true, nil
+			pass = append(head, pass...)
 		}
+		f.tail = kept
+		f.clearAt, f.printed, f.text = f.now(), bytes.Count(f.tail, []byte("\n")), plainLen(f.tail)
+	}
+	if f.quiet {
+		if len(f.tail) > quietCap {
+			if _, err := f.out.Write(pass); err != nil {
+				return err
+			}
+			return f.release()
+		}
+		if len(pass) == 0 {
+			return nil
+		}
+		_, err := f.out.Write(pass)
+		return err
 	}
 	from := 0
 	if over := len(f.tail) - tailBytes; over > 0 {
@@ -280,6 +330,33 @@ func toTerminal(seq []byte) bool {
 	return false
 }
 
+// plainLen is how many bytes of b are text, outside escape sequences.
+func plainLen(b []byte) int {
+	n := 0
+	for i := 0; i < len(b); {
+		if b[i] != 0x1b {
+			n++
+			i++
+			continue
+		}
+		j := i + 2
+		for ; j <= len(b); j++ {
+			if whole, known := sequence(b[i:j]); whole || !known {
+				break
+			}
+		}
+		i = j
+	}
+	return n
+}
+
+// query tells if a sequence that toTerminal passes asks the terminal for
+// an answer: the agent waits for it, so it passes at once.
+func query(seq []byte) bool {
+	final := seq[len(seq)-1]
+	return seq[1] == ']' || seq[1] == 'P' || (seq[1] == '[' && (final == 'n' || final == 'c' || final == 't'))
+}
+
 // otherScreen tells if a whole escape sequence switches to or from the
 // alternate screen.
 func otherScreen(seq []byte) bool {
@@ -304,17 +381,20 @@ func (f *Filter) Tick() error {
 			slow = f.winText > 0 && f.winLines < replayLines // a stream, not a print
 			f.winAt, f.winLines, f.winText = now, 0, 0
 		}
+		// After a clear, until its print has begun: words that come first
+		// are no end of the replay.
+		before := f.holding && f.printed < replayLines && now.Sub(f.clearAt) < printWait
 		wait := quietFor
 		if f.quiet {
 			wait = settleFor
 		}
 		switch {
 		case now.Sub(f.heldAt) >= holdCap:
-		case f.holding && len(f.tail) == 0 && len(f.seq) == 0: // a clear, and its print has not begun
-			if now.Sub(f.clearAt) < printWait {
-				return nil
-			}
-		case !slow && now.Sub(f.lastAt) < wait:
+		case before && f.text == 0 && len(f.seq) == 0: // no text yet: codes are no print
+			return nil
+		case before && now.Sub(f.lastAt) < quietFor:
+			return nil
+		case !before && !slow && now.Sub(f.lastAt) < wait:
 			return nil
 		}
 		return f.release()
@@ -335,7 +415,7 @@ func (f *Filter) release() error {
 	if f.holding {
 		end = append([]byte(ClearCodes+"\x1b[0m"), end...)
 	}
-	f.holding, f.quiet, f.tail, f.seq = false, false, nil, nil
+	f.holding, f.quiet, f.tail, f.seq, f.modes = false, false, nil, nil, nil
 	_, err := f.out.Write(end)
 	return err
 }

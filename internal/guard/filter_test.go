@@ -335,7 +335,7 @@ func TestFilterHoldLosesNoByte(t *testing.T) {
 		f.Arm()
 		writeIn(t, f, []byte(ClearCodes), 9)
 		writeIn(t, f, in, 1+rng.Intn(16))
-		c.t = c.t.Add(quietFor)
+		c.t = c.t.Add(printWait) // the longest a hold waits for a print to begin
 		if err := f.Tick(); err != nil {
 			t.Fatal(err)
 		}
@@ -493,5 +493,116 @@ func TestFilterSmallRedrawAfterResize(t *testing.T) {
 	tickFor(t, f, c, quietFor+50*time.Millisecond)
 	if !bytes.Equal(out.Bytes(), in) || f.Holding() {
 		t.Fatalf("a small redraw after a resize came out as %q (holding %v), want %q", out.Bytes(), f.Holding(), in)
+	}
+}
+
+// TestFilterTokensBeforeReplayPrint: a few bytes between Cursor's clear and
+// its print, such as streamed words, do not end the hold before the print.
+func TestFilterTokensBeforeReplayPrint(t *testing.T) {
+	var out bytes.Buffer
+	c := newClock()
+	f := NewFilter(&out, c.now)
+	f.Resized()
+	writeIn(t, f, burst("first", 1620), 8190)
+	tickFor(t, f, c, 250*time.Millisecond)
+	writeIn(t, f, []byte(ClearCodes), 11)
+	for range 20 {
+		writeIn(t, f, []byte("tok "), 4)
+		tickFor(t, f, c, 25*time.Millisecond)
+	}
+	writeIn(t, f, burst("second", 1620), 8190)
+	tickFor(t, f, c, time.Second)
+	got := out.String()
+	if strings.Contains(got, "second 1|") || strings.Count(got, "\n") != tailLines {
+		t.Fatalf("with words between the clear and the print, the pane got the print's start: %v, %d lines; want only its last %d", strings.Contains(got, "second 1|"), strings.Count(got, "\n"), tailLines)
+	}
+}
+
+// TestFilterQuietHoldKeepsOrder: a hold that a width change starts, and that
+// turns out to hold no replay, gives the pane its bytes in their order: a
+// cursor shown or hidden, or a switch of screen, comes where the agent put it.
+func TestFilterQuietHoldKeepsOrder(t *testing.T) {
+	for _, in := range []string{
+		"abc\x1b[?25ldef\x1b[?25hghi",
+		"abc\x1b[?25ldef\x1b[?1049hpicker",
+	} {
+		var out bytes.Buffer
+		c := newClock()
+		f := NewFilter(&out, c.now)
+		f.Resized()
+		writeIn(t, f, []byte(in), 3)
+		tickFor(t, f, c, time.Second)
+		if out.String() != in {
+			t.Fatalf("a quiet hold of %q gave the pane %q", in, out.String())
+		}
+	}
+}
+
+// TestFilterQuietHoldModesReachAReplay: a mode set in the print before the
+// clear still reaches the terminal, though that print never shows.
+func TestFilterQuietHoldModesReachAReplay(t *testing.T) {
+	var out bytes.Buffer
+	c := newClock()
+	f := NewFilter(&out, c.now)
+	f.Resized()
+	writeIn(t, f, append([]byte("\x1b[?2004h"), burst("first", 1200)...), 4096)
+	tickFor(t, f, c, 250*time.Millisecond)
+	writeIn(t, f, append([]byte(ClearCodes), burst("second", 1200)...), 4096)
+	tickFor(t, f, c, time.Second)
+	got := out.String()
+	if strings.Count(got, "\x1b[?2004h") != 1 || strings.Contains(got, "first ") {
+		t.Fatalf("the mode set before the clear reached the pane %d times, the first print shows: %v; want once and no", strings.Count(got, "\x1b[?2004h"), strings.Contains(got, "first "))
+	}
+}
+
+// TestFilterSettlesForCursorsPause: Cursor's clear can come more than
+// quietFor after its first print; the hold a width change starts waits
+// settleFor, so that print still never shows.
+func TestFilterSettlesForCursorsPause(t *testing.T) {
+	var out bytes.Buffer
+	c := newClock()
+	f := NewFilter(&out, c.now)
+	f.Resized()
+	writeIn(t, f, burst("first", 1620), 8190)
+	tickFor(t, f, c, 400*time.Millisecond)
+	writeIn(t, f, append([]byte(ClearCodes), burst("second", 1620)...), 8190)
+	tickFor(t, f, c, time.Second)
+	if got := out.String(); strings.Contains(got, "first ") {
+		t.Fatalf("with 400 ms between the print and the clear, %d lines of the first print reached the pane", strings.Count(got, "first "))
+	}
+}
+
+// TestFilterQuietHoldKeepsEveryByte: a width change after which the agent
+// prints a long text with no clear, so no replay, gives the pane every byte
+// of it: nothing is cut from the scrollback.
+func TestFilterQuietHoldKeepsEveryByte(t *testing.T) {
+	var out bytes.Buffer
+	c := newClock()
+	f := NewFilter(&out, c.now)
+	f.Resized()
+	in := burst("out", 1500)
+	writeIn(t, f, in, 4096)
+	tickFor(t, f, c, time.Second)
+	if !bytes.Equal(out.Bytes(), in) {
+		t.Fatalf("1,500 lines with no clear after a resize gave the pane %d lines, the first: %v; want all of them, as they came", strings.Count(out.String(), "\n"), strings.Contains(out.String(), "out 1|"))
+	}
+}
+
+// TestFilterCodesAfterClearAreNoPrint: what Cursor sends right after its
+// clear, a mode set or a style, is not its print beginning: the pause after
+// it still holds (measured on a wider pane, #402).
+func TestFilterCodesAfterClearAreNoPrint(t *testing.T) {
+	for _, after := range []string{"\x1b[?25l", "\x1b[0m", "\x1b[?2026h\x1b[1;1H"} {
+		var out bytes.Buffer
+		c := newClock()
+		f := NewFilter(&out, c.now)
+		f.Resized()
+		writeIn(t, f, []byte(ClearCodes+after), 64)
+		tickFor(t, f, c, 360*time.Millisecond)
+		writeIn(t, f, burst("chat", 1621), 8190)
+		tickFor(t, f, c, time.Second)
+		if got := out.String(); strings.Contains(got, "chat 1|") || strings.Count(got, "\n") != tailLines {
+			t.Fatalf("with %q after the clear, the pane got the chat's start: %v, %d lines; want only the last %d", after, strings.Contains(got, "chat 1|"), strings.Count(got, "\n"), tailLines)
+		}
 	}
 }

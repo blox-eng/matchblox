@@ -13,7 +13,7 @@ All notable changes to matchblox are in this file. The format follows
   whole chat once with no clear before it, clears 0.25 s later, and prints
   it again 0.5 s after that. The guard of v0.44.0 held neither print. It now
   holds from the width change itself and waits out Cursor's pause. On a
-  chat of 1,600 lines, going from 216 to 180 columns sent 267 kB to the pane
+  chat of 1,600 lines, going from 216 to 180 columns sent 289 kB to the pane
   without the guard and 87 kB with it; the last screen is the same.
 
 ## [0.44.0] - 2026-11-14

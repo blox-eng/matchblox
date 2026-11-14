@@ -384,7 +384,7 @@ func TestGuardInTmux(t *testing.T) {
 		t.Helper()
 		deadline := time.Now().Add(20 * time.Second)
 		for last := -1; ; {
-			time.Sleep(400 * time.Millisecond) // over the guard's end window
+			time.Sleep(700 * time.Millisecond) // over the guard's longest wait for quiet, settleFor
 			direct, guarded = tmux("capture-pane", "-p", "-t", "direct"), tmux("capture-pane", "-p", "-t", "guarded")
 			size := len(printed("direct")) + len(printed("guarded"))
 			box := strings.TrimRight("│ → "+typed, " ")
