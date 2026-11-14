@@ -14,10 +14,10 @@ import (
 // 2026-11-14). NEEDS YOU takes its cards and its head first, but leaves 2
 // rows to each other section shown. A blank row sits between sections and
 // is the first to go when rows are short. SHIPPING sits at the bottom with
-// its head and a row for each of its ships matches, but only 3 rows when
-// WORKING's works matches do not fit too. WORKING takes the rest, so its
-// head moves only with NEEDS YOU, and SHIPPING's only with ships as well.
-func stackRows(need, works, ships, rows int, work, ship bool) (needH, workH, shipH, gaps int) {
+// its head and a row for each of its ships matches, 3 at most. WORKING
+// takes the rest, so its head moves only with NEEDS YOU, and SHIPPING's
+// only with NEEDS YOU and a count of ships under 4.
+func stackRows(need, ships, rows int, work, ship bool) (needH, workH, shipH, gaps int) {
 	shown := 0
 	if work {
 		shown++
@@ -39,11 +39,7 @@ func stackRows(need, works, ships, rows int, work, ship bool) (needH, workH, shi
 		workH = min(rest, 2)
 		shipH = rest - workH
 	case work && ship:
-		shipH = 1 + max(ships, 1)
-		if 1+max(works, 1)+shipH > rest {
-			shipH = min(shipH, 4) // WORKING does not fit: SHIPPING keeps 3 rows
-		}
-		shipH = min(shipH, rest-2)
+		shipH = min(1+max(min(ships, 3), 1), rest-2)
 		workH = rest - shipH
 	case work:
 		workH = rest
@@ -81,7 +77,7 @@ func (m Model) boardStacked(d *boardDrawn, b *boardDraw, shown []boardCol, w, ro
 			}
 		}
 	}
-	needH, workH, shipH, gaps := stackRows(need, len(b.idx[colWork]), len(b.idx[colShip]), sec, slices.Contains(shown, colWork), slices.Contains(shown, colShip))
+	needH, workH, shipH, gaps := stackRows(need, len(b.idx[colShip]), sec, slices.Contains(shown, colWork), slices.Contains(shown, colShip))
 	for _, c := range []boardCol{colWork, colShip} {
 		b.nameW[c] = 14
 		for _, s := range b.idx[c] {

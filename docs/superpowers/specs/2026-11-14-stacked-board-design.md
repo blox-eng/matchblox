@@ -22,6 +22,7 @@ All dated 2026-11-14.
 - `QUIET` stays the drawer under the sections, as today.
 - The chosen card in `NEEDS YOU` opens its peek, so a move of the selection there moves the sections under it. That move is the owner's own act, not one "by itself". The mockup did the same.
 - `SHIPPING` sits at the bottom and gets its own rows: its head and one row for each ship (owner, 2026-11-14). This replaces a fixed 3 to 2 split, which left rows blank in one section while the other was cut.
+- Ruling (2026-11-14): the rows of `SHIPPING` do not depend on `WORKING`. `SHIPPING` always takes its head and one row for each ship, 3 rows at most. With more than 3 ships, the third row is `↓ N more`. Rows that `WORKING` does not use stay blank under its cards. So the head of `SHIPPING` moves only when the rows of `NEEDS YOU` change, or when the count of ships changes under 4.
 
 ## Non-goals
 
@@ -53,9 +54,9 @@ A section's head is its own line, with its tap span over the name and the `−`.
 
 ### Who gets the rows
 
-`NEEDS YOU` gets the rows of all its cards first, with the chosen card open. When `NEEDS YOU` alone does not fit, it takes all rows but 4 and scrolls; `WORKING` and `SHIPPING` keep 2 rows each. `SHIPPING` sits at the bottom of the rows. It gets its head and one row for each ship. When the cards of `WORKING` do not all fit too, `SHIPPING` gets its head and 3 rows at most. `WORKING` gets the rest, between `NEEDS YOU` and `SHIPPING`; its blank rows are under its cards (owner, 2026-11-14). So no section has blank rows while the other ends in `↓ N more`. A section that does not fit ends in `↓ N more`, and scrolls so that the chosen card is whole, as a column does today. A section of one row and more cards shows the chosen card, else the first, and its head counts the others: `SHIPPING · 3  ↓ 2  −`.
+`NEEDS YOU` gets the rows of all its cards first, with the chosen card open. When `NEEDS YOU` alone does not fit, it takes all rows but 4 and scrolls; `WORKING` and `SHIPPING` keep 2 rows each. `SHIPPING` sits at the bottom of the rows. It gets its head and one row for each ship, 3 rows at most (Ruling, 2026-11-14). `WORKING` gets the rest, between `NEEDS YOU` and `SHIPPING`; its blank rows are under its cards (owner, 2026-11-14). A section that does not fit ends in `↓ N more`, and scrolls so that the chosen card is whole, as a column does today. A section of one row and more cards shows the chosen card, else the first, and its head counts the others: `SHIPPING · 3  ↓ 2  −`.
 
-So the head of `WORKING` moves only when the rows of `NEEDS YOU` change: a change the owner makes, or the news the owner wants. The head of `SHIPPING` moves also when the count of ships changes. A match that starts work or stops it moves nothing.
+So the head of `WORKING` moves only when the rows of `NEEDS YOU` change: a change the owner makes, or the news the owner wants. The head of `SHIPPING` moves also when the count of ships changes under 4. A match that starts work or stops it moves nothing.
 
 A hidden section gives its rows to the others. A blank row goes first when rows are short, then the gap under the heads.
 

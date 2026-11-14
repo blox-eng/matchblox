@@ -17,55 +17,42 @@ import (
 func TestStackRowsGivesShippingItsShips(t *testing.T) {
 	tests := []struct {
 		name                          string
-		need, works, ships, rows      int
+		need, ships, rows             int
 		work, ship                    bool
 		needH, workH, shipH, wantGaps int
 	}{
-		{"every section fits: shipping takes a row a ship", 9, 3, 3, 21, true, true, 10, 5, 4, 2},
-		{"working does not fit: shipping keeps its 3 ships", 9, 13, 3, 21, true, true, 10, 5, 4, 2},
-		{"working does not fit: shipping stops at 3 rows", 9, 13, 6, 21, true, true, 10, 5, 4, 2},
-		{"working fits: shipping takes all its ships", 9, 1, 6, 21, true, true, 10, 2, 7, 2},
-		{"an empty shipping keeps its head and a row", 9, 3, 0, 21, true, true, 10, 7, 2, 2},
-		{"needs you that does not fit leaves two rows each", 30, 13, 3, 21, true, true, 17, 2, 2, 0},
-		{"one shown section takes the rest", 9, 3, 0, 21, true, false, 10, 10, 0, 1},
-		{"only shipping shown takes the rest", 9, 0, 3, 21, false, true, 10, 0, 10, 1},
-		{"hidden needs you gives its rows to working", 0, 3, 3, 21, true, true, 0, 16, 4, 1},
-		{"neither section shown leaves needs you the rows", 30, 0, 0, 21, false, false, 21, 0, 0, 0},
-		{"one shown section keeps two rows when needs you is long", 30, 3, 0, 21, true, false, 19, 2, 0, 0},
-		{"short of rows each section keeps what it can", 9, 3, 3, 5, true, true, 2, 2, 1, 0},
+		{"shipping takes a row a ship", 9, 3, 21, true, true, 10, 5, 4, 2},
+		{"shipping stops at 3 rows", 9, 6, 21, true, true, 10, 5, 4, 2},
+		{"one ship takes one row", 9, 1, 21, true, true, 10, 7, 2, 2},
+		{"an empty shipping keeps its head and a row", 9, 0, 21, true, true, 10, 7, 2, 2},
+		{"needs you that does not fit leaves two rows each", 30, 3, 21, true, true, 17, 2, 2, 0},
+		{"one shown section takes the rest", 9, 0, 21, true, false, 10, 10, 0, 1},
+		{"only shipping shown takes the rest", 9, 3, 21, false, true, 10, 0, 10, 1},
+		{"hidden needs you gives its rows to working", 0, 3, 21, true, true, 0, 16, 4, 1},
+		{"neither section shown leaves needs you the rows", 30, 0, 21, false, false, 21, 0, 0, 0},
+		{"one shown section keeps two rows when needs you is long", 30, 0, 21, true, false, 19, 2, 0, 0},
+		{"short of rows each section keeps what it can", 9, 3, 5, true, true, 2, 2, 1, 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			needH, workH, shipH, gaps := stackRows(tt.need, tt.works, tt.ships, tt.rows, tt.work, tt.ship)
+			needH, workH, shipH, gaps := stackRows(tt.need, tt.ships, tt.rows, tt.work, tt.ship)
 			if needH != tt.needH || workH != tt.workH || shipH != tt.shipH || gaps != tt.wantGaps {
-				t.Fatalf("stackRows(%d, %d, %d, %d, %v, %v) = %d, %d, %d, %d; want %d, %d, %d, %d",
-					tt.need, tt.works, tt.ships, tt.rows, tt.work, tt.ship, needH, workH, shipH, gaps,
+				t.Fatalf("stackRows(%d, %d, %d, %v, %v) = %d, %d, %d, %d; want %d, %d, %d, %d",
+					tt.need, tt.ships, tt.rows, tt.work, tt.ship, needH, workH, shipH, gaps,
 					tt.needH, tt.workH, tt.shipH, tt.wantGaps)
 			}
-			if sum := needH + workH + shipH + gaps; tt.work || tt.ship {
-				if sum != tt.rows {
-					t.Errorf("the sections take %d of %d rows", sum, tt.rows)
-				}
+			if sum := needH + workH + shipH + gaps; (tt.work || tt.ship) && sum != tt.rows {
+				t.Errorf("the sections take %d of %d rows", sum, tt.rows)
 			}
 		})
 	}
 }
 
-func TestStackRowsMovesWorkingOnlyWithNeedsYou(t *testing.T) {
-	for _, works := range []int{0, 1, 3, 13, 40} {
-		for _, ships := range []int{0, 1, 3, 6} {
-			needH, _, _, gaps := stackRows(9, works, ships, 21, true, true)
-			if needH != 10 || gaps != 2 {
-				t.Errorf("%d working, %d ships: WORKING's head moved (%d, %d)", works, ships, needH, gaps)
-			}
-		}
-	}
-	for _, ships := range []int{0, 1, 3} { // up to 3 ships, the count at work moves nothing
-		_, _, want, _ := stackRows(9, 0, ships, 21, true, true)
-		for _, works := range []int{1, 3, 13, 40} {
-			if _, _, shipH, _ := stackRows(9, works, ships, 21, true, true); shipH != want {
-				t.Errorf("%d ships: SHIPPING's rows moved with %d working: %d, want %d", ships, works, shipH, want)
-			}
+func TestStackRowsMovesShippingOnlyUnderFourShips(t *testing.T) {
+	_, _, want, _ := stackRows(9, 3, 21, true, true)
+	for _, ships := range []int{4, 5, 13} {
+		if _, _, shipH, _ := stackRows(9, ships, 21, true, true); shipH != want {
+			t.Errorf("%d ships take %d rows, want %d as 3 do", ships, shipH, want)
 		}
 	}
 }
@@ -213,9 +200,37 @@ func TestMediumHeadsHoldStill(t *testing.T) {
 			t.Errorf("%s: the heads moved from %v to %v", c.name, want, got)
 		}
 	}
-	got := heads(ships, nil)
-	if got[colNeed] != want[colNeed] || got[colWork] != want[colWork] || got[colShip] != want[colShip]-1 {
-		t.Errorf("a match moves from WORKING to SHIPPING: the heads are %v, want %v with SHIPPING a row up for its new ship", got, want)
+	if got := heads(ships, nil); !maps.Equal(got, want) { // the fourth ship: SHIPPING keeps its 3 rows
+		t.Errorf("a match moves from WORKING to SHIPPING: the heads moved from %v to %v", want, got)
+	}
+	two := base
+	two.Sessions = slices.DeleteFunc(slices.Clone(base.Sessions), func(s sample.Session) bool { return s.Name == "hearth-limits" })
+	sh2 := *base.Ships
+	sh2.Ships = slices.DeleteFunc(slices.Clone(sh2.Ships), func(sh proto.Ship) bool { return sh.Session.Name == "hearth-limits" })
+	two.Ships = &sh2
+	if got := heads(two, nil); got[colNeed] != want[colNeed] || got[colWork] != want[colWork] || got[colShip] != want[colShip]+1 {
+		t.Errorf("a ship goes, 3 to 2: the heads are %v, want %v with SHIPPING a row down", got, want)
+	}
+	five := base // more than 3 ships: SHIPPING keeps its rows whatever WORKING holds
+	sh5 := *base.Ships
+	for i, name := range []string{"ember-tax", "wick-push"} {
+		ship := boardMatch(name, time.Hour)
+		ship.Context, ship.ContextPct = "known", 30
+		five.Sessions = append(slices.Clone(five.Sessions), ship)
+		sh5.Ships = append(slices.Clone(sh5.Ships), shipFor(ship, 4571+i, shipRunning, "CI · 1 of 9 jobs", 1, time.Minute))
+	}
+	five.Ships = &sh5
+	fiveMore, fiveFewer := five, five
+	fiveMore.Sessions = append(slices.Clone(five.Sessions), extra)
+	fiveFewer.Sessions = slices.DeleteFunc(slices.Clone(five.Sessions), func(s sample.Session) bool { return s.Name == "spark-docs" })
+	wantFive := heads(five, nil)
+	if _, plain, _ := sectionHeads(t, boardShot(t, five, 80, 31, nil)); !strings.HasPrefix(strings.TrimSpace(plain[wantFive[colShip]]), "SHIPPING · 5") {
+		t.Fatalf("the fleet of five ships has %q", plain[wantFive[colShip]])
+	}
+	for name, st := range map[string]proto.State{"gains": fiveMore, "loses": fiveFewer} {
+		if got := heads(st, nil); !maps.Equal(got, wantFive) {
+			t.Errorf("5 ships, WORKING %s a match: the heads moved from %v to %v", name, wantFive, got)
+		}
 	}
 	if a, b := heads(base, chooseCard("flint-ui")), heads(base, chooseCard("spark-docs")); !maps.Equal(a, b) {
 		t.Errorf("the selection moved in WORKING: the heads moved from %v to %v", a, b)
