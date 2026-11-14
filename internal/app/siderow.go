@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"strconv"
 
 	"charm.land/lipgloss/v2"
@@ -35,11 +36,13 @@ func linkOf(i, n int, twoLines bool) (first, rest string) {
 func (m Model) sideRow(s sample.Session, w int, chosen bool, link sideLink) []string {
 	h := m.sideStateOf(s)
 	word, says := m.cardSays(s)
-	if says == "" && h == sideNeed {
-		says = word
-	}
-	if h == sideHeld {
+	switch {
+	case h == sideHeld:
 		says = m.heldWhy(s)
+	case says == "" && h == sideNeed:
+		says = cmp.Or(m.askedOf(s), word)
+	case says == "":
+		says = word
 	}
 	two := says != "" && (h == sideNeed || chosen)
 
@@ -96,4 +99,16 @@ func (m Model) chainHead(u sideUnit, w int, lit bool) string {
 	}
 	left := " " + name.Render(ansi.Truncate("≋ "+m.chainLabel(u.chain), max(w-lipgloss.Width(right)-2, 1), "…"))
 	return spread(left, m.st.muted.Render(right)+" ", w)
+}
+
+// askedOf is what a session asks, whether or not a hold covers it.
+func (m Model) askedOf(s sample.Session) string {
+	switch q, _ := m.headAsks(s); {
+	case s.Ask != nil && len(s.Ask.Questions) > 0:
+		return s.Ask.Questions[0].Question
+	case s.WaitingFor != "":
+		return s.WaitingFor
+	default:
+		return q
+	}
 }

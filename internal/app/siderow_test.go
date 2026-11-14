@@ -10,6 +10,7 @@ import (
 
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/queue"
+	"github.com/blox-eng/matchblox/internal/said"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
@@ -56,6 +57,33 @@ func TestHeldRowSaysWhyWhenChosen(t *testing.T) {
 	got := plainLines(m.sideRow(s, 50, true, sideLink{}))
 	if len(got) != 2 || !strings.Contains(got[1], "parked by you") {
 		t.Fatalf("held row %q, want its reason", got)
+	}
+}
+
+func TestChosenRowWithNothingSaidStillHasASecondLine(t *testing.T) {
+	m := boardModel(t, boardState(boardMatch("hearth-api", time.Hour)))
+	s := m.all.sessions[0]
+	s.LastLine = ""
+	got := plainLines(m.sideRow(s, 40, true, sideLink{}))
+	if len(got) != 2 || strings.TrimSpace(got[1]) == "" {
+		t.Fatalf("chosen row %q, want a second line with the state word", got)
+	}
+}
+
+func TestHeldSessionThatAsksShowsItsQuestion(t *testing.T) {
+	s := boardMatch("flint-auth", time.Hour)
+	s.Ask = &said.Ask{ID: "toolu_a", Questions: []said.Question{{Question: "Do I skip the lint?"}}}
+	s.Asks, s.Reported, s.Status = true, true, "waiting"
+	st := boardState(s)
+	st.Holds = append(st.Holds, proto.Hold{SessionID: s.SessionID, Pane: s.Pane, Name: s.Name, By: "stoker", Why: "not the priority"})
+	m := boardModel(t, st)
+	s = m.all.sessions[0]
+	if m.sideStateOf(s) != sideNeed {
+		t.Skipf("fixture state is %v, not NEEDS YOU", m.sideStateOf(s))
+	}
+	got := plainLines(m.sideRow(s, 50, false, sideLink{}))
+	if len(got) != 2 || !strings.Contains(got[1], "Do I skip the lint?") {
+		t.Fatalf("row %q, want the question", got)
 	}
 }
 
@@ -156,7 +184,27 @@ func TestSideMatchHasAGlyphForEachState(t *testing.T) {
 func TestRowFitsItsWidth(t *testing.T) {
 	m, a := needsYou(t)
 	a.Agent = "cursor"
+	rows := []Model{m}
+	subjects := []sample.Session{a}
+	ship := boardMatch("hearth-api", time.Hour)
+	sst := boardState(ship)
+	sst.Ships.Ships = append(sst.Ships.Ships, shipFor(ship, 4551, shipRunning, "CI runs", 1, time.Hour))
+	sm := boardModel(t, sst)
+	rows, subjects = append(rows, sm), append(subjects, sm.all.sessions[0])
+	hm, _ := twoHostBoard(t, 120, "flint-auth")
+	for _, s := range hm.all.sessions {
+		if s.Host != hm.opt.Host {
+			rows, subjects = append(rows, hm), append(subjects, s)
+		}
+	}
 	for w := 24; w <= 60; w++ {
+		for i := range rows {
+			for _, l := range rows[i].sideRow(subjects[i], w, true, sideLink{i: 1, n: 3, lit: true}) {
+				if lw := ansi.StringWidth(l); lw > w {
+					t.Fatalf("width %d, row %d: line is %d wide: %q", w, i, lw, ansi.Strip(l))
+				}
+			}
+		}
 		for _, chosen := range []bool{false, true} {
 			for _, link := range []sideLink{{}, {i: 0, n: 2, lit: true}} {
 				for _, l := range m.sideRow(a, w, chosen, link) {
