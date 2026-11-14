@@ -18,27 +18,28 @@ func TestStackRowsGivesShippingItsShips(t *testing.T) {
 	tests := []struct {
 		name                          string
 		need, ships, rows             int
-		work, ship                    bool
+		needs, work, ship             bool
 		needH, workH, shipH, wantGaps int
 	}{
-		{"shipping takes a row a ship", 9, 3, 21, true, true, 10, 5, 4, 2},
-		{"shipping stops at 3 rows", 9, 6, 21, true, true, 10, 5, 4, 2},
-		{"one ship takes one row", 9, 1, 21, true, true, 10, 7, 2, 2},
-		{"an empty shipping keeps its head and a row", 9, 0, 21, true, true, 10, 7, 2, 2},
-		{"needs you that does not fit leaves two rows each", 30, 3, 21, true, true, 17, 2, 2, 0},
-		{"one shown section takes the rest", 9, 0, 21, true, false, 10, 10, 0, 1},
-		{"only shipping shown takes the rest", 9, 3, 21, false, true, 10, 0, 10, 1},
-		{"hidden needs you gives its rows to working", 0, 3, 21, true, true, 0, 16, 4, 1},
-		{"neither section shown leaves needs you the rows", 30, 0, 21, false, false, 21, 0, 0, 0},
-		{"one shown section keeps two rows when needs you is long", 30, 0, 21, true, false, 19, 2, 0, 0},
-		{"short of rows each section keeps what it can", 9, 3, 5, true, true, 2, 2, 1, 0},
+		{"shipping takes a row a ship", 9, 3, 21, true, true, true, 10, 5, 4, 2},
+		{"shipping stops at 3 rows", 9, 6, 21, true, true, true, 10, 5, 4, 2},
+		{"one ship takes one row", 9, 1, 21, true, true, true, 10, 7, 2, 2},
+		{"an empty shipping keeps its head and a row", 9, 0, 21, true, true, true, 10, 7, 2, 2},
+		{"needs you that does not fit leaves two rows each", 30, 3, 21, true, true, true, 17, 2, 2, 0},
+		{"one shown section takes the rest", 9, 0, 21, true, true, false, 10, 10, 0, 1},
+		{"only shipping shown takes the rest", 9, 3, 21, true, false, true, 10, 0, 10, 1},
+		{"hidden needs you gives its rows to working", 0, 3, 21, false, true, true, 0, 16, 4, 1},
+		{"neither section shown leaves needs you the rows", 30, 0, 21, true, false, false, 21, 0, 0, 0},
+		{"one shown section keeps two rows when needs you is long", 30, 0, 21, true, true, false, 19, 2, 0, 0},
+		{"short of rows each section keeps what it can", 9, 3, 5, true, true, true, 2, 2, 1, 0},
+		{"a narrowed empty needs you keeps its head alone", 0, 3, 21, true, true, true, 1, 14, 4, 2},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			needH, workH, shipH, gaps := stackRows(tt.need, tt.ships, tt.rows, tt.work, tt.ship)
+			needH, workH, shipH, gaps := stackRows(tt.need, tt.ships, tt.rows, tt.needs, tt.work, tt.ship)
 			if needH != tt.needH || workH != tt.workH || shipH != tt.shipH || gaps != tt.wantGaps {
-				t.Fatalf("stackRows(%d, %d, %d, %v, %v) = %d, %d, %d, %d; want %d, %d, %d, %d",
-					tt.need, tt.ships, tt.rows, tt.work, tt.ship, needH, workH, shipH, gaps,
+				t.Fatalf("stackRows(%d, %d, %d, %v, %v, %v) = %d, %d, %d, %d; want %d, %d, %d, %d",
+					tt.need, tt.ships, tt.rows, tt.needs, tt.work, tt.ship, needH, workH, shipH, gaps,
 					tt.needH, tt.workH, tt.shipH, tt.wantGaps)
 			}
 			if sum := needH + workH + shipH + gaps; (tt.work || tt.ship) && sum != tt.rows {
@@ -49,9 +50,9 @@ func TestStackRowsGivesShippingItsShips(t *testing.T) {
 }
 
 func TestStackRowsMovesShippingOnlyUnderFourShips(t *testing.T) {
-	_, _, want, _ := stackRows(9, 3, 21, true, true)
+	_, _, want, _ := stackRows(9, 3, 21, true, true, true)
 	for _, ships := range []int{4, 5, 13} {
-		if _, _, shipH, _ := stackRows(9, ships, 21, true, true); shipH != want {
+		if _, _, shipH, _ := stackRows(9, ships, 21, true, true, true); shipH != want {
 			t.Errorf("%d ships take %d rows, want %d as 3 do", ships, shipH, want)
 		}
 	}
