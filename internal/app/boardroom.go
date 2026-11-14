@@ -253,7 +253,7 @@ func (m *Model) roomEdge(d int) bool {
 	i := slices.IndexFunc(ss, func(s sample.Session) bool { return b.picked && paneOf(s) == paneOf(b.chosen) })
 	next, on := m.nextSection(b, shown, d)
 	quiet := next == colQuiet || b.open == colQuiet // the talk line sits between the stack and the drawer
-	if on && b.picked && !above && !below && !(quiet && len(after) > 0) {
+	if on && b.picked && !above && !below && (!quiet || len(after) == 0) {
 		return false // at Medium ↑ ↓ cross the sections first (boardMove)
 	}
 	switch {

@@ -87,7 +87,7 @@ func (m Model) boardCard(s sample.Session, w int, o cardOpts) (lines []string, t
 	case whole || o.need:
 		add(pad(state, w), nil)
 	}
-	if whole && !(o.stacked && o.need) {
+	if whole && (!o.stacked || !o.need) {
 		add(m.cardTrack(s, w, o))
 	}
 	if o.sel {
