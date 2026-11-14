@@ -17,4 +17,4 @@
  RECOMMENDATIONS · 7
  ✻ Claude Max  5h ▰▰▰▰▰▰▰▱ 84% · Fri 01:20   wk ▰▰▰▰▰▰▰▱ 82% · Mon 09:00              machine ›
 ────────────────────────────────────────────────────────────────────────────────────────────────
- ⏎ go in   c copy   v one line   s hosts   u strip   ←→ columns   tab next
+ ⏎ go in   c copy   v one line   s hosts   u strip   ←→ sections   tab next

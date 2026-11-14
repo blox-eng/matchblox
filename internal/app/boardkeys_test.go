@@ -179,19 +179,21 @@ func TestTheChoiceFollowsItsMatch(t *testing.T) {
 		t.Errorf("↑ at the top: %s", got)
 	}
 	clock := demoAt
+	// ↓ at the bottom chooses the ghost row (step 0b), and ↑ comes back. At
+	// Medium the bottom is SHIPPING's last card: ↓ goes on through the sections.
+	m = pressOn(boardShot(t, st, 80, 31, chooseCard("hearth-limits")), "esc")
+	if m = pressOn(m, "down"); reachOf(m) != "ghost" {
+		t.Errorf("↓ at the bottom chose %s, want the ghost row", reachOf(m))
+	}
+	if m = pressOn(m, "up"); chosenName(t, m) != "hearth-limits" {
+		t.Errorf("↑ from the ghost row chose %s, want hearth-limits", chosenName(t, m))
+	}
 	m = boardShot(t, st, 80, 31, func(m *Model) {
 		chooseCard("flint-auth")(m)
 		m.opt.Now = func() time.Time { return clock }
 	})
 	m = pressOn(m, "esc") // the first frame lands the peek
 	clock = clock.Add(time.Minute)
-	// ↓ at the bottom chooses the ghost row (step 0b), and ↑ comes back.
-	if m = pressOn(m, "down"); reachOf(m) != "ghost" {
-		t.Errorf("↓ at the bottom chose %s, want the ghost row", reachOf(m))
-	}
-	if m = pressOn(m, "up"); chosenName(t, m) != "flint-auth" {
-		t.Errorf("↑ from the ghost row chose %s, want flint-auth", chosenName(t, m))
-	}
 	m = pressOn(m, "up", "down")
 	if m.peekAsk != "toolu_board" {
 		t.Errorf("the peek of flint-auth does not keep its question: %q", m.peekAsk)
@@ -1403,5 +1405,74 @@ func TestATabsSpanPressesNoKey(t *testing.T) {
 	drain(cmd)
 	if nm := next.(Model); nm.tab != tabMachine || len(boardFake(nm).acts()) != 0 {
 		t.Errorf("a tap on machine: tab %d, sent %+v", nm.tab, boardFake(nm).acts())
+	}
+}
+
+func TestMediumDownCrossesIntoTheNextSection(t *testing.T) {
+	m := boardShot(t, boardFixture(t), 80, 31, chooseCard("flint-auth")) // the last wait
+	if m = pressOn(m, "down"); chosenName(t, m) != "flint-ui" || m.boardAt != colWork {
+		t.Fatalf("↓ from the last wait chooses %s in %s, want flint-ui in WORKING", chosenName(t, m), m.boardAt.name())
+	}
+	if m = pressOn(m, "up"); chosenName(t, m) != "flint-auth" || m.boardAt != colNeed {
+		t.Errorf("↑ from the first working match chooses %s in %s, want flint-auth in NEEDS YOU", chosenName(t, m), m.boardAt.name())
+	}
+	m = pressOn(boardShot(t, boardFixture(t), 80, 31, chooseCard("spark-docs")), "down")
+	if chosenName(t, m) != "cinder-ci" || m.boardAt != colShip {
+		t.Errorf("↓ from the last working match chooses %s, want cinder-ci", chosenName(t, m))
+	}
+	m = pressOn(boardShot(t, boardFixture(t), 80, 31, func(m *Model) { m.flipHidden(colWork); chooseCard("flint-auth")(m) }), "down")
+	if chosenName(t, m) != "cinder-ci" {
+		t.Errorf("↓ from the last wait with WORKING hidden chooses %s, want cinder-ci", chosenName(t, m))
+	}
+
+	w := pressOn(boardShot(t, boardFixture(t), 104, 38, chooseCard("flint-auth")), "down")
+	if w.boardAt != colNeed || w.boardBelow != 1 {
+		t.Errorf("on Wide ↓ from a column's last card leaves its column: open %s, below %d", w.boardAt.name(), w.boardBelow)
+	}
+}
+
+func TestMediumDownReachesEachCardOfAOneRowSection(t *testing.T) {
+	m := boardShot(t, boardFixture(t), 80, 24, chooseCard("flint-ui")) // a short screen leaves WORKING one row
+	for _, want := range []string{"ember-billing", "spark-docs"} {
+		m = pressOn(m, "down")
+		_, plain, at := sectionHeads(t, m)
+		if chosenName(t, m) != want || !strings.Contains(plain[at[colWork]+1], want) {
+			t.Fatalf("↓ in the one-row WORKING chooses %s, row %q; want %s", chosenName(t, m), plain[at[colWork]+1], want)
+		}
+	}
+}
+
+func TestMediumArrowsMoveBetweenSections(t *testing.T) {
+	m := boardShot(t, boardFixture(t), 80, 31, nil)
+	if m = pressOn(m, "right"); m.boardAt != colWork {
+		t.Errorf("→ from NEEDS YOU opens %s, want WORKING", m.boardAt.name())
+	}
+	if m = pressOn(m, "left"); m.boardAt != colNeed {
+		t.Errorf("← from WORKING opens %s, want NEEDS YOU", m.boardAt.name())
+	}
+	m = boardShot(t, boardFixture(t), 80, 31, func(m *Model) { m.flipHidden(colWork) })
+	if m = pressOn(m, "right"); m.boardAt != colShip {
+		t.Errorf("→ with WORKING hidden opens %s, want SHIPPING", m.boardAt.name())
+	}
+}
+
+func TestMediumTapOnASectionHidesIt(t *testing.T) {
+	for _, c := range []boardCol{colNeed, colWork, colShip} {
+		m := tapHead(t, boardShot(t, boardFixture(t), 80, 31, nil), c)
+		if !m.colHidden(c) {
+			t.Errorf("a tap on the head of %s does not hide it", c.name())
+		}
+		if c == colWork && !strings.Contains(strings.Split(plainFrame(m), "\n")[1], "+ work 3") {
+			t.Errorf("the tab row has no + work 3:\n%s", plainFrame(m))
+		}
+	}
+}
+
+func TestMediumKeyLineSaysSections(t *testing.T) {
+	if got := keyLineOf(boardShot(t, boardFixture(t), 80, 31, nil)); !strings.Contains(got, "←→ sections") {
+		t.Errorf("the key line at 80x31 is %q, want ←→ sections", got)
+	}
+	if got := keyLineOf(boardShot(t, boardFixture(t), 104, 38, nil)); !strings.Contains(got, "←→ columns") {
+		t.Errorf("the key line at 104x38 is %q, want ←→ columns", got)
 	}
 }

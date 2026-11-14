@@ -28,4 +28,4 @@
  RECOMMENDATIONS · 7
  ✻ 5h ▰▰▰▰▰▰▰▱ 84%  wk 82%   ✻ @gpu-1 5h ▰▰▰▰▰▰▰▱ 84%  wk 82%         machine ›
 ────────────────────────────────────────────────────────────────────────────────
- ⏎ set up   c copy   v one line   s hosts   u strip   ←→ columns   tab next
+ ⏎ set up   c copy   v one line   s hosts   u strip   ←→ sections   tab next
