@@ -73,7 +73,11 @@ func TestAShortRoomKeepsTheWaitingCard(t *testing.T) {
 		m, _ := hearthOpen(t, size[0], headState(t, runningPlan(), true))
 		m = upd(t, m, tea.WindowSizeMsg{Width: size[0], Height: size[1]})
 		frame := plainFrame(m)
-		if !strings.Contains(frame, "kindle-web") || !strings.Contains(frame, "› tell hearth's stoker…") {
+		card := "kindle-web"
+		if m.layoutAt(size[0]) == Medium && size[1] == 8 {
+			card = "NEEDS YOU · 1  ↓ 1" // the stack keeps each section's name first: the head counts the wait
+		}
+		if !strings.Contains(frame, card) || !strings.Contains(frame, "› tell hearth's stoker…") {
 			t.Errorf("%dx%d: the waiting card or the talk line is not drawn:\n%s", size[0], size[1], frame)
 		}
 		lines := strings.Split(frame, "\n")
