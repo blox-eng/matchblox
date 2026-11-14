@@ -107,7 +107,7 @@ func TestChainMovesWhenItsWaitIsAnswered(t *testing.T) {
 }
 
 func TestOrderInAGroupHoldsWhileStatesHold(t *testing.T) {
-	build := func() Model {
+	build := func(order ...int) Model {
 		var ss []sample.Session
 		st := boardState()
 		for i, n := range []string{"hearth-api", "spark-docs", "cinder-ci", "ember-billing"} {
@@ -116,12 +116,14 @@ func TestOrderInAGroupHoldsWhileStatesHold(t *testing.T) {
 			s.Started = boardAt.Add(-time.Duration(4-i) * time.Hour)
 			ss = append(ss, s)
 		}
-		st.Sessions = []sample.Session{ss[2], ss[0], ss[3], ss[1]}
+		for _, i := range order {
+			st.Sessions = append(st.Sessions, ss[i])
+		}
 		return boardModel(t, st)
 	}
-	a, b := build().sideOrder(), build().sideOrder()
+	a, b := build(2, 0, 3, 1).sideOrder(), build(3, 1, 0, 2).sideOrder()
 	if !slices.Equal(a, b) {
-		t.Fatalf("two refreshes order\n%v\n%v", a, b)
+		t.Fatalf("two refreshes with the input in another order\n%v\n%v", a, b)
 	}
 	var names []string
 	for _, p := range a {
@@ -177,5 +179,30 @@ func TestShipOnlyCardIsNotInTheList(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+func TestChainKeepsAMemberTheTeamDoesNotList(t *testing.T) {
+	// spark-docs shares flint-auth's session id: the team names one of them,
+	// and the chain still holds both.
+	st := boardState()
+	var list []sample.Session
+	for _, n := range []string{"kindle-web", "flint-auth", "spark-docs"} {
+		list = append(list, boardMatch(n, time.Hour))
+	}
+	list[2].SessionID = list[1].SessionID
+	st.Queue = []queue.Item{waitFor(list[2], queue.StatePermission, time.Minute)}
+	st.Sessions = list
+	st.Chains = &state.ChainsView{Chains: []chains.Chain{{ID: "c1", Name: "login", Repo: "/home/user/src/hearth"}}}
+	for _, s := range list[:2] {
+		st.Chains.Chains[0].Members = append(st.Chains.Chains[0].Members, memberOf(s))
+	}
+	m := boardModel(t, st)
+	need, ok := groupOfState(m.sideGroups(), sideNeed)
+	if !ok || len(need.units) != 1 {
+		t.Fatalf("NEEDS YOU %+v, want the chain with the session that asks", need)
+	}
+	if got, want := unitNames(need.units[0]), []string{"kindle-web", "flint-auth", "spark-docs"}; !slices.Equal(got, want) {
+		t.Fatalf("members %v, want %v", got, want)
 	}
 }

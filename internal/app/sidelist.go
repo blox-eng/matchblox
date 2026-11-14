@@ -74,6 +74,10 @@ func (m Model) sideGroups() []sideGroup {
 	var states [][]sideState
 	done := map[chainKey]bool{}
 	listed := m.sideSessions()
+	isListed := map[paneKey]bool{}
+	for _, s := range listed {
+		isListed[paneOf(s)] = true
+	}
 	for _, s := range listed {
 		k, ok := m.chainKeyOf(s)
 		if !ok {
@@ -86,10 +90,19 @@ func (m Model) sideGroups() []sideGroup {
 		}
 		done[k] = true
 		var ms []sample.Session
+		have := map[paneKey]bool{}
 		seen, _ := m.members(k)
 		for _, o := range seen {
-			if slices.ContainsFunc(listed, func(l sample.Session) bool { return paneOf(l) == paneOf(o) }) {
+			if isListed[paneOf(o)] {
 				ms = append(ms, o)
+				have[paneOf(o)] = true
+			}
+		}
+		for _, o := range listed { // a listed match the team does not name still shows
+			if ok := have[paneOf(o)]; !ok {
+				if ko, in := m.chainKeyOf(o); in && ko == k {
+					ms = append(ms, o)
+				}
 			}
 		}
 		hs := make([]sideState, len(ms))
