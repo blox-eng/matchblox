@@ -6,6 +6,8 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+## [0.45.0] - 2026-11-14
+
 ### Added
 
 - **The console opens on a board.** Each match has one card in one of four
@@ -1690,7 +1692,8 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.44.1...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.45.0...HEAD
+[0.45.0]: https://github.com/blox-eng/matchblox/compare/v0.44.1...v0.45.0
 [0.44.1]: https://github.com/blox-eng/matchblox/compare/v0.44.0...v0.44.1
 [0.44.0]: https://github.com/blox-eng/matchblox/compare/v0.43.1...v0.44.0
 [0.43.1]: https://github.com/blox-eng/matchblox/compare/v0.43.0...v0.43.1
