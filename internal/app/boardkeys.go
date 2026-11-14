@@ -230,12 +230,13 @@ func (m *Model) boardMove(d int) {
 }
 
 // nextSection is the section of the stack at Medium after the open one
-// (d 1) or before it (d -1) that shows cards. false: none, or no stack.
+// (d 1) or before it (d -1) that shows cards. The QUIET drawer is the last
+// section. false: none, or no stack.
 func (m Model) nextSection(b boardDraw, shown []boardCol, d int) (boardCol, bool) {
-	if m.layoutAt(max(m.width, minWidth)) != Medium || b.open == colQuiet {
+	if m.layoutAt(max(m.width, minWidth)) != Medium {
 		return 0, false
 	}
-	for c := b.open + boardCol(d); c >= colNeed && c <= colShip; c += boardCol(d) {
+	for c := b.open + boardCol(d); c >= colNeed && c <= colQuiet; c += boardCol(d) {
 		if slices.Contains(shown, c) && len(b.idx[c]) > 0 {
 			return c, true
 		}
@@ -263,14 +264,19 @@ func (m Model) stackEnd(b boardDraw, shown []boardCol, d int) (boardCol, bool) {
 
 // aboveMove is ↑ (d -1) and ↓ (d 1) on a line above the columns: up
 // through them, and down from the last one to the first card of the open
-// column.
+// column, at Medium of the stack.
 func (m *Model) aboveMove(d int) {
 	if m.boardAbove = min(m.boardAbove-d, len(m.aboveLines())); m.boardAbove > 0 {
 		return
 	}
 	m.boardAbove = 0
-	if b, _ := m.boardDrawOf(); len(b.idx[b.open]) > 0 {
-		m.boardChooseCard(b.open, b.idx[b.open][0])
+	b, shown := m.boardDrawOf()
+	c := b.open
+	if top, ok := m.stackEnd(b, shown, 1); ok {
+		c = top
+	}
+	if len(b.idx[c]) > 0 {
+		m.boardChooseCard(c, b.idx[c][0])
 	}
 }
 

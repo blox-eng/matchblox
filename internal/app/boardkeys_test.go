@@ -12,6 +12,7 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/blox-eng/matchblox/internal/doors"
 	"github.com/blox-eng/matchblox/internal/keycmd"
 	"github.com/blox-eng/matchblox/internal/logos"
 	"github.com/blox-eng/matchblox/internal/proto"
@@ -180,13 +181,16 @@ func TestTheChoiceFollowsItsMatch(t *testing.T) {
 	}
 	clock := demoAt
 	// ↓ at the bottom chooses the ghost row (step 0b), and ↑ comes back. At
-	// Medium the bottom is SHIPPING's last card: ↓ goes on through the sections.
-	m = pressOn(boardShot(t, st, 80, 31, chooseCard("hearth-limits")), "esc")
+	// Medium the bottom is QUIET's last card: ↓ goes on through the sections
+	// and the drawer.
+	quiet := boardShot(t, st, 80, 31, nil).boardIndex()[colQuiet]
+	bottom := quiet[len(quiet)-1].Name
+	m = pressOn(boardShot(t, st, 80, 31, chooseCard(bottom)), "esc")
 	if m = pressOn(m, "down"); reachOf(m) != "ghost" {
 		t.Errorf("↓ at the bottom chose %s, want the ghost row", reachOf(m))
 	}
-	if m = pressOn(m, "up"); chosenName(t, m) != "hearth-limits" {
-		t.Errorf("↑ from the ghost row chose %s, want hearth-limits", chosenName(t, m))
+	if m = pressOn(m, "up"); chosenName(t, m) != bottom {
+		t.Errorf("↑ from the ghost row chose %s, want %s", chosenName(t, m), bottom)
 	}
 	m = boardShot(t, st, 80, 31, func(m *Model) {
 		chooseCard("flint-auth")(m)
@@ -1497,3 +1501,61 @@ func TestMediumKeyLineSaysSections(t *testing.T) {
 func (m Model) boardSelectedOK() bool { _, ok := m.boardSelected(); return ok }
 
 func (m Model) roomOwn() bool { _, own := m.roomChosen(); return own }
+
+// TestMediumDownReachesTheQuietDrawer: at Medium the QUIET drawer is the last
+// stop of ↓, and ↑ from its first card goes back up to the stack.
+func TestMediumDownReachesTheQuietDrawer(t *testing.T) {
+	st := boardFixture(t)
+	first := boardShot(t, st, 80, 31, nil).boardIndex()[colQuiet][0].Name
+	m := pressOn(boardShot(t, st, 80, 31, chooseCard("hearth-limits")), "down") // SHIPPING's last card
+	if m.boardAt != colQuiet || chosenName(t, m) != first {
+		t.Fatalf("↓ from SHIPPING's last card opens %s, want %s in QUIET", m.boardAt.name(), first)
+	}
+	if m = pressOn(m, "up"); m.boardAt != colShip || chosenName(t, m) != "hearth-limits" {
+		t.Errorf("↑ from QUIET's first card opens %s, want hearth-limits in SHIPPING", m.boardAt.name())
+	}
+	m = pressOn(boardShot(t, st, 80, 31, func(m *Model) { m.flipHidden(colShip); chooseCard("spark-docs")(m) }), "down")
+	if m.boardAt != colQuiet || chosenName(t, m) != first {
+		t.Fatalf("↓ from WORKING's last card with SHIPPING hidden opens %s, want QUIET", m.boardAt.name())
+	}
+	if m = pressOn(m, "up"); chosenName(t, m) != "spark-docs" {
+		t.Errorf("↑ from QUIET's first card with SHIPPING hidden chooses %s, want spark-docs", chosenName(t, m))
+	}
+
+	quiet := boardFixture(t) // the chain's room: its talk line sits between SHIPPING and QUIET
+	cv := *quiet.Chains
+	cv.Chains = slices.Clone(cv.Chains)
+	cv.Chains[0].Members = append(slices.Clone(cv.Chains[0].Members), memberOf(paneSession(quiet, "ember-reports")))
+	quiet.Chains = &cv
+	m = pressOn(boardShot(t, quiet, 80, 31, func(m *Model) {
+		chooseCard("flint-auth")(m)
+		m.viewPrefs.Told = []string{"chain"}
+	}), "esc", "g", "down", "down")
+	if m = pressOn(m, "down"); !m.roomOwn() {
+		t.Fatalf("with the chain narrowed ↓ from SHIPPING's last card does not reach the talk line")
+	}
+	if m = pressOn(m, "down"); !m.boardSelectedOK() || chosenName(t, m) != "ember-reports" {
+		t.Errorf("↓ from the talk line does not reach QUIET's ember-reports")
+	}
+	if m = pressOn(m, "up"); !m.roomOwn() {
+		t.Errorf("↑ from QUIET's first card does not come back to the talk line")
+	}
+
+	w := pressOn(boardShot(t, st, 104, 38, chooseCard("hearth-limits")), "down")
+	if w.boardAt != colShip || w.boardBelow != 1 {
+		t.Errorf("on Wide ↓ from a column's last card leaves it for QUIET: open %s, below %d", w.boardAt.name(), w.boardBelow)
+	}
+}
+
+// TestMediumDownFromALineAboveGoesToTheTop: ↓ from the last line above the
+// stack chooses the stack's first card, whichever section is open.
+func TestMediumDownFromALineAboveGoesToTheTop(t *testing.T) {
+	m := boardShot(t, boardFixture(t), 80, 31, func(m *Model) {
+		m.doors = []doors.Door{{ID: doors.Tmux, Title: "Install tmux", Term: []string{"sh", "-c", "true"}}}
+		chooseCard("cinder-ci")(m)
+		m.boardAbove = 1
+	})
+	if m = pressOn(m, "down"); m.boardAt != colNeed || chosenName(t, m) != "spark-search" {
+		t.Errorf("↓ from the doors line opens %s, want spark-search in NEEDS YOU", m.boardAt.name())
+	}
+}

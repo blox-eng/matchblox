@@ -199,6 +199,19 @@ func (m *Model) roomToCard(d int) bool {
 	return true
 }
 
+// roomToQuiet gives the cursor to the first card of the QUIET drawer, at
+// Medium under the talk line. false: no stack, or the drawer has no card.
+func (m *Model) roomToQuiet() bool {
+	b, shown := m.boardDrawOf()
+	if m.layoutAt(max(m.width, minWidth)) != Medium || !slices.Contains(shown, colQuiet) || len(b.idx[colQuiet]) == 0 {
+		return false
+	}
+	m.roomOff()
+	m.boardChooseCard(colQuiet, b.idx[colQuiet][0])
+	m.chooseByHand()
+	return true
+}
+
 // roomMove is ↑ (d -1) or ↓ (d 1) on the room's own row at: through the
 // card's rows and the talk line, and from their ends onto the board.
 func (m *Model) roomMove(at, d int) {
@@ -219,6 +232,7 @@ func (m *Model) roomMove(at, d int) {
 	case d > 0 && slices.Equal(list, before) && m.roomToCard(1):
 	case d > 0 && slices.Equal(list, before) && len(after) > 0:
 		m.roomOn(after[0])
+	case d > 0 && slices.Equal(list, after) && m.roomToQuiet():
 	case d > 0 && len(m.belowLines()) > 0:
 		m.roomOff()
 		m.boardBelow = 1
@@ -237,7 +251,9 @@ func (m *Model) roomEdge(d int) bool {
 	b, shown := m.boardDrawOf()
 	ss := b.idx[b.open]
 	i := slices.IndexFunc(ss, func(s sample.Session) bool { return b.picked && paneOf(s) == paneOf(b.chosen) })
-	if _, on := m.nextSection(b, shown, d); on && b.picked && !above && !below {
+	next, on := m.nextSection(b, shown, d)
+	quiet := next == colQuiet || b.open == colQuiet // the talk line sits between the stack and the drawer
+	if on && b.picked && !above && !below && !(quiet && len(after) > 0) {
 		return false // at Medium ↑ ↓ cross the sections first (boardMove)
 	}
 	switch {
@@ -247,6 +263,8 @@ func (m *Model) roomEdge(d int) bool {
 		m.roomOn(after[len(after)-1])
 	case above || below:
 		return false
+	case on && b.open == colQuiet && d < 0 && i <= 0 && len(after) > 0:
+		m.roomOn(after[len(after)-1])
 	case d < 0 && i <= 0 && len(before) > 0:
 		m.roomOn(before[len(before)-1])
 	case d > 0 && (!b.picked || i == len(ss)-1) && len(after) > 0:
