@@ -49,6 +49,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/doors"
 	"github.com/blox-eng/matchblox/internal/filestamp"
 	"github.com/blox-eng/matchblox/internal/gitscan"
+	"github.com/blox-eng/matchblox/internal/guard"
 	"github.com/blox-eng/matchblox/internal/history"
 	"github.com/blox-eng/matchblox/internal/holds"
 	"github.com/blox-eng/matchblox/internal/hooks"
@@ -156,6 +157,17 @@ func run(args []string) error {
 		case "connect":
 			return liveConnect(args[1:])
 		}
+	}
+	if len(args) > 0 && args[0] == "guard" {
+		argv := args[1:]
+		if len(argv) > 0 && argv[0] == "--" {
+			argv = argv[1:]
+		}
+		if len(argv) == 0 {
+			return errors.New("guard needs a command: matchblox guard -- <command>")
+		}
+		// The agent's own status is this process's: tmux and the service read it.
+		os.Exit(guard.Main(argv, os.Getenv(guard.SessionEnv), os.Stdin, os.Stdout))
 	}
 	if len(args) > 2 && args[0] == "hook" && args[1] == "statusline" && args[2] == "--cursor" {
 		return cursorStatusLine(args[3:], os.Stdin, os.Stdout, os.Getenv, filepath.Dir(state.Path()), time.Now())
@@ -333,7 +345,7 @@ func run(args []string) error {
 // prompt, not a word that run dispatches.
 func askpassMode(args []string, env func(string) string) bool {
 	return len(args) == 1 && env(askpass.EnvSocket) != "" && env(askpass.EnvToken) != "" &&
-		!slices.Contains(commands, args[0]) && !slices.Contains([]string{"gate", "authorize", "push", "hook"}, args[0])
+		!slices.Contains(commands, args[0]) && !slices.Contains([]string{"gate", "authorize", "push", "hook", "guard"}, args[0])
 }
 
 // askpassMain prints the console's answer to the prompt for ssh, and

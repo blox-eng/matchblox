@@ -11,9 +11,9 @@ import (
 	"github.com/blox-eng/matchblox/internal/remote"
 )
 
-// internalCommands run from a hook, an ssh forced command or a connect;
-// the docs may name them and need not.
-var internalCommands = []string{"hook", "authorize", "gate"}
+// internalCommands run from a hook, an ssh forced command, a connect or a
+// session's own launch; the docs may name them and need not.
+var internalCommands = []string{"hook", "authorize", "gate", "guard"}
 
 // docHosts are the hosts public text may name (DESIGN.md §7): the demo
 // host, or a placeholder. Any other word is a typo of a command.
