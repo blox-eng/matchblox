@@ -443,8 +443,7 @@ func (f *Filter) Tick() error {
 func (f *Filter) release() error {
 	var end []byte
 	if f.holding {
-		end = make([]byte, 0, len(ClearCodes)+4+len(f.tail)+len(f.seq))
-		end = append(append(append(end, ClearCodes+"\x1b[0m"...), f.tail...), f.seq...)
+		end = append(append([]byte(ClearCodes+"\x1b[0m"), f.tail...), f.seq...)
 	} else {
 		end = append(f.tail, f.seq...) // the tail is let go here
 	}
