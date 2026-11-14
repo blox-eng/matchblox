@@ -6,6 +6,27 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **A long Cursor session stays at the bottom when its pane changes width.**
+  Cursor's CLI clears the screen and prints its whole chat again each time
+  its terminal's width changes: when a phone or a second terminal shows the
+  pane, or you resize your own. On a long chat that scrolled for minutes.
+  matchblox now starts Cursor behind a guard. During that replay the pane
+  shows one line, `Cursor redraws for the new width…`, then the last 1,000
+  lines of the chat and the input box. Keys you type meanwhile reach Cursor.
+  The pane still takes each terminal's size. The guard is for sessions that
+  matchblox starts, switches or recovers, on Linux and macOS; a session
+  that runs now gets it at its next start. It is measured on a stand-in for
+  Cursor (1.4 MB of replay becomes 74 kB), not yet on a real long chat: if
+  a replay still scrolls by for you, say so in #399.
+
+### Fixed
+
+- **A process that an agent leaves behind on a terminal of its own does not
+  pass for you.** It is placed in that agent's pane, as its other processes
+  are.
+
 ## [0.43.1] - 2026-11-13
 
 ### Security
