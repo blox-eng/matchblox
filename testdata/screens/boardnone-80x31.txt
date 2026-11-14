@@ -1,4 +1,4 @@
- ▰ matchblox
+ ▰ matchblox                                                ✓ nothing needs you
  BOARD 0    machine
 ────────────────────────────────────────────────────────────────────────────────
 ▌+ start a new session

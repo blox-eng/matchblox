@@ -325,6 +325,7 @@ type Model struct {
 	at         time.Time // the last stateMsg
 	git        *proto.GitReport
 	recs       []advice.Rec
+	sideAt     paneKey // the session the list chooses; zero is the first one drawn
 	queue      []queue.Item
 	doors      []doors.Door // the open doors, above the sessions
 	stoker     *proto.StokerView

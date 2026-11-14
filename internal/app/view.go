@@ -340,8 +340,11 @@ func (m Model) header(w int) (string, span, span) {
 	// Short of room the host goes first (a phone), then the words of who
 	// waits; the count stays.
 	waits := []string{""}
-	if n > 0 {
+	switch {
+	case n > 0:
 		waits = []string{fmt.Sprintf(count, n), fmt.Sprintf("● %d", n)}
+	case m.have:
+		waits = []string{"✓ nothing needs you", "✓"}
 	}
 	lefts := []string{left}
 	if host != "" {
@@ -350,14 +353,18 @@ func (m Model) header(w int) (string, span, span) {
 	var right string
 	for _, word := range waits {
 		right = stoker + " "
+		ink := st.accent
+		if n == 0 {
+			ink = st.muted
+		}
 		switch {
 		case word != "" && stoker != "":
-			right = st.accent.Render(word) + "  " + right
+			right = ink.Render(word) + "  " + right
 		case word != "":
-			right = st.accent.Render(word) + " "
+			right = ink.Render(word) + " "
 		}
 		hit := span{}
-		if word != "" {
+		if word != "" && n > 0 {
 			hit = span{w - lipgloss.Width(right), w - lipgloss.Width(right) + lipgloss.Width(word), "waits"}
 		}
 		for _, l := range lefts {
