@@ -103,7 +103,7 @@ func Run(argv []string, in, out *os.File) (int, error) {
 			return
 		}
 		if cols != 0 && ws.Col != cols {
-			f.Arm() // before the agent hears of it
+			f.Resized() // before the agent hears of it
 		}
 		cols = ws.Col
 		_ = unix.IoctlSetWinsize(int(master.Fd()), unix.TIOCSWINSZ, ws) //nolint:gosec // a file descriptor fits

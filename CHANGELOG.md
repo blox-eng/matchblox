@@ -6,6 +6,16 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **Narrower Cursor panes no longer replay the chat twice.** Measured on
+  Cursor 2026.10.19 (#402): when its pane gets narrower, Cursor prints its
+  whole chat once with no clear before it, clears 0.25 s later, and prints
+  it again 0.5 s after that. The guard of v0.44.0 held neither print. It now
+  holds from the width change itself and waits out Cursor's pause. On a
+  chat of 1,600 lines, going from 216 to 180 columns sent 289 kB to the pane
+  without the guard and 87 kB with it; the last screen is the same.
+
 ## [0.44.0] - 2026-11-14
 
 ### Added
