@@ -6,9 +6,11 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+## [0.44.0] - 2026-11-14
+
 ### Added
 
-- **A long Cursor session stays at the bottom when its pane changes width.**
+- **Long Cursor chats stay at the bottom on resize.**
   Cursor's CLI clears the screen and prints its whole chat again each time
   its terminal's width changes: when a phone or a second terminal shows the
   pane, or you resize your own. On a long chat that scrolled for minutes.
@@ -1590,7 +1592,8 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.43.1...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.44.0...HEAD
+[0.44.0]: https://github.com/blox-eng/matchblox/compare/v0.43.1...v0.44.0
 [0.43.1]: https://github.com/blox-eng/matchblox/compare/v0.43.0...v0.43.1
 [0.43.0]: https://github.com/blox-eng/matchblox/compare/v0.42.0...v0.43.0
 [0.42.0]: https://github.com/blox-eng/matchblox/compare/v0.41.0...v0.42.0
