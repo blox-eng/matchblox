@@ -841,3 +841,68 @@ func TestFilterCells(t *testing.T) {
 		}
 	}
 }
+
+// TestFilterQuietHoldSlowFirstPrint: on a long chat or a slow machine,
+// Cursor's first print after a resize can take over 2 s; it still never
+// shows.
+func TestFilterQuietHoldSlowFirstPrint(t *testing.T) {
+	var out bytes.Buffer
+	c := newClock()
+	f := NewFilter(&out, c.now)
+	f.Resized()
+	for i := range 100 { // 1,600 lines over 2.5 s
+		writeIn(t, f, burst(fmt.Sprintf("first%d", i), 16), 8190)
+		tickFor(t, f, c, 25*time.Millisecond)
+	}
+	tickFor(t, f, c, 250*time.Millisecond)
+	writeIn(t, f, []byte(ClearCodes), 11)
+	tickFor(t, f, c, 500*time.Millisecond)
+	writeIn(t, f, burst("second", 1600), 8190)
+	tickFor(t, f, c, time.Second)
+	if got := out.String(); strings.Contains(got, "first") {
+		t.Fatalf("a first print over 2.5 s: %d of its lines reached the pane", strings.Count(got, "first"))
+	}
+}
+
+// TestFilterResizeLateInReplayHoldsNextPrint: a resize near the end of a
+// long replay: the quiet hold that the replay's end starts waits for the
+// next print, and does not end at once.
+func TestFilterResizeLateInReplayHoldsNextPrint(t *testing.T) {
+	var out bytes.Buffer
+	c := newClock()
+	f := NewFilter(&out, c.now)
+	f.Arm()
+	writeIn(t, f, []byte(ClearCodes), 11)
+	c.t = c.t.Add(10 * time.Millisecond) // the resize comes after the clear
+	f.Resized()
+	for i := range 76 { // the replay goes on for 1.9 s
+		writeIn(t, f, burst(fmt.Sprintf("chat%d", i), 21), 8190)
+		tickFor(t, f, c, 25*time.Millisecond)
+	}
+	tickFor(t, f, c, 400*time.Millisecond)
+	writeIn(t, f, burst("next", 1600), 8190)
+	tickFor(t, f, c, 250*time.Millisecond)
+	writeIn(t, f, append([]byte(ClearCodes), burst("last", 1600)...), 8190)
+	tickFor(t, f, c, time.Second)
+	if got := out.String(); strings.Contains(got, "next ") {
+		t.Fatalf("after a resize late in a replay, %d lines of the next print, with no clear before it, reached the pane", strings.Count(got, "next "))
+	}
+}
+
+// TestFilterFlushAfterResizeInReplayHoldsNothing: at the agent's end, a
+// resize during the last replay leaves no hold behind: what comes after the
+// flush still reaches the pane.
+func TestFilterFlushAfterResizeInReplayHoldsNothing(t *testing.T) {
+	var out bytes.Buffer
+	c := newClock()
+	f := NewFilter(&out, c.now)
+	f.Arm()
+	writeIn(t, f, append([]byte(ClearCodes), burst("chat", 20)...), 8190)
+	c.t = c.t.Add(10 * time.Millisecond) // the resize comes after the clear
+	f.Resized()
+	_ = f.Flush()
+	writeIn(t, f, []byte("late bytes"), 64)
+	if f.Holding() || !strings.HasSuffix(out.String(), "late bytes") {
+		t.Fatalf("after the flush: holding %v, the late bytes reached the pane: %v", f.Holding(), strings.HasSuffix(out.String(), "late bytes"))
+	}
+}

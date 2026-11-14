@@ -405,6 +405,10 @@ func (f *Filter) Tick() error {
 		// After a clear, until its print has begun: words that come first
 		// are no end of the replay.
 		before := f.holding && f.printed < replayLines && now.Sub(f.clearAt) < printWait
+		quietFrom := f.heldAt // a quiet hold waits from its start, or the last change of width after it
+		if f.resizedAt.After(quietFrom) {
+			quietFrom = f.resizedAt
+		}
 		wait := quietFor
 		if f.quiet {
 			wait = settleFor
@@ -415,7 +419,7 @@ func (f *Filter) Tick() error {
 		}
 		switch {
 		case now.Sub(f.heldAt) >= holdCap:
-		case f.quiet && now.Sub(f.resizedAt) >= printWait: // no clear came: no replay, and a long stream must not freeze the pane
+		case f.quiet && now.Sub(quietFrom) >= armFor: // no clear came in time: no replay, and a long stream must not freeze the pane
 		case before && f.text == 0 && len(f.seq) == 0: // no text yet: codes are no print
 			return nil
 		case before && now.Sub(f.lastAt) < quietFor && (!slow || f.printed == 0): // lines printed, then a trickle, is a short chat
@@ -456,10 +460,12 @@ func (f *Filter) release() error {
 }
 
 // Flush writes what the filter still holds, at the agent's end: the end of
-// a replay, or output that waited for the rest of ClearCodes.
+// a replay, or output that waited for the rest of ClearCodes. It leaves no
+// hold behind, as nothing ends one after it.
 func (f *Filter) Flush() error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.resizedAt = time.Time{}
 	if f.holding || f.quiet {
 		return f.release()
 	}
