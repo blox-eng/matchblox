@@ -1,0 +1,31 @@
+ ▰ matchblox · all hosts ▾                                         ● 4 need you
+ BOARD 15    machine                                                   + ship 3
+────────────────────────────────────────────────────────────────────────────────
+ NEEDS YOU · 4  −
+▌╿ spark-search                                                           ✻ 31m
+  stuck CI failed · lint, twice                        #4548 ●━✕┄○┄○┄○  ctx 77%
+  “Lint fails on a file I did not change. I tried twice and stopped.”
+  ⏎ go in
+ ╿ kindle-web                                                             ✻  9m
+  green #4556 waits for your merge                     #4556 ●━●━◉┄○┄○  ctx 48%
+ ╿ hearth-api                                                             ✻  4m
+  asks The plan changes 2 records and removes none.                     ctx 31%
+ ╿ flint-auth                                                             ✻  2m
+  asks Which way do we fix the login?                          ctx 62%  ─╴login
+
+ WORKING · 3  −
+ ✦ flint-ui             ✻  busy Writing the test for a token … ctx 40%  ─╴login
+ ✦ ember-billing @gpu-1 ✻  agents Three subagents read the invoice pat… ctx 71%
+ ✦ spark-docs           ✻  busy Running the suite.                      ctx 22%
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────
+ QUIET · 5   wick-mobile · hearth-notes · ember-reports · kindle-legacy · t… −
+ + start a new session
+ RECOMMENDATIONS · 7
+ ✻ 5h ▰▰▰▰▰▰▰▱ 84%  wk 82%   ✻ @gpu-1 5h ▰▰▰▰▰▰▰▱ 84%  wk 82%         machine ›
+────────────────────────────────────────────────────────────────────────────────
+ ⏎ go in   c copy   v one line   s hosts   u strip   ←→ sections   tab next
