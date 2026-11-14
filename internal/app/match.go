@@ -261,3 +261,18 @@ func (m *Model) animate() tea.Cmd {
 	m.animating = true
 	return tea.Tick(animTick, func(time.Time) tea.Msg { return animMsg{} })
 }
+
+// sideMatch is the match of a list row: struck and red when it needs the
+// owner, burning while it works, unlit when held, burnt out when idle.
+func (m Model) sideMatch(h sideState) string {
+	mk, ch, c := m.marks(), "╿", m.marks().Head
+	switch h {
+	case sideWork:
+		ch, c = "✦", mk.Flame
+	case sideHeld:
+		ch, c = "╽", m.st.theme.Muted
+	case sideIdle:
+		ch, c = "╵", m.st.theme.Faint
+	}
+	return lipgloss.NewStyle().Foreground(c).Bold(h == sideNeed).Render(ch)
+}
