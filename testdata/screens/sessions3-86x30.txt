@@ -1,26 +1,26 @@
  ▰ matchblox · all hosts ▾                                               ● 8 need you
  BOARD 10    machine
 ──────────────────────────────────────────────────────────────────────────────────────
- NEEDS YOU · 8  −                           WORKING · 2  −        SHIPPING · 0  −
-▌╿ flint-auth                       ✻  2m   ✦ hearth-api  ✻
-  stuck conflicts with main                  busy
-  #4545 ●━✕┄○┄○┄○  ctx 41%                   #4551 ●━◉  ctx 79%
-  “The refresh flow works and the tests
-  pass. One choice is yours before I wire   │ docs-sweep… ✻
-  the rotation.”                             busy I rewrote th…
-  ⏎ go in                                    ctx 88%
-
- │ spark-docs                       ✻  9m
-  done I rewrote the quick start and the…
-  #4540 ●━●━●━●━●  ctx 88%
+ NEEDS YOU · 8  −
+▌╿ flint-auth                                                                   ✻  2m
+  stuck conflicts with main                                  #4545 ●━✕┄○┄○┄○  ctx 41%
+  “The refresh flow works and the tests pass. One choice is yours before I wire the
+  rotation.”
   ⏎ go in
+ │ spark-docs                                                                   ✻  9m
+  done I rewrote the quick start and the install page.       #4540 ●━●━●━●━●  ctx 88%
+ ╿ ember-billing                                                                ✻  4m
+  green #4552 waits for your merge                           #4552 ●━●━◉┄○┄○  ctx 32%
+ │ train-loop @gpu-1                                                            ✻  4m
+  asks I rewrote the quick start and the install page.                        ctx 88%
+ ╿ kindle-web                                                                   ✻  1m
+  asks Claude needs your permission to use Bash                               ctx 56%
+  ↓ 3 more
 
- ╿ ember-billing                    ✻  4m
-  green #4552 waits for your merge
-  #4552 ●━●━◉┄○┄○  ctx 32%
-  p merge #4552   ⏎ go in
+ WORKING · 2  −
+  ↓ 2 more
+ SHIPPING · 0  −
 
-  ↓ 5 more
 ──────────────────────────────────────────────────────────────────────────────────────
  QUIET · 0   ▴                                                                     −
  + start a new session

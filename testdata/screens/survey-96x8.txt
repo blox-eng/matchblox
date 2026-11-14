@@ -1,8 +1,8 @@
  ▰ matchblox                                                                       ● 6 need you
  BOARD 7    machine
 ────────────────────────────────────────────────────────────────────────────────────────────────
- NEEDS YOU · 6  −                               WORKING · 1  −           SHIPPING · 0  −
-▌╿ flint-auth                           ✻  2m    ↓ 1 more
-  stuck conflicts with main
+ NEEDS YOU · 6  −
+▌╿ flint-auth                                                                             ✻  2m
+ WORKING · 1  −
 ────────────────────────────────────────────────────────────────────────────────────────────────
  ⏎ go in   c copy   v one line   s hosts   u strip   ←→ columns   tab next

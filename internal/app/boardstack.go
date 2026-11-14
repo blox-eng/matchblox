@@ -1,5 +1,13 @@
 package app
 
+import (
+	"slices"
+	"strconv"
+	"strings"
+
+	"charm.land/lipgloss/v2"
+)
+
 // stackRows splits the body rows of the stacked board. NEEDS YOU takes its
 // cards and its head first, but leaves 2 rows to each other section shown.
 // A blank row sits between sections and is the first to go when rows are
@@ -14,7 +22,7 @@ func stackRows(need, rows int, work, ship bool) (needH, workH, shipH, gaps int) 
 		shown++
 	}
 	if need > 0 {
-		needH = min(need+1, rows-2*shown)
+		needH = max(min(need+1, rows-2*shown), min(need+1, rows, 2)) // short of rows, NEEDS YOU keeps its head and a row
 	}
 	sections := shown
 	if needH > 0 {
@@ -23,6 +31,9 @@ func stackRows(need, rows int, work, ship bool) (needH, workH, shipH, gaps int) 
 	gaps = max(0, min(min(sections-1, 2), rows-needH-2*shown))
 	rest := max(0, rows-needH-gaps)
 	switch {
+	case work && ship && rest < 4:
+		workH = min(rest, 2)
+		shipH = rest - workH
 	case work && ship:
 		shipH = max(2, rest-(rest*3+4)/5)
 		workH = rest - shipH
@@ -32,4 +43,73 @@ func stackRows(need, rows int, work, ship bool) (needH, workH, shipH, gaps int) 
 		shipH = rest
 	}
 	return needH, workH, shipH, gaps
+}
+
+// boardStacked is the board at Medium: NEEDS YOU, WORKING and SHIPPING
+// from the top, each the full width under a head of its own line, then the
+// room's talk lines and the QUIET drawer. A tap on a head presses its
+// column's short name, as on a column's head.
+func (m Model) boardStacked(d *boardDrawn, b *boardDraw, shown []boardCol, w, rows int, talk []roomDrawn) {
+	st := m.st
+	b.stacked = true
+	drawer := 0
+	if slices.Contains(shown, colQuiet) {
+		drawer = 2
+		if b.open == colQuiet {
+			drawer = 2 + quietRows
+		}
+		if b.open != colQuiet && rows-drawer-len(talk) < 2 {
+			drawer = 0 // the chosen card's head outranks the shelf
+		}
+	}
+	sec := max(rows-drawer-len(talk), 0)
+	need := 0
+	if slices.Contains(shown, colNeed) {
+		need = 2 // a blank row, and that nothing needs you
+		if ss := b.idx[colNeed]; len(ss) > 0 {
+			need = 0
+			for _, s := range ss {
+				need += len(m.boardBlockOf(b, colNeed, s, w, false).lines)
+			}
+		}
+	}
+	needH, workH, shipH, gaps := stackRows(need, sec, slices.Contains(shown, colWork), slices.Contains(shown, colShip))
+	top := len(d.lines)
+	for _, sc := range []struct {
+		c boardCol
+		h int
+	}{{colNeed, needH}, {colWork, workH}, {colShip, shipH}} {
+		if sc.h <= 0 {
+			continue
+		}
+		if len(d.lines) > top && gaps > 0 {
+			d.add(-1, strings.Repeat(" ", w))
+			gaps--
+		}
+		n := len(b.idx[sc.c])
+		name := " " + sc.c.name()
+		if m.have {
+			name += " · " + strconv.Itoa(n)
+		}
+		if d.headAt < 0 {
+			d.headAt = len(d.lines)
+		}
+		d.taps[len(d.lines)] = []span{{0, lipgloss.Width(name) + 3, sc.c.short()}} // with its −
+		d.add(-1, m.boardHead(sc.c, n, w, sc.c == b.open))
+		m.boardStack(d, b, sc.c, len(d.lines), 0, w, sc.h-1, false)
+	}
+	for len(d.lines) < top+sec {
+		d.add(-1, strings.Repeat(" ", w))
+	}
+	d.colsTo = top + sec
+	if words := m.boardWords(b); words != "" && d.headAt >= 0 && sec > 1 {
+		d.lines[d.headAt+1] = fit("  "+st.faint.Render(words), w)
+	}
+	for _, t := range talk {
+		d.roomAt[len(d.lines)] = t.at
+		d.addRow(-1, t.sel, w, st, t.text)
+	}
+	if drawer > 0 {
+		m.boardDrawer(d, b, w)
+	}
 }

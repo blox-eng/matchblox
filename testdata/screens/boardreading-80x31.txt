@@ -1,10 +1,11 @@
  ▰ matchblox
  BOARD 0    machine
 ────────────────────────────────────────────────────────────────────────────────
- NEEDS YOU  −                           WORKING  −           SHIPPING  −
+ NEEDS YOU  −
   reading your matches…
 
 
+ WORKING  −
 
 
 
@@ -16,8 +17,7 @@
 
 
 
-
-
+ SHIPPING  −
 
 
 

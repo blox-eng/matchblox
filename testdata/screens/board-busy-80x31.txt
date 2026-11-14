@@ -1,0 +1,31 @@
+ ▰ matchblox · all hosts ▾                                         ● 2 need you
+ BOARD 23    machine
+────────────────────────────────────────────────────────────────────────────────
+ NEEDS YOU · 2  −
+ ╿ kindle-web                                                             ✻  9m
+  green #4556 waits for your merge                     #4556 ●━●━◉┄○┄○  ctx 48%
+▌╿ flint-auth                                                             ✻  2m
+  asks Which way do we fix the login?                          ctx 62%  ━╸login
+  “I can fix it in two ways. The token check is a small patch.”
+  1. Patch the token check
+  2. Move to the new session store
+  1-2 mark an answer   ⏎ go in
+
+ WORKING · 13  −
+ ✦ hearth-api     ✻  busy Migrating the session table to the new key.   ctx 31%
+ ✦ spark-search   ✻  busy Running 412 tests in internal/search.         ctx 77%
+ ✦ flint-ui       ✻  busy Writing the test for a token that e… ctx 40%  ━╸login
+ ✦ hearth-search  ✻  busy Tuning the ranking weights.                   ctx 39%
+  ↓ 9 more
+
+ SHIPPING · 3  −
+ ╿ cinder-ci @gpu-1 ❋  merged deploying                    #4549 ●━●━●━◉┄○   2h
+ ╿ flint-api      ✻  ci waits for review                   #4560 ●━◉┄○┄○┄○  40m
+ ╿ hearth-limits  ✻  ci CI · 6 of 9 jobs                   #4551 ●━◉┄○┄○┄○   4m
+────────────────────────────────────────────────────────────────────────────────
+ QUIET · 5   wick-mobile · hearth-notes · ember-reports · kindle-legacy · t… −
+ + start a new session
+ RECOMMENDATIONS · 7
+ ✻ 5h ▰▰▰▰▰▰▰▱ 84%  wk 82%   ✻ @gpu-1 5h ▰▰▰▰▰▰▰▱ 84%  wk 82%         machine ›
+────────────────────────────────────────────────────────────────────────────────
+ 1-2 mark an answer   ⏎ go in   c copy   v one line   s hosts   u strip

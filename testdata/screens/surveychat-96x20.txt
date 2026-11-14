@@ -1,16 +1,16 @@
  ▰ matchblox                                                                       ● 6 need you
  BOARD 7    machine
 ────────────────────────────────────────────────────────────────────────────────────────────────
- NEEDS YOU · 6  −                               WORKING · 1  −           SHIPPING · 0  −
-▌╿ flint-auth                           ✻  2m   ✦ hearth-api     ✻
-  stuck conflicts with main                      busy
-  #4545 ●━✕┄○┄○┄○  ctx 41%                       #4551 ●━◉┄○┄○  ctx 79%
-  “The refresh flow works and the tests pass.
-  One choice is yours before I wire the
-  rotation.”
+ NEEDS YOU · 6  −
+▌╿ flint-auth                                                                             ✻  2m
+  stuck conflicts with main                                            #4545 ●━✕┄○┄○┄○  ctx 41%
+  “The refresh flow works and the tests pass. One choice is yours before I wire the rotation.”
   ⏎ go in
-
   ↓ 5 more
+ WORKING · 1  −
+ ✦ hearth-api     ✻  busy                                                               ctx 79%
+ SHIPPING · 0  −
+
 ────────────────────────────────────────────────────────────────────────────────────────────────
  QUIET · 0   ▴                                                                               −
  + start a new session

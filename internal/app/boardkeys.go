@@ -944,9 +944,11 @@ func (m Model) boardTap(x, y int) (tea.Model, tea.Cmd) {
 	if at, ok := d.underAt[y]; ok {
 		return m.underTap(at, x, w)
 	}
-	if sp, ok := spanAt(d.taps[y], x); ok && sp.press == colQuiet.short() {
-		m.flipHidden(colQuiet) // the drawer's name
-		return m, nil
+	if sp, ok := spanAt(d.taps[y], x); ok {
+		if i := slices.IndexFunc(boardCols[:], func(c boardCol) bool { return c.short() == sp.press }); i >= 0 {
+			m.flipHidden(boardCols[i]) // the drawer's name, or a section's in the stack
+			return m, nil
+		}
 	}
 	if d.live > 0 && x >= w-d.live && y >= d.headAt && y < d.colsTo && b.picked {
 		return m.boardInto(b.chosen) // the live view is the chosen card's pane
