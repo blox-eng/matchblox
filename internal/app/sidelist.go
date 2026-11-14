@@ -1,0 +1,144 @@
+package app
+
+import (
+	"slices"
+	"time"
+
+	"github.com/blox-eng/matchblox/internal/sample"
+)
+
+// sideUnit is one entry of the list: a chain with its members in team
+// order, or one session in no chain.
+type sideUnit struct {
+	chain   chainKey // zero for a session in no chain
+	members []sample.Session
+	lead    int // the place of the most urgent member
+}
+
+// sideGroup is the units of one state. count is the sessions of its units
+// that are in that state: a chain's members in other states do not count.
+type sideGroup struct {
+	state sideState
+	count int
+	units []sideUnit
+}
+
+// urgent is the member the unit sits by.
+func (u sideUnit) urgent() sample.Session { return u.members[u.lead] }
+
+// step is the place of the most urgent member in team order, and the
+// member count.
+func (u sideUnit) step() (n, of int) { return u.lead + 1, len(u.members) }
+
+// sideTime is what a group orders its sessions by, as the board did: the
+// wait, else the start, and the quiet ones by the last activity.
+func (m Model) sideTime(h sideState, s sample.Session) time.Time {
+	switch h {
+	case sideNeed:
+		return m.needSince(s)
+	case sideIdle:
+		return m.lastActive(s)
+	}
+	return s.Started
+}
+
+// sideBefore orders two sessions of state h: the oldest first, the quiet
+// ones newest first, and a session with no time last.
+func (m Model) sideBefore(h sideState, a, b sample.Session) int {
+	at, bt := m.sideTime(h, a), m.sideTime(h, b)
+	switch {
+	case at.IsZero() && !bt.IsZero():
+		return 1
+	case !at.IsZero() && bt.IsZero():
+		return -1
+	case h == sideIdle:
+		return bt.Compare(at)
+	}
+	return at.Compare(bt)
+}
+
+// sideSessions are the sessions the list draws: every match on every host
+// the console is linked to. A ship no session owns is no entry, and the
+// stoker's own agent is one only while it asks.
+func (m Model) sideSessions() []sample.Session {
+	return slices.DeleteFunc(slices.Clone(m.all.sessions), func(s sample.Session) bool {
+		return isShipCard(s) || m.isStoker(s) && !m.stokerAsksAsCard(s)
+	})
+}
+
+// sideGroups are the groups that hold a session, in state rank. A chain is
+// one unit, in the group of its most urgent member, and counts only the
+// members in that state.
+func (m Model) sideGroups() []sideGroup {
+	var units []sideUnit
+	var states [][]sideState
+	done := map[chainKey]bool{}
+	listed := m.sideSessions()
+	for _, s := range listed {
+		k, ok := m.chainKeyOf(s)
+		if !ok {
+			units = append(units, sideUnit{members: []sample.Session{s}})
+			states = append(states, []sideState{m.sideStateOf(s)})
+			continue
+		}
+		if done[k] {
+			continue
+		}
+		done[k] = true
+		var ms []sample.Session
+		seen, _ := m.members(k)
+		for _, o := range seen {
+			if slices.ContainsFunc(listed, func(l sample.Session) bool { return paneOf(l) == paneOf(o) }) {
+				ms = append(ms, o)
+			}
+		}
+		hs := make([]sideState, len(ms))
+		for i, o := range ms {
+			hs[i] = m.sideStateOf(o)
+		}
+		units = append(units, sideUnit{chain: k, members: ms})
+		states = append(states, hs)
+	}
+	var out []sideGroup
+	for h := sideNeed; h <= sideIdle; h++ {
+		g := sideGroup{state: h}
+		for i, u := range units {
+			lead, n := -1, 0
+			for j, o := range u.members {
+				if states[i][j] != h {
+					continue
+				}
+				n++
+				if lead < 0 || m.sideBefore(h, o, u.members[lead]) < 0 {
+					lead = j
+				}
+			}
+			if lead < 0 || slices.ContainsFunc(states[i], func(o sideState) bool { return o < h }) {
+				continue // a more urgent member holds the unit in an earlier group
+			}
+			u.lead = lead
+			g.count += n
+			g.units = append(g.units, u)
+		}
+		if len(g.units) == 0 {
+			continue
+		}
+		slices.SortStableFunc(g.units, func(a, b sideUnit) int { return m.sideBefore(h, a.urgent(), b.urgent()) })
+		out = append(out, g)
+	}
+	return out
+}
+
+// sideOrder is the sessions ↑↓ walk, as drawn: the units of each group in
+// order, a chain's members in team order.
+func (m Model) sideOrder() []paneKey {
+	var out []paneKey
+	for _, g := range m.sideGroups() {
+		for _, u := range g.units {
+			for _, s := range u.members {
+				out = append(out, paneOf(s))
+			}
+		}
+	}
+	return out
+}
