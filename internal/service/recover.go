@@ -278,7 +278,7 @@ func (s *Service) recoverRow(e recovery.Entry, moved string, live, taken map[str
 		}
 	}
 	agent = append(agent, resumeArgs(e.Agent, e.ConversationID)...)
-	return row, append(argv, agent...), strings.Join(agent, " ")
+	return row, append(argv, guardArgv(s.guardLink(), s.goos(), e.Agent, row.As, agent)...), strings.Join(agent, " ")
 }
 
 // freeName is name, or name-2, name-3, … when a tmux session has it.

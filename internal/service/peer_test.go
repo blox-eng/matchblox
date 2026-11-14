@@ -491,3 +491,40 @@ func TestGoingInFromAConsoleFreesThePane(t *testing.T) {
 		t.Fatal("the person went in, and the pane stayed the stoker's")
 	}
 }
+
+// TestCallerPaneOfGuardedOrphan: a guarded Cursor (#399) runs on the guard's
+// terminal, which is no tmux pane. A process of it that left its tree
+// (nohup, setsid) still has that terminal, and is placed in the Cursor's
+// pane: it does not pass for the person. A terminal that is no pane's and
+// no agent's is still the person's.
+func TestCallerPaneOfGuardedOrphan(t *testing.T) {
+	s := newTest(t, time.Hour)
+	s.cur.Sessions = []sample.Session{
+		{Pane: "%1", PID: 100, Agent: "claude"},
+		{Pane: "%7", PID: 500, Agent: sample.CursorAgent},
+	}
+	dev := func(path string) (ttyDevice, bool) {
+		d, ok := map[string]ttyDevice{"/dev/pts/1": {136, 1}, "/dev/pts/7": {136, 7}}[path]
+		return d, ok
+	}
+	tty := func(pid int) (ttyDevice, bool) {
+		d, ok := map[int]ttyDevice{
+			100: {136, 1},  // Claude Code, on its pane's terminal
+			500: {136, 40}, // Cursor, on its guard's terminal
+			900: {136, 40}, // a process Cursor started and left behind
+			901: {136, 55}, // a person's shell outside tmux
+		}[pid]
+		return d, ok
+	}
+	s.TmuxOut = func([]string) (string, error) { return "%1 /dev/pts/1\n%7 /dev/pts/7\n", nil }
+	for pid, want := range map[int]string{900: "%7", 901: ""} {
+		if pane, ok := s.paneOfTerminal(pid, tty, dev); pane != want || !ok {
+			t.Errorf("pid %d: pane %q, placed %v; want %q, placed", pid, pane, ok, want)
+		}
+	}
+	s.TTYPane = func(pid int) (string, bool) { return s.paneOfTerminal(pid, tty, dev) }
+	s.PeerPane = func(int) string { return "" } // the orphan's tree no longer leads to a pane
+	if pane, placed := s.callerPane(900); pane != "%7" || !placed {
+		t.Fatalf("the orphan of a guarded Cursor is placed in %q (placed %v), want its Cursor's pane %%7: else it passes for the person", pane, placed)
+	}
+}

@@ -296,3 +296,32 @@ func TestChildName(t *testing.T) {
 		}
 	}
 }
+
+// TestCursorUnderGuard: matchblox starts Cursor behind its redraw guard
+// (#399), so the pane's own process is the guard and Cursor is its child.
+// The session is still Cursor's, in that pane, and the guard is no session.
+func TestCursorUnderGuard(t *testing.T) {
+	root := copyFixture(t)
+	addProc(t, root, 930, 1, "matchblox-guard", []string{"/home/user/.local/state/matchblox/matchblox-guard", "guard", "--", "cursor-agent", "--resume", "x"}, "%30")
+	addProc(t, root, 931, 930, "node", []string{"/home/user/.local/bin/cursor-agent", "--use-system-ca", cursorJS, "--resume", "x"}, "%30")
+	addPane(t, root, "%30\tcur:1.1\tw\t930\tmatchblox-guard\t/work")
+	smp := newFixtureSampler(root)
+	smp.Agents = []string{"claude", CursorAgent}
+	snap := smp.Sample()
+	s, ok := byPane(snap)["%30"]
+	if !ok {
+		t.Fatal("no session in the pane of a guarded Cursor")
+	}
+	if s.Agent != CursorAgent || s.PID != 931 {
+		t.Fatalf("the session is %q, process %d: want %q, process 931 (Cursor, not its guard)", s.Agent, s.PID, CursorAgent)
+	}
+	n := 0
+	for _, x := range snap.Sessions {
+		if x.Pane == "%30" || x.PID == 930 {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Fatalf("%d sessions for one guarded Cursor: the guard is not a session", n)
+	}
+}
