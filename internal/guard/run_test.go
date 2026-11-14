@@ -46,9 +46,12 @@ func TestMain(m *testing.M) {
 // standInLines is how long the stand-in's chat is: over 1 MiB a replay.
 const standInLines = 20000
 
-// helperCursor stands in for Cursor with a long chat. It prints the clear
-// codes, every line and its input box at its start and at each change of
-// columns, and nothing at a change of rows. It shows each key in its box.
+// helperCursor stands in for Cursor with a long chat, as Cursor 2026.10.19
+// printed on a real chat (#402). At its start it prints the clear codes and
+// every line. When its columns get fewer it prints every line with no clear
+// before them, then 0.25 s later the clear alone, then 0.5 s after that
+// every line again; when they get more, the clear, 0.26 s later every line.
+// At a change of rows it prints nothing. It shows each key in its box.
 func helperCursor() {
 	if _, err := term.MakeRaw(os.Stdin.Fd()); err != nil {
 		os.Exit(2)
@@ -56,20 +59,30 @@ func helperCursor() {
 	var mu sync.Mutex
 	var input []byte
 	replaying := false
-	replay := func() {
-		mu.Lock()
-		replaying = true
-		mu.Unlock()
-		var b bytes.Buffer
-		b.WriteString(ClearCodes)
+	chat := func(b *bytes.Buffer) {
 		for i := 1; i <= standInLines; i++ {
-			fmt.Fprintf(&b, "line %d| %s\r\n", i, strings.Repeat("chat ", 12))
+			fmt.Fprintf(b, "line %d| %s\r\n", i, strings.Repeat("chat ", 12))
 			if i%200 == 0 { // a burst, not one write: as a renderer at work
 				_, _ = os.Stdout.Write(b.Bytes())
 				b.Reset()
 				time.Sleep(time.Millisecond)
 			}
 		}
+	}
+	replay := func(fewer bool, pause time.Duration) {
+		mu.Lock()
+		replaying = true
+		mu.Unlock()
+		var b bytes.Buffer
+		if fewer {
+			chat(&b)
+			_, _ = os.Stdout.Write(b.Bytes())
+			b.Reset()
+			time.Sleep(250 * time.Millisecond)
+		}
+		_, _ = os.Stdout.WriteString(ClearCodes)
+		time.Sleep(pause)
+		chat(&b)
 		mu.Lock()
 		defer mu.Unlock()
 		fmt.Fprintf(&b, "╭── ask ──╮\r\n│ → %s", input)
@@ -94,11 +107,16 @@ func helperCursor() {
 	winch := make(chan os.Signal, 8)
 	signal.Notify(winch, syscall.SIGWINCH)
 	cols, _, _ := term.GetSize(os.Stdout.Fd())
-	replay()
+	replay(false, 0)
 	for range winch {
 		if now, _, _ := term.GetSize(os.Stdout.Fd()); now != cols {
+			fewer := now < cols
 			cols = now
-			replay()
+			pause := 260 * time.Millisecond
+			if fewer {
+				pause = 500 * time.Millisecond
+			}
+			replay(fewer, pause)
 		}
 	}
 }
@@ -366,7 +384,7 @@ func TestGuardInTmux(t *testing.T) {
 		t.Helper()
 		deadline := time.Now().Add(20 * time.Second)
 		for last := -1; ; {
-			time.Sleep(400 * time.Millisecond) // over the guard's end window
+			time.Sleep(700 * time.Millisecond) // over the guard's longest wait for quiet, settleFor
 			direct, guarded = tmux("capture-pane", "-p", "-t", "direct"), tmux("capture-pane", "-p", "-t", "guarded")
 			size := len(printed("direct")) + len(printed("guarded"))
 			box := strings.TrimRight("│ → "+typed, " ")
