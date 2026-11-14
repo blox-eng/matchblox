@@ -23,27 +23,21 @@ import (
 
 func TestBoardWidths(t *testing.T) {
 	all := boardCols[:]
-	for _, c := range []struct {
-		l     Layout
+	for _, c := range []struct { // on Wide only: Medium stacks (TestMediumStacksTheSections), a phone pages
 		w     int
 		shown []boardCol
 		cols  []int
 		live  int
 	}{
-		{Medium, 80, all, nil, 0}, // the sections stack at the full width (TestMediumStacksTheSections)
-		{Wide, 104, all, []int{36, 24, 24, 17}, 0},
-		{Wide, 151, all, []int{53, 35, 35, 25}, 0},
-		{Wide, 152, all, []int{36, 25, 25, 18}, 44},
-		{Wide, 160, all, []int{36, 25, 25, 18}, 52},
-		{Wide, 160, []boardCol{colNeed, colShip, colQuiet}, []int{36, 25, 18}, 78},
-		{Narrow, 40, all, []int{40}, 0},
+		{104, all, []int{36, 24, 24, 17}, 0},
+		{151, all, []int{53, 35, 35, 25}, 0},
+		{152, all, []int{36, 25, 25, 18}, 44},
+		{160, all, []int{36, 25, 25, 18}, 52},
+		{160, []boardCol{colNeed, colShip, colQuiet}, []int{36, 25, 18}, 78},
 	} {
-		cols, live := boardWidths(c.l, c.w, c.shown)
+		cols, live := boardWidths(c.w, c.shown)
 		if !slices.Equal(cols, c.cols) || live != c.live {
-			t.Errorf("boardWidths(%v, %d, %v) = %v, %d; want %v, %d", c.l, c.w, c.shown, cols, live, c.cols, c.live)
-		}
-		if c.cols == nil {
-			continue
+			t.Errorf("boardWidths(%d, %v) = %v, %d; want %v, %d", c.w, c.shown, cols, live, c.cols, c.live)
 		}
 		sum := live
 		for _, x := range cols {
@@ -54,7 +48,7 @@ func TestBoardWidths(t *testing.T) {
 			gaps++
 		}
 		if sum+gaps != c.w {
-			t.Errorf("boardWidths(%v, %d, %v): %v and %d with %d gaps do not fill the width", c.l, c.w, c.shown, cols, live, gaps)
+			t.Errorf("boardWidths(%d, %v): %v and %d with %d gaps do not fill the width", c.w, c.shown, cols, live, gaps)
 		}
 	}
 }
@@ -332,7 +326,7 @@ func TestEmptyNeedsYouSaysSo(t *testing.T) {
 		if !strings.Contains(head, "WORKING · 0") {
 			t.Errorf("w=%d: an empty WORKING has no head: %q", w, head)
 		}
-		cols, _ := boardWidths(m.layoutAt(w), w, boardCols[:])
+		cols, _ := boardWidths(w, boardCols[:])
 		if len(d.heads) < 2 || d.heads[1].x0 != cols[0]+1 || d.heads[1].x1-d.heads[1].x0 != cols[1] {
 			t.Errorf("w=%d: an empty WORKING does not keep its width %d: %+v", w, cols[1], d.heads)
 		}
@@ -476,7 +470,7 @@ func TestTheLiveViewFollowsTheChosenCard(t *testing.T) {
 		}
 	}
 	m := boardShot(t, st, 160, 38, screen("flint-auth"))
-	cols, live := boardWidths(Wide, 160, boardCols[:])
+	cols, live := boardWidths(160, boardCols[:])
 	right := 160 - live
 	d := m.boardPanel(160, m.bodyRows())
 	side := func(d boardDrawn) string {
@@ -601,8 +595,8 @@ func TestAHiddenColumnGivesItsRoom(t *testing.T) {
 			continue
 		}
 		shown := []boardCol{colNeed, colShip, colQuiet}
-		cols, live := boardWidths(m.layoutAt(w), w, shown)
-		full, _ := boardWidths(m.layoutAt(w), w, boardCols[:])
+		cols, live := boardWidths(w, shown)
+		full, _ := boardWidths(w, boardCols[:])
 		if len(d.heads) != len(cols) || d.heads[0].x1 != cols[0] {
 			t.Errorf("w=%d: heads %+v, want widths %v", w, d.heads, cols)
 		}

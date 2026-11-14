@@ -688,7 +688,7 @@ func TestTheLiveViewCropsTheChosenCardsScreen(t *testing.T) {
 	if m.watching != paneNamed(st, "flint-auth") {
 		t.Fatalf("the board watches %q, not flint-auth", m.watching)
 	}
-	_, live := boardWidths(Wide, 160, boardCols[:])
+	_, live := boardWidths(160, boardCols[:])
 	var text strings.Builder
 	for i := 1; i <= 60; i++ {
 		fmt.Fprintf(&text, "row %d %s\n", i, strings.Repeat("=", 2*live))

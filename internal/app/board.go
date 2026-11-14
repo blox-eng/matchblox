@@ -20,31 +20,28 @@ import (
 // columns at which an agent's menu reads.
 const liveFrom = 152
 
-// boardBase is each column's width of 104 on Wide. Medium stacks its
-// sections at the full width (boardStacked), and has no columns.
-var boardBase = map[Layout][4]int{Wide: {36, 25, 25, 18}}
+// boardBase is each column's width of 104 on Wide, the only layout with
+// columns side by side: Medium stacks its sections (boardStacked), and a
+// phone shows one column a page.
+var boardBase = [4]int{36, 25, 25, 18}
 
-// boardWidths is the width of each shown column at w, with one cell
-// between two, and the live view's at the right (0 for none). A hidden
-// column gives its room to the others in their proportions; on Wide from
+// boardWidths is the width of each shown column at w on Wide, with one
+// cell between two, and the live view's at the right (0 for none). A
+// hidden column gives its room to the others in their proportions; from
 // liveFrom the columns keep their base widths and the live view takes it.
-func boardWidths(l Layout, w int, shown []boardCol) (cols []int, live int) {
-	return boardWidthsAt(l, w, shown, true)
+func boardWidths(w int, shown []boardCol) (cols []int, live int) {
+	return boardWidthsAt(w, shown, true)
 }
 
 // boardWidthsAt is boardWidths; roomy: the live view has the rows for a
 // menu (menuLeast), else the columns take its room.
-func boardWidthsAt(l Layout, w int, shown []boardCol, roomy bool) (cols []int, live int) {
-	if l == Narrow {
-		return []int{w}, 0
-	}
+func boardWidthsAt(w int, shown []boardCol, roomy bool) (cols []int, live int) {
 	sum := 0
 	for _, c := range shown {
-		if x := boardBase[l][c]; x > 0 {
-			cols, sum = append(cols, x), sum+x
-		}
+		x := boardBase[c]
+		cols, sum = append(cols, x), sum+x
 	}
-	if l == Wide && w >= liveFrom && roomy {
+	if w >= liveFrom && roomy {
 		return cols, w - sum - len(cols)
 	}
 	if len(cols) == 0 {
@@ -82,8 +79,9 @@ type boardDrawn struct {
 	// line under the columns reaches (boardLine.at).
 	doorsAt int
 	underAt map[int]string
-	// colsTo is the line under the columns side by side, and live the
-	// width of the live view at their right (0: none).
+	// colsTo is the line under the columns side by side, or at Medium under
+	// the sections, and live the width of the live view at their right (0:
+	// none).
 	colsTo, live int
 	// roomAt is the room's row on each line the room draws.
 	roomAt map[int]int
@@ -497,7 +495,7 @@ func (m Model) boardPage(d *boardDrawn, b *boardDraw, shown []boardCol, w, rows 
 // side, and from liveFrom the live view at the right.
 func (m Model) boardColumns(d *boardDrawn, b *boardDraw, shown []boardCol, w, rows int) {
 	st := m.st
-	widths, live := boardWidthsAt(Wide, w, shown, rows >= menuLeast)
+	widths, live := boardWidthsAt(w, shown, rows >= menuLeast)
 	b.live, d.live = live, live
 	colH := max(rows-1, 0)
 
