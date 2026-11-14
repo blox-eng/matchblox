@@ -334,3 +334,33 @@ func TestMediumOneRowSectionShowsACard(t *testing.T) {
 		t.Errorf("WORKING's one row is not the chosen card's row: %q", row)
 	}
 }
+
+// TestMediumShortScreensKeepTheNames sweeps the heights at 80 columns: every
+// shown section with cards keeps its name on the screen, whatever is
+// chosen and whether QUIET is open, and every line is the screen's width.
+func TestMediumShortScreensKeepTheNames(t *testing.T) {
+	st := boardFixture(t)
+	for h := 6; h <= 31; h++ {
+		for _, chosen := range []string{"spark-search", "kindle-web", "hearth-api", "flint-auth", "wick-mobile"} {
+			m := boardShot(t, st, 80, h, chooseCard(chosen))
+			lines := frameLines(m)
+			if len(lines) != h {
+				t.Errorf("80x%d, %s chosen: %d lines", h, chosen, len(lines))
+			}
+			for i, l := range lines {
+				if lipgloss.Width(l) != 80 {
+					t.Errorf("80x%d, %s chosen: line %d is %d cells", h, chosen, i, lipgloss.Width(l))
+				}
+			}
+			if m.bodyRows() < 1 {
+				continue // no body row: the console's least frame
+			}
+			f := plainFrame(m)
+			for _, c := range []boardCol{colNeed, colWork, colShip} {
+				if !strings.Contains(f, c.name()+" · ") {
+					t.Errorf("80x%d, %s chosen: no %s on the screen:\n%s", h, chosen, c.name(), f)
+				}
+			}
+		}
+	}
+}

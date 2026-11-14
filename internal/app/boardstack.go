@@ -2,6 +2,7 @@ package app
 
 import (
 	"slices"
+	"strconv"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -12,9 +13,10 @@ import (
 
 // stackRows splits the body rows of the stacked board (owner,
 // 2026-11-14). NEEDS YOU takes its cards and its head first, but leaves 2
-// rows to each other section shown. A blank row sits between sections and
+// rows to each other section shown; short of rows each section keeps its
+// head before NEEDS YOU keeps a card. A blank row sits between sections and
 // is the first to go when rows are short. SHIPPING sits at the bottom with
-// its head and a row for each of its ships matches, 3 at most. WORKING
+// its head and a row for each of its ships, 3 at most. WORKING
 // takes the rest, so its head moves only with NEEDS YOU, and SHIPPING's
 // only with NEEDS YOU and a count of ships under 4.
 func stackRows(need, ships, rows int, work, ship bool) (needH, workH, shipH, gaps int) {
@@ -26,7 +28,9 @@ func stackRows(need, ships, rows int, work, ship bool) (needH, workH, shipH, gap
 		shown++
 	}
 	if need > 0 {
-		needH = max(min(need+1, rows-2*shown), min(need+1, rows, 2)) // short of rows, NEEDS YOU keeps its head and a row
+		if needH = min(need+1, rows-2*shown); needH < 2 {
+			needH = max(min(need+1, 2, rows-shown), min(rows, 1)) // the heads first, then a card
+		}
 	}
 	sections := shown
 	if needH > 0 {
@@ -36,7 +40,7 @@ func stackRows(need, ships, rows int, work, ship bool) (needH, workH, shipH, gap
 	rest := max(0, rows-needH-gaps)
 	switch {
 	case work && ship && rest < 4:
-		workH = min(rest, 2)
+		workH = max(min(rest-1, 2), 0)
 		shipH = rest - workH
 	case work && ship:
 		shipH = min(1+max(min(ships, 3), 1), rest-2)
@@ -66,9 +70,26 @@ func (m Model) boardStacked(d *boardDrawn, b *boardDraw, shown []boardCol, w, ro
 			drawer = 0 // the chosen card's head outranks the shelf
 		}
 	}
+	// Short of rows the heads of the sections with cards come first, then the
+	// chosen card's head, then the heads of empty sections, then the drawer,
+	// whose foot is cut.
+	stack := slices.DeleteFunc(slices.Clone(shown), func(c boardCol) bool { return c == colQuiet })
+	if rows-len(talk) <= len(stack) {
+		stack = slices.DeleteFunc(stack, func(c boardCol) bool { return len(b.idx[c]) == 0 })
+	}
+	reserve := len(stack)
+	if b.picked && b.open != colQuiet {
+		reserve++
+	}
+	drawer = min(drawer, max(rows-len(talk)-reserve, 0))
 	sec := max(rows-drawer-len(talk), 0)
+	if sec < len(stack) {
+		m.stackNames(d, b, stack, w, sec)
+		m.stackFoot(d, b, w, talk, drawer)
+		return
+	}
 	need := 0
-	if slices.Contains(shown, colNeed) {
+	if slices.Contains(stack, colNeed) {
 		need = 2 // a blank row, and that nothing needs you
 		if ss := b.idx[colNeed]; len(ss) > 0 {
 			need = 0
@@ -77,7 +98,7 @@ func (m Model) boardStacked(d *boardDrawn, b *boardDraw, shown []boardCol, w, ro
 			}
 		}
 	}
-	needH, workH, shipH, gaps := stackRows(need, len(b.idx[colShip]), sec, slices.Contains(shown, colWork), slices.Contains(shown, colShip))
+	needH, workH, shipH, gaps := stackRows(need, len(b.idx[colShip]), sec, slices.Contains(stack, colWork), slices.Contains(stack, colShip))
 	for _, c := range []boardCol{colWork, colShip} {
 		b.nameW[c] = 14
 		for _, s := range b.idx[c] {
@@ -98,6 +119,9 @@ func (m Model) boardStacked(d *boardDrawn, b *boardDraw, shown []boardCol, w, ro
 		}
 		ss := b.idx[sc.c]
 		on, more := b, 0
+		if sc.h == 1 {
+			more = len(ss) // the head alone: it counts every card
+		}
 		if sc.h == 2 && len(ss) > 1 { // one row: the chosen card, else the first, and the head counts the rest
 			one := *b
 			card := ss[0]
@@ -123,11 +147,44 @@ func (m Model) boardStacked(d *boardDrawn, b *boardDraw, shown []boardCol, w, ro
 	if words := m.boardWords(b); words != "" && d.headAt >= 0 && sec > 1 {
 		d.lines[d.headAt+1] = fit("  "+st.faint.Render(words), w)
 	}
+	m.stackFoot(d, b, w, talk, drawer)
+}
+
+// stackFoot is what closes the stack: the room's talk lines, then the
+// QUIET drawer.
+func (m Model) stackFoot(d *boardDrawn, b *boardDraw, w int, talk []roomDrawn, drawer int) {
 	for _, t := range talk {
 		d.roomAt[len(d.lines)] = t.at
-		d.addRow(-1, t.sel, w, st, t.text)
+		d.addRow(-1, t.sel, w, m.st, t.text)
 	}
 	if drawer > 0 {
 		m.boardDrawer(d, b, w)
 	}
+}
+
+// stackNames is the stack in fewer rows than it has heads: one line names
+// each section of stack with its count, as the column heads did, and a tap
+// on a name hides it.
+func (m Model) stackNames(d *boardDrawn, b *boardDraw, stack []boardCol, w, rows int) {
+	if rows <= 0 {
+		return
+	}
+	var parts []string
+	x := 0
+	for _, c := range stack {
+		text := " " + c.name()
+		if m.have {
+			text += " · " + strconv.Itoa(len(b.idx[c]))
+		}
+		cw := lipgloss.Width(text + "  −")
+		parts = append(parts, m.boardHead(c, len(b.idx[c]), 0, cw, c == b.open))
+		d.heads = append(d.heads, span{min(x, w), min(x+cw, w), c.short()})
+		x += cw + 1
+	}
+	d.headAt = len(d.lines)
+	d.add(-1, fit(strings.Join(parts, " "), w))
+	for range rows - 1 {
+		d.add(-1, strings.Repeat(" ", w))
+	}
+	d.colsTo = len(d.lines)
 }
