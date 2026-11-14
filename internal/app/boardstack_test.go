@@ -20,27 +20,33 @@ func TestStackRowsGivesShippingItsShips(t *testing.T) {
 		name                          string
 		need, ships, rows             int
 		needs, work, ship             bool
+		pick                          boardCol
 		needH, workH, shipH, wantGaps int
 	}{
-		{"shipping takes a row a ship", 9, 3, 21, true, true, true, 10, 5, 4, 2},
-		{"shipping stops at 3 rows", 9, 6, 21, true, true, true, 10, 5, 4, 2},
-		{"one ship takes one row", 9, 1, 21, true, true, true, 10, 7, 2, 2},
-		{"an empty shipping keeps its head and a row", 9, 0, 21, true, true, true, 10, 7, 2, 2},
-		{"needs you that does not fit leaves two rows each", 30, 3, 21, true, true, true, 17, 2, 2, 0},
-		{"one shown section takes the rest", 9, 0, 21, true, true, false, 10, 10, 0, 1},
-		{"only shipping shown takes the rest", 9, 3, 21, true, false, true, 10, 0, 10, 1},
-		{"hidden needs you gives its rows to working", 0, 3, 21, false, true, true, 0, 16, 4, 1},
-		{"neither section shown leaves needs you the rows", 30, 0, 21, true, false, false, 21, 0, 0, 0},
-		{"one shown section keeps two rows when needs you is long", 30, 0, 21, true, true, false, 19, 2, 0, 0},
-		{"short of rows each section keeps what it can", 9, 3, 5, true, true, true, 2, 2, 1, 0},
-		{"a narrowed empty needs you keeps its head alone", 0, 3, 21, true, true, true, 1, 14, 4, 2},
+		{"shipping takes a row a ship", 9, 3, 21, true, true, true, colNeed, 10, 5, 4, 2},
+		{"shipping stops at 3 rows", 9, 6, 21, true, true, true, colNeed, 10, 5, 4, 2},
+		{"one ship takes one row", 9, 1, 21, true, true, true, colNeed, 10, 7, 2, 2},
+		{"an empty shipping keeps its head and a row", 9, 0, 21, true, true, true, colNeed, 10, 7, 2, 2},
+		{"needs you that does not fit leaves two rows each", 30, 3, 21, true, true, true, colNeed, 17, 2, 2, 0},
+		{"one shown section takes the rest", 9, 0, 21, true, true, false, colNeed, 10, 10, 0, 1},
+		{"only shipping shown takes the rest", 9, 3, 21, true, false, true, colNeed, 10, 0, 10, 1},
+		{"hidden needs you gives its rows to working", 0, 3, 21, false, true, true, colNeed, 0, 16, 4, 1},
+		{"neither section shown leaves needs you the rows", 30, 0, 21, true, false, false, colNeed, 21, 0, 0, 0},
+		{"one shown section keeps two rows when needs you is long", 30, 0, 21, true, true, false, colNeed, 19, 2, 0, 0},
+		{"short of rows each section keeps what it can", 9, 3, 5, true, true, true, colNeed, 2, 2, 1, 0},
+		{"a narrowed empty needs you keeps its head alone", 0, 3, 21, true, true, true, colNeed, 1, 14, 4, 2},
+		{"short of rows the chosen wait keeps its row", 9, 3, 4, true, true, true, colNeed, 2, 1, 1, 0},
+		{"short of rows the chosen working match keeps its row", 9, 3, 4, true, true, true, colWork, 1, 2, 1, 0},
+		{"short of rows the chosen ship keeps its row", 9, 3, 4, true, true, true, colShip, 1, 1, 2, 0},
+		{"no chosen card: needs you keeps its row", 9, 3, 4, true, true, true, colQuiet, 2, 1, 1, 0},
+		{"a chosen ship and one more row", 9, 3, 5, true, true, true, colShip, 2, 1, 2, 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			needH, workH, shipH, gaps := stackRows(tt.need, tt.ships, tt.rows, tt.needs, tt.work, tt.ship)
+			needH, workH, shipH, gaps := stackRows(tt.need, tt.ships, tt.rows, tt.needs, tt.work, tt.ship, tt.pick)
 			if needH != tt.needH || workH != tt.workH || shipH != tt.shipH || gaps != tt.wantGaps {
-				t.Fatalf("stackRows(%d, %d, %d, %v, %v, %v) = %d, %d, %d, %d; want %d, %d, %d, %d",
-					tt.need, tt.ships, tt.rows, tt.needs, tt.work, tt.ship, needH, workH, shipH, gaps,
+				t.Fatalf("stackRows(%d, %d, %d, %v, %v, %v, %s) = %d, %d, %d, %d; want %d, %d, %d, %d",
+					tt.need, tt.ships, tt.rows, tt.needs, tt.work, tt.ship, tt.pick.name(), needH, workH, shipH, gaps,
 					tt.needH, tt.workH, tt.shipH, tt.wantGaps)
 			}
 			if sum := needH + workH + shipH + gaps; (tt.work || tt.ship) && sum != tt.rows {
@@ -51,9 +57,9 @@ func TestStackRowsGivesShippingItsShips(t *testing.T) {
 }
 
 func TestStackRowsMovesShippingOnlyUnderFourShips(t *testing.T) {
-	_, _, want, _ := stackRows(9, 3, 21, true, true, true)
+	_, _, want, _ := stackRows(9, 3, 21, true, true, true, colWork)
 	for _, ships := range []int{4, 5, 13} {
-		if _, _, shipH, _ := stackRows(9, ships, 21, true, true, true); shipH != want {
+		if _, _, shipH, _ := stackRows(9, ships, 21, true, true, true, colWork); shipH != want {
 			t.Errorf("%d ships take %d rows, want %d as 3 do", ships, shipH, want)
 		}
 	}
@@ -425,6 +431,46 @@ func TestMediumCountsEveryCard(t *testing.T) {
 						}
 					}
 				}
+			}
+		}
+	}
+}
+
+// TestMediumDownKeepsTheChosenCardShown walks ↓ through every card on short
+// and tall screens: the chosen card is on the screen after each step, and
+// no section counts its cards twice, on its head and in a ↓ N more row.
+func TestMediumDownKeepsTheChosenCardShown(t *testing.T) {
+	st := boardFixture(t)
+	for _, w := range []int{60, 80, 99} {
+		for h := 9; h <= 31; h++ {
+			m := boardShot(t, st, w, h, chooseCard("spark-search"))
+			if m.layoutAt(w) != Medium {
+				continue // upright at 60 columns: a phone's pages
+			}
+			for step := 0; step < 12 && m.boardBelow == 0 && m.boardAt != colQuiet; step++ {
+				s, ok := m.boardSelected()
+				if !ok {
+					t.Fatalf("%dx%d, step %d: no card is chosen", w, h, step)
+				}
+				d, plain, at := sectionHeads(t, m)
+				if !m.cardDrawn(s) || !slices.ContainsFunc(plain[:d.colsTo], func(l string) bool { return strings.Contains(l, s.Name) }) {
+					t.Errorf("%dx%d, step %d: the chosen %s is not on the screen:\n%s", w, h, step, s.Name, strings.Join(plain[:d.colsTo], "\n"))
+				}
+				for c, head := range at {
+					if head < 0 || !strings.Contains(plain[head], "↓") {
+						continue
+					}
+					to := d.colsTo
+					for _, other := range at {
+						if other > head && other < to {
+							to = other
+						}
+					}
+					if slices.ContainsFunc(plain[head+1:to], func(l string) bool { return strings.HasPrefix(strings.TrimSpace(l), "↓ ") }) {
+						t.Errorf("%dx%d, %s chosen: %s counts its cards on its head and in a ↓ row:\n%s", w, h, s.Name, c.name(), strings.Join(plain[:d.colsTo], "\n"))
+					}
+				}
+				m = pressOn(m, "down")
 			}
 		}
 	}

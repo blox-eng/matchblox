@@ -60,7 +60,7 @@ A section's head is its own line, with its tap span over the name and the `−`.
 
 So the head of `WORKING` moves only when the rows of `NEEDS YOU` change: a change the owner makes, or the news the owner wants. The head of `SHIPPING` moves also when the count of ships changes under 4. A match that starts work or stops it moves nothing.
 
-A hidden section gives its rows to the others. A blank row goes first when rows are short, then the gap under the heads. On a short screen the heads come first: the heads of the sections with cards, then the chosen card's head, then the heads of empty sections, then the `QUIET` drawer, whose foot is cut. With fewer rows than heads, one line names the sections with their counts, as the column heads did.
+A hidden section gives its rows to the others. A blank row goes first when rows are short, then the gap under the heads. On a short screen the heads come first: the heads of the sections with cards, then the chosen card's head (its row in its own section, before `NEEDS YOU` takes a second row; a wait in one row is its head line, and its section's head counts the others), then the heads of empty sections, then the `QUIET` drawer, whose foot is cut. With fewer rows than heads, one line names the sections with their counts, as the column heads did.
 
 ### Taps and keys
 
