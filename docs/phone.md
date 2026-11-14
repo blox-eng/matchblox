@@ -85,8 +85,9 @@ terminal.`
 - Each time the app opens, Face ID or the passcode unlocks the key. The key
   stays in the Secure Enclave of the device. Each host has its own key.
 - With one host, the app opens straight into its console. With two or
-  more, it lists the hosts. Tap a host to open its console. Tap
-  `+ Pair a host` to add one.
+  more, it lists the hosts. Tap a host to open its console, or
+  `+ Pair a host` to add one. The console's `Hosts` button opens the list
+  with either count, so you can remove even your only host.
 - If the app says `Can't reach <host>.` and `New address?`, type the
   address that the device can reach, then tap `Try again`. The pairing
   stays.
@@ -96,8 +97,7 @@ terminal.`
   gets the same message, and the app shows the Address field: the address
   reaches another machine.
 - When you quit the console, the app says that the console ended. Tap
-  `Open again` to open it. With two or more hosts, tap `Hosts` to go to
-  the list.
+  `Open again` to open it, or `Hosts` to go to the list.
 - A swipe on a host in the list removes the host and its key from the
   device. It does not remove the key on the host. Run
   `matchblox devices rm <name>` on the host for that.
