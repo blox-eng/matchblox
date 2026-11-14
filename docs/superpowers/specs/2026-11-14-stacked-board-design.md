@@ -48,6 +48,8 @@ Top to bottom, in the rows that the columns take today (`boardRows`):
 1. `NEEDS YOU · N  −`, then each card in two lines, the full width: the name with harness and wait; then the state word and its text, with the track, `ctx` and chain stub at its right. The owner chose this card (proposal B of the mockup, owner, 2026-11-14). Only the chosen card opens its peek: the quote, the options and its keys. A card that is not chosen has no key line, and no blank row is between two cards. In one-line density a card is its head and its state line, as today.
 2. A blank row, then `WORKING · N  −`, then one row a match: glyph, name, harness, the state word and its text, and at the right `ctx` and the chain stub. This is the row that QUIET draws on Wide (`boardBlockOf` with `quietRow`), with the state text.
 3. A blank row, then `SHIPPING · N  −`, then one row a match: glyph, name, harness, the state word and its text, and at the right the track and the wait.
+
+In `WORKING` and `SHIPPING` the chosen match opens to its full card, as in one-line density today. The names and host words of a section have one width, so the harness marks line up. A section of one row shows the chosen card, else the first, and its head counts the others: `WORKING · 3  ↓ 2  −`. A section with no row for a card is its head, and the head counts every card.
 4. The `QUIET` drawer, as today.
 
 A section's head is its own line, with its tap span over the name and the `−`. The open section's name is fg bold, as a column's head is.
@@ -58,7 +60,7 @@ A section's head is its own line, with its tap span over the name and the `−`.
 
 So the head of `WORKING` moves only when the rows of `NEEDS YOU` change: a change the owner makes, or the news the owner wants. The head of `SHIPPING` moves also when the count of ships changes under 4. A match that starts work or stops it moves nothing.
 
-A hidden section gives its rows to the others. A blank row goes first when rows are short, then the gap under the heads.
+A hidden section gives its rows to the others. A blank row goes first when rows are short, then the gap under the heads. On a short screen the heads come first: the heads of the sections with cards, then the chosen card's head, then the heads of empty sections, then the `QUIET` drawer, whose foot is cut. With fewer rows than heads, one line names the sections with their counts, as the column heads did.
 
 ### Taps and keys
 
