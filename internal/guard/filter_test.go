@@ -3,6 +3,7 @@ package guard
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"math/rand"
 	"slices"
 	"strings"
@@ -608,17 +609,26 @@ func TestFilterCodesAfterClearAreNoPrint(t *testing.T) {
 }
 
 // TestFilterQuietHoldOnePass: a long chat after a resize costs the guard one
-// pass over its bytes, not a pass per write: the pane does not freeze.
+// pass over its bytes, not a pass per write: the pane does not freeze. Six
+// times the bytes take about six times as long, where a pass per write takes
+// thirty-six; a slow machine, or the race detector, changes neither ratio.
 func TestFilterQuietHoldOnePass(t *testing.T) {
-	var out bytes.Buffer
-	c := newClock()
-	f := NewFilter(&out, c.now)
-	f.Resized()
-	in := bytes.Repeat([]byte("line | chat chat chat chat chat chat chat chat chat chat chat chat\r\n"), quietCap/68)
-	began := time.Now()
-	writeIn(t, f, in, 4096)
-	if took := time.Since(began); took > 5*time.Second {
-		t.Fatalf("a quiet hold of %d MiB took %v to take in, want a few hundred ms at most: each write scans all it holds", len(in)>>20, took)
+	line := []byte("line | chat chat chat chat chat chat chat chat chat chat chat chat\r\n")
+	took := func(mib int) time.Duration {
+		best := time.Duration(1 << 62)
+		for range 2 { // the faster of two runs: a pause of the machine is no cost of the guard
+			f := NewFilter(io.Discard, newClock().now)
+			f.Resized()
+			in := bytes.Repeat(line, (mib<<20)/len(line))
+			began := time.Now()
+			writeIn(t, f, in, 4096)
+			best = min(best, time.Since(began))
+		}
+		return best
+	}
+	small, big := took(2), took(12)
+	if ratio := float64(big) / float64(small); ratio > 18 {
+		t.Fatalf("2 MiB in a quiet hold took %v, 12 MiB %v: %.0f times as long for six times the bytes; each write scans all the hold holds", small, big, ratio)
 	}
 }
 
