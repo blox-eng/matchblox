@@ -48,6 +48,21 @@ final class IslandStateTests: XCTestCase {
         XCTAssertEqual(n.resets, Date(timeIntervalSince1970: 1_792_594_800))
     }
 
+    /// OpenCode's plugin reports `waiting` and `retry` (owner, 2026-11-13: "Allow them"). The
+    /// phone never reads an agent's status: the host counts a wait as `wait` and a retry as
+    /// `burn`, and names the top's state in its own words. A word the phone does not know
+    /// still decodes, and the island draws it quiet.
+    func testAStateWordThePhoneDoesNotKnowStillDecodes() throws {
+        for word in ["waiting", "retry"] {
+            let raw = #"{"host":"f10f7812","burn":1,"wait":1,"top":{"n":3,"state":"\#(word)","pct":0},"accounts":[],"stoker":false}"#
+            let s = try JSONDecoder().decode(IslandState.self, from: Data(raw.utf8))
+            XCTAssertEqual(s.top?.state, word)
+            XCTAssertEqual(s.burn, 1)
+            XCTAssertEqual(s.wait, 1)
+            XCTAssertEqual(IslandLook.state(s.top), .quiet, word)
+        }
+    }
+
     func testTheRegisterTypesReadTheFixtures() throws {
         let r: RegisterRequest = try PushFixture.load("register-request")
         // Grants are keyed as the host's Sender looks them up: "<kind>:<target>".

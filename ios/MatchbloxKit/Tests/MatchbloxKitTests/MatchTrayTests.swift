@@ -10,35 +10,35 @@ final class MatchTrayTests: XCTestCase {
 
     func testTheLayoutInUseBurnsAndTheRestAreReady() {
         let tray = MatchTray(inUse: .steer)
-        XCTAssertEqual(BeltLayout.allCases, [.steer, .commands, .tmux, .mine])
-        XCTAssertEqual(matches(tray), [.burns, .ready, .ready, .ready])
+        XCTAssertEqual(BeltLayout.allCases, [.steer, .commands, .tmux, .mine, .board])
+        XCTAssertEqual(matches(tray), [.burns, .ready, .ready, .ready, .ready])
     }
 
     func testAPickStrikesTheMatchAndTheOneLeftGoesOut() {
         var tray = MatchTray(inUse: .steer)
         XCTAssertEqual(tray.pick(.tmux), .steer)
         XCTAssertEqual(tray.inUse, .tmux)
-        XCTAssertEqual(matches(tray), [.out, .ready, .burns, .ready])
+        XCTAssertEqual(matches(tray), [.out, .ready, .burns, .ready, .ready])
     }
 
     func testTheBurntMatchStaysBurntWhileTheTrayIsOpen() {
         var tray = MatchTray(inUse: .steer)
         tray.pick(.tmux)
         XCTAssertEqual(tray.pick(.mine), .tmux)
-        XCTAssertEqual(matches(tray), [.out, .ready, .out, .burns])
+        XCTAssertEqual(matches(tray), [.out, .ready, .out, .burns, .ready])
     }
 
     func testPickingTheLayoutInUseChangesNothing() {
         var tray = MatchTray(inUse: .commands)
         XCTAssertNil(tray.pick(.commands))
-        XCTAssertEqual(matches(tray), [.ready, .burns, .ready, .ready])
+        XCTAssertEqual(matches(tray), [.ready, .burns, .ready, .ready, .ready])
     }
 
     func testAMatchLeftAndPickedAgainBurns() {
         var tray = MatchTray(inUse: .steer)
         tray.pick(.tmux)
         XCTAssertEqual(tray.pick(.steer), .tmux)
-        XCTAssertEqual(matches(tray), [.burns, .ready, .out, .ready])
+        XCTAssertEqual(matches(tray), [.burns, .ready, .out, .ready, .ready])
     }
 
     func testAClosedBoxIsFreshButTheMatchInUseBurns() {
@@ -47,7 +47,14 @@ final class MatchTrayTests: XCTestCase {
         tray.pick(.mine)
         tray.close()
         XCTAssertEqual(tray.inUse, .mine)
-        XCTAssertEqual(matches(tray), [.ready, .ready, .ready, .burns])
+        XCTAssertEqual(matches(tray), [.ready, .ready, .ready, .burns, .ready])
+    }
+
+    func testBoardIsTheFifthMatch() {
+        var tray = MatchTray(inUse: .commands)
+        XCTAssertEqual(tray.pick(.board), .commands)
+        XCTAssertEqual(matches(tray), [.ready, .out, .ready, .ready, .burns])
+        XCTAssertEqual(BeltLayout(rawValue: "board"), .board)
     }
 
     func testTheIslandMatchOfEachState() {

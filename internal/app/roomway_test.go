@@ -6,15 +6,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
-func TestEnterOnAChainHeadOpensItsRoom(t *testing.T) {
-	m, _ := headModel(t, 160, headState(t, runningPlan(), true))
-	m = pick(t, m, stokerPane)
-	next, _ := press(m, tea.KeyEnter)
-	if r := next.(Model).room; r == nil || r.k.id != "c1" {
-		t.Fatalf("room %+v", r)
-	}
-}
-
 func TestFlipOnALooseSessionOpensItsChainOfOne(t *testing.T) {
 	m, _ := headModel(t, 160, headState(t, runningPlan(), true))
 	m = pick(t, m, "%2") // flint-auth, in no chain

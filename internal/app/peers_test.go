@@ -4,9 +4,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"testing"
 	"time"
+
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/blox-eng/matchblox/internal/history"
 	"github.com/blox-eng/matchblox/internal/proto"
@@ -82,8 +85,9 @@ func TestPeerLostRedialsOnItsOwn(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("no redial scheduled")
 	}
-	if msg, ok := cmd().(peerRedialMsg); !ok || msg.host != "ws-1" {
-		t.Fatalf("the tick gives %#v, want a peerRedialMsg of ws-1", msg)
+	msgs := msgsWithin(cmd, time.Second) // with the board's belt in the batch
+	if i := slices.IndexFunc(msgs, func(msg tea.Msg) bool { r, ok := msg.(peerRedialMsg); return ok && r.host == "ws-1" }); i < 0 {
+		t.Fatalf("the tick gives %#v, want a peerRedialMsg of ws-1", msgs)
 	}
 	if _, cmd := next.Update(peerMsg{host: "ws-1", conn: ws, msg: lostMsg{err: io.EOF, conn: ws}}); cmd != nil {
 		t.Fatal("a second loss of the same peer conn scheduled a second redial")
@@ -97,7 +101,7 @@ func TestPeerBlockedStopsRedial(t *testing.T) {
 	if p := next.(Model).peers[0]; !errors.Is(p.blocked, remote.ErrNotConnected) || !p.lost || p.redialing {
 		t.Fatalf("blocked %v, lost %v, redialing %v; want blocked and lost, no redial", p.blocked, p.lost, p.redialing)
 	}
-	if cmd != nil {
+	if slices.ContainsFunc(msgsWithin(cmd, time.Second), func(msg tea.Msg) bool { _, ok := msg.(peerRedialMsg); return ok }) {
 		t.Fatal("a blocked peer scheduled a redial")
 	}
 }
@@ -149,8 +153,8 @@ func TestResultOfAnActLostWithItsPeer(t *testing.T) {
 	_ = m.sendPeer(0, proto.Act{RecID: "answer:%12", Text: "yes"})()
 	next, _ := m.Update(peerMsg{host: "ws-1", conn: x, msg: lostMsg{err: io.EOF, conn: x}})
 	nm := next.(Model)
-	if want := "ws-1: 1 act has no answer"; nm.toast != want || nm.flash != "" {
-		t.Fatalf("toast %q, flash %q; want the toast %q", nm.toast, nm.flash, want)
+	if want := "ws-1: 1 act has no answer"; saidNow(nm) != want || nm.flash != "" {
+		t.Fatalf("toast %q, flash %q; want the toast %q", saidNow(nm), nm.flash, want)
 	}
 	if len(nm.peers[0].acts) != 0 {
 		t.Fatal("the lost acts are still in flight")
@@ -159,8 +163,8 @@ func TestResultOfAnActLostWithItsPeer(t *testing.T) {
 	flash := nm.flash
 	next, cmd := nm.Update(peerMsg{host: "ws-1", conn: y, msg: resultMsg{ActID: x.sent[0].ID, Err: "late"}})
 	nm = next.(Model)
-	if nm.toast != "ws-1: 1 act has no answer" || nm.flash != flash {
-		t.Fatalf("a result on the new conn was taken for the lost act: toast %q, flash %q", nm.toast, nm.flash)
+	if saidNow(nm) != "ws-1: 1 act has no answer" || nm.flash != flash {
+		t.Fatalf("a result on the new conn was taken for the lost act: toast %q, flash %q", saidNow(nm), nm.flash)
 	}
 	if cmd == nil {
 		t.Fatal("the peer's next message is not read")
@@ -176,8 +180,8 @@ func TestPeerBlockedClearsItsFlash(t *testing.T) {
 	err := fmt.Errorf("ws-1: %w", remote.ErrHostKeyChanged)
 	next, _ := m.Update(peerMsg{host: "ws-1", conn: ws, msg: lostMsg{err: err, conn: ws}})
 	nm := next.(Model)
-	if nm.flash != "" || len(nm.peers[0].acts) != 0 || nm.toast != "ws-1: 1 act has no answer" {
-		t.Fatalf("flash %q, in flight %v, toast %q; want no flash, no act, the toast", nm.flash, nm.peers[0].acts, nm.toast)
+	if nm.flash != "" || len(nm.peers[0].acts) != 0 || saidNow(nm) != "ws-1: 1 act has no answer" {
+		t.Fatalf("flash %q, in flight %v, toast %q; want no flash, no act, the toast", nm.flash, nm.peers[0].acts, saidNow(nm))
 	}
 }
 

@@ -1,0 +1,31 @@
+ ▰ matchblox · all hosts ▾                                         ● 4 need you
+ BOARD 15    machine                                  chain login · 3   esc all
+────────────────────────────────────────────────────────────────────────────────
+ NEEDS YOU · 1  −                       WORKING · 1  −       SHIPPING · 1  −
+▌╿ flint-auth                   ✻  2m   ✦ flint-ui   ✻       ╿ flint-api  ✻ 40m
+  asks Which way do we fix the login?    busy Writing the…    ci waits for rev…
+  ctx 62%                     ━╸login    ctx 40%   ━╸login    #4560 ●━◉┄○┄○┄○
+  “I can fix it in two ways. The
+  token check is a small patch.”
+  1. Patch the token check
+  2. Move to the new session store
+  1-2 mark an answer   ⏎ go in
+
+
+
+
+
+
+
+
+
+
+
+ › what should login's stoker do?
+────────────────────────────────────────────────────────────────────────────────
+ QUIET · 0   ▴                                                               −
+ + start a new session
+ RECOMMENDATIONS · 7
+ ✻ 5h ▰▰▰▰▰▰▰▱ 84%  wk 82%   ✻ @gpu-1 5h ▰▰▰▰▰▰▰▱ 84%  wk 82%         machine ›
+────────────────────────────────────────────────────────────────────────────────
+ 1-2 mark an answer   ⏎ go in   c copy   v one line   s hosts   u strip

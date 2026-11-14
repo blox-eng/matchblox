@@ -51,13 +51,19 @@ func (m Model) askGraphics(msg graphicsTickMsg) (Model, tea.Cmd) {
 	if m.gfxBusy {
 		return m, next
 	}
+	m, ask := m.askViewers()
+	return m, tea.Batch(next, ask)
+}
+
+// askViewers is the question itself: who shows the console now.
+func (m Model) askViewers() (Model, tea.Cmd) {
 	m.gfxBusy = true
 	m.gfxAsks++
 	g, gen := m.opt.Graphics, m.opt.Gen
-	return m, tea.Batch(next, func() tea.Msg {
+	return m, func() tea.Msg {
 		can, key, watched := g()
 		return graphicsMsg{gen, can, key, watched}
-	})
+	}
 }
 
 // graphics draws the logos while every viewer can, and sends them again

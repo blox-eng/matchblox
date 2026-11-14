@@ -9,10 +9,11 @@ import (
 	"github.com/blox-eng/matchblox/internal/proto"
 )
 
-// deskView is the demo desk with the live view beside the list, and its fake.
+// deskView is the demo desk with the live view beside the board, and its
+// fake.
 func deskView(t *testing.T) (Model, *fakeConn) {
 	t.Helper()
-	m := demoSized(t, 132, 32)
+	m := demoSized(t, 160, 32)
 	return m, m.conn.(*fakeConn)
 }
 
@@ -28,12 +29,13 @@ func wheelAt(t *testing.T, m Model, up bool, x, y int) Model {
 	return next.(Model)
 }
 
-// turnWheel turns the wheel over the chat n times.
+// turnWheel turns the wheel over the live view n times.
 func turnWheel(t *testing.T, m Model, up bool, n int) Model {
 	t.Helper()
 	sc := m.draw(m.width)
+	d := m.boardPanel(m.width, m.bodyRows())
 	for range n {
-		m = wheelAt(t, m, up, sc.listW+10, sc.bodyTop+5)
+		m = wheelAt(t, m, up, m.width-d.live+10, sc.bodyTop+d.headAt+5)
 	}
 	return m
 }
@@ -67,7 +69,7 @@ func TestTheWheelOverTheListMovesTheSelection(t *testing.T) {
 // The view is a window on the pane: the wheel scrolls it back through the
 // service, and the console keeps no history of its own (#288). T14.
 func TestTheWheelScrollsTheLiveViewBack(t *testing.T) {
-	m, f := loadedWith(t, 100, fixtureState())
+	m, f := loadedWith(t, 160, fixtureState()) // the board's live view, from 152 columns
 	m.tab = tabSessions
 	before := len(keyActs(f))
 	m = turnWheel(t, m, true, 1)

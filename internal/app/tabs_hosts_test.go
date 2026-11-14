@@ -43,17 +43,6 @@ func TestShipsOfEveryHost(t *testing.T) {
 	if m.ships()[0].Number != 2 {
 		t.Fatalf("the ship that waits for you is not first: %v", m.ships())
 	}
-	if got := m.tabLabel(tabShips, true); !strings.Contains(ansi.Strip(got), "2") {
-		t.Fatalf("the tab counts %q, want both hosts' ships", ansi.Strip(got))
-	}
-	m.setTab(tabShips)
-	frame := frameOf(m)
-	if l := lineWith(frame, "#2"); !strings.Contains(l, "ws-1") {
-		t.Fatalf("the peer's ship does not name its host: %q", l)
-	}
-	if l := lineWith(frame, "#1"); !strings.Contains(l, "this machine") {
-		t.Fatalf("the home ship does not name its host: %q", l)
-	}
 }
 
 func TestOneHostShipsAreToday(t *testing.T) {
@@ -73,32 +62,12 @@ func TestDriverMatchesWithinItsHost(t *testing.T) {
 	shipsOfIn(&home, shipOn(1, "%12", "same-id", shipRunning))
 	shipsOfIn(&peer, shipOn(2, "%12", "same-id", shipRunning))
 	m, _ := twoHosts(t, home, peer)
-	for _, sh := range m.ships() {
-		d, ok := m.driver(sh)
-		if !ok || d.Host != sh.Host {
-			t.Fatalf("ship #%d on %q is driven by %s on %q", sh.Number, sh.Host, d.Name, d.Host)
-		}
-	}
 	for _, s := range m.snap.Sessions {
 		ss := m.shipsOf(s)
 		if len(ss) != 1 || ss[0].Host != s.Host {
 			t.Fatalf("%s on %q drives %v", s.Name, s.Host, ss)
 		}
 	}
-}
-
-// selectShip selects the ship numbered n on the Ships tab.
-func selectShip(t *testing.T, m Model, n int) Model {
-	t.Helper()
-	m.setTab(tabShips)
-	for i, sh := range m.ships() {
-		if sh.Number == n {
-			m.shipSel = i
-			return m
-		}
-	}
-	t.Fatalf("no ship #%d", n)
-	return m
 }
 
 // TestPeerRowActsGoToItsHost: a merge on a peer's ship, a worktree's
@@ -117,7 +86,9 @@ func TestPeerRowActsGoToItsHost(t *testing.T) {
 	next, _ = next.Update(peerMsg{host: "ws-1", conn: wsConn, msg: stateMsg(peer)})
 	m = next.(Model)
 
-	got := pressAll(selectShip(t, m, 2), "x", "y")
+	onPeer := m
+	chooseCard("peer-12")(&onPeer) // the ship is on its card, and p merges it
+	got := pressAll(onPeer, "p", "y")
 	if acts := wsConn.acts(); len(acts) != 1 || acts[0].RecID != "ship:o/r#2" {
 		t.Fatalf("the peer got %v; flash %q", acts, got.(Model).flash)
 	}
@@ -178,7 +149,7 @@ func TestUsageRowsPerHostNeverMerged(t *testing.T) {
 	home.Limits = []limits.Account{acct(work, 41), acct("/home/u/.matchblox/accounts/claude/side", 10)}
 	peer.Limits = []limits.Account{acct(work, 77)}
 	m, _ := twoHosts(t, home, peer)
-	out := m.usageLines(100, true, "")
+	out := m.usageLines(100, true)
 	frame := ansi.Strip(strings.Join(out, "\n"))
 	var rows []string
 	for _, l := range out {
@@ -205,7 +176,7 @@ func TestUsageCellOfAStaleHost(t *testing.T) {
 		Windows: []limits.Window{{UsedPct: 30, Minutes: limits.BoxMinutes}}}
 	m.snap.Limits = []limits.Account{acct}
 	m.peers[0].st.Limits = []limits.Account{acct}
-	if l := ansi.Strip(lineWith(m.usageLines(100, true, ""), "Claude")); !strings.Contains(l, "this machine 30% · ws-1 stale") {
+	if l := ansi.Strip(lineWith(m.usageLines(100, true), "Claude")); !strings.Contains(l, "this machine 30% · ws-1 stale") {
 		t.Fatalf("the row is %q", l)
 	}
 }
@@ -229,28 +200,39 @@ func machineHosts(t *testing.T, after time.Duration, w, h int) Model {
 	return upd(t, m, stateMsg(stateAt(cpu(hostState(sess(1, "api-auth", "%1", nil)), 12), now)))
 }
 
-func TestDockMachineLinePerHost(t *testing.T) {
+// TestTheStripsMachineLinePerHost: the strip's machine face of two or more
+// hosts says each host with its CPU, in Hosts order (the dock's line
+// before Task 12 step 2).
+func TestTheStripsMachineLinePerHost(t *testing.T) {
 	m := machineHosts(t, 10*time.Second, 132, 40)
-	least, _ := m.panel(panelMachine, 60, "")
-	if len(least) != 4 {
-		t.Fatalf("the machine panel has %d lines, want its label and one per host:\n%s", len(least), ansi.Strip(strings.Join(least, "\n")))
-	}
-	for i, want := range [][2]string{{"this machine", "12%"}, {"gpu-1", "87%"}, {"ws-1", "55%"}} {
-		l := ansi.Strip(least[i+1])
-		if !strings.Contains(l, want[0]) || !strings.Contains(l, want[1]) || strings.Contains(l, "stale") {
-			t.Errorf("line %d is %q, want %s at %s", i+1, l, want[0], want[1])
+	line := ansi.Strip(m.stripMachine(200))
+	at := 0
+	for _, want := range [][2]string{{"this machine", "12%"}, {"gpu-1", "87%"}, {"ws-1", "55%"}} {
+		i := strings.Index(line[at:], want[0])
+		if i < 0 {
+			t.Fatalf("the machine lacks %s after column %d: %q", want[0], at, line)
 		}
+		at += i
+		part, _, _ := strings.Cut(line[at+len(want[0]):], "%")
+		if !strings.Contains(part+"%", want[1]) {
+			t.Errorf("%s is %q, want %s", want[0], part, want[1])
+		}
+	}
+	if strings.Contains(line, "stale") {
+		t.Errorf("a live host says stale: %q", line)
 	}
 }
 
+// TestStaleMachineLine: a stale host says since when, not its last
+// numbers; a live one keeps its CPU (the strip's machine face).
 func TestStaleMachineLine(t *testing.T) {
 	m := machineHosts(t, 40*time.Second, 132, 40)
-	least, _ := m.panel(panelMachine, 60, "")
-	if l := ansi.Strip(lineWith(least, "gpu-1")); !strings.Contains(l, "stale · as of 14:02") || strings.Contains(l, "87%") {
-		t.Fatalf("the stale host's line is %q", l)
+	line := ansi.Strip(m.stripMachine(200))
+	if !strings.Contains(line, "gpu-1 stale · as of 14:02") || strings.Contains(line, "87%") {
+		t.Fatalf("the stale host's part is not since when: %q", line)
 	}
-	if l := ansi.Strip(lineWith(least, "ws-1")); strings.Contains(l, "stale") {
-		t.Fatalf("a live host's line is %q", l)
+	if !strings.Contains(line, "ws-1") || !strings.Contains(line, "55%") {
+		t.Fatalf("a live host lost its CPU: %q", line)
 	}
 }
 
@@ -288,10 +270,6 @@ func TestOneHostMachineTabHasNoSections(t *testing.T) {
 	if got := heads(m.machinePanel(104).lines); len(got) != 0 {
 		t.Fatalf("one host's Machine tab has sections %q", got)
 	}
-	least, _ := m.panel(panelMachine, 60, "")
-	if len(least) != 5 {
-		t.Fatalf("one host's dock machine has %d lines", len(least))
-	}
 }
 
 // TestRunsCountTheirHostsAgents: a host's machine counts its own agents.
@@ -319,7 +297,7 @@ func TestShortUsageLineKeepsItsWindow(t *testing.T) {
 	m, _ := twoHosts(t, home, peer)
 	want := map[string][]string{"5h": {"this machine 84%", "ws-1 61%"}, "wk": {"this machine 82%", "ws-1 12%"}}
 	for _, w := range []int{40, 50, 100} {
-		lines := m.usageLines(w, false, "")[1:]
+		lines := m.usageLines(w, false)[1:]
 		got := map[string][]string{}
 		win := ""
 		for _, line := range lines {
@@ -441,5 +419,51 @@ func TestHomeLossKeepsThePeersPartOfABatch(t *testing.T) {
 	m = upd(t, m, peerMsg{host: "ws-1", conn: wsConn, msg: resultMsg(proto.Result{ActID: wsID, Ran: [][]string{{"git", "worktree", "remove", "/src/api/wt/done"}}})})
 	if want := "removed 1, failed 1: this machine: connection lost"; m.batch != nil || m.flash != want {
 		t.Fatalf("batch %+v, flash %q, want %q", m.batch, m.flash, want)
+	}
+}
+
+// TestAHostRowOnMachineOpensHosts: a host is a filter on the board, and
+// Hosts, where a host is added or removed, opens from Machine: a row for
+// each host, ⏎ or a second tap on it. esc stays in the console. A console
+// with no Hosts above it has no host rows.
+func TestAHostRowOnMachineOpensHosts(t *testing.T) {
+	toHosts := func(cmd tea.Cmd) bool {
+		return slices.ContainsFunc(cmdMsgs(cmd), func(msg tea.Msg) bool { _, ok := msg.(layerMsg); return ok })
+	}
+	m, _ := twoHosts(t, hostState(sess(1, "api-auth", "%1", nil)), hostState(sess(2, "train", "%2", nil)))
+	alone := m
+	alone.setTab(tabMachine)
+	m.opt.Layered = true
+	m.setTab(tabMachine)
+	if alone.rowCount() != m.rowCount()-2 {
+		t.Fatalf("rows: %d alone, %d under Hosts; want one more for each host", alone.rowCount(), m.rowCount())
+	}
+	if next, cmd := key(m, "esc"); toHosts(cmd) || next.(Model).tab != tabMachine {
+		t.Fatal("esc on Machine left the console")
+	}
+	m.selectRow(m.rowCount() - 1)
+	if keys := plainHints(m.view().keys(m)...); !strings.HasPrefix(keys, "⏎ hosts") {
+		t.Fatalf("a host row's keys are %q", keys)
+	}
+	out := screen(m)
+	lines := strings.Split(out, "\n")
+	hosts := slices.IndexFunc(lines, func(l string) bool { return strings.Contains(l, "HOSTS") })
+	ws := slices.IndexFunc(lines, func(l string) bool { return strings.Contains(l, "ws-1") })
+	if hosts < 0 || ws <= hosts || slices.ContainsFunc(lines[hosts:ws], func(l string) bool { return strings.TrimSpace(l) == "" }) {
+		t.Fatalf("ws-1 is not a host row under HOSTS:\n%s", out)
+	}
+	if _, cmd := key(m, "enter"); !toHosts(cmd) {
+		t.Fatal("⏎ on a host row does not open Hosts")
+	}
+	y := lineOf(t, m, "HOSTS") + 1 // the home's row: a tap chooses it, a second opens Hosts
+	if row := strings.Split(out, "\n")[y]; !strings.Contains(row, "this machine") {
+		t.Fatalf("the first host row is %q", row)
+	}
+	once, cmd := tap(m, 3, y)
+	if toHosts(cmd) {
+		t.Fatal("the first tap on a host row opened Hosts")
+	}
+	if _, cmd := tap(once, 3, y); !toHosts(cmd) {
+		t.Fatal("a second tap on a host row does not open Hosts")
 	}
 }

@@ -251,7 +251,7 @@ footer a { color: var(--muted); }
 .run .row .t { white-space: normal; flex-basis: 100%; }
 
 /* The stoker takes orders (stoker.js): the same Duo, folded at first, six
-   steps over it, the switch and the Sessions keys under it. */
+   steps over it, the switch and the board's keys under it. */
 .orders .stage { gap: 16px; padding-block: 20px; }
 /* Its lines run to both edges: a margin keeps the glass's corners off them. */
 .orders .glass { padding: 9px 8px; }

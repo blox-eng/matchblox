@@ -239,7 +239,7 @@ onReady(() => {
     fold.classList.toggle("open", to);
     fold.setAttribute("aria-pressed", String(to));
     sides.forEach((b) => { b.setAttribute("aria-pressed", String((b.dataset.fold === "duo") === to)); b.parentElement.hidden = false; });
-    say.textContent = to ? "Open: the desk, sessions, the answer and the dock at once." : "Folded: the phone, one column.";
+    say.textContent = to ? "Open: the board, its four columns side by side." : "Folded: the phone, one column a page.";
   };
   // It swings only once the new size's frames are here, and the stage
   // keeps the tallest height it has had, so the page below never jumps.

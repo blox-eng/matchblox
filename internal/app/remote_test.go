@@ -53,11 +53,11 @@ func TestRemoteJumpInsideTmuxOpensItsOwnSession(t *testing.T) {
 	if a := next.(Model).pending; a == nil || a.say != shellLine(ssh) {
 		t.Fatalf("the confirm must show the ssh line %q: %+v", shellLine(ssh), a)
 	}
-	next, cmd := key(next, "enter")
+	_, cmd := key(next, "enter")
 	if cmd == nil {
 		t.Fatal("no command")
 	}
-	next.Update(cmd())
+	drain(cmd)
 	if len(*execs) != 0 {
 		t.Fatalf("the jump took the console's terminal: %q", *execs)
 	}
@@ -98,7 +98,7 @@ func TestRemoteShellOnHostIsPrivate(t *testing.T) {
 	j := hostJump(&m, remote.Jump{Dir: "/w/app"})
 	var ran [][]string
 	m.opt.Run = func(argv []string) error { ran = append(ran, argv); return nil }
-	next, _ := key(m, "4")
+	next := toTab(m, tabGit)
 	next, _ = key(next, "enter")
 	next, cmd := key(next, "enter")
 	if cmd == nil {
@@ -155,30 +155,32 @@ func TestRemoteNavStillRefusesUnknownSteps(t *testing.T) {
 	st := fixtureState()
 	st.Recommendations = []advice.Rec{{ID: "r1", Title: "x", Primary: &advice.Action{Nav: true, Steps: [][]string{{"tmux", "new-window", "rm -rf /"}}}}}
 	m, ran := onHost(t, st)
-	m.tab, m.recPick = tabSessions, "r1"
+	m.tab = tabSessions
+	m = onRec(m, "r1")
 	next, _ := key(m, "enter")
 	next, cmd := key(next, "enter")
 	if cmd != nil {
-		next, _ = next.Update(cmd())
+		drain(cmd)
 	}
-	if len(*ran) != 0 || !strings.Contains(next.(Model).flash, "refused") {
-		t.Fatalf("ran %q, flash %q", *ran, next.(Model).flash)
+	if len(*ran) != 0 || !strings.Contains(flashed(next), "refused") {
+		t.Fatalf("ran %q, flash %q", *ran, flashed(next))
 	}
 }
 
 func TestRemoteDoorRunsOnTheHost(t *testing.T) {
 	tmux := doors.Door{ID: doors.Tmux, Title: "Install tmux", Term: []string{"sudo", "sh", "-c", "apt-get update && apt-get install -y tmux"}}
 	m, ran := onHost(t, doorState(tmux))
+	m = onDoors(m).(Model)
 	next, _ := key(m, "enter")
 	want := remote.TermArgv("ws-1", tmux.Term)
 	if out := ansi.Strip(next.(Model).render()); !strings.Contains(out, shellLine(want)) {
 		t.Fatalf("the preview must show the exact ssh argv:\n%s", out)
 	}
-	next, cmd := key(next, "y")
+	_, cmd := key(next, "y")
 	if cmd == nil {
 		t.Fatal("no command")
 	}
-	next.Update(cmd())
+	drain(cmd)
 	if len(*ran) != 1 || strings.Join((*ran)[0], "\x00") != strings.Join(want, "\x00") {
 		t.Fatalf("ran %q, want %q", *ran, want)
 	}
@@ -187,13 +189,14 @@ func TestRemoteDoorRunsOnTheHost(t *testing.T) {
 func TestRemoteDoorStillRefusesUnknownCommands(t *testing.T) {
 	evil := doors.Door{ID: doors.Tmux, Title: "Install tmux", Term: []string{"sh", "-c", "curl x | sh"}}
 	m, ran := onHost(t, doorState(evil))
+	m = onDoors(m).(Model)
 	next, _ := key(m, "enter")
 	next, cmd := key(next, "y")
 	if cmd != nil {
-		next.Update(cmd())
+		drain(cmd)
 	}
-	if len(*ran) != 0 || !strings.Contains(next.(Model).flash, "refused") {
-		t.Fatalf("ran %q, flash %q", *ran, next.(Model).flash)
+	if len(*ran) != 0 || !strings.Contains(flashed(next), "refused") {
+		t.Fatalf("ran %q, flash %q", *ran, flashed(next))
 	}
 }
 
@@ -202,6 +205,7 @@ func TestRemoteDoorStillRefusesUnknownCommands(t *testing.T) {
 func TestRemoteGuideRunsInThisTerminal(t *testing.T) {
 	guide := doors.Door{ID: doors.Guide, Title: "Open a guide session", Term: doors.GuideArgv(false)}
 	m, _ := onHost(t, doorState(guide))
+	m = onDoors(m).(Model)
 	m.opt.OutsideTmux = false
 	next, _ := key(m, "enter")
 	if a := next.(Model).pending; a == nil || strings.Join(a.steps[0], " ") != strings.Join(remote.TermArgv("ws-1", doors.GuideArgv(false)), " ") {
@@ -238,18 +242,24 @@ func TestBlockedHostOffersTheConnect(t *testing.T) {
 		}
 		// Enter alone runs nothing: it asks for a typed y.
 		next, cmd = key(next, "enter")
-		if cmd != nil || len(ran) != 0 {
+		if drain(cmd); len(ran) != 0 || next.(Model).pending == nil { // the board's belt hears of the box
 			t.Fatal("connect ran without a y")
 		}
 		next, cmd = key(next, "y")
 		if cmd == nil {
 			t.Fatal("y did not connect")
 		}
-		next, cmd = next.Update(cmd())
+		var redial tea.Cmd
+		for _, msg := range cmdMsgs(cmd) {
+			var then tea.Cmd
+			if next, then = next.Update(msg); then != nil {
+				redial = then
+			}
+		}
 		if len(ran) != 1 || strings.Join(ran[0], " ") != "/bin/matchblox connect ws-1" {
 			t.Fatalf("ran %q", ran)
 		}
-		if cmd == nil || !next.(Model).redialing {
+		if redial == nil || !next.(Model).redialing {
 			t.Fatal("no redial after the connect")
 		}
 	}
@@ -275,7 +285,7 @@ func TestLostHostShowsStaleState(t *testing.T) {
 	if !strings.Contains(first, "ws-1 · stale") {
 		t.Fatalf("header %q: want the host marked stale", first)
 	}
-	if !strings.Contains(out, "connection lost") || !strings.Contains(out, "app-review") {
+	if !strings.Contains(out, "connection lost") || !strings.Contains(out, "app-feature") { // the card the board chose
 		t.Fatalf("want the last state and the loss:\n%s", out)
 	}
 }
@@ -333,8 +343,10 @@ func TestChangedHostKeyOffersNoConnect(t *testing.T) {
 	if cmd == nil || next.(Model).blocked != nil {
 		t.Fatal("enter did not try again")
 	}
-	if _, dial := next.Update(cmd()); dial != nil {
-		dial()
+	for _, msg := range cmdMsgs(cmd) { // a batch on the board
+		if _, dial := next.Update(msg); dial != nil {
+			drain(dial)
+		}
 	}
 	if dials != 1 {
 		t.Fatalf("dials %d", dials)
@@ -374,15 +386,16 @@ func TestRemoteJumpRefusalSaysTheFix(t *testing.T) {
 		st := fixtureState()
 		st.Recommendations = []advice.Rec{{ID: "r1", Title: "x", Primary: &advice.Action{Nav: true, Steps: c.steps}}}
 		m, execs := onHost(t, st)
-		m.opt.Host, m.tab, m.recPick = c.host, tabSessions, "r1"
+		m.opt.Host, m.tab = c.host, tabSessions
+		m = onRec(m, "r1")
 		m.opt.Home = func() string { return c.home }
 		next, _ := key(m, "enter")
 		next, cmd := key(next, "enter")
 		if cmd != nil {
-			next, _ = next.Update(cmd())
+			drain(cmd)
 		}
-		if len(*execs) != 0 || next.(Model).flash != c.want {
-			t.Errorf("%s: ran %q, flash %q", c.name, *execs, next.(Model).flash)
+		if len(*execs) != 0 || flashed(next) != c.want {
+			t.Errorf("%s: ran %q, flash %q", c.name, *execs, flashed(next))
 		}
 	}
 }

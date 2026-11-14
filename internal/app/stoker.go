@@ -58,12 +58,6 @@ func (m Model) unsent(host string) string {
 	return ""
 }
 
-// stokedShows: the stoker has steps, or the card of a run, the builder
-// has not seen.
-func (m Model) stokedShows() bool {
-	return m.stoker != nil && m.stoker.Unseen && (len(m.stoker.Run) > 0 || m.card() != nil)
-}
-
 // card is the score of the run that ended, while no run is on.
 func (m Model) card() *proto.StokerCard {
 	if m.stoker == nil || m.stoker.On {
@@ -136,9 +130,9 @@ func (m Model) stokersBadge(short bool) string {
 	case !kept:
 		return ""
 	case m.stokerAsks() && short:
-		return st.accent.Render("stoker waits")
+		return st.accent.Render("stoker asks")
 	case m.stokerAsks():
-		return st.accent.Render("stoker waits for you")
+		return st.accent.Render("stoker needs you")
 	case runs == 0:
 		return st.faint.Render("stoker off")
 	}
@@ -182,6 +176,9 @@ func (m Model) asksTakeOver(k tea.KeyPressMsg) bool {
 	if m.standIn { // the demo's world, which has no stoker
 		return false
 	}
+	if m.boardShown() && !m.boardOnRow() {
+		return false // Sessions' row is not what the board shows: the key acts on no session of it
+	}
 	s, onSession := m.selectedSession()
 	if _, head := m.headRow(s); onSession && head && bkey.Matches(k, m.keys.main.Open, m.keys.main.Into, m.keys.main.Jump) {
 		return false // the stoker's own pane or its sheet: no session is taken from it
@@ -191,9 +188,6 @@ func (m Model) asksTakeOver(k tea.KeyPressMsg) bool {
 	case bkey.Matches(k, m.keys.main.Into) && m.tab == tabStoker:
 		pane, _ := m.stokerTarget()
 		return pane != "" && m.takeOverOn(m.opt.Host)
-	case bkey.Matches(k, m.keys.main.Into) && m.tab == tabShips:
-		host, pane := m.shipTarget()
-		return pane != "" && m.takeOverOn(host)
 	case bkey.Matches(k, m.keys.main.Jump), bkey.Matches(k, m.keys.main.Into):
 		return onSession && s.Pane != "" && on(m.primary())
 	case bkey.Matches(k, m.keys.main.Open):
@@ -219,10 +213,6 @@ func (m Model) hold(k tea.KeyPressMsg) (func(Model) (tea.Model, tea.Cmd), string
 	if bkey.Matches(k, m.keys.main.Into) && m.tab == tabStoker {
 		pane, _ := m.stokerTarget()
 		return heldInto(m.askedBy, m.opt.Host, pane), m.opt.Host
-	}
-	if bkey.Matches(k, m.keys.main.Into) && m.tab == tabShips {
-		host, pane := m.shipTarget()
-		return heldInto(m.askedBy, host, pane), cmp.Or(host, m.opt.Host)
 	}
 	a := m.primary()
 	if _, onSession := m.selectedSession(); onSession && (bkey.Matches(k, m.keys.main.Open) || bkey.Matches(k, m.keys.main.Into) || bkey.Matches(k, m.keys.main.Jump)) {

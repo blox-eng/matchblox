@@ -12,7 +12,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/accounts"
 	"github.com/blox-eng/matchblox/internal/proto"
@@ -183,7 +182,7 @@ func TestAOpensSwitchAgentAndJumpsAfter(t *testing.T) {
 		t.Fatalf("form %+v pending %+v acts %+v", nm.form, nm.pending, f.acts())
 	}
 	next, cmd := key(next, "y")
-	cmd()
+	drain(cmd)
 	acts := f.acts()
 	if len(acts) != 1 || acts[0].RecID != "switch:%1" || acts[0].Confirm != "y" {
 		t.Fatalf("sent %+v", acts)
@@ -200,8 +199,7 @@ func TestAOpensSwitchAgentAndJumpsAfter(t *testing.T) {
 	}
 	// A switch that ran jumps to the pane.
 	done, cmd := next.Update(resultMsg(proto.Result{ActID: act, Ran: [][]string{{"tmux"}}}))
-	c := cmd().(tea.BatchMsg)
-	drain(c[len(c)-1])
+	drain(cmd) // the jump, with what the board batches
 	if len(ran) != 1 || strings.Join(ran[0], " ") != "tmux switch-client -t %1" || done.(Model).flash != "switched app-feature to codex" {
 		t.Fatalf("ran %v flash %q", ran, done.(Model).flash)
 	}
@@ -215,13 +213,13 @@ func TestSwitchOfABusySessionTakesASecondY(t *testing.T) {
 	next, _ = key(next, "enter")
 	next, cmd := key(next, "y")
 	if cmd != nil {
-		cmd()
+		drain(cmd)
 	}
 	if line := actionLine(next); len(f.acts()) != 0 || !strings.Contains(line, "app-feature works: y again switches it mid-turn") {
 		t.Fatalf("one y switched a session that works: %q %+v", line, f.acts())
 	}
 	_, cmd = key(next, "y")
-	cmd()
+	drain(cmd)
 	if acts := f.acts(); len(acts) != 1 || !strings.Contains(acts[0].Text, `"anyway":true`) || !strings.Contains(acts[0].Text, `"agent":"codex"`) {
 		t.Fatalf("sent %+v", acts)
 	}
@@ -257,7 +255,7 @@ func TestSwitchExtrasFollowTheHandover(t *testing.T) {
 	next = typeText(next, "--yolo keep CSV only")
 	next, _ = key(next, "enter")
 	_, cmd := key(next, "y")
-	cmd()
+	drain(cmd)
 	var sw proto.SwitchAgent
 	if acts := f.acts(); len(acts) != 1 || json.Unmarshal([]byte(acts[0].Text), &sw) != nil || sw.Handoff != proto.Handoff("--yolo keep CSV only") {
 		t.Fatalf("sent %+v", f.acts())
@@ -358,7 +356,7 @@ func TestSwitchConfirmCellsForEveryStart(t *testing.T) {
 		t.Helper()
 		next, cmd := key(next, decline)
 		if cmd != nil {
-			cmd()
+			drain(cmd)
 		}
 		if nm := next.(Model); nm.pending != nil || len(f.acts()) != 0 || !strings.HasPrefix(nm.flash, "cancelled: ") {
 			t.Errorf("%s, %s: pending %+v acts %+v", what, decline, nm.pending, f.acts())
@@ -379,7 +377,7 @@ func TestSwitchConfirmCellsForEveryStart(t *testing.T) {
 			t.Fatalf("%s: one y switched a busy session", name)
 		}
 		_, cmd := key(next, "y")
-		cmd()
+		drain(cmd)
 		var sw proto.SwitchAgent
 		if acts := f.acts(); len(acts) != 1 || json.Unmarshal([]byte(acts[0].Text), &sw) != nil || !sw.Anyway || sw.Handoff != c.handoff {
 			t.Errorf("%s, the second y sent %+v", name, f.acts())
@@ -403,7 +401,7 @@ func TestSwitchCanStartWithNoTask(t *testing.T) {
 			t.Fatalf("the confirm hides no task: %q", say)
 		}
 		_, cmd := key(next, "y")
-		cmd()
+		drain(cmd)
 		var sw proto.SwitchAgent
 		if acts := f.acts(); len(acts) != 1 || json.Unmarshal([]byte(acts[0].Text), &sw) != nil || sw.Handoff != "" {
 			t.Fatalf("sent %+v", f.acts())
@@ -417,26 +415,6 @@ func TestSwitchEscSendsNothing(t *testing.T) {
 	next, _ = key(next, "esc")
 	if nm := next.(Model); nm.form != nil || nm.pending != nil || len(f.acts()) != 0 {
 		t.Fatal("esc sent or kept the form")
-	}
-}
-
-// A phone has no A key to hand: the opened row carries A switch, and a
-// tap on it opens the form. Beside the list a desk shows the chat.
-func TestATapOnSwitchOpensTheForm(t *testing.T) {
-	const w = 50
-	st := lifeState()
-	st.Queue = nil
-	m, _ := loadedWith(t, w, st)
-	next := selectPane(t, m, "%1")
-	out := strings.Split(ansi.Strip(next.(Model).render()), "\n")
-	y := slices.IndexFunc(out[:len(out)-1], func(l string) bool { return strings.Contains(l, "A switch") })
-	if y < 0 {
-		t.Fatalf("%d columns: no A switch above the key line:\n%s", w, strings.Join(out, "\n"))
-	}
-	x := len([]rune(out[y][:strings.Index(out[y], "A switch")]))
-	tapped, _ := tap(next, x, y)
-	if fm := tapped.(Model).form; fm == nil || !fm.swap {
-		t.Fatalf("%d columns: a tap on A switch opened %+v", w, fm)
 	}
 }
 
@@ -680,13 +658,13 @@ func TestCloneKeepsTheAccount(t *testing.T) {
 		next, _ := key(m, "N")
 		next, cmd := next.Update(tea.PasteMsg{Content: cloneURL})
 		if cmd != nil {
-			cmd()
+			drain(cmd)
 		}
 		p := proto.ClonePlan{Repo: "o/r", URL: cloneURL, Target: home + "/src/r"}
 		next, _ = next.Update(resultMsg(proto.Result{ActID: next.(Model).form.planAct, Clone: &p}))
 		next, cmd = key(next, "enter")
 		if cmd != nil {
-			cmd()
+			drain(cmd)
 		}
 		next, _ = next.Update(resultMsg(proto.Result{ActID: next.(Model).form.startAct, CloneID: 1}))
 		for range 4 {
@@ -731,7 +709,7 @@ func TestCloneKeepsTheAccount(t *testing.T) {
 		t.Fatalf("sent %+v pending %+v form %+v", f.acts(), nm.pending, nm.form)
 	}
 	_, cmd = key(next, "y")
-	cmd()
+	drain(cmd)
 	if acts := f.acts(); len(acts) != 3 || json.Unmarshal([]byte(acts[2].Text), &n) != nil ||
 		n.Where != home+"/src/r" || !n.Cloned || n.Account != "w2" || !n.NewAccount || n.First != "" {
 		t.Fatalf("sent %+v", acts)
@@ -1616,11 +1594,11 @@ func TestNewAccountShowsSetupLikeDefault(t *testing.T) {
 	}
 	// Enter asks for a typed y; the service gets the confirmed act.
 	next, cmd := key(next, "enter")
-	if cmd != nil || len(f.acts()) != 0 || next.(Model).pending == nil {
+	if drainActs(f, cmd) != 0 || next.(Model).pending == nil { // the board's belt hears of the box
 		t.Fatalf("a new account sent without its y: %+v", f.acts())
 	}
 	_, cmd = key(next, "y")
-	cmd()
+	drain(cmd)
 	acts := f.acts()
 	if len(acts) != 1 || acts[0].RecID != "new:session" || acts[0].Confirm != "y" {
 		t.Fatalf("sent %+v", acts)
@@ -1651,7 +1629,7 @@ func TestSetupCyclesAndIsSent(t *testing.T) {
 	}
 	next, _ = key(next, "enter")
 	_, cmd := key(next, "y")
-	cmd()
+	drain(cmd)
 	var n proto.NewSession
 	if err := json.Unmarshal([]byte(f.acts()[0].Text), &n); err != nil || n.Setup != "empty" {
 		t.Fatalf("%+v %v", n, err)
@@ -1708,7 +1686,7 @@ func TestFirstIsDimmedForANewAccount(t *testing.T) {
 	}
 	next, _ = key(next, "enter")
 	_, cmd := key(next, "y")
-	cmd()
+	drain(cmd)
 	if got := f.acts()[0].Text; strings.Contains(got, "fix it") {
 		t.Fatalf("the first message was sent: %s", got)
 	}
@@ -1752,11 +1730,11 @@ func TestConfirmNamesTheAccount(t *testing.T) {
 	next, _ = key(next, "right")
 	next, _ = key(next, "right") // work
 	next, cmd := key(next, "enter")
-	cmd()
+	drain(cmd)
 	if nm := next.(Model); nm.pending != nil || len(f.acts()) != 1 {
 		t.Fatalf("an existing account asked: %+v %+v", nm.pending, f.acts())
 	}
-	if line := actionLine(next); !strings.Contains(line, "start claude in /work/app on work") {
+	if line := flashed(next); !strings.Contains(line, "start claude in /work/app on work") { // the board's notice
 		t.Fatalf("flash %q", line)
 	}
 	var n proto.NewSession
@@ -1986,15 +1964,14 @@ func TestSwitchWithANotLinkedNoteJumps(t *testing.T) {
 	next, _ = key(m, "A")
 	next, _ = key(next, "enter")
 	next, cmd := key(next, "y")
-	cmd()
+	drain(cmd)
 	act := next.(Model).jumpAfter.act
 	note := proto.NotLinked + "permission denied"
 	done, cmd := next.Update(resultMsg(proto.Result{ActID: act, Ran: [][]string{{"tmux"}}, Skipped: []string{note}}))
 	if f := done.(Model).flash; !strings.Contains(f, "switched app-feature to codex") {
 		t.Fatalf("flash %q: the switch ran", f) // before cmd: a lone recv waits forever
 	}
-	c := cmd().(tea.BatchMsg)
-	drain(c[len(c)-1])
+	drain(cmd) // the jump, with what the board batches
 	if len(ran) != 1 || !strings.Contains(done.(Model).flash, "switched app-feature to codex") || !strings.Contains(done.(Model).flash, note) {
 		t.Fatalf("ran %v flash %q", ran, done.(Model).flash)
 	}
@@ -2137,7 +2114,7 @@ func TestSwitchExtrasTakeTheCLIsLimit(t *testing.T) {
 	}
 	next, _ = key(next, "enter")
 	_, cmd := key(next, "y")
-	cmd()
+	drain(cmd)
 	var sw proto.SwitchAgent
 	if acts := f.acts(); len(acts) != 1 || json.Unmarshal([]byte(acts[0].Text), &sw) != nil || sw.Handoff != proto.Handoff(full) {
 		t.Fatalf("sent %+v", f.acts())
@@ -2153,7 +2130,7 @@ func recordWait(t *testing.T, w int) (tea.Model, *fakeConn) {
 	next, _ = key(m, "A")
 	next, _ = key(next, "enter")
 	next, cmd := key(next, "y")
-	cmd()
+	drain(cmd)
 	next, _ = next.Update(tea.WindowSizeMsg{Width: w, Height: 30})
 	st := lifeState()
 	st.Queue = nil
@@ -2183,7 +2160,7 @@ func TestEscDuringTheRecordWaitSwitchesNow(t *testing.T) {
 	next, f := recordWait(t, 80)
 	next, cmd := key(next, "esc")
 	if cmd != nil {
-		cmd()
+		drain(cmd)
 	}
 	acts := f.acts()
 	if len(acts) != 2 || acts[1] != (proto.Act{RecID: proto.SwitchNowPrefix + "%1"}) {
@@ -2197,9 +2174,9 @@ func TestEscDuringTheRecordWaitSwitchesNow(t *testing.T) {
 	next, _ = key(next, "A")
 	next, _ = key(next, "enter")
 	next, cmd = key(next, "y")
-	cmd()
+	drain(cmd)
 	if _, cmd = key(next, "esc"); cmd != nil {
-		cmd()
+		drain(cmd)
 	}
 	if acts := f.acts(); len(acts) != 1 || strings.Contains(screen(next), "esc switches now") {
 		t.Fatalf("sent %+v:\n%s", acts, screen(next))
@@ -2210,13 +2187,13 @@ func TestAnotherConsoleSeesTheWait(t *testing.T) {
 	st := lifeState()
 	st.Queue = nil
 	st.Refreshes = []proto.Refresh{{Pane: "%1", Name: "app-feature", Agent: "claude", Since: time.Now().Add(-42 * time.Second)}}
-	for _, w := range []int{100, 44} {
+	for _, w := range []int{160, 44} {
 		m, _ := loadedWith(t, w, st)
+		m = selectPane(t, m, "%1").(Model) // the live view's head, or the phone's card, says it
 		s := screen(m)
-		i := slices.IndexFunc(strings.Split(s, "\n"), func(l string) bool {
-			return strings.Contains(l, "app-feature") && strings.Contains(l, "writes its record")
-		})
-		if i < 0 || strings.Contains(s, "esc switches now") {
+		lines := strings.Split(s, "\n")
+		i := slices.IndexFunc(lines, func(l string) bool { return strings.Contains(l, "writes its record") })
+		if i < 1 || !strings.Contains(lines[i]+lines[i-1], "app-feature") || strings.Contains(s, "esc switches now") {
 			t.Fatalf("width %d: %%1's row lacks the wait:\n%s", w, s)
 		}
 	}
@@ -2231,14 +2208,13 @@ func TestASwitchWithARefreshNoteJumps(t *testing.T) {
 		next, _ = key(m, "A")
 		next, _ = key(next, "enter")
 		next, cmd := key(next, "y")
-		cmd()
+		drain(cmd)
 		act := next.(Model).jumpAfter.act
 		done, cmd := next.Update(resultMsg(proto.Result{ActID: act, Ran: [][]string{{"tmux"}}, Skipped: []string{note}}))
 		if want := "switched app-feature to codex; " + note; done.(Model).flash != want {
 			t.Fatalf("flash %q, want %q", done.(Model).flash, want)
 		}
-		c := cmd().(tea.BatchMsg)
-		c[len(c)-1]()
+		drain(cmd) // the jump, with what the board batches
 		if len(ran) != 1 || strings.Join(ran[0], " ") != "tmux switch-client -t %1" {
 			t.Fatalf("%q: ran %v", note, ran)
 		}
@@ -2249,16 +2225,35 @@ func TestASecondEscDuringTheRecordWaitSendsNothing(t *testing.T) {
 	next, f := recordWait(t, 80)
 	next, cmd := key(next, "esc")
 	if cmd != nil {
-		cmd()
+		drain(cmd)
 	}
 	if s := screen(next); !strings.Contains(s, "switching now") || strings.Contains(s, "esc switches now") {
 		t.Fatalf("after esc:\n%s", s)
 	}
 	if _, cmd = key(next, "esc"); cmd != nil {
-		cmd()
+		drain(cmd)
 	}
 	if acts := f.acts(); len(acts) != 2 {
 		t.Fatalf("sent %+v", acts)
+	}
+}
+
+// TestEscOnTheBoardDuringTheRecordWaitSwitchesNow: the board takes esc
+// for its search and chain, but a record wait takes it first.
+func TestEscOnTheBoardDuringTheRecordWaitSwitchesNow(t *testing.T) {
+	next, f := recordWait(t, 80)
+	m := next.(Model)
+	m.filter, m.boardChain = "api", "login"
+	if !m.boardShown() {
+		t.Fatal("the board is not shown")
+	}
+	next, cmd := key(m, "esc")
+	drain(cmd) // the board's belt comes in the same batch
+	if acts := f.acts(); len(acts) != 2 || acts[1] != (proto.Act{RecID: proto.SwitchNowPrefix + "%1"}) {
+		t.Fatalf("sent %+v", acts)
+	}
+	if nm := next.(Model); nm.filter != "api" || nm.boardChain != "login" {
+		t.Fatalf("esc changed the board: search %q chain %q", nm.filter, nm.boardChain)
 	}
 }
 

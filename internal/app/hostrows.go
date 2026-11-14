@@ -9,15 +9,12 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/config"
 	"github.com/blox-eng/matchblox/internal/hosts"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/release"
 	"github.com/blox-eng/matchblox/internal/remote"
-	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/state"
 )
 
@@ -234,28 +231,6 @@ func (m Model) blockedWords(b blockedHost) (why, fix string) {
 	return "is not connected", "connect"
 }
 
-// blockedRow is a blocked host's row: the host, why, and ⏎ with its fix.
-func (m Model) blockedRow(b blockedHost, sel bool, w int) string {
-	st := m.st
-	mark := " "
-	if sel {
-		mark = st.accent.Render("▌")
-	}
-	why, fix := m.blockedWords(b)
-	line := mark + st.ink(sel).Render(m.nameOf(b.host)) + "  " + st.warn.Render(why) + "  "
-	if !b.fixable() {
-		return fit(line+st.muted.Render(fix), w)
-	}
-	return fit(line+keyWord(m.keys.main.Open, st.accent, st.muted, " "+fix), w)
-}
-
-// blockedRows are the blocked hosts' rows, after the ghost rows.
-func (m Model) blockedRows(b *body, at, sel, w int) {
-	for i, bh := range m.blockedHosts() {
-		b.addRow(at+i, i == sel, w, m.st, m.blockedRow(bh, i == sel, w))
-	}
-}
-
 // unblockHost is ⏎ on a blocked host's row: today's fix for that host.
 func (m Model) unblockHost(b blockedHost) (tea.Model, tea.Cmd) {
 	if b.host == m.opt.Host {
@@ -290,40 +265,6 @@ func (m Model) peerTryAgain(i int) (tea.Model, tea.Cmd) {
 	p.lost, p.redialing = true, true
 	host, gen, id := p.host, m.opt.Gen, p.id
 	return m, func() tea.Msg { return peerRedialMsg{host, gen, id} }
-}
-
-// rowTag is the muted words after a session's name, in room cells: its
-// host when the console has two or more, then its account. Short of
-// room the account goes first; taggedName then cuts the host (R11).
-func (m Model) rowTag(s sample.Session, room int) string {
-	account := m.accountTag(s)
-	if m.hostCount() == 1 {
-		return account
-	}
-	host := m.nameOf(s.Host)
-	if account == "" {
-		return host
-	}
-	if full := host + " · " + account; lipgloss.Width(full) <= room {
-		return full
-	}
-	return host
-}
-
-// rowName is s's name and its tag in w cells, or false with no tag.
-// With two or more hosts a name that would leave the host word no room
-// is cut to leave it four cells, so two hosts' rows of one long name
-// still differ (R11).
-func (m Model) rowName(s sample.Session, ink lipgloss.Style, w int) (string, bool) {
-	name := s.Name
-	if m.hostCount() > 1 && tagRoom(name, w) < 4 && w >= 9 {
-		name = ansi.Truncate(name, w-5, "…")
-	}
-	tag := m.rowTag(s, tagRoom(name, w))
-	if tag == "" {
-		return "", false
-	}
-	return m.taggedName(name, tag, ink, w), true
 }
 
 // hostNote is host's live note on Hosts: its sessions, those that wait,

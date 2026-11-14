@@ -1,38 +1,38 @@
- ▰ matchblox                                                                           ● 6 wait for you
- SESSIONS 7    ships 3    machine    git    history    panes    stoker
+ ▰ matchblox                                                                               ● 6 need you
+ BOARD 7    machine
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
- SET UP · 1                              │ spark-docs · done
-   Update to v0.43.0                     │ ✻ team@example.com · Max · #4540 ●━●━●━●━●  live
-                                         │
- WAITS FOR YOU · 6                       │
-▌│ spark-docs        done       9m   88% │
- ╿ ember-billing     done       4m   32% │
- ╿ flint-auth        asks       2m   41% │
- ╿ kindle-web        asks       1m   56% │
- ╿ cinder-ci         done       0s   55% │
- ╿ wick-mobile       done       0s    6% │
- WORKING · 1                             │
- ✦ hearth-api        busy            79% │
- + start a new session                   │
-                                         │
- 1 without an agent: shell:1.1 zsh       │
-                                         │
- RECOMMENDATIONS · 7 · h hides           │
- ▲ The week runs short: compact spark-do…│
- ○ Clear spark-docs (%3)                 │
- ○ Clear kindle-web (%5)                 │
- ○ Clear cinder-ci (%6)                  │
- ○ Clear flint-auth (%2)                 │
- ○ Clear ember-billing (%8)              │
- ○ Clear wick-mobile (%7)                │
-─────────────────────────────────────────│
- USAGE                                   │
- ✻ Claude Max    5h   ▰▰▰ 84%            │
-                 wk   ▰▰▱ 82%            │
-                 out Fri ~21:00          │
- · Google login  not measured            │
- ❋ OpenAI Plus   5h   ▰▱▱ 40%  · 23:59   │
-                 wk   ▱▱▱ 12%            │
-                 lasts the week          │
+ SET UP · 1 · Update to v0.43.0
+ NEEDS YOU · 6  −                     WORKING · 1  −           SHIPPING · 0  −          QUIET · 0  −
+▌╿ flint-auth                 ✻  2m   ✦ hearth-api     ✻
+  stuck conflicts with main            busy
+  #4545 ●━✕┄○┄○┄○  ctx 41%             #4551 ●━◉┄○┄○  ctx 79%
+  “The refresh flow works and the
+  tests pass. One choice is yours
+  before I wire the rotation.”
+  ⏎ go in
+
+ │ spark-docs                 ✻  9m
+  done I rewrote the quick start a…
+  #4540 ●━●━●━●━●  ctx 88%
+  ⏎ go in
+
+ ╿ ember-billing              ✻  4m
+  green #4552 waits for your merge
+  #4552 ●━●━◉┄○┄○  ctx 32%
+  p merge #4552   ⏎ go in
+
+ ╿ kindle-web                 ✻  1m
+  asks Claude needs your permissio…
+  ctx 56%
+  ⏎ go in
+
+  ↓ 2 more
+
+
+
+
+ + start a new session
+ RECOMMENDATIONS · 7
+ ✻ Claude Max  5h ▰▰▰▰▰▰▰▱ 84% · Fri 01:20   wk ▰▰▰▰▰▰▰▱ 82% · Mon 09:00                      machine ›
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
- enter goes into spark-docs  x kill  r rename  z park  N new  p ships  f stoker  / find  sampled 0s ago
+ ⏎ go in   c copy   v one line   s hosts   u strip   ←→ columns   tab next

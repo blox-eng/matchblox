@@ -260,7 +260,7 @@ func (s *Service) kill(ctx context.Context, pane string, a proto.Act) proto.Resu
 		return proto.Result{Err: "switching already"}
 	}
 	if _, own := s.unitOf(proto.Act{From: pane}); own {
-		return proto.Result{Err: "the stoker is not killed here: Q on the STOKER tab quits it"}
+		return proto.Result{Err: "the stoker is not killed here: Q on Machine › stoker quits it"}
 	}
 	x, ok := s.sessionAt(pane)
 	if !ok {
@@ -269,7 +269,7 @@ func (s *Service) kill(ctx context.Context, pane string, a proto.Act) proto.Resu
 	word := ""
 	switch {
 	case s.waitsOn(pane, x):
-		word = "waits for you"
+		word = "needs you"
 	case x.Works():
 		word = "works"
 	}
@@ -416,7 +416,7 @@ func (s *Service) switchAgent(ctx context.Context, pane string, a proto.Act) pro
 	word := ""
 	switch {
 	case s.waitsOn(pane, x):
-		word = "waits for you"
+		word = "needs you"
 	case x.Works():
 		word = "works"
 	}

@@ -100,16 +100,6 @@ func pairFrame() tea.Cmd {
 	return tea.Tick(splashTick, func(time.Time) tea.Msg { return pairFrameMsg{} })
 }
 
-// clip puts text on the clipboard. Without a Clip, the program writes OSC 52
-// with its output, between frames: it works over SSH and through tmux.
-func (m Model) clip(text string) tea.Cmd {
-	if m.opt.Clip != nil {
-		m.opt.Clip(text)
-		return nil
-	}
-	return tea.SetClipboard(text)
-}
-
 // pairOffer is an Offer that runs off the Update goroutine: it can take
 // seconds (tailscale status). A page that closes while it runs cancels it,
 // and whichever side sees the key last removes it.

@@ -43,7 +43,7 @@ When Homebrew installed matchblox, `matchblox update` changes nothing and
 tells you to run `brew upgrade matchblox`.
 
 You need not remember to run it. The service looks for a new release once
-a day, and Sessions offers it under `SET UP` (see
+a day, and the board offers it under `SET UP` (see
 [step 4](#4-open-the-setup-steps)). `[update] mode = "auto"` installs it by
 itself a day later, when a logged-in `gh` can check the build's provenance,
 and `"off"` never looks. See [Config](config.md#update).
@@ -74,7 +74,7 @@ The first run asks one question: **Where do your agents run?**
 
 The first run also writes `~/.config/matchblox/config.toml` with goals for
 this machine, and the agents it finds on `PATH`. A known agent you install
-later shows in Sessions all the same.
+later shows on the board all the same.
 
 The console then asks, once: **Find the Git repositories in your home
 folder?** `y` lets N offer them when you start a session; they stay on
@@ -85,7 +85,7 @@ such as the ones macOS guards or a network folder. See
 
 ## 4. Open the setup steps
 
-Sessions shows the setup steps above everything else, under `SET UP`.
+The board shows the setup steps above its columns, under `SET UP`.
 The queue hooks and the guide show only when Claude Code is on this machine. Each
 step says what it gives you. `Enter` shows the exact change before it runs. A
 typed `y` makes the change. `x` closes a step that you do not want. Only
@@ -98,6 +98,7 @@ stoker drives and a `matchblox` command are refused.
 | Add the queue hooks | Adds the matchblox hooks to `~/.claude/settings.json`, and keeps a backup. Claude Code then tells the queue when it waits, and the console what its question tool asks. It also allows the stoker's `matchblox` commands without a prompt. Your own hooks and rules stay. After an update that adds a hook or a rule, the step shows again with the entry it adds. |
 | Add the way back | Adds `prefix m` and a tap target `◂ matchblox` to your tmux config (`~/.tmux.conf`), and keeps a backup. From any pane, one key or one tap brings you back to the console. It takes over `prefix m`, the tmux key that marks a pane. The tap needs the tmux mouse: `m` in the preview turns it on too (off unless you press it). |
 | Keep matchblox running | Writes a user unit that runs `matchblox serve`: `~/Library/LaunchAgents/com.blox.matchblox.plist` on macOS (started with `launchctl bootstrap`), `~/.config/systemd/user/matchblox.service` on Linux (started with `systemctl --user enable --now`). The phone buzzes only while `serve` runs, so this keeps it running with no console open. After an upgrade, `serve` runs the new binary in its own place, and your tmux sessions run on. A unit from an earlier release shows the step again with the change: open it once. On Linux, `loginctl enable-linger` keeps it after you log out. The step shows the file and the command first. |
+| Add the OpenCode plugin | Shows when OpenCode is on this machine. Writes `matchblox.ts` into OpenCode's global plugin folder (`~/.config/opencode/plugins/`, or `$XDG_CONFIG_HOME/opencode/plugins/`). Each OpenCode then writes its state to `~/.local/state/matchblox/opencode/<pid>.json`, so the board shows when it works and when it waits for a permission or a question. Without the plugin the board reads its pane. Delete the file to stop it. |
 | Open a guide session | Starts Claude Code with a prompt that reads this page and walks you through it. It uses your tokens. |
 | Update to v0.43.0 | Shows when the service finds a newer release. Installs it over this binary, with the checks of `matchblox update`. The service runs again on it, and the console starts again or asks you to open it again. Your sessions run on. A closed one shows again at the next release. See [Config](config.md#update) and the [other release steps](console.md#a-new-release). |
 
@@ -112,8 +113,9 @@ In another terminal:
 tmux new -s app claude
 ```
 
-matchblox finds each agent that runs in a tmux pane. When an agent waits
-for you, it comes to the top of Sessions. `Enter` jumps to its pane. The
-way back (`prefix m`) returns to the console.
+matchblox finds each agent that runs in a tmux pane, and gives it a card
+on the board. When an agent needs you, its card goes into `NEEDS YOU`.
+`Enter` jumps to its pane. The way back (`prefix m`) returns to the
+console.
 
 Next: [the console](console.md).

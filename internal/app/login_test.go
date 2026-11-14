@@ -236,7 +236,7 @@ func TestLoginResultSaysTheFix(t *testing.T) {
 			t.Errorf("%v: flash %q\nwant %q", c.login, f, c.want)
 		}
 		if cmd != nil {
-			cmd()
+			drain(cmd)
 		}
 		if jumped := len(ran) == 1; jumped != c.jumps {
 			t.Errorf("%v: ran %q", c.login, ran)

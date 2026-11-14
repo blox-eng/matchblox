@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -18,7 +19,7 @@ import (
 
 var (
 	tmuxDone   = doors.Door{ID: doors.Tmux, Title: "Install tmux", Done: true}
-	hooksDoor  = doors.Door{ID: doors.Hooks, Title: "Add the queue hooks", Why: "Claude Code tells matchblox when an agent waits for you.", Path: home + "/.claude/settings.json", Sum: "s1", Preview: " {\n+  \"hooks\": {}\n }"}
+	hooksDoor  = doors.Door{ID: doors.Hooks, Title: "Add the queue hooks", Why: "Claude Code tells matchblox when an agent needs you.", Path: home + "/.claude/settings.json", Sum: "s1", Preview: " {\n+  \"hooks\": {}\n }"}
 	wayBack    = doors.Door{ID: doors.WayBack, Title: "Add the way back", Why: "prefix m comes back here.", Path: home + "/.tmux.conf", Sum: "s2", Preview: "+bind m switch-client -t =matchblox"}
 	guideDoor  = doors.Door{ID: doors.Guide, Title: "Open a guide session", Why: "This starts Claude Code and uses your tokens.", Term: doors.GuideArgv(false), Preview: "claude '...'"}
 	updateDoor = doors.Door{ID: doors.Update, Title: "Update to v0.43.0", Why: "matchblox v0.43.0 is out. This machine runs v0.42.0.", Sum: "v0.43.0",
@@ -33,6 +34,44 @@ func doorState(ds ...doors.Door) proto.State {
 	return st
 }
 
+// onDoors chooses the board's doors line on its first door, as ↑ from the
+// first card does: the board chooses a card first, where Sessions chose
+// the first door while nobody waited.
+func onDoors(m tea.Model) tea.Model {
+	mm := m.(Model)
+	lines := mm.aboveLines()
+	if i := slices.Index(lines, ""); i >= 0 {
+		mm.boardAbove, mm.boardDoor = len(lines)-i, 0
+	}
+	return mm
+}
+
+// onRec chooses the recommendation id under the board's columns, as ↓
+// from the last card does.
+func onRec(m Model, id string) Model {
+	if i := slices.Index(m.belowLines(), id); i >= 0 {
+		m.boardBelow = i + 1
+	}
+	return m
+}
+
+// flashed is what the console said of a key: its flash, or on the board
+// the notice in the strip's row.
+func flashed(m tea.Model) string { return cmp.Or(m.(Model).flash, m.(Model).noticeText) }
+
+// drainActs runs cmd, each of a batch, and counts what it sent.
+func drainActs(f *fakeConn, cmd tea.Cmd) int {
+	drain(cmd)
+	return len(f.acts())
+}
+
+// doorsBoard is loadedWith, the doors line chosen (onDoors).
+func doorsBoard(t *testing.T, width int, st proto.State) (Model, *fakeConn) {
+	t.Helper()
+	m, f := loadedWith(t, width, st)
+	return onDoors(m).(Model), f
+}
+
 func doorsAndQueue(ds ...doors.Door) proto.State {
 	st := queueState()
 	st.Doors = ds
@@ -40,9 +79,9 @@ func doorsAndQueue(ds ...doors.Door) proto.State {
 }
 
 func TestDoorsAboveTheSessions(t *testing.T) {
-	m, _ := loadedWith(t, 100, doorsAndQueue(tmuxDone, hooksDoor, wayBack))
+	m, _ := doorsBoard(t, 100, doorsAndQueue(tmuxDone, hooksDoor, wayBack))
 	out := ansi.Strip(m.render())
-	if set, waits := lineOf(t, m, "SET UP"), lineOf(t, m, "WAITS FOR YOU"); set > waits {
+	if set, waits := lineOf(t, m, "SET UP"), lineOf(t, m, "NEEDS YOU"); set > waits {
 		t.Fatalf("doors are not above the sessions (%d, %d):\n%s", set, waits, out)
 	}
 	if !strings.Contains(out, "Add the queue hooks") || strings.Contains(out, "Install tmux") {
@@ -52,7 +91,7 @@ func TestDoorsAboveTheSessions(t *testing.T) {
 	for range len(m.recs) + 1 {
 		next, _ = key(next, "up")
 	}
-	if !strings.Contains(actionLine(next), "⏎ open  x close") {
+	if !strings.Contains(actionLine(next), "⏎ set up   x close") { // the board's doors line
 		t.Fatalf("no door keys:\n%s", screen(next))
 	}
 }
@@ -65,7 +104,7 @@ func TestNoDoorsNoRegion(t *testing.T) {
 }
 
 func TestEnterOnADoorShowsTheDiff(t *testing.T) {
-	m, f := loadedWith(t, 100, doorState(wayBack))
+	m, f := doorsBoard(t, 100, doorState(wayBack))
 	next, _ := key(m, "enter")
 	out := ansi.Strip(next.(Model).render())
 	for _, want := range []string{"+bind m switch-client -t =matchblox", "RUN Add the way back: write ~/.tmux.conf", "y run"} {
@@ -76,18 +115,18 @@ func TestEnterOnADoorShowsTheDiff(t *testing.T) {
 	if len(f.acts()) != 0 {
 		t.Fatalf("Enter sent %+v", f.acts())
 	}
-	if _, cmd := key(next, "enter"); len(f.acts()) != 0 || cmd != nil {
+	if _, cmd := key(next, "enter"); drainActs(f, cmd) != 0 { // on the board the cancel is a notice's tick
 		t.Fatal("a second Enter wrote the file: a door needs a typed y")
 	}
 }
 
 func TestYOpensTheDoorItShowed(t *testing.T) {
-	m, f := loadedWith(t, 100, doorState(hooksDoor, wayBack))
-	next, _ := key(m, "down")
+	m, f := doorsBoard(t, 100, doorState(hooksDoor, wayBack))
+	next, _ := key(m, "right")
 	next, _ = key(next, "enter")
-	next, cmd := key(next, "y")
+	_, cmd := key(next, "y")
 	if cmd != nil {
-		next.Update(cmd())
+		drain(cmd)
 	}
 	acts := f.acts()
 	if len(acts) != 1 || acts[0] != (proto.Act{RecID: "door:wayback", Which: "primary", Confirm: "y", Text: "s2"}) {
@@ -96,14 +135,14 @@ func TestYOpensTheDoorItShowed(t *testing.T) {
 }
 
 func TestXClosesADoor(t *testing.T) {
-	m, f := loadedWith(t, 100, doorState(guideDoor))
+	m, f := doorsBoard(t, 100, doorState(guideDoor))
 	next, _ := key(m, "x")
 	if out := ansi.Strip(next.(Model).render()); !strings.Contains(out, "close Open a guide session") {
 		t.Fatalf("no close confirm:\n%s", out)
 	}
-	next, cmd := key(next, "y")
+	_, cmd := key(next, "y")
 	if cmd != nil {
-		next.Update(cmd())
+		drain(cmd)
 	}
 	if acts := f.acts(); len(acts) != 1 || acts[0] != (proto.Act{RecID: "door:guide", Which: "secondary", Confirm: "y"}) {
 		t.Fatalf("acts %+v", acts)
@@ -113,7 +152,7 @@ func TestXClosesADoor(t *testing.T) {
 func TestTheUpdateDoorInstallsTheTagItShowed(t *testing.T) {
 	st := doorState(updateDoor)
 	st.Update = &state.UpdateView{Mode: "offer", Current: "v0.42.0", Latest: "v0.43.0"}
-	m, f := loadedWith(t, 100, st)
+	m, f := doorsBoard(t, 100, st)
 	next, _ := key(m, "enter")
 	out := ansi.Strip(next.(Model).render())
 	for _, want := range []string{"RUN install v0.43.0 over v0.42.0", "matchblox v0.42.0 → v0.43.0", "    ~/.local/bin/matchblox"} {
@@ -121,10 +160,8 @@ func TestTheUpdateDoorInstallsTheTagItShowed(t *testing.T) {
 			t.Fatalf("no %q:\n%s", want, out)
 		}
 	}
-	next, cmd := key(next, "y")
-	if cmd != nil {
-		next.Update(cmd())
-	}
+	_, cmd := key(next, "y")
+	drain(cmd)
 	if acts := f.acts(); len(acts) != 1 || acts[0] != (proto.Act{RecID: "door:update", Which: "primary", Confirm: "y", Text: "v0.43.0"}) {
 		t.Fatalf("acts %+v", acts)
 	}
@@ -141,14 +178,12 @@ func TestConsoleStartsAgainAfterItsUpdate(t *testing.T) {
 		if err := os.WriteFile(self, []byte("v0.42.0"), 0o700); err != nil {
 			t.Fatal(err)
 		}
-		m, _ := loadedWith(t, 100, doorState(updateDoor))
+		m, _ := doorsBoard(t, 100, doorState(updateDoor))
 		restarts := 0
 		m.opt.Local, m.opt.Self, m.opt.Restart = true, self, func() error { restarts++; return nil }
 		next, _ := key(m, "enter")
 		next, cmd := key(next, "y")
-		if cmd != nil {
-			next.Update(cmd())
-		}
+		drain(cmd)
 		if over {
 			if err := os.WriteFile(self, []byte("v0.43.0, a new install"), 0o700); err != nil {
 				t.Fatal(err)
@@ -192,7 +227,7 @@ func TestConsoleStartsAgainAfterItsUpdate(t *testing.T) {
 func TestClosingTheOfferUnderAutoSaysAutoStillInstalls(t *testing.T) {
 	st := doorState(updateDoor)
 	st.Update = &state.UpdateView{Mode: "auto", Current: "v0.42.0", Latest: "v0.43.0"}
-	m, _ := loadedWith(t, 100, st)
+	m, _ := doorsBoard(t, 100, st)
 	next, _ := key(m, "x")
 	if out := ansi.Strip(next.(Model).render()); !strings.Contains(out, "close Update to v0.43.0 (auto still installs it)") {
 		t.Fatalf("close confirm:\n%s", out)
@@ -200,24 +235,24 @@ func TestClosingTheOfferUnderAutoSaysAutoStillInstalls(t *testing.T) {
 }
 
 func TestXClosesTheReleaseTheUpdateDoorShowed(t *testing.T) {
-	m, f := loadedWith(t, 100, doorState(updateDoor))
+	m, f := doorsBoard(t, 100, doorState(updateDoor))
 	next, _ := key(m, "x")
 	if out := ansi.Strip(next.(Model).render()); !strings.Contains(out, "close Update to v0.43.0 (the next release opens it again)") {
 		t.Fatalf("close confirm:\n%s", out)
 	}
-	next, cmd := key(next, "y")
-	if cmd != nil {
-		next.Update(cmd())
-	}
+	_, cmd := key(next, "y")
+	drain(cmd)
 	if acts := f.acts(); len(acts) != 1 || acts[0] != (proto.Act{RecID: "door:update", Which: "secondary", Confirm: "y", Text: "v0.43.0"}) {
 		t.Fatalf("acts %+v", acts)
 	}
 }
 
 func TestGuideNeedsConfirm(t *testing.T) {
-	m, f := loadedWith(t, 100, doorState(guideDoor))
+	m, f := doorsBoard(t, 100, doorState(guideDoor))
+	var ran [][]string
+	m.opt.Run = func(argv []string) error { ran = append(ran, argv); return nil }
 	next, cmd := key(m, "enter")
-	if cmd != nil {
+	if drainActs(f, cmd) != 0 || len(ran) != 0 || next.(Model).pending == nil {
 		t.Fatal("Enter started the guide")
 	}
 	out := ansi.Strip(next.(Model).render())
@@ -236,7 +271,7 @@ func TestGuideNeedsConfirm(t *testing.T) {
 }
 
 func TestGuideOutsideTmuxTakesTheTerminal(t *testing.T) {
-	m, _ := loadedWith(t, 100, doorState(guideDoor))
+	m, _ := doorsBoard(t, 100, doorState(guideDoor))
 	m.opt.OutsideTmux = true
 	next, _ := key(m, "enter")
 	if out := ansi.Strip(next.(Model).render()); !strings.Contains(out, "in this terminal") || !strings.Contains(out, " claude 'Help me") {
@@ -246,14 +281,16 @@ func TestGuideOutsideTmuxTakesTheTerminal(t *testing.T) {
 
 func TestATermDoorRunsOnlyKnownCommands(t *testing.T) {
 	evil := doors.Door{ID: doors.Tmux, Title: "Install tmux", Term: []string{"sh", "-c", "curl x | sh"}, Preview: "sh"}
-	m, _ := loadedWith(t, 100, doorState(evil))
+	m, f := doorsBoard(t, 100, doorState(evil))
+	var ran [][]string
+	m.opt.Run = func(argv []string) error { ran = append(ran, argv); return nil }
 	next, _ := key(m, "enter")
 	next, cmd := key(next, "y")
-	if cmd != nil {
+	if drainActs(f, cmd) != 0 || len(ran) != 0 {
 		t.Fatal("an unknown command ran")
 	}
-	if !strings.Contains(next.(Model).flash, "refused") {
-		t.Fatalf("flash %q", next.(Model).flash)
+	if said := cmp.Or(next.(Model).flash, next.(Model).noticeText); !strings.Contains(said, "refused") {
+		t.Fatalf("flash %q", said)
 	}
 }
 
@@ -263,7 +300,7 @@ func TestTheGuideClosesAfterItRan(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("nothing sent")
 	}
-	cmd()
+	drain(cmd)
 	if acts := f.acts(); len(acts) != 1 || acts[0] != (proto.Act{RecID: "door:guide", Which: "secondary", Confirm: "y"}) {
 		t.Fatalf("acts %+v", acts)
 	}
@@ -278,13 +315,13 @@ func TestDoneDoorFolds(t *testing.T) {
 	if strings.Contains(out, "Add the queue hooks") || !strings.Contains(out, "Add the way back") {
 		t.Fatalf("hooks did not fold:\n%s", out)
 	}
-	if mm := next.(Model); mm.sessIndex() != 0 {
-		t.Fatalf("selection %d, want the next door", mm.sessIndex())
+	if mm := next.(Model); mm.boardDoors()[mm.doorIndex(mm.boardDoors())].ID != doors.WayBack { // the board's doors line
+		t.Fatalf("the doors line names %+v, want the next door", mm.boardDoors()[mm.doorIndex(mm.boardDoors())])
 	}
 }
 
 func TestADoorWithAProblemShowsTheFix(t *testing.T) {
-	m, _ := loadedWith(t, 100, doorState(brokenDoor))
+	m, _ := doorsBoard(t, 100, doorState(brokenDoor))
 	out := ansi.Strip(m.render())
 	if !strings.Contains(out, "is not valid JSON: fix it") {
 		t.Fatalf("no fix:\n%s", out)
@@ -328,17 +365,6 @@ func TestTheQueueComesFirstWhenSomeoneWaits(t *testing.T) {
 	}
 }
 
-func TestAFoldedDoorPassesToTheNext(t *testing.T) {
-	m, _ := loadedWith(t, 100, doorState(hooksDoor, wayBack, guideDoor))
-	next, _ := key(m, "down")
-	done := wayBack
-	done.Done = true
-	next, _ = next.Update(stateMsg(doorState(hooksDoor, done, guideDoor)))
-	if d, ok := next.(Model).selectedDoor(); !ok || d.ID != doors.Guide {
-		t.Fatalf("selected %+v, want the guide after the way back folded", d)
-	}
-}
-
 func longDoor() doors.Door {
 	d := hooksDoor
 	var b strings.Builder
@@ -354,7 +380,9 @@ func TestALongDiffIsReadToTheEndBeforeY(t *testing.T) {
 	m := New(Options{NoMotion: true, Conn: f})
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	next, _ = next.Update(stateMsg(doorState(longDoor(), wayBack, guideDoor)))
-	next, _ = key(next, "enter")
+	mm := next.(Model)
+	mm.viewPrefs.CopyCheckedDesk = true
+	next, _ = key(onDoors(mm), "enter")
 	next, _ = key(next, "y")
 	if len(f.acts()) != 0 || next.(Model).pending == nil {
 		t.Fatal("y wrote a diff the person did not see to its end")
@@ -369,9 +397,9 @@ func TestALongDiffIsReadToTheEndBeforeY(t *testing.T) {
 	if out := ansi.Strip(next.(Model).render()); !strings.Contains(out, "+line 39") || !strings.Contains(out, "y run") {
 		t.Fatalf("scrolled to the end, no y:\n%s", out)
 	}
-	next, cmd := key(next, "y")
+	_, cmd := key(next, "y")
 	if cmd != nil {
-		next.Update(cmd())
+		drain(cmd)
 	}
 	if len(f.acts()) != 1 {
 		t.Fatalf("acts %+v", f.acts())
@@ -392,30 +420,20 @@ func TestTildeShortensOnlyAWholePath(t *testing.T) {
 }
 
 func TestTheWhyIsReadInFull(t *testing.T) {
-	m, _ := loadedWith(t, 100, doorState(hooksDoor, guideDoor))
+	m, _ := doorsBoard(t, 100, doorState(hooksDoor, guideDoor))
 	long := guideDoor
 	long.Why = "Claude Code walks you through matchblox in a new window. This starts Claude Code and uses your tokens."
 	next, _ := m.Update(stateMsg(doorState(hooksDoor, long)))
-	next, _ = key(next, "down")
-	if out := ansi.Strip(next.(Model).render()); !strings.Contains(out, "uses your tokens.") {
+	next, _ = key(next, "right")
+	if out := strings.Join(strings.Fields(ansi.Strip(next.(Model).render())), " "); !strings.Contains(out, "uses your tokens.") {
 		t.Fatalf("the why is cut:\n%s", out)
-	}
-}
-
-func TestOneBlankLineUnderTheDoors(t *testing.T) {
-	m, _ := loadedWith(t, 100, doorState(hooksDoor))
-	lines := strings.Split(ansi.Strip(m.render()), "\n")
-	for i := lineOf(t, m, "SET UP"); i < lineOf(t, m, "RECOMMENDATIONS"); i++ {
-		if strings.TrimSpace(lines[i]) == "" && strings.TrimSpace(lines[i+1]) == "" {
-			t.Fatalf("two blank lines at %d:\n%s", i, strings.Join(lines, "\n"))
-		}
 	}
 }
 
 func TestThePreviewShortensHome(t *testing.T) {
 	d := hooksDoor
 	d.Preview = `+      {"command": "` + home + `/go/bin/matchblox hook Stop"}`
-	m, _ := loadedWith(t, 100, doorState(d))
+	m, _ := doorsBoard(t, 100, doorState(d))
 	next, _ := key(m, "enter")
 	if out := ansi.Strip(next.(Model).render()); !strings.Contains(out, `"~/go/bin/matchblox hook Stop"`) {
 		t.Fatalf("no ~ in the preview:\n%s", out)
@@ -425,18 +443,18 @@ func TestThePreviewShortensHome(t *testing.T) {
 func TestTheResultShortensHome(t *testing.T) {
 	m, _ := loadedWith(t, 100, doorState(hooksDoor))
 	next, _ := m.Update(resultMsg(proto.Result{Ran: [][]string{{"write", home + "/.claude/settings.json"}}}))
-	if got := next.(Model).toast; got != "ran: write ~/.claude/settings.json" {
+	if got := saidNow(next.(Model)); got != "ran: write ~/.claude/settings.json" {
 		t.Fatalf("toast %q", got)
 	}
 }
 
 func TestAPhoneShowsOnlyTheSelectedWhy(t *testing.T) {
-	m, _ := loadedWith(t, 40, doorState(hooksDoor, wayBack, guideDoor))
+	m, _ := doorsBoard(t, 40, doorState(hooksDoor, wayBack, guideDoor))
 	out := ansi.Strip(m.render())
 	if !strings.Contains(out, "Claude Code tells") || strings.Contains(out, "prefix m comes back") || strings.Contains(out, "uses your tokens") {
 		t.Fatalf("a phone shows each why:\n%s", out)
 	}
-	next, _ := key(m, "down")
+	next, _ := key(m, "right")
 	if out := ansi.Strip(next.(Model).render()); !strings.Contains(out, "prefix m comes back") || strings.Contains(out, "Claude Code tells") {
 		t.Fatalf("the why does not follow the selection:\n%s", out)
 	}
@@ -449,7 +467,7 @@ var wayBackMouse = func() doors.Door {
 }()
 
 func TestTheWayBackMouseIsOffUntilM(t *testing.T) {
-	m, f := loadedWith(t, 100, doorState(wayBackMouse))
+	m, f := doorsBoard(t, 100, doorState(wayBackMouse))
 	next, _ := key(m, "enter")
 	out := ansi.Strip(next.(Model).render())
 	if !strings.Contains(out, "[ ] m also turn the mouse on") || strings.Contains(out, "+set -g mouse on") {
@@ -462,9 +480,9 @@ func TestTheWayBackMouseIsOffUntilM(t *testing.T) {
 			t.Fatalf("no %q after m:\n%s", want, out)
 		}
 	}
-	next, cmd := key(next, "y")
+	_, cmd := key(next, "y")
 	if cmd != nil {
-		next.Update(cmd())
+		drain(cmd)
 	}
 	if acts := f.acts(); len(acts) != 1 || acts[0] != (proto.Act{RecID: "door:wayback", Which: "also", Confirm: "y", Text: "s2"}) {
 		t.Fatalf("acts %+v", acts)
@@ -472,13 +490,13 @@ func TestTheWayBackMouseIsOffUntilM(t *testing.T) {
 }
 
 func TestMTwiceLeavesTheMouseOff(t *testing.T) {
-	m, f := loadedWith(t, 100, doorState(wayBackMouse))
+	m, f := doorsBoard(t, 100, doorState(wayBackMouse))
 	next, _ := key(m, "enter")
 	next, _ = key(next, "m")
 	next, _ = key(next, "m")
-	next, cmd := key(next, "y")
+	_, cmd := key(next, "y")
 	if cmd != nil {
-		next.Update(cmd())
+		drain(cmd)
 	}
 	if acts := f.acts(); len(acts) != 1 || acts[0].Which != "primary" {
 		t.Fatalf("acts %+v", acts)

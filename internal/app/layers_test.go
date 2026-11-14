@@ -139,7 +139,7 @@ func TestHostsListsEveryHost(t *testing.T) {
 	}
 }
 
-func TestEnterOpensAHostAndEscComesBack(t *testing.T) {
+func TestEnterOpensAHostAndEscStaysInTheConsole(t *testing.T) {
 	r := hidingShell(t, []string{"ws-1"}, []string{"this machine"}, "")
 	r.toHosts(t) // ws-1 selected
 	r.key(t, "enter")
@@ -151,29 +151,16 @@ func TestEnterOpensAHostAndEscComesBack(t *testing.T) {
 	if first := strings.Split(r.view(), "\n")[0]; !strings.Contains(first, "matchblox · ws-1 · 1 hidden") {
 		t.Fatalf("header %q", first)
 	}
-	r.key(t, "esc")
+	r.key(t, "esc") // esc stays in the console: Hosts opens from Machine
+	if r.sh.layer != layerConsole {
+		t.Fatalf("esc left the console: layer %v", r.sh.layer)
+	}
+	r.toHosts(t)
 	if r.sh.layer != layerHosts || r.conns["ws-1"].closed {
-		t.Fatalf("esc: layer %v, closed %v", r.sh.layer, r.conns["ws-1"].closed)
+		t.Fatalf("back to Hosts: layer %v, closed %v", r.sh.layer, r.conns["ws-1"].closed)
 	}
 	if r.sh.sel != 1 {
 		t.Fatalf("the hosts layer must keep ws-1 selected, sel %d", r.sh.sel)
-	}
-}
-
-func TestEscClearsTheSearchBeforeItLeaves(t *testing.T) {
-	r := newShell(t, []string{"ws-1"}, nil, "ws-1", false)
-	next, _ := r.sh.Update(stateMsg(fixtureState()))
-	r.sh = next.(Shell)
-	r.key(t, "/")
-	r.key(t, "a")
-	r.key(t, "enter")
-	r.key(t, "esc")
-	if r.sh.layer != layerConsole {
-		t.Fatal("esc left the console while a search was on")
-	}
-	r.key(t, "esc")
-	if r.sh.layer != layerHosts {
-		t.Fatal("the second esc did not go back")
 	}
 }
 
@@ -295,7 +282,7 @@ func TestOldConsoleMessagesDoNotReachTheNewOne(t *testing.T) {
 	next, cmd := r.sh.Update(redialMsg{})
 	r.sh = next.(Shell)
 	if cmd != nil {
-		cmd()
+		drain(cmd)
 	}
 	if redials != 0 {
 		t.Fatal("a redial tick of the closed console dialed again")
@@ -446,10 +433,17 @@ func (r *shellRig) rowOf(host string) string {
 	return ""
 }
 
-// toHosts goes from the console back to Hosts.
+// toHosts goes from the console back to Hosts: esc stays in the console,
+// and Hosts opens from Machine's host rows, the last of its rows.
 func (r *shellRig) toHosts(t *testing.T) {
 	t.Helper()
-	r.key(t, "esc")
+	for i := 0; r.sh.cur.tab != tabMachine && i < len(tabNames); i++ {
+		r.key(t, "tab")
+	}
+	for range r.sh.cur.rowCount() {
+		r.key(t, "down")
+	}
+	r.key(t, "enter")
 	if r.sh.layer != layerHosts {
 		t.Fatal("esc did not go back to Hosts")
 	}
@@ -556,7 +550,7 @@ func TestHidingAPeerClosesItAndItsTick(t *testing.T) {
 		t.Fatalf("a hidden host's rows stay:\n%s", r.view())
 	}
 	if cmd := r.update(late); cmd != nil {
-		cmd()
+		drain(cmd)
 	}
 	before := r.view()
 	r.update(staleMsg{})
@@ -574,7 +568,7 @@ func TestHidingAPeerClosesItAndItsTick(t *testing.T) {
 	}
 	r.update(peerMsg{host: "ws-1", conn: again, msg: lostMsg{err: io.EOF, conn: again}})
 	if cmd := r.update(late); cmd != nil {
-		cmd()
+		drain(cmd)
 	}
 	if r.redials["ws-1"] != 0 {
 		t.Fatal("the old link's tick dialed the new one")
@@ -589,7 +583,7 @@ func TestHeaderCountsHidden(t *testing.T) {
 	r := hidingShell(t, []string{"ws-1", "gpu-1"}, []string{"gpu-1"}, "")
 	r.update(stateMsg(fixtureState()))
 	r.sh.cur.splashDone = true
-	if head := strings.Split(r.view(), "\n")[0]; !strings.Contains(head, "2 hosts · 1 hidden") {
+	if head := strings.Split(r.view(), "\n")[0]; !strings.Contains(head, "all hosts ▾ · 1 hidden") { // the board's host filter
 		t.Fatalf("header %q", head)
 	}
 	one := newShell(t, nil, nil, "", false)
@@ -740,7 +734,7 @@ func TestEnterWithNoneTickedSaysSo(t *testing.T) {
 	if !strings.Contains(lines[0], "ws-1 · 1 hidden") {
 		t.Fatalf("header %q", lines[0])
 	}
-	if last := strings.TrimSpace(lines[len(lines)-1]); last != "No host is ticked: ws-1 opens alone." {
-		t.Fatalf("key line %q", last)
+	if row := strings.TrimSpace(lines[len(lines)-3]); row != "No host is ticked: ws-1 opens alone." { // the board's strip row
+		t.Fatalf("notice %q", row)
 	}
 }

@@ -146,9 +146,6 @@ func (m Model) ghostRow(g ghost, sel bool, w int) string {
 		ink = st.muted
 	}
 	left := mark + st.accent.Render("+") + " " + ink.Render(words)
-	if t := m.sessTracks(w); t.wide {
-		left = mark + st.accent.Render("+") + " " + ink.Render(pad(words, t.name))
-	}
 	if where == "" {
 		return fit(left, w)
 	}
@@ -156,25 +153,4 @@ func (m Model) ghostRow(g ghost, sel bool, w int) string {
 		where = cutStartTo(where, room)
 	}
 	return fit(left+st.faint.Render("   "+where), w)
-}
-
-// ghostDetail is the detail of a ghost row: where ⏎ starts, and how.
-func (m Model) ghostDetail(g ghost, w int) []string {
-	st := m.st
-	out := []string{"", fit(" "+st.accent.Bold(true).Render(ghostAction(g).say), w)}
-	if g.repo.branch != "" {
-		out = append(out, fit(" "+st.muted.Render("on "+g.repo.branch), w))
-	}
-	if len(m.snap.Sessions) == 0 {
-		out = append(out, "", fit(" "+st.faint.Render(m.nothing("no agent sessions found in tmux")), w))
-	}
-	return append(out, "", " "+keyWord(m.keys.main.Open, st.accent, st.muted, " new session"))
-}
-
-// ghostRows add the ghost rows under the sessions, the first at row at;
-// sel is the selected one, from 0.
-func (m Model) ghostRows(b *body, at, sel, w int) {
-	for i, g := range m.ghosts() {
-		b.addRow(at+i, i == sel, w, m.st, m.ghostRow(g, i == sel, w))
-	}
 }

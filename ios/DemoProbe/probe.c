@@ -1,4 +1,5 @@
-// Runs the demo in a simulator process, walks two tabs, and prints what it saw.
+// Runs the demo in a simulator process, turns from the board to Machine and back, and prints
+// what it saw.
 #include <pthread.h>
 #include <stdio.h>
 #include <string.h>
@@ -67,14 +68,16 @@ int main(int argc, char **argv) {
     pthread_t t;
     pthread_create(&t, NULL, reader, NULL);
 
-    int sessions = wait_for("hearth-api", 30);
-    printf("RESULT hearth-api drawn: %d\n", sessions);
-    int tab2 = sessions && press("2", "SHIPS", 15);
-    printf("RESULT key 2 drew the ships tab: %d\n", tab2);
-    int machine = tab2 && wait_for("16 cores", 15);
+    // The board opens on NEEDS YOU, flint-auth first; Tab turns to Machine and back (a digit
+    // on the board answers its card).
+    int board = wait_for("flint-auth", 30);
+    printf("RESULT the board drew flint-auth: %d\n", board);
+    int tab = board && press("\t", "load 6.2", 15);
+    printf("RESULT tab drew Machine: %d\n", tab);
+    int machine = tab && wait_for("16 cores", 15);
     printf("RESULT the machine's 16 cores drawn: %d\n", machine);
-    int tab1 = tab2 && press("1", "SESSIONS 7", 15);
-    printf("RESULT key 1 drew the 7 sessions: %d\n", tab1);
+    int back = tab && press("\t", "flint-auth", 15);
+    printf("RESULT tab drew the board again: %d\n", back);
 
     struct rusage use;
     getrusage(RUSAGE_SELF, &use);
@@ -87,5 +90,5 @@ int main(int argc, char **argv) {
     MBDemoStop();
     pthread_join(t, NULL);
     printf("RESULT stopped: 1\n");
-    return sessions && tab2 && machine && tab1 ? 0 : 1;
+    return board && tab && machine && back ? 0 : 1;
 }

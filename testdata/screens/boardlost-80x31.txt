@@ -1,0 +1,31 @@
+ ▰ matchblox · all hosts ▾                                         ● 4 need you
+ BOARD 15    machine
+────────────────────────────────────────────────────────────────────────────────
+ NEEDS YOU · 4  −                       WORKING · 3  −       SHIPPING · 3  −
+▌╿ spark-search                 ✻ 31m   ✦ flint-ui   ✻       ╿ cinder-ci… ❋  2h
+  stuck CI failed · lint, twice          busy Writing the…    merged deploying
+  #4548 ●━✕┄○┄○┄○  ctx 77%               ctx 40%   ─╴login    #4549 ●━●━●━◉┄○
+  “Lint fails on a file I did not
+  change. I tried twice and stopped.”   ✦ ember-bil… ✻       ╿ flint-api  ✻ 40m
+  ⏎ go in                                agents Three sub…    ci waits for rev…
+                                         ctx 71%              #4560 ●━◉┄○┄○┄○
+ ╿ kindle-web                   ✻  9m
+  green #4556 waits for your merge      ✦ spark-docs ✻       ╿ hearth-li… ✻  4m
+  #4556 ●━●━◉┄○┄○  ctx 48%               busy Running the…    ci CI · 6 of 9 j…
+  p merge #4556   ⏎ go in                ctx 22%              #4551 ●━◉┄○┄○┄○
+
+ ╿ hearth-api                   ✻  4m
+  asks The plan changes 2 records an…
+  ctx 31%
+  ⏎ go in
+
+  ↓ 1 more
+
+
+────────────────────────────────────────────────────────────────────────────────
+ QUIET · 5   wick-mobile · hearth-notes · ember-reports · kindle-legacy · t… −
+ + start a new session
+ RECOMMENDATIONS · 7
+ no service · it redials
+────────────────────────────────────────────────────────────────────────────────
+ ⏎ go in   c copy   v one line   s hosts   u strip   ←→ columns   tab next

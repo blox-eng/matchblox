@@ -5,6 +5,7 @@ package queue
 
 import (
 	"path/filepath"
+	"slices"
 	"sort"
 	"time"
 
@@ -255,6 +256,25 @@ func (q *Queue) Merge(sessions []sample.Session, now time.Time) {
 			}
 			if it, ok := q.waiting[id]; ok {
 				it.Pane, it.Target, it.Name = s.Pane, s.Target, s.Name
+				if s.ReportsWork() {
+					// A live report beats an old guess: an agent that says it
+					// works asks nothing and waits for nothing, whatever its
+					// last hook said. An ask is back, from when it began, if
+					// the work ends with it still open; a finished turn waits
+					// from the end of the work.
+					if it.State == StateFinished || it.Reminder {
+						it.Since = time.Time{}
+					}
+					q.waiting[id] = it
+					continue
+				}
+				if s.ReportsWait() && (it.State == StateFinished || it.Reminder) {
+					// A turn its background work started asks, and no hook
+					// fires for it: the agent's own report is the ask.
+					q.waiting[id] = it
+					items = append(items, reportedWait(id, s, now))
+					continue
+				}
 				if working(s, it.Since, now) && (it.State == StateFinished || it.Reminder) {
 					// A turn that ended asking nothing does not wait while the
 					// session works: its subagents, or the turn their results
@@ -276,7 +296,13 @@ func (q *Queue) Merge(sessions []sample.Session, now time.Time) {
 					SessionID: id, Pane: s.Pane, Target: s.Target, Name: s.Name,
 					State: StatePermission, Since: now.Add(-s.Idle), LastLine: s.LastLine, FromPane: true,
 				})
+			} else if s.ReportsWait() {
+				items = append(items, reportedWait(id, s, now))
 			}
+			continue
+		}
+		if s.ReportsWait() {
+			items = append(items, reportedWait(s.SessionID, s, now))
 			continue
 		}
 		if s.Status == "idle" && !s.Busy {
@@ -325,6 +351,25 @@ func (q *Queue) Merge(sessions []sample.Session, now time.Time) {
 		return items[i].Name < items[j].Name
 	})
 	q.items = items
+}
+
+// permissionsFor are the reasons a report gives for a wait that is a
+// permission: Claude Code's own list, and OpenCode's plugin's word. Any
+// other reason is a question.
+var permissionsFor = []string{"permission prompt", "sandbox request", "worker request", "goal proposal", "permission"}
+
+// reportedWait is the ask of a session whose own report says it waits: it
+// holds with no hook, so a restart loses no wait.
+func reportedWait(id string, s sample.Session, now time.Time) Item {
+	state := StateQuestion
+	if slices.Contains(permissionsFor, s.WaitingFor) {
+		state = StatePermission
+	}
+	since := s.StatusAt // the report's own time: the same at every merge
+	if since.IsZero() {
+		since = now.Add(-s.Idle)
+	}
+	return Item{SessionID: id, Pane: s.Pane, Target: s.Target, Name: s.Name, State: state, Since: since, LastLine: s.LastLine}
 }
 
 // byNewer puts id in byPane for pane unless a hooked session that spoke

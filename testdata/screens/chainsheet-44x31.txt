@@ -1,25 +1,25 @@
- ▰ matchblox               ● 1 wait for you
- SESSIONS 5  ships  machine  4  5  6  7
+ ▰ matchblox                   ● 1 need you
+ BOARD 5    machine
 ────────────────────────────────────────────
- WAITS FOR YOU · 1 · chain of 3
-   ─────────────────────────────────────────
-▌╿╮ kindle-web           asks      1m   56%
-  │ “Claude needs your permission to use
-  │ Bash”
-  │                       A switch  ⏎ go in
-  │─────────────────────────────────────────
- ✦┤ hearth-api           busy           79%
- ╿╯ ember-billing        idle      3m   32%
- WORKING · 1
- ✦  flint-auth           busy           41%
- QUIET · 1
- │  spark-docs           idle      9m   88%
- + start a new session
+ NEEDS YOU 1 −  work 2  ship 0  quiet 2
+────────────────────────────────────────────
+▌╿ kindle-web                         ✻  1m
+  asks Claude needs your permission to use…
+  ctx 56%                          ━╸hearth
+  “Claude needs your permission to use
+  Bash”
+  ⏎ go in
 
- 1 without an agent: shell:1.1 zsh
 
- RECOMMENDATIONS · 7 · h hides
- ▲ The week runs short: compact spark-docs
+
+
+
+
+
+
+
+
+
 ╭─ Stoke the chain kindle-web (3 matches)? ╮
 │ How should I run this chain?             │
 │                                          │
@@ -28,4 +28,4 @@
 │ ✓ merges  ○ releases  ○ deploys  ○ kills │
 ╰─ ⏎ start ─ tab chips ─ esc ──────────────╯
 ────────────────────────────────────────────
- ⏎ go in  x kill  r rename  F stoke chain  …
+ c copy   v one line   s hosts   u strip

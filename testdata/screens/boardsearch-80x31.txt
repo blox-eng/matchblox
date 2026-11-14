@@ -1,0 +1,31 @@
+ ▰ matchblox · all hosts ▾                                         ● 4 need you
+ BOARD 15    machine
+────────────────────────────────────────────────────────────────────────────────
+ NEEDS YOU · 0  −                       WORKING · 0  −       SHIPPING · 0  −
+  nothing matches "redis" · esc clears
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────
+ QUIET · 0   ▴                                                               −
+ + start a new session
+ ✻ 5h ▰▰▰▰▰▰▰▱ 84%  wk 82%   ✻ @gpu-1 5h ▰▰▰▰▰▰▰▱ 84%  wk 82%         machine ›
+────────────────────────────────────────────────────────────────────────────────
+ c copy   v one line   s hosts   u strip   ←→ columns   tab next

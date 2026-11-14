@@ -1,6 +1,9 @@
- ▰ matchblox                                                                                      ● 6 wait for you  ☾ night → 02:50
- sessions 7    ships 3    machine    git    history    panes    STOKER 1
+ ▰ matchblox                                                                                          ● 7 need you  ☾ night → 02:50
+ board 7    MACHINE
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ STOKER                                                                                                               night → 02:50
+ watching 0 · 1 compacted · 0 waited · 167k back
+ 21:50 │ hearth-api  176k → 9k
 
  NIGHT · 19:50 → 02:50                                                                                                       sealed
 
@@ -21,12 +24,9 @@
           the build is green, waits for the release
 
  YOUR GO
- ▌⏸ 21:31 waits for you: kindle-web wants to run gh release create v1.4
+ ▌⏸ 21:31 waits for your go: kindle-web wants to run gh release create v1.4
           y gives the go, once
 
  STANDING RULES
-  ✓ 21:20 spark-docs opened #4570: compacted, sent /review
-
- TODAY
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ↑↓ move  y give the go  ⏎ command  1 sessions  p ships  n stop night  / find  q quit                                sampled 0s ago
+ ↑↓ move  esc machine  y give the go  ⏎ command  n stop night  / find  q quit                                        sampled 0s ago

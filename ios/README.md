@@ -149,10 +149,12 @@ and again with two hosts.
    Tap it. The scan view finds its own code in under three seconds. It turns on
    no camera and asks for no permission. The app opens the console on the
    host `demo`.
-3. Tap the session at the top, flint-auth: the stand-in for its pane says
-   `type 2 to answer`. Raise the keyboard with
-   the belt's key and type `2`, or press `↓` then `⏎` on the belt. The agent
-   works for a few seconds, then the sheet rises with
+3. The board opens on flint-auth's card in `NEEDS YOU`, with its question's
+   options in the peek. Tap `2. Rotate, keep the old one a minute`: the card
+   marks it, and the key line says `2 again sends`. Tap it again to send it.
+   The card strikes into `WORKING`. Or tap the card again to open the
+   stand-in for its pane (`type 2 to answer`), and press `↓` then `⏎` on the
+   belt. The agent works for a few seconds, then the sheet rises with
    `Your agents wait the same way.`, the line, `Copy`, `Send to my computer`,
    `Pair a host` and `Keep looking`. `Copy` puts the line on the pasteboard.
    `Send to my computer` opens the share sheet.
@@ -207,7 +209,7 @@ is a second paired host.
 Use an iPhone held upright, with a Claude Code session that waits on a
 question.
 
-29. Tap the session: you are in the agent's tmux pane, with the agent's own menu at the bottom. `↓ ↓ ⏎` picks the third
+29. Tap the session's card to choose it, then tap it again: you are in the agent's tmux pane, with the agent's own menu at the bottom. `↓ ↓ ⏎` picks the third
     option.
 30. Each key of Steer (`◂ ↑ ↓ ⏎ Esc ^C ⇞ ⇟`) works on the first tap, with
     the keyboard up and with it down. `^C` reaches the agent as tmux sends

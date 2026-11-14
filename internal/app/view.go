@@ -125,27 +125,27 @@ func spanAt(spans []span, x int) (span, bool) {
 }
 
 // drawn is a frame and where its parts are, so a tap finds what it
-// hit: the header, the tabs, the body rows, the dock and the key line.
+// hit: the header, the tabs, the body rows and the key line.
 type drawn struct {
 	lines   []string
-	waits   span // the header's "● N wait for you"
+	waits   span // the header's "● N need you"
+	hostAt  span // the board's host filter in the header: a tap turns it
 	tabs    []span
 	bodyTop int   // the line of the first body row
 	rows    []int // the row each body line shows; -1 none, headerRow
-	listW   int   // the list's columns; the detail or the chat is right of them
-	dockAt  int   // the dock's first line; -1 when it is folded
-	keysAt  int   // the key line; -1 when there is none
-	keys    []span
+	stripAt int   // the board's strip; -1 when it has none
+	strip   span  // a tap on the strip turns it
+	// boardView is the live view beside the board: from column x0 and line
+	// y0 to line y1 (x1 0: none).
+	boardView struct{ x0, x1, y0, y1 int }
+	keysAt    int // the key line; -1 when there is none
+	keys      []span
 	// A box over the screen (the sheet, a form): its first line and
 	// column, its width, the key a tap on each of its lines presses, and
 	// the keys of its footer.
 	boxAt, boxX, boxW int
 	boxRows           []string
 	boxKeys           []span
-	// The dock: its height and the columns of the stoker's panel. full:
-	// the dock shows all it has; paneFull: so does the right pane.
-	dockH, stx0, stx1 int
-	full, paneFull    bool
 	// The launch sheet's go chips: their line, and the key a tap on each
 	// one presses.
 	sheetGoesAt int
@@ -155,43 +155,36 @@ type drawn struct {
 	formAgentsAt int
 	formAgents   []span
 	stokerAt     span // the header's stoker word
-	// The selected session's own keys, on its opened row or under its
-	// detail: their line, and the key a tap on each presses.
-	actKeysAt int
-	actKeys   []span
 	// placeFull: the chat is the whole screen, and a tap on its title row
 	// goes back to Sessions. viewRows: the lines of the agent's screen the
 	// chat shows.
 	placeFull bool
-	// viewAt, viewX, viewW: the first row of the agent's screen in the chat,
-	// the chat's first column for a tap, and the screen's width; viewW 0: no chat.
-	viewAt, viewX, viewW int
-	viewRows             int
+	// viewAt, viewW: the first row of the agent's screen in the chat, and
+	// the screen's width; viewW 0: no chat.
+	viewAt, viewW int
+	viewRows      int
 }
 
 // draw is the screen, with an ssh prompt over everything.
 func (m Model) draw(w int) drawn {
+	idx := m.boardIndex()
+	m.frameIdx = &idx
 	sc := m.drawScreen(w)
 	if m.asking() {
 		m.overlayAsk(&sc, w)
 	}
+	m.overlayDrag(&sc)
 	return sc
 }
 
 // drawScreen lays out the screen, top to bottom: the header, the tabs, a
-// hairline, the body (on an opened phone and a desk the list and the
-// detail side by side), the dock when it fits and the view is not list
-// only, then a hairline and the
-// key line (design/0006 §4.1).
-// minBlank is how many blank rows a folded dock may not leave: short of
-// fewer, the dock folds; of more, it stays and the body scrolls.
-const minBlank = 3
-
+// hairline, the body, then a hairline and the key line (design/0006
+// §4.1).
 func (m Model) drawScreen(w int) drawn {
 	head, waits, stokerAt := m.header(w)
 	tabs, tabSpans := m.tabsLine(w)
 	sc := drawn{lines: []string{head, tabs, m.st.rule.Render(strings.Repeat("─", w))}, waits: waits, stokerAt: stokerAt, tabs: tabSpans,
-		bodyTop: 3, listW: w, dockAt: -1, keysAt: -1, actKeysAt: -1}
+		bodyTop: 3, stripAt: -1, keysAt: -1, hostAt: m.boardHostHit(head)}
 	switch {
 	case m.hostCount() > 1 && m.shows():
 		// A blocked host of two or more is a row, never the screen.
@@ -201,7 +194,7 @@ func (m Model) drawScreen(w int) drawn {
 	case m.blocked != nil:
 		sc.lines = append(sc.lines, "", m.blockedText(w))
 		return sc
-	case !m.have:
+	case !m.have && !m.boardShown():
 		why := m.waitingWhy()
 		if len(sc.lines)+markH/2+3 <= m.height {
 			sc.lines = append(append(sc.lines, ""), m.markLines(w)...)
@@ -213,88 +206,37 @@ func (m Model) drawScreen(w int) drawn {
 		}
 		return sc
 	}
-	if m.room != nil {
-		return m.roomScreen(w, sc)
-	}
-	listW, detailW := m.panes(w)
 	if m.viewFull() { // one column: the live view takes the screen
 		return m.viewScreen(w)
 	}
-	full := m.bodyRows()
-	sc.listW = listW
-	b := m.body(listW)
-	chat, viewing := m.viewShown(detailW)
-	stacked := m.tab == tabSessions && detailW > 0 // usage, the machine and the stoker under the list
-	paneFull := true
-	paneLines := func(rows int) []string {
-		switch {
-		case detailW == 0 || viewing:
-			return nil
+	room := m.bodyRows()
+	var b body
+	if m.boardShown() { // the board draws its tab row from the body's index
+		p := m.boardPanel(w, room)
+		b, sc.lines[1], sc.tabs = p.body, p.tabRow, p.tabSpans
+		if p.live > 0 {
+			sc.boardView.x0, sc.boardView.x1 = w-p.live, w
+			sc.boardView.y0, sc.boardView.y1 = sc.bodyTop+p.headAt, sc.bodyTop+p.colsTo
 		}
-		lines, all := m.detailPane(detailW, rows)
-		paneFull = all
-		return lines
-	}
-	detail := paneLines(0)
-	var d docked
-	if m.tab != tabMachine && m.tab != tabStoker && !stacked && !m.listOnly() {
-		d = m.dock(w, -1)
-	}
-	room := full
-	tall := max(len(b.lines), len(detail))
-	switch {
-	case len(d.lines) > 0 && tall+len(d.lines)+1 <= full:
-		// The dock fits; it grows into the rows the body leaves free.
-		d = m.dock(w, full-tall-1)
-		room -= len(d.lines) + 1
-	case len(d.lines) > 0 && full-tall >= minBlank && full-len(d.lines)-1 >= full/2:
-		// A few rows short: the dock stays at its fewest and the body
-		// scrolls, rather than leave the rows it would free blank.
-		room -= len(d.lines) + 1
-	default:
-		d = docked{}
-	}
-	if m.listOnly() && m.tab != tabMachine && m.tab != tabStoker {
-		d = m.listOnlyStats(w, full-len(b.lines))
-		if len(d.lines) > 0 {
-			room -= len(d.lines) + 1
+		if p.stripAt >= 0 {
+			sc.stripAt, sc.strip = sc.bodyTop+p.stripAt, p.strip
 		}
-	}
-	sc.full = d.full || m.tab == tabMachine || m.tab == tabStoker || m.listOnly() // list only has no dock to show
-	detail = paneLines(room)
-	sc.paneFull = paneFull && len(detail) <= room
-	if viewing {
-		detail = m.viewPane(chat, detailW, room)
-		sc.viewRows = room - 1 - len(m.viewStrip(chat, detailW, room-1))
-		sc.viewAt, sc.viewX, sc.viewW = sc.bodyTop+room-sc.viewRows, listW+1, detailW-1
+	} else {
+		b = m.body(w)
 	}
 	vis := windowed(b, room, m.rowIndex())
-	if stacked {
-		vis, sc.full = m.leftColumn(b, listW, room)
-	}
-	edge := m.st.hair
 	for i := range room {
 		line, row := "", -1
 		if i < len(vis.lines) {
 			line, row = vis.lines[i], vis.rows[i]
 		}
-		if detailW > 0 {
-			right := ""
-			if i < len(detail) {
-				right = detail[i]
-			}
-			line = fit(line, listW) + edge.Render("│") + fit(right, detailW)
-		}
 		sc.lines, sc.rows = append(sc.lines, line), append(sc.rows, row)
 	}
-	m.markActKeys(&sc, b, vis, detail, room, detailW, viewing)
-	if len(d.lines) > 0 {
-		sc.dockAt, sc.dockH, sc.stx0, sc.stx1 = len(sc.lines)+1, len(d.lines), d.stx0, d.stx1
-		sc.lines = append(append(sc.lines, m.st.hair.Render(strings.Repeat("─", w))), d.lines...)
+	if !m.beltOnly() { // Pocket's belt has the keys
+		hair, keys, keySpans := m.keyRows(w)
+		sc.keysAt, sc.keys = len(sc.lines)+1, keySpans
+		sc.lines = append(sc.lines, hair, keys)
 	}
-	hair, keys, keySpans := m.keyRows(w)
-	sc.keysAt, sc.keys = len(sc.lines)+1, keySpans
-	sc.lines = append(sc.lines, hair, keys)
 	switch {
 	case m.consenting():
 		m.overlayConsent(&sc, w)
@@ -302,76 +244,19 @@ func (m Model) drawScreen(w int) drawn {
 		m.overlaySheet(&sc, w)
 	case m.form != nil:
 		m.overlayForm(&sc, w)
+	case m.menu != nil && m.boardShown():
+		m.overlayMenu(&sc, w)
 	}
 	return sc
 }
 
-// markActKeys finds the selected session's own keys: the last line of its
-// opened row on a phone, the last line of its detail beside the list. An
-// opened row cut by the screen has no keys to tap: its last line is not
-// theirs. Covered: the right side is not the detail.
-func (m Model) markActKeys(sc *drawn, b, vis body, detail []string, room, detailW int, covered bool) {
-	s, ok := m.selectedSession()
-	if !ok || m.tab != tabSessions {
-		return
-	}
-	switch {
-	case detailW > 0 && !covered && len(detail) <= room:
-		_, spans := m.detailKeys(s)
-		sc.actKeysAt, sc.actKeys = sc.bodyTop+len(detail)-1, shift(spans, sc.listW+1)
-	case detailW == 0 && m.inPlace():
-		at, last, shown, all := m.rowIndex(), -1, 0, 0
-		for i, r := range vis.rows {
-			if r == at {
-				last, shown = i, shown+1
-			}
-		}
-		for _, r := range b.rows {
-			if r == at {
-				all++
-			}
-		}
-		if last > 0 && vis.rows[last-1] == at && shown == all { // opened, and whole
-			_, spans := m.openedKeys(s, sc.listW)
-			sc.actKeysAt, sc.actKeys = sc.bodyTop+last, spans
-		}
-	}
-}
-
-// panes splits Sessions into the list and the chat, the list at 40% of
-// the screen (sessionsSplit), and Ships at the middle on an opened phone
-// and at the list's ≈78 columns on a desk. A phone, list only and the
-// other tabs have one column, and so has a door's diff while it waits for
-// its y: it shows whole.
-func (m Model) panes(w int) (list, detail int) {
-	if _, preview := m.previewDoor(); m.tab != tabSessions && m.tab != tabShips || m.layoutAt(w) == Narrow || m.listOnly() || preview {
-		return w, 0
-	}
-	at := splitAt(w, m.layoutAt(w))
-	if m.tab == tabSessions {
-		at = sessionsSplit(w)
-		if !m.viewRoom(w - at - 1) {
-			return w, 0 // no room for a menu beside the list: the chat opens full-screen
-		}
-	}
-	return at, w - at - 1
-}
-
 // bodyRows is how many rows the body has under the header and over the key
-// line.
-func (m Model) bodyRows() int { return max(m.height-5, 1) }
-
-// sessionsSplit is the list's width where Sessions splits: 40% of the
-// screen, at least 38 columns and at most 78; the chat takes the rest.
-func sessionsSplit(w int) int { return min(max(w*2/5, 38), 78) }
-
-// splitAt is the column the list and the detail split at, and the dock's
-// usage and machine under them.
-func splitAt(w int, l Layout) int {
-	if l == Medium {
-		return (w - 1) / 2
+// line; on Pocket's belt, to the bottom.
+func (m Model) bodyRows() int {
+	if m.beltOnly() {
+		return max(m.height-3, 1)
 	}
-	return min(78, w-41)
+	return max(m.height-5, 1)
 }
 
 // windowed is the part of a body that fits in room lines: it scrolls so
@@ -418,7 +303,9 @@ func (m Model) header(w int) (string, span, span) {
 	if host == "" {
 		host = m.host.Host
 	}
-	if n := m.hostCount(); n > 1 {
+	if n := m.hostCount(); n > 1 && m.boardShown() {
+		host = m.boardHostWord()
+	} else if n > 1 {
 		host = fmt.Sprintf("%d hosts", n)
 	}
 	lost := ""
@@ -439,7 +326,7 @@ func (m Model) header(w int) (string, span, span) {
 		}
 		return fit(left, w), span{}, span{}
 	}
-	if m.toast != "" {
+	if m.toast != "" && !m.boardShown() { // the board's toasts are notices
 		// A long toast is cut, never the name; the host stays when the
 		// toast still has room.
 		if host != "" && w-lipgloss.Width(left+lost)-len(host)-6 >= 20 {
@@ -448,18 +335,13 @@ func (m Model) header(w int) (string, span, span) {
 		room := max(w-lipgloss.Width(left+lost)-3, 1)
 		return spread(left+lost, st.accent.Render(ansi.Truncate(m.toast, room, "…"))+" ", w), span{}, span{}
 	}
-	n := 0
-	for _, s := range m.all.sessions {
-		if m.groupOf(s) == groupWaits {
-			n++
-		}
-	}
+	n, count := m.needCount(), "● %d need you"
 	stoker := m.stokerBadge(m.layoutAt(w) == Narrow)
 	// Short of room the host goes first (a phone), then the words of who
 	// waits; the count stays.
 	waits := []string{""}
 	if n > 0 {
-		waits = []string{fmt.Sprintf("● %d wait for you", n), fmt.Sprintf("● %d", n)}
+		waits = []string{fmt.Sprintf(count, n), fmt.Sprintf("● %d", n)}
 	}
 	lefts := []string{left}
 	if host != "" {
@@ -531,9 +413,9 @@ func (m Model) hostBadge(short bool) string {
 	case m.stoker == nil:
 		return ""
 	case m.stokerAsks() && short:
-		return st.accent.Render("stoker waits")
+		return st.accent.Render("stoker asks")
 	case m.stokerAsks():
-		return st.accent.Render("stoker waits for you")
+		return st.accent.Render("stoker needs you")
 	case !m.stoker.On:
 		return st.faint.Render("stoker off")
 	case m.resting():
@@ -546,35 +428,41 @@ func (m Model) hostBadge(short bool) string {
 	return st.stoker.Render("stoker")
 }
 
-// tabsLine names every tab: the open one uppercase in the accent with its
-// rule, the others lowercase in faint, a count after a name when it means
-// something. When the names do not fit, the tabs far from the open one
-// shorten to their digit, the nearest last.
+// tabPress is what a tap on tab i's name presses: no key, since a digit
+// answers a card's question on the board (ruling 37).
+func tabPress(i int) string { return "tab:" + strconv.Itoa(i) }
+
+// tabOfPress is the tab a tab span's press opens.
+func tabOfPress(press string) (int, bool) {
+	n, ok := strings.CutPrefix(press, "tab:")
+	if !ok {
+		return 0, false
+	}
+	i, err := strconv.Atoi(n)
+	return i, err == nil && i >= 0 && i < len(tabNames)
+}
+
+// tabsLine names both tabs: the open one uppercase in the accent with its
+// rule, the other lowercase in faint, a count after a name when it means
+// something. Short of room the gap between them narrows; a tab's span
+// presses tabPress.
 func (m Model) tabsLine(w int) (string, []span) {
 	alert := m.alert()
 	aw := lipgloss.Width(alert)
-	try := func(near int, gap string) (string, []span) {
-		line, x := " ", 1
-		var spans []span
-		for i := range views {
-			if i > 0 {
-				line += gap
-				x += len(gap)
-			}
-			label := m.tabLabel(i, i-m.tab <= near && m.tab-i <= near)
-			spans = append(spans, span{x, x + lipgloss.Width(label), strconv.Itoa(i + 1)})
-			line += label
-			x += lipgloss.Width(label)
-		}
-		return line, spans
-	}
 	var line string
 	var spans []span
-	for _, t := range []struct {
-		near int
-		gap  string
-	}{{len(views), "    "}, {len(views), "   "}, {len(views), "  "}, {2, "  "}, {1, "  "}, {0, "  "}, {-1, "  "}} {
-		if line, spans = try(t.near, t.gap); lipgloss.Width(line)+aw+2 <= w {
+	for _, gap := range []string{"    ", "   ", "  "} {
+		line, spans = " ", nil
+		for i := range tabNames {
+			if i > 0 {
+				line += gap
+			}
+			label := m.tabLabel(i)
+			x := lipgloss.Width(line)
+			spans = append(spans, span{x, x + lipgloss.Width(label), tabPress(i)})
+			line += label
+		}
+		if lipgloss.Width(line)+aw+2 <= w {
 			break
 		}
 	}
@@ -584,37 +472,26 @@ func (m Model) tabsLine(w int) (string, []span) {
 	return fit(line, w), spans
 }
 
-// tabLabel is a tab's name and count, or its digit when it is shortened.
-func (m Model) tabLabel(i int, named bool) string {
+// tabLabel is a tab's name and count.
+func (m Model) tabLabel(i int) string {
 	st := m.st
-	name, count := views[i].name, ""
+	name, count := tabNames[i], ""
 	switch i {
 	case tabSessions:
 		count = strconv.Itoa(len(m.all.sessions))
-	case tabShips:
-		if n := m.inFlight(); n > 0 {
-			count = strconv.Itoa(n)
-		}
 	case tabMachine:
 		if len(m.all.orphans) > 0 {
 			count = "!" // a detached busy loop burns
 		}
-	case tabStoker:
-		if n := m.stokerNeeds(); n > 0 {
-			count = strconv.Itoa(n)
-		}
-	}
-	if !named {
-		name = strconv.Itoa(i + 1)
 	}
 	switch {
-	case i == m.tab && count == "":
+	case i == m.openTab() && count == "":
 		return st.tabActive.Render(strings.ToUpper(name))
-	case i == m.tab:
+	case i == m.openTab():
 		return st.tabActive.Render(strings.ToUpper(name)) + st.accent.Render(" "+count)
 	case count == "!":
 		return st.faint.Render(name) + st.neg.Render(" !")
-	case count != "" && named:
+	case count != "":
 		return st.faint.Render(name + " " + count)
 	}
 	return st.faint.Render(name)
@@ -672,19 +549,25 @@ func (m Model) keyLine(w int) (string, []span) {
 	if m.pair.strips() && (m.pair.beat == 4 || m.flash == "") {
 		return fit(" "+st.text.Render(m.pair.line), w), nil
 	}
-	if m.flash != "" {
+	if m.flash != "" && (!m.boardShown() || m.viewFull()) { // the board's flash is a notice
 		return fit(" "+st.text.Render(m.flash), w), nil
 	}
 	if l := m.lostLine(); l != "" { // a lost host outranks the stand-in's keys, which may not go
 		return fit(" "+st.text.Render(l), w), nil
 	}
-	if m.room != nil {
+	if m.room != nil && m.room.typing && m.boardShown() {
 		return m.roomKeyLine(w), nil
 	}
 	if m.viewFull() {
 		return m.liveKeyLine(w)
 	}
+	if m.boardShown() {
+		return m.boardKeyLine(w)
+	}
 	hints := slices.DeleteFunc(slices.Clone(m.view().keys(m)), func(h hint) bool { return h == (hint{}) })
+	if _, ok := m.openedView(); ok { // esc comes back to Machine
+		hints = append([]hint{hintFor(m.keys.main.Back, "machine")}, hints...)
+	}
 	if m.layoutAt(w) == Wide {
 		mk := m.keys.main
 		hints = append([]hint{noTap(hintFor(mk.Up, ""))}, hints...)
@@ -700,42 +583,13 @@ func (m Model) keyLine(w int) (string, []span) {
 		line += st.muted.Render(lead)
 		x += lipgloss.Width(lead)
 	}
-	// List only's switch names its key after its word. On the full view
-	// it is the first spare key to go, before every other one and the age.
-	// In list only it is the way back, so it stays: the list only mark goes
-	// first, then the age, then a spare key; a key of the row outranks it.
-	on := m.listOnly()
-	var flip hint
-	flipW := 0
-	if m.tab != tabMachine && m.tab != tabStoker {
-		flip = m.listOnlyHint()
-		flipW = lipgloss.Width(flip.label+" "+flip.key) + 2
-	}
 	age := st.faint.Render("sampled " + sample.Human(m.now().Sub(m.snap.At)) + " ago ")
 	ageW := lipgloss.Width("sampled 59m ago ")
 	room := w - x
-	switch {
-	case on:
-		hints = fitHints(hints, room-flipW)
-		if hintsWidth(hints)+flipW > room {
-			flip = hint{}
-		}
-	default:
-		if fit := fitHints(hints, room-ageW); hintsWidth(fit) <= room-ageW {
-			hints = fit
-		} else {
-			hints = fitHints(hints, room)
-		}
-		rest := room - hintsWidth(hints)
-		if x+hintsWidth(hints)+lipgloss.Width(age)+1 <= w {
-			rest -= lipgloss.Width(age) + 1 // the age stays before the switch
-		}
-		if flipW > rest {
-			flip = hint{}
-		}
-	}
-	if m.newer != "" && flip != (hint{}) && hintsWidth(hints)+flipW > room {
-		flip = hint{}
+	if fit := fitHints(hints, room-ageW); hintsWidth(fit) <= room-ageW {
+		hints = fit
+	} else {
+		hints = fitHints(hints, room)
 	}
 	for m.newer != "" && len(hints) > 0 && hintsWidth(hints) > room {
 		hints = hints[:len(hints)-1] // whole keys after the notice, never one cut in half
@@ -756,31 +610,20 @@ func (m Model) keyLine(w int) (string, []span) {
 	for _, h := range hints {
 		add(st.accent.Render(h.key)+st.muted.Render(" "+h.label), h.press)
 	}
-	if flip != (hint{}) {
-		add(st.muted.Render(flip.label+" ")+st.accent.Render(flip.key), flip.press)
-	}
-	right, gap := age, 1
-	if on {
-		// The mark keeps two columns from the keys, as every key does.
-		mark := st.accent.Render("list only") + " "
-		right, gap = age+" "+mark, 2
-		if lipgloss.Width(line)+lipgloss.Width(right)+gap > w {
-			right = age
-		} else {
-			spans = append(spans, span{w - lipgloss.Width(mark), w - 1, m.keys.main.ListOnly.Keys()[0]})
-		}
-	}
-	if lipgloss.Width(line)+lipgloss.Width(right)+gap > w {
+	if lipgloss.Width(line)+lipgloss.Width(age)+1 > w {
 		return fit(line, w), spans // the keys matter more than the age
 	}
-	return line + strings.Repeat(" ", w-lipgloss.Width(line)-lipgloss.Width(right)) + right, spans
+	return line + strings.Repeat(" ", w-lipgloss.Width(line)-lipgloss.Width(age)) + age, spans
 }
 
 // spareKeys are the keys a short key line drops first, in that order:
-// each one is reached another way (a tab tap, the dock, the docs).
+// each one is reached another way (a tab tap, the docs). esc, the way back
+// from a view of Machine, goes last: a tap on the tab row's MACHINE also
+// goes back.
 var spareKeys = func() []string {
 	k := defaultKeys().main
-	return []string{k.Switch.Help().Key, k.Up.Help().Key, k.Quit.Help().Key, k.Search.Help().Key, k.Ships.Help().Key, k.Park.Help().Key, k.Stoke.Help().Key}
+	return []string{k.Switch.Help().Key, k.Up.Help().Key, k.Quit.Help().Key, k.Search.Help().Key, k.Park.Help().Key, k.Stoke.Help().Key,
+		k.Back.Help().Key}
 }()
 
 // fitHints drops spare keys until the hints fit in room columns. The
@@ -849,15 +692,6 @@ func plural(n int, noun string) string {
 		return strconv.Itoa(n) + " " + noun + "es"
 	}
 	return strconv.Itoa(n) + " " + noun + "s"
-}
-
-// contextWord names a context use that has no figure: "fresh" before the
-// first turn, "not measured" for an agent without an adapter.
-func contextWord(c string) string {
-	if c == "unmeasured" {
-		return "not measured"
-	}
-	return c
 }
 
 // prOf is the open pull request of the worktree a directory is in: the

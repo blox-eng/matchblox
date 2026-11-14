@@ -10,21 +10,23 @@ import (
 )
 
 // emptyTexts are what a tab says when it has nothing to show.
-var emptyTexts = []string{"No ships yet.", "scanning repositories…", "collecting history", "this service keeps no stoker", "could not read"}
+var emptyTexts = []string{"scanning repositories…", "collecting history", "this service keeps no stoker", "could not read"}
 
 // fillBound is how long a tab may take to fill after its key is pressed.
 const fillBound = 2 * time.Second
 
-// tabs are the seven tabs by key, each with a string only its seeded data
-// draws: a screen that is blank or still loading cannot pass on absence alone.
+// tabs are the screens in turn, each with the keys that open it from the
+// one before and a string only its seeded data draws: a screen that is
+// blank or still loading cannot pass on absence alone. Tab turns between
+// the board and Machine (a digit on the board answers its card); the
+// stoker, Git, History and Panes are Machine's rows, in that order.
 var tabs = []struct{ key, name, seeded string }{
-	{"2", "Ships", "Rate limits on the public API"},
-	{"3", "Machine", "NETWORK AND DISK"},
-	{"4", "Git", "9 WORKTREES"},
-	{"5", "History", "LAST 2H"},
-	{"6", "Panes", "hearth:2.1"},
-	{"7", "Stoker", "n starts a night"},
-	{"1", "Sessions", "hearth-api"},
+	{"\t", "Machine", "load 6.2"},
+	{"j\r", "Git", "9 WORKTREES"},             // Machine's second row
+	{"\t\tj\r", "History", "LAST 2H"},         // the board, Machine on Git's row, the next
+	{"\t\tj\r", "Panes", "hearth:2.1"},        // the board, Machine on History's row, the next
+	{"\t", "Board", "flint-auth"},             // Tab from a view of Machine
+	{"\tkkk\r", "Stoker", "n starts a night"}, // Machine on Panes' row, up to the first
 }
 
 func TestEveryTabHasData(t *testing.T) {
@@ -33,7 +35,7 @@ func TestEveryTabHasData(t *testing.T) {
 			t.Setenv("TMPDIR", t.TempDir())
 			started := time.Now()
 			_, term := startAt(t, size[0], size[1])
-			term.waitFor(t, "hearth-api")
+			term.waitFor(t, "flint-auth")
 			t.Logf("Sessions drew the machine %v after Start", time.Since(started).Round(10*time.Millisecond))
 			for _, tab := range tabs {
 				from := len(term.text())
@@ -85,6 +87,9 @@ func TestEveryAgentPaneReads(t *testing.T) {
 // how long a loading text can show.
 func TestATabPressedAtTheFirstDrawFillsAtOnce(t *testing.T) {
 	for _, tab := range tabs {
+		if tab.key != "\t" {
+			continue // a view of Machine opens from its row: no one key to press at the first draw
+		}
 		t.Run(tab.name, func(t *testing.T) {
 			t.Setenv("TMPDIR", t.TempDir())
 			_, term := startAt(t, 44, 31)

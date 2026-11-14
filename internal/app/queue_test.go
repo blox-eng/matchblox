@@ -3,7 +3,6 @@ package app
 import (
 	"fmt"
 	"reflect"
-	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -43,21 +42,6 @@ func typeText(m tea.Model, s string) tea.Model {
 		m, _ = m.Update(tea.KeyPressMsg{Text: string(r), Code: r})
 	}
 	return m
-}
-
-// TestSessionsIsTheDefaultTab: the console opens on Sessions, on the first
-// session that waits; its chat is beside the list.
-func TestSessionsIsTheDefaultTab(t *testing.T) {
-	m, _ := loadedWith(t, 132, queueState())
-	out := ansi.Strip(m.render())
-	if m.tab != tabSessions {
-		t.Fatalf("the console opens on tab %d", m.tab)
-	}
-	for _, want := range []string{"SESSIONS 3", "WAITS FOR YOU · 2", "app-feature · asks", "panes"} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("view lacks %q:\n%s", want, out)
-		}
-	}
 }
 
 func TestCtrlOOnQueueRowSwitches(t *testing.T) {
@@ -110,38 +94,9 @@ func TestTabsFit80WithAlert(t *testing.T) {
 	m, _ := loadedWith(t, 80, st)
 	line, _ := m.tabsLine(80)
 	line = ansi.Strip(line)
-	for _, want := range []string{"SESSIONS", "ships", "machine", "git", "history", "panes", "▲ 1 alert"} {
+	for _, want := range []string{"BOARD", "machine", "▲ 1 alert"} {
 		if !strings.Contains(line, want) || strings.Contains(line, "…") {
 			t.Fatalf("tab line %q lacks %q", line, want)
-		}
-	}
-}
-
-func TestSessionMatchGlyphs(t *testing.T) {
-	m := loaded(t, 120) // no motion: each state is one still glyph
-	m.opt.CompactAt = 85
-	for _, tc := range []struct {
-		busy bool
-		pct  float64
-		want matchKind
-		ch   string
-		word string
-	}{
-		{true, 50, matchLit, "✦", "busy"},
-		{false, 50, matchUnlit, "╿", "idle"},
-		{true, 90, matchBurnt, "│", "busy"},
-		{false, 90, matchBurnt, "│", "idle"},
-	} {
-		s := sample.Session{Pane: "%9", Target: "lab:1.9", Name: "api", Busy: tc.busy, Context: "known", ContextPct: tc.pct, Tokens: int(tc.pct * 2000)}
-		if !tc.busy {
-			s.Status = "idle"
-		}
-		if got := m.matchOf(s); got != tc.want {
-			t.Errorf("busy=%v %v%%: %v, want %v", tc.busy, tc.pct, got, tc.want)
-		}
-		plain := ansi.Strip(strings.Join(m.sessionRow(s, false, 78), "\n"))
-		if !strings.Contains(plain, tc.ch+" ") || !strings.Contains(plain, tc.word) {
-			t.Errorf("busy=%v %v%%: row %q lacks %q or the word %q", tc.busy, tc.pct, plain, tc.ch, tc.word)
 		}
 	}
 }
@@ -321,82 +276,11 @@ func TestAWaitingSessionsMatch(t *testing.T) {
 
 func TestPanesTabListsEveryPane(t *testing.T) {
 	m, _ := loadedWith(t, 100, queueState())
-	next, _ := key(m, "6")
+	next := toTab(m, tabPanes)
 	out := ansi.Strip(next.(Model).render())
 	for _, want := range []string{"work:1.1", "notes:1.1", "zsh", "/work/notes"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("panes tab lacks %q:\n%s", want, out)
-		}
-	}
-}
-
-// TestAnAgentWithoutHooksIsReadFromThePane: a Codex session waits with the
-// question from its pane, says where that came from, shows "not measured"
-// for context use, and takes an answer like any other.
-func TestAnAgentWithoutHooksIsReadFromThePane(t *testing.T) {
-	st := fixtureState()
-	q := "Would you like to run the following command?"
-	st.Sessions = append(st.Sessions, sample.Session{PID: 900, Pane: "%9", Target: "api:1.1", Tab: "api", Name: "codex",
-		Status: "idle", Idle: time.Minute, Context: "unmeasured", FromPane: true, Permits: true, LastLine: q, Procs: 1})
-	st.Queue = []queue.Item{{Pane: "%9", Target: "api:1.1", Name: "codex", State: queue.StatePermission,
-		Since: st.At.Add(-time.Minute), LastLine: q, Estimated: true, FromPane: true}}
-	for w, wants := range map[int][]string{132: {"codex", "asks"}, 50: {"codex", "asks", "Would you like to run"}} { // a desk shows the pane itself
-		m, _ := loadedWith(t, w, st)
-		out := ansi.Strip(m.render())
-		for _, want := range wants {
-			if !strings.Contains(out, want) {
-				t.Fatalf("width %d: the session lacks %q:\n%s", w, want, out)
-			}
-		}
-	}
-	m, _ := loadedWith(t, 132, outsideTmux(st)) // the detail: a desk shows a session in a pane as its chat
-	m.selPID, m.chose = 900, true
-	out := ansi.Strip(m.render())
-	if strings.Contains(out, "1 processes") {
-		t.Fatalf("one process in the plural:\n%s", out)
-	}
-	for _, want := range []string{"not measured", q, "no hooks for codex: busy and idle are", "1 process"} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("Sessions lacks %q:\n%s", want, out)
-		}
-	}
-}
-
-// TestSessionsSayWhatTheQueueSays: a session that waits shows the queue's
-// word in Sessions, not idle; a turn that ended under 100% progress, with
-// no question, is paused on both tabs.
-func TestSessionsSayWhatTheQueueSays(t *testing.T) {
-	st := fixtureState()
-	st.Sessions = append(st.Sessions,
-		sample.Session{PID: 901, Pane: "%8", Target: "app:1.1", Name: "slice-one", Status: "idle", Idle: time.Minute, Context: "fresh",
-			Progress: &sample.Progress{Pct: 60, Step: "wiring"}},
-		sample.Session{PID: 902, Pane: "%9", Target: "app:2.1", Name: "slice-two", Status: "idle", Idle: time.Minute, Context: "fresh"})
-	st.Queue = []queue.Item{
-		{Pane: "%8", Target: "app:1.1", Name: "slice-one", State: queue.StateFinished, Since: st.At.Add(-time.Minute)},
-		{Pane: "%9", Target: "app:2.1", Name: "slice-two", State: queue.StateQuestion, Since: st.At.Add(-time.Minute), LastLine: "Shall I open the PR?"},
-	}
-	m, _ := loadedWith(t, 100, st)
-	rowOf := func(out, name string) string {
-		for _, l := range strings.Split(out, "\n") {
-			if l = listOf(l, m.width); strings.Contains(l, name) {
-				return l
-			}
-		}
-		t.Fatalf("no row for %s:\n%s", name, out)
-		return ""
-	}
-	q := ansi.Strip(m.render())
-	if r := rowOf(q, "slice-one"); !strings.Contains(r, "paused") {
-		t.Fatalf("queue row %q", r)
-	}
-	m.tab = tabSessions
-	for _, w := range []int{100, 50} {
-		m.width = w
-		out := ansi.Strip(m.render())
-		for name, word := range map[string]string{"slice-one": "paused", "slice-two": "waits"} {
-			if r := rowOf(out, name); !strings.Contains(r, word) || strings.Contains(r, "idle") {
-				t.Fatalf("width %d: %s row %q, want %q", w, name, r, word)
-			}
 		}
 	}
 }
@@ -465,23 +349,4 @@ func TestAnEstimatedRowShowsWhatTheAgentAsked(t *testing.T) {
 	if out := strings.Join(strings.Fields(ansi.Strip(next.(Model).render())), " "); !strings.Contains(out, q) {
 		t.Fatalf("width %d: the session lacks the question:\n%s", w, ansi.Strip(next.(Model).render()))
 	}
-}
-
-// A finished turn of a session the plan's limit stops says out on its
-// queue row: there is nothing to answer before the reset.
-func TestAQueueRowOfAnOutSessionSaysOut(t *testing.T) {
-	st := fixtureState()
-	st.Sessions = append(st.Sessions, sample.Session{PID: 901, Pane: "%8", Target: "app:1.1", Name: "slice-x",
-		Status: "idle", Idle: time.Minute, Context: "fresh", Out: st.At.Add(time.Hour)})
-	st.Queue = []queue.Item{{Pane: "%8", Target: "app:1.1", Name: "slice-x", State: queue.StateFinished, Since: st.At.Add(-time.Minute)}}
-	m, _ := loadedWith(t, 100, st)
-	for _, l := range strings.Split(ansi.Strip(m.render()), "\n") {
-		if strings.Contains(l, "slice-x") {
-			if !regexp.MustCompile(`\bout\b`).MatchString(l) || strings.Contains(l, "done") {
-				t.Fatalf("queue row %q", l)
-			}
-			return
-		}
-	}
-	t.Fatal("no queue row")
 }

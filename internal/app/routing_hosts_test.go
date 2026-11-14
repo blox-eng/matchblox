@@ -162,7 +162,9 @@ func TestNewOnAPeerRowListsThatHostsRepos(t *testing.T) {
 		t.Fatalf("the label is %+v", r)
 	}
 	// The ghost row is the home host's.
-	next, _ = key(mm, "down")
+	g := mm
+	g.boardBelow = 1 // the board's ghost row, under the columns
+	next = g.onChoice()
 	if _, ok := next.(Model).selectedGhost(); !ok {
 		t.Fatal("no ghost row under the peer's")
 	}
@@ -241,8 +243,9 @@ func TestARemoteRowIsListOnly(t *testing.T) {
 			t.Fatalf("a remote row sent %q", a.RecID)
 		}
 	}
-	out := screen(m)
-	if strings.Contains(out, "HOME TWELVE") || !strings.Contains(out, "on ws-1") || !strings.Contains(out, "goes into its pane") {
-		t.Fatalf("the remote row's right side:\n%s", out)
+	// The detail pane that named the host and the way in goes with the
+	// list: the card names its host (TestACardNamesAnotherHost).
+	if out := screen(m); strings.Contains(out, "HOME TWELVE") || !strings.Contains(out, "@ws") {
+		t.Fatalf("the remote card:\n%s", out)
 	}
 }

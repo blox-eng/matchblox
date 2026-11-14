@@ -237,6 +237,7 @@ jobs:
       # The relay's tests use a fake fetch and keys made in the test: no
       # network, no Apple, no device. The glob is quoted for Node to expand:
       # on Node 22 `node --test worker/` runs worker/index.js as the only
-      # "test" and passes without running one.
+      # "test" and passes without running one. The OpenCode plugin that
+      # `matchblox setup` installs runs here too: Node 22 strips its types.
       - name: Tests
-        run: node --test 'worker/*.test.js'
+        run: node --test 'worker/*.test.js' 'internal/setup/*.test.js'

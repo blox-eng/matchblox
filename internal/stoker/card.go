@@ -127,7 +127,7 @@ func (m Mode) observe(ss []sample.Session, waiting map[string]bool, full sample.
 }
 
 func waits(s sample.Session, waiting map[string]bool) bool {
-	return waiting[s.Pane] || s.Asks || s.Permits
+	return waiting[s.Pane] || !s.ReportsWork() && (s.Asks || s.Permits) // a live report beats an old guess
 }
 
 // Score freezes the card of a run that ended, from the sessions as they
@@ -162,7 +162,7 @@ func (m Mode) Score(ss []sample.Session, waiting map[string]bool, full sample.Fu
 		case !alive:
 			why = append(why, "gone")
 		case waits(s, waiting):
-			why = append(why, "waits for you")
+			why = append(why, "needs you")
 		case !s.Out.IsZero() && !s.Busy:
 			out = s.Out
 			why = append(why, "out until "+limits.Until(s.Out, m.Ended))

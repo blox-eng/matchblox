@@ -1,0 +1,34 @@
+ ▰ matchblox · all hosts ▾ ● 4 need you
+ chain login · 3   esc all
+────────────────────────────────────────
+ stoker NEEDS YOU 1 − work 1 ship 1 qui…
+────────────────────────────────────────
+▌╿ flint-auth                     ✻  2m
+  asks Which way do we fix the login?
+  ctx 62%                       ━╸login
+  “I can fix it in two ways. The token
+  check is a small patch.”
+  1. Patch the token check
+  2. Move to the new session store
+  1-2 mark an answer   ⏎ go in
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ + start a new session
+ RECOMMENDATIONS · 7
+ ✻ 5h 84% · wk 82%            machine ›
+────────────────────────────────────────
+ c copy   v one line   s hosts   u strip

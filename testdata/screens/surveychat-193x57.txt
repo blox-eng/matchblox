@@ -1,57 +1,57 @@
- ▰ matchblox                                                                                                                                                                    ● 6 wait for you
- SESSIONS 7    ships 3    machine    git    history    panes    stoker
+ ▰ matchblox                                                                                                                                                                        ● 6 need you
+ BOARD 7    machine
 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- WAITS FOR YOU · 6                                                           │ flint-auth · asks
- │ spark-docs              done       9m   88%  ▲ clear      #4540 ●━●━●━●━● │ ✻ team@example.com · Max · #4545 ●━✕┄○┄○┄○  conflicts with main
- ╿ ember-billing           done       4m   32%  ▲ clear      #4552 ●━●━◉┄○┄○ │
-▌╿ flint-auth              asks       2m   41%  ▲ clear      #4545 ●━✕┄○┄○┄○ │
- ╿ kindle-web              asks       1m   56%  ▲ clear                      │
- ╿ cinder-ci               done       0s   55%  ▲ clear                      │
- ╿ wick-mobile             done       0s    6%  ▲ clear                      │
- WORKING · 1                                                                 │
- ✦ hearth-api              busy            79%  ▰▰▰▱▱ 60%    #4551 ●━◉┄○┄○┄○ │
- + start a new session                                                       │
-                                                                             │
- 1 without an agent: shell:1.1 zsh                                           │
-                                                                             │
- RECOMMENDATIONS · 7 · h hides                                               │
- ▲ The week runs short: compact spark-docs                                   │
- ○ Clear spark-docs (%3)                                                     │
- ○ Clear kindle-web (%5)                                                     │
- ○ Clear cinder-ci (%6)                                                      │
- ○ Clear flint-auth (%2)                                                     │
- ○ Clear ember-billing (%8)                                                  │
- ○ Clear wick-mobile (%7)                                                    │
-                                                                             │
-                                                                             │
-─────────────────────────────────────────────────────────────────────────────│
- USAGE                                                                       │
- ✻ Claude Max    5h   ▰▰▰▰▰▰▰▱ 84%  · Fri 01:20                              │
-                 wk   ▰▰▰▰▰▰▰▱ 82%  · Mon 09:00 · out Fri ~21:00             │
- · Google login  not measured · OpenCode keeps no limits                     │
- ❋ OpenAI Plus   5h   ▰▰▰▱▱▱▱▱ 40%  · 23:59                                  │
-                 wk   ▰▱▱▱▱▱▱▱ 12%  · Tue 09:00 · lasts the week             │
-─────────────────────────────────────────────────────────────────────────────│
- MACHINE                                                            16 cores │
- cpu  ▁ 0%   load 6.2                                                        │
- mem  ▰▰▰▱▱▱▱▱ 26 of 64 GB                                                   │
- disk ▰▰▰▰▰▰▱▱ 71% of 1 TB                                                   │
- runs 5 claude · 1 codex · 1 opencode                                        │
-                                                                             │
- PID      COMMAND           CPU    MEM     OWNER                             │
- 1        systemd             0%   9.8M    system                            │
- 1200     claude              0%   9.8M    pane %1 · hearth-api              │ ⏺ The refresh endpoint is in and its tests pass.
- 1300     zsh                 0%   9.8M    pane %2 · flint-auth              │
- 1310     claude              0%   9.8M    pane %2 · flint-auth              │ ────────────────────────────────────────────────────────────────────────────────
- 1400     claude              0%   9.8M    pane %3 · spark-docs              │  ☐ Rotate
- 1500     zsh                 0%   9.8M    pane %4                           │
- 1600     claude              0%   9.8M    pane %5 · kindle-web              │ Should a refresh also rotate the token?
- 1700     codex               0%   9.8M    pane %6 · cinder-ci               │
- 1800     MainThread          0%   9.8M    pane %7 · wick-mobile             │ ❯ 1. Rotate it
- 1900     claude              0%   9.8M    pane %8 · ember-billing           │      The old one stops at once.
- 4242     bash                0%   9.8M    pane %9                           │   2. Rotate, keep the old one a minute
-─────────────────────────────────────────────────────────────────────────────│   3. Type something.
- STOKER                                                                  off │
- off · f starts it · n starts a night                                        │ Enter to select · ↑/↓ to navigate · Esc to cancel
+ NEEDS YOU · 6  −                     WORKING · 1  −            SHIPPING · 0  −           QUIET · 0  −     │ flint-auth · stuck
+▌╿ flint-auth                 ✻  2m   ✦ hearth-api      ✻                                                  │ ✻ team@example.com · Max · #4545 ●━✕┄○┄○┄○  conflicts with main
+  stuck conflicts with main            busy                                                                │
+  #4545 ●━✕┄○┄○┄○  ctx 41%             #4551 ●━◉┄○┄○  ctx 79%                                              │
+  ⏎ go in                                                                                                  │
+                                                                                                           │
+ │ spark-docs                 ✻  9m                                                                        │
+  done I rewrote the quick start a…                                                                        │
+  #4540 ●━●━●━●━●  ctx 88%                                                                                 │
+  ⏎ go in                                                                                                  │
+                                                                                                           │
+ ╿ ember-billing              ✻  4m                                                                        │
+  green #4552 waits for your merge                                                                         │
+  #4552 ●━●━◉┄○┄○  ctx 32%                                                                                 │
+  p merge #4552   ⏎ go in                                                                                  │
+                                                                                                           │
+ ╿ kindle-web                 ✻  1m                                                                        │
+  asks Claude needs your permissio…                                                                        │
+  ctx 56%                                                                                                  │
+  ⏎ go in                                                                                                  │
+                                                                                                           │
+ ╿ cinder-ci                  ❋  0s                                                                        │
+  done I am moving the cache key t…                                                                        │
+  ctx 55%                                                                                                  │
+  ⏎ go in                                                                                                  │
+                                                                                                           │
+ ╿ wick-mobile                ▣  0s                                                                        │
+  done ⠙ Working                                                                                           │
+  ctx 6%                                                                                                   │
+  ⏎ go in                                                                                                  │
+                                                                                                           │
+                                                                                                           │
+                                                                                                           │
+                                                                                                           │
+                                                                                                           │
+                                                                                                           │
+                                                                                                           │ ⏺ The refresh endpoint is in and its tests pass.
+                                                                                                           │
+                                                                                                           │ ────────────────────────────────────────────────────────────────────────────────
+                                                                                                           │  ☐ Rotate
+                                                                                                           │
+                                                                                                           │ Should a refresh also rotate the token?
+                                                                                                           │
+                                                                                                           │ ❯ 1. Rotate it
+                                                                                                           │      The old one stops at once.
+                                                                                                           │   2. Rotate, keep the old one a minute
+                                                                                                           │   3. Type something.
+                                                                                                           │
+                                                                                                           │ Enter to select · ↑/↓ to navigate · Esc to cancel
+ + start a new session
+ RECOMMENDATIONS · 7
+ ✻ Claude Max  5h ▰▰▰▰▰▰▰▱ 84% · Fri 01:20   wk ▰▰▰▰▰▰▰▱ 82% · Mon 09:00   ❋ OpenAI Plus  5h ▰▰▰▱▱▱▱▱ 40% · 23:59   wk ▰▱▱▱▱▱▱▱ 12% · Tue 09:00   · Google login  not measured         machine ›
 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ↑↓ move  enter goes into flint-auth  x kill  r rename  A switch  z park  N new  p ships  f stoker  / find  q quit  list only v                                                   sampled 0s ago
+ ⏎ go in   c copy   v one line   s hosts   u strip   ←→ columns   tab next

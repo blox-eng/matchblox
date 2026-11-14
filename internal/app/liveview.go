@@ -147,7 +147,12 @@ func cropScreen(text string, w, h int) []string {
 func (m *Model) watchCmd() tea.Cmd {
 	want := ""
 	if m.conn != nil && !m.lost && !m.mismatch && !m.away {
-		if s, ok := m.selected(); ok && s.Host == m.opt.Host { // another host's pane id names another pane here
+		s, ok := m.selected()
+		if m.boardShown() { // the board watches its chosen card beside the live view, or in the stand-in
+			s, ok = m.boardSelected()
+			ok = ok && (m.boardLive() || m.standIn)
+		}
+		if ok && s.Host == m.opt.Host && !isShipCard(s) { // another host's pane id names another pane here
 			want = s.Pane
 		}
 	}
@@ -200,18 +205,6 @@ func (m Model) viewLines(w, h int) []string {
 	return append(lines[:len(lines)-len(fit)], fit...)
 }
 
-// viewShown is the session whose chat is the right side of Sessions: the
-// selected one, when it has a pane on the home host and the screen has a
-// right side. Another host's row is list only: its detail shows there.
-func (m Model) viewShown(rightW int) (sample.Session, bool) {
-	s, ok := m.selectedSession()
-	return s, ok && s.Pane != "" && s.Host == m.opt.Host && m.tab == tabSessions && rightW > 0
-}
-
-// viewLeast is the narrowest chat beside the list: an agent's menu reads at
-// 44 columns, as on a folded phone.
-const viewLeast = 44
-
 // menuLeast is the fewest rows a chat at a menu needs for the whole of what
 // the person answers. It is the tallest common Claude Code menu, the question
 // tool's multi-select at its four options with descriptions, from its
@@ -222,29 +215,21 @@ const viewLeast = 44
 // size, and redraws above this.
 const menuLeast = 16
 
-// viewPlace is where Sessions draws the selected session's chat.
+// viewPlace is where the selected session's live view is drawn.
 type viewPlace int
 
 const (
-	placeNone   viewPlace = iota // one column, or no room for the stand-in's menu: the list's opened row shows the session
-	placeBeside                  // the right side of Sessions, beside the list
-	placeFull                    // the whole screen: the demo's stand-in for a pane
+	placeNone viewPlace = iota // no stand-in, or no room for its menu
+	placeFull                  // the whole screen: the demo's stand-in for a pane
 )
 
 // viewPlacement is the one answer to where the selected session's live
-// view is drawn at w columns, and how many rows it has for its title, strip
-// and screen: beside the list where Sessions splits, else the whole screen,
-// unless it waits at a menu and the screen has under menuLeast rows for it.
-// The demo's stand-in is the whole screen at every width.
-func (m Model) viewPlacement(w int) (viewPlace, int) {
-	if m.tab != tabSessions {
+// view is drawn, and how many rows it has for its screen: the demo's
+// stand-in is the whole screen at every width, unless it waits at a menu
+// and the screen has under menuLeast rows for it.
+func (m Model) viewPlacement() (viewPlace, int) {
+	if m.tab != tabSessions || !m.standIn {
 		return placeNone, 0
-	}
-	if _, right := m.panes(w); right > 0 && !m.standIn {
-		return placeBeside, max(m.height-5, 0)
-	}
-	if !m.standIn {
-		return placeNone, 0 // one column: the list's opened row shows the session
 	}
 	if s, ok := m.selectedSession(); ok && m.height > 0 && m.height-3 < menuLeast && m.atMenu(s) {
 		return placeNone, 0
@@ -252,47 +237,11 @@ func (m Model) viewPlacement(w int) (viewPlace, int) {
 	return placeFull, max(m.height-3, 0)
 }
 
-// oneColumn tells if Sessions is one column at w, with no right side: as
-// on a phone, a tap on a row opens its live view over the whole screen.
-func (m Model) oneColumn(w int) bool {
-	_, right := m.panes(w)
-	return m.tab == tabSessions && right == 0
-}
-
-// viewRoom tells if a chat right columns wide fits beside the list: it is
-// at least viewLeast wide, and the body has room for viewReserve.
-func (m Model) viewRoom(right int) bool {
-	if right < viewLeast {
-		return false
-	}
-	if m.height == 0 {
-		return true // no height yet
-	}
-	return m.height-5 >= m.viewReserve(right)
-}
-
-// viewReserve is the most rows the chat right columns wide takes, of any
-// home session the cursor can move to: its title, its strip as drawn (two
-// lines on a narrow chat) and menuLeast. Sessions splits by it, so the split
-// holds as the cursor moves and as a session comes to a menu.
-func (m Model) viewReserve(right int) int {
-	most := 1 + menuLeast
-	for _, s := range m.snap.Sessions {
-		if most == 3+menuLeast { // the strip is two lines at most
-			break
-		}
-		if s.Host == m.opt.Host && s.Pane != "" {
-			most = max(most, 1+len(m.viewStrip(s, right, 2))+menuLeast)
-		}
-	}
-	return most
-}
-
 // viewTitle names the chat's session and its state.
 func (m Model) viewTitle(s sample.Session) string { return m.titleOf(s) + " · " + m.wordOf(s) }
 
-// viewPane is the live view beside the list, w by h: its title over the
-// strip and the screen.
+// viewPane is the live view beside the board's columns, w by h: its title
+// over the strip and the screen.
 func (m Model) viewPane(s sample.Session, w, h int) []string {
 	lines := []string{fit(" "+m.st.label.Render(m.viewTitle(s)), w)}
 	strip := m.viewStrip(s, w, h-1)
@@ -361,14 +310,14 @@ func (m Model) screenLines(w, h int) []string {
 }
 
 // viewScreen is the live view on an upright phone: the whole screen under a
-// title row that goes back to Sessions and says a toast, over the key
+// title row that goes back to the board and says a toast, over the key
 // line, with a step that asks to confirm on top. Its title, hairline and
 // key line always show: a screen under 4 rows has no room for the agent's
 // lines.
 func (m Model) viewScreen(w int) drawn {
 	st := m.st
 	s, _ := m.selectedSession()
-	title := " " + st.accent.Render("‹ Sessions") + st.muted.Render(" · ")
+	title := " " + st.accent.Render("‹ board") + st.muted.Render(" · ")
 	head := m.viewTitle(s)
 	if room := w - lipgloss.Width(title); lipgloss.Width(head) > room {
 		head = ansi.Truncate(s.Name, max(room, 1), "…") // the state, then the name, give way
@@ -378,8 +327,8 @@ func (m Model) viewScreen(w int) drawn {
 		title = spread(title, st.accent.Render(ansi.Truncate(m.toast, max(w/2, 1), "…"))+" ", w)
 	}
 	title = fit(title, w)
-	_, rows := m.viewPlacement(w)
-	sc := drawn{lines: []string{title}, bodyTop: 1, listW: w, dockAt: -1, actKeysAt: -1, placeFull: true, viewRows: rows, viewAt: 1, viewW: w}
+	_, rows := m.viewPlacement()
+	sc := drawn{lines: []string{title}, bodyTop: 1, placeFull: true, viewRows: rows, viewAt: 1, viewW: w}
 	sc.lines = append(sc.lines, m.screenLines(w, rows)...)
 	hair, keys, spans := m.keyRows(w)
 	sc.keysAt, sc.keys = len(sc.lines)+1, spans
@@ -391,7 +340,7 @@ func (m Model) viewScreen(w int) drawn {
 }
 
 // homeKey is the app's home gesture (panes.HomeKey, which the console may
-// not import): it leaves the live view, and the stand-in, for Sessions.
+// not import): it leaves the live view, and the stand-in, for the board.
 const homeKey = "\x1b_matchblox\x1b\\"
 
 // menuWait tells if a wait is answered on a menu: a digit or Enter there
@@ -460,7 +409,7 @@ const standInHint = "type 2 to answer"
 // viewFull tells if the live view takes the whole screen: opened on one
 // column, with room for its question.
 func (m Model) viewFull() bool {
-	place, _ := m.viewPlacement(max(m.width, minWidth))
+	place, _ := m.viewPlacement()
 	return m.standIn && place == placeFull
 }
 
@@ -480,26 +429,27 @@ func (m Model) openStandIn(pane string) Model {
 	return m
 }
 
-// leaveStandIn goes back from the stand-in to Sessions, on the session that
+// leaveStandIn goes back from the stand-in to the board, on the session that
 // waits next, as a jump back from a real pane does.
 func (m Model) leaveStandIn() Model {
 	s, _ := m.selectedSession()
 	m.standIn = false
 	m.keysOut.queue = nil // typed at a screen that is gone; the key in flight still answers
-	return m.nextAfter(s.Pane)
+	// On the board, the first other wait is chosen.
+	return m.nextAfter(s.Pane).boardActed()
 }
 
-// keepView closes the live view once Sessions or the selected session's
-// pane on this host is gone, or the screen has no room for its question:
-// the list's opened row shows the question, and the keys are the console's,
-// never a screen's the person cannot see. A new tap or Enter opens it again.
-// A session that ended shows the list again, and the key line says why.
+// keepView closes the stand-in once the board or the chosen session's pane
+// on this host is gone, or the screen has no room for its question: the
+// card shows the question then, and the keys are the console's, never a
+// screen's the person cannot see. A new tap or Enter opens it again. A
+// session that ended shows the board again, and the key line says why.
 func (m Model) keepView() Model {
 	if !m.standIn {
 		return m
 	}
 	s, ok := m.selectedSession()
-	place, _ := m.viewPlacement(max(m.width, minWidth))
+	place, _ := m.viewPlacement()
 	switch {
 	case !ok || m.tab != tabSessions || s.Pane == "" || s.Host != m.opt.Host || place == placeNone:
 		m.standIn = false
@@ -602,26 +552,39 @@ const maxKeysAhead = 64
 // the console shows. Not m.send: a key takes no number from the acts the
 // builder sees, and its answer is no toast.
 func (m *Model) sendKey(s sample.Session, text string) tea.Cmd {
+	var seen time.Time
+	if m.screen.Pane == s.Pane {
+		seen = m.screen.At
+	}
 	if m.conn == nil || m.lost {
 		return nil
 	}
-	act := proto.Act{RecID: proto.KeysPrefix + s.Pane, Text: text, PID: s.PID, Start: s.Start}
-	if m.screen.Pane == s.Pane {
-		act.Seen = m.screen.At
+	cmd, why := m.sendKeySeen(s, text, seen)
+	if why != "" {
+		m.flash = why
 	}
+	return cmd
+}
+
+// sendKeySeen is sendKey for what the console showed of s at seen. why
+// says why the key neither went nor waits in line; "" when it did.
+func (m *Model) sendKeySeen(s sample.Session, text string, seen time.Time) (cmd tea.Cmd, why string) {
+	if m.conn == nil || m.lost {
+		return nil, "not sent: no service · it redials"
+	}
+	act := proto.Act{RecID: proto.KeysPrefix + s.Pane, Text: text, PID: s.PID, Start: s.Start, Seen: seen}
 	if m.keysOut.conn != m.conn { // a new connection: no answer comes for the old one's keys
 		m.keysOut = keysOut{conn: m.conn}
 	}
 	if m.keysOut.busy {
 		if len(m.keysOut.queue) >= maxKeysAhead {
-			m.flash = "not sent: " + strconv.Itoa(maxKeysAhead) + " keys still wait for " + s.Name
-			return nil
+			return nil, "not sent: " + strconv.Itoa(maxKeysAhead) + " keys still wait for " + s.Name
 		}
 		m.keysOut.queue = append(m.keysOut.queue, act)
-		return nil
+		return nil, ""
 	}
 	m.keysOut.busy = true
-	return sendKeyAct(m.conn, act)
+	return sendKeyAct(m.conn, act), ""
 }
 
 // nextKey sends the key that waits behind the one the service answered.

@@ -301,12 +301,14 @@ func TestHookStaysInBudgetWithASlowHello(t *testing.T) {
 }
 
 func TestHookReachesService(t *testing.T) {
+	// %2 runs an agent whose own report says idle: in %1 its report of work
+	// would hide the ask (spec "A live report beats an old guess").
 	sock := isolate(t)
 	s := newService(config.Default(), fixtures(t))
 	// The hook runs in this process, which plays the agent in %1.
 	s.PeerPane = func(pid int) string {
 		if pid == os.Getpid() {
-			return "%1"
+			return "%2"
 		}
 		return ""
 	}
@@ -316,14 +318,14 @@ func TestHookReachesService(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	ev := `{"session_id":"s9","cwd":"/work/app","hook_event_name":"Notification","message":"Claude needs your permission to use Bash","notification_type":"permission_prompt"}`
-	t.Setenv("TMUX_PANE", "%1")
+	t.Setenv("TMUX_PANE", "%2")
 	spool := filepath.Join(t.TempDir(), "spool.jsonl")
 	if err := hook([]string{"Notification"}, strings.NewReader(ev), io.Discard, sock, spool, false); err != nil {
 		t.Fatal(err)
 	}
 	for time.Now().Before(deadline) {
 		for _, it := range s.State().Queue {
-			if it.SessionID == "s9" && it.Pane == "%1" && !it.Estimated {
+			if it.SessionID == "s9" && it.Pane == "%2" && !it.Estimated {
 				if _, err := os.Stat(spool); !os.IsNotExist(err) {
 					t.Fatal("delivered and spooled")
 				}

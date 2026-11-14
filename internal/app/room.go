@@ -2,7 +2,7 @@ package app
 
 import (
 	"cmp"
-	"fmt"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -12,7 +12,6 @@ import (
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
-	"github.com/blox-eng/matchblox/internal/state"
 )
 
 // room is a chain's room on screen: the chain, the cursor's row, the
@@ -35,26 +34,24 @@ type room struct {
 
 type roomKind int
 
+// The room's own rows: the stoker's card, its steps and the fold, and
+// the talk line. The board draws its matches, ships and git (Task 12 step
+// 6d); roomNone is no row, as the cursor on the board.
 const (
-	roomNeed roomKind = iota
+	roomNone roomKind = iota
 	roomCard
 	roomStep
 	roomMore
-	roomMatch
-	roomShips
-	roomGit
 	roomTalk
 )
 
 // roomRow is one row of a room: what it is, the id it acts on (a step's
-// number, a match's pane), its words, and faint for a mate the sampler
-// cannot see.
+// number), and its words.
 type roomRow struct {
-	kind  roomKind
-	id    string
-	text  string
-	faint bool
-	tone  string // "warn" or "neg" for a state that needs the owner; "" plain
+	kind roomKind
+	id   string
+	text string
+	tone string // "warn" or "neg" for a state that needs the owner; "" plain
 }
 
 // oneKey is the room of a session in no chain: its chain of one, which the
@@ -139,46 +136,49 @@ func (m Model) members(k chainKey) ([]sample.Session, []chains.Member) {
 	return seen, unseen
 }
 
+// chainNeed is what room k waits on the person for: an ask of one of its
+// matches (the pane), or a go its stoker waits for.
+type chainNeed struct {
+	pane string
+	g    goWait
+	isGo bool
+	at   int64
+}
+
 // needOf is the oldest need of room k: an ask of one of its matches, or a
-// step of its stoker that waits for a go; and how many more wait.
-func (m Model) needOf(k chainKey) (roomRow, int, bool) {
-	type need struct {
-		row roomRow
-		at  int64
-	}
-	var needs []need
+// step of its stoker that waits for a go.
+func (m Model) needOf(k chainKey) (chainNeed, bool) {
+	var needs []chainNeed
 	seen, _ := m.members(k)
 	for _, s := range seen {
 		if it, ok := m.waitOf(s); ok && (it.State == queue.StatePermission || it.State == queue.StateQuestion) {
-			text := it.Name + " asks"
-			if it.LastLine != "" {
-				text += ": " + it.LastLine
-			}
-			needs = append(needs, need{roomRow{kind: roomNeed, id: it.Pane, text: text}, it.Since.UnixNano()})
+			needs = append(needs, chainNeed{pane: it.Pane, at: it.Since.UnixNano()})
 		}
 	}
 	for _, g := range m.goWaits(k) {
-		needs = append(needs, need{roomRow{kind: roomNeed, id: g.id, text: "▸ " + g.text + " waits for your go · y"}, g.at})
+		needs = append(needs, chainNeed{pane: g.pane, g: g, isGo: true, at: g.at})
 	}
 	if len(needs) == 0 {
-		return roomRow{}, 0, false
+		return chainNeed{}, false
 	}
-	slices.SortStableFunc(needs, func(a, b need) int { return cmp.Compare(a.at, b.at) })
-	return needs[0].row, len(needs) - 1, true
+	slices.SortStableFunc(needs, func(a, b chainNeed) int { return cmp.Compare(a.at, b.at) })
+	return needs[0], true
 }
 
-// roomRows are room k's rows, top down: the need, the stoker's card and its
-// steps, the matches, ships, git and the talk line.
+// roomEmpty is the id of the card's line of a chain with no match: ⏎ on it
+// starts a session.
+const roomEmpty = "empty"
+
+// roomRows are room k's own rows, top down: the stoker's card and its
+// steps, a line when the chain has no match, then the talk line. The board
+// draws the need (NEEDS YOU), the matches (the cards), their ships and git
+// (Task 12 step 6d).
 func (m Model) roomRows(k chainKey) []roomRow {
-	var rows []roomRow
-	if need, _, ok := m.needOf(k); ok {
-		rows = append(rows, need)
+	rows := m.cardRows(k)
+	if seen, unseen := m.members(k); !k.isOne() && len(seen) == 0 && len(unseen) == 0 {
+		rows = append(rows, roomRow{kind: roomCard, id: roomEmpty, text: "the chain has no matches · + start one here"})
 	}
-	rows = append(rows, m.cardRows(k)...)
-	seen, unseen := m.members(k)
-	rows = append(rows, m.roomMatchRows(k, seen, unseen)...)
-	rows = append(rows, m.shipsRow(k.host, seen), m.gitRow(k.host, seen), roomRow{kind: roomTalk, text: m.talkText(k)})
-	return rows
+	return append(rows, roomRow{kind: roomTalk, text: m.talkText(k)})
 }
 
 // cardRows are the stoker's card: its order and plan, with the active
@@ -237,7 +237,7 @@ func (m Model) cardRows(k chainKey) []roomRow {
 const quietFor = 60 * time.Second
 
 // cardState is the card's state line, when it has one: the stoker did not
-// start, it wakes, or it is quiet.
+// start, it wakes, it asks, or it is quiet.
 func (m Model) cardState(k chainKey, v proto.StokerView) []roomRow {
 	if r := m.room; r != nil && r.k == k {
 		u, ok := m.unitOf(k)
@@ -246,6 +246,13 @@ func (m Model) cardState(k chainKey, v proto.StokerView) []roomRow {
 			return []roomRow{{kind: roomCard, text: "the stoker did not start: " + r.failed, tone: "neg"}}
 		case r.woke && (!ok || !chainAlive(u)):
 			return []roomRow{{kind: roomCard, text: "≋ waking…"}}
+		}
+	}
+	if u, ok := m.unitOf(k); ok {
+		if s, ok := m.agentOf(k.host, u.ID); ok {
+			if q, asks := m.headAsks(s); asks {
+				return []roomRow{{kind: roomCard, tone: "warn", text: "≋ " + m.roomStokerWord(k) + " asks: " + q}}
+			}
 		}
 	}
 	o := v.Order
@@ -273,151 +280,6 @@ func runTimes(run []proto.StokerEntry) []time.Time {
 	return out
 }
 
-// roomMatchRows are one row a match: its agent's mark, its name, its repo when
-// the team spans two, its state, its inbox and its other teams. A mate the
-// sampler cannot see stays, faint.
-func (m Model) roomMatchRows(k chainKey, seen []sample.Session, unseen []chains.Member) []roomRow {
-	repos := map[string]bool{}
-	for _, s := range seen {
-		repos[m.repoOf(s)] = true
-	}
-	var mates []state.MateView
-	if cv := m.chainsOf(k.host); cv != nil {
-		mates = cv.Mates
-	}
-	mateOf := func(mb chains.Member) state.MateView {
-		if i := slices.IndexFunc(mates, func(v state.MateView) bool { return v.Member.Same(mb) }); i >= 0 {
-			return mates[i]
-		}
-		return state.MateView{}
-	}
-	var rows []roomRow
-	for _, s := range seen {
-		text := s.Name
-		if mark := providerMarks[s.Provider]; mark != "" {
-			text = mark + " " + text
-		}
-		if repo := m.repoOf(s); len(repos) > 1 && repo != s.Name {
-			text += "  " + repo
-		}
-		text += "  " + m.stateWord(s)
-		if n := mateOf(memberOf(s)).Inbox; n > 0 {
-			text += "  ✉ " + strconv.Itoa(n)
-		}
-		var also []string
-		for _, c := range m.teamsOf(s) {
-			if c.ID != k.id {
-				also = append(also, c.Name)
-			}
-		}
-		if len(also) > 0 {
-			text += " · also in " + strings.Join(also, ", ")
-		}
-		rows = append(rows, roomRow{kind: roomMatch, id: s.Pane, text: text})
-	}
-	if len(seen) == 0 && len(unseen) == 0 {
-		return []roomRow{{kind: roomMatch, text: "the chain has no matches · + start one here"}}
-	}
-	for _, mb := range unseen {
-		text := mb.Pane + "  not seen"
-		if at := mateOf(mb).Unseen; !at.IsZero() {
-			text += " · " + shortAgo(m.now().Sub(at))
-		}
-		rows = append(rows, roomRow{kind: roomMatch, id: mb.Pane, text: text, faint: true})
-	}
-	return rows
-}
-
-// shortAgo is a wait in whole minutes, hours or days: 4m, 2h, 3d.
-func shortAgo(d time.Duration) string {
-	switch {
-	case d < time.Hour:
-		return fmt.Sprintf("%dm", max(0, int(d/time.Minute)))
-	case d < 24*time.Hour:
-		return fmt.Sprintf("%dh", int(d/time.Hour))
-	}
-	return fmt.Sprintf("%dd", int(d/(24*time.Hour)))
-}
-
-// shipsRow is the chain's pull requests on one line.
-func (m Model) shipsRow(host string, seen []sample.Session) roomRow {
-	if !slices.ContainsFunc(m.shipReports(), func(h hostShips) bool { return h.host == host }) {
-		return roomRow{kind: roomShips, text: "SHIPS  reading…"}
-	}
-	var parts []string
-	got := map[string]bool{}
-	for _, s := range seen {
-		for _, sh := range m.shipsOf(s) {
-			key := sh.Repo + "#" + strconv.Itoa(sh.Number)
-			if got[key] {
-				continue
-			}
-			got[key] = true
-			word := stageNames[min(sh.Stage, stageLive)]
-			switch sh.Kind {
-			case shipStuck:
-				word = "stuck"
-			case shipWaits:
-				word = "waits"
-			}
-			parts = append(parts, "#"+strconv.Itoa(sh.Number)+" "+word)
-		}
-	}
-	if len(parts) == 0 {
-		return roomRow{kind: roomShips, text: "SHIPS  no ships yet"}
-	}
-	return roomRow{kind: roomShips, text: "SHIPS  " + strings.Join(parts, " · ")}
-}
-
-// gitRow counts the worktrees of the repos the chain's matches work in,
-// with the ones no session works in (eng review correction 4).
-func (m Model) gitRow(host string, seen []sample.Session) roomRow {
-	var r *proto.GitReport
-	for _, g := range m.gitReports() {
-		if g.host == host {
-			r = g.r
-		}
-	}
-	if r == nil {
-		return roomRow{kind: roomGit, text: "GIT  reading…"}
-	}
-	var n, merged, safe int
-	{
-		for _, repo := range r.Repos {
-			if !slices.ContainsFunc(seen, func(s sample.Session) bool { return inRepo(repo.Worktrees, s.Cwd) }) {
-				continue
-			}
-			for _, wt := range repo.Worktrees {
-				n++
-				if wt.Merged {
-					merged++
-				}
-				if wt.Safe {
-					safe++
-				}
-			}
-		}
-	}
-	if n == 0 {
-		return roomRow{kind: roomGit, text: "GIT  no worktrees"}
-	}
-	parts := []string{plural(n, "worktree")}
-	if merged > 0 {
-		parts = append(parts, strconv.Itoa(merged)+" merged")
-	}
-	if safe > 0 {
-		parts = append(parts, strconv.Itoa(safe)+" safe to remove")
-	}
-	return roomRow{kind: roomGit, text: "GIT  " + strings.Join(parts, " · ")}
-}
-
-// inRepo tells if dir is one of the worktrees, or inside one.
-func inRepo(wts []proto.Worktree, dir string) bool {
-	return dir != "" && slices.ContainsFunc(wts, func(wt proto.Worktree) bool {
-		return dir == wt.Path || strings.HasPrefix(dir, wt.Path+"/")
-	})
-}
-
 // talkText is the talk line: whom it talks to, or that the chain's stoker
 // waits for its first order.
 func (m Model) talkText(k chainKey) string {
@@ -443,21 +305,66 @@ func (m Model) roomKeyOf(s sample.Session) chainKey {
 	return oneKey(s)
 }
 
-// openRoom opens room k with the cursor on its need, else on its talk line.
+// openRoom opens room k on the board: the board narrows to the chain, and
+// the cursor lands on the need (the card that asks, or the step that
+// waits for a go), else on the talk line.
 func (m Model) openRoom(k chainKey) Model {
-	rows := m.roomRows(k)
-	at := len(rows) - 1
-	if i := slices.IndexFunc(rows, func(r roomRow) bool { return r.kind == roomNeed }); i >= 0 {
-		at = i
+	m.keepDraft() // a room this one replaces keeps its words
+	m.room = &room{k: k, from: map[string]string{}}
+	m.tab, m.boardAbove, m.boardBelow = tabSessions, 0, 0
+	m.boardChain, m.peekAt = "", m.now()
+	if !k.isOne() {
+		m.boardChain = m.chainLabel(k)
 	}
-	m.room = &room{k: k, at: at, from: map[string]string{}}
+	m.room.at = m.roomLanding(k)
+	if d := m.drafts[k]; d != "" { // words typed before the room closed: back on the talk line, and no longer kept
+		m.room.draft, m.room.at = d, len(m.roomRows(k))-1
+		m.drafts = maps.Clone(m.drafts)
+		delete(m.drafts, k)
+	}
 	return m
 }
 
+// roomLanding is the row the cursor lands on in room k: the step of the
+// need's go; else -1, the board, with the card the need is on chosen; with
+// no need, the talk line.
+func (m *Model) roomLanding(k chainKey) int {
+	rows := m.roomRows(k)
+	talk := len(rows) - 1
+	need, ok := m.needOf(k)
+	if !ok {
+		return talk
+	}
+	pane := need.pane
+	if g := need.g; need.isGo {
+		if g.step > 0 {
+			step := strconv.Itoa(g.step)
+			if i := slices.IndexFunc(rows, func(r roomRow) bool { return r.kind == roomStep && r.id == step }); i >= 0 {
+				return i
+			}
+			r := *m.room
+			r.unfolded = true // the step is folded away: the card opens to it
+			m.room = &r
+			rows = m.roomRows(k)
+			if i := slices.IndexFunc(rows, func(r roomRow) bool { return r.kind == roomStep && r.id == step }); i >= 0 {
+				return i
+			}
+			return len(rows) - 1
+		}
+		pane = g.pane
+	}
+	seen, _ := m.members(k)
+	if i := slices.IndexFunc(seen, func(s sample.Session) bool { return s.Pane == pane }); i >= 0 {
+		m.boardChooseCard(m.columnOf(seen[i]), seen[i])
+		return -1
+	}
+	return talk
+}
+
 // keepRoomRow keeps the room's cursor on the row it was on, by its kind and
-// id, when rows come or go under it.
+// id, when rows come or go under it. A tap that moved it moved it.
 func (m Model) keepRoomRow(was *room, anchor roomRow) Model {
-	if was == nil || m.room == nil || m.room.k != was.k || anchor.kind == 0 && anchor.id == "" {
+	if was == nil || m.room == nil || m.room.k != was.k || m.room.at != was.at || anchor.kind == roomNone {
 		return m
 	}
 	rows := m.roomRows(m.room.k)

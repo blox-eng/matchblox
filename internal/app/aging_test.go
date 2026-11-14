@@ -54,67 +54,6 @@ func agingState() proto.State {
 	return st
 }
 
-// TestIdleSessionsAge: who waits for the person, then who works, then idle
-// by the newest; a day makes a session cold, a week makes it stale.
-func TestIdleSessionsAge(t *testing.T) {
-	for _, w := range []int{50, 120} {
-		m, _ := loadedWith(t, w, agingState())
-		next, _ := key(m, "1")
-		if got := order(next); got != "charlie bravo alpha delta echo" {
-			t.Fatalf("width %d: order %q", w, got)
-		}
-		lines := strings.Split(screen(next), "\n")
-		for name, word := range map[string]string{"alpha": "idle", "delta": "cold", "echo": "stale"} {
-			if l := lines[lineOf(t, next, name)]; !strings.Contains(l, word) {
-				t.Fatalf("width %d: %s is not %s: %q", w, name, word, l)
-			}
-		}
-	}
-}
-
-// TestXKillsASession: x on any session kills it after a typed y, with
-// the exact commands on the RUN line; one that waits for you asks for a
-// second y and says why.
-func TestXKillsASession(t *testing.T) {
-	st := agingState()
-	st.Sessions[4].Status = "idle" // echo rests: one y kills it
-	m, f := loadedWith(t, 160, st)
-	var next tea.Model = m
-	next, _ = key(next, "1")
-	next, _ = key(next, "x") // charlie: it waits
-	if line := actionLine(next); !strings.Contains(line, "Kill charlie: tmux kill-pane -t %charlie") {
-		t.Fatalf("x on charlie: %q", line)
-	}
-	next, cmd := key(next, "y")
-	if cmd != nil {
-		cmd()
-	}
-	if line := actionLine(next); len(f.acts()) != 0 || !strings.Contains(line, "charlie waits for you: y again kills it all the same") {
-		t.Fatalf("one y killed a session that waits: %q %+v", line, f.acts())
-	}
-	_, cmd = key(next, "y")
-	if cmd == nil {
-		t.Fatal("y sent nothing")
-	}
-	cmd()
-	if acts := f.acts(); len(acts) != 1 || acts[0] != (proto.Act{RecID: "kill:%charlie", Which: "secondary", Confirm: "y", Text: "anyway"}) {
-		t.Fatalf("sent %+v", acts)
-	}
-	next = selectPane(t, next, "%echo")
-	if !strings.Contains(actionLine(next), "x kill") {
-		t.Fatalf("the keys of a session lack x: %q", actionLine(next))
-	}
-	next, _ = key(next, "x")
-	if line := actionLine(next); !strings.Contains(line, "Kill echo: tmux kill-pane -t %echo then kill -TERM 5") {
-		t.Fatalf("x on echo: %q", line)
-	}
-	_, cmd = key(next, "y")
-	cmd()
-	if acts := f.acts(); len(acts) != 2 || acts[1] != (proto.Act{RecID: "kill:%echo", Which: "secondary", Confirm: "y"}) {
-		t.Fatalf("sent %+v", acts)
-	}
-}
-
 // TestOldSessionsSinkEvenWhenQueued: a queue item a day old does not lift a
 // cold session over a fresh one: age outranks waiting (found live: without
 // hooks the queue holds a "done" item for nearly every idle session).
@@ -150,16 +89,18 @@ func TestTheFixFitsTheParent(t *testing.T) {
 func TestAnOutSessionSaysUntilWhen(t *testing.T) {
 	st := fixtureState()
 	back := st.At.Add(2 * time.Hour)
+	out := ""
 	for i := range st.Sessions {
 		if !st.Sessions[i].Busy {
 			st.Sessions[i].Out, st.Sessions[i].Idle = back, 10*time.Minute
+			out = st.Sessions[i].Pane
 			break
 		}
 	}
-	m, _ := loadedWith(t, 120, st)
-	m.tab = tabSessions
+	m, _ := loadedWith(t, 160, st)
+	m = selectPane(t, m, out).(Model) // the chosen card says what the row said
 	at := back.Local().Format("15:04")
-	if out := ansi.Strip(m.render()); !regexp.MustCompile(`out +` + at).MatchString(out) {
+	if out := ansi.Strip(m.render()); !strings.Contains(out, "· out") || !regexp.MustCompile(`✻ +`+at).MatchString(out) { // the card's word and its age
 		t.Fatalf("no out %s in\n%s", at, out)
 	}
 	if g := m.groupOf(sample.Session{Out: back}); g != groupQuiet {

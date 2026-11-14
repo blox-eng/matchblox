@@ -150,15 +150,13 @@ func (m Model) intoSelected() (tea.Model, tea.Cmd) {
 	return m.goIntoAsking(s.Host, s.Pane)
 }
 
-// tapTarget is the pane a second tap on the selected row goes into: a home
-// session's, or a failed step's. A row of another host acts through tapAct.
+// tapTarget is the pane a second tap on the selected row goes into: on
+// the stoker's screen, a failed step's. (The board's cards go in by its own
+// taps.) Another row acts through tapAct.
 func (m Model) tapTarget() (host, pane string) {
 	if m.tab == tabStoker {
 		pane, _ = m.stokerTarget()
 		return m.opt.Host, pane
-	}
-	if s, ok := m.selectedSession(); ok && s.Host == m.opt.Host {
-		return s.Host, s.Pane
 	}
 	return "", ""
 }

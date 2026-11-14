@@ -1,8 +1,9 @@
 # Ships
 
-A ship is a pull request one of your sessions drives. Ships follows each
-one from open to live, so you see on one screen which PR runs, which waits
-for you and which is stuck, and why.
+A ship is a pull request one of your sessions drives. matchblox follows
+each one from open to live, and puts it on the card of the session that
+drives it. So the board shows which PR runs, which waits for your merge
+and which is stuck, and why.
 
 ## Which pull requests
 
@@ -37,8 +38,8 @@ ships along. A pane that another session takes over takes none of them.
 `matchblox ships --json` gives the owner in `session`: its `name`, `pane`,
 `session_id` and `since`, when it became the owner. A ship that no session
 owns has no `name`, `pane` or `session_id`, and `since` says since when.
-The Ships tab shows it `by no session`. Message the owner by its name,
-never by its pane.
+A ship that no session owns has a card of its own on the board. Message
+the owner by its name, never by its pane.
 
 A Claude Code `/clear` starts a new session id. A ship that the old id
 found goes to the new one when it sits on the PR's branch, else it has no
@@ -53,7 +54,7 @@ session.
 
 The five stages are `open → ci → green → merged → live`. A done stage is
 `●`, the current one `◉`: `warn` while it runs on its own, the accent when
-it waits for you, and `✕` in `neg` when it is stuck. The note says the
+it waits for your merge, and `✕` in `neg` when it is stuck. The note says the
 state in words:
 
 | Note | It means |
@@ -65,7 +66,7 @@ state in words:
 | `waits for review`, `changes requested` | A review holds it. |
 | `waits for a required check` | Its checks passed, but a branch rule still blocks the merge. |
 | `checking mergeability` | GitHub has not worked out yet whether it merges. |
-| `green · waits for your merge` | Every check passed: `x` merges it. |
+| `green · waits for your merge` | Every check passed: `p` merges it. |
 | `auto-merge on` | It merges by itself. |
 | `merged · deploying · 2h` | Merged, and a run on the merge commit has been going for 2 hours. |
 | `merged · deploy queued · 1h` | Merged, and the runs on the merge commit have waited an hour to start. |
@@ -85,25 +86,31 @@ To count only the workflows that deploy a repository, name them in the
 "owner/name" = ["Release"]
 ```
 
-## Keys
+## On the board
+
+The third line of a card shows the ship and its track
+(`#4551 ●━◉┄○┄○`). A session that drives more than one ship leads with
+the one that most needs you: stuck, then waiting for your merge, in
+flight, merged, live. The second line says the state in words:
+`green #4556 waits for your merge`, `stuck CI failed · lint, twice`. A
+ship decides the card's column with the rest of the match: see
+[The board](console.md#the-board). When a ship passes a stage, a bright
+cell runs along its track once.
 
 | Key | What it does |
 |---|---|
-| `Enter` | Selects the session that drives the ship, in Sessions. On a ship no session owns, opens New session in the worktree on its branch, else in its repository's main checkout, as a ghost row of Sessions does: the folder picked, the cursor on agent, and a first message about the PR to edit. |
-| `x` | Merges a ship that waits for your merge: a box shows `gh pr merge <n> --squash --match-head-commit <sha>` (the repository's merge method, pinned to the commit that was read green), and a typed `y` runs it. It is offered only on a read from the last two minutes. |
-| `a` | Goes into the pane of the session of a stuck ship, to tell it what to do. |
+| `p` | Merges the card's leading ship when it waits for your merge: a box shows `gh pr merge <n> --squash --match-head-commit <sha>` (the repository's merge method, pinned to the commit that was read green), and a typed `y` runs it. It is offered only on a read from the last two minutes. On any other card it says `no ship of <name> waits for a merge`. |
+| `Enter` | Goes into the pane of the session that drives the ship, to tell it what to do. On a ship no session owns, opens New session in the worktree on its branch, else in its repository's main checkout, as the ghost row does: the folder picked, the cursor on agent, and a first message about the PR to edit. |
 
-On a phone the selected ship adds who drives it and its keys. Wider, the
-detail beside the list shows the five stages with their times, and the
-PR's URL. A session's row shows its ship too, with a count of the others
-it drives (`+1 merged`), and its detail lists the first three.
+`x` kills the match. It never merges. The card's menu (`m`) copies the
+link of the pull request.
 
 ## Reading GitHub
 
 The service reads GitHub with `gh`, one query per repository a minute, and
 only while a ship is in flight. It shares GitHub's rate limit with every
 agent on the machine: when less than a tenth is left it stops until the
-limit resets, and the tab says until when. Without `gh`, or with `gh` not
+limit resets, and the strip says until when. Without `gh`, or with `gh` not
 signed in, the ships still list, with `state unknown · gh not signed in`.
 A repository that cannot be read is asked again after a minute, then less
 and less often, up to every 30 minutes; a PR that was never read leaves

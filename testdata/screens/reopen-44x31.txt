@@ -1,31 +1,31 @@
- ▰ matchblox               ● 6 wait for you
- SESSIONS 7  ships 3  machine  4  5  6  7
+ ▰ matchblox                   ● 6 need you
+ BOARD 7    machine
 ────────────────────────────────────────────
- WAITS FOR YOU · 6
+ SET UP · 1 · Check that copy reaches you
+ NEEDS YOU 6 −  work 1  ship 0  quiet 0
 ────────────────────────────────────────────
-▌│ spark-docs            done      9m   88%
-   “I rewrote the quick start and the
-   install page.”
-   #4540 ●━●━●━●━●  live
-   ▰▰▰▰▰ plan 100%  ▲ clear
-                          A switch  ⏎ go in
-────────────────────────────────────────────
- ╿ ember-billing         done      4m   32%
- ╿ flint-auth            asks      2m   41%
- ╿ kindle-web            asks      1m   56%
- ╿ cinder-ci             done      0s   55%
- ╿ wick-mobile           done      0s    6%
- WORKING · 1
- ✦ hearth-api            busy           79%
+▌╿ flint-auth                         ✻  2m
+  stuck conflicts with main
+  #4545 ●━✕┄○┄○┄○  ctx 41%
+  “The refresh flow works and the tests
+  pass. One choice is yours before I wire
+  the rotation.”
+  ⏎ go in
+
+ │ spark-docs                         ✻  9m
+  done I rewrote the quick start and the i…
+  #4540 ●━●━●━●━●  ctx 88%
+  ⏎ go in
+
+ ╿ ember-billing                      ✻  4m
+  green #4552 waits for your merge
+  #4552 ●━●━◉┄○┄○  ctx 32%
+  p merge #4552   ⏎ go in
+
+  ↓ 3 more
+
  + start a new session
-
- 1 without an agent: shell:1.1 zsh
-
- RECOMMENDATIONS · 7 · h hides
- ▲ The week runs short: compact spark-docs
- ○ Clear spark-docs (%3)
- ○ Clear kindle-web (%5)
- ○ Clear cinder-ci (%6)
- ○ Clear flint-auth (%2)
+ RECOMMENDATIONS · 7
+ ✻ 5h ▰▰▰▰▰▰▰▱ 84%  wk 82%        machine ›
 ────────────────────────────────────────────
  quit and reopen · service v0.43.0, console…

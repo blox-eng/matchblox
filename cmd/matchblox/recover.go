@@ -105,7 +105,7 @@ func printRecover(w io.Writer, rows []proto.Recovered, reopen bool) error {
 		return err
 	}
 	if !reopen && ready > 0 {
-		if _, err := fmt.Fprintf(w, "\nmatchblox recover --all reopens the %d that can reopen; matchblox recover <name> reopens one. Each waits for you: no prompt is sent.\n", ready); err != nil {
+		if _, err := fmt.Fprintf(w, "\nmatchblox recover --all reopens the %d that can reopen; matchblox recover <name> reopens one. Each waits for your next prompt: none is sent.\n", ready); err != nil {
 			return err
 		}
 	}

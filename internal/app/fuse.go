@@ -2,7 +2,6 @@ package app
 
 import (
 	"cmp"
-	"fmt"
 	"maps"
 	"slices"
 	"strconv"
@@ -11,7 +10,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/chains"
 	"github.com/blox-eng/matchblox/internal/proto"
@@ -19,16 +17,8 @@ import (
 	"github.com/blox-eng/matchblox/internal/state"
 )
 
-// A fuse joins the matches of a chain in Sessions, in a column between the
-// match and the name. By need a chain stays together and its fuse is whole:
-// ╮ first, ┤ between, ╯ last; by repo too, for its matches in one repo.
-// Status, none, and a repo group a chain only partly sits in split it, and
-// each of its matches keeps a stub ─╴ that lights with the selected one.
-
 // sparkFor is how long the spark takes to run down a fuse.
 const sparkFor = 600 * time.Millisecond
-
-const sameRepoHint = " · same repo · chain?"
 
 // chainKey is a chain on a host: chains live on one host.
 type chainKey struct{ host, id string }
@@ -53,7 +43,6 @@ type chainIndex struct {
 	need    map[chainKey]int             // the neediest group of the chain's listed matches
 	present map[chainKey]int             // the matches the host has, whatever the filter hides
 	shown   map[chainKey]int             // the matches in the list
-	rows    map[chainKey][]int           // the list rows of each chain, top down
 	heads   map[rowKey]state.ChainStoker // the head rows: the chain stoker of each
 	repo    map[chainKey]string          // the repo label of a chain with a head
 }
@@ -151,6 +140,20 @@ func (m Model) hasUnit(k chainKey) bool {
 	return ok
 }
 
+// stokerChain is the chain whose stoker's agent s is: tmux session
+// stoker-<id> on the stoker's server, for a chain stoker id of s's host.
+func (m Model) stokerChain(s sample.Session) (chainKey, bool) {
+	if !m.isStoker(s) {
+		return chainKey{}, false
+	}
+	for _, u := range m.stateOf(s.Host).Stokers {
+		if s.TmuxSession() == sample.StokerSession+"-"+u.ID {
+			return chainKey{s.Host, u.Chain}, true
+		}
+	}
+	return chainKey{}, false
+}
+
 // agentOf is the session of chain stoker id's agent on host: tmux session
 // stoker-<id> on the stoker's server.
 func (m Model) agentOf(host, id string) (sample.Session, bool) {
@@ -232,26 +235,9 @@ func (m Model) chainName(k chainKey) string {
 	return k.id
 }
 
-// indexChainRows notes the list rows of each chain: the spark runs down
-// them.
-func (m *Model) indexChainRows() {
-	m.chainIx.rows = map[chainKey][]int{}
-	for i, s := range m.snap.Sessions {
-		if k, ok := m.chainKeyOf(s); ok {
-			m.chainIx.rows[k] = append(m.chainIx.rows[k], i)
-		}
-	}
-}
-
 func (m Model) chainKeyOf(s sample.Session) (chainKey, bool) {
 	k, ok := m.chainIx.of[keyOf(s)]
 	return k, ok
-}
-
-// chainOf tells if a session is in a chain.
-func (m Model) chainOf(s sample.Session) bool {
-	_, ok := m.chainKeyOf(s)
-	return ok
 }
 
 // needGroup is the need group a session is listed in: its own, or the
@@ -308,130 +294,6 @@ func (m Model) together(ss []sample.Session) []sample.Session {
 	return out
 }
 
-// chainsIn is what a group's label adds for the chains whose first match in
-// view it holds: under need, how many matches each has; in every grouping,
-// how many of them a filter hides.
-func (m Model) chainsIn(label string, ss []sample.Session) string {
-	out := ""
-	seen := map[chainKey]bool{}
-	for _, s := range ss {
-		k, ok := m.chainKeyOf(s)
-		if !ok || seen[k] {
-			continue
-		}
-		seen[k] = true
-		if m.groupLabel(s) != label {
-			continue
-		}
-		shown, all := m.chainIx.shown[k], max(m.chainIx.present[k], m.chainIx.shown[k])
-		if m.sessGroup == groupNeed {
-			out += fmt.Sprintf(" · chain of %d", all)
-		}
-		if all > shown {
-			out += fmt.Sprintf(" · %d hidden", all-shown)
-		}
-	}
-	return out
-}
-
-// fuseWidth is the fuse column of a list w wide: none while no session in
-// it is chained, two cells on a wide list, one below.
-func (m Model) fuseWidth(w int) int {
-	if !slices.ContainsFunc(m.snap.Sessions, m.chainOf) {
-		return 0
-	}
-	if w >= wideList {
-		return 2
-	}
-	return 1
-}
-
-// fuseRuns tells if the fuse of row i runs up to the row above and down to
-// the row below: by need and by repo, between chain-mates in one group.
-func (m Model) fuseRuns(i int, ss []sample.Session) (up, down bool) {
-	if m.sessGroup != groupNeed && m.sessGroup != groupRepo {
-		return false, false
-	}
-	k, ok := m.chainKeyOf(ss[i])
-	if !ok {
-		return false, false
-	}
-	joins := func(j int) bool {
-		if j < 0 || j >= len(ss) {
-			return false
-		}
-		o, ok := m.chainKeyOf(ss[j])
-		return ok && o == k && m.groupLabel(ss[j]) == m.groupLabel(ss[i])
-	}
-	return joins(i - 1), joins(i + 1)
-}
-
-// fuseCell is the fuse on the line of row i of ss, sel the selected row,
-// in a list w wide that has a fuse column: "" on a row in no chain.
-func (m Model) fuseCell(i int, ss []sample.Session, sel, w int) string {
-	k, ok := m.chainKeyOf(ss[i])
-	if !ok {
-		return ""
-	}
-	lead, glyph, style := "─", "╴", m.st.faint
-	switch up, down := m.fuseRuns(i, ss); {
-	case up && down:
-		glyph, style = "┤", m.st.accent
-	case down:
-		glyph, style = "╮", m.st.accent
-	case up:
-		glyph, style = "╯", m.st.accent
-	default: // a stub: lit while a chain-mate is selected
-		if sel >= 0 && sel < len(ss) {
-			if ks, ok := m.chainKeyOf(ss[sel]); ok && ks == k {
-				style = m.st.accent
-			}
-		}
-		if i == sel {
-			lead, glyph = "━", "╸"
-		}
-	}
-	cell := glyph
-	if w >= wideList {
-		cell = lead + glyph
-	}
-	if m.sparkOn(i, k, ss) {
-		style = m.sparkStyle()
-	}
-	return style.Render(cell)
-}
-
-// fuseThrough is the fuse on a line between rows, fw cells: │ where it
-// runs on.
-func (m Model) fuseThrough(runs bool, fw int) string {
-	if !runs {
-		return strings.Repeat(" ", fw)
-	}
-	return padLeft(m.st.accent.Render("│"), fw)
-}
-
-// fused puts the fuse into the lines under a row, after their first two
-// cells, which are blank.
-func (m Model) fused(lines []string, runs bool, fw int) []string {
-	if fw == 0 {
-		return lines
-	}
-	out := make([]string, len(lines))
-	for i, l := range lines {
-		out[i] = "  " + m.fuseThrough(runs, fw) + ansi.TruncateLeft(l, 2, "")
-	}
-	return out
-}
-
-// hairline sets the phone's opened block apart: after the fuse when there
-// is one.
-func (m Model) hairline(w, fw int, runs bool) string {
-	if fw == 0 {
-		return m.st.hair.Render(strings.Repeat("─", w))
-	}
-	return "  " + m.fuseThrough(runs, fw) + m.st.hair.Render(strings.Repeat("─", max(w-2-fw, 0)))
-}
-
 // sparkKey is where a chain's spark is kept among the changes: apart from
 // every pane, whose ids have no colon.
 func sparkKey(k chainKey) paneKey { return paneKey{k.host, "chain:" + k.id} }
@@ -450,64 +312,12 @@ func (m *Model) noteSparks(host string, next *state.ChainsView, now time.Time) {
 	}
 	for _, c := range next.Chains {
 		if !c.Spark.IsZero() && !c.Spark.Equal(was[c.ID]) {
-			m.changes[sparkKey(chainKey{host, c.ID})] = change{changeSpark, now}
+			m.changes[sparkKey(chainKey{host, c.ID})] = change{kind: changeSpark, at: now}
 		}
 	}
-}
-
-// sparkOn tells if the spark of chain k is on row i now: it runs down the
-// chain's rows once, in sparkFor.
-func (m Model) sparkOn(i int, k chainKey, ss []sample.Session) bool {
-	c, ok := m.changes[sparkKey(k)]
-	if m.opt.NoMotion || !ok || c.kind != changeSpark {
-		return false
-	}
-	e := m.now().Sub(c.at)
-	if e < 0 || e >= sparkFor {
-		return false
-	}
-	rows := m.chainIx.rows[k]
-	return rows[int(e*time.Duration(len(rows))/sparkFor)] == i
 }
 
 func (m Model) sparkStyle() lipgloss.Style { return lipgloss.NewStyle().Foreground(m.marks().Core) }
-
-// mayChain tells if a row offers a chain: by need or in one list, a
-// session with a repo mate on its host that it is not chained with.
-func (m Model) mayChain(s sample.Session) bool {
-	if m.sessGroup != groupNeed && m.sessGroup != groupNone {
-		return false
-	}
-	return m.repoMates[keyOf(s)]
-}
-
-// chainedTogether tells if a and b are in one chain.
-func (m Model) chainedTogether(a, b sample.Session) bool {
-	ka, okA := m.chainKeyOf(a)
-	kb, okB := m.chainKeyOf(b)
-	return okA && okB && ka == kb
-}
-
-// sharingRepos are the sessions of ss that share their repo, on their host,
-// with another session they are not chained with.
-func (m Model) sharingRepos(ss []sample.Session) map[rowKey]bool {
-	type in struct{ host, repo string }
-	byRepo := map[in][]sample.Session{}
-	for _, s := range ss {
-		if r, _, ok := proto.RepoOf(m.gitOf(s.Host), s.Cwd); ok {
-			byRepo[in{s.Host, r}] = append(byRepo[in{s.Host, r}], s)
-		}
-	}
-	out := map[rowKey]bool{}
-	for _, mates := range byRepo {
-		for _, s := range mates {
-			out[keyOf(s)] = slices.ContainsFunc(mates, func(o sample.Session) bool {
-				return keyOf(o) != keyOf(s) && !m.chainedTogether(s, o)
-			})
-		}
-	}
-	return out
-}
 
 // teamsOf are the teams s is in, in the order they formed: it draws in the
 // first one's fuse.
@@ -524,26 +334,6 @@ func (m Model) teamsOf(s sample.Session) []chains.Chain {
 		}
 	}
 	return out
-}
-
-// alsoIn is what a row adds for each team but the one whose fuse it draws
-// in: " · also in web", or "".
-func (m Model) alsoIn(s sample.Session) string {
-	teams := m.teamsOf(s)
-	if len(teams) < 2 {
-		return ""
-	}
-	drawn, ok := m.chainKeyOf(s)
-	if !ok {
-		drawn.id = teams[0].ID
-	}
-	var names []string
-	for _, c := range teams {
-		if c.ID != drawn.id {
-			names = append(names, c.Name)
-		}
-	}
-	return " · also in " + strings.Join(names, ", ")
 }
 
 // joinNews is the toast for a change of the teams from the console's last
@@ -579,9 +369,9 @@ func (m Model) joinNews(next *state.ChainsView, sessions []sample.Session) strin
 		for _, mb := range c.Members {
 			// a /clear or switch renames a member in its pane: no join
 			if !slices.ContainsFunc(old.Members, func(o chains.Member) bool { return o.Same(mb) || o.Pane == mb.Pane }) {
-				out := " · u in its room takes it out"
+				out := " · out of " + c.Name + " is in its menu, in the room"
 				if m.width < 50 {
-					out = " · u: out"
+					out = " · m: out"
 				}
 				return name(mb) + " joined " + c.Name + out
 			}
@@ -607,44 +397,6 @@ func (m Model) outOfTeam(s sample.Session, team string) action {
 // person's.
 const sealedFamily = "the night is sealed: answer the stoker's prompts, or give the order in the morning"
 
-// headed tells if chain k has a head row in the list.
-func (m Model) headed(k chainKey) bool {
-	for r := range m.chainIx.heads {
-		if m.chainIx.of[r] == k {
-			return true
-		}
-	}
-	return false
-}
-
-// headIn is the head row of a chain, in the columns t: its stoker's match,
-// the chain's name, the steps of its plan done and what it asks. On a
-// phone the selected head opens in place, as any row does.
-func (m Model) headIn(s sample.Session, u state.ChainStoker, sel bool, w int, t tracks, fuse string, runs bool) []string {
-	st := m.st
-	mark := " "
-	if sel {
-		mark = st.accent.Render("▌")
-	}
-	cell := m.matchCell(s)
-	if t.fuse > 0 {
-		cell = strings.TrimSuffix(cell, " ") + padTo(fuse, t.fuse) + " "
-	}
-	done, all := u.View.PlanProgress()
-	line := mark + cell + st.ink(sel).Render("stoker") + "   " + st.text.Render(u.Name) + st.muted.Render(fmt.Sprintf(" · plan %d/%d", done, all))
-	if q, asks := m.headAsks(s); asks {
-		if q != "" {
-			q = ": " + q
-		}
-		line += st.warn.Render(" · asks" + q)
-	}
-	rows := []string{fit(line, w)}
-	if !sel || !m.inPlace() {
-		return rows
-	}
-	return append(rows, m.fused(m.opened(s, w-t.fuse), runs, t.fuse)...)
-}
-
 // headAsks tells if a chain stoker's agent waits for the person, and its
 // question.
 func (m Model) headAsks(s sample.Session) (string, bool) {
@@ -668,14 +420,6 @@ func (m Model) sealedNight(host string) bool {
 // on, or a night runs, and its agent has a pane.
 func (m Model) headPane(s sample.Session, u state.ChainStoker) bool {
 	return s.Pane != "" && (u.View.On || m.sealedNight(s.Host))
-}
-
-// headVerb is what a does on head row s.
-func (m Model) headVerb(s sample.Session, u state.ChainStoker) string {
-	if m.headPane(s, u) {
-		return "go in"
-	}
-	return "stoke"
 }
 
 // headAct is a on the selected head row s: the stoker's pane in a popup,
@@ -727,20 +471,13 @@ func (m Model) startChain(k chainKey) Model {
 	return m.openChainSheet(k)
 }
 
-// titleOf names a row in the detail and the chat: a head row by its
+// titleOf names a session in the live view's title: a head row by its
 // chain, not by its agent's tmux session.
 func (m Model) titleOf(s sample.Session) string {
 	if u, head := m.headRow(s); head {
 		return "stoker of chain " + u.Name
 	}
 	return s.Name
-}
-
-// onFuse tells if column x of a row of a list w wide is on its fuse:
-// after the mark and the match.
-func (m Model) onFuse(x, w int) bool {
-	fw := m.fuseWidth(w)
-	return fw > 0 && x >= 2 && x < 2+fw
 }
 
 // openChainSheet opens the start sheet of chain k: a run of its stoker

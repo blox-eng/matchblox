@@ -1,7 +1,7 @@
 import Foundation
 
 public enum BeltLayout: String, CaseIterable, Codable, Sendable {
-    case steer, commands, tmux, mine
+    case steer, commands, tmux, mine, board
 }
 
 /// One row of the console's command table (`testdata/keys/commands.json`). A command key
@@ -54,12 +54,14 @@ public struct KeyCatalog: Sendable {
 
     /// Commands follows `agent`, the agent of the session the console shows. With no agent,
     /// or one with no commands, it is the home row only. Mine keeps the keys of the catalog.
-    public func keys(_ layout: BeltLayout, agent: String?, mine: [BeltKey]) -> [BeltKey] {
+    /// Board holds the keys the console's board says.
+    public func keys(_ layout: BeltLayout, agent: String?, mine: [BeltKey], board: BoardBelt = .plain) -> [BeltKey] {
         switch layout {
         case .steer: Self.steer
         case .tmux: Self.tmux
         case .commands: Self.homeRow + commands.filter { $0.agent == agent }.map(Self.key)
         case .mine: mine.compactMap { known[$0.id] }
+        case .board: board.keys
         }
     }
 

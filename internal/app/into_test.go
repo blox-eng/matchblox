@@ -24,60 +24,6 @@ func recordRuns(m *Model) *[][]string {
 	return &ran
 }
 
-func TestEveryWayInJumps(t *testing.T) {
-	for _, k := range []string{"enter", "right", "a", "ctrl+o"} {
-		m := loaded(t, 100)
-		ran := recordRuns(&m)
-		next, cmd := key(m, k)
-		drain(cmd)
-		if nm := next.(Model); nm.standIn || nm.pending != nil {
-			t.Errorf("%s: stand-in %v, pending %v: want the jump at once", k, nm.standIn, nm.pending)
-		}
-		if len(*ran) != 1 || strings.Join((*ran)[0], " ") != "tmux switch-client -t %1" {
-			t.Errorf("%s ran %q", k, *ran)
-		}
-	}
-}
-
-// A phone (owner, 2026-11-09, #351 and #352): on one column the first tap
-// on a row goes into its pane, as Enter does. A split screen shows the view
-// beside the list: the first tap selects the row, and a second tap on it
-// goes in.
-func TestATapOnARowJumps(t *testing.T) {
-	m, _ := loadedWith(t, 44, fixtureState())
-	ran := recordRuns(&m)
-	_, cmd := tap(m, 5, sessLine(t, m, "app-review"))
-	drain(cmd)
-	if len(*ran) != 1 || strings.Join((*ran)[0], " ") != "tmux switch-client -t %2" {
-		t.Fatalf("44 wide: the first tap ran %q, want the jump into %%2", *ran)
-	}
-
-	m, _ = loadedWith(t, 100, fixtureState())
-	ran = recordRuns(&m)
-	next, cmd := tap(m, 5, sessLine(t, m, "app-review"))
-	drain(cmd)
-	if s, _ := next.(Model).selectedSession(); s.Pane != "%2" || len(*ran) != 0 {
-		t.Fatalf("100 wide: the first tap selected %q, ran %q", s.Pane, *ran)
-	}
-	_, cmd = tap(next, 5, sessLine(t, next.(Model), "app-review"))
-	drain(cmd)
-	if len(*ran) != 1 || strings.Join((*ran)[0], " ") != "tmux switch-client -t %2" {
-		t.Errorf("100 wide: the second tap ran %q", *ran)
-	}
-}
-
-func TestAPanelessRowSaysSo(t *testing.T) {
-	m, _ := loadedWith(t, 100, outsideTmux(fixtureState()))
-	m.tab = tabSessions
-	s, _ := m.selectedSession()
-	for _, k := range []string{"enter", "a", "right", "ctrl+o"} {
-		next, _ := key(m, k)
-		if got, want := next.(Model).flash, s.Name+" runs outside tmux: no pane to go into"; got != want {
-			t.Errorf("%s: flash %q, want %q", k, got, want)
-		}
-	}
-}
-
 func TestEnterOnAStokerHostAsksToTakeOver(t *testing.T) {
 	m := sized(t, 100, 30, stokerState(runningNight(time.Now())))
 	ran := recordRuns(&m)
@@ -89,23 +35,6 @@ func TestEnterOnAStokerHostAsksToTakeOver(t *testing.T) {
 	drain(cmd)
 	if len(*ran) != 1 || (*ran)[0][1] != "switch-client" {
 		t.Errorf("after the answer ran %q", *ran)
-	}
-}
-
-func TestAOnAStuckShipJumps(t *testing.T) {
-	m, _ := shipsAt(t, 86, screensState(t))
-	ran := recordRuns(&m)
-	next, _ := key(m, "down")
-	next, _ = key(next, "down") // #4545 is stuck; flint-auth asks
-	_, cmd := key(next, "a")
-	drain(cmd)
-	if len(*ran) != 1 || strings.Join((*ran)[0], " ") != "tmux switch-client -t %2" {
-		t.Fatalf("a on a stuck ship ran %q", *ran)
-	}
-	next, cmd = key(m, "a") // #4551 runs
-	drain(cmd)
-	if nm := next.(Model); len(*ran) != 1 || nm.flash != "a goes into the session of a stuck ship" {
-		t.Errorf("a on a ship that runs: ran %q, flash %q", *ran, nm.flash)
 	}
 }
 
@@ -188,60 +117,13 @@ func TestCtrlOInTheViewGoesIntoThePane(t *testing.T) {
 	}
 }
 
-func TestAClickRightOfTheListGoesIn(t *testing.T) {
-	m := loaded(t, 200)
-	ran := recordRuns(&m)
-	sc := m.draw(200)
-	next, cmd := m.Update(tea.MouseClickMsg(tea.Mouse{X: sc.listW + 5, Y: sc.bodyTop + 1, Button: tea.MouseLeft}))
-	drain(cmd)
-	if len(*ran) != 1 || next.(Model).standIn {
-		t.Errorf("ran %q, stand-in %v", *ran, next.(Model).standIn)
-	}
-}
-
-// On a host the stoker drives, every tap that goes in asks to take over first.
-func TestATapIntoAStokerHostAsksFirst(t *testing.T) {
-	night := func(w int) (Model, *[][]string) {
-		m := sized(t, w, 30, stokerState(runningNight(time.Now())))
-		m.tab = tabSessions
-		return m, recordRuns(&m)
-	}
-	asked := func(t *testing.T, name string, next tea.Model, ran *[][]string, cmd tea.Cmd) {
-		t.Helper()
-		drain(cmd)
-		if next.(Model).held == nil || len(*ran) != 0 {
-			t.Fatalf("%s: held %v ran %q: want take over? first", name, next.(Model).held != nil, *ran)
-		}
-		_, cmd = key(next, "n")
-		drain(cmd)
-		if len(*ran) != 1 {
-			t.Errorf("%s: after the answer ran %q", name, *ran)
-		}
-	}
-
-	m, ran := night(100)
-	y := sessLine(t, m, "app-feature")
-	next, cmd := tap(m, 5, y)
-	drain(cmd)
-	next, cmd = tap(next, 5, y)
-	asked(t, "second tap on the selected row", next, ran, cmd)
-
-	m, ran = night(200)
-	sc := m.draw(200)
-	next, cmd = m.Update(tea.MouseClickMsg(tea.Mouse{X: sc.listW + 5, Y: sc.bodyTop + 1, Button: tea.MouseLeft}))
-	asked(t, "tap right of the list", next, ran, cmd)
-
-}
-
 func TestAOnAStuckShipAtNightAsksToTakeOver(t *testing.T) {
 	st := stokerState(runningNight(time.Now()))
 	full := screensState(t)
 	st.Ships, st.Sessions = full.Ships, full.Sessions
 	m := sized(t, 86, 30, st)
 	ran := recordRuns(&m)
-	next, _ := key(m, "p")
-	next, _ = key(next, "down")
-	next, _ = key(next, "down") // #4545 is stuck
+	next, _ := key(m, "p") // flint-auth leads NEEDS YOU: its #4545 is stuck
 	asked, cmd := key(next, "a")
 	drain(cmd)
 	if asked.(Model).held == nil || len(*ran) != 0 {
@@ -423,14 +305,6 @@ func TestTakeOverAnsweredFromTheDeskJumpsThePhone(t *testing.T) {
 	}
 }
 
-func TestTheSelectionMovesOnWhenNoOneElseWatches(t *testing.T) {
-	m, _ := loadedWith(t, 100, queueState())
-	next, _ := m.Update(ranMsg{cmd: "tmux switch-client -c /dev/pts/7 -t %1", jumped: "%1", tty: "/dev/pts/7"})
-	if s, _ := next.(Model).selectedSession(); s.Pane != "%2" {
-		t.Errorf("the selection is %q, want the next that waits, %%2", s.Pane)
-	}
-}
-
 func TestTheSelectionStaysWhileTheDeskWatches(t *testing.T) {
 	m, _ := loadedWith(t, 100, queueState())
 	next, _ := m.Update(ranMsg{cmd: "tmux switch-client -c /dev/pts/7 -t %1", jumped: "%1", tty: "/dev/pts/7", watched: true})
@@ -540,7 +414,7 @@ func TestTheConsoleAnnouncesTheMarks(t *testing.T) {
 		t.Errorf("a phone that attached got %q, want %q", raws(cmd), marks)
 	}
 	// tmux tells the console the moment a terminal comes to show it.
-	if _, cmd = next.Update(uv.UnknownApcEvent(keycmd.ViewerKey)); !slices.Equal(raws(cmd), []string{marks}) {
+	if _, cmd = next.Update(uv.UnknownApcEvent(keycmd.ViewerKey)); !slices.Contains(raws(cmd), marks) { // with the board's keys
 		t.Errorf("a terminal that came got %q, want %q at once", raws(cmd), marks)
 	}
 }
@@ -675,7 +549,7 @@ func TestTheSignalGoesTheWayTheTerminalReadsIt(t *testing.T) {
 // reads no hidden pane while the person types in the agent's. The watch
 // comes back when a screen shows the console again, or the person acts there.
 func TestAJumpWithNoOneLeftStopsTheWatch(t *testing.T) {
-	m, f := loadedWith(t, 100, fixtureState())
+	m, f := loadedWith(t, 160, fixtureState()) // the board watches beside its live view
 	m, _ = rigged(m, "1794089220 /dev/pts/1 %99")
 	s, _ := m.selectedSession()
 	next, cmd := key(m, "enter")
@@ -685,11 +559,14 @@ func TestAJumpWithNoOneLeftStopsTheWatch(t *testing.T) {
 	}
 	_, cmd = next.Update(uv.UnknownApcEvent(keycmd.ViewerKey))
 	drain(cmd)
+	if c, ok := next.(Model).boardSelected(); ok {
+		s = c // after the jump the board chose the first wait (R3.2)
+	}
 	if a := lastWatch(t, f); a.RecID != proto.WatchPrefix+s.Pane {
 		t.Errorf("back on the console the watch is %q, want %s", a.RecID, s.Pane)
 	}
 
-	m, f = loadedWith(t, 100, fixtureState())
+	m, f = loadedWith(t, 160, fixtureState()) // the board watches beside its live view
 	m, _ = rigged(m, deskAndPad)
 	next, cmd = key(m, "enter")
 	settled(next, cmd)

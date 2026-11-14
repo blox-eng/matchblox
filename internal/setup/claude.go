@@ -66,7 +66,7 @@ func usesClaude(e Env) bool {
 func hooksDoor(e Env) doors.Door {
 	path := settingsPath(e)
 	d := doors.Door{ID: doors.Hooks, Title: "Add the queue hooks", Path: path,
-		Why: "Claude Code tells matchblox when an agent waits for you. Without the hooks the queue is estimated, and the stoker's matchblox commands ask before they run."}
+		Why: "Claude Code tells matchblox when an agent needs you. Without the hooks the queue is estimated, and the stoker's matchblox commands ask before they run."}
 	_, old, _, err := read(path)
 	if err != nil {
 		d.Problem = err.Error()

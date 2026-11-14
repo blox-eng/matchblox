@@ -222,3 +222,58 @@ func TestDraftLeavesOutClaudeCodesSuggestion(t *testing.T) {
 		}
 	}
 }
+
+// TestThePaneRuleReadsOnlyTheLiveLines: while an agent works, its pane
+// draws a line that says so ("esc to interrupt"), and everything above it
+// is the transcript of the turn: a question there is old, and asks
+// nothing. The same words below it, in the live lines, ask.
+func TestThePaneRuleReadsOnlyTheLiveLines(t *testing.T) {
+	for _, c := range []struct {
+		name, screen string
+		kind         Kind
+	}{
+		{"codex works under an old question", `
+• Should I also update the docs?
+• Do you want to proceed?
+  Running the suite again.
+• Working (12s • esc to interrupt)
+
+› Ask Codex to do anything
+  ? for shortcuts · 100% context left
+`, None},
+		{"opencode works under an old question", `
+  Should I also update the docs?
+  Do you want to proceed?
+┃  
+┃  Ask anything...
+╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+  ⬝⬝⬝■■■  esc interrupt
+`, None},
+		{"a prompt above a line that quotes the words", `
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. No
+ Tip: press esc to interrupt a long command
+`, Permits},
+		{"claude code works under an old question", `
+⏺ Should I also update the docs?
+✻ Thinking… (12s · ↑ 1.2k tokens · esc to interrupt)
+╭──────────────────────────────────────────╮
+│ >                                        │
+╰──────────────────────────────────────────╯
+`, None},
+		{"the same question in the live lines", `
+  Running the suite again.
+  Do you want to proceed?
+`, Asks},
+		{"Claude Code's trust prompt", `
+ Do you trust the files in this folder?
+ ❯ Yes, I trust this folder
+   No, exit
+`, Permits},
+	} {
+		if _, kind := Screen(c.screen); kind != c.kind {
+			t.Errorf("%s: got %v, want %v", c.name, kind, c.kind)
+		}
+	}
+}

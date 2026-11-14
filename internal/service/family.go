@@ -456,7 +456,7 @@ func (s *Service) givenGoes(grants []string, giver string) (*stokerUnit, []strin
 }
 
 func (s *Service) atCap() error {
-	return fmt.Errorf("the family has its %d chain stokers: max_chains. Quit one on the STOKER tab first.", s.maxChains()) //nolint:staticcheck // the line a person reads, as it stands
+	return fmt.Errorf("the family has its %d chain stokers: max_chains. Quit one on Machine › stoker first.", s.maxChains()) //nolint:staticcheck // the line a person reads, as it stands
 }
 
 // runChain starts a run of chain unit u, whose agent is up or starting:

@@ -42,7 +42,10 @@ more. CI's `Landing page` step checks it. Run it locally with
 - `go run ./cmd/matchblox --fixtures testdata/demo` opens the console on the
   demo machine `ws-1`.
 - When the console's look changes, record the replay again:
-  `go test ./cmd/matchblox -run TestReplay -update`. It records the site's
+  `go test ./cmd/matchblox -run TestReplay -update`. It records the board
+  on the demo machine `ws-1`: an answer marked and sent from a card's peek,
+  the card that strikes into `WORKING`, a merge with `p` and a typed `y`, a
+  column hidden and shown again, and one chain. It records the site's
   three sizes (desk, duo, phone) and writes `www/demo/frames-<size>.json`,
   `www/demo/replay-<size>.svg` for the desk and the phone (the README's),
   and the duo's still frame in `www/index.html`. The test fails when a frame names this machine (its

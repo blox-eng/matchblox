@@ -157,7 +157,7 @@ func TestHomeKeyMatchesTheApp(t *testing.T) {
 // takes another's binding.
 func TestHomeAndCommandKeysDoNotCollide(t *testing.T) {
 	slots := map[string]string{}
-	for _, argv := range [][]string{HomeKeyArgv(), CommandKeysArgv(), MarkKeyArgv(), FlipKeysArgv()} {
+	for _, argv := range [][]string{HomeKeyArgv(), CommandKeysArgv(), MarkKeyArgv(), BeltKeyArgv(), FlipKeysArgv()} {
 		for i, a := range argv {
 			if a != "set-option" {
 				continue
@@ -176,6 +176,9 @@ func TestHomeAndCommandKeysDoNotCollide(t *testing.T) {
 	}
 	if slots["user-keys["+strconv.Itoa(keycmd.MarkSlot)+"]"] != keycmd.MarkKey {
 		t.Fatalf("the mark key is not held: %q", slots)
+	}
+	if slots["user-keys["+strconv.Itoa(keycmd.BeltSlot)+"]"] != keycmd.BeltKey {
+		t.Fatalf("the belt's answer is not held: %q", slots)
 	}
 	if len(slots) < 2 || slots["user-keys["+homeUserKey+"]"] != HomeKey {
 		t.Fatalf("slots %q", slots)
@@ -199,6 +202,19 @@ func TestMarkKeyArgvRunsOnlyAtTheConsole(t *testing.T) {
 		"#{&&:#{==:#{session_name},matchblox},#{==:#{pane_current_command},matchblox}}", "#{client_tty}"} {
 		if !strings.Contains(line, want) {
 			t.Errorf("MarkKeyArgv lacks %q: %s", want, line)
+		}
+	}
+}
+
+// TestBeltKeyArgvHandsTheAnswerOnlyToTheConsole: the app's answer to the
+// board's keys goes to the console with the client's tty, and nowhere else.
+func TestBeltKeyArgvHandsTheAnswerOnlyToTheConsole(t *testing.T) {
+	line := strings.Join(BeltKeyArgv(), " ")
+	slot := strconv.Itoa(keycmd.BeltSlot)
+	for _, want := range []string{"user-keys[" + slot + "] " + keycmd.BeltKey, "bind-key -n User" + slot + " if-shell -F " + atConsole,
+		"send-keys -t #{pane_id} -H " + hexKeys(keycmd.BeltFromPrefix), "#{client_tty}"} {
+		if !strings.Contains(line, want) {
+			t.Errorf("BeltKeyArgv lacks %q: %s", want, line)
 		}
 	}
 }

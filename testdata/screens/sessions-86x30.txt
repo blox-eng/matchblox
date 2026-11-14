@@ -1,30 +1,30 @@
- ▰ matchblox                                                         ● 6 wait for you
- SESSIONS 7    ships 3    machine    git    history    panes    stoker
+ ▰ matchblox                                                             ● 6 need you
+ BOARD 7    machine
 ──────────────────────────────────────────────────────────────────────────────────────
- WAITS FOR YOU · 6                    │ spark-docs · done
-▌│ spark-docs     done       9m   88% │ ✻ team@example.com · Max
- ╿ ember-billing  done       4m   32% │ #4540 ●━●━●━●━●  live
- ╿ flint-auth     asks       2m   41% │
- ╿ kindle-web     asks       1m   56% │
- ╿ cinder-ci      done       0s   55% │
- ╿ wick-mobile    done       0s    6% │
- WORKING · 1                          │
- ✦ hearth-api     busy            79% │
- + start a new session                │
-                                      │
- 1 without an agent: shell:1.1 zsh    │
-                                      │
- RECOMMENDATIONS · 7 · h hides        │
- ▲ The week runs short: compact spark…│
- ○ Clear spark-docs (%3)              │
- ○ Clear kindle-web (%5)              │
- ○ Clear cinder-ci (%6)               │
- ↓ 3 more                             │
-──────────────────────────────────────│
- USAGE                                │
- ✻ Claude        5h   ▰▰▰ 84%         │
-                 wk   ▰▰▱ 82%         │
- · Google login  not measured         │
- ❋ OpenAI        5h ▰▱▱ 40% · wk 12%  │
+ NEEDS YOU · 6  −                           WORKING · 1  −        SHIPPING · 0  −
+▌╿ flint-auth                       ✻  2m   ✦ hearth-api  ✻
+  stuck conflicts with main                  busy
+  #4545 ●━✕┄○┄○┄○  ctx 41%                   #4551 ●━◉  ctx 79%
+  “The refresh flow works and the tests
+  pass. One choice is yours before I wire
+  the rotation.”
+  ⏎ go in
+
+ │ spark-docs                       ✻  9m
+  done I rewrote the quick start and the…
+  #4540 ●━●━●━●━●  ctx 88%
+  ⏎ go in
+
+ ╿ ember-billing                    ✻  4m
+  green #4552 waits for your merge
+  #4552 ●━●━◉┄○┄○  ctx 32%
+  p merge #4552   ⏎ go in
+
+  ↓ 3 more
 ──────────────────────────────────────────────────────────────────────────────────────
- enter goes into spark-docs  x kill  r rename  z park  N new  f stoker sampled 0s ago
+ QUIET · 0   ▴                                                                     −
+ + start a new session
+ RECOMMENDATIONS · 7
+ ✻ Claude Max  5h ▰▰▰▰▰▰▰▱ 84% · Fri 01:20   wk ▰▰▰▰▰▰▰▱ 82% · Mon 09:00    machine ›
+──────────────────────────────────────────────────────────────────────────────────────
+ ⏎ go in   c copy   v one line   s hosts   u strip   ←→ columns   tab next

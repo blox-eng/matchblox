@@ -39,6 +39,9 @@ func (m Model) stateWord(s sample.Session) string {
 	if s.Stopped() {
 		return "out"
 	}
+	if s.ReportsWait() {
+		return "asks" // the agent's own word is newer than any queue row
+	}
 	if it, ok := m.waitOf(s); ok && s.Ask != nil {
 		return "asks" // the question tool's menu: its hook calls it a permission
 	} else if ok {
