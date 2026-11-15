@@ -100,8 +100,13 @@ ship passes a stage, a bright cell runs along its track once.
 
 `↑` and `↓` choose a card, and the chosen card is the peek. It shows
 whole, with what the agent said last (three lines at most) and the options
-of its question. A chain mate's peek counts the lines
-in its inbox (`✉ 1 in its inbox`).
+of its question.
+
+The line under the chat's head names the facts of the chosen session, and
+shows only when it has one: the fix for tokens with no window known
+(first), a chain mate's inbox (`✉ 1 in its inbox`), an account that is
+not the default, the pull request when no ship names it, the subagents,
+the shells and the child runs. The line is cut at the chat's width.
 
 The digits answer a question with one choice, given with its options
 (Claude Code's question tool). Every other wait shows `⏎ go in`: a

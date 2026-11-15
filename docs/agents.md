@@ -385,9 +385,10 @@ first window it finds, in this order:
 3. The window of a Claude model that matchblox knows, such as 1M for
    `claude-opus-5-5`. A model setting that ends in `[1m]` gives 1M.
 
-When none of them gives a window, matchblox does not guess one. The card
-shows no context, and its peek says "no window known", with what to do. The stoker
-then compacts the session at `compact_tokens` only, never at a percentage.
+When none of them gives a window, matchblox does not guess one. The row
+shows no context. The line under the chat's head says "no window known",
+with what to do. The stoker then compacts the session at `compact_tokens`
+only, never at a percentage.
 
 ## The account
 

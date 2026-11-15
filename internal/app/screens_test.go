@@ -127,6 +127,15 @@ func TestScreens(t *testing.T) {
 	goldenFile(t, tapOn(t, phone, listRow(t, phone, "flint-auth")), "side-44x31-chat")
 	desk, _, _ := sideShot(t, 132, 32)
 	golden(t, pressOn(desk, "ctrl+l"), "side-hidden", 132, 32)
+	facts := screensState(t) // the chosen session's facts under the chat's head
+	for i := range facts.Sessions {
+		if paneOf(facts.Sessions[i]) == desk.chosenSide() {
+			noWindow(&facts.Sessions[i])
+			facts.Sessions[i].Agents = 2
+		}
+	}
+	withFacts, _, _ := sideShotOf(t, facts, 132, 32)
+	golden(t, withFacts, "side-facts", 132, 32)
 	for _, size := range [][2]int{{44, 31}, {132, 32}} {
 		check(t, twoShipsState(t), "sessionships", size[0], size[1], nil)
 	}
