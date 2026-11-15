@@ -260,3 +260,42 @@ func TestWheelOverTheListChooses(t *testing.T) {
 		}
 	}
 }
+
+// TestPasteInTheRoomGoesToItsTalkLine: a paste while the room's talk line
+// types goes to that line, as one line, and no session's line takes it.
+func TestPasteInTheRoomGoesToItsTalkLine(t *testing.T) {
+	st := headState(t, runningPlan(), true)
+	st.Queue = nil
+	m, _ := roomWith(t, st, "hearth-api")
+	m.tab = tabSessions
+	m, _ = send(t, m, "enter")
+	if m.sidePlace != placeRoom || !m.room.typing {
+		t.Fatalf("the room does not type: place %v, room %+v", m.sidePlace, m.room)
+	}
+	next, cmd := m.Update(tea.PasteMsg{Content: "ship the\nlogin fix"})
+	drain(cmd)
+	m = next.(Model)
+	if m.room == nil || m.room.draft != "ship the login fix" {
+		t.Fatalf("the talk line holds %+v", m.room)
+	}
+	if len(m.lines) != 0 {
+		t.Fatalf("a session's line took the paste: %v", m.lines)
+	}
+}
+
+// TestPasteInTipsSaysSo: the tips take no text. A paste there says so, and
+// no line keeps it.
+func TestPasteInTipsSaysSo(t *testing.T) {
+	m, _ := sideConsole(t, boardState(boardMatch("flint-auth", time.Hour)))
+	for _, p := range []sidePlace{placeTips, placeSetup, placeHost} {
+		f := m
+		f.openPlace(p)
+		f.noticeText = ""
+		next, cmd := f.Update(tea.PasteMsg{Content: "words"})
+		drain(cmd)
+		f = next.(Model)
+		if len(f.lines) != 0 || !strings.Contains(f.noticeText, "no text · the paste is not kept") {
+			t.Errorf("%v: lines %v, notice %q", p, f.lines, f.noticeText)
+		}
+	}
+}

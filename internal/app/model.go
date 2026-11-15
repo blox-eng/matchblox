@@ -1171,7 +1171,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.copyPasted(msg.Content)
 		}
 		if m.sideActive() && m.focus(tea.KeyPressMsg{}) == layerMain {
-			return m.linePaste(msg.Content)
+			return m.sidePaste(msg.Content)
 		}
 		return m, nil
 	case tea.MouseClickMsg:

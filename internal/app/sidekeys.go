@@ -427,6 +427,41 @@ func (m *Model) setLine(k paneKey, text string) {
 	}
 }
 
+// sidePaste is a paste on the Sessions tab: it lands in the line that
+// shows. The chat's place gives it to the chosen session's line, and the
+// room's talk line takes it as one line while it types. Any other place
+// takes no text: it says so and keeps nothing.
+func (m Model) sidePaste(text string) (tea.Model, tea.Cmd) {
+	switch {
+	case m.sidePlace == placeChat:
+		return m.linePaste(text)
+	case m.sidePlace == placeRoom && m.room != nil && m.room.typing:
+		r := *m.room
+		r.draft += oneLine(text)
+		m.room = &r
+		return m, nil
+	}
+	verb := "take"
+	if m.sidePlace == placeRoom || m.sidePlace == placeHost {
+		verb = "takes"
+	}
+	return m, m.notice("the " + m.placeName() + " " + verb + " no text · the paste is not kept")
+}
+
+// oneLine is text as one line: a newline or a tab is a space, and no other
+// control character stays.
+func oneLine(text string) string {
+	return strings.Map(func(r rune) rune {
+		switch {
+		case r == '\n' || r == '\t':
+			return ' '
+		case unicode.IsControl(r):
+			return -1
+		}
+		return r
+	}, text)
+}
+
 // linePaste adds text to the chosen session's line, as one piece. A
 // parked session's line is off: it says so, and takes nothing.
 func (m Model) linePaste(text string) (tea.Model, tea.Cmd) {

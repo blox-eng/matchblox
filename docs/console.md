@@ -127,8 +127,8 @@ session in the line's name. A message that cannot go stays in the line,
 with the reason. Nothing sends it again by itself.
 
 - **A short message** goes as typed text, then `Enter`.
-- **A paste** goes in as one piece. A text with a new line, or one over 500
-  characters, goes as a bracketed paste: the agent gets it as one paste,
+- **A paste** goes in as one piece. A text with a new line or a tab, or one
+  over 500 characters, goes as a bracketed paste: the agent gets it as one paste,
   and the console then presses `Enter`. The console strips control
   characters from it, and it takes up to 16384 bytes. A paste works only in
   the console. `matchblox send` does not change.

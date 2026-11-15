@@ -13,8 +13,10 @@ The keys go to one of two places: the chat's line or the list. The key
 line names the place first, `writing to flint-auth` or `in the list`, then
 at most five keys for it.
 
-In the line, every letter types, `j`, `k` and `q` too. A paste goes in as
-one piece. A digit answers only with the line empty and a question on
+In the line, every letter types, `j`, `k`, `q` and `R` too. A paste goes
+in as one piece, in the line that shows: the chosen session's line, or
+the room's talk line while it types. The tips, a setup step and a host's
+trouble take no text: a paste there says so. A digit answers only with the line empty and a question on
 the screen; else it types.
 
 | Key | What it does |
