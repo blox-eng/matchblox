@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -33,41 +34,72 @@ func (m Model) sideShows(g sideGroup) []sideUnit {
 
 // The foot's parts, as a tap on each names it.
 const (
-	footNew   = "foot:new"
-	footTips  = "foot:tips"
-	footSetup = "foot:setup"
+	footNew    = "foot:new"
+	footTips   = "foot:tips"
+	footSetup  = "foot:setup"
+	footExited = "foot:exited"
 )
 
-// sideFoot is the panel's last line: a new session, the tips, and the
-// setup steps still open. The spans are where a tap opens each part.
-func (m Model) sideFoot(w int) (string, []span) {
-	st := m.st
-	type part struct{ text, press string }
-	parts := []part{{st.accent.Render("+ new"), footNew}}
+// listFootPart is a part of the list's foot: its words, and what it opens.
+type listFootPart struct{ text, press string }
+
+// footParts are the parts the foot shows: a new session, the tips, the
+// setup steps still open, and the exited agents while they are hidden.
+func (m Model) footParts() []listFootPart {
+	parts := []listFootPart{{"+ new", footNew}}
 	if n := len(m.recs); n > 0 {
 		word := " tips"
 		if n == 1 {
 			word = " tip"
 		}
-		parts = append(parts, part{st.muted.Render("✧ " + strconv.Itoa(n) + word), footTips})
+		parts = append(parts, listFootPart{"✧ " + strconv.Itoa(n) + word, footTips})
 	}
 	if n := len(m.boardDoors()); n > 0 {
-		parts = append(parts, part{st.warn.Render("! " + strconv.Itoa(n) + " setup"), footSetup})
+		parts = append(parts, listFootPart{"! " + strconv.Itoa(n) + " setup", footSetup})
 	}
+	if n := len(m.snap.Exited); n > 0 && !m.showExited {
+		parts = append(parts, listFootPart{strconv.Itoa(n) + " exited", footExited})
+	}
+	return parts
+}
+
+// sideFoot is the panel's last line, the foot's parts: the spans are where
+// a tap opens each. The part the arrows chose is marked as a chosen row.
+func (m Model) sideFoot(w int) (string, []span) {
+	st := m.st
+	ink := map[string]lipgloss.Style{footNew: st.accent, footTips: st.muted, footSetup: st.warn, footExited: st.faint}
 	line, x := " ", 1
+	if m.footAt > 0 {
+		line = st.accent.Render("▌")
+	}
 	var spans []span
-	for i, p := range parts {
+	for i, p := range m.footParts() {
 		if i > 0 {
 			line += st.faint.Render(" · ")
 			x += 3
+		}
+		text := ink[p.press].Render(p.text)
+		if m.footAt == i+1 {
+			text = st.accent.Bold(true).Render(p.text)
 		}
 		pw := ansi.StringWidth(p.text)
 		if x+pw <= w {
 			spans = append(spans, span{x, x + pw, p.press})
 		}
-		line, x = line+p.text, x+pw
+		line, x = line+text, x+pw
 	}
 	return fit(line, w), spans
+}
+
+// exitedRows are the agents that exited and wait for their parent, dim at
+// the end of IDLE while e shows them.
+func (m Model) exitedRows(w int) []string {
+	var out []string
+	for _, e := range m.snap.Exited {
+		left := " " + m.st.faint.Render("╵ pid "+strconv.Itoa(e.PID)+" · "+e.ParentComm+" has not reaped it")
+		out = append(out, spread(left, m.st.faint.Render("exited")+" ", w))
+	}
+	return out
 }
 
 // sideHit is what one line of the list holds: a session's row, a group's
@@ -95,6 +127,10 @@ func (m Model) sideList(w, h int) ([]string, []sideHit, []span) {
 	}
 	st := m.st
 	chosen := m.chosenSide()
+	if m.footAt > 0 {
+		chosen = paneKey{} // the foot's part is the chosen line
+	}
+	exited := m.showExited && len(m.snap.Exited) > 0
 	var lines []string
 	var hits []sideHit
 	at := map[int]bool{} // the lines of the chosen row
@@ -108,9 +144,12 @@ func (m Model) sideList(w, h int) ([]string, []sideHit, []span) {
 	if !m.have {
 		groups = nil
 	}
+	if exited && !slices.ContainsFunc(groups, func(g sideGroup) bool { return g.state == sideIdle }) {
+		groups = append(groups, sideGroup{state: sideIdle}) // its head holds the exited agents
+	}
 	for _, g := range groups {
 		units := m.sideShows(g)
-		if len(units) == 0 {
+		if len(units) == 0 && !(exited && g.state == sideIdle) {
 			continue
 		}
 		if len(lines) > 0 {
@@ -137,6 +176,11 @@ func (m Model) sideList(w, h int) ([]string, []sideHit, []span) {
 				for _, l := range m.sideRow(s, w, paneOf(s) == chosen, link) {
 					add(l, sideHit{k: paneOf(s), state: g.state}, paneOf(s) == chosen)
 				}
+			}
+		}
+		if exited && g.state == sideIdle {
+			for _, l := range m.exitedRows(w) {
+				add(l, sideHit{}, false)
 			}
 		}
 	}

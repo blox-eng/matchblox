@@ -535,9 +535,12 @@ func TestListKeyWithNoJobSaysSo(t *testing.T) {
 	}
 	e, _ := sideConsole(t, boardState())
 	e = pressOn(e, "esc")
+	if e = pressOn(e, "down"); e.footAt != 1 || !strings.Contains(e.sideKeyWords(), "+ new") {
+		t.Fatalf("↓ on an empty list: foot %d, key words %q, want + new chosen", e.footAt, e.sideKeyWords())
+	}
 	e.noticeText = ""
-	if e = pressOn(e, "down"); e.noticeText == "" {
-		t.Fatal("↓ on an empty list said nothing")
+	if e = pressOn(e, "up", "up"); e.noticeText == "" {
+		t.Fatal("↑ on an empty list said nothing")
 	}
 }
 

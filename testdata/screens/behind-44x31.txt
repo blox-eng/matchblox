@@ -24,8 +24,8 @@
 
 
 
-
-
  run matchblox update ·
  console v0.41.0, latest v0.43.0
+ + new · ✧ 7 tips · ! 1 setup
+────────────────────────────────────────────
  in the list · ↑↓ choose · ⏎ write · s hosts

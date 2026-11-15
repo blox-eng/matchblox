@@ -761,7 +761,7 @@ func TestEnterWithNoneTickedSaysSo(t *testing.T) {
 	if !strings.Contains(lines[0], "ws-1 · 1 hidden") {
 		t.Fatalf("header %q", lines[0])
 	}
-	if row := strings.TrimSpace(lines[len(lines)-2]); row != "No host is ticked: ws-1 opens alone." { // the line over the key line
+	if row := strings.TrimSpace(lines[len(lines)-4]); row != "No host is ticked: ws-1 opens alone." { // over the chat's line and the foot
 		t.Fatalf("notice %q", row)
 	}
 }

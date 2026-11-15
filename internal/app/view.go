@@ -185,7 +185,7 @@ func (m Model) draw(w int) drawn {
 // hairline, the body, then a hairline and the key line (design/0006
 // §4.1).
 func (m Model) drawScreen(w int) drawn {
-	head, waits, stokerAt := m.header(w)
+	head, waits, stokerAt, named := m.headerOf(w)
 	tabs, tabSpans := m.tabsLine(w)
 	sc := drawn{lines: []string{head, tabs, m.st.rule.Render(strings.Repeat("─", w))}, waits: waits, stokerAt: stokerAt, tabs: tabSpans,
 		bodyTop: 3, stripAt: -1, keysAt: -1, hostAt: m.boardHostHit(head)}
@@ -218,7 +218,7 @@ func (m Model) drawScreen(w int) drawn {
 	switch {
 	case m.sideActive():
 		b = m.sideBody(w, room)
-		sc.names, sc.namePanes = m.headNameSpans(head)
+		sc.names, sc.namePanes = named.spans, named.panes
 	case m.boardShown(): // the board draws its tab row from the body's index
 		p := m.boardPanel(w, room)
 		b, sc.lines[1], sc.tabs = p.body, p.tabRow, p.tabSpans
@@ -308,6 +308,19 @@ func windowStart(b body, room, sel int) int {
 // waits and the stoker on the right, or a toast after an action. The
 // spans are what a tap on who waits, and on the stoker's word, presses.
 func (m Model) header(w int) (string, span, span) {
+	line, waits, stoker, _ := m.headerOf(w)
+	return line, waits, stoker
+}
+
+// headNamed are the names of the waits the header draws while the list is
+// hidden: where each is, and its session.
+type headNamed struct {
+	spans []span
+	panes []paneKey
+}
+
+// headerOf is header, with where it drew the names of the waits.
+func (m Model) headerOf(w int) (string, span, span, headNamed) {
 	st := m.st
 	left := " " + st.accent.Render("▰") + " " + st.text.Render("matchblox")
 	host := m.opt.Host
@@ -346,7 +359,7 @@ func (m Model) header(w int) (string, span, span) {
 		if host != "" {
 			left += st.faint.Render(" · ") + st.muted.Render(host)
 		}
-		return fit(left, w), span{}, span{}
+		return fit(left, w), span{}, span{}, headNamed{}
 	}
 	if m.toast != "" && !m.boardShown() { // the board's toasts are notices
 		// A long toast is cut, never the name; the host stays when the
@@ -355,7 +368,7 @@ func (m Model) header(w int) (string, span, span) {
 			left += st.faint.Render(" · ") + st.muted.Render(host)
 		}
 		room := max(w-lipgloss.Width(left+lost)-3, 1)
-		return spread(left+lost, st.accent.Render(ansi.Truncate(m.toast, room, "…"))+" ", w), span{}, span{}
+		return spread(left+lost, st.accent.Render(ansi.Truncate(m.toast, room, "…"))+" ", w), span{}, span{}, headNamed{}
 	}
 	n, count := m.needCount(), "● %d need you"
 	stoker := m.stokerBadge(m.layoutAt(w) == Narrow)
@@ -377,7 +390,7 @@ func (m Model) header(w int) (string, span, span) {
 	// first. Short of room the words go first, then the last names, which
 	// a count stands for.
 	var named []string
-	names := m.headNames()
+	names, waiting := m.headNames(), m.sideWaits()
 	for k := len(names); k > 0; k-- {
 		more := ""
 		if k < len(names) {
@@ -386,7 +399,7 @@ func (m Model) header(w int) (string, span, span) {
 		named = append(named, st.text.Render(strings.Join(names[:k], " · "))+more+"  ")
 	}
 	named = append(named, "")
-	for _, pre := range named {
+	for j, pre := range named {
 		for _, word := range waits {
 			right = stoker + " "
 			ink := st.accent
@@ -407,12 +420,19 @@ func (m Model) header(w int) (string, span, span) {
 			}
 			for _, l := range lefts {
 				if lipgloss.Width(l+lost)+lipgloss.Width(right)+1 <= w {
-					return spread(l+lost, right, w), hit, m.stokerHit(stoker, w)
+					var at headNamed
+					x := w - lipgloss.Width(right)
+					for i := range len(names) - j { // named[j] names the first len(names)-j
+						nw := lipgloss.Width(names[i])
+						at.spans, at.panes = append(at.spans, span{x, x + nw, "name"}), append(at.panes, paneOf(waiting[i]))
+						x += nw + 3
+					}
+					return spread(l+lost, right, w), hit, m.stokerHit(stoker, w), at
 				}
 			}
 		}
 	}
-	return spread(left+lost, right, w), span{}, m.stokerHit(stoker, w)
+	return spread(left+lost, right, w), span{}, m.stokerHit(stoker, w), headNamed{}
 }
 
 // stokerHit is where the header's stoker word is, the line's last word:

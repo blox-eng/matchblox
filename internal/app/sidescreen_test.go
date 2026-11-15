@@ -7,12 +7,23 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/blox-eng/matchblox/internal/doors"
+	"github.com/blox-eng/matchblox/internal/proto"
+	"github.com/blox-eng/matchblox/internal/sample"
+	"github.com/blox-eng/matchblox/internal/state"
 )
 
 // sideShot is the demo machine at w by h on the Sessions tab, as the
 // console opens it: the list and the chat. clipped is what it copies,
 // ran what it runs.
 func sideShot(t *testing.T, w, h int) (m Model, clipped *[]string, ran *[][]string) {
+	t.Helper()
+	return sideShotOf(t, screensState(t), w, h)
+}
+
+// sideShotOf is sideShot on st.
+func sideShotOf(t *testing.T, st proto.State, w, h int) (m Model, clipped *[]string, ran *[][]string) {
 	t.Helper()
 	clipped, ran = &[]string{}, &[][]string{}
 	m = New(Options{NoMotion: true, Conn: newFake(), Now: func() time.Time { return demoAt },
@@ -21,7 +32,7 @@ func sideShot(t *testing.T, w, h int) (m Model, clipped *[]string, ran *[][]stri
 	m.viewPrefs.CopyCheckedPhone, m.viewPrefs.CopyCheckedDesk = true, true // the copy check is the board's first-run door
 	m.viewPrefs.Told = []string{"copy", "chain", "digit"}
 	m = upd(t, m, tea.WindowSizeMsg{Width: w, Height: h})
-	m = upd(t, m, stateMsg(screensState(t)))
+	m = upd(t, m, stateMsg(st))
 	m.splashDone = true
 	return upd(t, m, noticeMsg{}), clipped, ran
 }
@@ -274,5 +285,192 @@ func TestSmallScreensKeepTheChatLine(t *testing.T) {
 		if box.listW > 0 && box.chatW > 0 && (box.chatX < box.listW+1 || box.chatX+box.chatW > w) {
 			t.Errorf("%dx%d: the list %d and the chat %d+%d overlap", w, h, box.listW, box.chatX, box.chatW)
 		}
+	}
+}
+
+// footLine is the list's foot, and its line on the frame.
+func footLine(m Model) (string, int) {
+	y := 3 + m.bodyRows() - 1
+	return strings.Split(plainFrame(m), "\n")[y], y
+}
+
+func TestNewSessionOpensInTheChatsPlace(t *testing.T) {
+	st := screensState(t)
+	st.Agents = []string{"claude", "codex", "opencode"}
+	m, _, _ := sideShotOf(t, st, 160, 38)
+	chat := ansi.Cut(bodyLine(m, 0), listWide+1, 160)
+	m = tapOn(t, m, point{2, 3 + m.bodyRows() - 1}) // + new
+	if m.form == nil {
+		t.Fatalf("+ new opened no form: flash %q", m.flash)
+	}
+	frame := plainFrame(m)
+	if !strings.Contains(frame, "New session") {
+		t.Fatalf("no form:\n%s", frame)
+	}
+	if top := bodyLine(m, 0); !strings.HasPrefix(ansi.Cut(top, listWide+1, 160), "╭") || !strings.Contains(top, "NEEDS YOU") {
+		t.Fatalf("the form is not in the chat's place, beside the list: %q", top)
+	}
+	for i := range m.bodyRows() {
+		if l := bodyLine(m, i); strings.Contains(ansi.Truncate(l, listWide+1, ""), "New session") {
+			t.Fatalf("the form covers the list on line %d: %q", i, l)
+		}
+	}
+	for range 2 { // the first esc closes where's list of repositories
+		m = pressOn(m, "esc")
+	}
+	if m.form != nil || ansi.Cut(bodyLine(m, 0), listWide+1, 160) != chat {
+		t.Fatalf("esc did not give the place back to the chat: %q", bodyLine(m, 0))
+	}
+}
+
+func TestArrowsReachTheFootAndEnterOpensIt(t *testing.T) {
+	st := screensState(t)
+	st.Doors = []doors.Door{{ID: doors.Update, Title: "Update to v0.43.0", Why: "matchblox v0.43.0 is out. This machine runs v0.42.0.", Sum: "v0.43.0"}}
+	st.Update = &state.UpdateView{Mode: "offer", Current: "v0.42.0", Latest: "v0.43.0"}
+	m, _, _ := sideShotOf(t, st, 160, 38)
+	m = pressOn(m, "esc") // the keys to the list
+	for range len(m.sideWalk()) {
+		m = pressOn(m, "down")
+	}
+	if keys := keyLineOf(m); !strings.Contains(keys, "+ new") {
+		t.Fatalf("↓ past the last row: the key line %q names no foot part", keys)
+	}
+	if foot, _ := footLine(m); !strings.HasPrefix(foot, "▌+ new") {
+		t.Fatalf("the chosen foot part is not marked: %q", foot)
+	}
+	if m = pressOn(m, "up"); strings.Contains(keyLineOf(m), "+ new") {
+		t.Fatal("↑ from the foot stayed on it")
+	}
+	m = pressOn(m, "down", "down")
+	if keys := keyLineOf(m); !strings.Contains(keys, "tips") {
+		t.Fatalf("the second foot part: %q", keys)
+	}
+	m = pressOn(m, "enter")
+	if head := ansi.Cut(bodyLine(m, 0), listWide+1, 160); !strings.HasPrefix(strings.TrimSpace(head), "TIPS · ") {
+		t.Fatalf("⏎ on the tips: %q", head)
+	}
+	m = pressOn(m, "esc", "esc")
+	for range len(m.sideWalk()) + 3 {
+		m = pressOn(m, "down")
+	}
+	if keys := keyLineOf(m); !strings.Contains(keys, "setup") {
+		t.Fatalf("the last foot part: %q", keys)
+	}
+	m = pressOn(m, "enter")
+	chat := ansi.Strip(strings.Join(strings.Split(plainFrame(m), "\n")[3:6], "\n"))
+	if !strings.Contains(chat, "SET UP") || !strings.Contains(chat, "Update to v0.43.0") {
+		t.Fatalf("⏎ on the setup step:\n%s", chat)
+	}
+}
+
+func TestExitedAgentsShowWithE(t *testing.T) {
+	st := screensState(t)
+	st.Exited = []sample.Exited{{PID: 4242, Parent: 1, ParentComm: "systemd"}}
+	m, _, _ := sideShotOf(t, st, 160, 38)
+	if foot, _ := footLine(m); !strings.Contains(foot, "1 exited") {
+		t.Fatalf("the foot %q does not count the exited agent", foot)
+	}
+	idle := func(m Model) string {
+		for _, l := range strings.Split(listOf(m), "\n") {
+			if strings.Contains(l, "IDLE") || strings.Contains(l, "WORKING") {
+				return strings.TrimSpace(l)
+			}
+		}
+		return ""
+	}
+	head := idle(m)
+	m = pressOn(m, "esc", "e")
+	if line := m.lines[m.chosenSide()]; line != "" {
+		t.Fatalf("e typed %q into the line", line)
+	}
+	list := listOf(m)
+	if !strings.Contains(list, "4242") || !strings.Contains(list, "exited") {
+		t.Fatalf("e did not show the exited agent:\n%s", list)
+	}
+	if foot, _ := footLine(m); strings.Contains(foot, "exited") {
+		t.Fatalf("the foot %q counts what the list shows", foot)
+	}
+	if idle(m) != head && !strings.HasPrefix(idle(m), "IDLE · 0") {
+		t.Fatalf("the head %q counts the exited agent (was %q)", idle(m), head)
+	}
+	if m = pressOn(m, "e"); strings.Contains(listOf(m), "4242") {
+		t.Fatal("a second e left the exited agent shown")
+	}
+}
+
+func TestListChoiceSurvivesAResize(t *testing.T) {
+	m, _, _ := sideShot(t, 132, 32)
+	m = pressOn(m, "ctrl+l")
+	m = upd(t, m, tea.WindowSizeMsg{Width: 160, Height: 38})
+	if m.listShown() {
+		t.Fatal("a wider desk showed the list the owner hid")
+	}
+	m = upd(t, m, tea.WindowSizeMsg{Width: 60, Height: 20})
+	if m.listShown() {
+		t.Fatal("a short screen showed the list the owner hid")
+	}
+	m = upd(t, m, tea.WindowSizeMsg{Width: 132, Height: 32})
+	if m.listShown() {
+		t.Fatal("back on the desk the list the owner hid shows")
+	}
+}
+
+func TestANoticeLeavesTheChatLineAndTheFoot(t *testing.T) {
+	m, _, _ := sideShot(t, 160, 38)
+	chosen := chosenSideName(m)
+	m = pressOn(m, "right") // no job in the line: a notice
+	if m.noticeText == "" {
+		t.Fatal("no notice")
+	}
+	foot, y := footLine(m)
+	if !strings.Contains(foot, "+ new") || !strings.Contains(foot, "⏎ send to") {
+		t.Fatalf("the notice covers the foot or the chat line: %q", foot)
+	}
+	at := -1
+	for i, l := range strings.Split(plainFrame(m), "\n") {
+		if strings.Contains(l, "the line takes text") {
+			at = i
+		}
+	}
+	if at < 0 || at >= y {
+		t.Fatalf("the notice is at line %d, the foot at %d", at, y)
+	}
+	m = tapOn(t, m, point{3, at})
+	if chosenSideName(m) != chosen || len(m.sideFold) != 0 {
+		t.Fatalf("a tap on the notice chose %q, folds %v", chosenSideName(m), m.sideFold)
+	}
+}
+
+func TestTwoWaitsOfOneNameEachTakeTheirTap(t *testing.T) {
+	st := screensState(t)
+	for i, s := range st.Sessions {
+		if s.Name == "spark-docs" {
+			st.Sessions[i].Name = "flint-auth"
+		}
+	}
+	m, _, _ := sideShotOf(t, st, 160, 38)
+	m = pressOn(m, "ctrl+l")
+	sc := m.draw(160)
+	if len(sc.names) < 2 || sc.namePanes[0] == sc.namePanes[1] {
+		t.Fatalf("names %v panes %v", sc.names, sc.namePanes)
+	}
+	m = tapOn(t, m, point{sc.names[1].x0 + 1, 0})
+	if m.chosenSide() != sc.namePanes[1] {
+		t.Fatalf("a tap on the second name chose %v, want %v", m.chosenSide(), sc.namePanes[1])
+	}
+}
+
+func TestCtrlOWithNoPaneSaysSoAndNoWayBack(t *testing.T) {
+	st := screensState(t)
+	for i, s := range st.Sessions {
+		if s.Name == "spark-docs" {
+			st.Sessions[i].Pane = ""
+		}
+	}
+	m, _, ran := sideShotOf(t, st, 160, 38)
+	m = tapOn(t, m, listRow(t, m, "spark-docs"))
+	m = pressOn(m, "ctrl+o")
+	if len(*ran) != 0 || strings.HasPrefix(keyLineOf(m), "went into") {
+		t.Fatalf("ran %v, key line %q", *ran, keyLineOf(m))
 	}
 }

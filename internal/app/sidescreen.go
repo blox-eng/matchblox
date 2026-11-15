@@ -64,10 +64,18 @@ func (m Model) listStartsHidden() bool {
 }
 
 // listHidden: the chat takes the body, and the list does not draw.
-func (m Model) listHidden() bool { return m.listFlip != m.listStartsHidden() }
+func (m Model) listHidden() bool {
+	if m.listSet && m.listOne == m.onePane(max(m.width, minWidth)) {
+		return m.listOff
+	}
+	return m.listStartsHidden()
+}
 
-// hideList hides the list, or shows it.
-func (m *Model) hideList(hidden bool) { m.listFlip = hidden != m.listStartsHidden() }
+// hideList hides the list, or shows it: the owner's choice, until the
+// screen changes between one pane and two.
+func (m *Model) hideList(hidden bool) {
+	m.listOff, m.listSet, m.listOne = hidden, true, m.onePane(max(m.width, minWidth))
+}
 
 // listShown: the list draws on the screen as it is now.
 func (m Model) listShown() bool { return m.sideBoxAt(max(m.width, minWidth)).listW > 0 }
@@ -83,7 +91,7 @@ func (m Model) inList() bool {
 
 // toLine gives the keys to the line. Where one pane shows, the chat comes.
 func (m *Model) toLine() {
-	m.keysIn = focusLine
+	m.keysIn, m.footAt = focusLine, 0
 	if m.onePane(max(m.width, minWidth)) {
 		m.hideList(true)
 	}
@@ -303,8 +311,12 @@ func (m Model) expand(s sample.Session, ok bool) (tea.Model, tea.Cmd) {
 	if !ok {
 		return m, m.notice("no session to expand · " + m.keys.main.New.Help().Key + " starts one")
 	}
-	m.sideIn = paneOf(s)
-	return m.onCard(s).intoSelected()
+	next, cmd := m.onCard(s).intoSelected()
+	if nm, ok := next.(Model); ok && cmd != nil && nm.flash == "" && nm.pending == nil && nm.held == nil {
+		nm.sideIn = paneOf(s) // the jump runs: the key line says the way back
+		return nm, cmd
+	}
+	return next, cmd
 }
 
 // sideSays is what the Sessions tab says now: a notice while one shows,
@@ -316,20 +328,26 @@ func (m Model) sideSays() string {
 	return m.flash
 }
 
-// sideNotices puts what the tab says on the hair over the key line, and
-// over the body's last lines when it takes more than one: the keys stay.
-func (m Model) sideNotices(sc *drawn, w int) {
+// noticeAt is where what the tab says draws, in lines of the body: the
+// lines just over its last one, which holds the chat's line and the
+// list's foot. y0 == y1: nothing is said.
+func (m Model) noticeAt(w int) (rows []string, y0, y1 int) {
 	text := m.sideSays()
 	if text == "" {
-		return
+		return nil, 0, 0
 	}
-	rows := m.noticeRows(text, w)
-	end := len(sc.lines)
-	if sc.keysAt >= 0 {
-		end = sc.keysAt // the hair is the line over the key line
-	}
+	rows = m.noticeRows(text, w)
+	y1 = max(m.bodyRows()-1, 0)
+	y0 = max(y1-len(rows), 0)
+	return rows[len(rows)-(y1-y0):], y0, y1
+}
+
+// sideNotices draws what the tab says over the body, above the chat's line
+// and the list's foot: the keys, the line and the foot stay.
+func (m Model) sideNotices(sc *drawn, w int) {
+	rows, y0, _ := m.noticeAt(w)
 	for i, r := range rows {
-		if y := end - len(rows) + i; y >= sc.bodyTop {
+		if y := sc.bodyTop + y0 + i; y < len(sc.lines) {
 			sc.lines[y] = r
 		}
 	}
@@ -370,6 +388,9 @@ func (m Model) sideHints() (string, []hint) {
 	if m.sidePlace != placeChat {
 		return "in the " + m.placeName(), m.placeHints()
 	}
+	if parts := m.footParts(); m.inList() && m.footAt > 0 {
+		return "in the list: " + parts[min(m.footAt, len(parts))-1].text, []hint{hintFor(sk.Enter, "open"), hintFor(sk.Up, "")}
+	}
 	if m.inList() {
 		return "in the list", []hint{hintFor(sk.Up, ""), hintFor(sk.Enter, "write"), hintFor(bk.Host, ""), hintFor(bk.Chain, ""), hintFor(bk.Menu, "")}
 	}
@@ -405,6 +426,9 @@ func (m Model) sideKeyWords() string {
 func (m Model) sideTap(x, y int) (tea.Model, tea.Cmd) {
 	w := max(m.width, minWidth)
 	box := m.sideBoxAt(w)
+	if _, y0, y1 := m.noticeAt(w); y >= y0 && y < y1 {
+		return m, nil // a notice covers the line: a tap on it does nothing to what is under it
+	}
 	if box.listW > 0 && x < box.listW {
 		lines, hits, foot := m.sideList(box.listW, m.bodyRows())
 		switch hit := hits[min(max(y, 0), len(hits)-1)]; {
@@ -439,7 +463,7 @@ func (m Model) sideTap(x, y int) (tea.Model, tea.Cmd) {
 
 // chooseSide chooses the session k and gives the keys to its line.
 func (m Model) chooseSide(k paneKey) Model {
-	m.sideAt, m.sidePlace = k, placeChat
+	m.sideAt, m.sidePlace, m.footAt = k, placeChat, 0
 	if s, ok := m.sideChosen(); ok {
 		m.startChatMark(s)
 		m.sideName = m.cardName(s)
@@ -450,18 +474,45 @@ func (m Model) chooseSide(k paneKey) Model {
 
 // footTap opens the part of the list's foot at x.
 func (m Model) footTap(foot []span, x int) (tea.Model, tea.Cmd) {
-	sp, ok := spanAt(foot, x)
-	switch {
-	case !ok:
-		return m, nil
-	case sp.press == footNew:
-		return m.key(keyPress(m.keys.main.New.Keys()[0]))
-	case sp.press == footTips:
-		m.openPlace(placeTips)
-	case sp.press == footSetup:
-		m.openPlace(placeSetup)
+	if sp, ok := spanAt(foot, x); ok {
+		return m.openFoot(sp.press)
 	}
 	return m, nil
+}
+
+// openFoot opens a part of the list's foot in the chat's place: New
+// session, the tips, the first open setup step; or shows the exited agents.
+func (m Model) openFoot(press string) (tea.Model, tea.Cmd) {
+	m.footAt = 0
+	switch press {
+	case footNew:
+		m.sidePlace = placeChat
+		return m.key(keyPress(m.keys.main.New.Keys()[0]))
+	case footTips:
+		m.openPlace(placeTips)
+	case footSetup:
+		m.openPlace(placeSetup)
+	case footExited:
+		return m, m.flipExited()
+	}
+	return m, nil
+}
+
+// onLastRow: the chosen session is the last row the list draws, or it
+// draws none; ↓ goes on to the foot.
+func (m Model) onLastRow() bool {
+	walk := m.sideWalk()
+	return len(walk) == 0 || walk[len(walk)-1] == m.chosenSide()
+}
+
+// flipExited is e in the list: the exited agents show at the end of IDLE,
+// or hide again.
+func (m *Model) flipExited() tea.Cmd {
+	if len(m.snap.Exited) == 0 {
+		return m.notice("no agent exited")
+	}
+	m.showExited = !m.showExited
+	return nil
 }
 
 // sideWaits are the sessions that need you, as the list draws them: what
@@ -506,33 +557,6 @@ func (m Model) headNames() []string {
 	return names
 }
 
-// headNameSpans are where the header's names are on head: a tap on one
-// chooses its session.
-func (m Model) headNameSpans(head string) ([]span, []paneKey) {
-	names := m.headNames()
-	if len(names) == 0 {
-		return nil, nil
-	}
-	plain := ansi.Strip(head)
-	k, i := len(names)+1, -1
-	for i < 0 && k > 1 { // short of room the header names the first ones
-		k--
-		i = strings.Index(plain, strings.Join(names[:k], " · ")+" ")
-	}
-	if i < 0 {
-		return nil, nil
-	}
-	x := ansi.StringWidth(plain[:i])
-	var spans []span
-	var keys []paneKey
-	for j, s := range m.sideWaits()[:k] {
-		nw := ansi.StringWidth(names[j])
-		spans, keys = append(spans, span{x, x + nw, "name"}), append(keys, paneOf(s))
-		x += nw + 3
-	}
-	return spans, keys
-}
-
 // sideWheel is a wheel step on the Sessions tab: it chooses the session
 // above or below, as ↑ and ↓ do.
 func (m Model) sideWheel(ms tea.Mouse) (tea.Model, tea.Cmd) {
@@ -569,7 +593,7 @@ func (m Model) sideRowAt(x, y int) (paneKey, bool) {
 	w := max(m.width, minWidth)
 	box := m.sideBoxAt(w)
 	y -= m.drawScreen(w).bodyTop
-	if box.listW == 0 || x >= box.listW || y < 0 {
+	if _, y0, y1 := m.noticeAt(w); box.listW == 0 || x >= box.listW || y < 0 || y >= y0 && y < y1 {
 		return paneKey{}, false
 	}
 	_, hits, _ := m.sideList(box.listW, m.bodyRows())
@@ -598,4 +622,30 @@ func (m Model) sideRightClick(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	return m.sideMenuOn(k, ms.X, ms.Y)
+}
+
+// formInChat draws the open form in the chat's place, beside the list:
+// the form's box from the body's first line, blank under it. Where one
+// pane shows, the form takes the width.
+func (m Model) formInChat(sc *drawn, w int) {
+	box := m.sideBoxAt(w)
+	x, bw := box.chatX, box.chatW
+	if bw == 0 {
+		x, bw = 0, w
+	}
+	lines, press, spans, agentsAt, agents := m.formBox(bw)
+	for i := range m.bodyRows() {
+		y := sc.bodyTop + i
+		if y >= len(sc.lines) {
+			break
+		}
+		l := strings.Repeat(" ", bw)
+		if i < len(lines) {
+			l = fit(lines[i], bw)
+		}
+		left := ansi.Truncate(sc.lines[y], x, "")
+		sc.lines[y] = left + strings.Repeat(" ", max(x-ansi.StringWidth(left), 0)) + l
+	}
+	sc.boxAt, sc.boxX, sc.boxW, sc.boxRows, sc.boxKeys = sc.bodyTop, x, bw, press, spans
+	sc.formAgentsAt, sc.formAgents = sc.bodyTop+agentsAt, agents
 }

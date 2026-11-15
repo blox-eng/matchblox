@@ -603,15 +603,19 @@ type Model struct {
 	// chosen session's name then: what follows a chosen session that ends.
 	sideWas  []paneKey
 	sideName string
-	// listFlip: the owner hid the list where it starts shown, or showed it
-	// where it starts hidden (listHidden). sideFold are the groups folded
-	// to their heads. sidePlace is what shows in the chat's place, and
-	// sideTip the tip chosen there. sideIn is the session ctrl+o went into.
-	listFlip  bool
-	sideFold  map[sideState]bool
-	sidePlace sidePlace
-	sideTip   int
-	sideIn    paneKey
+	// listOff is the owner's choice to hide the list, kept while listSet
+	// and while the screen keeps the shape it was made on (listOne: one
+	// pane or two); else the screen's start state holds. sideFold are the
+	// groups folded to their heads. sidePlace is what shows in the chat's
+	// place, and sideTip the tip chosen there. footAt is the part of the
+	// list's foot the arrows chose (1 the first; 0 none). sideIn is the
+	// session ctrl+o went into.
+	listOff, listSet, listOne bool
+	footAt                    int
+	sideFold                  map[sideState]bool
+	sidePlace                 sidePlace
+	sideTip                   int
+	sideIn                    paneKey
 }
 
 func New(opt Options) Model {

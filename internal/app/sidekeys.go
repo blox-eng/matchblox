@@ -191,14 +191,25 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 	sk, mk, bk := m.keys.side, m.keys.main, m.keys.board
 	var cmd tea.Cmd
 	switch {
-	case bkey.Matches(k, sk.Up, sk.Down) && len(m.sideOrder()) == 0:
+	case bkey.Matches(k, sk.Up) && m.footAt > 0:
+		m.footAt--
+	case bkey.Matches(k, sk.Down) && m.footAt > 0:
+		m.footAt = min(m.footAt+1, len(m.footParts()))
+	case bkey.Matches(k, sk.Down) && m.onLastRow():
+		m.footAt = 1 // past the last row: the foot's first part
+	case bkey.Matches(k, sk.Up) && len(m.sideOrder()) == 0:
 		cmd = m.notice("no session to choose")
 	case bkey.Matches(k, sk.Up):
 		m.sideMove(-1)
 	case bkey.Matches(k, sk.Down):
 		m.sideMove(1)
+	case bkey.Matches(k, sk.Enter) && m.footAt > 0:
+		parts := m.footParts()
+		return m.openFoot(parts[min(m.footAt, len(parts))-1].press)
 	case bkey.Matches(k, sk.Enter):
 		m.toLine()
+	case bkey.Matches(k, mk.Exited):
+		cmd = m.flipExited()
 	case bkey.Matches(k, sk.Leave):
 		switch {
 		case m.filter != "":
@@ -241,7 +252,7 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 func (m *Model) listTakes() tea.Cmd {
 	sk, mk, bk := m.keys.side, m.keys.main, m.keys.board
 	var keys []string
-	for _, b := range []bkey.Binding{sk.Up, sk.Enter, bk.Host, bk.Chain, mk.Search, bk.Menu, bk.Copy, mk.Park, mk.New, mk.NextTab} {
+	for _, b := range []bkey.Binding{sk.Up, sk.Enter, bk.Host, bk.Chain, mk.Search, bk.Menu, bk.Copy, mk.Park, mk.New, mk.Exited, mk.NextTab} {
 		keys = append(keys, b.Help().Key)
 	}
 	return m.notice("the list takes " + strings.Join(keys, " ") + " · a letter types in the line")

@@ -66,7 +66,7 @@ the screen; else it types.
 | `Enter` | In the line, sends the text to the session the line names, through its own host. In the list, goes back to the line. |
 | `Backspace` | Erases the last character of the line. |
 | A digit, 1 to 9 | With the line empty, marks that option of the question on the screen. The same digit again sends it. A question that opened less than half a second ago takes no digit: the digit types. On a session the stoker holds, 1 marks "Let it go", and 1 again lets it go. |
-| `↑`, `↓` | With the line empty, or in the list, chooses the session above or below, as the list draws them. |
+| `↑`, `↓` | With the line empty, or in the list, chooses the session above or below, as the list draws them. In the list, `↓` past the last row chooses the parts of the foot one by one, and `↑` goes back up. `Enter` opens the chosen part. |
 | `Esc` | In the line, clears a marked answer, then moves the keys to the list. In the list, clears the search, then closes the chain's room, then shows all chains. |
 | `s` | In the list, shows the next host, then all hosts. It goes to each host, a hidden host too. With one host shown, all hosts is that host, so `s` goes from host to host. With one host only, a notice says so. |
 | `h` | In the list, on a hidden host, shows that host in all hosts again. Machine › Hosts then ticks the host. On another host, a notice says what `h` does. |
@@ -79,17 +79,20 @@ the screen; else it types.
 | `Tab` | Goes to Machine. |
 | `Ctrl+O` | Goes into the chosen agent's pane, from the line or the list. The key line then says the way back, `ctrl+a m`. |
 | `Ctrl+L` | Hides the list, or shows it again. With the list hidden, the chat takes the width, and the header names each session that needs you. A tap on a name opens its chat. On a phone, the list and the chat take turns. |
-| `◂` or `←` | On a phone, goes from the chat back to the list. A tap on `◂` at the left of the chat's head does it too. On a desk, moves the keys to the list. |
+| `◂` or `←` | On a phone, goes from the chat back to the list. A tap on `◂` at the left of the chat's head does it too. On a desk, `←` in the line moves the keys to the list, as `◂` does on a phone. |
+| `e` | In the list, shows the agents that exited and wait for their parent, dim at the end of `IDLE`, each with the word `exited`. `e` again hides them. The `IDLE` count counts only the sessions that run. While they are hidden, the foot counts them: `· 1 exited`. |
 
 On a desk the list is 40 columns wide, with the chat beside it. On a
 narrower screen the list is 32 columns wide. A phone, and a screen that
 leaves the chat less than 40 columns, shows one of the two at a time: the
 list first. A tap on a row, or `Enter` in the list, opens its chat. A tap
-on the `−` of a group's head folds the group: the head keeps its count,
-and a tap on its plus sign unfolds it again. The foot opens each of its parts in the
-chat's place: `+ new` opens **New session**, `✧ 2 tips` the tips, and
-`! 1 setup` the first open setup step. `Esc` gives the place back to the
-chat. In the tips, `↑` `↓` choose, `Enter` does the chosen tip and `d`
+on a group's head folds the group: the head keeps its count, and its `−`
+turns to a plus sign. A tap on the head again unfolds it. The foot opens
+each of its parts in the chat's place, beside the list: `+ new` opens
+**New session**, `✧ 2 tips` the tips, and `! 1 setup` the first open
+setup step. `Esc` gives the place back to the chat. A notice shows over
+the lines above the chat's line and the foot, and a tap on it does
+nothing. In the tips, `↑` `↓` choose, `Enter` does the chosen tip and `d`
 dismisses it. A drag in the chat copies only the chat's text.
 
 A key with no job in the line or the list does not do nothing: a notice
