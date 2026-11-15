@@ -418,6 +418,10 @@ func keyMsg(k string) tea.KeyPressMsg {
 		return tea.KeyPressMsg{Code: tea.KeyEnter}
 	case "esc":
 		return tea.KeyPressMsg{Code: tea.KeyEscape}
+	case "up":
+		return tea.KeyPressMsg{Code: tea.KeyUp}
+	case "down":
+		return tea.KeyPressMsg{Code: tea.KeyDown}
 	case "ctrl+o":
 		return tea.KeyPressMsg{Code: rune(k[5]), Mod: tea.ModCtrl}
 	}
@@ -480,26 +484,16 @@ func replayAt(t *testing.T, z replaySize) {
 		t.Fatal(err)
 	}
 	s.Stoker = st
-	// The merge is the one act the demo's world does not take: the replay
-	// takes it here, and the ship moves on to merged.
-	var merged atomic.Bool
-	worldRun := s.Actions.Run
-	s.Actions.Run = func(argv []string) error {
-		if slices.Equal(argv, demoMerge) {
-			merged.Store(true)
-			return nil
-		}
-		return worldRun(argv)
-	}
-	s.Ships = demoShips(clk, &merged)
-	// The ship reads merged at the next read of the pull requests: every
-	// 15 s of the wall's time, a long wait for a replay that moves 40 times
-	// faster. A read every 300 ms keeps the step to a beat of the replay.
+	s.Ships = demoShips(clk)
+	// The pull requests are read every 15 s of the wall's time, a long wait
+	// for a replay that moves 40 times faster. A read every 300 ms puts the
+	// badges on their rows before the first frame.
 	s.ShipsEvery = 300 * time.Millisecond
-	// hearth-api, kindle-web and ember-billing are one chain, hearth.
-	s.Chains = &chains.Store{Chains: []chains.Chain{{ID: "c1", Name: "hearth", Repo: "/work/hearth", Members: []chains.Member{
-		{SessionID: "5ea1c0de-0000-4000-8000-000000000001"}, {SessionID: "5ea1c0de-0000-4000-8000-000000000004"},
-		{SessionID: "5ea1c0de-0000-4000-8000-000000000005"}}}}}
+	// kindle-web, flint-auth and hearth-api are one chain, login, in that
+	// order of steps.
+	s.Chains = &chains.Store{Chains: []chains.Chain{{ID: "c1", Name: "login", Repo: "/work/hearth", Members: []chains.Member{
+		{SessionID: "5ea1c0de-0000-4000-8000-000000000004"}, {SessionID: "5ea1c0de-0000-4000-8000-000000000002"},
+		{SessionID: "5ea1c0de-0000-4000-8000-000000000001"}}}}}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go s.Run(ctx)
@@ -522,7 +516,7 @@ func replayAt(t *testing.T, z replaySize) {
 
 	var mu sync.Mutex
 	var jumps [][]string
-	// The replay shows the board to a person new to it: the notices of the
+	// The replay shows the console to a person new to it: the notices of the
 	// keys that changed their job, and the copy check, are for one who used
 	// the console before.
 	views := t.TempDir()
@@ -533,7 +527,7 @@ func replayAt(t *testing.T, z replaySize) {
 	heard := &heardConn{Conn: transport.NewConn(a)}
 	view.upTo = heard.fresh(20 * time.Second) // under staleAfter (30 s)
 	m := app.New(app.Options{
-		Conn: heard, Binary: version, CompactAt: cfg.Sessions.CompactAt, Now: view.Now, StateDir: views, Board: true,
+		Conn: heard, Binary: version, CompactAt: cfg.Sessions.CompactAt, Now: view.Now, StateDir: views,
 		Run: func(argv []string) error { // a jump: the demo moves no terminal
 			mu.Lock()
 			jumps = append(jumps, argv)
@@ -593,92 +587,76 @@ func replayAt(t *testing.T, z replaySize) {
 	view.Follow(clk)
 	time.Sleep(600 * time.Millisecond) // a dozen samples reach the console: the sparklines fill
 
-	// chosen is a screen whose chosen card is name's: its line starts with
-	// the selection mark, then the match.
+	// chosen is a screen whose chosen row is name's: its line starts with
+	// the selection mark, a chain's link, then the match.
 	chosen := func(name string) func(string) bool {
-		re := regexp.MustCompile(`▌\S+ ` + regexp.QuoteMeta(name))
+		re := regexp.MustCompile(`▌(?:[├└] )?\S+ ` + regexp.QuoteMeta(name))
 		return func(s string) bool { return re.MatchString(s) }
 	}
-	// choose taps name's card when the screen shows it, then moves the
-	// selection down the open column until name's card is chosen.
-	choose := func(name string) func() {
+	// tapOn clicks the first cell of text on the screen, as a thumb or a
+	// mouse does: the leftmost, so a row of the list before the chat.
+	tapOn := func(text string) func() {
 		return func() {
-			tap := func(text string) bool {
-				for y, l := range strings.Split(ansi.Strip(capture()), "\n") {
-					if i := strings.Index(l, text); i >= 0 {
-						p.Send(tea.MouseClickMsg{X: ansi.StringWidth(l[:i]), Y: y, Button: tea.MouseLeft})
-						return true
-					}
+			x, y := -1, -1
+			for row, l := range strings.Split(ansi.Strip(capture()), "\n") {
+				if i := strings.Index(l, text); i >= 0 && (x < 0 || ansi.StringWidth(l[:i]) < x) {
+					x, y = ansi.StringWidth(l[:i]), row
 				}
-				return false
 			}
-			if !tap(name) { // a phone shows one page: NEEDS YOU is the first
-				tap("need")
-				time.Sleep(100 * time.Millisecond)
-				tap(name)
+			if x < 0 {
+				t.Fatalf("no %q on the screen to tap", text)
 			}
-			for range 8 {
+			p.Send(tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft})
+		}
+	}
+	// walk moves the choice up the list, then down, until name's row is
+	// chosen.
+	walk := func(name string) func() {
+		return func() {
+			for _, k := range slices.Concat(slices.Repeat([]string{"up"}, 8), slices.Repeat([]string{"down"}, 16)) {
 				if chosen(name)(ansi.Strip(capture())) {
 					return
 				}
-				p.Send(keyMsg("j"))
+				p.Send(keyMsg(k))
+				time.Sleep(20 * time.Millisecond)
 			}
 		}
 	}
-	// tapOn clicks the first cell of text on the screen, as a thumb or a
-	// mouse does.
-	tapOn := func(text string) func() {
-		return func() {
-			for y, l := range strings.Split(ansi.Strip(capture()), "\n") {
-				if i := strings.Index(l, text); i >= 0 {
-					p.Send(tea.MouseClickMsg{X: ansi.StringWidth(l[:i]), Y: y, Button: tea.MouseLeft})
-					return
-				}
-			}
-			t.Fatalf("no %q on the screen to tap", text)
-		}
-	}
-	// settle lets the peek's dead time pass on the demo clock: a digit
-	// arms nothing for 400 ms after the peek lands on a card.
+	// settle lets the chat's dead time pass on the demo clock: a digit
+	// marks nothing for 400 ms after the chat opens on a question.
 	settle := func() { time.Sleep(300 * time.Millisecond) }
 	steps := []step{
-		// The board: every match in its column, and the accent on one card.
-		{name: "the board", at: 1300 * time.Millisecond, ok: has("need you", "NEEDS YOU", "flint-auth")},
-		// flint-auth asks: its card's peek shows the question's options.
-		{name: "the question", at: 2600 * time.Millisecond, do: choose("flint-auth"), ok: func(s string) bool {
-			return chosen("flint-auth")(s) && has("1. ", "2. ")(s)
-		}},
-		// A digit arms the answer; nothing is sent.
-		{name: "an answer armed", at: 4200 * time.Millisecond, do: settle, key: "2", ok: has("❯ 2.", "again sends")},
-		// The same digit sends it: the card strikes into WORKING. The frame
-		// is the one where it left NEEDS YOU (4 need you before): the ones
-		// before it race the samples that carry the answer.
-		{name: "sent", at: 5800 * time.Millisecond, key: "2", hold: true, ok: func(s string) bool {
-			return has("sent 2 to flint-auth", "● 3 need you")(s) && !chosen("flint-auth")(s)
-		}},
+		// The list: every session in its group, and the chat beside it.
+		{name: "the console", at: 1300 * time.Millisecond, ok: has("need you", "NEEDS YOU", "flint-auth")},
+		// flint-auth asks: its chat shows the question's options.
+		{name: "the question", at: 2600 * time.Millisecond, do: tapOn("flint-auth"), ok: has("send to flint-auth", "1. ", "2. ")},
+		// A digit marks the answer; nothing is sent.
+		{name: "an answer marked", at: 4200 * time.Millisecond, do: settle, key: "2", ok: has("❯ 2. Rotate, keep")},
+		// The same digit sends it. The frame is the one where flint-auth
+		// left NEEDS YOU (4 need you before): the ones before it race the
+		// samples that carry the answer.
+		{name: "sent", at: 5800 * time.Millisecond, key: "2", hold: true, ok: has("sent 2 to flint-auth", "● 3 need you")},
 		{name: "it works", at: 7400 * time.Millisecond, ok: func(s string) bool {
 			return has("✦ flint-auth")(s) && !strings.Contains(s, "sent 2 to flint-auth")
 		}},
-		// p merges the ship that waits for its merge, after a typed y.
-		{name: "a ship waits", at: 9 * time.Second, do: choose("ember-billing"), ok: func(s string) bool {
-			return chosen("ember-billing")(s) && has("p merge #4552")(s)
+		// esc gives the keys to the list; ↑ and ↓ choose kindle-web, which
+		// asks for permission.
+		{name: "the list", at: 9 * time.Second, key: "esc", ok: has("in the list")},
+		{name: "kindle-web asks", at: 10500 * time.Millisecond, do: walk("kindle-web"), ok: func(s string) bool {
+			return chosen("kindle-web")(s) && has("permission")(s)
 		}},
-		{name: "merge?", at: 10500 * time.Millisecond, key: "p", ok: has("pr merge 4552")},
-		// The ship reads merged at the next read of the pull requests.
-		{name: "merged", at: 12500 * time.Millisecond, key: "y", ok: func(s string) bool {
-			return !strings.Contains(s, "pr merge 4552") && merged.Load() && strings.Contains(s, "merged deploying")
+		// g shows only kindle-web's chain, login; esc shows all.
+		{name: "one chain", at: 13 * time.Second, key: "g", ok: func(s string) bool {
+			return has("≋ login", "kindle-web")(s) && !strings.Contains(s, "spark-docs")
 		}},
-		// g narrows the board to the chosen card's chain; esc shows all.
-		{name: "one chain", at: 18500 * time.Millisecond, do: choose("kindle-web"), key: "g", ok: has("chain hearth", "esc all")},
-		{name: "every chain", at: 21 * time.Second, key: "esc", ok: func(s string) bool {
-			return !strings.Contains(s, "chain hearth") && has("NEEDS YOU")(s)
-		}},
+		{name: "every chain", at: 16 * time.Second, key: "esc", ok: has("≋ login", "spark-docs")},
 	}
 	if phone {
-		// The card struck into WORKING, which is another page.
-		steps[slices.IndexFunc(steps, func(st step) bool { return st.name == "it works" })].do = tapOn("work")
-		at := slices.IndexFunc(steps, func(st step) bool { return st.name == "one chain" })
-		steps = slices.Insert(steps, at, step{name: "the work page", at: 13700 * time.Millisecond, do: tapOn("work"), ok: has("WORKING")})
+		// The phone draws one pane at a time: a tap on a row opens its
+		// chat, and ◂ comes back to the list.
+		at := slices.IndexFunc(steps, func(st step) bool { return st.name == "it works" })
+		steps[at].do = tapOn("◂")
+		steps = slices.Delete(steps, at+1, at+2) // the list has the keys once it shows
 	}
 	var still replay.Frame
 	for _, st := range steps {
@@ -706,7 +684,7 @@ func replayAt(t *testing.T, z replaySize) {
 			view.Follow(clk)
 		}
 		keep(st.name, st.at, screen)
-		if st.name == "the board" {
+		if st.name == "the console" {
 			still = frames[len(frames)-1]
 		}
 	}
@@ -727,7 +705,8 @@ func replayAt(t *testing.T, z replaySize) {
 	if !lit {
 		t.Fatal("the replay never shows the struck, burning match")
 	}
-	// The replay shows the three matches: burning, at rest and spent.
+	// The replay shows the matches of its sessions: burning and at rest. No
+	// session of the demo is idle, so no spent match draws.
 	matches := map[string]bool{}
 	for _, f := range frames {
 		for _, l := range f.Lines {
@@ -737,13 +716,11 @@ func replayAt(t *testing.T, z replaySize) {
 					matches["burning"] = true
 				case text == "╿" && strings.HasPrefix(sp.FG, "match-"):
 					matches["rest"] = true
-				case text == "│" && sp.FG == "faint":
-					matches["spent"] = true
 				}
 			}
 		}
 	}
-	for _, want := range []string{"burning", "rest", "spent"} {
+	for _, want := range []string{"burning", "rest"} {
 		if !matches[want] {
 			t.Fatalf("the replay lacks a %s match; has %v", want, matches)
 		}
@@ -756,7 +733,7 @@ func replayAt(t *testing.T, z replaySize) {
 		t.Fatal(err)
 	}
 	// The story goes into no pane: it answers flint-auth's question with its
-	// second option, then merges ember-billing's ship.
+	// second option from the chat.
 	mu.Lock()
 	if len(jumps) != 0 {
 		t.Fatalf("the replay jumped %q, want no jump", jumps)
@@ -764,9 +741,6 @@ func replayAt(t *testing.T, z replaySize) {
 	mu.Unlock()
 	if ran, want := world.Ran(), [][]string{{"tmux", "send-keys", "-t", "%2", "-l", "--", "2"}}; !reflect.DeepEqual(ran, want) {
 		t.Fatalf("the service ran %q, want %q", ran, want)
-	}
-	if !merged.Load() {
-		t.Fatalf("the merge of #4552 never ran: %v", demoMerge)
 	}
 
 	framesPath, svgPath := "../../www/demo/frames-"+z.name+".json", "../../www/demo/replay-"+z.name+".svg"
@@ -842,8 +816,8 @@ func replayAt(t *testing.T, z replaySize) {
 }
 
 func TestSkeletonCatchesAChangedScreen(t *testing.T) {
-	a := []string{" ▰ matchblox · ws-1  │  cpu  47% ▅▄▄▄  │  mem 26G/64G ▄▄", " BOARD 7    machine", " web-checkout  idle  4m   88%"}
-	b := []string{" ▰ matchblox · ws-1  │  cpu  52% ▄▅  │  mem 27G/64G ▄▄▄▄▄", " BOARD 7    machine", " web-checkout  idle  5m   88%"}
+	a := []string{" ▰ matchblox · ws-1  │  cpu  47% ▅▄▄▄  │  mem 26G/64G ▄▄", " SESSIONS 7    machine", " web-checkout  idle  4m   88%"}
+	b := []string{" ▰ matchblox · ws-1  │  cpu  52% ▄▅  │  mem 27G/64G ▄▄▄▄▄", " SESSIONS 7    machine", " web-checkout  idle  5m   88%"}
 	if skeleton(a) != skeleton(b) {
 		t.Fatalf("figures and sparklines change between runs; the skeletons must match:\n%q\n%q", skeleton(a), skeleton(b))
 	}
@@ -853,19 +827,16 @@ func TestSkeletonCatchesAChangedScreen(t *testing.T) {
 		t.Fatalf("a cut that moves with a figure must not change the skeleton:\n%q\n%q", skeleton(cut[:1]), skeleton(cut[1:]))
 	}
 	c := append([]string{}, b...)
-	c[1] = " board 7    MACHINE"
+	c[1] = " sessions 7    MACHINE"
 	if skeleton(a) == skeleton(c) {
 		t.Fatal("a renamed tab must change the skeleton")
 	}
 }
 
-// demoMerge is the merge of ember-billing's ship, as the service runs it.
-var demoMerge = []string{"gh", "pr", "merge", "4552", "--squash", "-R", "hearth/ember-billing"}
-
 // demoShips is the demo machine's pull requests, as GitHub would say them:
-// one in CI, one green that waits for your merge until merged says it went,
-// one with a conflict, one live.
-func demoShips(clk *clock, merged *atomic.Bool) service.ShipsSource {
+// one in CI, one green that waits for your merge, one with a conflict, one
+// live.
+func demoShips(clk *clock) service.ShipsSource {
 	return func(context.Context, []sample.Session, *gitscan.Report) ships.Report {
 		at := clk.Now()
 		ship := func(n int, pane, name, title, kind, note string, stage int, age time.Duration) ships.Ship {
@@ -878,10 +849,7 @@ func demoShips(clk *clock, merged *atomic.Bool) service.ShipsSource {
 			return sh
 		}
 		waits := ship(4552, "%8", "ember-billing", "Invoice export as CSV and PDF", ships.WaitsForYou, "green · waits for your merge", ships.StageGreen, 6*time.Minute)
-		waits.Merge = demoMerge
-		if merged.Load() {
-			waits = ship(4552, "%8", "ember-billing", "Invoice export as CSV and PDF", ships.Running, "deploying", ships.StageMerged, time.Minute)
-		}
+		waits.Merge = []string{"gh", "pr", "merge", "4552", "--squash", "-R", "hearth/ember-billing"}
 		return ships.Report{At: at, InFlight: 3, Ships: []ships.Ship{
 			ship(4551, "%1", "hearth-api", "Rate limits on the public API", ships.Running, "CI · 6 of 9 jobs", ships.StageCI, 4*time.Minute),
 			waits,
