@@ -43,6 +43,11 @@ final class BoardBeltTests: XCTestCase {
         XCTAssertEqual(try labels(";v,u,left,right,],["), ["◂"] + arrows + tail)
         XCTAssertNil(BoardBelt.bytes(for: "board.v"))
         XCTAssertNil(BoardBelt.bytes(for: "board.]"))
+        // Each act key sends its own tap (keycmd.TapKeys and keycmd.TapKey in Go), which no
+        // keyboard sends.
+        for key in ["p", "y", "s", "g", "/", "m", "c", "z", "N", "x"] {
+            XCTAssertEqual(BoardBelt.bytes(for: "board.\(key)"), Array("\u{1b}_matchblox;tap=\(key)\u{1b}\\".utf8), key)
+        }
     }
 
     /// While the chat's line holds text the console says the digits and the arrows are off.
@@ -192,16 +197,16 @@ final class BoardBeltTests: XCTestCase {
 
     // MARK: What each key sends
 
-    /// An act key sends CSI u with the super modifier (`beltAct` in Go reads it, and tmux's alt
-    /// form of it); the digits, `⌃o`, `⇥`, the arrows and Return send as a keyboard does.
+    /// An act key sends its tap, which its tmux binding hands the console (`beltTap` in Go); the
+    /// digits, `⌃o`, `⇥`, the arrows and Return send as a keyboard does.
     func testEachKeySendsWhatTheConsolesBindingReads() {
         let esc: UInt8 = 0x1b
-        func tap(_ code: Int) -> [UInt8] { Array("\u{1b}[\(code);9u".utf8) }
+        func tap(_ key: String) -> [UInt8] { Array("\u{1b}_matchblox;tap=\(key)\u{1b}\\".utf8) }
         let sent: [String: [UInt8]] = [
-            "board.1": [0x31], "board.2": [0x32], "board.3": [0x33], "board.p": tap(112),
-            "board.y": tap(121), "board.c": tap(99), "board.m": tap(109), "board.g": tap(103),
-            "board.s": tap(115), "board./": tap(47), "board.z": tap(122), "board.N": tap(78),
-            "board.x": tap(120), "board.tab": [0x09], "board.ctrl+o": [0x0f],
+            "board.1": [0x31], "board.2": [0x32], "board.3": [0x33], "board.p": tap("p"),
+            "board.y": tap("y"), "board.c": tap("c"), "board.m": tap("m"), "board.g": tap("g"),
+            "board.s": tap("s"), "board./": tap("/"), "board.z": tap("z"), "board.N": tap("N"),
+            "board.x": tap("x"), "board.tab": [0x09], "board.ctrl+o": [0x0f],
             "board.runs": Array("y".utf8), "board.cancels": [esc], "board.do": [0x0d], "board.close": [esc],
             "↑": [esc, 0x5b, 0x41], "↓": [esc, 0x5b, 0x42], "⏎": [0x0d], "◂": HomeKey.bytes,
         ]

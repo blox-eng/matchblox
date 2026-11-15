@@ -123,10 +123,10 @@ public struct BoardBelt: Equatable, Sendable {
     /// keys, `↑ ↓ ⏎`) is the belt's seven cells at rest. A card key shows its glyph only: the
     /// row on the screen says what it does.
     ///
-    /// An act key (`act`) is a tap on the belt, not a typed letter: it sends its key with the
-    /// super modifier (`tap`), so it acts on the chosen session while the chat's line has the
-    /// keys, and a letter the soft keyboard types still types (`beltAct` in Go). The digits,
-    /// `⌃o`, `⇥` and the consent box's keys send as a keyboard does.
+    /// An act key (`act`) is a tap on the belt, not a typed letter: it sends its own signal
+    /// (`tap`), so it acts on the chosen session while the chat's line has the keys, and a letter
+    /// the soft keyboard types still types (`beltTap` in Go). The digits, `⌃o`, `⇥` and the
+    /// consent box's keys send as a keyboard does.
     private static let faces: [String: Face] = {
         let esc: UInt8 = 0x1b
         func own(_ id: String) -> Face { Face(id: id, label: id, spoken: id, bytes: []) }
@@ -151,10 +151,10 @@ public struct BoardBelt: Equatable, Sendable {
         ]
     }()
 
-    /// A tap on an act key: CSI u with the super modifier, `ESC [ code ; 9 u`. tmux passes it on
-    /// as alt (`ESC c`), and the console on Pocket reads both as the belt's.
+    /// A tap on an act key (`keycmd.TapKey`): an APC no keyboard sends. Each key has its own tmux
+    /// user-keys slot, which hands the console the key and the tty of the client that tapped.
     static func tap(_ key: String) -> [UInt8] {
-        Array("\u{1b}[\(key.unicodeScalars.first!.value);9u".utf8)
+        Array("\u{1b}_matchblox;tap=\(key)\u{1b}\\".utf8)
     }
 
     private static let tokens: [String: String] = Dictionary(uniqueKeysWithValues: faces.map { ($0.value.id, $0.key) })

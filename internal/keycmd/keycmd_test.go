@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -164,5 +165,26 @@ func TestEachBeltTapHasItsOwnKey(t *testing.T) {
 		if _, _, ok := ParseTapped(bad); ok {
 			t.Errorf("ParseTapped(%q) reads a tap", bad)
 		}
+	}
+}
+
+// TestTheAppsBeltSendsEachTap: the app's belt (ios BoardBelt.swift) sends
+// TapKey for each key of TapKeys, and for no other key.
+func TestTheAppsBeltSendsEachTap(t *testing.T) {
+	src, err := os.ReadFile("../../ios/MatchbloxKit/Sources/MatchbloxKit/BoardBelt.swift")
+	if err != nil {
+		t.Fatal(err)
+	}
+	swift := string(src)
+	if !strings.Contains(swift, `Array("\u{1b}_matchblox;tap=\(key)\u{1b}\\".utf8)`) {
+		t.Error("BoardBelt.tap does not send TapKey")
+	}
+	acts := regexp.MustCompile(`act\("([^"]+)"`).FindAllStringSubmatch(swift, -1)
+	var got []string
+	for _, a := range acts {
+		got = append(got, a[1])
+	}
+	if !slices.Equal(got, TapKeys) {
+		t.Errorf("the app's belt taps %q, TapKeys are %q", got, TapKeys)
 	}
 }

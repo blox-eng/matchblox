@@ -130,8 +130,8 @@ device before a release. `ws-1` is the host.
     opens; tap another agent, then `Enter`, then type `y`. The console
     jumps to the pane, where the new agent starts.
 17. On a host with a question waiting, tap that session once: its chat
-    opens, with the question's options. Tap `⌃o` on the belt: you are in its
-    pane, at the question, and typing reaches the agent. Turn the phone to
+    opens, with the question's options. Scroll the belt to `⌃o` and tap it,
+    or use the menu's `go in`: you are in its pane, at the question, and typing reaches the agent. Turn the phone to
     landscape, then back. The pane still shows the question.
 18. On a real host, tap a row of the session list once. Its chat opens; the
     tap clicks once and the chat is not clicked through. The keyboard rises
@@ -154,11 +154,12 @@ and again with two hosts.
    no camera and asks for no permission. The app opens the console on the
    host `demo`.
 3. The list opens with flint-auth first in `NEEDS YOU`. Tap it: its chat
-   opens, with its question's options. Tap
-   `2. Rotate, keep the old one a minute`: the chat marks it, and says
-   `2 again sends`. Tap it again to send it. flint-auth moves into
-   `WORKING`. Or tap `⌃o` on the belt to open the stand-in for its pane
-   (`type 2 to answer`), and press `↓` then `⏎` on the belt. The agent works for a few seconds, then the sheet rises with
+   opens, with its question's options. Tap `2. Rotate, keep the old one a
+   minute`: the chat marks it, and says `2 again sends`. Tap it again to
+   send it. flint-auth moves into `WORKING`. Or open the stand-in for its
+   pane (`type 2 to answer`): scroll the belt to `⌃o` and tap it, or
+   long-press the row and tap the menu's `go in`. Then press `↓` then `⏎`
+   on the belt. The agent works for a few seconds, then the sheet rises with
    `Your agents wait the same way.`, the line, `Copy`, `Send to my computer`,
    `Pair a host` and `Keep looking`. `Copy` puts the line on the pasteboard.
    `Send to my computer` opens the share sheet.
@@ -166,8 +167,9 @@ and again with two hosts.
    the question card shows in place of the screen. Turn the device back, and
    the stand-in shows the question again.
 5. Tap `Keep looking`, then quit the console: tap `machine` in the tab row,
-   then type `q`. In Sessions, `q` types in the chat's line. The ended screen offers
-   `Open again`, `Pair a host`, the line, `Copy` and `Send to my computer`.
+   then type `q`. In Sessions, `q` types in the chat's line. The ended
+   screen offers `Open again`, `Pair a host`, the line, `Copy` and
+   `Send to my computer`.
 6. Kill the app in the middle of the demo and open it again. The demo starts
    fresh, and the first launch left nothing of the old one.
 7. Open a host you paired. Its console, the Island and the host list are the
