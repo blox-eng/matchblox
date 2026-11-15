@@ -150,6 +150,9 @@ func (m *Model) watchCmd() tea.Cmd {
 	if m.watchConn(host) == nil {
 		host, want = m.watchHost, "" // the service forgot the watch with the connection
 	}
+	if host != m.watchHost {
+		m.watchHeld = "" // a pane id the old host refused names another pane here
+	}
 	if m.watchHeld != "" && host == m.watchHost && want == m.watchHeld {
 		want = m.watching
 	}

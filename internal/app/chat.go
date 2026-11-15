@@ -25,6 +25,8 @@ func (m Model) chatPanel(w, h int) []string {
 	var lines []string
 	switch {
 	case !m.have: // the chat waits for the first state
+	case m.filter != "" && !slices.ContainsFunc(listed, m.inBoard):
+		lines = append([]string{blank}, m.sideWords(w)...)
 	case k.pane == "" || i < 0:
 		text := "No sessions yet. + new session starts one here (" + m.keys.main.New.Help().Key + "). matchblox setup finds the agents you already run."
 		lines = append(lines, blank)
@@ -183,12 +185,24 @@ func (m Model) chatLine(s sample.Session, w int) string {
 // menuOption is an option of an agent's menu, not its prompt: "❯ 1. Yes".
 var menuOption = regexp.MustCompile(`^[›❯]\s*\d+\.`)
 
+// footMax is the most lines with words an agent's foot holds under the
+// line where its input box starts: the box, its border and the status
+// lines.
+const footMax = 8
+
 // chatCut is an agent's pane cut to its conversation: its input box and
-// the status lines under it go. An agent whose frame the cut does not know keeps its whole pane.
-//   - Claude Code: from the last box whose first row is the prompt
-//     (╭─ over "│ >"), or the last rule over a "> " prompt line.
-//   - Codex: from the last composer line, "› " or "▌", that is no option.
-//   - OpenCode: from the first of the last run of "┃" lines.
+// the status lines under it go. The cut is made only at the agent's foot:
+// the last line that starts the input box, with the frame's own end under
+// it and at most footMax lines with words from it down. A past message
+// that carries the prompt's mark is no foot, so with no input box on
+// screen, and for an agent whose frame the cut does not know, the whole
+// pane stays.
+//   - Claude Code: a box whose first row is the prompt (╭─ over "│ >"),
+//     closed by ╰; or a rule over a "> " prompt line, closed by a rule.
+//   - Codex: the composer line, "› " or "▌", that is no option, over the
+//     footer that says the context left.
+//   - OpenCode: the first of the last run of "┃" lines, over the bottom
+//     border (╹▀▀▀).
 func chatCut(agent, text string) string {
 	lines := strings.Split(onlyColours(text), "\n")
 	plain := func(i int) string {
@@ -200,29 +214,47 @@ func chatCut(agent, text string) string {
 	prompt := func(p string) bool {
 		return (p == ">" || strings.HasPrefix(p, "> ") || p == "❯" || strings.HasPrefix(p, "❯ ")) && !menuOption.MatchString(p)
 	}
-	at := -1
-	for i := len(lines) - 1; i >= 0 && at < 0; i-- {
-		p := plain(i)
-		switch agent {
-		case "claude":
+	var starts func(i int) bool
+	var ends func(p string, i int) bool
+	switch agent {
+	case "claude":
+		starts = func(i int) bool {
 			inBox := strings.TrimSpace(strings.TrimPrefix(plain(i+1), "│"))
-			if strings.HasPrefix(p, "╭") && prompt(inBox) || isRule(lines[i]) && prompt(plain(i+1)) {
-				at = i
-			}
-		case "codex":
-			if (p == "›" || strings.HasPrefix(p, "› ") || strings.HasPrefix(p, "▌")) && !menuOption.MatchString(p) {
-				at = i
-			}
-		case "opencode":
-			if strings.HasPrefix(p, "┃") {
-				for at = i; strings.HasPrefix(plain(at-1), "┃"); at-- {
-				}
-			}
-		default:
-			return text
+			return strings.HasPrefix(plain(i), "╭") && prompt(inBox) || isRule(lines[i]) && prompt(plain(i+1))
+		}
+		ends = func(p string, i int) bool { return strings.HasPrefix(p, "╰") || isRule(lines[i]) }
+	case "codex":
+		starts = func(i int) bool {
+			p := plain(i)
+			return (p == "›" || strings.HasPrefix(p, "› ") || strings.HasPrefix(p, "▌")) && !menuOption.MatchString(p)
+		}
+		ends = func(p string, _ int) bool { return strings.Contains(p, "context left") }
+	case "opencode":
+		starts = func(i int) bool { return strings.HasPrefix(plain(i), "┃") }
+		ends = func(p string, _ int) bool { return strings.HasPrefix(p, "╹") || strings.HasPrefix(p, "▀") }
+	default:
+		return text
+	}
+	at := len(lines) - 1
+	for at >= 0 && !starts(at) {
+		at--
+	}
+	if agent == "opencode" {
+		for at > 0 && starts(at-1) {
+			at--
 		}
 	}
 	if at < 0 {
+		return text
+	}
+	words, closed := 0, false
+	for i := at; i < len(lines); i++ {
+		if p := plain(i); p != "" {
+			words++
+			closed = closed || i > at && ends(p, i)
+		}
+	}
+	if !closed || words > footMax {
 		return text
 	}
 	return strings.Join(lines[:at], "\n")

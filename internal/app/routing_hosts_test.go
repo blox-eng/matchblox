@@ -232,9 +232,10 @@ func TestARemoteRowIsListOnly(t *testing.T) {
 	m, home, ws := samePane(t, nil)
 	mm := m.(Model)
 	mm.sideAt = paneKey{"ws-1", "%12"}
-	m, _ = mm.Update(tea.WindowSizeMsg{Width: 132, Height: 30})
-	if nm := m.(Model); nm.watchHost != "ws-1" || nm.watching != "%12" {
-		t.Fatalf("the peer's chosen row watches %q on %q", nm.watching, nm.watchHost)
+	m, cmd := mm.Update(tea.WindowSizeMsg{Width: 132, Height: 30})
+	drain(cmd)
+	if nm := m.(Model); nm.watchHost != "ws-1" || nm.watching != "%12" || !hasAct(ws, proto.WatchPrefix+"%12") {
+		t.Fatalf("the peer's chosen row watches %q on %q; ws-1 got %+v", nm.watching, nm.watchHost, ws.allActs())
 	}
 	m, _ = m.Update(screenMsg{Pane: "%12", At: time.Now(), Text: "HOME TWELVE"})
 	if nm := m.(Model); nm.screen.Text != "" {
@@ -249,6 +250,10 @@ func TestARemoteRowIsListOnly(t *testing.T) {
 		if strings.HasPrefix(a.RecID, proto.KeysPrefix) || strings.HasPrefix(a.RecID, "pick:") {
 			t.Fatalf("a remote row sent %q", a.RecID)
 		}
+	}
+	// The anti-goal's mix-up: the peer's %12 is never watched as home's.
+	if hasAct(home, proto.WatchPrefix+"%12") {
+		t.Fatalf("home got the watch of the peer's %%12: %+v", home.allActs())
 	}
 	// The detail pane that named the host and the way in goes with the
 	// list: the card names its host (TestACardNamesAnotherHost).

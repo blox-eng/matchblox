@@ -1,6 +1,7 @@
 package app
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
+	"github.com/blox-eng/matchblox/internal/transport"
 )
 
 func chatText(m Model, w, h int) string {
@@ -168,5 +170,97 @@ func TestNoSessionsSaysHowToStart(t *testing.T) {
 	want := "No sessions yet. + new session starts one here (N). matchblox setup finds the agents you already run."
 	if got := chatText(m, 140, 10); !strings.Contains(got, want) {
 		t.Fatalf("chat:\n%s", got)
+	}
+}
+
+// TestChatKeepsThePaneWhenTheComposerIsGone: with no input box on screen
+// (a menu, an approval), a past message that carries the composer's mark
+// is no foot, and the whole pane stays.
+func TestChatKeepsThePaneWhenTheComposerIsGone(t *testing.T) {
+	for agent, file := range map[string]string{"claude": "claude-menu.txt", "codex": "codex-approval.txt", "opencode": "opencode-permission.txt"} {
+		b, err := os.ReadFile(filepath.Join("..", "..", "testdata", "chat", file))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := chatCut(agent, string(b)); got != string(b) {
+			t.Errorf("%s: the cut keeps only:\n%s", agent, got)
+		}
+	}
+}
+
+// TestChatSaysTheSearchHidesAll: a search that matches no session says so
+// in the list's words; "No sessions yet" is only for none at all.
+func TestChatSaysTheSearchHidesAll(t *testing.T) {
+	m := boardModel(t, boardState(boardMatch("hearth-api", time.Hour)))
+	m.filter = "zzz"
+	got := chatText(m, 140, 10)
+	if want := `Nothing matches "zzz". ` + m.keys.main.Back.Help().Key + " clears the search."; !strings.Contains(got, want) || strings.Contains(got, "No sessions yet") {
+		t.Fatalf("chat:\n%s", got)
+	}
+}
+
+// peerChat is a console on a home host with no session and the peer ws-2
+// with flint-auth in %7, every command run. The home host has %7 and %8.
+func peerChat(t *testing.T, redial func() (transport.Conn, error)) (Model, *fakeConn, *fakeConn) {
+	t.Helper()
+	home, ws := newFake(), newFake()
+	var next tea.Model = New(Options{NoMotion: true, Conn: home, Peers: []Peer{{Host: "ws-2", Conn: ws, Redial: redial}}})
+	next, _ = next.Update(tea.WindowSizeMsg{Width: 132, Height: 30})
+	next, cmd := next.Update(stateMsg(hostState(sess(4141, "hearth-api", "%7", nil), sess(4343, "spark-docs", "%8", nil))))
+	drain(cmd)
+	next, cmd = next.Update(peerMsg{host: "ws-2", conn: ws, msg: stateMsg(hostState(sess(4242, "flint-auth", "%7", nil)))})
+	drain(cmd)
+	return next.(Model), home, ws
+}
+
+// chooseSide makes k the list's chosen session and runs the watch it starts.
+func chooseSide(m Model, k paneKey) Model {
+	m.sideAt = k
+	next, cmd := m.Update(tea.WindowSizeMsg{Width: m.width, Height: m.height})
+	drain(cmd)
+	return next.(Model)
+}
+
+// TestHeldWatchOnAPeerDoesNotBlockTheSamePaneAtHome: ws-2 refuses %7; the
+// home host's own %7 is another pane, and its watch is never held by it,
+// also when the chat comes back to it from home's %8.
+func TestHeldWatchOnAPeerDoesNotBlockTheSamePaneAtHome(t *testing.T) {
+	m, home, _ := peerChat(t, nil)
+	m = chooseSide(m, paneKey{"ws-2", "%7"})
+	next, cmd := m.Update(peerMsg{host: "ws-2", conn: m.peers[0].conn, msg: resultMsg{ActID: watchActID + "%7", Err: "no pane %7"}})
+	drain(cmd)
+	m = chooseSide(next.(Model), paneKey{m.opt.Host, "%7"})
+	m = chooseSide(m, paneKey{m.opt.Host, "%8"})
+	m = chooseSide(m, paneKey{m.opt.Host, "%7"})
+	if m.watchHost != m.opt.Host || m.watching != "%7" {
+		t.Fatalf("home's %%7 watches %q on %q, held %q", m.watching, m.watchHost, m.watchHeld)
+	}
+	if !hasAct(home, proto.WatchPrefix+"%7") {
+		t.Fatalf("home got %+v", home.allActs())
+	}
+}
+
+// TestChatWatchesAgainAfterAPeerRedials: the watch goes with a lost peer's
+// conn and comes back on the new conn once the peer sends its state.
+func TestChatWatchesAgainAfterAPeerRedials(t *testing.T) {
+	again := newFake()
+	m, _, ws := peerChat(t, func() (transport.Conn, error) { return again, nil })
+	m = chooseSide(m, paneKey{"ws-2", "%7"})
+	if !hasAct(ws, proto.WatchPrefix+"%7") {
+		t.Fatalf("ws-2 got %+v", ws.allActs())
+	}
+	next, _ := m.Update(peerMsg{host: "ws-2", conn: ws, msg: lostMsg{err: io.EOF, conn: ws}})
+	if nm := next.(Model); nm.watching != "" {
+		t.Fatalf("a lost peer is still watched: %q", nm.watching)
+	}
+	next, cmd := next.Update(peerRedialMsg{host: "ws-2"})
+	if cmd == nil {
+		t.Fatal("the redial tick dialed nothing")
+	}
+	next, _ = next.Update(cmd())
+	next, cmd = next.Update(peerMsg{host: "ws-2", conn: again, msg: stateMsg(hostState(sess(4242, "flint-auth", "%7", nil)))})
+	drain(cmd)
+	if nm := next.(Model); nm.watchHost != "ws-2" || nm.watching != "%7" || !hasAct(again, proto.WatchPrefix+"%7") {
+		t.Fatalf("after the redial: watching %q on %q, the new conn got %+v", nm.watching, nm.watchHost, again.allActs())
 	}
 }

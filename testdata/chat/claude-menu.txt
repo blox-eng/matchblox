@@ -1,0 +1,10 @@
+> Add a refresh token to the login flow
+
+● I can keep the refresh token in two places.
+
+────────────────────────────────────────────────────
+ Which store for the refresh token?
+
+❯ 1. Keychain
+  2. File
+Enter to select · ↑/↓ to navigate · Esc to cancel
