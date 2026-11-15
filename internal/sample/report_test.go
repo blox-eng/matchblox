@@ -148,3 +148,23 @@ func TestAReportRewrittenInOneTickIsReadAgain(t *testing.T) {
 		t.Errorf("the report said idle in the same tick, yet the reader kept %q", rep.Status)
 	}
 }
+
+// TestAMenuOnAReportingPaneIsRead: Claude Code can report busy while its
+// pane draws an approval menu, as for a PreToolUse hook that asks. The
+// menu at the bottom of the pane is live, so the session permits.
+func TestAMenuOnAReportingPaneIsRead(t *testing.T) {
+	root := copyFixture(t)
+	claudeReport(t, root, "busy", "")
+	writeFile(t, filepath.Join(root, "panes", "1.txt"), `● Bash(git push)
+ │ Hook PreToolUse:Bash requires confirmation for this command:
+ │ Working-state guard: this branch adds 2 line(s)
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. No
+ Esc to cancel · Tab to amend
+`)
+	s := byPane(newFixtureSampler(root).Sample())["%1"]
+	if !s.Reported || !s.Permits || s.Asks || s.LastLine != "Do you want to proceed?" {
+		t.Fatalf("got %+v, want a reported session that permits", s)
+	}
+}
