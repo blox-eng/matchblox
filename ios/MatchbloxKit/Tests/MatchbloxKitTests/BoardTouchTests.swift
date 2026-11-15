@@ -2,38 +2,22 @@ import XCTest
 @testable import MatchbloxKit
 
 final class BoardTouchTests: XCTestCase {
-    private let left = Array("\u{1b}[D".utf8)
-    private let right = Array("\u{1b}[C".utf8)
-
-    func testASwipeToTheRightSendsLeft() {
-        XCTAssertEqual(BoardTouch.page(dx: 80, velocity: 0), left)
-        XCTAssertEqual(BoardTouch.page(dx: -80, velocity: 0), right)
+    /// The list and the chat have no pages: a sideways swipe that does not start at the edge
+    /// sends nothing, in either direction, however far or fast.
+    func testSidewaysSwipeTurnsNoPage() {
+        for (dx, velocity) in [(80.0, 0.0), (-80.0, 0.0), (20.0, 900.0), (-20.0, -900.0), (300.0, 2000.0)] {
+            XCTAssertNil(BoardTouch.sideways(fromEdge: false, dx: CGFloat(dx), velocity: CGFloat(velocity)), "dx \(dx), velocity \(velocity)")
+        }
     }
 
-    func testAFlickTurnsThePageToo() {
-        XCTAssertEqual(BoardTouch.page(dx: 20, velocity: 900), left)
-        XCTAssertEqual(BoardTouch.page(dx: -20, velocity: -900), right)
-        XCTAssertEqual(BoardTouch.page(dx: 0, velocity: -900), right)
-    }
-
-    func testAShortSlowSwipeSendsNothing() {
-        XCTAssertNil(BoardTouch.page(dx: 40, velocity: 200))
-        XCTAssertNil(BoardTouch.page(dx: 0, velocity: 0))
-    }
-
-    func testOnlyAMostlySidewaysPanIsAPage() {
-        XCTAssertTrue(BoardTouch.isSideways(dx: 300, dy: 100))
-        XCTAssertTrue(BoardTouch.isSideways(dx: -300, dy: 299))
-        XCTAssertFalse(BoardTouch.isSideways(dx: 100, dy: 300))
-        XCTAssertFalse(BoardTouch.isSideways(dx: 200, dy: -200))
-        XCTAssertFalse(BoardTouch.isSideways(dx: 0, dy: 0))
-    }
-
-    func testTheLeftEdgeStaysBack() {
-        XCTAssertTrue(BoardTouch.fromEdge(x: 0))
-        XCTAssertTrue(BoardTouch.fromEdge(x: 23))
-        XCTAssertFalse(BoardTouch.fromEdge(x: 24))
-        XCTAssertFalse(BoardTouch.fromEdge(x: 200))
+    /// The edge swipe sends `◂`, the belt's way back to the list, once it runs far or fast enough.
+    func testEdgeSwipeGoesBack() {
+        let back = KeyBar.bytes(for: "◂")
+        XCTAssertEqual(back, HomeKey.bytes)
+        XCTAssertEqual(BoardTouch.sideways(fromEdge: true, dx: 80, velocity: 0), back)
+        XCTAssertEqual(BoardTouch.sideways(fromEdge: true, dx: 20, velocity: 900), back)
+        XCTAssertNil(BoardTouch.sideways(fromEdge: true, dx: 40, velocity: 200))
+        XCTAssertNil(BoardTouch.sideways(fromEdge: true, dx: -80, velocity: -900))
     }
 
     func testALongPressIsARightClickAtItsCell() {
