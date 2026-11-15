@@ -626,8 +626,8 @@ It never answers a question or a permission prompt, never sends
 ## In the morning
 
 The header's stoker word says how the stoker is: `stoker`, `☾ night →
-07:00`, `stoker rests`. What it does shows for a moment in the strip's
-row: it started, it compacted a session, it rests, the run ended.
+07:00`, `stoker rests`. What it does shows for a moment in a notice: it
+started, it compacted a session, it rests, the run ended.
 
 The row `stoker` on Machine opens the stoker's view, even after a night
 with nothing to do. It holds your words, the plan with the outcome

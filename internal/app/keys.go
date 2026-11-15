@@ -169,7 +169,6 @@ func defaultKeys() keymaps {
 			Density:   bind(ks("v"), "v", "one line"),
 			Chain:     bind(ks("g"), "g", "chain"),
 			Host:      bind(ks("s"), "s", "hosts"),
-			Strip:     bind(ks("u"), "u", "strip"),
 			NextChain: bind(ks("]"), "]", "next chain"),
 			PrevChain: bind(ks("["), "[", "previous chain"),
 			Menu:      bind(ks("m"), "m", "menu"),
@@ -302,11 +301,11 @@ func (k askKeys) bindings() []bkey.Binding { return []bkey.Binding{k.Send, k.Can
 // boardKeys are the board's own keys, over mainKeys while the board shows:
 // ↑ ↓ ⏎ x y esc and the rest keep their mainKeys bindings.
 type boardKeys struct {
-	Left, Right, Copy, Density, Chain, Host, Strip, NextChain, PrevChain, Menu, Merge bkey.Binding
+	Left, Right, Copy, Density, Chain, Host, NextChain, PrevChain, Menu, Merge bkey.Binding
 }
 
 func (k boardKeys) bindings() []bkey.Binding {
-	return []bkey.Binding{k.Left, k.Right, k.Copy, k.Density, k.Chain, k.Host, k.Strip, k.NextChain, k.PrevChain, k.Menu, k.Merge}
+	return []bkey.Binding{k.Left, k.Right, k.Copy, k.Density, k.Chain, k.Host, k.NextChain, k.PrevChain, k.Menu, k.Merge}
 }
 
 // sideKeys are the chat's line and the list beside it. In the line every

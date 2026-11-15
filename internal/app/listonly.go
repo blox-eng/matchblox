@@ -16,15 +16,12 @@ type viewPrefs struct {
 	ListOnlyPhone bool `json:"list_only_phone"`
 	ListOnlyDesk  bool `json:"list_only_desk"`
 
-	// The board's views, for each shape: the columns hidden (boardCol.short),
-	// one line a card, and the strip's face (usage, machine, week or off;
-	// empty reads as usage). A phone's density is nil until its first v.
+	// The board's views, for each shape: the columns hidden (boardCol.short)
+	// and one line a card. A phone's density is nil until its first v.
 	HiddenPhone  []string `json:"hidden_phone"`
 	HiddenDesk   []string `json:"hidden_desk"`
 	OneLinePhone *bool    `json:"one_line_phone,omitempty"`
 	OneLineDesk  bool     `json:"one_line_desk"`
-	StripPhone   string   `json:"strip_phone"`
-	StripDesk    string   `json:"strip_desk"`
 
 	// Told is the notices already shown once, for both shapes.
 	Told []string `json:"told"`
@@ -101,40 +98,6 @@ func (m *Model) flipOneLine() {
 		m.viewPrefs.OneLinePhone = &one
 	} else {
 		m.viewPrefs.OneLineDesk = !m.viewPrefs.OneLineDesk
-	}
-	m.keepViewPrefs()
-}
-
-// stripFace is what the strip shows: usage, machine, week or off.
-func (m Model) stripFace() string {
-	face := m.viewPrefs.StripDesk
-	if m.upright() {
-		face = m.viewPrefs.StripPhone
-	}
-	if face == "" {
-		return "usage"
-	}
-	return face
-}
-
-// stripTurn is the order the strip turns through. Week joins it when the
-// daily record exists.
-var stripTurn = []string{"usage", "machine", "off"}
-
-// stripNext is the face after face.
-func stripNext(face string) string {
-	return stripTurn[(slices.Index(stripTurn, face)+1)%len(stripTurn)]
-}
-
-// turnStrip moves the strip to its next face.
-func (m *Model) turnStrip() { m.setStripFace(stripNext(m.stripFace())) }
-
-// setStripFace keeps face as this shape's strip.
-func (m *Model) setStripFace(face string) {
-	if m.upright() {
-		m.viewPrefs.StripPhone = face
-	} else {
-		m.viewPrefs.StripDesk = face
 	}
 	m.keepViewPrefs()
 }

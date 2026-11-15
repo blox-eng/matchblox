@@ -69,7 +69,7 @@ func TestDeviceGetsTheRefusals(t *testing.T) {
 	r, m := pairDoorConsole(t)
 	tty := "/dev/ttys009"
 	phoneIn(t, r, &m, &tty)
-	next, _ := key(m, "enter") // the board says the refusal in its strip's row too
+	next, _ := key(m, "enter") // the board says the refusal in its notice row too
 	got := next.(Model)
 	if got.pair != nil || got.flash != "Pair from the host's own terminal." {
 		t.Fatalf("page %v, flash %q", got.pair, got.flash)

@@ -28,4 +28,4 @@
 │ first  › fix the flaky ships test▏       │
 ╰─ ⏎ start ─ tab next ─ esc ───────────────╯
 ────────────────────────────────────────────
- c copy   v one line   s hosts   u strip
+ c copy   v one line   s hosts

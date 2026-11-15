@@ -24,8 +24,8 @@
 
 
 
+
  + start a new session
  RECOMMENDATIONS · 7
- ✻ Claude Max  5h ▰▰▰▰▰▰▰▱ 84%  wk 82%   machine ›
 ───────────────────────────────────────────────────
- c copy   v one line   s hosts   u strip
+ c copy   v one line   s hosts

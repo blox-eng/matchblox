@@ -112,35 +112,28 @@ func TestFrameCostWithChains(t *testing.T) {
 }
 
 // TestBoardPrefsAreKeptForEachShape: a phone and a desk each keep their
-// hidden columns, density and strip; an old view.json still loads.
+// hidden columns and density; an old view.json still loads.
 func TestBoardPrefsAreKeptForEachShape(t *testing.T) {
 	dir := t.TempDir()
 	m := demoIn(t, dir, 44, 31)
-	if !m.upright() || m.colHidden(colWork) || m.oneLine() || m.stripFace() != "usage" {
+	if !m.upright() || m.colHidden(colWork) || m.oneLine() {
 		t.Fatalf("a fresh phone is not plain: %+v", m.viewPrefs)
 	}
 	m.flipHidden(colWork)
 	m.flipOneLine()
-	m.turnStrip()
 
 	again := demoIn(t, dir, 44, 31)
-	if !again.colHidden(colWork) || again.colHidden(colNeed) || !again.oneLine() || again.stripFace() != "machine" {
+	if !again.colHidden(colWork) || again.colHidden(colNeed) || !again.oneLine() {
 		t.Fatalf("the phone lost its board views: %+v", again.viewPrefs)
 	}
 	desk := demoIn(t, dir, 132, 32)
-	if desk.upright() || desk.colHidden(colWork) || desk.oneLine() || desk.stripFace() != "usage" {
+	if desk.upright() || desk.colHidden(colWork) || desk.oneLine() {
 		t.Fatalf("the desk took the phone's board views: %+v", desk.viewPrefs)
 	}
 
 	again.flipHidden(colWork)
 	if again.colHidden(colWork) {
 		t.Fatal("a second flip did not show the column again")
-	}
-	for _, want := range []string{"off", "usage"} {
-		again.turnStrip()
-		if got := again.stripFace(); got != want {
-			t.Fatalf("the strip turned to %q, want %q", got, want)
-		}
 	}
 }
 
@@ -152,7 +145,7 @@ func TestAnOldViewFileStillLoads(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := loadViewPrefs(dir)
-	if p.ListOnlyPhone || p.OneLinePhone != nil || p.StripPhone != "" || len(p.HiddenPhone) != 0 || len(p.Told) != 0 {
+	if p.ListOnlyPhone || p.OneLinePhone != nil || len(p.HiddenPhone) != 0 || len(p.Told) != 0 {
 		t.Fatalf("old file: %+v", p)
 	}
 }

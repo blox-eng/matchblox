@@ -74,9 +74,9 @@ type boardDrawn struct {
 	// tabRow and tabSpans are the tab row while the board shows.
 	tabRow   string
 	tabSpans []span
-	// stripAt is the strip's first line (-1: none), and strip its tap.
-	stripAt int
-	strip   span
+	// noteAt is the notice row's first line (-1: none), and noteTap its tap.
+	noteAt  int
+	noteTap span
 	// doorsAt is the doors line (-1: none), and underAt what a tap on a
 	// line under the columns reaches (boardLine.at).
 	doorsAt int
@@ -119,7 +119,7 @@ func (m Model) boardShown() bool { return m.tab == tabSessions }
 // the ghost row and the recommendations under them, each folded to one
 // line. It draws the tab row too, from the same index.
 func (m Model) boardPanel(w, h int) boardDrawn {
-	d := boardDrawn{headAt: -1, stripAt: -1, doorsAt: -1, cards: map[boardSpot]paneKey{}, taps: map[int][]span{}, hostAt: map[int]string{},
+	d := boardDrawn{headAt: -1, noteAt: -1, doorsAt: -1, cards: map[boardSpot]paneKey{}, taps: map[int][]span{}, hostAt: map[int]string{},
 		underAt: map[int]string{}, roomAt: map[int]int{}}
 	b, shown := m.boardDrawOf()
 	d.tabRow, d.tabSpans = m.boardTabRow(w, &b)
@@ -140,7 +140,7 @@ func (m Model) boardPanel(w, h int) boardDrawn {
 		}
 	}
 	none := m.have && b.none
-	roomAbove, roomBelow, under, strip, tap, rows := m.boardFold(w, h, none)
+	roomAbove, roomBelow, under, note, tap, rows := m.boardFold(w, h, none)
 	for _, l := range roomAbove {
 		if l.at >= 0 {
 			d.roomAt[len(d.lines)] = l.at
@@ -179,28 +179,28 @@ func (m Model) boardPanel(w, h int) boardDrawn {
 		}
 		d.addRow(-1, l.sel, w, st, l.text)
 	}
-	if len(strip) > 0 {
-		d.stripAt, d.strip = len(d.lines), tap
+	if len(note) > 0 {
+		d.noteAt, d.noteTap = len(d.lines), tap
 	}
-	d.add(-1, strip...)
+	d.add(-1, note...)
 	return d
 }
 
 // boardRows is how many of the board's h rows the columns take: all but the
 // doors line above, the ghost row and the recommendations under them, and
-// the strip's row. none: no session at all, and no ghost row under.
+// the notice row. none: no session at all, and no ghost row under.
 func (m Model) boardRows(w, h int, none bool) int {
 	_, _, _, _, _, rows := m.boardFold(w, h, none)
 	return rows
 }
 
 // boardFold is what the board keeps of its lines under the columns and of
-// its strip in h rows, and the rows left to the columns. Short of rows the
-// recommendations fold from the last, then the ghost row, then the strip,
-// so the columns keep the chosen card's head.
-func (m Model) boardFold(w, h int, none bool) (above, below []roomDrawn, under []boardLine, strip []string, tap span, rows int) {
+// its notice row in h rows, and the rows left to the columns. Short of rows
+// the recommendations fold from the last, then the ghost row, then the
+// notice, so the columns keep the chosen card's head.
+func (m Model) boardFold(w, h int, none bool) (above, below []roomDrawn, under []boardLine, note []string, tap span, rows int) {
 	under = m.underLines(w, none)
-	strip, tap, _ = m.strip(w)
+	note, tap = m.boardNotice(w)
 	fold := 0
 	above, below = m.roomSplit(w, fold)
 	fixed := func() int { return len(m.hostLines(w)) + len(m.doorsLines(w)) + len(above) + len(below) }
@@ -211,18 +211,18 @@ func (m Model) boardFold(w, h int, none bool) (above, below []roomDrawn, under [
 	case l == Medium && !m.colHidden(colQuiet):
 		least += 2 // the QUIET drawer under the columns
 	}
-	for !none && h-fixed()-len(under)-len(strip) < least && (len(under)+len(strip) > 0 || fold < roomFolds && len(above) > 0) {
+	for !none && h-fixed()-len(under)-len(note) < least && (len(under)+len(note) > 0 || fold < roomFolds && len(above) > 0) {
 		switch {
 		case len(under) > 0:
 			under = under[:len(under)-1]
-		case len(strip) > 0:
-			strip = nil
+		case len(note) > 0:
+			note = nil
 		default: // then the stoker's card
 			fold++
 			above, below = m.roomSplit(w, fold)
 		}
 	}
-	return above, below, under, strip, tap, max(h-fixed()-len(under)-len(strip), 0)
+	return above, below, under, note, tap, max(h-fixed()-len(under)-len(note), 0)
 }
 
 // boardLine is a line above or under the columns: its text, chosen or
@@ -389,7 +389,7 @@ func (m Model) boardWords(b *boardDraw) string {
 	return ""
 }
 
-// boardStateNotice is what the strip's row says of the board's state: the
+// boardStateNotice is what the notice row says of the board's state: the
 // service lost, data older than the stale limit, why the ships may be
 // behind, or nothing.
 func (m Model) boardStateNotice() string {

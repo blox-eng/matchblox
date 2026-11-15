@@ -13,8 +13,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
-// Usage and the machine: the strip says them on the board, and the Machine
-// tab has them all (design/0006 §7).
+// Usage and the machine: the Machine tab has them all (design/0006 §7).
 
 // usageLines are the limits of each account a session runs under, as
 // /usage says them: each window's name, a bar (warn from 60%, neg from

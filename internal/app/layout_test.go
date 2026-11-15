@@ -233,7 +233,7 @@ func selectPane(t *testing.T, m tea.Model, pane string) tea.Model {
 // cut before the name is, then goes; a failure stays on the key line.
 func TestAToastSaysWhatRan(t *testing.T) {
 	m, _ := loadedWith(t, 44, queueState())
-	m.tab = tabMachine // the board says what ran in its strip's row (TestEveryNoticeKeepsItsFix)
+	m.tab = tabMachine // the board says what ran in its notice row (TestEveryNoticeKeepsItsFix)
 	next, cmd := m.Update(resultMsg(proto.Result{Ran: [][]string{{"tmux", "send-keys", "-t", "%2", "-l", "--", "a long answer for a narrow screen"}}}))
 	head := strings.Split(screen(next), "\n")[0]
 	if !strings.HasPrefix(head, " ▰ matchblox") || !strings.Contains(head, "ran: tmux") || !strings.Contains(head, "…") {

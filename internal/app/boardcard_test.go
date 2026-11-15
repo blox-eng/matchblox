@@ -299,6 +299,7 @@ func TestTheCardsMarkFollowsTheAgent(t *testing.T) {
 	oc.Agent, oc.Provider = "opencode", "anthropic"
 	st.Sessions = append(st.Sessions, oc)
 	m, _ := loadedWith(t, 132, st)
+	m.setTab(tabMachine)
 	if out := screen(m); !strings.Contains(out, "✻ Claude Max ") {
 		t.Errorf("the dock's account row for the Anthropic plan lost ✻:\n%s", out)
 	}

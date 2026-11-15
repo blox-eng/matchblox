@@ -113,7 +113,7 @@ func TestJoinToastNarrow(t *testing.T) {
 }
 
 // saidNow is the news the console said last: the header's toast, or on the
-// board the notice in the strip's row.
+// board its notice.
 func saidNow(m Model) string { return cmp.Or(m.toast, m.noticeText) }
 
 func TestNewTeamToast(t *testing.T) {

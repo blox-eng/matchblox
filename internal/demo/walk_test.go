@@ -1036,7 +1036,7 @@ func (w *walker) searched(name string) string {
 }
 
 // finds tells if the board, searched for name, shows its card: a line
-// with name that is not the strip's "started name".
+// with name that is not the notice's "started name".
 func (w *walker) finds(name string) bool {
 	w.t.Helper()
 	return slices.ContainsFunc(strings.Split(w.searched(name), "\n"), func(l string) bool {

@@ -529,7 +529,7 @@ func replayAt(t *testing.T, z replaySize) {
 	// the console before.
 	views := t.TempDir()
 	if err := os.WriteFile(filepath.Join(views, "view.json"),
-		[]byte(`{"told":["chain","copy","density","digit","host","kill","merge","strip"],"copy_checked_phone":true,"copy_checked_desk":true}`), 0o600); err != nil {
+		[]byte(`{"told":["chain","copy","density","digit","host","kill","merge"],"copy_checked_phone":true,"copy_checked_desk":true}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	heard := &heardConn{Conn: transport.NewConn(a)}
@@ -692,7 +692,7 @@ func replayAt(t *testing.T, z replaySize) {
 			}
 		}
 		// A slow (-race) run can draw a frame before the sample reaches the
-		// console: the strip then says the data is old in place of what it
+		// console: a notice then says the data is old in place of what it
 		// shows. The demo clock runs 40 times faster than the wall's, so
 		// 750 ms behind is 30 s. A frame is kept only once the data is fresh.
 		fresh := func(s string) bool { return st.ok(s) && !strings.Contains(s, "the service is slow") }

@@ -22,6 +22,7 @@ func TestUsageNamesAccountBlocks(t *testing.T) {
 	st := limitsState()
 	st.Limits = accountBlocks()
 	m, _ := loadedWith(t, 132, st)
+	m.setTab(tabMachine)
 	out := screen(m)
 	for _, want := range []string{"✻ Claude Max ", "✻ Claude work "} {
 		if !strings.Contains(out, want) {
@@ -35,6 +36,7 @@ func TestHandMadeFolderIsNamedByItsBase(t *testing.T) {
 	st.Limits = accountBlocks()
 	st.Limits[1].Dir = "/home/u/.claude-old"
 	m, _ := loadedWith(t, 132, st)
+	m.setTab(tabMachine)
 	if out := screen(m); !strings.Contains(out, "✻ Claude .claude-old ") {
 		t.Errorf("USAGE lacks the hand-made folder's name:\n%s", out)
 	}

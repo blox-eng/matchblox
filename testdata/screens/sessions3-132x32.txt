@@ -20,13 +20,13 @@
   #4552 ●━●━◉┄○┄○  ctx 32%
   p merge #4552   ⏎ go in
 
-  ↓ 5 more
+ │ train-loop @gpu-1                   ✻  4m
+  asks I rewrote the quick start and the in…
+  ctx 88%
+  ⏎ go in
 
-
-
-
+  ↓ 4 more
  + start a new session
  RECOMMENDATIONS · 7
- ✻ 5h ▰▰▰▰▰▰▰▱ 84%  wk 82%   ✻ @gpu-1 5h ▰▰▰▰▰▰▰▱ 84%  wk 82%   ✻ @ws-1 5h ▰▰▰▰▰▰▰▱ 84%  wk 82%                           machine ›
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ⏎ go in   c copy   v one line   s hosts   u strip   ←→ columns   tab next
+ ⏎ go in   c copy   v one line   s hosts   ←→ columns   tab next

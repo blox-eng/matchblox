@@ -85,10 +85,10 @@ func demoBoard(t *testing.T, w int, st proto.State) Model {
 	return boardOn(next.(Model))
 }
 
-// TestTheStripSaysWhyShipsAreBehind: the strip's row says plainly why the
+// TestTheNoticeSaysWhyShipsAreBehind: the notice row says plainly why the
 // ships may be behind: GitHub's rate limit, gh that cannot read, and a
 // repository whose poll failed.
-func TestTheStripSaysWhyShipsAreBehind(t *testing.T) {
+func TestTheNoticeSaysWhyShipsAreBehind(t *testing.T) {
 	st := screensState(t)
 	r := *st.Ships
 	r.Paused, r.Unknown, r.Errors = time.Date(2026, 10, 1, 23, 33, 0, 0, time.Local), "gh not signed in", []string{"hearth/hearth-api: HTTP 502"}
@@ -98,12 +98,12 @@ func TestTheStripSaysWhyShipsAreBehind(t *testing.T) {
 		out := strings.Join(strings.Fields(plainFrame(m)), " ")
 		for _, want := range []string{"ships read again at 23:33", "GitHub cannot be read: gh not signed in", "not read: hearth/hearth-api: HTTP 502"} {
 			if !strings.Contains(out, want) {
-				t.Errorf("width %d: the strip does not say %q:\n%s", w, want, plainFrame(m))
+				t.Errorf("width %d: the notice row does not say %q:\n%s", w, want, plainFrame(m))
 			}
 		}
 	}
 	if out := plainFrame(demoBoard(t, 132, screensState(t))); strings.Contains(out, "read again") || strings.Contains(out, "cannot be read") {
-		t.Errorf("the strip says the ships are behind when they are not:\n%s", out)
+		t.Errorf("the notice row says the ships are behind when they are not:\n%s", out)
 	}
 }
 

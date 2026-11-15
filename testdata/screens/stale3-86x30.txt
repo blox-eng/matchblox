@@ -16,15 +16,15 @@
   #4540 ●━●━●━●━●  ctx 88%
   ⏎ go in
 
-  ↓ 6 more
+ ╿ ember-billing                    ✻  4m
+  green #4552 waits for your merge
+  #4552 ●━●━◉┄○┄○  ctx 32%
+  p merge #4552   ⏎ go in
 
-
-
-
+  ↓ 5 more
 ──────────────────────────────────────────────────────────────────────────────────────
  QUIET · 0   ▴                                                                     −
  + start a new session
  RECOMMENDATIONS · 7
- ✻ 5h 84% · wk 82%   ✻ @gpu-1 5h 84% · wk 82%   ✻ @ws-1 5h 84% · wk 82%     machine ›
 ──────────────────────────────────────────────────────────────────────────────────────
  gpu-1: connection lost. Tries again in 8s.

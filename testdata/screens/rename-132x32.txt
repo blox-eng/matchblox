@@ -20,13 +20,13 @@
   #4552 ●━●━◉┄○┄○  ctx 32%
   p merge #4552   ⏎ go in
 
-  ↓ 3 more
+ ╿ kindle-web                          ✻  1m
+  asks Claude needs your permission to use …
+  ctx 56%
+  ⏎ go in
 
-
-
-
+  ↓ 2 more
  + start a new session
  RECOMMENDATIONS · 7
- ✻ Claude Max  5h ▰▰▰▰▰▰▰▱ 84% · Fri 01:20   wk ▰▰▰▰▰▰▰▱ 82% · Mon 09:00                                                  machine ›
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ⏎ go in   c copy   v one line   s hosts   u strip   ←→ columns   tab next
+ ⏎ go in   c copy   v one line   s hosts   ←→ columns   tab next

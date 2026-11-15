@@ -113,9 +113,9 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 			return m.keyed(keyPress(s.press))
 		}
 		return m, nil
-	case sc.stripAt > 0 && ms.Y == sc.stripAt:
-		if s, ok := spanAt([]span{sc.strip}, ms.X); ok && s.press != "" {
-			return m.keyed(keyPress(s.press)) // as u
+	case sc.noteAt > 0 && ms.Y == sc.noteAt:
+		if s, ok := spanAt([]span{sc.noteTap}, ms.X); ok && s.press != "" {
+			return m.keyed(keyPress(s.press))
 		}
 		return m, nil
 	case m.sideActive() && ms.Y >= sc.bodyTop && ms.Y < sc.bodyTop+len(sc.rows):

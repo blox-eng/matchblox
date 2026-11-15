@@ -595,9 +595,6 @@ func (m Model) boardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 		m.turnChain(1)
 	case bkey.Matches(k, bk.PrevChain):
 		m.turnChain(-1)
-	case bkey.Matches(k, bk.Strip):
-		cmd = m.once("strip", bk.Strip.Help().Key+" turns the strip now.", "")
-		m.turnStripShown()
 	case isDigit(k): // never a tab on the board
 		next, cmd := m.answerFromChat(k.Text)
 		return next, cmd, true
@@ -819,8 +816,8 @@ func (m Model) boardTapGo(s sample.Session) (tea.Model, tea.Cmd) {
 }
 
 // boardHints are the board's keys on the key line: the chosen card's, then
-// c v s u, then ←→ and tab. A phone shows c v s u only: the chosen card
-// shows its own keys.
+// c v s, then ←→ and tab. A phone shows c v s only: the chosen card shows
+// its own keys.
 func (m Model) boardHints(w int) []hint {
 	bk, mk := m.keys.board, m.keys.main
 	if m.menu != nil { // the menu takes every key
@@ -833,11 +830,11 @@ func (m Model) boardHints(w int) []hint {
 	if !m.have && m.opt.Layered { // a host that never answered: the way back
 		return []hint{hintFor(mk.Back, "hosts"), hintFor(mk.Quit, "")}
 	}
-	tail := []hint{hintFor(bk.Copy, ""), density, hintFor(bk.Host, ""), hintFor(bk.Strip, "")}
+	tail := []hint{hintFor(bk.Copy, ""), density, hintFor(bk.Host, "")}
 	cancel := hintFor(mk.Back, "cancel") // the copy check waits for its paste
 	if b, _ := m.boardDrawOf(); m.have && b.none && m.copyCode == "" && m.boardAbove == 0 {
 		// No session at all: only the keys that act on an empty board.
-		return []hint{hintFor(mk.Open, "new session"), hintFor(bk.Strip, ""), hintFor(mk.NextTab, "")}
+		return []hint{hintFor(mk.Open, "new session"), hintFor(mk.NextTab, "")}
 	}
 	if m.layoutAt(w) == Narrow {
 		if m.copyCode != "" {
@@ -1087,7 +1084,6 @@ func (m Model) beltKeys() []beltKey {
 		beltOf(bk.Chain, "", "chain", card && m.chainLabelOf(s) != ""),
 		beltOf(bk.Density, "", "one line", board),
 		beltOf(bk.Host, "", "hosts", board && m.hostCount() > 1),
-		beltOf(bk.Strip, "", "strip", board),
 		beltOf(mk.NextTab, "⇥", "machine", !m.consenting()),
 		beltOf(mk.Second, "", "kill", card && !head && !isShipCard(s) && m.killAction(s) != nil),
 		beltOf(bk.Left, "←", "", board),

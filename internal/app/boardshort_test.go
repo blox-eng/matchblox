@@ -16,7 +16,7 @@ func shortBoard(t *testing.T, w, h int) (Model, *fakeConn) {
 }
 
 // TestAShortScreenKeepsTheChosenCard: on a short screen the ghost row, the
-// recommendations and the strip fold before the chosen card's head goes;
+// recommendations and the notice row fold before the chosen card's head goes;
 // where no card can be drawn at all, no key acts on one.
 func TestAShortScreenKeepsTheChosenCard(t *testing.T) {
 	for _, size := range [][2]int{{44, 10}, {44, 8}, {80, 8}, {96, 8}, {100, 8}, {160, 8}} {

@@ -219,8 +219,8 @@ func TestTalkInAChainOfOneStartsTheHostStoker(t *testing.T) {
 }
 
 // TestUTakesAMatchOutOfTheChain: out of the chain asks first, with the
-// act named, and a typed y takes it out. u is the board's strip: the act
-// is the room's card menu's (TestTheMenuTakesAMatchOutOfItsChain).
+// act named, and a typed y takes it out. The act is the room's card
+// menu's (TestTheMenuTakesAMatchOutOfItsChain).
 func TestUTakesAMatchOutOfTheChain(t *testing.T) {
 	st := headState(t, runningPlan(), true)
 	st.Queue = nil

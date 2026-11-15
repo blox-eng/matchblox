@@ -30,7 +30,8 @@
  ╿ wick-mobile                ▣  0s                                                                        │
   done ⠙ Working                                                                                           │
   ctx 6%                                                                                                   │
-  ⏎ go in                                                                                                  │ ⏺ The refresh endpoint is in and its tests pass.
+  ⏎ go in                                                                                                  │
+                                                                                                           │ ⏺ The refresh endpoint is in and its tests pass.
                                                                                                            │
                                                                                                            │ ────────────────────────────────────────────────────────────────────────────────
                                                                                                            │  ☐ Rotate
@@ -45,6 +46,5 @@
                                                                                                            │ Enter to select · ↑/↓ to navigate · Esc to cancel
  + start a new session
  RECOMMENDATIONS · 7
- ✻ Claude Max  5h ▰▰▰▰▰▰▰▱ 84% · Fri 01:20   wk ▰▰▰▰▰▰▰▱ 82% · Mon 09:00   ❋ OpenAI Plus  5h ▰▰▰▱▱▱▱▱ 40% · 23:59   wk ▰▱▱▱▱▱▱▱ 12% · Tue 09:00   · Google login  not measured                machine ›
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ⏎ go in   c copy   v one line   s hosts   u strip   ←→ columns   tab next
+ ⏎ go in   c copy   v one line   s hosts   ←→ columns   tab next

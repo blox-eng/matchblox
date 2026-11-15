@@ -21,11 +21,11 @@
 
 
 
+
  › what should login's stoker do?
 ────────────────────────────────────────────────────────────────────────────────
  QUIET · 0   ▴                                                               −
  + start a new session
  RECOMMENDATIONS · 7
- ✻ 5h ▰▰▰▰▰▰▰▱ 84%  wk 82%   ✻ @gpu-1 5h ▰▰▰▰▰▰▰▱ 84%  wk 82%         machine ›
 ────────────────────────────────────────────────────────────────────────────────
- 1-2 mark an answer   ⏎ go in   c copy   v one line   s hosts   u strip
+ 1-2 mark an answer   ⏎ go in   c copy   v one line   s hosts   ←→ columns

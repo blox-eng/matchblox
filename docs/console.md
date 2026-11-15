@@ -1,7 +1,7 @@
 # The console
 
-From the top: the header, the tab row, the board, the strip, and at the
-bottom the key line.
+From the top: the header, the tab row, the board, and at the bottom the
+key line.
 
 The header shows the host, the host filter (`all hosts ▾`) when you have
 more than one host, how many matches need you (`● 3 need you`) and
@@ -119,7 +119,7 @@ pane.
   sends it. Another digit moves the mark. `Esc`, a move to another card,
   or a new question clears it.
 - **After the send** the card says `sent 2 · waits for <name>`, and its
-  digits do nothing until the question changes. The strip says where the
+  digits do nothing until the question changes. A notice says where the
   card went: `sent 2 to flint-auth · now in WORKING`.
 
 For 400 ms after the peek lands on a card, after the console opens, and
@@ -155,21 +155,9 @@ the board says how to show one again.
   `ws-1: not reached since 14:02 · ⏎ try again`. Its cards stay, faint,
   with `as of 14:02`, and the header does not count them.
 
-### The strip
+### Notices
 
-The strip is one line above the key line. `u`, or a tap on it, turns it:
-usage, then the machine, then hidden, then usage again. The word at its
-right names the next face (`machine ›`, `hide ›`). A phone and a desk each
-keep their own choice. With the strip hidden, the board takes its row.
-
-- **usage**: each account's 5-hour window and week.
-- **the machine**: the CPU and memory of the host in the filter; with all
-  hosts, each host's CPU.
-
-The strip turns by itself while a plan is within 10% of its limit (usage)
-or a detached busy loop burns (the machine), until you turn it.
-
-Every notice shows in the strip's row for 2.5 seconds: what ran, what was
+A notice shows above the key line for 2.5 seconds: what ran, what was
 refused and why, and the age of the data when the service is slow
 (`data is 40 s old · the service is slow`). A notice that does not fit
 wraps, up to three lines. The header never shows a notice.
@@ -198,11 +186,11 @@ closes. Each line shows only where it applies:
 ### Copy
 
 `c` and the menu copy to your clipboard. A drag over text on a desk
-selects it and copies it when you let go: the strip says `copied 42
+selects it and copies it when you let go: a notice says `copied 42
 characters`. On a phone a drag never selects: the menu copies.
 
 The console copies with OSC 52, through each hop between it and your
-screen. When the console's own tmux drops the copy, the strip says
+screen. When the console's own tmux drops the copy, a notice says
 `not copied: tmux drops it · tmux set -s set-clipboard on`, and the setup
 step "Let copy through" makes that change on a typed `y`. tmux passes a
 copy on only with `set-clipboard on`: `external`, tmux's default, and
@@ -331,8 +319,7 @@ is `‹ board`. At a question its key line says `type 2 to answer`.
 
 ## Usage
 
-The strip shows each account's windows in one line. Machine shows them
-whole, with the machine:
+Machine shows each account's windows, with the machine:
 
 ```
  USAGE
@@ -444,7 +431,7 @@ A card of a chain has a stub at the right of its third line: `─╴login`, in
 `━╸login` in every column. A match in two chains shows the chain that
 formed first. A match is never drawn twice.
 
-- When a match joins a chain, the strip says so for 2.5 seconds
+- When a match joins a chain, a notice says so for 2.5 seconds
   (`docs-bot joined hearth`). A new chain shows `hearth formed: hearth,
   web-cart`. The notice shows with `--no-motion` too.
 

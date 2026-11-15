@@ -24,8 +24,8 @@
 
   ↓ 4 more
 
+
  + start a new session
  RECOMMENDATIONS · 7
- ✻ 5h ▰▰▰▰▰▰▰▱ 84%  wk 82%        machine ›
 ────────────────────────────────────────────
  RUN install v0.43.0 over v0.42.0   y run  …

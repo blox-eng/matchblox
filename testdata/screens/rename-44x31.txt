@@ -28,4 +28,4 @@
 │ tmux and the agent take this name        │
 ╰─ ⏎ rename ─ esc ─────────────────────────╯
 ────────────────────────────────────────────
- c copy   v one line   s hosts   u strip
+ c copy   v one line   s hosts

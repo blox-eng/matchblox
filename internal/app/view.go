@@ -133,8 +133,8 @@ type drawn struct {
 	tabs    []span
 	bodyTop int   // the line of the first body row
 	rows    []int // the row each body line shows; -1 none, headerRow
-	stripAt int   // the board's strip; -1 when it has none
-	strip   span  // a tap on the strip turns it
+	noteAt  int   // the board's notice row; -1 when it has none
+	noteTap span  // a tap on the notice row
 	// boardView is the live view beside the board: from column x0 and line
 	// y0 to line y1 (x1 0: none).
 	boardView struct{ x0, x1, y0, y1 int }
@@ -188,7 +188,7 @@ func (m Model) drawScreen(w int) drawn {
 	head, waits, stokerAt, named := m.headerOf(w)
 	tabs, tabSpans := m.tabsLine(w)
 	sc := drawn{lines: []string{head, tabs, m.st.rule.Render(strings.Repeat("─", w))}, waits: waits, stokerAt: stokerAt, tabs: tabSpans,
-		bodyTop: 3, stripAt: -1, keysAt: -1, hostAt: m.boardHostHit(head)}
+		bodyTop: 3, noteAt: -1, keysAt: -1, hostAt: m.boardHostHit(head)}
 	switch {
 	case m.hostCount() > 1 && m.shows():
 		// A blocked host of two or more is a row, never the screen.
@@ -226,8 +226,8 @@ func (m Model) drawScreen(w int) drawn {
 			sc.boardView.x0, sc.boardView.x1 = w-p.live, w
 			sc.boardView.y0, sc.boardView.y1 = sc.bodyTop+p.headAt, sc.bodyTop+p.colsTo
 		}
-		if p.stripAt >= 0 {
-			sc.stripAt, sc.strip = sc.bodyTop+p.stripAt, p.strip
+		if p.noteAt >= 0 {
+			sc.noteAt, sc.noteTap = sc.bodyTop+p.noteAt, p.noteTap
 		}
 	default:
 		b = m.body(w)

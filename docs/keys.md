@@ -9,8 +9,8 @@ the bottom shows the keys of the open tab. A tap on a key presses it.
 
 ## The board
 
-The key line shows the keys of the chosen card first, then `c`, `v`, `s`
-and `u`, then `←→` and `Tab`. A key that does not fit leaves whole, from
+The key line shows the keys of the chosen card first, then `c`, `v` and
+`s`, then `←→` and `Tab`. A key that does not fit leaves whole, from
 the right.
 
 | Key | What it does |
@@ -29,7 +29,6 @@ the right.
 | `g` | Shows only the chain of the chosen card: its room. `Esc` shows all. |
 | `]`, `[` | Shows the next or the previous chain. |
 | `s` | Shows the next host, then all hosts. |
-| `u` | Turns the strip: usage, the machine, hidden. |
 | `Tab` or `Shift+Tab` | Goes to the board, or to Machine. |
 | `/` | Searches the board. A search narrows every column. |
 | `N` | Opens **New session**: where it starts (a path, or `←` `→` through your repositories and worktrees, then the ones found on the host, the most recent first), a branch for a new worktree beside the repository (blank: none), its name, the agent (`←` `→`, from the installed Claude Code, Codex, OpenCode and Cursor), for Claude Code, Codex and Cursor the account (see below), and a first message (blank: it waits for your first prompt; a new account has none). `Tab` goes to the next line. |
@@ -48,8 +47,8 @@ the right.
 | `R` | Starts the console again on the binary the service runs. The key line offers it first, `R start again · service v0.43.0, console v0.42.0`, when the service on this machine runs a newer release than the console and the console's own binary was installed over. Otherwise the line says `quit and reopen`. |
 
 A key that changed its job with the board says so once, the first time
-you press it: `c`, `v`, `s`, `g`, `u`, `p`, `x` on a card whose ship waits
-for its merge, and a digit.
+you press it: `c`, `v`, `s`, `g`, `p`, `x` on a card whose ship waits for
+its merge, and a digit.
 
 ## The list and the chat
 
@@ -318,7 +317,6 @@ Pocket, a sideways swipe turns the page too.
 | open the menu | Long-press a card, or press `m`. |
 | act | Tap a key on the card or on the key line. A destructive act still waits for a typed `y`. |
 | come back | The belt's `◂`, or the edge swipe. |
-| turn the strip | Tap the strip. |
 
 A vertical swipe scrolls the column. On a phone a drag never selects text:
 the menu copies. A tap is never consent: a tap on a card's `y go` marks

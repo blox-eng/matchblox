@@ -110,7 +110,7 @@ link of the pull request.
 The service reads GitHub with `gh`, one query per repository a minute, and
 only while a ship is in flight. It shares GitHub's rate limit with every
 agent on the machine: when less than a tenth is left it stops until the
-limit resets, and the strip says until when. Without `gh`, or with `gh` not
+limit resets, and a notice says until when. Without `gh`, or with `gh` not
 signed in, the ships still list, with `state unknown · gh not signed in`.
 A repository that cannot be read is asked again after a minute, then less
 and less often, up to every 30 minutes; a PR that was never read leaves

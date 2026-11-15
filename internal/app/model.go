@@ -419,9 +419,6 @@ type Model struct {
 	picked      map[wtKey]bool // worktrees x removes
 	batch       *batch
 	showExited  bool // e: the exited agents, one by one
-	// stripTurned: u turned the board's strip while a warning lasts, so the
-	// warning no longer turns it.
-	stripTurned bool
 	// stokerSel is the selected row of the STOKER tab, stokerShown the row
 	// whose command it shows, ackSent when the steps were last marked seen.
 	stokerSel    int
@@ -795,7 +792,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.askedBy, m.marked, m.away = m.marked.spend(m.now()), clientMark{}, false
 		m = m.dragDropped(msg)
 		if _, wheel := msg.(tea.MouseWheelMsg); m.boardShown() && m.held == nil && !wheel {
-			m.flash = "" // a flash after the key is new: it goes to the strip's row
+			m.flash = "" // a flash after the key is new: it goes to the notice row
 		}
 	default:
 		m.askedBy = ""
@@ -817,9 +814,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		again := nm.beltPoll(msg)
 		nm, belt := nm.tellBelt(again)
 		cmd = tea.Batch(cmd, belt)
-		if nm.stripTurned && nm.stripWarn() == "" {
-			nm.stripTurned = false // the warning ended: the next one turns the strip
-		}
 		if note := nm.flashNotice(was); note != nil {
 			cmd = tea.Batch(cmd, note)
 		}

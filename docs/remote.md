@@ -104,7 +104,7 @@ stop the others.
   no answer`.
 - A jump to a lost host works. It uses your own ssh, not the stream.
 
-### The strip and Machine
+### Machine
 
 - Panes lists the rows of every ticked host. Each row names its host.
 - Git names the host on each repository heading, not on each worktree row.
@@ -115,8 +115,6 @@ stop the others.
   61%`.
 - matchblox never adds or averages the readings of two hosts.
 - A short line drops whole cells and ends in ` …`.
-- The strip's machine face shows the CPU of each host, or of the one host
-  that `s` shows.
 
 ### The stoker, for each host
 

@@ -118,11 +118,8 @@ The full walk is [Get started](https://docs.matchblox.com/start/).
 - **Ships on their cards**: every pull request your sessions drive, on one
   track from CI to live, said in words. One that waits for your merge
   merges with `p` and a typed `y`.
-- **The strip**: one line under the board. `u` turns it: what `/usage` says
-  for each account, in percentages, each named by its provider
-  (`✻ Claude Team`, `❋ OpenAI Team`), and the machine. Press `n`
-  before you sleep: each session that fills its context compacts itself and
-  leaves one line on how to continue.
+- **A night**: press `n` before you sleep. Each session that fills its
+  context compacts itself and leaves one line on how to continue.
 - **Orders for the stoker**: matchblox starts the stoker agent you choose
   out of sight, on a tmux server of its own. Say in your own words how to
   run the night ("merge them on green") and turn on the gos
@@ -158,7 +155,6 @@ More in [The console](https://docs.matchblox.com/console/).
 | `v` | Shows each card whole, or as one line. |
 | `g` | Shows only the chain of the chosen card. `Esc` shows all. |
 | `s` | Shows the next host, then all hosts. |
-| `u` | Turns the strip: usage, the machine, hidden. |
 | `N` | Starts a new session: where, the agent, its account and a first message (none on a new account). |
 | `A` | Switches the chosen session to another agent in the same pane. |
 | `Tab` | Goes to the board, or to Machine. |

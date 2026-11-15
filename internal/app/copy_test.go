@@ -514,15 +514,15 @@ func TestTheCopyCheckSaysHowToLeave(t *testing.T) {
 		}
 		*clock = clock.Add(time.Hour)
 		m = upd(t, m, noticeMsg{})
-		if row := stripRow(m); !strings.Contains(row, "Now paste here · esc cancels") {
+		if row := boardNoticeRow(m); !strings.Contains(row, "Now paste here · esc cancels") {
 			t.Errorf("%s: an hour on, the check's row says %q", name, row)
 		}
 		if keys := keyLineOf(m); !strings.Contains(keys, "esc cancel") || strings.Contains(keys, "set up") {
 			t.Errorf("%s: while the check waits the key line says %q", name, keys)
 		}
 		m = pressOn(m, "down") // off the doors line
-		if m.copyCode != "" || strings.Contains(stripRow(m), "paste") || strings.Contains(keyLineOf(m), "cancel") {
-			t.Errorf("%s: a move off the doors line keeps the check: code %q, row %q, keys %q", name, m.copyCode, stripRow(m), keyLineOf(m))
+		if m.copyCode != "" || strings.Contains(boardNoticeRow(m), "paste") || strings.Contains(keyLineOf(m), "cancel") {
+			t.Errorf("%s: a move off the doors line keeps the check: code %q, row %q, keys %q", name, m.copyCode, boardNoticeRow(m), keyLineOf(m))
 		}
 	}
 }
@@ -732,8 +732,8 @@ func TestTheCheckBlocksNoOtherDoor(t *testing.T) {
 	}
 
 	// → during the check names another door: the check ends.
-	if m = pressOn(open(), "enter", "right"); m.copyCode != "" || strings.Contains(stripRow(m), "paste") || strings.Contains(keyLineOf(m), "cancel") {
-		t.Errorf("→ to another door keeps the check: code %q, row %q, keys %q", m.copyCode, stripRow(m), keyLineOf(m))
+	if m = pressOn(open(), "enter", "right"); m.copyCode != "" || strings.Contains(boardNoticeRow(m), "paste") || strings.Contains(keyLineOf(m), "cancel") {
+		t.Errorf("→ to another door keeps the check: code %q, row %q, keys %q", m.copyCode, boardNoticeRow(m), keyLineOf(m))
 	}
 
 	m = open()

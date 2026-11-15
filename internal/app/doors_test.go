@@ -56,7 +56,7 @@ func onRec(m Model, id string) Model {
 }
 
 // flashed is what the console said of a key: its flash, or on the board
-// the notice in the strip's row.
+// its notice.
 func flashed(m tea.Model) string { return cmp.Or(m.(Model).flash, m.(Model).noticeText) }
 
 // drainActs runs cmd, each of a batch, and counts what it sent.

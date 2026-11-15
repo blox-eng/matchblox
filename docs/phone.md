@@ -107,7 +107,7 @@ terminal.`
   Board layout. Home is `◂`, then the keys of the chosen card (`1 answer`,
   `p merge`, `y go`), then `↑ ↓ ⏎`. The rest of the belt has every other
   key of the board: `c copy`, `m menu`, `g chain`, `v one line`, `s hosts`,
-  `u strip`, `⇥ machine`, `x kill`, `←`, `→`, `]`, `[`, `/`, `z park`. A
+  `⇥ machine`, `x kill`, `←`, `→`, `]`, `[`, `/`, `z park`. A
   key that does not apply is dim and sends nothing. In a pane, the belt
   goes back to the layout it had there. A tap on `y go` does not give the
   go. The first tap arms it: the card says what the go does, for example
@@ -411,9 +411,7 @@ elsewhere. `v` turns every card whole, or every card to one line. The
 chosen card is always whole, with its peek: what the agent said last and
 the options of its question.
 
-The strip, one line above the key line, shows usage or the machine. `u`,
-or a tap on it, turns it, and a third turn hides it. Machine has all of
-it.
+Machine shows usage and the machine.
 
 The key line is at the bottom: an SSH app that shrinks the terminal for
 its keyboard keeps it above the keys. A tap on a key presses it. In

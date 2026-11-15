@@ -25,7 +25,7 @@
 
 
 
+
  RECOMMENDATIONS · 7
- ✻ Claude Max  5h ▰▰▰▰▰▰▰▱ 84%  wk 82%                                machine ›
 ────────────────────────────────────────────────────────────────────────────────
- ⏎ new session   u strip   tab next
+ ⏎ new session   tab next
