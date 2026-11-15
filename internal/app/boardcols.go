@@ -69,8 +69,12 @@ func (m Model) columnOf(s sample.Session) boardCol {
 // asksNow: the match asks a question or a permission. Claude Code's idle
 // prompt after a turn asks nothing: the turn ended. An agent that reports
 // its own state decides: one that says it works asks nothing, whatever its
-// transcript or the queue still hold.
+// transcript or the queue still hold. An approval menu its pane draws is
+// live and beats the report.
 func (m Model) asksNow(s sample.Session) bool {
+	if s.Permits {
+		return true // a drawn menu is live, whatever the report says
+	}
 	if s.ReportsWork() {
 		return false
 	}

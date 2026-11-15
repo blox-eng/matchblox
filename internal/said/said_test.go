@@ -277,3 +277,36 @@ func TestThePaneRuleReadsOnlyTheLiveLines(t *testing.T) {
 		}
 	}
 }
+
+// TestMenu: a drawn Claude Code menu ends with its own key hint. A reply
+// that only lists a "1. Yes" choice is no menu: the person answers it
+// with a typed line.
+func TestMenu(t *testing.T) {
+	for screen, want := range map[string]string{
+		` │ Hook PreToolUse:Bash requires confirmation for this command:
+ │ Working-state guard: this branch adds 2 line(s)
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. No
+ Esc to cancel · Tab to amend
+`: "Do you want to proceed?",
+		` Yes, I trust this folder
+ ❯ No, exit
+ Enter to confirm · Esc to cancel
+`: "Yes, I trust this folder",
+		`● Ready to ship. Pick one:
+
+  1. Yes, ship it
+  2. No, keep it local
+
+────────────────────────────────────────
+❯ 
+────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)
+`: "",
+	} {
+		if got, ok := Menu(screen); got != want || ok != (want != "") {
+			t.Errorf("Menu(%q) = %q, %v; want %q", screen, got, ok, want)
+		}
+	}
+}

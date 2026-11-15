@@ -1,6 +1,7 @@
 package queue
 
 import (
+	"slices"
 	"testing"
 	"time"
 
@@ -480,7 +481,8 @@ func TestACursorEventJoinsOnlyACursorSession(t *testing.T) {
 }
 
 // TestAHookedCursorSessionThatPermitsWaitsForPermission: no Cursor hook
-// fires when its approval menu draws, so its pane tells it.
+// fires when its approval menu draws, so its pane tells it. A hooked
+// Claude Code session at a drawn menu waits too.
 func TestAHookedCursorSessionThatPermitsWaitsForPermission(t *testing.T) {
 	q := New()
 	q.Apply(hooks.Event{Name: "UserPromptSubmit", Agent: hooks.CursorAgent, SessionID: "chat1", Pane: "%7", At: at(0)})
@@ -491,8 +493,27 @@ func TestAHookedCursorSessionThatPermitsWaitsForPermission(t *testing.T) {
 	claude.Agent, claude.Permits = "claude", true
 	q.Merge([]sample.Session{cursor, claude}, at(10))
 	items := q.Items()
-	if len(items) != 1 || items[0].Pane != "%7" || items[0].State != StatePermission || items[0].LastLine != "Run this command?" {
-		t.Errorf("items %+v, want one permission wait of %%7", items)
+	if len(items) != 2 || items[0].State != StatePermission || items[1].State != StatePermission ||
+		items[0].Pane == items[1].Pane || !slices.ContainsFunc(items, func(it Item) bool { return it.Pane == "%7" && it.LastLine == "Run this command?" }) {
+		t.Errorf("items %+v, want a permission wait of %%7 and of %%8", items)
+	}
+}
+
+// TestAMenuBeatsAReportOfWork: Claude Code reports busy while a PreToolUse
+// hook's confirmation menu is up, and the hook's notification never came
+// or was already undone. The drawn menu is live: the session waits.
+func TestAMenuBeatsAReportOfWork(t *testing.T) {
+	for _, hooked := range []bool{false, true} {
+		q := New()
+		if hooked {
+			q.Apply(hooks.Event{Name: "Stop", SessionID: "flint", Pane: "%2", At: at(0)})
+		}
+		s := session("flint", "%2", "flint-auth", "busy", 0)
+		s.Agent, s.Reported, s.Permits, s.LastLine = "claude", true, true, "Do you want to proceed?"
+		q.Merge([]sample.Session{s}, at(60))
+		if items := q.Items(); len(items) != 1 || items[0].State != StatePermission || items[0].LastLine != "Do you want to proceed?" {
+			t.Errorf("hooked %v: items %+v, want flint-auth's permission wait", hooked, items)
+		}
 	}
 }
 
