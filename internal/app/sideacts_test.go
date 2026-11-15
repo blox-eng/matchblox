@@ -84,35 +84,52 @@ func TestAFootPartTakesNoCardKey(t *testing.T) {
 	}
 }
 
+// TestMenuHoldsNoActThatDestroys: the menu names the acts that can be
+// undone (the owner, 2026-11-12: the menu destroys nothing). The kill, the
+// merge, the go, the switch and the stoker's stop stay keys of the list.
+func TestMenuHoldsNoActThatDestroys(t *testing.T) {
+	st := boardFixture(t)
+	for _, s := range st.Sessions {
+		m := pressOn(listShot(t, st, 160, 38, s.Name), "m")
+		if m.menu == nil {
+			t.Fatalf("m opened no menu on %s", s.Name)
+		}
+		for i, it := range m.menu.items {
+			if slices.Contains([]string{"x", "p", "y", "A", "f"}, it.key) {
+				t.Errorf("%s's menu has %q (%s)", s.Name, it.label, it.key)
+			}
+			run := m
+			for range i {
+				run = pressOn(run, "down")
+			}
+			run = pressOn(run, "enter")
+			if run.pending != nil && run.pending.destructive || run.menu != nil {
+				t.Errorf("%s's %q opened a destructive step or kept the menu: %v", s.Name, it.label, run.pending)
+			}
+			for _, a := range boardFake(run).acts() {
+				if strings.HasPrefix(a.RecID, "kill:") || strings.HasPrefix(a.RecID, "ship:") {
+					t.Errorf("%s's %q sent %s", s.Name, it.label, a.RecID)
+				}
+			}
+		}
+	}
+}
+
 func TestMenuNamesTheListsActs(t *testing.T) {
 	st := boardFixture(t)
-	labels := func(m Model) map[string]string {
-		out := map[string]string{}
-		for _, it := range m.menu.items {
-			out[it.key] = it.label
-		}
-		return out
-	}
-	m := pressOn(listShot(t, st, 160, 38, "kindle-web"), "m")
+	m := pressOn(listShot(t, st, 160, 38, "flint-auth"), "m")
 	if m.menu == nil {
 		t.Fatal("m opened no menu")
 	}
-	got := labels(m)
-	for _, k := range []string{"x", "r", "A", "p"} {
-		if got[k] == "" {
-			t.Errorf("the menu names no act on %s: %v", k, got)
-		}
+	got := map[string]string{}
+	for _, it := range m.menu.items {
+		got[it.key] = it.label
 	}
-	m = pressOn(m, "x")
-	if m.menu != nil || !strings.Contains(consentText(m), "kill-pane") {
-		t.Fatalf("x in the menu: menu %v, box %q", m.menu != nil, consentText(m))
+	if got["r"] != "rename" || got["F"] != "stoke the chain login" {
+		t.Errorf("the menu names %v", got)
 	}
-
-	m = pressOn(listShot(t, st, 160, 38, "spark-docs"), "m")
-	if got := labels(m); got["p"] != "" {
-		t.Errorf("a session with no ship that waits offers a merge: %v", got)
-	}
-	if !slices.ContainsFunc(m.menu.items, func(it menuItem) bool { return it.key == "x" }) {
-		t.Error("spark-docs's menu has no kill")
+	m = pressOn(m, "r")
+	if m.menu != nil || m.form == nil {
+		t.Fatalf("r in the menu: menu %v, form %v", m.menu != nil, m.form != nil)
 	}
 }

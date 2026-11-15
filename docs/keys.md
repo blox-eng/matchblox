@@ -69,7 +69,7 @@ the screen; else it types.
 | `h` | In the list, on a hidden host, shows that host in all hosts again. Machine › Hosts then ticks the host. On another host, a notice says what `h` does. |
 | `g` | In the list, shows only the chain of the chosen session. `Esc` shows all. |
 | `/` | In the list, searches the list. |
-| `m` | In the list, opens the menu of the chosen session. It names each act the session can take, with its key. A kill or a merge from the menu waits for a typed `y`, as its key does. |
+| `m` | In the list, opens the menu of the chosen session. It names the acts that destroy nothing, with their keys: rename, stoke the chain, a new order. A kill, a merge, a go, a switch and the stoker's stop are keys of the list only. |
 | `c` | In the list, copies what the agent said last. |
 | `z` | In the list, parks the chosen session, or lets it go. In the line of a parked session, lets it go. |
 | `N` | In the list, opens **New session**. |

@@ -171,16 +171,16 @@ closes. Each line shows only where it applies:
 3. `copy the link of #4556`
 4. `copy its name`
 5. `show only the chain login` (also `g`)
-6. The acts the session can take, each with its key: `merge #4556` (`p`),
-   `give the go` (`y`), `kill` (`x`), `rename` (`r`), `switch the agent`
-   (`A`), `stoke the chain login` (`F`), `start or stop the stoker` (`f`)
-   and `a new order` (`o`).
+6. The acts that destroy nothing, each with its key: `rename` (`r`),
+   `stoke the chain login` (`F`) and `a new order` (`o`).
 7. `go in` (also `a`)
 8. `out of login`, only while the board shows that chain: it takes the
    match out of the chain, after a typed `y`.
 
-A kill and a merge show their commands in the consent box first. They
-run on a typed `y`, from the menu as from their keys.
+The menu destroys nothing. A kill (`x`), a merge (`p`), a go (`y`), a
+switch of the agent (`A`) and the stoker's stop (`f`) are keys of the
+list. A kill and a merge show their commands in the consent box first,
+and run on a typed `y`.
 
 ### Copy
 
