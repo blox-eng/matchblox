@@ -807,21 +807,55 @@ func TestStokerHoldKeepsTheMessageWaiting(t *testing.T) {
 	}
 }
 
-// TestReleaseIntoAQuestionComesBackWithWords: the session asks, the
-// message goes, the service refuses, and the text returns with its words.
-func TestReleaseIntoAQuestionComesBackWithWords(t *testing.T) {
+// TestAHeldMessageWaitsOutAQuestion: the turn ends on a question menu. A
+// line typed there would pick, and the service refuses it, so the message
+// keeps waiting, and goes when the question is answered.
+func TestAHeldMessageWaitsOutAQuestion(t *testing.T) {
 	m := heldOn(t)
 	next, cmd := m.Update(stateMsg(boardState(askingMatch("hearth-api", "Yes", "No"))))
 	drain(cmd)
 	m = next.(Model)
-	got := messageActs(boardFake(m))
-	if len(got) != 1 || got[0].Text != "later" {
-		t.Fatalf("sent %+v", got)
+	if got := messageActs(boardFake(m)); len(got) != 0 {
+		t.Fatalf("sent into the question: %+v", got)
 	}
-	next, _ = m.Update(resultMsg{ActID: "a" + strconv.Itoa(m.acts), Err: "hearth-api asks a question now"})
+	if got := chatLineOf(m, 120); m.lineHeld[m.chosenSide()].text != "later" || !strings.Contains(got, "queued until its question is answered") {
+		t.Fatalf("held %v, line %q", m.lineHeld, got)
+	}
+	next, cmd = m.Update(stateMsg(boardState(boardMatch("hearth-api", time.Hour))))
+	drain(cmd)
 	m = next.(Model)
-	if m.lines[m.chosenSide()] != "later" || !strings.Contains(chatLineOf(m, 120), "not sent: hearth-api asks a question now") {
-		t.Fatalf("line %q, says %q", m.lines[m.chosenSide()], chatLineOf(m, 120))
+	if got := messageActs(boardFake(m)); len(got) != 1 || got[0].Text != "later" {
+		t.Fatalf("after the answer, sent %+v", got)
+	}
+}
+
+// TestALineTypedAtAMenuWaitsForTheAnswer: Claude Code draws a permission
+// prompt, and the owner types a message and ⏎. Enter would approve there,
+// so the console queues the message, says so, and sends it once the
+// prompt is answered. A second message waits for the first.
+func TestALineTypedAtAMenuWaitsForTheAnswer(t *testing.T) {
+	s := boardMatch("kindle-web", time.Hour)
+	s.Agent, s.Permits, s.LastLine = "claude", true, "Do you want to proceed?"
+	m, _ := sideConsole(t, boardState(s))
+	k := m.chosenSide()
+	m = pressOn(typeLine(m, "then run the tests"), "enter")
+	if got := messageActs(boardFake(m)); len(got) != 0 {
+		t.Fatalf("sent into a permission prompt: %+v", got)
+	}
+	if got := chatLineOf(m, 120); m.lines[k] != "" || m.lineHeld[k].text != "then run the tests" || !strings.Contains(got, "queued until its question is answered") {
+		t.Fatalf("line %q, held %v, says %q", m.lines[k], m.lineHeld, got)
+	}
+	m = pressOn(typeLine(m, "and more"), "enter")
+	if got := chatLineOf(m, 120); m.lines[k] != "and more" || !strings.Contains(got, "one message already waits for the answer") {
+		t.Fatalf("line %q, says %q", m.lines[k], got)
+	}
+
+	s.Permits, s.Busy, s.Status, s.Idle = false, true, "busy", 0 // approved: it works, and Claude Code queues typing
+	next, cmd := m.Update(stateMsg(boardState(s)))
+	drain(cmd)
+	m = next.(Model)
+	if got := messageActs(boardFake(m)); len(got) != 1 || got[0].RecID != "message:"+k.pane || got[0].Text != "then run the tests" {
+		t.Fatalf("after the answer, sent %+v", got)
 	}
 }
 
