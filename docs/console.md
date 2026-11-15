@@ -106,7 +106,9 @@ The line under the chat's head names the facts of the chosen session, and
 shows only when it has one: the fix for tokens with no window known
 (first), a chain mate's inbox (`✉ 1 in its inbox`), an account that is
 not the default, the pull request when no ship names it, the subagents,
-the shells and the child runs. The line is cut at the chat's width.
+the shells and the child runs. The line is cut at the chat's width. The
+window fix is never cut: when it does not fit with the other facts, it
+wraps on lines of its own, and the other facts come after it.
 
 The digits answer a question with one choice, given with its options
 (Claude Code's question tool). Every other wait shows `⏎ go in`: a

@@ -136,6 +136,8 @@ func TestScreens(t *testing.T) {
 	}
 	withFacts, _, _ := sideShotOf(t, facts, 132, 32)
 	golden(t, withFacts, "side-facts", 132, 32)
+	phoneFacts, _, _ := sideShotOf(t, facts, 44, 31) // the fix wraps whole on a phone
+	golden(t, tapOn(t, phoneFacts, listRow(t, phoneFacts, "flint-auth")), "side-facts", 44, 31)
 	for _, size := range [][2]int{{44, 31}, {132, 32}} {
 		check(t, twoShipsState(t), "sessionships", size[0], size[1], nil)
 	}

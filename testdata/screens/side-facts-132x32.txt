@@ -2,8 +2,8 @@
  SESSIONS 7    machine
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  NEEDS YOU · 6  −                       │ flint-auth ✻ asks · #4545 ci                                       ctrl+o expand · m menu
-▌╿ flint-auth                       2m ✻│ 158k tokens · no window known: run matchblox setup, or add the model to [sessions.windows…
-   conflicts with main                  │
+▌╿ flint-auth                       2m ✻│ 158k tokens · no window known: run matchblox setup, or add the model to [sessions.windows]
+   conflicts with main                  │ 2 subagents running
  ╿ spark-docs                       9m ✻│
    I rewrote the quick start and the in…│
  ╿ ember-billing                    4m ✻│

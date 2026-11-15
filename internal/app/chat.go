@@ -14,8 +14,9 @@ import (
 )
 
 // chatPanel is the chosen session's chat in h lines of w cells: the head
-// line, its facts when it has some, the chain line for a session in a chain, the conversation cut from
-// its pane, the question with its options when it asks, and the line.
+// line, its facts when it has some, the chain line for a session in a
+// chain, the conversation cut from its pane, the question with its options
+// when it asks, and the line.
 func (m Model) chatPanel(w, h int) []string {
 	if w <= 0 || h <= 0 {
 		return nil
@@ -38,9 +39,7 @@ func (m Model) chatPanel(w, h int) []string {
 	default:
 		s := listed[i]
 		top := []string{m.chatHead(s, w)}
-		if l, ok := m.chatFacts(s, w); ok {
-			top = append(top, l)
-		}
+		top = append(top, m.chatFacts(s, w)...)
 		if l, ok := m.chatChain(s, w); ok {
 			top = append(top, l)
 		}

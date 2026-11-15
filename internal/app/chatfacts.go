@@ -8,17 +8,48 @@ import (
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/state"
+	"github.com/charmbracelet/x/ansi"
 )
 
-// chatFacts is the line under the chat's head, w cells wide: the fix for
-// tokens with no window known first, then a chain mate's inbox, an account
-// that is not the default, the pull request when no ship names it, and the
-// background work. It is cut, never wrapped. false: nothing to say.
-func (m Model) chatFacts(s sample.Session, w int) (string, bool) {
-	var parts []string
-	if fix := windowFix(s); fix != "" {
-		parts = append(parts, fix)
+// chatFacts are the lines under the chat's head, each w cells wide: the
+// fix for tokens with no window known first, then a chain mate's inbox, an
+// account that is not the default, the pull request when no ship names it,
+// and the background work. They are one line where they fit. Else the fix
+// wraps whole, so it keeps its action, and the other facts follow on its
+// last line, or on one line of their own, cut. None: nothing to say.
+func (m Model) chatFacts(s sample.Session, w int) []string {
+	ink := m.st.muted.Render
+	fix, parts := windowFix(s), m.otherFacts(s)
+	all := parts
+	if fix != "" {
+		all = append([]string{fix}, parts...)
 	}
+	if len(all) == 0 {
+		return nil
+	}
+	line := strings.Join(all, " · ")
+	if fix == "" || 1+ansi.StringWidth(line) <= w {
+		return []string{fit(" "+ink(line), w)}
+	}
+	lines := wrapPlain(fix, max(w-1, 1))
+	if len(parts) > 0 {
+		rest := strings.Join(parts, " · ")
+		if tail := lines[len(lines)-1] + " · " + rest; 1+ansi.StringWidth(tail) <= w {
+			lines[len(lines)-1] = tail
+		} else {
+			lines = append(lines, rest) // cut to the width below
+		}
+	}
+	out := make([]string, len(lines))
+	for i, l := range lines {
+		out[i] = fit(" "+ink(l), w)
+	}
+	return out
+}
+
+// otherFacts are the facts of s after the window fix, in their order.
+func (m Model) otherFacts(s sample.Session) []string {
+	var parts []string
 	if v, ok := m.mateOf(s); ok && v.Inbox > 0 {
 		inbox := "✉ " + strconv.Itoa(v.Inbox) + " in its inbox"
 		if v.Full {
@@ -51,10 +82,7 @@ func (m Model) chatFacts(s sample.Session, w int) (string, bool) {
 	if n := m.descendants(s.Host, sample.ProcRef{PID: s.PID, Start: s.Start}); n > 0 {
 		parts = append(parts, plural(n, "child run"))
 	}
-	if len(parts) == 0 {
-		return "", false
-	}
-	return fit(" "+m.st.muted.Render(strings.Join(parts, " · ")), w), true
+	return parts
 }
 
 // prOf is the open pull request of the worktree a directory is in: the
