@@ -583,3 +583,23 @@ func TestAShipThatPassesAStageSparksOnce(t *testing.T) {
 		t.Errorf("the Ships tab's track sparks: %q", got)
 	}
 }
+
+// TestACardWithNoWindowPrintsNoZero: tokens with no window known (a model
+// OpenCode's cache does not know) never print "/ 0" on the chosen card.
+func TestACardWithNoWindowPrintsNoZero(t *testing.T) {
+	st := outsideTmux(demoState(t))
+	for i, s := range st.Sessions {
+		if s.Agent == "opencode" {
+			st.Sessions[i].Context, st.Sessions[i].Window, st.Sessions[i].ContextPct = "unmeasured", 0, 0
+		}
+	}
+	m, _ := loadedWith(t, 160, st)
+	for _, s := range m.snap.Sessions {
+		if s.Agent == "opencode" {
+			choose(&m, s.PID)
+		}
+	}
+	if out := plainFrame(m); strings.Contains(out, "/ 0") {
+		t.Errorf("a card prints / 0:\n%s", out)
+	}
+}

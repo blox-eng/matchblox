@@ -3,7 +3,6 @@ package app
 import (
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
@@ -272,9 +271,6 @@ func (m Model) selectedRec() (advice.Rec, bool) {
 	return m.recs[i], true
 }
 
-// maxTreeDepth is how many levels of children are drawn under a session.
-const maxTreeDepth = 4
-
 // childrenOf are the children started by one process of host, in
 // snapshot order.
 func (m Model) childrenOf(host string, parent sample.ProcRef) []sample.Session {
@@ -293,34 +289,6 @@ func (m Model) descendants(host string, parent sample.ProcRef) int {
 		n += 1 + m.descendants(host, sample.ProcRef{PID: c.PID, Start: c.Start})
 	}
 	return n
-}
-
-// childRows are the lines under one session or child, depth first: a
-// branch for each child and a fold for what lies below the last level.
-// indent carries a bar down past each ancestor that has siblings below.
-func (m Model) childRows(host string, parent sample.ProcRef, indent string, depth, w int) []string {
-	st := m.st
-	kids := m.childrenOf(host, parent)
-	if len(kids) == 0 {
-		return nil
-	}
-	if depth > maxTreeDepth {
-		return []string{fit(st.faint.Render(indent+"└─ … "+strconv.Itoa(m.descendants(host, parent))+" more"), w)}
-	}
-	var out []string
-	for i, c := range kids {
-		branch, below := "├─ ", "│ "
-		if i == len(kids)-1 {
-			branch, below = "└─ ", "  "
-		}
-		line := st.faint.Render(indent+branch) + st.text.Render(c.Name)
-		if c.Status != "" {
-			line += st.faint.Render(" " + c.Status)
-		}
-		out = append(out, fit(line, w))
-		out = append(out, m.childRows(host, sample.ProcRef{PID: c.PID, Start: c.Start}, indent+below, depth+1, w)...)
-	}
-	return out
 }
 
 // accountTag is the account a session runs on, for a row: empty on the
