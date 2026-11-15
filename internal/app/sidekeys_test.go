@@ -875,3 +875,31 @@ func TestTheMenuGoesInByCtrlO(t *testing.T) {
 		t.Fatalf("go in ran %v", *ran)
 	}
 }
+
+// beltTap is a tap on an act key of Pocket's belt: its letter with the
+// super modifier (CSI u), which no soft keyboard sends.
+func beltTap(r rune) tea.KeyPressMsg { return tea.KeyPressMsg{Code: r, Mod: tea.ModSuper} }
+
+// TestBeltActKeysActWhileTheLineHasTheKeys: the belt's act keys (copy,
+// menu, kill…) act on the chosen session even while the line has the keys,
+// and the same letter typed on the keyboard still types.
+func TestBeltActKeysActWhileTheLineHasTheKeys(t *testing.T) {
+	m, clipped, _ := sideShot(t, 160, 38)
+	m.toLine()
+	next, cmd := m.Update(beltTap('c'))
+	nm := fed(next, cmd).(Model)
+	if len(*clipped) != 1 || nm.lines[nm.chosenSide()] != "" || nm.inList() {
+		t.Errorf("the belt's c: clipped %q, line %q, in the list %v", *clipped, nm.lines[nm.chosenSide()], nm.inList())
+	}
+	next, _ = m.Update(beltTap('x'))
+	if next.(Model).pending == nil {
+		t.Errorf("the belt's x opened no kill box: %q", next.(Model).noticeText)
+	}
+	next, _ = m.Update(beltTap('m'))
+	if next.(Model).menu == nil {
+		t.Error("the belt's m opened no menu")
+	}
+	if nm := pressOn(m, "c"); nm.lines[nm.chosenSide()] != "c" {
+		t.Errorf("a typed c: the line holds %q", nm.lines[nm.chosenSide()])
+	}
+}

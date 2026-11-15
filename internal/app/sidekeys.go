@@ -140,6 +140,11 @@ func (m Model) sideKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 	case m.inList():
 		next, cmd := m.listKey(k, s, ok)
 		return next, cmd, true
+	case k.Mod&tea.ModSuper != 0:
+		if b, act := m.beltAct(k); act { // a tap on the belt acts as in the list; the line keeps the keys
+			next, cmd := m.listKey(b, s, ok)
+			return next, cmd, true
+		}
 	}
 	next, cmd := m.lineKey(k, s, ok)
 	return next, cmd, true
@@ -275,6 +280,16 @@ func (m Model) noRowWhy() string {
 		return "no match on " + m.boardHost + " · " + m.keys.board.Host.Help().Key + " turns the host"
 	}
 	return "no session to act on · " + m.keys.main.New.Help().Key + " starts one"
+}
+
+// beltAct is k, a tap on an act key of Pocket's belt, as the list reads
+// it: the belt sends its act keys with the super modifier (CSI u), which
+// no soft keyboard sends, so a typed letter still types in the line.
+func (m Model) beltAct(k tea.KeyPressMsg) (tea.KeyPressMsg, bool) {
+	b := tea.KeyPressMsg{Code: k.Code, Text: string(k.Code), Mod: k.Mod &^ tea.ModSuper}
+	bk, mk := m.keys.board, m.keys.main
+	acts := []bkey.Binding{bk.Copy, bk.Menu, bk.Chain, bk.Host, bk.Merge, mk.Second, mk.Search, mk.Park, mk.Grant}
+	return b, b.Mod == 0 && bkey.Matches(b, acts...)
 }
 
 // rowActKeys are the keys that act on the chosen row in the list, as they
