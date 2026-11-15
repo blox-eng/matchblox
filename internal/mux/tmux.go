@@ -35,6 +35,14 @@ func (t Tmux) Load(pane, name, text string) error {
 	return c.Run()
 }
 
+// NoBracketedPaste reads #{bracket_paste_flag}. The format exists from
+// tmux 3.7; an older tmux prints nothing, and then it cannot tell.
+func (t Tmux) NoBracketedPaste(pane string) bool {
+	tmux, id := sample.Tmux(pane)
+	out, err := t.run(slices.Concat(tmux, []string{"display-message", "-p", "-t", id, "#{bracket_paste_flag}"}))
+	return err == nil && strings.TrimSpace(out) == "0"
+}
+
 func (Tmux) Paste(pane, name string) []string {
 	tmux, id := sample.Tmux(pane)
 	return slices.Concat(tmux, []string{"paste-buffer", "-p", "-d", "-b", name, "-t", id})

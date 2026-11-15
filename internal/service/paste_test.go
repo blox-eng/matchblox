@@ -20,7 +20,7 @@ func flintAuth() sample.Session {
 }
 
 func pasteAct(pane, text string) proto.Act {
-	return proto.Act{RecID: proto.PastePrefix + pane, Confirm: "y", Text: text, FromPlaced: true}
+	return proto.Act{RecID: proto.PastePrefix + pane, Confirm: "y", Text: text, Console: true}
 }
 
 // TestPasteGoesInAsBracketedPaste: the text goes to tmux on stdin, into a
@@ -40,9 +40,13 @@ func TestPasteGoesInAsBracketedPaste(t *testing.T) {
 	if res.Err != "" || len(res.Skipped) != 0 {
 		t.Fatalf("%+v", res)
 	}
-	if len(ran) != 3 || len(stdin) != 1 || stdin[0] != text {
+	if len(ran) != 4 || len(stdin) != 1 || stdin[0] != text {
 		t.Fatalf("ran %q, stdin %q", ran, stdin)
 	}
+	if want := []string{"tmux", "display-message", "-p", "-t", "%3", "#{bracket_paste_flag}"}; !slices.Equal(ran[0], want) {
+		t.Fatalf("mode %q, want %q", ran[0], want)
+	}
+	ran = ran[1:]
 	load, paste := ran[0], ran[1]
 	if !slices.Equal(load[:3], []string{"tmux", "load-buffer", "-b"}) || load[4] != "-" || len(load) != 5 {
 		t.Fatalf("load %q", load)
@@ -61,7 +65,7 @@ func TestPasteGoesInAsBracketedPaste(t *testing.T) {
 	if res := s.act(t.Context(), pasteAct("%3", "another\ntext")); res.Err != "" {
 		t.Fatalf("%+v", res)
 	}
-	if ran[0][3] == name {
+	if ran[1][3] == name {
 		t.Fatalf("two pastes share the buffer %q", name)
 	}
 }
@@ -167,19 +171,92 @@ func TestPasteKeepsTheMessageGuard(t *testing.T) {
 	}
 }
 
-// TestPasteIsAPaneActLikeAMessage: an unplaced caller and an agent's pane
-// that is neither the stoker's nor driven are refused, as for a message.
+// TestPasteIsAPaneActLikeAMessage: paste: names its pane as message: does.
 func TestPasteIsAPaneActLikeAMessage(t *testing.T) {
-	s, ran := holdsTest(t, flintAuth())
-	s.Mux = &muxtest.Fake{}
-	if res := s.act(t.Context(), proto.Act{RecID: proto.PastePrefix + "%3", Confirm: "y", Text: "a\nb"}); res.Err != unplacedSender {
-		t.Fatalf("unplaced: %q", res.Err)
-	}
 	if paneOf(proto.PastePrefix+"%3") != "%3" || typedPane(proto.PastePrefix+"%3") != "%3" {
 		t.Fatal("paste: names no pane")
 	}
-	if len(*ran) != 0 {
-		t.Fatalf("ran %q", *ran)
+}
+
+// TestPasteFromAnAgentIsRefused: only the person at a console pastes. The
+// stoker, a pane it drives, a CLI and an unplaced caller are refused, and
+// nothing loads.
+func TestPasteFromAnAgentIsRefused(t *testing.T) {
+	s, ran := drivenPaneTest(t)
+	fake := &muxtest.Fake{}
+	s.Mux = fake
+	mustAct(t, s, fromStokerAct("message:%2", "rebase on main")) // the stoker drives %2 now
+	s.PeerPane = func(pid int) string { return map[int]string{4242: "%9@mbtest", 200: "%2"}[pid] }
+	*ran = nil
+	if res := s.act(t.Context(), fromStokerAct(proto.PastePrefix+"%2", "a\nb")); res.Err != noPaste {
+		t.Errorf("the stoker: %q", res.Err)
+	}
+	for _, c := range []struct {
+		pid    int
+		client string
+	}{{4242, proto.ClientConsole}, {200, proto.ClientConsole}, {200, proto.ClientCLI}, {555, proto.ClientCLI}, {0, proto.ClientCLI}} {
+		a := proto.Act{RecID: proto.PastePrefix + "%2", Confirm: "y", Text: "a\nb"}
+		if res := actOver(t, s, c.pid, c.client, a); res.Err != noPaste {
+			t.Errorf("pid %d, %s: %q", c.pid, c.client, res.Err)
+		}
+	}
+	if res := s.act(t.Context(), proto.Act{RecID: proto.PastePrefix + "%2", Confirm: "y", Text: "a\nb", FromPlaced: true}); res.Err != noPaste {
+		t.Errorf("a placed caller that is no console: %q", res.Err)
+	}
+	if len(*ran) != 0 || len(fake.Loads()) != 0 {
+		t.Fatalf("ran %q, loaded %q", *ran, fake.Loads())
+	}
+	if res := actOver(t, s, 555, proto.ClientConsole, proto.Act{RecID: proto.PastePrefix + "%2", Confirm: "y", Text: "a\nb"}); res.Err == noPaste {
+		t.Fatal("the person's console was refused")
+	}
+}
+
+// TestPasteToAPaneWithoutBracketedPasteIsRefused: tmux brackets a paste
+// only for a program that asked for it; for any other, each line would go
+// with its own Enter. Nothing loads and nothing runs.
+func TestPasteToAPaneWithoutBracketedPasteIsRefused(t *testing.T) {
+	s, ran := holdsTest(t, flintAuth())
+	var argv [][]string
+	s.Mux = mux.Tmux{
+		Run:   func(a []string) (string, error) { argv = append(argv, a); return "0\n", nil },
+		RunIn: func(a []string, _ string) error { argv = append(argv, a); return nil },
+	}
+	res := s.act(t.Context(), pasteAct("%3", "a\nb"))
+	if want := "flint-auth does not take a paste · send it as one line"; res.Err != want {
+		t.Fatalf("err %q, want %q", res.Err, want)
+	}
+	if want := [][]string{{"tmux", "display-message", "-p", "-t", "%3", "#{bracket_paste_flag}"}}; fmt.Sprint(argv) != fmt.Sprint(want) || len(*ran) != 0 {
+		t.Fatalf("tmux ran %q, steps %q", argv, *ran)
+	}
+}
+
+// TestPasteWhenTmuxCannotTellStillPastes: a tmux before 3.7 has no
+// bracket_paste_flag and prints nothing; the paste goes with -p.
+func TestPasteWhenTmuxCannotTellStillPastes(t *testing.T) {
+	for _, out := range []string{"\n", "1\n"} {
+		s, ran := holdsTest(t, flintAuth())
+		loaded := 0
+		s.Mux = mux.Tmux{
+			Run:   func([]string) (string, error) { return out, nil },
+			RunIn: func([]string, string) error { loaded++; return nil },
+		}
+		if res := s.act(t.Context(), pasteAct("%3", "a\nb")); res.Err != "" || len(*ran) != 2 || loaded != 1 {
+			t.Errorf("flag %q: %+v, steps %q, loads %d", out, res, *ran, loaded)
+		}
+	}
+}
+
+// TestPasteChecksTheModeBeforeLoading: the mode is read before the text
+// goes into a buffer, so a refused paste leaves no buffer behind.
+func TestPasteChecksTheModeBeforeLoading(t *testing.T) {
+	s, _ := holdsTest(t, flintAuth())
+	fake := &muxtest.Fake{NoBracket: map[string]bool{"%3": true}}
+	s.Mux = fake
+	if res := s.act(t.Context(), pasteAct("%3", "a\nb")); res.Err == "" {
+		t.Fatal("pasted into a pane without bracketed paste")
+	}
+	if len(fake.Loads()) != 0 || len(fake.Dropped()) != 0 {
+		t.Fatalf("loaded %q, dropped %q", fake.Loads(), fake.Dropped())
 	}
 }
 

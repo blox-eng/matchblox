@@ -853,6 +853,7 @@ func newService(cfg config.Config, root string) *service.Service {
 		s.Host = demo.Host(root)
 		// The fixture's panes and pids exist on this machine too.
 		s.Actions.Run = func([]string) error { return errors.New("fixtures: nothing runs on this machine") }
+		s.TmuxIn = func([]string, string) error { return errors.New("fixtures: nothing runs on this machine") }
 		return s
 	}
 	s.Actions.Run = func(argv []string) error { return actions.Exec(context.Background(), argv) }

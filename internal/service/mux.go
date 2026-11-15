@@ -7,5 +7,5 @@ func (s *Service) mux() mux.Mux {
 	if s.Mux != nil {
 		return s.Mux
 	}
-	return mux.Tmux{Run: s.tmuxOut, Capture: s.Capture}
+	return mux.Tmux{Run: s.tmuxOut, RunIn: s.TmuxIn, Capture: s.Capture}
 }

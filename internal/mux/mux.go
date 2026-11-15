@@ -19,6 +19,10 @@ type Mux interface {
 	// Load puts text into the paste buffer name on the server of pane. The
 	// text goes on stdin: no argv word and no shell holds it.
 	Load(pane, name, text string) error
+	// NoBracketedPaste tells if the program in pane said it takes no
+	// bracketed paste: tmux would send each line of a paste with its own
+	// Enter. False when the multiplexer cannot tell.
+	NoBracketedPaste(pane string) bool
 	// Paste is the step that pastes buffer name into pane as one bracketed
 	// paste, then deletes the buffer.
 	Paste(pane, name string) []string

@@ -118,12 +118,15 @@ func typesInto(a proto.Act) bool {
 }
 
 func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
+	if strings.HasPrefix(a.RecID, proto.PastePrefix) && !a.Console {
+		return proto.Result{Err: noPaste} // no agent, stoker or CLI: the paste is the line's
+	}
 	if typesInto(a) {
 		s.typingActs.add()
 		defer s.typingActs.done()
 	}
 	if !a.FromPlaced && !a.Console { // it could be any match's
-		if _, send := isSend(a); send || strings.HasPrefix(a.RecID, proto.PastePrefix) {
+		if _, send := isSend(a); send {
 			return proto.Result{Err: unplacedSender}
 		}
 		if typedPane(a.RecID) != "" {
@@ -235,6 +238,7 @@ func personsOwn(recID string) bool {
 }
 
 const (
+	noPaste      = "only you paste, at a console"
 	noDoor       = "only you open or close a door, at a console"
 	noHostUpdate = "only you update matchblox, at a console"
 )

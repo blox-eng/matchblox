@@ -35,13 +35,16 @@ func (s *Service) paste(ctx context.Context, pane string, a proto.Act) proto.Res
 	case len(text) > proto.MaxPaste:
 		return proto.Result{Err: fmt.Sprintf("the paste is %d bytes: the most is %d", len(text), proto.MaxPaste)}
 	}
+	m := s.mux()
+	if m.NoBracketedPaste(pane) {
+		return proto.Result{Err: x.Name + " does not take a paste · send it as one line"}
+	}
 	name, err := pasteBuffer()
 	if err != nil {
 		return proto.Result{Err: "no paste buffer: " + err.Error()}
 	}
 	release := s.holdPane(pane)
 	defer release()
-	m := s.mux()
 	if err := m.Load(pane, name, text); err != nil {
 		return proto.Result{Err: "the paste did not load: " + err.Error()}
 	}

@@ -10,15 +10,16 @@ import (
 )
 
 // Fake is a multiplexer in memory: Screen is each pane's text, Mode the
-// panes in copy mode. Its steps are argv words that name no program.
+// panes in copy mode, NoBracket the panes that take no bracketed paste. Its steps are argv words that name no program.
 type Fake struct {
-	mu     sync.Mutex
-	Screen map[string]string
-	Mode   map[string]bool
-	marked map[string]bool
-	marks  int
-	loads  []Load
-	drops  []string
+	mu        sync.Mutex
+	Screen    map[string]string
+	Mode      map[string]bool
+	NoBracket map[string]bool
+	marked    map[string]bool
+	marks     int
+	loads     []Load
+	drops     []string
 }
 
 // Load is one text Load put into a buffer.
@@ -37,6 +38,12 @@ func (f *Fake) Load(pane, name, text string) error {
 	defer f.mu.Unlock()
 	f.loads = append(f.loads, Load{pane, name, text})
 	return nil
+}
+
+func (f *Fake) NoBracketedPaste(pane string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.NoBracket[pane]
 }
 
 func (*Fake) Paste(pane, name string) []string { return []string{"fake", "paste", pane, name} }
