@@ -310,6 +310,27 @@ func TestTheStandInsBackKeyReturnsToTheNextWait(t *testing.T) {
 	}
 }
 
+// On a phone ◂ is "back to the list": the way back from the stand-in shows
+// the list, also when the stand-in opened from a chat (a long-press opens
+// the chat, then the menu's go in).
+func TestTheStandInsBackKeyShowsTheListOnAPhone(t *testing.T) {
+	m := onSession(t, demoSessions(t, 44), "flint-auth")
+	m.opt.Demo = demoLine
+	m.toLine()
+	if m.inList() {
+		t.Fatal("44 columns: the chat does not show: the test shows nothing")
+	}
+	m = pressKeys(t, m, "ctrl+o")
+	if !m.standIn {
+		t.Fatal("ctrl+o opened no stand-in")
+	}
+	next, _ := m.Update(uv.UnknownApcEvent(homeKey))
+	nm := next.(Model)
+	if screen := ansi.Strip(nm.render()); !nm.inList() || !strings.Contains(screen, "NEEDS YOU") {
+		t.Errorf("the way back shows no list:\n%s", screen)
+	}
+}
+
 func TestTheStandInForwardsKeysToItsPane(t *testing.T) {
 	m := standIn(t, 44)
 	f := m.conn.(*fakeConn)

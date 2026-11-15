@@ -213,11 +213,15 @@ func (m Model) openStandIn(pane string) Model {
 }
 
 // leaveStandIn goes back from the stand-in to the list, on the session
-// that waits next, as a jump back from a real pane does.
+// that waits next, as a jump back from a real pane does. Where one pane
+// shows, the list comes, not the chat the stand-in opened from.
 func (m Model) leaveStandIn() Model {
 	s, _ := m.selectedSession()
 	m.standIn = false
 	m.keysOut.queue = nil // typed at a screen that is gone; the key in flight still answers
+	if m.onePane(max(m.width, minWidth)) {
+		m.toList()
+	}
 	return m.nextAfter(s.Pane)
 }
 
