@@ -146,9 +146,11 @@ After an answer, a merge or a go, the board chooses the first card of
 - `s`, or a tap on the host filter in the header, shows the next host,
   then all hosts again. A card of another host says `@ws-1` after its name
   while the board shows more than one host. `⏎` on it goes into its pane.
-- A host that matchblox cannot reach keeps a line at the top of the board:
-  `ws-1: not reached since 14:02 · ⏎ try again`. Its cards stay, faint,
-  with `as of 14:02`, and the header does not count them.
+- A host that matchblox cannot reach is a part of the list's foot:
+  `! ws-1 not reached`. `Enter` on it shows
+  `ws-1: not reached since 14:02.` in the chat's place, and `Enter` there
+  dials it again. Its rows stay, faint, and the header does not count
+  them.
 
 ### Notices
 

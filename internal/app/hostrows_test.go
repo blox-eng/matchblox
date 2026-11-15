@@ -126,8 +126,9 @@ func TestOneHostStaleIsToday(t *testing.T) {
 	}
 }
 
-// TestThreeHostFrames: the golden frames of three hosts show what they
-// are for.
+// TestThreeHostFrames: the frames of three hosts show what they are for:
+// the header names the host filter, a row another host's, and a host that
+// is not reached is a part of the list's foot.
 func TestThreeHostFrames(t *testing.T) {
 	st := screensState(t)
 	for _, c := range []struct {
@@ -135,19 +136,15 @@ func TestThreeHostFrames(t *testing.T) {
 		w, h int
 		want []string
 	}{
-		// On the board (Task 12 step 1): the header names the host filter, a
-		// card another host's, a host that is not reached is a line over the
-		// columns in the service's own words (ruling 30).
-		{"fine", 86, 30, []string{"matchblox · all hosts ▾", "docs-sweep…"}},
-		{"fine", 132, 32, []string{"docs-sweep @ws-1"}},
-		{"stale", 86, 30, []string{"· gpu-1 stale", "gpu-1: not reached since 22:49 · ⏎ try again", "gpu-1: connection lost. Tries again in 8s."}},
-		{"stale", 132, 50, []string{"gpu-1: not reached since 22:49"}},
-		{"blocked", 86, 30, []string{"gpu-1: is not connected · ⏎ connect"}},
+		{"fine", 86, 30, []string{"all hosts ▾", "docs-sweep@ws-1"}},
+		{"fine", 132, 32, []string{"docs-sweep@ws-1"}},
+		{"stale", 132, 32, []string{"! gpu-1 not reached"}},
+		{"blocked", 132, 32, []string{"! gpu-1 blocked"}},
 	} {
-		all := strings.Join(frameOf(threeHosts(t, st, c.w, c.h, c.gpu)), "\n")
+		all := strings.Join(frameOf(consoleOn(threeHosts(t, st, c.w, c.h, c.gpu))), "\n")
 		for _, w := range c.want {
 			if !strings.Contains(all, w) {
-				t.Errorf("%s at %d: no %q in the frame", c.gpu, c.w, w)
+				t.Errorf("%s at %d: no %q in the frame:\n%s", c.gpu, c.w, w, all)
 			}
 		}
 	}

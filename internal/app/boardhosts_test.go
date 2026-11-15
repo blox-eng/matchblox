@@ -15,6 +15,14 @@ import (
 
 // The board's tests of the hosts (Task 12 step 0c).
 
+// consoleOn is m with the list and the chat on, its first frame drawn.
+func consoleOn(m Model) Model {
+	m.sideOn = true
+	m.splashDone = true
+	m.viewPrefs.CopyCheckedPhone, m.viewPrefs.CopyCheckedDesk = true, true
+	return m
+}
+
 // boardOn is m with the board on, its first frame drawn.
 func boardOn(m Model) Model {
 	m = boardOnly(m)
@@ -76,16 +84,14 @@ func TestACardNamesAnotherHost(t *testing.T) {
 	}
 }
 
-// TestAStaleHostsCardsSayTheirAge: under 30 s a lost host changes no
-// frame; from 30 s the header says the host is stale, and its cards say
-// stale, faint, with the time of their last state ("as of 14:02", the
-// spec's "A host that is not reached"), which stays faint.
-func TestAStaleHostsCardsSayTheirAge(t *testing.T) {
+// TestAStaleHostsRowsSayTheirAge: under 30 s a lost host changes no
+// frame; from 30 s its rows are faint, and the list's foot names it.
+func TestAStaleHostsRowsSayTheirAge(t *testing.T) {
 	now := lostAt.Add(-time.Second)
 	m, _, conns := hostsAt(t, &now, "", 196, 30, "ws-1")
 	home, peer := hostState(sess(1, "hearth-api", "%1", busy)), hostState(sess(2, "spark-docs", "%2", busy))
 	m = upd(t, m, stateMsg(stateAt(home, now)))
-	m = boardOn(upd(t, m, peerMsg{host: "ws-1", conn: conns["ws-1"], msg: stateMsg(peer)}))
+	m = consoleOn(upd(t, m, peerMsg{host: "ws-1", conn: conns["ws-1"], msg: stateMsg(peer)}))
 	before := frameOf(m)
 	now = lostAt
 	m = upd(t, m, peerMsg{host: "ws-1", conn: conns["ws-1"], msg: stateMsg(peer)})
@@ -97,36 +103,24 @@ func TestAStaleHostsCardsSayTheirAge(t *testing.T) {
 			t.Fatalf("%v after the loss the frame changed:\n%s\nwant:\n%s", at, strings.Join(got, "\n"), strings.Join(before, "\n"))
 		}
 	}
-	asOf := "as of " + m.stateAt("ws-1").Format("15:04")
 	for _, after := range []time.Duration{30 * time.Second, time.Minute, 10 * time.Minute} {
 		now = lostAt.Add(after)
 		m = upd(t, m, stateMsg(stateAt(home, now)))
-		f := frameOf(m)
-		if !strings.Contains(f[0], "· ws-1 stale") {
-			t.Fatalf("%v: the header is %q, want · ws-1 stale", after, f[0])
+		if l := lineWith(frameOf(m), "! ws-1 not reached"); l == "" {
+			t.Fatalf("%v: the foot does not name ws-1:\n%s", after, strings.Join(frameOf(m), "\n"))
 		}
-		d := m.boardPanel(196, m.bodyRows())
-		plain := plainLines(d.lines)
-		i := slices.IndexFunc(plain, func(l string) bool { return strings.Contains(l, "✦ spark-") })
-		if i < 0 || i+1 >= len(plain) {
-			t.Fatalf("%v: no card of ws-1:\n%s", after, strings.Join(f, "\n"))
-		}
-		if !strings.Contains(plain[i], asOf) || !strings.Contains(plain[i+1], "stale") {
-			t.Errorf("%v: the card is %q / %q, want %q and the word stale", after, plain[i], plain[i+1], asOf)
-		}
-		col := d.heads[slices.IndexFunc(d.heads, func(h span) bool { return h.press == colWork.short() })]
-		for _, j := range []int{i, i + 1} {
-			if cell := string([]rune(plain[j])[col.x0:col.x1]); !strings.Contains(d.lines[j], m.st.faint.Render(cell)) {
-				t.Errorf("%v: the card's line %q is not faint", after, cell)
-			}
+		i := slices.IndexFunc(m.all.sessions, func(s sample.Session) bool { return s.Name == "spark-docs" })
+		if row := m.sideRow(m.all.sessions[i], 60, false, sideLink{})[0]; !strings.Contains(row, m.st.faint.Render("spark-docs@ws-1")) {
+			t.Errorf("%v: ws-1's row is not faint: %q", after, row)
 		}
 	}
 }
 
 // TestABlockedHostSaysWhyAndItsFix (ruling 30): a host the console cannot
-// read is a host line above the columns, in the service's own words and
-// with its fix; ↑ chooses it and ⏎ (or a tap) runs the fix: matchblox
-// connect, or for a host that does not answer, the command to see why.
+// read is a part of the list's foot. ⏎ on it, or a tap, shows the
+// service's own words and the fix in the chat's place, and ⏎ there runs
+// the fix: matchblox connect, or for a host that does not answer, the
+// command to see why.
 func TestABlockedHostSaysWhyAndItsFix(t *testing.T) {
 	blocked := func(t *testing.T, msg func(*fakeConn) any) Model {
 		t.Helper()
@@ -134,41 +128,37 @@ func TestABlockedHostSaysWhyAndItsFix(t *testing.T) {
 		m, _, conns := hostsAt(t, &now, "", 120, 30, "ws-1")
 		m = upd(t, m, stateMsg(hostState(sess(1, "hearth-api", "%1", nil))))
 		m = upd(t, m, peerMsg{host: "ws-1", conn: conns["ws-1"], msg: msg(conns["ws-1"])})
-		return firstCard(boardOn(m))
+		m = consoleOn(m)
+		m.toList()
+		return m
 	}
 	for _, c := range []struct {
 		name string
 		msg  func(*fakeConn) any
-		line string
+		says string
 	}{
 		{"another version", func(*fakeConn) any { return helloMsg(proto.Hello{Version: proto.Version - 1}) },
-			fmt.Sprintf("ws-1: is version %d, the console is version %d · ⏎ connect", proto.Version-1, proto.Version)},
+			fmt.Sprintf("ws-1: is version %d, the console is version %d.", proto.Version-1, proto.Version)},
 		{"not connected", func(c *fakeConn) any { return lostMsg{err: fmt.Errorf("ws-1: %w", remote.ErrNotConnected), conn: c} },
-			"ws-1: is not connected · ⏎ connect"},
+			"ws-1: is not connected."},
 	} {
 		m := blocked(t, c.msg)
-		if l := lineWith(frameOf(m), "ws-1:"); !strings.Contains(l, c.line) {
-			t.Errorf("%s: the host line is %q, want %q", c.name, strings.TrimSpace(l), c.line)
+		if l := lineWith(frameOf(m), "! ws-1 blocked"); l == "" {
+			t.Errorf("%s: no foot part for ws-1:\n%s", c.name, strings.Join(frameOf(m), "\n"))
 			continue
 		}
-		if m = pressOn(m, "up"); func() bool { line, ok := m.aboveChosen(); return !ok || line != "ws-1" }() {
-			t.Errorf("%s: ↑ from the first card does not choose the host line", c.name)
+		opened := tapText(t, m, "! ws-1 blocked")
+		if f := strings.Join(frameOf(opened), "\n"); !strings.Contains(f, c.says) || !strings.Contains(f, "⏎ connect") {
+			t.Errorf("%s: the host's place:\n%s", c.name, f)
 		}
-		if p := pressOn(m, "enter").pending; p == nil || !p.connect || p.String() != "matchblox connect ws-1" {
-			t.Errorf("%s: ⏎ on the host line is %+v, want its connect", c.name, p)
-		}
-		y := lineOf(t, m, "ws-1:")
-		if next, _ := tap(m, 5, y); next.(Model).pending == nil || !next.(Model).pending.connect {
-			t.Errorf("%s: a tap on the host line is %+v, want its connect", c.name, next.(Model).pending)
+		if p := pressOn(opened, "enter").pending; p == nil || !p.connect || p.String() != "matchblox connect ws-1" {
+			t.Errorf("%s: ⏎ in the host's place is %+v, want its connect", c.name, p)
 		}
 	}
 
-	m := blocked(t, func(c *fakeConn) any { return silentMsg{c} })
-	if l := lineWith(frameOf(m), "ws-1:"); !strings.Contains(l, "ws-1: does not answer · run ssh ws-1 matchblox status to see why") {
-		t.Fatalf("the silent host's line is %q", strings.TrimSpace(l))
-	}
-	if want := "ws-1 does not answer: run ssh ws-1 matchblox status to see why"; pressOn(m, "up", "enter").flash != want {
-		t.Errorf("⏎ on the silent host's line says %q, want %q", pressOn(m, "up", "enter").flash, want)
+	m := tapText(t, blocked(t, func(c *fakeConn) any { return silentMsg{c} }), "! ws-1 blocked")
+	if f := strings.Join(frameOf(m), "\n"); !strings.Contains(f, "ws-1: does not answer.") || !strings.Contains(f, "run ssh ws-1 matchblox status to see why") {
+		t.Fatalf("the silent host's place:\n%s", f)
 	}
 }
 

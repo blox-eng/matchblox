@@ -79,13 +79,14 @@ stop the others.
   8s.`
 - With two lost hosts, it says `2 hosts lost: gpu-1, ws-1. Tries again in
   8s.`
-- A host that the console cannot reach is one line at the top of the
-  board, with why and its fix. A host that was there says
-  `gpu-1: not reached since 14:02 · ⏎ try again`.
-- `Enter` on that line runs the fix.
-- A host that connects and sends no state in 3 seconds has a line too,
+- A host that the console cannot reach is a part of the list's foot:
+  `! gpu-1 not reached`, or `! gpu-1 blocked`. All hosts leaves a hidden
+  host out; `s` on that host shows it.
+- `Enter` on the part shows why and the fix in the chat's place.
+  `Enter` there runs the fix, or dials the host again.
+- A host that connects and sends no state in 3 seconds has a part too,
   with the command that shows why. The console cannot fix the service. The
-  line goes when the host sends its first state.
+  part goes when the host sends its first state.
 - The other hosts keep going.
 
 ### Acts go to the card's host

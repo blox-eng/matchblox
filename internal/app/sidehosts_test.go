@@ -190,16 +190,13 @@ func TestHiddenLostHostIsNamedNowhereInAllHosts(t *testing.T) {
 
 func TestHiddenHostShowsItsTroubleWhenShown(t *testing.T) {
 	m := lostHidden(t)
-	m.sideOn = false
 	m = pressOn(m, "s")
-	f := strings.Join(frameOf(m), "\n")
-	if m.boardHost != "ws-2" || !strings.Contains(f, "ws-2: connection lost.") || !strings.Contains(f, "ws-2: not reached since") {
-		t.Fatalf("the board on ws-2 hides its trouble:\n%s", f)
+	if f := strings.Join(frameOf(m), "\n"); m.boardHost != "ws-2" || !strings.Contains(f, "! ws-2 not reached") {
+		t.Fatalf("the list on ws-2 hides its trouble:\n%s", f)
 	}
 	if !strings.Contains(m.stokerBadge(false), "stoker 1/2") {
 		t.Errorf("the stoker badge on ws-2: %q", m.stokerBadge(false))
 	}
-	m.sideOn = true
 	if got := headerOf(m); !strings.Contains(got, "ws-2 · hidden from all hosts · h shows it") {
 		t.Errorf("side header on ws-2: %q", got)
 	}
@@ -228,13 +225,11 @@ func TestOneHostShownStillNamesAnotherLostHost(t *testing.T) {
 	m = upd(t, m, peerMsg{host: "ws-2", conn: conns["ws-2"], msg: stateMsg(st)})
 	m = upd(t, m, peerMsg{host: "ws-2", conn: conns["ws-2"], msg: lostMsg{err: io.EOF, conn: conns["ws-2"]}})
 	*now = now.Add(2 * time.Minute)
-	m.sideOn = false
 	m = pressOn(m, "s") // ws-1
 	if m.boardHost != "ws-1" {
 		t.Fatalf("s turned to %q", m.boardHost)
 	}
-	f := strings.Join(frameOf(m), "\n")
-	if !strings.Contains(f, "ws-2: connection lost.") || !strings.Contains(f, "ws-2: not reached since") || !strings.Contains(frameOf(m)[0], "ws-2 stale") {
+	if f := strings.Join(frameOf(m), "\n"); !strings.Contains(f, "! ws-2 not reached") {
 		t.Errorf("s on ws-1 hides the lost ws-2:\n%s", f)
 	}
 	if got := m.stokerBadge(false); !strings.Contains(got, "stoker 1/2") {
@@ -246,6 +241,6 @@ func TestOneHostShownStillNamesAnotherLostHost(t *testing.T) {
 		t.Fatalf("s on ws-1: blocked rows %+v, want ws-2's", bs)
 	}
 	if got := m.unreached(); !slices.Equal(got, []string{"ws-2"}) {
-		t.Errorf("s on ws-1: the lines ↑ reaches %q", got)
+		t.Errorf("s on ws-1: the foot names %q", got)
 	}
 }

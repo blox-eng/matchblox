@@ -93,11 +93,14 @@ list first. A tap on a row, or `Enter` in the list, opens its chat. A tap
 on a group's head folds the group: the head keeps its count, and its `−`
 turns to a plus sign. A tap on the head again unfolds it. The foot opens
 each of its parts in the chat's place, beside the list: `+ new` opens
-**New session**, `✧ 2 tips` the tips, and `! 1 setup` the first open
-setup step. `Esc` gives the place back to the chat. A notice shows over
+**New session**, `✧ 2 tips` the tips, `! 1 setup` the first open setup
+step, and `! gpu-1 not reached` (or `! gpu-1 blocked`) that host's
+trouble and its fix. `Esc` gives the place back to the chat. A notice shows over
 the lines above the chat's line and the foot, and a tap on it does
 nothing. In the tips, `↑` `↓` choose, `Enter` does the chosen tip and `d`
-dismisses it. A drag in the chat copies only the chat's text.
+dismisses it. In a setup step, `Enter` sets it up and `x` closes it, after
+a typed `y`. In a host's trouble, `Enter` runs the fix or dials the host
+again. A drag in the chat copies only the chat's text.
 
 A key with no job in the line or the list does not do nothing: a notice
 names the keys that place takes. Any other letter in the list moves the keys back to the line and types

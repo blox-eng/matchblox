@@ -231,52 +231,30 @@ func TestSTurnsThroughTheHosts(t *testing.T) {
 	}
 }
 
-func TestAHostThatIsNotReachedKeepsItsCards(t *testing.T) {
-	m := lostPeer(t, 40*time.Second)
-	m.splashDone = true
-	m.viewPrefs.CopyCheckedPhone, m.viewPrefs.CopyCheckedDesk = true, true // the copy check has its own test
-	m = upd(t, m, tea.WindowSizeMsg{Width: 40, Height: 34})
-	m = openOn(m, "api-auth")
-	w := 40
-	d := m.boardPanel(w, m.bodyRows())
-	plain := plainLines(d.lines)
-	host := slices.IndexFunc(plain, func(l string) bool { return strings.HasPrefix(l, " ws-1: not reached since 14:02") })
-	if host < 0 || host >= d.headAt || !strings.Contains(strings.Join(plain[host:d.headAt], " "), "⏎ try again") {
-		t.Fatalf("the host line is at %d, the columns at %d:\n%s", host, d.headAt, strings.Join(plain, "\n"))
+// TestAHostThatIsNotReachedKeepsItsRows: its rows stay, faint, and the
+// foot names it; ⏎ on the foot's part, then ⏎ in its place, dials it
+// again, and a tap on the part opens the place too.
+func TestAHostThatIsNotReachedKeepsItsRows(t *testing.T) {
+	m := consoleOn(lostPeer(t, 40*time.Second))
+	m = upd(t, m, tea.WindowSizeMsg{Width: 160, Height: 34})
+	m.toList()
+	if !strings.Contains(strings.Join(frameOf(m), "\n"), "train-loop") {
+		t.Fatalf("the row of ws-1 is gone:\n%s", strings.Join(frameOf(m), "\n"))
 	}
-	if wide := m.hostLines(80); len(wide) != 1 || strings.TrimSpace(ansi.Strip(wide[0])) != "ws-1: not reached since 14:02 · ⏎ try again" {
-		t.Errorf("the host line at 80: %q", wide)
+	m.footAt = len(m.footParts())
+	opened := pressOn(m, "enter")
+	if f := strings.Join(frameOf(opened), "\n"); !strings.Contains(f, "ws-1: not reached since 14:02.") || !strings.Contains(f, "⏎ try again") {
+		t.Fatalf("the host's place:\n%s", f)
 	}
-	card := slices.IndexFunc(plain, func(l string) bool { return strings.Contains(l, "train-loop") })
-	if card < 0 {
-		t.Fatalf("the card of ws-1 is gone:\n%s", strings.Join(plain, "\n"))
-	}
-	if !strings.Contains(plain[card], "as of 14:02") {
-		t.Errorf("the card of ws-1 says no time: %q", plain[card])
-	}
-	if want := m.st.faint.Render(plain[card]); !strings.Contains(d.lines[card], want) {
-		t.Errorf("the card of ws-1 is not faint: %q", d.lines[card])
-	}
-	next, cmd := tap(m, 2, m.draw(w).bodyTop+host)
-	msgs := cmdMsgs(cmd)
-	if !slices.ContainsFunc(msgs, func(msg tea.Msg) bool { r, ok := msg.(peerRedialMsg); return ok && r.host == "ws-1" }) {
-		t.Errorf("a tap on the host line does not redial ws-1: %v", msgs)
+	next, cmd := key(opened, "enter")
+	if msgs := cmdMsgs(cmd); !slices.ContainsFunc(msgs, func(msg tea.Msg) bool { r, ok := msg.(peerRedialMsg); return ok && r.host == "ws-1" }) {
+		t.Errorf("⏎ in the host's place does not redial ws-1: %v", msgs)
 	}
 	if f := next.(Model).flash; !strings.Contains(f, "ws-1") {
 		t.Errorf("the redial says %q", f)
 	}
-
-	m = firstCard(m)
-	m = pressOn(m, "up")
-	if line, above := m.aboveChosen(); !above || line != "ws-1" {
-		t.Fatalf("up from the first card chose %q, %v; want the host line", line, above)
-	}
-	next, cmd = key(m, "enter")
-	if msgs := cmdMsgs(cmd); !slices.ContainsFunc(msgs, func(msg tea.Msg) bool { r, ok := msg.(peerRedialMsg); return ok && r.host == "ws-1" }) {
-		t.Errorf("enter on the host line does not redial ws-1: %v", msgs)
-	}
-	if f := next.(Model).flash; !strings.Contains(f, "ws-1") {
-		t.Errorf("the redial by enter says %q", f)
+	if tapped := tapText(t, m, "! ws-1 not reached"); tapped.sidePlace != placeHost {
+		t.Errorf("a tap on the part opens place %d", tapped.sidePlace)
 	}
 }
 

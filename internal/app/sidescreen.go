@@ -2,6 +2,7 @@ package app
 
 import (
 	"maps"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -138,6 +139,7 @@ const (
 	placeTips
 	placeSetup
 	placeRoom // the chain's room: the stoker's card, its steps and the talk line
+	placeHost // a host's trouble and its fix
 )
 
 // chatPlace is the chat's place in w by h: the chat, the tips, or the
@@ -151,6 +153,8 @@ func (m Model) chatPlace(w, h int) []string {
 		lines = m.setupPanel(w)
 	case placeRoom:
 		lines = m.roomPanel(w)
+	case placeHost:
+		lines = m.hostPanel(w)
 	default:
 		return m.chatPanel(w, h)
 	}
@@ -260,6 +264,16 @@ func (m Model) placeKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.belowKey(m.recs[m.tipAt()].ID, k)
 	case m.sidePlace == placeSetup && bkey.Matches(k, sk.Enter) && len(m.boardDoors()) > 0:
 		return m.openBoardDoor()
+	case m.sidePlace == placeSetup && bkey.Matches(k, mk.Second) && len(m.boardDoors()) > 0:
+		if next, cmd, took := m.doorKey(k); took {
+			return next, cmd
+		}
+	case m.sidePlace == placeHost && bkey.Matches(k, sk.Enter) && m.hostFix(m.sideHost) != "":
+		m.sidePlace = placeChat // the fix's words, or its box, come back over the chat
+		if b, ok := m.blockedOf(m.sideHost); ok {
+			return m.unblockHost(b)
+		}
+		return m.peerTryAgain(m.peerAt(m.sideHost))
 	case bkey.Matches(k, mk.NextTab, mk.PrevTab):
 		m.sidePlace = placeChat
 		return m.key(k)
@@ -274,6 +288,8 @@ func (m Model) placeName() string {
 		return "setup steps"
 	case placeRoom:
 		return "room"
+	case placeHost:
+		return "host's trouble"
 	}
 	return "tips"
 }
@@ -286,7 +302,16 @@ func (m Model) placeHints() []hint {
 		row, _ := m.roomChosen()
 		return append(m.roomHints(row), hintFor(sk.Up, ""))
 	}
+	if m.sidePlace == placeHost {
+		if fix := m.hostFix(m.sideHost); fix != "" {
+			return []hint{hintFor(sk.Enter, fix), back}
+		}
+		return []hint{back}
+	}
 	if m.sidePlace == placeSetup {
+		if ds := m.boardDoors(); len(ds) > len(m.copyDoors()) && m.doorIndex(ds) >= len(m.copyDoors()) {
+			return []hint{hintFor(sk.Enter, "set up"), hintFor(mk.Second, "close"), back}
+		}
 		return []hint{hintFor(sk.Enter, "set up"), back}
 	}
 	if len(m.recs) == 0 {
@@ -510,6 +535,10 @@ func (m Model) openFoot(press string) (tea.Model, tea.Cmd) {
 		m.openPlace(placeSetup)
 	case footExited:
 		return m, m.flipExited()
+	}
+	if host, ok := strings.CutPrefix(press, footHost); ok {
+		m.openPlace(placeHost)
+		m.sideHost = host
 	}
 	return m, nil
 }
@@ -738,4 +767,46 @@ func (m Model) roomPlaceKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		next = nm
 	}
 	return next, cmd
+}
+
+// hostPanel is a host's trouble in the chat's place: why the console
+// does not read it, and its fix; or that it answers again.
+func (m Model) hostPanel(w int) []string {
+	host := m.sideHost
+	lines := []string{m.placeHead("HOST "+m.nameOf(host), w), strings.Repeat(" ", w)}
+	says, how := m.nameOf(host)+" answers again.", ""
+	switch b, blocked := m.blockedOf(host); {
+	case blocked:
+		why, fix := m.blockedWords(b)
+		says, how = m.nameOf(host)+": "+why+".", fix
+	case slices.Contains(m.unreached(), host):
+		says, how = m.nameOf(host)+": not reached since "+m.stateAt(host).Format("15:04")+".", "it dials again"
+	}
+	for _, l := range wrap(says, w-1, m.st.text.Render) {
+		lines = append(lines, fit(" "+l, w))
+	}
+	if how != "" {
+		if fix := m.hostFix(host); fix != "" {
+			how = m.keys.side.Enter.Help().Key + " " + fix
+		}
+		lines = append(lines, fit(" "+m.st.muted.Render(how), w))
+	}
+	return lines
+}
+
+// hostFix is the words of what ⏎ does for host's trouble: the blocked
+// host's fix when the console can run it, else try again for a host that
+// is not reached; "" when ⏎ does nothing there.
+func (m Model) hostFix(host string) string {
+	if b, ok := m.blockedOf(host); ok {
+		if !b.fixable() {
+			return ""
+		}
+		_, fix := m.blockedWords(b)
+		return fix
+	}
+	if slices.Contains(m.unreached(), host) && m.peerAt(host) >= 0 {
+		return "try again"
+	}
+	return ""
 }

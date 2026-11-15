@@ -604,7 +604,8 @@ type Model struct {
 	// and while the screen keeps the shape it was made on (listOne: one
 	// pane or two); else the screen's start state holds. sideFold are the
 	// groups folded to their heads. sidePlace is what shows in the chat's
-	// place, and sideTip the tip chosen there. footAt is the part of the
+	// place, sideTip the tip chosen there, and sideHost the host whose
+	// trouble shows there. footAt is the part of the
 	// list's foot the arrows chose (1 the first; 0 none). sideIn is the
 	// session ctrl+o went into.
 	listOff, listSet, listOne bool
@@ -612,6 +613,7 @@ type Model struct {
 	sideFold                  map[sideState]bool
 	sidePlace                 sidePlace
 	sideTip                   int
+	sideHost                  string // the host whose trouble the host place shows
 	sideIn                    paneKey
 }
 

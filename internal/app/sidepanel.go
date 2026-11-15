@@ -38,6 +38,7 @@ const (
 	footTips   = "foot:tips"
 	footSetup  = "foot:setup"
 	footExited = "foot:exited"
+	footHost   = "foot:host:" // then the host's routing key
 )
 
 // listFootPart is a part of the list's foot: its words, and what it opens.
@@ -56,6 +57,13 @@ func (m Model) footParts() []listFootPart {
 	}
 	if n := len(m.boardDoors()); n > 0 {
 		parts = append(parts, listFootPart{"! " + strconv.Itoa(n) + " setup", footSetup})
+	}
+	for _, h := range m.unreached() {
+		word := " not reached"
+		if _, ok := m.blockedOf(h); ok {
+			word = " blocked"
+		}
+		parts = append(parts, listFootPart{"! " + m.nameOf(h) + word, footHost + h})
 	}
 	if n := len(m.snap.Exited); n > 0 && !m.showExited {
 		parts = append(parts, listFootPart{strconv.Itoa(n) + " exited", footExited})
@@ -78,7 +86,11 @@ func (m Model) sideFoot(w int) (string, []span) {
 			line += st.faint.Render(" · ")
 			x += 3
 		}
-		text := ink[p.press].Render(p.text)
+		ink, ok := ink[p.press]
+		if !ok { // a host's trouble
+			ink = st.warn
+		}
+		text := ink.Render(p.text)
 		if m.footAt == i+1 {
 			text = st.accent.Bold(true).Render(p.text)
 		}
