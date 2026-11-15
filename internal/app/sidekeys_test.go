@@ -644,3 +644,77 @@ func TestRefusalReturnsToTheOldSessionsLine(t *testing.T) {
 		t.Fatalf("lines %v, note %+v", m.lines, m.lineNote)
 	}
 }
+
+// workingAs is a match of the agent that works now.
+func workingAs(name, agent string) sample.Session {
+	s := boardMatch(name, time.Hour)
+	s.Agent, s.Busy, s.Status, s.Idle = agent, true, "busy", 0
+	return s
+}
+
+// TestBusyAgentGetsTheMessageWhenItsTurnEnds: OpenCode does not take typed
+// input while it works, so the console holds the message and sends it when
+// the session leaves "works". A second message waits for the first.
+func TestBusyAgentGetsTheMessageWhenItsTurnEnds(t *testing.T) {
+	m, _ := sideConsole(t, boardState(workingAs("hearth-api", "opencode")))
+	if m.sideStateOf(m.all.sessions[0]) != sideWork {
+		t.Fatalf("the session does not work: %v", m.sideStateOf(m.all.sessions[0]))
+	}
+	k := m.chosenSide()
+	m = pressOn(typeLine(m, "next please"), "enter")
+	if got := messageActs(boardFake(m)); len(got) != 0 {
+		t.Fatalf("sent to a busy agent: %+v", got)
+	}
+	if got := chatLineOf(m, 120); !strings.Contains(got, "queued for its next turn") {
+		t.Fatalf("line %q", got)
+	}
+	if m.lines[k] != "" || m.lineHeld[k] != "next please" {
+		t.Fatalf("line %q, held %q", m.lines[k], m.lineHeld[k])
+	}
+
+	m = pressOn(typeLine(m, "and more"), "enter")
+	if got := chatLineOf(m, 120); !strings.Contains(got, "one message already waits for its next turn") || m.lines[k] != "and more" {
+		t.Fatalf("line %q, text %q", got, m.lines[k])
+	}
+
+	next, cmd := m.Update(stateMsg(boardState(boardMatch("hearth-api", time.Hour))))
+	drain(cmd)
+	m = next.(Model)
+	got := messageActs(boardFake(m))
+	if len(got) != 1 || got[0].RecID != "message:"+k.pane || got[0].Text != "next please" || got[0].Confirm != "y" {
+		t.Fatalf("sent %+v", got)
+	}
+	if len(m.lineHeld) != 0 {
+		t.Fatalf("still held: %v", m.lineHeld)
+	}
+}
+
+// TestBusyAgentThatQueuesGetsTheMessageAtOnce: Claude Code queues what is
+// typed while it works, and the line says so.
+func TestBusyAgentThatQueuesGetsTheMessageAtOnce(t *testing.T) {
+	m, _ := sideConsole(t, boardState(workingAs("hearth-api", "claude")))
+	m = pressOn(typeLine(m, "now"), "enter")
+	if got := messageActs(boardFake(m)); len(got) != 1 || got[0].Text != "now" {
+		t.Fatalf("sent %+v", got)
+	}
+	if got := chatLineOf(m, 120); !strings.Contains(got, "queued for its next turn") {
+		t.Fatalf("line %q", got)
+	}
+}
+
+// TestHeldMessageOfAnEndedSessionComesBack: the session ends while the
+// message waits, and the text returns to its line, unsent.
+func TestHeldMessageOfAnEndedSessionComesBack(t *testing.T) {
+	m, _ := sideConsole(t, boardState(workingAs("hearth-api", "opencode"), boardMatch("flint-auth", time.Hour)))
+	m = pickSide(t, m, "hearth-api")
+	k := m.chosenSide()
+	m = pressOn(typeLine(m, "later"), "enter")
+	next, _ := m.Update(stateMsg(boardState(boardMatch("flint-auth", time.Hour))))
+	m = next.(Model)
+	if len(m.lineHeld) != 0 || m.lines[k] != "later" || len(messageActs(boardFake(m))) != 0 {
+		t.Fatalf("held %v, line %q, sent %+v", m.lineHeld, m.lines[k], messageActs(boardFake(m)))
+	}
+	if m.lineNote.text != "hearth-api ended · the text is not sent" {
+		t.Fatalf("note %+v", m.lineNote)
+	}
+}

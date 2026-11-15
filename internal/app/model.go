@@ -591,6 +591,10 @@ type Model struct {
 	lines    map[paneKey]string
 	lineNote lineNote
 	lineActs map[string]lineSent
+	// lineHeld is the one message each busy session waits to get, with
+	// the session's name for when it ends first.
+	lineHeld     map[paneKey]string
+	lineHeldName map[paneKey]string
 	// sideWas is the list's order at the last message, and sideName the
 	// chosen session's name then: what follows a chosen session that ends.
 	sideWas  []paneKey
@@ -789,6 +793,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	next, cmd := m.update(msg)
 	if nm, ok := next.(Model); ok {
 		nm = nm.keepRoomRow(m.room, anchor)
+		var held tea.Cmd
+		nm, held = nm.heldRelease()
+		cmd = tea.Batch(cmd, held)
 		nm = nm.scanShows().keepView().inDemo().sideKeep().chatMarkOn().onChoice() // what reads Sessions' selection reads the board's choice
 		again := nm.beltPoll(msg)
 		nm, belt := nm.tellBelt(again)

@@ -339,9 +339,22 @@ func (m Model) cannotReach(host string) string {
 	return "not sent: " + m.nameOf(host) + " is not reached"
 }
 
+// typesWhileBusy: the agent takes a message typed while it works and
+// queues it for its next turn. The values come from each agent's
+// documented behaviour: Claude Code and Codex queue a message typed while
+// they work, and OpenCode is unknown, so the console holds its messages.
+// They are NOT checked by hand yet. An agent not listed counts as false.
+var typesWhileBusy = map[string]bool{"claude": true, "codex": true, "opencode": false}
+
+const (
+	queuedNote  = "queued for its next turn"
+	oneHeldNote = "one message already waits for its next turn"
+)
+
 // sendLine sends the chosen session's line as a message, on its host's
 // conn. A line that cannot go keeps its text and says why; nothing
-// retries by itself.
+// retries by itself. To a session that works and does not take typed
+// input, the message waits for the end of its turn.
 func (m *Model) sendLine() tea.Cmd {
 	s, ok := m.sideChosen()
 	if !ok {
@@ -355,8 +368,37 @@ func (m *Model) sendLine() tea.Cmd {
 	case strings.TrimSpace(text) == "":
 		return m.notice("the line is empty")
 	}
+	busy := m.sideStateOf(s) == sideWork
+	if busy && !typesWhileBusy[s.Agent] {
+		if _, waits := m.lineHeld[k]; waits {
+			m.lineNote = lineNote{k, oneHeldNote}
+			return nil
+		}
+		m.lineHeld, m.lineHeldName = maps.Clone(m.lineHeld), maps.Clone(m.lineHeldName)
+		if m.lineHeld == nil {
+			m.lineHeld, m.lineHeldName = map[paneKey]string{}, map[paneKey]string{}
+		}
+		m.lineHeld[k], m.lineHeldName[k] = text, m.cardName(s)
+		m.setLine(k, "")
+		return nil
+	}
+	cmd := m.sendText(s, text)
+	if busy && m.lineNote.k == (paneKey{}) {
+		m.lineNote = lineNote{k, queuedNote}
+	}
+	return cmd
+}
+
+// sendText sends text to s as a message and empties the line of s, or
+// says why it cannot go and keeps the text there.
+func (m *Model) sendText(s sample.Session, text string) tea.Cmd {
+	k := paneOf(s)
 	if why := m.cannotReach(s.Host); why != "" {
-		m.lineNote = lineNote{k, why}
+		if m.lines[k] == text { // still in the line: it stays there
+			m.lineNote = lineNote{k, why}
+			return nil
+		}
+		m.giveBack(lineSent{k, s.Host, m.cardName(s), text}, why)
 		return nil
 	}
 	id, cmd := m.sendToID(s.Host, proto.Act{RecID: "message:" + s.Pane, Text: text, Confirm: "y"})
@@ -365,8 +407,39 @@ func (m *Model) sendLine() tea.Cmd {
 		m.lineActs = map[string]lineSent{}
 	}
 	m.lineActs[id] = lineSent{k, s.Host, m.cardName(s), text}
-	m.setLine(k, "")
+	if m.lines[k] == text {
+		m.setLine(k, "")
+	}
 	return cmd
+}
+
+// heldRelease sends each held message whose session no longer works, as
+// sendLine does. A session that is gone gives its text back to its line.
+// A "queued" note ends with the turn it was said for.
+func (m Model) heldRelease() (Model, tea.Cmd) {
+	var cmds []tea.Cmd
+	for k, text := range m.lineHeld {
+		i := slices.IndexFunc(m.all.sessions, func(s sample.Session) bool { return paneOf(s) == k })
+		if i >= 0 && m.sideStateOf(m.all.sessions[i]) == sideWork {
+			continue
+		}
+		name := m.lineHeldName[k]
+		m.lineHeld, m.lineHeldName = maps.Clone(m.lineHeld), maps.Clone(m.lineHeldName)
+		delete(m.lineHeld, k)
+		delete(m.lineHeldName, k)
+		if i < 0 {
+			m.setLine(k, strings.TrimSpace(text+" "+m.lines[k]))
+			m.lineNote = lineNote{k, name + " ended · the text is not sent"}
+			continue
+		}
+		cmds = append(cmds, m.sendText(m.all.sessions[i], text))
+	}
+	if m.lineNote.text == queuedNote {
+		if i := slices.IndexFunc(m.all.sessions, func(s sample.Session) bool { return paneOf(s) == m.lineNote.k }); i < 0 || m.sideStateOf(m.all.sessions[i]) != sideWork {
+			m.lineNote = lineNote{}
+		}
+	}
+	return m, tea.Batch(cmds...)
 }
 
 // lineResult is the service's answer to a message of the line: a refusal

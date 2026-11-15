@@ -230,6 +230,8 @@ func (m Model) chatLine(s sample.Session, w int) string {
 	right := st.faint.Render(m.keys.side.Enter.Help().Key + " send to " + m.cardName(s))
 	if n := m.lineNote; n.k == paneOf(s) && n.text != "" {
 		right = st.warn.Render(n.text)
+	} else if _, waits := m.lineHeld[paneOf(s)]; waits {
+		right = st.warn.Render(queuedNote)
 	}
 	text := lineShown(m.lines[paneOf(s)])
 	if room := w - lipgloss.Width(right) - 5; lipgloss.Width(text) > room {
