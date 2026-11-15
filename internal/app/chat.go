@@ -30,6 +30,11 @@ func (m Model) chatPanel(w, h int) []string {
 	case !m.have: // the chat waits for the first state
 	case m.filter != "" && !slices.ContainsFunc(listed, m.inBoard):
 		lines = append([]string{blank}, m.sideWords(w)...)
+	case k.pane == "" && i >= 0: // outside tmux, with no process and no session id to know it by
+		lines = append(lines, blank)
+		for _, l := range wrapPlain(listed[i].Name+" runs outside tmux, and its process is not known: nothing to write to", max(w-2, 1)) {
+			lines = append(lines, fit(" "+m.st.muted.Render(l), w))
+		}
 	case k.pane == "" || i < 0:
 		text := "No sessions yet. + new session starts one here (" + m.keys.main.New.Help().Key + "). matchblox setup finds the agents you already run."
 		lines = append(lines, blank)

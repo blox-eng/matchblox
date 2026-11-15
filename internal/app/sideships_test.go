@@ -256,3 +256,51 @@ func TestShipRowsMenuHoldsNoSessionActs(t *testing.T) {
 		}
 	}
 }
+
+// TestAReusedPidStartsWithAnEmptyLine: outside tmux a session keys on its
+// process and the process's start, so a new process that reuses the pid
+// of one that ended starts with an empty line and no note of the old one.
+func TestAReusedPidStartsWithAnEmptyLine(t *testing.T) {
+	started := func(at uint64) func(*sample.Session) { return func(s *sample.Session) { s.Start = at } }
+	st := hostState(sess(1, "hearth-api", "%1", nil), sess(4242, "flint-cli", "", started(100)))
+	m, _, _ := sideShotOf(t, st, 160, 38)
+	old := m.sideSessions()[slices.IndexFunc(m.sideSessions(), func(s sample.Session) bool { return s.Name == "flint-cli" })]
+	m.setLine(paneOf(old), "half a message")
+	m.lineNote = lineNote{paneOf(old), "flint-cli ended · the text is not sent"}
+
+	next, _ := m.Update(stateMsg(hostState(sess(1, "hearth-api", "%1", nil), sess(4242, "spark-cli", "", started(200)))))
+	m = next.(Model)
+	reused := m.sideSessions()[slices.IndexFunc(m.sideSessions(), func(s sample.Session) bool { return s.Name == "spark-cli" })]
+	if paneOf(reused) == paneOf(old) {
+		t.Fatalf("the new process of pid 4242 has the old one's key %v", paneOf(old))
+	}
+	if got := m.lines[paneOf(reused)]; got != "" {
+		t.Errorf("the new process of pid 4242 starts with the line %q", got)
+	}
+	if m.lineNote.k == paneOf(reused) {
+		t.Errorf("the new process of pid 4242 has the old one's note %q", m.lineNote.text)
+	}
+}
+
+// TestASessionWithNoPidAndNoPaneSharesNoKey: two sessions with no pane
+// and no process are two keys by their session ids; with no id either,
+// the row cannot be chosen, and the chat says why.
+func TestASessionWithNoPidAndNoPaneSharesNoKey(t *testing.T) {
+	id := func(sid string) func(*sample.Session) { return func(s *sample.Session) { s.SessionID = sid } }
+	a, b := sess(0, "flint-cli", "", id("a1"))(sample.Session{}), sess(0, "spark-cli", "", id("b2"))(sample.Session{})
+	if paneOf(a) == paneOf(b) {
+		t.Fatalf("two sessions with no pid and no pane share the key %v", paneOf(a))
+	}
+	m, _, _ := sideShotOf(t, hostState(sess(1, "hearth-api", "%1", nil), sess(0, "wick-mobile", "", nil)), 160, 38)
+	i := slices.IndexFunc(m.sideSessions(), func(s sample.Session) bool { return s.Name == "wick-mobile" })
+	if i < 0 {
+		t.Fatalf("the list holds no wick-mobile:\n%s", plainFrame(m))
+	}
+	m.sideAt = paneOf(m.sideSessions()[i])
+	if _, ok := m.sideChosen(); ok {
+		t.Errorf("a session with no pid, pane or id can be chosen")
+	}
+	if chat := strings.Join(plainLines(m.chatPanel(100, 20)), "\n"); strings.Contains(chat, "No sessions yet") || !strings.Contains(chat, "wick-mobile") {
+		t.Errorf("the chat on it says:\n%s", chat)
+	}
+}

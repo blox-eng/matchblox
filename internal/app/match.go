@@ -137,13 +137,20 @@ func (m Model) matchCell(s sample.Session) string {
 // paneKey is a pane on a host: pane ids repeat across hosts.
 type paneKey struct{ host, pane string }
 
-// paneOf is the key of s: its pane, or outside tmux its process ("pid:4242"),
-// so two sessions with no pane are two keys.
+// paneOf is the key of s: its pane; outside tmux its process and the
+// process's start ("pid:4242@9113"), so a reused pid is a new key; with no
+// process its session id ("sid:…"). A session with none of them has the
+// empty key, which no row can choose.
 func paneOf(s sample.Session) paneKey {
-	if s.Pane == "" && s.PID != 0 {
-		return paneKey{s.Host, "pid:" + strconv.Itoa(s.PID)}
+	switch {
+	case s.Pane != "":
+		return paneKey{s.Host, s.Pane}
+	case s.PID != 0:
+		return paneKey{s.Host, "pid:" + strconv.Itoa(s.PID) + "@" + strconv.FormatUint(s.Start, 10)}
+	case s.SessionID != "":
+		return paneKey{s.Host, "sid:" + s.SessionID}
 	}
-	return paneKey{s.Host, s.Pane}
+	return paneKey{s.Host, ""}
 }
 
 // tmuxPane: k names a tmux pane (%12), not a process outside tmux nor the
