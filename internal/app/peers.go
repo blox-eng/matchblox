@@ -317,7 +317,9 @@ func (m Model) peerLost(i int, err error) (tea.Model, tea.Cmd) {
 	first := !p.lost
 	p.lost, p.silent = true, false
 	m = m.roomLost(p.host).lineLost(p.host)
-	news := m.noAnswer(*p)
+	m, answer := m.answerLost(p.host, p.acts)
+	p = &m.peers[i]
+	news := tea.Batch(m.noAnswer(*p), answer)
 	m.batchLost(p.host, p.acts)
 	p.acts = nil
 	if blocking(err) {

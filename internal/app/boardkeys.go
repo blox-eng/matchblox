@@ -121,8 +121,10 @@ func (m Model) answerFromChat(digit string) (tea.Model, tea.Cmd) {
 	armed, sent := m.chatMarks(s)
 	said, answer := "", tea.Cmd(nil)
 	switch {
-	case !ok || sent > 0:
-		// no card, or the card says its answer is sent
+	case !ok:
+		// no card
+	case sent > 0:
+		said = strconv.Itoa(sent) + " went to " + m.cardName(s) + " · a digit answers its next question"
 	case !m.chatAnswers(s) && m.asksNow(s):
 		said = m.cardName(s) + " asks in its pane · " + m.keys.main.Jump.Help().Key + " goes in"
 	case !m.chatAnswers(s):

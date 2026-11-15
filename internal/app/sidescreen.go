@@ -506,7 +506,7 @@ func (m Model) sideTap(x, y int) (tea.Model, tea.Cmd) {
 	box := m.sideBoxAt(w)
 	if _, y0, y1 := m.noticeAt(w); y >= y0 && y < y1 {
 		if m.sideSays() == m.newer && m.startsAgain { // Pocket's notice of a newer release: a tap starts again
-			return m.keyed(keyPress(m.keys.main.StartAgain.Keys()[0]))
+			return m.startAgain()
 		}
 		return m, nil // a notice covers the line: a tap on it does nothing to what is under it
 	}

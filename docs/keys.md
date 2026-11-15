@@ -49,7 +49,7 @@ the screen; else it types.
 | `◂` or `←` | On a phone, goes from the chat back to the list. A tap on `◂` at the left of the chat's head does it too. On a desk, `←` in the line moves the keys to the list, as `◂` does on a phone. |
 | `e` | In the list, shows the agents that exited and wait for their parent, dim at the end of `IDLE`: for each parent, how many, the command that makes it reap them, and their pids. `e` again hides them. The `IDLE` count counts only the sessions that run. While they are hidden, the foot counts them: `· 1 exited`. |
 | `q` or `Ctrl+C` | Quits the console: `Ctrl+C` from every tab, `q` from Machine. In the line and the list, `q` types. The service keeps running. |
-| `R` | Starts the console again on the binary the service runs. The key line offers it first, `R start again · service v0.43.0, console v0.42.0`, when the service on this machine runs a newer release than the console and the console's own binary was installed over. Otherwise the line says `quit and reopen`. |
+| `R` | In the list, starts the console again on the binary the service runs. In the line, `R` types. A tap on the key line's notice starts the console again too. The key line offers it first, `R start again · service v0.43.0, console v0.42.0`, when the service on this machine runs a newer release than the console and the console's own binary was installed over. Otherwise the line says `quit and reopen`. |
 
 On a desk the list is 40 columns wide, with the chat beside it. On a
 narrower screen the list is 32 columns wide. A phone, and a screen that

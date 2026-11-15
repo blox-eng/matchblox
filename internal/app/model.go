@@ -1015,14 +1015,18 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case resultMsg:
 		if strings.HasPrefix(msg.ActID, keyActID) {
 			var note tea.Cmd
+			why := msg.Err
+			if why == "" && len(msg.Skipped) > 0 { // a guard skipped the key: it did not go
+				why = msg.Skipped[len(msg.Skipped)-1]
+			}
 			switch {
-			case msg.Err != "" && m.boardShown() && !m.viewFull(): // the stand-in says it on its own key line
+			case why != "" && m.boardShown() && !m.viewFull(): // the stand-in says it on its own key line
 				if msg.ActID == keyActID+m.peekSentPane { // the answer was not sent: its card takes digits again
 					m.peekSent, m.peekSentAsk, m.peekSentPane = 0, "", ""
 				}
-				note = m.notice(msg.Err)
-			case msg.Err != "":
-				m.flash = msg.Err
+				note = m.notice(why)
+			case why != "":
+				m.flash = why
 			}
 			next := m.nextKey()
 			return m, tea.Batch(m.recv(), next, note)

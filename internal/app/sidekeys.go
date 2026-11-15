@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -117,8 +118,12 @@ func (m Model) sideKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 	if !m.have && m.opt.Layered && bkey.Matches(k, m.keys.main.Back) {
 		return m, nil, false // a host that never answered: esc goes back to Hosts
 	}
-	if m.newer != "" && bkey.Matches(k, m.keys.main.StartAgain) && m.lines[m.chosenSide()] == "" {
-		return m, nil, false // the key line offers it first: R starts the console again
+	if m.newer != "" && bkey.Matches(k, m.keys.main.StartAgain) && m.sidePlace == placeChat && m.inList() {
+		if !m.startsAgain {
+			return m, m.notice(m.newer), true
+		}
+		next, cmd := m.startAgain()
+		return next, cmd, true // in the line R types
 	}
 	m.flash, m.sideIn = "", paneKey{}
 	s, ok := m.sideChosen()
@@ -134,7 +139,7 @@ func (m Model) sideKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 	case m.tapping && m.sidePlace == placeChat: // a tap on the belt acts as in the list; the line keeps the keys
 		next, cmd := m.listKey(k, s, ok)
 		return next, cmd, true
-	case m.sidePlace == placeChat && m.onPocket() && joinedEsc(k):
+	case m.sidePlace == placeChat && (m.onPocket() || m.pocketClient(m.askedBy)) && joinedEsc(k):
 		// tmux joins an Esc and a letter typed within its escape-time into
 		// alt+letter, and the phone has no alt key: the letter types.
 		m.toLine()
@@ -588,9 +593,10 @@ type heldMsg struct{ text, name string }
 const maxMessage = 500
 
 // lineAct is the act that carries text: a paste for a text with a newline
-// or one longer than a message, else a message.
+// or a tab, which a message refuses and a paste keeps, or for one longer
+// than a message; else a message.
 func lineAct(text string) string {
-	if strings.Contains(text, "\n") || utf8.RuneCountInString(text) > maxMessage {
+	if strings.ContainsAny(text, "\n\t") || utf8.RuneCountInString(text) > maxMessage {
 		return proto.PastePrefix
 	}
 	return "message:"
@@ -687,17 +693,29 @@ func (m *Model) giveBack(sent lineSent, why string) {
 }
 
 // lineLost gives back each message to host that has no answer: its conn
-// went, and the answer with it.
+// went, and the answer with it. The texts come back in the order they
+// went: giveBack puts each before the line, so the last sent goes first.
 func (m Model) lineLost(host string) Model {
+	var ids []string
 	for id, sent := range m.lineActs {
-		if sent.host != host {
-			continue
+		if sent.host == host {
+			ids = append(ids, id)
 		}
+	}
+	slices.SortFunc(ids, func(a, b string) int { return cmp.Compare(actNumber(b), actNumber(a)) })
+	for _, id := range ids {
+		sent := m.lineActs[id]
 		m.lineActs = maps.Clone(m.lineActs)
 		delete(m.lineActs, id)
 		m.giveBack(sent, cmp.Or(m.cannotReach(host), "not sent: "+m.nameOf(host)+" is not reached"))
 	}
 	return m
+}
+
+// actNumber is the count in an act id sendOn gave ("a12" is 12).
+func actNumber(id string) int {
+	n, _ := strconv.Atoi(strings.TrimPrefix(id, "a"))
+	return n
 }
 
 // answerResult is a peer's answer to the act that carried a digit: a
@@ -707,11 +725,25 @@ func (m Model) answerResult(r proto.Result) (Model, tea.Cmd, bool) {
 		return m, nil, false
 	}
 	m.peekSentAct = ""
-	if r.Err == "" {
+	why := r.Err
+	if why == "" && len(r.Skipped) > 0 { // a guard skipped it: it did not go
+		why = r.Skipped[len(r.Skipped)-1]
+	}
+	if why == "" {
 		return m, nil, true
 	}
 	m.peekSent, m.peekSentAsk, m.peekSentPane = 0, "", ""
-	return m, m.notice("not sent: " + r.Err), true
+	return m, m.notice("not sent: " + why), true
+}
+
+// answerLost forgets the answer in flight to host: its conn went, and the
+// act's answer with it. The digits take an answer again.
+func (m Model) answerLost(host string, acts []string) (Model, tea.Cmd) {
+	if m.peekSentAct == "" || !slices.Contains(acts, m.peekSentAct) {
+		return m, nil
+	}
+	m.peekSentAct, m.peekSent, m.peekSentAsk, m.peekSentPane = "", 0, "", ""
+	return m, m.notice(m.nameOf(host) + " is lost · the console does not know if the answer went")
 }
 
 // lineShown is a draft as the line draws it: a newline as ↵, and no
