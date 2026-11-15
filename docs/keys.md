@@ -52,6 +52,39 @@ A key that changed its job with the board says so once, the first time
 you press it: `c`, `v`, `s`, `g`, `u`, `p`, `x` on a card whose ship waits
 for its merge, and a digit.
 
+## The list and the chat
+
+The keys go to one of two places: the chat's line or the list. The key
+line names the place first, `writing to flint-auth` or `in the list`, then
+at most five keys for it.
+
+In the line, every letter types, `j`, `k` and `q` too. A paste goes in as
+one piece. A digit answers only with the line empty and a question on
+the screen; else it types.
+
+| Key | What it does |
+|---|---|
+| `Enter` | In the line, sends the text to the session the line names, through its own host. In the list, goes back to the line. |
+| `Backspace` | Erases the last character of the line. |
+| A digit, 1 to 9 | With the line empty, marks that option of the question on the screen. The same digit again sends it. A question that opened less than half a second ago takes no digit: the digit types. On a session the stoker holds, 1 marks "Let it go", and 1 again lets it go. |
+| `↑`, `↓` | With the line empty, or in the list, chooses the session above or below, as the list draws them. |
+| `Esc` | In the line, clears a marked answer, then moves the keys to the list. In the list, clears the search, then the chain. |
+| `s` | In the list, shows the next host, then all hosts. |
+| `g` | In the list, shows only the chain of the chosen session. `Esc` shows all. |
+| `/` | In the list, searches the list. |
+| `m` | In the list, opens the menu of the chosen session. |
+| `c` | In the list, copies what the agent said last. |
+| `z` | In the list, parks the chosen session, or lets it go. In the line of a parked session, lets it go. |
+| `N` | In the list, opens **New session**. |
+| `Tab` | Goes to Machine. |
+
+Any other letter in the list moves the keys back to the line and types
+there. The line of a parked session is off: it says
+`parked: z lets it go`. A message to a host that is not reached stays in the line, and the
+line says `not sent: ws-2 is not reached`. Nothing sends it again by
+itself. When the chosen session ends, the next session in the list is
+chosen, and its line says `flint-auth ended · the text is not sent`.
+
 ## Machine
 
 `Tab` opens it. The rows are the stoker, git, history and panes, then the

@@ -1308,7 +1308,7 @@ func TestADigitThatCannotActSaysWhy(t *testing.T) {
 		if got := noticeRow(m); got != c.said {
 			t.Errorf("%s on %s says %q, want %q", c.digit, c.card, got, c.said)
 		}
-		if armed, _ := m.peekMarks(matchNamed(t, m, c.card)); armed != 0 {
+		if armed, _ := m.chatMarks(matchNamed(t, m, c.card)); armed != 0 {
 			t.Errorf("%s on %s armed %d", c.digit, c.card, armed)
 		}
 	}

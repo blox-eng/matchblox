@@ -46,7 +46,7 @@ func (m Model) boardSelected() (sample.Session, bool) {
 // to another match starts its peek.
 func (m *Model) boardChooseCard(c boardCol, s sample.Session) {
 	if was, ok := m.boardSelected(); !ok || paneOf(was) != paneOf(s) {
-		m.startPeek(s)
+		m.startChatMark(s)
 		m.goArmed = paneKey{}
 	}
 	pick := maps.Clone(m.boardPick)
@@ -57,9 +57,9 @@ func (m *Model) boardChooseCard(c boardCol, s sample.Session) {
 	m.boardAt, m.boardPick, m.boardAbove, m.boardBelow = c, pick, 0, 0
 }
 
-// startPeek starts the peek of s's card: for peekDead its digits arm
+// startChatMark starts the mark guard on s: for peekDead its digits arm
 // nothing, and a mark from before holds no more.
-func (m *Model) startPeek(s sample.Session) {
+func (m *Model) startChatMark(s sample.Session) {
 	m.peekAt, m.peekAsk, m.peekPane, m.peekNew = m.now(), askOf(s), paneOf(s), false
 }
 
@@ -79,14 +79,14 @@ func (m *Model) chooseByHand() {
 	}
 }
 
-// peekOn keeps the peek on the chosen card. The card coming into reach of
-// the digits (the first frame, a layer over the board that closes, the
-// menu that closes, a line above the columns left), a choice that moved
-// with no key (a card that left its column, a filter) and a new question
-// on the chosen card each start a new peek. A chosen line above the
+// chatMarkOn keeps the mark guard on the chosen match. The match coming
+// into reach of the digits (the first frame, a layer over the board that
+// closes, the menu that closes, a line above the columns left), a choice
+// that moved with no key (a card that left its column, a filter) and a
+// new question on the chosen match each start the guard again. A chosen line above the
 // columns that is gone is no choice, and a menu off the board or on a
 // match that is gone closes.
-func (m Model) peekOn() Model {
+func (m Model) chatMarkOn() Model {
 	if m.boardAbove > len(m.aboveLines()) {
 		m.boardAbove = 0
 	}
@@ -95,39 +95,48 @@ func (m Model) peekOn() Model {
 	if _, ok := m.menuOn(); m.menu != nil && !ok {
 		m.menu = nil
 	}
-	s, ok := m.boardSelected()
-	if !ok || paneOf(s) != m.boardMine {
+	if b, ok := m.boardSelected(); !ok || paneOf(b) != m.boardMine {
 		m.boardMine = paneKey{} // the choice moved by itself
 	}
-	reach := ok && m.peekReach()
+	s, ok := m.markTarget()
+	reach := ok && m.chatMarkReach()
 	was := m.peekReached
 	m.peekReached = reach
 	switch {
 	case !reach:
 	case !was || paneOf(s) != m.peekPane:
-		m.startPeek(s)
+		m.startChatMark(s)
 	case askOf(s) != m.peekAsk:
-		m.startPeek(s)
+		m.startChatMark(s)
 		m.peekNew = askOf(s) != ""
 	}
 	return m
 }
 
-// peekReach: a digit reaches the board, with no layer or menu over it.
-func (m Model) peekReach() bool {
+// markTarget is the match the digits answer: the list's chosen session,
+// else the board's chosen card.
+func (m Model) markTarget() (sample.Session, bool) {
+	if m.sideActive() {
+		return m.sideChosen()
+	}
+	return m.boardSelected()
+}
+
+// chatMarkReach: a digit reaches the board, with no layer or menu over it.
+func (m Model) chatMarkReach() bool {
 	return m.boardShown() && m.menu == nil && !m.standIn && !m.viewFull() && m.focus(keyPress("1")) == layerMain
 }
 
-// peekAnswers: the digits answer s's question, one question with one
+// chatAnswers: the digits answer s's question, one question with one
 // choice, given with its options.
-func (m Model) peekAnswers(s sample.Session) bool {
+func (m Model) chatAnswers(s sample.Session) bool {
 	_, ok := m.oneChoice(s)
 	return ok
 }
 
-// peekMarks are the option a first digit marked on s's card, and the
+// chatMarks are the option a first digit marked on s's card, and the
 // option sent to its question; 0 for none.
-func (m Model) peekMarks(s sample.Session) (armed, sent int) {
+func (m Model) chatMarks(s sample.Session) (armed, sent int) {
 	switch id := askOf(s); {
 	case id == "":
 	case id == m.peekSentAsk:
@@ -138,30 +147,30 @@ func (m Model) peekMarks(s sample.Session) (armed, sent int) {
 	return armed, sent
 }
 
-// answerFromPeek is a digit on the board (the spec's "Answering from the
-// peek"): the first marks that option of the chosen card's question, the
+// answerFromChat is a digit on the chosen match (the spec's "Answering
+// from the peek"): the first marks that option of its question, the
 // same digit again sends it. It sends nothing for peekDead after the peek
 // starts, to a question the card did not draw, or while the service is
 // lost.
-func (m Model) answerFromPeek(digit string) (tea.Model, tea.Cmd) {
-	s, ok := m.boardSelected()
+func (m Model) answerFromChat(digit string) (tea.Model, tea.Cmd) {
+	s, ok := m.markTarget()
 	q, _ := m.oneChoice(s)
 	n, _ := strconv.Atoi(digit)
-	armed, sent := m.peekMarks(s)
+	armed, sent := m.chatMarks(s)
 	said, answer, queued := "", tea.Cmd(nil), false
 	switch {
 	case !ok || sent > 0:
 		// no card, or the card says its answer is sent
-	case !m.peekAnswers(s) && m.asksNow(s):
+	case !m.chatAnswers(s) && m.asksNow(s):
 		said = m.cardName(s) + " asks in its pane · " + m.keys.main.Open.Help().Key + " goes in"
-	case !m.peekAnswers(s):
+	case !m.chatAnswers(s):
 		said = m.cardName(s) + " asks no question"
 	case m.lost || m.conn == nil:
 		m.peekArmed, said = 0, "not sent: no service · it redials"
-	case s.Host != m.opt.Host:
+	case s.Host != m.opt.Host && !m.sideActive(): // the chat draws a question on any host; a card does not
 		said = "not sent: " + m.cardName(s) + " is on " + m.nameOf(s.Host) + " · " + m.keys.main.Open.Help().Key + " goes in"
 	case paneOf(s) != m.peekPane || askOf(s) != m.peekAsk:
-		m.startPeek(s) // a question the card has not drawn yet
+		m.startChatMark(s) // a question the card has not drawn yet
 		said = "not sent: " + m.cardName(s) + " asks something new — look again"
 	case m.now().Sub(m.peekAt) < peekDead && m.peekNew:
 		said = "not sent: " + m.cardName(s) + " asks something new — look again"
@@ -181,18 +190,25 @@ func (m Model) answerFromPeek(digit string) (tea.Model, tea.Cmd) {
 		m.peekArmed, m.peekArmedAt = n, m.now()
 	}
 	note := m.once("digit", "A digit marks an answer now. Press it again to send.", said)
-	if queued {
+	if queued && !m.sideActive() {
 		return m.boardActed(), tea.Batch(answer, note)
 	}
-	return m, note
+	return m, tea.Batch(answer, note)
 }
 
 // sendAnswer sends digit to the pane of s as sendKey does, seen at the
 // time of the sample that carried the question the card drew: the card's
-// options come from the sample, not from the pane's screen. why says why
-// the key did not go and does not wait in line; "" when it did.
+// options come from the sample, not from the pane's screen. A peer's
+// session gets it on the peer's own conn. why says why the key did not go
+// and does not wait in line; "" when it did.
 func (m *Model) sendAnswer(s sample.Session, digit string) (tea.Cmd, string) {
-	return m.sendKeySeen(s, proto.LitPrefix+digit, m.stateAt(s.Host))
+	if s.Host == m.opt.Host {
+		return m.sendKeySeen(s, proto.LitPrefix+digit, m.stateAt(s.Host))
+	}
+	if why := m.cannotReach(s.Host); why != "" {
+		return nil, why
+	}
+	return m.sendTo(s.Host, proto.Act{RecID: proto.KeysPrefix + s.Pane, Text: proto.LitPrefix + digit, PID: s.PID, Start: s.Start, Seen: m.stateAt(s.Host)}), ""
 }
 
 // isDigit: k is a digit with no modifier.
@@ -277,6 +293,12 @@ func (m Model) boardOnRow() bool {
 // the layers over the board (the take-over question) read that selection,
 // so they act on the card, or the line, the key was pressed on.
 func (m Model) onChoice() Model {
+	if m.sideActive() {
+		if s, ok := m.sideChosen(); ok {
+			return m.onCard(s)
+		}
+		return m
+	}
 	if !m.boardShown() {
 		return m
 	}
@@ -560,7 +582,7 @@ func (m Model) boardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 	case bkey.Matches(k, mk.Back):
 		// The menu took esc first; then the mark, the search, the chain.
 		m.goArmed = paneKey{}
-		switch armed, _ := m.peekMarks(s); {
+		switch armed, _ := m.chatMarks(s); {
 		case ok && armed > 0:
 			m.peekArmed = 0
 		case m.filter != "":
@@ -589,7 +611,7 @@ func (m Model) boardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 		cmd = m.once("strip", bk.Strip.Help().Key+" turns the strip now.", "")
 		m.turnStripShown()
 	case isDigit(k): // never a tab on the board
-		next, cmd := m.answerFromPeek(k.Text)
+		next, cmd := m.answerFromChat(k.Text)
 		return next, cmd, true
 	case !ok && len(m.snap.Sessions) > 0 && bkey.Matches(k, bk.Merge, bk.Menu, mk.Second, mk.Grant, mk.Open, mk.Into, mk.Jump,
 		mk.Park, mk.Rename, mk.Switch, mk.Dismiss, mk.Fold, mk.Stoke, mk.StokeChain, mk.Night, mk.Order):
@@ -854,7 +876,7 @@ func (m Model) boardHints(w int) []hint {
 		hs = m.belowHints(under)
 	case b.picked && m.cardDrawn(b.chosen):
 		q, answers := m.offersDigits(b.chosen)
-		armed, sent := m.peekMarks(b.chosen)
+		armed, sent := m.chatMarks(b.chosen)
 		hs, _ = m.cardHints(b.chosen, cardOpts{sel: true, armed: armed}, len(q.Options), answers && sent == 0)
 	}
 	right := hintFor(bk.Right, "")
@@ -1098,7 +1120,7 @@ func (m Model) beltKeys() []beltKey {
 func (m Model) cardBelt(s sample.Session) []beltKey {
 	var ks []beltKey
 	if q, answers := m.oneChoice(s); answers {
-		if _, sent := m.peekMarks(s); sent == 0 {
+		if _, sent := m.chatMarks(s); sent == 0 {
 			for i := range min(len(q.Options), 3) {
 				n := strconv.Itoa(i + 1)
 				ks = append(ks, beltKey{Key: n, Face: n, Word: "answer", On: s.Host == m.opt.Host, Act: true})
@@ -1135,7 +1157,7 @@ func (m Model) beltValue() string {
 	}
 	armed := ""
 	if s, ok := m.boardSelected(); ok && m.boardShown() {
-		if a, _ := m.peekMarks(s); a > 0 {
+		if a, _ := m.chatMarks(s); a > 0 {
 			armed = strconv.Itoa(a)
 		} else if m.goArmedOn(s) {
 			armed = m.keys.main.Grant.Keys()[0]

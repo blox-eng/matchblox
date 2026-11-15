@@ -916,12 +916,12 @@ func TestASwipeMovesTheCardAsTheArrowsDo(t *testing.T) {
 	m, _, clock := menuBoard(t, 80, 31, chooseCard("flint-auth"))
 	*clock = clock.Add(time.Second)
 	m = pressOn(m, "1")
-	if armed, _ := m.peekMarks(matchNamed(t, m, "flint-auth")); armed != 1 {
+	if armed, _ := m.chatMarks(matchNamed(t, m, "flint-auth")); armed != 1 {
 		t.Fatalf("1 marked %d", armed)
 	}
 	x, y := cardOn(t, m, "flint-auth")
 	m = mouse(t, m, tea.MouseWheelMsg{X: x, Y: y, Button: tea.MouseWheelUp}) // flint-auth is the column's last
-	if armed, _ := m.peekMarks(matchNamed(t, m, "flint-auth")); armed != 0 {
+	if armed, _ := m.chatMarks(matchNamed(t, m, "flint-auth")); armed != 0 {
 		t.Errorf("a swipe kept the mark %d", armed)
 	}
 

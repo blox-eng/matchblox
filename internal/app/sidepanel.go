@@ -23,12 +23,9 @@ func (m Model) chosenSide() paneKey {
 	return paneKey{}
 }
 
-// sideShows is the units of g the search keeps: a chain stays whole while
-// one of its members matches.
+// sideShows is the units of g the search, the chain of g and the host of
+// s keep: a chain stays whole while one of its members is kept.
 func (m Model) sideShows(g sideGroup) []sideUnit {
-	if m.filter == "" {
-		return g.units
-	}
 	return slices.DeleteFunc(slices.Clone(g.units), func(u sideUnit) bool {
 		return !slices.ContainsFunc(u.members, m.inBoard)
 	})

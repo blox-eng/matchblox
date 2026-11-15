@@ -147,7 +147,7 @@ func (m Model) sideGroups() []sideGroup {
 func (m Model) sideOrder() []paneKey {
 	var out []paneKey
 	for _, g := range m.sideGroups() {
-		for _, u := range g.units {
+		for _, u := range m.sideShows(g) {
 			for _, s := range u.members {
 				out = append(out, paneOf(s))
 			}

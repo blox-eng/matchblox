@@ -38,6 +38,7 @@ type keymaps struct {
 	scan     scanKeys
 	ask      askKeys
 	board    boardKeys
+	side     sideKeys
 }
 
 type shellKeymaps struct {
@@ -58,6 +59,7 @@ var shadowsMain = map[string]map[string]bool{
 	"scan":     {"y": true, "n": true, "esc": true},
 	"ask":      {"esc": true, "enter": true, "c": true},
 	"board":    {"right": true, "c": true, "s": true},
+	"side":     {"enter": true, "esc": true, "up": true, "down": true},
 }
 
 func defaultKeys() keymaps {
@@ -173,6 +175,13 @@ func defaultKeys() keymaps {
 			PrevChain: bind(ks("["), "[", "previous chain"),
 			Menu:      bind(ks("m"), "m", "menu"),
 			Merge:     bind(ks("p"), "p", "merge"),
+		},
+		side: sideKeys{
+			Enter: bind(ks("enter"), "⏎", "send"),
+			Erase: bind(ks("backspace"), "⌫", "erase"),
+			Leave: bind(ks("esc"), "esc", "list"),
+			Up:    bind(ks("up"), "↑↓", "choose"),
+			Down:  bind(ks("down"), "↑↓", "choose"),
 		},
 	}
 }
@@ -296,6 +305,16 @@ type boardKeys struct {
 
 func (k boardKeys) bindings() []bkey.Binding {
 	return []bkey.Binding{k.Left, k.Right, k.Copy, k.Density, k.Chain, k.Host, k.Strip, k.NextChain, k.PrevChain, k.Menu, k.Merge}
+}
+
+// sideKeys are the chat's line and the list beside it. In the line every
+// printable key is text; only the arrows choose, and only with the line
+// empty. In the list ⏎ goes back to the line, and the board's keys act on
+// the chosen session.
+type sideKeys struct{ Enter, Erase, Leave, Up, Down bkey.Binding }
+
+func (k sideKeys) bindings() []bkey.Binding {
+	return []bkey.Binding{k.Enter, k.Erase, k.Leave, k.Up, k.Down}
 }
 
 // shellKeys are the Hosts list. Update and Dismiss act on a host on

@@ -430,7 +430,7 @@ func TestAnAnswerThatCannotWaitInLineIsNotSent(t *testing.T) {
 	if head := strings.Split(plainFrame(m), "\n")[0]; strings.Contains(head, "not sent") || m.flash != "" {
 		t.Errorf("the header shows %q, the flash %q", head, m.flash)
 	}
-	if _, sentN := m.peekMarks(matchNamed(t, m, "flint-auth")); sentN != 0 || chosenName(t, m) != "flint-auth" || !armedOn(m, "1") {
+	if _, sentN := m.chatMarks(matchNamed(t, m, "flint-auth")); sentN != 0 || chosenName(t, m) != "flint-auth" || !armedOn(m, "1") {
 		t.Errorf("a key that did not go counts as sent (%d), or the choice moved to %s", sentN, chosenName(t, m))
 	}
 	m.keysOut.queue = nil
@@ -445,11 +445,11 @@ func TestOnlyTheAnswersRefusalTakesItsDigitsBack(t *testing.T) {
 	flint := matchNamed(t, m, "flint-auth")
 	next, _ := m.Update(resultMsg{ActID: keyActID + "%another", Err: "not sent: kindle-web asks something new — look again"})
 	m = next.(Model)
-	if _, n := m.peekMarks(flint); n != 1 {
+	if _, n := m.chatMarks(flint); n != 1 {
 		t.Errorf("a refused key of another pane cleared the answer: sent %d", n)
 	}
 	next, _ = m.Update(resultMsg{ActID: keyActID + flint.Pane, Err: "not sent: flint-auth asks something new — look again"})
-	if _, n := next.(Model).peekMarks(flint); n != 0 {
+	if _, n := next.(Model).chatMarks(flint); n != 0 {
 		t.Errorf("the answer's refusal kept it sent: %d", n)
 	}
 }
@@ -476,7 +476,7 @@ func TestADigitIsDeadWhenTheChoiceMovesWithNoKey(t *testing.T) {
 	gone.Queue = st.Queue[1:]
 	*clock = clock.Add(time.Second)
 	m = newBoardState(t, m, gone)
-	if s, ok := m.boardSelected(); !ok || s.Name == "flint-auth" || !m.peekAnswers(s) {
+	if s, ok := m.boardSelected(); !ok || s.Name == "flint-auth" || !m.chatAnswers(s) {
 		t.Fatalf("the choice is %s (%v), want a card that asks", s.Name, ok)
 	}
 	if m = pressOn(m, "1"); armedOn(m, "1") {

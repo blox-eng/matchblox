@@ -266,7 +266,7 @@ func (m Model) menuTap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 // boardRightClick is a right-click on the board: on a card it chooses the
 // card and opens its menu at the pointer.
 func (m Model) boardRightClick(ms tea.Mouse) (tea.Model, tea.Cmd) {
-	if !m.peekReach() || m.splashing() {
+	if !m.chatMarkReach() || m.splashing() {
 		return m, nil
 	}
 	c, s, ok := m.cardAtCell(ms.X, ms.Y)
@@ -305,7 +305,7 @@ func (m Model) cardAtCell(x, y int) (boardCol, sample.Session, bool) {
 // while the board takes keys.
 func (m Model) holdPress(next tea.Model, cmd tea.Cmd, ms tea.Mouse) (tea.Model, tea.Cmd) {
 	nm, ok := next.(Model)
-	if !ok || !nm.sawRelease || !nm.peekReach() {
+	if !ok || !nm.sawRelease || !nm.chatMarkReach() {
 		return next, cmd
 	}
 	_, s, on := m.cardAtCell(ms.X, ms.Y)
@@ -337,7 +337,7 @@ func (m Model) pointer(msg tea.Msg) (Model, tea.Cmd) {
 		return m.dragOn(point{ms.X, ms.Y}), nil
 	case longPressMsg:
 		c, s, ok := m.boardCardOf(m.longPress.pane)
-		if !m.longPress.on || msg.id != m.longPress.id || !ok || !m.peekReach() {
+		if !m.longPress.on || msg.id != m.longPress.id || !ok || !m.chatMarkReach() {
 			return m, nil
 		}
 		m.boardChooseCard(c, s) // a press that waits for its release has not chosen it yet

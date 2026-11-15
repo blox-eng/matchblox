@@ -6,8 +6,10 @@ import (
 	"strconv"
 	"strings"
 
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/blox-eng/matchblox/internal/said"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
@@ -158,28 +160,67 @@ func (m Model) chatConversation(s sample.Session, w, rows int) []string {
 	return out
 }
 
-// chatAsk is the question the session asks, with its options: none when
-// it asks no question with options.
+// chatAsk is the question the digits answer, with its options: the one
+// the session asks, or, while the stoker holds it, whether to let it go.
+// The agent's own menu in the pane is the question: then only the mark
+// shows, in one line. None when the digits answer nothing.
 func (m Model) chatAsk(s sample.Session, w int) []string {
 	q, ok := m.oneChoice(s)
+	if _, held := m.stokerHolds(s); held && !ok {
+		q, ok = said.Question{Question: m.cardName(s) + " is " + m.heldWhy(s), Options: []said.Option{{Label: "Let it go"}}}, true
+	}
 	if !ok {
 		return nil
 	}
+	armed := m.chatMark(s)
 	var lines []string
-	for _, l := range upTo(wrapPlain(q.Question, max(w-2, 1)), 2, max(w-2, 1)) {
-		lines = append(lines, fit(" "+m.st.text.Bold(true).Render(l), w))
+	if !m.paneAsks(s, q) {
+		for _, l := range upTo(wrapPlain(q.Question, max(w-2, 1)), 2, max(w-2, 1)) {
+			lines = append(lines, fit(" "+m.st.text.Bold(true).Render(l), w))
+		}
+		for i, o := range q.Options {
+			lines = append(lines, m.optionLine(i+1, 0, ansi.Truncate(o.Label, max(w-6, 1), "…"), w, armed))
+		}
 	}
-	for i, o := range q.Options {
-		lines = append(lines, m.optionLine(i+1, 0, ansi.Truncate(o.Label, max(w-6, 1), "…"), w, 0))
+	n := strconv.Itoa(armed)
+	switch _, sent := m.chatMarks(s); {
+	case sent > 0:
+		lines = append(lines, fit(" "+m.st.muted.Render("sent "+strconv.Itoa(sent)+" · waits for "+m.cardName(s)), w))
+	case armed > 0 && armed <= len(q.Options):
+		lines = append(lines, fit(" "+m.st.accent.Render("❯ "+n+". "+q.Options[armed-1].Label)+
+			m.st.muted.Render(" · "+n+" again sends · "+m.keys.side.Leave.Help().Key+" clears"), w))
 	}
 	return lines
 }
 
-// chatLine is the line at the bottom: what the owner types, and at the
-// right whom it goes to.
+// paneAsks: the cut pane of s on screen shows q's options, as the agent
+// draws its own menu.
+func (m Model) paneAsks(s sample.Session, q said.Question) bool {
+	if m.watchConn(s.Host) == nil || m.watchHost != s.Host || m.watching != s.Pane || m.screen.Pane != s.Pane || m.screen.Gone {
+		return false
+	}
+	text := ansi.Strip(chatCut(s.Agent, m.screen.Text))
+	return len(q.Options) > 0 && !slices.ContainsFunc(q.Options, func(o said.Option) bool { return !strings.Contains(text, o.Label) })
+}
+
+// chatLine is the line at the bottom: what the owner types, its end in
+// view, and at the right whom it goes to, or what the line says of its
+// text. A parked session's line is off.
 func (m Model) chatLine(s sample.Session, w int) string {
-	to := m.st.faint.Render(m.keys.main.Open.Help().Key + " send to " + m.cardName(s))
-	return spread(" "+m.st.accent.Render("›")+" ", to+" ", w)
+	st := m.st
+	lead := " " + st.accent.Render("›") + " "
+	if m.parked(s) {
+		return fit(lead+st.muted.Render("parked: "+m.keys.main.Park.Help().Key+" lets it go"), w)
+	}
+	right := st.faint.Render(m.keys.side.Enter.Help().Key + " send to " + m.cardName(s))
+	if n := m.lineNote; n.k == paneOf(s) && n.text != "" {
+		right = st.warn.Render(n.text)
+	}
+	text := lineShown(m.lines[paneOf(s)])
+	if room := w - lipgloss.Width(right) - 5; lipgloss.Width(text) > room {
+		text = ansi.TruncateLeft(text, lipgloss.Width(text)-max(room-1, 0), "…")
+	}
+	return spread(lead+st.text.Render(text), right+" ", w)
 }
 
 // menuOption is an option of an agent's menu, not its prompt: "❯ 1. Yes".

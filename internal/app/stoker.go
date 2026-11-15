@@ -176,6 +176,9 @@ func (m Model) asksTakeOver(k tea.KeyPressMsg) bool {
 	if m.standIn { // the demo's world, which has no stoker
 		return false
 	}
+	if m.sideActive() && !bkey.Matches(k, m.keys.main.Jump) {
+		return false // the line and the list type and choose: only a jump goes into a pane
+	}
 	if m.boardShown() && !m.boardOnRow() {
 		return false // Sessions' row is not what the board shows: the key acts on no session of it
 	}

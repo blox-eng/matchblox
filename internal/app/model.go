@@ -578,6 +578,20 @@ type Model struct {
 	// drafts are the words typed to a chain's stoker in its room when the
 	// room closed; the room shows them again when it opens.
 	drafts map[chainKey]string
+	// sideOn: the Sessions tab is the list and the chat, and keysIn is
+	// where the keys go there. lines are the words typed in the chat's
+	// line, each for the session it was typed for, and lineNote what one
+	// line says of its text. lineActs are the messages the service has not
+	// answered yet, by act id.
+	sideOn   bool
+	keysIn   sideFocus
+	lines    map[paneKey]string
+	lineNote lineNote
+	lineActs map[string]lineSent
+	// sideWas is the list's order at the last message, and sideName the
+	// chosen session's name then: what follows a chosen session that ends.
+	sideWas  []paneKey
+	sideName string
 }
 
 func New(opt Options) Model {
@@ -767,7 +781,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	next, cmd := m.update(msg)
 	if nm, ok := next.(Model); ok {
 		nm = nm.keepRoomRow(m.room, anchor)
-		nm = nm.scanShows().keepView().inDemo().peekOn().onChoice() // what reads Sessions' selection reads the board's choice
+		nm = nm.scanShows().keepView().inDemo().sideKeep().chatMarkOn().onChoice() // what reads Sessions' selection reads the board's choice
 		again := nm.beltPoll(msg)
 		nm, belt := nm.tellBelt(again)
 		cmd = tea.Batch(cmd, belt)
@@ -1142,7 +1156,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		toast := m.say("ran: " + msg.cmd)
 		return m, tea.Batch(took, toast)
 	case tea.PasteMsg:
-		// Only the ssh prompt and the form take a paste, in their field.
+		// The ssh prompt, the form and the chat's line take a paste.
 		if m.ask != nil {
 			return m.askPaste(msg.Content), nil
 		}
@@ -1151,6 +1165,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.copyCode != "" && m.boardShown() { // the check's answer, never an agent's
 			return m.copyPasted(msg.Content)
+		}
+		if m.sideActive() && m.focus(tea.KeyPressMsg{}) == layerMain {
+			return m.linePaste(msg.Content), nil
 		}
 		return m, nil
 	case tea.MouseClickMsg:
@@ -1205,6 +1222,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // conn r came on.
 func (m Model) result(r proto.Result) (Model, tea.Cmd) {
 	m.endRec(r.ActID, r)
+	if mm, cmd, ok := m.lineResult(r); ok {
+		return mm, cmd
+	}
 	if mm, ok := m.started(r); ok {
 		return mm, nil
 	}
@@ -1487,8 +1507,10 @@ func (m Model) press(f layerID, k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		next, cmd = m.pendingKey(k)
 	case layerMain:
 		var took bool
-		if next, cmd, took = m.boardKey(k); !took {
-			next, cmd = m.key(k)
+		if next, cmd, took = m.sideKey(k); !took {
+			if next, cmd, took = m.boardKey(k); !took {
+				next, cmd = m.key(k)
+			}
 		}
 	}
 	if f.underOverlays() {

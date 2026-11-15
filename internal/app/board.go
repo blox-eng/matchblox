@@ -716,7 +716,7 @@ func (m Model) boardBlockOf(b *boardDraw, c boardCol, s sample.Session, w int, q
 		otherHost: m.hostCount() > 1 && m.boardHost == "" && s.Host != m.opt.Host,
 		bare:      b.live > 0,
 	}
-	if armed, sent := m.peekMarks(s); o.sel {
+	if armed, sent := m.chatMarks(s); o.sel {
 		o.armed, o.sent = armed, sent
 	} else {
 		o.sent = sent

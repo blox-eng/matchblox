@@ -117,7 +117,7 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 			return m.holdPress(m, nil, ms)
 		}
 		next, cmd := m.boardTap(ms.X, ms.Y-sc.bodyTop)
-		if nm, ok := next.(Model); ok && (nm.pending != nil || nm.menu != nil || !nm.peekReach()) {
+		if nm, ok := next.(Model); ok && (nm.pending != nil || nm.menu != nil || !nm.chatMarkReach()) {
 			nm.dragFrom, nm.dragLines = nil, nil // the press opened a box: no drag hides it
 			next = nm
 		}
