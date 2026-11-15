@@ -67,8 +67,8 @@ func (m Model) menuFor(s sample.Session) []menuItem {
 		}})
 	}
 	items = append(items, m.actItems(s)...)
-	items = append(items, menuItem{"go in", mk.Into.Help().Key, func(m *Model) tea.Cmd {
-		next, cmd := m.boardInto(s)
+	items = append(items, menuItem{"go in", mk.Jump.Help().Key, func(m *Model) tea.Cmd {
+		next, cmd := m.expand(s, true)
 		if nm, ok := next.(Model); ok {
 			*m = nm
 		}

@@ -28,7 +28,7 @@
 │   show only the chain login        g │
 │   rename                           r │
 │   stoke the chain login            F │
-│   go in                            a │
+│   go in                       ctrl+o │
 ╰─ ⏎ do ─ esc close ───────────────────╯
 ────────────────────────────────────────
  in the menu · ↑↓ move · ⏎ do

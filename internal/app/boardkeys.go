@@ -259,11 +259,6 @@ func (m Model) onCard(s sample.Session) Model {
 	return m
 }
 
-// boardInto is ⏎: into the pane of s, then the first other wait is chosen.
-func (m Model) boardInto(s sample.Session) (tea.Model, tea.Cmd) {
-	return m.onCard(s).intoSelected()
-}
-
 // boardCopy is c: the chosen card's last message, whole, on the clipboard.
 func (m *Model) boardCopy(s sample.Session, ok bool) tea.Cmd {
 	first := m.keys.board.Copy.Help().Key + " copies now: the last message, whole."
@@ -428,6 +423,7 @@ func (m Model) beltKeys() []beltKey {
 	}
 	_, head := m.headRow(s)
 	return append(ks, up, down, beltOf(mk.Open, "", "", true),
+		beltOf(mk.Jump, "⌃o", "expand", card),
 		beltOf(bk.Copy, "", "copy", card),
 		beltOf(bk.Menu, "", "menu", card),
 		beltOf(bk.Chain, "", "chain", card && m.chainLabelOf(s) != ""),

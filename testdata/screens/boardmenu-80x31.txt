@@ -10,15 +10,15 @@
    The plan changes 2 records a…│
  ≋ login        step 1 of 3 · 3 │
 ▌├ ╿ flint-auth             2m ✻│
- │╭─ flint-auth ────────────────────╮
- ├│ ▌ copy last message           c │
- └│   copy the question             │
-──│   copy its name                 │
- W│   show only the chain login   g │
- ✦│   rename                      r │
- ✦│   stoke the chain login       F │
-──│   go in                       a │
- H╰─ ⏎ do ─ esc close ──────────────╯
+ │╭─ flint-auth ─────────────────────────╮
+ ├│ ▌ copy last message                c │
+ └│   copy the question                  │
+──│   copy its name                      │
+ W│   show only the chain login        g │
+ ✦│   rename                           r │
+ ✦│   stoke the chain login            F │
+──│   go in                       ctrl+o │
+ H╰─ ⏎ do ─ esc close ───────────────────╯
  ╽ kindle-legacy            5h ✻│
 ────────────────────────────────│
  IDLE · 6  −                    │

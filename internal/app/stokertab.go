@@ -250,7 +250,7 @@ func (m Model) stokerKeys() []hint {
 		case r.state() == "waits" && r.e.Needs != "":
 			keys = append(keys, hintFor(mk.Grant, ""))
 		case m.hasSession(r):
-			keys = append(keys, hintFor(mk.Into, ""))
+			keys = append(keys, hintFor(mk.Jump, ""))
 		}
 		if r.e != nil {
 			keys = append(keys, hintFor(mk.Open, "command"))
@@ -340,7 +340,7 @@ func (m Model) stokerTarget() (pane, why string) {
 	case !ok:
 		return "", ""
 	case r.state() != "failed":
-		return "", "a goes into the session of a failed step"
+		return "", m.keys.main.Jump.Help().Key + " goes into the session of a failed step"
 	}
 	if _, ok := m.sessionIn(m.opt.Host, r.e.Pane); !ok {
 		return "", r.e.Name + " is gone: there is no pane to go into"
@@ -813,7 +813,7 @@ func (m Model) outcome(r stokerRow) []styled {
 		}
 	case "failed":
 		if m.hasSession(r) {
-			out = append(out, styled{m.keys.main.Into.Help().Key + " goes into its session", st.warn})
+			out = append(out, styled{m.keys.main.Jump.Help().Key + " goes into its session", st.warn})
 		} else {
 			out = append(out, styled{"its session ended" + m.endedWay(), st.warn})
 		}

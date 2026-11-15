@@ -214,8 +214,8 @@ run. `matchblox stoker when --list` prints the run's triggers, `--drop
 The whole console goes dark blue, and only the matches keep their fire.
 One glance, at 03:00 on your phone, tells you the stoker is in charge.
 
-Look around as you like. The first time you act on a session (`Enter` on a
-row, `x`, `a`, or a second tap), the key line asks:
+Look around as you like. The first time you act on a session (`Ctrl+O`,
+`x`, or another act on a row), the key line asks:
 
 ```text
  The stoker is on. Take over?  y rests it while you work · n keeps it on
@@ -673,7 +673,7 @@ end of the run its score:
 Each step shows its glyph: `✓` done, `◐` under way, `⏸` waits, `✕`
 failed, `○` not begun. `Enter` on a step shows the exact command the
 stoker ran for it, or the one a go step waits to run. `y` on a step under
-`YOUR GO` gives it the go, once. `a` on a failed step goes into
+`YOUR GO` gives it the go, once. `Ctrl+O` on a failed step goes into
 its session's pane; a go the run ended before you gave reads `the run ended
 before your go`, and nothing guards that command any more. Opening the
 view marks the steps seen.

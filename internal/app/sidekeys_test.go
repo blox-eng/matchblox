@@ -848,3 +848,30 @@ func TestHeldNoteShowsOnlyForItsSession(t *testing.T) {
 		t.Fatalf("flint-auth's line %q", got)
 	}
 }
+
+// TestAInTheListTypes: a goes into no pane: in the list it goes back to the
+// line and types there, as any letter with no job does. Ctrl+O goes in.
+func TestAInTheListTypes(t *testing.T) {
+	m, _, ran := sideShot(t, 160, 38)
+	m.toList()
+	if m = pressOn(m, "a"); len(*ran) != 0 || m.inList() || m.lines[m.chosenSide()] != "a" {
+		t.Fatalf("a in the list: ran %v, in the list %v, line %q", *ran, m.inList(), m.lines[m.chosenSide()])
+	}
+}
+
+// TestTheMenuGoesInByCtrlO: the menu's go in names ctrl+o, and goes in.
+func TestTheMenuGoesInByCtrlO(t *testing.T) {
+	m, _, ran := sideShot(t, 160, 38)
+	m.toList()
+	m = pressOn(m, "m")
+	i := slices.IndexFunc(m.menu.items, func(it menuItem) bool { return it.label == "go in" })
+	if i < 0 || m.menu.items[i].key != "ctrl+o" {
+		t.Fatalf("the menu's go in: %+v", m.menu.items)
+	}
+	m.menu.at = i
+	next, cmd := m.Update(keyPress("enter"))
+	fed(next, cmd)
+	if len(*ran) != 1 {
+		t.Fatalf("go in ran %v", *ran)
+	}
+}

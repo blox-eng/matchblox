@@ -194,9 +194,9 @@ func TestEnterShowsTheCommand(t *testing.T) {
 	}
 }
 
-// While the stoker is in charge, a on a failed step asks to take over first,
+// While the stoker is in charge, ctrl+o on a failed step asks to take over first,
 // as every jump on such a host does; the answer then goes into its pane.
-func TestAOnAFailedStepAtNightAsksToTakeOver(t *testing.T) {
+func TestCtrlOOnAFailedStepAtNightAsksToTakeOver(t *testing.T) {
 	st := tabNight(screensState(t))
 	m, _ := loadedWith(t, 100, st)
 	m.setTab(tabStoker)
@@ -212,10 +212,10 @@ func TestAOnAFailedStepAtNightAsksToTakeOver(t *testing.T) {
 		}
 	}
 	ran := recordRuns(&m)
-	next, cmd := key(selectStep(t, m, "p5"), "a")
+	next, cmd := key(selectStep(t, m, "p5"), "ctrl+o")
 	drain(cmd)
 	if next.(Model).held == nil || len(*ran) != 0 {
-		t.Fatalf("a: held %v ran %q, want the take-over question first", next.(Model).held != nil, *ran)
+		t.Fatalf("ctrl+o: held %v ran %q, want the take-over question first", next.(Model).held != nil, *ran)
 	}
 	_, cmd = key(next, "n")
 	drain(cmd)

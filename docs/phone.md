@@ -105,8 +105,8 @@ terminal.`
 - While the console shows Sessions or Machine, the key belt is on its
   Board layout. Home is `◂`, then the keys of the chosen session
   (`1 answer`, `p merge`, `y go`), then `↑ ↓ ⏎`. The rest of the belt has
-  the list's keys: `c copy`, `m menu`, `g chain`, `s hosts`, `⇥ machine`,
-  `x kill`, `/`, `z park`. A key that does not apply is dim and sends
+  `⌃o expand` and the list's keys: `c copy`, `m menu`, `g chain`,
+  `s hosts`, `⇥ machine`, `x kill`, `/`, `z park`. A key that does not apply is dim and sends
   nothing. In a pane, the belt goes back to the layout it had there. A tap
   on `y go` does not give the go. The first tap arms it: a notice says
   what the go does, for example `y again gives the go: merge #4556`. Tap
@@ -264,8 +264,8 @@ starts it. A second phone or laptop attaches to the same session.
 `Ctrl+O` goes into the agent's own tmux pane, and moves only the phone.
 
 1. Tap an agent's row to open its chat: the chat shows the question the
-   agent asks and its last words. Then press `Ctrl+O`, or `a` in the list,
-   to go into its pane.
+   agent asks and its last words. Then press `Ctrl+O`, or tap `⌃o` on the
+   key belt, to go into its pane.
 2. On a host the stoker drives, the console asks `take over?` first. A
    session with no pane says `<name> runs outside tmux: no pane to go into`.
 3. Type in the pane. The belt's keys (`Esc`, `Ctrl`, arrows, `Tab`, the
@@ -366,8 +366,8 @@ program does not read the mouse, the terminal scrolls its own history.
 
 ## Go to an agent's pane and back
 
-`Ctrl+O`, and `a` in the list, go into the agent's pane. In Panes, a tap
-on a row goes into it the same way.
+`Ctrl+O`, or `⌃o` on the key belt, goes into the agent's pane. In Panes,
+a tap on a row goes into it the same way.
 
 To come back in the matchblox app, tap `◂` on the belt, swipe in from
 the left edge, tap `◂ matchblox` at the left of the tmux status line, or

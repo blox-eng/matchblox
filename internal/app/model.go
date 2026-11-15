@@ -1690,9 +1690,8 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.tab == tabStoker {
 			return m.grantStep()
 		}
-	case bkey.Matches(k, mk.Into):
-		switch m.tab {
-		case tabStoker:
+	case bkey.Matches(k, mk.Jump):
+		if m.tab == tabStoker {
 			return m.stokerInto()
 		}
 		if s, ok := m.selectedSession(); ok {
@@ -1705,8 +1704,6 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.tab == tabSessions {
 			return m.stokeChain()
 		}
-	case bkey.Matches(k, mk.Jump):
-		return m.intoSelected()
 	case bkey.Matches(k, mk.Dismiss):
 		if m.tab == tabSessions {
 			m.dismissRec()

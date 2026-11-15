@@ -50,8 +50,8 @@ type shellKeymaps struct {
 // the layer is on top, so its key wins. A new overlap fails
 // TestKeymapsHaveNoCollisions until it is added here.
 var shadowsMain = map[string]map[string]bool{
-	"form":     {"esc": true, "enter": true, "tab": true, "shift+tab": true, "up": true, "down": true, "space": true, "right": true},
-	"sheet":    {"esc": true, "enter": true, "tab": true, "space": true, "right": true},
+	"form":     {"esc": true, "enter": true, "tab": true, "shift+tab": true, "up": true, "down": true, "space": true},
+	"sheet":    {"esc": true, "enter": true, "tab": true, "space": true},
 	"search":   {"esc": true, "enter": true},
 	"pair":     {"c": true, "esc": true, "enter": true},
 	"takeOver": {"y": true, "n": true},
@@ -92,7 +92,6 @@ func defaultKeys() keymaps {
 			Order:      bind(ks("o"), "o", "new order"),
 			Rename:     bind(ks("r"), "r", "rename"),
 			StartAgain: bind(ks("R", "shift+r"), "R", "start again"),
-			Into:       bind(ks("a", "right"), "a", "go in"),
 			Jump:       bind(ks("ctrl+o"), "ctrl+o", "go in"),
 		},
 		form: formKeys{
@@ -230,7 +229,7 @@ type mainKeys struct {
 	Stoker, Quit, NextTab, PrevTab, Search, Back, Sort      bkey.Binding
 	Park, Mark, Exited, MarkSafe, QuitAgent, Up, Down, Open bkey.Binding
 	Second, New, Switch, Grant, Dismiss                     bkey.Binding
-	Stoke, StokeChain, Night, Order, Rename, Into, Jump     bkey.Binding
+	Stoke, StokeChain, Night, Order, Rename, Jump           bkey.Binding
 	StartAgain                                              bkey.Binding
 }
 
@@ -238,7 +237,7 @@ func (k mainKeys) bindings() []bkey.Binding {
 	return []bkey.Binding{k.Stoker, k.Quit, k.NextTab, k.PrevTab, k.Search, k.Back, k.Sort,
 		k.Park, k.Mark, k.Exited, k.MarkSafe, k.QuitAgent, k.Up, k.Down, k.Open,
 		k.Second, k.New, k.Switch, k.Grant, k.Dismiss,
-		k.Stoke, k.StokeChain, k.Night, k.Order, k.Rename, k.Into, k.Jump, k.StartAgain}
+		k.Stoke, k.StokeChain, k.Night, k.Order, k.Rename, k.Jump, k.StartAgain}
 }
 
 // formKeys are the new-session, switch and rename form. Down and Up go to

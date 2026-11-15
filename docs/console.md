@@ -173,7 +173,7 @@ closes. Each line shows only where it applies:
 5. `show only the chain login` (also `g`)
 6. The acts that destroy nothing, each with its key: `rename` (`r`),
    `stoke the chain login` (`F`) and `a new order` (`o`).
-7. `go in` (also `a`)
+7. `go in` (also `Ctrl+O`)
 8. `out of login`, only while the list shows that chain: it takes the
    match out of the chain, after a typed `y`.
 

@@ -370,7 +370,7 @@ func keyLineStates(t *testing.T) []keyLineAt {
 		add(fmt.Sprintf("sheet n/%d", w), sendKey(sh, "n"))
 		add(fmt.Sprintf("sheet chips/%d", w), sendKey(sendKey(sh, "n"), "tab"))
 		add(fmt.Sprintf("stoker step ask/%d", w), sendKey(selectStep(t, tabAt(at(w, tabNight(queueState())), tabStoker).(Model), "g8"), "y"))
-		add(fmt.Sprintf("stoker step look/%d", w), sendKey(selectStep(t, tabAt(at(w, tabMorning(queueState())), tabStoker).(Model), "p5"), "a"))
+		add(fmt.Sprintf("stoker step look/%d", w), sendKey(selectStep(t, tabAt(at(w, tabMorning(queueState())), tabStoker).(Model), "p5"), "ctrl+o"))
 		add(fmt.Sprintf("stoker command/%d", w), sendKey(tabAt(at(w, tabNight(queueState())), tabStoker), "enter"))
 		add(fmt.Sprintf("stoker quit agent/%d", w), sendKey(tabAt(at(w, agentState(proto.StokerView{PaneUp: true})), tabStoker), "Q"))
 	}

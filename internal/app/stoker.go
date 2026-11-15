@@ -183,15 +183,15 @@ func (m Model) asksTakeOver(k tea.KeyPressMsg) bool {
 		return false // the list chose no session: the key acts on no session
 	}
 	s, onSession := m.selectedSession()
-	if _, head := m.headRow(s); onSession && head && bkey.Matches(k, m.keys.main.Open, m.keys.main.Into, m.keys.main.Jump) {
+	if _, head := m.headRow(s); onSession && head && bkey.Matches(k, m.keys.main.Open, m.keys.main.Jump) {
 		return false // the stoker's own pane or its sheet: no session is taken from it
 	}
 	on := func(a *action) bool { return a != nil && m.takeOverOn(m.actHost(a)) }
 	switch {
-	case bkey.Matches(k, m.keys.main.Into) && m.tab == tabStoker:
+	case bkey.Matches(k, m.keys.main.Jump) && m.tab == tabStoker:
 		pane, _ := m.stokerTarget()
 		return pane != "" && m.takeOverOn(m.opt.Host)
-	case bkey.Matches(k, m.keys.main.Jump), bkey.Matches(k, m.keys.main.Into):
+	case bkey.Matches(k, m.keys.main.Jump):
 		return onSession && s.Pane != "" && on(m.primary())
 	case bkey.Matches(k, m.keys.main.Open):
 		return on(m.primary())
@@ -213,12 +213,12 @@ func (m Model) hold(k tea.KeyPressMsg) (func(Model) (tea.Model, tea.Cmd), string
 			return m, nil
 		}, m.actHost(a)
 	}
-	if bkey.Matches(k, m.keys.main.Into) && m.tab == tabStoker {
+	if bkey.Matches(k, m.keys.main.Jump) && m.tab == tabStoker {
 		pane, _ := m.stokerTarget()
 		return heldInto(m.askedBy, m.opt.Host, pane), m.opt.Host
 	}
 	a := m.primary()
-	if _, onSession := m.selectedSession(); onSession && (bkey.Matches(k, m.keys.main.Open) || bkey.Matches(k, m.keys.main.Into) || bkey.Matches(k, m.keys.main.Jump)) {
+	if _, onSession := m.selectedSession(); onSession && (bkey.Matches(k, m.keys.main.Open) || bkey.Matches(k, m.keys.main.Jump)) {
 		return func(m Model) (tea.Model, tea.Cmd) { return m.runInto(a) }, m.actHost(a)
 	}
 	return func(m Model) (tea.Model, tea.Cmd) {

@@ -38,7 +38,7 @@ func TestEnterOnAStokerHostAsksToTakeOver(t *testing.T) {
 	}
 }
 
-func TestAOnAFailedStepJumps(t *testing.T) {
+func TestCtrlOOnAFailedStepJumps(t *testing.T) {
 	m, _ := loadedWith(t, 100, tabMorning(screensState(t)))
 	m.setTab(tabStoker)
 	pane := ""
@@ -53,17 +53,20 @@ func TestAOnAFailedStepJumps(t *testing.T) {
 		}
 	}
 	ran := recordRuns(&m)
-	if line := actionLine(selectStep(t, m, "p5")); !strings.Contains(line, "a go in") {
-		t.Errorf("the key line does not offer a: %q", line)
+	if line := actionLine(selectStep(t, m, "p5")); !strings.Contains(line, "ctrl+o go in") {
+		t.Errorf("the key line does not offer ctrl+o: %q", line)
 	}
-	_, cmd := key(selectStep(t, m, "p5"), "a")
+	_, cmd := key(selectStep(t, m, "p5"), "ctrl+o")
 	drain(cmd)
 	if len(*ran) != 1 || strings.Join((*ran)[0], " ") != "tmux switch-client -t "+pane {
-		t.Fatalf("a on a failed step ran %q", *ran)
+		t.Fatalf("ctrl+o on a failed step ran %q", *ran)
 	}
-	next, _ := key(selectStep(t, m, "p2"), "a")
-	if nm := next.(Model); len(*ran) != 1 || nm.flash != "a goes into the session of a failed step" {
-		t.Errorf("a on a done step: ran %q, flash %q", *ran, nm.flash)
+	next, _ := key(selectStep(t, m, "p2"), "ctrl+o")
+	if nm := next.(Model); len(*ran) != 1 || nm.flash != "ctrl+o goes into the session of a failed step" {
+		t.Errorf("ctrl+o on a done step: ran %q, flash %q", *ran, nm.flash)
+	}
+	if next, _ := key(selectStep(t, m, "p5"), "a"); len(*ran) != 1 || next.(Model).flash != "" {
+		t.Errorf("a on a failed step still acts: ran %q, flash %q", *ran, next.(Model).flash)
 	}
 }
 

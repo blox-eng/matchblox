@@ -154,7 +154,7 @@ for each one follows the host stoker's card.
 | `Enter` | On the stoker agent's row, opens the stoker (`⏎ open the stoker`): inside tmux in a popup, `tmux display-popup -E -w 90% -h 90% 'tmux -L matchblox attach -t stoker'`, which detaching (prefix `d`) closes; outside tmux the console names the command to run. This is where you answer the stoker's own prompts. On a `CHAIN <name>` card, opens the pane of that chain's stoker. On a step, shows the exact command it ran, or the one it waits to run, or hides it again. |
 | `Q` | Quits the stoker agent and its tmux session, after a typed `y`: `tmux -L matchblox kill-session -t =stoker`. `f` only turns the stoker off and leaves the agent running, so its context carries to the next order. On a `CHAIN <name>` card, `Q` and a typed `y` quit the stoker of that chain only. |
 | `y` | Gives the go a step waits for (`⏸ waits for your go: api-gw wants to run gh pr merge 4556`). The go is good for one command of that kind in that session, and the stoker hears of it at its next wake. |
-| `a` | On a failed step (`✕`), goes into its session's pane. |
+| `Ctrl+O` | On a failed step (`✕`), goes into its session's pane. |
 
 ## An action before it runs
 
@@ -214,7 +214,6 @@ height seen at the width.
 | Key | What it does |
 |---|---|
 | `Ctrl+O` | Goes into the chosen agent's tmux pane, from the line or the list. |
-| `a` | In the list, goes into the chosen agent's tmux pane, as `Ctrl+O` does (help `go in`). |
 | `ctrl+a m` | In the iOS demo, which has no tmux, `Ctrl+O` opens a stand-in for the pane: the agent's screen over the whole screen, and every key goes to the agent. Its title is `‹ sessions`. `ctrl+a`, then `m` within 1 s, goes back to the list. |
 
 The mouse wheel over the stand-in scrolls it back through the pane's
@@ -282,7 +281,7 @@ and `◂` comes back.
 |---|---|
 | open a chat | Tap its row. |
 | answer | Tap an option in the chat, then tap it again to send it. |
-| go in | Press `Ctrl+O`. |
+| go in | Tap `⌃o` on the key belt, or press `Ctrl+O`. |
 | open the menu | Long-press a row, or press `m` in the list. |
 | act | Tap a key on the key line. A destructive act still waits for a typed `y`. |
 | come back | `◂`, the belt's `◂`, or the edge swipe. |

@@ -147,7 +147,6 @@ list, and `Enter` there moves them back.
 | `↑`, `↓` | Chooses the session above or below. |
 | A digit, 1 to 9 | With the line empty, marks an option of the chosen session's question. The same digit again sends it. |
 | `Ctrl+O` | Goes into the chosen agent's pane. |
-| `a` | In the list, goes into the pane, as `Ctrl+O` does. |
 | `p` | In the list, merges the pull request that waits for your merge. It runs only after a typed `y`. |
 | `x` | In the list, kills the match. It runs only after a typed `y`. |
 | `y` | In the list, gives the go a stoker step waits for. |
