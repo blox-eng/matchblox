@@ -75,14 +75,15 @@ All notable changes to matchblox are in this file. The format follows
 - **Fold recs** (`h`). `h` shows a hidden host now.
   ([#411](https://github.com/blox-eng/matchblox/issues/411))
 
+## [0.45.1] - 2026-11-15
+
 ### Fixed
 
-- **A match at an approval menu needs you, whatever it reports.** A hook
-  that asks you to confirm a command, such as `Hook PreToolUse:Bash
-  requires confirmation`, puts the match in needs you in the console's list
-  and in `matchblox sessions`, also while Claude Code still says it
-  works. A reply that only lists a `1. Yes` choice still takes your typed
-  answer. ([#412](https://github.com/blox-eng/matchblox/issues/412))
+- **An approval menu needs you.** A match whose hook asks you to confirm a
+  command, such as `Hook PreToolUse:Bash requires confirmation`, is in
+  needs you in the list, on the board and in `matchblox sessions`, also
+  while Claude Code still says it works. A reply that only lists a `1. Yes`
+  choice still takes your typed answer. ([#412](https://github.com/blox-eng/matchblox/issues/412))
 
 ## [0.45.0] - 2026-11-14
 
@@ -1763,7 +1764,8 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.45.0...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.45.1...HEAD
+[0.45.1]: https://github.com/blox-eng/matchblox/compare/v0.45.0...v0.45.1
 [0.45.0]: https://github.com/blox-eng/matchblox/compare/v0.44.1...v0.45.0
 [0.44.1]: https://github.com/blox-eng/matchblox/compare/v0.44.0...v0.44.1
 [0.44.0]: https://github.com/blox-eng/matchblox/compare/v0.43.1...v0.44.0
