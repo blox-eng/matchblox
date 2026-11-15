@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"maps"
 	"slices"
-	"strconv"
 	"strings"
 	"unicode"
 
@@ -33,8 +32,8 @@ type lineNote struct {
 // lineSent is a message on its way: the session it went to, and its text,
 // which comes back to the line when the service refuses it.
 type lineSent struct {
-	k          paneKey
-	name, text string
+	k                paneKey
+	host, name, text string
 }
 
 // sideActive: the Sessions tab is the list and the chat, and its keys go
@@ -158,9 +157,11 @@ func (m Model) lineKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 		}
 		return m.answerFromChat(k.Text)
 	case printsText(k):
-		m = m.linePaste(k.Text)
+		return m.linePaste(k.Text)
 	case bkey.Matches(k, mk.NextTab, mk.PrevTab, mk.Jump):
 		return m.key(k)
+	default:
+		cmd = m.notice("the line takes text · " + sk.Leave.Help().Key + " gives the keys to the list")
 	}
 	return m, cmd
 }
@@ -172,6 +173,8 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 	sk, mk, bk := m.keys.side, m.keys.main, m.keys.board
 	var cmd tea.Cmd
 	switch {
+	case bkey.Matches(k, sk.Up, sk.Down) && len(m.sideOrder()) == 0:
+		cmd = m.notice("no session to choose")
 	case bkey.Matches(k, sk.Up):
 		m.sideMove(-1)
 	case bkey.Matches(k, sk.Down):
@@ -187,6 +190,8 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 			m = m.closeRoom()
 		case m.boardChain != "":
 			m.boardChain, m.peekAt = "", m.now()
+		default:
+			cmd = m.listTakes()
 		}
 	case bkey.Matches(k, bk.Host):
 		m.turnHost()
@@ -203,8 +208,21 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 	case printsText(k):
 		m.keysIn = focusLine
 		return m.lineKey(k, s, ok)
+	default:
+		cmd = m.listTakes()
 	}
 	return m, cmd
+}
+
+// listTakes is the notice of a key the list has no job for: the keys it
+// takes.
+func (m *Model) listTakes() tea.Cmd {
+	sk, mk, bk := m.keys.side, m.keys.main, m.keys.board
+	var keys []string
+	for _, b := range []bkey.Binding{sk.Up, sk.Enter, bk.Host, bk.Chain, mk.Search, bk.Menu, bk.Copy, mk.Park, mk.New, mk.NextTab} {
+		keys = append(keys, b.Help().Key)
+	}
+	return m.notice("the list takes " + strings.Join(keys, " ") + " · a letter types in the line")
 }
 
 // printsText: k prints text, with no ctrl or alt.
@@ -243,14 +261,17 @@ func (m *Model) setLine(k paneKey, text string) {
 
 // linePaste adds text to the chosen session's line, as one piece. A
 // parked session's line is off: it says so, and takes nothing.
-func (m Model) linePaste(text string) Model {
+func (m Model) linePaste(text string) (tea.Model, tea.Cmd) {
 	m.keysIn = focusLine
 	s, ok := m.sideChosen()
-	if !ok || m.parked(s) {
-		return m
+	switch {
+	case !ok:
+		return m, m.notice("no session to write to · " + m.keys.main.New.Help().Key + " starts one")
+	case m.parked(s):
+		return m, nil // the line says it is off, and why
 	}
 	m.setLine(paneOf(s), m.lines[paneOf(s)]+text)
-	return m
+	return m, nil
 }
 
 // parked: the owner parked s.
@@ -338,12 +359,12 @@ func (m *Model) sendLine() tea.Cmd {
 		m.lineNote = lineNote{k, why}
 		return nil
 	}
-	cmd := m.sendTo(s.Host, proto.Act{RecID: "message:" + s.Pane, Text: text, Confirm: "y"})
+	id, cmd := m.sendToID(s.Host, proto.Act{RecID: "message:" + s.Pane, Text: text, Confirm: "y"})
 	m.lineActs = maps.Clone(m.lineActs)
 	if m.lineActs == nil {
 		m.lineActs = map[string]lineSent{}
 	}
-	m.lineActs["a"+strconv.Itoa(m.acts)] = lineSent{k, m.cardName(s), text}
+	m.lineActs[id] = lineSent{k, s.Host, m.cardName(s), text}
 	m.setLine(k, "")
 	return cmd
 }
@@ -365,11 +386,43 @@ func (m Model) lineResult(r proto.Result) (Model, tea.Cmd, bool) {
 	if why == "" {
 		return m, m.say("sent to " + sent.name), true
 	}
-	if m.lines[sent.k] == "" {
-		m.setLine(sent.k, sent.text)
-	}
-	m.lineNote = lineNote{sent.k, "not sent: " + why}
+	m.giveBack(sent, "not sent: "+why)
 	return m, nil, true
+}
+
+// giveBack puts the text of a message that did not go back in its line,
+// before what the owner typed since, and the line says why.
+func (m *Model) giveBack(sent lineSent, why string) {
+	m.setLine(sent.k, strings.TrimSpace(sent.text+" "+m.lines[sent.k]))
+	m.lineNote = lineNote{sent.k, why}
+}
+
+// lineLost gives back each message to host that has no answer: its conn
+// went, and the answer with it.
+func (m Model) lineLost(host string) Model {
+	for id, sent := range m.lineActs {
+		if sent.host != host {
+			continue
+		}
+		m.lineActs = maps.Clone(m.lineActs)
+		delete(m.lineActs, id)
+		m.giveBack(sent, cmp.Or(m.cannotReach(host), "not sent: "+m.nameOf(host)+" is not reached"))
+	}
+	return m
+}
+
+// answerResult is a peer's answer to the act that carried a digit: a
+// refusal gives the digits back, and the notice says why.
+func (m Model) answerResult(r proto.Result) (Model, tea.Cmd, bool) {
+	if r.ActID == "" || r.ActID != m.peekSentAct {
+		return m, nil, false
+	}
+	m.peekSentAct = ""
+	if r.Err == "" {
+		return m, nil, true
+	}
+	m.peekSent, m.peekSentAsk, m.peekSentPane = 0, "", ""
+	return m, m.notice("not sent: " + r.Err), true
 }
 
 // lineShown is a draft as the line draws it: a newline as ↵, and no

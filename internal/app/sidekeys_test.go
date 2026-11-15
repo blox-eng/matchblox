@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"slices"
 	"strconv"
 	"strings"
@@ -451,5 +452,195 @@ func TestAQuestionInThePaneIsNotDrawnTwice(t *testing.T) {
 	m = pressOn(m, "2")
 	if got := chatText(m, 100, 14); !strings.Contains(got, "❯ 2. Refresh the token · 2 again sends") {
 		t.Fatalf("no mark line:\n%s", got)
+	}
+}
+
+// peerSide is the console at 160 columns with an empty home and the peer
+// ws-2 that sent peer, with the keys of the list and the chat, on a clock
+// the test moves: the guard started peekDead ago.
+func peerSide(t *testing.T, home, peer proto.State) (Model, *fakeConn, *fakeConn) {
+	t.Helper()
+	clock := boardAt
+	hc, ws := newFake(), newFake()
+	m := New(Options{NoMotion: true, Conn: hc, Peers: []Peer{{Host: "ws-2", Conn: ws}}})
+	m.opt.Now = func() time.Time { return clock }
+	m.tab, m.sideOn = tabSessions, true
+	m.tell("digit")
+	var next tea.Model = m
+	next, _ = next.Update(tea.WindowSizeMsg{Width: 160, Height: 38})
+	next, _ = next.Update(stateMsg(home))
+	next, _ = next.Update(peerMsg{host: "ws-2", conn: ws, msg: stateMsg(peer)})
+	m = next.(Model)
+	for _, s := range m.all.sessions {
+		if s.Host == "ws-2" {
+			m.sideAt = paneOf(s)
+		}
+	}
+	next, _ = m.Update(noticeMsg{})
+	clock = clock.Add(peekDead)
+	return next.(Model), hc, ws
+}
+
+func askingPeer() proto.State {
+	return hostState(sess(4242, "flint-auth", "%7", func(s *sample.Session) {
+		a := askingMatch("flint-auth", "Keep the token", "Refresh the token")
+		s.Asks, s.Ask = true, a.Ask
+	}))
+}
+
+// TestShortOptionsInProseStillDrawTheQuestion: options that are plain
+// words in the pane's prose are no menu: the chat draws the question.
+func TestShortOptionsInProseStillDrawTheQuestion(t *testing.T) {
+	m, _ := sideConsole(t, boardState(askingMatch("flint-auth", "Yes", "No")))
+	s := matchNamed(t, m, "flint-auth")
+	m.watchHost, m.watching = s.Host, s.Pane
+	m.screen = proto.Screen{Pane: s.Pane, Text: "● Yes, the token is stored. No change is needed."}
+	if got := chatText(m, 100, 14); !strings.Contains(got, "Which way do we fix the login?") || !strings.Contains(got, "1. Yes") {
+		t.Fatalf("the question is off the screen:\n%s", got)
+	}
+}
+
+func TestListKeyWithNoJobSaysSo(t *testing.T) {
+	m, _ := sideConsole(t, boardState(boardMatch("flint-auth", time.Hour)))
+	m = pressOn(m, "esc")
+	for _, k := range []tea.KeyPressMsg{keyPress("backspace"), keyPress("left"), keyPress("right"), keyPress("esc")} {
+		m.noticeText = ""
+		next, cmd := m.Update(k)
+		drain(cmd)
+		m = next.(Model)
+		if !strings.Contains(m.noticeText, "the list takes") || m.keysIn != focusList {
+			t.Fatalf("%s in the list: notice %q, keys in %v", k.String(), m.noticeText, m.keysIn)
+		}
+	}
+	e, _ := sideConsole(t, boardState())
+	e = pressOn(e, "esc")
+	e.noticeText = ""
+	if e = pressOn(e, "down"); e.noticeText == "" {
+		t.Fatal("↓ on an empty list said nothing")
+	}
+}
+
+func TestLineKeyWithNoJobSaysSo(t *testing.T) {
+	m, _ := sideConsole(t, boardState(boardMatch("flint-auth", time.Hour)))
+	for _, k := range []tea.KeyPressMsg{keyPress("left"), keyPress("right"), keyPress("pgup"), {Code: tea.KeyHome}, {Code: tea.KeyDelete}, keyPress("ctrl+x")} {
+		m.noticeText = ""
+		next, cmd := m.Update(k)
+		drain(cmd)
+		m = next.(Model)
+		if !strings.Contains(m.noticeText, "the line takes text") || m.keysIn != focusLine || len(boardFake(m).acts()) != 0 {
+			t.Fatalf("%s in the line: notice %q, keys in %v, acts %+v", k.String(), m.noticeText, m.keysIn, boardFake(m).acts())
+		}
+	}
+}
+
+func TestTypingWithNoSessionSaysSo(t *testing.T) {
+	m, _ := sideConsole(t, boardState())
+	if m = pressOn(m, "a"); !strings.Contains(m.noticeText, "no session") || len(m.lines) != 0 {
+		t.Fatalf("a with no session: notice %q, lines %v", m.noticeText, m.lines)
+	}
+	m.noticeText = ""
+	next, cmd := m.Update(tea.PasteMsg{Content: "words"})
+	drain(cmd)
+	if m = next.(Model); !strings.Contains(m.noticeText, "no session") || len(m.lines) != 0 {
+		t.Fatalf("a paste with no session: notice %q, lines %v", m.noticeText, m.lines)
+	}
+}
+
+// TestRefusedPeerAnswerClearsAndSays: a peer that refuses the answer
+// gives the digits back, and the notice says why.
+func TestRefusedPeerAnswerClearsAndSays(t *testing.T) {
+	m, _, ws := peerSide(t, hostState(), askingPeer())
+	m = pressOn(m, "1", "1")
+	if !hasAct(ws, proto.KeysPrefix+"%7") {
+		t.Fatalf("ws-2 got %+v", ws.acts())
+	}
+	s := m.all.sessions[slices.IndexFunc(m.all.sessions, func(s sample.Session) bool { return s.Host == "ws-2" })]
+	if _, sent := m.chatMarks(s); sent != 1 {
+		t.Fatalf("sent %d, want 1", sent)
+	}
+	next, cmd := m.Update(peerMsg{host: "ws-2", conn: ws, msg: resultMsg{ActID: "a" + strconv.Itoa(m.acts), Err: "the pane moved"}})
+	drain(cmd)
+	m = next.(Model)
+	if _, sent := m.chatMarks(s); sent != 0 || !strings.Contains(m.noticeText, "the pane moved") {
+		t.Fatalf("after the refusal: sent %d, notice %q", sent, m.noticeText)
+	}
+}
+
+func TestPeerAnswerGoesToThePeerOnly(t *testing.T) {
+	m, home, ws := peerSide(t, hostState(sess(1, "hearth-api", "%7", nil)), askingPeer())
+	pressOn(m, "1", "1")
+	if got := keyActs(ws); len(got) != 1 || got[0].Text != proto.LitPrefix+"1" {
+		t.Fatalf("ws-2 got %+v", got)
+	}
+	if got := keyActs(home); len(got) != 0 {
+		t.Fatalf("home got %+v", got)
+	}
+}
+
+func TestAnswerToAPeerWhileHomeIsDown(t *testing.T) {
+	m, home, ws := peerSide(t, hostState(), askingPeer())
+	m.lost = true
+	m = pressOn(m, "1", "1")
+	if got := keyActs(ws); len(got) != 1 || len(keyActs(home)) != 0 {
+		t.Fatalf("ws-2 got %+v, home %+v", got, keyActs(home))
+	}
+}
+
+// TestLostConnPutsTheTextBack: a message the service did not answer
+// before its conn went comes back to its line, which says why.
+func TestLostConnPutsTheTextBack(t *testing.T) {
+	m, _, ws := peerSide(t, hostState(), hostState(sess(4242, "flint-auth", "%7", nil)))
+	m = pressOn(typeLine(m, "go on"), "enter")
+	if len(messageActs(ws)) != 1 || m.lines[m.chosenSide()] != "" {
+		t.Fatalf("sent %+v, the line holds %q", messageActs(ws), m.lines[m.chosenSide()])
+	}
+	next, cmd := m.Update(peerMsg{host: "ws-2", conn: ws, msg: lostMsg{errors.New("eof"), ws}})
+	drain(cmd)
+	m = next.(Model)
+	if got := m.lines[m.chosenSide()]; got != "go on" {
+		t.Fatalf("the line holds %q", got)
+	}
+	if got := chatLineOf(m, 120); !strings.Contains(got, "not sent: ws-2 is not reached") {
+		t.Fatalf("line %q", got)
+	}
+
+	h, _ := sideConsole(t, boardState(boardMatch("flint-auth", time.Hour)))
+	h = pressOn(typeLine(h, "go on"), "enter")
+	next, cmd = h.Update(lostMsg{errors.New("eof"), h.conn})
+	drain(cmd)
+	h = next.(Model)
+	if got := h.lines[h.chosenSide()]; got != "go on" || !strings.Contains(chatLineOf(h, 120), "not sent: no service") {
+		t.Fatalf("home lost: the line holds %q, says %q", got, chatLineOf(h, 120))
+	}
+}
+
+func TestRefusalKeepsBothTexts(t *testing.T) {
+	m, _ := sideConsole(t, boardState(boardMatch("flint-auth", time.Hour)))
+	m = pressOn(typeLine(m, "first"), "enter")
+	id := "a" + strconv.Itoa(m.acts)
+	m = typeLine(m, "second")
+	next, _ := m.Update(resultMsg{ActID: id, Err: "flint-auth asks a question now"})
+	m = next.(Model)
+	if got := m.lines[m.chosenSide()]; got != "first second" {
+		t.Fatalf("the line holds %q", got)
+	}
+	if got := chatLineOf(m, 120); !strings.Contains(got, "not sent: flint-auth asks a question now") {
+		t.Fatalf("line %q", got)
+	}
+}
+
+// TestRefusalReturnsToTheOldSessionsLine: the refused text goes back to
+// the line it was typed in, not to the line now chosen.
+func TestRefusalReturnsToTheOldSessionsLine(t *testing.T) {
+	m, _ := sideConsole(t, boardState(boardMatch("flint-auth", time.Hour), boardMatch("hearth-api", 2*time.Hour)))
+	m = pickSide(t, m, "flint-auth")
+	m = pressOn(typeLine(m, "first"), "enter")
+	id := "a" + strconv.Itoa(m.acts)
+	m = pickSide(t, m, "hearth-api")
+	next, _ := m.Update(resultMsg{ActID: id, Err: "no agent session in %flint-auth any more"})
+	m = next.(Model)
+	flint, hearth := paneOf(matchNamed(t, m, "flint-auth")), paneOf(matchNamed(t, m, "hearth-api"))
+	if m.lines[flint] != "first" || m.lines[hearth] != "" || m.lineNote.k != flint {
+		t.Fatalf("lines %v, note %+v", m.lines, m.lineNote)
 	}
 }

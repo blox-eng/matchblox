@@ -562,6 +562,9 @@ type Model struct {
 	// changes.
 	peekSent                  int
 	peekSentAsk, peekSentPane string
+	// peekSentAct is the act that carried that answer to a peer: its
+	// refusal gives the digits back.
+	peekSentAct string
 	// frameIdx is the board's index while one frame draws (draw sets it
 	// on its own copy): a frame asks for it five times, and each read of it
 	// is a copy.
@@ -707,15 +710,20 @@ func (m *Model) send(a proto.Act) tea.Cmd { return m.sendTo(m.opt.Host, a) }
 // sendPeer. A host that is not ticked, or a peer with no conn, gets
 // nothing: the caller asked refusal first.
 func (m *Model) sendTo(host string, a proto.Act) tea.Cmd {
+	_, cmd := m.sendToID(host, a)
+	return cmd
+}
+
+// sendToID is sendTo, with the act's id: "" when nothing went.
+func (m *Model) sendToID(host string, a proto.Act) (string, tea.Cmd) {
 	if host == m.opt.Host {
-		_, cmd := m.sendOn(m.conn, a)
-		return cmd
+		return m.sendOn(m.conn, a)
 	}
 	i := m.peerAt(host)
 	if i < 0 || m.peers[i].conn == nil {
-		return nil
+		return "", nil
 	}
-	return m.sendPeer(i, a)
+	return m.sendPeerID(i, a)
 }
 
 // hostOf is the host a runs on: its row's, else the home host.
@@ -1038,7 +1046,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		first := !m.lost
 		m.lost = true
-		m = m.roomLost(m.opt.Host)
+		m = m.roomLost(m.opt.Host).lineLost(m.opt.Host)
 		if blocking(msg.err) {
 			// Trying again cannot help: connecting the host can.
 			m.blocked, m.flash = msg.err, ""
@@ -1167,7 +1175,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.copyPasted(msg.Content)
 		}
 		if m.sideActive() && m.focus(tea.KeyPressMsg{}) == layerMain {
-			return m.linePaste(msg.Content), nil
+			return m.linePaste(msg.Content)
 		}
 		return m, nil
 	case tea.MouseClickMsg:
@@ -1223,6 +1231,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) result(r proto.Result) (Model, tea.Cmd) {
 	m.endRec(r.ActID, r)
 	if mm, cmd, ok := m.lineResult(r); ok {
+		return mm, cmd
+	}
+	if mm, cmd, ok := m.answerResult(r); ok {
 		return mm, cmd
 	}
 	if mm, ok := m.started(r); ok {

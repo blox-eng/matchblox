@@ -68,7 +68,7 @@ the screen; else it types.
 | `Backspace` | Erases the last character of the line. |
 | A digit, 1 to 9 | With the line empty, marks that option of the question on the screen. The same digit again sends it. A question that opened less than half a second ago takes no digit: the digit types. On a session the stoker holds, 1 marks "Let it go", and 1 again lets it go. |
 | `↑`, `↓` | With the line empty, or in the list, chooses the session above or below, as the list draws them. |
-| `Esc` | In the line, clears a marked answer, then moves the keys to the list. In the list, clears the search, then the chain. |
+| `Esc` | In the line, clears a marked answer, then moves the keys to the list. In the list, clears the search, then closes the chain's room, then shows all chains. |
 | `s` | In the list, shows the next host, then all hosts. |
 | `g` | In the list, shows only the chain of the chosen session. `Esc` shows all. |
 | `/` | In the list, searches the list. |
@@ -77,8 +77,10 @@ the screen; else it types.
 | `z` | In the list, parks the chosen session, or lets it go. In the line of a parked session, lets it go. |
 | `N` | In the list, opens **New session**. |
 | `Tab` | Goes to Machine. |
+| `Ctrl+O` | Goes into the chosen agent's pane, from the line or the list. |
 
-Any other letter in the list moves the keys back to the line and types
+A key with no job in the line or the list does not do nothing: a notice
+names the keys that place takes. Any other letter in the list moves the keys back to the line and types
 there. The line of a parked session is off: it says
 `parked: z lets it go`. A message to a host that is not reached stays in the line, and the
 line says `not sent: ws-2 is not reached`. Nothing sends it again by

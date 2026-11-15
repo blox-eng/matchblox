@@ -165,7 +165,9 @@ func (m Model) answerFromChat(digit string) (tea.Model, tea.Cmd) {
 		said = m.cardName(s) + " asks in its pane · " + m.keys.main.Open.Help().Key + " goes in"
 	case !m.chatAnswers(s):
 		said = m.cardName(s) + " asks no question"
-	case m.lost || m.conn == nil:
+	case m.sideActive() && m.cannotReach(s.Host) != "":
+		m.peekArmed, said = 0, m.cannotReach(s.Host)
+	case !m.sideActive() && (m.lost || m.conn == nil):
 		m.peekArmed, said = 0, "not sent: no service · it redials"
 	case s.Host != m.opt.Host && !m.sideActive(): // the chat draws a question on any host; a card does not
 		said = "not sent: " + m.cardName(s) + " is on " + m.nameOf(s.Host) + " · " + m.keys.main.Open.Help().Key + " goes in"
@@ -203,12 +205,15 @@ func (m Model) answerFromChat(digit string) (tea.Model, tea.Cmd) {
 // and does not wait in line; "" when it did.
 func (m *Model) sendAnswer(s sample.Session, digit string) (tea.Cmd, string) {
 	if s.Host == m.opt.Host {
+		m.peekSentAct = "" // the home keys' refusal comes by the pane (model.go's keyActID)
 		return m.sendKeySeen(s, proto.LitPrefix+digit, m.stateAt(s.Host))
 	}
 	if why := m.cannotReach(s.Host); why != "" {
 		return nil, why
 	}
-	return m.sendTo(s.Host, proto.Act{RecID: proto.KeysPrefix + s.Pane, Text: proto.LitPrefix + digit, PID: s.PID, Start: s.Start, Seen: m.stateAt(s.Host)}), ""
+	id, cmd := m.sendToID(s.Host, proto.Act{RecID: proto.KeysPrefix + s.Pane, Text: proto.LitPrefix + digit, PID: s.PID, Start: s.Start, Seen: m.stateAt(s.Host)})
+	m.peekSentAct = id
+	return cmd, ""
 }
 
 // isDigit: k is a digit with no modifier.

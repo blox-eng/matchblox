@@ -125,11 +125,17 @@ func (m Model) peerRecv(i int) tea.Cmd {
 // sendPeer sends a on peer i and keeps its id until its result comes, so a
 // lost conn can say which acts have no answer.
 func (m *Model) sendPeer(i int, a proto.Act) tea.Cmd {
+	_, cmd := m.sendPeerID(i, a)
+	return cmd
+}
+
+// sendPeerID is sendPeer, with the act's id.
+func (m *Model) sendPeerID(i int, a proto.Act) (string, tea.Cmd) {
 	m.peers = slices.Clone(m.peers)
 	l := &m.peers[i]
 	id, cmd := m.sendOn(l.conn, a)
 	l.acts = append(slices.Clone(l.acts), id)
-	return toPeer(l.host, cmd)
+	return id, toPeer(l.host, cmd)
 }
 
 // helloOf is the hello a host sent; the zero one before it says hello.
@@ -310,7 +316,7 @@ func (m Model) peerLost(i int, err error) (tea.Model, tea.Cmd) {
 	}
 	first := !p.lost
 	p.lost, p.silent = true, false
-	m = m.roomLost(p.host)
+	m = m.roomLost(p.host).lineLost(p.host)
 	news := m.noAnswer(*p)
 	m.batchLost(p.host, p.acts)
 	p.acts = nil

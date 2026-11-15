@@ -193,15 +193,30 @@ func (m Model) chatAsk(s sample.Session, w int) []string {
 	return lines
 }
 
-// paneAsks: the cut pane of s on screen shows q's options, as the agent
-// draws its own menu.
+// paneAsks: the cut pane of s on screen draws q's options as the agent's
+// own menu: a line "N. <label>" for each option N, after the menu's
+// mark or blanks. A label in the pane's prose is no menu.
 func (m Model) paneAsks(s sample.Session, q said.Question) bool {
-	if m.watchConn(s.Host) == nil || m.watchHost != s.Host || m.watching != s.Pane || m.screen.Pane != s.Pane || m.screen.Gone {
+	if len(q.Options) == 0 || m.watchConn(s.Host) == nil || m.watchHost != s.Host || m.watching != s.Pane || m.screen.Pane != s.Pane || m.screen.Gone {
 		return false
 	}
-	text := ansi.Strip(chatCut(s.Agent, m.screen.Text))
-	return len(q.Options) > 0 && !slices.ContainsFunc(q.Options, func(o said.Option) bool { return !strings.Contains(text, o.Label) })
+	menu := map[string]string{}
+	for _, l := range strings.Split(ansi.Strip(chatCut(s.Agent, m.screen.Text)), "\n") {
+		if g := agentMenuLine.FindStringSubmatch(l); g != nil {
+			menu[g[1]] = g[2]
+		}
+	}
+	for i, o := range q.Options {
+		if !strings.HasPrefix(menu[strconv.Itoa(i+1)], o.Label) {
+			return false
+		}
+	}
+	return true
 }
+
+// agentMenuLine is a line of an agent's menu: its mark or blanks, the option's
+// number, and its label.
+var agentMenuLine = regexp.MustCompile(`^\s*[›❯>]?\s*(\d+)\.\s+(.*?)\s*$`)
 
 // chatLine is the line at the bottom: what the owner types, its end in
 // view, and at the right whom it goes to, or what the line says of its
