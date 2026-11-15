@@ -33,7 +33,8 @@ the header counts it. `s` shows one host, then the next, then all again.
 `matchblox ws-1` opens `ws-1` alone.
 
 The home host is the first ticked host. It is `this machine`, unless you
-hide `this machine`. Then it is the first ticked host after it.
+hide `this machine`. Then it is the first ticked host after it, and
+`this machine` has no connection: `s` does not go to it.
 
 ### Tick the hosts
 
@@ -48,8 +49,11 @@ you added, and `+ add a host`. The header says `HOSTS · 3 · 2 SHOWN`.
 - With no host ticked, `Enter` opens the selected host alone. The key line
   says `No host is ticked: <host> opens alone.`
 - A ticked host has a live note, such as `5 sessions · 1 waits`.
-- A hidden host has the note `hidden`. It has no connection, so matchblox
-  has no count for it.
+- A hidden host has the note `hidden`. All hosts leaves it out: its
+  sessions, its waits and its name. That is all that hidden does.
+- A hidden host keeps its connection, so `s` goes to it. On a hidden host,
+  the header says `ws-2 · hidden from all hosts · h shows it`. `h` shows
+  the host in all hosts again, and Hosts ticks it.
 - `esc` and `Enter` again keep the hosts that stay ticked. They keep the
   selection too.
 

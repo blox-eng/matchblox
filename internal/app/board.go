@@ -1,7 +1,6 @@
 package app
 
 import (
-	"cmp"
 	"fmt"
 	"slices"
 	"strconv"
@@ -849,18 +848,13 @@ func (m Model) aboveChosen() (string, bool) {
 	return lines[len(lines)-m.boardAbove], true
 }
 
-// boardHostWord is the header's host filter while the board shows.
-func (m Model) boardHostWord() string {
-	return cmp.Or(m.boardHost, "all hosts") + " ▾"
-}
-
 // boardHostHit is where the header head has the host filter: a tap there
 // does what s does.
 func (m Model) boardHostHit(head string) span {
 	if !m.boardShown() || m.hostCount() == 1 {
 		return span{}
 	}
-	lead, word := " ▰ matchblox · ", m.boardHostWord()
+	lead, word := " ▰ matchblox · ", m.hostWord()
 	if !strings.HasPrefix(ansi.Strip(head), lead+word) {
 		return span{} // short of room the header drops the host
 	}

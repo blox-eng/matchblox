@@ -304,21 +304,32 @@ func (m Model) header(w int) (string, span, span) {
 		host = m.host.Host
 	}
 	if n := m.hostCount(); n > 1 && m.boardShown() {
-		host = m.boardHostWord()
+		host = m.hostWord()
 	} else if n > 1 {
 		host = fmt.Sprintf("%d hosts", n)
 	}
 	lost := ""
 	switch names := m.staleHosts(); {
+	case m.sideActive() && m.hostCount() > 1:
+		// The host word says it of the one host s shows.
+		var words []string
+		for _, h := range m.hosts() {
+			if m.boardHost == "" && m.inView(h) && m.stale(h) {
+				words = append(words, m.unreachedWord(h))
+			}
+		}
+		if len(words) > 0 {
+			lost = st.faint.Render(" · ") + st.warn.Render(strings.Join(words, " · "))
+		}
 	case len(names) > 0:
 		lost = st.faint.Render(" · ") + st.warn.Render(strings.Join(names, ", ")+" stale")
 	case m.stale(m.opt.Host):
 		// One host: what shows is the last state it sent.
 		lost = st.faint.Render(" · ") + st.warn.Render("stale")
 	}
-	if m.hidden > 0 {
-		// A hidden host has no stream, so no count of its waits (R6).
-		lost += st.faint.Render(" · ") + st.muted.Render(fmt.Sprintf("%d hidden", m.hidden))
+	if n := len(m.hiddenHosts); n > 0 {
+		// All hosts leaves a hidden host out, so no count of its waits (R6).
+		lost += st.faint.Render(" · ") + st.muted.Render(fmt.Sprintf("%d hidden", n))
 	}
 	if !m.shows() {
 		if host != "" {

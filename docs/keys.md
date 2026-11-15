@@ -68,7 +68,8 @@ the screen; else it types.
 | A digit, 1 to 9 | With the line empty, marks that option of the question on the screen. The same digit again sends it. A question that opened less than half a second ago takes no digit: the digit types. On a session the stoker holds, 1 marks "Let it go", and 1 again lets it go. |
 | `↑`, `↓` | With the line empty, or in the list, chooses the session above or below, as the list draws them. |
 | `Esc` | In the line, clears a marked answer, then moves the keys to the list. In the list, clears the search, then closes the chain's room, then shows all chains. |
-| `s` | In the list, shows the next host, then all hosts. |
+| `s` | In the list, shows the next host, then all hosts. It goes to each host, a hidden host too. With one host shown, all hosts is that host, so `s` goes from host to host. With one host only, a notice says so. |
+| `h` | In the list, on a hidden host, shows that host in all hosts again. Machine › Hosts keeps the same list. On another host, a notice says what `h` does. |
 | `g` | In the list, shows only the chain of the chosen session. `Esc` shows all. |
 | `/` | In the list, searches the list. |
 | `m` | In the list, opens the menu of the chosen session. |
@@ -83,7 +84,8 @@ names the keys that place takes. Any other letter in the list moves the keys bac
 there. The line of a parked session is off: it says
 `parked: z lets it go`. A message to a host that is not reached stays in the line, and the
 line says `not sent: ws-2 is not reached`. Nothing sends it again by
-itself. When the chosen session ends, the next session in the list is
+itself. The rows of that host stay, dimmed. On that host, the header says
+`ws-2 not reached · since 2m`. When the chosen session ends, the next session in the list is
 chosen, and its line says `flint-auth ended · the text is not sent`.
 
 ## Machine
@@ -273,7 +275,7 @@ On the chips:
 | Key | What it does |
 |---|---|
 | `↑` or `k`, `↓` or `j` | Selects a host. |
-| `Space` | Shows or hides the host. A hidden host has no stream, and the header counts it. |
+| `Space` | Shows or hides the host. All hosts leaves a hidden host out, and the header counts it. `s` still goes to it. |
 | `Enter` | Opens one console of the ticked hosts, or adds a host. With no host ticked, it opens the selected host. |
 | `c` | Connects the host again with `matchblox connect`. |
 | `x` | Removes a host from the list. matchblox stays on that host. |

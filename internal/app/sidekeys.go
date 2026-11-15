@@ -195,7 +195,11 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 			cmd = m.listTakes()
 		}
 	case bkey.Matches(k, bk.Host):
-		m.turnHost()
+		if said := m.turnHost(); said != "" {
+			cmd = m.notice(said)
+		}
+	case bkey.Matches(k, sk.Unhide):
+		cmd = m.unhide()
 	case bkey.Matches(k, bk.Chain):
 		cmd = m.boardChainOf(s, ok)
 	case bkey.Matches(k, bk.Menu) && ok:

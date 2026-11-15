@@ -2,6 +2,7 @@ package app
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -131,25 +132,47 @@ func (s Shell) ticked() []string {
 	return out
 }
 
-func (s Shell) hiddenCount() int { return 1 + len(s.hosts) - len(s.ticked()) }
+// hiddenNames are the hidden hosts by name, but home: the console of
+// home leaves them out of all hosts.
+func (s Shell) hiddenNames(home string) []string {
+	var out []string
+	for _, h := range append([]string{""}, s.hosts...) {
+		if h != home && s.isHidden(h) {
+			out = append(out, hostName(h))
+		}
+	}
+	return out
+}
+
+// linked are the hosts of the console of the ticks: home is the first
+// ticked host, then every other added host in Hosts order, hidden ones
+// too, so s reaches them. This machine hidden has no stream while another
+// host is home. Nothing ticked: none.
+func (s Shell) linked() []string {
+	t := s.ticked()
+	if len(t) == 0 {
+		return nil
+	}
+	return append([]string{t[0]}, slices.DeleteFunc(slices.Clone(s.hosts), func(h string) bool { return h == t[0] })...)
+}
 
 // live: a console is open, on screen or under Hosts.
 func (s Shell) live() bool { return s.cur.opt.Gen != 0 && !s.cur.quitting }
 
-// openTicked opens one console over the ticked hosts: home is the first,
+// openTicked opens one console over the linked hosts: home is the first,
 // the rest are its peers. Nothing ticked opens nothing.
 func (s Shell) openTicked(first bool) (Shell, tea.Cmd) {
-	t := s.ticked()
-	if len(t) == 0 {
+	l := s.linked()
+	if len(l) == 0 {
 		return s, nil
 	}
-	s, cmd := s.openOn(t[0], t[1:], first)
-	s.cur.hidden = s.hiddenCount()
+	s, cmd := s.openOn(l[0], l[1:], first)
+	s.cur.hiddenHosts = s.hiddenNames(l[0])
 	return s, cmd
 }
 
-// keep gives the open console the peers of the ticks (R12): it keeps the
-// streams of the hosts that stay and dials only the newly ticked.
+// keep gives the open console the peers of the linked hosts (R12): it
+// keeps the streams of the hosts that stay and dials only the new ones.
 func (s Shell) keep(peerHosts []string) (Shell, tea.Cmd) {
 	var peers []Peer
 	var added []string
@@ -165,7 +188,7 @@ func (s Shell) keep(peerHosts []string) (Shell, tea.Cmd) {
 	for _, h := range added {
 		m.editLogin(h, func(l *hostLogin) { l.tailscale = s.tailscale[h] }) // until its check says
 	}
-	m.hidden = s.hiddenCount()
+	m.hiddenHosts = s.hiddenNames(s.curHost)
 	s.cur, s.layer = m, layerConsole
 	return s, cmd
 }
@@ -289,6 +312,8 @@ func (s Shell) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case layerMsg:
 		return s.back(), nil
+	case showHostMsg:
+		return s.showHost(msg.host)
 	case connectedHostMsg:
 		if msg.err != nil {
 			s.flash = "not connected: " + msg.err.Error()
@@ -514,19 +539,36 @@ func (s Shell) flip(host string) Shell {
 }
 
 // enterTicked opens the console of the ticked hosts. The open one stays
-// when its home host does: Enter dials the newly ticked and closes the
-// newly hidden (R12). With none ticked, host opens alone.
+// when its home host does: Enter dials a new host and closes a removed
+// one, and a hidden host keeps its stream (R12). With none ticked, host
+// opens alone.
 func (s Shell) enterTicked(host string) (Shell, tea.Cmd) {
 	switch t := s.ticked(); {
 	case len(t) == 0:
 		s, cmd := s.open(host, false)
-		s.cur.hidden = s.hiddenCount() - 1 // all but the one that opens
+		s.cur.hiddenHosts = s.hiddenNames(host)
 		s.cur.flash = "No host is ticked: " + s.cur.nameOf(host) + " opens alone."
 		return s, tea.Batch(cmd, s.cur.flashNotice("")) // the board says it in its strip's row
 	case s.live() && t[0] == s.curHost:
-		return s.keep(t[1:])
+		return s.keep(s.linked()[1:])
 	}
 	return s.openTicked(false)
+}
+
+// showHost is h on a hidden host in the console: it writes the hidden file
+// as Space on Hosts does, and all hosts holds the host again.
+func (s Shell) showHost(host string) (Shell, tea.Cmd) {
+	var err error
+	switch {
+	case s.opt.Show == nil:
+		err = errors.New("this console keeps no hidden hosts")
+	case s.isHidden(host):
+		err = s.opt.Show(hostName(host))
+	}
+	s.hidden = s.readHidden()
+	var cmd tea.Cmd
+	s.cur, cmd = s.cur.hostShown(host, s.hiddenNames(s.curHost), err)
+	return s, cmd
 }
 
 // connect is `matchblox connect <host>` in this terminal: the ssh login is

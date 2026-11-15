@@ -56,7 +56,7 @@ func (m *Model) keepViewPrefs() {
 }
 
 // colHidden: the board leaves this column out, for the shape the screen has
-// now. (Not hidden: Model.hidden counts the hosts the builder hid.)
+// now. (Not hidden: Model.hiddenHosts are the hosts the builder hid.)
 func (m Model) colHidden(c boardCol) bool {
 	if m.upright() {
 		return slices.Contains(m.viewPrefs.HiddenPhone, c.short())

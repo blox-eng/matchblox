@@ -238,13 +238,14 @@ func (m Model) boardColumn(c boardCol) []sample.Session {
 	return slices.DeleteFunc(m.boardIndex()[c], func(s sample.Session) bool { return !m.inBoard(s) })
 }
 
-// needCount is every match that needs the owner, on every host and in
-// every chain, whatever the filters hide: one the owner parked is not
-// counted, nor one on a host that is not reached.
+// needCount is every match that needs the owner, on every host in view and
+// in every chain, whatever the filters hide: one the owner parked is not
+// counted, nor one on a host that is not reached, nor one on a hidden host
+// that s does not show.
 func (m Model) needCount() int {
 	n := 0
 	for _, s := range m.boardIndex()[colNeed] {
-		if !m.stale(s.Host) {
+		if !m.stale(s.Host) && (!m.hostHidden(s.Host) || m.inView(s.Host)) {
 			n++
 		}
 	}
@@ -259,7 +260,7 @@ func (m Model) inBoard(s sample.Session) bool {
 	if m.boardChain != "" && m.chainLabelOf(s) != m.boardChain && !m.inRoomTeam(s) {
 		return false
 	}
-	if m.boardHost != "" && m.nameOf(s.Host) != m.boardHost {
+	if !m.inView(s.Host) {
 		return false
 	}
 	if m.filter == "" {

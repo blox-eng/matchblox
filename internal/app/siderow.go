@@ -32,7 +32,8 @@ func linkOf(i, n int, twoLines bool) (first, rest string) {
 // sideRow is a session's row: line 1 holds the selection mark, the link,
 // the match, the name, the wait or the badge, and the agent's mark. A
 // second line shows what a session that needs you asks, or what the chosen
-// session does, or why a held one is held.
+// session does, or why a held one is held. The row of a host that does not
+// answer is its last state, dimmed.
 func (m Model) sideRow(s sample.Session, w int, chosen bool, link sideLink) []string {
 	h := m.sideStateOf(s)
 	word, says := m.cardSays(s)
@@ -46,10 +47,13 @@ func (m Model) sideRow(s sample.Session, w int, chosen bool, link sideLink) []st
 	}
 	two := says != "" && (h == sideNeed || chosen)
 
-	mark, name := " ", m.st.text
+	mark, name, rest := " ", m.st.text, m.st.muted
+	if m.stale(s.Host) { // its host does not answer: the row is its last state, dimmed
+		name, rest = m.st.faint, m.st.faint
+	}
 	if chosen {
 		mark, name = m.st.accent.Render("▌"), name.Bold(true)
-	} else if h == sideNeed {
+	} else if h == sideNeed && !m.stale(s.Host) {
 		name = name.Bold(true)
 	}
 	ink := m.st.faint
@@ -62,7 +66,7 @@ func (m Model) sideRow(s sample.Session, w int, chosen bool, link sideLink) []st
 		lead, cont = ink.Render(first)+" ", ink.Render(rest)+" "
 	}
 
-	right := m.st.muted.Render(m.sideRight(s)) + " " + m.st.muted.Render(harnessMark(s))
+	right := rest.Render(m.sideRight(s)) + " " + rest.Render(harnessMark(s))
 	title := m.cardName(s)
 	if m.hostCount() > 1 && m.boardHost == "" && s.Host != m.opt.Host {
 		title += "@" + m.nameOf(s.Host)

@@ -307,74 +307,76 @@ func fromAdvice(r advice.Rec, which string) *action {
 }
 
 type Model struct {
-	recPrefs   recPrefs  // dismissed recommendations and the fold
-	viewPrefs  viewPrefs // the board's views, for a phone and for a desk
-	opt        Options
-	conn       transport.Conn
-	peers      []link // the other ticked hosts, in Hosts order; copied on write
-	linked     int    // the links reconcile opened: the id of the last
-	hidden     int    // the hosts the builder hid: the header counts them (R6)
-	st         styles
-	width      int
-	height     int
-	tallW      int // the width the tallest height was seen at
-	tallH      int // the tallest height seen at tallW: the screen's shape
-	snap       sample.Snapshot
-	push       string // the push sender's line for the Machine tab, or ""
-	have       bool
-	at         time.Time // the last stateMsg
-	git        *proto.GitReport
-	recs       []advice.Rec
-	sideAt     paneKey // the session the list chooses; zero is the first one drawn
-	queue      []queue.Item
-	doors      []doors.Door // the open doors, above the sessions
-	stoker     *proto.StokerView
-	stokers    []state.ChainStoker // the chain stokers, for the head rows of their chains
-	doorPick   string              // the selected door
-	doorAt     int                 // its row, for the door after it when it folds
-	previewTop int                 // the first line of a door's diff on screen
-	paneSel    int
-	screen     proto.Screen       // the last capture of the watched pane
-	watching   string             // the pane the service sends, or ""
-	watchHost  string             // the host of watching: a pane id names a pane on one host only
-	watchHeld  string             // the pane of watchHost the service refused, until its next snapshot
-	changes    map[paneKey]change // a match change that plays once
-	animating  bool
-	hist       history.Series
-	selPID     int
-	selHost    string // the host of selPID: PIDs repeat across hosts
-	orphanPID  int
-	recPick    string // the selected recommendation, above the sessions
-	ghostPick  int    // the ghost row, then the blocked host's row, picked in Sessions, from 1; 0 is none
-	chose      bool   // a session was picked; before, the first that waits is
-	gitSel     int
-	shipReport *proto.Ships
-	allShips   []proto.Ship // every host's ships, as merge joins them
-	tab        int
-	pending    *action
-	flash      string
-	history    *series
-	quitting   bool
-	host       proto.Hello
-	mismatch   bool
-	blocked    error                // why the host cannot be reached, until the builder acts
-	logins     map[string]hostLogin // the builder's own ssh login to each host; copied on write
-	lost       bool
-	backoff    time.Duration
-	redialing  bool
-	answered   bool // a state came on the current connection
-	replaced   bool
-	acts       int
-	recRun     recRun // the last act on a recommendation, and what came of it
-	dark       bool
-	logos      bool   // USAGE draws the providers' logos
-	gfxKey     string // the viewers and background the logos went to
-	viewers    string // the viewers the agent signal went to
-	gfxBusy    bool   // a question about who shows the console waits
-	gfxAsks    int    // questions asked, for the tests
-	splashAt   time.Time
-	splashDone bool
-	armed      string // the step a second tap runs: what the first tap showed
+	recPrefs  recPrefs  // dismissed recommendations and the fold
+	viewPrefs viewPrefs // the board's views, for a phone and for a desk
+	opt       Options
+	conn      transport.Conn
+	peers     []link // the other hosts, hidden ones too, in Hosts order; copied on write
+	linked    int    // the links reconcile opened: the id of the last
+	// hiddenHosts are the hosts the builder hid, by name, never the home
+	// host: all hosts leaves them out, and the header counts them (R6).
+	hiddenHosts []string
+	st          styles
+	width       int
+	height      int
+	tallW       int // the width the tallest height was seen at
+	tallH       int // the tallest height seen at tallW: the screen's shape
+	snap        sample.Snapshot
+	push        string // the push sender's line for the Machine tab, or ""
+	have        bool
+	at          time.Time // the last stateMsg
+	git         *proto.GitReport
+	recs        []advice.Rec
+	sideAt      paneKey // the session the list chooses; zero is the first one drawn
+	queue       []queue.Item
+	doors       []doors.Door // the open doors, above the sessions
+	stoker      *proto.StokerView
+	stokers     []state.ChainStoker // the chain stokers, for the head rows of their chains
+	doorPick    string              // the selected door
+	doorAt      int                 // its row, for the door after it when it folds
+	previewTop  int                 // the first line of a door's diff on screen
+	paneSel     int
+	screen      proto.Screen       // the last capture of the watched pane
+	watching    string             // the pane the service sends, or ""
+	watchHost   string             // the host of watching: a pane id names a pane on one host only
+	watchHeld   string             // the pane of watchHost the service refused, until its next snapshot
+	changes     map[paneKey]change // a match change that plays once
+	animating   bool
+	hist        history.Series
+	selPID      int
+	selHost     string // the host of selPID: PIDs repeat across hosts
+	orphanPID   int
+	recPick     string // the selected recommendation, above the sessions
+	ghostPick   int    // the ghost row, then the blocked host's row, picked in Sessions, from 1; 0 is none
+	chose       bool   // a session was picked; before, the first that waits is
+	gitSel      int
+	shipReport  *proto.Ships
+	allShips    []proto.Ship // every host's ships, as merge joins them
+	tab         int
+	pending     *action
+	flash       string
+	history     *series
+	quitting    bool
+	host        proto.Hello
+	mismatch    bool
+	blocked     error                // why the host cannot be reached, until the builder acts
+	logins      map[string]hostLogin // the builder's own ssh login to each host; copied on write
+	lost        bool
+	backoff     time.Duration
+	redialing   bool
+	answered    bool // a state came on the current connection
+	replaced    bool
+	acts        int
+	recRun      recRun // the last act on a recommendation, and what came of it
+	dark        bool
+	logos       bool   // USAGE draws the providers' logos
+	gfxKey      string // the viewers and background the logos went to
+	viewers     string // the viewers the agent signal went to
+	gfxBusy     bool   // a question about who shows the console waits
+	gfxAsks     int    // questions asked, for the tests
+	splashAt    time.Time
+	splashDone  bool
+	armed       string // the step a second tap runs: what the first tap showed
 	// held is what the builder pressed or tapped while the stoker was in
 	// charge: it runs once they answer the take-over question. heldOn is
 	// the host it acts on, whose stoker the question is about (R14).

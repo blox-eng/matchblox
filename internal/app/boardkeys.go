@@ -453,22 +453,6 @@ func (m *Model) turnChain(d int) {
 	}
 }
 
-// turnHost is s: the next host, then all hosts again.
-func (m *Model) turnHost() {
-	if m.hostCount() == 1 {
-		return
-	}
-	var names []string
-	for _, h := range m.hosts() {
-		names = append(names, m.nameOf(h))
-	}
-	next := ""
-	if i := slices.Index(names, m.boardHost); i+1 < len(names) {
-		next = names[i+1]
-	}
-	m.boardHost, m.peekAt = next, m.now()
-}
-
 // boardActed chooses, after an act on the chosen card, the first other card
 // of NEEDS YOU; with none, the choice stays.
 func (m Model) boardActed() Model {
@@ -604,8 +588,7 @@ func (m Model) boardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 		cmd = m.once("density", bk.Density.Help().Key+" changes the cards now: verbose, or one line.", "")
 		m.flipOneLine()
 	case bkey.Matches(k, bk.Host):
-		cmd = m.once("host", bk.Host.Help().Key+" changes the host now. The order of a column is fixed.", "")
-		m.turnHost()
+		cmd = m.once("host", bk.Host.Help().Key+" changes the host now. The order of a column is fixed.", m.turnHost())
 	case bkey.Matches(k, bk.Chain):
 		cmd = m.boardChainOf(s, ok)
 	case bkey.Matches(k, bk.NextChain):

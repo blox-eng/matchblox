@@ -284,7 +284,10 @@ func TestListKeys(t *testing.T) {
 		key  string
 		done func(Model) bool
 	}{
-		{"s", func(m Model) bool { return m.keysIn == focusList }}, // one host: Task 9 says so
+		{"s", func(m Model) bool {
+			return strings.HasSuffix(m.noticeText, "is the only host · Machine › Hosts adds one")
+		}},
+		{"h", func(m Model) bool { return m.noticeText == "no host is hidden" }},
 		{"g", func(m Model) bool { return m.room != nil }},
 		{"/", func(m Model) bool { return m.searching }},
 		{"m", func(m Model) bool { return m.menu != nil }},

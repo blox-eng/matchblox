@@ -176,11 +176,12 @@ func defaultKeys() keymaps {
 			Merge:     bind(ks("p"), "p", "merge"),
 		},
 		side: sideKeys{
-			Enter: bind(ks("enter"), "⏎", "send"),
-			Erase: bind(ks("backspace"), "⌫", "erase"),
-			Leave: bind(ks("esc"), "esc", "list"),
-			Up:    bind(ks("up"), "↑↓", "choose"),
-			Down:  bind(ks("down"), "↑↓", "choose"),
+			Enter:  bind(ks("enter"), "⏎", "send"),
+			Erase:  bind(ks("backspace"), "⌫", "erase"),
+			Leave:  bind(ks("esc"), "esc", "list"),
+			Up:     bind(ks("up"), "↑↓", "choose"),
+			Down:   bind(ks("down"), "↑↓", "choose"),
+			Unhide: bind(ks("h"), "h", "show the host"),
 		},
 	}
 }
@@ -310,10 +311,10 @@ func (k boardKeys) bindings() []bkey.Binding {
 // printable key is text; only the arrows choose, and only with the line
 // empty. In the list ⏎ goes back to the line, and the board's keys act on
 // the chosen session.
-type sideKeys struct{ Enter, Erase, Leave, Up, Down bkey.Binding }
+type sideKeys struct{ Enter, Erase, Leave, Up, Down, Unhide bkey.Binding }
 
 func (k sideKeys) bindings() []bkey.Binding {
-	return []bkey.Binding{k.Enter, k.Erase, k.Leave, k.Up, k.Down}
+	return []bkey.Binding{k.Enter, k.Erase, k.Leave, k.Up, k.Down, k.Unhide}
 }
 
 // shellKeys are the Hosts list. Update and Dismiss act on a host on

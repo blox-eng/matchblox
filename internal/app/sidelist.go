@@ -66,14 +66,14 @@ func (m Model) sideSessions() []sample.Session {
 	})
 }
 
-// sideGroups are the groups that hold a session, in state rank. A chain is
-// one unit, in the group of its most urgent member, and counts only the
-// members in that state.
+// sideGroups are the groups that hold a session of the hosts in view, in
+// state rank. A chain is one unit, in the group of its most urgent member,
+// and counts only the members in that state.
 func (m Model) sideGroups() []sideGroup {
 	var units []sideUnit
 	var states [][]sideState
 	done := map[chainKey]bool{}
-	listed := m.sideSessions()
+	listed := slices.DeleteFunc(m.sideSessions(), func(s sample.Session) bool { return !m.inView(s.Host) })
 	isListed := map[paneKey]bool{}
 	for _, s := range listed {
 		isListed[paneOf(s)] = true
