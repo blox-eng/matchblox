@@ -1,32 +1,32 @@
  ▰ matchblox                                                                                                           ● 6 need you
- BOARD 7    machine
+ SESSIONS 7    machine
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- NEEDS YOU · 6  −                              WORKING · 1  −                  SHIPPING · 0  −                 QUIET · 0  −
-▌╿ flint-auth                          ✻  2m   ✦ hearth-api            ✻
-  stuck conflicts with main                     busy
-  #4545 ●━✕┄○┄○┄○  ctx 41%                      #4551 ●━◉┄○┄○┄○ +1  ctx 79%
-  “The refresh flow works and the tests
-  pass. One choice is yours before I wire
-  the rotation.”
-  ⏎ go in
-
- │ spark-docs                          ✻  9m
-  ci CI · 2 of 5 jobs
-  #4547 ●━◉┄○┄○┄○ +1 live  ctx 88%
-  ⏎ go in
-
- ╿ ember-billing                       ✻  4m
-  green #4552 waits for your merge
-  #4552 ●━●━◉┄○┄○  ctx 32%
-  p merge #4552   ⏎ go in
-
-  ↓ 3 more
-
-
-
-
- + start a new session
- RECOMMENDATIONS · 7
- ✻ Claude Max  5h ▰▰▰▰▰▰▰▱ 84% · Fri 01:20   wk ▰▰▰▰▰▰▰▱ 82% · Mon 09:00                                                  machine ›
+ NEEDS YOU · 6  −                       │ flint-auth ✻ asks · #4545 ci                              ctx 41%  ctrl+o expand · m menu
+▌╿ flint-auth                       2m ✻│
+   conflicts with main                  │
+ ╿ spark-docs                       9m ✻│
+   CI · 2 of 5 jobs                     │
+ ╿ ember-billing                    4m ✻│
+   #4552 waits for your merge           │
+ ╿ kindle-web                       1m ✻│
+   Claude needs your permission to use …│
+ ╿ cinder-ci                        0s ❋│
+   I am moving the cache key to the go.…│
+ ╿ wick-mobile                      0s ▣│
+   ⠙ Working                            │
+────────────────────────────────────────│
+ WORKING · 1  −                         │
+ ✦ hearth-api                 #4551 ci ✻│
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+ + new · ✧ 7 tips                       │ ›                                                                    ⏎ send to flint-auth
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ⏎ go in   c copy   v one line   s hosts   u strip   ←→ columns   tab next
+ writing to flint-auth · ⏎ send · ↑↓ choose · esc list · ctrl+o expand · tab Machine

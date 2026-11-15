@@ -68,7 +68,7 @@ func headOf(cells [][]inked, name string) (y, x int, ok bool) {
 // clock *now.
 func motionBoard(t *testing.T, st proto.State, now *time.Time, noMotion bool) Model {
 	t.Helper()
-	m := New(Options{Conn: newFake(), NoMotion: noMotion, Now: func() time.Time { return *now }})
+	m := (New(Options{Conn: newFake(), NoMotion: noMotion, Now: func() time.Time { return *now }}))
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 34})
 	next, _ = next.Update(stateMsg(st))
 	m = next.(Model)
@@ -79,8 +79,8 @@ func motionBoard(t *testing.T, st proto.State, now *time.Time, noMotion bool) Mo
 
 // TestOnlyWaitingAndFireMove: with no change in play, the only cells that
 // differ between two frames 200 ms apart are the flames in WORKING and the
-// heads that ask in NEEDS YOU. A parked match that asks is in QUIET, and
-// QUIET does not move.
+// heads that ask in NEEDS YOU. A parked match that asks is in HELD, and
+// HELD does not move.
 func TestOnlyWaitingAndFireMove(t *testing.T) {
 	st := boardFixture(t)
 	for _, s := range st.Sessions {
@@ -109,6 +109,7 @@ func TestOnlyWaitingAndFireMove(t *testing.T) {
 				}
 				moved++
 				name, _, _ := strings.Cut(strings.TrimSpace(textOf(b[y], x+2, len(b[y]))), " ")
+				name, _, _ = strings.Cut(name, "@") // another host's row names it
 				s, ok := byName[strings.TrimSuffix(name, "…")]
 				for full, x := range byName {
 					if !ok && strings.HasSuffix(name, "…") && strings.HasPrefix(full, strings.TrimSuffix(name, "…")) {
@@ -118,56 +119,17 @@ func TestOnlyWaitingAndFireMove(t *testing.T) {
 				if !ok || !strings.Contains("✦✧╿", a[y][x].ch) {
 					t.Fatalf("+%dms line %d cell %d moves: %+v → %+v, not a match's head (%q)", step*200, y, x, a[y][x], b[y][x], textOf(b[y], 0, len(b[y])))
 				}
-				c := m.columnOf(s)
-				fire := c == colWork && m.matchOf(s) == matchLit
-				asks := c == colNeed && m.asks(s)
+				h := m.sideStateOf(s)
+				fire := h == sideWork && m.matchOf(s) == matchLit
+				asks := h == sideNeed && m.asks(s)
 				if !fire && !asks {
-					t.Fatalf("+%dms: the match of %s moves in %s: %+v → %+v", step*200, name, c.name(), a[y][x], b[y][x])
+					t.Fatalf("+%dms: the match of %s moves in %s: %+v → %+v", step*200, name, h.head(), a[y][x], b[y][x])
 				}
 			}
 		}
 	}
 	if moved == 0 {
 		t.Fatal("nothing moves: the flames in WORKING should flicker")
-	}
-}
-
-// TestQuietCoolsWithAge: the head of a QUIET match is match-head while
-// idle, match-ember when cold, and faint when stale, parked or held.
-func TestQuietCoolsWithAge(t *testing.T) {
-	s := boardMatch("ember-reports", time.Hour)
-	for _, c := range []struct {
-		what string
-		idle time.Duration
-		held bool
-		want string
-	}{
-		{"idle", 3 * time.Hour, false, "match-head"},
-		{"cold", 2 * 24 * time.Hour, false, "match-ember"},
-		{"stale", 9 * 24 * time.Hour, false, "faint"},
-		{"parked or held", 5 * time.Hour, true, "faint"},
-	} {
-		s.Idle = c.idle
-		if got := quietTone(s, c.held); got != c.want {
-			t.Errorf("%s: %s, want %s", c.what, got, c.want)
-		}
-	}
-
-	// On the board, with motion on: the heads in QUIET are still and cool.
-	now := demoAt
-	m := boardShot(t, boardFixture(t), 120, 34, func(m *Model) {
-		m.opt.NoMotion, m.opt.Now = false, func() time.Time { return now }
-	})
-	cells := inkedCells(t, m.render())
-	// QUIET is narrow at 120 columns: the names are cut.
-	for name, want := range map[string]string{"ember-rep": "match-head", "tinder-sc": "match-ember", "kindle-le": "faint"} {
-		y, x, ok := headOf(cells, name)
-		if !ok {
-			t.Fatalf("no card of %s", name)
-		}
-		if got := cells[y][x-2]; got.ch != "╿" || got.fg != want {
-			t.Errorf("the head of %s is %+v, want ╿ in %s", name, got, want)
-		}
 	}
 }
 

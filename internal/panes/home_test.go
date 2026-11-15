@@ -157,7 +157,7 @@ func TestHomeKeyMatchesTheApp(t *testing.T) {
 // takes another's binding.
 func TestHomeAndCommandKeysDoNotCollide(t *testing.T) {
 	slots := map[string]string{}
-	for _, argv := range [][]string{HomeKeyArgv(), CommandKeysArgv(), MarkKeyArgv(), BeltKeyArgv(), FlipKeysArgv()} {
+	for _, argv := range [][]string{HomeKeyArgv(), CommandKeysArgv(), MarkKeyArgv(), BeltKeyArgv(), TapKeysArgv(), FlipKeysArgv()} {
 		for i, a := range argv {
 			if a != "set-option" {
 				continue
@@ -215,6 +215,22 @@ func TestBeltKeyArgvHandsTheAnswerOnlyToTheConsole(t *testing.T) {
 		"send-keys -t #{pane_id} -H " + hexKeys(keycmd.BeltFromPrefix), "#{client_tty}"} {
 		if !strings.Contains(line, want) {
 			t.Errorf("BeltKeyArgv lacks %q: %s", want, line)
+		}
+	}
+}
+
+// TestTapKeysArgvHandsEachTapOnlyToTheConsole: each act key of the app's
+// belt has its own slot, and goes to the console with its key and the
+// client's tty, and nowhere else.
+func TestTapKeysArgvHandsEachTapOnlyToTheConsole(t *testing.T) {
+	line := strings.Join(TapKeysArgv(), " ")
+	for i, k := range keycmd.TapKeys {
+		slot := strconv.Itoa(keycmd.TapSlot + i)
+		for _, want := range []string{"user-keys[" + slot + "] " + keycmd.TapKey(k), "bind-key -n User" + slot + " if-shell -F " + atConsole,
+			"send-keys -t #{pane_id} -H " + hexKeys(keycmd.TappedPrefix+k+";") + " ; send-keys -t #{pane_id} -l #{client_tty}"} {
+			if !strings.Contains(line, want) {
+				t.Errorf("TapKeysArgv lacks %q", want)
+			}
 		}
 	}
 }

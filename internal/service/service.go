@@ -164,6 +164,8 @@ type Service struct {
 	// TmuxOut runs a tmux command and returns what it prints: the pane of
 	// a session matchblox started. Nil: exec.
 	TmuxOut func(argv []string) (string, error)
+	// TmuxIn runs a tmux command with stdin: the text of a paste. Nil: exec.
+	TmuxIn func(argv []string, stdin string) error
 	// IsDir tells if a new session's directory is there. Nil: os.Stat.
 	IsDir func(path string) bool
 	// WorktreeStep is the step that adds a worktree for a new session's

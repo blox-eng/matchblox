@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -136,5 +137,54 @@ func TestACommandsTextIsOneSlashWord(t *testing.T) {
 		if c.Text != "" && !word.MatchString(c.Text) {
 			t.Errorf("%s types %q", c.ID, c.Text)
 		}
+	}
+}
+
+// TestEachBeltTapHasItsOwnKey: each act key of the app's belt has its own
+// sequence and user-keys slot, after the belt's answer, and the binding's
+// hand reads back as the key and the tty of the client that tapped.
+func TestEachBeltTapHasItsOwnKey(t *testing.T) {
+	if got := TapKey("c"); got != "\x1b_matchblox;tap=c\x1b\\" {
+		t.Errorf("TapKey(c) = %q", got)
+	}
+	seen := map[string]bool{}
+	for i, k := range TapKeys {
+		if seen[k] {
+			t.Errorf("%q twice in TapKeys", k)
+		}
+		seen[k] = true
+		if slot := TapSlot + i; slot == MarkSlot || slot == BeltSlot {
+			t.Errorf("the tap %q takes slot %d", k, slot)
+		}
+	}
+	key, tty, ok := ParseTapped(TappedPrefix + "N;/dev/pts/7\x1b\\")
+	if !ok || key != "N" || tty != "/dev/pts/7" {
+		t.Errorf("ParseTapped = %q %q %v", key, tty, ok)
+	}
+	for _, bad := range []string{TapKey("c"), TappedPrefix + "c\x1b\\", TappedPrefix + "c;/dev/pts/7", BeltFromPrefix + "/dev/pts/7\x1b\\"} {
+		if _, _, ok := ParseTapped(bad); ok {
+			t.Errorf("ParseTapped(%q) reads a tap", bad)
+		}
+	}
+}
+
+// TestTheAppsBeltSendsEachTap: the app's belt (ios BoardBelt.swift) sends
+// TapKey for each key of TapKeys, and for no other key.
+func TestTheAppsBeltSendsEachTap(t *testing.T) {
+	src, err := os.ReadFile("../../ios/MatchbloxKit/Sources/MatchbloxKit/BoardBelt.swift")
+	if err != nil {
+		t.Fatal(err)
+	}
+	swift := string(src)
+	if !strings.Contains(swift, `Array("\u{1b}_matchblox;tap=\(key)\u{1b}\\".utf8)`) {
+		t.Error("BoardBelt.tap does not send TapKey")
+	}
+	acts := regexp.MustCompile(`act\("([^"]+)"`).FindAllStringSubmatch(swift, -1)
+	var got []string
+	for _, a := range acts {
+		got = append(got, a[1])
+	}
+	if !slices.Equal(got, TapKeys) {
+		t.Errorf("the app's belt taps %q, TapKeys are %q", got, TapKeys)
 	}
 }

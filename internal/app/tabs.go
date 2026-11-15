@@ -104,23 +104,23 @@ const (
 
 var views = [...]tabView{
 	tabSessions: {
-		keys: func(m Model) []hint { return m.boardHints(max(m.width, minWidth)) },
+		keys: func(Model) []hint { return nil }, // the list and the chat draw their own key line
 		count: func(m Model) int {
-			return len(m.doors) + len(m.snap.Sessions) + len(m.ghosts()) + len(m.blockedHosts()) + m.recRows()
+			return len(m.doors) + len(m.snap.Sessions) + len(m.blockedHosts()) + len(m.recs)
 		},
 		index: Model.sessIndex,
 		pick: func(m *Model, i int) {
-			nd, ns, ng := len(m.doors), len(m.snap.Sessions), len(m.ghosts())+len(m.blockedHosts())
+			nd, ns, ng := len(m.doors), len(m.snap.Sessions), len(m.blockedHosts())
 			switch {
 			case i < nd:
-				m.doorPick, m.doorAt, m.recPick, m.ghostPick = m.doors[i].ID, i, "", 0
+				m.doorPick, m.doorAt, m.recPick, m.blockedPick = m.doors[i].ID, i, "", 0
 			case i < nd+ns:
 				s := m.snap.Sessions[i-nd]
-				m.doorPick, m.recPick, m.ghostPick, m.chose, m.selPID, m.selHost = "", "", 0, true, s.PID, s.Host
+				m.doorPick, m.recPick, m.blockedPick, m.chose, m.selPID, m.selHost = "", "", 0, true, s.PID, s.Host
 			case i < nd+ns+ng:
-				m.doorPick, m.recPick, m.ghostPick = "", "", i-nd-ns+1
+				m.doorPick, m.recPick, m.blockedPick = "", "", i-nd-ns+1
 			default:
-				m.doorPick, m.recPick, m.ghostPick = "", m.recs[i-nd-ns-ng].ID, 0
+				m.doorPick, m.recPick, m.blockedPick = "", m.recs[i-nd-ns-ng].ID, 0
 			}
 		},
 		primary: func(m Model) *action {
@@ -129,9 +129,6 @@ var views = [...]tabView{
 			}
 			if r, ok := m.selectedRec(); ok {
 				return fromAdvice(r, "primary")
-			}
-			if g, ok := m.selectedGhost(); ok {
-				return ghostAction(g)
 			}
 			if s, ok := m.selectedSession(); ok && s.Pane != "" {
 				return m.jumpOn(s.Host, s.Pane)
@@ -150,7 +147,7 @@ var views = [...]tabView{
 			}
 			return nil
 		},
-		body: func(m Model, w int) body { return m.boardPanel(w, m.bodyRows()).body },
+		body: func(m Model, w int) body { return m.sideBody(w, m.bodyRows()) },
 	},
 	tabMachine: {
 		keys: func(m Model) []hint {
@@ -266,10 +263,10 @@ var views = [...]tabView{
 	},
 }
 
-// tabNames names the tabs of the tab row, in Tab's order: the board and
+// tabNames names the tabs of the tab row, in Tab's order: Sessions and
 // Machine. The stoker, Git, History and Panes are no tabs: they open from
 // Machine's rows (machineViews).
-var tabNames = []string{tabSessions: "board", tabMachine: "machine"}
+var tabNames = []string{tabSessions: "sessions", tabMachine: "machine"}
 
 func (m Model) view() tabView { return views[m.tab] }
 

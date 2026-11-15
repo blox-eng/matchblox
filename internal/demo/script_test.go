@@ -60,7 +60,7 @@ var oldAge = regexp.MustCompile(`stale|\b31d\b`)
 func TestAgesAreRecent(t *testing.T) {
 	t.Setenv("TMPDIR", t.TempDir())
 	_, term := start(t)
-	term.waitFor(t, "BOARD 7", "flint-auth")
+	term.waitFor(t, "SESSIONS 7", "flint-auth")
 	time.Sleep(500 * time.Millisecond) // more samples
 	if m := oldAge.FindString(term.text()); m != "" {
 		t.Errorf("an age reads %q:\n%s", m, term.text())
@@ -101,7 +101,7 @@ func transcript(t *testing.T) string {
 	return string(b)
 }
 
-const flintRow = 7 // flint-auth's card on the board's first screen at 44x31, under the doors line and the page marks
+const flintRow = 5 // flint-auth's row, first under NEEDS YOU, on the list at 44x31
 
 // openQuestion opens the stand-in for flint-auth's pane, which asks.
 func openQuestion(t *testing.T) (*demo.Demo, *terminal) {
@@ -109,7 +109,7 @@ func openQuestion(t *testing.T) (*demo.Demo, *terminal) {
 	t.Setenv("TMPDIR", t.TempDir())
 	d, term := start(t)
 	term.waitFor(t, "NEEDS YOU", "flint-auth")
-	term.send(t, "\r")
+	term.send(t, "\x0f") // ctrl+o: into the chosen session's stand-in
 	term.waitFor(t, "Rotate it", "type 2 to answer")
 	return d, term
 }
@@ -208,7 +208,7 @@ func TestTheDemoSurvivesATurn(t *testing.T) {
 	// the console's, never a menu's the person cannot see.
 	term.reset()
 	d.Resize(106, 10)
-	term.waitFor(t, "NEEDS YOU", "go in") // ten rows leave the board no room for a card
+	term.waitFor(t, "NEEDS YOU", "flint-auth")
 	from := len(d.Ran())
 	term.send(t, "2")
 	term.send(t, "1")
@@ -224,26 +224,28 @@ func TestTheDemoSurvivesATurn(t *testing.T) {
 	if d.Done() {
 		t.Fatal("a resize answered the question")
 	}
-	term.send(t, "\r") // a new Enter opens the stand-in again
+	term.send(t, "\x0f") // a new ctrl+o opens the stand-in again
 	term.waitFor(t, "Rotate it", "type 2 to answer")
 	term.send(t, "2")
 	term.waitFor(t, "I rotate the token on each refresh")
 	eventually(t, 6*time.Second, "Done", d.Done)
 }
 
-// TestTapsOpenTheStandIn: on a phone's one column a tap on the agent's card
-// chooses it and a second goes into the stand-in, as Enter does, and the
-// belt's 2 answers (#351).
-func TestTapsOpenTheStandIn(t *testing.T) {
+// TestATapOpensTheChatThatAnswers: on a phone a tap on the agent's row
+// opens its chat with the options of its question, and the belt's 2, then
+// 2 again, answers (#351).
+func TestATapOpensTheChatThatAnswers(t *testing.T) {
 	t.Setenv("TMPDIR", t.TempDir())
 	d, term := start(t)
 	term.waitFor(t, "NEEDS YOU", "flint-auth")
 	term.tap(t, flintRow)
-	term.tap(t, flintRow)
-	term.waitFor(t, "type 2 to answer")
+	term.waitFor(t, "Rotate it", "send to flint-auth")
 	if d.Done() {
 		t.Fatal("Done before an answer")
 	}
+	time.Sleep(settled) // a question that just opened takes no digit
+	term.send(t, "2")
+	time.Sleep(settled)
 	term.send(t, "2")
 	term.waitFor(t, "I rotate the token on each refresh")
 	eventually(t, 6*time.Second, "Done", d.Done)

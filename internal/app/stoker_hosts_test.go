@@ -64,14 +64,14 @@ func TestStokerRestIsThatHostsOnly(t *testing.T) {
 	m, home, conns := stokedHosts(t, nil, nightView(), nightView())
 	// A key on this machine's row acts at once: its host runs no stoker.
 	m = selectRow(t, m, "home-1")
-	if f := m.focus(keyPress("enter")); f == layerTakeOver {
+	if f := m.focus(keyPress("ctrl+o")); f == layerTakeOver {
 		t.Fatal("a row of a host with no stoker asks to take over")
 	}
 	m = selectRow(t, m, "ws-run")
-	if f := m.focus(keyPress("enter")); f != layerTakeOver {
+	if f := m.focus(keyPress("ctrl+o")); f != layerTakeOver {
 		t.Fatalf("a key on a ws-1 row: layer %v, want the take-over question", f)
 	}
-	next := pressAll(m, "enter", "y")
+	next := pressAll(m, "ctrl+o", "y")
 	nm := next.(Model)
 	if got := stokerActs(conns["ws-1"]); !slices.Equal(got, []string{"stoker:rest"}) {
 		t.Fatalf("ws-1 got %v", got)
@@ -87,7 +87,7 @@ func TestStokerRestIsThatHostsOnly(t *testing.T) {
 	}
 	// gpu-1's stoker still asks for its own rows.
 	nm = selectRow(t, nm, "gpu-run")
-	if f := nm.focus(keyPress("enter")); f != layerTakeOver {
+	if f := nm.focus(keyPress("ctrl+o")); f != layerTakeOver {
 		t.Fatalf("a key on a gpu-1 row: layer %v", f)
 	}
 }
@@ -98,7 +98,7 @@ func TestStokerTakeOverRefusedByItsHost(t *testing.T) {
 	m, _, conns := stokedHosts(t, nil, nightView(), nil)
 	m.lost = true
 	m = selectRow(t, m, "ws-run")
-	nm := pressAll(m, "enter", "y").(Model)
+	nm := pressAll(m, "ctrl+o", "y").(Model)
 	if got := stokerActs(conns["ws-1"]); !slices.Equal(got, []string{"stoker:rest"}) {
 		t.Fatalf("ws-1 got %v, flash %q", got, nm.flash)
 	}

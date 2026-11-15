@@ -112,7 +112,7 @@ func (r *shellRig) drain(cmd tea.Cmd) {
 		for _, c := range msg {
 			r.drain(c)
 		}
-	case layerMsg, connectedHostMsg, peerMsg:
+	case layerMsg, connectedHostMsg, peerMsg, showHostMsg:
 		next, cmd := r.sh.Update(msg)
 		r.sh = next.(Shell)
 		r.drain(cmd)
@@ -501,13 +501,14 @@ func TestHostsNotesAreLive(t *testing.T) {
 
 func TestEnterOpensTheTickedHosts(t *testing.T) {
 	r := hidingShell(t, []string{"ws-1", "gpu-1"}, []string{"gpu-1"}, "gpu-1")
+	alone := r.conns["gpu-1"]
 	r.toHosts(t)
 	r.key(t, "enter")
-	if r.sh.layer != layerConsole || r.sh.cur.opt.Host != "" || !slices.Equal(peerHosts(r.sh.cur), []string{"ws-1"}) {
+	if r.sh.layer != layerConsole || r.sh.cur.opt.Host != "" || !slices.Equal(peerHosts(r.sh.cur), []string{"ws-1", "gpu-1"}) {
 		t.Fatalf("layer %v, home %q, peers %q", r.sh.layer, r.sh.cur.opt.Host, peerHosts(r.sh.cur))
 	}
-	if !slices.Equal(r.opened, []string{"gpu-1", "", "ws-1"}) || !r.conns["gpu-1"].closed {
-		t.Fatalf("opened %q, gpu-1 closed %v", r.opened, r.conns["gpu-1"].closed)
+	if !slices.Equal(r.opened[:3], []string{"gpu-1", "", "ws-1"}) || !alone.closed {
+		t.Fatalf("opened %q, gpu-1 alone closed %v", r.opened, alone.closed)
 	}
 }
 
@@ -529,42 +530,58 @@ func TestEscKeepsTheStreams(t *testing.T) {
 	}
 }
 
-// Review Focus 3: a hidden peer's late redial tick reopens nothing, and its
-// stale tick draws nothing. A host shown again is a new link: the old tick
-// is not its own.
-func TestHidingAPeerClosesItAndItsTick(t *testing.T) {
+// Hidden means left out of all hosts, and nothing more: a hidden peer
+// keeps its stream, so s still shows its rows.
+func TestHidingAPeerKeepsItsStream(t *testing.T) {
 	r := newShell(t, []string{"ws-1"}, nil, "", false)
 	r.update(stateMsg(fixtureState()))
 	ws := r.conns["ws-1"]
 	r.update(peerMsg{host: "ws-1", conn: ws, msg: stateMsg(hostState(sess(2, "api-auth", "%1", nil)))})
-	r.update(peerMsg{host: "ws-1", conn: ws, msg: lostMsg{err: io.EOF, conn: ws}})
-	late := peerRedialMsg{host: "ws-1", gen: r.sh.cur.opt.Gen, id: r.sh.cur.peers[0].id}
 	r.toHosts(t)
 	r.key(t, "down")
 	r.key(t, "space")
 	r.key(t, "enter")
-	if len(r.sh.cur.peers) != 0 || !ws.closed {
-		t.Fatalf("peers %q, ws-1 closed %v", peerHosts(r.sh.cur), ws.closed)
+	if !slices.Equal(peerHosts(r.sh.cur), []string{"ws-1"}) || ws.closed || r.redials["ws-1"] != 0 {
+		t.Fatalf("peers %q, ws-1 closed %v, %d redials", peerHosts(r.sh.cur), ws.closed, r.redials["ws-1"])
 	}
+	r.sh.cur = consoleOn(r.sh.cur)
+	r.sh.cur.tab = tabSessions
 	if strings.Contains(r.view(), "api-auth") {
-		t.Fatalf("a hidden host's rows stay:\n%s", r.view())
+		t.Fatalf("all hosts shows a hidden host's rows:\n%s", r.view())
+	}
+	r.sh.cur.boardHost = "ws-1" // s
+	if !strings.Contains(r.view(), "api-a") {
+		t.Fatalf("the hidden host's own view lost its rows:\n%s", r.view())
+	}
+}
+
+// Review Focus 3: a removed peer's late redial tick reopens nothing. A
+// host added again is a new link: the old tick is not its own.
+func TestRemovedHostsStaleRedialDialsNothing(t *testing.T) {
+	r := newShell(t, []string{"ws-1"}, nil, "", false)
+	r.update(stateMsg(fixtureState()))
+	ws := r.conns["ws-1"]
+	r.update(peerMsg{host: "ws-1", conn: ws, msg: lostMsg{err: io.EOF, conn: ws}})
+	late := peerRedialMsg{host: "ws-1", gen: r.sh.cur.opt.Gen, id: r.sh.cur.peers[0].id}
+	r.added = nil // what x and y on ws-1 write
+	r.toHosts(t)
+	r.key(t, "enter")
+	if len(r.sh.cur.peers) != 0 || !ws.closed {
+		t.Fatalf("ws-1 removed: peers %q, closed %v", peerHosts(r.sh.cur), ws.closed)
 	}
 	if cmd := r.update(late); cmd != nil {
 		drain(cmd)
 	}
-	before := r.view()
-	r.update(staleMsg{})
-	if r.redials["ws-1"] != 0 || r.view() != before {
-		t.Fatalf("the late ticks: %d redials, frame changed %v", r.redials["ws-1"], r.view() != before)
+	if r.redials["ws-1"] != 0 {
+		t.Fatalf("the late tick of a removed host: %d redials", r.redials["ws-1"])
 	}
-	// Shown again: a new stream, lost too; only its own tick dials.
+	// Added again: a new stream, lost too; only its own tick dials.
+	r.added = []string{"ws-1"}
 	r.toHosts(t)
-	r.key(t, "down")
-	r.key(t, "space")
 	r.key(t, "enter")
 	again := r.conns["ws-1"]
 	if again == ws || len(r.sh.cur.peers) != 1 {
-		t.Fatalf("ws-1 shown again: peers %q", peerHosts(r.sh.cur))
+		t.Fatalf("ws-1 added again: peers %q", peerHosts(r.sh.cur))
 	}
 	r.update(peerMsg{host: "ws-1", conn: again, msg: lostMsg{err: io.EOF, conn: again}})
 	if cmd := r.update(late); cmd != nil {
@@ -576,6 +593,16 @@ func TestHidingAPeerClosesItAndItsTick(t *testing.T) {
 	own := peerRedialMsg{host: "ws-1", gen: r.sh.cur.opt.Gen, id: r.sh.cur.peers[0].id}
 	if cmd := r.update(own); cmd == nil || cmd() == nil || r.redials["ws-1"] != 1 {
 		t.Fatalf("its own tick: %d redials", r.redials["ws-1"])
+	}
+}
+
+// A connect with no host ticked opens that host alone, and the header
+// still counts the hidden, as Enter does.
+func TestAConnectWithNoneTickedCountsTheHidden(t *testing.T) {
+	r := hidingShell(t, []string{"ws-1"}, []string{"this machine", "ws-1"}, "")
+	r.update(connectedHostMsg{host: "ws-1"})
+	if r.sh.curHost != "ws-1" || !slices.Equal(r.sh.cur.hiddenHosts, []string{"this machine"}) {
+		t.Fatalf("host %q, hidden %q", r.sh.curHost, r.sh.cur.hiddenHosts)
 	}
 }
 
@@ -598,7 +625,7 @@ func TestHeaderCountsHidden(t *testing.T) {
 // opens ws-1 alone.
 func TestStartOpensTheTickedHosts(t *testing.T) {
 	r := hidingShell(t, []string{"ws-1", "gpu-1"}, []string{"gpu-1"}, "")
-	if r.sh.layer != layerConsole || r.sh.cur.opt.Host != "" || !slices.Equal(r.opened, []string{"", "ws-1"}) || !slices.Equal(peerHosts(r.sh.cur), []string{"ws-1"}) {
+	if r.sh.layer != layerConsole || r.sh.cur.opt.Host != "" || !slices.Equal(r.opened, []string{"", "ws-1", "gpu-1"}) || !slices.Equal(peerHosts(r.sh.cur), []string{"ws-1", "gpu-1"}) {
 		t.Fatalf("layer %v, opened %q, peers %q", r.sh.layer, r.opened, peerHosts(r.sh.cur))
 	}
 	if r.sh.cur.splashDone {
@@ -734,7 +761,7 @@ func TestEnterWithNoneTickedSaysSo(t *testing.T) {
 	if !strings.Contains(lines[0], "ws-1 · 1 hidden") {
 		t.Fatalf("header %q", lines[0])
 	}
-	if row := strings.TrimSpace(lines[len(lines)-3]); row != "No host is ticked: ws-1 opens alone." { // the board's strip row
+	if row := strings.TrimSpace(lines[len(lines)-4]); row != "No host is ticked: ws-1 opens alone." { // over the chat's line and the foot
 		t.Fatalf("notice %q", row)
 	}
 }

@@ -30,7 +30,7 @@ func flintAt(t *testing.T, w, h int, keys ...string) Model {
 	cur := next
 	for _, k := range keys {
 		var cmd tea.Cmd
-		cur, cmd = keyOrOpen(cur, k)
+		cur, cmd = key(cur, k)
 		drain(cmd)
 	}
 	return cur.(Model)
@@ -56,7 +56,7 @@ func TestEveryGoldenShowsTheAgentsWholeMenu(t *testing.T) {
 	sizes := append(slices.Clone(surveyGrids), [2]int{200, 50}, [2]int{132, 32}, [2]int{86, 30}, [2]int{107, 60}, [2]int{44, 31}, [2]int{44, 16})
 	for _, size := range sizes {
 		w, h := size[0], size[1]
-		for _, keys := range [][]string{nil, {"enter"}, {"v"}, {"v", "enter"}} {
+		for _, keys := range [][]string{nil, {"enter"}} {
 			m := flintAt(t, w, h, keys...)
 			if drawn, _ := viewDrawn(m); !drawn {
 				continue

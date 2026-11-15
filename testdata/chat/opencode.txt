@@ -1,0 +1,15 @@
+  opencode v0.15.0
+  ~/src/spark-docs
+
+┃ Write the docs index for spark-docs
+
+  The index lists each page by its title. I add the three new pages.
+
+  ⚙ edit docs/index.md
+
+┃
+┃  Ask anything... "Fix a TODO in the codebase"
+┃
+┃  Build  Claude Sonnet 4.5
+╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                       tab switch agent  ctrl+p commands

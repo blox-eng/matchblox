@@ -20,17 +20,46 @@ final class BoardBeltTests: XCTestCase {
     }
 
     private let arrows = ["↑", "↓", "⏎"]
-    private let tail = [
-        "c copy", "m menu", "g chain", "v one line", "s hosts", "u strip", "⇥ machine", "x kill",
-        "←", "→", "]", "[", "/", "z park",
-    ]
+    private let tail = ["⌃o", "s hosts", "g chain", "/", "m menu", "c copy", "z park", "N new", "⇥ machine", "x kill"]
 
     // MARK: The keys
 
     func testHomeIsBackTheCardsKeysAndTheArrows() throws {
         XCTAssertEqual(try labels("1,2;"), ["◂", "1", "2"] + arrows + tail)
         XCTAssertEqual(try labels("p,y;"), ["◂", "p", "y"] + arrows + tail)
-        XCTAssertEqual(try labels(";c,m,g,s,x,],[,z"), ["◂"] + arrows + tail)
+        XCTAssertEqual(try labels(";c,m,g,s,x,z"), ["◂"] + arrows + tail)
+    }
+
+    /// The sidebar console's belt: `◂`, the chosen session's answers, `↑ ↓ ⏎`, then `⌃o` and the
+    /// list's keys. The board's column and page keys are gone.
+    func testBeltHasTheSidebarKeys() throws {
+        XCTAssertEqual(try labels("1,2,3;"), ["◂", "1", "2", "3", "↑", "↓", "⏎", "⌃o", "s hosts", "g chain", "/",
+                                             "m menu", "c copy", "z park", "N new", "⇥ machine", "x kill"])
+        let ids = board(";").keys.map(\.id)
+        for gone in ["board.v", "board.u", "board.]", "board.[", "←", "→"] {
+            XCTAssertFalse(ids.contains(gone), gone)
+        }
+        // A console that still says the old keys draws none of them.
+        XCTAssertEqual(try labels(";v,u,left,right,],["), ["◂"] + arrows + tail)
+        XCTAssertNil(BoardBelt.bytes(for: "board.v"))
+        XCTAssertNil(BoardBelt.bytes(for: "board.]"))
+        // Each act key sends its own tap (keycmd.TapKeys and keycmd.TapKey in Go), which no
+        // keyboard sends.
+        for key in ["p", "y", "s", "g", "/", "m", "c", "z", "N", "x"] {
+            XCTAssertEqual(BoardBelt.bytes(for: "board.\(key)"), Array("\u{1b}_matchblox;tap=\(key)\u{1b}\\".utf8), key)
+        }
+    }
+
+    /// While the chat's line holds text the console says the digits and the arrows are off.
+    func testTheLinesTextDimsTheDigitsAndTheArrows() {
+        let b = board(";1,2,up,down")
+        XCTAssertEqual(b.keys.map(\.id).prefix(4), ["◂", "board.1", "board.2", "↑"])
+        XCTAssertTrue(b.isDim("board.1"))
+        XCTAssertTrue(b.isDim("board.2"))
+        XCTAssertTrue(b.isDim("↑"))
+        XCTAssertTrue(b.isDim("↓"))
+        XCTAssertFalse(b.isDim("⏎"))
+        XCTAssertFalse(b.isDim("board.c"))
     }
 
     func testAtMostThreeCardKeys() {
@@ -51,11 +80,11 @@ final class BoardBeltTests: XCTestCase {
     }
 
     func testAKeyThatIsOffIsDim() {
-        let b = board("p;g,x,left")
+        let b = board("p;g,x,ctrl+o")
         XCTAssertTrue(b.isDim("board.g"))
         XCTAssertTrue(b.isDim("board.x"))
-        XCTAssertTrue(b.isDim("←"))
-        XCTAssertFalse(b.isDim("→"))
+        XCTAssertTrue(b.isDim("board.ctrl+o"))
+        XCTAssertFalse(b.isDim("board.N"))
         XCTAssertFalse(b.isDim("board.c"))
         XCTAssertFalse(b.isDim("board.p"))
         XCTAssertFalse(b.isDim("◂"))
@@ -73,10 +102,10 @@ final class BoardBeltTests: XCTestCase {
     }
 
     func testMachineDimsTheTailButMachine() {
-        let b = board(";c,m,g,v,s,u,x,left,right,],[,/,z")
+        let b = board(";ctrl+o,s,g,/,m,c,z,N,x")
         let dim = b.keys.map(\.id).filter(b.isDim)
-        XCTAssertEqual(dim, ["board.c", "board.m", "board.g", "board.v", "board.s", "board.u", "board.x",
-                             "←", "→", "board.]", "board.[", "board./", "board.z"])
+        XCTAssertEqual(dim, ["board.ctrl+o", "board.s", "board.g", "board./", "board.m", "board.c", "board.z",
+                             "board.N", "board.x"])
         XCTAssertFalse(b.isDim("board.tab"))
     }
 
@@ -104,7 +133,8 @@ final class BoardBeltTests: XCTestCase {
         XCTAssertEqual(c.keys(.board, agent: nil, mine: []), BoardBelt.plain.keys)
         XCTAssertEqual(c.keys(.board, agent: "claude", mine: [], board: board("1,2;")), board("1,2;").keys)
         XCTAssertEqual(KeyFace(BeltKey(id: "board.c", cells: 2), in: c).size, .word)
-        XCTAssertEqual(KeyFace(BeltKey(id: "board.]", cells: 1), in: c).size, .glyph)
+        XCTAssertEqual(KeyFace(BeltKey(id: "board./", cells: 1), in: c).size, .glyph)
+        XCTAssertEqual(KeyFace(BeltKey(id: "board.ctrl+o", cells: 2), in: c).size, .word)
         XCTAssertEqual(KeyFace(BeltKey(id: "board.1", cells: 1), in: c).size, .glyph)
     }
 
@@ -114,16 +144,16 @@ final class BoardBeltTests: XCTestCase {
         let three = board("1,2,3;").keys
         XCTAssertEqual(three.prefix(7).map(\.id), ["◂", "board.1", "board.2", "board.3", "↑", "↓", "⏎"])
         XCTAssertEqual(three.prefix(7).map(\.cells), [1, 1, 1, 1, 1, 1, 1])
-        XCTAssertEqual(board("p;").keys.prefix(6).map(\.id), ["◂", "board.p", "↑", "↓", "⏎", "board.c"])
+        XCTAssertEqual(board("p;").keys.prefix(6).map(\.id), ["◂", "board.p", "↑", "↓", "⏎", "board.ctrl+o"])
         XCTAssertEqual(board("menu").keys.map(\.cells), [1, 1, 1, 2, 2])
         XCTAssertEqual(board("box").keys.map(\.cells), [1, 2, 2])
     }
 
     func testVoiceOverSaysTheWords() throws {
         let c = try catalog()
-        let spoken = ["board.1", "board.p", "board.y", "board.tab", "board.]", "board.[", "board./", "board.c", "board.runs", "←"]
+        let spoken = ["board.1", "board.p", "board.y", "board.tab", "board.ctrl+o", "board.N", "board./", "board.c", "board.runs", "◂"]
             .map { KeyFace(BeltKey(id: $0, cells: 1), in: c).spoken }
-        XCTAssertEqual(spoken, ["1, answer", "p, merge", "y, go", "machine", "next chain", "previous chain", "find", "copy", "y, run", "Left"])
+        XCTAssertEqual(spoken, ["1, answer", "p, merge", "y, go", "machine", "expand", "new session", "find", "copy", "y, run", "Back to matchblox"])
     }
 
     // MARK: Away from the board
@@ -152,49 +182,33 @@ final class BoardBeltTests: XCTestCase {
 
     // MARK: The terminal's touches
 
-    func testTheTouchesActOnlyWhileTheBoardShows() {
+    func testTheLongPressIsTheMenuOnlyWhileTheConsoleShows() {
         var follow = BoardFollow()
-        XCTAssertFalse(follow.turnsPages)
         XCTAssertFalse(follow.opensMenu)
         _ = follow.heard("1,2;", on: .steer)
-        XCTAssertTrue(follow.turnsPages)
         XCTAssertTrue(follow.opensMenu)
         _ = follow.pane(true, on: .board)
-        XCTAssertFalse(follow.turnsPages)
         XCTAssertFalse(follow.opensMenu)
         _ = follow.pane(false, on: .steer)
-        _ = follow.heard("", on: .board)
-        XCTAssertFalse(follow.turnsPages)
-        XCTAssertFalse(follow.opensMenu)
-    }
-
-    func testNoPageOnMachineUnderTheBoxOrInTheMenu() {
-        var follow = BoardFollow()
-        _ = follow.heard(";c,m,g,v,s,u,x,left,right,],[,/,z", on: .board)
-        XCTAssertFalse(follow.turnsPages)
         XCTAssertTrue(follow.opensMenu)
-        _ = follow.heard("box", on: .board)
-        XCTAssertFalse(follow.turnsPages)
-        _ = follow.heard("menu", on: .board)
-        XCTAssertFalse(follow.turnsPages)
-        _ = follow.heard(";g", on: .board)
-        XCTAssertTrue(follow.turnsPages)
+        _ = follow.heard("", on: .board)
+        XCTAssertFalse(follow.opensMenu)
     }
 
     // MARK: What each key sends
 
+    /// An act key sends its tap, which its tmux binding hands the console (`beltTap` in Go); the
+    /// digits, `⌃o`, `⇥`, the arrows and Return send as a keyboard does.
     func testEachKeySendsWhatTheConsolesBindingReads() {
         let esc: UInt8 = 0x1b
+        func tap(_ key: String) -> [UInt8] { Array("\u{1b}_matchblox;tap=\(key)\u{1b}\\".utf8) }
         let sent: [String: [UInt8]] = [
-            "board.1": [0x31], "board.2": [0x32], "board.3": [0x33], "board.p": Array("p".utf8),
-            "board.y": Array("y".utf8), "board.c": Array("c".utf8), "board.m": Array("m".utf8),
-            "board.g": Array("g".utf8), "board.v": Array("v".utf8), "board.s": Array("s".utf8),
-            "board.u": Array("u".utf8), "board.tab": [0x09], "board.x": Array("x".utf8),
-            "board.]": Array("]".utf8), "board.[": Array("[".utf8), "board./": Array("/".utf8),
-            "board.z": Array("z".utf8), "board.runs": Array("y".utf8), "board.cancels": [esc],
-            "board.do": [0x0d], "board.close": [esc],
-            "←": [esc, 0x5b, 0x44], "→": [esc, 0x5b, 0x43], "↑": [esc, 0x5b, 0x41], "↓": [esc, 0x5b, 0x42],
-            "⏎": [0x0d], "◂": HomeKey.bytes,
+            "board.1": [0x31], "board.2": [0x32], "board.3": [0x33], "board.p": tap("p"),
+            "board.y": tap("y"), "board.c": tap("c"), "board.m": tap("m"), "board.g": tap("g"),
+            "board.s": tap("s"), "board./": tap("/"), "board.z": tap("z"), "board.N": tap("N"),
+            "board.x": tap("x"), "board.tab": [0x09], "board.ctrl+o": [0x0f],
+            "board.runs": Array("y".utf8), "board.cancels": [esc], "board.do": [0x0d], "board.close": [esc],
+            "↑": [esc, 0x5b, 0x41], "↓": [esc, 0x5b, 0x42], "⏎": [0x0d], "◂": HomeKey.bytes,
         ]
         for (id, bytes) in sent {
             XCTAssertEqual(KeyBar.bytes(for: id), bytes, id)

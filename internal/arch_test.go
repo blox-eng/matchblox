@@ -78,7 +78,7 @@ func TestArchBoundaries(t *testing.T) {
 // TestChainAndSendNameNoTmux: chains and sends reach panes only through
 // internal/mux, so another multiplexer can run them.
 func TestChainAndSendNameNoTmux(t *testing.T) {
-	for _, f := range []string{"peersend.go", "chains.go", "chainnews.go", "notice.go"} {
+	for _, f := range []string{"peersend.go", "chains.go", "chainnews.go", "notice.go", "paste.go"} {
 		b, err := os.ReadFile(filepath.Join("service", f))
 		if err != nil {
 			t.Fatal(err)

@@ -129,13 +129,17 @@ device before a release. `ws-1` is the host.
 16. Select a session in tmux and tap `A switch` under it. Switch agent
     opens; tap another agent, then `Enter`, then type `y`. The console
     jumps to the pane, where the new agent starts.
-17. On a host with a question waiting, tap that session once: you are in
-    its pane, at the question, and typing reaches the agent. Turn the phone
-    to landscape, then back. The pane still shows the question.
-18. On a real host, tap a row of the session list once. You are in the
-    agent's own tmux pane; the tap clicks once and the pane is not clicked
-    through. The keyboard rises on that tap. A desk attached to the same
-    session stays where it was.
+17. On a host with a question waiting, tap that session once: its chat
+    opens, with the question's options. Scroll the belt to `⌃o` and tap it,
+    or use the menu's `go in`: you are in its pane, at the question, and typing reaches the agent. Turn the phone to
+    landscape, then back. The pane still shows the question.
+18. On a real host, tap a row of the session list once. Its chat opens; the
+    tap clicks once and the chat is not clicked through. The keyboard rises
+    on that tap, and a letter you type goes into the chat's line. Paste two
+    lines from another app: they land in the line as one piece. A desk
+    attached to the same session stays where it was. A sideways swipe turns
+    no page. A swipe in from the left edge, or `◂` on the belt, goes from
+    the chat back to the list. A long-press on a row opens its menu.
 
 ### The demo
 
@@ -149,20 +153,23 @@ and again with two hosts.
    Tap it. The scan view finds its own code in under three seconds. It turns on
    no camera and asks for no permission. The app opens the console on the
    host `demo`.
-3. The board opens on flint-auth's card in `NEEDS YOU`, with its question's
-   options in the peek. Tap `2. Rotate, keep the old one a minute`: the card
-   marks it, and the key line says `2 again sends`. Tap it again to send it.
-   The card strikes into `WORKING`. Or tap the card again to open the
-   stand-in for its pane (`type 2 to answer`), and press `↓` then `⏎` on the
-   belt. The agent works for a few seconds, then the sheet rises with
+3. The list opens with flint-auth first in `NEEDS YOU`. Tap it: its chat
+   opens, with its question's options. Tap `2. Rotate, keep the old one a
+   minute`: the chat marks it, and says `2 again sends`. Tap it again to
+   send it. flint-auth moves into `WORKING`. Or open the stand-in for its
+   pane (`type 2 to answer`): scroll the belt to `⌃o` and tap it, or
+   long-press the row and tap the menu's `go in`. Then press `↓` then `⏎`
+   on the belt. The agent works for a few seconds, then the sheet rises with
    `Your agents wait the same way.`, the line, `Copy`, `Send to my computer`,
    `Pair a host` and `Keep looking`. `Copy` puts the line on the pasteboard.
    `Send to my computer` opens the share sheet.
 4. On an iPhone, turn the device to landscape at the question. Under 16 rows,
    the question card shows in place of the screen. Turn the device back, and
    the stand-in shows the question again.
-5. Tap `Keep looking`, then quit the console with `q`. The ended screen offers
-   `Open again`, `Pair a host`, the line, `Copy` and `Send to my computer`.
+5. Tap `Keep looking`, then quit the console: tap `machine` in the tab row,
+   then type `q`. In Sessions, `q` types in the chat's line. The ended
+   screen offers `Open again`, `Pair a host`, the line, `Copy` and
+   `Send to my computer`.
 6. Kill the app in the middle of the demo and open it again. The demo starts
    fresh, and the first launch left nothing of the old one.
 7. Open a host you paired. Its console, the Island and the host list are the
@@ -209,7 +216,7 @@ is a second paired host.
 Use an iPhone held upright, with a Claude Code session that waits on a
 question.
 
-29. Tap the session's card to choose it, then tap it again: you are in the agent's tmux pane, with the agent's own menu at the bottom. `↓ ↓ ⏎` picks the third
+29. Tap the session's row to open its chat, then tap `⌃o` on the belt: you are in the agent's tmux pane, with the agent's own menu at the bottom. `↓ ↓ ⏎` picks the third
     option.
 30. Each key of Steer (`◂ ↑ ↓ ⏎ Esc ^C ⇞ ⇟`) works on the first tap, with
     the keyboard up and with it down. `^C` reaches the agent as tmux sends
@@ -235,8 +242,7 @@ question.
 35. Choose Mine, then `EDIT MINE`. Tap a key to add it and to take it off.
     Drag a key to move it. A tap on `◂` says `◂ always stays: it is the
     way back`. Quit the app and open it again: Mine is the same.
-36. Swipe down in a session's live view: earlier lines show, and the key
-    line says `↑ n lines back`.
+36. Swipe down in a session's chat: earlier lines show.
 37. Press `Ctrl+O` on a hardware keyboard to go into the tmux pane. A swipe
     scrolls its history, about as fast as the finger. A long press, then a
     drag, selects text. `◂` goes back to the console.

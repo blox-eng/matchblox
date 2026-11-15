@@ -5,12 +5,12 @@ which agent needs you, what loads the machine, the state of every git
 checkout, and the one safe action that resolves each thing. It works on the
 host, over SSH, and from a phone.
 
-![The matchblox board on a demo machine: four columns, NEEDS YOU, WORKING, SHIPPING and QUIET. A digit marks an answer from the agent's own options, the same digit sends it, and the card strikes into WORKING. p and a typed y merge a pull request. A tap hides the WORKING column and brings it back, and g shows one chain](assets/replay.svg)
+![The matchblox console on a demo machine: the list of every match beside the chat of the chosen one. A tap opens the chat of flint-auth, a digit marks an answer from the agent's own options, the same digit sends it, and flint-auth moves into WORKING. g opens the room of the chain login](assets/replay.svg)
 
 ## Learn it in five minutes
 
 1. [Get started](start.md): install, the first run and its setup steps.
-2. [The console](console.md): the board and its four columns, the card and its peek, the live view, the strip, and Machine.
+2. [The console](console.md): the list and its groups, the chat of the chosen session, and Machine.
 3. [Keys](keys.md): every key, on one page.
 4. [The phone](phone.md): the console as the first screen of an SSH app.
 
@@ -18,7 +18,7 @@ Then, when you need them:
 
 - [The stoker](stoker.md): sessions that compact themselves while you sleep, and an agent that takes your orders.
 - [Your ways](ways.md): the standing rules and recipes the stoker follows.
-- [Ships](ships.md): the pull requests your sessions drive, from open to live, on their cards.
+- [Ships](ships.md): the pull requests your sessions drive, from open to live, on their rows.
 - [Agents](agents.md): Claude Code, Codex, OpenCode, Cursor and any other agent; accounts for Claude Code, Codex and Cursor.
 - [Remote hosts](remote.md): agents on another machine.
 - [Config](config.md): thresholds and agents.

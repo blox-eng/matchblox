@@ -273,9 +273,8 @@ func TestRunCopies(t *testing.T) {
 	if status := wait(); status != 0 {
 		t.Fatalf("the agent ended with status %d", status)
 	}
-	if got := s.text(); got != "ready"+keys {
-		t.Fatalf("the screen shows %q, want %q", got, "ready"+keys)
-	}
+	// The agent's end does not wait for the screen's reader: wait for the copy.
+	s.waitFor(fmt.Sprintf("%q", "ready"+keys), func(text string) bool { return text == "ready"+keys })
 }
 
 // TestRunSize: the agent's terminal has the pane's size, at its start and

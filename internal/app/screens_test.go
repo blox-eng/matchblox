@@ -117,13 +117,31 @@ func TestScreens(t *testing.T) {
 		}
 	}
 	check(t, st, "folded", 44, 16, nil)
-	for _, size := range [][2]int{{92, 40}, {132, 32}} {
-		check(t, st, "listonly", size[0], size[1], []string{"v"})
+	// The Sessions tab at every size: the list beside the chat on a desk
+	// and a mid screen; one pane at a time on a phone and where the chat
+	// beside the list would be narrower than chatMin (60x20).
+	for _, size := range [][2]int{{160, 38}, {132, 32}, {104, 38}, {80, 24}, {60, 20}, {44, 31}} {
+		check(t, st, "side", size[0], size[1], nil)
 	}
+	phone, _, _ := sideShot(t, 44, 31)
+	goldenFile(t, tapOn(t, phone, listRow(t, phone, "flint-auth")), "side-44x31-chat")
+	desk, _, _ := sideShot(t, 132, 32)
+	golden(t, pressOn(desk, "ctrl+l"), "side-hidden", 132, 32)
+	facts := screensState(t) // the chosen session's facts under the chat's head
+	for i := range facts.Sessions {
+		if paneOf(facts.Sessions[i]) == desk.chosenSide() {
+			noWindow(&facts.Sessions[i])
+			facts.Sessions[i].Agents = 2
+		}
+	}
+	withFacts, _, _ := sideShotOf(t, facts, 132, 32)
+	golden(t, withFacts, "side-facts", 132, 32)
+	phoneFacts, _, _ := sideShotOf(t, facts, 44, 31) // the fix wraps whole on a phone
+	golden(t, tapOn(t, phoneFacts, listRow(t, phoneFacts, "flint-auth")), "side-facts", 44, 31)
 	for _, size := range [][2]int{{44, 31}, {132, 32}} {
 		check(t, twoShipsState(t), "sessionships", size[0], size[1], nil)
 	}
-	night := append([]string{"n"}, strings.Split("merge them on green", "")...)
+	night := append([]string{keysInList, "n"}, strings.Split("merge them on green", "")...)
 	for _, size := range [][2]int{{44, 31}, {104, 38}, {132, 32}} {
 		check(t, sheetScreen(st, false), "sheet", size[0], size[1], append(night, "tab", "space", "tab"))
 	}
@@ -132,7 +150,7 @@ func TestScreens(t *testing.T) {
 		check(t, tabNight(st), "stoker", size[0], size[1], toStokerTab)
 		check(t, tabMorning(st), "stokermorning", size[0], size[1], toStokerTab)
 	}
-	check(t, sheetScreen(st, true), "sheetday", 104, 38, []string{"o"})
+	check(t, sheetScreen(st, true), "sheetday", 104, 38, []string{keysInList, "o"})
 	for _, size := range [][2]int{{44, 31}, {104, 38}} {
 		check(t, tabFamily(st, false), "stokerfamily", size[0], size[1], append(slices.Clone(toStokerTab), "down", "down"))
 	}
@@ -140,7 +158,10 @@ func TestScreens(t *testing.T) {
 	offer.Doors = []doors.Door{{ID: doors.Update, Title: "Update to v0.43.0", Why: "matchblox v0.43.0 is out. This machine runs v0.42.0.", Sum: "v0.43.0",
 		Preview: "matchblox v0.42.0 → v0.43.0 (linux/amd64)\n  checksum    checked first\n  provenance  checked if gh is installed\n              and logged in\n  replaces\n    /home/user/.local/bin/matchblox"}}
 	offer.Update = &state.UpdateView{Mode: "offer", Current: "v0.42.0", Latest: "v0.43.0"}
-	toDoor := append(slices.Repeat([]string{"up"}, 12), "enter") // up from the cards to the doors line, then its preview
+	// Past the list's last row to its foot's last part, the setup step;
+	// then its preview.
+	toSetup := append(append([]string{keysInList}, slices.Repeat([]string{"down"}, 20)...), "enter")
+	toDoor := append(slices.Clone(toSetup), "enter")
 	for _, size := range [][2]int{{44, 31}, {104, 38}} {
 		check(t, offer, "updatedoor", size[0], size[1], nil)
 		check(t, offer, "updatedoorpreview", size[0], size[1], toDoor)
@@ -150,7 +171,7 @@ func TestScreens(t *testing.T) {
 	failed.Doors[0].Why += " The install failed, nothing was changed. Enter tries again, or run: matchblox update. " +
 		"checksum mismatch for matchblox_linux_amd64 · published 3f9a3f9a3f9a… · download c2e1c2e1c2e1…"
 	for _, size := range [][2]int{{44, 31}, {104, 38}} {
-		check(t, failed, "updatedoorfailed", size[0], size[1], slices.Repeat([]string{"up"}, 12))
+		check(t, failed, "updatedoorfailed", size[0], size[1], toSetup)
 		golden(t, newerNotice(t, st, size[0], size[1], true), "startagain", size[0], size[1])
 	}
 	golden(t, newerNotice(t, st, 44, 31, false), "reopen", 44, 31)
@@ -166,19 +187,16 @@ func TestScreens(t *testing.T) {
 	for _, size := range surveyGrids {
 		check(t, st, "survey", size[0], size[1], nil, asks)
 		check(t, st, "surveychat", size[0], size[1], []string{"enter"}, asks)
-		if portrait(size[0], size[1]) && size[0] >= 83 { // list only by default: the full view splits
-			check(t, st, "surveyfull", size[0], size[1], []string{"v", "enter"}, asks)
-		}
 	}
 	life := st
 	life.Agents = []string{"claude", "codex", "opencode"}
-	newKeys := append([]string{"N", "tab"}, strings.Split("feat/88-rate-limits", "")...)
+	newKeys := append([]string{keysInList, "N", "tab"}, strings.Split("feat/88-rate-limits", "")...)
 	newKeys = append(newKeys, "tab", "tab", "tab")
 	newKeys = append(newKeys, strings.Split("fix the flaky ships test", "")...)
 	for _, size := range [][2]int{{44, 31}, {104, 38}, {132, 32}} {
 		check(t, life, "new", size[0], size[1], newKeys)
-		check(t, life, "rename", size[0], size[1], append(append([]string{"r"}, slices.Repeat([]string{"backspace"}, len("spark-docs"))...), strings.Split("docs-1-0", "")...))
-		check(t, life, "kill", size[0], size[1], []string{"x"})
+		check(t, life, "rename", size[0], size[1], append(append([]string{keysInList, "r"}, slices.Repeat([]string{"backspace"}, len("spark-docs"))...), strings.Split("docs-1-0", "")...))
+		check(t, life, "kill", size[0], size[1], []string{keysInList, "x"})
 	}
 	pw := askMsg{prompt: askpass.Prompt{Host: "ws-1", Text: "builder@ws-1's password: "}, answer: func(string, bool) {}}
 	hostKey := askMsg{prompt: askpass.Prompt{Host: "ws-1", Confirm: true, Text: "The authenticity of host 'ws-1' can't be established.\n" +
@@ -208,16 +226,12 @@ func TestScreens(t *testing.T) {
 	for _, size := range [][2]int{{40, 34}, {80, 31}, {104, 38}, {160, 38}} {
 		golden(t, boardShot(t, board, size[0], size[1], nil), "board", size[0], size[1])
 	}
-	for _, size := range [][2]int{{40, 34}, {160, 38}} { // v, before the board takes its keys
-		golden(t, boardShot(t, board, size[0], size[1], oneLineBoard), "boardoneline", size[0], size[1])
-	}
 	onLogin := func(m *Model) {
 		chooseCard("flint-auth")(m)
 		m.viewPrefs.Told = []string{"chain"} // the shot is of the chain, not of g's once-notice
 	}
 	for _, size := range [][2]int{{80, 31}, {40, 34}} {
 		golden(t, pressOn(boardShot(t, board, size[0], size[1], onLogin), "g"), "boardchain", size[0], size[1])
-		golden(t, boardShot(t, board, size[0], size[1], func(m *Model) { m.flipHidden(colWork) }), "boardhidden", size[0], size[1])
 		golden(t, pressOn(boardShot(t, board, size[0], size[1], chooseCard("flint-auth")), "m"), "boardmenu", size[0], size[1])
 	}
 }
@@ -230,8 +244,8 @@ func threeHosts(t *testing.T, st proto.State, w, h int, gpu string) Model {
 	t.Helper()
 	now := demoAt.Add(-40 * time.Second)
 	conns := map[string]*fakeConn{"gpu-1": newFake(), "ws-1": newFake()}
-	m := New(Options{NoMotion: true, Conn: newFake(), Now: func() time.Time { return now },
-		Peers: []Peer{{Host: "gpu-1", Conn: conns["gpu-1"]}, {Host: "ws-1", Conn: conns["ws-1"]}}})
+	m := (New(Options{NoMotion: true, Conn: newFake(), Now: func() time.Time { return now },
+		Peers: []Peer{{Host: "gpu-1", Conn: conns["gpu-1"]}, {Host: "ws-1", Conn: conns["ws-1"]}}}))
 	m.viewPrefs.CopyCheckedPhone, m.viewPrefs.CopyCheckedDesk = true, true // the copy check is the board's first-run door
 	next, _ := m.Update(tea.WindowSizeMsg{Width: w, Height: h})
 	next, _ = next.Update(stateMsg(st))
@@ -417,8 +431,15 @@ var surveyGrids = [][2]int{{51, 45}, {51, 31}, {96, 20}, {96, 8}, {106, 10}, {95
 // check draws the console with msgs, then keys, against its golden frame.
 func check(t *testing.T, st proto.State, name string, w, h int, keys []string, msgs ...tea.Msg) {
 	t.Helper()
-	f := newFake()
-	m := New(Options{NoMotion: true, Conn: f, Now: func() time.Time { return demoAt }})
+	shoot(t, New(Options{NoMotion: true, Conn: newFake(), Now: func() time.Time { return demoAt }}), st, name, w, h, keys, msgs...)
+}
+
+// keysInList, first in a shot's keys, gives the keys to the list: a desk
+// starts in the chat's line, where the list's keys type.
+const keysInList = "\x00list"
+
+func shoot(t *testing.T, m Model, st proto.State, name string, w, h int, keys []string, msgs ...tea.Msg) {
+	t.Helper()
 	next, _ := m.Update(tea.WindowSizeMsg{Width: w, Height: h})
 	next, _ = next.Update(stateMsg(st))
 	nm := next.(Model)
@@ -441,8 +462,13 @@ func check(t *testing.T, st proto.State, name string, w, h int, keys []string, m
 		}
 		next, _ = next.Update(msg)
 	}
+	if len(keys) > 0 && keys[0] == keysInList {
+		nm := next.(Model)
+		nm.toList()
+		next, keys = nm, keys[1:]
+	}
 	for _, k := range keys {
-		next, _ = keyOrOpen(next, k)
+		next, _ = key(next, k)
 	}
 	for _, msg := range later {
 		next, _ = next.Update(msg)
@@ -454,13 +480,19 @@ func check(t *testing.T, st proto.State, name string, w, h int, keys []string, m
 // testdata/screens/name-wxh.txt; -update writes it.
 func golden(t *testing.T, m interface{ render() string }, name string, w, h int) {
 	t.Helper()
+	goldenFile(t, m, name+"-"+strconv.Itoa(w)+"x"+strconv.Itoa(h))
+}
+
+// goldenFile is golden for the frame testdata/screens/file.txt.
+func goldenFile(t *testing.T, m interface{ render() string }, file string) {
+	t.Helper()
 	got := ansi.Strip(m.render())
 	lines := strings.Split(got, "\n")
 	for i, l := range lines {
 		lines[i] = strings.TrimRight(l, " ")
 	}
 	got = strings.Join(lines, "\n") + "\n"
-	path := filepath.Join("..", "..", "testdata", "screens", name+"-"+strconv.Itoa(w)+"x"+strconv.Itoa(h)+".txt")
+	path := filepath.Join("..", "..", "testdata", "screens", file+".txt")
 	if *update {
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			t.Fatal(err)

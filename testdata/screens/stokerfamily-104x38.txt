@@ -1,5 +1,5 @@
  ▰ matchblox                                                                          ● 6 need you  ≋ 2
- board 7    MACHINE
+ sessions 7    MACHINE
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
  STOKER · 1 chain                                                                                    on
  watching 0 · 0 compacted · 0 waited · 0k back

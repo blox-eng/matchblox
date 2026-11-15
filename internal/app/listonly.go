@@ -16,16 +16,6 @@ type viewPrefs struct {
 	ListOnlyPhone bool `json:"list_only_phone"`
 	ListOnlyDesk  bool `json:"list_only_desk"`
 
-	// The board's views, for each shape: the columns hidden (boardCol.short),
-	// one line a card, and the strip's face (usage, machine, week or off;
-	// empty reads as usage). A phone's density is nil until its first v.
-	HiddenPhone  []string `json:"hidden_phone"`
-	HiddenDesk   []string `json:"hidden_desk"`
-	OneLinePhone *bool    `json:"one_line_phone,omitempty"`
-	OneLineDesk  bool     `json:"one_line_desk"`
-	StripPhone   string   `json:"strip_phone"`
-	StripDesk    string   `json:"strip_desk"`
-
 	// Told is the notices already shown once, for both shapes.
 	Told []string `json:"told"`
 
@@ -53,90 +43,6 @@ func (m *Model) keepViewPrefs() {
 	if err := keepState(m.opt.StateDir, viewPrefsFile, m.viewPrefs); err != nil {
 		m.flash = "not kept: " + err.Error()
 	}
-}
-
-// colHidden: the board leaves this column out, for the shape the screen has
-// now. (Not hidden: Model.hidden counts the hosts the builder hid.)
-func (m Model) colHidden(c boardCol) bool {
-	if m.upright() {
-		return slices.Contains(m.viewPrefs.HiddenPhone, c.short())
-	}
-	return slices.Contains(m.viewPrefs.HiddenDesk, c.short())
-}
-
-// flipHidden hides the column, or shows it again.
-func (m *Model) flipHidden(c boardCol) {
-	list := &m.viewPrefs.HiddenDesk
-	if m.upright() {
-		list = &m.viewPrefs.HiddenPhone
-	}
-	if i := slices.Index(*list, c.short()); i >= 0 {
-		*list = slices.Delete(slices.Clone(*list), i, i+1)
-	} else {
-		*list = append(slices.Clone(*list), c.short())
-	}
-	m.keepViewPrefs()
-}
-
-// oneLine: every card takes one line, by the person's choice.
-func (m Model) oneLine() bool {
-	if m.upright() {
-		return m.viewPrefs.OneLinePhone != nil && *m.viewPrefs.OneLinePhone
-	}
-	return m.viewPrefs.OneLineDesk
-}
-
-// oneLineIn: a card of column c takes one line. A phone with no choice yet
-// keeps NEEDS YOU verbose and every other page one line.
-func (m Model) oneLineIn(c boardCol) bool {
-	if m.upright() && m.viewPrefs.OneLinePhone == nil {
-		return c != colNeed
-	}
-	return m.oneLine()
-}
-
-func (m *Model) flipOneLine() {
-	if m.upright() {
-		one := !m.oneLine()
-		m.viewPrefs.OneLinePhone = &one
-	} else {
-		m.viewPrefs.OneLineDesk = !m.viewPrefs.OneLineDesk
-	}
-	m.keepViewPrefs()
-}
-
-// stripFace is what the strip shows: usage, machine, week or off.
-func (m Model) stripFace() string {
-	face := m.viewPrefs.StripDesk
-	if m.upright() {
-		face = m.viewPrefs.StripPhone
-	}
-	if face == "" {
-		return "usage"
-	}
-	return face
-}
-
-// stripTurn is the order the strip turns through. Week joins it when the
-// daily record exists.
-var stripTurn = []string{"usage", "machine", "off"}
-
-// stripNext is the face after face.
-func stripNext(face string) string {
-	return stripTurn[(slices.Index(stripTurn, face)+1)%len(stripTurn)]
-}
-
-// turnStrip moves the strip to its next face.
-func (m *Model) turnStrip() { m.setStripFace(stripNext(m.stripFace())) }
-
-// setStripFace keeps face as this shape's strip.
-func (m *Model) setStripFace(face string) {
-	if m.upright() {
-		m.viewPrefs.StripPhone = face
-	} else {
-		m.viewPrefs.StripDesk = face
-	}
-	m.keepViewPrefs()
 }
 
 // copyChecked: a paste proved that a copy reaches the shape the screen has

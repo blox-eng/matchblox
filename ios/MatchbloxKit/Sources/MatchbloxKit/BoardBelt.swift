@@ -1,11 +1,11 @@
 import Foundation
 
 /// The Board layout's keys, as the console's board signal says them (`keycmd.BoardSignal`,
-/// `beltWord` in Go). The value is `box` under the consent box, `menu` under the card's menu,
-/// or `card;dim`: the chosen card's keys that are on (`*` after the armed one), then the keys
-/// that are off. Home is `◂`, the card's keys (at most three), then `↑ ↓ ⏎`; the tail has every
-/// other key of the board. A key that is off is dim and sends nothing. A token the app does not
-/// know is not drawn.
+/// `beltWord` in Go). The value is `box` under the consent box, `menu` under the row's menu,
+/// or `card;dim`: the chosen session's keys that are on (`*` after the armed one), then the
+/// keys that are off. Home is `◂` (back to the list), the session's keys (at most three), then
+/// `↑ ↓ ⏎`; the tail has the list's keys. A key that is off is dim and sends nothing. A token
+/// the app does not know is not drawn.
 public struct BoardBelt: Equatable, Sendable {
     public enum Shape: Equatable, Sendable { case board, box, menu }
 
@@ -22,13 +22,13 @@ public struct BoardBelt: Equatable, Sendable {
 
     /// Board for a value the app cannot read: home with no card keys, and every key on.
     public static let plain = BoardBelt(shape: .board, card: [], armed: nil, dim: [])
-    /// Board while the console does not show the board, or the screen is a pane: every key but
-    /// `◂` is dim, as none of them means there what it means on the board.
+    /// Board while the console does not show Sessions or Machine, or the screen is a pane: every
+    /// key but `◂` is dim, as none of them means there what it means in the console.
     public static let away = BoardBelt(shape: .board, card: [], armed: nil, dim: Set(["up", "down", "enter"] + BoardBelt.tail))
 
     private static let cardTokens: Set<String> = ["1", "2", "3", "p", "y"]
     private static let maxCard = 3
-    private static let tail = ["c", "m", "g", "v", "s", "u", "tab", "x", "left", "right", "]", "[", "/", "z"]
+    private static let tail = ["ctrl+o", "s", "g", "/", "m", "c", "z", "N", "tab", "x"]
 
     private init(shape: Shape, card: [String], armed: String?, dim: Set<String>) {
         self.shape = shape
@@ -121,28 +121,41 @@ public struct BoardBelt: Equatable, Sendable {
     /// console's binding reads. `◂`, the arrows and Return are the belt's own keys, and send as
     /// `KeyBar` says. A glyph is one cell, the arrows and Return too, so home (`◂`, three card
     /// keys, `↑ ↓ ⏎`) is the belt's seven cells at rest. A card key shows its glyph only: the
-    /// card on the screen says what it does.
+    /// row on the screen says what it does.
+    ///
+    /// An act key (`act`) is a tap on the belt, not a typed letter: it sends its own signal
+    /// (`tap`), so it acts on the chosen session while the chat's line has the keys, and a letter
+    /// the soft keyboard types still types (`beltTap` in Go). The digits, `⌃o`, `⇥` and the
+    /// consent box's keys send as a keyboard does.
     private static let faces: [String: Face] = {
         let esc: UInt8 = 0x1b
         func own(_ id: String) -> Face { Face(id: id, label: id, spoken: id, bytes: []) }
         func word(_ token: String, _ label: String, _ spoken: String, _ bytes: [UInt8]? = nil) -> Face {
             Face(id: "board.\(token)", label: label, spoken: spoken, bytes: bytes ?? Array(token.utf8))
         }
+        func act(_ token: String, _ label: String, _ spoken: String) -> Face {
+            word(token, label, spoken, BoardBelt.tap(token))
+        }
         return [
             "◂": own("◂"), "up": own("↑"), "down": own("↓"), "enter": own("⏎"),
-            "left": own("←"), "right": own("→"),
             "1": word("1", "1", "1, answer"), "2": word("2", "2", "2, answer"), "3": word("3", "3", "3, answer"),
-            "p": word("p", "p", "p, merge"), "y": word("y", "y", "y, go"),
-            "c": word("c", "c copy", "copy"), "m": word("m", "m menu", "menu"), "g": word("g", "g chain", "chain"),
-            "v": word("v", "v one line", "one line"), "s": word("s", "s hosts", "hosts"),
-            "u": word("u", "u strip", "strip"), "tab": word("tab", "⇥ machine", "machine", [0x09]),
-            "x": word("x", "x kill", "kill"), "]": word("]", "]", "next chain"),
-            "[": word("[", "[", "previous chain"), "/": word("/", "/", "find"), "z": word("z", "z park", "park"),
+            "p": act("p", "p", "p, merge"), "y": act("y", "y", "y, go"),
+            "ctrl+o": word("ctrl+o", "⌃o", "expand", [0x0f]),
+            "s": act("s", "s hosts", "hosts"), "g": act("g", "g chain", "chain"), "/": act("/", "/", "find"),
+            "m": act("m", "m menu", "menu"), "c": act("c", "c copy", "copy"), "z": act("z", "z park", "park"),
+            "N": act("N", "N new", "new session"), "tab": word("tab", "⇥ machine", "machine", [0x09]),
+            "x": act("x", "x kill", "kill"),
             "runs": word("runs", "y runs", "y, run", Array("y".utf8)),
             "cancels": word("cancels", "esc cancels", "escape, cancel", [esc]),
             "do": word("do", "⏎ do", "return, do", [0x0d]), "close": word("close", "esc close", "escape, close", [esc]),
         ]
     }()
+
+    /// A tap on an act key (`keycmd.TapKey`): an APC no keyboard sends. Each key has its own tmux
+    /// user-keys slot, which hands the console the key and the tty of the client that tapped.
+    static func tap(_ key: String) -> [UInt8] {
+        Array("\u{1b}_matchblox;tap=\(key)\u{1b}\\".utf8)
+    }
 
     private static let tokens: [String: String] = Dictionary(uniqueKeysWithValues: faces.map { ($0.value.id, $0.key) })
 
@@ -194,15 +207,9 @@ public struct BoardFollow: Sendable {
         return said
     }
 
-    /// The terminal's long-press is the card's menu only while the console shows the board.
+    /// The terminal's long-press is the row's menu only while the console shows Sessions or
+    /// Machine. The list and the chat have no pages, so no sideways swipe turns one.
     public var opensMenu: Bool { shows }
-
-    /// A sideways swipe turns the board's page only while the board shows with `←` and `→` on:
-    /// not on Machine, under the consent box or in the menu.
-    public var turnsPages: Bool {
-        let now = self.belt
-        return shows && now.shape == .board && !now.isDim("←") && !now.isDim("→")
-    }
 
     /// The console sent `value`. Returns the layout to turn to, or nil to stay.
     public mutating func heard(_ value: String, on layout: BeltLayout) -> BeltLayout? {

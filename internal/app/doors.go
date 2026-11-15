@@ -7,6 +7,7 @@ import (
 
 	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/blox-eng/matchblox/internal/doors"
 	"github.com/blox-eng/matchblox/internal/proto"
@@ -141,57 +142,6 @@ func (m Model) doorRan(msg doorRanMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// doorsSection is the doors above the sessions: one row each, and under
-// the door that waits for its y, the exact diff or command.
-func (m Model) doorsSection(b *body, w int) {
-	if len(m.doors) == 0 {
-		return
-	}
-	st := m.st
-	sel := m.sessIndex()
-	b.add(-1, st.label.Render(fit(fmt.Sprintf(" SET UP · %d", len(m.doors)), w)))
-	narrow := m.layoutAt(w) == Narrow
-	for i, d := range m.doors {
-		mark := "  "
-		if i == sel {
-			mark = "▌ "
-		}
-		if narrow {
-			// A phone: one line for each door, the why of the selected one,
-			// so the sessions stay on the first screen.
-			b.addRow(i, i == sel, w, st, " "+st.accent.Render(mark)+st.ink(i == sel).Render(d.Title))
-			if i != sel {
-				continue
-			}
-			for _, l := range wrap(d.Why, w-2, st.muted.Render) {
-				b.addRow(i, i == sel, w, st, "  "+l)
-			}
-			if d.Problem != "" {
-				for _, l := range wrap(d.Problem, w-2, st.warn.Render) {
-					b.addRow(i, i == sel, w, st, "  "+l)
-				}
-			}
-			continue
-		}
-		// The why wraps beside the title: "uses your tokens" must be read
-		// before the y.
-		text, style := d.Why, st.muted
-		if d.Problem != "" {
-			text, style = d.Problem, st.warn
-		}
-		for j, l := range wrap(text, w-colDoor+1, plainText) {
-			lead := " " + st.accent.Render(mark) + st.ink(i == sel).Render(pad(d.Title, colDoor-3))
-			if j > 0 {
-				lead = strings.Repeat(" ", colDoor)
-			}
-			b.addRow(i, i == sel, w, st, lead+style.Render(strings.TrimPrefix(l, " ")))
-		}
-	}
-	if d, ok := m.previewDoor(); ok {
-		m.preview(b, d, w)
-	}
-}
-
 // previewDoor is the door whose diff waits for a y.
 func (m Model) previewDoor() (doors.Door, bool) {
 	if m.pending == nil || m.pending.door == "" || m.pending.which == "secondary" {
@@ -230,20 +180,24 @@ func (m Model) choiceLines(d doors.Door, w int) []string {
 	return wrap(box+" "+m.keys.confirm.Also.Help().Key+" "+d.Also.Label, w-2, plainText)
 }
 
-// previewRoom is how many lines of the diff fit under the doors.
+// previewRoom is how many lines of the diff fit in the setup place under
+// the step's own words: its path, its choice and the hint at the end take
+// a line each.
 func (m Model) previewRoom() int {
-	var rows body
 	mm := m
 	mm.pending = nil
-	w := max(m.width, minWidth)
-	mm.doorsSection(&rows, w)
-	choice := 0
-	if d, ok := m.previewDoor(); ok {
-		choice = len(m.choiceLines(d, w))
+	w := m.sideBoxAt(max(m.width, minWidth)).chatW
+	if w == 0 {
+		w = max(m.width, minWidth)
 	}
-	// The header, the tabs and a hairline above; a hairline and the key
-	// line under.
-	return max(3, m.height-5-len(rows.lines)-3-choice)
+	used := len(mm.setupPanel(w)) + 1 // and the blank line over the diff
+	if d, ok := m.previewDoor(); ok {
+		used += len(m.choiceLines(d, w)) + 1
+		if d.Path != "" {
+			used++
+		}
+	}
+	return max(3, m.bodyRows()-used)
 }
 
 // previewSeen: the last line of the diff was on the screen. A door opens
@@ -285,9 +239,6 @@ func (m Model) scrollPreview(k tea.KeyPressMsg) (Model, bool) {
 	return m, true
 }
 
-// colDoor is the title column of a door row.
-const colDoor = doors.TitleCols + 3
-
 // preview draws a door's diff: new lines in the accent, removed ones in
 // neg. What does not fit says where to see it all.
 func (m Model) preview(b *body, d doors.Door, w int) {
@@ -311,7 +262,17 @@ func (m Model) preview(b *body, d doors.Door, w int) {
 		case strings.HasPrefix(l, "-"):
 			style = st.neg
 		case d.Path == "":
-			style = st.text // a command
+			style = st.text // a command or a note, whole: it wraps under its own indent
+			body := strings.TrimLeft(tilde(l), " ")
+			indent := strings.Repeat(" ", len(tilde(l))-len(body))
+			parts := []string{body} // a line that fits keeps its spaces: a preview lines up its columns
+			if room := max(w-1-len(indent), 1); lipgloss.Width(body) > room {
+				parts = wrapPlain(body, room)
+			}
+			for _, part := range parts {
+				b.add(-1, fit(" "+indent+style.Render(part), w))
+			}
+			continue
 		}
 		b.add(-1, fit(" "+style.Render(tilde(l)), w))
 	}

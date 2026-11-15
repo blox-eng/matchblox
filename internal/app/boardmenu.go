@@ -47,6 +47,9 @@ type longPressMsg struct{ id int }
 // chain in its room (the owner, 2026-11-12: "Menu, in the room only"),
 // which waits for a typed y.
 func (m Model) menuFor(s sample.Session) []menuItem {
+	if isShipCard(s) {
+		return m.shipMenu(s)
+	}
 	bk, mk := m.keys.board, m.keys.main
 	items := []menuItem{{"copy last message", bk.Copy.Help().Key, func(m *Model) tea.Cmd { return m.boardCopy(s, true) }}}
 	if q := questionText(s); q != "" && m.asksNow(s) {
@@ -66,8 +69,9 @@ func (m Model) menuFor(s sample.Session) []menuItem {
 			return m.boardChainOf(s, true)
 		}})
 	}
-	items = append(items, menuItem{"go in", mk.Into.Help().Key, func(m *Model) tea.Cmd {
-		next, cmd := m.boardInto(s)
+	items = append(items, m.actItems(s)...)
+	items = append(items, menuItem{"go in", mk.Jump.Help().Key, func(m *Model) tea.Cmd {
+		next, cmd := m.expand(s, true)
 		if nm, ok := next.(Model); ok {
 			*m = nm
 		}
@@ -81,11 +85,57 @@ func (m Model) menuFor(s sample.Session) []menuItem {
 			return nil
 		}})
 	}
-	c := m.columnOf(s)
-	return append(items, menuItem{"hide " + strings.ToLower(c.name()), "", func(m *Model) tea.Cmd {
-		m.flipHidden(c)
-		return nil
+	return items
+}
+
+// shipMenu are the lines of the menu on the row of a ship no session
+// drives: no session is there to rename, copy from or act on, so only the
+// ship's link, the row's name and New session on its branch.
+func (m Model) shipMenu(s sample.Session) []menuItem {
+	var items []menuItem
+	if link, n, ok := m.shipLink(s); ok {
+		number := "#" + strconv.Itoa(n)
+		items = append(items, menuItem{"copy the link of " + number, "", func(m *Model) tea.Cmd {
+			return m.copyText(link, "the link of "+number)
+		}})
+	}
+	items = append(items, menuItem{"copy its name", "", func(m *Model) tea.Cmd { return m.copyText(s.Name, s.Name) }})
+	return append(items, menuItem{"new session on its branch", m.keys.side.Enter.Help().Key, func(m *Model) tea.Cmd {
+		next, cmd := m.shipKey(s)
+		if nm, ok := next.(Model); ok {
+			*m = nm
+		}
+		return cmd
 	}})
+}
+
+// actItems are the menu's lines of the acts the list takes on s
+// (rowActKeys) that destroy nothing, each only when s can take it. The
+// kill, the merge, the go, the switch and the stoker's stop stay keys of
+// the list, behind their own confirms (the owner, 2026-11-12: the menu
+// destroys nothing).
+func (m Model) actItems(s sample.Session) []menuItem {
+	mk := m.keys.main
+	act := func(label string, b bkey.Binding) menuItem {
+		return menuItem{label, b.Help().Key, func(m *Model) tea.Cmd {
+			next, cmd := m.rowAct(keyPress(b.Keys()[0]), s)
+			if nm, ok := next.(Model); ok {
+				*m = nm
+			}
+			return cmd
+		}}
+	}
+	var items []menuItem
+	if _, head := m.headRow(s); !head && s.Pane != "" {
+		items = append(items, act("rename", mk.Rename))
+	}
+	if chain := m.chainLabelOf(s); chain != "" {
+		items = append(items, act("stoke the chain "+chain, mk.StokeChain))
+	}
+	if m.stokerOf(s.Host) != nil {
+		items = append(items, act("a new order", mk.Order))
+	}
+	return items
 }
 
 // roomOf is the chain whose room is open on the board with s in it: the
@@ -125,7 +175,8 @@ func (m Model) shipLink(s sample.Session) (string, int, bool) {
 	return "", 0, false
 }
 
-// openMenu opens s's menu at the cell x, y. It opens only on the board.
+// openMenu opens s's menu at the cell x, y. It opens only on the Sessions
+// tab.
 func (m Model) openMenu(s sample.Session, x, y int) Model {
 	if m.boardShown() {
 		m.menu, m.longPress.on = &boardMenu{pane: paneOf(s), items: m.menuFor(s), x: x, y: y}, false
@@ -134,21 +185,15 @@ func (m Model) openMenu(s sample.Session, x, y int) Model {
 	return m
 }
 
-// openMenuOnChosen is m: the menu of the chosen card, at its first line.
+// openMenuOnChosen is m: the menu of the chosen session, under its row.
 func (m Model) openMenuOnChosen(s sample.Session) Model {
 	w := max(m.width, minWidth)
-	d := m.boardPanel(w, m.bodyRows())
-	x, y := 0, len(d.lines)
-	for spot, k := range d.cards {
-		if k != paneOf(s) || spot.line >= y {
-			continue
-		}
-		x, y = 0, spot.line
-		if i := slices.IndexFunc(d.heads, func(h span) bool { return h.press == spot.col.short() }); i >= 0 && m.layoutAt(w) != Narrow {
-			x = d.heads[i].x0
-		}
+	y := 0
+	if box := m.sideBoxAt(w); box.listW > 0 {
+		_, hits, _ := m.sideList(box.listW, m.bodyRows())
+		y = max(slices.IndexFunc(hits, func(h sideHit) bool { return h.k == paneOf(s) }), 0)
 	}
-	return m.openMenu(s, x+2, m.drawScreen(w).bodyTop+y+1)
+	return m.openMenu(s, 2, m.drawScreen(w).bodyTop+y+1)
 }
 
 // menuKey is k while the menu is open: it takes every key. ↑ ↓ move, ⏎
@@ -225,11 +270,14 @@ func (m Model) menuOn() (sample.Session, bool) {
 	if m.menu == nil || !m.boardShown() {
 		return sample.Session{}, false
 	}
-	i := slices.IndexFunc(m.snap.Sessions, func(s sample.Session) bool { return paneOf(s) == m.menu.pane })
-	if i < 0 {
-		return sample.Session{}, false
+	on := func(s sample.Session) bool { return paneOf(s) == m.menu.pane }
+	if i := slices.IndexFunc(m.snap.Sessions, on); i >= 0 {
+		return m.snap.Sessions[i], true
 	}
-	return m.snap.Sessions[i], true
+	if cards := m.shipCards(); slices.ContainsFunc(cards, on) { // a ship's row is no session of the snapshot
+		return cards[slices.IndexFunc(cards, on)], true
+	}
+	return sample.Session{}, false
 }
 
 // overlayMenu lays the menu's box over the board, the board left as it is
@@ -263,57 +311,20 @@ func (m Model) menuTap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// boardRightClick is a right-click on the board: on a card it chooses the
-// card and opens its menu at the pointer.
-func (m Model) boardRightClick(ms tea.Mouse) (tea.Model, tea.Cmd) {
-	if !m.peekReach() || m.splashing() {
-		return m, nil
-	}
-	c, s, ok := m.cardAtCell(ms.X, ms.Y)
-	if !ok {
-		return m, nil
-	}
-	m.boardChooseCard(c, s)
-	m.boardMine = paneOf(s)
-	return m.openMenu(s, ms.X, ms.Y), nil
-}
-
-// boardCardOf is the card of pane k on the board, and its column.
-func (m Model) boardCardOf(k paneKey) (boardCol, sample.Session, bool) {
-	b, _ := m.boardDrawOf()
-	for _, c := range boardCols {
-		if i := slices.IndexFunc(b.idx[c], func(s sample.Session) bool { return paneOf(s) == k }); i >= 0 {
-			return c, b.idx[c][i], true
-		}
-	}
-	return 0, sample.Session{}, false
-}
-
-// cardAtCell is the card at the frame's cell x, y, and its column.
-func (m Model) cardAtCell(x, y int) (boardCol, sample.Session, bool) {
-	w := max(m.width, minWidth)
-	sc := m.drawScreen(w)
-	if y < sc.bodyTop || y >= sc.keysAt-1 {
-		return 0, sample.Session{}, false
-	}
-	b, _ := m.boardDrawOf()
-	return m.cardAt(m.boardPanel(w, m.bodyRows()), b, x, y-sc.bodyTop)
-}
-
 // holdPress arms the long press of a left press at ms on a card, after the
 // tap has acted on it: only on a terminal that reports releases, and only
 // while the board takes keys.
 func (m Model) holdPress(next tea.Model, cmd tea.Cmd, ms tea.Mouse) (tea.Model, tea.Cmd) {
 	nm, ok := next.(Model)
-	if !ok || !nm.sawRelease || !nm.peekReach() {
+	if !ok || !nm.sawRelease || !nm.chatMarkReach() {
 		return next, cmd
 	}
-	_, s, on := m.cardAtCell(ms.X, ms.Y)
+	pane, on := m.sideRowAt(ms.X, ms.Y)
 	if !on {
 		return next, cmd
 	}
 	id := nm.longPress.id + 1
-	nm.longPress = longPress{id: id, x: ms.X, y: ms.Y, pane: paneOf(s), on: true}
+	nm.longPress = longPress{id: id, x: ms.X, y: ms.Y, pane: pane, on: true}
 	tick := tea.Tick(longPressFor, func(time.Time) tea.Msg { return longPressMsg{id} })
 	return nm, tea.Batch(cmd, tick)
 }
@@ -336,13 +347,11 @@ func (m Model) pointer(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		return m.dragOn(point{ms.X, ms.Y}), nil
 	case longPressMsg:
-		c, s, ok := m.boardCardOf(m.longPress.pane)
-		if !m.longPress.on || msg.id != m.longPress.id || !ok || !m.peekReach() {
+		if !m.sideActive() || !m.longPress.on || msg.id != m.longPress.id || !m.chatMarkReach() {
 			return m, nil
 		}
-		m.boardChooseCard(c, s) // a press that waits for its release has not chosen it yet
-		m.boardMine = paneOf(s)
-		return m.openMenu(s, m.longPress.x, m.longPress.y), nil
+		next, _ := m.sideMenuOn(m.longPress.pane, m.longPress.x, m.longPress.y)
+		return next.(Model), nil
 	}
 	return m, nil
 }

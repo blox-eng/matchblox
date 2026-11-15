@@ -63,7 +63,7 @@ var fuseTeams = []string{"hearth", "web", "docs"}
 // the session named pick picked.
 func fuseModel(t *testing.T, width int, st proto.State, pick string) Model {
 	t.Helper()
-	var next tea.Model = New(Options{NoMotion: true, Conn: newFake(), Now: func() time.Time { return demoAt }})
+	var next tea.Model = (New(Options{NoMotion: true, Conn: newFake(), Now: func() time.Time { return demoAt }}))
 	next, _ = next.Update(tea.WindowSizeMsg{Width: width, Height: 30})
 	next, _ = next.Update(stateMsg(st))
 	m := next.(Model)
@@ -113,7 +113,7 @@ func TestJoinToastNarrow(t *testing.T) {
 }
 
 // saidNow is the news the console said last: the header's toast, or on the
-// board the notice in the strip's row.
+// board its notice.
 func saidNow(m Model) string { return cmp.Or(m.toast, m.noticeText) }
 
 func TestNewTeamToast(t *testing.T) {
@@ -260,12 +260,12 @@ func wentInto(t *testing.T, m Model, k string) (Model, [][]string) {
 	return next.(Model), *ran
 }
 
-// TestAOnAMemberStaysItsChat: a chain with no stoker keeps a on a member
-// for that member: into its own pane.
-func TestAOnAMemberStaysItsChat(t *testing.T) {
+// TestAJumpOnAMemberStaysItsPane: a chain with no stoker keeps ctrl+o on a
+// member for that member: into its own pane.
+func TestAJumpOnAMemberStaysItsPane(t *testing.T) {
 	m := fuseModel(t, 160, fuseState(t, mockupChain), "hearth-api")
 	pane := m.snap.Sessions[slices.IndexFunc(m.snap.Sessions, func(s sample.Session) bool { return s.Name == "hearth-api" })].Pane
-	next, ran := wentInto(t, m, "a")
+	next, ran := wentInto(t, m, "ctrl+o")
 	if len(ran) != 1 || strings.Join(ran[0], " ") != "tmux switch-client -t "+pane || next.sheet != nil {
 		t.Fatalf("ran %q, sheet %v", ran, next.sheet)
 	}
@@ -290,7 +290,7 @@ func TestTheHostStokerAskingCountsAsToday(t *testing.T) {
 
 // TestPeerChainDrawsItsFuse holds the console's side of #389 in place: a
 // chain of a peer's two sessions with no name and no mates, as v0.38.1 sent
-// it, draws its stub on both cards of the board. It passes without this
+// it, draws its link on both rows of the list. It passes without this
 // branch too: the cause of #389 is not known.
 func TestPeerChainDrawsItsFuse(t *testing.T) {
 	peer := hostState(sess(2, "flint-auth", "%2", nil), sess(3, "spark-docs", "%3", nil))
@@ -300,10 +300,11 @@ func TestPeerChainDrawsItsFuse(t *testing.T) {
 	}
 	peer.Chains = &state.ChainsView{Chains: []chains.Chain{c}}
 	m, _ := twoHosts(t, hostState(sess(1, "hearth-api", "%1", nil)), peer)
-	m = boardOn(m)
-	for _, name := range []string{"flint-auth", "spark-docs"} {
-		if stub := stubOf(t, m, name); stub == "" {
-			t.Errorf("%s's card in a peer's chain has no stub", name)
+	m = consoleOn(m)
+	frame := plainFrame(m)
+	for _, name := range []string{"flint-auth@ws-1", "spark-docs@ws-1"} { // the chain's head holds the first name
+		if !strings.Contains(lineWith(strings.Split(frame, "\n"), name), "├") && !strings.Contains(lineWith(strings.Split(frame, "\n"), name), "└") {
+			t.Errorf("%s's row in a peer's chain has no link:\n%s", name, frame)
 		}
 	}
 }

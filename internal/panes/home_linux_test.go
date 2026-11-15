@@ -516,6 +516,59 @@ func TestTheBeltsAnswerNamesTheClientThatSentIt(t *testing.T) {
 	}
 }
 
+// TestABeltTapNamesItsKeyAndTheClientThatSentIt: a tap on the app's belt
+// reaches the console as its key and the tty of the client that tapped, of
+// no other.
+func TestABeltTapNamesItsKeyAndTheClientThatSentIt(t *testing.T) {
+	sock, tmux, got := consolePane(t)
+	tmux(TapKeysArgv()[1:]...)
+	attach(t, sock, Home)
+	waitFor(t, func() bool { return len(clientTTYs(tmux)) == 1 })
+	desk := clientTTYs(tmux)[0]
+	phone := attach(t, sock, Home)
+	waitFor(t, func() bool { return len(clientTTYs(tmux)) == 2 })
+	phoneTTY := ""
+	for _, tty := range clientTTYs(tmux) {
+		if tty != desk {
+			phoneTTY = tty
+		}
+	}
+	for _, k := range []string{"c", "/", "N"} {
+		if _, err := phone.WriteString(keycmd.TapKey(k)); err != nil {
+			t.Fatal(err)
+		}
+		tap := eventLine(uv.UnknownApcEvent(keycmd.TappedPrefix + k + ";" + phoneTTY + "\x1b\\"))
+		waitFor(t, func() bool { return slices.Contains(paneRead(t, got), tap) })
+		if deskTap := eventLine(uv.UnknownApcEvent(keycmd.TappedPrefix + k + ";" + desk + "\x1b\\")); slices.Contains(paneRead(t, got), deskTap) {
+			t.Errorf("the tap %s names the desk %s", k, desk)
+		}
+	}
+}
+
+func TestABeltTapElsewhereTypesNothing(t *testing.T) {
+	sock := tmuxtest.Server(t)
+	tmux := func(args ...string) string {
+		t.Helper()
+		out, err := exec.Command("tmux", append([]string{"-L", sock, "-f", os.DevNull}, args...)...).CombinedOutput() //nolint:gosec // test argv
+		if err != nil {
+			t.Fatalf("tmux %q: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	typed := t.TempDir() + "/typed"
+	tmux("new-session", "-d", "-s", "work", "cat -v > "+typed)
+	tmux(TapKeysArgv()[1:]...)
+	client := attach(t, sock, "work")
+	waitFor(t, func() bool { return len(clientTTYs(tmux)) == 1 })
+	if _, err := client.WriteString(keycmd.TapKey("z") + "x\r"); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool { b, _ := os.ReadFile(typed); return strings.Contains(string(b), "x") })
+	if b, _ := os.ReadFile(typed); strings.Contains(string(b), "matchblox") || strings.Contains(string(b), "tap") {
+		t.Errorf("the belt's tap was typed: %q", b)
+	}
+}
+
 func TestABeltAnswerElsewhereTypesNothing(t *testing.T) {
 	sock := tmuxtest.Server(t)
 	tmux := func(args ...string) string {

@@ -9,16 +9,12 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 
 	"github.com/blox-eng/matchblox/internal/chains"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/state"
 )
-
-// sparkFor is how long the spark takes to run down a fuse.
-const sparkFor = 600 * time.Millisecond
 
 // chainKey is a chain on a host: chains live on one host.
 type chainKey struct{ host, id string }
@@ -45,6 +41,64 @@ type chainIndex struct {
 	shown   map[chainKey]int             // the matches in the list
 	heads   map[rowKey]state.ChainStoker // the head rows: the chain stoker of each
 	repo    map[chainKey]string          // the repo label of a chain with a head
+	spots   memberSpots                  // where each match is in m.all.sessions
+}
+
+// memberSpots finds a chain's member in m.all.sessions without a walk of
+// every session for each member: the first index of each match, by its
+// session id, and by its pane, pid and start with or without one.
+type memberSpots struct {
+	bySID     map[[2]string]int
+	byPPS     map[ppsSpot]int
+	byPPSOnly map[ppsSpot]int // the sessions with no session id
+}
+
+type ppsSpot struct {
+	host, pane string
+	pid        int
+	start      uint64
+}
+
+func (m Model) spotsOf(ss []sample.Session) memberSpots {
+	sp := memberSpots{bySID: map[[2]string]int{}, byPPS: map[ppsSpot]int{}, byPPSOnly: map[ppsSpot]int{}}
+	first := func(to map[ppsSpot]int, k ppsSpot, i int) {
+		if _, ok := to[k]; !ok {
+			to[k] = i
+		}
+	}
+	for i, s := range ss {
+		if m.isStoker(s) {
+			continue
+		}
+		pps := ppsSpot{s.Host, s.Pane, s.PID, s.Start}
+		first(sp.byPPS, pps, i)
+		if s.SessionID == "" {
+			first(sp.byPPSOnly, pps, i)
+		} else if _, ok := sp.bySID[[2]string{s.Host, s.SessionID}]; !ok {
+			sp.bySID[[2]string{s.Host, s.SessionID}] = i
+		}
+	}
+	return sp
+}
+
+// spot is the first index of the session on host that mb names, as
+// Member.Same matches; -1 for none.
+func (sp memberSpots) spot(host string, mb chains.Member) int {
+	pps := ppsSpot{host, mb.Pane, mb.PID, mb.Start}
+	if mb.SessionID == "" {
+		if i, ok := sp.byPPS[pps]; ok {
+			return i
+		}
+		return -1
+	}
+	at := -1
+	if i, ok := sp.bySID[[2]string{host, mb.SessionID}]; ok {
+		at = i
+	}
+	if i, ok := sp.byPPSOnly[pps]; ok && (at < 0 || i < at) {
+		at = i
+	}
+	return at
 }
 
 // indexChains works out which sessions are chained, and how needy their
@@ -106,6 +160,7 @@ func (m *Model) indexChains() {
 			}
 		}
 	}
+	ix.spots = m.spotsOf(m.all.sessions)
 	m.chainIx = ix
 }
 
@@ -317,8 +372,6 @@ func (m *Model) noteSparks(host string, next *state.ChainsView, now time.Time) {
 	}
 }
 
-func (m Model) sparkStyle() lipgloss.Style { return lipgloss.NewStyle().Foreground(m.marks().Core) }
-
 // teamsOf are the teams s is in, in the order they formed: it draws in the
 // first one's fuse.
 func (m Model) teamsOf(s sample.Session) []chains.Chain {
@@ -471,7 +524,7 @@ func (m Model) startChain(k chainKey) Model {
 	return m.openChainSheet(k)
 }
 
-// titleOf names a session in the live view's title: a head row by its
+// titleOf names a session in a title: a head row by its
 // chain, not by its agent's tmux session.
 func (m Model) titleOf(s sample.Session) string {
 	if u, head := m.headRow(s); head {

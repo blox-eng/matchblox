@@ -5,6 +5,7 @@ package keycmd
 import (
 	_ "embed"
 	"encoding/json"
+	"strings"
 
 	"github.com/blox-eng/matchblox/internal/sample"
 )
@@ -75,7 +76,35 @@ const (
 	// BeltFromPrefix is what BeltKey's binding hands the console, then the
 	// tty of the client that answered, then ESC \.
 	BeltFromPrefix = "\x1b_matchblox;belt="
+	// TapSlot is the user-keys slot of the first of TapKeys; each next key
+	// takes the next slot.
+	TapSlot = 952
+	// TappedPrefix is what a tap's binding hands the console, then the key,
+	// ";", the tty of the client that tapped, then ESC \.
+	TappedPrefix = "\x1b_matchblox;tapped="
 )
+
+// TapKeys are the act keys of the app's belt. A tap on one sends TapKey,
+// which no keyboard sends, so it never reads as a typed letter or as an
+// Esc then a letter.
+var TapKeys = []string{"p", "y", "s", "g", "/", "m", "c", "z", "N", "x"}
+
+// TapKey is what the app sends for a tap on the belt's act key key.
+func TapKey(key string) string { return "\x1b_matchblox;tap=" + key + "\x1b\\" }
+
+// ParseTapped reads what a tap's binding hands the console: the key and
+// the tty of the client that tapped.
+func ParseTapped(apc string) (key, tty string, ok bool) {
+	body, ok := strings.CutPrefix(apc, TappedPrefix)
+	if !ok {
+		return "", "", false
+	}
+	if body, ok = strings.CutSuffix(body, "\x1b\\"); !ok {
+		return "", "", false
+	}
+	key, tty, ok = strings.Cut(body, ";")
+	return key, tty, ok && key != "" && tty != ""
+}
 
 // OtherAgent is the agent signal's id for a pane whose agent has no
 // commands: the app keeps its command keys dim there.

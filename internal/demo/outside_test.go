@@ -113,3 +113,77 @@ func TestAServiceOfTheDemoClonesNothing(t *testing.T) {
 		t.Fatalf("the demo's service clones into %s", svc.CloneRoot)
 	}
 }
+
+// TestDemoServiceRunsNoTmuxOnPaste: a paste from the console reaches the
+// world's refusal, never this machine's tmux server: the text goes to
+// tmux on stdin, and the demo refuses that seam as it refuses TmuxOut.
+func TestDemoServiceRunsNoTmuxOnPaste(t *testing.T) {
+	t.Setenv("TMPDIR", t.TempDir())
+	root, err := copyTree("../../testdata/demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(root) })
+	_, svc, err := newService(root, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if svc.TmuxIn == nil {
+		t.Fatal("the demo leaves TmuxIn to exec")
+	}
+	if err := svc.TmuxIn([]string{"tmux", "load-buffer", "-"}, "x"); err == nil || err.Error() != Refusal {
+		t.Fatalf("TmuxIn: %v, want the refusal line", err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	go svc.Run(ctx)
+	a, b := net.Pipe()
+	go func() { _ = svc.Handle(ctx, transport.NewConn(b)) }()
+	c := transport.NewConn(a)
+	defer func() { _ = c.Close() }()
+	sent := make(chan error, 1)
+	go func() {
+		sent <- c.Send(proto.KindHello, "", proto.Hello{Version: proto.Version, Client: proto.ClientConsole})
+	}()
+	if _, err := c.Recv(); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-sent; err != nil {
+		t.Fatal(err)
+	}
+	for deadline := time.Now().Add(5 * time.Second); len(svc.State().Sessions) == 0; time.Sleep(20 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("the demo never sampled")
+		}
+	}
+	pane := ""
+	for _, x := range svc.State().Sessions {
+		if x.Ask == nil && !x.Permits && x.Agent == "claude" {
+			pane = x.Pane
+			break
+		}
+	}
+	go func() {
+		sent <- c.Send(proto.KindAct, "1", proto.Act{RecID: proto.PastePrefix + pane, Confirm: "y", Text: "one\ntwo"})
+	}()
+	for {
+		env, err := c.Recv()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if env.Kind != proto.KindResult || env.ID != "1" {
+			continue
+		}
+		var r proto.Result
+		if err := json.Unmarshal(env.Body, &r); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(r.Err, Refusal) || len(r.Ran) != 0 {
+			t.Fatalf("paste to %s: %+v, want the refusal line", pane, r)
+		}
+		break
+	}
+	if err := <-sent; err != nil {
+		t.Fatal(err)
+	}
+}

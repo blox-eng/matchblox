@@ -31,7 +31,7 @@ func TestTabsAndTheirDigits(t *testing.T) {
 	}
 	phone, _ := loadedWith(t, 44, queueState())
 	phone.setTab(tabMachine)
-	if line, _ := phone.tabsLine(44); !slices.Equal(strings.Fields(ansi.Strip(line)), []string{"board", "3", "MACHINE"}) {
+	if line, _ := phone.tabsLine(44); !slices.Equal(strings.Fields(ansi.Strip(line)), []string{"sessions", "3", "MACHINE"}) {
 		t.Errorf("Machine on a phone: %q", ansi.Strip(line))
 	}
 }

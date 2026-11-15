@@ -173,19 +173,6 @@ func TestTalkRefusalKeepsTheDraft(t *testing.T) {
 	}
 }
 
-func TestBracketsWalkTheChains(t *testing.T) {
-	m, _ := roomWith(t, fuseState(t, mockupChain, []string{"flint-auth", "spark-docs"}), "hearth-api")
-	first := m.room.k
-	m, _ = send(t, m, "]")
-	if m.room.k == first || m.room.k.id != "c2" {
-		t.Fatalf("] went to %+v", m.room.k)
-	}
-	m, _ = send(t, m, "[")
-	if m.room.k != first {
-		t.Fatalf("[ went to %+v", m.room.k)
-	}
-}
-
 func TestEscStepsBackOneLevel(t *testing.T) {
 	st := headState(t, runningPlan(), true)
 	st.Queue = nil
@@ -219,8 +206,8 @@ func TestTalkInAChainOfOneStartsTheHostStoker(t *testing.T) {
 }
 
 // TestUTakesAMatchOutOfTheChain: out of the chain asks first, with the
-// act named, and a typed y takes it out. u is the board's strip: the act
-// is the room's card menu's (TestTheMenuTakesAMatchOutOfItsChain).
+// act named, and a typed y takes it out. The act is the room's card
+// menu's (TestTheMenuTakesAMatchOutOfItsChain).
 func TestUTakesAMatchOutOfTheChain(t *testing.T) {
 	st := headState(t, runningPlan(), true)
 	st.Queue = nil

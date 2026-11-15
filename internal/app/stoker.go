@@ -115,10 +115,10 @@ func stokerWordOf(md proto.StokerMode) string {
 }
 
 // stokersBadge is the stoker's word of two or more hosts: how many of
-// them it runs on, `stoker 2/3`; off when it runs on none.
+// the named hosts it runs on, `stoker 2/3`; off when it runs on none.
 func (m Model) stokersBadge(short bool) string {
-	st, kept, runs := m.st, false, 0
-	for _, h := range m.hosts() {
+	st, kept, runs, hs := m.st, false, 0, m.namedHosts()
+	for _, h := range hs {
 		if v := m.stokerOf(h); v != nil {
 			kept = true
 			if v.On {
@@ -136,7 +136,7 @@ func (m Model) stokersBadge(short bool) string {
 	case runs == 0:
 		return st.faint.Render("stoker off")
 	}
-	return st.stoker.Render(fmt.Sprintf("stoker %d/%d", runs, m.hostCount()))
+	return st.stoker.Render(fmt.Sprintf("stoker %d/%d", runs, len(hs)))
 }
 
 // resting: the builder took over and the home host's stoker waits for
@@ -176,19 +176,22 @@ func (m Model) asksTakeOver(k tea.KeyPressMsg) bool {
 	if m.standIn { // the demo's world, which has no stoker
 		return false
 	}
-	if m.boardShown() && !m.boardOnRow() {
-		return false // Sessions' row is not what the board shows: the key acts on no session of it
+	if m.sideActive() && !bkey.Matches(k, m.keys.main.Jump) && (!m.inList() || !bkey.Matches(k, m.rowActKeys()...)) {
+		return false // the line types and the list chooses: only a jump and the row's acts take a session
+	}
+	if m.boardShown() && !m.listOnRow() {
+		return false // the list chose no session: the key acts on no session
 	}
 	s, onSession := m.selectedSession()
-	if _, head := m.headRow(s); onSession && head && bkey.Matches(k, m.keys.main.Open, m.keys.main.Into, m.keys.main.Jump) {
+	if _, head := m.headRow(s); onSession && head && bkey.Matches(k, m.keys.main.Open, m.keys.main.Jump) {
 		return false // the stoker's own pane or its sheet: no session is taken from it
 	}
 	on := func(a *action) bool { return a != nil && m.takeOverOn(m.actHost(a)) }
 	switch {
-	case bkey.Matches(k, m.keys.main.Into) && m.tab == tabStoker:
+	case bkey.Matches(k, m.keys.main.Jump) && m.tab == tabStoker:
 		pane, _ := m.stokerTarget()
 		return pane != "" && m.takeOverOn(m.opt.Host)
-	case bkey.Matches(k, m.keys.main.Jump), bkey.Matches(k, m.keys.main.Into):
+	case bkey.Matches(k, m.keys.main.Jump):
 		return onSession && s.Pane != "" && on(m.primary())
 	case bkey.Matches(k, m.keys.main.Open):
 		return on(m.primary())
@@ -210,12 +213,12 @@ func (m Model) hold(k tea.KeyPressMsg) (func(Model) (tea.Model, tea.Cmd), string
 			return m, nil
 		}, m.actHost(a)
 	}
-	if bkey.Matches(k, m.keys.main.Into) && m.tab == tabStoker {
+	if bkey.Matches(k, m.keys.main.Jump) && m.tab == tabStoker {
 		pane, _ := m.stokerTarget()
 		return heldInto(m.askedBy, m.opt.Host, pane), m.opt.Host
 	}
 	a := m.primary()
-	if _, onSession := m.selectedSession(); onSession && (bkey.Matches(k, m.keys.main.Open) || bkey.Matches(k, m.keys.main.Into) || bkey.Matches(k, m.keys.main.Jump)) {
+	if _, onSession := m.selectedSession(); onSession && (bkey.Matches(k, m.keys.main.Open) || bkey.Matches(k, m.keys.main.Jump)) {
 		return func(m Model) (tea.Model, tea.Cmd) { return m.runInto(a) }, m.actHost(a)
 	}
 	return func(m Model) (tea.Model, tea.Cmd) {

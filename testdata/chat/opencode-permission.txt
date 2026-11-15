@@ -1,0 +1,7 @@
+┃ Write the docs index for spark-docs
+
+  The index lists each page by its title. I add the three new pages.
+
+  △ Permission required
+  edit docs/index.md
+  Allow once   Always   Reject

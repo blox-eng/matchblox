@@ -1524,6 +1524,10 @@ func (m Model) formFoot(bw int) []footPart {
 }
 
 func (m Model) overlayForm(sc *drawn, w int) {
+	if m.sideActive() {
+		m.formInChat(sc, w)
+		return
+	}
 	phone := m.layoutAt(w) == Narrow || m.upright()
 	bw := min(w, 72)
 	if !phone {

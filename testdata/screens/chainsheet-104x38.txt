@@ -1,38 +1,38 @@
  ▰ matchblox                                                                               ● 1 need you
- BOARD 5    machine
+ SESSIONS 5    machine
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
- NEEDS YOU · 1  −                     WORKING · 2  −           SHIPPING · 0  −          QUIET · 2  −
-▌╿ kindle-web                 ✻  1m   ✦ hearth-api     ✻                                ╿ ember-… ✻  3m
-  asks Claude needs your permissio…    busy                                             │ spark-… ✻  9m
-  ctx 56%                  ━╸hearth    ctx 79%      ━╸hearth
-  “Claude needs your permission to
-  use Bash”                           ✦ flint-auth     ✻
-  ⏎ go in                              busy The refresh flo…
-                                       ctx 41%
-
-
-
-                     ╭─ Stoke the chain kindle-web (3 matches)? ──────────────────╮
-                     │ How should I run this chain?                               │
-                     │                                                            │
-                     │ › merge on green▏                                          │
-                     │                                                            │
-                     │ gos ✓ merges  ○ releases  ○ deploys  ○ kills  off asks you │
-                     ╰─ ⏎ start ─ tab chips ─ esc ────────────────────────────────╯
-
-
-
-
-
-
-
-
-
-
-
-
- + start a new session
- RECOMMENDATIONS · 7
- ✻ Claude Max  5h ▰▰▰▰▰▰▰▱ 84% · Fri 01:20   wk ▰▰▰▰▰▰▰▱ 82% · Mon 09:00                      machine ›
+ NEEDS YOU · 1  −                       │ kindle-web ✻ asks             ctx 56%  ctrl+o expand · m menu
+ ≋ hearth               step 1 of 3 · 3 │ chain hearth · step 1 of 3   kindle-web needs you → hearth-ap…
+▌├ ╿ kindle-web                     1m ✻│
+ │   Claude needs your permission to us…│
+ ├ ✦ hearth-api                        ✻│
+ └ ╵ ember-billing                  3m ✻│
+────────────────────────────────────────│
+ WORKING · 1  −                         │
+ ✦ flint-auth                          ✻│
+────────────────────────────────────────│
+ IDLE · 1  −                            │
+ ╵ spark-docs                       9m ✻│
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+ + new · ✧ 7 tips                       │ › Fmerge on green                        ⏎ send to kindle-web
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
- ⏎ go in   c copy   v one line   s hosts   u strip   ←→ columns   tab next
+ writing to kindle-web · ⏎ send · ↑↓ choose · esc list · ctrl+o expand · tab Machine

@@ -1,6 +1,8 @@
 package app
 
 import (
+	"slices"
+
 	tea "charm.land/bubbletea/v2"
 )
 
@@ -23,8 +25,8 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		return m, nil
 	case m.menu != nil && m.boardShown():
 		return m.menuTap(ms)
-	case ms.Button == tea.MouseRight && m.boardShown():
-		return m.boardRightClick(ms)
+	case ms.Button == tea.MouseRight && m.sideActive() && m.form == nil && m.sheet == nil: // a box beside the list takes every click
+		return m.sideRightClick(ms)
 	case ms.Button != tea.MouseLeft:
 		return m, nil
 	}
@@ -73,6 +75,9 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		if s, ok := spanAt([]span{sc.hostAt}, ms.X); ok && s.press != "" {
 			return m.keyed(keyPress(s.press)) // the host filter: as s
 		}
+		if i := slices.IndexFunc(sc.names, func(s span) bool { return ms.X >= s.x0 && ms.X < s.x1 }); i >= 0 {
+			return m.chooseSide(sc.namePanes[i]), nil // the list stays hidden
+		}
 		if s, ok := spanAt([]span{sc.waits}, ms.X); ok && s.press != "" {
 			if m.boardShown() {
 				m.clearBoardFilters()
@@ -87,9 +92,6 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		return m, nil
 	case ms.Y == 1:
 		if s, ok := spanAt(sc.tabs, ms.X); ok {
-			if next, crumb := m.boardTabTap(s.press); crumb {
-				return next, nil
-			}
 			if t, ok := tabOfPress(s.press); ok {
 				m.setTab(t)
 				m.flash = ""
@@ -100,32 +102,31 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	case ms.Y == sc.keysAt:
 		if s, ok := spanAt(sc.keys, ms.X); ok {
 			m.armed = ""
+			if s.press == tapAgain {
+				return m.startAgain()
+			}
 			if s.press == tapBack {
 				return m.leaveStandIn(), nil
 			}
 			return m.keyed(keyPress(s.press))
 		}
 		return m, nil
-	case sc.stripAt > 0 && ms.Y == sc.stripAt:
-		if s, ok := spanAt([]span{sc.strip}, ms.X); ok && s.press != "" {
-			return m.keyed(keyPress(s.press)) // as u
+	case sc.noteAt > 0 && ms.Y == sc.noteAt:
+		if s, ok := spanAt([]span{sc.noteTap}, ms.X); ok && s.press != "" {
+			return m.keyed(keyPress(s.press))
 		}
 		return m, nil
-	case m.boardShown() && ms.Y >= sc.bodyTop && ms.Y < sc.bodyTop+len(sc.rows): // on Pocket no key line closes the body
-		if m.tapWaits(ms.X, ms.Y-sc.bodyTop) {
-			m.tapLater = &point{ms.X, ms.Y} // a drag may start here: the tap waits for the release
+	case m.sideActive() && ms.Y >= sc.bodyTop && ms.Y < sc.bodyTop+len(sc.rows):
+		if m.dragFrom != nil && m.sawRelease { // a drag may start here: the tap waits for the release
+			m.tapLater = &point{ms.X, ms.Y}
 			return m.holdPress(m, nil, ms)
 		}
-		next, cmd := m.boardTap(ms.X, ms.Y-sc.bodyTop)
-		if nm, ok := next.(Model); ok && (nm.pending != nil || nm.menu != nil || !nm.peekReach()) {
-			nm.dragFrom, nm.dragLines = nil, nil // the press opened a box: no drag hides it
-			next = nm
-		}
-		return m.holdPress(next, cmd, ms)
+		next, cmd := m.sideTap(ms.X, ms.Y-sc.bodyTop)
+		return m.holdPress(next, cmd, ms) // a long press opens the row's menu
 	}
 	i := ms.Y - sc.bodyTop
 	if m.boardShown() || i < 0 || i >= len(sc.rows) {
-		return m, nil // the board took every tap on its body above
+		return m, nil // the list and the chat took every tap on their body above
 	}
 	if sc.rows[i] == headerRow {
 		return m.tapHeader(ms.X)
@@ -190,9 +191,6 @@ func (m Model) tapAct() (string, func(Model) (tea.Model, tea.Cmd), string) {
 		if a.pair {
 			return m.openPairDoor()
 		}
-		if a.ghost {
-			return m.openNewIn(m.opt.Host, a.where, ""), nil
-		}
 		if a.nav && !a.destructive {
 			return m.confirm(*a)
 		}
@@ -201,15 +199,15 @@ func (m Model) tapAct() (string, func(Model) (tea.Model, tea.Cmd), string) {
 	}, m.actHost(a)
 }
 
-// wheel is a swipe on a phone: over the live view it scrolls the agent's
+// wheel is a swipe on a phone: over the stand-in it scrolls the agent's
 // screen back; elsewhere it moves the selection, as ↑ and ↓ do.
 func (m Model) wheel(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	if m.asking() || m.menu != nil && m.boardShown() { // the menu moves only with its keys
 		return m, nil
 	}
 	m.held = nil // a swipe is another key: it drops the question
-	if m.boardShown() && !m.standIn && !m.viewFull() {
-		return m.boardWheel(ms)
+	if m.sideActive() {
+		return m.sideWheel(ms)
 	}
 	if m.overView() {
 		m.armed = ""
@@ -225,43 +223,7 @@ func (m Model) wheel(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// boardWheel is a wheel step, or a phone's swipe, on the board: over the
-// live view beside the columns it scrolls the chosen card's pane, else it
-// moves the chosen card as ↑ and ↓ do, by the same keys and their rules.
-func (m Model) boardWheel(ms tea.Mouse) (tea.Model, tea.Cmd) {
-	up := ms.Button == tea.MouseWheelUp
-	if s, ok := m.boardSelected(); ok && m.overBoardView(ms) {
-		return m.onCard(s).wheelView(up)
-	}
-	k := m.keys.main.Down
-	if up {
-		k = m.keys.main.Up
-	} else if ms.Button != tea.MouseWheelDown {
-		return m, nil
-	}
-	next, cmd, _ := m.boardKey(keyPress(k.Keys()[0]))
-	return next, cmd
-}
-
-// overBoardView tells if ms is over the live view beside the board, in
-// the frame View drew last: a swipe's ticks draw nothing again.
-func (m Model) overBoardView(ms tea.Mouse) bool {
-	w := max(m.width, minWidth)
-	sc, kept := m.onScreen(w)
-	if !kept {
-		sc = m.draw(w)
-	}
-	return overBoardViewOf(ms, sc)
-}
-
-// overBoardViewOf tells if ms is over the live view beside the board of
-// the frame sc.
-func overBoardViewOf(ms tea.Mouse, sc drawn) bool {
-	v := sc.boardView
-	return v.x1 > 0 && ms.X >= v.x0 && ms.X < v.x1 && ms.Y >= v.y0 && ms.Y < v.y1
-}
-
-// overView tells if the live view is under the finger: the stand-in is
+// overView tells if the stand-in is under the finger: it is
 // the whole screen.
 func (m Model) overView() bool {
 	if !m.have || m.mismatch || m.pair.owns() || m.sheet != nil || m.form != nil || m.pending != nil {

@@ -133,13 +133,10 @@ type drawn struct {
 	tabs    []span
 	bodyTop int   // the line of the first body row
 	rows    []int // the row each body line shows; -1 none, headerRow
-	stripAt int   // the board's strip; -1 when it has none
-	strip   span  // a tap on the strip turns it
-	// boardView is the live view beside the board: from column x0 and line
-	// y0 to line y1 (x1 0: none).
-	boardView struct{ x0, x1, y0, y1 int }
-	keysAt    int // the key line; -1 when there is none
-	keys      []span
+	noteAt  int   // the board's notice row; -1 when it has none
+	noteTap span  // a tap on the notice row
+	keysAt  int   // the key line; -1 when there is none
+	keys    []span
 	// A box over the screen (the sheet, a form): its first line and
 	// column, its width, the key a tap on each of its lines presses, and
 	// the keys of its footer.
@@ -155,6 +152,10 @@ type drawn struct {
 	formAgentsAt int
 	formAgents   []span
 	stokerAt     span // the header's stoker word
+	// names are the sessions that need you, which the header names while
+	// the list is hidden, and namePanes the session of each.
+	names     []span
+	namePanes []paneKey
 	// placeFull: the chat is the whole screen, and a tap on its title row
 	// goes back to Sessions. viewRows: the lines of the agent's screen the
 	// chat shows.
@@ -166,9 +167,11 @@ type drawn struct {
 }
 
 // draw is the screen, with an ssh prompt over everything.
-func (m Model) draw(w int) drawn {
-	idx := m.boardIndex()
-	m.frameIdx = &idx
+func (m Model) draw(w int) drawn { return m.drawWith(w, &sideMemo{}) }
+
+// drawWith is draw with memo as the frame's one build of the list's groups.
+func (m Model) drawWith(w int, memo *sideMemo) drawn {
+	m.side = memo
 	sc := m.drawScreen(w)
 	if m.asking() {
 		m.overlayAsk(&sc, w)
@@ -181,10 +184,10 @@ func (m Model) draw(w int) drawn {
 // hairline, the body, then a hairline and the key line (design/0006
 // §4.1).
 func (m Model) drawScreen(w int) drawn {
-	head, waits, stokerAt := m.header(w)
+	head, waits, stokerAt, named := m.headerOf(w)
 	tabs, tabSpans := m.tabsLine(w)
 	sc := drawn{lines: []string{head, tabs, m.st.rule.Render(strings.Repeat("─", w))}, waits: waits, stokerAt: stokerAt, tabs: tabSpans,
-		bodyTop: 3, stripAt: -1, keysAt: -1, hostAt: m.boardHostHit(head)}
+		bodyTop: 3, noteAt: -1, keysAt: -1, hostAt: m.boardHostHit(head)}
 	switch {
 	case m.hostCount() > 1 && m.shows():
 		// A blocked host of two or more is a row, never the screen.
@@ -206,22 +209,16 @@ func (m Model) drawScreen(w int) drawn {
 		}
 		return sc
 	}
-	if m.viewFull() { // one column: the live view takes the screen
+	if m.viewFull() { // the stand-in takes the screen
 		return m.viewScreen(w)
 	}
 	room := m.bodyRows()
 	var b body
-	if m.boardShown() { // the board draws its tab row from the body's index
-		p := m.boardPanel(w, room)
-		b, sc.lines[1], sc.tabs = p.body, p.tabRow, p.tabSpans
-		if p.live > 0 {
-			sc.boardView.x0, sc.boardView.x1 = w-p.live, w
-			sc.boardView.y0, sc.boardView.y1 = sc.bodyTop+p.headAt, sc.bodyTop+p.colsTo
-		}
-		if p.stripAt >= 0 {
-			sc.stripAt, sc.strip = sc.bodyTop+p.stripAt, p.strip
-		}
-	} else {
+	switch {
+	case m.sideActive():
+		b = m.sideBody(w, room)
+		sc.names, sc.namePanes = named.spans, named.panes
+	default:
 		b = m.body(w)
 	}
 	vis := windowed(b, room, m.rowIndex())
@@ -246,6 +243,9 @@ func (m Model) drawScreen(w int) drawn {
 		m.overlayForm(&sc, w)
 	case m.menu != nil && m.boardShown():
 		m.overlayMenu(&sc, w)
+	}
+	if m.sideActive() { // over a box too: what a box's act says shows
+		m.sideNotices(&sc, w)
 	}
 	return sc
 }
@@ -297,6 +297,19 @@ func windowStart(b body, room, sel int) int {
 // waits and the stoker on the right, or a toast after an action. The
 // spans are what a tap on who waits, and on the stoker's word, presses.
 func (m Model) header(w int) (string, span, span) {
+	line, waits, stoker, _ := m.headerOf(w)
+	return line, waits, stoker
+}
+
+// headNamed are the names of the waits the header draws while the list is
+// hidden: where each is, and its session.
+type headNamed struct {
+	spans []span
+	panes []paneKey
+}
+
+// headerOf is header, with where it drew the names of the waits.
+func (m Model) headerOf(w int) (string, span, span, headNamed) {
 	st := m.st
 	left := " " + st.accent.Render("▰") + " " + st.text.Render("matchblox")
 	host := m.opt.Host
@@ -304,27 +317,38 @@ func (m Model) header(w int) (string, span, span) {
 		host = m.host.Host
 	}
 	if n := m.hostCount(); n > 1 && m.boardShown() {
-		host = m.boardHostWord()
+		host = m.hostWord()
 	} else if n > 1 {
 		host = fmt.Sprintf("%d hosts", n)
 	}
 	lost := ""
 	switch names := m.staleHosts(); {
+	case m.sideActive() && m.hostCount() > 1:
+		// The host word says it of the one host s shows.
+		var words []string
+		for _, h := range m.hosts() {
+			if m.boardHost == "" && m.inView(h) && m.stale(h) {
+				words = append(words, m.unreachedWord(h))
+			}
+		}
+		if len(words) > 0 {
+			lost = st.faint.Render(" · ") + st.warn.Render(strings.Join(words, " · "))
+		}
 	case len(names) > 0:
 		lost = st.faint.Render(" · ") + st.warn.Render(strings.Join(names, ", ")+" stale")
 	case m.stale(m.opt.Host):
 		// One host: what shows is the last state it sent.
 		lost = st.faint.Render(" · ") + st.warn.Render("stale")
 	}
-	if m.hidden > 0 {
-		// A hidden host has no stream, so no count of its waits (R6).
-		lost += st.faint.Render(" · ") + st.muted.Render(fmt.Sprintf("%d hidden", m.hidden))
+	if n := len(m.hiddenHosts); n > 0 {
+		// All hosts leaves a hidden host out, so no count of its waits (R6).
+		lost += st.faint.Render(" · ") + st.muted.Render(fmt.Sprintf("%d hidden", n))
 	}
 	if !m.shows() {
 		if host != "" {
 			left += st.faint.Render(" · ") + st.muted.Render(host)
 		}
-		return fit(left, w), span{}, span{}
+		return fit(left, w), span{}, span{}, headNamed{}
 	}
 	if m.toast != "" && !m.boardShown() { // the board's toasts are notices
 		// A long toast is cut, never the name; the host stays when the
@@ -333,40 +357,71 @@ func (m Model) header(w int) (string, span, span) {
 			left += st.faint.Render(" · ") + st.muted.Render(host)
 		}
 		room := max(w-lipgloss.Width(left+lost)-3, 1)
-		return spread(left+lost, st.accent.Render(ansi.Truncate(m.toast, room, "…"))+" ", w), span{}, span{}
+		return spread(left+lost, st.accent.Render(ansi.Truncate(m.toast, room, "…"))+" ", w), span{}, span{}, headNamed{}
 	}
 	n, count := m.needCount(), "● %d need you"
 	stoker := m.stokerBadge(m.layoutAt(w) == Narrow)
 	// Short of room the host goes first (a phone), then the words of who
 	// waits; the count stays.
 	waits := []string{""}
-	if n > 0 {
+	switch {
+	case n > 0:
 		waits = []string{fmt.Sprintf(count, n), fmt.Sprintf("● %d", n)}
+	case m.have:
+		waits = []string{"✓ nothing needs you", "✓"}
 	}
 	lefts := []string{left}
 	if host != "" {
 		lefts = []string{left + st.faint.Render(" · ") + st.muted.Render(host), left}
 	}
 	var right string
-	for _, word := range waits {
-		right = stoker + " "
-		switch {
-		case word != "" && stoker != "":
-			right = st.accent.Render(word) + "  " + right
-		case word != "":
-			right = st.accent.Render(word) + " "
+	// With the list hidden, the names of the sessions that need you come
+	// first. Short of room the words go first, then the last names, which
+	// a count stands for.
+	var named []string
+	names, waiting := m.headNames(), m.sideWaits()
+	for k := len(names); k > 0; k-- {
+		more := ""
+		if k < len(names) {
+			more = st.muted.Render(" · +" + strconv.Itoa(len(names)-k))
 		}
-		hit := span{}
-		if word != "" {
-			hit = span{w - lipgloss.Width(right), w - lipgloss.Width(right) + lipgloss.Width(word), "waits"}
-		}
-		for _, l := range lefts {
-			if lipgloss.Width(l+lost)+lipgloss.Width(right)+1 <= w {
-				return spread(l+lost, right, w), hit, m.stokerHit(stoker, w)
+		named = append(named, st.text.Render(strings.Join(names[:k], " · "))+more+"  ")
+	}
+	named = append(named, "")
+	for j, pre := range named {
+		for _, word := range waits {
+			right = stoker + " "
+			ink := st.accent
+			if n == 0 {
+				ink = st.muted
+			}
+			switch {
+			case word != "" && stoker != "":
+				right = ink.Render(word) + "  " + right
+			case word != "":
+				right = ink.Render(word) + " "
+			}
+			right = pre + right
+			hit := span{}
+			if word != "" && n > 0 {
+				x := w - lipgloss.Width(right) + lipgloss.Width(pre)
+				hit = span{x, x + lipgloss.Width(word), "waits"}
+			}
+			for _, l := range lefts {
+				if lipgloss.Width(l+lost)+lipgloss.Width(right)+1 <= w {
+					var at headNamed
+					x := w - lipgloss.Width(right)
+					for i := range len(names) - j { // named[j] names the first len(names)-j
+						nw := lipgloss.Width(names[i])
+						at.spans, at.panes = append(at.spans, span{x, x + nw, "name"}), append(at.panes, paneOf(waiting[i]))
+						x += nw + 3
+					}
+					return spread(l+lost, right, w), hit, m.stokerHit(stoker, w), at
+				}
 			}
 		}
 	}
-	return spread(left+lost, right, w), span{}, m.stokerHit(stoker, w)
+	return spread(left+lost, right, w), span{}, m.stokerHit(stoker, w), headNamed{}
 }
 
 // stokerHit is where the header's stoker word is, the line's last word:
@@ -383,7 +438,7 @@ func (m Model) stokerHit(word string, w int) span {
 // phone drops the night's end.
 func (m Model) stokerBadge(short bool) string {
 	word, n := m.hostBadge(short), 0
-	for _, h := range m.hosts() {
+	for _, h := range m.namedHosts() {
 		n += m.chainsAtWork(h)
 	}
 	if word == "" || n == 0 {
@@ -480,8 +535,8 @@ func (m Model) tabLabel(i int) string {
 	case tabSessions:
 		count = strconv.Itoa(len(m.all.sessions))
 	case tabMachine:
-		if len(m.all.orphans) > 0 {
-			count = "!" // a detached busy loop burns
+		if len(m.all.orphans) > 0 || len(m.nearlySpent()) > 0 {
+			count = "!" // a detached busy loop burns, or a plan is nearly spent
 		}
 	}
 	switch {
@@ -561,8 +616,8 @@ func (m Model) keyLine(w int) (string, []span) {
 	if m.viewFull() {
 		return m.liveKeyLine(w)
 	}
-	if m.boardShown() {
-		return m.boardKeyLine(w)
+	if m.sideActive() {
+		return m.sideKeyLine(w)
 	}
 	hints := slices.DeleteFunc(slices.Clone(m.view().keys(m)), func(h hint) bool { return h == (hint{}) })
 	if _, ok := m.openedView(); ok { // esc comes back to Machine
@@ -574,7 +629,11 @@ func (m Model) keyLine(w int) (string, []span) {
 		hints = append(hints, hintFor(mk.Search, ""), noTap(hintFor(mk.Quit, "")))
 	}
 	line, x := " ", 1
+	var spans []span
 	if m.newer != "" { // first: its key stays when the line is cut
+		if m.startsAgain {
+			spans = append(spans, span{x, x + lipgloss.Width(m.newer), tapAgain})
+		}
 		line += st.warn.Render(m.newer) + "  "
 		x += lipgloss.Width(m.newer) + 2
 	}
@@ -594,7 +653,6 @@ func (m Model) keyLine(w int) (string, []span) {
 	for m.newer != "" && len(hints) > 0 && hintsWidth(hints) > room {
 		hints = hints[:len(hints)-1] // whole keys after the notice, never one cut in half
 	}
-	var spans []span
 	parts := 0
 	add := func(part, press string) {
 		if parts++; parts > 1 {
@@ -649,24 +707,6 @@ func hintsWidth(hs []hint) int {
 	return n
 }
 
-// accountCell is the provider's mark and the account label: "✻ a@b.c · Max".
-// A provider without a mark keeps its name.
-func accountCell(s sample.Session) string {
-	p := providerMarks[s.Provider]
-	if p == "" {
-		p = s.Provider
-	}
-	switch {
-	case p == "":
-		return s.Account
-	case s.Account == "":
-		return p
-	case providerMarks[s.Provider] != "":
-		return p + " " + s.Account
-	}
-	return p + " · " + s.Account
-}
-
 // idleCell is how long a session sat idle, or, while the plan's limit stops
 // it, when it can work again: 19:50 within a day, else the weekday.
 func (m Model) idleCell(s sample.Session) string {
@@ -692,24 +732,6 @@ func plural(n int, noun string) string {
 		return strconv.Itoa(n) + " " + noun + "es"
 	}
 	return strconv.Itoa(n) + " " + noun + "s"
-}
-
-// prOf is the open pull request of the worktree a directory is in: the
-// worktree with the longest path that holds it.
-func (m Model) prOf(cwd string) *proto.PR {
-	if m.git == nil || cwd == "" {
-		return nil
-	}
-	var pr *proto.PR
-	best := 0
-	for _, r := range m.git.Repos {
-		for _, wt := range r.Worktrees {
-			if (cwd == wt.Path || strings.HasPrefix(cwd, wt.Path+"/")) && len(wt.Path) > best {
-				pr, best = wt.PR, len(wt.Path)
-			}
-		}
-	}
-	return pr
 }
 
 // place names a pane the way the tmux status bar does (session:window.pane),

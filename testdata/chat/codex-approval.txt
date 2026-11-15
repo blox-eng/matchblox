@@ -1,0 +1,13 @@
+› Run the tests for kindle-web
+
+• I run the suite now.
+
+• The reader test needs the network.
+
+  Would you like to run the following command?
+
+  $ npm test -- reader
+
+› 1. Yes, proceed
+  2. No, and tell Codex what to do differently
+  Press enter to confirm or esc to cancel

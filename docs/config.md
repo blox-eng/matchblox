@@ -155,12 +155,12 @@ checkout) never looks, and a prerelease is never offered. A look that
 fails keeps the release it found before, and never reads as up to date.
 One failed look, or two days of them, stay quiet: `matchblox status` gives
 the reason in `update.err`. After three days of failed looks, counted from
-the first failed look, the board shows the step "Release check fails" under
+the first failed look, the console shows the step "Release check fails" under
 `SET UP`, with the reason and `Run: matchblox update`. A look that works starts the count again. Closing
 the step hides it until a look works and the looks then fail for three more
 days.
 
-**offer.** The board shows the step "Update to v0.43.0" under `SET UP`, with
+**offer.** The console shows the step "Update to v0.43.0" under `SET UP`, with
 "matchblox v0.43.0 is out. This machine runs v0.42.0."
 `Enter` shows the release it installs and the file it replaces. It also
 says what the install checks first: the checksum always, the build's
@@ -208,7 +208,7 @@ A stoker run does not hold it: the run goes on after the restart. From the
 start of any install, from the offer, from auto or from `u`,
 until matchblox runs again on the new release, a new clone is refused: see
 [Limits](limits.md). When the service still runs the old release two
-minutes after the install, or starts again on the old release, the board
+minutes after the install, or starts again on the old release, the console
 shows the step "Restart for v0.43.0" with
 `v0.43.0 is installed, but this service still runs v0.42.0. Quit matchblox and open it again.`
 A new clone then says `v0.43.0 is installed. Quit matchblox and open it again.`

@@ -32,9 +32,13 @@ func samePane(t *testing.T, peer func(*proto.State)) (tea.Model, *fakeConn, *fak
 	next, _ = next.Update(peerMsg{host: "ws-1", conn: wsConn, msg: stateMsg(ws)})
 	for range next.(Model).rowCount() {
 		if s, ok := next.(Model).selectedSession(); ok && s.Host == "ws-1" {
-			return next, homeConn, wsConn
+			nm := next.(Model)
+			nm.toList() // the list's keys act on the chosen row
+			return nm, homeConn, wsConn
 		}
-		next, _ = key(next, "down")
+		var cmd tea.Cmd
+		next, cmd = key(next, "down")
+		drain(cmd) // the watch of the chosen row
 	}
 	t.Fatal("no peer row to select")
 	return nil, nil, nil
@@ -105,7 +109,7 @@ func TestJumpToAPeerRowUsesThatHost(t *testing.T) {
 	mm.opt.JumpID = func() string { return "0a1b2c3d" }
 	j := remote.Jump{Host: "ws-1", Pane: "%12", Prefix: "C-b", ID: "0a1b2c3d", Outer: true}
 	want := j.Local(remote.JumpSSH("ws-1", j, nil))
-	next, _ := key(mm, "enter")
+	next, _ := key(mm, "ctrl+o")
 	if a := next.(Model).pending; a == nil || len(a.steps) != 1 || !slices.Equal(a.steps[0], want) {
 		t.Fatalf("the jump is %+v, want %q", a, want)
 	}
@@ -161,17 +165,6 @@ func TestNewOnAPeerRowListsThatHostsRepos(t *testing.T) {
 	if r := nm.form.rows[0]; r.kind != rowLabel || r.text != "SUGGESTED · ws-1" {
 		t.Fatalf("the label is %+v", r)
 	}
-	// The ghost row is the home host's.
-	g := mm
-	g.boardBelow = 1 // the board's ghost row, under the columns
-	next = g.onChoice()
-	if _, ok := next.(Model).selectedGhost(); !ok {
-		t.Fatal("no ghost row under the peer's")
-	}
-	next, _ = key(next, "enter")
-	if nm := next.(Model); nm.form == nil || nm.formHost() != nm.opt.Host {
-		t.Fatalf("the ghost row starts on %q: %+v", nm.formHost(), nm.form)
-	}
 }
 
 // TestKillStaysOnItsHost: with the peer's %12 selected, a wait on home's
@@ -223,25 +216,37 @@ func TestSwitchJumpsOnItsHost(t *testing.T) {
 	}
 }
 
-// TestARemoteRowIsListOnly: the chat watches and sends keys only for the
-// home host's sessions. With the peer's %12 selected, nothing watches
-// home's %12, its screen never shows, a and typing send no keys, and the
-// right side names the row's host and the way into its pane.
+// TestARemoteRowIsListOnly: the board sends keys only for the home host's
+// sessions. With the peer's %12 selected and chosen in the list, the chat
+// watches it on the peer, home's %12 screen never shows, a and typing send
+// no keys, and the right side names the row's host and the way into its
+// pane.
 func TestARemoteRowIsListOnly(t *testing.T) {
 	m, home, ws := samePane(t, nil)
-	if w := m.(Model).watching; w != "" {
-		t.Fatalf("the peer's row watches %q on this machine", w)
+	mm := m.(Model)
+	mm.sideAt = paneKey{"ws-1", "%12"}
+	m, cmd := mm.Update(tea.WindowSizeMsg{Width: 132, Height: 30})
+	drain(cmd)
+	if nm := m.(Model); nm.watchHost != "ws-1" || nm.watching != "%12" || !hasAct(ws, proto.WatchPrefix+"%12") {
+		t.Fatalf("the peer's chosen row watches %q on %q; ws-1 got %+v", nm.watching, nm.watchHost, ws.allActs())
 	}
 	m, _ = m.Update(screenMsg{Pane: "%12", At: time.Now(), Text: "HOME TWELVE"})
-	m = pressAll(m, "a")
+	if nm := m.(Model); nm.screen.Text != "" {
+		t.Fatalf("home's %%12 screen stays for the peer's: %+v", nm.screen)
+	}
+	m = pressAll(m, "ctrl+o")
 	if nm := m.(Model); nm.standIn || nm.pending == nil || nm.pending.host != "ws-1" {
-		t.Fatalf("a on a remote row: stand-in %v, pending %+v", nm.standIn, nm.pending)
+		t.Fatalf("ctrl+o on a remote row: stand-in %v, pending %+v", nm.standIn, nm.pending)
 	}
 	m = pressAll(m, "x", "y", "1")
 	for _, a := range append(home.allActs(), ws.allActs()...) {
-		if strings.HasPrefix(a.RecID, proto.WatchPrefix) || strings.HasPrefix(a.RecID, proto.KeysPrefix) || strings.HasPrefix(a.RecID, "pick:") {
+		if strings.HasPrefix(a.RecID, proto.KeysPrefix) || strings.HasPrefix(a.RecID, "pick:") {
 			t.Fatalf("a remote row sent %q", a.RecID)
 		}
+	}
+	// The anti-goal's mix-up: the peer's %12 is never watched as home's.
+	if hasAct(home, proto.WatchPrefix+"%12") {
+		t.Fatalf("home got the watch of the peer's %%12: %+v", home.allActs())
 	}
 	// The detail pane that named the host and the way in goes with the
 	// list: the card names its host (TestACardNamesAnotherHost).

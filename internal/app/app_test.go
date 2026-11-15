@@ -116,10 +116,12 @@ func loadedWith(t *testing.T, width int, st proto.State) (Model, *fakeConn) {
 	t.Helper()
 	f := newFake()
 	m := New(Options{NoMotion: true, Conn: f})
-	m.viewPrefs.CopyCheckedPhone, m.viewPrefs.CopyCheckedDesk = true, true // the copy check is the board's first-run door
+	m.viewPrefs.CopyCheckedPhone, m.viewPrefs.CopyCheckedDesk = true, true // the copy check is the setup steps' first-run door
 	next, _ := m.Update(tea.WindowSizeMsg{Width: width, Height: 30})
 	next, _ = next.Update(stateMsg(st))
-	return next.(Model), f
+	nm := next.(Model)
+	nm.toList() // the list's keys act on the chosen session
+	return nm, f
 }
 
 // loaded is the console on the fixture machine, on the sessions tab.
@@ -366,7 +368,7 @@ func selfOver(t *testing.T, over bool) (string, os.FileInfo) {
 
 // TestOldConsoleDoesNotReplaceANewerService: a console left open on an old
 // release never puts that release back over a newer service. It says so,
-// and R starts this console again on the new binary.
+// and R in the list starts this console again on the new binary.
 func TestOldConsoleDoesNotReplaceANewerService(t *testing.T) {
 	f := newFake()
 	restarts := 0
@@ -386,6 +388,7 @@ func TestOldConsoleDoesNotReplaceANewerService(t *testing.T) {
 	if err := next.(Model).Restart(); err != nil || restarts != 0 {
 		t.Fatalf("started again before R: %d, %v", restarts, err)
 	}
+	next, _ = key(next, "esc") // in the line R types
 	next, cmd = key(next, "R")
 	if !slices.ContainsFunc(cmdMsgs(cmd), func(msg tea.Msg) bool { _, ok := msg.(tea.QuitMsg); return ok }) {
 		t.Fatal("R did not end the console")

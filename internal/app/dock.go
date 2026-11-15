@@ -13,8 +13,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
-// Usage and the machine: the strip says them on the board, and the Machine
-// tab has them all (design/0006 §7).
+// Usage and the machine: the Machine tab has them all (design/0006 §7).
 
 // usageLines are the limits of each account a session runs under, as
 // /usage says them: each window's name, a bar (warn from 60%, neg from
@@ -23,7 +22,11 @@ import (
 // two lines, and one of another provider than Anthropic one.
 func (m Model) usageLines(w int, full bool) []string {
 	st := m.st
-	out := []string{spread(st.label.Render(" USAGE"), "", w)}
+	spent := ""
+	if plans := m.nearlySpent(); len(plans) > 0 {
+		spent = st.neg.Render("nearly spent: "+strings.Join(plans, " · ")) + " "
+	}
+	out := []string{spread(st.label.Render(" USAGE"), spent, w)}
 	tight := !full && w < 50
 	rows, nameW := m.usageRows(tight)
 	if len(rows) == 0 {
@@ -239,6 +242,32 @@ func (m Model) usageCell(r usageRow, uses []limits.Use, win string) string {
 		}
 	}
 	return st.faint.Render(name + " —")
+}
+
+// spentAt is the share of a plan's window from which the Machine tab
+// marks it.
+const spentAt = 90
+
+// nearlySpent names each window of a plan at spentAt or more: "OpenAI
+// Plus wk 92%", with @host for another host. A hidden host is left out.
+func (m Model) nearlySpent() []string {
+	rows, _ := m.usageRows(false)
+	var out []string
+	for _, r := range rows {
+		if m.hostHidden(r.host) {
+			continue
+		}
+		on := ""
+		if r.host != m.opt.Host {
+			on = " @" + m.nameOf(r.host)
+		}
+		for _, u := range r.a.Uses(m.now()) {
+			if u.Pct >= spentAt {
+				out = append(out, fmt.Sprintf("%s%s %s %.0f%%", r.name, on, u.Name, u.Pct))
+			}
+		}
+	}
+	return out
 }
 
 // usageRow is an account's limits on a host, with its short name.

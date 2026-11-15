@@ -15,11 +15,11 @@ import (
 )
 
 // paneActs are the acts that name a pane after the colon.
-var paneActs = []string{"message:", proto.PickPrefix, "answer:", "compact:", "hold:", "release:", "park:", "kill:", "rename:", "switch:", proto.SwitchNowPrefix, proto.KeysPrefix}
+var paneActs = []string{"message:", proto.PastePrefix, proto.PickPrefix, "answer:", "compact:", "hold:", "release:", "park:", "kill:", "rename:", "switch:", proto.SwitchNowPrefix, proto.KeysPrefix}
 
-// typedPane is the pane a message, an answer or a pick types into.
+// typedPane is the pane a message, a paste, an answer or a pick types into.
 func typedPane(recID string) string {
-	for _, p := range []string{"message:", "answer:", proto.PickPrefix} {
+	for _, p := range []string{"message:", proto.PastePrefix, "answer:", proto.PickPrefix} {
 		if pane, ok := strings.CutPrefix(recID, p); ok {
 			return pane
 		}

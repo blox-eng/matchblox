@@ -1170,3 +1170,18 @@ func TestSessionsJSONUnchangedWithoutFamily(t *testing.T) {
 		t.Fatalf("family keys without a family: %s", buf.String())
 	}
 }
+
+// TestSendCommandIsUnchanged: the paste act is the console's. matchblox
+// send of a text of two lines is still a message: act, and the service's
+// refusal of it reads as before (recorded before paste: came).
+func TestSendCommandIsUnchanged(t *testing.T) {
+	a, err := handAct(cliDoc(), "send", []string{"api", "fix the build\nthen run", "the e2e"}, 0, "", "%9")
+	if err != nil || a.RecID != "message:%3" || a.Text != "fix the build\nthen run the e2e" || a.Confirm != "y" || a.From != "%9" {
+		t.Fatalf("%+v %v", a, err)
+	}
+	var buf bytes.Buffer
+	err = handOutcome(&buf, "send", "api", proto.Result{Err: "the message must be one line, without control keys"}, nil)
+	if want := "send api: refused: the message must be one line, without control keys"; err == nil || err.Error() != want || buf.Len() != 0 {
+		t.Fatalf("printed %q, err %v, want %q", buf.String(), err, want)
+	}
+}

@@ -23,16 +23,17 @@ func reported(name, status, waitingFor string) sample.Session {
 	return s
 }
 
-// laneOf is the column and the card's word and text of the one match of st.
-func laneOf(t *testing.T, st proto.State) (boardCol, string, string) {
+// laneOf is the list's group and the row's word and text of the one
+// session of st.
+func laneOf(t *testing.T, st proto.State) (sideState, string, string) {
 	t.Helper()
 	m := boardModel(t, st)
 	if len(m.all.sessions) != 1 {
-		t.Fatalf("the board has %d matches", len(m.all.sessions))
+		t.Fatalf("the list has %d sessions", len(m.all.sessions))
 	}
 	s := m.all.sessions[0]
 	word, says := m.cardSays(s)
-	return m.columnOf(s), word, says
+	return m.sideStateOf(s), word, says
 }
 
 // TestAWaitingReportNeedsYou: Claude Code says it waits at a permission
@@ -41,8 +42,8 @@ func laneOf(t *testing.T, st proto.State) (boardCol, string, string) {
 func TestAWaitingReportNeedsYou(t *testing.T) {
 	s := reported("flint-auth", "waiting", "permission prompt")
 	col, word, says := laneOf(t, boardState(s))
-	if col != colNeed || word != "asks" || says != "permission prompt" {
-		t.Fatalf("got %s %q %q, want NEEDS YOU asks permission prompt", col.name(), word, says)
+	if col != sideNeed || word != "asks" || says != "permission prompt" {
+		t.Fatalf("got %s %q %q, want NEEDS YOU asks permission prompt", col.head(), word, says)
 	}
 	if w := stoker.Word(s); w != "asks" { // matchblox sessions and peek say the board's word
 		t.Fatalf("stoker.Word %q, want asks", w)
@@ -56,8 +57,8 @@ func TestAReportedWaitBeatsAFinishedRow(t *testing.T) {
 	s := reported("flint-auth", "waiting", "permission prompt")
 	st := boardState(s)
 	st.Queue = []queue.Item{waitFor(s, queue.StateFinished, 20*time.Minute)}
-	if col, word, says := laneOf(t, st); col != colNeed || word != "asks" || says != "permission prompt" {
-		t.Fatalf("got %s %q %q, want NEEDS YOU asks permission prompt", col.name(), word, says)
+	if col, word, says := laneOf(t, st); col != sideNeed || word != "asks" || says != "permission prompt" {
+		t.Fatalf("got %s %q %q, want NEEDS YOU asks permission prompt", col.head(), word, says)
 	}
 }
 
@@ -68,8 +69,8 @@ func TestABusyReportBeatsAnOldAsk(t *testing.T) {
 	s.Asks, s.LastLine = true, "Should I also update the docs?"
 	st := boardState(s)
 	st.Queue = []queue.Item{waitFor(s, queue.StateQuestion, 20*time.Minute)}
-	if col, word, _ := laneOf(t, st); col != colWork || word != "busy" {
-		t.Fatalf("got %s %q, want WORKING busy", col.name(), word)
+	if col, word, _ := laneOf(t, st); col != sideWork || word != "busy" {
+		t.Fatalf("got %s %q, want WORKING busy", col.head(), word)
 	}
 	if w := stoker.Word(s); w != "busy" { // matchblox sessions agrees with the board
 		t.Fatalf("stoker.Word %q, want busy", w)
@@ -78,17 +79,17 @@ func TestABusyReportBeatsAnOldAsk(t *testing.T) {
 
 // TestAMenuBeatsABusyReport: Claude Code can report busy while its pane
 // draws an approval menu, as for a PreToolUse hook that asks. The menu is
-// live, not an old guess: the card needs you.
+// live, not an old guess: the session needs you.
 func TestAMenuBeatsABusyReport(t *testing.T) {
 	s := reported("ember-billing", "busy", "")
 	s.Permits, s.LastLine = true, "Do you want to proceed?"
-	if col, word, _ := laneOf(t, boardState(s)); col != colNeed || word != "asks" {
-		t.Fatalf("got %s %q, want NEEDS YOU asks", col.name(), word)
+	if col, word, _ := laneOf(t, boardState(s)); col != sideNeed || word != "asks" {
+		t.Fatalf("got %s %q, want NEEDS YOU asks", col.head(), word)
 	}
 	if w := stoker.Word(s); w != "asks" {
 		t.Fatalf("stoker.Word %q, want asks", w)
 	}
-	m := boardModel(t, boardState(s)) // the list agrees with the board
+	m := boardModel(t, boardState(s)) // the list's group and word agree
 	if g, w := m.groupOf(m.all.sessions[0]), m.wordOf(m.all.sessions[0]); g != groupWaits || w != "asks" {
 		t.Fatalf("list: group %d word %q, want the waits group and asks", g, w)
 	}
@@ -99,8 +100,8 @@ func TestAMenuBeatsABusyReport(t *testing.T) {
 func TestAShellReportIsWorking(t *testing.T) {
 	s := reported("kindle-web", "shell", "")
 	s.Asks = true // the turn that started the shells ended on a question
-	if col, word, _ := laneOf(t, boardState(s)); col != colWork || word != "shell" {
-		t.Fatalf("got %s %q, want WORKING shell", col.name(), word)
+	if col, word, _ := laneOf(t, boardState(s)); col != sideWork || word != "shell" {
+		t.Fatalf("got %s %q, want WORKING shell", col.head(), word)
 	}
 	if !s.Works() {
 		t.Fatal("a shell report does not work")
@@ -113,8 +114,8 @@ func TestAStokerGoStillNeedsYouWhileBusy(t *testing.T) {
 	s := reported("ember-billing", "busy", "")
 	st := boardState(s)
 	st.Stoker = &proto.StokerView{Mode: proto.StokerMode{On: true}, Run: []proto.StokerEntry{goFor(s, 2*time.Minute)}}
-	if col, _, _ := laneOf(t, st); col != colNeed {
-		t.Fatalf("got %s, want NEEDS YOU", col.name())
+	if col, _, _ := laneOf(t, st); col != sideNeed {
+		t.Fatalf("got %s, want NEEDS YOU", col.head())
 	}
 }
 
@@ -122,12 +123,12 @@ func TestAStokerGoStillNeedsYouWhileBusy(t *testing.T) {
 // that ended on a question asks, and one that asked nothing is QUIET.
 func TestAnIdleReportKeepsTodaysRules(t *testing.T) {
 	s := reported("spark-docs", "idle", "")
-	if col, _, _ := laneOf(t, boardState(s)); col != colQuiet {
-		t.Fatalf("idle, nothing: got %s, want QUIET", col.name())
+	if col, _, _ := laneOf(t, boardState(s)); col != sideIdle {
+		t.Fatalf("idle, nothing: got %s, want QUIET", col.head())
 	}
 	s.Asks, s.LastLine = true, "Should I also update the docs?"
-	if col, _, says := laneOf(t, boardState(s)); col != colNeed || says != s.LastLine {
-		t.Fatalf("idle on a question: got %s %q, want NEEDS YOU", col.name(), says)
+	if col, _, says := laneOf(t, boardState(s)); col != sideNeed || says != s.LastLine {
+		t.Fatalf("idle on a question: got %s %q, want NEEDS YOU", col.head(), says)
 	}
 }
 
@@ -143,24 +144,24 @@ func TestAnOpencodeReportDecidesItsLane(t *testing.T) {
 	}
 	for _, c := range []struct {
 		status, why string
-		want        boardCol
+		want        sideState
 		says        string
 	}{
-		{"waiting", "permission", colNeed, "permission"},
-		{"waiting", "question", colNeed, "question"},
-		{"busy", "", colWork, ""},
-		{"idle", "", colQuiet, ""},
+		{"waiting", "permission", sideNeed, "permission"},
+		{"waiting", "question", sideNeed, "question"},
+		{"busy", "", sideWork, ""},
+		{"idle", "", sideIdle, ""},
 	} {
 		s := opencode(c.status, c.why)
 		s.Asks = c.status == "busy" // an old question while it works is no ask
 		col, _, says := laneOf(t, boardState(s))
 		if col != c.want || c.says != "" && says != c.says {
-			t.Errorf("%s %s: got %s %q, want %s %q", c.status, c.why, col.name(), says, c.want.name(), c.says)
+			t.Errorf("%s %s: got %s %q, want %s %q", c.status, c.why, col.head(), says, c.want.head(), c.says)
 		}
 	}
 	s := opencode("retry", "")
 	s.Retry = 3
-	if col, word, says := laneOf(t, boardState(s)); col != colWork || word != "busy" || says != "retrying · attempt 3" {
-		t.Fatalf("retry: got %s %q %q, want WORKING busy retrying · attempt 3", col.name(), word, says)
+	if col, word, says := laneOf(t, boardState(s)); col != sideWork || word != "busy" || says != "retrying · attempt 3" {
+		t.Fatalf("retry: got %s %q %q, want WORKING busy retrying · attempt 3", col.head(), word, says)
 	}
 }
