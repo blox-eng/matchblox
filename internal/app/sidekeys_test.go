@@ -68,7 +68,7 @@ func typeLine(m Model, text string) Model {
 func messageActs(f *fakeConn) []proto.Act {
 	var out []proto.Act
 	for _, a := range f.acts() {
-		if strings.HasPrefix(a.RecID, "message:") {
+		if strings.HasPrefix(a.RecID, "message:") || strings.HasPrefix(a.RecID, proto.PastePrefix) {
 			out = append(out, a)
 		}
 	}
@@ -141,7 +141,7 @@ func TestPasteArrivesAsOnePiece(t *testing.T) {
 	}
 	m = pressOn(m, "enter")
 	acts := messageActs(boardFake(m))
-	if len(acts) != 1 || acts[0].Text != paste {
+	if len(acts) != 1 || acts[0].RecID != proto.PastePrefix+"%flint-auth" || acts[0].Text != paste || acts[0].Confirm != "y" {
 		t.Fatalf("sent %+v", acts)
 	}
 	id := "a" + strconv.Itoa(m.acts)
@@ -152,6 +152,24 @@ func TestPasteArrivesAsOnePiece(t *testing.T) {
 	}
 	if got := chatLineOf(m, 120); !strings.Contains(got, "not sent: the message has a control character") {
 		t.Fatalf("line %q", got)
+	}
+}
+
+// TestALongOrManyLineTextGoesAsAPaste: a text with a newline, or over
+// 500 characters, goes as paste:; a short line goes as message:.
+func TestALongOrManyLineTextGoesAsAPaste(t *testing.T) {
+	for text, want := range map[string]string{
+		"fix it":                   "message:",
+		strings.Repeat("ü", 500):   "message:",
+		strings.Repeat("ü", 501):   proto.PastePrefix,
+		"the first line\nthe next": proto.PastePrefix,
+	} {
+		m, _ := sideConsole(t, boardState(boardMatch("flint-auth", time.Hour)))
+		next, _ := m.Update(tea.PasteMsg{Content: text})
+		m = pressOn(next.(Model), "enter")
+		if acts := messageActs(boardFake(m)); len(acts) != 1 || acts[0].RecID != want+"%flint-auth" || acts[0].Text != text {
+			t.Errorf("%.20q: sent %+v, want %s", text, acts, want)
+		}
 	}
 }
 

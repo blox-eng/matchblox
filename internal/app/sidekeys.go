@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
@@ -393,6 +394,18 @@ func (m *Model) sendLine() tea.Cmd {
 // name for when it ends first.
 type heldMsg struct{ text, name string }
 
+// maxMessage is the longest text a message: act takes, in characters.
+const maxMessage = 500
+
+// lineAct is the act that carries text: a paste for a text with a newline
+// or one longer than a message, else a message.
+func lineAct(text string) string {
+	if strings.Contains(text, "\n") || utf8.RuneCountInString(text) > maxMessage {
+		return proto.PastePrefix
+	}
+	return "message:"
+}
+
 // sendText sends text to s as a message and empties the line of s, or
 // says why it cannot go and keeps the text there. sent: the act went.
 func (m *Model) sendText(s sample.Session, text string) (cmd tea.Cmd, sent bool) {
@@ -405,7 +418,7 @@ func (m *Model) sendText(s sample.Session, text string) (cmd tea.Cmd, sent bool)
 		m.giveBack(lineSent{k, s.Host, m.cardName(s), text}, why)
 		return nil, false
 	}
-	id, cmd := m.sendToID(s.Host, proto.Act{RecID: "message:" + s.Pane, Text: text, Confirm: "y"})
+	id, cmd := m.sendToID(s.Host, proto.Act{RecID: lineAct(text) + s.Pane, Text: text, Confirm: "y"})
 	m.lineActs = maps.Clone(m.lineActs)
 	if m.lineActs == nil {
 		m.lineActs = map[string]lineSent{}

@@ -123,7 +123,7 @@ func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 		defer s.typingActs.done()
 	}
 	if !a.FromPlaced && !a.Console { // it could be any match's
-		if _, send := isSend(a); send {
+		if _, send := isSend(a); send || strings.HasPrefix(a.RecID, proto.PastePrefix) {
 			return proto.Result{Err: unplacedSender}
 		}
 		if typedPane(a.RecID) != "" {
@@ -318,8 +318,9 @@ func (s *Service) dispatch(ctx context.Context, a proto.Act) proto.Result {
 		key += "\x00" + a.Text + "\x00" + it.Since.String()
 	}
 	msgPane, message := strings.CutPrefix(a.RecID, "message:")
+	pastePane, paste := strings.CutPrefix(a.RecID, proto.PastePrefix)
 	within := doneFor
-	if message {
+	if message || paste {
 		key += "\x00" + a.Text
 		within = messageDoneFor
 	}
@@ -364,6 +365,11 @@ func (s *Service) dispatch(ctx context.Context, a proto.Act) proto.Result {
 	}
 	if message {
 		res := s.message(ctx, msgPane, a)
+		ran = len(res.Ran) > 0
+		return res
+	}
+	if paste {
+		res := s.paste(ctx, pastePane, a)
 		ran = len(res.Ran) > 0
 		return res
 	}
@@ -479,8 +485,13 @@ func (s *Service) message(ctx context.Context, pane string, a proto.Act) proto.R
 // messageAction types one line and Enter, each step guarded: the same
 // agent is still in the pane, and it asks nothing a line would answer.
 func messageAction(pane string, x sample.Session, text string) advice.Action {
-	g := advice.Guard{MessagePane: pane, MessagePID: x.PID, PID: x.PID, StartTicks: x.Start}
+	g := messageGuard(pane, x)
 	return advice.Action{Label: "message", Steps: panes.Send(pane, text), Destructive: true, Guards: []advice.Guard{g, g}}
+}
+
+// messageGuard is the guard of each step that types into the pane of x.
+func messageGuard(pane string, x sample.Session) advice.Guard {
+	return advice.Guard{MessagePane: pane, MessagePID: x.PID, PID: x.PID, StartTicks: x.Start}
 }
 
 // sessionAtLocked is sessionAt for callers that hold mu.
