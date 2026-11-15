@@ -93,6 +93,7 @@ func defaultKeys() keymaps {
 			Rename:     bind(ks("r"), "r", "rename"),
 			StartAgain: bind(ks("R", "shift+r"), "R", "start again"),
 			Jump:       bind(ks("ctrl+o"), "ctrl+o", "go in"),
+			WasInto:    bind(ks("a"), "a", ""), // ctrl+o goes in now: a says so once
 		},
 		form: formKeys{
 			Close: bind(ks("esc"), "esc", ""),
@@ -229,7 +230,7 @@ type mainKeys struct {
 	Stoker, Quit, NextTab, PrevTab, Search, Back, Sort      bkey.Binding
 	Park, Mark, Exited, MarkSafe, QuitAgent, Up, Down, Open bkey.Binding
 	Second, New, Switch, Grant, Dismiss                     bkey.Binding
-	Stoke, StokeChain, Night, Order, Rename, Jump           bkey.Binding
+	Stoke, StokeChain, Night, Order, Rename, Jump, WasInto  bkey.Binding
 	StartAgain                                              bkey.Binding
 }
 
@@ -237,7 +238,7 @@ func (k mainKeys) bindings() []bkey.Binding {
 	return []bkey.Binding{k.Stoker, k.Quit, k.NextTab, k.PrevTab, k.Search, k.Back, k.Sort,
 		k.Park, k.Mark, k.Exited, k.MarkSafe, k.QuitAgent, k.Up, k.Down, k.Open,
 		k.Second, k.New, k.Switch, k.Grant, k.Dismiss,
-		k.Stoke, k.StokeChain, k.Night, k.Order, k.Rename, k.Jump, k.StartAgain}
+		k.Stoke, k.StokeChain, k.Night, k.Order, k.Rename, k.Jump, k.WasInto, k.StartAgain}
 }
 
 // formKeys are the new-session, switch and rename form. Down and Up go to

@@ -582,3 +582,22 @@ func TestTheAskingStokersCardIsItsChainsStokerEverywhere(t *testing.T) {
 func needRows(m Model) []sample.Session {
 	return slices.DeleteFunc(m.sideSessions(), func(s sample.Session) bool { return m.sideStateOf(s) != sideNeed })
 }
+
+// TestLeavingTheRoomSaysGReopensIt: ◂ in the room gives the chat its place
+// back and the keys to the list; the key line names g, which opens the
+// room again.
+func TestLeavingTheRoomSaysGReopensIt(t *testing.T) {
+	st := headState(t, runningPlan(), true)
+	st.Queue = nil
+	m, _ := hearthOpen(t, 160, st)
+	m = pressOn(m, "left")
+	if m.sidePlace != placeChat || !m.inList() {
+		t.Fatalf("◂ in the room: place %d, in the list %v", m.sidePlace, m.inList())
+	}
+	if keys := keyLineOf(m); !strings.Contains(keys, "g room") {
+		t.Errorf("the key line %q does not say g opens the room again", keys)
+	}
+	if m = pressOn(m, "g"); m.sidePlace != placeRoom {
+		t.Errorf("g did not open the room again: place %d", m.sidePlace)
+	}
+}

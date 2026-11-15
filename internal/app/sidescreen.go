@@ -451,7 +451,11 @@ func (m Model) sideHints() (string, []hint) {
 		return "in the list: " + parts[min(m.footAt, len(parts))-1].text, []hint{hintFor(sk.Enter, "open"), hintFor(sk.Up, "")}
 	}
 	if m.inList() {
-		return "in the list", []hint{hintFor(sk.Up, ""), hintFor(sk.Enter, "write"), hintFor(bk.Host, ""), hintFor(bk.Chain, ""), hintFor(bk.Menu, "")}
+		chain := hintFor(bk.Chain, "")
+		if m.room != nil { // the room stays open behind the chat: g brings it back
+			chain.label = "room"
+		}
+		return "in the list", []hint{hintFor(sk.Up, ""), hintFor(sk.Enter, "write"), hintFor(bk.Host, ""), chain, hintFor(bk.Menu, "")}
 	}
 	name := "no session"
 	s, ok := m.sideChosen()

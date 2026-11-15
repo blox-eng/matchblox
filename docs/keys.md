@@ -111,7 +111,7 @@ the keys. The key line shows the keys of the chosen line.
 | `y` | Gives the go a step waits for. Every go (a merge, a release, a deploy, a kill) acts outside the session: it shows its command first and runs on a typed `y`. |
 | `⌥s` | Goes back to the session you flipped from. With none, starts typing on the talk line. |
 | `⌥n` | Goes into the chain's first match. |
-| `◂` or `←` | Gives the keys to the list. The room stays open, and the list shows only its chain. |
+| `◂` or `←` | Gives the chat its place back and the keys to the list. The list still shows only the chain, and the key line says `g room`: `g` opens the room again. |
 | `Esc` | Stops typing (the words stay). Else closes the room, shows every chain and gives the chat its place back. |
 | `Backspace` | Erases the last character while you type. |
 
@@ -155,6 +155,7 @@ for each one follows the host stoker's card.
 | `Q` | Quits the stoker agent and its tmux session, after a typed `y`: `tmux -L matchblox kill-session -t =stoker`. `f` only turns the stoker off and leaves the agent running, so its context carries to the next order. On a `CHAIN <name>` card, `Q` and a typed `y` quit the stoker of that chain only. |
 | `y` | Gives the go a step waits for (`⏸ waits for your go: api-gw wants to run gh pr merge 4556`). The go is good for one command of that kind in that session, and the stoker hears of it at its next wake. |
 | `Ctrl+O` | On a failed step (`✕`), goes into its session's pane. |
+| `a` | Says once that `Ctrl+O` goes into a failed step's session now. |
 
 ## An action before it runs
 

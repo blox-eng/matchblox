@@ -551,3 +551,19 @@ func TestAJumpWithNoOneLeftStopsTheWatch(t *testing.T) {
 		t.Error("the watch stopped with the iPad still on the console")
 	}
 }
+
+// TestAOnTheStokersViewSaysCtrlOGoesIn: a went into a failed step's
+// session; it says once that ctrl+o does now.
+func TestAOnTheStokersViewSaysCtrlOGoesIn(t *testing.T) {
+	m, _ := loadedWith(t, 100, tabMorning(screensState(t)))
+	m.setTab(tabStoker)
+	ran := recordRuns(&m)
+	next, cmd := key(selectStep(t, m, "p5"), "a")
+	nm := fed(next, cmd).(Model)
+	if len(*ran) != 0 || !strings.Contains(nm.noticeText, "ctrl+o goes into") {
+		t.Fatalf("a on the stoker's view: ran %q, notice %q", *ran, nm.noticeText)
+	}
+	if !nm.told("into") {
+		t.Errorf("the notice is not kept as told: it would say it again")
+	}
+}

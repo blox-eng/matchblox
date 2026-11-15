@@ -1569,6 +1569,9 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.standIn {
 		return m.standInKey(k)
 	}
+	if m.tab == tabStoker && bkey.Matches(k, mk.WasInto) { // a went into a failed step's session
+		return m, m.once("into", mk.Jump.Help().Key+" goes into a failed step's session now.", "")
+	}
 	if m.room != nil && m.boardShown() && !bkey.Matches(k, mk.NextTab, mk.PrevTab) { // off the board the room only filters it
 		m.flash = ""
 		return m.roomKey(k)
