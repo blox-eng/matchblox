@@ -90,8 +90,8 @@ jobs:
   test:
     name: Test
     runs-on: ${{ matrix.os }}
-    # macOS runners vary: the race tests took 6m44s and 9m31s on the same
-    # code, so macOS gets room that a slow runner does not use up.
+    # macOS runners vary, so macOS gets room that a slow runner does not use
+    # up. Its tests ran under -race for 14m to 26m (#414) and passed the cap.
     timeout-minutes: ${{ matrix.os == 'macos-latest' && 30 || 10 }}
     strategy:
       fail-fast: false
@@ -127,14 +127,19 @@ jobs:
         run: |
           tmux -S "$RUNNER_TEMP/sentinel" -f /dev/null new-session -d -s sentinel sleep 7200
           tmux -L default -f /dev/null new-session -d -s sentinel sleep 7200
-      - name: Tests (race)
+      # Linux runs the race detector; macOS does not. Its own code is five
+      # small files with no goroutine, channel or lock, and the shared code
+      # races on Linux, as for demo-race (#414).
+      - name: Tests
         env:
           CGO_ENABLED: '1'
           TMUX: ${{ runner.os == 'Linux' && format('{0}/sentinel,1,0', runner.temp) || '' }}
           TMUX_PANE: ${{ runner.os == 'Linux' && '%0' || '' }}
         # go test stops a package at 10 minutes by default; on macOS the app
-        # package's race run reached 9m55s, so it gets the job's own room.
-        run: go test -race -cover -timeout ${{ matrix.os == 'macos-latest' && '18m' || '10m' }} $(go list ./... | grep -v '/internal/demo$')
+        # package's race run reached 15m28s, so it keeps the job's own room.
+        run: |
+          # shellcheck disable=SC2046 # one word per package
+          go test ${{ runner.os == 'Linux' && '-race' || '' }} -cover -timeout ${{ matrix.os == 'macos-latest' && '18m' || '10m' }} $(go list ./... | grep -v '/internal/demo$')
       # The demo's walks press every key of the console through a real service.
       # Under -race they took 8 minutes on Linux, against a 10 minute job, so
       # the race run is its own job (demo-race) and this run is without it.
