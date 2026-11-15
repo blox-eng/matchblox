@@ -450,6 +450,13 @@ func (m Model) sideHints() (string, []hint) {
 	if parts := m.footParts(); m.inList() && m.footAt > 0 {
 		return "in the list: " + parts[min(m.footAt, len(parts))-1].text, []hint{hintFor(sk.Enter, "open"), hintFor(sk.Up, "")}
 	}
+	if s, sh, card := m.chosenShip(); card { // no session drives it: its keys are New session and the merge
+		hs := []hint{hintFor(sk.Up, ""), hintFor(sk.Enter, "new session")}
+		if _, ok := m.mergeable(s); ok {
+			hs = append(hs, hintFor(bk.Merge, "merge"))
+		}
+		return "on #" + strconv.Itoa(sh.Number), append(hs, hintFor(bk.Host, ""), hintFor(bk.Menu, ""))
+	}
 	if m.inList() {
 		chain := hintFor(bk.Chain, "")
 		if m.room != nil { // the room stays open behind the chat: g brings it back

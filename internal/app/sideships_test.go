@@ -155,3 +155,30 @@ func TestASessionOutsideTmuxSaysWhy(t *testing.T) {
 		t.Errorf("ctrl+o said %q", nm.flash)
 	}
 }
+
+// TestAShipsRowSaysWhatItsKeysDo: on a ship's row the key line names
+// what ⏎ and p do, the chat's place shows the ship and the same two acts,
+// and its head says the ship's state.
+func TestAShipsRowSaysWhatItsKeysDo(t *testing.T) {
+	m := chooseShip(t, orphanShip(t, shipWaits))
+	keys := keyLineOf(m)
+	if !strings.Contains(keys, "⏎ new session") || !strings.Contains(keys, "p merge") || strings.Contains(keys, "write") {
+		t.Errorf("the key line %q", keys)
+	}
+	chat := strings.Join(plainLines(m.chatPanel(100, 20)), "\n")
+	for _, want := range []string{"Cache the session store", "#4570", "waits for your merge", "new session on its branch", "p merge"} {
+		if !strings.Contains(chat, want) {
+			t.Errorf("the chat's place lacks %q:\n%s", want, chat)
+		}
+	}
+	if head := plainLines(m.chatPanel(100, 20))[0]; strings.Contains(head, "idle") || !strings.Contains(head, "waits for your merge") {
+		t.Errorf("the head %q", head)
+	}
+	m.toLine()
+	if keys := keyLineOf(m); strings.Contains(keys, "send") {
+		t.Errorf("in the line the key line %q offers a send", keys)
+	}
+	if nm := pressOn(m, "p"); nm.pending == nil {
+		t.Errorf("p, which the key line offers, does not merge from the line: %q", nm.noticeText)
+	}
+}

@@ -167,6 +167,8 @@ func (m Model) lineKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 		m.toList()
 	case ok && isShipCard(s) && bkey.Matches(k, sk.Enter):
 		return m.shipKey(s)
+	case ok && isShipCard(s) && bkey.Matches(k, m.keys.board.Merge): // the key line offers it: the line takes no text here
+		return m.rowAct(k, s)
 	case bkey.Matches(k, sk.Enter):
 		cmd = m.sendLine()
 	case bkey.Matches(k, sk.Erase):

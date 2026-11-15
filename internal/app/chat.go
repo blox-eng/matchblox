@@ -36,6 +36,9 @@ func (m Model) chatPanel(w, h int) []string {
 		for _, l := range wrapPlain(text, max(w-2, 1)) {
 			lines = append(lines, fit(" "+m.st.muted.Render(l), w))
 		}
+	case isShipCard(listed[i]):
+		sh, _ := m.shipOfCard(listed[i])
+		lines = m.shipPanel(listed[i], sh, w, h)
 	default:
 		s := listed[i]
 		top := []string{m.chatHead(s, w)}
@@ -68,12 +71,19 @@ func (m Model) chatHead(s sample.Session, w int) string {
 	if s.Host != m.opt.Host {
 		about += "@" + m.nameOf(s.Host) + " "
 	}
-	about += harnessMark(s) + " " + m.wordOf(s)
+	if sh, card := m.shipOfCard(s); card {
+		about += "· " + shipWord(sh)
+	} else {
+		about += harnessMark(s) + " " + m.wordOf(s)
+	}
 	if ships := m.shipsOf(s); len(ships) > 0 {
 		about += " · #" + strconv.Itoa(ships[0].Number) + " " + stageNames[ships[0].Stage]
 	}
 	name := m.backMark(w) + " " + st.text.Bold(true).Render(m.cardName(s))
 	keys := st.faint.Render(m.keys.main.Jump.Help().Key+" expand · "+m.keys.board.Menu.Help().Key+" menu") + " "
+	if isShipCard(s) { // no pane to expand: a session starts on its branch
+		keys = st.faint.Render(m.keys.side.Enter.Help().Key+" new session · "+m.keys.board.Menu.Help().Key+" menu") + " "
+	}
 	ctx := ""
 	if s.Context == "known" {
 		ctx = m.contextStyle(s).Render("ctx "+strconv.Itoa(int(s.ContextPct+0.5))+"%") + "  "

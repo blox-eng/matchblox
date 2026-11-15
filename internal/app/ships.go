@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 
+	"charm.land/lipgloss/v2"
+
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
@@ -212,6 +214,57 @@ func (m Model) shipOfCard(s sample.Session) (proto.Ship, bool) {
 		return proto.Ship{}, false
 	}
 	return m.ships()[i], true
+}
+
+// chosenShip is the chosen row when it is a ship no session drives.
+func (m Model) chosenShip() (sample.Session, proto.Ship, bool) {
+	s, ok := m.sideChosen()
+	if !ok {
+		return s, proto.Ship{}, false
+	}
+	sh, card := m.shipOfCard(s)
+	return s, sh, card
+}
+
+// shipWord is the state of a ship in words, as its row says it.
+func shipWord(sh proto.Ship) string {
+	switch sh.Kind {
+	case shipWaits:
+		return "waits for your merge"
+	case shipStuck:
+		return "stuck"
+	}
+	return stageNames[sh.Stage]
+}
+
+// shipPanel is the chat's place on a ship no session drives: its pull
+// request, its stage and its checks, and the two acts it takes.
+func (m Model) shipPanel(s sample.Session, sh proto.Ship, w, h int) []string {
+	st := m.st
+	lines := []string{m.chatHead(s, w), strings.Repeat(" ", w)}
+	add := func(text string, ink lipgloss.Style) {
+		for _, l := range wrapPlain(text, max(w-2, 1)) {
+			lines = append(lines, fit(" "+ink.Render(l), w))
+		}
+	}
+	add("#"+strconv.Itoa(sh.Number)+" "+sh.Title, st.text.Bold(true))
+	add(sh.Repo+" · "+shipWord(sh), st.muted)
+	if sh.Note != "" && sh.Note != shipWord(sh) {
+		add(sh.Note, st.muted)
+	}
+	if sh.URL != "" {
+		add(sh.URL, st.faint)
+	}
+	lines = append(lines, strings.Repeat(" ", w))
+	acts := m.keys.side.Enter.Help().Key + " new session on its branch"
+	if _, ok := m.mergeable(s); ok {
+		acts += " · " + m.keys.board.Merge.Help().Key + " merge, after a typed y"
+	}
+	add(acts, st.text)
+	for len(lines) < h-1 {
+		lines = append(lines, strings.Repeat(" ", w))
+	}
+	return append(lines[:min(len(lines), max(h-1, 0))], m.chatLine(s, w))
 }
 
 // shipCardWhy is what a ship's row says of keys that need a session.

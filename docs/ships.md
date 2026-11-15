@@ -43,7 +43,8 @@ the branch of its checkout (else its repository and number), with its
 badge. It is in `NEEDS YOU` while it waits for your merge or is stuck,
 and in `IDLE` while it runs. `Enter` or `N` on it opens New session in
 its checkout, with a first message to take the pull request over. `p`
-merges it after a typed `y`. Message the owner by its name, never by its
+merges it after a typed `y`. The chat's place shows the pull request,
+its state and its checks, and names those two keys. Message the owner by its name, never by its
 pane.
 
 A Claude Code `/clear` starts a new session id. A ship that the old id

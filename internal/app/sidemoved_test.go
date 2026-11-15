@@ -170,3 +170,25 @@ func TestATapNeverRunsADestructiveAct(t *testing.T) {
 		t.Errorf("a tap on the box did not cancel it: %v %+v", m.pending, boardFake(m).acts())
 	}
 }
+
+// TestDigitInTheListMarksWhenTheLineIsEmpty: a digit pressed in the list
+// goes to the line and is read there: with the line empty and a question
+// on the screen it marks, and the same digit sends; else it types.
+func TestDigitInTheListMarksWhenTheLineIsEmpty(t *testing.T) {
+	m, clock := flintBoard(t, 80, 31)
+	*clock = clock.Add(peekDead)
+	m.toList()
+	if m = pressOn(m, "1"); !armedOn(m, "1") || m.lines[m.chosenSide()] != "" || m.inList() {
+		t.Fatalf("a digit in the list: armed %v, line %q, in the list %v", armedOn(m, "1"), m.lines[m.chosenSide()], m.inList())
+	}
+	m.toList()
+	if m = pressOn(m, "1"); len(sent(m)) != 1 {
+		t.Errorf("the same digit from the list again sent %+v", sent(m))
+	}
+	n, _ := flintBoard(t, 80, 31) // the question just showed: the digit types
+	n.peekAt = n.now()
+	n.toList()
+	if n = pressOn(n, "1"); armedOn(n, "1") || n.lines[n.chosenSide()] != "1" {
+		t.Errorf("a dead digit in the list: armed %v, line %q", armedOn(n, "1"), n.lines[n.chosenSide()])
+	}
+}
