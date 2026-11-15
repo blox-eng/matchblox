@@ -26,7 +26,7 @@ func boardFake(m Model) *fakeConn { return m.conn.(*fakeConn) }
 
 func chosenName(t *testing.T, m Model) string {
 	t.Helper()
-	s, ok := m.boardSelected()
+	s, ok := m.markTarget()
 	if !ok {
 		t.Fatal("no card is chosen")
 	}

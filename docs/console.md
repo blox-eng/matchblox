@@ -412,25 +412,24 @@ formed first. A match is never drawn twice.
 
 ## A chain's room
 
-The board narrowed to one chain is the chain's room. `g` on a card of the
-chain, a tap on its stub, or `⌥s` opens it; `⌥s` in an agent's pane flips
-there and back (see [Keys](keys.md#a-chains-room)). The tab row says
-`chain hearth · 3   esc all`. The room adds two things to the board:
+One chain and its stoker are the chain's room. `g` on a session of the
+chain in the list, or `⌥s`, opens it; `⌥s` in an agent's pane flips there
+and back (see [Keys](keys.md#a-chains-room)). The list shows only the
+chain's sessions, and the room takes the chat's place, `CHAIN hearth` at
+its head:
 
-- **The stoker's card**, above the columns: its order in quotes, the
-  active step with one step on each side, then `↓ N more`. `≋ waking…`
-  while a new stoker starts; `the stoker did not start: <why>` when it was
-  refused; `≋ hearth's stoker is quiet since 14:02 · ⏎ asks it` when its
-  run has said nothing for 60 s. `y` on a step gives the go it waits for.
-- **The talk line**, under the columns: `› tell hearth's stoker…`. Your
-  words go to the chain's stoker; to a chain with no stoker they start one
+- **The stoker's card**: its order in quotes, the active step with one
+  step on each side, then `↓ N more`. `≋ waking…` while a new stoker
+  starts; `the stoker did not start: <why>` when it was refused;
+  `≋ hearth's stoker is quiet since 14:02 · ⏎ asks it` when its run has
+  said nothing for 60 s. `y` on a step gives the go it waits for.
+- **The talk line**, under the card: `› tell hearth's stoker…`. Your words
+  go to the chain's stoker; to a chain with no stoker they start one
   (`› what should hearth's stoker do?`).
 
-On a phone the stoker is a page of its own, first in the page marks
-(`stoker NEEDS YOU 2 − work 1 ship 0 quiet 0`), with the card and the
-talk line on it. `]` and `[` go to the next and the previous chain. A
-sideways swipe goes to the next column, not the next chain. `Esc` closes
-the room and shows every chain. In the room, the menu of a card adds
+On a phone the room takes the screen, and `◂` goes back to the list. `]`
+and `[` go to the next and the previous chain. `Esc` closes the room and
+shows every chain. In the room, the menu of a session adds
 `out of hearth`: it takes the match out of the chain after a typed `y`.
 Its agent goes on, and the chain hears that it left.
 

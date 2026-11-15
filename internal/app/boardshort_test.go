@@ -6,12 +6,13 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/blox-eng/matchblox/internal/proto"
 )
 
 // shortBoard is the chain fixture, kindle-web asking, on a w by h screen.
 func shortBoard(t *testing.T, w, h int) (Model, *fakeConn) {
 	t.Helper()
-	m, f := chainBoard(t, w, headState(t, runningPlan(), true), "")
+	m, f := boardChain(t, w, headState(t, runningPlan(), true))
 	return upd(t, m, tea.WindowSizeMsg{Width: w, Height: h}), f
 }
 
@@ -52,7 +53,7 @@ func noCardDrawn(t *testing.T, w, h int) {
 // TestOnMediumTheTalkLineIsAboveTheQuietShelf: the room's talk line closes
 // the columns; the QUIET shelf comes under it (the sketch, 0019).
 func TestOnMediumTheTalkLineIsAboveTheQuietShelf(t *testing.T) {
-	m, _ := hearthOpen(t, 80, headState(t, runningPlan(), true))
+	m, _ := boardHearth(t, 80, headState(t, runningPlan(), true))
 	if m.layoutAt(80) != Medium {
 		t.Fatalf("80 columns is %v, want Medium", m.layoutAt(80))
 	}
@@ -70,7 +71,7 @@ func TestOnMediumTheTalkLineIsAboveTheQuietShelf(t *testing.T) {
 // chosen card; the talk line stays, and no two hairlines meet.
 func TestAShortRoomKeepsTheWaitingCard(t *testing.T) {
 	for _, size := range [][2]int{{100, 10}, {100, 12}, {80, 8}} {
-		m, _ := hearthOpen(t, size[0], headState(t, runningPlan(), true))
+		m, _ := boardHearth(t, size[0], headState(t, runningPlan(), true))
 		m = upd(t, m, tea.WindowSizeMsg{Width: size[0], Height: size[1]})
 		frame := plainFrame(m)
 		if !strings.Contains(frame, "kindle-web") || !strings.Contains(frame, "› tell hearth's stoker…") {
@@ -83,4 +84,21 @@ func TestAShortRoomKeepsTheWaitingCard(t *testing.T) {
 			}
 		}
 	}
+}
+
+// boardChain is the board of st at w columns: what a short board keeps.
+func boardChain(t *testing.T, w int, st proto.State) (Model, *fakeConn) {
+	t.Helper()
+	m, f := headModel(t, w, st)
+	return boardOn(m), f
+}
+
+// boardHearth is the board at w with the room of chain hearth open, as g
+// on hearth-api opens it.
+func boardHearth(t *testing.T, w int, st proto.State) (Model, *fakeConn) {
+	t.Helper()
+	m, f := boardChain(t, w, st)
+	s := matchOf(t, m, "hearth-api")
+	m.boardChooseCard(m.columnOf(s), s)
+	return pressOn(m, "g"), f
 }

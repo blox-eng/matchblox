@@ -205,7 +205,7 @@ func runningPlan() proto.StokerView {
 func headModel(t *testing.T, width int, st proto.State) (Model, *fakeConn) {
 	t.Helper()
 	f := newFake()
-	var next tea.Model = boardOnly(New(Options{NoMotion: true, Conn: f, Now: func() time.Time { return demoAt }}))
+	var next tea.Model = New(Options{NoMotion: true, Conn: f, Now: func() time.Time { return demoAt }})
 	next, _ = next.Update(tea.WindowSizeMsg{Width: width, Height: 30})
 	next, _ = next.Update(stateMsg(st))
 	m := next.(Model)

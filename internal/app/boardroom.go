@@ -54,6 +54,9 @@ func (m *Model) keepDraft() {
 func (m Model) closeRoom() Model {
 	m.keepDraft()
 	m.room = nil
+	if m.sidePlace == placeRoom {
+		m.sidePlace = placeChat
+	}
 	m.boardChain, m.peekAt = "", m.now()
 	return m
 }

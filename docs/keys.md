@@ -127,26 +127,27 @@ detached busy loops, the devices and, over several hosts, the hosts.
 
 ## A chain's room
 
-A room is the board narrowed to one chain: `g`, `⌥s` or a tap on a card's
-stub opens it. It adds the stoker's card above the columns and the talk
-line under them. The board's keys work on its cards. The key line shows
-the keys of the chosen line.
+A room is one chain and its stoker: `g` in the list or `⌥s` opens it. The
+list shows only the chain's sessions, and the room takes the chat's place:
+its name, the stoker's card and steps, then the talk line. The room has
+the keys. The key line shows the keys of the chosen line.
 
 | Key | What it does |
 |---|---|
-| `↑` or `k`, `↓` or `j` | Chooses the line above or below: the stoker's steps, the cards, the talk line. |
-| `Enter` | On a card, goes into the match's pane. On `↓ N more`, unfolds the plan. On the talk line, starts typing. On a quiet stoker's line, starts typing to it. |
+| `↑`, `↓` | Chooses the line above or below: the stoker's card, its steps, the talk line. |
+| `Enter` | On `↓ N more`, unfolds the plan. On the talk line, starts typing. On a quiet stoker's line, starts typing to it. |
 | `y` | Gives the go a step waits for. Every go (a merge, a release, a deploy, a kill) acts outside the session: it shows its command first and runs on a typed `y`. |
 | `]` | Opens the next chain's room. |
 | `[` | Opens the previous chain's room. |
 | `⌥s` | Goes back to the session you flipped from. With none, starts typing on the talk line. |
 | `⌥n` | Goes into the chain's first match. |
-| `Esc` | Stops typing (the words stay). Else closes the room and shows every chain. |
+| `◂` or `←` | Gives the keys to the list. The room stays open, and the list shows only its chain. |
+| `Esc` | Stops typing (the words stay). Else closes the room, shows every chain and gives the chat its place back. |
 | `Backspace` | Erases the last character while you type. |
 
 `out of <chain>` in a card's menu (`m`) takes the match out of the chain,
 after a typed `y`. Its agent goes on, and the chain hears that it left.
-The menu has it only while the board shows that chain.
+The menu has it only while the list shows that chain.
 
 While the talk line types, every key is text until `Enter` sends it to the
 chain's stoker or `Esc` stops. The first words to a chain with no stoker

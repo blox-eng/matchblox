@@ -137,6 +137,7 @@ const (
 	placeChat sidePlace = iota
 	placeTips
 	placeSetup
+	placeRoom // the chain's room: the stoker's card, its steps and the talk line
 )
 
 // chatPlace is the chat's place in w by h: the chat, the tips, or the
@@ -148,6 +149,8 @@ func (m Model) chatPlace(w, h int) []string {
 		lines = m.tipsPanel(w)
 	case placeSetup:
 		lines = m.setupPanel(w)
+	case placeRoom:
+		lines = m.roomPanel(w)
 	default:
 		return m.chatPanel(w, h)
 	}
@@ -266,8 +269,11 @@ func (m Model) placeKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 // placeName is the name of what has the chat's place.
 func (m Model) placeName() string {
-	if m.sidePlace == placeSetup {
+	switch m.sidePlace {
+	case placeSetup:
 		return "setup steps"
+	case placeRoom:
+		return "room"
 	}
 	return "tips"
 }
@@ -276,6 +282,10 @@ func (m Model) placeName() string {
 func (m Model) placeHints() []hint {
 	sk, mk := m.keys.side, m.keys.main
 	back := hintFor(sk.Leave, "chat")
+	if m.sidePlace == placeRoom {
+		row, _ := m.roomChosen()
+		return append(m.roomHints(row), hintFor(sk.Up, ""))
+	}
 	if m.sidePlace == placeSetup {
 		return []hint{hintFor(sk.Enter, "set up"), back}
 	}
@@ -453,6 +463,12 @@ func (m Model) sideTap(x, y int) (tea.Model, tea.Cmd) {
 	if m.backMark(box.chatW) != "" && y == 0 && x-box.chatX < 3 {
 		m.sidePlace = placeChat
 		m.toList()
+		return m, nil
+	}
+	if m.sidePlace == placeRoom {
+		if _, rows := m.roomPanelRows(box.chatW); y >= 0 && y < len(rows) && rows[y] >= 0 {
+			return m.roomTap(rows[y])
+		}
 		return m, nil
 	}
 	if m.sidePlace == placeChat {
@@ -657,4 +673,69 @@ func (m Model) formInChat(sc *drawn, w int) {
 	}
 	sc.boxAt, sc.boxX, sc.boxW, sc.boxRows, sc.boxKeys = sc.bodyTop, x, bw, press, spans
 	sc.formAgentsAt, sc.formAgents = sc.bodyTop+agentsAt, agents
+}
+
+// roomPanel is the chain's room in the chat's place: its name, then the
+// stoker's card and its steps, then the talk line.
+func (m Model) roomPanel(w int) []string {
+	lines, _ := m.roomPanelRows(w)
+	return lines
+}
+
+// roomPanelRows are roomPanel's lines, and the room's row each line is
+// (-1 for none).
+func (m Model) roomPanelRows(w int) (lines []string, rows []int) {
+	if m.room == nil {
+		return nil, nil
+	}
+	blank := strings.Repeat(" ", w)
+	lines, rows = []string{m.placeHead("CHAIN "+m.roomName(m.room.k), w), blank}, []int{-1, -1}
+	card, talk := m.roomDraws(w)
+	for _, d := range card {
+		lines, rows = append(lines, d.text), append(rows, d.at)
+	}
+	if len(card) > 0 {
+		lines, rows = append(lines, blank), append(rows, -1)
+	}
+	for _, d := range talk {
+		lines, rows = append(lines, d.text), append(rows, d.at)
+	}
+	return lines, rows
+}
+
+// roomPlaceKey is k while the room has the chat's place: ↑↓ walk its rows,
+// ◂ gives the keys to the list with the room still open, and the room's
+// own keys do the rest (y gives a go, ⏎ unfolds or talks, esc closes the
+// room). A room that closes gives the place back to the chat.
+func (m Model) roomPlaceKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	sk, mk := m.keys.side, m.keys.main
+	if m.room == nil {
+		m.sidePlace = placeChat
+		return m, nil
+	}
+	rows := m.roomRows(m.room.k)
+	switch {
+	case m.room.typing:
+	case bkey.Matches(k, sk.Up, sk.Down) && len(rows) > 0:
+		d := 1
+		if bkey.Matches(k, sk.Up) {
+			d = -1
+		}
+		m.roomOn(clampMove(max(m.room.at, 0), d, len(rows)))
+		return m, nil
+	case bkey.Matches(k, sk.List):
+		m.sidePlace = placeChat
+		m.toList()
+		return m, nil
+	case bkey.Matches(k, mk.NextTab, mk.PrevTab):
+		return m.key(k) // the room waits for the tab to come back
+	case !bkey.Matches(k, m.keys.room.bindings()...):
+		return m, m.notice("the room takes " + strings.Join(m.placeKeys(), " ") + " · " + sk.List.Help().Key + " gives the keys to the list")
+	}
+	next, cmd := m.roomKey(k)
+	if nm, ok := next.(Model); ok && nm.room == nil && nm.sidePlace == placeRoom {
+		nm.sidePlace = placeChat
+		next = nm
+	}
+	return next, cmd
 }

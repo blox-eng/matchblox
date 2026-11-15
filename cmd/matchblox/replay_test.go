@@ -645,11 +645,14 @@ func replayAt(t *testing.T, z replaySize) {
 		{name: "kindle-web asks", at: 10500 * time.Millisecond, do: walk("kindle-web"), ok: func(s string) bool {
 			return chosen("kindle-web")(s) && has("permission")(s)
 		}},
-		// g shows only kindle-web's chain, login; esc shows all.
+		// g opens kindle-web's chain, login: the list shows only the chain,
+		// and its room takes the chat's place. esc closes it.
 		{name: "one chain", at: 13 * time.Second, key: "g", ok: func(s string) bool {
-			return has("≋ login", "kindle-web")(s) && !strings.Contains(s, "spark-docs")
+			return has("CHAIN login", "≋ login", "kindle-web")(s) && !strings.Contains(s, "spark-docs")
 		}},
-		{name: "every chain", at: 16 * time.Second, key: "esc", ok: has("≋ login", "spark-docs")},
+		{name: "every chain", at: 16 * time.Second, key: "esc", ok: func(s string) bool {
+			return has("≋ login", "spark-docs")(s) && !strings.Contains(s, "CHAIN login")
+		}},
 	}
 	if phone {
 		// The phone draws one pane at a time: a tap on a row opens its
@@ -657,6 +660,9 @@ func replayAt(t *testing.T, z replaySize) {
 		at := slices.IndexFunc(steps, func(st step) bool { return st.name == "it works" })
 		steps[at].do = tapOn("◂")
 		steps = slices.Delete(steps, at+1, at+2) // the list has the keys once it shows
+		// The room, then the chat it closes to, take the screen in turn.
+		steps[len(steps)-2].ok = has("CHAIN login", "what should login's stoker do?")
+		steps[len(steps)-1].ok = func(s string) bool { return has("send to kindle-web")(s) && !strings.Contains(s, "CHAIN login") }
 	}
 	var still replay.Frame
 	for _, st := range steps {

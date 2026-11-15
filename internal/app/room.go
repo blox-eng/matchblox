@@ -317,6 +317,10 @@ func (m Model) openRoom(k chainKey) Model {
 		m.boardChain = m.chainLabel(k)
 	}
 	m.room.at = m.roomLanding(k)
+	if m.sideActive() { // the room takes the chat's place, and the keys
+		m.sidePlace = placeRoom
+		m.toLine()
+	}
 	if d := m.drafts[k]; d != "" { // words typed before the room closed: back on the talk line, and no longer kept
 		m.room.draft, m.room.at = d, len(m.roomRows(k))-1
 		m.drafts = maps.Clone(m.drafts)
@@ -356,6 +360,7 @@ func (m *Model) roomLanding(k chainKey) int {
 	seen, _ := m.members(k)
 	if i := slices.IndexFunc(seen, func(s sample.Session) bool { return s.Pane == pane }); i >= 0 {
 		m.boardChooseCard(m.columnOf(seen[i]), seen[i])
+		m.chooseRow(seen[i])
 		return -1
 	}
 	return talk

@@ -1,30 +1,30 @@
  ▰ matchblox                                                       ● 2 need you
- BOARD 6    machine                                  chain hearth · 3   esc all
+ SESSIONS 6    machine
 ────────────────────────────────────────────────────────────────────────────────
- ≋ "ship the chain"
- ≋ hearth's stoker is quiet since 22:49 · ⏎ asks it
-   ✓ step
-   ▸ step · waits for your go
-     step
-   ↓ 2 more
+ NEEDS YOU · 2  −               │ CHAIN hearth
+ ≋ hearth       step 2 of 3 · 3 │
+ ├ ╵ kindle-web             2m ✻│ ≋ "ship the chain"
+▌├ ╿ hearth-api             8h ✻│ ≋ hearth's stoker is quiet since 22:49 · ⏎ as…
+ │   permission prompt          │   ✓ step
+ └ ╿ ember-billing          8h ✻│   ▸ step · waits for your go
+     which branch?              │     step
+                                │   ↓ 2 more
+                                │
+                                │ › tell hearth's stoker…
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+ + new · ✧ 7 tips               │
 ────────────────────────────────────────────────────────────────────────────────
- NEEDS YOU · 2                          WORKING · 0          SHIPPING · 0
-▌╿ hearth-api                   ✻  8h
-  asks permission prompt
-  ctx 79%                    ━╸hearth
-  “may I force-push the rebase?”
-  ⏎ go in
-
- ╿ ember-billing                ✻  8h
-  waits which branch?
-  ctx 32%                    ━╸hearth
-  ⏎ go in
-
-
- › tell hearth's stoker…
-────────────────────────────────────────────────────────────────────────────────
- QUIET · 1   kindle-web   ▴
- + start a new session
- RECOMMENDATIONS · 7
-────────────────────────────────────────────────────────────────────────────────
- ⏎ go in   c copy   s hosts   tab next
+ in the room · ] next chain · esc all · ↑↓ choose

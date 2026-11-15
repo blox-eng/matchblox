@@ -30,6 +30,6 @@ func TestRoomScreens(t *testing.T) {
 	st := headState(t, aGo(runningPlan(), "rebase", ""), true)
 	twoAsk(&st)
 	for _, size := range [][2]int{{110, 30}, {80, 30}, {40, 24}} {
-		checkBoard(t, st, "room", size[0], size[1], []string{"alt+s"})
+		check(t, st, "room", size[0], size[1], []string{"alt+s"})
 	}
 }

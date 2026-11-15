@@ -57,6 +57,16 @@ func (m *Model) boardChooseCard(c boardCol, s sample.Session) {
 	m.boardAt, m.boardPick, m.boardAbove, m.boardBelow = c, pick, 0, 0
 }
 
+// chooseRow makes s the list's chosen session. A move to another
+// session starts its mark guard.
+func (m *Model) chooseRow(s sample.Session) {
+	if paneOf(s) != m.chosenSide() {
+		m.startChatMark(s)
+		m.goArmed = paneKey{}
+	}
+	m.sideAt = paneOf(s)
+}
+
 // startChatMark starts the mark guard on s: for peekDead its digits arm
 // nothing, and a mark from before holds no more.
 func (m *Model) startChatMark(s sample.Session) {

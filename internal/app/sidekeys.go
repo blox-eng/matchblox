@@ -128,6 +128,12 @@ func (m Model) sideKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 	case bkey.Matches(k, m.keys.main.Jump):
 		next, cmd := m.expand(s, ok)
 		return next, cmd, true
+	case m.sidePlace == placeRoom:
+		next, cmd := m.roomPlaceKey(k)
+		return next, cmd, true
+	case bkey.Matches(k, m.keys.room.Flip):
+		next, cmd := m.flipHere()
+		return next, cmd, true
 	case m.sidePlace != placeChat:
 		next, cmd := m.placeKey(k)
 		return next, cmd, true

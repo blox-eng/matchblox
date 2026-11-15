@@ -79,7 +79,7 @@ func choose(m *Model, pid int) {
 	m.chose, m.selPID, m.doorPick, m.recPick = true, pid, "", ""
 	for _, s := range m.snap.Sessions {
 		if s.PID == pid {
-			m.selHost = s.Host
+			m.selHost, m.sideAt = s.Host, paneOf(s)
 			m.boardChooseCard(m.columnOf(s), s)
 			return
 		}
