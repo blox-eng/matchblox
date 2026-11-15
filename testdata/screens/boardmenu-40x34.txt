@@ -19,15 +19,15 @@
   ⏎ go in
 
 ▌╿ flint-auth                     ✻  2m
-  asks Which way do we fix the login?
-  ctx 62%                       ━╸login
-  “I can fix it in two ways. The token
-  check is a small patch.”
 ╭─ flint-auth ─────────────────────────╮
 │ ▌ copy last message                c │
 │   copy the question                  │
 │   copy its name                      │
 │   show only the chain login        g │
+│   kill                             x │
+│   rename                           r │
+│   switch the agent                 A │
+│   stoke the chain login            F │
 │   go in                            a │
 ╰─ ⏎ do ─ esc close ───────────────────╯
 ────────────────────────────────────────

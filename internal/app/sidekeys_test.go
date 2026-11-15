@@ -312,9 +312,9 @@ func TestListKeys(t *testing.T) {
 	}
 	m := loginChain(t, nil)
 	m.tab, m.sideOn = tabSessions, true
-	m = pressOn(m, "esc", "x")
-	if m.keysIn != focusLine || m.lines[m.chosenSide()] != "x" {
-		t.Fatalf("x in the list: keys in %v, the line holds %q", m.keysIn, m.lines[m.chosenSide()])
+	m = pressOn(m, "esc", "w")
+	if m.keysIn != focusLine || m.lines[m.chosenSide()] != "w" {
+		t.Fatalf("w in the list: keys in %v, the line holds %q", m.keysIn, m.lines[m.chosenSide()])
 	}
 }
 

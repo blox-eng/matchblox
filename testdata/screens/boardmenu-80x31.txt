@@ -19,12 +19,12 @@
   │   copy the question             │
   │   copy its name                 │
   │   show only the chain login   g │
-  │   go in                       a │
-  ╰─ ⏎ do ─ esc close ──────────────╯
-
-
-────────────────────────────────────────────────────────────────────────────────
- QUIET · 5   wick-mobile · hearth-notes · ember-reports · kindle-legacy · tinde…
+  │   kill                        x │
+  │   rename                      r │
+  │   switch the agent            A │
+  │   stoke the chain login       F │
+──│   go in                       a │───────────────────────────────────────────
+ Q╰─ ⏎ do ─ esc close ──────────────╯es · ember-reports · kindle-legacy · tinde…
  + start a new session
  RECOMMENDATIONS · 7
 ────────────────────────────────────────────────────────────────────────────────

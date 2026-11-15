@@ -66,6 +66,7 @@ func (m Model) menuFor(s sample.Session) []menuItem {
 			return m.boardChainOf(s, true)
 		}})
 	}
+	items = append(items, m.actItems(s)...)
 	items = append(items, menuItem{"go in", mk.Into.Help().Key, func(m *Model) tea.Cmd {
 		next, cmd := m.boardInto(s)
 		if nm, ok := next.(Model); ok {
@@ -80,6 +81,41 @@ func (m Model) menuFor(s sample.Session) []menuItem {
 			m.pending, m.previewTop = &a, 0
 			return nil
 		}})
+	}
+	return items
+}
+
+// actItems are the menu's lines of the acts the list takes on s
+// (rowActKeys), each only when s can take it.
+func (m Model) actItems(s sample.Session) []menuItem {
+	mk := m.keys.main
+	act := func(label string, b bkey.Binding) menuItem {
+		return menuItem{label, b.Help().Key, func(m *Model) tea.Cmd {
+			next, cmd := m.rowAct(keyPress(b.Keys()[0]), s)
+			if nm, ok := next.(Model); ok {
+				*m = nm
+			}
+			return cmd
+		}}
+	}
+	var items []menuItem
+	if sh, ok := m.mergeable(s); ok {
+		items = append(items, act("merge #"+strconv.Itoa(sh.Number), m.keys.board.Merge))
+	}
+	if m.goWaitsHere(s) {
+		items = append(items, act("give the go: "+m.goWhat(s), mk.Grant))
+	}
+	if _, head := m.headRow(s); !head && !isShipCard(s) && s.Pane != "" {
+		if m.killAction(s) != nil {
+			items = append(items, act("kill", mk.Second))
+		}
+		items = append(items, act("rename", mk.Rename), act("switch the agent", mk.Switch))
+	}
+	if chain := m.chainLabelOf(s); chain != "" {
+		items = append(items, act("stoke the chain "+chain, mk.StokeChain))
+	}
+	if m.stokerOf(s.Host) != nil {
+		items = append(items, act("start or stop the stoker", mk.Stoke), act("a new order", mk.Order))
 	}
 	return items
 }

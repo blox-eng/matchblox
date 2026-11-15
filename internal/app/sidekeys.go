@@ -191,7 +191,7 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 	sk, mk, bk := m.keys.side, m.keys.main, m.keys.board
 	var cmd tea.Cmd
 	switch {
-	case m.footAt > 0 && bkey.Matches(k, mk.Park, bk.Copy, bk.Chain, bk.Menu):
+	case m.footAt > 0 && bkey.Matches(k, append([]bkey.Binding{mk.Park, bk.Copy, bk.Chain, bk.Menu}, m.rowActKeys()...)...):
 		cmd = m.notice(strings.Join([]string{mk.Park.Help().Key, bk.Copy.Help().Key, bk.Chain.Help().Key, bk.Menu.Help().Key}, " ") +
 			" act on a session · " + sk.Up.Help().Key + " chooses one")
 	case bkey.Matches(k, sk.Up) && m.footAt > 0:
@@ -239,6 +239,8 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 		cmd = m.boardCopy(s, ok)
 	case bkey.Matches(k, mk.Park) && ok:
 		return m.onCard(s).key(k)
+	case bkey.Matches(k, m.rowActKeys()...) && ok:
+		return m.rowAct(k, s)
 	case bkey.Matches(k, mk.New, mk.Search, mk.NextTab, mk.PrevTab):
 		return m.key(k)
 	case printsText(k):
@@ -248,6 +250,33 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 		cmd = m.listTakes()
 	}
 	return m, cmd
+}
+
+// rowActKeys are the keys that act on the chosen row in the list, as they
+// did on the board's chosen card.
+func (m Model) rowActKeys() []bkey.Binding {
+	mk := m.keys.main
+	return []bkey.Binding{mk.Second, mk.Rename, mk.Switch, m.keys.board.Merge, mk.Grant, mk.Stoke, mk.StokeChain, mk.Order, mk.Night}
+}
+
+// rowAct is k, one of rowActKeys, on the chosen row s: the kill and the
+// merge wait in the consent box, a go that a tap armed waits for the
+// second, and the forms open on s.
+func (m Model) rowAct(k tea.KeyPressMsg, s sample.Session) (tea.Model, tea.Cmd) {
+	mk := m.keys.main
+	switch {
+	case isShipCard(s) && !bkey.Matches(k, m.keys.board.Merge):
+		return m, m.notice(s.Name + " has no session · " + mk.New.Help().Key + " starts one")
+	case bkey.Matches(k, m.keys.board.Merge):
+		return m, m.boardMerge(s)
+	case bkey.Matches(k, mk.Second):
+		return m, m.boardKill(s)
+	case bkey.Matches(k, mk.Grant) && m.onPocket() && m.goWaitsHere(s): // the belt's y is a tap: arm, then give
+		return m.armGo(s, mk.Grant.Help().Key+" again gives the go: "+m.goWhat(s))
+	case bkey.Matches(k, mk.Grant):
+		return m.boardGo(s)
+	}
+	return m.onCard(s).key(k)
 }
 
 // listTakes is the notice of a key the list has no job for: the keys it

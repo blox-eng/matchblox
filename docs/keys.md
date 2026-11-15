@@ -69,10 +69,17 @@ the screen; else it types.
 | `h` | In the list, on a hidden host, shows that host in all hosts again. Machine › Hosts then ticks the host. On another host, a notice says what `h` does. |
 | `g` | In the list, shows only the chain of the chosen session. `Esc` shows all. |
 | `/` | In the list, searches the list. |
-| `m` | In the list, opens the menu of the chosen session. |
+| `m` | In the list, opens the menu of the chosen session. It names each act the session can take, with its key. A kill or a merge from the menu waits for a typed `y`, as its key does. |
 | `c` | In the list, copies what the agent said last. |
 | `z` | In the list, parks the chosen session, or lets it go. In the line of a parked session, lets it go. |
 | `N` | In the list, opens **New session**. |
+| `x` | In the list, kills the chosen session: a box shows the commands, and they run on a typed `y`. A session that works or needs you asks for a second `y`. |
+| `r` | In the list, renames the chosen session. |
+| `A` | In the list, switches the agent of the chosen session. |
+| `p` | In the list, merges the pull request of the chosen session when it waits for your merge. A box shows the command, and it runs on a typed `y`. |
+| `y` | In the list, gives the go that a stoker step waits for on the chosen session. On Pocket the first `y` only arms it, and a second `y` gives it. |
+| `f`, `n`, `o` | In the list, the stoker's keys on the host of the chosen session: `f` turns the stoker on or off, `n` starts or ends a night, `o` gives a new order. |
+| `F` | In the list, stokes the chain of the chosen session. |
 | `Tab` | Goes to Machine. |
 | `Ctrl+O` | Goes into the chosen agent's pane, from the line or the list. The key line then says the way back, `ctrl+a m`. |
 | `Ctrl+L` | Hides the list, or shows it again. With the list hidden, the chat takes the width, and the header names each session that needs you. A tap on a name opens its chat. On a phone, the list and the chat take turns. |
