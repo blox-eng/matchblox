@@ -35,4 +35,4 @@
                                         │
  + new · ✧ 7 tips · ! 1 setup           │ ›                                        ⏎ send to flint-auth
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
- R start again · service v0.43.0, console v0.42.0  writing to flint-auth · ⏎ send · ↑↓ choose · esc list
+ esc R start again · service v0.43.0, console v0.42.0  writing to flint-auth · ⏎ send · ↑↓ choose

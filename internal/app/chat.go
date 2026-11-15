@@ -218,9 +218,12 @@ func (m Model) chatAsk(s sample.Session, w, room int) []string {
 			m.st.muted.Render(" · "+n+" again sends · "+m.keys.side.Leave.Help().Key+" clears"), w)}
 	}
 	if len(asks)+len(options)+len(mark) > room {
-		asks = asks[:min(len(asks), 1)]
-		if fits := room - len(asks) - len(mark); fits < len(options) {
-			keep := max(fits-1, 0)
+		asks = asks[:min(len(asks), 1, max(room-len(mark), 0))] // the mark says what the next digit sends: it stays
+		switch fits := room - len(asks) - len(mark); {
+		case fits <= 0:
+			options = nil
+		case fits < len(options):
+			keep := fits - 1
 			more := fit("  "+m.st.muted.Render("+"+strconv.Itoa(len(options)-keep)+" more · "+m.keys.main.Jump.Help().Key+" shows all"), w)
 			options = append(options[:keep], more)
 		}

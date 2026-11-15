@@ -118,7 +118,7 @@ func (m Model) sideKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 	if !m.have && m.opt.Layered && bkey.Matches(k, m.keys.main.Back) {
 		return m, nil, false // a host that never answered: esc goes back to Hosts
 	}
-	if m.newer != "" && bkey.Matches(k, m.keys.main.StartAgain) && m.sidePlace == placeChat && m.inList() {
+	if m.newer != "" && bkey.Matches(k, m.keys.main.StartAgain) && !m.rTypes() {
 		if !m.startsAgain {
 			return m, m.notice(m.newer), true
 		}

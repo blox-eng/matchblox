@@ -434,7 +434,7 @@ func (m Model) sideSays() string {
 	case m.copyCode != "":
 		return m.pasteHere()
 	case m.newer != "" && !m.lost && m.beltOnly():
-		return m.newer
+		return m.newerSaid()
 	case m.flash != "":
 		return m.flash
 	}
@@ -472,11 +472,14 @@ func (m Model) sideKeyLine(w int) (string, []span) {
 	st := m.st
 	where, hints := m.sideHints()
 	line, x := " ", 1
-	if m.newer != "" { // first: its key stays when the line is cut
-		line, x = line+st.warn.Render(m.newer)+"  ", x+lipgloss.Width(m.newer)+2
+	var spans []span
+	if newer := m.newerSaid(); newer != "" { // first: its key stays when the line is cut
+		if m.startsAgain {
+			spans = append(spans, span{x, x + lipgloss.Width(newer), tapAgain})
+		}
+		line, x = line+st.warn.Render(newer)+"  ", x+lipgloss.Width(newer)+2
 	}
 	line, x = line+st.label.Render(where), x+lipgloss.Width(where)
-	var spans []span
 	for _, h := range hints {
 		part := st.text.Render(h.key) + st.muted.Render(" "+h.label)
 		if x+3+lipgloss.Width(part) > w {
@@ -489,6 +492,29 @@ func (m Model) sideKeyLine(w int) (string, []span) {
 		x += lipgloss.Width(part)
 	}
 	return fit(line, w), spans
+}
+
+// tapAgain is what a tap on the notice of a newer release presses: no
+// key, as R types where the line or the room has the keys.
+const tapAgain = "again"
+
+// rTypes: R goes as text where the keys are now, to the chat's line or to
+// the room. The tips, a setup step and a host's trouble take no text.
+func (m Model) rTypes() bool {
+	return m.sideActive() && m.menu == nil && (m.sidePlace == placeRoom || m.sidePlace == placeChat && !m.inList())
+}
+
+// newerSaid is the notice of a newer release as the key line says it:
+// where R types, it names first the key that gives the keys to the list.
+func (m Model) newerSaid() string {
+	if m.newer == "" || !m.startsAgain || !m.rTypes() {
+		return m.newer
+	}
+	first := m.keys.side.Leave
+	if m.sidePlace == placeRoom {
+		first = m.keys.side.List
+	}
+	return first.Help().Key + " " + m.newer
 }
 
 // sideHints is where the keys go and the keys of that place.
@@ -562,7 +588,7 @@ func (m Model) sideTap(x, y int) (tea.Model, tea.Cmd) {
 	w := max(m.width, minWidth)
 	box := m.sideBoxAt(w)
 	if _, y0, y1 := m.noticeAt(w); y >= y0 && y < y1 {
-		if m.sideSays() == m.newer && m.startsAgain { // Pocket's notice of a newer release: a tap starts again
+		if m.newer != "" && m.sideSays() == m.newerSaid() && m.startsAgain { // Pocket's notice of a newer release: a tap starts again
 			return m.startAgain()
 		}
 		return m, nil // a notice covers the line: a tap on it does nothing to what is under it
@@ -718,7 +744,28 @@ func (m Model) sideWheel(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		m.sideMove(map[bool]int{true: -1, false: 1}[up])
 		return m, nil
 	}
+	if m.sidePlace != placeChat {
+		return m.placeWheel(up)
+	}
 	return m.chatWheel(up)
+}
+
+// placeWheel is a wheel step over what has the chat's place: it moves the
+// choice of the tips or the room, as ↑ and ↓ do. The chosen session's
+// pane is under the place, so the wheel never goes to it.
+func (m Model) placeWheel(up bool) (tea.Model, tea.Cmd) {
+	d := map[bool]int{true: -1, false: 1}[up]
+	switch {
+	case m.sidePlace == placeTips && len(m.recs) > 0:
+		m.sideTip = clampMove(m.tipAt(), d, len(m.recs))
+		return m, nil
+	case m.sidePlace == placeRoom && m.room != nil && !m.room.typing:
+		if rows := m.roomRows(m.room.k); len(rows) > 0 {
+			m.roomOn(clampMove(max(m.room.at, 0), d, len(rows)))
+			return m, nil
+		}
+	}
+	return m, m.notice("nothing in the " + m.placeName() + " scrolls")
 }
 
 // chatWheel scrolls the chat of the chosen session through its pane's

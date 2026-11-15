@@ -383,12 +383,19 @@ func TestPocketSeesANewerService(t *testing.T) {
 		if !m.onPocket() {
 			t.Fatal("the board is not on Pocket")
 		}
-		if f := strings.Join(strings.Fields(plainFrame(m)), " "); !strings.Contains(f, "R start again · service v0.43.0, console v0.42.0") {
-			t.Fatalf("%d: Pocket does not say the service is newer:\n%s", w, plainFrame(m))
+		if f := strings.Join(strings.Fields(plainFrame(m)), " "); !strings.Contains(f, "R start again · service v0.43.0, console v0.42.0") || strings.Contains(f, "esc R") {
+			t.Fatalf("%d: Pocket in the list does not say R starts again:\n%s", w, plainFrame(m))
 		}
 		next := tapText(t, m, "R start again")
 		if !next.restarting {
 			t.Errorf("%d: a tap on the notice did not start the console again", w)
+		}
+		m.toLine() // R types in the line: the notice names esc first
+		if f := strings.Join(strings.Fields(plainFrame(m)), " "); !strings.Contains(f, "esc R start again · service v0.43.0, console v0.42.0") {
+			t.Fatalf("%d: Pocket in the line does not name esc:\n%s", w, plainFrame(m))
+		}
+		if next = tapText(t, m, "esc R start again"); !next.restarting {
+			t.Errorf("%d: a tap on the notice in the line did not start the console again", w)
 		}
 	}
 }

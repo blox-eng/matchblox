@@ -361,3 +361,94 @@ func TestTheRoomKeepsItsTalkLineInView(t *testing.T) {
 		t.Fatalf("the talk line %q is not in view:\n%s", strings.TrimSpace(full[len(full)-1]), got)
 	}
 }
+
+// TestKeyLineNamesTheWayToStartAgainFromTheLine: while the line has the
+// keys, R types, so the key line names esc first. In the list it names R
+// only. A tap on its words starts the console again from both.
+func TestKeyLineNamesTheWayToStartAgainFromTheLine(t *testing.T) {
+	m := newerConsole(t)
+	if l := keyLineOf(m); !strings.Contains(l, "esc R start again · service v0.46.0") {
+		t.Errorf("the line has the keys: the key line says %q", l)
+	}
+	if next := tapText(t, m, "esc R start again"); !next.restarting {
+		t.Error("a tap on the key line's words in the line did not start the console again")
+	}
+	m.toList()
+	if l := keyLineOf(m); !strings.Contains(l, "R start again") || strings.Contains(l, "esc R") {
+		t.Errorf("in the list: the key line says %q", l)
+	}
+	if next := tapText(t, m, "R start again"); !next.restarting {
+		t.Error("a tap on the key line's words in the list did not start the console again")
+	}
+}
+
+// TestRInAPlaceWithNoTextStartsAgain: the tips, a setup step and a host's
+// trouble take no text, so R starts the console again there. The room
+// takes text: its key line names ◂ first, and R does not start again.
+func TestRInAPlaceWithNoTextStartsAgain(t *testing.T) {
+	for _, p := range []sidePlace{placeTips, placeSetup, placeHost} {
+		m := newerConsole(t)
+		m.openPlace(p)
+		if l := keyLineOf(m); !strings.Contains(l, "R start again") || strings.Contains(l, "esc R") {
+			t.Errorf("%v: the key line says %q", p, l)
+		}
+		if m = pressOn(m, "R"); !m.restarting {
+			t.Errorf("%v: R did not start the console again", p)
+		}
+	}
+	st := headState(t, runningPlan(), true)
+	st.Queue = nil
+	m, _ := hearthOpen(t, 160, st)
+	m.newer, m.startsAgain = "R start again · service v0.46.0, console v0.45.0", true
+	m.opt.Restart = func() error { return nil }
+	if m.sidePlace != placeRoom {
+		t.Fatalf("the room does not have the chat's place: %v", m.sidePlace)
+	}
+	if l := keyLineOf(m); !strings.Contains(l, "◂ R start again") {
+		t.Errorf("in the room: the key line says %q", l)
+	}
+	if m = pressOn(m, "R"); m.restarting {
+		t.Error("R in the room started the console again")
+	}
+}
+
+// TestWheelInAPlaceNeverReachesThePane: while a place other than the chat
+// has the chat's place, a wheel step over it moves that place's choice, or
+// says that nothing there scrolls. It never scrolls the hidden pane.
+func TestWheelInAPlaceNeverReachesThePane(t *testing.T) {
+	for _, p := range []sidePlace{placeTips, placeSetup, placeHost} {
+		m := wheelConsole(t, 160, 30)
+		m.openPlace(p)
+		m.noticeText = ""
+		m = wheelOn(t, m, 150, 10, false)
+		if len(sent(m)) != 0 || !strings.Contains(m.noticeText, "scrolls") {
+			t.Errorf("%v: sent %+v, notice %q", p, sent(m), m.noticeText)
+		}
+	}
+	m := wheelConsole(t, 160, 30)
+	m.recs = fixtureState().Recommendations[:2]
+	m.openPlace(placeTips)
+	if m = wheelOn(t, m, 150, 10, false); m.tipAt() != 1 || len(sent(m)) != 0 {
+		t.Errorf("the wheel in the tips: tip %d, sent %+v", m.tipAt(), sent(m))
+	}
+	st := headState(t, runningPlan(), true)
+	st.Queue = nil
+	r, f := hearthOpen(t, 160, st)
+	before := r.room.at
+	if r = wheelOn(t, r, 150, 10, true); r.room == nil || r.room.at == before || len(keyActs(f)) != 0 {
+		t.Errorf("the wheel in the room: room %+v (was at %d), sent %+v", r.room, before, keyActs(f))
+	}
+}
+
+// TestACutQuestionKeepsItsMark: in two lines or one, the marked option
+// and "2 again sends" stay, so the owner sees what the next 2 sends.
+func TestACutQuestionKeepsItsMark(t *testing.T) {
+	m := wheelConsole(t, 160, 30)
+	s := matchNamed(t, m, "flint-auth")
+	for _, room := range []int{1, 2} {
+		got := plainLines(m.chatAsk(s, 60, room))
+		if len(got) > room || len(got) == 0 || !strings.Contains(got[len(got)-1], "2 again sends") {
+			t.Errorf("in %d lines: %q", room, got)
+		}
+	}
+}

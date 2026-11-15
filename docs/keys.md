@@ -16,8 +16,8 @@ at most five keys for it.
 In the line, every letter types, `j`, `k`, `q` and `R` too. A paste goes
 in as one piece, in the line that shows: the chosen session's line, or
 the room's talk line while it types. The tips, a setup step and a host's
-trouble take no text: a paste there says so. A digit answers only with the line empty and a question on
-the screen; else it types.
+trouble take no text: a paste there says so. A digit answers only with
+the line empty and a question on the screen; else it types.
 
 | Key | What it does |
 |---|---|
@@ -51,39 +51,43 @@ the screen; else it types.
 | `◂` or `←` | On a phone, goes from the chat back to the list. A tap on `◂` at the left of the chat's head does it too. On a desk, `←` in the line moves the keys to the list, as `◂` does on a phone. |
 | `e` | In the list, shows the agents that exited and wait for their parent, dim at the end of `IDLE`: for each parent, how many, the command that makes it reap them, and their pids. `e` again hides them. The `IDLE` count counts only the sessions that run. While they are hidden, the foot counts them: `· 1 exited`. |
 | `q` or `Ctrl+C` | Quits the console: `Ctrl+C` from every tab, `q` from Machine. In the line and the list, `q` types. The service keeps running. |
-| `R` | In the list, starts the console again on the binary the service runs. In the line, `R` types. A tap on the key line's notice starts the console again too. The key line offers it first, `R start again · service v0.43.0, console v0.42.0`, when the service on this machine runs a newer release than the console and the console's own binary was installed over. Otherwise the line says `quit and reopen`. |
+| `R` | In the list, in the tips, in a setup step and in a host's trouble, starts the console again on the binary the service runs. In the line and in the room, `R` types. The key line offers it first, `R start again · service v0.43.0, console v0.42.0`, when the service on this machine runs a newer release than the console and the console's own binary was installed over. Where `R` types, the key line names the way to the list first: `esc R start again` in the line, `◂ R start again` in the room. A tap on these words starts the console again from every place, on Pocket too. Otherwise the line says `quit and reopen`. |
 
 On a desk the list is 40 columns wide, with the chat beside it. On a
 narrower screen the list is 32 columns wide. A phone, and a screen that
-leaves the chat less than 40 columns, shows one of the two at a time: the
-list first. A tap on a row, or `Enter` in the list, opens its chat. A tap
-on a group's head folds the group: the head keeps its count, and its `−`
-turns to a plus sign. A tap on the head again unfolds it. The foot opens
-each of its parts in the chat's place, beside the list: `+ new` opens
-**New session**, `✧ 2 tips` the tips, `! 1 setup` the first open setup
-step, and `! ws-2 not reached` (or `! ws-2 blocked`) that host's
-trouble and its fix. `Esc` gives the place back to the chat. A notice
-shows over the lines above the chat's line and the foot, and a tap on it
-does
-nothing. In the tips, `↑` `↓` choose, `Enter` does the chosen tip and `d`
-dismisses it. In a setup step, `Enter` sets it up and `x` closes it, after
-a typed `y`. In a host's trouble, `Enter` runs the fix or dials the host
-again. A drag in the chat copies only the chat's text.
+leaves the chat less than 40 columns, shows one of the two at a time:
+the list first. A tap on a row, or `Enter` in the list, opens its chat.
+A tap on a group's head folds the group: the head keeps its count, and
+its `−` turns to a plus sign. A tap on the head again unfolds it. The
+foot opens each of its parts in the chat's place, beside the list:
+`+ new` opens **New session**, `✧ 2 tips` the tips, `! 1 setup` the
+first open setup step, and `! ws-2 not reached` (or `! ws-2 blocked`)
+that host's trouble and its fix. `Esc` gives the place back to the chat.
+A notice shows over the lines above the chat's line and the foot, and a
+tap on it does nothing, except on the notice of a newer release: that
+tap starts the console again. In the tips, `↑` `↓` choose, `Enter` does
+the chosen tip and `d` dismisses it. In a setup step, `Enter` sets it up
+and `x` closes it, after a typed `y`. In a host's trouble, `Enter` runs
+the fix or dials the host again. In these three places `R` starts the
+console again, when a newer release waits. A drag in the chat copies
+only the chat's text.
 
 A key that changed its job says so once, the first time you press it:
 `c`, `g`, `p`, `x` on a session whose pull request waits for its merge,
 and a digit.
 
 A key with no job in the line or the list does not do nothing: a notice
-names the keys that place takes. Any other letter in the list moves the keys back to the line and types
-there. The line of a parked session is off: it says
-`parked: esc, then z lets it go`. No letter in the line acts on a session:
-on the row of a pull request that no session drives, the line takes no
-text, and `p` merges from the list only (`esc`, then `p`). A message to a host that is not reached stays in the line, and the
+names the keys that place takes. Any other letter in the list moves the
+keys back to the line and types there. The line of a parked session is
+off: it says `parked: esc, then z lets it go`. No letter in the line
+acts on a session: on the row of a pull request that no session drives,
+the line takes no text, and `p` merges from the list only (`esc`, then
+`p`). A message to a host that is not reached stays in the line, and the
 line says `not sent: ws-2 is not reached`. Nothing sends it again by
-itself. The rows of that host stay, dimmed. On that host, the header says
-`ws-2 not reached · since 2m`. When the chosen session ends, the next session in the list is
-chosen, and its line says `flint-auth ended · the text is not sent`.
+itself. The rows of that host stay, dimmed. On that host, the header
+says `ws-2 not reached · since 2m`. When the chosen session ends, the
+next session in the list is chosen, and its line says
+`flint-auth ended · the text is not sent`.
 
 ## Machine
 
@@ -292,15 +296,19 @@ and `◂` comes back.
 | act | Tap a key on the key line. A destructive act still waits for a typed `y`. |
 | come back | `◂`, the belt's `◂`, or the edge swipe. |
 
-A vertical swipe over the list, or a wheel step there, chooses the session
-above or below. Over the chat it scrolls the chat back through the pane's
-history, and the choice and a marked answer stay. A chat with no screen
-to scroll says so. On a phone a drag never selects text: the menu
-copies. A tap is never consent: a tap on `y`
-marks the go, and a second tap gives it. A tap on a key of the key line
-presses it, and a tap on `● N need you` shows `NEEDS YOU` and chooses the
-first session that needs you. A tap on the header's stoker word opens the
-stoker agent. On Panes, a tap on a column header sorts by it.
+A vertical swipe over the list, or a wheel step there, chooses the
+session above or below. Over the chat it scrolls the chat back through
+the pane's history, and the choice and a marked answer stay. A chat with
+no screen to scroll says so. While the tips or the room have the chat's
+place, a wheel step there chooses the tip or the room's row above or
+below. Over a setup step or a host's trouble, a notice says that nothing
+there scrolls. The wheel never goes to the pane under the place. On a
+phone a drag never selects text: the menu copies. A tap is never
+consent: a tap on `y` marks the go, and a second tap gives it. A tap on
+a key of the key line presses it, and a tap on `● N need you` shows
+`NEEDS YOU` and chooses the first session that needs you. A tap on the
+header's stoker word opens the stoker agent. On Panes, a tap on a column
+header sorts by it.
 
 A long-press needs Matchblox Pocket, or a terminal that reports the
 release of a press. Elsewhere, `m` opens the menu.

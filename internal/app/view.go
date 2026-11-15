@@ -167,8 +167,11 @@ type drawn struct {
 }
 
 // draw is the screen, with an ssh prompt over everything.
-func (m Model) draw(w int) drawn {
-	m.side = &sideMemo{} // one build of the list's groups for the frame
+func (m Model) draw(w int) drawn { return m.drawWith(w, &sideMemo{}) }
+
+// drawWith is draw with memo as the frame's one build of the list's groups.
+func (m Model) drawWith(w int, memo *sideMemo) drawn {
+	m.side = memo
 	sc := m.drawScreen(w)
 	if m.asking() {
 		m.overlayAsk(&sc, w)
@@ -626,7 +629,11 @@ func (m Model) keyLine(w int) (string, []span) {
 		hints = append(hints, hintFor(mk.Search, ""), noTap(hintFor(mk.Quit, "")))
 	}
 	line, x := " ", 1
+	var spans []span
 	if m.newer != "" { // first: its key stays when the line is cut
+		if m.startsAgain {
+			spans = append(spans, span{x, x + lipgloss.Width(m.newer), tapAgain})
+		}
 		line += st.warn.Render(m.newer) + "  "
 		x += lipgloss.Width(m.newer) + 2
 	}
@@ -646,7 +653,6 @@ func (m Model) keyLine(w int) (string, []span) {
 	for m.newer != "" && len(hints) > 0 && hintsWidth(hints) > room {
 		hints = hints[:len(hints)-1] // whole keys after the notice, never one cut in half
 	}
-	var spans []span
 	parts := 0
 	add := func(part, press string) {
 		if parts++; parts > 1 {

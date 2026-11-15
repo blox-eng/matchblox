@@ -67,9 +67,6 @@ func (m Model) sideSessions() []sample.Session {
 	return append(listed, m.shipCards()...)
 }
 
-// sideGroupsBuilt counts the builds of the groups, for the tests.
-var sideGroupsBuilt int
-
 // sideGroups are the groups that hold a session of the hosts in view, in
 // state rank. A chain is one unit, in the group of its most urgent member,
 // and counts only the members in that state.
@@ -80,22 +77,23 @@ func (m Model) sideGroups() []sideGroup {
 	groups := m.buildSideGroups()
 	if m.side != nil {
 		m.side.groups, m.side.built = groups, true
+		m.side.builds++
 	}
 	return slices.Clip(groups)
 }
 
 // sideMemo keeps one build of the groups, and the order they give, for a
 // step that changes nothing they are built from: a frame, the steps after
-// a message, a move of the choice.
+// a message, a move of the choice. builds counts its builds, for the tests.
 type sideMemo struct {
 	built           bool
+	builds          int
 	groups          []sideGroup
 	order, walk     []paneKey
 	ordered, walked bool
 }
 
 func (m Model) buildSideGroups() []sideGroup {
-	sideGroupsBuilt++
 	var units []sideUnit
 	var states [][]sideState
 	done := map[chainKey]bool{}

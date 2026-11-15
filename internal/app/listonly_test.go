@@ -112,9 +112,9 @@ func TestFrameCostWithChains(t *testing.T) {
 func TestAFrameBuildsTheGroupsOnce(t *testing.T) {
 	m := chainedFleet(t, 30, true)
 	for _, w := range []int{200, 40} {
-		before := sideGroupsBuilt
-		_ = m.draw(w)
-		if n := sideGroupsBuilt - before; n != 1 {
+		memo := &sideMemo{}
+		_ = m.drawWith(w, memo)
+		if n := memo.builds; n != 1 {
 			t.Errorf("%d: a frame built the groups %d times", w, n)
 		}
 	}
