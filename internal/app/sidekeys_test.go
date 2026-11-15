@@ -888,6 +888,7 @@ func beltTap(r rune) tea.KeyPressMsg { return tea.KeyPressMsg{Code: r, Mod: tea.
 // and the same letter typed on the keyboard still types.
 func TestBeltActKeysActWhileTheLineHasTheKeys(t *testing.T) {
 	m, clipped, _ := sideShot(t, 160, 38)
+	pocketOnly(&m)
 	m.toLine()
 	next, cmd := m.Update(beltTap('c'))
 	nm := fed(next, cmd).(Model)
@@ -904,5 +905,30 @@ func TestBeltActKeysActWhileTheLineHasTheKeys(t *testing.T) {
 	}
 	if nm := pressOn(m, "c"); nm.lines[nm.chosenSide()] != "c" {
 		t.Errorf("a typed c: the line holds %q", nm.lines[nm.chosenSide()])
+	}
+}
+
+// TestSuperKeysOnADeskTerminalActOnNothing: off Pocket, a super-modified
+// key in the line (cmd+x, cmd+y, cmd+z on kitty, Ghostty or WezTerm) is no
+// belt tap: it acts on no session, opens no box, and says the line takes
+// text.
+func TestSuperKeysOnADeskTerminalActOnNothing(t *testing.T) {
+	m, clipped, _ := sideShot(t, 160, 38)
+	m.toLine()
+	for _, r := range []rune{'x', 'y', 'z', 'c', 'm', 'p'} {
+		next, cmd := m.Update(beltTap(r))
+		nm := fed(next, cmd).(Model)
+		if nm.pending != nil || nm.consenting() || nm.menu != nil || nm.form != nil || nm.inList() {
+			t.Errorf("cmd+%c off Pocket: pending %+v, menu %v, form %v, in the list %v", r, nm.pending, nm.menu != nil, nm.form != nil, nm.inList())
+		}
+		if acts := boardFake(nm).acts(); len(acts) != 0 {
+			t.Errorf("cmd+%c off Pocket sent %+v", r, acts)
+		}
+		if !strings.Contains(nm.noticeText, "the line takes text") {
+			t.Errorf("cmd+%c off Pocket said %q", r, nm.noticeText)
+		}
+	}
+	if len(*clipped) != 0 {
+		t.Errorf("cmd+c off Pocket copied %q", *clipped)
 	}
 }

@@ -140,6 +140,9 @@ func (m Model) sideKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 	case m.inList():
 		next, cmd := m.listKey(k, s, ok)
 		return next, cmd, true
+	case k.Mod&tea.ModSuper != 0 && !m.onPocket(): // a desk's cmd+x is no belt tap: it acts on nothing
+		cmd := m.lineTakes()
+		return m, cmd, true
 	case k.Mod&tea.ModSuper != 0:
 		if b, act := m.beltAct(k); act { // a tap on the belt acts as in the list; the line keeps the keys
 			next, cmd := m.listKey(b, s, ok)
@@ -192,9 +195,14 @@ func (m Model) lineKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 	case bkey.Matches(k, mk.NextTab, mk.PrevTab):
 		return m.key(k)
 	default:
-		cmd = m.notice("the line takes text · " + sk.Leave.Help().Key + " gives the keys to the list")
+		cmd = m.lineTakes()
 	}
 	return m, cmd
+}
+
+// lineTakes is the notice of a key the line has no job for.
+func (m *Model) lineTakes() tea.Cmd {
+	return m.notice("the line takes text · " + m.keys.side.Leave.Help().Key + " gives the keys to the list")
 }
 
 // listKey is k in the list: ↑↓ choose, ⏎ goes back to the line, the
@@ -284,7 +292,8 @@ func (m Model) noRowWhy() string {
 
 // beltAct is k, a tap on an act key of Pocket's belt, as the list reads
 // it: the belt sends its act keys with the super modifier (CSI u), which
-// no soft keyboard sends, so a typed letter still types in the line.
+// no soft keyboard sends, so a typed letter still types in the line. A
+// desk terminal sends the same for cmd+x, so only Pocket takes it.
 func (m Model) beltAct(k tea.KeyPressMsg) (tea.KeyPressMsg, bool) {
 	b := tea.KeyPressMsg{Code: k.Code, Text: string(k.Code), Mod: k.Mod &^ tea.ModSuper}
 	bk, mk := m.keys.board, m.keys.main
