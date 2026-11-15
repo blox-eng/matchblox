@@ -27,7 +27,7 @@ the screen; else it types.
 | `s` | In the list, shows the next host, then all hosts. It goes to each host, a hidden host too. With one host shown, all hosts is that host, so `s` goes from host to host. With one host only, a notice says so. |
 | `h` | In the list, on a hidden host, shows that host in all hosts again. Machine › Hosts then ticks the host. On another host, a notice says what `h` does. |
 | `g` | In the list, shows only the chain of the chosen session: its room. `Esc` shows all. |
-| `⌥s` | Opens the room of the chosen session's chain, as `g` does. A session in no chain opens its chain of one, which the host's stoker drives. |
+| `⌥s` | Opens the room of the chosen session's chain, as `g` does. A session in no chain opens its chain of one, which the host's stoker drives. In the matchblox app, `⌥s` types `s` in the line, and the belt's `g` opens the room. |
 | `/` | In the list, searches the list. |
 | `m` | In the list, opens the menu of the chosen session. It names the acts that destroy nothing, with their keys: rename, stoke the chain, a new order. A kill, a merge, a go, a switch and the stoker's stop are keys of the list only. On the row of a pull request that no session drives, it offers only the link, the name and a new session on its branch. |
 | `c` | In the list, copies what the agent said last. |

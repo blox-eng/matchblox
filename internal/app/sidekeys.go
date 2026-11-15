@@ -122,7 +122,6 @@ func (m Model) sideKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 	}
 	m.flash, m.sideIn = "", paneKey{}
 	s, ok := m.sideChosen()
-	tap, tapped := m.beltAct(k)
 	switch {
 	case bkey.Matches(k, m.keys.side.HideList):
 		return m.flipList(), nil, true
@@ -132,8 +131,14 @@ func (m Model) sideKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 	case m.sidePlace == placeRoom:
 		next, cmd := m.roomPlaceKey(k)
 		return next, cmd, true
-	case tapped && m.sidePlace == placeChat: // a tap on the belt acts as in the list; the line keeps the keys
-		next, cmd := m.listKey(tap, s, ok)
+	case m.tapping && m.sidePlace == placeChat: // a tap on the belt acts as in the list; the line keeps the keys
+		next, cmd := m.listKey(k, s, ok)
+		return next, cmd, true
+	case m.sidePlace == placeChat && m.onPocket() && joinedEsc(k):
+		// tmux joins an Esc and a letter typed within its escape-time into
+		// alt+letter, and the phone has no alt key: the letter types.
+		m.toLine()
+		next, cmd := m.lineKey(letterOf(k), s, ok)
 		return next, cmd, true
 	case bkey.Matches(k, m.keys.room.Flip):
 		next, cmd := m.flipHere()
@@ -144,9 +149,6 @@ func (m Model) sideKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 	case m.inList():
 		next, cmd := m.listKey(k, s, ok)
 		return next, cmd, true
-	case k.Mod&tea.ModSuper != 0 && !m.onPocket(): // a desk's cmd+x is no belt tap: it acts on nothing
-		cmd := m.lineTakes()
-		return m, cmd, true
 	}
 	next, cmd := m.lineKey(k, s, ok)
 	return next, cmd, true
@@ -289,25 +291,46 @@ func (m Model) noRowWhy() string {
 	return "no session to act on · " + m.keys.main.New.Help().Key + " starts one"
 }
 
-// beltAct is k, a tap on an act key of Pocket's belt, as the list reads
-// it: the belt sends its act keys with the super modifier (CSI u), which
-// no soft keyboard sends, so a typed letter still types in the line. tmux
-// passes super on as alt (ESC c, and ESC N for N), so alt counts too. A
-// desk terminal sends the same for cmd+x or ⌥x, so only Pocket takes it;
-// there ⌥s is the belt's s, not the room's flip.
-func (m Model) beltAct(k tea.KeyPressMsg) (tea.KeyPressMsg, bool) {
-	tap := tea.ModSuper | tea.ModAlt
-	if k.Mod&tap == 0 || !m.onPocket() {
-		return k, false
-	}
-	code, mod := k.Code, k.Mod&^tap
-	if mod == tea.ModShift && k.ShiftedCode != 0 {
-		code, mod = k.ShiftedCode, 0
-	}
-	b := tea.KeyPressMsg{Code: code, Text: string(code), Mod: mod}
+// beltActs are the keys a tap on Pocket's belt acts with (keycmd.TapKeys).
+func (m Model) beltActs() []bkey.Binding {
 	bk, mk := m.keys.board, m.keys.main
-	acts := []bkey.Binding{bk.Copy, bk.Menu, bk.Chain, bk.Host, bk.Merge, mk.Second, mk.Search, mk.Park, mk.Grant, mk.New}
-	return b, b.Mod == 0 && bkey.Matches(b, acts...)
+	return []bkey.Binding{bk.Copy, bk.Menu, bk.Chain, bk.Host, bk.Merge, mk.Second, mk.Search, mk.Park, mk.Grant, mk.New}
+}
+
+// beltTap is a tap on an act key of Pocket's belt, from the client on tty
+// (keycmd.ParseTapped). The tap names its client, so it acts for the app
+// on its Board layout even with a desk attached. It acts as the list's key
+// while the line has the keys; a typed key never acts so.
+func (m Model) beltTap(key, tty string) (tea.Model, tea.Cmd) {
+	r := []rune(key)
+	if len(r) != 1 || !bkey.Matches(tea.KeyPressMsg{Code: r[0], Text: key}, m.beltActs()...) {
+		return m, m.notice("the belt sent a key the console does not know: " + key)
+	}
+	if !m.pocketClient(tty) {
+		return m, m.notice("a belt tap from a terminal that is not on its Board layout")
+	}
+	m.marked, m.tapping = clientMark{tty, m.now()}, true
+	next, cmd := m.Update(tea.KeyPressMsg{Code: r[0], Text: key})
+	if nm, ok := next.(Model); ok {
+		nm.tapping = false
+		next = nm
+	}
+	return next, cmd
+}
+
+// joinedEsc: k is alt with a letter, as tmux passes an Esc and a quick
+// letter after it.
+func joinedEsc(k tea.KeyPressMsg) bool {
+	return k.Mod&^tea.ModShift == tea.ModAlt && unicode.IsPrint(letterOf(k).Code)
+}
+
+// letterOf is the letter of k with no alt: the shifted one with shift.
+func letterOf(k tea.KeyPressMsg) tea.KeyPressMsg {
+	code := k.Code
+	if k.Mod&tea.ModShift != 0 && k.ShiftedCode != 0 {
+		code = k.ShiftedCode
+	}
+	return tea.KeyPressMsg{Code: code, Text: string(code)}
 }
 
 // rowActKeys are the keys that act on the chosen row in the list, as they
@@ -327,7 +350,7 @@ func (m Model) rowAct(k tea.KeyPressMsg, s sample.Session) (tea.Model, tea.Cmd) 
 		return m, m.boardMerge(s)
 	case bkey.Matches(k, mk.Second):
 		return m, m.boardKill(s)
-	case bkey.Matches(k, mk.Grant) && m.onPocket() && m.goWaitsHere(s): // the belt's y is a tap: arm, then give
+	case bkey.Matches(k, mk.Grant) && (m.onPocket() || m.tapping) && m.goWaitsHere(s): // the belt's y is a tap: arm, then give
 		return m.armGo(s, mk.Grant.Help().Key+" again gives the go: "+m.goWhat(s))
 	case bkey.Matches(k, mk.Grant):
 		return m.boardGo(s)

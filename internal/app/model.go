@@ -551,6 +551,8 @@ type Model struct {
 	noticeUntil time.Time
 	// goArmed is the card whose go a first tap armed; a second tap gives it.
 	goArmed paneKey
+	// tapping: the key in hand is a tap on Pocket's belt (beltTap).
+	tapping bool
 	// goArmedTap is the go armed when the tap now running began: every tap
 	// disarms, and only a tap on that card's go gives it.
 	goArmedTap paneKey
@@ -746,6 +748,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.belt = m.heardFrom(tty)
 			}
 			return m, nil
+		}
+		if key, tty, ok := keycmd.ParseTapped(string(apc)); ok && remote.ClientTTY(tty) {
+			return m.beltTap(key, tty)
 		}
 		if string(apc) == keycmd.ViewerKey {
 			m.away = false // a terminal came to show the console

@@ -107,10 +107,14 @@ terminal.`
   (`1 answer`, `p merge`, `y go`), then `↑ ↓ ⏎`. The rest of the belt has
   `⌃o expand` and the list's keys: `s hosts`, `g chain`, `/`, `m menu`,
   `c copy`, `z park`, `N new`, `⇥ machine`, `x kill`. These keys act on
-  the chosen session while you write in its line too: a letter you type
-  on the keyboard types. While the line holds text, a digit types, so the
-  digits are dim. A key that does not apply is dim and sends nothing. In a pane, the belt goes back to the layout it had there. A tap
-  on `y go` does not give the go. The first tap arms it: a notice says
+  the chosen session while you write in its line too, also with a desk
+  attached: a tap on the belt is its own signal, and a letter you type on
+  the keyboard types. While the line holds text, a digit types, so the
+  digits are dim, and in the line `↑ ↓` are dim too. A key that does not
+  apply is dim and sends nothing. In the app, `Esc` then a letter, or
+  `⌥` and a letter, types the letter in the line: `⌥s` does not open the
+  room there. In a pane, the belt goes back to the layout it had there. A
+  tap on `y go` does not give the go. The first tap arms it: a notice says
   what the go does, for example `y again gives the go: merge #4556`. Tap
   `y` again to give the go. Any other key or tap disarms it. While the
   consent box shows, the belt is `◂`, `y runs` and `esc cancels`: a tap on

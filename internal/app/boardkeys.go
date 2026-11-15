@@ -668,11 +668,25 @@ func (m Model) onPocket() bool {
 		if i < 0 {
 			return false
 		}
-		if n := b.pocket[i].n; n != b.n && (n != b.n-1 || m.now().Sub(b.at) >= beltAnswerWait) {
+		if !b.fresh(b.pocket[i].n, m.now()) {
 			return false
 		}
 	}
 	return true
+}
+
+// pocketClient: the client on tty is the app on its Board layout: it
+// answered the last board= value, or the one before for beltAnswerWait.
+func (m Model) pocketClient(tty string) bool {
+	return slices.ContainsFunc(m.belt.pocket, func(p pocketClient) bool {
+		t, _, _ := strings.Cut(p.client, ":")
+		return t == tty && m.belt.fresh(p.n, m.now())
+	})
+}
+
+// fresh: an answer to value n still counts at now.
+func (b beltSaid) fresh(n int, now time.Time) bool {
+	return n == b.n || n == b.n-1 && now.Sub(b.at) < beltAnswerWait
 }
 
 // yesBox: the consent box that takes a typed y, and esc, shows: a

@@ -8,9 +8,11 @@ import (
 	"testing"
 	"time"
 
+	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	uv "github.com/charmbracelet/ultraviolet"
 
+	"github.com/blox-eng/matchblox/internal/keycmd"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/said"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -880,53 +882,80 @@ func TestTheMenuGoesInByCtrlO(t *testing.T) {
 	}
 }
 
-// beltTap is a tap on an act key of Pocket's belt: its letter with the
-// super modifier (CSI u), which no soft keyboard sends.
-func beltTap(r rune) tea.KeyPressMsg { return tea.KeyPressMsg{Code: r, Mod: tea.ModSuper} }
+// beltPhone and beltDesk are the two clients of pocketAndDesk.
+const beltPhone, beltDesk = "/dev/pts/7", "/dev/pts/9"
 
-// TestBeltActKeysActWhileTheLineHasTheKeys: the belt's act keys (copy,
-// menu, kill…) act on the chosen session even while the line has the keys,
-// and the same letter typed on the keyboard still types.
-func TestBeltActKeysActWhileTheLineHasTheKeys(t *testing.T) {
+// pocketAndDesk: the app on its Board layout and a desk both view the
+// console, so the console is not on Pocket.
+func pocketAndDesk(m *Model) {
+	pocketOnly(m)
+	m.viewers = beltPhone + ":105@here," + beltDesk + ":200@there"
+}
+
+// tapFrom is a tap on the belt's act key key, as the tap's tmux binding
+// hands it to the console (panes.TapKeysArgv).
+func tapFrom(key, tty string) tea.Msg {
+	return uv.UnknownApcEvent(keycmd.TappedPrefix + key + ";" + tty + "\x1b\\")
+}
+
+// TestEveryBeltTapIsAnActKey: each key the belt taps (keycmd.TapKeys) is a
+// key the list acts with.
+func TestEveryBeltTapIsAnActKey(t *testing.T) {
+	m, _, _ := sideShot(t, 160, 38)
+	for _, k := range keycmd.TapKeys {
+		if !bkey.Matches(tea.KeyPressMsg{Code: []rune(k)[0], Text: k}, m.beltActs()...) {
+			t.Errorf("the belt taps %q, which no act key reads", k)
+		}
+	}
+}
+
+// TestBeltTapActsOnPocketWithADeskAttached: a tap names the client that
+// sent it, so a tap from the app acts on the chosen session while the line
+// has the keys, even with a desk attached. The same tap named for the desk
+// acts on nothing and says so.
+func TestBeltTapActsOnPocketWithADeskAttached(t *testing.T) {
+	for name, viewers := range map[string]func(*Model){"Pocket only": pocketOnly, "Pocket and a desk": pocketAndDesk} {
+		m, clipped, _ := sideShot(t, 160, 38)
+		viewers(&m)
+		m.toLine()
+		next, cmd := m.Update(tapFrom("c", beltPhone))
+		if nm := fed(next, cmd).(Model); len(*clipped) != 1 || nm.lines[nm.chosenSide()] != "" || nm.inList() {
+			t.Errorf("%s: the tap on c copied %q, the line holds %q, in the list %v", name, *clipped, nm.lines[nm.chosenSide()], nm.inList())
+		}
+		if next, _ = m.Update(tapFrom("m", beltPhone)); next.(Model).menu == nil {
+			t.Errorf("%s: the tap on m opened no menu", name)
+		}
+		if next, _ = m.Update(tapFrom("x", beltPhone)); next.(Model).pending == nil {
+			t.Errorf("%s: the tap on x opened no kill box: %q", name, next.(Model).noticeText)
+		}
+		if next, _ = m.Update(tapFrom("N", beltPhone)); next.(Model).form == nil && !strings.HasPrefix(next.(Model).flash, "no agent to start here") {
+			t.Errorf("%s: the tap on N started no session: %q", name, next.(Model).noticeText)
+		}
+		list := m
+		list.toList()
+		*clipped = nil
+		next, cmd = list.Update(tapFrom("c", beltPhone))
+		if fed(next, cmd); len(*clipped) != 1 {
+			t.Errorf("%s: the tap on c in the list copied %q", name, *clipped)
+		}
+	}
 	m, clipped, _ := sideShot(t, 160, 38)
-	pocketOnly(&m)
+	pocketAndDesk(&m)
 	m.toLine()
-	next, cmd := m.Update(beltTap('c'))
+	next, cmd := m.Update(tapFrom("z", beltDesk))
 	nm := fed(next, cmd).(Model)
-	if len(*clipped) != 1 || nm.lines[nm.chosenSide()] != "" || nm.inList() {
-		t.Errorf("the belt's c: clipped %q, line %q, in the list %v", *clipped, nm.lines[nm.chosenSide()], nm.inList())
+	if acts := boardFake(nm).acts(); len(acts) != 0 || len(*clipped) != 0 || nm.lines[nm.chosenSide()] != "" {
+		t.Errorf("a tap named for the desk: acts %+v, clipped %q, line %q", acts, *clipped, nm.lines[nm.chosenSide()])
 	}
-	next, _ = m.Update(beltTap('x'))
-	if next.(Model).pending == nil {
-		t.Errorf("the belt's x opened no kill box: %q", next.(Model).noticeText)
-	}
-	next, _ = m.Update(beltTap('m'))
-	if next.(Model).menu == nil {
-		t.Error("the belt's m opened no menu")
-	}
-	if nm := pressOn(m, "c"); nm.lines[nm.chosenSide()] != "c" {
-		t.Errorf("a typed c: the line holds %q", nm.lines[nm.chosenSide()])
+	if nm.noticeText == "" {
+		t.Error("a tap named for the desk said nothing")
 	}
 }
 
-// tmuxTap is what the console reads for bytes, the app's belt tap after
-// tmux passed it on: tmux 3.4 sends the super modifier on as alt.
-func tmuxTap(t *testing.T, bytes string) tea.KeyPressMsg {
-	t.Helper()
-	var d uv.EventDecoder
-	n, ev := d.Decode([]byte(bytes))
-	k, ok := ev.(uv.KeyPressEvent)
-	if !ok || n != len(bytes) {
-		t.Fatalf("%q reads as %#v (%d bytes)", bytes, ev, n)
-	}
-	return tea.KeyPressMsg(k)
-}
-
-// TestBeltTapsActThroughTmux: the belt's act keys reach the console as
-// tmux passes them on (super as alt: ESC c, ESC N), and act on the chosen
-// session from the line and from the list. On Pocket ⌥s is the belt's s:
-// it opens no room.
-func TestBeltTapsActThroughTmux(t *testing.T) {
+// TestEscThenALetterOnPocketTypes: tmux joins an Esc and a letter typed
+// within its escape-time into alt+letter (ESC z). On Pocket that is no
+// belt tap: nothing parks, and the letter reaches the line.
+func TestEscThenALetterOnPocketTypes(t *testing.T) {
 	m, clipped, _ := sideShot(t, 160, 38)
 	pocketOnly(&m)
 	for _, focus := range []string{"line", "list"} {
@@ -936,49 +965,45 @@ func TestBeltTapsActThroughTmux(t *testing.T) {
 		} else {
 			f.toLine()
 		}
-		*clipped = nil
-		next, cmd := f.Update(tmuxTap(t, "\x1bc"))
-		if nm := fed(next, cmd).(Model); len(*clipped) != 1 || nm.lines[nm.chosenSide()] != "" {
-			t.Errorf("%s: tmux's ESC c copied %q, the line holds %q", focus, *clipped, nm.lines[nm.chosenSide()])
-		}
-		if next, _ = f.Update(tmuxTap(t, "\x1bm")); next.(Model).menu == nil {
-			t.Errorf("%s: tmux's ESC m opened no menu", focus)
-		}
-		if next, _ = f.Update(tmuxTap(t, "\x1bN")); next.(Model).form == nil && !strings.HasPrefix(next.(Model).flash, "no agent to start here") {
-			t.Errorf("%s: tmux's ESC N started no session: %q", focus, next.(Model).noticeText)
-		}
-		if next, _ = f.Update(tmuxTap(t, "\x1bs")); next.(Model).room != nil {
-			t.Errorf("%s: the belt's s opened a room", focus)
+		for _, r := range []rune{'z', 'c', 's', 'y'} {
+			next, cmd := f.Update(tea.KeyPressMsg{Code: r, Mod: tea.ModAlt})
+			nm := fed(next, cmd).(Model)
+			if acts := boardFake(nm).acts(); len(acts) != 0 || nm.pending != nil || nm.room != nil || len(*clipped) != 0 {
+				t.Errorf("%s: ESC %c acted: acts %+v, pending %v, room %v, clipped %q", focus, r, acts, nm.pending != nil, nm.room != nil, *clipped)
+			}
+			if got := nm.lines[nm.chosenSide()]; got != string(r) || nm.inList() {
+				t.Errorf("%s: ESC %c: the line holds %q, in the list %v", focus, r, got, nm.inList())
+			}
 		}
 	}
-	// The app's own bytes, read with no tmux between: super N is N.
-	next, _ := m.Update(tmuxTap(t, "\x1b[78;9u"))
-	if nm := next.(Model); nm.form == nil && !strings.HasPrefix(nm.flash, "no agent to start here") {
-		t.Errorf("super N started no session: %q", nm.noticeText)
+	next, _ := m.Update(tea.KeyPressMsg{Code: 'n', ShiftedCode: 'N', Mod: tea.ModAlt | tea.ModShift})
+	if nm := next.(Model); nm.form != nil || nm.lines[nm.chosenSide()] != "N" {
+		t.Errorf("ESC N: form %v, the line holds %q", nm.form != nil, nm.lines[nm.chosenSide()])
 	}
 }
 
-// TestSuperKeysOnADeskTerminalActOnNothing: off Pocket, a super-modified
-// key in the line (cmd+x, cmd+y, cmd+z on kitty, Ghostty or WezTerm) is no
-// belt tap: it acts on no session, opens no box, and says the line takes
-// text.
-func TestSuperKeysOnADeskTerminalActOnNothing(t *testing.T) {
+// TestAltLetterOnADeskActsOnNothing: off Pocket, alt or super with a letter
+// in the line (⌥x, cmd+x on kitty, Ghostty or WezTerm) is no belt tap: it
+// acts on no session, opens no box, and says the line takes text.
+func TestAltLetterOnADeskActsOnNothing(t *testing.T) {
 	m, clipped, _ := sideShot(t, 160, 38)
 	m.toLine()
-	for _, r := range []rune{'x', 'y', 'z', 'c', 'm', 'p'} {
-		next, cmd := m.Update(beltTap(r))
-		nm := fed(next, cmd).(Model)
-		if nm.pending != nil || nm.consenting() || nm.menu != nil || nm.form != nil || nm.inList() {
-			t.Errorf("cmd+%c off Pocket: pending %+v, menu %v, form %v, in the list %v", r, nm.pending, nm.menu != nil, nm.form != nil, nm.inList())
-		}
-		if acts := boardFake(nm).acts(); len(acts) != 0 {
-			t.Errorf("cmd+%c off Pocket sent %+v", r, acts)
-		}
-		if !strings.Contains(nm.noticeText, "the line takes text") {
-			t.Errorf("cmd+%c off Pocket said %q", r, nm.noticeText)
+	for _, mod := range []tea.KeyMod{tea.ModAlt, tea.ModSuper} {
+		for _, r := range []rune{'x', 'y', 'z', 'c', 'm', 'p'} {
+			next, cmd := m.Update(tea.KeyPressMsg{Code: r, Mod: mod})
+			nm := fed(next, cmd).(Model)
+			if nm.pending != nil || nm.consenting() || nm.menu != nil || nm.form != nil || nm.inList() {
+				t.Errorf("%v+%c off Pocket: pending %+v, menu %v, form %v, in the list %v", mod, r, nm.pending, nm.menu != nil, nm.form != nil, nm.inList())
+			}
+			if acts := boardFake(nm).acts(); len(acts) != 0 {
+				t.Errorf("%v+%c off Pocket sent %+v", mod, r, acts)
+			}
+			if !strings.Contains(nm.noticeText, "the line takes text") {
+				t.Errorf("%v+%c off Pocket said %q", mod, r, nm.noticeText)
+			}
 		}
 	}
 	if len(*clipped) != 0 {
-		t.Errorf("cmd+c off Pocket copied %q", *clipped)
+		t.Errorf("a desk's alt or cmd copied %q", *clipped)
 	}
 }
