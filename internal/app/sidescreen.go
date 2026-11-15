@@ -143,27 +143,79 @@ const (
 	placeHost // a host's trouble and its fix
 )
 
-// chatPlace is the chat's place in w by h: the chat, the tips, or the
-// first open setup step.
+// chatPlace is the chat's place in w by h: the chat, the tips, the first
+// open setup step, the room or a host's trouble.
 func (m Model) chatPlace(w, h int) []string {
-	var lines []string
-	switch m.sidePlace {
-	case placeTips:
-		lines = m.tipsPanel(w)
-	case placeSetup:
-		lines = m.setupPanel(w)
-	case placeRoom:
-		lines = m.roomPanel(w)
-	case placeHost:
-		lines = m.hostPanel(w)
-	default:
+	if m.sidePlace == placeChat {
 		return m.chatPanel(w, h)
 	}
-	lines = lines[:min(len(lines), h)]
-	for len(lines) < h {
-		lines = append(lines, strings.Repeat(" ", w))
-	}
+	lines, _ := m.placeLines(w, h)
 	return lines
+}
+
+// placeLines is what has the chat's place in w by h, and the line of the
+// whole place each shown line is (-1 for a cut's mark). A place taller
+// than h keeps its head, and the chosen row or the talk line in view, and
+// says how many lines are cut above and below.
+func (m Model) placeLines(w, h int) (lines []string, from []int) {
+	var all []string
+	focus := 0
+	switch m.sidePlace {
+	case placeTips:
+		all, focus = m.tipsLines(w)
+	case placeSetup:
+		all = m.setupPanel(w)
+	case placeRoom:
+		var rows []int
+		all, rows = m.roomPanelRows(w)
+		switch {
+		case m.room != nil && m.room.typing:
+			focus = len(all) - 1
+		case m.room != nil:
+			focus = max(slices.Index(rows, m.room.at), 0)
+		}
+	case placeHost:
+		all = m.hostPanel(w)
+	}
+	blank := strings.Repeat(" ", w)
+	if len(all) <= h || h < 4 {
+		for i := range min(len(all), h) {
+			lines, from = append(lines, all[i]), append(from, i)
+		}
+		for len(lines) < h {
+			lines, from = append(lines, blank), append(from, -1)
+		}
+		return lines, from
+	}
+	// The head stays. Under it, the first window that shows focus, less a
+	// line for each mark it needs.
+	start, end := 1, 1
+	for ; ; start++ {
+		n := h - 1
+		if start > 1 {
+			n--
+		}
+		if end = start + n; end < len(all) {
+			end--
+		}
+		if focus < end || end >= len(all) {
+			break
+		}
+	}
+	mark := func(arrow string, n int) string {
+		return fit(" "+m.st.muted.Render(arrow+" "+strconv.Itoa(n)+" more"), w)
+	}
+	lines, from = []string{all[0]}, []int{0}
+	if start > 1 {
+		lines, from = append(lines, mark("↑", start-1)), append(from, -1)
+	}
+	for i := start; i < end; i++ {
+		lines, from = append(lines, all[i]), append(from, i)
+	}
+	if end < len(all) {
+		lines, from = append(lines, mark("↓", len(all)-end)), append(from, -1)
+	}
+	return lines, from
 }
 
 // placeHead is the first line of a place in the chat's: its name, with the
@@ -181,12 +233,16 @@ func (m Model) backMark(w int) string {
 	return ""
 }
 
-// tipsPanel is the tips in the chat's place: each as the board drew it
-// under its columns, the chosen one with what it is about.
-func (m Model) tipsPanel(w int) []string {
-	lines := []string{m.placeHead("TIPS · "+strconv.Itoa(len(m.recs)), w), strings.Repeat(" ", w)}
+// tipsLines is the tips in the chat's place: each as the board drew it
+// under its columns, the chosen one with what it is about. chosen is the
+// chosen tip's line.
+func (m Model) tipsLines(w int) (lines []string, chosen int) {
+	lines = []string{m.placeHead("TIPS · "+strconv.Itoa(len(m.recs)), w), strings.Repeat(" ", w)}
 	at := m.tipAt()
 	for i, r := range m.recs {
+		if i == at {
+			chosen = len(lines)
+		}
 		lines = append(lines, fit(m.recLine(r, i == at, w), w))
 		if i == at && r.Evidence != "" {
 			for _, l := range upTo(wrapPlain(r.Evidence, max(w-4, 1)), 3, max(w-4, 1)) {
@@ -197,7 +253,7 @@ func (m Model) tipsPanel(w int) []string {
 	if len(m.recs) == 0 {
 		lines = append(lines, fit(" "+m.st.muted.Render("No tips now."), w))
 	}
-	return lines
+	return lines, chosen
 }
 
 // tipAt is the chosen tip, kept in range as tips go.
@@ -538,8 +594,9 @@ func (m Model) sideTap(x, y int) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if m.sidePlace == placeRoom {
-		if _, rows := m.roomPanelRows(box.chatW); y >= 0 && y < len(rows) && rows[y] >= 0 {
-			return m.roomTap(rows[y])
+		_, rows := m.roomPanelRows(box.chatW)
+		if _, from := m.placeLines(box.chatW, m.bodyRows()); y >= 0 && y < len(from) && from[y] >= 0 && rows[from[y]] >= 0 {
+			return m.roomTap(rows[from[y]])
 		}
 		return m, nil
 	}

@@ -13,6 +13,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	uv "github.com/charmbracelet/ultraviolet"
 
+	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/keycmd"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -297,5 +298,66 @@ func TestPasteInTipsSaysSo(t *testing.T) {
 		if len(f.lines) != 0 || !strings.Contains(f.noticeText, "no text · the paste is not kept") {
 			t.Errorf("%v: lines %v, notice %q", p, f.lines, f.noticeText)
 		}
+	}
+}
+
+// TestAQuestionThatDoesNotFitIsCut: on a short chat the question keeps its
+// first line and the options that fit, and says how many more it has.
+func TestAQuestionThatDoesNotFitIsCut(t *testing.T) {
+	m, _ := sideConsole(t, boardState(askingMatch("flint-auth", "Keep the token", "Refresh the token", "Drop the token", "Ask the owner")))
+	m = pickSide(t, m, "flint-auth")
+	full := plainLines(m.chatPanel(100, 30))
+	top := slices.IndexFunc(full, func(l string) bool { return strings.TrimSpace(l) == "" }) // the head's lines end at the first blank
+	if top < 1 || !strings.Contains(strings.Join(full, "\n"), "Which way do we fix the login?") {
+		t.Fatalf("no head or no question on a tall chat:\n%s", strings.Join(full, "\n"))
+	}
+	h := top + 4 // the head's lines, the question, two lines for options, the line
+	got := strings.Join(plainLines(m.chatPanel(100, h)), "\n")
+	for _, want := range []string{"Which way do we fix the login?", "1. Keep the token", "+3 more"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("no %q in a chat %d high:\n%s", want, h, got)
+		}
+	}
+	if lines := plainLines(m.chatPanel(100, h)); !strings.Contains(lines[len(lines)-1], "send to flint-auth") {
+		t.Errorf("the line is not last:\n%s", got)
+	}
+}
+
+// TestAPlaceKeepsTheChosenRowInView: tips taller than the chat's place
+// keep the chosen tip in view, and say how many lines are cut.
+func TestAPlaceKeepsTheChosenRowInView(t *testing.T) {
+	m, _ := sideConsole(t, boardState(boardMatch("flint-auth", time.Hour)))
+	for i := range 12 {
+		m.recs = append(m.recs, advice.Rec{ID: "tip-" + strconv.Itoa(i), Level: "info", Title: "Tip number " + strconv.Itoa(i)})
+	}
+	m.openPlace(placeTips)
+	m.sideTip = 10
+	got := strings.Join(plainLines(m.chatPlace(80, 8)), "\n")
+	for _, want := range []string{"TIPS · 12", "Tip number 10", "more"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("no %q in tips 8 high:\n%s", want, got)
+		}
+	}
+	if lines := m.chatPlace(80, 8); len(lines) != 8 {
+		t.Errorf("%d lines, want 8", len(lines))
+	}
+}
+
+// TestTheRoomKeepsItsTalkLineInView: a room taller than the chat's place
+// keeps the talk line in view while it types.
+func TestTheRoomKeepsItsTalkLineInView(t *testing.T) {
+	st := headState(t, runningPlan(), true)
+	st.Queue = nil
+	m, _ := roomWith(t, st, "hearth-api")
+	m.tab = tabSessions
+	m, _ = send(t, m, "enter")
+	full := plainLines(m.roomPanel(100))
+	h := 5
+	if len(full) <= h {
+		t.Fatalf("the room is %d lines: the test proves nothing", len(full))
+	}
+	got := strings.Join(plainLines(m.chatPlace(100, h)), "\n")
+	if !strings.Contains(got, strings.TrimSpace(full[len(full)-1])) || !strings.Contains(got, "more") {
+		t.Fatalf("the talk line %q is not in view:\n%s", strings.TrimSpace(full[len(full)-1]), got)
 	}
 }

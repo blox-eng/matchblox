@@ -51,11 +51,8 @@ func (m Model) chatPanel(w, h int) []string {
 		if l, ok := m.chatChain(s, w); ok {
 			top = append(top, l)
 		}
-		ask := m.chatAsk(s, w)
+		ask := m.chatAsk(s, w, max(h-len(top)-1, 0))
 		rows := h - len(top) - len(ask) - 1
-		if rows < 0 {
-			ask, rows = nil, h-len(top)-1
-		}
 		lines = append(top, m.chatConversation(s, w, max(rows, 0))...)
 		lines = append(lines, ask...)
 		lines = append(lines, m.chatLine(s, w))
@@ -191,8 +188,10 @@ func (m Model) chatConversation(s sample.Session, w, rows int) []string {
 // chatAsk is the question the digits answer, with its options: the one
 // the session asks, or, while the stoker holds it, whether to let it go.
 // The agent's own menu in the pane is the question: then only the mark
-// shows, in one line. None when the digits answer nothing.
-func (m Model) chatAsk(s sample.Session, w int) []string {
+// shows, in one line. None when the digits answer nothing. In fewer than
+// room lines the question keeps its first line, the mark and the options
+// that fit, and says how many more it has.
+func (m Model) chatAsk(s sample.Session, w, room int) []string {
 	q, ok := m.oneChoice(s)
 	if _, held := m.stokerHolds(s); held && !ok {
 		q, ok = said.Question{Question: m.cardName(s) + " is " + m.heldWhy(s), Options: []said.Option{{Label: "Let it go"}}}, true
@@ -201,24 +200,33 @@ func (m Model) chatAsk(s sample.Session, w int) []string {
 		return nil
 	}
 	armed := m.chatMark(s)
-	var lines []string
+	var asks, options, mark []string
 	if !m.paneAsks(s, q) {
 		for _, l := range upTo(wrapPlain(q.Question, max(w-2, 1)), 2, max(w-2, 1)) {
-			lines = append(lines, fit(" "+m.st.text.Bold(true).Render(l), w))
+			asks = append(asks, fit(" "+m.st.text.Bold(true).Render(l), w))
 		}
 		for i, o := range q.Options {
-			lines = append(lines, m.optionLine(i+1, 0, ansi.Truncate(o.Label, max(w-6, 1), "…"), w, armed))
+			options = append(options, m.optionLine(i+1, 0, ansi.Truncate(o.Label, max(w-6, 1), "…"), w, armed))
 		}
 	}
 	n := strconv.Itoa(armed)
 	switch _, sent := m.chatMarks(s); {
 	case sent > 0:
-		lines = append(lines, fit(" "+m.st.muted.Render("sent "+strconv.Itoa(sent)+" · waits for "+m.cardName(s)), w))
+		mark = []string{fit(" "+m.st.muted.Render("sent "+strconv.Itoa(sent)+" · waits for "+m.cardName(s)), w)}
 	case armed > 0 && armed <= len(q.Options):
-		lines = append(lines, fit(" "+m.st.accent.Render("❯ "+n+". "+q.Options[armed-1].Label)+
-			m.st.muted.Render(" · "+n+" again sends · "+m.keys.side.Leave.Help().Key+" clears"), w))
+		mark = []string{fit(" "+m.st.accent.Render("❯ "+n+". "+q.Options[armed-1].Label)+
+			m.st.muted.Render(" · "+n+" again sends · "+m.keys.side.Leave.Help().Key+" clears"), w)}
 	}
-	return lines
+	if len(asks)+len(options)+len(mark) > room {
+		asks = asks[:min(len(asks), 1)]
+		if fits := room - len(asks) - len(mark); fits < len(options) {
+			keep := max(fits-1, 0)
+			more := fit("  "+m.st.muted.Render("+"+strconv.Itoa(len(options)-keep)+" more · "+m.keys.main.Jump.Help().Key+" shows all"), w)
+			options = append(options[:keep], more)
+		}
+	}
+	lines := append(append(asks, options...), mark...)
+	return lines[:min(len(lines), room)]
 }
 
 // paneAsks: the cut pane of s on screen draws q's options as the agent's
