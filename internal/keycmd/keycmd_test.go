@@ -138,3 +138,31 @@ func TestACommandsTextIsOneSlashWord(t *testing.T) {
 		}
 	}
 }
+
+// TestEachBeltTapHasItsOwnKey: each act key of the app's belt has its own
+// sequence and user-keys slot, after the belt's answer, and the binding's
+// hand reads back as the key and the tty of the client that tapped.
+func TestEachBeltTapHasItsOwnKey(t *testing.T) {
+	if got := TapKey("c"); got != "\x1b_matchblox;tap=c\x1b\\" {
+		t.Errorf("TapKey(c) = %q", got)
+	}
+	seen := map[string]bool{}
+	for i, k := range TapKeys {
+		if seen[k] {
+			t.Errorf("%q twice in TapKeys", k)
+		}
+		seen[k] = true
+		if slot := TapSlot + i; slot == MarkSlot || slot == BeltSlot {
+			t.Errorf("the tap %q takes slot %d", k, slot)
+		}
+	}
+	key, tty, ok := ParseTapped(TappedPrefix + "N;/dev/pts/7\x1b\\")
+	if !ok || key != "N" || tty != "/dev/pts/7" {
+		t.Errorf("ParseTapped = %q %q %v", key, tty, ok)
+	}
+	for _, bad := range []string{TapKey("c"), TappedPrefix + "c\x1b\\", TappedPrefix + "c;/dev/pts/7", BeltFromPrefix + "/dev/pts/7\x1b\\"} {
+		if _, _, ok := ParseTapped(bad); ok {
+			t.Errorf("ParseTapped(%q) reads a tap", bad)
+		}
+	}
+}

@@ -136,6 +136,25 @@ func BeltKeyArgv() []string {
 		";", "bind-key", "-n", "User" + slot, "if-shell", "-F", atConsole, hand}
 }
 
+// TapKeysArgv makes each act key of the app's belt a key of the tmux
+// server, each in its own slot from keycmd.TapSlot. At the console it hands
+// the console the key and the tty of the client that tapped, as
+// BeltKeyArgv does; elsewhere it does nothing.
+func TapKeysArgv() []string {
+	argv := []string{"tmux"}
+	for i, k := range keycmd.TapKeys {
+		slot := strconv.Itoa(keycmd.TapSlot + i)
+		hand := "run-shell -C 'send-keys -t #{pane_id} -H " + hexKeys(keycmd.TappedPrefix+k+";") +
+			" ; send-keys -t #{pane_id} -l #{client_tty} ; send-keys -t #{pane_id} -H 1b 5c'"
+		if len(argv) > 1 {
+			argv = append(argv, ";")
+		}
+		argv = append(argv, "set-option", "-s", "user-keys["+slot+"]", keycmd.TapKey(k),
+			";", "bind-key", "-n", "User"+slot, "if-shell", "-F", atConsole, hand)
+	}
+	return argv
+}
+
 // ViewerHookArgv tells the console the moment a terminal attaches to it or
 // switches to it, so the console announces the marks to that terminal then:
 // tmux passes the announce only to the clients that show the pane when it is
