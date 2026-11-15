@@ -254,6 +254,12 @@ func (q *Queue) Merge(sessions []sample.Session, now time.Time) {
 				// with Esc, which sends no hook.
 				delete(q.asks, id)
 			}
+			if s.AtMenu() {
+				// No hook may tell a drawn menu: Cursor sends none, and Claude
+				// Code can report busy at a hook's confirmation menu.
+				items = append(items, menuWait(id, s, q.waiting[id], now))
+				continue
+			}
 			if it, ok := q.waiting[id]; ok {
 				it.Pane, it.Target, it.Name = s.Pane, s.Target, s.Name
 				if s.ReportsWork() {
@@ -289,16 +295,13 @@ func (q *Queue) Merge(sessions []sample.Session, now time.Time) {
 				}
 				q.waiting[id] = it
 				items = append(items, it)
-			} else if s.Agent == sample.CursorAgent && s.Status == "idle" && s.Permits {
-				// No Cursor hook fires when its approval menu draws: its pane
-				// tells it.
-				items = append(items, Item{
-					SessionID: id, Pane: s.Pane, Target: s.Target, Name: s.Name,
-					State: StatePermission, Since: now.Add(-s.Idle), LastLine: s.LastLine, FromPane: true,
-				})
 			} else if s.ReportsWait() {
 				items = append(items, reportedWait(id, s, now))
 			}
+			continue
+		}
+		if s.Reported && s.AtMenu() {
+			items = append(items, menuWait(s.SessionID, s, Item{}, now))
 			continue
 		}
 		if s.ReportsWait() {
@@ -370,6 +373,22 @@ func reportedWait(id string, s sample.Session, now time.Time) Item {
 		since = now.Add(-s.Idle)
 	}
 	return Item{SessionID: id, Pane: s.Pane, Target: s.Target, Name: s.Name, State: state, Since: since, LastLine: s.LastLine}
+}
+
+// menuWait is the permission wait of a session whose pane draws an
+// approval menu. It starts when the hooks' permission started, else when
+// the report changed, else when the pane went still: the same at every
+// merge.
+func menuWait(id string, s sample.Session, hooked Item, now time.Time) Item {
+	since := s.StatusAt
+	if hooked.State == StatePermission && !hooked.Since.IsZero() {
+		since = hooked.Since
+	}
+	if since.IsZero() {
+		since = now.Add(-s.Idle)
+	}
+	return Item{SessionID: id, Pane: s.Pane, Target: s.Target, Name: s.Name, State: StatePermission, Since: since,
+		LastLine: s.LastLine, FromPane: s.FromPane}
 }
 
 // byNewer puts id in byPane for pane unless a hooked session that spoke

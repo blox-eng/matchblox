@@ -6,6 +6,15 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **A match at an approval menu needs you, whatever it reports.** A hook
+  that asks you to confirm a command, such as `Hook PreToolUse:Bash
+  requires confirmation`, puts the match in needs you in the list, on the
+  board and in `matchblox sessions`, also while Claude Code still says it
+  works. A reply that only lists a `1. Yes` choice still takes your typed
+  answer. ([#412](https://github.com/blox-eng/matchblox/issues/412))
+
 ## [0.45.0] - 2026-11-14
 
 ### Added
