@@ -77,6 +77,24 @@ func TestABusyReportBeatsAnOldAsk(t *testing.T) {
 	}
 }
 
+// TestAMenuBeatsABusyReport: Claude Code can report busy while its pane
+// draws an approval menu, as for a PreToolUse hook that asks. The menu is
+// live, not an old guess: the session needs you.
+func TestAMenuBeatsABusyReport(t *testing.T) {
+	s := reported("ember-billing", "busy", "")
+	s.Permits, s.LastLine = true, "Do you want to proceed?"
+	if col, word, _ := laneOf(t, boardState(s)); col != sideNeed || word != "asks" {
+		t.Fatalf("got %s %q, want NEEDS YOU asks", col.head(), word)
+	}
+	if w := stoker.Word(s); w != "asks" {
+		t.Fatalf("stoker.Word %q, want asks", w)
+	}
+	m := boardModel(t, boardState(s)) // the list's group and word agree
+	if g, w := m.groupOf(m.all.sessions[0]), m.wordOf(m.all.sessions[0]); g != groupWaits || w != "asks" {
+		t.Fatalf("list: group %d word %q, want the waits group and asks", g, w)
+	}
+}
+
 // TestAShellReportIsWorking: the turn ended and its background shells or
 // agents run; matchblox may see no shell of its own.
 func TestAShellReportIsWorking(t *testing.T) {

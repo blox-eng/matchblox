@@ -1,6 +1,7 @@
 package sample
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -47,8 +48,9 @@ func TestAPaneShowsBusyIdleAndWhatItAsks(t *testing.T) {
 		t.Fatalf("no adapter: context %q, want unmeasured", s.Context)
 	}
 	for _, panes := range asked {
-		if strings.Join(panes, ",") != "%10" {
-			t.Fatalf("only panes of agents without an adapter are read, got %q", panes)
+		// The panes of agents with an adapter are read apart, for a menu only.
+		if strings.Join(panes, ",") != "%10" && slices.Contains(panes, "%10") {
+			t.Fatalf("an agent without an adapter is read with the menu reads, got %q", panes)
 		}
 	}
 }

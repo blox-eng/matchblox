@@ -206,6 +206,12 @@ func (s Session) ReportsWork() bool { return s.Reported && s.Works() }
 // ReportsWait: the agent's own report says it waits for the person.
 func (s Session) ReportsWait() bool { return s.Reported && s.Status == StatusWaiting }
 
+// AtMenu: the pane draws an approval menu that waits for the person. It
+// beats a report of work: Claude Code can report busy at a PreToolUse
+// hook's confirmation menu. A pane-read agent's menu counts once its pane
+// holds still.
+func (s Session) AtMenu() bool { return s.Permits && (s.Reported || s.Status == "idle") }
+
 // TmuxSession is the name of the tmux session the pane belongs to.
 func (s Session) TmuxSession() string {
 	name, _, _ := strings.Cut(s.Target, ":")
@@ -613,6 +619,7 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 	hosting := map[string]bool{}
 	alive := map[procKey]bool{}
 	var fromPane []int // sessions without an adapter: read from their pane
+	var atMenu []int   // sessions that tell their own state: read for an approval menu only
 	// The socket and pid of the builder's tmux server and of the
 	// stoker's, as listed: an agent's TMUX names one of them.
 	var server, stokers Pane
@@ -896,13 +903,18 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 			sess.Name = tmuxName(pane, agent)
 		}
 		// Codex has a session id but no hooks: only its pane tells busy.
-		if (sess.SessionID == "" || agent == "codex") && paneID != "" {
+		switch {
+		case paneID == "":
+		case sess.SessionID == "" || agent == "codex":
 			fromPane = append(fromPane, len(snap.Sessions))
+		default:
+			atMenu = append(atMenu, len(snap.Sessions))
 		}
 		sess.Do, sess.Why = s.Rules.suggest(sess)
 		snap.Sessions = append(snap.Sessions, sess)
 	}
 	s.readPanes(snap.Sessions, fromPane, now)
+	s.readMenus(snap.Sessions, atMenu)
 	snap.Children = linkChildren(snap.Sessions, snap.Children)
 	snap.Limits = lims.build(now, s.Cfg.Limits.Quiet)
 	for key := range s.envs {
@@ -1182,6 +1194,27 @@ func (s *Sampler) readPanes(sessions []Session, idx []int, now time.Time) {
 		}
 		sess.FromPane = true
 		sess.Asks, sess.Permits = kind == said.Asks, kind == said.Permits
+	}
+}
+
+// readMenus reads the panes of the sessions that tell their own state, for
+// a drawn approval menu only: no hook or report may tell one. Claude Code
+// reports busy at a PreToolUse hook's confirmation menu. The menu's
+// question is the line to show.
+func (s *Sampler) readMenus(sessions []Session, idx []int) {
+	if len(idx) == 0 {
+		return
+	}
+	ids := make([]string, len(idx))
+	for i, j := range idx {
+		ids[i] = sessions[j].Pane
+	}
+	text := s.Capture(ids)
+	for _, j := range idx {
+		sess := &sessions[j]
+		if line, ok := said.Menu(text[sess.Pane]); ok {
+			sess.Permits, sess.LastLine = true, line
+		}
 	}
 }
 

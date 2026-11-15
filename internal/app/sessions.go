@@ -52,7 +52,7 @@ func (m Model) groupOf(s sample.Session) int {
 	if _, held := m.holdOf(s); held {
 		return groupHeld
 	}
-	if _, head := m.headRow(s); head && (s.Asks || s.Permits) { // a chain stoker's agent at a menu
+	if _, head := m.headRow(s); s.AtMenu() || head && (s.Asks || s.Permits) { // a drawn menu, or a chain stoker's agent at one
 		return groupWaits
 	}
 	switch _, waits := m.waitOf(s); {
@@ -156,6 +156,8 @@ var testRunner = regexp.MustCompile(`\b(go test|pytest|jest|vitest|playwright|mo
 // its queue row, or its age.
 func (m Model) wordOf(s sample.Session) string {
 	switch {
+	case s.AtMenu():
+		return "asks" // a drawn menu waits, whatever the report says
 	case s.Busy:
 		return busyWord(s)
 	case m.groupOf(s) == groupWorking:

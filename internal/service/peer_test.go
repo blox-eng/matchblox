@@ -193,9 +193,9 @@ func TestAHookEventSpeaksOnlyForItsOwnPane(t *testing.T) {
 	}
 }
 
-// TestNoTextGoesToAPaneThatShowsAPermissionPrompt: whatever the hooks
-// said, a sample that shows the approval menu refuses a message and an
-// answer: a typed "1" would approve the tool call.
+// TestNoTextGoesToAPaneThatShowsAPermissionPrompt: the hooks said the
+// session asks a question, and its sample shows the approval menu. It
+// refuses a message and an answer: a typed "1" would approve the tool call.
 func TestNoTextGoesToAPaneThatShowsAPermissionPrompt(t *testing.T) {
 	s, ran := handsTest(t)
 	s.Hook(hooks.Event{Name: "Stop", SessionID: "s1", Pane: "%1", At: night0, Message: "done?", Asks: true})
@@ -203,8 +203,8 @@ func TestNoTextGoesToAPaneThatShowsAPermissionPrompt(t *testing.T) {
 		{Agent: "claude", Pane: "%1", Target: "app:1.1", SessionID: "s1", Name: "work", Status: "idle", Idle: 5 * time.Minute, Permits: true},
 		{Agent: "claude", Pane: "%9@mbtest", Target: "stoker:1.1", SessionID: "s9", Name: "stoker", Status: "busy", Busy: true},
 	}}, func(state.Doc) {})
-	if waitsForPermission(s, "%1") {
-		t.Fatal("the test needs the hooks to say the session asks a question, not for permission")
+	if !waitsForPermission(s, "%1") {
+		t.Fatal("a drawn menu is a permission wait, whatever the hooks said")
 	}
 	for _, a := range []proto.Act{
 		fromStokerAct("message:%1", "1"),

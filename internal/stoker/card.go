@@ -127,7 +127,7 @@ func (m Mode) observe(ss []sample.Session, waiting map[string]bool, full sample.
 }
 
 func waits(s sample.Session, waiting map[string]bool) bool {
-	return waiting[s.Pane] || !s.ReportsWork() && (s.Asks || s.Permits) // a live report beats an old guess
+	return waiting[s.Pane] || s.Permits || !s.ReportsWork() && s.Asks // a live report beats an old guess; a drawn menu is live too
 }
 
 // Score freezes the card of a run that ended, from the sessions as they

@@ -51,6 +51,9 @@ var (
 	// hintRe is a line of key hints or a footer, never what the agent said.
 	hintRe = regexp.MustCompile(`(?i)\b(ctrl|shift|alt|esc|enter)\b|^\? for shortcuts|^[~/]\S*`)
 	wordRe = regexp.MustCompile(`\pL\pL`)
+	// cancelRe is the key hint under each Claude Code menu: its approval
+	// prompts, its folder trust prompt and its question tool.
+	cancelRe = regexp.MustCompile(`(?i)\besc to cancel\b`)
 )
 
 type line struct {
@@ -93,6 +96,21 @@ func Screen(screen string) (string, Kind) {
 		}
 	}
 	return "", None
+}
+
+// Menu reads a pane for a Claude Code approval menu drawn now: an
+// approval prompt that its own key hint closes. A reply that only lists
+// a "1. Yes" choice is no menu.
+func Menu(screen string) (string, bool) {
+	q, kind := Screen(screen)
+	if kind != Permits {
+		return "", false
+	}
+	ls := lines(screen)
+	if len(ls) == 0 || !cancelRe.MatchString(ls[len(ls)-1].text) {
+		return "", false
+	}
+	return q, true
 }
 
 // Draft is what the person typed into an agent's input field and did not

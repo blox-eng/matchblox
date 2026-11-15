@@ -302,10 +302,10 @@ func stageOf(sh ships.Ship) string {
 // runs, is background: the agent is there and takes a message. Why a
 // resting session is idle is its reason, not its word. An agent that
 // reports it works asks nothing, and one that reports a wait asks, as on
-// the board.
+// the board. An approval menu its pane draws asks, whatever the report.
 func Word(s sample.Session) string {
 	switch {
-	case s.ReportsWait(), !s.ReportsWork() && (s.Asks || s.Permits || s.Ask != nil):
+	case s.ReportsWait(), s.Permits, !s.ReportsWork() && (s.Asks || s.Ask != nil):
 		return "asks"
 	case s.Busy:
 		return "busy"
