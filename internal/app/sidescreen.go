@@ -452,7 +452,15 @@ func (m Model) sideHints() (string, []hint) {
 	}
 	if s, sh, card := m.chosenShip(); card { // no session drives it: its keys are New session and the merge
 		hs := []hint{hintFor(sk.Up, ""), hintFor(sk.Enter, "new session")}
-		if _, ok := m.mergeable(s); ok {
+		_, merges := m.mergeable(s)
+		if !m.inList() { // the line acts on nothing: the merge is a key of the list
+			leave := hintFor(sk.Leave, "")
+			if merges {
+				leave.key, leave.label = leave.key+" then "+bk.Merge.Help().Key, "merge"
+			}
+			return "on #" + strconv.Itoa(sh.Number), append(hs, leave)
+		}
+		if merges {
 			hs = append(hs, hintFor(bk.Merge, "merge"))
 		}
 		return "on #" + strconv.Itoa(sh.Number), append(hs, hintFor(bk.Host, ""), hintFor(bk.Menu, ""))

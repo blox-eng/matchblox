@@ -258,7 +258,11 @@ func (m Model) shipPanel(s sample.Session, sh proto.Ship, w, h int) []string {
 	lines = append(lines, strings.Repeat(" ", w))
 	acts := m.keys.side.Enter.Help().Key + " new session on its branch"
 	if _, ok := m.mergeable(s); ok {
-		acts += " · " + m.keys.board.Merge.Help().Key + " merge, after a typed y"
+		merge := m.keys.board.Merge.Help().Key
+		if !m.inList() {
+			merge = m.keys.side.Leave.Help().Key + ", then " + merge
+		}
+		acts += " · " + merge + " merge, after a typed y"
 	}
 	add(acts, st.text)
 	for len(lines) < h-1 {

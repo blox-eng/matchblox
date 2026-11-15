@@ -175,10 +175,49 @@ func TestAShipsRowSaysWhatItsKeysDo(t *testing.T) {
 		t.Errorf("the head %q", head)
 	}
 	m.toLine()
-	if keys := keyLineOf(m); strings.Contains(keys, "send") {
+	if keys = keyLineOf(m); strings.Contains(keys, "send") {
 		t.Errorf("in the line the key line %q offers a send", keys)
 	}
-	if nm := pressOn(m, "p"); nm.pending == nil {
-		t.Errorf("p, which the key line offers, does not merge from the line: %q", nm.noticeText)
+	leave := m.keys.side.Leave.Help().Key
+	if esc, p := strings.Index(keys, leave), strings.Index(keys, "p merge"); esc < 0 || p < esc {
+		t.Errorf("in the line the key line %q does not say %s, then p merge", keys, leave)
+	}
+	if nm := pressOn(m, "p"); nm.pending != nil {
+		t.Errorf("p in the line opened the merge box: the line acts on nothing")
+	}
+}
+
+// TestTypingHappyInAShipRowsLineMergesNothing: the line of a ship's row
+// takes no text, and its letters act on nothing: "copy happy" opens no
+// merge box, and its y confirms no merge.
+func TestTypingHappyInAShipRowsLineMergesNothing(t *testing.T) {
+	m := chooseShip(t, orphanShip(t, shipWaits))
+	m.toLine()
+	m = typeLine(m, "copy happy")
+	if m.pending != nil || m.consenting() || m.menu != nil || m.form != nil {
+		t.Errorf("typing in the ship's line opened pending %+v, menu %v, form %v", m.pending, m.menu != nil, m.form != nil)
+	}
+	if acts := boardFake(m).acts(); len(acts) != 0 {
+		t.Errorf("typing in the ship's line sent %+v", acts)
+	}
+	if m.inList() || m.lines[m.chosenSide()] != "" {
+		t.Errorf("the ship's line: in the list %v, holds %q", m.inList(), m.lines[m.chosenSide()])
+	}
+	if got := chatLineOf(m, 100); !strings.Contains(got, "no session drives #4570") {
+		t.Errorf("the ship's line %q does not say why it takes no text", got)
+	}
+}
+
+// TestShipRowMergesFromTheList: in the list, p on a ship's row opens the
+// merge box, and the typed y merges it.
+func TestShipRowMergesFromTheList(t *testing.T) {
+	m := chooseShip(t, orphanShip(t, shipWaits))
+	m = pressOn(m, "p")
+	if !m.consenting() || !strings.Contains(consentText(m), "merge 4570") {
+		t.Fatalf("p in the list does not show the merge: %q", consentText(m))
+	}
+	m = pressOn(m, "y")
+	if acts := boardFake(m).acts(); len(acts) != 1 || acts[0].RecID != "ship:hearth/hearth-api#4570" || acts[0].Confirm != "y" {
+		t.Fatalf("p y sent %+v", acts)
 	}
 }

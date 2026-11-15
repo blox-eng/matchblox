@@ -389,12 +389,15 @@ func TestParkedLineIsOff(t *testing.T) {
 	if m.lines[paneOf(s)] != "" || len(messageActs(boardFake(m))) != 0 {
 		t.Fatalf("a parked line took %q, sent %+v", m.lines[paneOf(s)], messageActs(boardFake(m)))
 	}
-	if got := chatLineOf(m, 100); !strings.Contains(got, "parked: z lets it go") {
+	if got := chatLineOf(m, 100); !strings.Contains(got, "parked: esc, then z lets it go") {
 		t.Fatalf("line %q", got)
 	}
-	m = pressOn(m, "z")
+	if nm := pressOn(m, "z"); len(boardFake(nm).acts()) != 0 {
+		t.Fatalf("z in the parked line sent %+v: the line acts on nothing", boardFake(nm).acts())
+	}
+	m = pressOn(m, "esc", "z")
 	if !hasAct(boardFake(m), "park:%flint-auth") {
-		t.Fatalf("z on the parked line sent %+v", boardFake(m).acts())
+		t.Fatalf("esc z on the parked session sent %+v", boardFake(m).acts())
 	}
 }
 
@@ -775,7 +778,7 @@ func TestParkWhileHeldGivesTheTextBack(t *testing.T) {
 	if len(m.lineHeld) != 0 || m.lines[paneOf(s)] != "later" {
 		t.Fatalf("held %v, line %q", m.lineHeld, m.lines[paneOf(s)])
 	}
-	if got := chatLineOf(m, 120); !strings.Contains(got, "parked: z lets it go") {
+	if got := chatLineOf(m, 120); !strings.Contains(got, "parked: esc, then z lets it go") {
 		t.Fatalf("line %q", got)
 	}
 }

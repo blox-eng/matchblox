@@ -31,7 +31,7 @@ the screen; else it types.
 | `/` | In the list, searches the list. |
 | `m` | In the list, opens the menu of the chosen session. It names the acts that destroy nothing, with their keys: rename, stoke the chain, a new order. A kill, a merge, a go, a switch and the stoker's stop are keys of the list only. |
 | `c` | In the list, copies what the agent said last. |
-| `z` | In the list, parks the chosen session: nothing types into it, and the stoker leaves it alone. `z` again lets it go. In the line of a parked session, lets it go. |
+| `z` | In the list, parks the chosen session: nothing types into it, and the stoker leaves it alone. `z` again lets it go. In the line of a parked session, `z` does nothing: `Esc`, then `z`. |
 | `N` | In the list, opens **New session**: where it starts (a path, or `←` `→` through your repositories and worktrees, then the ones found on the host, the most recent first), a branch for a new worktree beside the repository (blank: none), its name, the agent (`←` `→`, from the installed Claude Code, Codex, OpenCode and Cursor), for Claude Code, Codex and Cursor the account (see below), and a first message (blank: it waits for your first prompt; a new account has none). `Tab` goes to the next line. |
 | `x` | In the list, kills the chosen session: a box shows the commands, and they run on a typed `y`. A session that works or needs you asks for a second `y`. |
 | `r` | In the list, renames the chosen session: its tmux window, its tmux session when it is that session's one window, and Claude Code's own name (`/rename`), all alike. A Claude Code session that works takes its new name when it rests. |
@@ -74,7 +74,9 @@ and a digit.
 A key with no job in the line or the list does not do nothing: a notice
 names the keys that place takes. Any other letter in the list moves the keys back to the line and types
 there. The line of a parked session is off: it says
-`parked: z lets it go`. A message to a host that is not reached stays in the line, and the
+`parked: esc, then z lets it go`. No letter in the line acts on a session:
+on the row of a pull request that no session drives, the line takes no
+text, and `p` merges from the list only (`esc`, then `p`). A message to a host that is not reached stays in the line, and the
 line says `not sent: ws-2 is not reached`. Nothing sends it again by
 itself. The rows of that host stay, dimmed. On that host, the header says
 `ws-2 not reached · since 2m`. When the chosen session ends, the next session in the list is

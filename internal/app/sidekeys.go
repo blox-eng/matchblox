@@ -152,6 +152,8 @@ func (m Model) sideKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 
 // lineKey is k in the line: printable keys type, ⏎ sends, and with the
 // line empty a digit answers the question on screen and the arrows choose.
+// No letter acts on a session here: a line that takes no text says why,
+// and the list keys act.
 func (m Model) lineKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model, tea.Cmd) {
 	sk, mk := m.keys.side, m.keys.main
 	text := m.lines[paneOf(s)]
@@ -167,8 +169,6 @@ func (m Model) lineKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 		m.toList()
 	case ok && isShipCard(s) && bkey.Matches(k, sk.Enter):
 		return m.shipKey(s)
-	case ok && isShipCard(s) && bkey.Matches(k, m.keys.board.Merge): // the key line offers it: the line takes no text here
-		return m.rowAct(k, s)
 	case bkey.Matches(k, sk.Enter):
 		cmd = m.sendLine()
 	case bkey.Matches(k, sk.Erase):
@@ -181,8 +181,6 @@ func (m Model) lineKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 		m.sideMove(-1)
 	case bkey.Matches(k, sk.Down):
 		m.sideMove(1)
-	case ok && m.parked(s) && bkey.Matches(k, mk.Park):
-		return m.onCard(s).key(k)
 	case ok && isDigit(k) && text == "" && m.digitAnswers(s):
 		if _, held := m.stokerHolds(s); held {
 			cmd = m.releaseDigit(s, k.Text)
@@ -405,12 +403,18 @@ func (m Model) lineOff(s sample.Session) string {
 		return m.shipCardWhy(sh)
 	}
 	if m.parked(s) {
-		return "parked: " + m.keys.main.Park.Help().Key + " lets it go"
+		return m.parkedNote()
 	}
 	if s.Pane == "" {
 		return s.Name + " runs outside tmux: no pane to write to"
 	}
 	return ""
+}
+
+// parkedNote is what the line of a parked session says: the list's z
+// lets it go.
+func (m Model) parkedNote() string {
+	return "parked: " + m.keys.side.Leave.Help().Key + ", then " + m.keys.main.Park.Help().Key + " lets it go"
 }
 
 // shipKey is ⏎ or N on the row of a ship no session drives: New session
@@ -598,7 +602,7 @@ func (m Model) heldRelease() (Model, tea.Cmd) {
 		}
 		note := h.name + " ended · the text is not sent"
 		if i >= 0 {
-			note = "parked: " + m.keys.main.Park.Help().Key + " lets it go"
+			note = m.parkedNote()
 		}
 		m.setLine(k, strings.TrimSpace(h.text+" "+m.lines[k]))
 		if m.lineNote.k == (paneKey{}) || m.lineNote.k == k {
