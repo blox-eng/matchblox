@@ -77,7 +77,20 @@ the screen; else it types.
 | `z` | In the list, parks the chosen session, or lets it go. In the line of a parked session, lets it go. |
 | `N` | In the list, opens **New session**. |
 | `Tab` | Goes to Machine. |
-| `Ctrl+O` | Goes into the chosen agent's pane, from the line or the list. |
+| `Ctrl+O` | Goes into the chosen agent's pane, from the line or the list. The key line then says the way back, `ctrl+a m`. |
+| `Ctrl+L` | Hides the list, or shows it again. With the list hidden, the chat takes the width, and the header names each session that needs you. A tap on a name opens its chat. On a phone, the list and the chat take turns. |
+| `◂` or `←` | On a phone, goes from the chat back to the list. A tap on `◂` at the left of the chat's head does it too. On a desk, moves the keys to the list. |
+
+On a desk the list is 40 columns wide, with the chat beside it. On a
+narrower screen the list is 32 columns wide. A phone, and a screen that
+leaves the chat less than 40 columns, shows one of the two at a time: the
+list first. A tap on a row, or `Enter` in the list, opens its chat. A tap
+on the `−` of a group's head folds the group: the head keeps its count,
+and a tap on its plus sign unfolds it again. The foot opens each of its parts in the
+chat's place: `+ new` opens **New session**, `✧ 2 tips` the tips, and
+`! 1 setup` the first open setup step. `Esc` gives the place back to the
+chat. In the tips, `↑` `↓` choose, `Enter` does the chosen tip and `d`
+dismisses it. A drag in the chat copies only the chat's text.
 
 A key with no job in the line or the list does not do nothing: a notice
 names the keys that place takes. Any other letter in the list moves the keys back to the line and types

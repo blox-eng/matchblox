@@ -14,7 +14,7 @@ import (
 // Words match in any case.
 var docKey = map[string]string{
 	"enter": "enter", "⏎": "enter", "esc": "esc", "↑": "up", "↓": "down", "←": "left", "→": "right",
-	"tab": "tab", "shift+tab": "shift+tab", "space": "space", "ctrl+c": "ctrl+c", "ctrl+o": "ctrl+o",
+	"tab": "tab", "shift+tab": "shift+tab", "space": "space", "ctrl+c": "ctrl+c", "ctrl+o": "ctrl+o", "ctrl+l": "ctrl+l",
 	"backspace": "backspace",
 }
 

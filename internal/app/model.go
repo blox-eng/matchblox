@@ -69,6 +69,10 @@ type Options struct {
 	NoticeFor time.Duration
 	// NoMotion makes every motion an instant change.
 	NoMotion bool
+	// Board draws the old board in the Sessions tab in place of the list
+	// and the chat: the replay's and the demo's stories, until they follow
+	// the new screen.
+	Board bool
 	// OutsideTmux: the console does not run in tmux, so going to a pane
 	// attaches to it, and the console comes back when tmux detaches.
 	OutsideTmux bool
@@ -599,6 +603,15 @@ type Model struct {
 	// chosen session's name then: what follows a chosen session that ends.
 	sideWas  []paneKey
 	sideName string
+	// listFlip: the owner hid the list where it starts shown, or showed it
+	// where it starts hidden (listHidden). sideFold are the groups folded
+	// to their heads. sidePlace is what shows in the chat's place, and
+	// sideTip the tip chosen there. sideIn is the session ctrl+o went into.
+	listFlip  bool
+	sideFold  map[sideState]bool
+	sidePlace sidePlace
+	sideTip   int
+	sideIn    paneKey
 }
 
 func New(opt Options) Model {
@@ -615,7 +628,7 @@ func New(opt Options) Model {
 		opt.Binary = "dev"
 	}
 	m := Model{opt: opt, conn: opt.Conn, st: newStyles(true), dark: true, width: 100, height: 30, history: newSeries(60),
-		recPrefs: loadRecPrefs(opt.StateDir), viewPrefs: loadViewPrefs(opt.StateDir), keys: defaultKeys(), peers: links(opt.Peers), shown: &shownFrame{}}
+		recPrefs: loadRecPrefs(opt.StateDir), viewPrefs: loadViewPrefs(opt.StateDir), keys: defaultKeys(), peers: links(opt.Peers), shown: &shownFrame{}, sideOn: !opt.Board}
 	m.splashAt = m.now()
 	if opt.Ask != nil {
 		m.askCtx, m.askStop = context.WithCancel(context.Background())

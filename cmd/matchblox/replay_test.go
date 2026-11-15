@@ -535,7 +535,7 @@ func replayAt(t *testing.T, z replaySize) {
 	heard := &heardConn{Conn: transport.NewConn(a)}
 	view.upTo = heard.fresh(20 * time.Second) // under staleAfter (30 s)
 	m := app.New(app.Options{
-		Conn: heard, Binary: version, CompactAt: cfg.Sessions.CompactAt, Now: view.Now, StateDir: views,
+		Conn: heard, Binary: version, CompactAt: cfg.Sessions.CompactAt, Now: view.Now, StateDir: views, Board: true,
 		Run: func(argv []string) error { // a jump: the demo moves no terminal
 			mu.Lock()
 			jumps = append(jumps, argv)

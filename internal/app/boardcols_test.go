@@ -50,7 +50,7 @@ func boardModel(t *testing.T, st proto.State) Model {
 	t.Helper()
 	m, _ := loadedWith(t, 160, st)
 	m.opt.Now = func() time.Time { return boardAt }
-	return m
+	return boardOnly(m)
 }
 
 func waitFor(s sample.Session, state string, ago time.Duration) queue.Item {

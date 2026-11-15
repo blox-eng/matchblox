@@ -1,6 +1,8 @@
 package app
 
 import (
+	"slices"
+
 	tea "charm.land/bubbletea/v2"
 )
 
@@ -23,6 +25,8 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		return m, nil
 	case m.menu != nil && m.boardShown():
 		return m.menuTap(ms)
+	case ms.Button == tea.MouseRight && m.sideActive():
+		return m.sideRightClick(ms)
 	case ms.Button == tea.MouseRight && m.boardShown():
 		return m.boardRightClick(ms)
 	case ms.Button != tea.MouseLeft:
@@ -73,6 +77,9 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		if s, ok := spanAt([]span{sc.hostAt}, ms.X); ok && s.press != "" {
 			return m.keyed(keyPress(s.press)) // the host filter: as s
 		}
+		if i := slices.IndexFunc(sc.names, func(s span) bool { return ms.X >= s.x0 && ms.X < s.x1 }); i >= 0 {
+			return m.chooseSide(sc.namePanes[i]), nil // the list stays hidden
+		}
 		if s, ok := spanAt([]span{sc.waits}, ms.X); ok && s.press != "" {
 			if m.boardShown() {
 				m.clearBoardFilters()
@@ -111,6 +118,13 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 			return m.keyed(keyPress(s.press)) // as u
 		}
 		return m, nil
+	case m.sideActive() && ms.Y >= sc.bodyTop && ms.Y < sc.bodyTop+len(sc.rows):
+		if m.dragFrom != nil && m.sawRelease { // a drag may start here: the tap waits for the release
+			m.tapLater = &point{ms.X, ms.Y}
+			return m.holdPress(m, nil, ms)
+		}
+		next, cmd := m.sideTap(ms.X, ms.Y-sc.bodyTop)
+		return m.holdPress(next, cmd, ms) // a long press opens the row's menu
 	case m.boardShown() && ms.Y >= sc.bodyTop && ms.Y < sc.bodyTop+len(sc.rows): // on Pocket no key line closes the body
 		if m.tapWaits(ms.X, ms.Y-sc.bodyTop) {
 			m.tapLater = &point{ms.X, ms.Y} // a drag may start here: the tap waits for the release
@@ -208,6 +222,9 @@ func (m Model) wheel(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.held = nil // a swipe is another key: it drops the question
+	if m.sideActive() {
+		return m.sideWheel(ms)
+	}
 	if m.boardShown() && !m.standIn && !m.viewFull() {
 		return m.boardWheel(ms)
 	}

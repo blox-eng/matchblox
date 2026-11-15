@@ -138,6 +138,13 @@ func boardFixture(t testing.TB) proto.State {
 	return st
 }
 
+// boardOnly is m with the old board in the Sessions tab in place of the
+// list and the chat: a test of what only the board does asks for it.
+func boardOnly(m Model) Model {
+	m.sideOn = false
+	return m
+}
+
 // boardShot is the console at w by h with the board on, on the clock of
 // demoAt: st's matches of this machine, and gpu-1's when st has some. edit
 // changes the model before the frame is drawn.
@@ -178,7 +185,7 @@ func boardShot(t testing.TB, st proto.State, w, h int, edit func(*Model)) Model 
 	if len(gpu.Sessions) > 0 {
 		opt.Peers = []Peer{{Host: "gpu-1", Conn: peer}}
 	}
-	var next tea.Model = New(opt)
+	var next tea.Model = boardOnly(New(opt))
 	next, _ = next.Update(tea.WindowSizeMsg{Width: w, Height: h})
 	next, _ = next.Update(stateMsg(home))
 	if len(gpu.Sessions) > 0 {
@@ -332,7 +339,7 @@ func TestEmptyNeedsYouSaysSo(t *testing.T) {
 func TestTheBoardsStates(t *testing.T) {
 	st := boardFixture(t)
 	t.Run("before the first state", func(t *testing.T) {
-		var next tea.Model = New(Options{NoMotion: true, Conn: newFake(), Now: func() time.Time { return demoAt }})
+		var next tea.Model = boardOnly(New(Options{NoMotion: true, Conn: newFake(), Now: func() time.Time { return demoAt }}))
 		next, _ = next.Update(tea.WindowSizeMsg{Width: 80, Height: 31})
 		m := next.(Model)
 		m.splashDone = true

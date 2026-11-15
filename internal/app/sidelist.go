@@ -142,11 +142,20 @@ func (m Model) sideGroups() []sideGroup {
 	return out
 }
 
-// sideOrder is the sessions ↑↓ walk, as drawn: the units of each group in
-// order, a chain's members in team order.
-func (m Model) sideOrder() []paneKey {
+// sideOrder is the sessions of the list in drawn order: the units of each
+// group in order, a chain's members in team order, a folded group's too.
+func (m Model) sideOrder() []paneKey { return m.sidePanes(true) }
+
+// sideWalk is the sessions ↑↓ walk: sideOrder without the rows of a folded
+// group, which the list does not draw.
+func (m Model) sideWalk() []paneKey { return m.sidePanes(false) }
+
+func (m Model) sidePanes(folded bool) []paneKey {
 	var out []paneKey
 	for _, g := range m.sideGroups() {
+		if !folded && m.sideFold[g.state] {
+			continue
+		}
 		for _, u := range m.sideShows(g) {
 			for _, s := range u.members {
 				out = append(out, paneOf(s))

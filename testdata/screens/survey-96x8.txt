@@ -1,8 +1,8 @@
  ▰ matchblox                                                                       ● 6 need you
- BOARD 7    machine
+ SESSIONS 7    machine
 ────────────────────────────────────────────────────────────────────────────────────────────────
- NEEDS YOU · 6  −                               WORKING · 1  −           SHIPPING · 0  −
-▌╿ flint-auth                           ✻  2m    ↓ 1 more
-  stuck conflicts with main
+▌╿ flint-auth               2m ✻│ flint-auth ✻ asks · #4545 ci  ctx 41%  ctrl+o expand · m menu
+   conflicts with main          │ Enter to select · ↑/↓ to navigate · Esc to cancel
+ + new · ✧ 7 tips               │ ›                                        ⏎ send to flint-auth
 ────────────────────────────────────────────────────────────────────────────────────────────────
- ⏎ go in   c copy   v one line   s hosts   u strip   ←→ columns   tab next
+ writing to flint-auth · ⏎ send · ↑↓ choose · esc list · ctrl+o expand · tab Machine

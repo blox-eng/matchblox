@@ -1,20 +1,20 @@
  ▰ matchblox                                                                       ● 6 need you
- BOARD 7    machine
+ SESSIONS 7    machine
 ────────────────────────────────────────────────────────────────────────────────────────────────
- NEEDS YOU · 6  −                               WORKING · 1  −           SHIPPING · 0  −
-▌╿ flint-auth                           ✻  2m   ✦ hearth-api     ✻
-  stuck conflicts with main                      busy
-  #4545 ●━✕┄○┄○┄○  ctx 41%                       #4551 ●━◉┄○┄○  ctx 79%
-  “The refresh flow works and the tests pass.
-  One choice is yours before I wire the
-  rotation.”
-  ⏎ go in
-
-  ↓ 5 more
+ NEEDS YOU · 6  −               │ flint-auth ✻ asks · #4545 ci  ctx 41%  ctrl+o expand · m menu
+▌╿ flint-auth               2m ✻│ ⏺ The refresh endpoint is in and its tests pass.
+   conflicts with main          │
+ ╿ spark-docs               9m ✻│ ──────────────────────────────────────────────────────────────
+   I rewrote the quick start an…│  ☐ Rotate
+ ╿ ember-billing            4m ✻│
+   #4552 waits for your merge   │ Should a refresh also rotate the token?
+ ╿ kindle-web               1m ✻│
+   Claude needs your permission…│ ❯ 1. Rotate it
+ ╿ cinder-ci                0s ❋│      The old one stops at once.
+   I am moving the cache key to…│   2. Rotate, keep the old one a minute
+ ╿ wick-mobile              0s ▣│   3. Type something.
+   ⠙ Working                    │
+────────────────────────────────│ Enter to select · ↑/↓ to navigate · Esc to cancel
+ + new · ✧ 7 tips               │ ›                                        ⏎ send to flint-auth
 ────────────────────────────────────────────────────────────────────────────────────────────────
- QUIET · 0   ▴                                                                               −
- + start a new session
- RECOMMENDATIONS · 7
- ✻ Claude Max  5h ▰▰▰▰▰▰▰▱ 84% · Fri 01:20   wk ▰▰▰▰▰▰▰▱ 82% · Mon 09:00              machine ›
-────────────────────────────────────────────────────────────────────────────────────────────────
- ⏎ go in   c copy   v one line   s hosts   u strip   ←→ columns   tab next
+ writing to flint-auth · ⏎ send · ↑↓ choose · esc list · ctrl+o expand · tab Machine

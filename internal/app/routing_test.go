@@ -286,7 +286,7 @@ func keyLineStates(t *testing.T) []keyLineAt {
 		if now.IsZero() {
 			now = demoAt
 		}
-		m := New(Options{NoMotion: true, Conn: newFake(), Now: func() time.Time { return now }})
+		m := boardOnly(New(Options{NoMotion: true, Conn: newFake(), Now: func() time.Time { return now }}))
 		m.viewPrefs.CopyCheckedPhone, m.viewPrefs.CopyCheckedDesk = true, true // the copy check is the board's first-run door
 		next, _ := m.Update(tea.WindowSizeMsg{Width: w, Height: 30})
 		next, _ = next.Update(stateMsg(st))

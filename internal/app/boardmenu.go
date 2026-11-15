@@ -308,12 +308,22 @@ func (m Model) holdPress(next tea.Model, cmd tea.Cmd, ms tea.Mouse) (tea.Model, 
 	if !ok || !nm.sawRelease || !nm.chatMarkReach() {
 		return next, cmd
 	}
-	_, s, on := m.cardAtCell(ms.X, ms.Y)
-	if !on {
-		return next, cmd
+	var pane paneKey
+	if m.sideActive() {
+		k, on := m.sideRowAt(ms.X, ms.Y)
+		if !on {
+			return next, cmd
+		}
+		pane = k
+	} else {
+		_, s, on := m.cardAtCell(ms.X, ms.Y)
+		if !on {
+			return next, cmd
+		}
+		pane = paneOf(s)
 	}
 	id := nm.longPress.id + 1
-	nm.longPress = longPress{id: id, x: ms.X, y: ms.Y, pane: paneOf(s), on: true}
+	nm.longPress = longPress{id: id, x: ms.X, y: ms.Y, pane: pane, on: true}
 	tick := tea.Tick(longPressFor, func(time.Time) tea.Msg { return longPressMsg{id} })
 	return nm, tea.Batch(cmd, tick)
 }
@@ -336,6 +346,13 @@ func (m Model) pointer(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		return m.dragOn(point{ms.X, ms.Y}), nil
 	case longPressMsg:
+		if m.sideActive() {
+			if !m.longPress.on || msg.id != m.longPress.id || !m.chatMarkReach() {
+				return m, nil
+			}
+			next, _ := m.sideMenuOn(m.longPress.pane, m.longPress.x, m.longPress.y)
+			return next.(Model), nil
+		}
 		c, s, ok := m.boardCardOf(m.longPress.pane)
 		if !m.longPress.on || msg.id != m.longPress.id || !ok || !m.chatMarkReach() {
 			return m, nil

@@ -543,7 +543,7 @@ func TestListKeyWithNoJobSaysSo(t *testing.T) {
 
 func TestLineKeyWithNoJobSaysSo(t *testing.T) {
 	m, _ := sideConsole(t, boardState(boardMatch("flint-auth", time.Hour)))
-	for _, k := range []tea.KeyPressMsg{keyPress("left"), keyPress("right"), keyPress("pgup"), {Code: tea.KeyHome}, {Code: tea.KeyDelete}, keyPress("ctrl+x")} {
+	for _, k := range []tea.KeyPressMsg{keyPress("right"), keyPress("pgup"), {Code: tea.KeyHome}, {Code: tea.KeyDelete}, keyPress("ctrl+x")} {
 		m.noticeText = ""
 		next, cmd := m.Update(k)
 		drain(cmd)

@@ -176,12 +176,14 @@ func defaultKeys() keymaps {
 			Merge:     bind(ks("p"), "p", "merge"),
 		},
 		side: sideKeys{
-			Enter:  bind(ks("enter"), "⏎", "send"),
-			Erase:  bind(ks("backspace"), "⌫", "erase"),
-			Leave:  bind(ks("esc"), "esc", "list"),
-			Up:     bind(ks("up"), "↑↓", "choose"),
-			Down:   bind(ks("down"), "↑↓", "choose"),
-			Unhide: bind(ks("h"), "h", "show the host"),
+			Enter:    bind(ks("enter"), "⏎", "send"),
+			Erase:    bind(ks("backspace"), "⌫", "erase"),
+			Leave:    bind(ks("esc"), "esc", "list"),
+			Up:       bind(ks("up"), "↑↓", "choose"),
+			Down:     bind(ks("down"), "↑↓", "choose"),
+			Unhide:   bind(ks("h"), "h", "show the host"),
+			List:     bind(ks("left"), "◂", "list"),
+			HideList: bind(ks("ctrl+l"), "ctrl+l", "list"),
 		},
 	}
 }
@@ -310,11 +312,12 @@ func (k boardKeys) bindings() []bkey.Binding {
 // sideKeys are the chat's line and the list beside it. In the line every
 // printable key is text; only the arrows choose, and only with the line
 // empty. In the list ⏎ goes back to the line, and the board's keys act on
-// the chosen session.
-type sideKeys struct{ Enter, Erase, Leave, Up, Down, Unhide bkey.Binding }
+// the chosen session. List comes back to the list from a chat that has the
+// screen; HideList hides or shows the list, from either place.
+type sideKeys struct{ Enter, Erase, Leave, Up, Down, Unhide, List, HideList bkey.Binding }
 
 func (k sideKeys) bindings() []bkey.Binding {
-	return []bkey.Binding{k.Enter, k.Erase, k.Leave, k.Up, k.Down, k.Unhide}
+	return []bkey.Binding{k.Enter, k.Erase, k.Leave, k.Up, k.Down, k.Unhide, k.List, k.HideList}
 }
 
 // shellKeys are the Hosts list. Update and Dismiss act on a host on

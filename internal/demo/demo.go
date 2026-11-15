@@ -118,6 +118,7 @@ func Start(o Options) (*Demo, error) {
 		Conn: conn, Binary: binary, Demo: Refusal, OutsideTmux: true,
 		Pair:     &app.PairHost{}, // the Machine tab offers a device, for the line to answer
 		StateDir: stateDir(root), Now: clockFrom(started),
+		Board: true, // the demo's scripts and Pocket's belt are the board's, until they follow the list and the chat
 	}
 	if o.console != nil {
 		o.console(&opts)

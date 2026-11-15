@@ -63,7 +63,7 @@ var fuseTeams = []string{"hearth", "web", "docs"}
 // the session named pick picked.
 func fuseModel(t *testing.T, width int, st proto.State, pick string) Model {
 	t.Helper()
-	var next tea.Model = New(Options{NoMotion: true, Conn: newFake(), Now: func() time.Time { return demoAt }})
+	var next tea.Model = boardOnly(New(Options{NoMotion: true, Conn: newFake(), Now: func() time.Time { return demoAt }}))
 	next, _ = next.Update(tea.WindowSizeMsg{Width: width, Height: 30})
 	next, _ = next.Update(stateMsg(st))
 	m := next.(Model)
@@ -205,7 +205,7 @@ func runningPlan() proto.StokerView {
 func headModel(t *testing.T, width int, st proto.State) (Model, *fakeConn) {
 	t.Helper()
 	f := newFake()
-	var next tea.Model = New(Options{NoMotion: true, Conn: f, Now: func() time.Time { return demoAt }})
+	var next tea.Model = boardOnly(New(Options{NoMotion: true, Conn: f, Now: func() time.Time { return demoAt }}))
 	next, _ = next.Update(tea.WindowSizeMsg{Width: width, Height: 30})
 	next, _ = next.Update(stateMsg(st))
 	m := next.(Model)
@@ -235,7 +235,7 @@ func TestHeadScreens(t *testing.T) {
 	check(t, asks, "chainheadasks", 44, 31, nil)
 	start := append([]string{"F"}, strings.Split("merge on green", "")...)
 	for _, size := range [][2]int{{44, 31}, {104, 38}} {
-		check(t, fuseState(t, mockupChain), "chainsheet", size[0], size[1], append(start, "tab", "space", "tab"))
+		checkBoard(t, fuseState(t, mockupChain), "chainsheet", size[0], size[1], append(start, "tab", "space", "tab"))
 	}
 }
 

@@ -265,6 +265,12 @@ func (m Model) dragDropped(msg tea.Msg) Model {
 // board's body may cover: those of the column or the live view under the
 // press, else the whole width.
 func (m Model) dragColumn(x, y, w int) [2]int {
+	if m.sideActive() {
+		if y < 0 || y >= m.bodyRows() {
+			return [2]int{0, w}
+		}
+		return m.sideDragCols(x, w)
+	}
 	d := m.boardPanel(w, m.bodyRows())
 	switch {
 	case d.headAt < 0 || y < d.headAt || y >= d.colsTo:
@@ -362,7 +368,11 @@ func (m Model) chosenByHand(s sample.Session) bool {
 
 // tapOnRelease runs the tap of a press that waited for its release.
 func (m Model) tapOnRelease(p point) (Model, tea.Cmd) {
-	next, cmd := m.boardTap(p.x, p.y-m.drawScreen(max(m.width, minWidth)).bodyTop)
+	tap := m.boardTap
+	if m.sideActive() {
+		tap = m.sideTap
+	}
+	next, cmd := tap(p.x, p.y-m.drawScreen(max(m.width, minWidth)).bodyTop)
 	if nm, ok := next.(Model); ok {
 		return nm, cmd
 	}

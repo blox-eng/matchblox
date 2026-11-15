@@ -1,30 +1,30 @@
  ▰ matchblox                                                                                                                             ● 2 need you
- BOARD 6    machine
+ SESSIONS 6    machine
 ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- NEEDS YOU · 2  −                                     WORKING · 2  −                      SHIPPING · 0  −                     QUIET · 2  −
-▌╿ kindle-web                                 ✻  1m   ✦ hearth-api                ✻                                           ╿ ember-billing   ✻  3m
-  asks Claude needs your permission to use Bash        busy                                                                   │ spark-docs      ✻  9m
-  ctx 56%                                              ctx 79%                 ─╴hearth
-  “Claude needs your permission to use Bash”
-  ⏎ go in                                             ✦ flint-auth                ✻
-                                                       busy The refresh flow works and…
- ╿ hearth's stoker                            ·  0s    ctx 41%
-  idle merge #812 now?
-                                           ─╴hearth
-  ⏎ go in
-
-
-
-
-
-
-
-
-
-
-
- + start a new session
- RECOMMENDATIONS · 7
- ✻ Claude Max  5h ▰▰▰▰▰▰▰▱ 84% · Fri 01:20   wk ▰▰▰▰▰▰▰▱ 82% · Mon 09:00                                                                    machine ›
+ NEEDS YOU · 2  −                       │ kindle-web ✻ asks                                                           ctx 56%  ctrl+o expand · m menu
+▌╿ kindle-web                       1m ✻│
+   Claude needs your permission to use …│
+ ≋ hearth               step 3 of 3 · 3 │
+ ├ ✦ hearth-api                        ✻│
+ ├ ╵ ember-billing                  3m ✻│
+ └ ╿ hearth's stoker                0s ·│
+     merge #812 now?                    │
+────────────────────────────────────────│
+ WORKING · 1  −                         │
+ ✦ flint-auth                          ✻│
+────────────────────────────────────────│
+ IDLE · 1  −                            │
+ ╵ spark-docs                       9m ✻│
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+ + new · ✧ 7 tips                       │ ›                                                                                      ⏎ send to kindle-web
 ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ⏎ go in   c copy   v one line   s hosts   u strip   ←→ columns   tab next
+ writing to kindle-web · ⏎ send · ↑↓ choose · esc list · ctrl+o expand · tab Machine

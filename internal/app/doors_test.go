@@ -377,7 +377,7 @@ func longDoor() doors.Door {
 
 func TestALongDiffIsReadToTheEndBeforeY(t *testing.T) {
 	f := newFake()
-	m := New(Options{NoMotion: true, Conn: f})
+	m := boardOnly(New(Options{NoMotion: true, Conn: f}))
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	next, _ = next.Update(stateMsg(doorState(longDoor(), wayBack, guideDoor)))
 	mm := next.(Model)

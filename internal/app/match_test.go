@@ -68,7 +68,7 @@ func headOf(cells [][]inked, name string) (y, x int, ok bool) {
 // clock *now.
 func motionBoard(t *testing.T, st proto.State, now *time.Time, noMotion bool) Model {
 	t.Helper()
-	m := New(Options{Conn: newFake(), NoMotion: noMotion, Now: func() time.Time { return *now }})
+	m := boardOnly(New(Options{Conn: newFake(), NoMotion: noMotion, Now: func() time.Time { return *now }}))
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 34})
 	next, _ = next.Update(stateMsg(st))
 	m = next.(Model)

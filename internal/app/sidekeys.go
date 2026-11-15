@@ -114,9 +114,24 @@ func (m Model) sideKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 	if bkey.Matches(k, m.keys.main.Back) && m.waiting() { // the record wait takes esc first
 		return m, m.switchNow(), true
 	}
-	m.flash = ""
+	if !m.have && m.opt.Layered && bkey.Matches(k, m.keys.main.Back) {
+		return m, nil, false // a host that never answered: esc goes back to Hosts
+	}
+	if m.newer != "" && bkey.Matches(k, m.keys.main.StartAgain) && m.lines[m.chosenSide()] == "" {
+		return m, nil, false // the key line offers it first: R starts the console again
+	}
+	m.flash, m.sideIn = "", paneKey{}
 	s, ok := m.sideChosen()
-	if m.keysIn == focusList {
+	switch {
+	case bkey.Matches(k, m.keys.side.HideList):
+		return m.flipList(), nil, true
+	case bkey.Matches(k, m.keys.main.Jump):
+		next, cmd := m.expand(s, ok)
+		return next, cmd, true
+	case m.sidePlace != placeChat:
+		next, cmd := m.placeKey(k)
+		return next, cmd, true
+	case m.inList():
 		next, cmd := m.listKey(k, s, ok)
 		return next, cmd, true
 	}
@@ -135,8 +150,10 @@ func (m Model) lineKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 		if ok && m.chatMark(s) > 0 {
 			m.peekArmed = 0
 		} else {
-			m.keysIn = focusList
+			m.toList()
 		}
+	case bkey.Matches(k, sk.List):
+		m.toList()
 	case bkey.Matches(k, sk.Enter):
 		cmd = m.sendLine()
 	case bkey.Matches(k, sk.Erase):
@@ -159,7 +176,7 @@ func (m Model) lineKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 		return m.answerFromChat(k.Text)
 	case printsText(k):
 		return m.linePaste(k.Text)
-	case bkey.Matches(k, mk.NextTab, mk.PrevTab, mk.Jump):
+	case bkey.Matches(k, mk.NextTab, mk.PrevTab):
 		return m.key(k)
 	default:
 		cmd = m.notice("the line takes text · " + sk.Leave.Help().Key + " gives the keys to the list")
@@ -181,7 +198,7 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 	case bkey.Matches(k, sk.Down):
 		m.sideMove(1)
 	case bkey.Matches(k, sk.Enter):
-		m.keysIn = focusLine
+		m.toLine()
 	case bkey.Matches(k, sk.Leave):
 		switch {
 		case m.filter != "":
@@ -208,10 +225,10 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 		cmd = m.boardCopy(s, ok)
 	case bkey.Matches(k, mk.Park) && ok:
 		return m.onCard(s).key(k)
-	case bkey.Matches(k, mk.New, mk.Search, mk.NextTab, mk.PrevTab, mk.Jump):
+	case bkey.Matches(k, mk.New, mk.Search, mk.NextTab, mk.PrevTab):
 		return m.key(k)
 	case printsText(k):
-		m.keysIn = focusLine
+		m.toLine()
 		return m.lineKey(k, s, ok)
 	default:
 		cmd = m.listTakes()
@@ -235,13 +252,32 @@ func printsText(k tea.KeyPressMsg) bool {
 	return k.Text != "" && k.Mod&(tea.ModCtrl|tea.ModAlt) == 0
 }
 
-// sideMove chooses the session d places down the list as drawn.
+// sideMove chooses the session d places down the list as drawn: a folded
+// group's rows are not drawn, so the walk passes them.
 func (m *Model) sideMove(d int) {
-	order := m.sideOrder()
-	if len(order) == 0 {
+	walk := m.sideWalk()
+	if len(walk) == 0 {
 		return
 	}
-	m.sideAt = order[clampMove(slices.Index(order, m.chosenSide()), d, len(order))]
+	at := slices.Index(walk, m.chosenSide())
+	if at < 0 { // the chosen row is folded away: the walk goes on from its place
+		order := m.sideOrder()
+		i := slices.Index(order, m.chosenSide())
+		at = len(walk) - 1
+		if d > 0 {
+			at = 0
+		}
+		for j, k := range walk {
+			if p := slices.Index(order, k); d > 0 && p > i || d < 0 && p < i {
+				at = j
+				if d > 0 {
+					break
+				}
+			}
+		}
+		d = 0
+	}
+	m.sideAt = walk[clampMove(at, d, len(walk))]
 	if s, ok := m.sideChosen(); ok {
 		m.startChatMark(s)
 		m.sideName = m.cardName(s)
@@ -267,7 +303,7 @@ func (m *Model) setLine(k paneKey, text string) {
 // linePaste adds text to the chosen session's line, as one piece. A
 // parked session's line is off: it says so, and takes nothing.
 func (m Model) linePaste(text string) (tea.Model, tea.Cmd) {
-	m.keysIn = focusLine
+	m.toLine()
 	s, ok := m.sideChosen()
 	switch {
 	case !ok:
@@ -540,21 +576,4 @@ func lineShown(text string) string {
 		}
 		return r
 	}, text)
-}
-
-// sideKeyWords is the key line of the list and the chat: where the keys
-// go, then at most five keys for that place.
-func (m Model) sideKeyWords() string {
-	sk, mk, bk := m.keys.side, m.keys.main, m.keys.board
-	hint := func(b bkey.Binding, desc string) string {
-		return b.Help().Key + " " + cmp.Or(desc, b.Help().Desc)
-	}
-	if m.keysIn == focusList {
-		return strings.Join([]string{"in the list", hint(sk.Up, ""), hint(sk.Enter, "write"), hint(bk.Host, ""), hint(bk.Chain, ""), hint(bk.Menu, "")}, " · ")
-	}
-	name := "no session"
-	if s, ok := m.sideChosen(); ok {
-		name = m.cardName(s)
-	}
-	return strings.Join([]string{"writing to " + name, hint(sk.Enter, ""), hint(sk.Up, ""), hint(sk.Leave, ""), hint(mk.Jump, ""), hint(mk.NextTab, "Machine")}, " · ")
 }

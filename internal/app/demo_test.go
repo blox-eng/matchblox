@@ -21,7 +21,7 @@ const demoLine = "This is a demo. Install matchblox to do that."
 func demoConsole(t *testing.T, w int, o Options) Model {
 	t.Helper()
 	o.NoMotion, o.Conn, o.Demo = true, newFake(), demoLine
-	next, _ := New(o).Update(tea.WindowSizeMsg{Width: w, Height: 30})
+	next, _ := boardOnly(New(o)).Update(tea.WindowSizeMsg{Width: w, Height: 30})
 	next, _ = next.Update(stateMsg(fixtureState()))
 	m := next.(Model)
 	m.tab, m.splashDone = tabSessions, true

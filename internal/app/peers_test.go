@@ -20,7 +20,7 @@ import (
 // peered is a console on a home host with one peer, ws-1.
 func peered(redial func() (transport.Conn, error)) (Model, *fakeConn, *fakeConn) {
 	home, ws := newFake(), newFake()
-	m := New(Options{NoMotion: true, Conn: home, Peers: []Peer{{Host: "ws-1", Conn: ws, Redial: redial}}})
+	m := boardOnly(New(Options{NoMotion: true, Conn: home, Peers: []Peer{{Host: "ws-1", Conn: ws, Redial: redial}}}))
 	return m, home, ws
 }
 

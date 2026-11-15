@@ -15,7 +15,7 @@ import (
 func loadedHere(t *testing.T, width int, st proto.State, here string) (Model, *fakeConn) {
 	t.Helper()
 	f := newFake()
-	m := New(Options{NoMotion: true, Conn: f, Here: here})
+	m := boardOnly(New(Options{NoMotion: true, Conn: f, Here: here}))
 	next, _ := m.Update(tea.WindowSizeMsg{Width: width, Height: 30})
 	next, _ = next.Update(stateMsg(st))
 	return next.(Model), f

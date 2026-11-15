@@ -155,6 +155,10 @@ type drawn struct {
 	formAgentsAt int
 	formAgents   []span
 	stokerAt     span // the header's stoker word
+	// names are the sessions that need you, which the header names while
+	// the list is hidden, and namePanes the session of each.
+	names     []span
+	namePanes []paneKey
 	// placeFull: the chat is the whole screen, and a tap on its title row
 	// goes back to Sessions. viewRows: the lines of the agent's screen the
 	// chat shows.
@@ -211,7 +215,11 @@ func (m Model) drawScreen(w int) drawn {
 	}
 	room := m.bodyRows()
 	var b body
-	if m.boardShown() { // the board draws its tab row from the body's index
+	switch {
+	case m.sideActive():
+		b = m.sideBody(w, room)
+		sc.names, sc.namePanes = m.headNameSpans(head)
+	case m.boardShown(): // the board draws its tab row from the body's index
 		p := m.boardPanel(w, room)
 		b, sc.lines[1], sc.tabs = p.body, p.tabRow, p.tabSpans
 		if p.live > 0 {
@@ -221,7 +229,7 @@ func (m Model) drawScreen(w int) drawn {
 		if p.stripAt >= 0 {
 			sc.stripAt, sc.strip = sc.bodyTop+p.stripAt, p.strip
 		}
-	} else {
+	default:
 		b = m.body(w)
 	}
 	vis := windowed(b, room, m.rowIndex())
@@ -236,6 +244,9 @@ func (m Model) drawScreen(w int) drawn {
 		hair, keys, keySpans := m.keyRows(w)
 		sc.keysAt, sc.keys = len(sc.lines)+1, keySpans
 		sc.lines = append(sc.lines, hair, keys)
+	}
+	if m.sideActive() {
+		m.sideNotices(&sc, w)
 	}
 	switch {
 	case m.consenting():
@@ -362,25 +373,42 @@ func (m Model) header(w int) (string, span, span) {
 		lefts = []string{left + st.faint.Render(" · ") + st.muted.Render(host), left}
 	}
 	var right string
-	for _, word := range waits {
-		right = stoker + " "
-		ink := st.accent
-		if n == 0 {
-			ink = st.muted
+	// With the list hidden, the names of the sessions that need you come
+	// first. Short of room the words go first, then the last names, which
+	// a count stands for.
+	var named []string
+	names := m.headNames()
+	for k := len(names); k > 0; k-- {
+		more := ""
+		if k < len(names) {
+			more = st.muted.Render(" · +" + strconv.Itoa(len(names)-k))
 		}
-		switch {
-		case word != "" && stoker != "":
-			right = ink.Render(word) + "  " + right
-		case word != "":
-			right = ink.Render(word) + " "
-		}
-		hit := span{}
-		if word != "" && n > 0 {
-			hit = span{w - lipgloss.Width(right), w - lipgloss.Width(right) + lipgloss.Width(word), "waits"}
-		}
-		for _, l := range lefts {
-			if lipgloss.Width(l+lost)+lipgloss.Width(right)+1 <= w {
-				return spread(l+lost, right, w), hit, m.stokerHit(stoker, w)
+		named = append(named, st.text.Render(strings.Join(names[:k], " · "))+more+"  ")
+	}
+	named = append(named, "")
+	for _, pre := range named {
+		for _, word := range waits {
+			right = stoker + " "
+			ink := st.accent
+			if n == 0 {
+				ink = st.muted
+			}
+			switch {
+			case word != "" && stoker != "":
+				right = ink.Render(word) + "  " + right
+			case word != "":
+				right = ink.Render(word) + " "
+			}
+			right = pre + right
+			hit := span{}
+			if word != "" && n > 0 {
+				x := w - lipgloss.Width(right) + lipgloss.Width(pre)
+				hit = span{x, x + lipgloss.Width(word), "waits"}
+			}
+			for _, l := range lefts {
+				if lipgloss.Width(l+lost)+lipgloss.Width(right)+1 <= w {
+					return spread(l+lost, right, w), hit, m.stokerHit(stoker, w)
+				}
 			}
 		}
 	}
@@ -494,6 +522,9 @@ func (m Model) tabsLine(w int) (string, []span) {
 func (m Model) tabLabel(i int) string {
 	st := m.st
 	name, count := tabNames[i], ""
+	if i == tabSessions && m.sideOn {
+		name = "sessions" // the list and the chat, not the board
+	}
 	switch i {
 	case tabSessions:
 		count = strconv.Itoa(len(m.all.sessions))
@@ -578,6 +609,9 @@ func (m Model) keyLine(w int) (string, []span) {
 	}
 	if m.viewFull() {
 		return m.liveKeyLine(w)
+	}
+	if m.sideActive() {
+		return m.sideKeyLine(w)
 	}
 	if m.boardShown() {
 		return m.boardKeyLine(w)

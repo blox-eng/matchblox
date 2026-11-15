@@ -31,40 +31,78 @@ func (m Model) sideShows(g sideGroup) []sideUnit {
 	})
 }
 
+// The foot's parts, as a tap on each names it.
+const (
+	footNew   = "foot:new"
+	footTips  = "foot:tips"
+	footSetup = "foot:setup"
+)
+
 // sideFoot is the panel's last line: a new session, the tips, and the
-// setup steps still open.
-func (m Model) sideFoot(w int) string {
+// setup steps still open. The spans are where a tap opens each part.
+func (m Model) sideFoot(w int) (string, []span) {
 	st := m.st
-	parts := []string{st.accent.Render("+ new")}
+	type part struct{ text, press string }
+	parts := []part{{st.accent.Render("+ new"), footNew}}
 	if n := len(m.recs); n > 0 {
 		word := " tips"
 		if n == 1 {
 			word = " tip"
 		}
-		parts = append(parts, st.muted.Render("✧ "+strconv.Itoa(n)+word))
+		parts = append(parts, part{st.muted.Render("✧ " + strconv.Itoa(n) + word), footTips})
 	}
 	if n := len(m.boardDoors()); n > 0 {
-		parts = append(parts, st.warn.Render("! "+strconv.Itoa(n)+" setup"))
+		parts = append(parts, part{st.warn.Render("! " + strconv.Itoa(n) + " setup"), footSetup})
 	}
-	return fit(" "+strings.Join(parts, st.faint.Render(" · ")), w)
+	line, x := " ", 1
+	var spans []span
+	for i, p := range parts {
+		if i > 0 {
+			line += st.faint.Render(" · ")
+			x += 3
+		}
+		pw := ansi.StringWidth(p.text)
+		if x+pw <= w {
+			spans = append(spans, span{x, x + pw, p.press})
+		}
+		line, x = line+p.text, x+pw
+	}
+	return fit(line, w), spans
+}
+
+// sideHit is what one line of the list holds: a session's row, a group's
+// head, or nothing (the zero value).
+type sideHit struct {
+	k     paneKey
+	head  bool
+	state sideState
 }
 
 // sidePanel is the list in h lines of w cells: each group under its head,
 // a thin line between groups, and the foot on the last line. The list
 // scrolls to keep the chosen row in view.
 func (m Model) sidePanel(w, h int) []string {
+	lines, _, _ := m.sideList(w, h)
+	return lines
+}
+
+// sideList is sidePanel, with what each line holds and where the foot's
+// parts are. A folded group keeps its head and its count, with a +, and
+// draws no row.
+func (m Model) sideList(w, h int) ([]string, []sideHit, []span) {
 	if w <= 0 || h <= 0 {
-		return nil
+		return nil, nil, nil
 	}
 	st := m.st
 	chosen := m.chosenSide()
 	var lines []string
+	var hits []sideHit
 	at := map[int]bool{} // the lines of the chosen row
-	add := func(l string, hit bool) {
-		if hit {
+	add := func(l string, hit sideHit, lit bool) {
+		if lit {
 			at[len(lines)] = true
 		}
-		lines = append(lines, l)
+		lines, hits = append(lines, l), append(hits, hit)
 	}
 	groups := m.sideGroups()
 	if !m.have {
@@ -76,13 +114,20 @@ func (m Model) sidePanel(w, h int) []string {
 			continue
 		}
 		if len(lines) > 0 {
-			add(st.hair.Render(strings.Repeat("─", w)), false)
+			add(st.hair.Render(strings.Repeat("─", w)), sideHit{}, false)
 		}
-		add(fit(" "+st.label.Render(g.state.head()+" · "+strconv.Itoa(m.sideCount(g, units)))+st.faint.Render("  −"), w), false)
+		fold := "  −"
+		if m.sideFold[g.state] {
+			fold = "  +"
+		}
+		add(fit(" "+st.label.Render(g.state.head()+" · "+strconv.Itoa(m.sideCount(g, units)))+st.faint.Render(fold), w), sideHit{head: true, state: g.state}, false)
+		if m.sideFold[g.state] {
+			continue
+		}
 		for _, u := range units {
 			lit := slices.ContainsFunc(u.members, func(s sample.Session) bool { return paneOf(s) == chosen })
 			if u.chain != (chainKey{}) {
-				add(m.chainHead(u, w, lit), false)
+				add(m.chainHead(u, w, lit), sideHit{}, false)
 			}
 			for i, s := range u.members {
 				link := sideLink{}
@@ -90,13 +135,15 @@ func (m Model) sidePanel(w, h int) []string {
 					link = sideLink{i: i, n: len(u.members), lit: lit}
 				}
 				for _, l := range m.sideRow(s, w, paneOf(s) == chosen, link) {
-					add(l, paneOf(s) == chosen)
+					add(l, sideHit{k: paneOf(s), state: g.state}, paneOf(s) == chosen)
 				}
 			}
 		}
 	}
 	if len(lines) == 0 {
-		lines = m.sideWords(w)
+		for _, l := range m.sideWords(w) {
+			add(l, sideHit{}, false)
+		}
 	}
 	room := max(h-1, 0)
 	start := 0
@@ -105,12 +152,14 @@ func (m Model) sidePanel(w, h int) []string {
 			start = max(i-room+1, start)
 		}
 	}
-	lines = lines[min(start, len(lines)):]
-	lines = lines[:min(len(lines), room)]
+	start = min(start, len(lines))
+	lines, hits = lines[start:], hits[start:]
+	lines, hits = lines[:min(len(lines), room)], hits[:min(len(hits), room)]
 	for len(lines) < room {
-		lines = append(lines, strings.Repeat(" ", w))
+		lines, hits = append(lines, strings.Repeat(" ", w)), append(hits, sideHit{})
 	}
-	return append(lines, m.sideFoot(w))
+	foot, spans := m.sideFoot(w)
+	return append(lines, foot), append(hits, sideHit{}), spans
 }
 
 // sideWords is what the list says in place of rows: before the first

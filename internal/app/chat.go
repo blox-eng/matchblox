@@ -70,12 +70,23 @@ func (m Model) chatHead(s sample.Session, w int) string {
 	if ships := m.shipsOf(s); len(ships) > 0 {
 		about += " · #" + strconv.Itoa(ships[0].Number) + " " + stageNames[ships[0].Stage]
 	}
-	left := " " + st.text.Bold(true).Render(m.cardName(s)) + " " + st.muted.Render(about)
-	right := st.faint.Render(m.keys.main.Jump.Help().Key+" expand · "+m.keys.board.Menu.Help().Key+" menu") + " "
+	name := m.backMark(w) + " " + st.text.Bold(true).Render(m.cardName(s))
+	keys := st.faint.Render(m.keys.main.Jump.Help().Key+" expand · "+m.keys.board.Menu.Help().Key+" menu") + " "
+	ctx := ""
 	if s.Context == "known" {
-		right = m.contextStyle(s).Render("ctx "+strconv.Itoa(int(s.ContextPct+0.5))+"%") + "  " + right
+		ctx = m.contextStyle(s).Render("ctx "+strconv.Itoa(int(s.ContextPct+0.5))+"%") + "  "
 	}
-	return spread(left, right, w)
+	// Short of room the keys go first (the key line has them), then the
+	// context, then the words after the name: the name stays whole.
+	left := name + " " + st.muted.Render(about)
+	for _, l := range []string{left, name} {
+		for _, right := range []string{ctx + keys, ctx, ""} {
+			if lipgloss.Width(l)+lipgloss.Width(right)+1 <= w {
+				return spread(l, right, w)
+			}
+		}
+	}
+	return spread(left, "", w)
 }
 
 // chatChain is the line of a session in a chain: the chain, its step, and

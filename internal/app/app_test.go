@@ -115,7 +115,7 @@ func (f *fakeConn) allActs() []proto.Act {
 func loadedWith(t *testing.T, width int, st proto.State) (Model, *fakeConn) {
 	t.Helper()
 	f := newFake()
-	m := New(Options{NoMotion: true, Conn: f})
+	m := boardOnly(New(Options{NoMotion: true, Conn: f}))
 	m.viewPrefs.CopyCheckedPhone, m.viewPrefs.CopyCheckedDesk = true, true // the copy check is the board's first-run door
 	next, _ := m.Update(tea.WindowSizeMsg{Width: width, Height: 30})
 	next, _ = next.Update(stateMsg(st))

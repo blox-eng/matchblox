@@ -1,31 +1,31 @@
  ▰ matchblox                   ● 2 need you
- BOARD 6    machine
+ SESSIONS 6    machine
 ────────────────────────────────────────────
- NEEDS YOU 2 −  work 2  ship 0  quiet 2
+ NEEDS YOU · 2  −
+▌╿ kindle-web                           1m ✻
+   Claude needs your permission to use Bash
+ ≋ hearth                   step 3 of 3 · 3
+ ├ ✦ hearth-api                            ✻
+ ├ ╵ ember-billing                      3m ✻
+ └ ╿ hearth's stoker                    0s ·
+     merge #812 now?
 ────────────────────────────────────────────
-▌╿ kindle-web                         ✻  1m
-  asks Claude needs your permission to use…
-  ctx 56%
-  “Claude needs your permission to use
-  Bash”
-  ⏎ go in
-
- ╿ hearth's stoker                    ·  0s
-  idle merge #812 now?
-                                   ─╴hearth
-  ⏎ go in
-
-
-
-
-
-
-
-
-
-
- + start a new session
- RECOMMENDATIONS · 7
- ✻ 5h ▰▰▰▰▰▰▰▱ 84%  wk 82%        machine ›
+ WORKING · 1  −
+ ✦ flint-auth                              ✻
 ────────────────────────────────────────────
- c copy   v one line   s hosts   u strip
+ IDLE · 1  −
+ ╵ spark-docs                           9m ✻
+
+
+
+
+
+
+
+
+
+
+
+ + new · ✧ 7 tips
+────────────────────────────────────────────
+ in the list · ↑↓ choose · ⏎ write · s hosts

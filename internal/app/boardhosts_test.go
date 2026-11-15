@@ -17,6 +17,7 @@ import (
 
 // boardOn is m with the board on, its first frame drawn.
 func boardOn(m Model) Model {
+	m = boardOnly(m)
 	m.splashDone = true
 	m.viewPrefs.CopyCheckedPhone, m.viewPrefs.CopyCheckedDesk = true, true
 	return m
