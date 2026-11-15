@@ -3,7 +3,6 @@ package app
 import (
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
@@ -213,11 +212,11 @@ func (m Model) firstWaiting() int {
 }
 
 // sessIndex is the selected row of Sessions: the doors, the sessions,
-// the ghost rows, then the recommendations. A door that folds passes the
-// selection to the next door. Nothing picked: the first session that
-// waits, else the first door; with no session, the first ghost row.
+// the blocked hosts, then the recommendations. A door that folds passes
+// the selection to the next door. Nothing picked: the first session that
+// waits, else the first door.
 func (m Model) sessIndex() int {
-	nd, ns, ng, nr := len(m.doors), len(m.snap.Sessions), len(m.ghosts())+len(m.blockedHosts()), m.recRows()
+	nd, ns, ng := len(m.doors), len(m.snap.Sessions), len(m.blockedHosts())
 	for i, d := range m.doors {
 		if d.ID == m.doorPick {
 			return i
@@ -226,13 +225,13 @@ func (m Model) sessIndex() int {
 	if nd > 0 && m.doorPick != "" {
 		return min(m.doorAt, nd-1)
 	}
-	for i, r := range m.recs[:nr] {
+	for i, r := range m.recs {
 		if r.ID == m.recPick && m.recPick != "" {
 			return nd + ns + ng + i
 		}
 	}
-	if m.ghostPick > 0 {
-		return nd + ns + min(m.ghostPick, ng) - 1
+	if m.blockedPick > 0 {
+		return nd + ns + min(m.blockedPick, ng) - 1
 	}
 	if ns == 0 {
 		return nd
@@ -267,15 +266,12 @@ func (m Model) selectedRec() (advice.Rec, bool) {
 	if m.tab != tabSessions {
 		return advice.Rec{}, false
 	}
-	i := m.sessIndex() - len(m.doors) - len(m.snap.Sessions) - len(m.ghosts()) - len(m.blockedHosts())
-	if i < 0 || i >= m.recRows() {
+	i := m.sessIndex() - len(m.doors) - len(m.snap.Sessions) - len(m.blockedHosts())
+	if i < 0 || i >= len(m.recs) {
 		return advice.Rec{}, false
 	}
 	return m.recs[i], true
 }
-
-// maxTreeDepth is how many levels of children are drawn under a session.
-const maxTreeDepth = 4
 
 // childrenOf are the children started by one process of host, in
 // snapshot order.
@@ -297,34 +293,6 @@ func (m Model) descendants(host string, parent sample.ProcRef) int {
 	return n
 }
 
-// childRows are the lines under one session or child, depth first: a
-// branch for each child and a fold for what lies below the last level.
-// indent carries a bar down past each ancestor that has siblings below.
-func (m Model) childRows(host string, parent sample.ProcRef, indent string, depth, w int) []string {
-	st := m.st
-	kids := m.childrenOf(host, parent)
-	if len(kids) == 0 {
-		return nil
-	}
-	if depth > maxTreeDepth {
-		return []string{fit(st.faint.Render(indent+"└─ … "+strconv.Itoa(m.descendants(host, parent))+" more"), w)}
-	}
-	var out []string
-	for i, c := range kids {
-		branch, below := "├─ ", "│ "
-		if i == len(kids)-1 {
-			branch, below = "└─ ", "  "
-		}
-		line := st.faint.Render(indent+branch) + st.text.Render(c.Name)
-		if c.Status != "" {
-			line += st.faint.Render(" " + c.Status)
-		}
-		out = append(out, fit(line, w))
-		out = append(out, m.childRows(host, sample.ProcRef{PID: c.PID, Start: c.Start}, indent+below, depth+1, w)...)
-	}
-	return out
-}
-
 // accountTag is the account a session runs on, for a row: empty on the
 // default sign-in.
 func (m Model) accountTag(s sample.Session) string {
@@ -332,14 +300,6 @@ func (m Model) accountTag(s sample.Session) string {
 		return ""
 	}
 	return accounts.Name(s.AccountDir)
-}
-
-func shift(spans []span, dx int) []span {
-	out := make([]span, len(spans))
-	for i, s := range spans {
-		out[i] = span{s.x0 + dx, s.x1 + dx, s.press}
-	}
-	return out
 }
 
 // lastWords is what the agent said last: its queue row's message while it
@@ -403,15 +363,4 @@ func spread(left, right string, w int) string {
 		return fit(ansi.Truncate(left, max(w-rw-1, 0), "…")+" "+right, w)
 	}
 	return left + strings.Repeat(" ", w-lw-rw) + right
-}
-
-// padTo pads styled text to w cells, cutting it when it is wider.
-func padTo(s string, w int) string {
-	s = ansi.Truncate(s, w, "…")
-	return s + strings.Repeat(" ", max(w-lipgloss.Width(s), 0))
-}
-
-// padLeft right-aligns styled text in w cells.
-func padLeft(s string, w int) string {
-	return strings.Repeat(" ", max(w-lipgloss.Width(s), 0)) + s
 }

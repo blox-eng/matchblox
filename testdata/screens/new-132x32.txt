@@ -1,32 +1,32 @@
  ▰ matchblox                                                                                                           ● 6 need you
- BOARD 7    machine
+ SESSIONS 7    machine
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- NEEDS YOU · 6  −                              WORKING · 1  −                  SHIPPING · 0  −                 QUIET · 0  −
-▌╿ flint-auth                          ✻  2m   ✦ hearth-api            ✻
-  stuck conflicts with main                     busy
-  #4545 ●━✕┄○┄○┄○  ctx 41%                      #4551 ●━◉┄○┄○┄○  ctx 79%
-  “The refresh flow works and the tests
-  pass. One choice is yours before I wire
-  the rotation.”
-  ⏎ go in
-                                   ╭─ New session ──────────────────────────────────────────────╮
- │ spark-docs                      │ where    /work/flint-auth                                  │
-  done I rewrote the quick start an│ branch   feat/88-rate-limits                               │
-  #4540 ●━●━●━●━●  ctx 88%         │ name     flint-auth-feat-88-rate-limits                    │
-  ⏎ go in                          │ agent    ● claude  ○ codex  ○ opencode                     │
-                                   │ first  › fix the flaky ships test▏                         │
- ╿ ember-billing                   ╰─ ⏎ start ─ tab next ─ esc ─────────────────────────────────╯
-  green #4552 waits for your merge
-  #4552 ●━●━◉┄○┄○  ctx 32%
-  p merge #4552   ⏎ go in
-
-  ↓ 3 more
-
-
-
-
- + start a new session
- RECOMMENDATIONS · 7
- ✻ Claude Max  5h ▰▰▰▰▰▰▰▱ 84% · Fri 01:20   wk ▰▰▰▰▰▰▰▱ 82% · Mon 09:00                                                  machine ›
+ NEEDS YOU · 6  −                       │╭─ New session ───────────────────────────────────────────────────────────────────────────╮
+▌╿ flint-auth                       2m ✻││ where    /work/flint-auth                                                               │
+   conflicts with main                  ││ branch   feat/88-rate-limits                                                            │
+ ╿ spark-docs                       9m ✻││ name     flint-auth-feat-88-rate-limits                                                 │
+   I rewrote the quick start and the in…││ agent    ● claude  ○ codex  ○ opencode                                                  │
+ ╿ ember-billing                    4m ✻││ first  › fix the flaky ships test▏                                                      │
+   #4552 waits for your merge           │╰─ ⏎ start ─ tab next ─ esc ──────────────────────────────────────────────────────────────╯
+ ╿ kindle-web                       1m ✻│
+   Claude needs your permission to use …│
+ ╿ cinder-ci                        0s ❋│
+   I am moving the cache key to the go.…│
+ ╿ wick-mobile                      0s ▣│
+   ⠙ Working                            │
+────────────────────────────────────────│
+ WORKING · 1  −                         │
+ ✦ hearth-api                 #4551 ci ✻│
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+ + new · ✧ 7 tips                       │
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ⏎ go in   c copy   v one line   s hosts   u strip   ←→ columns   tab next
+ in the list · ↑↓ choose · ⏎ write · s hosts · g chain · m menu

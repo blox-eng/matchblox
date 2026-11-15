@@ -386,8 +386,7 @@ private final class Belts {
         if let layout, layout != .board { turn(to: layout) }
         lifted.board = board.belt
         dock.board = board.belt
-        terminal?.turnsPages = board.turnsPages
-        terminal?.opensMenu = board.opensMenu
+        terminal?.showsConsole = board.opensMenu
         if layout == .board { turn(to: .board) }
     }
 

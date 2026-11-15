@@ -98,22 +98,29 @@ terminal.`
   reaches another machine.
 - When you quit the console, the app says that the console ended. Tap
   `Open again` to open it, or `Hosts` to go to the list.
-- The console opens on the board, one column a page. Swipe sideways, or tap
-  a page's mark at the top, to see the next column. Tap a card to see its
-  peek, and tap it again to go into its pane. Tap an option of its question
-  to mark it, and tap it again to send it. Long-press a card for its menu.
-  See [The board](console.md#the-board).
-- While the console shows the board or Machine, the key belt is on its
-  Board layout. Home is `◂`, then the keys of the chosen card (`1 answer`,
-  `p merge`, `y go`), then `↑ ↓ ⏎`. The rest of the belt has every other
-  key of the board: `c copy`, `m menu`, `g chain`, `v one line`, `s hosts`,
-  `u strip`, `⇥ machine`, `x kill`, `←`, `→`, `]`, `[`, `/`, `z park`. A
-  key that does not apply is dim and sends nothing. In a pane, the belt
-  goes back to the layout it had there. A tap on `y go` does not give the
-  go. The first tap arms it: the card says what the go does, for example
-  `y again: merge #4556`. Tap `y` again to give the go. Any other key or
-  tap disarms it. While the consent box shows, the belt is `◂`, `y runs`
-  and `esc cancels`: a tap on a card is never consent.
+- The console opens on the list. Tap a row to open its chat, and `◂` to
+  come back. Tap an option of its question to mark it, and tap it again to
+  send it. Long-press a row for its menu. See
+  [The list](console.md#the-list).
+- While the console shows Sessions or Machine, the key belt is on its
+  Board layout. Home is `◂`, then the keys of the chosen session
+  (`1 answer`, `p merge`, `y go`), then `↑ ↓ ⏎`. The rest of the belt has
+  `⌃o expand` and the list's keys: `s hosts`, `g chain`, `/`, `m menu`,
+  `c copy`, `z park`, `N new`, `⇥ machine`, `x kill`. These keys act on
+  the chosen session while you write in its line too. A letter you type
+  on the keyboard types. While the line holds text, a digit types, so the
+  digits are dim, and in the line `↑ ↓` are dim too. A key that does not
+  apply is dim and sends nothing. In a pane, the belt goes back to the
+  layout it had there.
+- A tap on the belt is its own signal, and it names its phone. So with a
+  desk and Pocket on one console, the belt's taps still act. On a phone,
+  `Esc` then a quick letter types the letter in the line. `⌥` and a
+  letter types it too: `⌥s` does not open the room there. A tap on
+  `y go` does not give the go. The first tap arms it: a notice says what
+  the go does, for example `y again gives the go: merge #4556`. Tap `y`
+  again to give the go. Any other key or tap disarms it. While the
+  consent box shows, the belt is `◂`, `y runs` and `esc cancels`: a tap
+  on a row is never consent.
 - A swipe on a host in the list removes the host and its key from the
   device. It does not remove the key on the host. Run
   `matchblox devices rm <name>` on the host for that.
@@ -128,9 +135,10 @@ The demo's own scan turns on no camera and asks for no permission. Then the app
 saves a host called `demo`.
 
 The demo runs the real console on a made-up machine inside the app. It needs no
-network and starts fresh each time it opens. The board opens on the card of
-flint-auth in `NEEDS YOU`, with the options of its question. Tap an option to
-mark it, then tap it again to send it. The card strikes into `WORKING`. When
+network and starts fresh each time it opens. The list opens with
+flint-auth first in `NEEDS YOU`. Tap it to open its chat, with the options of
+its question. Tap an option to mark it, then tap it again to send it.
+flint-auth moves into `WORKING`. When
 that agent finishes, a sheet says
 `Your agents wait the same way.` It shows the line
 `curl -fsSL https://matchblox.sh | sh` with `Copy`, and these buttons:
@@ -261,22 +269,19 @@ starts it. A second phone or laptop attaches to the same session.
 
 ## Go into an agent
 
-Enter goes into the agent's own tmux pane, and moves only the phone. From
-152 columns the board keeps a read-only live view of the chosen agent. See
-[the live view](console.md#the-live-view).
+`Ctrl+O` goes into the agent's own tmux pane, and moves only the phone.
 
-1. Tap an agent's card to choose it, then tap it again, or press Return,
-   to go into its pane. The chosen card shows the question the agent asks
-   and its last words.
+1. Tap an agent's row to open its chat: the chat shows the question the
+   agent asks and its last words. Then press `Ctrl+O`, or tap `⌃o` on the
+   key belt, to go into its pane.
 2. On a host the stoker drives, the console asks `take over?` first. A
    session with no pane says `<name> runs outside tmux: no pane to go into`.
 3. Type in the pane. The belt's keys (`Esc`, `Ctrl`, arrows, `Tab`, the
    prefix) reach the agent unchanged.
 4. To come back, tap `◂` on the belt, tap `◂ matchblox` in the tmux status
-   line, or press `prefix m`. The console then chooses the next card that
-   needs you.
+   line, or press `prefix m`. The console then shows the chat you left.
 
-The demo has no tmux. There Return opens a full-screen stand-in for the
+The demo has no tmux. There `Ctrl+O` opens a full-screen stand-in for the
 pane, and the belt answers it: at a question the key line says `type 2 to
 answer`. The stand-in closes when the screen is too short to show the
 question.
@@ -300,13 +305,13 @@ and stops with a key at the left side.
   you send.
 
 - `◂` goes back. In a tmux pane it goes to the console. In the demo's
-  stand-in it goes to the board.
+  stand-in it goes to the list.
 - `^C` interrupts. `^C` twice stops Claude Code. A second `^C` within 1 s
   is held, and the key line says so.
-- `⇞` and `⇟` send `PgUp` and `PgDn` (`ESC [ 5 ~` and `ESC [ 6 ~`). In the
-  live view they move the history one screen up and down. In a pane you
-  went into on a host, the jump table of the host starts tmux copy mode one
-  page up, and moves it one page. In a local pane they go to the agent.
+- `⇞` and `⇟` send `PgUp` and `PgDn` (`ESC [ 5 ~` and `ESC [ 6 ~`). In a
+  pane you went into on a host, the jump table of the host starts tmux copy
+  mode one page up, and moves it one page. In a local pane they go to the
+  agent.
 
 The row above the belt is the handle row. It shows the name of the layout
 (on Commands, the mark of the agent too), the grip, and a ghost keyboard
@@ -327,14 +332,14 @@ each layout:
 | Commands | `◂ ↑ ↓ ⏎`, then the commands of the agent you are in |
 | tmux | `◂ ↑ ↓ ⏎ ⇞ ⇟ Tab ⇧Tab ^B` |
 | Mine | The keys you chose |
-| Board | `◂`, the chosen card's keys, `↑ ↓ ⏎`, then every other key of the board |
+| Board | `◂`, the chosen session's keys, `↑ ↓ ⏎`, then the list's keys |
 
 The match of the layout in use burns. Tap another match: it strikes, and
 the match you leave goes out. The tray closes 0.9 s after your tap. The
 next time it opens, every match is new, and the one in use burns. The
 screen does not change size while the tray is open. The app keeps the
 layout you chose, and opens on it the next time. Board follows the console:
-the app is on Board while the console shows the board or Machine, as
+the app is on Board while the console shows Sessions or Machine, as
 Commands follows the agent of the pane you are in.
 
 #### Command keys
@@ -359,7 +364,10 @@ goes dark. Tap it again to let it go. The pane gets ctrl with `b d e f g k l
 n p r t u v w x y`, and with `a` and `c`. It sends no `ctrl+z`, which would
 stop the agent, and no `ctrl+s` or `ctrl+q`, which stop and start the terminal.
 
-A vertical swipe scrolls the console and a tmux pane. The lines move with
+A vertical swipe scrolls the console and a tmux pane. In the console's
+list, a swipe chooses the session above or below. In the chat, a swipe
+scrolls the chat back through the pane's history, and the chosen session
+stays. A chat with no screen to scroll says so. The lines move with
 your finger: one line for each line of travel. In a tmux pane each wheel
 step scrolls 5 lines, so the app sends one step for each 5 lines of travel.
 Swipe down for older lines, and up for newer lines. A flick carries on for
@@ -369,9 +377,8 @@ program does not read the mouse, the terminal scrolls its own history.
 
 ## Go to an agent's pane and back
 
-`Enter`, `a` and `Ctrl+O` go into the agent's pane. A phone has no
-`Ctrl+O`: a tap on the chosen card, or Return, does it. In Panes, a tap on
-a row goes into it the same way.
+`Ctrl+O`, or `⌃o` on the key belt, goes into the agent's pane. In Panes,
+a tap on a row goes into it the same way.
 
 To come back in the matchblox app, tap `◂` on the belt, swipe in from
 the left edge, tap `◂ matchblox` at the left of the tmux status line, or
@@ -383,13 +390,12 @@ then m). There the tap needs the tmux mouse on: press `m` in the preview of
 "Add the way back" to turn it on with it, or add `set -g mouse on` to your
 tmux config. Without it, use `prefix m`.
 
-The console then chooses the next card that needs you, unless another
-screen still shows the console. The iOS app marks its own Return and taps, so a
+The console then shows the chat you left. The iOS app marks its own Return and taps, so a
 jump moves only the phone.
 
 ## Switch an agent from the phone
 
-Press `A` on the chosen card, or tap `A` on the key line, to open Switch
+Press `A` in the list, or tap `A` on the key line, to open Switch
 agent. Tap the agent you want, then
 `Enter`; the plan rises in a box above the key line. A typed `y` runs it (a
 tap is never consent). The new agent starts in the same pane with the same name, on the account you last
@@ -399,29 +405,19 @@ See [`A` in Keys](keys.md).
 ## The phone layout
 
 A phone is read by its shape at the tallest height seen at its width, so
-the keyboard coming and going never changes the layout. Upright under 90
-columns, or under 60 columns, the board is one column a page. The page
-marks at the top name the open column in capitals with its count, and the
-others short: `NEEDS YOU 4 −  work 3  ship 3  quiet 5`. A tap on a mark
-opens its page, and a tap on the open page's mark hides the page. A hidden
-page waits at the end of the marks as `+ work 3`.
+the keyboard coming and going never changes the layout. Upright, or under
+60 columns, Sessions shows the list or the chat, one at a time: the list
+first. A tap on a row opens its chat, and `◂` comes back.
 
-A phone starts with whole cards in `NEEDS YOU` and one line for each card
-elsewhere. `v` turns every card whole, or every card to one line. The
-chosen card is always whole, with its peek: what the agent said last and
-the options of its question.
-
-The strip, one line above the key line, shows usage or the machine. `u`,
-or a tap on it, turns it, and a third turn hides it. Machine has all of
-it.
+Machine shows usage and the machine.
 
 The key line is at the bottom: an SSH app that shrinks the terminal for
 its keyboard keeps it above the keys. A tap on a key presses it. In
 Matchblox Pocket the key belt takes its place.
 
-With a small font that makes the screen 60 columns or more, three columns
-show side by side, and `QUIET` is a drawer under them. From 100 columns the
-board has four columns.
+With a small font that makes the screen 60 columns or more in landscape,
+the list and the chat show side by side. See
+[Shapes](console.md#shapes).
 
 Every key is on the key bar of an SSH app: letters, digits, arrows, `Enter`
 and `Esc`. The matchblox app adds its key belt. See [Keys](keys.md).
@@ -429,8 +425,8 @@ and `Esc`. The matchblox app adds its key belt. See [Keys](keys.md).
 ## The hosts on the phone
 
 The phone shows what the console of its host can open. If you connected
-`ws-1` to `gpu-1` yourself, a phone paired to `ws-1` sees `gpu-1` in the
-combined console and acts on it. The same phone reaches `gpu-1` today from
+`ws-1` to `ws-2` yourself, a phone paired to `ws-1` sees `ws-2` in the
+combined console and acts on it. The same phone reaches `ws-2` today from
 Hosts: on Machine, `Enter` on a host's row opens it. matchblox sets up no key between hosts, so
 a phone never sees a host that its host cannot open.
 

@@ -13,7 +13,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/doors"
-	"github.com/blox-eng/matchblox/internal/proto"
 )
 
 // lastMessage is a message of five lines: the peek shows less of it.
@@ -62,16 +61,11 @@ func tmuxSays(value string, ran *[][]string) func(args ...string) (string, error
 	}
 }
 
-// toDoors moves up from the chosen card to the doors line.
+// toDoors opens the setup steps in the chat's place, as the foot's ! setup
+// does.
 func toDoors(t *testing.T, m Model) Model {
 	t.Helper()
-	for range 12 {
-		if line, above := m.aboveChosen(); above && line == "" {
-			return m
-		}
-		m = pressOn(m, "up")
-	}
-	t.Fatalf("↑ never reached the doors line:\n%s", plainFrame(m))
+	m.openPlace(placeSetup)
 	return m
 }
 
@@ -184,50 +178,6 @@ func cellsIn(frame string, a, b point, x0, x1 int) string {
 	return strings.TrimRight(strings.Join(out, "\n"), "\n")
 }
 
-// columnOn is the cells of the board's column head over x.
-func columnOn(t *testing.T, m Model, x int) (x0, x1 int) {
-	t.Helper()
-	for _, h := range m.boardPanel(max(m.width, minWidth), m.bodyRows()).heads {
-		if x >= h.x0 && x < h.x1 {
-			return h.x0, h.x1
-		}
-	}
-	t.Fatalf("no column at %d", x)
-	return 0, 0
-}
-
-func TestADragCopiesOnlyWhatWasUnderThePointer(t *testing.T) {
-	// A press on a card that is not chosen, then a drag: the press never
-	// chooses the card first, and no row reaches into the next column.
-	for _, released := range []bool{true, false} {
-		m, clipped, _ := menuBoard(t, 80, 31, func(m *Model) { m.sawRelease = released })
-		before := plainFrame(m)
-		x, y := cardOn(t, m, "green #4556")
-		from, to := point{x, y}, point{x + 22, y + 1}
-		m = drag(t, m, from, point{x + 5, y}, to)
-		x0, x1 := columnOn(t, m, x)
-		want := cellsIn(before, from, to, x0, x1)
-		if !strings.HasPrefix(want, "green #4556 waits for your merge\n") {
-			t.Fatalf("the press is not where the test thinks: %q", want)
-		}
-		if during := plainFrame(m); cellsIn(during, from, to, x0, x1) != want {
-			t.Errorf("released %v: the frame moved under the drag:\n%s", released, during)
-		}
-		m = letGo(t, m, to)
-		if len(*clipped) != 1 || (*clipped)[0] != want {
-			t.Errorf("released %v: the drag copied %q, want %q", released, *clipped, want)
-		}
-		for _, other := range []string{"spark-docs", "hearth-li", "Running", "“Every"} {
-			if len(*clipped) == 1 && strings.Contains((*clipped)[0], other) {
-				t.Errorf("released %v: the drag copied %q of another column or card: %q", released, other, (*clipped)[0])
-			}
-		}
-		if released && chosenName(t, m) == "kindle-web" {
-			t.Errorf("a drag chose the card it started on")
-		}
-	}
-}
-
 func TestADragCopiesWhatItCovers(t *testing.T) {
 	for _, size := range [][2]int{{80, 31}, {160, 38}} {
 		name := fmt.Sprintf("%dx%d", size[0], size[1])
@@ -237,7 +187,8 @@ func TestADragCopiesWhatItCovers(t *testing.T) {
 			from, to := point{x, y}, point{x + 20, y + rows}
 			m = drag(t, m, from, point{x + 5, y}, to)
 			frame := plainFrame(m)
-			x0, x1 := columnOn(t, m, x)
+			cols := m.dragColumn(x, y-m.drawScreen(size[0]).bodyTop, size[0])
+			x0, x1 := cols[0], cols[1]
 			want := cellsIn(frame, from, to, x0, x1)
 			if want == "" || rows > 0 && strings.Count(want, "\n") != rows {
 				t.Fatalf("%s: the drag covers %q", name, want)
@@ -458,21 +409,21 @@ func TestCopySaysUncheckedUntilAPasteProvesIt(t *testing.T) {
 	if got := noticeRow(m); got != "copied: last message of flint-auth · not checked here" {
 		t.Errorf("c on a screen not checked says %q", got)
 	}
-	next, cmd := key(m, "enter")
+	next, cmd := key(m, "ctrl+o")
 	fed(next, cmd)
 	if want := "tmux switch-client -t " + paneNamed(boardFixture(t), "flint-auth"); strings.Join(ran, " ") != want {
-		t.Errorf("⏎ after the toast ran %q, want %q", ran, want)
+		t.Errorf("ctrl+o after the toast ran %q, want %q", ran, want)
 	}
 
 	if ids := boardDoorIDs(m); len(ids) == 0 || ids[0] != doors.CopyCheck {
 		t.Fatalf("the doors line is %q, want copy-check first", ids)
 	}
-	if !strings.Contains(plainFrame(m), "SET UP · 1 · Check that copy reaches you") {
-		t.Errorf("the doors line does not name the check:\n%s", plainFrame(m))
+	if !strings.Contains(plainFrame(m), "! 1 setup") {
+		t.Errorf("the list's foot does not name the check:\n%s", plainFrame(m))
 	}
 	m = pressOn(toDoors(t, m), "enter")
 	if len(*clipped) != 2 {
-		t.Fatalf("⏎ on the doors line copied %q", *clipped)
+		t.Fatalf("⏎ on the setup step copied %q", *clipped)
 	}
 	code := (*clipped)[1]
 	if utf8.RuneCountInString(code) != 6 || strings.Trim(code, "abcdefghijklmnopqrstuvwxyz") != "" {
@@ -481,7 +432,7 @@ func TestCopySaysUncheckedUntilAPasteProvesIt(t *testing.T) {
 	if got := noticeRow(m); got != m.pasteHere() {
 		t.Errorf("the check says %q", got)
 	}
-	m = pressOn(m, "esc", "enter")
+	m = pressOn(toDoors(t, pressOn(m, "esc")), "enter")
 	if again := (*clipped)[len(*clipped)-1]; again == code {
 		t.Errorf("a second check copied the same code %q", code)
 	}
@@ -497,6 +448,7 @@ func TestCopySaysUncheckedUntilAPasteProvesIt(t *testing.T) {
 	if slices.Contains(boardDoorIDs(m), doors.CopyCheck) {
 		t.Error("the check stays a door on a checked screen")
 	}
+	m = pressOn(m, "esc") // back to the chat from the setup step
 	chooseCard("flint-auth")(&m)
 	m = pressOn(m, "c")
 	if got := noticeRow(m); got != "copied: last message of flint-auth" {
@@ -514,15 +466,15 @@ func TestTheCopyCheckSaysHowToLeave(t *testing.T) {
 		}
 		*clock = clock.Add(time.Hour)
 		m = upd(t, m, noticeMsg{})
-		if row := stripRow(m); !strings.Contains(row, "Now paste here · esc cancels") {
+		if row := boardNoticeRow(m); !strings.Contains(row, "Now paste here · esc cancels") {
 			t.Errorf("%s: an hour on, the check's row says %q", name, row)
 		}
 		if keys := keyLineOf(m); !strings.Contains(keys, "esc cancel") || strings.Contains(keys, "set up") {
 			t.Errorf("%s: while the check waits the key line says %q", name, keys)
 		}
-		m = pressOn(m, "down") // off the doors line
-		if m.copyCode != "" || strings.Contains(stripRow(m), "paste") || strings.Contains(keyLineOf(m), "cancel") {
-			t.Errorf("%s: a move off the doors line keeps the check: code %q, row %q, keys %q", name, m.copyCode, stripRow(m), keyLineOf(m))
+		m = pressOn(m, "esc") // the chat takes its place back
+		if m.copyCode != "" || strings.Contains(boardNoticeRow(m), "paste") || strings.Contains(keyLineOf(m), "cancel") {
+			t.Errorf("%s: esc off the setup step keeps the check: code %q, row %q, keys %q", name, m.copyCode, boardNoticeRow(m), keyLineOf(m))
 		}
 	}
 }
@@ -594,7 +546,7 @@ func TestTheMenuShowsItsOwnKeys(t *testing.T) {
 		m, _, _ := menuBoard(t, w, 31, chooseCard("flint-auth"))
 		m = pressOn(m, "m")
 		lines := strings.Split(plainFrame(m), "\n")
-		if got := strings.TrimSpace(lines[len(lines)-1]); got != "↑↓ move   ⏎ do   esc close" {
+		if got := strings.TrimSpace(lines[len(lines)-1]); !strings.HasPrefix("in the menu · ↑↓ move · ⏎ do · esc close", got) || !strings.HasPrefix(got, "in the menu · ↑↓ move · ⏎ do") {
 			t.Errorf("%d columns: the key line with the menu open is %q", w, got)
 		}
 	}
@@ -612,16 +564,6 @@ func TestTheWheelLeavesTheMenuAlone(t *testing.T) {
 	}
 }
 
-func TestTheCheckLeadsTheDoorsLine(t *testing.T) {
-	for _, size := range [][2]int{{40, 34}, {80, 31}} {
-		m := boardShot(t, boardFixture(t), size[0], size[1], func(m *Model) {
-			m.viewPrefs.CopyCheckedPhone, m.viewPrefs.CopyCheckedDesk = false, false
-		})
-		m = toDoors(t, m)
-		golden(t, m, "boardcopycheck", size[0], size[1])
-	}
-}
-
 // releasing is menuBoard on a terminal that has reported a release, with
 // its jumps kept in ran.
 func releasing(t *testing.T, sawRelease bool, ran *[]string) (Model, *[]string) {
@@ -634,79 +576,10 @@ func releasingAt(t *testing.T, w, h int, sawRelease bool, ran *[]string) (Model,
 	t.Helper()
 	m, clipped, _ := menuBoard(t, w, h, func(m *Model) {
 		chooseCard("kindle-web")(m)
-		m.chooseByHand()
 		m.opt.Run = func(argv []string) error { *ran = argv; return nil }
 	})
 	m.sawRelease = sawRelease
 	return m, clipped
-}
-
-// headOn is the cell of the column name word on the heads line.
-func headOn(t *testing.T, m Model, word string) point {
-	t.Helper()
-	for y, l := range strings.Split(plainFrame(m), "\n") {
-		if i := strings.Index(l, word+" ·"); i >= 0 && y > 2 {
-			return point{ansi.StringWidth(l[:i]) + 1, y}
-		}
-	}
-	t.Fatalf("no head %s:\n%s", word, plainFrame(m))
-	return point{}
-}
-
-func TestADragIsNeverATap(t *testing.T) {
-	goIn := "tmux switch-client -t " + paneNamed(boardFixture(t), "kindle-web")
-
-	var ran []string
-	m, clipped := releasing(t, true, &ran)
-	x, y := cardOn(t, m, "kindle-web")
-	m = mouse(t, m, tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft}) // its commands run
-	m = mouse(t, m, tea.MouseMotionMsg{X: x + 12, Y: y + 2, Button: tea.MouseLeft})
-	letGo(t, m, point{x + 12, y + 2})
-	if len(ran) != 0 || len(*clipped) != 1 {
-		t.Errorf("a drag from the chosen card: ran %q, copied %q", ran, *clipped)
-	}
-
-	m, _ = releasing(t, true, &ran)
-	m = mouse(t, m, tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft})
-	if len(ran) != 0 {
-		t.Fatalf("a press on the chosen card went in before the release: %q", ran)
-	}
-	if letGo(t, m, point{x, y}); strings.Join(ran, " ") != goIn {
-		t.Errorf("a click on the chosen card ran %q, want %q", ran, goIn)
-	}
-
-	ran = nil
-	m, clipped = releasing(t, true, &ran)
-	h := headOn(t, m, "WORKING")
-	m = letGo(t, drag(t, m, h, point{h.x + 10, h.y + 2}), point{h.x + 10, h.y + 2})
-	if m.colHidden(colWork) || len(*clipped) != 1 {
-		t.Errorf("a drag from a column's name: hidden %v, copied %q", m.colHidden(colWork), *clipped)
-	}
-	m, _ = releasing(t, true, &ran)
-	if m = pressAt(t, m, h.x, h.y); m.colHidden(colWork) {
-		t.Fatal("a press on a column's name hid it before the release")
-	}
-	if m = letGo(t, m, h); !m.colHidden(colWork) {
-		t.Error("a click on a column's name did not hide it")
-	}
-
-	// A terminal that never reported a release: both act on the press.
-	ran = nil
-	m, _ = releasing(t, false, &ran)
-	if mouse(t, m, tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft}); strings.Join(ran, " ") != goIn {
-		t.Errorf("with no release seen, a press on the chosen card ran %q", ran)
-	}
-	if m = pressAt(t, m, h.x, h.y); !m.colHidden(colWork) {
-		t.Error("with no release seen, a press on a column's name did not hide it")
-	}
-
-	// A right press opens the menu and starts no drag.
-	m, clipped = releasing(t, true, &ran)
-	m = rightClick(t, m, x, y)
-	m = mouse(t, m, tea.MouseMotionMsg{X: x + 12, Y: y + 2, Button: tea.MouseRight})
-	if m = letGo(t, m, point{x + 12, y + 2}); m.dragTo != nil || len(*clipped) != 0 || m.menu == nil {
-		t.Errorf("a right press: drag %v, copied %q, menu %v", m.dragTo, *clipped, m.menu)
-	}
 }
 
 func TestTheCheckBlocksNoOtherDoor(t *testing.T) {
@@ -720,30 +593,17 @@ func TestTheCheckBlocksNoOtherDoor(t *testing.T) {
 	if m.copyCode == "" || m.pending != nil {
 		t.Errorf("⏎ alone: code %q, pending %v; want the check", m.copyCode, m.pending)
 	}
-	m = pressOn(open(), "right")
-	if !strings.Contains(plainFrame(m), "SET UP · 2 of 2 · Install tmux") {
-		t.Errorf("→ does not name the next door:\n%s", plainFrame(m))
+	m = onDoor(open(), 1).(Model)
+	if f := plainFrame(m); !strings.Contains(f, "SET UP · 2 of 2") || !strings.Contains(f, "Install tmux") {
+		t.Errorf("the next door is not named:\n%s", plainFrame(m))
 	}
 	if m = pressOn(m, "enter"); m.pending == nil || m.pending.door != doors.Tmux || m.copyCode != "" {
-		t.Errorf("→ then ⏎ opened %v, code %q; want the tmux door", m.pending, m.copyCode)
-	}
-	if m = pressOn(open(), "right", "left"); !strings.Contains(plainFrame(m), "SET UP · 1 of 2 · Check that copy reaches you") {
-		t.Errorf("← does not step back:\n%s", plainFrame(m))
+		t.Errorf("the next door then ⏎ opened %v, code %q; want the tmux door", m.pending, m.copyCode)
 	}
 
-	// → during the check names another door: the check ends.
-	if m = pressOn(open(), "enter", "right"); m.copyCode != "" || strings.Contains(stripRow(m), "paste") || strings.Contains(keyLineOf(m), "cancel") {
-		t.Errorf("→ to another door keeps the check: code %q, row %q, keys %q", m.copyCode, stripRow(m), keyLineOf(m))
-	}
-
-	m = open()
-	for y, l := range strings.Split(plainFrame(m), "\n") {
-		if strings.Contains(l, "SET UP") {
-			m = mouse(t, m, tea.MouseClickMsg{X: 3, Y: y, Button: tea.MouseLeft})
-		}
-	}
-	if m.copyCode == "" {
-		t.Error("a tap on the doors line opened no check")
+	// Naming another door during the check ends the check.
+	if m = onDoor(pressOn(open(), "enter"), 1).(Model).copyCheckOn(); m.copyCode != "" || strings.Contains(boardNoticeRow(m), "paste") || strings.Contains(keyLineOf(m), "cancel") {
+		t.Errorf("another door keeps the check: code %q, row %q, keys %q", m.copyCode, boardNoticeRow(m), keyLineOf(m))
 	}
 }
 
@@ -751,94 +611,12 @@ func TestTheFirstCSaysWhatItCopied(t *testing.T) {
 	m, clipped, clock := uncheckedBoard(t, 80, 31, t.TempDir(), chooseCard("flint-auth"))
 	m.viewPrefs.Told = nil
 	m = pressOn(m, "c")
-	if got := noticeRow(m); got != "c copies now. The stoker is on its card." || len(*clipped) != 1 {
+	if got := noticeRow(m); got != "c copies now: the last message, whole." || len(*clipped) != 1 {
 		t.Fatalf("the first c says %q, copied %q", got, *clipped)
 	}
 	*clock = clock.Add(noticeFor)
 	if m = mouse(t, m, noticeMsg{}); noticeRow(m) != "copied: last message of flint-auth · not checked here" {
 		t.Errorf("after the key's news: %q", noticeRow(m))
-	}
-}
-
-// wentIn: msgs hold the jump into the pane of name.
-func wentIn(msgs []tea.Msg, pane string) bool {
-	return slices.ContainsFunc(msgs, func(msg tea.Msg) bool {
-		r, ok := msg.(ranMsg)
-		return ok && r.cmd == "tmux switch-client -t "+pane
-	})
-}
-
-func TestOnlyACardYouChoseGoesIn(t *testing.T) {
-	m, _, _ := menuBoard(t, 80, 31, nil)
-	m.sawRelease = true
-	first := chosenName(t, m) // the board's own first choice
-	pane := paneNamed(boardFixture(t), first)
-	x, y := cardOn(t, m, first)
-	click := func(m Model) (Model, []tea.Msg) {
-		next, cmd := m.Update(tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft})
-		msgs := cmdMsgs(cmd)
-		next, cmd = next.Update(tea.MouseReleaseMsg{X: x, Y: y, Button: tea.MouseLeft})
-		return next.(Model), append(msgs, cmdMsgs(cmd)...)
-	}
-	m, msgs := click(m)
-	if wentIn(msgs, pane) || chosenName(t, m) != first {
-		t.Fatalf("the first tap on the card the board chose went in: %v", msgs)
-	}
-	if _, msgs = click(m); !wentIn(msgs, pane) {
-		t.Errorf("the second tap did not go in: %v", msgs)
-	}
-
-	// A key move chooses by hand too; a choice that moves by itself does not.
-	m, _, _ = menuBoard(t, 80, 31, nil)
-	m = pressOn(m, "down", "up")
-	if !m.chosenByHand(matchNamed(t, m, first)) {
-		t.Error("↓ ↑ is no choice by hand")
-	}
-	m = pressOn(m, "down")
-	m.boardPick = map[boardCol]paneKey{m.boardAt: paneOf(matchNamed(t, m, first))}
-	if m = upd(t, m, noticeMsg{}); m.chosenByHand(matchNamed(t, m, first)) {
-		t.Error("a choice that moved by itself counts as the person's")
-	}
-}
-
-func TestALongPressOnTheChosenCardOnAPhone(t *testing.T) {
-	goIn := "tmux switch-client -t " + paneNamed(boardFixture(t), "kindle-web")
-	var ran []string
-	open := func(sawRelease bool) (Model, int, int) {
-		ran = nil
-		m, _ := releasingAt(t, 40, 34, sawRelease, &ran)
-		x, y := cardOn(t, m, "kindle-web")
-		return m, x, y
-	}
-
-	m, x, y := open(true)
-	m = mouse(t, m, tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft})
-	if m = mouse(t, m, longPressMsg{m.longPress.id}); m.menu == nil || len(ran) != 0 {
-		t.Errorf("a long press on the chosen card: menu %v, ran %q", m.menu, ran)
-	}
-	if m = letGo(t, m, point{x, y}); len(ran) != 0 {
-		t.Errorf("the release after the menu ran %q", ran)
-	}
-
-	m, x, y = open(true)
-	m = mouse(t, m, tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft})
-	if letGo(t, m, point{x, y}); strings.Join(ran, " ") != goIn { // at 100 ms: before the tick
-		t.Errorf("a tap with a release ran %q, want %q", ran, goIn)
-	}
-
-	m, x, y = open(false)
-	if mouse(t, m, tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft}); strings.Join(ran, " ") != goIn {
-		t.Errorf("with no release seen, a press ran %q", ran)
-	}
-
-	// A right release alone is no release of a tap.
-	m, x, y = open(false)
-	m = mouse(t, m, tea.MouseReleaseMsg{X: 1, Y: 1, Button: tea.MouseRight})
-	if m.sawRelease {
-		t.Fatal("a right release counts as a left one")
-	}
-	if mouse(t, m, tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft}); strings.Join(ran, " ") != goIn {
-		t.Errorf("after a right release, a press ran %q", ran)
 	}
 }
 
@@ -860,35 +638,31 @@ func TestALostReleaseRunsNoOldTap(t *testing.T) {
 	}
 }
 
-func TestATapOnTheDoorsLineUnderAHost(t *testing.T) {
-	m := lostPeer(t, 40*time.Second)
-	m.splashDone = true
-	m = upd(t, m, tea.WindowSizeMsg{Width: 80, Height: 31})
-	if len(m.unreached()) != 1 {
-		t.Fatalf("unreached hosts: %q", m.unreached())
-	}
-	for y, l := range strings.Split(plainFrame(m), "\n") {
-		if strings.Contains(l, "SET UP") {
-			m = mouse(t, m, tea.MouseClickMsg{X: 3, Y: y, Button: tea.MouseLeft})
-		}
-	}
-	if line, above := m.aboveChosen(); !above || line != "" || m.copyCode == "" {
-		t.Errorf("a tap on the doors line chose %q, %v, code %q", line, above, m.copyCode)
-	}
-}
-
 func TestTheNamedDoorResetsWhenTheDoorsChange(t *testing.T) {
 	m, _, _ := uncheckedBoard(t, 80, 31, t.TempDir(), func(m *Model) {
 		m.doors = []doors.Door{{ID: doors.Tmux, Title: "Install tmux", Term: []string{"sh", "-c", "true"}}}
 	})
-	m = pressOn(toDoors(t, m), "right")
-	if !strings.Contains(plainFrame(m), "SET UP · 2 of 2 · Install tmux") {
-		t.Fatalf("→ named no second door:\n%s", plainFrame(m))
+	m = onDoor(toDoors(t, m), 1).(Model)
+	if f := plainFrame(m); !strings.Contains(f, "SET UP · 2 of 2") || !strings.Contains(f, "Install tmux") {
+		t.Fatalf("no second door is named:\n%s", plainFrame(m))
 	}
 	m.doors = append(m.doors, doors.Door{ID: doors.Guide, Title: "Open a guide session"})
-	if !strings.Contains(plainFrame(m), "SET UP · 1 of 3 · Check that copy reaches you") {
+	if f := plainFrame(m); !strings.Contains(f, "SET UP · 1 of 3") || !strings.Contains(f, "Check that copy reaches you") {
 		t.Errorf("a new list of doors keeps the old door:\n%s", plainFrame(m))
 	}
+}
+
+// rowOn is the cell of name's row in the list: only a swipe there chooses.
+func rowOn(t *testing.T, m Model, name string) (int, int) {
+	t.Helper()
+	listW := m.sideBoxAt(max(m.width, minWidth)).listW
+	for y, l := range strings.Split(plainFrame(m), "\n") {
+		if i := strings.Index(l, name); i >= 0 && ansi.StringWidth(l[:i]) < listW {
+			return ansi.StringWidth(l[:i]), y
+		}
+	}
+	t.Fatalf("no row of %s in the list:\n%s", name, plainFrame(m))
+	return 0, 0
 }
 
 func TestASwipeMovesTheCardAsTheArrowsDo(t *testing.T) {
@@ -901,7 +675,7 @@ func TestASwipeMovesTheCardAsTheArrowsDo(t *testing.T) {
 			b   tea.MouseButton
 		}{{"down", tea.MouseWheelDown}, {"down", tea.MouseWheelDown}, {"up", tea.MouseWheelUp}} {
 			keys = pressOn(keys, step.key)
-			x, y := cardOn(t, swipe, chosenName(t, swipe))
+			x, y := rowOn(t, swipe, chosenName(t, swipe))
 			swipe = mouse(t, swipe, tea.MouseWheelMsg{X: x, Y: y, Button: step.b})
 			if got, want := chosenName(t, swipe), chosenName(t, keys); got != want {
 				t.Errorf("%s: a swipe %s chose %s, the arrow %s", name, step.key, got, want)
@@ -916,79 +690,12 @@ func TestASwipeMovesTheCardAsTheArrowsDo(t *testing.T) {
 	m, _, clock := menuBoard(t, 80, 31, chooseCard("flint-auth"))
 	*clock = clock.Add(time.Second)
 	m = pressOn(m, "1")
-	if armed, _ := m.peekMarks(matchNamed(t, m, "flint-auth")); armed != 1 {
+	if armed, _ := m.chatMarks(matchNamed(t, m, "flint-auth")); armed != 1 {
 		t.Fatalf("1 marked %d", armed)
 	}
-	x, y := cardOn(t, m, "flint-auth")
+	x, y := rowOn(t, m, "flint-auth")
 	m = mouse(t, m, tea.MouseWheelMsg{X: x, Y: y, Button: tea.MouseWheelUp}) // flint-auth is the column's last
-	if armed, _ := m.peekMarks(matchNamed(t, m, "flint-auth")); armed != 0 {
+	if armed, _ := m.chatMarks(matchNamed(t, m, "flint-auth")); armed != 0 {
 		t.Errorf("a swipe kept the mark %d", armed)
-	}
-
-	// Over the live view the wheel still scrolls it.
-	m, _, _ = menuBoard(t, 160, 38, chooseCard("spark-search"))
-	before := len(keyActs(boardFake(m)))
-	m = mouse(t, m, tea.MouseWheelMsg{X: 150, Y: 10, Button: tea.MouseWheelUp})
-	got := keyActs(boardFake(m))[before:]
-	if len(got) != 1 || got[0].Text != proto.WheelUp || got[0].RecID != proto.KeysPrefix+paneNamed(boardFixture(t), "spark-search") {
-		t.Errorf("the wheel over the live view sent %+v, want one %s to spark-search", got, proto.WheelUp)
-	}
-	if chosenName(t, m) != "spark-search" {
-		t.Errorf("the wheel over the live view moved the card to %s", chosenName(t, m))
-	}
-}
-
-func TestALostDragReleaseLeavesTheFrameLive(t *testing.T) {
-	m, _, clock := menuBoard(t, 80, 31, func(m *Model) { chooseCard("spark-search")(m); m.sawRelease = true })
-	x, y := cardOn(t, m, "kindle-web")
-	m = drag(t, m, point{x, y}, point{x + 5, y}, point{x + 10, y + 2}) // its release is lost
-	m = pressOn(m, "down", "down")
-	*clock = clock.Add(time.Minute)
-	m = upd(t, m, noticeMsg{})
-	if chosenName(t, m) != "hearth-api" {
-		t.Fatalf("↓ ↓ chose %s", chosenName(t, m))
-	}
-	if x, y := cardOn(t, m, "hearth-api"); !strings.HasPrefix(strings.Split(plainFrame(m), "\n")[y], "▌") || x == 0 {
-		t.Errorf("the frame does not show hearth-api chosen:\n%s", plainFrame(m))
-	}
-	if m.dragFrom != nil || m.dragTo != nil || m.dragLines != nil {
-		t.Error("a key keeps the drag")
-	}
-
-	// A paste and a wheel step end it too.
-	for _, msg := range []tea.Msg{tea.PasteMsg{Content: "x"}, tea.MouseWheelMsg{X: 1, Y: 5, Button: tea.MouseWheelDown}} {
-		m, _, _ = menuBoard(t, 80, 31, nil)
-		x, y = cardOn(t, m, "kindle-web")
-		m = mouse(t, drag(t, m, point{x, y}, point{x + 10, y + 2}), msg)
-		if m.dragFrom != nil || m.dragTo != nil {
-			t.Errorf("%T keeps the drag", msg)
-		}
-	}
-}
-
-func TestAFirstPressThatOpensABoxStartsNoDrag(t *testing.T) {
-	m, clipped, _ := menuBoard(t, 80, 31, chooseCard("kindle-web")) // no release seen yet: the press acts at once
-	x, y := cardOn(t, m, "p merge")
-	m = pressAt(t, m, x, y)
-	if m.pending == nil {
-		t.Fatalf("the press on p merge opened no consent box:\n%s", plainFrame(m))
-	}
-	shown := plainFrame(m)
-	m = mouse(t, m, tea.MouseMotionMsg{X: x + 10, Y: y + 2, Button: tea.MouseLeft})
-	if m.dragTo != nil || plainFrame(m) != shown {
-		t.Errorf("a drag hides the consent box the press opened:\n%s", plainFrame(m))
-	}
-	if m = letGo(t, m, point{x + 10, y + 2}); len(*clipped) != 0 {
-		t.Errorf("the drag copied %q", *clipped)
-	}
-}
-
-func TestADragCopiesNoCutMark(t *testing.T) {
-	m, clipped, _ := menuBoard(t, 80, 31, func(m *Model) { m.sawRelease = true })
-	x, y := cardOn(t, m, "busy Writing the…")
-	to := point{x + 25, y + 1}
-	letGo(t, drag(t, m, point{x, y}, to), to)
-	if len(*clipped) != 1 || strings.Contains((*clipped)[0], "…") || !strings.HasPrefix((*clipped)[0], "busy Writing the\n") {
-		t.Errorf("the drag copied %q, want the text without the … of the cut", *clipped)
 	}
 }

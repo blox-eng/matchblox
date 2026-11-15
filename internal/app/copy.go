@@ -12,7 +12,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/doors"
-	"github.com/blox-eng/matchblox/internal/sample"
 )
 
 // The words of a copy (the spec's "Copy").
@@ -147,12 +146,6 @@ func doorIDs(ds []doors.Door) string {
 	return strings.Join(ids, " ")
 }
 
-// stepDoor names the door d steps (← -1, → 1) along the doors line.
-func (m *Model) stepDoor(d int) {
-	ds := m.boardDoors()
-	m.boardDoor, m.boardDoorsOf = max(min(m.doorIndex(ds)+d, len(ds)-1), 0), doorIDs(ds)
-}
-
 // openBoardDoor is ⏎ or a tap on the doors line: it opens the door the
 // line names. The check copies its code, the fix waits for its y, and a
 // service's door opens as from its row in Sessions.
@@ -193,16 +186,15 @@ func (m Model) pasteHere() string {
 	return "Now paste here · " + m.keys.main.Back.Help().Key + " cancels"
 }
 
-// copyCheckOn ends the copy check, unchecked, once its door is no longer
-// the chosen line, or the doors line names another door: the paste it
-// waits for answers only that door.
+// copyCheckOn ends the copy check, unchecked, once the setup steps leave
+// the chat's place, or they name another step: the paste it waits for
+// answers only that step.
 func (m Model) copyCheckOn() Model {
 	if m.copyCode == "" {
 		return m
 	}
 	ds := m.boardDoors()
-	line, above := m.aboveChosen()
-	if !m.boardShown() || !above || line != "" || len(ds) == 0 || ds[m.doorIndex(ds)].ID != doors.CopyCheck {
+	if !m.sideActive() || m.sidePlace != placeSetup || len(ds) == 0 || ds[m.doorIndex(ds)].ID != doors.CopyCheck {
 		m.copyCode = ""
 		if m.noticeText == m.pasteHere() {
 			m.noticeText = ""
@@ -262,22 +254,13 @@ func (m Model) dragDropped(msg tea.Msg) Model {
 }
 
 // dragColumn is the cells of each row that a drag from x on line y of the
-// board's body may cover: those of the column or the live view under the
-// press, else the whole width.
+// board's body may cover: those of the column under the press, else the
+// whole width.
 func (m Model) dragColumn(x, y, w int) [2]int {
-	d := m.boardPanel(w, m.bodyRows())
-	switch {
-	case d.headAt < 0 || y < d.headAt || y >= d.colsTo:
+	if !m.sideActive() || y < 0 || y >= m.bodyRows() {
 		return [2]int{0, w}
-	case d.live > 0 && x >= w-d.live:
-		return [2]int{w - d.live, w}
 	}
-	for _, h := range d.heads {
-		if x >= h.x0 && x <= h.x1 { // the gap at a column's right is its own
-			return [2]int{h.x0, h.x1}
-		}
-	}
-	return [2]int{0, w}
+	return m.sideDragCols(x, w)
 }
 
 // dragOn is a move with the button down: it starts the drag once it is
@@ -323,46 +306,9 @@ func characters(n int) string {
 	return strconv.Itoa(n) + " characters"
 }
 
-// tapWaits: the press at x, y of the board's body acts on its release,
-// so that a drag or a long press may start there: on a mid screen or a
-// desk any card and a column's name, so a drag never chooses or presses
-// anything; on a phone the card the person chose, which goes in. Only on
-// a terminal that reports the release of a left press; on a phone a key
-// or an option on a card acts on the press.
-func (m Model) tapWaits(x, y int) bool {
-	if !m.sawRelease || !m.boardShown() || m.menu != nil {
-		return false
-	}
-	_, s, ok := m.cardAtCell(x, y+m.drawScreen(max(m.width, minWidth)).bodyTop)
-	if ok && m.dragFrom != nil {
-		return true
-	}
-	if ok && m.chosenByHand(s) {
-		d := m.boardPanel(max(m.width, minWidth), m.bodyRows())
-		sp, onSpan := spanAt(d.taps[y], x)
-		return !onSpan || sp.press == ""
-	}
-	if m.dragFrom == nil { // no drag on a phone: a name acts on the press
-		return false
-	}
-	d := m.boardPanel(max(m.width, minWidth), m.bodyRows())
-	if _, ok := spanAt(d.heads, x); ok && y == d.headAt {
-		return true
-	}
-	sp, onSpan := spanAt(d.taps[y], x)
-	return onSpan && sp.press == colQuiet.short()
-}
-
-// chosenByHand: s is the chosen card, and the person chose it, by a key
-// or a tap. The board's own first choice is no choice of theirs.
-func (m Model) chosenByHand(s sample.Session) bool {
-	c, ok := m.boardSelected()
-	return ok && paneOf(c) == paneOf(s) && m.boardMine == paneOf(s)
-}
-
 // tapOnRelease runs the tap of a press that waited for its release.
 func (m Model) tapOnRelease(p point) (Model, tea.Cmd) {
-	next, cmd := m.boardTap(p.x, p.y-m.drawScreen(max(m.width, minWidth)).bodyTop)
+	next, cmd := m.sideTap(p.x, p.y-m.drawScreen(max(m.width, minWidth)).bodyTop)
 	if nm, ok := next.(Model); ok {
 		return nm, cmd
 	}
@@ -434,4 +380,18 @@ func (m Model) overlayDrag(sc *drawn) {
 		}
 		sc.lines[y] = ansi.Truncate(l, x0, "") + m.st.selected.Render(ansi.Strip(ansi.Cut(l, x0, x1))) + ansi.TruncateLeft(l, x1, "")
 	}
+}
+
+// doorKey is x on the setup step in the chat's place: a service's door
+// closes, behind its y, as from its row in Sessions. false: the door is
+// the console's own.
+func (m Model) doorKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
+	ds, own := m.boardDoors(), len(m.copyDoors())
+	i := m.doorIndex(ds)
+	if i < own {
+		return m, nil, false
+	}
+	m.selectRow(i - own)
+	next, cmd := m.key(k)
+	return next, cmd, true
 }

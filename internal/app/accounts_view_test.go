@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/blox-eng/matchblox/internal/limits"
+	"github.com/blox-eng/matchblox/internal/proto"
 )
 
 // accountBlocks is a default Claude block and a Claude block of the account
@@ -22,6 +23,7 @@ func TestUsageNamesAccountBlocks(t *testing.T) {
 	st := limitsState()
 	st.Limits = accountBlocks()
 	m, _ := loadedWith(t, 132, st)
+	m.setTab(tabMachine)
 	out := screen(m)
 	for _, want := range []string{"✻ Claude Max ", "✻ Claude work "} {
 		if !strings.Contains(out, want) {
@@ -35,6 +37,7 @@ func TestHandMadeFolderIsNamedByItsBase(t *testing.T) {
 	st.Limits = accountBlocks()
 	st.Limits[1].Dir = "/home/u/.claude-old"
 	m, _ := loadedWith(t, 132, st)
+	m.setTab(tabMachine)
 	if out := screen(m); !strings.Contains(out, "✻ Claude .claude-old ") {
 		t.Errorf("USAGE lacks the hand-made folder's name:\n%s", out)
 	}
@@ -58,22 +61,35 @@ func TestDefaultBlocksKeepTheirNames(t *testing.T) {
 	}
 }
 
+// sideOnPane is the list beside the chat at w on st, with the session in
+// pane chosen.
+func sideOnPane(t *testing.T, w int, st proto.State, pane string) Model {
+	t.Helper()
+	m, _ := loadedWith(t, w, st)
+	m.tab = tabSessions
+	for _, s := range m.snap.Sessions {
+		if s.Pane == pane {
+			m.sideAt = paneOf(s)
+			return m
+		}
+	}
+	t.Fatalf("no session in %s", pane)
+	return m
+}
+
 func TestRowSaysSigningIn(t *testing.T) {
-	for _, w := range []int{44, 160} { // the chosen card says what the row said
+	for _, w := range []int{44, 160} {
 		st := queueState()
 		st.Queue = nil // no ask or wait: the row says the sign-in
 		st.Sessions[0].AccountDir = "/home/u/.matchblox/accounts/claude/work"
 		st.Sessions[0].SigningIn = true
 		pane := st.Sessions[0].Pane
-		m, _ := loadedWith(t, w, st)
-		m = selectPane(t, m, pane).(Model)
-		out := screen(m)
+		out := screen(sideOnPane(t, w, st, pane))
 		if !strings.Contains(out, "signing in") {
 			t.Errorf("width %d: the row does not say signing in:\n%s", w, out)
 		}
 		st.SignIns = map[string]string{pane: "by hand"}
-		m, _ = loadedWith(t, w, st)
-		m = selectPane(t, m, pane).(Model)
+		m := sideOnPane(t, w, st, pane)
 		if out := screen(m); !strings.Contains(out, "sign in by hand") || strings.Contains(out, "signing in") {
 			t.Errorf("width %d: a sign-in by hand says so:\n%s", w, out)
 		}
@@ -94,7 +110,8 @@ func TestAsksWinsOverSigningIn(t *testing.T) {
 		m, _ := loadedWith(t, w, st)
 		m = selectPane(t, m, "%1").(Model) // the chosen card says what the row said
 		row := screen(m)
-		if !strings.Contains(row, "asks") || strings.Contains(row, "signing in") {
+		asks := strings.Contains(row, "asks") || strings.Contains(row, "needs your permission") // the chat's head, or the row's words
+		if !asks || strings.Contains(row, "signing in") {
 			t.Errorf("width %d: the row hides its ask: %q", w, row)
 		}
 	}
@@ -109,9 +126,7 @@ func TestRowSaysByHandForItsSessionName(t *testing.T) {
 	st.Sessions[0].SigningIn = true
 	st.Sessions[0].Target = "fresh:1.1"
 	st.SignIns = map[string]string{"fresh": "by hand"}
-	m, _ := loadedWith(t, 160, st)
-	m = selectPane(t, m, st.Sessions[0].Pane).(Model) // the chosen card says what the row said
-	if out := screen(m); !strings.Contains(out, "sign in by hand") {
+	if out := screen(sideOnPane(t, 160, st, st.Sessions[0].Pane)); !strings.Contains(out, "sign in by hand") {
 		t.Errorf("the row does not say sign in by hand:\n%s", out)
 	}
 }

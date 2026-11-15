@@ -125,11 +125,17 @@ func (m Model) peerRecv(i int) tea.Cmd {
 // sendPeer sends a on peer i and keeps its id until its result comes, so a
 // lost conn can say which acts have no answer.
 func (m *Model) sendPeer(i int, a proto.Act) tea.Cmd {
+	_, cmd := m.sendPeerID(i, a)
+	return cmd
+}
+
+// sendPeerID is sendPeer, with the act's id.
+func (m *Model) sendPeerID(i int, a proto.Act) (string, tea.Cmd) {
 	m.peers = slices.Clone(m.peers)
 	l := &m.peers[i]
 	id, cmd := m.sendOn(l.conn, a)
 	l.acts = append(slices.Clone(l.acts), id)
-	return toPeer(l.host, cmd)
+	return id, toPeer(l.host, cmd)
 }
 
 // helloOf is the hello a host sent; the zero one before it says hello.
@@ -252,6 +258,9 @@ func (m Model) peerUpdate(pm peerMsg) (tea.Model, tea.Cmd) {
 		m.noteChanges(p.host, st.Sessions, st.Chains)
 		first := !p.have
 		p.st, p.at, p.have, p.answered, p.silent = st, m.now(), true, true, false
+		if p.host == m.watchHost {
+			m.watchHeld = ""
+		}
 		p.cpu.push(st.Machine)
 		switch {
 		case msg.History != nil:
@@ -278,7 +287,12 @@ func (m Model) peerUpdate(pm peerMsg) (tea.Model, tea.Cmd) {
 		next, order := m.queuedOrder(p.host)
 		tick := next.waitTick()
 		return next, tea.Batch(next.peerRecv(i), order, tick)
+	case screenMsg:
+		return m.screenFrom(p.host, msg), m.peerRecv(i)
 	case resultMsg:
+		if mm, ok := m.watchRefused(p.host, proto.Result(msg)); ok {
+			return mm, mm.peerRecv(i)
+		}
 		at := slices.Index(p.acts, msg.ActID)
 		if at < 0 {
 			return m, m.peerRecv(i) // not an act sent on this conn: its own went with the lost one
@@ -302,8 +316,10 @@ func (m Model) peerLost(i int, err error) (tea.Model, tea.Cmd) {
 	}
 	first := !p.lost
 	p.lost, p.silent = true, false
-	m = m.roomLost(p.host)
-	news := m.noAnswer(*p)
+	m = m.roomLost(p.host).lineLost(p.host)
+	m, answer := m.answerLost(p.host, p.acts)
+	p = &m.peers[i]
+	news := tea.Batch(m.noAnswer(*p), answer)
 	m.batchLost(p.host, p.acts)
 	p.acts = nil
 	if blocking(err) {

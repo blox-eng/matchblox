@@ -1,32 +1,32 @@
  ▰ matchblox                                                                                               ● 6 need you  stoker off
- BOARD 7    machine
+ SESSIONS 7    machine
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- NEEDS YOU · 6  −                              WORKING · 1  −                  SHIPPING · 0  −                 QUIET · 0  −
-▌╿ flint-auth                          ✻  2m   ✦ hearth-api            ✻
-  stuck conflicts with main                     busy
-  #4545 ●━✕┄○┄○┄○  ctx 41%                      #4551 ●━◉┄○┄○┄○  ctx 79%
-  “The refresh flow works and the tests
-  pass. One choice is yours before I wire
-  the rotation.”
-  ⏎ go in
-                                   ╭─ ☾ Night ──────────────────────────────────────────────────╮
- │ spark-docs                      │ How should I run tonight?                                  │
-  done I rewrote the quick start an│                                                            │
-  #4540 ●━●━●━●━●  ctx 88%         │ › merge them on green▏                                     │
-  ⏎ go in                          │                                                            │
-                                   │ gos ✓ merges  ○ releases  ○ deploys  ○ kills  off asks you │
- ╿ ember-billing                   │ ways merge-order  priority  release-train  triage          │
-  green #4552 waits for your merge ╰─ ⏎ send ─ tab chips ─ esc ─────────────────────────────────╯
-  #4552 ●━●━◉┄○┄○  ctx 32%
-  p merge #4552   ⏎ go in
-
-  ↓ 3 more
-
-
-
-
- + start a new session
- RECOMMENDATIONS · 7
- ✻ Claude Max  5h ▰▰▰▰▰▰▰▱ 84% · Fri 01:20   wk ▰▰▰▰▰▰▰▱ 82% · Mon 09:00                                                  machine ›
+ NEEDS YOU · 6  −                       │ flint-auth ✻ asks · #4545 ci                              ctx 41%  ctrl+o expand · m menu
+▌╿ flint-auth                       2m ✻│
+   conflicts with main                  │
+ ╿ spark-docs                       9m ✻│
+   I rewrote the quick start and the in…│
+ ╿ ember-billing                    4m ✻│
+   #4552 waits for your merge           │
+ ╿ kindle-web                       1m ✻│
+   Claude needs your permission to ╭─ ☾ Night ──────────────────────────────────────────────────╮
+ ╿ cinder-ci                       │ How should I run tonight?                                  │
+   I am moving the cache key to the│                                                            │
+ ╿ wick-mobile                     │ › merge them on green▏                                     │
+   ⠙ Working                       │                                                            │
+───────────────────────────────────│ gos ✓ merges  ○ releases  ○ deploys  ○ kills  off asks you │
+ WORKING · 1  −                    │ ways merge-order  priority  release-train  triage          │
+ ✦ hearth-api                 #4551╰─ ⏎ send ─ tab chips ─ esc ─────────────────────────────────╯
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+ + new · ✧ 7 tips                       │ ›                                                                    ⏎ send to flint-auth
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ⏎ go in   c copy   v one line   s hosts   u strip   ←→ columns   tab next
+ in the list · ↑↓ choose · ⏎ write · s hosts · g chain · m menu

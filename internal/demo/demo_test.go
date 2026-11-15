@@ -150,13 +150,13 @@ func (term *terminal) wholeFrame() (int, string) {
 // repaintAfter is how long a wait reads what the console wrote before it
 // asks for a whole frame: a frame writes only the cells that change, so
 // what changed may never be written whole. A second was most of a walk's
-// time on the board, whose tabs and searches change a few cells each.
+// time on Sessions, whose tabs and searches change a few cells each.
 const repaintAfter = 150 * time.Millisecond
 
 // waitFor waits until the console drew every want, in what it wrote or in a
 // whole frame. The console writes only the cells that change, so a count it
-// drew while it waited for the service turns from "BOARD 0" to "BOARD 7"
-// by one cell, and what it wrote never holds "BOARD 7" whole (#321).
+// drew while it waited for the service turns from "SESSIONS 0" to "SESSIONS 7"
+// by one cell, and what it wrote never holds "SESSIONS 7" whole (#321).
 func (term *terminal) waitFor(t *testing.T, want ...string) {
 	t.Helper()
 	deadline := time.Now().Add(30 * time.Second)
@@ -214,11 +214,11 @@ func tempCopies(t *testing.T) []string {
 func TestTheConsoleDrawsTheMachine(t *testing.T) {
 	t.Setenv("TMPDIR", t.TempDir())
 	_, term := start(t)
-	term.waitFor(t, "BOARD 7", "flint-auth")
+	term.waitFor(t, "SESSIONS 7", "flint-auth")
 }
 
 // late holds back the console's first state until the start mark has played,
-// as a slow machine does: the console then draws "BOARD 0" while it waits.
+// as a slow machine does: the console then draws "SESSIONS 0" while it waits.
 type late struct {
 	transport.Conn
 	held *atomic.Bool
@@ -248,7 +248,7 @@ func TestAStateAfterTheStartMarkStillDrawsTheCount(t *testing.T) {
 	}
 	t.Cleanup(d.Stop)
 	term.d = d
-	term.waitFor(t, "BOARD 7", "flint-auth")
+	term.waitFor(t, "SESSIONS 7", "flint-auth")
 }
 
 func TestStopLeavesNothing(t *testing.T) {
@@ -316,7 +316,7 @@ func TestAStartSweepsWhatAKilledRunLeft(t *testing.T) {
 func TestAStartAfterAStopIsFresh(t *testing.T) {
 	t.Setenv("TMPDIR", t.TempDir())
 	d, first := start(t)
-	first.waitFor(t, "BOARD 7", "start a new session")
+	first.waitFor(t, "SESSIONS 7", "+ new")
 	firstSeen := first.screen()
 
 	if _, _, err := tryStart(t); !errors.Is(err, demo.ErrRunning) {
@@ -332,7 +332,7 @@ func TestAStartAfterAStopIsFresh(t *testing.T) {
 	d.Stop()
 
 	_, second := start(t)
-	second.waitFor(t, "BOARD 7", "start a new session")
+	second.waitFor(t, "SESSIONS 7", "+ new")
 	if a, b := firstScreen(firstSeen), firstScreen(second.screen()); a != b {
 		t.Errorf("the first screens differ:\n--- first\n%s\n--- after the restart\n%s", a, b)
 	}
@@ -342,8 +342,8 @@ func TestAStartAfterAStopIsFresh(t *testing.T) {
 // the spark of a working session turn with the clock, and differ from run to
 // run.
 func firstScreen(text string) string {
-	_, list, _ := strings.Cut(text, "BOARD 7")
-	list, _, _ = strings.Cut(list, "start a new session")
+	_, list, _ := strings.Cut(text, "SESSIONS 7")
+	list, _, _ = strings.Cut(list, "+ new")
 	return strings.ReplaceAll(list, "✧", "✦")
 }
 

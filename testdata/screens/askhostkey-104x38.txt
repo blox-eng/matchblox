@@ -1,38 +1,38 @@
  ▰ matchblox                                                                               ● 6 need you
- BOARD 7    machine
+ SESSIONS 7    machine
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
- NEEDS YOU · 6  −                     WORKING · 1  −           SHIPPING · 0  −          QUIET · 0  −
-▌╿ flint-auth                 ✻  2m   ✦ hearth-api     ✻
-  stuck conflicts with main            busy
-  #4545 ●━✕┄○┄○┄○  ctx 41%             #4551 ●━◉┄○┄○  ctx 79%
-  “The refresh flow works and the
-  tests pass. One choice is yours
-  before I wire ╭─ ssh ws-1 asks ──────────────────────────────────────────────────────╮
-  ⏎ go in       │                                                                      │
-                │   The authenticity of host 'ws-1' can't be established.              │
- │ spark-docs   │   ED25519 key fingerprint is                                         │
-  done I rewrote│   SHA256:Hx1T4cGQ0bZp6Yd3lq9m0f8aJk2sWvR7uNcE5yXoLtI.                │
-  #4540 ●━●━●━●━│   +--[ED25519 256]--+                                                │
-  ⏎ go in       │   |    .o+=*o.      |                                                │
-                │   |     o=B.+ .     |                                                │
- ╿ ember-billing│   |      +.X o      |                                                │
-  green #4552 wa│   +----[SHA256]-----+                                                │
-  #4552 ●━●━◉┄○┄│   This key is not known by any other names.                          │
-  p merge #4552 │   Are you sure you want to continue connecting                       │
-                │   (yes/no/[fingerprint])?                                            │
+ NEEDS YOU · 6  −                       │ flint-auth ✻ asks · #4545 ci  ctx 41%  ctrl+o expand · m menu
+▌╿ flint-auth                       2m ✻│
+   conflicts with main                  │
+ ╿ spark-docs                       9m ✻│
+   I rewrote the quick start and the in…│
+ ╿ ember-billing                    4m ✻│
+   #4552 waits f╭─ ssh ws-1 asks ──────────────────────────────────────────────────────╮
  ╿ kindle-web   │                                                                      │
-  asks Claude ne│   › •▏                                                               │
-  ctx 56%       │   ! type yes or no, then ⏎                                           │
-  ⏎ go in       │                                                                      │
+   Claude needs │   The authenticity of host 'ws-1' can't be established.              │
+ ╿ cinder-ci    │   ED25519 key fingerprint is                                         │
+   I am moving t│   SHA256:Hx1T4cGQ0bZp6Yd3lq9m0f8aJk2sWvR7uNcE5yXoLtI.                │
+ ╿ wick-mobile  │   +--[ED25519 256]--+                                                │
+   ⠙ Working    │   |    .o+=*o.      |                                                │
+────────────────│   |     o=B.+ .     |                                                │
+ WORKING · 1  − │   |      +.X o      |                                                │
+ ✦ hearth-api   │   +----[SHA256]-----+                                                │
+                │   This key is not known by any other names.                          │
+                │   Are you sure you want to continue connecting                       │
+                │   (yes/no/[fingerprint])?                                            │
+                │                                                                      │
+                │   › •▏                                                               │
+                │   ! type yes or no, then ⏎                                           │
+                │                                                                      │
                 ╰─ ⏎ answer ─ esc cancel the ssh ──────────────────────────────────────╯
- ╿ cinder-ci                  ❋  0s
-  done I am moving the cache key t…
-  ctx 55%
-  ⏎ go in
-
-  ↓ 1 more
- + start a new session
- RECOMMENDATIONS · 7
- ✻ Claude Max  5h ▰▰▰▰▰▰▰▱ 84% · Fri 01:20   wk ▰▰▰▰▰▰▰▱ 82% · Mon 09:00                      machine ›
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+ + new · ✧ 7 tips                       │ ›                                        ⏎ send to flint-auth
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
- ⏎ go in   c copy   v one line   s hosts   u strip   ←→ columns   tab next
+ writing to flint-auth · ⏎ send · ↑↓ choose · esc list · ctrl+o expand · tab Machine

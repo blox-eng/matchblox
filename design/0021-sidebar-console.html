@@ -1,0 +1,597 @@
+<meta charset="utf-8">
+<title>Sidebar Console</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: brief and controls; the live prototype; every branch as a list that drives it; the landing-page section as the page would show it. */
+:root {
+  --page: #EFE9DC; --ink: #2B261C; --muted: #5F5A4C; --faint: #8A8170;
+  --term: #F5F1E7; --acc: #9A7B3F; --wash: #E6DBC2; --warn: #8A6420; --neg: #9E4A34;
+  --flame: #C96A1C; --rule: #D8CFBC; --you: #E9DEC6; --head: #B23A24; --c1: #3F7A78; --c2: #7A5683;
+  --lp-bg: #F5F1E7; --lp-fg: #1C1813; --lp-muted: #5F5A4C; --lp-hair: rgba(120,96,44,.16); --lp-primary: #9A7B3F; --lp-stage: #E9E2D2;
+  --sans: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --page: #16130F; --ink: #E4DBC8; --muted: #A69D8D; --faint: #776F60;
+  --term: #0F0D0A; --acc: #C3A56A; --wash: #221D14; --warn: #B98F44; --neg: #B0563F;
+  --flame: #E8822E; --rule: #2C261E; --you: #1E1A13; --head: #C2452D; --c1: #6FB3AE; --c2: #B08DBA;
+  --lp-bg: #0F0D0A; --lp-fg: #EBE6DC; --lp-muted: #A69D8D; --lp-hair: rgba(232,214,176,.16); --lp-primary: #C3A56A; --lp-stage: #0B0A08; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --page: #16130F; --ink: #E4DBC8; --muted: #A69D8D; --faint: #776F60;
+  --term: #0F0D0A; --acc: #C3A56A; --wash: #221D14; --warn: #B98F44; --neg: #B0563F;
+  --flame: #E8822E; --rule: #2C261E; --you: #1E1A13; --head: #C2452D; --c1: #6FB3AE; --c2: #B08DBA;
+  --lp-bg: #0F0D0A; --lp-fg: #EBE6DC; --lp-muted: #A69D8D; --lp-hair: rgba(232,214,176,.16); --lp-primary: #C3A56A; --lp-stage: #0B0A08; color-scheme: dark }
+body { background: var(--page); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.55; }
+.wrap { max-width: 1340px; margin: 0 auto; padding-block: 28px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 26px; }
+h1 { font-size: 26px; margin: 0; font-weight: 600; text-wrap: balance; }
+h2 { font-size: 13px; margin: 0 0 10px; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); font-weight: 600; }
+p { margin: 0; max-width: 72ch; }
+.lead { color: var(--muted); }
+nav.parts { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 14px; }
+nav.parts a { color: var(--acc); }
+.controls { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+.seg { display: flex; border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; }
+.seg span { font: 500 12px var(--sans); color: var(--muted); padding: 7px 10px; border-right: 1px solid var(--rule); text-transform: uppercase; letter-spacing: .06em; }
+.seg button { font: 500 14px var(--sans); color: var(--ink); background: transparent; border: 0; border-right: 1px solid var(--rule); padding: 7px 12px; cursor: pointer; }
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--wash); color: var(--acc); }
+button:focus-visible { outline: 2px solid var(--acc); outline-offset: -2px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 18px; font: 13px var(--mono); }
+
+/* the terminal */
+.scroll { overflow-x: auto; }
+.term { font: 12.5px/1.5 var(--mono); color: var(--ink); background: var(--term); border: 1px solid var(--rule); border-radius: 8px;
+  width: max-content; display: grid; grid-template-rows: auto 1fr auto; height: 46.5em; outline: none; }
+.term.phone { height: 40em; }
+.bar { display: flex; gap: 2ch; padding: .25em 1ch; border-bottom: 1px solid var(--rule); white-space: pre; overflow: hidden; }
+.keys { display: flex; flex-wrap: wrap; gap: 0 2.5ch; padding: .25em 1ch; border-top: 1px solid var(--rule); white-space: pre; color: var(--muted); }
+.keys b { color: var(--ink); font-weight: 700; }
+.keys .where { color: var(--acc); }
+.body { display: grid; min-height: 0; }
+.side { overflow: hidden; display: flex; flex-direction: column; border-right: 1px solid var(--rule); min-height: 0; }
+.side.focus, .chat.focus .input { box-shadow: inset 0 0 0 1px var(--acc); }
+.side .list { flex: 1; overflow-y: auto; padding-block: .25em; }
+.grp { padding: .3em 1ch 0; color: var(--faint); white-space: pre; display: flex; justify-content: space-between; }
+.grp b { color: var(--ink); font-weight: 700; }
+.sep { border-top: 1px solid var(--rule); margin: .35em 1ch .1em; }
+.row { display: block; width: 100%; text-align: left; font: inherit; color: inherit; background: transparent; border: 0; padding: 0 1ch; cursor: pointer; white-space: pre; overflow: hidden; }
+.row:hover, .row.sel { background: var(--wash); }
+.row .l2 { color: var(--muted); }
+.row.dim, .row.dim .l2 { color: var(--faint); }
+.foot { border-top: 1px solid var(--rule); padding: .25em 0; }
+.foot .row { color: var(--muted); }
+.search { padding: .25em 1ch; border-bottom: 1px solid var(--rule); display: flex; gap: 1ch; }
+.search input, .input input { flex: 1; font: inherit; color: var(--ink); background: transparent; border: 0; outline: 0; min-width: 0; }
+.chat { display: flex; flex-direction: column; min-width: 0; min-height: 0; position: relative; }
+.chat > .log, .chat > .pane { flex: 1; }
+.chead { padding: .25em 1.5ch; white-space: pre; display: flex; justify-content: space-between; gap: 2ch; border-bottom: 1px solid var(--rule); }
+.chain { padding: .25em 1.5ch; white-space: pre; color: var(--muted); border-bottom: 1px solid var(--rule); overflow: hidden; }
+.chain .on { color: var(--acc); font-weight: 700; }
+.log { overflow-y: auto; padding: .5em 1.5ch; display: flex; flex-direction: column; gap: .6em; min-height: 0; }
+.msg { white-space: pre-wrap; max-width: 92ch; }
+.msg.you { background: var(--you); border-left: 2px solid var(--faint); padding: .2em 1ch; }
+.msg.tool { color: var(--muted); }
+.msg.tool::before { content: "⏺ "; color: var(--faint); }
+.msg.sys { color: var(--faint); font-style: italic; }
+.ask { border: 1px solid var(--acc); border-radius: 4px; padding: .4em 1ch; display: grid; gap: .2em; max-width: 84ch; }
+.ask .q { font-weight: 700; }
+.opt { font: inherit; color: inherit; text-align: left; background: transparent; border: 0; padding: 0 1ch; cursor: pointer; white-space: pre-wrap; }
+.opt:hover, .opt.armed { background: var(--wash); }
+.opt.armed::before { content: "❯ "; color: var(--acc); }
+.input { border-top: 1px solid var(--rule); padding: .35em 1.5ch; display: flex; gap: 1ch; align-items: center; }
+.input label { color: var(--acc); }
+.input input::placeholder, .search input::placeholder { color: var(--faint); }
+.input .to { color: var(--faint); white-space: pre; }
+.menu { position: absolute; right: 2ch; top: 4.5em; background: var(--term); border: 1px solid var(--acc); border-radius: 4px; padding: .3em 0; display: grid; min-width: 36ch; z-index: 2; }
+.menu .row { padding: 0 1.5ch; }
+.pane { padding: .5em 1.5ch; display: grid; gap: .8em; align-content: start; overflow-y: auto; }
+.pane .card { border: 1px solid var(--rule); border-radius: 4px; padding: .5em 1.5ch; display: grid; gap: .25em; max-width: 96ch; }
+.field { display: flex; gap: 1ch; white-space: pre; }
+.field .k { color: var(--muted); width: 14ch; }
+.agentui { margin: .4em 1ch; border: 1px solid var(--muted); border-radius: 6px; padding: .4em 1.5ch; display: grid; gap: .3em; }
+.c-c1 { color: var(--c1); } .c-c2 { color: var(--c2); }
+.m-need { color: var(--head); font-weight: 700; } .m-work { color: var(--flame); } .m-held { color: var(--muted); } .m-idle { color: var(--faint); }
+.acc { color: var(--acc); } .b { font-weight: 700; } .muted { color: var(--muted); } .faint { color: var(--faint); } .warn { color: var(--warn); } .neg { color: var(--neg); }
+
+/* every branch */
+.branches { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 18px 28px; }
+.branches section { min-width: 0; }
+.branches h3 { font-size: 14px; margin: 0 0 6px; font-weight: 600; }
+.branches ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.branches button { font: 14px var(--sans); color: var(--ink); background: transparent; border: 1px solid var(--rule); border-radius: 5px; padding: 6px 10px; text-align: left; width: 100%; cursor: pointer; display: grid; gap: 1px; }
+.branches button small { color: var(--muted); font-size: 12.5px; }
+.branches button[aria-pressed="true"] { border-color: var(--acc); background: var(--wash); }
+.now { font-size: 14px; color: var(--muted); min-height: 1.5em; }
+.now b { color: var(--ink); }
+
+/* the landing-page section, in the page's own style */
+.lp { background: var(--lp-bg); color: var(--lp-fg); border-radius: 10px; padding-block: 56px 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 22px; justify-items: center; text-align: center; border: 1px solid var(--lp-hair); }
+.lp h2 { font: 600 34px/1.15 var(--sans); color: var(--lp-fg); letter-spacing: -.01em; text-transform: none; margin: 0; text-wrap: balance; }
+.lp .lede { color: var(--lp-muted); font-size: 17px; max-width: 60ch; }
+.lp .stages { display: flex; flex-wrap: wrap; gap: 24px; justify-content: center; align-items: flex-end; max-width: 100%; }
+.lp .stage { background: var(--lp-stage); border: 1px solid var(--lp-hair); border-radius: 12px; padding: 14px; max-width: 100%; overflow-x: auto; text-align: left; }
+.lp .stage .term { font-size: 10px; }
+.lp .says { display: flex; flex-wrap: wrap; gap: 8px 28px; justify-content: center; font-size: 15px; color: var(--lp-muted); }
+.lp .says b { color: var(--lp-fg); font-weight: 600; }
+.lp .cta { font: 500 14px var(--mono); color: var(--lp-primary); border: 1px solid var(--lp-hair); border-radius: 6px; padding: 8px 14px; }
+.note { font-size: 13.5px; color: var(--muted); max-width: 80ch; }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 28px; }
+.cols > section { min-width: 0; }
+ol, ul.plain { margin: 0; padding-left: 20px; display: grid; gap: 8px; max-width: 72ch; }
+li b { font-weight: 600; }
+code { font: 13px var(--mono); }
+@media (max-width: 640px) { .term { font-size: 11px; } .lp h2 { font-size: 26px; } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header style="display:grid;gap:8px">
+    <h1>Sidebar console</h1>
+    <p class="lead">The matchblox console as a list of sessions beside one chat (#411). Choose a session: its chat is open and the cursor is in its line. <code>esc</code> moves your keys to the sidebar, where the one-letter keys act. <code>⌃o</code> steps into the agent's own screen. All sessions are examples from the demo fleet.</p>
+    <nav class="parts" aria-label="Parts of this page"><a href="#proto">The prototype</a><a href="#branches">Every branch</a><a href="#landing">The landing-page section</a><a href="#decide">Open for you</a></nav>
+  </header>
+
+  <div class="controls" id="proto">
+    <div class="seg" role="group" aria-label="Screen"><span>Screen</span>
+      <button id="v-desk" aria-pressed="true" data-v="desk">Desk 16″</button>
+      <button id="v-phone" aria-pressed="false" data-v="phone">Phone</button></div>
+    <div class="seg" role="group" aria-label="Sidebar"><span>Sidebar</span>
+      <button id="s-open" aria-pressed="true" data-s="open">Open</button>
+      <button id="s-off" aria-pressed="false" data-s="off">Hidden</button></div>
+    <button id="reset" class="seg" style="padding:7px 12px;font:500 14px var(--sans);color:var(--ink);background:transparent;cursor:pointer" data-reset="1">Start again</button>
+  </div>
+  <div class="legend" id="legend" aria-label="What the icons show"></div>
+
+  <div class="scroll"><div class="term" id="term" tabindex="0" aria-label="The console, drawn as a terminal"></div></div>
+  <p class="now" id="now" aria-live="polite">Click a session, or type in the line. <b>esc</b> moves your keys to the sidebar: there <b>s</b> is the next host, <b>g</b> one chain, <b>/</b> search, <b>m</b> the menu, <b>c</b> copy, <b>z</b> park, <b>n</b> a new session.</p>
+
+  <section id="branches">
+    <h2>Every branch</h2>
+    <p class="note" style="margin-bottom:14px">Each button loads the prototype in that state. Then keep using it from there.</p>
+    <div class="branches" id="branchList"></div>
+  </section>
+
+  <section id="landing" style="display:grid;gap:12px">
+    <h2>The landing-page section</h2>
+    <p class="note">Proposed words and still for the "Every agent, one box" section of the landing page, in the page's own type and colours. matchbloxrelease owns the page, so this is the brief I would send it after you approve the console.</p>
+    <div class="lp">
+      <h2>Every agent. One chat.</h2>
+      <p class="lede">What needs you is on top. Choose it, and you are already in its chat.</p>
+      <div class="stages"><div class="stage" id="lpDesk"></div><div class="stage" id="lpPhone"></div></div>
+      <div class="says"><span><b>Struck</b> needs you</span><span><b>Burning</b> works</span><span><b>Unlit</b> held, and it says why</span><span><b>s</b> the next host</span></div>
+      <span class="cta">curl -fsSL matchblox.dev/install.sh | sh</span>
+    </div>
+  </section>
+
+  <div class="cols" id="decide">
+    <section>
+      <h2>Your feedback, and what this draft does</h2>
+      <ol>
+        <li><b>Live view and ⏎.</b> The chat is the main pane. Choosing a session puts your cursor in its line. <code>⌃o</code> expands into the real pane; <code>⌃o</code> again comes back, so <code>esc</code> still reaches the agent inside.</li>
+        <li><b>Chains.</b> Each row names its chain. The chosen session's chain is a strip over the chat. <code>g</code> shows only that chain, with the stoker's card.</li>
+        <li><b>Phone.</b> The list is the first screen. A tap opens the chat; <code>◂</code> comes back.</li>
+        <li><b>Held vs quiet.</b> <code>HELD</code> is its own group and says who held it and why.</li>
+        <li><b>Setup, new session, tips.</b> One row each at the foot of the sidebar. Each opens in the main pane.</li>
+        <li><b>Hosts.</b> <code>s</code> stays. Every host you added shows. A hidden host never makes <code>s</code> silent.</li>
+        <li><b>The Jobs pass (cuts).</b> No rail: the list is open or hidden, and hidden, the header names what needs you. One icon, the match. One line a session, two only for a wait and the chosen row. The agent's mark at the end of the line. No "no chain" line. One footer line. At most five keys on the key line.</li>
+        <li><b>SHIPPING.</b> The group goes. A pull request is a badge; one that waits for your merge puts its row in <code>NEEDS YOU</code>.</li>
+      </ol>
+    </section>
+    <section>
+      <h2>Open for you</h2>
+      <ul class="plain">
+        <li>The chat: a clean transcript, as drawn here, or the agent's real pane cut to its chat? I recommend the real pane: matchblox already reads panes, and a transcript needs a parser for each agent.</li>
+        <li>Chains: also a way to group the sidebar? I recommend not yet: the tag, the strip and <code>g</code> first.</li>
+        <li>Machine (usage, CPU, accounts): a row at the foot of the sidebar, or its own tab as today? I recommend the tab, reached with <code>⇥</code>.</li>
+      </ul>
+    </section>
+  </div>
+</div>
+
+<script>
+const FLEET = [
+  {n:"flint-auth", g:"need", h:"ws-1", a:"✻", ch:"login", w:"2m", st:"asks", txt:"Which store for the refresh token?", ctx:58,
+   log:[["you","Move the refresh token out of the cookie."],["tool","Read internal/auth/session.go"],["tool","Read internal/auth/store.go"],["agent","The token sits in the cookie today. I can move it, but the new store has two places that would work."]],
+   ask:{q:"Which store for the refresh token?", o:["The session table, next to the user (one migration)","Redis, with a 30-day expiry (no migration)","Keep the cookie, but encrypt it"]}},
+  {n:"spark-search", g:"need", h:"ws-1", a:"✻", w:"31m", st:"asks", txt:"permission to use Bash", ctx:33,
+   log:[["you","Rebuild the search index after the schema change."],["tool","Edit search/schema.go"],["agent","I need to run the index build."]],
+   ask:{q:"Allow Bash: go run ./cmd/reindex --all ?", o:["Yes","Yes, and don't ask again for go run","No, tell me what to do"]}},
+  {n:"hearth-api", g:"need", h:"ws-1", a:"✻", w:"4m", st:"waits", txt:"done · open the pull request?", ctx:47,
+   log:[["you","Add rate limits to the public API."],["tool","Edit api/limits.go"],["tool","Bash go test ./api/... (ok)"],["agent","Done. The limits are 100 requests a minute per key, with a 429 and a Retry-After. The tests pass. Do you want me to open the pull request?"]]},
+  {n:"flint-api", g:"need", h:"ws-1", a:"✻", w:"40m", st:"merge", txt:"approved · waits for your merge", ctx:22, pr:"#4560 ✓",
+   log:[["agent","The review is approved and CI is green. It waits for your merge."]],
+   ask:{q:"Merge #4560 into main?", o:["Merge (squash)","Not yet"]}},
+  {n:"flint-ui", g:"work", h:"ws-1", a:"❋", ch:"login", st:"busy", txt:"Writing the test for a token refresh", ctx:40,
+   log:[["you","Show the login form again when the token is refused."],["tool","Read web/login.tsx"],["tool","Edit web/login.tsx"],["agent","The form now comes back on a 401. I write the test for a token that expires mid-session next."],["tool","Write web/login.test.tsx …"]]},
+  {n:"ember-billing", g:"work", h:"gpu-1", a:"✻", ch:"billing", st:"agents", txt:"Three subagents read the invoice paths", ctx:71,
+   log:[["you","Find why some invoices round the tax twice."],["tool","Task 3 subagents: invoice/, tax/, export/"],["agent","Two of the three are back. The tax is rounded in tax.Line and again in export.CSV."]]},
+  {n:"spark-docs", g:"work", h:"ws-1", a:"❋", st:"busy", txt:"Running the suite", ctx:22,
+   log:[["you","Rewrite the quick start."],["tool","Edit docs/start.md"],["tool","Bash make docs-test …"]]},
+  {n:"kindle-legacy", g:"held", h:"ws-1", a:"✻", st:"held", txt:"by the stoker · not the priority", ctx:12,
+   log:[["agent","Held by the stoker: \"not the priority\". Nothing types into it until you release it."]],
+   ask:{q:"Release kindle-legacy? The stoker held it: not the priority.", o:["Release, and tell it to carry on","Keep it held"]}},
+  {n:"ember-reports", g:"held", h:"gpu-1", a:"✻", st:"parked", txt:"by you · z lets it go", ctx:30,
+   log:[["agent","You parked this session. Nothing types into it. z lets it go."]]},
+  {n:"hearth-limits", g:"idle", h:"ws-1", a:"✻", st:"idle", txt:"pull request on CI", ctx:35, pr:"#4551 CI 6/9",
+   log:[["agent","I opened #4551. CI runs: 6 of 9 jobs are done."]]},
+  {n:"cinder-ci", g:"idle", h:"gpu-1", a:"❋", ch:"billing", st:"idle", txt:"merged · deploying", ctx:18, pr:"#4549 ↑",
+   log:[["agent","#4549 is merged. The deploy runs."]]},
+  {n:"kindle-web", g:"idle", h:"ws-1", a:"⬢", ch:"login", st:"done", txt:"step 1 of login · 1h", ctx:51,
+   log:[["agent","Step 1 is done: the new token store is in, with its migration."]]},
+  {n:"hearth-notes", g:"idle", h:"ws-1", a:"⬢", st:"idle", txt:"3h", ctx:9, log:[["agent","Nothing is open."]]},
+  {n:"wick-mobile", g:"idle", h:"ws-1", a:"✻", st:"cold", txt:"since yesterday", ctx:64, log:[["agent","It waited since yesterday. Cold."]]},
+];
+const CHAINS = { login: {c:"c1", steps:["the new token store","the refresh in the API","the login form"], at:1, order:["kindle-web","flint-auth","flint-ui"]},
+                 billing: {c:"c2", steps:["find the double rounding","fix and deploy"], at:0, order:["ember-billing","cinder-ci"]} };
+const GROUPS = [["need","NEEDS YOU"],["work","WORKING"],["held","HELD"],["idle","IDLE"]];
+const GLYPH = {need:"╿", work:"╿", held:"╽", idle:"╵"};
+const TIPS = [["A busy loop burns ws-1's CPU","node watch.js has run at 98% for 2 h · kill 48211"],["flint-ui's context is near the line","ctx 40% now; it compacts at 85% · /compact when its turn ends"]];
+const SETUP = [["Let copy through","tmux drops copies · tmux set -s set-clipboard on"]];
+
+let S, st;
+function fresh() {
+  S = JSON.parse(JSON.stringify(FLEET));
+  st = {v:"desk", s:"open", h:"", sel:"flint-auth", armed:{}, phoneChat:false, sent:{}, hidden:false, unreached:false,
+        note:"", focus:"line", pane:"chat", menu:false, chain:"", search:null, mode:"live", empty:false, branch:"", by:"state", icons:"match"};
+}
+const DOT = {need:"●", work:"●", held:"○", idle:"·"};
+const stateIcon = s => st.icons === "match" ? icon(s) : `<span class="m-${s.g}">${DOT[s.g]}</span>`;
+function legend() {
+  const g = st.icons === "match" ? GLYPH : DOT;
+  return `<span><span class="m-need">${g.need}</span> needs you</span><span><span class="m-work">${g.work}</span> works</span><span><span class="m-held">${g.held}</span> held</span><span><span class="m-idle">${g.idle}</span> idle</span>` +
+    `<span><span class="muted">≋ ├ └</span> a chain: it sits with its most urgent member</span><span class="muted">✻ Claude Code · ❋ Codex · ⬢ OpenCode</span>`;
+}
+const RANK = {need:0, work:1, held:2, idle:3};
+// The sidebar's units, in drawn order: each group holds its sessions alone and the chains whose most urgent member is in it.
+function units() {
+  const ss = shown(), out = [];
+  for (const [g, name] of GROUPS) {
+    const items = [];
+    for (const s of ss) {
+      if (!s.ch && s.g === g) items.push({at: S.indexOf(s), one: s});
+    }
+    for (const [cn, c] of Object.entries(CHAINS)) {
+      const mem = c.order.map(n => ss.find(s => s.n === n)).filter(Boolean);
+      if (!mem.length) continue;
+      const top = mem.reduce((a, b) => RANK[b.g] < RANK[a.g] ? b : a);
+      if (top.g === g) items.push({at: Math.min(...mem.map(m => S.indexOf(m))), chain: cn, mem, top});
+    }
+    items.sort((a, b) => a.at - b.at);
+    // The head counts the sessions in this state only; a chain's other members sit here but count in their own state.
+    if (items.length) out.push({g, name, items, n: ss.filter(s => s.g === g).length});
+  }
+  return out;
+}
+const drawnOrder = () => units().flatMap(u => u.items.flatMap(i => i.mem || [i.one]));
+fresh();
+try { const p = JSON.parse(localStorage.getItem("sidebar-console") || "{}"); if (p.v) st.v = p.v; if (p.s) st.s = p.s; } catch (e) {}
+
+const term = document.getElementById("term");
+const esc = t => String(t).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
+const pad = (t, n) => { t = String(t); return t.length > n ? t.slice(0, Math.max(n - 1, 0)) + "…" : t + " ".repeat(n - t.length); };
+const icon = s => `<span class="m-${s.g}">${GLYPH[s.g]}</span>`;
+const ABBR = (() => {
+  const ab = (n, k) => { const p = n.split("-"), last = p.pop(); return p.map(w => w[0]).join("") + last.slice(0, k); };
+  const out = {}, byBase = {};
+  for (const s of FLEET) (byBase[ab(s.n, 1)] ||= []).push(s.n);
+  for (const group of Object.values(byBase)) {
+    let k = 1;
+    while (group.length > 1 && new Set(group.map(n => ab(n, k))).size < group.length && k < 12) k++;
+    for (const n of group) out[n] = ab(n, k);
+  }
+  return out;
+})();
+const all = () => st.empty || st.mode === "loading" ? [] : S;
+function shown() {
+  return all().filter(s => (!st.h || s.h === st.h) && !(st.hidden && s.h === "gpu-1") &&
+    (!st.chain || s.ch === st.chain) && (!st.search || s.n.includes(st.search)));
+}
+const cur = () => shown().find(s => s.n === st.sel) || shown()[0];
+const needCount = () => all().filter(s => s.g === "need").length;
+const dim = s => st.mode === "lost" || (st.unreached && s.h === "gpu-1");
+
+// link: "" alone, "├" or "└" for a chain's member; the links light when the chosen session is in that chain.
+function rowHTML(s, w, rail, link = "") {
+  const c = cur(), lit = c && c.ch && s.ch === c.ch;
+  const sel = c && s.n === c.n;
+  const mark = sel ? '<span class="acc">▌</span>' : " ";
+  const cls = `row${sel ? " sel" : ""}${dim(s) ? " dim" : ""}`;
+  const lk = t => link ? `<span class="${lit ? "acc" : "faint"}">${t}</span>` : "";
+  if (rail) {
+    const ab = `<span class="${s.g==="need"?"b":s.g==="idle"?"muted":""}">${esc(pad(ABBR[s.n], 3))}</span>`;
+    return `<button class="${cls}" data-n="${s.n}" title="${esc(s.n + " · " + s.st + " " + s.txt)}">${mark}${link ? lk(link) : " "}${stateIcon(s)}<span class="faint">${esc(s.a)}</span>${ab}</button>`;
+  }
+  const host = s.h !== "ws-1" && !st.h ? "@" + s.h : "";
+  const ind = link ? 2 : 0;
+  const right = (s.pr && !s.w ? s.pr : s.w || "");
+  const name = pad(s.n + (host ? " " + host : ""), Math.max(6, w - 7 - ind - right.length));
+  const line1 = `${mark}${lk(link + " ")}${stateIcon(s)} <span class="${s.g==="need"?"b":""}">${esc(name)}</span> <span class="muted">${esc(right)}</span> <span class="faint">${esc(s.a)}</span>`;
+  // A second line only where it is news: what a waiting session asks, and the chosen row.
+  if (s.g !== "need" && !sel) return `<button class="${cls}" data-n="${s.n}">${line1}</button>`;
+  const t2 = s.st + " " + s.txt;
+  const cont = link ? lk((link === "├" ? "│" : " ") + " ") : "";
+  return `<button class="${cls}" data-n="${s.n}">${line1}\n ${cont}  <span class="l2">${esc(pad(t2, w - 5 - ind))}</span></button>`;
+}
+function chainHead(cn, item, w, rail) {
+  const c = CHAINS[cn], cs = cur(), lit = cs && cs.ch === cn;
+  if (rail) return `<button class="row" data-n="${item.top.n}" title="chain ${esc(cn)}"> <span class="${lit ? "acc" : "muted"}">≋${esc(cn.slice(0, 4))}</span></button>`;
+  const right = `step ${c.at + 1} of ${c.steps.length} · ${item.mem.length}`;
+  return `<button class="row" data-n="${item.top.n}"> <span class="${lit ? "acc b" : "b"}">≋ ${esc(pad(cn, w - 6 - right.length))}</span> <span class="muted">${esc(right)}</span></button>`;
+}
+
+function sideHTML(w, rail) {
+  let h = "";
+  if (st.search !== null && !rail) h += `<div class="search"><span class="acc">/</span><input id="q" value="${esc(st.search)}" placeholder="search the sessions" autocomplete="off"><span class="faint">${shown().length} of ${all().length}</span></div>`;
+  if (st.chain && !rail) h += `<div class="grp"><span><b>chain ${esc(st.chain)}</b> · ${shown().length}</span><span class="acc">esc all</span></div>`;
+  h += '<div class="list">';
+  if (st.mode === "loading") h += `<div class="grp">reading your matches…</div>`;
+  else if (st.empty) h += rail ? "" : `<div class="grp">no sessions yet</div>`;
+  let first = true;
+  // An empty section takes no row: units() leaves it out, and the header's count says it.
+  for (const u of units()) {
+    if (!first) h += '<div class="sep" aria-hidden="true"></div>';
+    first = false;
+    if (!rail) h += `<div class="grp"><span><b>${esc(u.name)}</b> · ${u.n}</span><span>−</span></div>`;
+    for (const it of u.items) {
+      if (it.one) { h += rowHTML(it.one, w, rail); continue; }
+      h += chainHead(it.chain, it, w, rail);
+      it.mem.forEach((m, i) => { h += rowHTML(m, w, rail, i === it.mem.length - 1 ? "└" : "├"); });
+    }
+  }
+  h += "</div>";
+  if (!rail) {
+    const b = (k, t) => `<button class="row" data-foot="${k}" style="display:inline;width:auto;padding:0 .5ch">${t}</button>`;
+    h += `<div class="foot" style="padding-inline:.5ch">${b("new", "+ new")}<span class="faint">·</span>${b("tips", "✧ 2 tips")}${st.mode === "live" ? `<span class="faint">·</span>${b("setup", '<span class="warn">! 1 setup</span>')}` : ""}</div>`;
+  }
+  return h;
+}
+
+function chainStrip(s) {
+  if (!s.ch) return ""; // no chain: no line
+  const c = CHAINS[s.ch];
+  if (st.chain) {
+    const steps = c.steps.map((t, i) => (i < c.at ? "✓ " : i === c.at ? "● " : "○ ") + (i + 1) + " " + t).map((t, i) => i === c.at ? `<span class="on">${esc(t)}</span>` : esc(t)).join("   ");
+    return `<div class="chain">≋ stoker · ${esc(s.ch)} · step ${c.at + 1} of ${c.steps.length}   ${steps}   <span class="faint">y gives a go · t talks to the stoker</span></div>`;
+  }
+  const parts = c.order.map(n => { const m = S.find(x => x.n === n); const txt = `${n} ${m.g==="need"?"needs you":m.g==="work"?"works":m.st}`; return n === s.n ? `<span class="on">${esc(txt)}</span>` : esc(txt); });
+  return `<div class="chain">chain <span class="b">${esc(s.ch)}</span> · step ${c.at + 1} of ${c.steps.length}   ${parts.join('<span class="faint"> → </span>')}   <span class="faint">g shows only it</span></div>`;
+}
+
+function mainHTML() {
+  const focusCls = st.focus === "line" ? " focus" : "";
+  if (st.pane === "new") return `<div class="chat${focusCls}"><div class="chead"><span class="b">+ new session</span><span class="faint">esc closes</span></div><div class="chain faint">starts an agent in a new tmux window, on the host you choose</div><div class="pane"><div class="card">
+    <div class="field"><span class="k">host</span><span>ws-1 <span class="faint">· s for gpu-1</span></span></div>
+    <div class="field"><span class="k">folder</span><span>~/work/hearth <span class="faint">· the folder of the chosen session</span></span></div>
+    <div class="field"><span class="k">agent</span><span>✻ Claude Code <span class="faint">· ❋ Codex · ⬢ OpenCode</span></span></div>
+    <div class="field"><span class="k">chain</span><span class="faint">none · or join login</span></div></div>
+    <div class="msg sys">Type the first prompt in the line, then ⏎. The new session opens here, in WORKING.</div></div>
+    <div class="input"><label for="msg">›</label><input id="msg" autocomplete="off" placeholder="the first prompt for the new session"><span class="to">⏎ start it</span></div></div>`;
+  if (st.pane === "tips" || st.pane === "setup") {
+    const list = st.pane === "tips" ? TIPS : SETUP;
+    return `<div class="chat${focusCls}"><div class="chead"><span class="b">${st.pane === "tips" ? "✧ 2 tips" : "! 1 setup step"}</span><span class="faint">esc closes</span></div><div class="chain faint">${st.pane === "tips" ? "each with its evidence and its exact command" : "steps that make matchblox work fully on this machine"}</div><div class="pane">` +
+      list.map(([t, d], i) => `<div class="card"><span class="b">${i + 1}. ${esc(t)}</span><span class="muted">${esc(d)}</span><span class="faint">${st.pane === "tips" ? "⏎ runs it · h hides the tip" : "y makes the change · ⏎ shows what it changes"}</span></div>`).join("") +
+      `</div><div class="input"><label>›</label><input id="msg" autocomplete="off" placeholder="${st.pane === "tips" ? "⏎ runs the first tip's command" : "y makes the change"}"><span class="to"></span></div></div>`;
+  }
+  const s = cur();
+  if (!s) {
+    const words = st.mode === "loading" ? "Reading your matches on ws-1 and gpu-1…" : st.empty ? "No sessions yet.\n\n+ new session starts one here (n).\nmatchblox setup finds the agents you already run." : st.search ? `Nothing matches "${st.search}". esc clears the search.` : "Nothing here.";
+    return `<div class="chat"><div class="chead"><span class="faint">matchblox</span><span></span></div><div class="chain faint"> </div><div class="pane"><div class="msg">${esc(words)}</div></div><div class="input"><label>›</label><input id="msg" autocomplete="off" placeholder="${st.empty ? "n starts a new session" : ""}" disabled><span class="to"></span></div></div>`;
+  }
+  const ctxCls = s.ctx >= 70 ? "warn" : "muted";
+  const head = `<span><span class="b">${esc(s.n)}</span> <span class="muted">${s.h !== "ws-1" ? "@" + esc(s.h) + " " : ""}${esc(s.a)} ${esc(s.st)}${s.pr ? " · " + esc(s.pr) : ""}</span></span><span><span class="${ctxCls}">ctx ${s.ctx}%</span>  <span class="faint">⌃o expand · m menu</span></span>`;
+  let log = "";
+  for (const [k, t] of s.log) log += `<div class="msg ${k === "you" ? "you" : k === "tool" ? "tool" : ""}">${esc(t)}</div>`;
+  for (const t of (st.sent[s.n] || [])) log += `<div class="msg you">${esc(t)}</div><div class="msg sys">${s.g === "work" ? "queued for its next turn" : dim(s) ? "not sent: " + s.h + " is not reached · it stays in the line" : "sent to " + esc(s.n)}</div>`;
+  if (s.ask && !(st.sent[s.n] || []).length) {
+    const a = st.armed[s.n];
+    log += `<div class="ask"><div class="q">${esc(s.ask.q)}</div>` + s.ask.o.map((o, i) => `<button class="opt${a===i?" armed":""}" data-o="${i}">${i+1}. ${esc(o)}</button>`).join("") +
+      `<div class="faint">${a == null ? "a digit marks an option · the same digit again sends it" : "press " + (a+1) + " again, or ⏎, to send it · esc clears the mark"}</div></div>`;
+  }
+  const blocked = s.st === "parked" || s.st === "held";
+  const ph = blocked ? (s.st === "parked" ? "parked: z lets it go, then you can type" : "held by the stoker: 1 releases it") : s.ask ? "type an answer, or a digit for an option" : s.g === "work" ? "type to queue a message for its next turn" : "type a message";
+  const menu = st.menu ? `<div class="menu" role="menu">${["copy the last message","copy the question","copy the pull request's link","copy the name","show its chain (g)","expand into the pane (⌃o)","park (z)","kill (x, then a typed y)"].map(t => `<button class="row" data-menu="${esc(t)}">${esc(t)}</button>`).join("")}</div>` : "";
+  return `<div class="chat${focusCls}"><div class="chead">${head}</div>${chainStrip(s)}<div class="log" id="log">${log}</div><div class="input"><label for="msg">›</label><input id="msg" autocomplete="off" placeholder="${esc(ph)}"${blocked && s.st === "parked" ? " disabled" : ""}><span class="to">⏎ send to ${esc(s.n)}</span></div>${menu}</div>`;
+}
+
+function expandHTML() {
+  const s = cur();
+  return `<div class="body" style="grid-template-columns:1fr"><div style="display:grid;grid-template-rows:auto 1fr;min-height:0">
+    <div class="chain"><span class="acc b">inside ${esc(s.n)}</span> · its own screen, every key goes to it · <span class="acc">⌃o</span> comes back to matchblox · <span class="acc">● ${needCount()}</span> still counts</div>
+    <div class="pane"><div class="agentui"><span class="b">✻ Claude Code</span><span class="muted">~/work/hearth · ${esc(s.n)}</span></div>
+    ${s.log.map(([k, t]) => `<div class="msg ${k === "you" ? "you" : k === "tool" ? "tool" : ""}">${k === "you" ? "&gt; " : ""}${esc(t)}</div>`).join("")}
+    ${s.ask ? `<div class="agentui"><span class="b">${esc(s.ask.q)}</span>${s.ask.o.map((o, i) => `<span>${i === 0 ? "❯" : " "} ${i + 1}. ${esc(o)}</span>`).join("")}<span class="faint">Enter to confirm · Esc to cancel</span></div>` : ""}
+    <div class="agentui"><span class="faint">&gt; </span></div></div></div></div>`;
+}
+
+const needWord = () => needCount() ? `<span class="acc">● ${needCount()} need you</span>` : `<span class="muted">✓ nothing needs you</span>`;
+function topBar(phone) {
+  if (phone) return `<div class="bar"><span class="acc b">matchblox</span>${needWord()}${st.note ? `<span class="warn">${esc(st.note)}</span>` : ""}</div>`;
+  const hosts = ["ws-1","gpu-1"].map(h => st.hidden && h === "gpu-1" ? `<span class="faint">${h} hidden</span>` : st.unreached && h === "gpu-1" ? `<span class="neg">${h} not reached · since 2m</span>` : st.h === h ? `<span class="acc b">${h}</span>` : (st.h ? `<span class="faint">${h}</span>` : h)).join(" · ");
+  const status = st.mode === "lost" ? `<span class="neg">no service · it redials</span>` : "";
+  // With the sidebar hidden, the header names what needs you: the list's job in one line.
+  const waits = st.s === "off" ? all().filter(s => s.g === "need").map(s => `<button class="row" data-n="${s.n}" style="display:inline;width:auto;padding:0">${esc(s.n)}</button>`).join('<span class="faint"> · </span>') : "";
+  return `<div class="bar"><span class="acc b">matchblox</span>${needWord()}${waits ? `<span>${waits}</span><span class="faint">⌃b list</span>` : ""}<span style="margin-left:auto">${hosts} <span class="faint">s ▸</span></span>${status}${st.note ? `<span class="warn">${esc(st.note)}</span>` : ""}</div>`;
+}
+
+function keyLine(phone) {
+  if (st.pane === "expand") return `<div class="keys"><span class="where">keys go to ${esc(cur().n)}</span><span><b>⌃o</b> back to matchblox</span></div>`;
+  if (phone) return st.phoneChat ? `<div class="keys"><span>◂ back</span><span><b>1-3</b> answer</span><span><b>⏎</b> send</span><span>long-press: menu</span></div>` : `<div class="keys"><span>tap opens the chat</span><span>long-press: menu</span><span>pull down: search</span></div>`;
+  const s = cur();
+  if (st.focus === "line") return `<div class="keys"><span class="where">writing to ${esc(s ? s.n : "—")}</span><span><b>⏎</b> send</span>${s && s.ask ? "<span><b>1-3</b> answer</span>" : ""}<span><b>↑↓</b> session</span><span><b>esc</b> list</span><span><b>⌃o</b> expand</span></div>`;
+  return `<div class="keys"><span class="where">in the list</span><span><b>⏎</b> write</span><span><b>s</b> host</span><span><b>g</b> chain</span><span><b>/</b> search</span><span><b>m</b> more</span></div>`;
+}
+
+function draw(el, phone) {
+  el.className = "term" + (phone ? " phone" : "");
+  let body;
+  if (phone) {
+    const W = 44; el.style.width = (W + 2) + "ch";
+    if (st.phoneChat && cur()) body = `<div class="body" style="grid-template-columns:1fr"><div style="display:grid;grid-template-rows:auto 1fr;min-height:0"><button class="row" data-back="1" style="border-bottom:1px solid var(--rule);padding:.25em 1ch">◂ sessions   <span class="acc">● ${needCount()}</span></button>${mainHTML()}</div></div>`;
+    else body = `<div class="body" style="grid-template-columns:1fr"><div class="side" style="border-right:0">${sideHTML(W, false)}</div></div>`;
+  } else if (st.pane === "expand" && cur()) {
+    el.style.width = "172ch"; body = expandHTML();
+  } else {
+    const SW = st.s === "open" ? 40 : 0;
+    el.style.width = "172ch";
+    body = `<div class="body" style="grid-template-columns:${SW ? `${SW + 1}ch 1fr` : "1fr"}">${SW ? `<div class="side${st.focus === "side" ? " focus" : ""}">${sideHTML(SW, st.s === "rail")}</div>` : ""}${mainHTML()}</div>`;
+  }
+  el.innerHTML = topBar(phone) + body + keyLine(phone);
+  const log = el.querySelector("#log"); if (log) log.scrollTop = log.scrollHeight;
+}
+
+function render(keepFocus) {
+  draw(term, st.v === "phone");
+  document.getElementById("legend").innerHTML = legend();
+  for (const [attr, key] of [["data-v","v"],["data-s","s"],["data-by","by"],["data-icons","icons"]])
+    document.querySelectorAll(`.controls [${attr}]`).forEach(b => b.setAttribute("aria-pressed", String(b.getAttribute(attr) === st[key])));
+  document.querySelectorAll("#branchList button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.b === st.branch)));
+  if (keepFocus !== false) {
+    if (st.search !== null && st.focus === "search") { const q = term.querySelector("#q"); if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); } }
+    else if (st.focus === "line" && st.pane !== "expand") { const m = term.querySelector("#msg"); if (m && !m.disabled && document.activeElement !== m && term.contains(document.activeElement || term)) m.focus(); }
+  }
+  try { localStorage.setItem("sidebar-console", JSON.stringify({v: st.v, s: st.s})); } catch (e) {}
+}
+
+function say(t) { document.getElementById("now").innerHTML = t; }
+function choose(n) { st.sel = n; st.menu = false; st.pane = "chat"; st.focus = "line"; if (st.v === "phone") st.phoneChat = true; render(); term.querySelector("#msg")?.focus(); }
+function move(d) { const l = drawnOrder(); const i = l.findIndex(s => s.n === (cur() || {}).n); if (l.length) { st.sel = l[Math.max(0, Math.min(l.length - 1, i + d))].n; st.menu = false; st.pane = "chat"; render(); } }
+function mark(i) {
+  const s = cur(); if (!s || !s.ask || i >= s.ask.o.length || (st.sent[s.n] || []).length) return;
+  if (st.armed[s.n] === i) send(s.ask.o[i]); else { st.armed[s.n] = i; render(); }
+}
+function send(t) {
+  const s = cur(); if (!s || !t.trim()) return;
+  if (st.pane === "new") { const n = "hearth-new"; if (!S.some(x => x.n === n)) S.push({n, g:"work", h:"ws-1", a:"✻", st:"busy", txt:"Reading the folder", ctx:3, log:[["you", t.trim()],["tool","Read README.md"]]}); st.pane = "chat"; st.sel = n; st.note = "started hearth-new on ws-1"; render(); return; }
+  (st.sent[s.n] = st.sent[s.n] || []).push(t.trim()); delete st.armed[s.n]; render();
+}
+function nextHost() {
+  const order = ["", "ws-1", "gpu-1"];
+  let h = order[(order.indexOf(st.h) + 1) % order.length];
+  if (st.hidden && h === "gpu-1") { st.note = "gpu-1 is hidden · Machine › Hosts shows it"; h = ""; }
+  else st.note = h ? "showing " + h + " · s again for the next host" : "all hosts";
+  st.h = h; render();
+}
+function toSide() { st.focus = "side"; st.menu = false; term.focus(); render(false); }
+function toLine(ch) { st.focus = "line"; render(); const m = term.querySelector("#msg"); if (m && !m.disabled) { m.focus(); if (ch) m.value += ch; } }
+
+term.addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) { if (e.target.closest(".side")) toSide(); else if (e.target.closest(".chat")) { st.focus = "line"; render(); } return; }
+  if (b.dataset.n) choose(b.dataset.n);
+  else if (b.dataset.o) mark(+b.dataset.o);
+  else if (b.dataset.back) { st.phoneChat = false; render(); }
+  else if (b.dataset.foot) { st.pane = b.dataset.foot; st.focus = "line"; render(); }
+  else if (b.dataset.menu) { const t = b.dataset.menu; st.menu = false; st.note = t.startsWith("copy") ? t.replace("copy", "copied") + " of " + cur().n : ""; if (t.startsWith("expand")) st.pane = "expand"; if (t.startsWith("show its chain")) st.chain = cur().ch || ""; if (t.startsWith("park")) cur().g = "held", cur().st = "parked", cur().txt = "by you · z lets it go"; render(); }
+});
+document.addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b || term.contains(b)) return;
+  if (b.dataset.v) { st.v = b.dataset.v; st.phoneChat = false; render(); }
+  else if (b.dataset.s) { st.s = b.dataset.s; render(); }
+  else if (b.dataset.by) { st.by = b.dataset.by; render(); }
+  else if (b.dataset.icons) { st.icons = b.dataset.icons; render(); }
+  else if (b.dataset.reset) { const v = st.v, s = st.s, by = st.by, ic = st.icons; fresh(); Object.assign(st, {v, s, by, icons: ic}); render(); say("Started again."); }
+  else if (b.dataset.b) runBranch(b.dataset.b);
+});
+term.addEventListener("input", e => { if (e.target.id === "q") { st.search = e.target.value; render(); } });
+term.addEventListener("keydown", e => {
+  const t = e.target, inLine = t.id === "msg", inSearch = t.id === "q";
+  if (e.ctrlKey && e.key === "o") { if (cur()) { st.pane = st.pane === "expand" ? "chat" : "expand"; render(); term.focus(); } e.preventDefault(); return; }
+  if (st.pane === "expand") return;
+  if (e.ctrlKey && e.key === "b") { st.s = st.s === "open" ? "off" : "open"; render(); e.preventDefault(); return; }
+  if (inSearch) { if (e.key === "Escape") { st.search = null; st.focus = "side"; render(false); term.focus(); e.preventDefault(); } else if (e.key === "Enter") { st.focus = "line"; render(); e.preventDefault(); } return; }
+  if (inLine) {
+    const s = cur();
+    if (e.key === "Enter") { if (!t.value && s && st.armed[s.n] != null) send(s.ask.o[st.armed[s.n]]); else send(t.value); e.preventDefault(); return; }
+    if (e.key === "Escape") { if (s && st.armed[s.n] != null) { delete st.armed[s.n]; render(); } else if (st.pane !== "chat") { st.pane = "chat"; render(); } else toSide(); e.preventDefault(); return; }
+    if (t.value) return;
+    if (e.key === "ArrowDown") { move(1); e.preventDefault(); }
+    else if (e.key === "ArrowUp") { move(-1); e.preventDefault(); }
+    else if (/^[1-9]$/.test(e.key) && s && s.ask) { mark(+e.key - 1); e.preventDefault(); }
+    return;
+  }
+  // keys in the sidebar
+  const s = cur();
+  if (e.key === "ArrowDown") move(1);
+  else if (e.key === "ArrowUp") move(-1);
+  else if (e.key === "Enter") toLine();
+  else if (e.key === "Escape") { if (st.menu) st.menu = false; else if (st.search !== null) st.search = null; else if (st.chain) st.chain = ""; else st.note = ""; render(false); }
+  else if (e.key === "s") nextHost();
+  else if (e.key === "g" && s) { st.chain = st.chain ? "" : (s.ch || ""); st.note = s.ch ? "" : s.n + " is in no chain"; render(false); }
+  else if (e.key === "/") { st.search = ""; st.focus = "search"; render(); }
+  else if (e.key === "m" && s) { st.menu = !st.menu; render(false); }
+  else if (e.key === "c" && s) { st.note = "copied the last message of " + s.n; render(false); }
+  else if (e.key === "z" && s) { if (s.st === "parked") { s.g = "idle"; s.st = "idle"; s.txt = "let go by you"; st.note = s.n + " is let go"; } else { s.g = "held"; s.st = "parked"; s.txt = "by you · z lets it go"; st.note = s.n + " is parked: it leaves the count"; } render(false); }
+  else if (e.key === "n") { st.pane = "new"; toLine(); }
+  else if (e.key === "Tab") { st.note = "⇥ opens Machine: usage, CPU, accounts, hosts, repos"; render(false); }
+  else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) { toLine(e.key); }
+  else return;
+  e.preventDefault();
+});
+
+const BRANCHES = [
+  ["Answering", [
+    ["ask", "Answer a question", "flint-auth asks; 2 is marked, 2 again sends", () => { st.sel = "flint-auth"; st.armed["flint-auth"] = 1; }],
+    ["perm", "Give a permission", "spark-search wants Bash", () => { st.sel = "spark-search"; }],
+    ["type", "Type a reply", "hearth-api asks to open the PR", () => { st.sel = "hearth-api"; }],
+    ["busy", "Message a busy agent", "flint-ui works; it queues for the next turn", () => { st.sel = "flint-ui"; st.sent["flint-ui"] = ["Also cover a refused refresh."]; }],
+    ["merge", "Merge a pull request", "flint-api's #4560 is approved", () => { st.sel = "flint-api"; }],
+  ]],
+  ["Held and parked", [
+    ["held", "Held by the stoker", "kindle-legacy: 1 releases it", () => { st.sel = "kindle-legacy"; }],
+    ["parked", "Parked by you", "ember-reports: z lets it go", () => { st.sel = "ember-reports"; }],
+  ]],
+  ["Chains", [
+    ["chain", "See a chain", "login mixes ✻ Claude Code, ❋ Codex and ⬢ OpenCode", () => { st.sel = "flint-ui"; }],
+    ["room", "Only one chain (g)", "the stoker's steps over the chat", () => { st.sel = "flint-auth"; st.chain = "login"; }],
+  ]],
+  ["Hosts", [
+    ["host", "Next host (s)", "the board shows gpu-1 alone", () => { st.h = "gpu-1"; st.sel = "ember-billing"; st.note = "showing gpu-1 · s again for the next host"; }],
+    ["hidden", "A hidden host", "s says it is hidden, and where", () => { st.hidden = true; st.note = "gpu-1 is hidden · Machine › Hosts shows it"; }],
+    ["unreached", "A host not reached", "its rows dim; a message stays in the line", () => { st.unreached = true; st.sel = "ember-billing"; st.sent["ember-billing"] = ["Fix it in tax.Line only."]; }],
+  ]],
+  ["The main pane", [
+    ["expand", "Expand into the pane (⌃o)", "the agent's own screen; ⌃o comes back", () => { st.sel = "flint-auth"; st.pane = "expand"; }],
+    ["menu", "The menu (m)", "copy, chain, expand, park, kill", () => { st.sel = "flint-auth"; st.menu = true; st.focus = "side"; }],
+    ["copy", "Copy (c)", "the last message, by OSC 52, through ssh", () => { st.sel = "hearth-api"; st.focus = "side"; st.note = "copied the last message of hearth-api"; }],
+    ["new", "Start a new session (n)", "host, folder, agent, first prompt", () => { st.pane = "new"; }],
+    ["tips", "Tips", "each with its evidence and command", () => { st.pane = "tips"; }],
+    ["setup", "A setup step", "Let copy through", () => { st.pane = "setup"; }],
+    ["search", "Search (/)", "fl narrows the list", () => { st.search = "fl"; st.focus = "side"; }],
+  ]],
+  ["States of the console", [
+    ["calm", "Nothing needs you", "no empty section: the header says it", () => { S = S.filter(s => s.g !== "need"); st.sel = "flint-ui"; }],
+    ["first", "First open: no sessions", "what to do first", () => { st.empty = true; }],
+    ["loading", "Loading", "reading your matches…", () => { st.mode = "loading"; }],
+    ["lost", "The service is lost", "it redials; rows dim; nothing is sent", () => { st.mode = "lost"; }],
+    ["hide", "The list hidden (⌃b)", "the header names what needs you", () => { st.s = "off"; }],
+  ]],
+  ["Phone", [
+    ["plist", "The list", "the first screen", () => { st.v = "phone"; st.phoneChat = false; }],
+    ["pchat", "A chat", "tap a session; ◂ comes back", () => { st.v = "phone"; st.sel = "flint-auth"; st.phoneChat = true; }],
+  ]],
+];
+function runBranch(id) {
+  for (const [, items] of BRANCHES) for (const [k, title, , fn] of items) if (k === id) {
+    const v = st.v, s = st.s, by = st.by, ic = st.icons; fresh(); st.by = by; st.icons = ic; st.v = id === "plist" || id === "pchat" ? "phone" : v === "phone" ? "desk" : v; st.s = id === "hide" ? "off" : "open";
+    st.branch = id; fn(); render(); say(`<b>${esc(title)}.</b> Keep going from here, or press another branch.`);
+    document.getElementById("term").scrollIntoView({block: "nearest", behavior: "smooth"});
+    return;
+  }
+}
+document.getElementById("branchList").innerHTML = BRANCHES.map(([g, items]) => `<section><h3>${esc(g)}</h3><ul>${items.map(([k, t, d]) => `<li><button data-b="${k}" aria-pressed="false">${esc(t)}<small>${esc(d)}</small></button></li>`).join("")}</ul></section>`).join("");
+
+// the landing-page stills: drawn by the same code, from a fixed state
+function still(el, phone, setup) {
+  const keep = [S, st]; fresh(); setup(); draw(el, phone);
+  el.querySelectorAll("button, input").forEach(x => { x.tabIndex = -1; x.disabled = true; });
+  el.removeAttribute("tabindex"); [S, st] = keep;
+}
+const lpDesk = document.createElement("div"), lpPhone = document.createElement("div");
+document.getElementById("lpDesk").appendChild(lpDesk); document.getElementById("lpPhone").appendChild(lpPhone);
+still(lpDesk, false, () => { st.sel = "flint-auth"; st.armed["flint-auth"] = 1; st.focus = "line"; });
+still(lpPhone, true, () => { st.sel = "flint-auth"; st.phoneChat = false; });
+render(false);
+</script>

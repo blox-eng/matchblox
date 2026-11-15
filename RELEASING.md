@@ -200,8 +200,9 @@ the demo in the same message (guideline 2.1):
 > **Try a demo** on the first screen. The first screen may ask for the camera.
 > Tap Don't Allow if you like: the demo works either way. The app scans a
 > throwaway code by itself, with no camera, and opens a made-up machine with
-> seven sessions. Tap the first session, then tap an option in its question.
-> When the agent finishes, a sheet shows how to install matchblox.
+> seven sessions. Tap the first session in the list to open its chat. Tap an
+> option of its question to mark it, then tap it again to send it. When the
+> agent finishes, a sheet shows how to install matchblox.
 > Please confirm the demo is enough to review the app.
 >
 > The usage panel shows the labels "Claude Max", "Google login" and "OpenAI

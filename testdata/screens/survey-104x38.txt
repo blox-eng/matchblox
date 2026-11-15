@@ -1,38 +1,38 @@
  ▰ matchblox                                                                               ● 6 need you
- BOARD 7    machine
+ SESSIONS 7    machine
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
- NEEDS YOU · 6  −                     WORKING · 1  −           SHIPPING · 0  −          QUIET · 0  −
-▌╿ flint-auth                 ✻  2m   ✦ hearth-api     ✻
-  stuck conflicts with main            busy
-  #4545 ●━✕┄○┄○┄○  ctx 41%             #4551 ●━◉┄○┄○  ctx 79%
-  “The refresh flow works and the
-  tests pass. One choice is yours
-  before I wire the rotation.”
-  ⏎ go in
-
- │ spark-docs                 ✻  9m
-  done I rewrote the quick start a…
-  #4540 ●━●━●━●━●  ctx 88%
-  ⏎ go in
-
- ╿ ember-billing              ✻  4m
-  green #4552 waits for your merge
-  #4552 ●━●━◉┄○┄○  ctx 32%
-  p merge #4552   ⏎ go in
-
- ╿ kindle-web                 ✻  1m
-  asks Claude needs your permissio…
-  ctx 56%
-  ⏎ go in
-
- ╿ cinder-ci                  ❋  0s
-  done I am moving the cache key t…
-  ctx 55%
-  ⏎ go in
-
-  ↓ 1 more
- + start a new session
- RECOMMENDATIONS · 7
- ✻ Claude Max  5h ▰▰▰▰▰▰▰▱ 84% · Fri 01:20   wk ▰▰▰▰▰▰▰▱ 82% · Mon 09:00                      machine ›
+ NEEDS YOU · 6  −                       │ flint-auth ✻ asks · #4545 ci  ctx 41%  ctrl+o expand · m menu
+▌╿ flint-auth                       2m ✻│
+   conflicts with main                  │
+ ╿ spark-docs                       9m ✻│
+   I rewrote the quick start and the in…│
+ ╿ ember-billing                    4m ✻│
+   #4552 waits for your merge           │
+ ╿ kindle-web                       1m ✻│
+   Claude needs your permission to use …│
+ ╿ cinder-ci                        0s ❋│
+   I am moving the cache key to the go.…│
+ ╿ wick-mobile                      0s ▣│
+   ⠙ Working                            │
+────────────────────────────────────────│
+ WORKING · 1  −                         │
+ ✦ hearth-api                 #4551 ci ✻│
+                                        │
+                                        │
+                                        │
+                                        │ ⏺ The refresh endpoint is in and its tests pass.
+                                        │
+                                        │ ──────────────────────────────────────────────────────────────
+                                        │  ☐ Rotate
+                                        │
+                                        │ Should a refresh also rotate the token?
+                                        │
+                                        │ ❯ 1. Rotate it
+                                        │      The old one stops at once.
+                                        │   2. Rotate, keep the old one a minute
+                                        │   3. Type something.
+                                        │
+                                        │ Enter to select · ↑/↓ to navigate · Esc to cancel
+ + new · ✧ 7 tips                       │ ›                                        ⏎ send to flint-auth
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
- ⏎ go in   c copy   v one line   s hosts   u strip   ←→ columns   tab next
+ writing to flint-auth · ⏎ send · ↑↓ choose · esc list · ctrl+o expand · tab Machine

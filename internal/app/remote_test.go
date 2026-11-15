@@ -170,6 +170,7 @@ func TestRemoteNavStillRefusesUnknownSteps(t *testing.T) {
 func TestRemoteDoorRunsOnTheHost(t *testing.T) {
 	tmux := doors.Door{ID: doors.Tmux, Title: "Install tmux", Term: []string{"sudo", "sh", "-c", "apt-get update && apt-get install -y tmux"}}
 	m, ran := onHost(t, doorState(tmux))
+	m.width = 160 // the preview's command on one line
 	m = onDoors(m).(Model)
 	next, _ := key(m, "enter")
 	want := remote.TermArgv("ws-1", tmux.Term)
@@ -423,7 +424,7 @@ func TestRemoteConsoleNeverMovesThisMachinesTmux(t *testing.T) {
 func TestAHostJumpCarriesTheAskingTTY(t *testing.T) {
 	m, _ := onHost(t, fixtureState())
 	m.tab = tabSessions
-	next, _ := key(marked(m, "/dev/pts/7"), "enter")
+	next, _ := key(marked(m, "/dev/pts/7"), "ctrl+o")
 	a := next.(Model).pending
 	if a == nil || !a.remote || !strings.Contains(strings.Join(a.steps[0], " "), "switch-client -c /dev/pts/7") {
 		t.Fatalf("the jump does not switch only the phone: %+v", a)

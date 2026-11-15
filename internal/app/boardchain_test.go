@@ -15,54 +15,17 @@ import (
 
 // The board's tests of the chains and their rooms (Task 12 step 0c).
 
-// chainBoard is the board of st at w columns, on the demo's clock, with
-// the card of the match named name chosen ("" for the board's choice).
+// chainBoard is the console on st at w columns, on the demo's clock, with
+// the keys in the list and the session named name chosen ("" for the
+// list's first).
 func chainBoard(t *testing.T, w int, st proto.State, name string) (Model, *fakeConn) {
 	t.Helper()
 	m, f := headModel(t, w, st)
-	m = boardOn(m)
+	m.toList()
 	if name != "" {
-		s := matchOf(t, m, name)
-		m.boardChooseCard(m.columnOf(s), s)
+		m.sideAt = paneOf(matchOf(t, m, name))
 	}
 	return m, f
-}
-
-// stubOf is the chain's stub on the card of the match named name, ""
-// for none.
-func stubOf(t *testing.T, m Model, name string) string {
-	t.Helper()
-	lines, _ := m.boardCard(matchOf(t, m, name), 40, cardOpts{})
-	for _, l := range plainLines(lines) {
-		if i := strings.IndexAny(l, "─━"); i >= 0 && strings.ContainsAny(l, "╴╸") {
-			return strings.TrimSpace(l[i:])
-		}
-	}
-	return ""
-}
-
-// TestACardOfAChainOfOneHasNoStub: a chain with one match here draws no
-// chain mark; with two, each card has its stub.
-func TestACardOfAChainOfOneHasNoStub(t *testing.T) {
-	st := fuseState(t, mockupChain)
-	left := func(gone ...string) proto.State {
-		out := st
-		out.Sessions = slices.DeleteFunc(slices.Clone(st.Sessions), func(s sample.Session) bool { return slices.Contains(gone, s.Name) })
-		return out
-	}
-	m, _ := chainBoard(t, 160, left("hearth-api", "ember-billing"), "")
-	if stub := stubOf(t, m, "kindle-web"); stub != "" {
-		t.Errorf("a chain of one has the stub %q", stub)
-	}
-	if names := m.boardChains(); len(names) != 0 {
-		t.Errorf("a chain of one is a chain of the board: %v", names)
-	}
-	m, _ = chainBoard(t, 160, left("ember-billing"), "")
-	for _, name := range []string{"kindle-web", "hearth-api"} {
-		if stub := stubOf(t, m, name); stub == "" {
-			t.Errorf("%s's card in a chain of two has no stub", name)
-		}
-	}
 }
 
 // TestFOnACardOfABareChainOpensTheSheet: F on a card of a chain with no
@@ -115,39 +78,15 @@ func TestTheRoomCardCountsTheOrdersSteps(t *testing.T) {
 
 // The tests the map names that need a later step of Task 12.
 
-// TestTheConsoleOpensOnTheBoard: the console's first frame is the board,
-// on the first match that waits, and the first tab's keys are the board's.
-func TestTheConsoleOpensOnTheBoard(t *testing.T) {
-	m, _ := loadedWith(t, 160, fuseState(t, mockupChain))
-	if m.tab != tabSessions || !m.boardShown() {
-		t.Fatalf("the console opens on tab %d, board %v", m.tab, m.boardShown())
-	}
-	if got := chosenName(t, m); got != "kindle-web" {
-		t.Errorf("the console opens on %s, want kindle-web: it waits", got)
-	}
-	frame := plainFrame(m)
-	for _, want := range []string{"NEEDS YOU · 1", "WORKING · 2", "kindle-web", "flint-auth"} {
-		if !strings.Contains(frame, want) {
-			t.Errorf("the first frame lacks %q:\n%s", want, frame)
-		}
-	}
-	if strings.Contains(frame, "WAITS FOR YOU") {
-		t.Errorf("the first frame draws the Sessions list:\n%s", frame)
-	}
-	if got := plainHints(m.view().keys(m)...); got != plainHints(m.boardHints(160)...) {
-		t.Errorf("the first tab's keys are %q, want the board's", got)
-	}
-}
-
 // TestTheTabRowIsBoardAndMachine: two tabs, the board and Machine; Git,
 // History, Panes and the stoker open from Machine's rows. Tab and
 // Shift+Tab turn between the two.
-func TestTheTabRowIsBoardAndMachine(t *testing.T) {
-	if !slices.Equal(tabNames, []string{"board", "machine"}) {
-		t.Fatalf("tabs %q, want board and machine", tabNames)
+func TestTheTabRowIsSessionsAndMachine(t *testing.T) {
+	if !slices.Equal(tabNames, []string{"sessions", "machine"}) {
+		t.Fatalf("tabs %q, want sessions and machine", tabNames)
 	}
 	m, _ := loadedWith(t, 100, queueState())
-	for tab, want := range map[int][]string{tabSessions: {"BOARD", "3", "machine"}, tabMachine: {"board", "3", "MACHINE"}} {
+	for tab, want := range map[int][]string{tabSessions: {"SESSIONS", "3", "machine"}, tabMachine: {"sessions", "3", "MACHINE"}} {
 		on := m
 		on.setTab(tab)
 		if row := strings.Fields(strings.Split(screen(on), "\n")[1]); !slices.Equal(row, want) {
@@ -155,14 +94,14 @@ func TestTheTabRowIsBoardAndMachine(t *testing.T) {
 		}
 	}
 	if next := pressOn(m, "tab"); next.tab != tabMachine {
-		t.Fatalf("tab on the board opens tab %d", next.tab)
+		t.Fatalf("tab on Sessions opens tab %d", next.tab)
 	}
 	machine := pressOn(m, "tab")
 	if pressOn(machine, "tab").tab != tabSessions || pressOn(machine, "shift+tab").tab != tabSessions || pressOn(m, "shift+tab").tab != tabMachine {
-		t.Fatal("Tab and Shift+Tab do not turn between the board and Machine")
+		t.Fatal("Tab and Shift+Tab do not turn between Sessions and Machine")
 	}
 	// A detached busy loop burns: the tab row says so, Machine's !, on the
-	// board and on a view of Machine.
+	// Sessions and on a view of Machine.
 	burns, _ := loadedWith(t, 100, orphanState())
 	stoker := burns
 	stoker.setTab(tabStoker)
@@ -213,7 +152,7 @@ func TestTheCountKeepsTheTalkDraft(t *testing.T) {
 	if m = tapText(t, m, "need you"); m.room != nil {
 		t.Fatal("the count kept the room")
 	}
-	m = pressOn(m, "g")
+	m = pressOn(m, "esc", "g") // the count gave the keys to the line: esc goes to the list
 	if m.room == nil || m.boardChain != "hearth" {
 		t.Fatalf("g after the count: room %v, chain %q", m.room, m.boardChain)
 	}
@@ -223,8 +162,7 @@ func TestTheCountKeepsTheTalkDraft(t *testing.T) {
 }
 
 // TestASentDraftDoesNotComeBack: a draft put back on the talk line is no
-// longer kept: once sent, no later open of the room shows it again, and
-// another chain's room in between keeps a draft that was not sent.
+// longer kept: once sent, no later open of the room shows it again.
 func TestASentDraftDoesNotComeBack(t *testing.T) {
 	m, f := hearthOpen(t, 160, headState(t, runningPlan(), true, mockupChain, []string{"flint-auth", "spark-docs"}))
 	toTalk := func(m Model) Model {
@@ -234,7 +172,7 @@ func TestASentDraftDoesNotComeBack(t *testing.T) {
 		return m
 	}
 	m = typeText(pressOn(toTalk(m), "enter"), "ship the login fix").(Model)
-	m = pressOn(tapText(t, m, "need you"), "g")
+	m = pressOn(tapText(t, m, "need you"), "esc", "g")
 	if m.room == nil || m.room.draft != "ship the login fix" {
 		t.Fatalf("g after the count: room %+v", m.room)
 	}
@@ -242,20 +180,8 @@ func TestASentDraftDoesNotComeBack(t *testing.T) {
 	if len(f.acts()) == 0 || m.room.draft != "" {
 		t.Fatalf("⏎ ⏎ did not send the draft: acts %+v, draft %q", f.acts(), m.room.draft)
 	}
-	for _, keys := range [][]string{{"esc", "]", "["}, {"esc", "esc", "g"}} {
-		if m = pressOn(m, keys...); m.room == nil || m.room.draft != "" || strings.Contains(plainFrame(m), "› ship the login fix") {
-			t.Errorf("after %v the sent draft is back: room %+v", keys, m.room)
-		}
-	}
-
-	m, _ = hearthOpen(t, 160, headState(t, runningPlan(), true, mockupChain, []string{"flint-auth", "spark-docs"}))
-	m = typeText(pressOn(toTalk(m), "enter"), "rebase on main").(Model)
-	m = pressOn(m, "esc", "]")
-	if m.room == nil || m.boardChain == "hearth" {
-		t.Fatalf("] did not turn to another chain: chain %q", m.boardChain)
-	}
-	if m = pressOn(m, "["); m.room == nil || m.boardChain != "hearth" || m.room.draft != "rebase on main" {
-		t.Errorf("] then [: chain %q, draft %+v", m.boardChain, m.room)
+	if m = pressOn(m, "esc", "esc", "esc", "g"); m.room == nil || m.room.draft != "" || strings.Contains(plainFrame(m), "› ship the login fix") {
+		t.Errorf("a room opened again shows the sent draft: room %+v", m.room)
 	}
 }
 
@@ -287,9 +213,6 @@ func TestARoomOpensOnTheNeedElseTheTalkLine(t *testing.T) {
 	if !strings.Contains(plainFrame(m), "▌› tell hearth's stoker…") {
 		t.Errorf("the talk line is not chosen on the frame:\n%s", plainFrame(m))
 	}
-	if _, ok := m.boardSelected(); ok {
-		t.Error("a card is chosen while the talk line is")
-	}
 
 	m, _ = chainBoard(t, 160, st, "")
 	m = m.flipFrom("/dev/pts/2", matchOf(t, m, "hearth-api").Pane)
@@ -298,17 +221,16 @@ func TestARoomOpensOnTheNeedElseTheTalkLine(t *testing.T) {
 	}
 }
 
-// TestTheRoomsCursorWalksCardColumnsAndTalk: ↑ from the first card goes up
-// the stoker's card, ↓ from the last card to the talk line, then to the
-// ghost row and the recommendations; ⏎ unfolds the plan and types on the
-// talk line; esc stops typing, then closes the room.
-func TestTheRoomsCursorWalksCardColumnsAndTalk(t *testing.T) {
+// TestTheRoomsCursorWalksItsRows: in the chat's place ↑ and ↓ walk the
+// stoker's card, its steps and the talk line, and stop at their ends; ⏎
+// unfolds the plan and types on the talk line; esc stops typing, then
+// closes the room, and the chat comes back.
+func TestTheRoomsCursorWalksItsRows(t *testing.T) {
 	st := headState(t, runningPlan(), true)
 	st.Queue = nil
 	m, _ := hearthOpen(t, 160, st)
-	m = pressOn(m, "up")
-	if chosenName(t, m) != "hearth-api" || roomRowNow(m) != "" {
-		t.Fatalf("↑ from the talk line chose %q, room row %q", chosenName(t, m), roomRowNow(m))
+	if m.sidePlace != placeRoom || roomRowNow(m) != "talk › tell hearth's stoker…" {
+		t.Fatalf("g opens place %d on %q", m.sidePlace, roomRowNow(m))
 	}
 	var walked []string
 	for range 6 {
@@ -320,28 +242,13 @@ func TestTheRoomsCursorWalksCardColumnsAndTalk(t *testing.T) {
 		t.Errorf("↑ walks %q, want %q", walked, want)
 	}
 	if m = pressOn(m, "up"); roomRowNow(m) != `card ≋ "ship the chain"` {
-		t.Errorf("↑ from the card's first row with no line above: %q", roomRowNow(m))
+		t.Errorf("↑ from the card's first row: %q", roomRowNow(m))
 	}
-	for range 6 {
+	for range 7 {
 		m = pressOn(m, "down")
 	}
-	if roomRowNow(m) != "" || chosenName(t, m) != "hearth-api" {
-		t.Fatalf("↓ from the card's last row: room row %q", roomRowNow(m))
-	}
-	if m = pressOn(m, "down"); roomRowNow(m) != "talk › tell hearth's stoker…" {
-		t.Fatalf("↓ from the last card: %q", roomRowNow(m))
-	}
-	if m = pressOn(m, "down"); roomRowNow(m) != "" {
-		t.Fatalf("↓ from the talk line stays on %q", roomRowNow(m))
-	}
-	if line, ok := m.belowChosen(); !ok || line != "" {
-		t.Fatalf("↓ from the talk line chose %q, %v, want the ghost row", line, ok)
-	}
-	if m = pressOn(m, "down"); func() bool { line, ok := m.belowChosen(); return !ok || line == "" }() {
-		t.Fatal("↓ from the ghost row chose no recommendation")
-	}
-	if m = pressOn(m, "up", "up"); roomRowNow(m) != "talk › tell hearth's stoker…" {
-		t.Fatalf("↑ from the ghost row: %q", roomRowNow(m))
+	if roomRowNow(m) != "talk › tell hearth's stoker…" {
+		t.Fatalf("↓ to the end: %q", roomRowNow(m))
 	}
 
 	m = pressOn(m, "enter")
@@ -352,37 +259,42 @@ func TestTheRoomsCursorWalksCardColumnsAndTalk(t *testing.T) {
 	if m = pressOn(m, "esc"); m.room == nil || m.room.typing {
 		t.Fatal("the first esc did not only stop typing")
 	}
-	if m = pressOn(m, "esc"); m.room != nil || m.boardChain != "" {
-		t.Fatalf("the second esc kept the room: chain %q", m.boardChain)
+	if m = pressOn(m, "esc"); m.room != nil || m.boardChain != "" || m.sidePlace != placeChat {
+		t.Fatalf("the second esc kept the room: chain %q, place %d", m.boardChain, m.sidePlace)
 	}
 
 	m, _ = hearthOpen(t, 160, st)
-	m = pressOn(m, "up", "up")
+	m = pressOn(m, "up")
 	if m = pressOn(m, "enter"); !m.room.unfolded || !strings.Contains(plainFrame(m), "  step") {
 		t.Error("⏎ on more does not unfold the plan")
 	}
 }
 
-// TestANarrowedChainIsItsRoom: the room is the board narrowed to the
-// chain, with the stoker's card above the columns and the talk line under
-// them; y on the step that waits gives its go through the consent box, and
-// a tap on the talk line chooses it, a second one types.
+// TestANarrowedChainIsItsRoom: g narrows the list to the chain, and the
+// room takes the chat's place: its stoker's card and steps, then the talk
+// line. y on the step that waits gives its go through the consent box,
+// and a tap on the talk line chooses it, a second one types.
 func TestANarrowedChainIsItsRoom(t *testing.T) {
 	st := headState(t, aGo(runningPlan(), "merge:#4556", ""), true)
 	st.Queue = nil
 	m, f := hearthOpen(t, 160, st)
-	got := drawnNames(m)
+	var got []string
+	for _, s := range m.sideSessions() {
+		if m.inBoard(s) {
+			got = append(got, s.Name)
+		}
+	}
 	slices.Sort(got)
 	if want := []string{"ember-billing", "hearth-api", "kindle-web"}; !slices.Equal(got, want) {
-		t.Errorf("the room's columns show %v, want %v", got, want)
+		t.Errorf("the room's list shows %v, want %v", got, want)
 	}
 	lines := strings.Split(plainFrame(m), "\n")
 	at := func(has string) int {
 		return slices.IndexFunc(lines, func(l string) bool { return strings.Contains(l, has) })
 	}
-	step, heads, talk := at("▸ step · waits for your go"), at("NEEDS YOU ·"), at("› tell hearth's stoker…")
-	if step < 0 || heads < 0 || talk < 0 || step >= heads || heads >= talk || at("chain hearth · 3   esc all") != 1 {
-		t.Fatalf("the card above the columns and the talk line under them (step %d, heads %d, talk %d):\n%s", step, heads, talk, strings.Join(lines, "\n"))
+	head, step, talk := at("CHAIN hearth"), at("▸ step · waits for your go"), at("› tell hearth's stoker…")
+	if head < 0 || step <= head || talk <= step {
+		t.Fatalf("the room's name, its step and the talk line (head %d, step %d, talk %d):\n%s", head, step, talk, strings.Join(lines, "\n"))
 	}
 	if !strings.Contains(lines[len(lines)-1], "y give") {
 		t.Errorf("the key line has no y give: %q", lines[len(lines)-1])
@@ -396,53 +308,38 @@ func TestANarrowedChainIsItsRoom(t *testing.T) {
 		t.Fatalf("the typed y sent %+v", a)
 	}
 
-	m = mouse(t, m, tea.MouseClickMsg{X: 5, Y: talk, Button: tea.MouseLeft})
-	m = mouse(t, m, tea.MouseReleaseMsg{X: 5, Y: talk, Button: tea.MouseLeft})
+	x := strings.Index(lines[talk], "›")
+	x = len([]rune(lines[talk][:x]))
+	m = mouse(t, m, tea.MouseClickMsg{X: x, Y: talk, Button: tea.MouseLeft})
+	m = mouse(t, m, tea.MouseReleaseMsg{X: x, Y: talk, Button: tea.MouseLeft})
 	if roomRowNow(m) != "talk › tell hearth's stoker…" || m.room.typing {
 		t.Fatalf("the first tap on the talk line: %q, typing %v", roomRowNow(m), m.room.typing)
 	}
-	m = mouse(t, m, tea.MouseClickMsg{X: 5, Y: talk, Button: tea.MouseLeft})
-	m = mouse(t, m, tea.MouseReleaseMsg{X: 5, Y: talk, Button: tea.MouseLeft})
+	m = mouse(t, m, tea.MouseClickMsg{X: x, Y: talk, Button: tea.MouseLeft})
+	m = mouse(t, m, tea.MouseReleaseMsg{X: x, Y: talk, Button: tea.MouseLeft})
 	if !m.room.typing {
 		t.Error("the second tap on the talk line does not type")
 	}
 }
 
-// TestOnAPhoneTheStokerIsAPage: on a phone the room's stoker is its first
-// page, with the card and the talk line; the columns' pages have no card
-// above them.
-func TestOnAPhoneTheStokerIsAPage(t *testing.T) {
+// TestOnAPhoneTheRoomTakesTheScreen: on a phone the room is one pane,
+// in place of the list: the stoker's card, its steps and the talk line,
+// with ◂ back to the list, the room still open.
+func TestOnAPhoneTheRoomTakesTheScreen(t *testing.T) {
 	st := headState(t, runningPlan(), true)
-	ember := slices.IndexFunc(st.Sessions, func(s sample.Session) bool { return s.Name == "ember-billing" })
-	st.Ships = &proto.Ships{At: demoAt, Ships: []proto.Ship{shipFor(st.Sessions[ember], 4556, shipRunning, "CI · 6 of 9 jobs", 1, time.Hour)}}
 	m, _ := hearthOpen(t, 44, st)
-	marks := func(m Model) string { return strings.TrimSpace(strings.Split(plainFrame(m), "\n")[3]) }
-	if got := marks(m); !strings.HasPrefix(got, "stoker NEEDS YOU 1 −") {
-		t.Fatalf("the room opens on kindle-web's page: marks %q", got)
-	}
-	if strings.Contains(plainFrame(m), "tell hearth's stoker") || strings.Contains(plainFrame(m), "▸ step") {
-		t.Errorf("a column's page has the card above it:\n%s", plainFrame(m))
-	}
-	m = pressOn(m, "up")
-	if got := marks(m); !strings.HasPrefix(got, "STOKER  need 1  work 1  ship 1") {
-		t.Errorf("↑ from the first card: marks %q, want the stoker's page", got)
-	}
 	frame := plainFrame(m)
-	for _, want := range []string{`≋ "ship the chain"`, "▸ step", "▌› tell hearth's stoker…"} {
+	for _, want := range []string{"◂ CHAIN hearth", `≋ "ship the chain"`, "▸ step", "› tell hearth's stoker…"} {
 		if !strings.Contains(frame, want) {
-			t.Errorf("the stoker's page lacks %q:\n%s", want, frame)
+			t.Errorf("the room's pane lacks %q:\n%s", want, frame)
 		}
 	}
-	if strings.Contains(frame, "kindle-web") {
-		t.Errorf("the stoker's page draws a card:\n%s", frame)
+	if strings.Contains(frame, "NEEDS YOU") {
+		t.Errorf("the room's pane draws the list:\n%s", frame)
 	}
-	if m = pressOn(m, "down"); chosenName(t, m) != "kindle-web" || !strings.HasPrefix(marks(m), "stoker NEEDS YOU 1 −") {
-		t.Errorf("↓ from the talk line: marks %q", marks(m))
-	}
-	m = mouse(t, m, tea.MouseClickMsg{X: 2, Y: 3, Button: tea.MouseLeft})
-	m = mouse(t, m, tea.MouseReleaseMsg{X: 2, Y: 3, Button: tea.MouseLeft})
-	if got := marks(m); !strings.HasPrefix(got, "STOKER") {
-		t.Errorf("a tap on the stoker's mark: marks %q", got)
+	m = pressOn(m, "left")
+	if m.room == nil || m.sidePlace != placeChat || !strings.Contains(plainFrame(m), "NEEDS YOU") {
+		t.Errorf("◂ from the room: room %v, place %d:\n%s", m.room != nil, m.sidePlace, plainFrame(m))
 	}
 }
 
@@ -461,10 +358,8 @@ func menuLine(m Model, s sample.Session, label string) int {
 	return slices.IndexFunc(m.menuFor(s), func(it menuItem) bool { return it.label == label })
 }
 
-// outOfChain runs line i of s's menu: the card chosen, the menu open, ↓ to
-// it, ⏎.
 func outOfChain(m Model, s sample.Session, i int) Model {
-	m.boardChooseCard(m.columnOf(s), s)
+	m.chooseRow(s)
 	m = m.openMenu(s, 0, 5)
 	for range i {
 		m = pressOn(m, "down")
@@ -498,23 +393,21 @@ func TestTheMenuTakesAMatchOutOfItsChain(t *testing.T) {
 		t.Fatalf("y: acts %+v", a)
 	}
 
-	// A tap that clears the narrowing closes the room: esc all on the tab
-	// row, and the count in the header. The line goes with it.
+	// A tap on the count in the header clears the narrowing and closes
+	// the room. The line goes with it.
 	asks, _ := hearthOpen(t, 160, headState(t, runningPlan(), true)) // kindle-web asks: the header counts it
 	if menuLine(asks, s, "out of hearth") < 0 {
 		t.Fatalf("the room's menu lacks out of hearth: %q", itemLabels(asks.menuFor(s)))
 	}
-	sc, wc := m.drawScreen(160), asks.drawScreen(160)
-	crumb := slices.IndexFunc(sc.tabs, func(sp span) bool { return sp.press == m.keys.main.Back.Help().Key })
-	if crumb < 0 || wc.waits.press == "" {
-		t.Fatalf("no esc all on the tab row (%+v) or no count in the header (%+v)", sc.tabs, wc.waits)
+	wc := asks.drawScreen(160)
+	if wc.waits.press == "" {
+		t.Fatalf("no count in the header (%+v)", wc.waits)
 	}
 	for _, c := range []struct {
 		name string
 		m    Model
 		at   tea.MouseClickMsg
 	}{
-		{"esc all", m, tea.MouseClickMsg{X: sc.tabs[crumb].x0, Y: 1, Button: tea.MouseLeft}},
 		{"the count", asks, tea.MouseClickMsg{X: wc.waits.x0, Y: 0, Button: tea.MouseLeft}},
 	} {
 		name, at := c.name, c.at
@@ -566,8 +459,8 @@ func TestATabLeavesTheRoom(t *testing.T) {
 	}
 }
 
-// TestARoomRowSaysWhyACardKeyRests: on the room's own rows a card's key
-// acts on nothing and says so.
+// TestARoomRowSaysWhyACardKeyRests: while the room has the chat's place a
+// key of the list acts on nothing and says which keys the room takes.
 func TestARoomRowSaysWhyACardKeyRests(t *testing.T) {
 	st := headState(t, runningPlan(), true)
 	st.Queue = nil
@@ -577,7 +470,7 @@ func TestARoomRowSaysWhyACardKeyRests(t *testing.T) {
 	}
 	for _, k := range []string{"x", "p", "c"} {
 		next := pressOn(m, k)
-		if !strings.HasPrefix(next.noticeText, "no card is chosen") || len(f.acts()) != 0 || next.pending != nil {
+		if !strings.HasPrefix(next.noticeText, "the room takes ") || len(f.acts()) != 0 || next.pending != nil {
 			t.Errorf("%s on the talk line: notice %q, acts %+v, pending %+v", k, next.noticeText, f.acts(), next.pending)
 		}
 	}
@@ -591,7 +484,7 @@ func TestAnAskingChainStokerIsANeed(t *testing.T) {
 	quiet := headState(t, runningPlan(), true, []string{"hearth-api", "ember-billing"})
 	m, _ := chainBoard(t, 160, quiet, "")
 	if slices.ContainsFunc(m.all.sessions, func(s sample.Session) bool {
-		return s.Pane == stokerPane && slices.ContainsFunc(m.boardIndex()[colNeed], func(c sample.Session) bool { return c.Pane == s.Pane })
+		return s.Pane == stokerPane && slices.ContainsFunc(needRows(m), func(c sample.Session) bool { return c.Pane == s.Pane })
 	}) || strings.Contains(plainFrame(m), "stoker-s1") {
 		t.Fatalf("a stoker that does not ask is a card:\n%s", plainFrame(m))
 	}
@@ -602,7 +495,7 @@ func TestAnAskingChainStokerIsANeed(t *testing.T) {
 	board, _ := chainBoard(t, 160, asks, "")
 	room, _ := hearthOpen(t, 160, asks)
 	for name, m := range map[string]Model{"board": board, "room": room} {
-		need := m.boardIndex()[colNeed]
+		need := needRows(m)
 		if !slices.ContainsFunc(need, func(s sample.Session) bool { return s.Pane == stokerPane }) {
 			t.Errorf("%s: the asking stoker is not in NEEDS YOU: %v", name, need)
 		}
@@ -630,7 +523,7 @@ func TestAChainStokerWhoseRunIsOffIsNoCard(t *testing.T) {
 		board, _ := chainBoard(t, 160, st, "")
 		room, _ := hearthOpen(t, 160, st)
 		for where, m := range map[string]Model{"board": board, "room": room} {
-			for _, ss := range m.boardIndex() {
+			for _, ss := range [][]sample.Session{m.sideSessions()} {
 				if slices.ContainsFunc(ss, func(s sample.Session) bool { return s.Pane == stokerPane }) {
 					t.Errorf("run %s, %s: the stoker's agent is a card", name, where)
 				}
@@ -651,7 +544,7 @@ func TestAFlipIntoAnOpenRoomLandsOnTheNeed(t *testing.T) {
 		t.Fatalf("the room opens on %s, want kindle-web", chosenName(t, m))
 	}
 	hearth := matchOf(t, m, "hearth-api")
-	m.boardChooseCard(m.columnOf(hearth), hearth)
+	m.chooseRow(hearth)
 	r := *m.room
 	r.draft = "half an order"
 	m.room = &r
@@ -674,7 +567,7 @@ func TestTheAskingStokersCardIsItsChainsStokerEverywhere(t *testing.T) {
 	if !ok {
 		t.Fatal("no stoker agent")
 	}
-	m.boardChooseCard(m.columnOf(s), s)
+	m.sideAt = paneOf(s)
 	m = pressOn(m, "m")
 	if m.menu == nil {
 		t.Fatal("m opened no menu on the stoker's card")
@@ -682,5 +575,29 @@ func TestTheAskingStokersCardIsItsChainsStokerEverywhere(t *testing.T) {
 	box, _, _ := m.menuBox(160, 30)
 	if got := ansi.Strip(strings.Join(box, "\n")); !strings.Contains(got, "hearth's stoker") || strings.Contains(got, "stoker-s1") {
 		t.Errorf("the menu does not name hearth's stoker:\n%s", got)
+	}
+}
+
+// needRows are the sessions of the list's NEEDS YOU.
+func needRows(m Model) []sample.Session {
+	return slices.DeleteFunc(m.sideSessions(), func(s sample.Session) bool { return m.sideStateOf(s) != sideNeed })
+}
+
+// TestLeavingTheRoomSaysGReopensIt: ◂ in the room gives the chat its place
+// back and the keys to the list; the key line names g, which opens the
+// room again.
+func TestLeavingTheRoomSaysGReopensIt(t *testing.T) {
+	st := headState(t, runningPlan(), true)
+	st.Queue = nil
+	m, _ := hearthOpen(t, 160, st)
+	m = pressOn(m, "left")
+	if m.sidePlace != placeChat || !m.inList() {
+		t.Fatalf("◂ in the room: place %d, in the list %v", m.sidePlace, m.inList())
+	}
+	if keys := keyLineOf(m); !strings.Contains(keys, "g room") {
+		t.Errorf("the key line %q does not say g opens the room again", keys)
+	}
+	if m = pressOn(m, "g"); m.sidePlace != placeRoom {
+		t.Errorf("g did not open the room again: place %d", m.sidePlace)
 	}
 }

@@ -367,6 +367,7 @@ func TestTheCardQuotesTheLatestOrder(t *testing.T) {
 func TestSheetSendsStokerNew(t *testing.T) {
 	m, f := headModel(t, 160, fuseState(t, mockupChain))
 	choose(&m, pidOf(m, "hearth-api"))
+	m.toList()
 	closed := sendKey(sendKey(m, "F"), "esc").(Model)
 	if closed.sheet != nil || len(f.acts()) != 0 {
 		t.Fatalf("esc: sheet %v, acts %+v", closed.sheet, f.acts())

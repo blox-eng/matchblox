@@ -82,30 +82,6 @@ func (m Model) roomName(k chainKey) string {
 	return k.id
 }
 
-// roomKeys are the rooms there are: every team of every host, and the team
-// a chain stoker keeps though no match of it is left (eng review
-// correction 5: chainIx drops a team with one present match).
-func (m Model) roomKeys() []chainKey {
-	hosts := []string{m.opt.Host}
-	for _, p := range m.peers {
-		hosts = append(hosts, p.host)
-	}
-	var out []chainKey
-	for _, h := range hosts {
-		if cv := m.chainsOf(h); cv != nil {
-			for _, c := range cv.Chains {
-				out = append(out, chainKey{h, c.ID})
-			}
-		}
-		for _, u := range m.stateOf(h).Stokers {
-			if k := (chainKey{h, u.Chain}); !slices.Contains(out, k) {
-				out = append(out, k)
-			}
-		}
-	}
-	return out
-}
-
 // members are the sessions of room k the sampler sees, in the team's order,
 // and the members it cannot see.
 func (m Model) members(k chainKey) ([]sample.Session, []chains.Member) {
@@ -123,10 +99,14 @@ func (m Model) members(k chainKey) ([]sample.Session, []chains.Member) {
 	}
 	var seen []sample.Session
 	var unseen []chains.Member
+	same := func(s sample.Session, mb chains.Member) bool {
+		return s.Host == k.host && !m.isStoker(s) && mb.Same(memberOf(s))
+	}
 	for _, mb := range c.Members {
-		i := slices.IndexFunc(m.all.sessions, func(s sample.Session) bool {
-			return s.Host == k.host && !m.isStoker(s) && mb.Same(memberOf(s))
-		})
+		i := m.chainIx.spots.spot(k.host, mb)
+		if i < 0 || i >= len(m.all.sessions) || !same(m.all.sessions[i], mb) { // gone, or the index is of other sessions
+			i = slices.IndexFunc(m.all.sessions, func(s sample.Session) bool { return same(s, mb) })
+		}
 		if i < 0 {
 			unseen = append(unseen, mb)
 			continue
@@ -305,18 +285,22 @@ func (m Model) roomKeyOf(s sample.Session) chainKey {
 	return oneKey(s)
 }
 
-// openRoom opens room k on the board: the board narrows to the chain, and
+// openRoom opens room k on the Sessions tab: the list narrows to the chain, and
 // the cursor lands on the need (the card that asks, or the step that
 // waits for a go), else on the talk line.
 func (m Model) openRoom(k chainKey) Model {
 	m.keepDraft() // a room this one replaces keeps its words
 	m.room = &room{k: k, from: map[string]string{}}
-	m.tab, m.boardAbove, m.boardBelow = tabSessions, 0, 0
+	m.tab = tabSessions
 	m.boardChain, m.peekAt = "", m.now()
 	if !k.isOne() {
 		m.boardChain = m.chainLabel(k)
 	}
 	m.room.at = m.roomLanding(k)
+	if m.sideActive() { // the room takes the chat's place, and the keys
+		m.sidePlace = placeRoom
+		m.toLine()
+	}
 	if d := m.drafts[k]; d != "" { // words typed before the room closed: back on the talk line, and no longer kept
 		m.room.draft, m.room.at = d, len(m.roomRows(k))-1
 		m.drafts = maps.Clone(m.drafts)
@@ -355,7 +339,7 @@ func (m *Model) roomLanding(k chainKey) int {
 	}
 	seen, _ := m.members(k)
 	if i := slices.IndexFunc(seen, func(s sample.Session) bool { return s.Pane == pane }); i >= 0 {
-		m.boardChooseCard(m.columnOf(seen[i]), seen[i])
+		m.chooseRow(seen[i])
 		return -1
 	}
 	return talk

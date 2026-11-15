@@ -1015,3 +1015,15 @@ func TestLocalTmuxHomeIsLive(t *testing.T) {
 		t.Fatalf("home after a rename %q", got)
 	}
 }
+
+// TestFixturesRunNoTmuxOnPaste: a fixture's service puts no paste into this
+// machine's tmux: nothing runs on this machine, stdin included.
+func TestFixturesRunNoTmuxOnPaste(t *testing.T) {
+	s := newService(config.Default(), fixtures(t))
+	if s.TmuxIn == nil {
+		t.Fatal("the fixtures leave TmuxIn to exec")
+	}
+	if err := s.TmuxIn([]string{"tmux", "load-buffer", "-"}, "x"); err == nil {
+		t.Fatal("a fixture's paste reached tmux")
+	}
+}

@@ -91,15 +91,6 @@ func TestLookingAroundNeverAsks(t *testing.T) {
 	}
 }
 
-func TestAnswerAsksToo(t *testing.T) {
-	m, _ := loadedWith(t, 120, nightState())
-	// The first row waits on a permission prompt; the second can be
-	// answered. With the chat open, the first key to the agent asks.
-	if got := footerOf(sendKey(openView(t, sendKey(m, "j").(Model)), "enter")); !strings.Contains(got, "Take over?") {
-		t.Fatalf("footer %q", got)
-	}
-}
-
 func TestAnyOtherKeyDropsTheQuestion(t *testing.T) {
 	m, f := loadedWith(t, 120, nightState())
 	next := sendKey(sendKey(m, "x"), "esc")
@@ -201,11 +192,12 @@ func TestATapOnADoorNeverAsks(t *testing.T) {
 	n := nightState()
 	st.Stoker = n.Stoker
 	m, _ := loadedWith(t, 120, st)
-	y := lineOf(t, m, "Add the queue hooks")
-	next, _ := tap(m, 5, y)
-	next, _ = tap(next, 5, y)
-	if next.(Model).held != nil {
-		t.Fatal("a tap on a door asked to take over")
+	next := tapText(t, m, "! 1 setup")
+	if next.sidePlace != placeSetup {
+		t.Fatal("a tap on the foot's setup did not open the step")
+	}
+	if next = tapText(t, next, "Add the queue hooks"); next.held != nil {
+		t.Fatal("a tap on a setup step asked to take over")
 	}
 }
 

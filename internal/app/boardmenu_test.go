@@ -8,9 +8,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/charmbracelet/x/ansi"
-
-	"github.com/blox-eng/matchblox/internal/doors"
 )
 
 // menuBoard is the board at w by h on the fixture, with its copies kept in
@@ -152,6 +151,7 @@ func TestNoReleaseEverMeansNoLongPress(t *testing.T) {
 			t.Fatal("a terminal that never reported a release has a long press")
 		}
 	}
+	m.toList() // the press chose the row and gave the keys to its line
 	if m = pressOn(m, "m"); m.menu == nil {
 		t.Error("m opened no menu")
 	}
@@ -164,7 +164,7 @@ func TestNoReleaseEverMeansNoLongPress(t *testing.T) {
 func TestTheMenuHasAKey(t *testing.T) {
 	m, _, _ := menuBoard(t, 80, 31, chooseCard("flint-auth"))
 	m = pressOn(m, "m")
-	s, _ := m.boardSelected()
+	s, _ := m.sideChosen()
 	if m.menu == nil || m.menu.pane != paneOf(s) || s.Name != "flint-auth" {
 		t.Fatalf("m opened %v on %s", m.menu, s.Name)
 	}
@@ -191,10 +191,10 @@ func TestTheMenuOnlyOffersWhatApplies(t *testing.T) {
 	}
 	m, _, _ := menuBoard(t, 80, 31, withLink)
 	for name, want := range map[string][]string{
-		"flint-auth": {"copy last message", "copy the question", "copy its name", "show only the chain login", "go in", "hide needs you"},
-		"kindle-web": {"copy last message", "copy the link of #4556", "copy its name", "go in", "hide needs you"},
-		"spark-docs": {"copy last message", "copy its name", "go in", "hide working"},
-		"flint-api":  {"copy last message", "copy its name", "show only the chain login", "go in", "hide shipping"},
+		"flint-auth": {"copy last message", "copy the question", "copy its name", "show only the chain login", "rename", "stoke the chain login", "go in"},
+		"kindle-web": {"copy last message", "copy the link of #4556", "copy its name", "rename", "go in"},
+		"spark-docs": {"copy last message", "copy its name", "rename", "go in"},
+		"flint-api":  {"copy last message", "copy its name", "show only the chain login", "rename", "stoke the chain login", "go in"},
 	} {
 		var got []string
 		for _, it := range m.menuFor(matchNamed(t, m, name)) {
@@ -208,8 +208,7 @@ func TestTheMenuOnlyOffersWhatApplies(t *testing.T) {
 
 func TestTheMenuHasNoDestructiveLine(t *testing.T) {
 	m, _, _ := menuBoard(t, 160, 38, nil)
-	b, _ := m.boardDrawOf()
-	for _, ss := range b.idx {
+	for _, ss := range [][]sample.Session{m.sideSessions()} {
 		for _, s := range ss {
 			items := m.menuFor(s)
 			for i, it := range items {
@@ -219,7 +218,7 @@ func TestTheMenuHasNoDestructiveLine(t *testing.T) {
 					}
 				}
 				run := m
-				run.boardChooseCard(m.columnOf(s), s)
+				run.chooseRow(s)
 				run = run.openMenu(s, 0, 5)
 				for range i {
 					run = pressOn(run, "down")
@@ -265,7 +264,8 @@ func TestTheMenuMovesAndCloses(t *testing.T) {
 	if m.menu != nil || m.boardChain != "login" {
 		t.Errorf("g in the menu: menu %v, chain %q", m.menu, m.boardChain)
 	}
-	m.boardChain = ""
+	m = m.closeRoom()
+	m.toList()
 
 	m = pressOn(m, "m")
 	if m = mouse(t, m, tea.MouseClickMsg{X: 0, Y: 0, Button: tea.MouseLeft}); m.menu != nil {
@@ -291,18 +291,10 @@ func TestTheMenuMovesAndCloses(t *testing.T) {
 }
 
 func TestADigitInTheMenuArmsNothing(t *testing.T) {
-	m, clock := flintBoard(t, 80, 31)
+	m, _ := flintBoard(t, 80, 31)
 	m = pressOn(m, "m", "1", "1")
 	if m.peekArmed != 0 || len(sent(m)) != 0 || m.menu == nil {
 		t.Fatalf("a digit in the menu: marked %d, sent %+v, menu %v", m.peekArmed, sent(m), m.menu)
-	}
-	*clock = clock.Add(time.Second)
-	if m = pressOn(m, "esc", "1"); armedOn(m, "1") || m.peekArmed != 0 {
-		t.Error("a digit right after the menu closed marks an answer")
-	}
-	*clock = clock.Add(peekDead)
-	if m = pressOn(m, "1"); !armedOn(m, "1") {
-		t.Errorf("a digit %v after the menu closed marks nothing", peekDead)
 	}
 }
 
@@ -310,7 +302,7 @@ func TestTheMenuFitsEveryScreen(t *testing.T) {
 	for _, size := range [][2]int{{40, 34}, {80, 31}, {160, 38}} {
 		w, h := size[0], size[1]
 		m, _, _ := menuBoard(t, w, h, chooseCard("flint-auth"))
-		s, _ := m.boardSelected()
+		s, _ := m.sideChosen()
 		m = m.openMenu(s, w-1, h-1)
 		box, x, y := m.menuBox(w, h)
 		bw := lipgloss.Width(box[0])
@@ -340,43 +332,5 @@ func TestTheMenuFitsEveryScreen(t *testing.T) {
 				t.Errorf("%dx%d: no %q on the box", w, h, label)
 			}
 		}
-	}
-}
-
-// TestAStaleLineAboveIsCleared: a chosen line above the columns that is
-// gone is no choice to come back to when the lines come back.
-func TestAStaleLineAboveIsCleared(t *testing.T) {
-	m, _, _ := menuBoard(t, 80, 31, func(m *Model) {
-		m.doors = []doors.Door{{ID: doors.Tmux, Title: "Install tmux", Term: []string{"sh", "-c", "true"}}}
-	})
-	if m = pressOn(m, "up"); m.boardAbove != 1 {
-		t.Fatalf("↑ from the first card chose line %d", m.boardAbove)
-	}
-	m.doors = nil
-	m = upd(t, m, noticeMsg{})
-	m.doors = []doors.Door{{ID: doors.Tmux, Title: "Install tmux", Term: []string{"sh", "-c", "true"}}}
-	if _, above := m.aboveChosen(); above || m.boardAbove != 0 {
-		t.Errorf("the doors line came back chosen: %d", m.boardAbove)
-	}
-}
-
-// TestATapOnTheQuietDrawerHidesIt: on Medium the drawer's name hides QUIET
-// as a column's name does, closed and open, and its + quiet brings it back.
-func TestATapOnTheQuietDrawerHidesIt(t *testing.T) {
-	for name, edit := range map[string]func(*Model){"closed": nil, "open": chooseCard("ember-reports")} {
-		m, _, _ := menuBoard(t, 80, 31, edit)
-		_, y := cardOn(t, m, " QUIET · 5")
-		if m = mouse(t, m, tea.MouseClickMsg{X: 3, Y: y, Button: tea.MouseLeft}); !m.colHidden(colQuiet) {
-			t.Fatalf("%s: a tap on QUIET did not hide it:\n%s", name, plainFrame(m))
-		}
-		x, y := cardOn(t, m, "+ quiet 5")
-		if m = mouse(t, m, tea.MouseClickMsg{X: x + 2, Y: y, Button: tea.MouseLeft}); m.colHidden(colQuiet) {
-			t.Errorf("%s: + quiet did not show QUIET again", name)
-		}
-	}
-	m, _, _ := menuBoard(t, 80, 31, nil)
-	_, y := cardOn(t, m, " QUIET · 5")
-	if m = mouse(t, m, tea.MouseClickMsg{X: 40, Y: y, Button: tea.MouseLeft}); m.colHidden(colQuiet) {
-		t.Error("a tap on the drawer's names hid QUIET")
 	}
 }

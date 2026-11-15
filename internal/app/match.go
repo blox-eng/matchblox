@@ -3,6 +3,8 @@ package app
 import (
 	"image/color"
 	"math"
+	"strconv"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -49,7 +51,6 @@ const (
 type change struct {
 	kind changeKind
 	at   time.Time
-	from boardCol // the column the card had before a strike or a going out
 }
 
 type animMsg struct{}
@@ -133,62 +134,28 @@ func (m Model) matchCell(s sample.Session) string {
 	return lipgloss.NewStyle().Foreground(c).Render(ch) + " "
 }
 
-// landed tells if the card of pane k, now in column col, still glows
-// where it landed: for landGlow after the match struck or went out and
-// the card changed column.
-func (m Model) landed(k paneKey, col boardCol) bool {
-	c, ok := m.changes[k]
-	if m.opt.NoMotion || !ok || c.kind != changeStrike && c.kind != changeOut || c.from == col {
-		return false
-	}
-	e := m.now().Sub(c.at)
-	return e >= 0 && e < landGlow
-}
-
-// stillCell is the match of s with no change playing and no motion: a
-// card that strikes outside WORKING lands with no fire.
-func (m Model) stillCell(s sample.Session) string {
-	m.opt.NoMotion = true
-	return m.matchCell(s)
-}
-
-// quietTone is the token of a QUIET head: it cools with age.
-func quietTone(s sample.Session, held bool) string {
-	switch age := s.Age(); {
-	case held || age == "stale":
-		return "faint"
-	case age == "cold":
-		return "match-ember"
-	}
-	return "match-head"
-}
-
-// quietCell is the match of a card in QUIET, where nothing moves: spent
-// is faint, fire stands still, and a head at rest cools with age.
-func (m Model) quietCell(s sample.Session) string {
-	mk := m.marks()
-	ch, c := "╿", mk.Head
-	switch m.matchOf(s) {
-	case matchBurnt:
-		ch, c = "│", m.st.theme.Faint
-	case matchLit:
-		ch, c = "✦", mk.Flame
-	default:
-		_, held := m.holdOf(s)
-		switch quietTone(s, held) {
-		case "faint":
-			c = m.st.theme.Faint
-		case "match-ember":
-			c = mk.Ember
-		}
-	}
-	return lipgloss.NewStyle().Foreground(c).Render(ch) + " "
-}
-
 // paneKey is a pane on a host: pane ids repeat across hosts.
 type paneKey struct{ host, pane string }
 
-func paneOf(s sample.Session) paneKey { return paneKey{s.Host, s.Pane} }
+// paneOf is the key of s: its pane; outside tmux its process and the
+// process's start ("pid:4242@9113"), so a reused pid is a new key; with no
+// process its session id ("sid:…"). A session with none of them has the
+// empty key, which no row can choose.
+func paneOf(s sample.Session) paneKey {
+	switch {
+	case s.Pane != "":
+		return paneKey{s.Host, s.Pane}
+	case s.PID != 0:
+		return paneKey{s.Host, "pid:" + strconv.Itoa(s.PID) + "@" + strconv.FormatUint(s.Start, 10)}
+	case s.SessionID != "":
+		return paneKey{s.Host, "sid:" + s.SessionID}
+	}
+	return paneKey{s.Host, ""}
+}
+
+// tmuxPane: k names a tmux pane (%12), not a process outside tmux nor the
+// row of a ship no session drives.
+func (k paneKey) tmuxPane() bool { return strings.HasPrefix(k.pane, "%") }
 
 // noteChanges records the changes between a host's last state and its
 // next, so each plays once.
@@ -216,12 +183,12 @@ func (m *Model) noteChanges(host string, next []sample.Session, chains *state.Ch
 		if !ok {
 			continue
 		}
-		at, old, from := paneKey{host, s.Pane}, m.matchOf(prev), m.columnOf(prev)
+		at, old := paneKey{host, s.Pane}, m.matchOf(prev)
 		switch k := m.matchOf(s); {
 		case k == matchLit && old != matchLit:
-			m.changes[at] = change{changeStrike, now, from}
+			m.changes[at] = change{changeStrike, now}
 		case k == matchUnlit && old == matchLit:
-			m.changes[at] = change{changeOut, now, from}
+			m.changes[at] = change{changeOut, now}
 		case k == matchBurnt && old != matchBurnt:
 			m.changes[at] = change{kind: changeBurn, at: now}
 		}
@@ -260,4 +227,23 @@ func (m *Model) animate() tea.Cmd {
 	}
 	m.animating = true
 	return tea.Tick(animTick, func(time.Time) tea.Msg { return animMsg{} })
+}
+
+// sideMatch is the match of s in a list row: struck and red when it needs
+// the owner, burning while it works, unlit when held, burnt out when idle.
+// A lit match flickers and the head of one that asks breathes, as on every
+// match (DESIGN.md §4).
+func (m Model) sideMatch(s sample.Session, h sideState) string {
+	mk, ch, c := m.marks(), "╿", m.marks().Head
+	switch {
+	case h == sideWork && m.matchOf(s) == matchLit, h == sideNeed && m.asks(s):
+		ch, c = m.matchFor(s)
+	case h == sideWork:
+		ch, c = "✦", mk.Flame
+	case h == sideHeld:
+		ch, c = "╽", m.st.theme.Muted
+	case h == sideIdle:
+		ch, c = "╵", m.st.theme.Faint
+	}
+	return lipgloss.NewStyle().Foreground(c).Bold(h == sideNeed).Render(ch)
 }

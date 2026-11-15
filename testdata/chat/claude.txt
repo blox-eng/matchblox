@@ -1,0 +1,19 @@
+╭───────────────────────────────────────────────────╮
+│ ✻ Welcome to Claude Code!                         │
+│                                                   │
+│   cwd: /home/user/src/flint-auth                  │
+╰───────────────────────────────────────────────────╯
+
+> Add a refresh token to the login flow
+
+● I read the login handler first.
+
+● Read(internal/auth/login.go)
+  ⎿  Read 120 lines
+
+● The handler keeps the token in memory. I add a store for the refresh token.
+
+╭───────────────────────────────────────────────────╮
+│ >                                                 │
+╰───────────────────────────────────────────────────╯
+  ? for shortcuts                                    ◯

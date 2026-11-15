@@ -52,6 +52,7 @@ func layersOf(k keymaps) (main kmLayer, modal []kmLayer) {
 		{"scan", k.scan.bindings(), fieldNames(k.scan), fieldBinds(k.scan)},
 		{"ask", k.ask.bindings(), fieldNames(k.ask), fieldBinds(k.ask)},
 		{"board", k.board.bindings(), fieldNames(k.board), fieldBinds(k.board)},
+		{"side", k.side.bindings(), fieldNames(k.side), fieldBinds(k.side)},
 	}
 	return main, modal
 }

@@ -59,3 +59,28 @@ func TestTmuxMarkSetsAndTakesOffThePaneOption(t *testing.T) {
 		t.Fatalf("ran %q, want %q", ran, want)
 	}
 }
+
+func TestTmuxLoadPutsTheTextOnStdinAndPasteIsBracketed(t *testing.T) {
+	var ran [][]string
+	var in string
+	m := Tmux{
+		Run:   func(argv []string) (string, error) { ran = append(ran, argv); return "", nil },
+		RunIn: func(argv []string, stdin string) error { ran = append(ran, argv); in = stdin; return nil },
+	}
+	if err := m.Load("%4@matchblox", "matchblox-paste-1", "a\nb;"); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Drop("%1", "matchblox-paste-1"); err != nil {
+		t.Fatal(err)
+	}
+	want := [][]string{
+		{"tmux", "-L", "matchblox", "load-buffer", "-b", "matchblox-paste-1", "-"},
+		{"tmux", "delete-buffer", "-b", "matchblox-paste-1"},
+	}
+	if !slices.EqualFunc(ran, want, slices.Equal) || in != "a\nb;" {
+		t.Fatalf("ran %q with %q, want %q", ran, in, want)
+	}
+	if got, want := m.Paste("%1", "matchblox-paste-1"), []string{"tmux", "paste-buffer", "-p", "-d", "-b", "matchblox-paste-1", "-t", "%1"}; !slices.Equal(got, want) {
+		t.Fatalf("paste %q, want %q", got, want)
+	}
+}

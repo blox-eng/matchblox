@@ -27,7 +27,7 @@ func recordRuns(m *Model) *[][]string {
 func TestEnterOnAStokerHostAsksToTakeOver(t *testing.T) {
 	m := sized(t, 100, 30, stokerState(runningNight(time.Now())))
 	ran := recordRuns(&m)
-	next, _ := key(m, "enter")
+	next, _ := key(m, "ctrl+o")
 	if nm := next.(Model); nm.held == nil || len(*ran) != 0 {
 		t.Fatalf("held %v ran %q: want take over? first", nm.held != nil, *ran)
 	}
@@ -38,7 +38,7 @@ func TestEnterOnAStokerHostAsksToTakeOver(t *testing.T) {
 	}
 }
 
-func TestAOnAFailedStepJumps(t *testing.T) {
+func TestCtrlOOnAFailedStepJumps(t *testing.T) {
 	m, _ := loadedWith(t, 100, tabMorning(screensState(t)))
 	m.setTab(tabStoker)
 	pane := ""
@@ -53,17 +53,20 @@ func TestAOnAFailedStepJumps(t *testing.T) {
 		}
 	}
 	ran := recordRuns(&m)
-	if line := actionLine(selectStep(t, m, "p5")); !strings.Contains(line, "a go in") {
-		t.Errorf("the key line does not offer a: %q", line)
+	if line := actionLine(selectStep(t, m, "p5")); !strings.Contains(line, "ctrl+o go in") {
+		t.Errorf("the key line does not offer ctrl+o: %q", line)
 	}
-	_, cmd := key(selectStep(t, m, "p5"), "a")
+	_, cmd := key(selectStep(t, m, "p5"), "ctrl+o")
 	drain(cmd)
 	if len(*ran) != 1 || strings.Join((*ran)[0], " ") != "tmux switch-client -t "+pane {
-		t.Fatalf("a on a failed step ran %q", *ran)
+		t.Fatalf("ctrl+o on a failed step ran %q", *ran)
 	}
-	next, _ := key(selectStep(t, m, "p2"), "a")
-	if nm := next.(Model); len(*ran) != 1 || nm.flash != "a goes into the session of a failed step" {
-		t.Errorf("a on a done step: ran %q, flash %q", *ran, nm.flash)
+	next, _ := key(selectStep(t, m, "p2"), "ctrl+o")
+	if nm := next.(Model); len(*ran) != 1 || nm.flash != "ctrl+o goes into the session of a failed step" {
+		t.Errorf("ctrl+o on a done step: ran %q, flash %q", *ran, nm.flash)
+	}
+	if next, _ := key(selectStep(t, m, "p5"), "a"); len(*ran) != 1 || next.(Model).flash != "" {
+		t.Errorf("a on a failed step still acts: ran %q, flash %q", *ran, next.(Model).flash)
 	}
 }
 
@@ -86,17 +89,6 @@ func TestAFocusOnAWaitGoesIntoThePane(t *testing.T) {
 func openViewCmd(m Model) (Model, tea.Cmd) {
 	next, cmd := m.Update(tea.WindowSizeMsg{Width: m.width, Height: m.height})
 	return next.(Model), cmd
-}
-
-// keyOrOpen presses k; an Enter on a session, which would go into its pane,
-// leaves the console as the selection shows it instead.
-func keyOrOpen(m tea.Model, k string) (tea.Model, tea.Cmd) {
-	if nm, ok := m.(Model); ok && k == "enter" && !nm.standIn && nm.focus(keyPress(k)) == layerMain {
-		if s, ok := nm.selectedSession(); ok && s.Pane != "" {
-			return openViewCmd(nm)
-		}
-	}
-	return key(m, k)
 }
 
 func openView(t *testing.T, m Model) Model {
@@ -124,7 +116,7 @@ func TestAOnAStuckShipAtNightAsksToTakeOver(t *testing.T) {
 	m := sized(t, 86, 30, st)
 	ran := recordRuns(&m)
 	next, _ := key(m, "p") // flint-auth leads NEEDS YOU: its #4545 is stuck
-	asked, cmd := key(next, "a")
+	asked, cmd := key(next, "ctrl+o")
 	drain(cmd)
 	if asked.(Model).held == nil || len(*ran) != 0 {
 		t.Fatalf("held %v ran %q: want take over? first", asked.(Model).held != nil, *ran)
@@ -192,7 +184,7 @@ func ranMarkThenFocus(ran [][]string, mark []string, tty, pane string) bool {
 
 func TestAMarkedEnterMovesOnlyThatClient(t *testing.T) {
 	m, ran := jumpRig(t, deskAndPad)
-	_, cmd := key(marked(m, "/dev/pts/7"), "enter")
+	_, cmd := key(marked(m, "/dev/pts/7"), "ctrl+o")
 	drain(cmd)
 	if !ranFocus(*ran, "/dev/pts/7", "%1") || ranFocus(*ran, "/dev/pts/1", "%1") {
 		t.Errorf("ran %q, want FocusArgv for /dev/pts/7 only", *ran)
@@ -201,7 +193,7 @@ func TestAMarkedEnterMovesOnlyThatClient(t *testing.T) {
 
 func TestAnUnmarkedEnterMovesTheDesk(t *testing.T) {
 	m, ran := jumpRig(t, deskAndPad)
-	_, cmd := key(m, "enter")
+	_, cmd := key(m, "ctrl+o")
 	drain(cmd)
 	if !ranFocus(*ran, "/dev/pts/1", "%1") || ranFocus(*ran, "/dev/pts/7", "%1") {
 		t.Errorf("ran %q, want FocusArgv for the desk, /dev/pts/1", *ran)
@@ -211,7 +203,7 @@ func TestAnUnmarkedEnterMovesTheDesk(t *testing.T) {
 func TestAMarkedKeyOfAGoneClientIsRefused(t *testing.T) {
 	m, ran := jumpRig(t, deskAndPad)
 	m.opt.ClientList = clients("1794089220 /dev/pts/1 %99") // the iPad left after its mark
-	next, cmd := key(marked(m, "/dev/pts/7"), "enter")
+	next, cmd := key(marked(m, "/dev/pts/7"), "ctrl+o")
 	next = fed(next, cmd)
 	if ranFocus(*ran, "/dev/pts/7", "%1") || ranFocus(*ran, "/dev/pts/1", "%1") {
 		t.Errorf("ran %q, want no jump", *ran)
@@ -226,7 +218,7 @@ func TestAMarkedKeyOfAGoneClientIsRefused(t *testing.T) {
 func TestATmuxErrorMovesNoScreen(t *testing.T) {
 	m, ran := jumpRig(t, deskAndPad)
 	m.opt.ClientList = func() (string, error) { return "", errors.New("no server running") }
-	next, cmd := key(m, "enter")
+	next, cmd := key(m, "ctrl+o")
 	next = fed(next, cmd)
 	if len(*ran) != 0 {
 		t.Errorf("ran %q", *ran)
@@ -235,7 +227,7 @@ func TestATmuxErrorMovesNoScreen(t *testing.T) {
 		t.Errorf("flash %q", got)
 	}
 	m.marked = clientMark{"/dev/pts/7", time.Now()} // a marked key: the same words, not "reconnect"
-	next, cmd = key(m, "enter")
+	next, cmd = key(m, "ctrl+o")
 	if got := fed(next, cmd).(Model).flash; got != errNoClient.Error() {
 		t.Errorf("a marked key's flash %q", got)
 	}
@@ -246,7 +238,7 @@ func TestATmuxErrorMovesNoScreen(t *testing.T) {
 func TestAMarkOfAClientElsewhereMovesNothing(t *testing.T) {
 	m, ran := jumpRig(t, deskAndPad+"\n1794089229 /dev/pts/9 %5")
 	m.marked = clientMark{"/dev/pts/9", time.Now()}
-	next, cmd := key(m, "enter")
+	next, cmd := key(m, "ctrl+o")
 	next = fed(next, cmd)
 	if len(*ran) != 0 {
 		t.Errorf("ran %q", *ran)
@@ -264,7 +256,7 @@ func TestAJumpToAGonePaneSaysSo(t *testing.T) {
 		}
 		return nil
 	}
-	next, cmd := key(m, "enter")
+	next, cmd := key(m, "ctrl+o")
 	next = fed(next, cmd)
 	nm := next.(Model)
 	if !strings.HasPrefix(nm.flash, "failed: tmux switch-client -c /dev/pts/1 -t %1") {
@@ -279,29 +271,14 @@ func TestAJumpToAGonePaneSaysSo(t *testing.T) {
 // tap, which asks with no key held, does the same.
 func TestTakeOverAnsweredFromTheDeskJumpsThePhone(t *testing.T) {
 	m, ran := rigged(sized(t, 100, 30, stokerState(runningNight(time.Now()))), deskAndPad)
-	held, _ := key(marked(m, "/dev/pts/7"), "enter")
+	held, _ := key(marked(m, "/dev/pts/7"), "ctrl+o")
 	if held.(Model).held == nil || len(*ran) != 0 {
 		t.Fatalf("held %v ran %q: want take over? first", held.(Model).held != nil, *ran)
 	}
 	_, cmd := key(held, "n")
 	drain(cmd)
 	if !ranFocus(*ran, "/dev/pts/7", "%1") || ranFocus(*ran, "/dev/pts/1", "%1") {
-		t.Errorf("Enter: ran %q, want FocusArgv for /dev/pts/7 only", *ran)
-	}
-
-	m, ran = rigged(sized(t, 100, 30, stokerState(runningNight(time.Now()))), deskAndPad)
-	m.tab = tabSessions
-	y := sessLine(t, m, "app-feature")
-	next, cmd := tap(m, 5, y)
-	drain(cmd)
-	held, _ = tap(marked(next, "/dev/pts/7"), 5, y)
-	if held.(Model).held == nil || len(*ran) != 0 {
-		t.Fatalf("tap: held %v ran %q: want take over? first", held.(Model).held != nil, *ran)
-	}
-	_, cmd = key(held, "n")
-	drain(cmd)
-	if !ranFocus(*ran, "/dev/pts/7", "%1") || ranFocus(*ran, "/dev/pts/1", "%1") {
-		t.Errorf("tap: ran %q, want FocusArgv for /dev/pts/7 only", *ran)
+		t.Errorf("ctrl+o: ran %q, want FocusArgv for /dev/pts/7 only", *ran)
 	}
 }
 
@@ -323,7 +300,7 @@ func TestTheSelectionStaysWhileTheDeskWatches(t *testing.T) {
 
 func TestTheSignalNamesThePaneBeforeTheJump(t *testing.T) {
 	m, ran := jumpRig(t, deskAndPad)
-	_, cmd := key(marked(m, "/dev/pts/7"), "enter")
+	_, cmd := key(marked(m, "/dev/pts/7"), "ctrl+o")
 	msgs := cmdMsgs(cmd)
 	want := tea.RawMsg{Msg: logos.Passthrough(keycmd.PaneSignal("claude", "%1"))}
 	if len(msgs) == 0 || msgs[0] != want {
@@ -338,7 +315,7 @@ func TestTheSignalNamesThePaneBeforeTheJump(t *testing.T) {
 // unmarked key, sends none: the phone would take the desk's pane as its own.
 func TestTheDesksJumpNamesNoPane(t *testing.T) {
 	m, ran := jumpRig(t, deskAndPad)
-	_, cmd := key(m, "enter")
+	_, cmd := key(m, "ctrl+o")
 	for _, msg := range cmdMsgs(cmd) {
 		if r, ok := msg.(tea.RawMsg); ok && strings.Contains(r.Msg.(string), "pane=") {
 			t.Fatalf("the desk's jump wrote %q", r.Msg)
@@ -355,7 +332,7 @@ func TestAJumpToAnAgentWithNoKeysUnmarksThePane(t *testing.T) {
 	m, ran := jumpRig(t, deskAndPad)
 	i := slices.IndexFunc(m.all.sessions, func(s sample.Session) bool { return s.Pane == "%1" })
 	m.all.sessions[i].Agent = "zsh"
-	_, cmd := key(m, "enter")
+	_, cmd := key(m, "ctrl+o")
 	drain(cmd)
 	if !ranMarkThenFocus(*ran, remote.AgentUnmarkArgv("%1"), "/dev/pts/1", "%1") {
 		t.Errorf("ran %q, want the unmark, then the focus of /dev/pts/1 on %%1", *ran)
@@ -433,7 +410,7 @@ func TestOnlyTheRunningJumpReadsTheClients(t *testing.T) {
 	if reads != 0 || next.(Model).primary() == nil || reads != 0 {
 		t.Fatalf("building the action read the clients %d times", reads)
 	}
-	_, cmd := key(next, "enter")
+	_, cmd := key(next, "ctrl+o")
 	if reads != 0 {
 		t.Fatalf("Enter read the clients %d times on the update loop", reads)
 	}
@@ -480,7 +457,7 @@ func TestGoingInWhileTheStokerRestsTakesTheSessionOver(t *testing.T) {
 	m, f := loadedWith(t, 100, restingState())
 	ran := recordRuns(&m)
 	s, _ := m.selectedSession()
-	next, cmd := key(m, "enter")
+	next, cmd := key(m, "ctrl+o")
 	settled(next, cmd)
 	if got := intoActs(f); len(got) != 1 || got[0] != proto.IntoPrefix+s.Pane {
 		t.Fatalf("into acts %q, want into:%s", got, s.Pane)
@@ -495,7 +472,7 @@ func TestGoingInWhileTheStokerIsInChargeLeavesItTheSession(t *testing.T) {
 	st.Stoker.Asked = true // n kept it on: Enter asks no more
 	m, f := loadedWith(t, 100, st)
 	ran := recordRuns(&m)
-	next, cmd := key(m, "enter")
+	next, cmd := key(m, "ctrl+o")
 	settled(next, cmd)
 	if got := intoActs(f); len(got) != 0 {
 		t.Fatalf("into acts %q while the stoker is in charge", got)
@@ -509,7 +486,7 @@ func TestTakingOverThenGoingInFreesTheSession(t *testing.T) {
 	m, f := loadedWith(t, 100, nightState())
 	recordRuns(&m)
 	s, _ := m.selectedSession()
-	next, _ := key(m, "enter")
+	next, _ := key(m, "ctrl+o")
 	next, cmd := key(next, "y")
 	settled(next, cmd)
 	got := recIDs(f.acts())
@@ -523,7 +500,7 @@ func TestTakingOverThenGoingInFreesTheSession(t *testing.T) {
 func TestARefusedJumpFreesNothing(t *testing.T) {
 	m, f := loadedWith(t, 100, restingState())
 	m.opt.Run = func([]string) error { return errors.New("can't find pane") }
-	next, cmd := key(m, "enter")
+	next, cmd := key(m, "ctrl+o")
 	settled(next, cmd)
 	if got := intoActs(f); len(got) != 0 {
 		t.Fatalf("into acts %q for a jump that failed", got)
@@ -549,28 +526,44 @@ func TestTheSignalGoesTheWayTheTerminalReadsIt(t *testing.T) {
 // reads no hidden pane while the person types in the agent's. The watch
 // comes back when a screen shows the console again, or the person acts there.
 func TestAJumpWithNoOneLeftStopsTheWatch(t *testing.T) {
-	m, f := loadedWith(t, 160, fixtureState()) // the board watches beside its live view
+	m, f := loadedWith(t, 160, fixtureState()) // the console watches its chosen session
 	m, _ = rigged(m, "1794089220 /dev/pts/1 %99")
 	s, _ := m.selectedSession()
-	next, cmd := key(m, "enter")
+	next, cmd := key(m, "ctrl+o")
 	next = settled(next, cmd)
 	if a := lastWatch(t, f); a.RecID != proto.WatchPrefix {
 		t.Fatalf("after the jump the watch is %q, want none", a.RecID)
 	}
 	_, cmd = next.Update(uv.UnknownApcEvent(keycmd.ViewerKey))
 	drain(cmd)
-	if c, ok := next.(Model).boardSelected(); ok {
-		s = c // after the jump the board chose the first wait (R3.2)
+	if c, ok := next.(Model).sideChosen(); ok {
+		s = c
 	}
 	if a := lastWatch(t, f); a.RecID != proto.WatchPrefix+s.Pane {
 		t.Errorf("back on the console the watch is %q, want %s", a.RecID, s.Pane)
 	}
 
-	m, f = loadedWith(t, 160, fixtureState()) // the board watches beside its live view
+	m, f = loadedWith(t, 160, fixtureState()) // the console watches its chosen session
 	m, _ = rigged(m, deskAndPad)
-	next, cmd = key(m, "enter")
+	next, cmd = key(m, "ctrl+o")
 	settled(next, cmd)
 	if slices.ContainsFunc(f.allActs(), func(a proto.Act) bool { return a.RecID == proto.WatchPrefix }) {
 		t.Error("the watch stopped with the iPad still on the console")
+	}
+}
+
+// TestAOnTheStokersViewSaysCtrlOGoesIn: a went into a failed step's
+// session; it says once that ctrl+o does now.
+func TestAOnTheStokersViewSaysCtrlOGoesIn(t *testing.T) {
+	m, _ := loadedWith(t, 100, tabMorning(screensState(t)))
+	m.setTab(tabStoker)
+	ran := recordRuns(&m)
+	next, cmd := key(selectStep(t, m, "p5"), "a")
+	nm := fed(next, cmd).(Model)
+	if len(*ran) != 0 || !strings.Contains(nm.noticeText, "ctrl+o goes into") {
+		t.Fatalf("a on the stoker's view: ran %q, notice %q", *ran, nm.noticeText)
+	}
+	if !nm.told("into") {
+		t.Errorf("the notice is not kept as told: it would say it again")
 	}
 }

@@ -241,14 +241,14 @@ func TestSummaryCarriesTheCard(t *testing.T) {
 }
 
 // TestTheCardLeavesSessions: the stoker's card is in the dock, not on top
-// of Sessions, so the setup steps open the list.
+// of Sessions.
 func TestTheCardLeavesSessions(t *testing.T) {
 	st := doorsAndQueue(hooksDoor)
 	v := quietNight()
 	st.Stoker = &v
 	m, _ := loadedWith(t, 120, st)
 	lines := strings.Split(ansi.Strip(m.render()), "\n")
-	if !strings.HasPrefix(lines[3], " SET UP") || strings.Contains(strings.Join(lines[:10], "\n"), "NIGHT 01:08") {
+	if strings.Contains(strings.Join(lines[:10], "\n"), "NIGHT 01:08") {
 		t.Fatalf("the card sits on top of Sessions:\n%s", strings.Join(lines, "\n"))
 	}
 }

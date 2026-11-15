@@ -26,9 +26,9 @@ func boardFake(m Model) *fakeConn { return m.conn.(*fakeConn) }
 
 func chosenName(t *testing.T, m Model) string {
 	t.Helper()
-	s, ok := m.boardSelected()
+	s, ok := m.sideChosen()
 	if !ok {
-		t.Fatal("no card is chosen")
+		t.Fatal("no session is chosen")
 	}
 	return s.Name
 }
@@ -50,8 +50,12 @@ func newBoardState(t *testing.T, m Model, st proto.State) Model {
 
 // noticeRow is the row over the key line's hairline.
 func noticeRow(m Model) string {
-	lines := strings.Split(plainFrame(m), "\n")
-	return strings.TrimSpace(lines[len(lines)-3])
+	rows, _, _ := m.noticeAt(max(m.width, minWidth))
+	var said []string
+	for _, r := range plainLines(rows) {
+		said = append(said, strings.TrimSpace(r))
+	}
+	return strings.Join(said, " ")
 }
 
 func mergeOf(t *testing.T, st proto.State) proto.Ship {
@@ -65,70 +69,8 @@ func mergeOf(t *testing.T, st proto.State) proto.Ship {
 	return proto.Ship{}
 }
 
-func TestArrowsSkipHiddenAndEmptyColumns(t *testing.T) {
-	st := boardFixture(t)
-	for _, w := range []int{80, 104} {
-		m := boardShot(t, st, w, 38, func(m *Model) { m.flipHidden(colWork) })
-		m = pressOn(m, "right")
-		if m.boardAt != colShip || chosenName(t, m) != "cinder-ci" {
-			t.Errorf("w=%d: → from NEEDS YOU with WORKING hidden: %v, %s", w, m.boardAt, chosenName(t, m))
-		}
-
-		noShips := st
-		noShips.Ships = &proto.Ships{At: demoAt}
-		m = boardShot(t, noShips, w, 38, func(m *Model) { m.flipHidden(colWork) })
-		if n := len(m.boardIndex()[colShip]); n != 0 {
-			t.Fatalf("SHIPPING has %d cards", n)
-		}
-		m = pressOn(m, "right")
-		if m.boardAt != colQuiet {
-			t.Errorf("w=%d: → over a hidden and an empty column lands on %v", w, m.boardAt)
-		}
-		if m = pressOn(m, "right"); m.boardAt != colWork || m.colHidden(colWork) {
-			t.Errorf("w=%d: → at the last column does not show the hidden WORKING: %v", w, m.boardAt)
-		}
-		if m = pressOn(m, "left"); m.boardAt != colNeed {
-			t.Errorf("w=%d: ← from QUIET lands on %v", w, m.boardAt)
-		}
-	}
-}
-
-// TestAKeyShowsAHiddenColumn: a keyboard with no mouse brings a hidden
-// column back: → past the last shown column shows the first hidden one,
-// and with every column hidden → shows NEEDS YOU.
-func TestAKeyShowsAHiddenColumn(t *testing.T) {
-	st := boardFixture(t)
-	m := boardShot(t, st, 104, 38, nil)
-	for range boardCols {
-		m = pressOn(m, "m")
-		for m.menu != nil && !strings.HasPrefix(m.menu.items[m.menu.at].label, "hide") {
-			m = pressOn(m, "down")
-		}
-		m = pressOn(m, "enter")
-	}
-	if _, shown := m.boardDrawOf(); len(shown) != 0 {
-		t.Fatalf("the menu left %v shown", shown)
-	}
-	if f := strings.Join(strings.Fields(plainFrame(m)), " "); !strings.Contains(f, "→ or a tap on a + name shows one") {
-		t.Errorf("the body does not name the key:\n%s", plainFrame(m))
-	}
-	m = pressOn(m, "right")
-	if s, ok := m.boardSelected(); m.colHidden(colNeed) || m.boardAt != colNeed || !ok || m.columnOf(s) != colNeed {
-		t.Errorf("→ with every column hidden: need hidden %v, open %s, a card of it chosen %v", m.colHidden(colNeed), m.boardAt.name(), ok)
-	}
-
-	m = pressOn(boardShot(t, st, 104, 38, func(m *Model) { m.flipHidden(colWork) }), "right", "right")
-	if m.boardAt != colQuiet {
-		t.Fatalf("→ → from NEEDS YOU lands on %s", m.boardAt.name())
-	}
-	if m = pressOn(m, "right"); m.colHidden(colWork) || m.boardAt != colWork {
-		t.Errorf("→ past QUIET: work hidden %v, open %s", m.colHidden(colWork), m.boardAt.name())
-	}
-}
-
 // TestAKeyOnAnEmptySearchSaysEscClears: a card key with no card says the
-// fix that is true: esc clears a search, s turns a host, and a + name
-// shows a column only when one is hidden.
+// fix that is true: esc clears a search, and s turns a host.
 func TestAKeyOnAnEmptySearchSaysEscClears(t *testing.T) {
 	st := boardFixture(t)
 	m := typeText(pressOn(boardShot(t, st, 104, 38, nil), "/"), "zzzz").(Model)
@@ -141,115 +83,6 @@ func TestAKeyOnAnEmptySearchSaysEscClears(t *testing.T) {
 	m = boardShot(t, st, 104, 38, func(m *Model) { m.boardHost = "macbook" })
 	if got := noticeRow(pressOn(m, "x")); got != "no match on macbook · s turns the host" {
 		t.Errorf("x on a host with no match says %q", got)
-	}
-	m = boardShot(t, st, 104, 38, func(m *Model) {
-		for _, c := range boardCols {
-			m.flipHidden(c)
-		}
-	})
-	if got := noticeRow(pressOn(m, "x")); got != "no card is chosen · tap a + name to show a column" {
-		t.Errorf("x with every column hidden says %q", got)
-	}
-}
-
-func TestTheChoiceFollowsItsMatch(t *testing.T) {
-	st := boardFixture(t)
-	m := pressOn(boardShot(t, st, 80, 31, nil), "down")
-	if got := chosenName(t, m); got != "kindle-web" {
-		t.Fatalf("↓ chose %s, want the second card, kindle-web", got)
-	}
-	if m.peekAt != demoAt {
-		t.Errorf("the move did not start the peek: %v", m.peekAt)
-	}
-
-	older := boardMatch("tinder-auth", time.Hour)
-	older.Permits, older.LastLine = true, "May I delete the old token table?"
-	st.Sessions = append(st.Sessions, older)
-	st.Queue = append(st.Queue, waitFor(older, queue.StatePermission, 3*time.Hour))
-	m = newBoardState(t, m, st)
-	if need := m.boardIndex()[colNeed]; need[0].Name != "tinder-auth" {
-		t.Fatalf("the new wait is not above: %s", need[0].Name)
-	}
-	if got := chosenName(t, m); got != "kindle-web" {
-		t.Errorf("after a new state the choice is %s, want kindle-web", got)
-	}
-
-	m = pressOn(m, "up", "up", "up")
-	if got := chosenName(t, m); got != "tinder-auth" {
-		t.Errorf("↑ at the top: %s", got)
-	}
-	clock := demoAt
-	m = boardShot(t, st, 80, 31, func(m *Model) {
-		chooseCard("flint-auth")(m)
-		m.opt.Now = func() time.Time { return clock }
-	})
-	m = pressOn(m, "esc") // the first frame lands the peek
-	clock = clock.Add(time.Minute)
-	// ↓ at the bottom chooses the ghost row (step 0b), and ↑ comes back.
-	if m = pressOn(m, "down"); reachOf(m) != "ghost" {
-		t.Errorf("↓ at the bottom chose %s, want the ghost row", reachOf(m))
-	}
-	if m = pressOn(m, "up"); chosenName(t, m) != "flint-auth" {
-		t.Errorf("↑ from the ghost row chose %s, want flint-auth", chosenName(t, m))
-	}
-	m = pressOn(m, "up", "down")
-	if m.peekAsk != "toolu_board" {
-		t.Errorf("the peek of flint-auth does not keep its question: %q", m.peekAsk)
-	}
-}
-
-func TestAfterAnActTheFirstWaitIsChosen(t *testing.T) {
-	st := boardFixture(t)
-	m := pressOn(boardShot(t, st, 80, 31, chooseCard("kindle-web")), "p", "y")
-	if len(boardFake(m).acts()) != 1 {
-		t.Fatalf("the merge was not sent: %+v", boardFake(m).acts())
-	}
-	if got := chosenName(t, m); m.boardAt != colNeed || got != "spark-search" {
-		t.Errorf("after a merge the choice is %s in %v, want spark-search", got, m.boardAt)
-	}
-
-	m = boardShot(t, st, 80, 31, chooseCard("hearth-api"))
-	m.opt.Run = func([]string) error { return nil }
-	if m = pressOn(m, "enter"); chosenName(t, m) != "spark-search" {
-		t.Errorf("after ⏎ the choice is %s, want spark-search", chosenName(t, m))
-	}
-
-	alone := st
-	alone.Sessions = slices.DeleteFunc(slices.Clone(st.Sessions), func(s sample.Session) bool {
-		return slices.Contains([]string{"flint-auth", "hearth-api", "spark-search"}, s.Name)
-	})
-	m = pressOn(boardShot(t, alone, 80, 31, chooseCard("kindle-web")), "p", "y")
-	if got := chosenName(t, m); m.boardAt != colNeed || got != "kindle-web" {
-		t.Errorf("with no other wait the choice moved to %s in %v", got, m.boardAt)
-	}
-}
-
-func TestTheKeyLineDropsWholeKeysFromTheRight(t *testing.T) {
-	st := boardFixture(t)
-	m := boardShot(t, st, 80, 31, chooseCard("kindle-web"))
-	hints := m.boardHints(80)
-	if hints[0].key != "p" || !slices.ContainsFunc(hints, func(h hint) bool { return h.key == "tab" }) {
-		t.Fatalf("the board's keys: %+v", hints)
-	}
-	line := strings.TrimSpace(keyText(m.draw(80)))
-	var parts []string
-	whole := -1
-	for i, h := range hints {
-		parts = append(parts, h.key+" "+h.label)
-		if strings.Join(parts, "   ") == line {
-			whole = i
-		}
-	}
-	if whole < 0 || whole == len(hints)-1 {
-		t.Errorf("at 80 the key line does not end at a whole key of %d: %q", len(hints), line)
-	}
-	if strings.Contains(line, "sessions") || strings.Contains(line, "rename") {
-		t.Errorf("the key line has the keys of Sessions: %q", line)
-	}
-
-	m = boardShot(t, st, 40, 34, nil)
-	if got := strings.TrimSpace(keyText(m.draw(40))); got != "c copy   v one line   s hosts   u strip" {
-		t.Errorf("at 40 the key line is %q", got)
 	}
 }
 
@@ -327,33 +160,8 @@ func TestTheBoxKeepsWhatItShowed(t *testing.T) {
 	if lead := m.shipsOf(kindle)[0]; lead.Number != 4557 {
 		t.Fatalf("the leading ship is #%d", lead.Number)
 	}
-	lines, _ := m.boardCard(kindle, 38, cardOpts{sel: true, need: true})
-	if f := strings.Join(plainLines(lines), "\n"); strings.Contains(f, "merge #") {
-		t.Errorf("a card whose leading ship is stuck offers the merge of the second:\n%s", f)
-	}
 	if m = pressOn(m, "p"); m.pending != nil {
 		t.Errorf("p merged a ship that does not lead: %v", m.pending)
-	}
-}
-
-func TestATapNeverRunsADestructiveAct(t *testing.T) {
-	m := boardShot(t, boardFixture(t), 80, 31, nil)
-	lines := strings.Split(plainFrame(m), "\n")
-	y := slices.IndexFunc(lines, func(l string) bool { return strings.HasPrefix(l, "  p merge #4556") })
-	if y < 0 {
-		t.Fatalf("no p merge on the frame:\n%s", strings.Join(lines, "\n"))
-	}
-	next, cmd := tap(m, 3, y)
-	drain(cmd)
-	m = next.(Model)
-	if !m.consenting() || chosenName(t, m) != "kindle-web" || !strings.Contains(consentText(m), "gh pr merge 4556") {
-		t.Fatalf("a tap on p merge: consent %v, chosen %s", m.consenting(), chosenName(t, m))
-	}
-	next, cmd = tap(m, 40, 15)
-	drain(cmd)
-	m = next.(Model)
-	if m.pending != nil || len(boardFake(m).acts()) != 0 {
-		t.Errorf("a tap on the box did not cancel it: %v %+v", m.pending, boardFake(m).acts())
 	}
 }
 
@@ -370,13 +178,9 @@ func TestAChangedKeySaysSoOnce(t *testing.T) {
 	}
 	m := open()
 	for _, c := range []struct{ key, once, then string }{
-		{"c", "c copies now. The stoker is on its card.", "copied: last message of spark-search · not checked here"},
-		{"v", "v changes the cards now: verbose, or one line.", ""},
+		{"c", "c copies now: the last message, whole.", "copied: last message of spark-search · not checked here"},
 		{"g", "g shows one chain now. esc shows all.", "spark-search is in no chain"},
-		{"u", "u turns the strip now.", ""},
-		{"p", "p merges now. The ships are on their cards.", "no ship of spark-search waits for a merge"},
-		{"1", "A digit marks an answer now. Press it again to send.", ""},
-		{"s", "s changes the host now. The order of a column is fixed.", ""}, // last: it turns to the next host
+		{"p", "p merges now: the pull request that waits for you.", "no ship of spark-search waits for a merge"},
 	} {
 		m = pressOn(m, c.key)
 		if got := noticeRow(m); got != c.once {
@@ -393,7 +197,7 @@ func TestAChangedKeySaysSoOnce(t *testing.T) {
 	}
 
 	m = open()
-	for _, k := range []string{"c", "v", "s", "g", "u", "p", "1"} {
+	for _, k := range []string{"c", "g", "p"} {
 		m = pressOn(m, k)
 		if got := noticeRow(m); strings.Contains(got, " now") {
 			t.Errorf("a new console says %q again on %s", got, k)
@@ -422,42 +226,11 @@ func TestEscNeverLeavesTheConsole(t *testing.T) {
 	}
 }
 
-// TestAPhoneStartsVerboseInNeedsYouOnly: until v is pressed on a phone,
-// NEEDS YOU is verbose and every other page one line; the first v stores a
-// choice for every page. A desk starts verbose.
-func TestAPhoneStartsVerboseInNeedsYouOnly(t *testing.T) {
-	dir := t.TempDir()
-	phone := boardShot(t, boardFixture(t), 40, 34, func(m *Model) { m.opt.StateDir, m.viewPrefs = dir, loadViewPrefs(dir) })
-	if phone.oneLineIn(colNeed) || !phone.oneLineIn(colWork) || !phone.oneLineIn(colQuiet) {
-		t.Fatalf("a fresh phone: NEEDS YOU one line %v, WORKING %v", phone.oneLineIn(colNeed), phone.oneLineIn(colWork))
-	}
-	page := func(m Model) string { return strings.Join(plainLines(m.boardPanel(40, m.bodyRows()).lines), "\n") }
-	if f := page(pressOn(phone, "right")); strings.Contains(f, "ctx 22%") {
-		t.Errorf("a card of WORKING that is not chosen is not one line on a fresh phone:\n%s", f)
-	}
-	phone = pressOn(phone, "v")
-	if !phone.oneLineIn(colNeed) || !phone.oneLineIn(colWork) {
-		t.Error("the first v does not make every page one line")
-	}
-	phone = pressOn(phone, "v")
-	if phone.oneLineIn(colNeed) || phone.oneLineIn(colWork) {
-		t.Error("the second v does not make every page verbose")
-	}
-	if p := loadViewPrefs(dir); p.OneLinePhone == nil || *p.OneLinePhone {
-		t.Errorf("the phone's choice is not kept: %v", p.OneLinePhone)
-	}
-	if desk := boardShot(t, boardFixture(t), 104, 38, nil); desk.oneLineIn(colWork) || desk.oneLineIn(colNeed) {
-		t.Error("a desk does not start verbose")
-	}
-}
-
 func TestTheNoticeIsGoneAfterItsTime(t *testing.T) {
 	now := demoAt
 	m := boardShot(t, boardFixture(t), 40, 34, func(m *Model) { m.opt.Now = func() time.Time { return now } })
 	tick := m.notice("not copied: tmux drops it · tmux set -s set-clipboard on")
-	lines := strings.Split(plainFrame(m), "\n")
-	two := strings.TrimSpace(lines[len(lines)-4]) + " " + strings.TrimSpace(lines[len(lines)-3])
-	if two != "not copied: tmux drops it · tmux set -s set-clipboard on" {
+	if two := noticeRow(m); two != "not copied: tmux drops it · tmux set -s set-clipboard on" {
 		t.Errorf("a long notice on a phone is not two whole lines: %q", two)
 	}
 	if !strings.Contains(ansi.Strip(m.render()), "● 4 need you") {
@@ -503,55 +276,6 @@ func goBoard(t *testing.T, now *time.Time, edit func(*Model)) Model {
 
 var grantAct = proto.Act{RecID: "stoker:grant", Which: "primary", Confirm: "y", Text: "go-hearth-api"}
 
-func TestATapOnTheGoArmsItAndASecondGivesIt(t *testing.T) {
-	now := demoAt
-	goAt := func(m Model) (int, int) {
-		t.Helper()
-		for y, l := range strings.Split(plainFrame(m), "\n") {
-			if x := strings.Index(l, "y give the go"); x >= 0 {
-				return x, y
-			}
-			if x := strings.Index(l, "y again: merge #4556"); x >= 0 { // the armed card says what the go does
-				return x, y
-			}
-		}
-		t.Fatalf("no y on a card:\n%s", plainFrame(m))
-		return 0, 0
-	}
-	tapGo := func(m Model) Model {
-		x, y := goAt(m)
-		next, cmd := tap(m, x, y)
-		drain(cmd)
-		return next.(Model)
-	}
-
-	m := tapGo(goBoard(t, &now, nil))
-	if len(boardFake(m).acts()) != 0 || noticeRow(m) != "tap y again to give the go" || chosenName(t, m) != "hearth-api" {
-		t.Fatalf("the first tap: acts %+v, notice %q", boardFake(m).acts(), noticeRow(m))
-	}
-	if m = tapGo(m); !slices.Equal(boardFake(m).acts(), []proto.Act{grantAct}) {
-		t.Fatalf("the second tap sent %+v", boardFake(m).acts())
-	}
-
-	for name, between := range map[string]func(Model) Model{
-		"a move":           func(m Model) Model { return pressOn(m, "up", "down") },
-		"esc":              func(m Model) Model { return pressOn(m, "esc") },
-		"the notice's end": func(m Model) Model { now = now.Add(noticeFor); return m },
-	} {
-		now = demoAt
-		m = tapGo(goBoard(t, &now, nil))
-		if m = tapGo(between(m)); len(boardFake(m).acts()) != 0 {
-			t.Errorf("a tap after %s gave the go: %+v", name, boardFake(m).acts())
-		}
-	}
-
-	now = demoAt
-	m = pressOn(goBoard(t, &now, chooseCard("hearth-api")), "y")
-	if !slices.Equal(boardFake(m).acts(), []proto.Act{grantAct}) {
-		t.Errorf("a typed y sent %+v", boardFake(m).acts())
-	}
-}
-
 // TestTheBeltsGoArmsThenGives (owner, 2026-11-13: "Arm then send"): on
 // Pocket the belt's y is a tap, so the first y arms the go and the card
 // says what it does; a second y gives it, and any other key between them
@@ -567,8 +291,8 @@ func TestTheBeltsGoArmsThenGives(t *testing.T) {
 	if len(boardFake(m).acts()) != 0 || m.pending != nil {
 		t.Fatalf("one belt y gave the go: acts %+v, pending %v", boardFake(m).acts(), m.pending)
 	}
-	if f := plainFrame(m); !strings.Contains(f, "y again: merge #4556") {
-		t.Errorf("the armed card does not say what the go does:\n%s", f)
+	if f := noticeRow(m); !strings.Contains(f, "y again gives the go: merge #4556") {
+		t.Errorf("the armed go does not say what it does: %q", f)
 	}
 	if v := m.beltValue(); !strings.Contains(v, "y*") {
 		t.Errorf("the belt does not light the armed y: %q", v)
@@ -582,7 +306,7 @@ func TestTheBeltsGoArmsThenGives(t *testing.T) {
 		m.belt.pocket[0].n = m.belt.n
 		return m
 	}
-	for _, between := range []string{"v", "c", "u", "esc"} {
+	for _, between := range []string{"c", "g", "esc"} {
 		now = demoAt
 		m = answered(answered(answered(goBoard(t, &now, pocket), "y"), between), "y")
 		if !m.onPocket() {
@@ -600,9 +324,8 @@ func TestAnyTapDisarmsTheBeltsGo(t *testing.T) {
 	now := demoAt
 	pocket := func(m *Model) { chooseCard("hearth-api")(m); pocketOnly(m) }
 	for name, tapAway := range map[string]func(Model) Model{
-		"a column's name": func(m Model) Model { return tapHead(t, m, colShip) },
-		"the header":      func(m Model) Model { next, _ := tap(m, m.width-1, 0); return next.(Model) },
-		"a blank row":     func(m Model) Model { next, _ := tap(m, m.width-1, m.height-2); return next.(Model) },
+		"the header":  func(m Model) Model { next, _ := tap(m, m.width-1, 0); return next.(Model) },
+		"a blank row": func(m Model) Model { next, _ := tap(m, m.width-1, m.height-2); return next.(Model) },
 	} {
 		now = demoAt
 		m := pressOn(goBoard(t, &now, pocket), "y")
@@ -640,71 +363,6 @@ func TestCtrlOGoesIntoTheChosenCard(t *testing.T) {
 	}
 }
 
-func TestNoCardChosenActsOnNothing(t *testing.T) {
-	st := boardFixture(t)
-	st.Agents = []string{"claude"}
-	m := boardShot(t, st, 80, 31, func(m *Model) {
-		for _, c := range boardCols {
-			m.flipHidden(c)
-		}
-		m.opt.Run = func(argv []string) error { t.Errorf("ran %v", argv); return nil }
-	})
-	if _, ok := m.boardSelected(); ok {
-		t.Fatal("a card is chosen with every column hidden")
-	}
-	for _, k := range []string{"enter", "a", "ctrl+o", "z", "r", "A", "d", "h", "f", "F", "n", "o", "x", "p", "y"} {
-		next, cmd := key(m, k)
-		drain(cmd)
-		nm := next.(Model)
-		if nm.pending != nil || nm.form != nil || nm.tab != tabSessions || len(boardFake(nm).acts()) != 0 {
-			t.Errorf("%s acted with no card: pending %v, form %v, tab %d, acts %+v", k, nm.pending, nm.form != nil, nm.tab, boardFake(nm).acts())
-		}
-		if got := noticeRow(nm); got != "no card is chosen · tap a + name to show a column" {
-			t.Errorf("%s says %q", k, got)
-		}
-	}
-	if nm := pressOn(m, "N"); nm.form == nil {
-		t.Errorf("N opens no form with no card: %q", nm.flash)
-	}
-	if nm := pressOn(m, "/"); !nm.searching {
-		t.Error("/ does not search with no card")
-	}
-}
-
-// The live view beside the board crops the chosen card's full-screen agent
-// as main's live view does: its lines are cut at the view's edge with a ›,
-// its last rows show, and its window keeps its own size (#351). At 151
-// columns there is no live view, and no screen is watched.
-func TestTheLiveViewCropsTheChosenCardsScreen(t *testing.T) {
-	st := boardFixture(t)
-	watched := func(w int) Model {
-		next, _ := boardShot(t, st, w, 38, chooseCard("flint-auth")).Update(tea.WindowSizeMsg{Width: w, Height: 38})
-		return next.(Model)
-	}
-	m := watched(160)
-	if m.watching != paneNamed(st, "flint-auth") {
-		t.Fatalf("the board watches %q, not flint-auth", m.watching)
-	}
-	_, live := boardWidths(Wide, 160, boardCols[:])
-	var text strings.Builder
-	for i := 1; i <= 60; i++ {
-		fmt.Fprintf(&text, "row %d %s\n", i, strings.Repeat("=", 2*live))
-	}
-	m.screen = proto.Screen{Pane: paneNamed(st, "flint-auth"), At: demoAt, Alt: true, Text: text.String()}
-	f := strings.Join(plainLines(m.boardPanel(160, m.bodyRows()).lines), "\n")
-	if !strings.Contains(f, "row 60 =") || strings.Contains(f, "row 1 =") || !strings.Contains(f, "=›") {
-		t.Errorf("the live view does not show the last rows of flint-auth, cut with a ›:\n%s", f)
-	}
-	for _, l := range plainLines(m.boardPanel(160, m.bodyRows()).lines) {
-		if n := ansi.StringWidth(l); n > 160 {
-			t.Errorf("a line %d wide at 160 columns: %q", n, l)
-		}
-	}
-	if m = watched(151); m.watching != "" {
-		t.Errorf("at 151 columns the board watches %q", m.watching)
-	}
-}
-
 // pocketOnly makes the app the only viewer, one that answered the board's
 // keys with a mark.
 func pocketOnly(m *Model) {
@@ -712,7 +370,7 @@ func pocketOnly(m *Model) {
 	m.belt.pocket = []pocketClient{{"/dev/pts/7:105", 1}}
 }
 
-// TestPocketSeesANewerService: Pocket has no key line, so the strip's row
+// TestPocketSeesANewerService: Pocket has no key line, so the notice row
 // says that the service is newer, and a tap on it starts the console again.
 func TestPocketSeesANewerService(t *testing.T) {
 	st := boardFixture(t)
@@ -725,12 +383,19 @@ func TestPocketSeesANewerService(t *testing.T) {
 		if !m.onPocket() {
 			t.Fatal("the board is not on Pocket")
 		}
-		if f := strings.Join(strings.Fields(plainFrame(m)), " "); !strings.Contains(f, "R start again · service v0.43.0, console v0.42.0") {
-			t.Fatalf("%d: Pocket does not say the service is newer:\n%s", w, plainFrame(m))
+		if f := strings.Join(strings.Fields(plainFrame(m)), " "); !strings.Contains(f, "R start again · service v0.43.0, console v0.42.0") || strings.Contains(f, "esc R") {
+			t.Fatalf("%d: Pocket in the list does not say R starts again:\n%s", w, plainFrame(m))
 		}
 		next := tapText(t, m, "R start again")
 		if !next.restarting {
 			t.Errorf("%d: a tap on the notice did not start the console again", w)
+		}
+		m.toLine() // R types in the line: the notice names esc first
+		if f := strings.Join(strings.Fields(plainFrame(m)), " "); !strings.Contains(f, "esc R start again · service v0.43.0, console v0.42.0") {
+			t.Fatalf("%d: Pocket in the line does not name esc:\n%s", w, plainFrame(m))
+		}
+		if next = tapText(t, m, "esc R start again"); !next.restarting {
+			t.Errorf("%d: a tap on the notice in the line did not start the console again", w)
 		}
 	}
 }
@@ -746,8 +411,8 @@ func boardSaid(cmd tea.Cmd) []string {
 	return got
 }
 
-// TestPocketHasNoKeyLine (spec "The belt on Pocket"): on Pocket the strip
-// is the last line and the cards take the key line's two rows; a frame
+// TestPocketHasNoKeyLine (spec "The belt on Pocket"): on Pocket the cards
+// take the key line's two rows; a frame
 // that is not Pocket's, the menu and the consent box keep the key line.
 func TestPocketHasNoKeyLine(t *testing.T) {
 	st := boardFixture(t)
@@ -757,11 +422,11 @@ func TestPocketHasNoKeyLine(t *testing.T) {
 		t.Fatalf("onPocket: desk %v, pocket %v", desk.onPocket(), pocket.onPocket())
 	}
 	ds, ps := desk.draw(40), pocket.draw(40)
-	if ds.keysAt != len(ds.lines)-1 || !strings.Contains(ansi.Strip(ds.lines[ds.keysAt]), "copy") {
+	if ds.keysAt != len(ds.lines)-1 || !strings.Contains(ansi.Strip(ds.lines[ds.keysAt]), "in the list") {
 		t.Errorf("the desk's last line is %q, want the key line", ansi.Strip(ds.lines[len(ds.lines)-1]))
 	}
-	if ps.keysAt != -1 || ps.stripAt != len(ps.lines)-1 {
-		t.Errorf("Pocket: key line at %d, strip at %d of %d lines; want no key line and the strip last", ps.keysAt, ps.stripAt, len(ps.lines))
+	if ps.keysAt != -1 {
+		t.Errorf("Pocket: key line at %d of %d lines; want no key line", ps.keysAt, len(ps.lines))
 	}
 	if strings.Contains(ansi.Strip(ps.lines[len(ps.lines)-2]), "─────") {
 		t.Errorf("Pocket keeps the key line's hairline: %q", ansi.Strip(ps.lines[len(ps.lines)-2]))
@@ -902,9 +567,9 @@ func beltKeyOf(t *testing.T, ks []beltKey, face string) beltKey {
 }
 
 // TestBeltKeysFollowTheChosenCard (design decision 10): home is ◂, the
-// chosen card's keys, ↑ ↓ ⏎; the tail has every other key of the board.
+// chosen session's keys, ↑ ↓ ⏎; the tail has the keys of the list.
 func TestBeltKeysFollowTheChosenCard(t *testing.T) {
-	tail := []string{"c", "m", "g", "v", "s", "u", "⇥", "x", "←", "→", "]", "[", "/", "z"}
+	tail := []string{"⌃o", "s", "g", "/", "m", "c", "z", "N", "⇥", "x"}
 	st := boardFixture(t)
 
 	m, _ := flintBoard(t, 80, 34)
@@ -937,7 +602,7 @@ func TestBeltKeysFollowTheChosenCard(t *testing.T) {
 	if g := beltKeyOf(t, ks, "g"); g.On {
 		t.Errorf("kindle-web is in no chain, yet g is %+v", g)
 	}
-	words := map[string]string{"c": "copy", "m": "menu", "g": "chain", "v": "one line", "s": "hosts", "u": "strip", "⇥": "machine", "x": "kill", "z": "park"}
+	words := map[string]string{"⌃o": "expand", "c": "copy", "m": "menu", "g": "chain", "s": "hosts", "⇥": "machine", "x": "kill", "z": "park", "N": "new"}
 	for face, word := range words {
 		if k := beltKeyOf(t, ks, face); k.Word != word {
 			t.Errorf("%s says %q, want %q", face, k.Word, word)
@@ -951,6 +616,34 @@ func TestBeltKeysFollowTheChosenCard(t *testing.T) {
 	}
 }
 
+// TestBeltFollowsTheFocus: the belt shows what acts. With the line empty
+// the digits answer and ↑ ↓ choose, in the line and in the list. While
+// the line holds text a digit types, so the digits are off; in the line
+// ↑ ↓ are off too, and in the list they choose.
+func TestBeltFollowsTheFocus(t *testing.T) {
+	m, _ := flintBoard(t, 80, 34)
+	m.toLine()
+	if got := m.beltValue(); got != "1,2;" {
+		t.Errorf("the line, empty: %q, want 1,2;", got)
+	}
+	typed := pressOn(m, "h")
+	if typed.lines[typed.chosenSide()] != "h" {
+		t.Fatalf("the line holds %q, want h", typed.lines[typed.chosenSide()])
+	}
+	if got := typed.beltValue(); got != ";1,2,up,down" {
+		t.Errorf("the line holds text: %q, want ;1,2,up,down", got)
+	}
+	list := typed
+	list.toList()
+	if got := list.beltValue(); got != ";1,2" {
+		t.Errorf("the list, a draft in the line: %q, want ;1,2", got)
+	}
+	m.toList()
+	if got := m.beltValue(); got != "1,2;" {
+		t.Errorf("the list, the line empty: %q, want 1,2;", got)
+	}
+}
+
 // TestTheBeltSignalSaysTheBoardsKeys: the console tells the app the
 // chosen card's keys, an armed one with *, and the dim keys after ;; box
 // and menu while they show; "" when it leaves the board. It says a value
@@ -961,7 +654,7 @@ func TestTheBeltSignalSaysTheBoardsKeys(t *testing.T) {
 
 	empty := st
 	empty.Sessions, empty.Queue, empty.Ships, empty.Chains = nil, nil, &proto.Ships{At: demoAt}, nil
-	if got := value(boardShot(t, empty, 80, 34, nil)); got != ";c,m,g,s,x,],[,z" {
+	if got := value(boardShot(t, empty, 80, 34, nil)); got != ";ctrl+o,s,g,m,c,z,x" {
 		t.Errorf("no card chosen: %q", got)
 	}
 
@@ -996,7 +689,7 @@ func TestTheBeltSignalSaysTheBoardsKeys(t *testing.T) {
 		if !c.consenting() {
 			t.Fatalf("%s does not show", name)
 		}
-		if got := value(c); got != ";c,m,g,v,s,u,tab,x,left,right,],[,/,z" {
+		if got := value(c); got != ";ctrl+o,s,g,/,m,c,z,N,tab,x" {
 			t.Errorf("%s: %q, want the home with no card keys", name, got)
 		}
 		if ks := c.beltKeys(); slices.ContainsFunc(ks, func(k beltKey) bool { return k.Act }) {
@@ -1224,94 +917,6 @@ func TestATerminalThatComesWaitsForTheViewers(t *testing.T) {
 	}
 }
 
-// remoteAuth is the fixture with flint-auth, and its question, on gpu-1.
-func remoteAuth(t *testing.T) proto.State {
-	t.Helper()
-	st := boardFixture(t)
-	for i, s := range st.Sessions {
-		if s.Name == "flint-auth" {
-			st.Sessions[i].Host = "gpu-1"
-			for j, it := range st.Queue {
-				if it.Pane == s.Pane {
-					st.Queue[j].Host = "gpu-1"
-				}
-			}
-		}
-	}
-	return st
-}
-
-func TestARemoteCardOffersNoDigits(t *testing.T) {
-	for _, size := range [][2]int{{40, 34}, {80, 31}, {104, 38}} {
-		m := boardShot(t, remoteAuth(t), size[0], size[1], chooseCard("flint-auth"))
-		if s, ok := m.boardSelected(); !ok || s.Name != "flint-auth" || s.Host != "gpu-1" {
-			t.Fatalf("%dx%d: the chosen card is %s on %q", size[0], size[1], s.Name, s.Host)
-		}
-		frame := plainFrame(m)
-		for _, no := range []string{"1-2", "1. Patch the token check", "2. Move to the new session store"} {
-			if strings.Contains(frame, no) {
-				t.Errorf("%dx%d: a card on gpu-1 offers %q:\n%s", size[0], size[1], no, frame)
-			}
-		}
-		if keys := keyLineOf(m); size[0] > 40 && !strings.HasPrefix(keys, "⏎ go in") {
-			t.Errorf("%dx%d: the key line of a card on gpu-1 is %q", size[0], size[1], keys)
-		}
-		if !strings.Contains(frame, "⏎ go in") {
-			t.Errorf("%dx%d: the card on gpu-1 shows no ⏎ go in:\n%s", size[0], size[1], frame)
-		}
-	}
-}
-
-func TestEveryEnterHintSaysGoIn(t *testing.T) {
-	for _, size := range [][2]int{{40, 34}, {80, 31}, {104, 38}, {160, 38}} {
-		m := boardShot(t, boardFixture(t), size[0], size[1], nil)
-		if frame := plainFrame(m); strings.Contains(frame, "⏎ answer") {
-			t.Errorf("%dx%d: a card says ⏎ answer:\n%s", size[0], size[1], frame)
-		}
-	}
-
-	// A tap on the key row of a card that is not chosen chooses it, and
-	// never goes in.
-	m, _, _ := menuBoard(t, 40, 34, nil)
-	lines := strings.Split(plainFrame(m), "\n")
-	_, ny := cardOn(t, m, "flint-auth")
-	ky := -1
-	for y := ny + 1; y < len(lines); y++ {
-		if strings.Contains(lines[y], "⏎ ") {
-			ky = y
-			break
-		}
-	}
-	if ky < 0 {
-		t.Fatalf("flint-auth draws no key row:\n%s", plainFrame(m))
-	}
-	kx := ansi.StringWidth(lines[ky][:strings.Index(lines[ky], "⏎")])
-	next, cmd := m.Update(tea.MouseClickMsg{X: kx, Y: ky, Button: tea.MouseLeft})
-	m = next.(Model)
-	if wentIn(cmdMsgs(cmd), paneNamed(boardFixture(t), "flint-auth")) || chosenName(t, m) != "flint-auth" {
-		t.Errorf("a tap on flint-auth's ⏎ go in: chosen %s, went in %v", chosenName(t, m), cmdMsgs(cmd))
-	}
-}
-
-func TestADigitThatCannotActSaysWhy(t *testing.T) {
-	for _, c := range []struct{ card, digit, said string }{
-		{"hearth-api", "1", "hearth-api asks in its pane · ⏎ goes in"},
-		{"flint-auth", "9", "1-2 only"},
-		{"flint-auth", "0", "1-2 only"},
-		{"flint-ui", "1", "flint-ui asks no question"},
-	} {
-		m, _, clock := menuBoard(t, 80, 31, chooseCard(c.card))
-		*clock = clock.Add(time.Second) // past the dead time
-		m = pressOn(m, c.digit)
-		if got := noticeRow(m); got != c.said {
-			t.Errorf("%s on %s says %q, want %q", c.digit, c.card, got, c.said)
-		}
-		if armed, _ := m.peekMarks(matchNamed(t, m, c.card)); armed != 0 {
-			t.Errorf("%s on %s armed %d", c.digit, c.card, armed)
-		}
-	}
-}
-
 // TestATapOnPocketChoosesTheCard: Pocket is worked by touch alone, so a
 // tap on a card chooses it there as on a desk.
 func TestATapOnPocketChoosesTheCard(t *testing.T) {
@@ -1330,52 +935,6 @@ func TestATapOnPocketChoosesTheCard(t *testing.T) {
 		drain(cmd)
 		if got := chosenName(t, next.(Model)); got != "flint-auth" {
 			t.Errorf("%d: a tap on flint-auth chose %s", w, got)
-		}
-	}
-}
-
-// TestATapBelowTheBoardsBodyChoosesNoCard: a tap under the body (the key
-// line's hairline, the key line off its keys, the strip off its words,
-// past the frame where the belt is) chooses no card and opens nothing, on
-// a desk and on Pocket, at 40 and 132 columns.
-func TestATapBelowTheBoardsBodyChoosesNoCard(t *testing.T) {
-	for _, w := range []int{40, 132} {
-		for _, pocket := range []bool{false, true} {
-			var edit func(*Model)
-			if pocket {
-				edit = pocketOnly
-			}
-			m := boardShot(t, boardFixture(t), w, 34, edit)
-			ran := recordRuns(&m)
-			sc := m.draw(w)
-			chosen := chosenName(t, m)
-			ys := []int{len(sc.lines), len(sc.lines) + 3}
-			if sc.keysAt >= 0 {
-				ys = append(ys, sc.keysAt-1, sc.keysAt)
-			}
-			if sc.stripAt > 0 {
-				ys = append(ys, sc.stripAt)
-			}
-			for _, y := range ys {
-				for _, x := range []int{0, w / 2, w - 1} {
-					if _, onKey := spanAt(sc.keys, x); y == sc.keysAt && onKey {
-						continue
-					}
-					if _, onStrip := spanAt([]span{sc.strip}, x); y == sc.stripAt && onStrip {
-						continue
-					}
-					next, cmd := tap(m, x, y)
-					drain(cmd)
-					nm := next.(Model)
-					if s, ok := nm.boardSelected(); !ok || s.Name != chosen {
-						t.Errorf("w %d pocket %v: a tap at %d,%d chose %s", w, pocket, x, y, s.Name)
-					}
-					if nm.pending != nil || nm.menu != nil || nm.form != nil || nm.sheet != nil || nm.standIn || nm.room != nil ||
-						len(boardFake(nm).acts()) != 0 || len(*ran) != 0 {
-						t.Errorf("w %d pocket %v: a tap at %d,%d opened or sent something", w, pocket, x, y)
-					}
-				}
-			}
 		}
 	}
 }

@@ -231,7 +231,8 @@ func TestSwitchRefusesOutsideTmuxAndOneAgent(t *testing.T) {
 		st.Sessions[i].Pane = ""
 	}
 	m, _ := loadedWith(t, 100, st)
-	s, _ := m.selectedSession()
+	s := st.Sessions[0]
+	m.chooseRow(s)
 	next, _ := key(m, "A")
 	if nm := next.(Model); nm.form != nil || nm.flash != s.Name+" is outside tmux: nothing to switch" {
 		t.Fatalf("form %+v flash %q", nm.form, nm.flash)
@@ -1548,7 +1549,7 @@ func accountState() proto.State {
 // toAccount opens N and walks Tab to the account field.
 func toAccount(t *testing.T) (tea.Model, *fakeConn) {
 	t.Helper()
-	m, f := loadedWith(t, 100, accountState())
+	m, f := loadedWith(t, 140, accountState())
 	next, _ := key(m, "N")
 	for range 4 {
 		next, _ = key(next, "tab")
@@ -1661,7 +1662,7 @@ func TestBadNameSaysWhyAtOnce(t *testing.T) {
 }
 
 func TestFirstIsDimmedForANewAccount(t *testing.T) {
-	m, f := loadedWith(t, 100, accountState())
+	m, f := loadedWith(t, 140, accountState())
 	next, _ := key(m, "N")
 	for range 5 {
 		next, _ = key(next, "tab")
@@ -1721,7 +1722,7 @@ func TestOpencodeShowsNoAccount(t *testing.T) {
 }
 
 func TestConfirmNamesTheAccount(t *testing.T) {
-	m, f := loadedWith(t, 100, accountState())
+	m, f := loadedWith(t, 140, accountState())
 	next, _ := key(m, "N")
 	next, _ = next.Update(tea.PasteMsg{Content: "/work/app"})
 	for range 4 {
@@ -1981,7 +1982,7 @@ func TestSwitchWithANotLinkedNoteJumps(t *testing.T) {
 // presses Enter: the confirm waits for its y.
 func toNewCodexAccount(t *testing.T) (tea.Model, *fakeConn) {
 	t.Helper()
-	m, f := loadedWith(t, 100, accountState())
+	m, f := loadedWith(t, 140, accountState())
 	next, _ := key(m, "N")
 	for range 3 {
 		next, _ = key(next, "tab")
@@ -2068,7 +2069,7 @@ func TestTheFormNamesTheFoldersNotListed(t *testing.T) {
 			"not listed: A, B, C, and 2 more (x)"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			m, _ := loadedWith(t, 100, skippedState(c.skips...))
+			m, _ := loadedWith(t, 140, skippedState(c.skips...))
 			next, _ := key(m, "N")
 			for range 4 {
 				next, _ = key(next, "tab")
@@ -2089,13 +2090,13 @@ func TestTheFormSaysNothingWhenAllAreListed(t *testing.T) {
 
 func TestAnUnreadableRootIsShownShortened(t *testing.T) {
 	long := "open /home/u/.matchblox/accounts/claude/" + strings.Repeat("x", 120) + ": permission denied"
-	m, _ := loadedWith(t, 100, skippedState(accounts.Skip{Path: "/home/u/.matchblox/accounts/claude", Why: long}))
+	m, _ := loadedWith(t, 140, skippedState(accounts.Skip{Path: "/home/u/.matchblox/accounts/claude", Why: long}))
 	next, _ := key(m, "N")
 	for range 4 {
 		next, _ = key(next, "tab")
 	}
 	s := screen(next)
-	if !strings.Contains(s, "accounts not read: open /home/u/.matchblox/accou…") || strings.Contains(s, "permission denied") {
+	if !strings.Contains(s, "accounts not read: open /home/u/.matchblox/accounts/claude/xxxxxxxxxxxxxxxxxxxxxxxxxx…") || strings.Contains(s, "permission denied") {
 		t.Fatalf("the form:\n%s", s)
 	}
 }
@@ -2188,9 +2189,7 @@ func TestAnotherConsoleSeesTheWait(t *testing.T) {
 	st.Queue = nil
 	st.Refreshes = []proto.Refresh{{Pane: "%1", Name: "app-feature", Agent: "claude", Since: time.Now().Add(-42 * time.Second)}}
 	for _, w := range []int{160, 44} {
-		m, _ := loadedWith(t, w, st)
-		m = selectPane(t, m, "%1").(Model) // the live view's head, or the phone's card, says it
-		s := screen(m)
+		s := screen(sideOnPane(t, w, st, "%1")) // the chosen row says it
 		lines := strings.Split(s, "\n")
 		i := slices.IndexFunc(lines, func(l string) bool { return strings.Contains(l, "writes its record") })
 		if i < 1 || !strings.Contains(lines[i]+lines[i-1], "app-feature") || strings.Contains(s, "esc switches now") {

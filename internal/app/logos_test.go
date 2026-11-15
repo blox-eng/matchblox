@@ -14,6 +14,7 @@ import (
 // provider's logo, sent once per set of viewers and background (#183).
 func TestUsageDrawsLogosWhereEveryViewerCan(t *testing.T) {
 	m, _ := loadedWith(t, 132, limitsState())
+	m.setTab(tabMachine)
 	next, send := m.Update(graphicsMsg{can: true, watched: true, key: "/dev/ttys002"})
 	m = next.(Model)
 	if send == nil {

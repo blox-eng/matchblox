@@ -1,33 +1,21 @@
 import Foundation
 
-/// The board's two touches on the console's terminal. A sideways swipe turns the board's page:
-/// a swipe to the right sends `←`, a swipe to the left sends `→`. A long-press sends a right
-/// click at its cell, and the console opens the card's menu.
+/// The console's touches on its terminal. The list and the chat have no pages, so a sideways
+/// swipe sends nothing. The edge swipe goes back: it sends `◂`, as the belt's key does. A tap is
+/// a click, and the console opens the row's chat. A long-press sends a right click at its cell,
+/// and the console opens the row's menu.
 public enum BoardTouch {
     /// The console's long-press.
     public static let longPress: TimeInterval = 0.48
-    /// A swipe turns the page once it has run this far, or left the finger this fast (pt/s),
-    /// as the edge swipe does.
-    public static let pageTravel: CGFloat = 60
-    public static let pageSpeed: CGFloat = 500
-    /// A swipe that starts this near the left side is the edge swipe's: it goes back.
-    public static let edge: CGFloat = 24
+    /// The edge swipe goes back once it has run this far, or left the finger this fast (pt/s).
+    public static let backTravel: CGFloat = 60
+    public static let backSpeed: CGFloat = 500
 
-    /// The wheel's rule turned round: a pan that runs more sideways than up or down is a page.
-    public static func isSideways(dx: CGFloat, dy: CGFloat) -> Bool {
-        abs(dx) > abs(dy)
-    }
-
-    public static func fromEdge(x: CGFloat) -> Bool {
-        x < edge
-    }
-
-    /// The key a sideways swipe sends when the finger lifts, or nil for a swipe too short and
-    /// too slow.
-    public static func page(dx: CGFloat, velocity: CGFloat) -> [UInt8]? {
-        guard abs(dx) > pageTravel || abs(velocity) > pageSpeed else { return nil }
-        let right = dx != 0 ? dx > 0 : velocity > 0
-        return KeyBar.bytes(for: right ? "←" : "→")
+    /// The key a sideways swipe sends when the finger lifts: `◂` for the edge swipe that ran far
+    /// or fast enough, else nil. A swipe that does not start at the edge turns no page.
+    public static func sideways(fromEdge: Bool, dx: CGFloat, velocity: CGFloat) -> [UInt8]? {
+        guard fromEdge, dx > backTravel || velocity > backSpeed else { return nil }
+        return KeyBar.bytes(for: "◂")
     }
 
     /// An SGR right-button press and release at a cell, from 0.

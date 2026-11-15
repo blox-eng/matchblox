@@ -1,0 +1,17 @@
+>_ OpenAI Codex (v0.46.0)
+
+  model:     gpt-5-codex
+  directory: ~/src/kindle-web
+
+› Fix the broken link in the reader page
+
+• I look at the reader page first.
+
+• Ran rg -n "href" web/reader.tsx
+  └ web/reader.tsx:42: <a href="/docs">
+
+• The link points at /docs. I change it to /help.
+
+› Ask Codex to do anything
+
+  ⏎ send   ⌃J newline   ⌃T transcript   ⌃C quit   88% context left

@@ -1,5 +1,5 @@
  ▰ matchblox                                                                   ● 6 need you  stoker off
- board 7    MACHINE
+ sessions 7    MACHINE
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
  STOKER                                                                                             off
  ready 4/5 · 1 compacted · 0 waited · 0k back

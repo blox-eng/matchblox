@@ -123,6 +123,7 @@ func (w *World) Wire(s *service.Service) {
 	s.PaneHistory, s.CaptureBack = nil, nil // a wheel goes to the world, not to a tmux that holds no history
 	s.KeysToWorld = true
 	s.TmuxOut = func([]string) (string, error) { return "", errRefused }
+	s.TmuxIn = func([]string, string) error { return errRefused }
 	s.PeerPane = func(int) string { return "" }
 	s.WorktreeStep = func(context.Context, string, string) ([]string, string, error) { return nil, "", errRefused }
 	s.MatchGit = func(context.Context, string, ...string) (string, error) { return "", nil } // the fixture has no git to read

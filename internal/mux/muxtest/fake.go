@@ -10,14 +10,20 @@ import (
 )
 
 // Fake is a multiplexer in memory: Screen is each pane's text, Mode the
-// panes in copy mode. Its steps are argv words that name no program.
+// panes in copy mode, NoBracket the panes that take no bracketed paste. Its steps are argv words that name no program.
 type Fake struct {
-	mu     sync.Mutex
-	Screen map[string]string
-	Mode   map[string]bool
-	marked map[string]bool
-	marks  int
+	mu        sync.Mutex
+	Screen    map[string]string
+	Mode      map[string]bool
+	NoBracket map[string]bool
+	marked    map[string]bool
+	marks     int
+	loads     []Load
+	drops     []string
 }
+
+// Load is one text Load put into a buffer.
+type Load struct{ Pane, Name, Text string }
 
 var _ mux.Mux = (*Fake)(nil)
 
@@ -25,6 +31,42 @@ func (*Fake) Type(pane, text string) []string { return []string{"fake", "type", 
 
 func (*Fake) Keys(pane string, keys ...string) []string {
 	return slices.Concat([]string{"fake", "keys", pane}, keys)
+}
+
+func (f *Fake) Load(pane, name, text string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.loads = append(f.loads, Load{pane, name, text})
+	return nil
+}
+
+func (f *Fake) NoBracketedPaste(pane string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.NoBracket[pane]
+}
+
+func (*Fake) Paste(pane, name string) []string { return []string{"fake", "paste", pane, name} }
+
+func (f *Fake) Drop(_, name string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.drops = append(f.drops, name)
+	return nil
+}
+
+// Loads are the texts Load put into buffers, in order.
+func (f *Fake) Loads() []Load {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.loads)
+}
+
+// Dropped are the buffers Drop deleted, in order.
+func (f *Fake) Dropped() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.drops)
 }
 
 func (f *Fake) Screens(ps []string) map[string]string {

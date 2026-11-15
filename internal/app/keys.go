@@ -38,6 +38,7 @@ type keymaps struct {
 	scan     scanKeys
 	ask      askKeys
 	board    boardKeys
+	side     sideKeys
 }
 
 type shellKeymaps struct {
@@ -49,15 +50,16 @@ type shellKeymaps struct {
 // the layer is on top, so its key wins. A new overlap fails
 // TestKeymapsHaveNoCollisions until it is added here.
 var shadowsMain = map[string]map[string]bool{
-	"form":     {"esc": true, "enter": true, "tab": true, "shift+tab": true, "up": true, "down": true, "space": true, "right": true},
-	"sheet":    {"esc": true, "enter": true, "tab": true, "space": true, "right": true},
+	"form":     {"esc": true, "enter": true, "tab": true, "shift+tab": true, "up": true, "down": true, "space": true},
+	"sheet":    {"esc": true, "enter": true, "tab": true, "space": true},
 	"search":   {"esc": true, "enter": true},
 	"pair":     {"c": true, "esc": true, "enter": true},
 	"takeOver": {"y": true, "n": true},
 	"confirm":  {"y": true, "enter": true, "up": true, "k": true, "down": true, "j": true},
 	"scan":     {"y": true, "n": true, "esc": true},
 	"ask":      {"esc": true, "enter": true, "c": true},
-	"board":    {"right": true, "c": true, "s": true},
+	"board":    {"c": true, "s": true},
+	"side":     {"enter": true, "esc": true, "up": true, "down": true},
 }
 
 func defaultKeys() keymaps {
@@ -84,15 +86,14 @@ func defaultKeys() keymaps {
 			Switch:     bind(ks("A", "shift+a"), "A", "switch"),
 			Grant:      bind(ks("y"), "y", "give the go"),
 			Dismiss:    bind(ks("d"), "d", "dismiss"),
-			Fold:       bind(ks("h"), "h", "fold recs"),
 			Stoke:      bind(ks("f"), "f", "stoker"),
 			StokeChain: bind(ks("F", "shift+f"), "F", "stoke chain"),
 			Night:      bind(ks("n"), "n", "stop night"),
 			Order:      bind(ks("o"), "o", "new order"),
 			Rename:     bind(ks("r"), "r", "rename"),
 			StartAgain: bind(ks("R", "shift+r"), "R", "start again"),
-			Into:       bind(ks("a", "right"), "a", "go in"),
 			Jump:       bind(ks("ctrl+o"), "ctrl+o", "go in"),
+			WasInto:    bind(ks("a"), "a", ""), // ctrl+o goes in now: a says so once
 		},
 		form: formKeys{
 			Close: bind(ks("esc"), "esc", ""),
@@ -121,8 +122,6 @@ func defaultKeys() keymaps {
 		room: roomKeys{
 			Open:  bind(ks("enter"), "⏎", ""),
 			Give:  bind(ks("y"), "y", "give"),
-			Next:  bind(ks("]"), "]", "next"),
-			Prev:  bind(ks("["), "[", "back"),
 			Back:  bind(ks("esc"), "esc", "back"),
 			Erase: bind(ks("backspace"), "⌫", "erase"),
 			Flip:  bind(ks("alt+s"), "⌥s", "room"),
@@ -162,17 +161,21 @@ func defaultKeys() keymaps {
 			Copy:   bind(ks("c"), "c", "copy the link"),
 		},
 		board: boardKeys{
-			Left:      bind(ks("left"), "←→", "columns"),
-			Right:     bind(ks("right"), "←→", "columns"),
-			Copy:      bind(ks("c"), "c", "copy"),
-			Density:   bind(ks("v"), "v", "one line"),
-			Chain:     bind(ks("g"), "g", "chain"),
-			Host:      bind(ks("s"), "s", "hosts"),
-			Strip:     bind(ks("u"), "u", "strip"),
-			NextChain: bind(ks("]"), "]", "next chain"),
-			PrevChain: bind(ks("["), "[", "previous chain"),
-			Menu:      bind(ks("m"), "m", "menu"),
-			Merge:     bind(ks("p"), "p", "merge"),
+			Copy:  bind(ks("c"), "c", "copy"),
+			Chain: bind(ks("g"), "g", "chain"),
+			Host:  bind(ks("s"), "s", "hosts"),
+			Menu:  bind(ks("m"), "m", "menu"),
+			Merge: bind(ks("p"), "p", "merge"),
+		},
+		side: sideKeys{
+			Enter:    bind(ks("enter"), "⏎", "send"),
+			Erase:    bind(ks("backspace"), "⌫", "erase"),
+			Leave:    bind(ks("esc"), "esc", "list"),
+			Up:       bind(ks("up"), "↑↓", "choose"),
+			Down:     bind(ks("down"), "↑↓", "choose"),
+			Unhide:   bind(ks("h"), "h", "show the host"),
+			List:     bind(ks("left"), "◂", "list"),
+			HideList: bind(ks("ctrl+l"), "ctrl+l", "list"),
 		},
 	}
 }
@@ -226,16 +229,16 @@ func (k globalKeys) bindings() []bkey.Binding { return []bkey.Binding{k.Quit} }
 type mainKeys struct {
 	Stoker, Quit, NextTab, PrevTab, Search, Back, Sort      bkey.Binding
 	Park, Mark, Exited, MarkSafe, QuitAgent, Up, Down, Open bkey.Binding
-	Second, New, Switch, Grant, Dismiss, Fold               bkey.Binding
-	Stoke, StokeChain, Night, Order, Rename, Into, Jump     bkey.Binding
+	Second, New, Switch, Grant, Dismiss                     bkey.Binding
+	Stoke, StokeChain, Night, Order, Rename, Jump, WasInto  bkey.Binding
 	StartAgain                                              bkey.Binding
 }
 
 func (k mainKeys) bindings() []bkey.Binding {
 	return []bkey.Binding{k.Stoker, k.Quit, k.NextTab, k.PrevTab, k.Search, k.Back, k.Sort,
 		k.Park, k.Mark, k.Exited, k.MarkSafe, k.QuitAgent, k.Up, k.Down, k.Open,
-		k.Second, k.New, k.Switch, k.Grant, k.Dismiss, k.Fold,
-		k.Stoke, k.StokeChain, k.Night, k.Order, k.Rename, k.Into, k.Jump, k.StartAgain}
+		k.Second, k.New, k.Switch, k.Grant, k.Dismiss,
+		k.Stoke, k.StokeChain, k.Night, k.Order, k.Rename, k.Jump, k.WasInto, k.StartAgain}
 }
 
 // formKeys are the new-session, switch and rename form. Down and Up go to
@@ -288,14 +291,25 @@ type askKeys struct{ Send, Cancel, Erase, Copy bkey.Binding }
 
 func (k askKeys) bindings() []bkey.Binding { return []bkey.Binding{k.Send, k.Cancel, k.Erase, k.Copy} }
 
-// boardKeys are the board's own keys, over mainKeys while the board shows:
-// ↑ ↓ ⏎ x y esc and the rest keep their mainKeys bindings.
+// boardKeys are the list's own keys, over mainKeys while the Sessions tab
+// shows: ↑ ↓ ⏎ x y esc and the rest keep their mainKeys bindings.
 type boardKeys struct {
-	Left, Right, Copy, Density, Chain, Host, Strip, NextChain, PrevChain, Menu, Merge bkey.Binding
+	Copy, Chain, Host, Menu, Merge bkey.Binding
 }
 
 func (k boardKeys) bindings() []bkey.Binding {
-	return []bkey.Binding{k.Left, k.Right, k.Copy, k.Density, k.Chain, k.Host, k.Strip, k.NextChain, k.PrevChain, k.Menu, k.Merge}
+	return []bkey.Binding{k.Copy, k.Chain, k.Host, k.Menu, k.Merge}
+}
+
+// sideKeys are the chat's line and the list beside it. In the line every
+// printable key is text; only the arrows choose, and only with the line
+// empty. In the list ⏎ goes back to the line, and the board's keys act on
+// the chosen session. List comes back to the list from a chat that has the
+// screen; HideList hides or shows the list, from either place.
+type sideKeys struct{ Enter, Erase, Leave, Up, Down, Unhide, List, HideList bkey.Binding }
+
+func (k sideKeys) bindings() []bkey.Binding {
+	return []bkey.Binding{k.Enter, k.Erase, k.Leave, k.Up, k.Down, k.Unhide, k.List, k.HideList}
 }
 
 // shellKeys are the Hosts list. Update and Dismiss act on a host on
