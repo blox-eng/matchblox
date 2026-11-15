@@ -86,7 +86,6 @@ func defaultKeys() keymaps {
 			Switch:     bind(ks("A", "shift+a"), "A", "switch"),
 			Grant:      bind(ks("y"), "y", "give the go"),
 			Dismiss:    bind(ks("d"), "d", "dismiss"),
-			Fold:       bind(ks("h"), "h", "fold recs"),
 			Stoke:      bind(ks("f"), "f", "stoker"),
 			StokeChain: bind(ks("F", "shift+f"), "F", "stoke chain"),
 			Night:      bind(ks("n"), "n", "stop night"),
@@ -235,7 +234,7 @@ func (k globalKeys) bindings() []bkey.Binding { return []bkey.Binding{k.Quit} }
 type mainKeys struct {
 	Stoker, Quit, NextTab, PrevTab, Search, Back, Sort      bkey.Binding
 	Park, Mark, Exited, MarkSafe, QuitAgent, Up, Down, Open bkey.Binding
-	Second, New, Switch, Grant, Dismiss, Fold               bkey.Binding
+	Second, New, Switch, Grant, Dismiss                     bkey.Binding
 	Stoke, StokeChain, Night, Order, Rename, Into, Jump     bkey.Binding
 	StartAgain                                              bkey.Binding
 }
@@ -243,7 +242,7 @@ type mainKeys struct {
 func (k mainKeys) bindings() []bkey.Binding {
 	return []bkey.Binding{k.Stoker, k.Quit, k.NextTab, k.PrevTab, k.Search, k.Back, k.Sort,
 		k.Park, k.Mark, k.Exited, k.MarkSafe, k.QuitAgent, k.Up, k.Down, k.Open,
-		k.Second, k.New, k.Switch, k.Grant, k.Dismiss, k.Fold,
+		k.Second, k.New, k.Switch, k.Grant, k.Dismiss,
 		k.Stoke, k.StokeChain, k.Night, k.Order, k.Rename, k.Into, k.Jump, k.StartAgain}
 }
 

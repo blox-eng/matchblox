@@ -215,7 +215,7 @@ func (m Model) firstWaiting() int {
 // selection to the next door. Nothing picked: the first session that
 // waits, else the first door; with no session, the first ghost row.
 func (m Model) sessIndex() int {
-	nd, ns, ng, nr := len(m.doors), len(m.snap.Sessions), len(m.ghosts())+len(m.blockedHosts()), m.recRows()
+	nd, ns, ng := len(m.doors), len(m.snap.Sessions), len(m.ghosts())+len(m.blockedHosts())
 	for i, d := range m.doors {
 		if d.ID == m.doorPick {
 			return i
@@ -224,7 +224,7 @@ func (m Model) sessIndex() int {
 	if nd > 0 && m.doorPick != "" {
 		return min(m.doorAt, nd-1)
 	}
-	for i, r := range m.recs[:nr] {
+	for i, r := range m.recs {
 		if r.ID == m.recPick && m.recPick != "" {
 			return nd + ns + ng + i
 		}
@@ -266,7 +266,7 @@ func (m Model) selectedRec() (advice.Rec, bool) {
 		return advice.Rec{}, false
 	}
 	i := m.sessIndex() - len(m.doors) - len(m.snap.Sessions) - len(m.ghosts()) - len(m.blockedHosts())
-	if i < 0 || i >= m.recRows() {
+	if i < 0 || i >= len(m.recs) {
 		return advice.Rec{}, false
 	}
 	return m.recs[i], true

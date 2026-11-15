@@ -106,7 +106,7 @@ var views = [...]tabView{
 	tabSessions: {
 		keys: func(m Model) []hint { return m.boardHints(max(m.width, minWidth)) },
 		count: func(m Model) int {
-			return len(m.doors) + len(m.snap.Sessions) + len(m.ghosts()) + len(m.blockedHosts()) + m.recRows()
+			return len(m.doors) + len(m.snap.Sessions) + len(m.ghosts()) + len(m.blockedHosts()) + len(m.recs)
 		},
 		index: Model.sessIndex,
 		pick: func(m *Model, i int) {

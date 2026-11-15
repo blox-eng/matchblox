@@ -1734,10 +1734,6 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.tab == tabSessions {
 			m.dismissRec()
 		}
-	case bkey.Matches(k, mk.Fold):
-		if m.tab == tabSessions {
-			m.foldRecs()
-		}
 	case bkey.Matches(k, mk.Stoke):
 		return m.stokerKey(false)
 	case bkey.Matches(k, mk.Night):

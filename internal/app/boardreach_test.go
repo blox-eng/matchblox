@@ -151,8 +151,7 @@ func TestTheBoardReachesDoorsGhostAndRecommendations(t *testing.T) {
 		t.Errorf("the recommendation does not say what came of x (%s):\n%s", reachOf(m), plainFrame(m))
 	}
 
-	// d dismisses it, and the one before takes the choice; h folds them and
-	// the choice goes to the ghost row; h again shows them.
+	// d dismisses it, and the one before takes the choice.
 	m = pressOn(m, "d")
 	if out := plainFrame(m); strings.Contains(out, "○ Clear tinder-scratch") || !strings.Contains(out, "RECOMMENDATIONS · 1") {
 		t.Fatalf("d did not dismiss the recommendation:\n%s", out)
@@ -160,26 +159,11 @@ func TestTheBoardReachesDoorsGhostAndRecommendations(t *testing.T) {
 	if reachOf(m) != "rec r1" {
 		t.Errorf("after d the board chose %s, want the other recommendation", reachOf(m))
 	}
-	m = pressOn(m, "h")
-	if out := plainFrame(m); !strings.Contains(out, "RECOMMENDATIONS · 1 hidden") || reachOf(m) != "ghost" {
-		t.Fatalf("h did not fold the recommendations (%s):\n%s", reachOf(m), out)
-	}
-	if m = pressOn(m, "down"); reachOf(m) != "ghost" {
-		t.Errorf("↓ reached a folded recommendation: %s", reachOf(m))
-	}
-	if m = pressOn(m, "h"); !strings.Contains(plainFrame(m), "RECOMMENDATIONS · 1") || strings.Contains(plainFrame(m), "hidden") {
-		t.Errorf("h again did not show the recommendations:\n%s", plainFrame(m))
-	}
 
-	// Taps, as on their rows: the label folds the recommendations, the
-	// chosen one's dismiss mark dismisses it, and the ghost row opens New
-	// session on its folder.
-	m = pressOn(m, "down")
+	// Taps, as on their rows: the chosen one's dismiss mark dismisses it,
+	// and the ghost row opens New session on its folder.
 	if tapped, _ := tap(m, m.width-3, lineOf(t, m, "Compact flint-auth")); strings.Contains(screen(tapped), "▲ Compact flint-auth") {
 		t.Errorf("a tap on the dismiss mark did not dismiss:\n%s", screen(tapped))
-	}
-	if folded, _ := tap(m, 3, lineOf(t, m, "RECOMMENDATIONS")); !strings.Contains(screen(folded), "RECOMMENDATIONS · 1 hidden") {
-		t.Errorf("a tap on the label did not fold:\n%s", screen(folded))
 	}
 	if opened, _ := tap(m, 3, lineOf(t, m, "start a new session here")); opened.(Model).form == nil {
 		t.Error("a tap on the ghost row did not open New session")

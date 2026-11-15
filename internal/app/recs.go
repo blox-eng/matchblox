@@ -11,13 +11,11 @@ import (
 
 // recPrefs is what the person did to the recommendations, kept in the
 // state directory: the ones dismissed, each with the evidence it was
-// dismissed on, and whether the section is folded. Releases are the
-// release notes of host rows dismissed, each as host, its release and
-// this console's, joined by NUL. Updated is the last record of mode auto
-// shown, its release and time joined by NUL.
+// dismissed on. Releases are the release notes of host rows dismissed,
+// each as host, its release and this console's, joined by NUL. Updated is
+// the last record of mode auto shown, its release and time joined by NUL.
 type recPrefs struct {
 	Dismissed map[string]string `json:"dismissed,omitempty"`
-	Folded    bool              `json:"folded,omitempty"`
 	Releases  []string          `json:"releases,omitempty"`
 	Updated   string            `json:"updated,omitempty"`
 }
@@ -68,15 +66,6 @@ func (p recPrefs) dismissed(r advice.Rec) bool {
 	return ok && ev == r.Evidence
 }
 
-// recRows is how many recommendation rows can be selected: none while the
-// section is folded.
-func (m Model) recRows() int {
-	if m.recPrefs.Folded {
-		return 0
-	}
-	return len(m.recs)
-}
-
 // dismissRec hides the selected recommendation until its evidence changes.
 func (m *Model) dismissRec() {
 	r, ok := m.selectedRec()
@@ -99,18 +88,5 @@ func (m *Model) dismissRec() {
 	m.refresh()
 	if n := len(m.recs); n > 0 { // the next one takes the selection
 		m.recPick, m.ghostPick = m.recs[min(at, n-1)].ID, 0
-	}
-}
-
-// foldRecs folds the recommendations to one line, or unfolds them.
-func (m *Model) foldRecs() {
-	if _, ok := m.selectedRec(); ok && !m.recPrefs.Folded {
-		m.chose = true // the selection leaves the folded section for the sessions
-		m.recPick, m.ghostPick = "", 0
-	}
-	m.recPrefs.Folded = !m.recPrefs.Folded
-	m.flash = ""
-	if err := m.recPrefs.save(m.opt.StateDir); err != nil {
-		m.flash = "not kept: " + err.Error()
 	}
 }

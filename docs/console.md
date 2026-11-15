@@ -245,8 +245,8 @@ ghost row, then the recommendations. Each opens in place.
   one you used last. With no session it comes first, and two more rows
   start in your next most recent repos.
 - **The recommendations**: each with its evidence and its exact command.
-  `d` dismisses the chosen one until its evidence changes; `h` folds them
-  all to one line, and `h` again shows them. The console remembers both.
+  `d` dismisses the chosen one until its evidence changes. The console
+  remembers it.
 
 ### A new release
 

@@ -260,7 +260,7 @@ func (m *Model) belowMove(d int) {
 	}
 }
 
-// belowKey is ⏎, x, d or h on a line under the columns: the ghost row and
+// belowKey is ⏎, x or d on a line under the columns: the ghost row and
 // a recommendation take them as their rows in Sessions did.
 func (m Model) belowKey(line string, k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	m.pickBelow(line)
@@ -271,7 +271,7 @@ func (m Model) belowKey(line string, k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // id line while it shows, else the ghost row.
 func (m *Model) pickBelow(line string) {
 	m.doorPick, m.recPick, m.ghostPick = "", "", 1
-	if line != "" && slices.ContainsFunc(m.recs[:m.recRows()], func(r advice.Rec) bool { return r.ID == line }) {
+	if line != "" && slices.ContainsFunc(m.recs, func(r advice.Rec) bool { return r.ID == line }) {
 		m.recPick, m.ghostPick = line, 0
 	}
 }
@@ -569,7 +569,7 @@ func (m Model) boardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 		m.belowMove(1)
 	case below && bkey.Matches(k, mk.Back):
 		m.belowMove(-m.boardBelow) // back to the card
-	case below && bkey.Matches(k, mk.Open, mk.Second, mk.Dismiss, mk.Fold):
+	case below && bkey.Matches(k, mk.Open, mk.Second, mk.Dismiss):
 		next, cmd := m.belowKey(under, k)
 		return next, cmd, true
 	case bkey.Matches(k, mk.Up):
@@ -619,7 +619,7 @@ func (m Model) boardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 		next, cmd := m.answerFromChat(k.Text)
 		return next, cmd, true
 	case !ok && len(m.snap.Sessions) > 0 && bkey.Matches(k, bk.Merge, bk.Menu, mk.Second, mk.Grant, mk.Open, mk.Into, mk.Jump,
-		mk.Park, mk.Rename, mk.Switch, mk.Dismiss, mk.Fold, mk.Stoke, mk.StokeChain, mk.Night, mk.Order):
+		mk.Park, mk.Rename, mk.Switch, mk.Dismiss, mk.Stoke, mk.StokeChain, mk.Night, mk.Order):
 		// A line above or under the columns is chosen, a search or a host leaves
 		// no card, or every column is hidden: never a row of Sessions the person
 		// cannot see. The notice names the fix that is true.
@@ -660,7 +660,7 @@ func (m Model) boardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 	case bkey.Matches(k, mk.Open, mk.Into, mk.Jump):
 		next, cmd := m.boardInto(s)
 		return next, cmd, true
-	case bkey.Matches(k, mk.Park, mk.New, mk.Rename, mk.Switch, mk.Exited, mk.Dismiss, mk.Fold,
+	case bkey.Matches(k, mk.Park, mk.New, mk.Rename, mk.Switch, mk.Exited, mk.Dismiss,
 		mk.Stoke, mk.StokeChain, mk.Night, mk.Order, mk.Search):
 		next, cmd := m.onCard(s).key(k)
 		return next, cmd, true
@@ -673,7 +673,7 @@ func (m Model) boardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 // cardKeys are the keys that act on the chosen card.
 func cardKeys(bk boardKeys, mk mainKeys) []bkey.Binding {
 	return []bkey.Binding{bk.Merge, bk.Menu, bk.Copy, bk.Chain, mk.Second, mk.Grant, mk.Open, mk.Into, mk.Jump,
-		mk.Park, mk.Rename, mk.Switch, mk.Dismiss, mk.Fold, mk.Stoke, mk.StokeChain, mk.Night, mk.Order}
+		mk.Park, mk.Rename, mk.Switch, mk.Dismiss, mk.Stoke, mk.StokeChain, mk.Night, mk.Order}
 }
 
 // cardDrawn: the board draws the card of s on the screen it has now.
@@ -903,7 +903,7 @@ func (m Model) belowHints(id string) []hint {
 	if m.recs[i].Second != nil {
 		hs = append(hs, hintFor(mk.Second, "other"))
 	}
-	return append(hs, hintFor(mk.Dismiss, "dismiss"), hintFor(mk.Fold, "hide"))
+	return append(hs, hintFor(mk.Dismiss, "dismiss"))
 }
 
 // boardKeyLine is the board's key line: the notice of a newer service
@@ -1000,16 +1000,14 @@ func (m Model) boardTap(x, y int) (tea.Model, tea.Cmd) {
 }
 
 // underTap is a tap at x on a line under the columns, as on its row in
-// Sessions: the ghost row opens New session, the recommendations' label
-// folds them, and the chosen one's dismiss mark dismisses it.
+// Sessions: the ghost row opens New session, and the chosen
+// recommendation's dismiss mark dismisses it.
 func (m Model) underTap(at string, x, w int) (tea.Model, tea.Cmd) {
 	mk := m.keys.main
 	switch line, below := m.belowChosen(); {
 	case at == atGhost:
 		m.boardBelow = 1
 		return m.belowKey("", keyPress(mk.Open.Keys()[0]))
-	case at == atRecs:
-		return m.belowKey("", keyPress(mk.Fold.Keys()[0]))
 	case below && at == line && x >= w-m.dismissWidth():
 		return m.belowKey(line, keyPress(mk.Dismiss.Keys()[0]))
 	}

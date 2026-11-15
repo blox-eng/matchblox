@@ -42,7 +42,6 @@ the right.
 | `o` | Gives a new order while a day run is on: the launch sheet opens with the run's gos, and the order goes to the stoker as one line. The run goes on, and done steps stay done. A night is sealed: `n` stops it first. |
 | `e` | Shows or hides the agents that exited and wait for their parent. |
 | `d` | Dismisses the chosen recommendation until its evidence changes. |
-| `h` | Folds the recommendations to one line, or shows them again. |
 | `⌥s` | Opens the room of the chosen card's chain, as `g` does. A session in no chain opens its chain of one, which the host's stoker drives. |
 | `Esc` | Closes the menu, then clears a marked answer, then the search, then the chain. It never leaves the console, except on a host that has not answered yet: then it goes back to Hosts. `Ctrl+M`, prefix `m` and the phone's back button do the same in the console. |
 | `q` or `Ctrl+C` | Quits the console. The service keeps running. |

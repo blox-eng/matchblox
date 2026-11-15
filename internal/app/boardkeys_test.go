@@ -652,7 +652,7 @@ func TestNoCardChosenActsOnNothing(t *testing.T) {
 	if _, ok := m.boardSelected(); ok {
 		t.Fatal("a card is chosen with every column hidden")
 	}
-	for _, k := range []string{"enter", "a", "ctrl+o", "z", "r", "A", "d", "h", "f", "F", "n", "o", "x", "p", "y"} {
+	for _, k := range []string{"enter", "a", "ctrl+o", "z", "r", "A", "d", "f", "F", "n", "o", "x", "p", "y"} {
 		next, cmd := key(m, k)
 		drain(cmd)
 		nm := next.(Model)

@@ -295,16 +295,12 @@ func (m Model) underLines(w int, none bool) []boardLine {
 	n := len(m.recs)
 	switch i := slices.IndexFunc(m.recs, func(r advice.Rec) bool { return below && r.ID == line }); {
 	case n == 0:
-	case m.recPrefs.Folded:
-		out = append(out, boardLine{fit(st.label.Render(fmt.Sprintf(" RECOMMENDATIONS · %d hidden", n))+st.faint.Render(" · ")+
-			keyWord(m.keys.main.Fold, st.accent, st.faint, " shows"), w), false, atRecs})
 	case i < 0:
 		out = append(out, boardLine{st.label.Render(fit(fmt.Sprintf(" RECOMMENDATIONS · %d", n), w)), false, atRecs})
 	default:
 		r := m.recs[i]
 		out = append(out,
-			boardLine{fit(st.label.Render(fmt.Sprintf(" RECOMMENDATIONS · %d", n))+st.faint.Render(" · ")+
-				keyWord(m.keys.main.Fold, st.accent, st.faint, " hides"), w), false, atRecs},
+			boardLine{st.label.Render(fit(fmt.Sprintf(" RECOMMENDATIONS · %d", n), w)), false, atRecs},
 			boardLine{fit(m.recLine(r, true, w), w), true, r.ID})
 		for _, l := range wrap(" "+tilde(r.Evidence), w, st.muted.Render) {
 			out = append(out, boardLine{fit(l, w), true, r.ID})
@@ -324,7 +320,7 @@ func (m Model) belowLines() []string {
 		return nil
 	}
 	lines := []string{""}
-	for _, r := range m.recs[:m.recRows()] {
+	for _, r := range m.recs {
 		lines = append(lines, r.ID)
 	}
 	return lines
