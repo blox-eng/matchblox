@@ -67,17 +67,46 @@ func (m Model) sideSessions() []sample.Session {
 	return append(listed, m.shipCards()...)
 }
 
+// sideGroupsBuilt counts the builds of the groups, for the tests.
+var sideGroupsBuilt int
+
 // sideGroups are the groups that hold a session of the hosts in view, in
 // state rank. A chain is one unit, in the group of its most urgent member,
 // and counts only the members in that state.
 func (m Model) sideGroups() []sideGroup {
+	if m.side != nil && m.side.built {
+		return slices.Clip(m.side.groups)
+	}
+	groups := m.buildSideGroups()
+	if m.side != nil {
+		m.side.groups, m.side.built = groups, true
+	}
+	return slices.Clip(groups)
+}
+
+// sideMemo keeps one build of the groups, and the order they give, for a
+// step that changes nothing they are built from: a frame, the steps after
+// a message, a move of the choice.
+type sideMemo struct {
+	built           bool
+	groups          []sideGroup
+	order, walk     []paneKey
+	ordered, walked bool
+}
+
+func (m Model) buildSideGroups() []sideGroup {
+	sideGroupsBuilt++
 	var units []sideUnit
 	var states [][]sideState
 	done := map[chainKey]bool{}
 	listed := slices.DeleteFunc(m.sideSessions(), func(s sample.Session) bool { return !m.inView(s.Host) })
 	isListed := map[paneKey]bool{}
+	inChain := map[chainKey][]sample.Session{} // the listed matches of each chain, in list order
 	for _, s := range listed {
 		isListed[paneOf(s)] = true
+		if k, ok := m.chainKeyOf(s); ok {
+			inChain[k] = append(inChain[k], s)
+		}
 	}
 	for _, s := range listed {
 		k, ok := m.chainKeyOf(s)
@@ -99,11 +128,9 @@ func (m Model) sideGroups() []sideGroup {
 				have[paneOf(o)] = true
 			}
 		}
-		for _, o := range listed { // a listed match the team does not name still shows
-			if ok := have[paneOf(o)]; !ok {
-				if ko, in := m.chainKeyOf(o); in && ko == k {
-					ms = append(ms, o)
-				}
+		for _, o := range inChain[k] { // a listed match the team does not name still shows
+			if !have[paneOf(o)] {
+				ms = append(ms, o)
 			}
 		}
 		hs := make([]sideState, len(ms))
@@ -152,6 +179,20 @@ func (m Model) sideOrder() []paneKey { return m.sidePanes(true) }
 func (m Model) sideWalk() []paneKey { return m.sidePanes(false) }
 
 func (m Model) sidePanes(folded bool) []paneKey {
+	if m.side != nil {
+		got, done := &m.side.walk, &m.side.walked
+		if folded {
+			got, done = &m.side.order, &m.side.ordered
+		}
+		if !*done {
+			*got, *done = m.buildSidePanes(folded), true
+		}
+		return slices.Clip(*got)
+	}
+	return m.buildSidePanes(folded)
+}
+
+func (m Model) buildSidePanes(folded bool) []paneKey {
 	var out []paneKey
 	for _, g := range m.sideGroups() {
 		if !folded && m.sideFold[g.state] {

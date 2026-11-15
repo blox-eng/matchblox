@@ -382,6 +382,9 @@ func printsText(k tea.KeyPressMsg) bool {
 // sideMove chooses the session d places down the list as drawn: a folded
 // group's rows are not drawn, so the walk passes them.
 func (m *Model) sideMove(d int) {
+	was := m.side
+	m.side = &sideMemo{} // a move changes only the choice: one build of the list serves it
+	defer func() { m.side = was }()
 	walk := m.sideWalk()
 	if len(walk) == 0 {
 		return

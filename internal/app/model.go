@@ -498,6 +498,10 @@ type Model struct {
 	// shown is the frame View drew last, shared by every copy of this
 	// Model: a tap and a wheel tick find what they hit in it.
 	shown *shownFrame
+	// side is one build of the list's groups while a frame draws, or a
+	// step that changes nothing they are built from runs; nil elsewhere,
+	// where each read builds them.
+	side *sideMemo
 
 	// boardChain and boardHost narrow the list to one chain and one host,
 	// each by its name; "" shows all.
@@ -788,6 +792,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var held tea.Cmd
 		nm, held = nm.heldRelease()
 		cmd = tea.Batch(cmd, held)
+		nm.side = &sideMemo{}                                                      // the steps after the message read the list and change nothing it is built from
 		nm = nm.scanShows().keepView().inDemo().sideKeep().chatMarkOn().onChoice() // what reads Sessions' selection reads the board's choice
 		again := nm.beltPoll(msg)
 		nm, belt := nm.tellBelt(again)
@@ -798,6 +803,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if watch := nm.watchCmd(); watch != nil {
 			cmd = tea.Batch(cmd, watch)
 		}
+		nm.side = nil
 		next = nm
 	}
 	return next, cmd
