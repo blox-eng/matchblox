@@ -107,7 +107,7 @@ terminal.`
   Board layout. Home is `◂`, then the keys of the chosen card (`1 answer`,
   `p merge`, `y go`), then `↑ ↓ ⏎`. The rest of the belt has every other
   key of the board: `c copy`, `m menu`, `g chain`, `s hosts`, `⇥ machine`,
-  `x kill`, `←`, `→`, `]`, `[`, `/`, `z park`. A key that does not apply is
+  `x kill`, `]`, `[`, `/`, `z park`. A key that does not apply is
   dim and sends nothing. In a pane, the belt
   goes back to the layout it had there. A tap on `y go` does not give the
   go. The first tap arms it: the card says what the go does, for example

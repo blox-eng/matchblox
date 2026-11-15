@@ -113,7 +113,7 @@ func TestAllHiddenSaysHowToComeBack(t *testing.T) {
 			}
 		})
 		f := plainFrame(m)
-		if !strings.Contains(strings.Join(strings.Fields(f), " "), "Every column is hidden. → or a tap on a + name shows one.") {
+		if !strings.Contains(strings.Join(strings.Fields(f), " "), "Every column is hidden. A tap on a + name shows one.") {
 			t.Errorf("%d: the body does not say how to come back:\n%s", size[0], f)
 		}
 		for _, mark := range []string{"+ need 4", "+ work 3", "+ ship 3", "+ quiet 5"} {
@@ -229,10 +229,8 @@ func TestGNarrowsToTheChain(t *testing.T) {
 		t.Errorf("] on gpu-1 alone goes to %q: no chain has a match there", hosted.boardChain)
 	}
 
-	m = pressOn(m, "right")
-	for chosenName(t, m) != "flint-docs" {
-		m = pressOn(m, "down")
-	}
+	docs := matchOf(t, m, "flint-docs")
+	m.boardChooseCard(m.columnOf(docs), docs)
 	if m = pressOn(m, "g"); m.boardChain != "" || noticeRow(m) != "flint-docs is in no chain" {
 		t.Errorf("g on a card in no chain: chain %q, notice %q", m.boardChain, noticeRow(m))
 	}

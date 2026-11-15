@@ -153,7 +153,7 @@ func TestTheCardSaysWhatTheRowSaid(t *testing.T) {
 			continue // QUIET's cards are one line beside the others: no word
 		}
 		m = portShot(t, w, 40, "ember-reports", st)
-		m.boardShowCol(colQuiet)
+		m.openColumn(colQuiet)
 		if out := plainFrame(m); !strings.Contains(out, "#4556 waits your merge") {
 			t.Errorf("width %d: the reason is not on the card:\n%s", w, out)
 		}
@@ -204,7 +204,7 @@ func TestTheStokersAgentIsNoCard(t *testing.T) {
 			}
 		}
 		m := portShot(t, w, 40, "", edit(false))
-		m.boardShowCol(colQuiet)
+		m.openColumn(colQuiet)
 		if strings.Contains(plainFrame(m), "ember-reports") {
 			t.Errorf("width %d: the stoker's agent is a card:\n%s", w, plainFrame(m))
 		}
@@ -376,9 +376,6 @@ func TestATakeOverIsAskedFromTheBoard(t *testing.T) {
 		t.Errorf("a second tap: held %v ran %q, want Take over? first", next.(Model).held != nil, *ran)
 	}
 
-	if p := pressOn(night(), "right", "right").pending; p != nil {
-		t.Errorf("a move asked %+v", p)
-	}
 	m = night() // gpu-1 runs the night too
 	billing := matchOf(t, m, "ember-billing")
 	m.boardChooseCard(colWork, billing)

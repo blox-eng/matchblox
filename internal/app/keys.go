@@ -58,7 +58,7 @@ var shadowsMain = map[string]map[string]bool{
 	"confirm":  {"y": true, "enter": true, "up": true, "k": true, "down": true, "j": true},
 	"scan":     {"y": true, "n": true, "esc": true},
 	"ask":      {"esc": true, "enter": true, "c": true},
-	"board":    {"right": true, "c": true, "s": true},
+	"board":    {"c": true, "s": true},
 	"side":     {"enter": true, "esc": true, "up": true, "down": true},
 }
 
@@ -163,8 +163,6 @@ func defaultKeys() keymaps {
 			Copy:   bind(ks("c"), "c", "copy the link"),
 		},
 		board: boardKeys{
-			Left:      bind(ks("left"), "←→", "columns"),
-			Right:     bind(ks("right"), "←→", "columns"),
 			Copy:      bind(ks("c"), "c", "copy"),
 			Chain:     bind(ks("g"), "g", "chain"),
 			Host:      bind(ks("s"), "s", "hosts"),
@@ -300,11 +298,11 @@ func (k askKeys) bindings() []bkey.Binding { return []bkey.Binding{k.Send, k.Can
 // boardKeys are the board's own keys, over mainKeys while the board shows:
 // ↑ ↓ ⏎ x y esc and the rest keep their mainKeys bindings.
 type boardKeys struct {
-	Left, Right, Copy, Chain, Host, NextChain, PrevChain, Menu, Merge bkey.Binding
+	Copy, Chain, Host, NextChain, PrevChain, Menu, Merge bkey.Binding
 }
 
 func (k boardKeys) bindings() []bkey.Binding {
-	return []bkey.Binding{k.Left, k.Right, k.Copy, k.Chain, k.Host, k.NextChain, k.PrevChain, k.Menu, k.Merge}
+	return []bkey.Binding{k.Copy, k.Chain, k.Host, k.NextChain, k.PrevChain, k.Menu, k.Merge}
 }
 
 // sideKeys are the chat's line and the list beside it. In the line every

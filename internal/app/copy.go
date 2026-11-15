@@ -147,12 +147,6 @@ func doorIDs(ds []doors.Door) string {
 	return strings.Join(ids, " ")
 }
 
-// stepDoor names the door d steps (← -1, → 1) along the doors line.
-func (m *Model) stepDoor(d int) {
-	ds := m.boardDoors()
-	m.boardDoor, m.boardDoorsOf = max(min(m.doorIndex(ds)+d, len(ds)-1), 0), doorIDs(ds)
-}
-
 // openBoardDoor is ⏎ or a tap on the doors line: it opens the door the
 // line names. The check copies its code, the fix waits for its y, and a
 // service's door opens as from its row in Sessions.

@@ -350,53 +350,22 @@ func (m Model) aboveOpen(host string, k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// boardSide opens the next shown column that has a card, at the left (d -1)
-// or the right (d 1), on the card it had chosen. Past the last one it shows
-// a hidden column, so a keyboard alone brings one back: the first of them
-// at the right (their + names end the tab row), the last at the left.
-func (m *Model) boardSide(d int) {
-	b, shown := m.boardDrawOf()
-	at := slices.Index(shown, b.open)
-	if len(shown) == 0 {
-		at = -1
+// openColumn is a tap on a column's name or its + name: it shows the
+// column when it is hidden, and opens it on the card it had chosen, else
+// its first.
+func (m *Model) openColumn(c boardCol) {
+	if m.colHidden(c) {
+		m.flipHidden(c)
 	}
-	for i := at + d; i >= 0 && i < len(shown); i += d {
-		if m.boardOpen(shown[i]) {
-			return
-		}
-	}
-	hidden := slices.DeleteFunc(slices.Clone(boardCols[:]), func(c boardCol) bool { return !m.colHidden(c) })
-	switch {
-	case len(hidden) == 0:
-	case d > 0:
-		m.boardShowCol(hidden[0])
-	default:
-		m.boardShowCol(hidden[len(hidden)-1])
-	}
-}
-
-// boardOpen opens column c on the card it had chosen, else its first;
-// false: c has no card.
-func (m *Model) boardOpen(c boardCol) bool {
 	b, _ := m.boardDrawOf()
 	ss := b.idx[c]
 	if len(ss) == 0 {
-		return false
+		m.boardAt = c
+		return
 	}
 	k, ok := m.boardPick[c]
 	at := slices.IndexFunc(ss, func(s sample.Session) bool { return ok && paneOf(s) == k })
 	m.boardChooseCard(c, ss[max(at, 0)])
-	return true
-}
-
-// boardShowCol shows column c when it is hidden, and opens it.
-func (m *Model) boardShowCol(c boardCol) {
-	if m.colHidden(c) {
-		m.flipHidden(c)
-	}
-	if !m.boardOpen(c) {
-		m.boardAt = c
-	}
 }
 
 // clearBoardFilters is a tap on the count: NEEDS YOU shows, every chain,
@@ -520,10 +489,6 @@ func (m Model) boardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 		if m.noticeText == m.pasteHere() {
 			m.noticeText = ""
 		}
-	case above && line == "" && bkey.Matches(k, bk.Left):
-		m.stepDoor(-1)
-	case above && line == "" && bkey.Matches(k, bk.Right):
-		m.stepDoor(1)
 	case above && bkey.Matches(k, mk.Up):
 		m.aboveMove(-1)
 	case above && bkey.Matches(k, mk.Down):
@@ -554,12 +519,6 @@ func (m Model) boardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 		m.chooseByHand()
 	case bkey.Matches(k, mk.Down):
 		m.boardMove(1)
-		m.chooseByHand()
-	case bkey.Matches(k, bk.Left):
-		m.boardSide(-1)
-		m.chooseByHand()
-	case bkey.Matches(k, bk.Right):
-		m.boardSide(1)
 		m.chooseByHand()
 	case bkey.Matches(k, mk.Back):
 		// The menu took esc first; then the mark, the search, the chain.
@@ -850,11 +809,7 @@ func (m Model) boardHints(w int) []hint {
 		armed, sent := m.chatMarks(b.chosen)
 		hs, _ = m.cardHints(b.chosen, cardOpts{sel: true, armed: armed}, len(q.Options), answers && sent == 0)
 	}
-	right := hintFor(bk.Right, "")
-	if above && line == "" && len(m.boardDoors()) > 1 {
-		right.label = "doors"
-	}
-	return append(append(hs, tail...), right, hintFor(mk.NextTab, ""))
+	return append(append(hs, tail...), hintFor(mk.NextTab, ""))
 }
 
 // belowHints are the keys of a line under the columns: the ghost row's,
@@ -920,7 +875,7 @@ func (m Model) boardTap(x, y int) (tea.Model, tea.Cmd) {
 	if h, ok := spanAt(d.heads, x); ok && y == d.headAt {
 		c := boardCols[slices.IndexFunc(boardCols[:], func(c boardCol) bool { return c.short() == h.press })]
 		if m.colHidden(c) || m.layoutAt(w) == Narrow && c != b.open {
-			m.boardShowCol(c)
+			m.openColumn(c)
 		} else {
 			m.flipHidden(c)
 		}
@@ -1012,7 +967,7 @@ func (m Model) boardTabTap(press string) (Model, bool) {
 	}
 	for _, c := range boardCols {
 		if press == c.short() {
-			m.boardShowCol(c)
+			m.openColumn(c)
 			return m, true
 		}
 	}
@@ -1068,8 +1023,6 @@ func (m Model) beltKeys() []beltKey {
 		beltOf(bk.Host, "", "hosts", board && m.hostCount() > 1),
 		beltOf(mk.NextTab, "⇥", "machine", !m.consenting()),
 		beltOf(mk.Second, "", "kill", card && !head && !isShipCard(s) && m.killAction(s) != nil),
-		beltOf(bk.Left, "←", "", board),
-		beltOf(bk.Right, "→", "", board),
 		beltOf(bk.NextChain, "", "", chains),
 		beltOf(bk.PrevChain, "", "", chains),
 		beltOf(mk.Search, "", "", board),

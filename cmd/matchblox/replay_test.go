@@ -418,8 +418,6 @@ func keyMsg(k string) tea.KeyPressMsg {
 		return tea.KeyPressMsg{Code: tea.KeyEnter}
 	case "esc":
 		return tea.KeyPressMsg{Code: tea.KeyEscape}
-	case "left":
-		return tea.KeyPressMsg{Code: tea.KeyLeft}
 	case "ctrl+o":
 		return tea.KeyPressMsg{Code: rune(k[5]), Mod: tea.ModCtrl}
 	}
@@ -601,12 +599,23 @@ func replayAt(t *testing.T, z replaySize) {
 		re := regexp.MustCompile(`▌\S+ ` + regexp.QuoteMeta(name))
 		return func(s string) bool { return re.MatchString(s) }
 	}
-	// choose goes to the first column, then moves the selection down it
-	// until name's card is chosen.
+	// choose taps name's card when the screen shows it, then moves the
+	// selection down the open column until name's card is chosen.
 	choose := func(name string) func() {
 		return func() {
-			for range 3 {
-				p.Send(keyMsg("left"))
+			tap := func(text string) bool {
+				for y, l := range strings.Split(ansi.Strip(capture()), "\n") {
+					if i := strings.Index(l, text); i >= 0 {
+						p.Send(tea.MouseClickMsg{X: ansi.StringWidth(l[:i]), Y: y, Button: tea.MouseLeft})
+						return true
+					}
+				}
+				return false
+			}
+			if !tap(name) { // a phone shows one page: NEEDS YOU is the first
+				tap("need")
+				time.Sleep(100 * time.Millisecond)
+				tap(name)
 			}
 			for range 8 {
 				if chosen(name)(ansi.Strip(capture())) {

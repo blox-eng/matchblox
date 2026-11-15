@@ -65,67 +65,6 @@ func mergeOf(t *testing.T, st proto.State) proto.Ship {
 	return proto.Ship{}
 }
 
-func TestArrowsSkipHiddenAndEmptyColumns(t *testing.T) {
-	st := boardFixture(t)
-	for _, w := range []int{80, 104} {
-		m := boardShot(t, st, w, 38, func(m *Model) { m.flipHidden(colWork) })
-		m = pressOn(m, "right")
-		if m.boardAt != colShip || chosenName(t, m) != "cinder-ci" {
-			t.Errorf("w=%d: → from NEEDS YOU with WORKING hidden: %v, %s", w, m.boardAt, chosenName(t, m))
-		}
-
-		noShips := st
-		noShips.Ships = &proto.Ships{At: demoAt}
-		m = boardShot(t, noShips, w, 38, func(m *Model) { m.flipHidden(colWork) })
-		if n := len(m.boardIndex()[colShip]); n != 0 {
-			t.Fatalf("SHIPPING has %d cards", n)
-		}
-		m = pressOn(m, "right")
-		if m.boardAt != colQuiet {
-			t.Errorf("w=%d: → over a hidden and an empty column lands on %v", w, m.boardAt)
-		}
-		if m = pressOn(m, "right"); m.boardAt != colWork || m.colHidden(colWork) {
-			t.Errorf("w=%d: → at the last column does not show the hidden WORKING: %v", w, m.boardAt)
-		}
-		if m = pressOn(m, "left"); m.boardAt != colNeed {
-			t.Errorf("w=%d: ← from QUIET lands on %v", w, m.boardAt)
-		}
-	}
-}
-
-// TestAKeyShowsAHiddenColumn: a keyboard with no mouse brings a hidden
-// column back: → past the last shown column shows the first hidden one,
-// and with every column hidden → shows NEEDS YOU.
-func TestAKeyShowsAHiddenColumn(t *testing.T) {
-	st := boardFixture(t)
-	m := boardShot(t, st, 104, 38, nil)
-	for range boardCols {
-		m = pressOn(m, "m")
-		for m.menu != nil && !strings.HasPrefix(m.menu.items[m.menu.at].label, "hide") {
-			m = pressOn(m, "down")
-		}
-		m = pressOn(m, "enter")
-	}
-	if _, shown := m.boardDrawOf(); len(shown) != 0 {
-		t.Fatalf("the menu left %v shown", shown)
-	}
-	if f := strings.Join(strings.Fields(plainFrame(m)), " "); !strings.Contains(f, "→ or a tap on a + name shows one") {
-		t.Errorf("the body does not name the key:\n%s", plainFrame(m))
-	}
-	m = pressOn(m, "right")
-	if s, ok := m.boardSelected(); m.colHidden(colNeed) || m.boardAt != colNeed || !ok || m.columnOf(s) != colNeed {
-		t.Errorf("→ with every column hidden: need hidden %v, open %s, a card of it chosen %v", m.colHidden(colNeed), m.boardAt.name(), ok)
-	}
-
-	m = pressOn(boardShot(t, st, 104, 38, func(m *Model) { m.flipHidden(colWork) }), "right", "right")
-	if m.boardAt != colQuiet {
-		t.Fatalf("→ → from NEEDS YOU lands on %s", m.boardAt.name())
-	}
-	if m = pressOn(m, "right"); m.colHidden(colWork) || m.boardAt != colWork {
-		t.Errorf("→ past QUIET: work hidden %v, open %s", m.colHidden(colWork), m.boardAt.name())
-	}
-}
-
 // TestAKeyOnAnEmptySearchSaysEscClears: a card key with no card says the
 // fix that is true: esc clears a search, s turns a host, and a + name
 // shows a column only when one is hidden.
@@ -224,7 +163,7 @@ func TestAfterAnActTheFirstWaitIsChosen(t *testing.T) {
 	}
 }
 
-func TestTheKeyLineDropsWholeKeysFromTheRight(t *testing.T) {
+func TestTheKeyLineHasTheBoardsKeysOnly(t *testing.T) {
 	st := boardFixture(t)
 	m := boardShot(t, st, 64, 20, chooseCard("kindle-web"))
 	hints := m.boardHints(64)
@@ -232,17 +171,6 @@ func TestTheKeyLineDropsWholeKeysFromTheRight(t *testing.T) {
 		t.Fatalf("the board's keys: %+v", hints)
 	}
 	line := strings.TrimSpace(keyText(m.draw(64)))
-	var parts []string
-	whole := -1
-	for i, h := range hints {
-		parts = append(parts, h.key+" "+h.label)
-		if strings.Join(parts, "   ") == line {
-			whole = i
-		}
-	}
-	if whole < 0 || whole == len(hints)-1 {
-		t.Errorf("at 64 the key line does not end at a whole key of %d: %q", len(hints), line)
-	}
 	if strings.Contains(line, "sessions") || strings.Contains(line, "rename") {
 		t.Errorf("the key line has the keys of Sessions: %q", line)
 	}
@@ -423,9 +351,9 @@ func TestEscNeverLeavesTheConsole(t *testing.T) {
 // TestAPhoneKeepsOnlyNeedsYouWhole: on a phone NEEDS YOU is verbose and
 // every other page one line, but for the chosen card.
 func TestAPhoneKeepsOnlyNeedsYouWhole(t *testing.T) {
-	phone := boardShot(t, boardFixture(t), 40, 34, nil)
+	phone := boardShot(t, boardFixture(t), 40, 34, func(m *Model) { m.openColumn(colWork) })
 	page := func(m Model) string { return strings.Join(plainLines(m.boardPanel(40, m.bodyRows()).lines), "\n") }
-	if f := page(pressOn(phone, "right")); strings.Contains(f, "ctx 22%") {
+	if f := page(phone); strings.Contains(f, "ctx 22%") {
 		t.Errorf("a card of WORKING that is not chosen is not one line on a phone:\n%s", f)
 	}
 }
@@ -849,7 +777,7 @@ func beltKeyOf(t *testing.T, ks []beltKey, face string) beltKey {
 // TestBeltKeysFollowTheChosenCard (design decision 10): home is ◂, the
 // chosen card's keys, ↑ ↓ ⏎; the tail has every other key of the board.
 func TestBeltKeysFollowTheChosenCard(t *testing.T) {
-	tail := []string{"c", "m", "g", "s", "⇥", "x", "←", "→", "]", "[", "/", "z"}
+	tail := []string{"c", "m", "g", "s", "⇥", "x", "]", "[", "/", "z"}
 	st := boardFixture(t)
 
 	m, _ := flintBoard(t, 80, 34)
@@ -941,7 +869,7 @@ func TestTheBeltSignalSaysTheBoardsKeys(t *testing.T) {
 		if !c.consenting() {
 			t.Fatalf("%s does not show", name)
 		}
-		if got := value(c); got != ";c,m,g,s,tab,x,left,right,],[,/,z" {
+		if got := value(c); got != ";c,m,g,s,tab,x,],[,/,z" {
 			t.Errorf("%s: %q, want the home with no card keys", name, got)
 		}
 		if ks := c.beltKeys(); slices.ContainsFunc(ks, func(k beltKey) bool { return k.Act }) {

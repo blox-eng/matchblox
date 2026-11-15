@@ -719,20 +719,17 @@ func TestTheCheckBlocksNoOtherDoor(t *testing.T) {
 	if m.copyCode == "" || m.pending != nil {
 		t.Errorf("⏎ alone: code %q, pending %v; want the check", m.copyCode, m.pending)
 	}
-	m = pressOn(open(), "right")
+	m = onDoor(open(), 1).(Model)
 	if !strings.Contains(plainFrame(m), "SET UP · 2 of 2 · Install tmux") {
-		t.Errorf("→ does not name the next door:\n%s", plainFrame(m))
+		t.Errorf("the next door is not named:\n%s", plainFrame(m))
 	}
 	if m = pressOn(m, "enter"); m.pending == nil || m.pending.door != doors.Tmux || m.copyCode != "" {
-		t.Errorf("→ then ⏎ opened %v, code %q; want the tmux door", m.pending, m.copyCode)
-	}
-	if m = pressOn(open(), "right", "left"); !strings.Contains(plainFrame(m), "SET UP · 1 of 2 · Check that copy reaches you") {
-		t.Errorf("← does not step back:\n%s", plainFrame(m))
+		t.Errorf("the next door then ⏎ opened %v, code %q; want the tmux door", m.pending, m.copyCode)
 	}
 
-	// → during the check names another door: the check ends.
-	if m = pressOn(open(), "enter", "right"); m.copyCode != "" || strings.Contains(boardNoticeRow(m), "paste") || strings.Contains(keyLineOf(m), "cancel") {
-		t.Errorf("→ to another door keeps the check: code %q, row %q, keys %q", m.copyCode, boardNoticeRow(m), keyLineOf(m))
+	// Naming another door during the check ends the check.
+	if m = onDoor(pressOn(open(), "enter"), 1).(Model).copyCheckOn(); m.copyCode != "" || strings.Contains(boardNoticeRow(m), "paste") || strings.Contains(keyLineOf(m), "cancel") {
+		t.Errorf("another door keeps the check: code %q, row %q, keys %q", m.copyCode, boardNoticeRow(m), keyLineOf(m))
 	}
 
 	m = open()
@@ -880,9 +877,9 @@ func TestTheNamedDoorResetsWhenTheDoorsChange(t *testing.T) {
 	m, _, _ := uncheckedBoard(t, 80, 31, t.TempDir(), func(m *Model) {
 		m.doors = []doors.Door{{ID: doors.Tmux, Title: "Install tmux", Term: []string{"sh", "-c", "true"}}}
 	})
-	m = pressOn(toDoors(t, m), "right")
+	m = onDoor(toDoors(t, m), 1).(Model)
 	if !strings.Contains(plainFrame(m), "SET UP · 2 of 2 · Install tmux") {
-		t.Fatalf("→ named no second door:\n%s", plainFrame(m))
+		t.Fatalf("no second door is named:\n%s", plainFrame(m))
 	}
 	m.doors = append(m.doors, doors.Door{ID: doors.Guide, Title: "Open a guide session"})
 	if !strings.Contains(plainFrame(m), "SET UP · 1 of 3 · Check that copy reaches you") {

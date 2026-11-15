@@ -280,8 +280,6 @@ func (m Model) roomBoardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 	case own && bkey.Matches(k, rk.Open, rk.Give, rk.Back):
 		next, cmd := m.roomKey(k)
 		return next, cmd, true
-	case own && bkey.Matches(k, bk.Left, bk.Right):
-		m.roomToCard(1) // back to the open column
 	case own && (isDigit(k) || bkey.Matches(k, bk.Merge, bk.Menu, bk.Copy, mk.Second, mk.Into, mk.Jump, bk.Chain,
 		mk.Park, mk.Rename, mk.Switch, mk.Dismiss, mk.Stoke, mk.StokeChain, mk.Night, mk.Order)):
 		// The room's row is chosen, not a card: never a match the person cannot see.

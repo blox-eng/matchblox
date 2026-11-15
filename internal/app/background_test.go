@@ -24,7 +24,9 @@ func TestASessionWorkingThroughSubagentsSaysAgents(t *testing.T) {
 		if w < 80 {
 			// The agent says it works, so its old permission does not
 			// count: it is in WORKING, the phone's next page.
-			next, _ = key(next, "right")
+			mm := next.(Model)
+			mm.openColumn(colWork)
+			next = mm
 		}
 		out := screen(next)
 		var row string

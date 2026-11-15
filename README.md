@@ -140,7 +140,6 @@ More in [The console](https://docs.matchblox.com/console/).
 | Key | What it does |
 |---|---|
 | `↑` or `k`, `↓` or `j` | Chooses the card above or below. The chosen card shows its peek. |
-| `←` `→` | Goes to the column at the left or the right. |
 | `Enter` | The safe action: go into the chosen agent's pane. |
 | `a` | Goes into the pane, as `Enter` does. |
 | A digit, 1 to 9 | Marks an option of the chosen card's question. The same digit again sends it. |

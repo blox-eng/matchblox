@@ -46,6 +46,13 @@ func onDoors(m tea.Model) tea.Model {
 	return mm
 }
 
+// onDoor names door i of the doors line, which has no key of its own.
+func onDoor(m tea.Model, i int) tea.Model {
+	mm := m.(Model)
+	mm.boardDoor, mm.boardDoorsOf = i, doorIDs(mm.boardDoors())
+	return mm
+}
+
 // onRec chooses the recommendation id under the board's columns, as ↓
 // from the last card does.
 func onRec(m Model, id string) Model {
@@ -122,7 +129,7 @@ func TestEnterOnADoorShowsTheDiff(t *testing.T) {
 
 func TestYOpensTheDoorItShowed(t *testing.T) {
 	m, f := doorsBoard(t, 100, doorState(hooksDoor, wayBack))
-	next, _ := key(m, "right")
+	next := onDoor(m, 1)
 	next, _ = key(next, "enter")
 	_, cmd := key(next, "y")
 	if cmd != nil {
@@ -424,7 +431,7 @@ func TestTheWhyIsReadInFull(t *testing.T) {
 	long := guideDoor
 	long.Why = "Claude Code walks you through matchblox in a new window. This starts Claude Code and uses your tokens."
 	next, _ := m.Update(stateMsg(doorState(hooksDoor, long)))
-	next, _ = key(next, "right")
+	next = onDoor(next, 1)
 	if out := strings.Join(strings.Fields(ansi.Strip(next.(Model).render())), " "); !strings.Contains(out, "uses your tokens.") {
 		t.Fatalf("the why is cut:\n%s", out)
 	}
@@ -454,7 +461,7 @@ func TestAPhoneShowsOnlyTheSelectedWhy(t *testing.T) {
 	if !strings.Contains(out, "Claude Code tells") || strings.Contains(out, "prefix m comes back") || strings.Contains(out, "uses your tokens") {
 		t.Fatalf("a phone shows each why:\n%s", out)
 	}
-	next, _ := key(m, "right")
+	next := onDoor(m, 1)
 	if out := ansi.Strip(next.(Model).render()); !strings.Contains(out, "prefix m comes back") || strings.Contains(out, "Claude Code tells") {
 		t.Fatalf("the why does not follow the selection:\n%s", out)
 	}

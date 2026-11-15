@@ -372,7 +372,7 @@ func TestThePeekSendsNoWatch(t *testing.T) {
 	next, _ := boardShot(t, boardFixture(t), 104, 38, nil).Update(noticeMsg{})
 	m := next.(Model) // the old console's watch of its list ends here
 	before := len(boardFake(m).allActs())
-	for _, k := range []string{"down", "down", "down", "right", "down", "right", "down", "right", "down", "down"} {
+	for _, k := range []string{"down", "down", "down", "down", "down", "down", "down"} {
 		m = pressOn(m, k)
 	}
 	if acts := boardFake(m).allActs(); len(acts) != before {
