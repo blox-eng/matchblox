@@ -10,7 +10,7 @@
    #4552 waits for your merge
  ╿ kindle-web                           1m ✻
    Claude needs your permission to use Bash
- ╿ cinder-ci                            0s ❋
+ ↓ 3 more · 2 need you
  + new · ✧ 7 tips
 ────────────────────────────────────────────
  in the list · ↑↓ choose · ⏎ write · s hosts

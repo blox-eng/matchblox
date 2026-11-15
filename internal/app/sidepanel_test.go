@@ -166,3 +166,25 @@ func TestChainLinksLightWhenAMemberIsChosen(t *testing.T) {
 		t.Fatalf("links: on has accent %v, off has accent %v", strings.Contains(on, m.st.accent.Render("├")), strings.Contains(off, m.st.accent.Render("├")))
 	}
 }
+
+// TestACutListSaysHowManyAreBelow: a list cut by the screen says how many
+// sessions it hides below and above, and how many of them need you.
+func TestACutListSaysHowManyAreBelow(t *testing.T) {
+	m := demoSized(t, 132, 14)
+	m.toList()
+	lines := plainLines(m.sidePanel(40, 9))
+	last := strings.TrimSpace(lines[len(lines)-2])
+	if !strings.HasPrefix(last, "↓ ") || !strings.Contains(last, " more") {
+		t.Fatalf("the cut list does not say what is below:\n%s", strings.Join(lines, "\n"))
+	}
+	for range len(m.sideOrder()) - 1 { // to the last row, not past it to the foot
+		m = pressOn(m, "down")
+	}
+	lines = plainLines(m.sidePanel(40, 9))
+	if first := strings.TrimSpace(lines[0]); !strings.HasPrefix(first, "↑ ") || !strings.Contains(first, " more") {
+		t.Fatalf("the list scrolled down does not say what is above:\n%s", strings.Join(lines, "\n"))
+	}
+	if !strings.Contains(strings.Join(lines, "\n"), "need") {
+		t.Errorf("the marks do not say how many hidden sessions need you:\n%s", strings.Join(lines, "\n"))
+	}
+}

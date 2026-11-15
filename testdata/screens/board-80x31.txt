@@ -25,7 +25,7 @@
  ╵ hearth-limits      #4551 ci ✻│
  ╵ wick-mobile           23:50 ▣│
  ╵ hearth-notes@gpu-1       1h ✻│
- ╵ cinder-ci@gpu… #4549 merged ❋│
+ ↓ 3 more                       │
  + new · ✧ 7 tips               │ ›                      ⏎ send to spark-search
 ────────────────────────────────────────────────────────────────────────────────
  in the list · ↑↓ choose · ⏎ write · s hosts · g chain · m menu

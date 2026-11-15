@@ -227,20 +227,75 @@ func (m Model) sideList(w, h int) ([]string, []sideHit, []span) {
 		}
 	}
 	room := max(h-1, 0)
-	start := 0
-	for i := range lines {
-		if at[i] && i >= room {
-			start = max(i-room+1, start)
+	startFor := func(r int) int {
+		start := 0
+		for i := range lines {
+			if at[i] && i >= r {
+				start = max(i-r+1, start)
+			}
 		}
+		return min(start, len(lines))
 	}
-	start = min(start, len(lines))
+	// A cut list says what it hides: a line above, a line below, each
+	// taken from the rows it shows.
+	up, down, r, start := false, false, room, startFor(room)
+	for range 3 {
+		r = max(room-btoi(up)-btoi(down), 1)
+		start = startFor(r)
+		up, down = start > 0, start+r < len(lines)
+	}
+	if room < 3 {
+		up, down, r, start = false, false, room, startFor(room)
+	}
+	above, below := hits[:start], hits[min(start+r, len(hits)):]
 	lines, hits = lines[start:], hits[start:]
-	lines, hits = lines[:min(len(lines), room)], hits[:min(len(hits), room)]
+	lines, hits = lines[:min(len(lines), r)], hits[:min(len(hits), r)]
+	if up {
+		lines, hits = append([]string{m.cutMark("↑", above, w)}, lines...), append([]sideHit{{}}, hits...)
+	}
+	if down {
+		lines, hits = append(lines, m.cutMark("↓", below, w)), append(hits, sideHit{})
+	}
 	for len(lines) < room {
 		lines, hits = append(lines, strings.Repeat(" ", w)), append(hits, sideHit{})
 	}
 	foot, spans := m.sideFoot(w)
 	return append(lines, foot), append(hits, sideHit{}), spans
+}
+
+// cutMark is the line of a cut list over or under the rows it shows: how
+// many sessions it hides there, and how many of those need you.
+func (m Model) cutMark(arrow string, hidden []sideHit, w int) string {
+	seen := map[paneKey]bool{}
+	need := 0
+	for _, h := range hidden {
+		if h.k == (paneKey{}) || seen[h.k] {
+			continue
+		}
+		seen[h.k] = true
+		if h.state == sideNeed {
+			need++
+		}
+	}
+	text := arrow + " " + strconv.Itoa(len(seen)) + " more"
+	switch {
+	case need == 1:
+		text += " · 1 needs you"
+	case need > 1:
+		text += " · " + strconv.Itoa(need) + " need you"
+	}
+	ink := m.st.faint
+	if need > 0 {
+		ink = m.st.warn
+	}
+	return fit(" "+ink.Render(text), w)
+}
+
+func btoi(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // sideWords is what the list says in place of rows: before the first

@@ -43,7 +43,9 @@ Inside a group the oldest wait or the oldest start is first. `IDLE` puts
 the newest first. A phone and a desk show the same order. A group with
 no match takes no row: the header's count says it.
 
-Before the first sample, the list says `reading your matches…`.
+Before the first sample, the list says `reading your matches…`. A list
+that the screen cuts says what it hides, and how many of those need you:
+`↓ 3 more · 1 needs you` under the rows, `↑ 2 more` over them.
 
 A row is one line: the match, the name (with `@ws-1` for a match of
 another host while the list shows more than one host), the wait or the
