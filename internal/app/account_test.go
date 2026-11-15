@@ -86,20 +86,6 @@ func choose(m *Model, pid int) {
 	}
 }
 
-// TestAProviderWithoutAMarkKeepsItsName: an OpenCode provider that has
-// no mark shows its id.
-func TestAProviderWithoutAMarkKeepsItsName(t *testing.T) {
-	if got := accountCell(sample.Session{Provider: "zen", Account: "API key"}); got != "zen · API key" {
-		t.Fatalf("got %q", got)
-	}
-	if got := accountCell(sample.Session{Provider: "bedrock"}); got != "bedrock" {
-		t.Fatalf("got %q", got)
-	}
-	if got := accountCell(sample.Session{}); got != "" {
-		t.Fatalf("got %q", got)
-	}
-}
-
 // TestNoCredentialReachesTheScreen: the demo's auth files hold tokens next
 // to the fields matchblox reads. No tab shows one, at any width.
 func TestNoCredentialReachesTheScreen(t *testing.T) {
@@ -115,13 +101,13 @@ func TestNoCredentialReachesTheScreen(t *testing.T) {
 		secrets = append(secrets, v)
 	}
 	secrets = append(secrets, "made-up")
-	shown := false
+	read := false
 	for _, w := range []int{50, 100, 160, 220} {
 		for _, m := range []Model{demoSessions(t, w), demoDetails(t, w)} {
+			read = read || slices.ContainsFunc(m.snap.Sessions, func(s sample.Session) bool { return strings.Contains(s.Account, "team@example.com") })
 			for tab := range screenNames() { // the tabs and Machine's views
 				m.tab = tab
 				out := ansi.Strip(m.render())
-				shown = shown || strings.Contains(out, "team@example.com")
 				for _, s := range secrets {
 					if strings.Contains(out, s) {
 						t.Fatalf("width %d tab %d shows %q", w, tab, s)
@@ -130,7 +116,7 @@ func TestNoCredentialReachesTheScreen(t *testing.T) {
 			}
 		}
 	}
-	if !shown {
-		t.Fatal("positive control: no account label on any screen, so the check proves nothing")
+	if !read {
+		t.Fatal("positive control: no session holds an account label, so the check proves nothing")
 	}
 }

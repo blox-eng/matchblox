@@ -14,40 +14,26 @@ import (
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
-// liveFrom is the narrowest board with the chosen match's live view at its
-// right: the four columns at their base widths, the gaps, and the 44
-// columns at which an agent's menu reads.
-const liveFrom = 152
-
 // boardBase is each column's width: of 80 on Medium, where QUIET is the
 // drawer, and of 104 on Wide.
 var boardBase = map[Layout][4]int{Medium: {38, 20, 20, 0}, Wide: {36, 25, 25, 18}}
 
 // boardWidths is the width of each shown column at w, with one cell
-// between two, and the live view's at the right (0 for none). A hidden
-// column gives its room to the others in their proportions; on Wide from
-// liveFrom the columns keep their base widths and the live view takes it.
-func boardWidths(l Layout, w int, shown []boardCol) (cols []int, live int) {
-	return boardWidthsAt(l, w, shown, true)
-}
-
-// boardWidthsAt is boardWidths; roomy: the live view has the rows for a
-// menu (menuLeast), else the columns take its room.
-func boardWidthsAt(l Layout, w int, shown []boardCol, roomy bool) (cols []int, live int) {
+// between two. A hidden column gives its room to the others in their
+// proportions.
+func boardWidths(l Layout, w int, shown []boardCol) []int {
 	if l == Narrow {
-		return []int{w}, 0
+		return []int{w}
 	}
+	var cols []int
 	sum := 0
 	for _, c := range shown {
 		if x := boardBase[l][c]; x > 0 {
 			cols, sum = append(cols, x), sum+x
 		}
 	}
-	if l == Wide && w >= liveFrom && roomy {
-		return cols, w - sum - len(cols)
-	}
 	if len(cols) == 0 {
-		return nil, 0
+		return nil
 	}
 	room := w - (len(cols) - 1)
 	left := room
@@ -56,7 +42,7 @@ func boardWidthsAt(l Layout, w int, shown []boardCol, roomy bool) (cols []int, l
 		left -= cols[i]
 	}
 	cols[0] += left
-	return cols, 0
+	return cols
 }
 
 // boardDrawn is the board's body and where its parts are, so a tap finds
@@ -81,9 +67,8 @@ type boardDrawn struct {
 	// line under the columns reaches (boardLine.at).
 	doorsAt int
 	underAt map[int]string
-	// colsTo is the line under the columns side by side, and live the
-	// width of the live view at their right (0: none).
-	colsTo, live int
+	// colsTo is the line under the columns side by side.
+	colsTo int
 	// roomAt is the room's row on each line the room draws.
 	roomAt map[int]int
 }
@@ -102,7 +87,6 @@ type boardDraw struct {
 	open   boardCol
 	chosen sample.Session
 	picked bool
-	live   int
 	none   bool
 }
 
@@ -477,8 +461,8 @@ func (m Model) boardPage(d *boardDrawn, b *boardDraw, shown []boardCol, w, rows 
 }
 
 // boardColumns is the board on a mid screen and a desk: the heads, the
-// columns side by side, from liveFrom the live view at the right, and on
-// Medium the room's talk lines and the QUIET drawer under them.
+// columns side by side, and on Medium the room's talk lines and the QUIET
+// drawer under them.
 func (m Model) boardColumns(d *boardDrawn, b *boardDraw, l Layout, shown []boardCol, w, rows int, talk []roomDrawn) {
 	st := m.st
 	var drawn []boardCol
@@ -487,8 +471,7 @@ func (m Model) boardColumns(d *boardDrawn, b *boardDraw, l Layout, shown []board
 			drawn = append(drawn, c)
 		}
 	}
-	widths, live := boardWidthsAt(l, w, shown, rows >= menuLeast)
-	b.live, d.live = live, live
+	widths := boardWidths(l, w, shown)
 	drawer := 0
 	if l == Medium && slices.Contains(shown, colQuiet) {
 		drawer = 2
@@ -519,23 +502,6 @@ func (m Model) boardColumns(d *boardDrawn, b *boardDraw, l Layout, shown []board
 	}
 	if words := m.boardWords(b); words != "" && colH > 0 {
 		d.lines[first] = fit("  "+st.faint.Render(words), x-1)
-	}
-	if live > 0 {
-		var view []string
-		if b.picked {
-			v := m
-			v.chose, v.selPID, v.selHost = true, b.chosen.PID, b.chosen.Host
-			view = v.viewPane(b.chosen, live, colH+1)
-			word, _ := m.cardSays(b.chosen) // the head says what the card says
-			view[0] = fit(" "+st.label.Render(m.titleOf(b.chosen)+" · "+word), live)
-		}
-		for i := d.headAt; i < first+colH; i++ {
-			right := ""
-			if j := i - d.headAt; j < len(view) {
-				right = view[j]
-			}
-			d.lines[i] = fit(d.lines[i], w-live-1) + st.hair.Render("│") + fit(right, live)
-		}
 	}
 	for len(d.lines) < first+colH {
 		d.add(-1, strings.Repeat(" ", w))
@@ -709,7 +675,6 @@ func (m Model) boardBlockOf(b *boardDraw, c boardCol, s sample.Session, w int, q
 		need:      c == colNeed,
 		quietRow:  quietRow,
 		otherHost: m.hostCount() > 1 && m.boardHost == "" && s.Host != m.opt.Host,
-		bare:      b.live > 0,
 	}
 	if armed, sent := m.chatMarks(s); o.sel {
 		o.armed, o.sent = armed, sent

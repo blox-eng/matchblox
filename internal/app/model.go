@@ -389,7 +389,7 @@ type Model struct {
 	held        func(Model) (tea.Model, tea.Cmd)
 	heldOn      string
 	keysOut     keysOut   // the keys the stand-in sends, one at a time
-	standIn     bool      // the demo's stand-in for a pane: the live view forwards the keys to the demo's world
+	standIn     bool      // the demo's stand-in for a pane: it forwards the keys to the demo's world
 	backArmed   time.Time // when ctrl+a, the first key of the stand-in's way back, was pressed; zero: not armed
 	touched     map[string]time.Time
 	all         lists  // what every host sent, merged; queue, recs and snap hold the drawn copies

@@ -391,9 +391,9 @@ then compacts the session at `compact_tokens` only, never at a percentage.
 
 ## The account
 
-The live view's strip shows the account of each session: the provider's
-mark, then the email and plan, or "API key". Only those two
-fields are read from the agent's auth files; no token reaches the console.
+matchblox reads the account of each session: the provider's mark, then
+the email and plan, or "API key". Only those two fields are read from the
+agent's auth files; no token reaches the console.
 Cursor's is the email and team its CLI keeps in `~/.cursor/cli-config.json`
 (`⬢ you@example.com · Acme`), or in `<folder>/cfg/cli-config.json` for an
 account, and USAGE lists the account. Its plan usage,

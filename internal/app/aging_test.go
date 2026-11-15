@@ -97,10 +97,9 @@ func TestAnOutSessionSaysUntilWhen(t *testing.T) {
 			break
 		}
 	}
-	m, _ := loadedWith(t, 160, st)
-	m = selectPane(t, m, out).(Model) // the chosen card says what the row said
+	m := sideOnPane(t, 160, st, out)
 	at := back.Local().Format("15:04")
-	if out := ansi.Strip(m.render()); !strings.Contains(out, "· out") || !regexp.MustCompile(`✻ +`+at).MatchString(out) { // the card's word and its age
+	if out := ansi.Strip(m.render()); !strings.Contains(out, "✻ out") || !regexp.MustCompile(at+` +✻`).MatchString(out) { // the chat's word, the row's time
 		t.Fatalf("no out %s in\n%s", at, out)
 	}
 	if g := m.groupOf(sample.Session{Out: back}); g != groupQuiet {

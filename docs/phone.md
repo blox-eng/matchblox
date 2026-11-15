@@ -261,9 +261,7 @@ starts it. A second phone or laptop attaches to the same session.
 
 ## Go into an agent
 
-Enter goes into the agent's own tmux pane, and moves only the phone. From
-152 columns the board keeps a read-only live view of the chosen agent. See
-[the live view](console.md#the-live-view).
+Enter goes into the agent's own tmux pane, and moves only the phone.
 
 1. Tap an agent's card to choose it, then tap it again, or press Return,
    to go into its pane. The chosen card shows the question the agent asks
@@ -303,10 +301,10 @@ and stops with a key at the left side.
   stand-in it goes to the board.
 - `^C` interrupts. `^C` twice stops Claude Code. A second `^C` within 1 s
   is held, and the key line says so.
-- `⇞` and `⇟` send `PgUp` and `PgDn` (`ESC [ 5 ~` and `ESC [ 6 ~`). In the
-  live view they move the history one screen up and down. In a pane you
-  went into on a host, the jump table of the host starts tmux copy mode one
-  page up, and moves it one page. In a local pane they go to the agent.
+- `⇞` and `⇟` send `PgUp` and `PgDn` (`ESC [ 5 ~` and `ESC [ 6 ~`). In a
+  pane you went into on a host, the jump table of the host starts tmux copy
+  mode one page up, and moves it one page. In a local pane they go to the
+  agent.
 
 The row above the belt is the handle row. It shows the name of the layout
 (on Commands, the mark of the agent too), the grip, and a ghost keyboard

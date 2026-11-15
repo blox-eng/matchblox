@@ -227,7 +227,7 @@ func TestCardIsAlwaysItsWidth(t *testing.T) {
 	opts := []cardOpts{
 		{}, {need: true}, {oneLine: true}, {oneLine: true, need: true}, {quietRow: true}, {quietRow: true, sel: true},
 		{sel: true, need: true}, {sel: true, need: true, armed: 1}, {sel: true, need: true, sent: 1},
-		{sel: true, bare: true}, {otherHost: true}, {lit: true},
+		{otherHost: true}, {lit: true},
 	}
 	for name, edit := range cases {
 		m, s := cardModel(t, edit)
@@ -270,13 +270,6 @@ func TestCardIsAlwaysItsWidth(t *testing.T) {
 	s.Host = "gpu-1"
 	if lines, _ := m.boardCard(s, 80, cardOpts{otherHost: true}); !strings.Contains(ansi.Strip(lines[0]), "flint-auth @gpu-1") {
 		t.Errorf("a card of another host does not name it: %q", ansi.Strip(lines[0]))
-	}
-	m, s = cardModel(t, nil)
-	lines, _ := m.boardCard(s, 80, cardOpts{sel: true, bare: true})
-	for _, l := range plainLines(lines) {
-		if strings.Contains(l, "“") || strings.Contains(l, "1. ") {
-			t.Errorf("a bare chosen card repeats the live view: %q", l)
-		}
 	}
 }
 

@@ -229,25 +229,21 @@ New session shows an account line when the agent keeps accounts: Claude Code, Co
 
 A start on a new account is a destructive action: the plan shows `RUN` and waits for a typed `y`. A start on an account that exists runs on `Enter`.
 
-## The live view
+## Go in
 
-From 152 columns, the right side of the board is the live view: the chosen
-agent's own screen, read-only. Under 152 columns there is no view: a
-second tap on the chosen card goes into its pane. The view never resizes
-the agent's window. A keyboard never changes the layout: the shape goes by
-the tallest height seen at the width. The view shows only a session of
-the console's own host.
-
-The view takes no keys: to answer or type, go into the agent's pane.
+A second tap on the chosen card goes into its pane. A keyboard never
+changes the layout: the shape goes by the tallest height seen at the
+width.
 
 | Key | What it does |
 |---|---|
-| `Enter` or `a` | Goes into the chosen agent's tmux pane (help `go in`). A tap on the view, or a second tap on the chosen card, does it too. |
+| `Enter` or `a` | Goes into the chosen agent's tmux pane (help `go in`). A second tap on the chosen card does it too. |
 | `ctrl+a m` | In the iOS demo, which has no tmux, `Enter` opens a stand-in for the pane: the agent's screen over the whole screen, and every key goes to the agent. Its title is `‹ board`. `ctrl+a`, then `m` within 1 s, goes back to the board. |
 
-The mouse wheel over the view scrolls it back through the pane's history,
-3 lines for each wheel step. The key line says how far back you are:
-`↑ 12 lines back`. Scrolling only looks: it types nothing into the pane.
+The mouse wheel over the stand-in scrolls it back through the pane's
+history, 3 lines for each wheel step. The key line says how far back you
+are: `↑ 12 lines back`. Scrolling only looks: it types nothing into the
+pane.
 
 If the pane is gone, the key line says `That session ended.`
 

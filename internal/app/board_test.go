@@ -27,32 +27,26 @@ func TestBoardWidths(t *testing.T) {
 		w     int
 		shown []boardCol
 		cols  []int
-		live  int
 	}{
-		{Medium, 80, []boardCol{colNeed, colWork, colShip}, []int{38, 20, 20}, 0},
-		{Medium, 80, all, []int{38, 20, 20}, 0}, // QUIET is the drawer
-		{Medium, 80, []boardCol{colNeed, colShip}, []int{52, 27}, 0},
-		{Wide, 104, all, []int{36, 24, 24, 17}, 0},
-		{Wide, 151, all, []int{53, 35, 35, 25}, 0},
-		{Wide, 152, all, []int{36, 25, 25, 18}, 44},
-		{Wide, 160, all, []int{36, 25, 25, 18}, 52},
-		{Wide, 160, []boardCol{colNeed, colShip, colQuiet}, []int{36, 25, 18}, 78},
-		{Narrow, 40, all, []int{40}, 0},
+		{Medium, 80, []boardCol{colNeed, colWork, colShip}, []int{38, 20, 20}},
+		{Medium, 80, all, []int{38, 20, 20}}, // QUIET is the drawer
+		{Medium, 80, []boardCol{colNeed, colShip}, []int{52, 27}},
+		{Wide, 104, all, []int{36, 24, 24, 17}},
+		{Wide, 151, all, []int{53, 35, 35, 25}},
+		{Wide, 160, all, []int{56, 37, 37, 27}},
+		{Wide, 160, []boardCol{colNeed, colShip, colQuiet}, []int{72, 50, 36}},
+		{Narrow, 40, all, []int{40}},
 	} {
-		cols, live := boardWidths(c.l, c.w, c.shown)
-		if !slices.Equal(cols, c.cols) || live != c.live {
-			t.Errorf("boardWidths(%v, %d, %v) = %v, %d; want %v, %d", c.l, c.w, c.shown, cols, live, c.cols, c.live)
+		cols := boardWidths(c.l, c.w, c.shown)
+		if !slices.Equal(cols, c.cols) {
+			t.Errorf("boardWidths(%v, %d, %v) = %v; want %v", c.l, c.w, c.shown, cols, c.cols)
 		}
-		sum := live
+		sum := 0
 		for _, x := range cols {
 			sum += x
 		}
-		gaps := len(cols) - 1
-		if live > 0 {
-			gaps++
-		}
-		if sum+gaps != c.w {
-			t.Errorf("boardWidths(%v, %d, %v): %v and %d with %d gaps do not fill the width", c.l, c.w, c.shown, cols, live, gaps)
+		if gaps := len(cols) - 1; sum+gaps != c.w {
+			t.Errorf("boardWidths(%v, %d, %v): %v with %d gaps do not fill the width", c.l, c.w, c.shown, cols, gaps)
 		}
 	}
 }
@@ -318,7 +312,7 @@ func TestEmptyNeedsYouSaysSo(t *testing.T) {
 		if !strings.Contains(head, "WORKING · 0") {
 			t.Errorf("w=%d: an empty WORKING has no head: %q", w, head)
 		}
-		cols, _ := boardWidths(m.layoutAt(w), w, boardCols[:])
+		cols := boardWidths(m.layoutAt(w), w, boardCols[:])
 		if len(d.heads) < 2 || d.heads[1].x0 != cols[0]+1 || d.heads[1].x1-d.heads[1].x0 != cols[1] {
 			t.Errorf("w=%d: an empty WORKING does not keep its width %d: %+v", w, cols[1], d.heads)
 		}
@@ -397,31 +391,6 @@ func TestTheBoardsStates(t *testing.T) {
 	})
 }
 
-func TestNoRepeatBesideTheLiveView(t *testing.T) {
-	st := boardFixture(t)
-	for _, c := range []struct {
-		w      int
-		repeat bool
-	}{{160, false}, {151, true}} {
-		m := boardShot(t, st, c.w, 38, chooseCard("flint-auth"))
-		d := m.boardPanel(c.w, m.bodyRows())
-		chosen := paneOf(m.boardIndex()[colNeed][3])
-		var card []string
-		for i, l := range plainLines(d.lines) {
-			if d.cards[boardSpot{i, colNeed}] == chosen {
-				card = append(card, l)
-			}
-		}
-		f := strings.Join(card, "\n")
-		if got := strings.Contains(f, "“I can fix it") && strings.Contains(f, "1. Patch the token check"); got != c.repeat {
-			t.Errorf("w=%d: the chosen card has its quote and options: %v, want %v\n%s", c.w, got, c.repeat, f)
-		}
-		if !strings.Contains(f, "flint-auth") {
-			t.Errorf("w=%d: flint-auth is not the chosen card:\n%s", c.w, f)
-		}
-	}
-}
-
 func TestQuietIsADrawerOnMedium(t *testing.T) {
 	st := boardFixture(t)
 	m := boardShot(t, st, 80, 31, nil)
@@ -447,59 +416,6 @@ func TestQuietIsADrawerOnMedium(t *testing.T) {
 		if !slices.ContainsFunc(plain[head+1:ghost], func(l string) bool { return strings.Contains(l, name) }) {
 			t.Errorf("the open drawer has no %s:\n%s", name, strings.Join(plain[head:ghost], "\n"))
 		}
-	}
-}
-
-func TestTheLiveViewFollowsTheChosenCard(t *testing.T) {
-	st := boardFixture(t)
-	screen := func(name string) func(*Model) {
-		return func(m *Model) {
-			chooseCard(name)(m)
-			m.screen = proto.Screen{Pane: paneNamed(st, "flint-auth"), At: demoAt, Text: "the pane of flint-auth\n"}
-		}
-	}
-	m := boardShot(t, st, 160, 38, screen("flint-auth"))
-	cols, live := boardWidths(Wide, 160, boardCols[:])
-	right := 160 - live
-	d := m.boardPanel(160, m.bodyRows())
-	side := func(d boardDrawn) string {
-		var out []string
-		for _, l := range plainLines(d.lines) {
-			if r := []rune(l); len(r) > right {
-				out = append(out, string(r[right:]))
-			}
-		}
-		return strings.Join(out, "\n")
-	}
-	s := m.boardIndex()[colNeed][3]
-	if r := side(d); !strings.Contains(r, m.viewTitle(s)) || !strings.Contains(r, "the pane of flint-auth") {
-		t.Errorf("the live view does not show flint-auth:\n%s", r)
-	}
-
-	// The screen comes from the service's watch, which follows the chosen
-	// card and not the selection of Sessions.
-	m = boardShot(t, st, 160, 38, chooseCard("flint-auth"))
-	next, _ := m.Update(tea.WindowSizeMsg{Width: 160, Height: 38})
-	next, _ = next.Update(screenMsg{Pane: paneNamed(st, "flint-auth"), At: demoAt, Text: "the pane of flint-auth\n"})
-	m = next.(Model)
-	if r := side(m.boardPanel(160, m.bodyRows())); m.watching != paneNamed(st, "flint-auth") || !strings.Contains(r, "the pane of flint-auth") {
-		t.Errorf("the live view watches %q, not flint-auth:\n%s", m.watching, r)
-	}
-
-	m = boardShot(t, st, 160, 38, screen("hearth-api")) // ↓ from flint-auth
-	d = m.boardPanel(160, m.bodyRows())
-	s = m.boardIndex()[colNeed][2]
-	if r := side(d); !strings.Contains(r, m.viewTitle(s)) || strings.Contains(r, "the pane of flint-auth") || strings.Contains(r, "flint-auth ·") {
-		t.Errorf("the live view does not follow the card to hearth-api:\n%s", r)
-	}
-
-	m = boardShot(t, st, 151, 38, screen("flint-auth"))
-	d = m.boardPanel(151, m.bodyRows())
-	if f := strings.Join(plainLines(d.lines), "\n"); strings.Contains(f, "the pane of flint-auth") || strings.Contains(f, "│") {
-		t.Errorf("a live view at 151 columns:\n%s", f)
-	}
-	if n := len(d.heads); n != 4 || d.heads[n-1].x1 != 151 {
-		t.Errorf("at 151 columns the columns do not take the width: %+v (of %v)", d.heads, cols)
 	}
 }
 
@@ -572,12 +488,12 @@ func TestAHiddenColumnGivesItsRoom(t *testing.T) {
 			}
 		}
 		shown := []boardCol{colNeed, colShip, colQuiet}
-		cols, live := boardWidths(m.layoutAt(w), w, shown)
-		full, _ := boardWidths(m.layoutAt(w), w, boardCols[:])
+		cols := boardWidths(m.layoutAt(w), w, shown)
+		full := boardWidths(m.layoutAt(w), w, boardCols[:])
 		if len(d.heads) != len(cols) || d.heads[0].x1 != cols[0] {
 			t.Errorf("w=%d: heads %+v, want widths %v", w, d.heads, cols)
 		}
-		if live == 0 && cols[0] <= full[0] {
+		if cols[0] <= full[0] {
 			t.Errorf("w=%d: NEEDS YOU does not take the room: %v, was %v", w, cols, full)
 		}
 	}
@@ -591,18 +507,5 @@ func TestTheEmptyBoardOffersOnlyWhatActs(t *testing.T) {
 		if got := keyLineOf(m); got != "⏎ new session   tab next" {
 			t.Errorf("%dx%d: the empty board offers %q", size[0], size[1], got)
 		}
-	}
-}
-
-func TestTheLiveViewSaysTheCardsWord(t *testing.T) {
-	m := boardShot(t, boardFixture(t), 160, 38, chooseCard("spark-search"))
-	word, _ := m.cardSays(matchNamed(t, m, "spark-search"))
-	if word != "stuck" {
-		t.Fatalf("the card of spark-search says %q, want stuck", word)
-	}
-	head := strings.Split(plainFrame(m), "\n")[3]
-	view := strings.TrimSpace(head[strings.LastIndex(head, "│")+len("│"):])
-	if view != "spark-search · stuck" {
-		t.Errorf("the live view's head is %q, want the card's word: spark-search · stuck", view)
 	}
 }

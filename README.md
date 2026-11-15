@@ -85,10 +85,8 @@ The full walk is [Get started](https://docs.matchblox.com/start/).
   typed `y`. A tap on a column's name hides the column. `g` shows one
   chain, and `s` one host.
 - **Go straight in**: `Enter` goes into the agent's own tmux pane, on this
-  host or another, and moves only your screen. A wide screen shows the
-  chosen agent's live screen, read-only, beside the board. `ctrl+a m` (your
-  tmux prefix, then `m`) comes back, with the next card that needs you
-  chosen.
+  host or another, and moves only your screen. `ctrl+a m` (your tmux
+  prefix, then `m`) comes back, with the next card that needs you chosen.
 - **Switch the agent, keep the seat**: `A` runs another agent in the same
   pane (Claude Code, Codex, OpenCode or Cursor) with the session's name,
   directory and pull request, on the account you last started that agent
@@ -129,8 +127,7 @@ The full walk is [Get started](https://docs.matchblox.com/start/).
   `y`, and what the stoker would wait for, matchblox fires itself.
 - **Three layouts, read from the screen's shape**: one column a page on a
   phone, three columns and a drawer for `QUIET` on a medium screen, and four
-  columns on a desk, with the chosen agent's live screen beside them from
-  152 columns.
+  columns on a desk.
 - **Machine**, the second tab: usage, **machine health**, **detached busy
   loops**, the stoker, **git** worktrees that are safe to remove, 24 hours
   of **history** and the tmux panes. The board keeps the

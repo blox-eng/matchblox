@@ -76,7 +76,11 @@ func viewModel(t *testing.T) (Model, *fakeConn) {
 		{PID: 1, Pane: "%1", Name: "a"},
 		{PID: 2, Pane: "%2", Name: "b"},
 	}
-	return loadedWith(t, 160, st) // the board watches its chosen card beside its live view
+	f := newFake()
+	var next tea.Model = New(Options{NoMotion: true, Conn: f}) // the chat watches the list's chosen session
+	next, _ = next.Update(tea.WindowSizeMsg{Width: 160, Height: 30})
+	next, _ = next.Update(stateMsg(st))
+	return next.(Model), f
 }
 
 func TestScreenOfAnotherPaneIsIgnored(t *testing.T) {
@@ -90,10 +94,9 @@ func TestScreenOfAnotherPaneIsIgnored(t *testing.T) {
 }
 
 func TestSelectionChangeWatches(t *testing.T) {
-	// the two matches are in two columns of the board: → moves between them
 	m, f := viewModel(t)
 	first, _ := m.selected()
-	next, cmd := key(m, "right")
+	next, cmd := key(m, "down")
 	drain(cmd)
 	second, _ := next.(Model).selected()
 	if first.Pane == second.Pane {
@@ -109,7 +112,7 @@ func TestSelectionChangeDropsTheOldScreen(t *testing.T) {
 	m, _ := viewModel(t)
 	sel, _ := m.selected()
 	next, _ := m.Update(screenMsg{Pane: sel.Pane, Text: "old"})
-	next, _ = key(next, "right") // the other column's card: the watch moves to its pane
+	next, _ = key(next, "down") // the other session: the watch moves to its pane
 	if got := next.(Model); got.watching == sel.Pane || got.screen.Text != "" {
 		t.Fatalf("watching %q, and the screen of the old pane stayed: %+v", got.watching, got.screen)
 	}
@@ -183,10 +186,9 @@ func TestChatLinesTakeNoNegativeHeight(t *testing.T) {
 }
 
 func TestRefusalOfAnOldWatchHoldsNothing(t *testing.T) {
-	// the two matches are in two columns of the board: → moves between them
 	m, _ := viewModel(t)
 	a, _ := m.selected()
-	next, cmd := key(m, "right")
+	next, cmd := key(m, "down")
 	drain(cmd)
 	b, _ := next.(Model).selected()
 	next, _ = next.Update(screenMsg{Pane: b.Pane, Text: "kept"})
@@ -197,10 +199,17 @@ func TestRefusalOfAnOldWatchHoldsNothing(t *testing.T) {
 	}
 }
 
-// onPane is m with the session in pane selected.
+// onPane is m with the session in pane chosen, on the board and in the
+// list.
 func onPane(t *testing.T, m Model, pane string) Model {
 	t.Helper()
-	next, cmd := selectPane(t, m, pane).Update(noticeMsg{}) // the board watches its chosen card
+	nm := selectPane(t, m, pane).(Model)
+	for _, s := range nm.snap.Sessions {
+		if s.Pane == pane {
+			nm.sideAt = paneOf(s)
+		}
+	}
+	next, cmd := nm.Update(noticeMsg{}) // the chat watches the chosen session
 	drain(cmd)
 	return next.(Model)
 }
@@ -281,52 +290,7 @@ func TestACutListSaysHowManyAreBelow(t *testing.T) {
 	}
 }
 
-// flintSized is the demo machine at w by h with flint-auth, edited by
-// edit, selected and its screen asking.
-func flintSized(t *testing.T, w, h int, edit func(*sample.Session)) Model {
-	t.Helper()
-	st := screensState(t)
-	for i := range st.Sessions {
-		if st.Sessions[i].Name == "flint-auth" {
-			edit(&st.Sessions[i])
-		}
-	}
-	m := New(Options{NoMotion: true, Conn: newFake(), Now: func() time.Time { return demoAt }})
-	next, _ := m.Update(tea.WindowSizeMsg{Width: w, Height: h})
-	next, _ = next.Update(stateMsg(st))
-	nm := next.(Model)
-	nm.splashDone = true
-	for _, s := range nm.snap.Sessions {
-		if s.Name == "flint-auth" {
-			nm.chose, nm.selPID = true, s.PID
-		}
-	}
-	nm.watchCmd()
-	next, _ = nm.Update(screenMsg{Pane: nm.watching, At: demoAt, Text: askScreen})
-	return next.(Model)
-}
-
-// A session with no account, no PR and no background work has no strip:
-// the screen starts under the title.
-func TestTheChatStripTakesNoRowsWithoutFacts(t *testing.T) {
-	m := flintSized(t, 200, 50, func(s *sample.Session) {
-		s.Provider, s.Account, s.Agents, s.Shells = "", "", 0, nil
-	})
-	m.shipReport, m.allShips = nil, nil
-	s, _ := m.selectedSession()
-	got := m.viewPane(s, 121, 40)
-	want := m.screenLines(120, 39)
-	if len(got) != 40 {
-		t.Fatalf("%d lines in a pane of 40", len(got))
-	}
-	for i, l := range want {
-		if got[i+1] != " "+l {
-			t.Fatalf("line %d under the title is %q, not the screen's %q", i+1, ansi.Strip(got[i+1]), ansi.Strip(l))
-		}
-	}
-}
-
-// inView is a phone with the first session's screen in its live view.
+// inView is the console with the first session's screen in its chat.
 func inView(t *testing.T) Model {
 	t.Helper()
 	m, _ := viewModel(t)
@@ -466,7 +430,7 @@ func TestOnlyColoursReachTheConsole(t *testing.T) {
 	}
 }
 
-func TestTheLiveViewTakesNoKeys(t *testing.T) { // T6
+func TestNoKeyReachesTheAgentOutsideTheDemo(t *testing.T) { // T6
 	for _, w := range []int{100, 44} {
 		m, f := loadedWith(t, w, fixtureState())
 		if w == 44 {

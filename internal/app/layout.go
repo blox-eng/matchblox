@@ -18,8 +18,7 @@ const (
 	Narrow Layout = iota
 	// Medium is a phone opened up: the board's columns, QUIET a drawer.
 	Medium
-	// Wide is a desk: every column, and from liveFrom the chosen card's
-	// live view beside them.
+	// Wide is a desk: every column.
 	Wide
 )
 

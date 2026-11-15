@@ -262,8 +262,8 @@ func (m Model) dragDropped(msg tea.Msg) Model {
 }
 
 // dragColumn is the cells of each row that a drag from x on line y of the
-// board's body may cover: those of the column or the live view under the
-// press, else the whole width.
+// board's body may cover: those of the column under the press, else the
+// whole width.
 func (m Model) dragColumn(x, y, w int) [2]int {
 	if m.sideActive() {
 		if y < 0 || y >= m.bodyRows() {
@@ -275,8 +275,6 @@ func (m Model) dragColumn(x, y, w int) [2]int {
 	switch {
 	case d.headAt < 0 || y < d.headAt || y >= d.colsTo:
 		return [2]int{0, w}
-	case d.live > 0 && x >= w-d.live:
-		return [2]int{w - d.live, w}
 	}
 	for _, h := range d.heads {
 		if x >= h.x0 && x <= h.x1 { // the gap at a column's right is its own

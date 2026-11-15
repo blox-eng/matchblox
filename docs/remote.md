@@ -92,9 +92,8 @@ stop the others.
 
 - Each key on a card goes to the host of that card. This holds for
   `Enter`, `x`, `p`, `r`, park and pick.
-- The live view watches only a session of the console's own host. On a
-  card of another host `Enter` goes into its pane. A digit does not answer
-  it: `not sent: <name> is on <host> · ⏎ goes in`.
+- On a card of another host `Enter` goes into its pane. A digit does not
+  answer it: `not sent: <name> is on <host> · ⏎ goes in`.
 - Two hosts can have the same pane id. The console never mixes them.
 - The console refuses an act on a lost host: `gpu-1 is not connected. It
   tries again in 8s.`

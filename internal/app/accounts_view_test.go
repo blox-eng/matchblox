@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/blox-eng/matchblox/internal/limits"
+	"github.com/blox-eng/matchblox/internal/proto"
 )
 
 // accountBlocks is a default Claude block and a Claude block of the account
@@ -60,22 +61,35 @@ func TestDefaultBlocksKeepTheirNames(t *testing.T) {
 	}
 }
 
+// sideOnPane is the list beside the chat at w on st, with the session in
+// pane chosen.
+func sideOnPane(t *testing.T, w int, st proto.State, pane string) Model {
+	t.Helper()
+	m, _ := loadedWith(t, w, st)
+	m.tab, m.sideOn = tabSessions, true
+	for _, s := range m.snap.Sessions {
+		if s.Pane == pane {
+			m.sideAt = paneOf(s)
+			return m
+		}
+	}
+	t.Fatalf("no session in %s", pane)
+	return m
+}
+
 func TestRowSaysSigningIn(t *testing.T) {
-	for _, w := range []int{44, 160} { // the chosen card says what the row said
+	for _, w := range []int{44, 160} {
 		st := queueState()
 		st.Queue = nil // no ask or wait: the row says the sign-in
 		st.Sessions[0].AccountDir = "/home/u/.matchblox/accounts/claude/work"
 		st.Sessions[0].SigningIn = true
 		pane := st.Sessions[0].Pane
-		m, _ := loadedWith(t, w, st)
-		m = selectPane(t, m, pane).(Model)
-		out := screen(m)
+		out := screen(sideOnPane(t, w, st, pane))
 		if !strings.Contains(out, "signing in") {
 			t.Errorf("width %d: the row does not say signing in:\n%s", w, out)
 		}
 		st.SignIns = map[string]string{pane: "by hand"}
-		m, _ = loadedWith(t, w, st)
-		m = selectPane(t, m, pane).(Model)
+		m := sideOnPane(t, w, st, pane)
 		if out := screen(m); !strings.Contains(out, "sign in by hand") || strings.Contains(out, "signing in") {
 			t.Errorf("width %d: a sign-in by hand says so:\n%s", w, out)
 		}
@@ -111,9 +125,7 @@ func TestRowSaysByHandForItsSessionName(t *testing.T) {
 	st.Sessions[0].SigningIn = true
 	st.Sessions[0].Target = "fresh:1.1"
 	st.SignIns = map[string]string{"fresh": "by hand"}
-	m, _ := loadedWith(t, 160, st)
-	m = selectPane(t, m, st.Sessions[0].Pane).(Model) // the chosen card says what the row said
-	if out := screen(m); !strings.Contains(out, "sign in by hand") {
+	if out := screen(sideOnPane(t, 160, st, st.Sessions[0].Pane)); !strings.Contains(out, "sign in by hand") {
 		t.Errorf("the row does not say sign in by hand:\n%s", out)
 	}
 }

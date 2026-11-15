@@ -27,15 +27,14 @@ func harnessMark(s sample.Session) string {
 }
 
 // cardOpts is how a card is drawn. armed and sent are an option's number,
-// 0 for none. bare: the chosen card beside the live view, which shows the
-// quote and the options. asOf: the time of the last state of a host that
+// 0 for none. asOf: the time of the last state of a host that
 // is not reached, "" for one that is. land: how a card that changed column
 // lands. match: the match cell drawn, "" for the match of this moment.
 type cardOpts struct {
-	sel, lit, oneLine, need, quietRow, otherHost, bare bool
-	armed, sent                                        int
-	asOf, match                                        string
-	land                                               landing
+	sel, lit, oneLine, need, quietRow, otherHost bool
+	armed, sent                                  int
+	asOf, match                                  string
+	land                                         landing
 }
 
 // landing is how a card that changed column lands, for landGlow (design
@@ -81,16 +80,13 @@ func (m Model) boardCard(s sample.Session, w int, o cardOpts) (lines []string, t
 		}
 	}
 	q, answers := m.offersDigits(s)
-	if last := m.lastWords(s); o.sel && !o.bare && last != "" {
+	if last := m.lastWords(s); o.sel && last != "" {
 		for _, l := range upTo(wrapPlain("“"+last+"”", w-3), 3, w-3) {
 			add(pad("  "+m.st.muted.Render(l), w), nil)
 		}
 	}
 	if o.sel && answers && o.sent == 0 {
 		for i, opt := range q.Options {
-			if o.bare && i+1 != o.armed {
-				continue // the live view shows the options: a bare card shows only the marked one
-			}
 			for j, l := range upTo(wrapPlain(opt.Label, w-6), 2, w-6) {
 				add(m.optionLine(i+1, j, l, w, o.armed), []span{{0, w, strconv.Itoa(i + 1)}})
 			}

@@ -154,16 +154,6 @@ func (m Model) shipStyle(sh proto.Ship) lipgloss.Style {
 // between two.
 var trackW = 2*len(stageNames) - 1
 
-// numW is the width of the widest ship number read, "#4551", so the tracks
-// after the numbers line up.
-func (m Model) numW() int {
-	n := 2
-	for _, sh := range m.ships() {
-		n = max(n, len("#"+strconv.Itoa(sh.Number)))
-	}
-	return n
-}
-
 // track is a ship's five stages, ●━●━◉┄○┄○: done muted, the current one in
 // its colour (✕ when stuck), the rest faint.
 func (m Model) track(sh proto.Ship) string { return m.trackAt(sh, -1) }
@@ -243,15 +233,6 @@ func (m Model) shipSpark(sh proto.Ship) int {
 		return -1
 	}
 	return int(e * time.Duration(trackW) / sparkFor)
-}
-
-// shipCell is "#4551 ●━◉┄○┄○", with the note when note is set.
-func (m Model) shipCell(sh proto.Ship, note bool) string {
-	cell := padTo(m.st.accent.Render("#"+strconv.Itoa(sh.Number)), m.numW()) + " " + m.track(sh)
-	if note {
-		cell += "  " + m.shipStyle(sh).Render(sh.Note)
-	}
-	return cell
 }
 
 // shipsBehind are the reasons the ships may be behind, one each, in plain

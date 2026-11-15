@@ -100,8 +100,7 @@ ship passes a stage, a bright cell runs along its track once.
 
 `↑` and `↓` choose a card, and the chosen card is the peek. It shows
 whole, with what the agent said last (three lines at most) and the options
-of its question. From 152 columns the live view beside the board shows
-them, and the card leaves them out. A chain mate's peek counts the lines
+of its question. A chain mate's peek counts the lines
 in its inbox (`✉ 1 in its inbox`).
 
 The digits answer a question with one choice, given with its options
@@ -214,7 +213,7 @@ rows × 2 are at least its columns.
 |---|---|
 | Narrow (upright under 90 columns, or under 60 columns) | One column a page. The page marks at the top name the open column in capitals with its count, and the others short: `NEEDS YOU 4 −  work 3  ship 3  quiet 5`. A tap on a mark opens its page, and a tap on the open page's mark hides it. |
 | Medium (60 to 99 columns, and upright from 90) | `NEEDS YOU`, `WORKING` and `SHIPPING` side by side. `QUIET` is a drawer under them, one line, which opens when the choice moves into it. |
-| Wide (100 columns and more) | Four columns. From 152 columns the chosen match's live view takes the room at the right. |
+| Wide (100 columns and more) | Four columns. |
 
 A keyboard that shrinks the screen never changes the shape: the shape
 goes by the tallest height seen at the width.
@@ -261,41 +260,15 @@ which has no key line, the row above the belt says it, and a tap on
 A host on another release says so on its row in Hosts. See
 [Remote hosts](remote.md#a-host-on-another-release).
 
-### The live view
+### Go in
 
-From 152 columns, the right side of the board is the live view: the chosen
-agent's own screen, drawn inside the console, read-only. `↑` `↓` change
-which agent it shows. Its title is `<name> · <state>`. Under the title, a
-strip shows the session's account, its PR and its background work. A
-session with none of these has no strip. The live view watches only a
-session of the console's own host.
+A second tap on the chosen card goes into the agent's pane, as `Enter`
+does. The app's edge swipe, ⌘M or ctrl+M (the home gesture) comes back,
+and the next card that needs you is chosen.
 
-The view takes no keys. To answer, type or stop the agent, go into its
-pane: `Enter`, `a` and `Ctrl+O` jump there in tmux, and so does a tap on
-the view. When Claude Code asks with its question tool or for a
-permission, the view shows the agent's own menu.
-
-The mouse wheel over the view scrolls it back through the pane's history,
-3 lines for each wheel step. The key line says `↑ 12 lines back`.
-Scrolling only looks: nothing is typed into the pane.
-
-The view never changes the agent's window: the agent keeps its own size
-and never redraws for the view. The view fits what the agent drew:
-
-- An agent that draws text, such as Codex or Cursor, has its lines joined
-  where its pane wrapped them, and wrapped again to the view's width.
-- A full-screen agent, such as Claude Code, keeps its shape: the view shows
-  its last rows, where its prompt is, and cuts each wider line at the
-  view's edge with a `›`.
-
-Under 152 columns there is no view. A second tap on the chosen card goes
-into the agent's pane, as `Enter` does. The app's edge swipe, ⌘M or ctrl+M
-(the home gesture) comes back, and the next card that needs you is
-chosen.
-
-The iOS demo has no tmux: there `Enter` opens a stand-in for the pane, the
-view over the whole screen with every key going to the agent. Its title
-is `‹ board`. At a question its key line says `type 2 to answer`.
+The iOS demo has no tmux: there `Enter` opens a stand-in for the pane: the
+agent's screen over the whole screen, and every key goes to the agent. Its
+title is `‹ board`. At a question its key line says `type 2 to answer`.
 `ctrl+a m` or the home gesture goes back to the board.
 
 - Context use is read from the agent's own files, as a share of the

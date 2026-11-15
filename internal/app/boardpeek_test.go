@@ -182,7 +182,7 @@ func TestThePeekSaysWhenNoWindowIsKnown(t *testing.T) {
 		s := st.Sessions[0]
 		m, _ := loadedWith(t, 160, st)
 		m = selectPane(t, m, s.Pane).(Model)
-		if peek := peekOf(t, m, s.Name); !strings.Contains(peek, "window known:") {
+		if peek := strings.Join(strings.Fields(peekOf(t, m, s.Name)), " "); !strings.Contains(peek, "window known:") {
 			t.Errorf("%s: the chosen card's peek does not name the fix:\n%s", c.agent, peek)
 		}
 		for _, w := range []int{36, 80} { // a column of NEEDS YOU, a phone's

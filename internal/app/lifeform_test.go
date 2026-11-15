@@ -2188,9 +2188,7 @@ func TestAnotherConsoleSeesTheWait(t *testing.T) {
 	st.Queue = nil
 	st.Refreshes = []proto.Refresh{{Pane: "%1", Name: "app-feature", Agent: "claude", Since: time.Now().Add(-42 * time.Second)}}
 	for _, w := range []int{160, 44} {
-		m, _ := loadedWith(t, w, st)
-		m = selectPane(t, m, "%1").(Model) // the live view's head, or the phone's card, says it
-		s := screen(m)
+		s := screen(sideOnPane(t, w, st, "%1")) // the chosen row says it
 		lines := strings.Split(s, "\n")
 		i := slices.IndexFunc(lines, func(l string) bool { return strings.Contains(l, "writes its record") })
 		if i < 1 || !strings.Contains(lines[i]+lines[i-1], "app-feature") || strings.Contains(s, "esc switches now") {

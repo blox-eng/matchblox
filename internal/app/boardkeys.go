@@ -483,13 +483,6 @@ func (m Model) onCard(s sample.Session) Model {
 	return m
 }
 
-// boardLive: the board has the live view of its chosen card at its right,
-// with the rows for a menu.
-func (m Model) boardLive() bool {
-	w := max(m.width, minWidth)
-	return m.layoutAt(w) == Wide && w >= liveFrom && m.boardRows(w, m.bodyRows(), false) >= menuLeast
-}
-
 // boardKey is k on the board: its own keys, and the keys that act on a
 // match, on the chosen card. false: the tabs take k.
 func (m Model) boardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
@@ -947,9 +940,6 @@ func (m Model) boardTap(x, y int) (tea.Model, tea.Cmd) {
 	if sp, ok := spanAt(d.taps[y], x); ok && sp.press == colQuiet.short() {
 		m.flipHidden(colQuiet) // the drawer's name
 		return m, nil
-	}
-	if d.live > 0 && x >= w-d.live && y >= d.headAt && y < d.colsTo && b.picked {
-		return m.boardInto(b.chosen) // the live view is the chosen card's pane
 	}
 	c, s, ok := m.cardAt(d, b, x, y)
 	if !ok {

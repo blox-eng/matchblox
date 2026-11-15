@@ -13,7 +13,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/doors"
-	"github.com/blox-eng/matchblox/internal/proto"
 )
 
 // lastMessage is a message of five lines: the peek shows less of it.
@@ -923,18 +922,6 @@ func TestASwipeMovesTheCardAsTheArrowsDo(t *testing.T) {
 	m = mouse(t, m, tea.MouseWheelMsg{X: x, Y: y, Button: tea.MouseWheelUp}) // flint-auth is the column's last
 	if armed, _ := m.chatMarks(matchNamed(t, m, "flint-auth")); armed != 0 {
 		t.Errorf("a swipe kept the mark %d", armed)
-	}
-
-	// Over the live view the wheel still scrolls it.
-	m, _, _ = menuBoard(t, 160, 38, chooseCard("spark-search"))
-	before := len(keyActs(boardFake(m)))
-	m = mouse(t, m, tea.MouseWheelMsg{X: 150, Y: 10, Button: tea.MouseWheelUp})
-	got := keyActs(boardFake(m))[before:]
-	if len(got) != 1 || got[0].Text != proto.WheelUp || got[0].RecID != proto.KeysPrefix+paneNamed(boardFixture(t), "spark-search") {
-		t.Errorf("the wheel over the live view sent %+v, want one %s to spark-search", got, proto.WheelUp)
-	}
-	if chosenName(t, m) != "spark-search" {
-		t.Errorf("the wheel over the live view moved the card to %s", chosenName(t, m))
 	}
 }
 

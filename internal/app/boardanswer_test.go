@@ -196,15 +196,9 @@ func TestTheSentState(t *testing.T) {
 func TestADigitAnswersTheChosenQuestion(t *testing.T) {
 	for _, size := range [][2]int{{40, 34}, {80, 31}, {160, 38}} {
 		m, _ := flintBoard(t, size[0], size[1])
-		if bare := size[0] >= liveFrom; bare && strings.Contains(plainFrame(m), "1. Patch the token check") {
-			t.Errorf("%v: the card beside the live view draws its options before a digit", size)
-		}
 		m = pressOn(m, "1")
 		if f := plainFrame(m); len(sent(m)) != 0 || !armedOn(m, "1") || !strings.Contains(f, "1 again sends · esc clears") {
 			t.Errorf("%v: the first 1 sent %+v, or the card does not show the mark:\n%s", size, sent(m), f)
-		}
-		if f := plainFrame(m); size[0] >= liveFrom && strings.Contains(f, "2. Move to the new session store") {
-			t.Errorf("%v: the bare card draws an option that is not marked:\n%s", size, f)
 		}
 		m = pressOn(m, "1")
 		acts := sent(m)

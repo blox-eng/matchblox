@@ -471,7 +471,7 @@ func (m Model) startChain(k chainKey) Model {
 	return m.openChainSheet(k)
 }
 
-// titleOf names a session in the live view's title: a head row by its
+// titleOf names a session in a title: a head row by its
 // chain, not by its agent's tmux session.
 func (m Model) titleOf(s sample.Session) string {
 	if u, head := m.headRow(s); head {

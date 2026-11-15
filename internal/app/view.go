@@ -135,11 +135,8 @@ type drawn struct {
 	rows    []int // the row each body line shows; -1 none, headerRow
 	noteAt  int   // the board's notice row; -1 when it has none
 	noteTap span  // a tap on the notice row
-	// boardView is the live view beside the board: from column x0 and line
-	// y0 to line y1 (x1 0: none).
-	boardView struct{ x0, x1, y0, y1 int }
-	keysAt    int // the key line; -1 when there is none
-	keys      []span
+	keysAt  int   // the key line; -1 when there is none
+	keys    []span
 	// A box over the screen (the sheet, a form): its first line and
 	// column, its width, the key a tap on each of its lines presses, and
 	// the keys of its footer.
@@ -210,7 +207,7 @@ func (m Model) drawScreen(w int) drawn {
 		}
 		return sc
 	}
-	if m.viewFull() { // one column: the live view takes the screen
+	if m.viewFull() { // the stand-in takes the screen
 		return m.viewScreen(w)
 	}
 	room := m.bodyRows()
@@ -222,10 +219,6 @@ func (m Model) drawScreen(w int) drawn {
 	case m.boardShown(): // the board draws its tab row from the body's index
 		p := m.boardPanel(w, room)
 		b, sc.lines[1], sc.tabs = p.body, p.tabRow, p.tabSpans
-		if p.live > 0 {
-			sc.boardView.x0, sc.boardView.x1 = w-p.live, w
-			sc.boardView.y0, sc.boardView.y1 = sc.bodyTop+p.headAt, sc.bodyTop+p.colsTo
-		}
 		if p.noteAt >= 0 {
 			sc.noteAt, sc.noteTap = sc.bodyTop+p.noteAt, p.noteTap
 		}
@@ -721,24 +714,6 @@ func hintsWidth(hs []hint) int {
 	return n
 }
 
-// accountCell is the provider's mark and the account label: "✻ a@b.c · Max".
-// A provider without a mark keeps its name.
-func accountCell(s sample.Session) string {
-	p := providerMarks[s.Provider]
-	if p == "" {
-		p = s.Provider
-	}
-	switch {
-	case p == "":
-		return s.Account
-	case s.Account == "":
-		return p
-	case providerMarks[s.Provider] != "":
-		return p + " " + s.Account
-	}
-	return p + " · " + s.Account
-}
-
 // idleCell is how long a session sat idle, or, while the plan's limit stops
 // it, when it can work again: 19:50 within a day, else the weekday.
 func (m Model) idleCell(s sample.Session) string {
@@ -764,24 +739,6 @@ func plural(n int, noun string) string {
 		return strconv.Itoa(n) + " " + noun + "es"
 	}
 	return strconv.Itoa(n) + " " + noun + "s"
-}
-
-// prOf is the open pull request of the worktree a directory is in: the
-// worktree with the longest path that holds it.
-func (m Model) prOf(cwd string) *proto.PR {
-	if m.git == nil || cwd == "" {
-		return nil
-	}
-	var pr *proto.PR
-	best := 0
-	for _, r := range m.git.Repos {
-		for _, wt := range r.Worktrees {
-			if (cwd == wt.Path || strings.HasPrefix(cwd, wt.Path+"/")) && len(wt.Path) > best {
-				pr, best = wt.PR, len(wt.Path)
-			}
-		}
-	}
-	return pr
 }
 
 // place names a pane the way the tmux status bar does (session:window.pane),

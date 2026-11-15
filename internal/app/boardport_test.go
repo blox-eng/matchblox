@@ -149,13 +149,13 @@ func TestTheCardSaysWhatTheRowSaid(t *testing.T) {
 		if _, says := m.cardSays(matchOf(t, m, "hearth-limits")); says != "Should a refresh also rotate the token?" {
 			t.Errorf("width %d: the estimated wait's card says %q", w, says)
 		}
-		if w == 132 {
+		if w != 44 {
 			continue // QUIET's cards are one line beside the others: no word
 		}
 		m = portShot(t, w, 40, "ember-reports", st)
 		m.boardShowCol(colQuiet)
 		if out := plainFrame(m); !strings.Contains(out, "#4556 waits your merge") {
-			t.Errorf("width %d: the reason is not on the card, or the live view's head:\n%s", w, out)
+			t.Errorf("width %d: the reason is not on the card:\n%s", w, out)
 		}
 	}
 
@@ -450,40 +450,6 @@ func TestTheChoiceStaysWhileTheDeskWatches(t *testing.T) {
 	next, _ := m.Update(ranMsg{cmd: "tmux switch-client -c /dev/pts/7 -t " + s.Pane, jumped: s.Pane, tty: "/dev/pts/7", watched: true})
 	if got := chosenName(t, next.(Model)); got != "kindle-web" {
 		t.Errorf("the choice moved to %s while the desk watches", got)
-	}
-}
-
-// TestAClickOnTheLiveViewGoesIn: a click on the live view beside the
-// board goes into the chosen card's pane.
-func TestAClickOnTheLiveViewGoesIn(t *testing.T) {
-	m := portShot(t, 200, 40, "kindle-web", nil)
-	ran := recordRuns(&m)
-	d := m.boardPanel(200, m.bodyRows())
-	if d.live == 0 {
-		t.Fatal("no live view at 200 columns")
-	}
-	sc := m.drawScreen(200)
-	next, cmd := m.Update(tea.MouseClickMsg(tea.Mouse{X: 200 - d.live + 5, Y: sc.bodyTop + 3, Button: tea.MouseLeft}))
-	drain(cmd)
-	if len(*ran) != 1 || next.(Model).standIn {
-		t.Errorf("a click on the live view ran %q", *ran)
-	}
-}
-
-// TestTheLiveViewBesideTheBoardHasRoomForAMenu: the live view beside the
-// board always has menuLeast rows.
-func TestTheLiveViewBesideTheBoardHasRoomForAMenu(t *testing.T) {
-	for _, w := range []int{152, 160, 200} {
-		for h := 8; h <= 34; h++ {
-			m := portShot(t, w, h, "kindle-web", nil)
-			d := m.boardPanel(w, m.bodyRows())
-			if d.live == 0 {
-				continue
-			}
-			if rows := d.colsTo - d.headAt; rows < menuLeast {
-				t.Fatalf("%dx%d: the live view beside the board has %d rows:\n%s", w, h, rows, plainFrame(m))
-			}
-		}
 	}
 }
 

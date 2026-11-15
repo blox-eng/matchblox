@@ -1,37 +1,37 @@
  ▰ matchblox · all hosts ▾                                                                                                                         ● 4 need you
  BOARD 15    machine
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- NEEDS YOU · 4  −                     WORKING · 3  −            SHIPPING · 3  −           QUIET · 5  −     │ spark-search · stuck
-▌╿ spark-search               ✻ 31m   ✦ flint-ui        ✻       ╿ cinder-ci @gpu… ❋  2h   ╿ wick-… ▣ 23:50 │ ✻ · #4548 ●━✕┄○┄○┄○  CI failed · lint, twice
-  stuck CI failed · lint, twice        busy Writing the test…    merged deploying         ╿ hearth-… ✻  1h │
-  #4548 ●━✕┄○┄○┄○  ctx 77%             ctx 40%        ─╴login    #4549 ●━●━●━◉┄○          ╿ ember-r… ⬢  3h │
-  ⏎ go in                                                                                 ╿ kindle-… ✻  5h │
-                                      ✦ ember-bi… @gpu… ✻       ╿ flint-api       ✻ 40m   ╿ tinder-… ·  2d │
- ╿ kindle-web                 ✻  9m    agents Three subagent…    ci waits for review                       │
-  green #4556 waits for your merge     ctx 71%                   #4560 ●━◉┄○┄○┄○                           │
-  #4556 ●━●━◉┄○┄○  ctx 48%                                                                                 │
-  p merge #4556   ⏎ go in             ✦ spark-docs      ✻       ╿ hearth-limits   ✻  4m                    │
-                                       busy Running the suit…    ci CI · 6 of 9 jobs                       │
- ╿ hearth-api                 ✻  4m    ctx 22%                   #4551 ●━◉┄○┄○┄○                           │
-  asks The plan changes 2 records …                                                                        │
-  ctx 31%                                                                                                  │
-  ⏎ go in                                                                                                  │
-                                                                                                           │
- ╿ flint-auth                 ✻  2m                                                                        │
-  asks Which way do we fix the log…                                                                        │
-  ctx 62%                   ─╴login                                                                        │
-  ⏎ go in                                                                                                  │
-                                                                                                           │
-                                                                                                           │
-                                                                                                           │
-                                                                                                           │
-                                                                                                           │
-                                                                                                           │
-                                                                                                           │
-                                                                                                           │
-                                                                                                           │
-                                                                                                           │
-                                                                                                           │
+ NEEDS YOU · 4  −                                         WORKING · 3  −                        SHIPPING · 3  −                       QUIET · 5  −
+▌╿ spark-search                                   ✻ 31m   ✦ flint-ui                    ✻       ╿ cinder-ci @gpu-1            ❋  2h   ╿ wick-mobile     ▣ 23:50
+  stuck CI failed · lint, twice                            busy Writing the test for a token…    merged deploying                     ╿ hearth-notes @gp… ✻  1h
+  #4548 ●━✕┄○┄○┄○  ctx 77%                                 ctx 40%                    ─╴login    #4549 ●━●━●━◉┄○  ctx 37%             ╿ ember-reports     ⬢  3h
+  “Lint fails on a file I did not change. I tried twice                                                                               ╿ kindle-legacy     ✻  5h
+  and stopped.”                                           ✦ ember-billing @gpu-1        ✻       ╿ flint-api                   ✻ 40m   ╿ tinder-scratch @… ·  2d
+  ⏎ go in                                                  agents Three subagents read the i…    ci waits for review
+                                                           ctx 71%                               #4560 ●━◉┄○┄○┄○  ctx 44%   ─╴login
+ ╿ kindle-web                                     ✻  9m
+  green #4556 waits for your merge                        ✦ spark-docs                  ✻       ╿ hearth-limits               ✻  4m
+  #4556 ●━●━◉┄○┄○  ctx 48%                                 busy Running the suite.               ci CI · 6 of 9 jobs
+  p merge #4556   ⏎ go in                                  ctx 22%                               #4551 ●━◉┄○┄○┄○  ctx 55%
+
+ ╿ hearth-api                                     ✻  4m
+  asks The plan changes 2 records and removes none.
+  ctx 31%
+  ⏎ go in
+
+ ╿ flint-auth                                     ✻  2m
+  asks Which way do we fix the login?
+  ctx 62%                                       ─╴login
+  ⏎ go in
+
+
+
+
+
+
+
+
+
  + start a new session
  RECOMMENDATIONS · 7
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

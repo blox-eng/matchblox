@@ -549,7 +549,7 @@ func TestTheSignalGoesTheWayTheTerminalReadsIt(t *testing.T) {
 // reads no hidden pane while the person types in the agent's. The watch
 // comes back when a screen shows the console again, or the person acts there.
 func TestAJumpWithNoOneLeftStopsTheWatch(t *testing.T) {
-	m, f := loadedWith(t, 160, fixtureState()) // the board watches beside its live view
+	m, f := loadedWith(t, 160, fixtureState()) // the console watches its chosen session
 	m, _ = rigged(m, "1794089220 /dev/pts/1 %99")
 	s, _ := m.selectedSession()
 	next, cmd := key(m, "enter")
@@ -566,7 +566,7 @@ func TestAJumpWithNoOneLeftStopsTheWatch(t *testing.T) {
 		t.Errorf("back on the console the watch is %q, want %s", a.RecID, s.Pane)
 	}
 
-	m, f = loadedWith(t, 160, fixtureState()) // the board watches beside its live view
+	m, f = loadedWith(t, 160, fixtureState()) // the console watches its chosen session
 	m, _ = rigged(m, deskAndPad)
 	next, cmd = key(m, "enter")
 	settled(next, cmd)

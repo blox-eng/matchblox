@@ -650,42 +650,6 @@ func TestNoCardChosenActsOnNothing(t *testing.T) {
 	}
 }
 
-// The live view beside the board crops the chosen card's full-screen agent
-// as main's live view does: its lines are cut at the view's edge with a ›,
-// its last rows show, and its window keeps its own size (#351). At 151
-// columns there is no live view, and no screen is watched.
-func TestTheLiveViewCropsTheChosenCardsScreen(t *testing.T) {
-	st := boardFixture(t)
-	watched := func(w int) Model {
-		next, _ := boardShot(t, st, w, 38, chooseCard("flint-auth")).Update(tea.WindowSizeMsg{Width: w, Height: 38})
-		return next.(Model)
-	}
-	m := watched(160)
-	if m.watching != paneNamed(st, "flint-auth") {
-		t.Fatalf("the board watches %q, not flint-auth", m.watching)
-	}
-	_, live := boardWidths(Wide, 160, boardCols[:])
-	var text strings.Builder
-	for i := 1; i <= 60; i++ {
-		fmt.Fprintf(&text, "row %d %s\n", i, strings.Repeat("=", 2*live))
-	}
-	m.screen = proto.Screen{Pane: paneNamed(st, "flint-auth"), At: demoAt, Alt: true, Text: text.String()}
-	f := strings.Join(plainLines(m.boardPanel(160, m.bodyRows()).lines), "\n")
-	if !strings.Contains(f, "row 60 =") || strings.Contains(f, "row 1 =") || !strings.Contains(f, "=›") {
-		t.Errorf("the live view does not show the last rows of flint-auth, cut with a ›:\n%s", f)
-	}
-	for _, l := range plainLines(m.boardPanel(160, m.bodyRows()).lines) {
-		if n := ansi.StringWidth(l); n > 160 {
-			t.Errorf("a line %d wide at 160 columns: %q", n, l)
-		}
-	}
-	// With no live view the board watches no card: the chat watches the
-	// list's chosen session.
-	if m = watched(151); m.watching != m.chosenSide().pane || m.watching == paneNamed(st, "flint-auth") {
-		t.Errorf("at 151 columns the console watches %q, not the list's chosen %q", m.watching, m.chosenSide().pane)
-	}
-}
-
 // pocketOnly makes the app the only viewer, one that answered the board's
 // keys with a mark.
 func pocketOnly(m *Model) {

@@ -1,49 +1,49 @@
  ▰ matchblox                                                                                                                                                                               ● 6 need you
  BOARD 7    machine
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- NEEDS YOU · 6  −                     WORKING · 1  −            SHIPPING · 0  −           QUIET · 0  −     │ flint-auth · stuck
-▌╿ flint-auth                 ✻  2m   ✦ hearth-api      ✻                                                  │ ✻ team@example.com · Max · #4545 ●━✕┄○┄○┄○  conflicts with main
-  stuck conflicts with main            busy                                                                │
-  #4545 ●━✕┄○┄○┄○  ctx 41%             #4551 ●━◉┄○┄○  ctx 79%                                              │
-  ⏎ go in                                                                                                  │
-                                                                                                           │
- │ spark-docs                 ✻  9m                                                                        │
-  done I rewrote the quick start a…                                                                        │
-  #4540 ●━●━●━●━●  ctx 88%                                                                                 │
-  ⏎ go in                                                                                                  │
-                                                                                                           │
- ╿ ember-billing              ✻  4m                                                                        │
-  green #4552 waits for your merge                                                                         │
-  #4552 ●━●━◉┄○┄○  ctx 32%                                                                                 │
-  p merge #4552   ⏎ go in                                                                                  │
-                                                                                                           │
- ╿ kindle-web                 ✻  1m                                                                        │
-  asks Claude needs your permissio…                                                                        │
-  ctx 56%                                                                                                  │
-  ⏎ go in                                                                                                  │
-                                                                                                           │
- ╿ cinder-ci                  ❋  0s                                                                        │
-  done I am moving the cache key t…                                                                        │
-  ctx 55%                                                                                                  │
-  ⏎ go in                                                                                                  │
-                                                                                                           │
- ╿ wick-mobile                ▣  0s                                                                        │
-  done ⠙ Working                                                                                           │
-  ctx 6%                                                                                                   │
-  ⏎ go in                                                                                                  │
-                                                                                                           │ ⏺ The refresh endpoint is in and its tests pass.
-                                                                                                           │
-                                                                                                           │ ────────────────────────────────────────────────────────────────────────────────
-                                                                                                           │  ☐ Rotate
-                                                                                                           │
-                                                                                                           │ Should a refresh also rotate the token?
-                                                                                                           │
-                                                                                                           │ ❯ 1. Rotate it
-                                                                                                           │      The old one stops at once.
-                                                                                                           │   2. Rotate, keep the old one a minute
-                                                                                                           │   3. Type something.
-                                                                                                           │
-                                                                                                           │ Enter to select · ↑/↓ to navigate · Esc to cancel
+ NEEDS YOU · 6  −                                                      WORKING · 1  −                                  SHIPPING · 0  −                                 QUIET · 0  −
+▌╿ flint-auth                                                  ✻  2m   ✦ hearth-api                            ✻
+  stuck conflicts with main                                             busy
+  #4545 ●━✕┄○┄○┄○  ctx 41%                                              #4551 ●━◉┄○┄○┄○  ctx 79%
+  “The refresh flow works and the tests pass. One choice is yours
+  before I wire the rotation.”
+  ⏎ go in
+
+ │ spark-docs                                                  ✻  9m
+  done I rewrote the quick start and the install page.
+  #4540 ●━●━●━●━●  ctx 88%
+  ⏎ go in
+
+ ╿ ember-billing                                               ✻  4m
+  green #4552 waits for your merge
+  #4552 ●━●━◉┄○┄○  ctx 32%
+  p merge #4552   ⏎ go in
+
+ ╿ kindle-web                                                  ✻  1m
+  asks Claude needs your permission to use Bash
+  ctx 56%
+  ⏎ go in
+
+ ╿ cinder-ci                                                   ❋  0s
+  done I am moving the cache key to the go.sum hash.
+  ctx 55%
+  ⏎ go in
+
+ ╿ wick-mobile                                                 ▣  0s
+  done ⠙ Working
+  ctx 6%
+  ⏎ go in
+
+
+
+
+
+
+
+
+
+
+
  + start a new session
  RECOMMENDATIONS · 7
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

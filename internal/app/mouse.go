@@ -215,7 +215,7 @@ func (m Model) tapAct() (string, func(Model) (tea.Model, tea.Cmd), string) {
 	}, m.actHost(a)
 }
 
-// wheel is a swipe on a phone: over the live view it scrolls the agent's
+// wheel is a swipe on a phone: over the stand-in it scrolls the agent's
 // screen back; elsewhere it moves the selection, as ↑ and ↓ do.
 func (m Model) wheel(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	if m.asking() || m.menu != nil && m.boardShown() { // the menu moves only with its keys
@@ -242,16 +242,11 @@ func (m Model) wheel(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// boardWheel is a wheel step, or a phone's swipe, on the board: over the
-// live view beside the columns it scrolls the chosen card's pane, else it
-// moves the chosen card as ↑ and ↓ do, by the same keys and their rules.
+// boardWheel is a wheel step, or a phone's swipe, on the board: it moves
+// the chosen card as ↑ and ↓ do, by the same keys and their rules.
 func (m Model) boardWheel(ms tea.Mouse) (tea.Model, tea.Cmd) {
-	up := ms.Button == tea.MouseWheelUp
-	if s, ok := m.boardSelected(); ok && m.overBoardView(ms) {
-		return m.onCard(s).wheelView(up)
-	}
 	k := m.keys.main.Down
-	if up {
+	if ms.Button == tea.MouseWheelUp {
 		k = m.keys.main.Up
 	} else if ms.Button != tea.MouseWheelDown {
 		return m, nil
@@ -260,25 +255,7 @@ func (m Model) boardWheel(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	return next, cmd
 }
 
-// overBoardView tells if ms is over the live view beside the board, in
-// the frame View drew last: a swipe's ticks draw nothing again.
-func (m Model) overBoardView(ms tea.Mouse) bool {
-	w := max(m.width, minWidth)
-	sc, kept := m.onScreen(w)
-	if !kept {
-		sc = m.draw(w)
-	}
-	return overBoardViewOf(ms, sc)
-}
-
-// overBoardViewOf tells if ms is over the live view beside the board of
-// the frame sc.
-func overBoardViewOf(ms tea.Mouse, sc drawn) bool {
-	v := sc.boardView
-	return v.x1 > 0 && ms.X >= v.x0 && ms.X < v.x1 && ms.Y >= v.y0 && ms.Y < v.y1
-}
-
-// overView tells if the live view is under the finger: the stand-in is
+// overView tells if the stand-in is under the finger: it is
 // the whole screen.
 func (m Model) overView() bool {
 	if !m.have || m.mismatch || m.pair.owns() || m.sheet != nil || m.form != nil || m.pending != nil {
