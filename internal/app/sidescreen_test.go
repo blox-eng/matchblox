@@ -1,6 +1,7 @@
 package app
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -472,5 +473,86 @@ func TestCtrlOWithNoPaneSaysSoAndNoWayBack(t *testing.T) {
 	m = pressOn(m, "ctrl+o")
 	if len(*ran) != 0 || strings.HasPrefix(keyLineOf(m), "went into") {
 		t.Fatalf("ran %v, key line %q", *ran, keyLineOf(m))
+	}
+}
+
+// formShot is the demo machine with its agents at w by h, New session
+// open in the chat's place from the foot.
+func formShot(t *testing.T, w, h int) Model {
+	t.Helper()
+	st := screensState(t)
+	st.Agents = []string{"claude", "codex", "opencode"}
+	m, _, _ := sideShotOf(t, st, w, h)
+	if !m.listShown() { // a short screen starts on the chat
+		m = pressOn(m, "ctrl+l")
+	}
+	_, y := footLine(m)
+	if m = tapOn(t, m, point{2, y}); m.form == nil {
+		t.Fatalf("+ new opened no form: flash %q", m.flash)
+	}
+	return m
+}
+
+func TestRightClickOnTheListWhileAFormIsOpenOpensNoMenu(t *testing.T) {
+	m := formShot(t, 160, 38)
+	chosen := m.chosenSide()
+	at := listRow(t, m, "spark-docs")
+	m = mouse(t, m, tea.MouseClickMsg{X: at.x, Y: at.y, Button: tea.MouseRight})
+	if m.menu != nil || m.chosenSide() != chosen || m.form == nil {
+		t.Fatalf("a right-click beside the form: menu %v, chosen %v (was %v), form %v", m.menu != nil, m.chosenSide(), chosen, m.form != nil)
+	}
+	for range 2 {
+		m = pressOn(m, "esc")
+	}
+	if m.form != nil || m.menu != nil {
+		t.Fatalf("after esc: form %v, menu %v", m.form != nil, m.menu != nil)
+	}
+}
+
+func TestSessionKeysOnTheFootSaySo(t *testing.T) {
+	m, _, _ := sideShot(t, 160, 38)
+	m = pressOn(m, "esc")
+	for range len(m.sideWalk()) {
+		m = pressOn(m, "down")
+	}
+	if m.footAt == 0 {
+		t.Fatal("no foot part chosen")
+	}
+	m.tell("copy")
+	for _, k := range []string{"z", "c", "g", "m"} {
+		m.noticeText = ""
+		m = pressOn(m, k)
+		if m.menu != nil || m.room != nil || m.boardChain != "" || hasAct(boardFake(m), "park:"+paneNamed(screensState(t), chosenSideName(m))) {
+			t.Fatalf("%s on the foot acted on the hidden session", k)
+		}
+		if !strings.Contains(m.noticeText, m.keys.side.Up.Help().Key) {
+			t.Fatalf("%s on the foot: notice %q", k, m.noticeText)
+		}
+	}
+}
+
+func TestFormInTheChatsPlaceFitsAShortScreen(t *testing.T) {
+	for _, size := range [][2]int{{80, 24}, {60, 20}} {
+		m := formShot(t, size[0], size[1])
+		sc := m.draw(size[0])
+		last := sc.boxAt + len(sc.boxRows) - 1
+		if last >= 3+m.bodyRows() {
+			t.Fatalf("%dx%d: the form's %d rows run past the body's %d", size[0], size[1], len(sc.boxRows), m.bodyRows())
+		}
+		foot := ansi.Strip(sc.lines[last])
+		if len(sc.boxKeys) == 0 || !strings.Contains(foot, "esc") {
+			t.Fatalf("%dx%d: the form's key row %q is not on the screen", size[0], size[1], foot)
+		}
+		for tap := range 2 { // the first esc closes where's list
+			sc := m.draw(size[0])
+			i := slices.IndexFunc(sc.boxKeys, func(s span) bool { return s.press == m.keys.form.Close.Keys()[0] })
+			if i < 0 {
+				t.Fatalf("%dx%d: tap %d: no esc on the form's key row: %+v", size[0], size[1], tap, sc.boxKeys)
+			}
+			m = tapOn(t, m, point{sc.boxX + sc.boxKeys[i].x0, sc.boxAt + len(sc.boxRows) - 1})
+		}
+		if m.form != nil {
+			t.Fatalf("%dx%d: two taps on the form's esc left it open", size[0], size[1])
+		}
 	}
 }

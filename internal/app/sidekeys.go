@@ -191,6 +191,9 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 	sk, mk, bk := m.keys.side, m.keys.main, m.keys.board
 	var cmd tea.Cmd
 	switch {
+	case m.footAt > 0 && bkey.Matches(k, mk.Park, bk.Copy, bk.Chain, bk.Menu):
+		cmd = m.notice(strings.Join([]string{mk.Park.Help().Key, bk.Copy.Help().Key, bk.Chain.Help().Key, bk.Menu.Help().Key}, " ") +
+			" act on a session · " + sk.Up.Help().Key + " chooses one")
 	case bkey.Matches(k, sk.Up) && m.footAt > 0:
 		m.footAt--
 	case bkey.Matches(k, sk.Down) && m.footAt > 0:

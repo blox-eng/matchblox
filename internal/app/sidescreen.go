@@ -634,6 +634,15 @@ func (m Model) formInChat(sc *drawn, w int) {
 		x, bw = 0, w
 	}
 	lines, press, spans, agentsAt, agents := m.formBox(bw)
+	if rows := m.bodyRows(); len(lines) > rows && rows > 1 {
+		// Short of room the form's last fields go: its key row stays.
+		end := len(lines) - 1
+		lines = append(lines[:rows-1:rows-1], lines[end])
+		press = append(press[:rows-1:rows-1], press[end])
+		if agentsAt >= rows-1 {
+			agentsAt, agents = -sc.bodyTop-1, nil // the agent chips are cut: no tap finds them
+		}
+	}
 	for i := range m.bodyRows() {
 		y := sc.bodyTop + i
 		if y >= len(sc.lines) {

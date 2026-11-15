@@ -25,7 +25,7 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		return m, nil
 	case m.menu != nil && m.boardShown():
 		return m.menuTap(ms)
-	case ms.Button == tea.MouseRight && m.sideActive():
+	case ms.Button == tea.MouseRight && m.sideActive() && m.form == nil && m.sheet == nil: // a box beside the list takes every click
 		return m.sideRightClick(ms)
 	case ms.Button == tea.MouseRight && m.boardShown():
 		return m.boardRightClick(ms)
