@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"testing"
 	"time"
 
@@ -35,18 +34,6 @@ func fullView(m Model) Model {
 }
 
 func keyText(sc drawn) string { return ansi.Strip(sc.lines[sc.keysAt]) }
-
-// TestVIsFree: v is the board's density alone; the tabs bind no v.
-func TestVIsFree(t *testing.T) {
-	main, _ := layersOf(defaultKeys())
-	if got := owners(t, main)["v"]; got != "" {
-		t.Fatalf("v is %q on the tabs", got)
-	}
-	if !slices.Contains(defaultKeys().board.Density.Keys(), "v") {
-		t.Fatalf("v is not the board's density: %q", defaultKeys().board.Density.Keys())
-	}
-	TestKeymapsHaveNoCollisions(t)
-}
 
 // manyRows is one host with n sessions, list only, 200×60.
 func manyRows(t *testing.T, n int) Model {
@@ -112,22 +99,21 @@ func TestFrameCostWithChains(t *testing.T) {
 }
 
 // TestBoardPrefsAreKeptForEachShape: a phone and a desk each keep their
-// hidden columns and density; an old view.json still loads.
+// hidden columns; an old view.json still loads.
 func TestBoardPrefsAreKeptForEachShape(t *testing.T) {
 	dir := t.TempDir()
 	m := demoIn(t, dir, 44, 31)
-	if !m.upright() || m.colHidden(colWork) || m.oneLine() {
+	if !m.upright() || m.colHidden(colWork) {
 		t.Fatalf("a fresh phone is not plain: %+v", m.viewPrefs)
 	}
 	m.flipHidden(colWork)
-	m.flipOneLine()
 
 	again := demoIn(t, dir, 44, 31)
-	if !again.colHidden(colWork) || again.colHidden(colNeed) || !again.oneLine() {
+	if !again.colHidden(colWork) || again.colHidden(colNeed) {
 		t.Fatalf("the phone lost its board views: %+v", again.viewPrefs)
 	}
 	desk := demoIn(t, dir, 132, 32)
-	if desk.upright() || desk.colHidden(colWork) || desk.oneLine() {
+	if desk.upright() || desk.colHidden(colWork) {
 		t.Fatalf("the desk took the phone's board views: %+v", desk.viewPrefs)
 	}
 
@@ -145,7 +131,7 @@ func TestAnOldViewFileStillLoads(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := loadViewPrefs(dir)
-	if p.ListOnlyPhone || p.OneLinePhone != nil || len(p.HiddenPhone) != 0 || len(p.Told) != 0 {
+	if p.ListOnlyPhone || len(p.HiddenPhone) != 0 || len(p.Told) != 0 {
 		t.Fatalf("old file: %+v", p)
 	}
 }

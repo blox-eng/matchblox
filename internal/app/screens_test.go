@@ -127,9 +127,6 @@ func TestScreens(t *testing.T) {
 	goldenFile(t, tapOn(t, phone, listRow(t, phone, "flint-auth")), "side-44x31-chat")
 	desk, _, _ := sideShot(t, 132, 32)
 	golden(t, pressOn(desk, "ctrl+l"), "side-hidden", 132, 32)
-	for _, size := range [][2]int{{92, 40}, {132, 32}} {
-		checkBoard(t, st, "listonly", size[0], size[1], []string{"v"})
-	}
 	for _, size := range [][2]int{{44, 31}, {132, 32}} {
 		check(t, twoShipsState(t), "sessionships", size[0], size[1], nil)
 	}
@@ -176,9 +173,6 @@ func TestScreens(t *testing.T) {
 	for _, size := range surveyGrids {
 		check(t, st, "survey", size[0], size[1], nil, asks)
 		checkBoard(t, st, "surveychat", size[0], size[1], []string{"enter"}, asks)
-		if portrait(size[0], size[1]) && size[0] >= 83 { // list only by default: the full view splits
-			checkBoard(t, st, "surveyfull", size[0], size[1], []string{"v", "enter"}, asks)
-		}
 	}
 	life := st
 	life.Agents = []string{"claude", "codex", "opencode"}
@@ -217,9 +211,6 @@ func TestScreens(t *testing.T) {
 	board := boardFixture(t)
 	for _, size := range [][2]int{{40, 34}, {80, 31}, {104, 38}, {160, 38}} {
 		golden(t, boardShot(t, board, size[0], size[1], nil), "board", size[0], size[1])
-	}
-	for _, size := range [][2]int{{40, 34}, {160, 38}} { // v, before the board takes its keys
-		golden(t, boardShot(t, board, size[0], size[1], oneLineBoard), "boardoneline", size[0], size[1])
 	}
 	onLogin := func(m *Model) {
 		chooseCard("flint-auth")(m)

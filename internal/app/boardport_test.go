@@ -295,9 +295,6 @@ func TestATapOnABoardKeyPressesIt(t *testing.T) {
 	if next, _ := tap(m, at("p merge"), y); next.(Model).pending == nil || !next.(Model).pending.destructive {
 		t.Errorf("a tap on p merge: %+v", next.(Model).pending)
 	}
-	if next, _ := tap(m, at("v one line"), y); !next.(Model).oneLine() {
-		t.Error("a tap on v one line did not change the density")
-	}
 	ran := recordRuns(&m)
 	next, cmd := tap(m, at("⏎ go in"), y)
 	drain(cmd)

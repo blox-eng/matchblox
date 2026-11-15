@@ -106,9 +106,9 @@ terminal.`
 - While the console shows the board or Machine, the key belt is on its
   Board layout. Home is `◂`, then the keys of the chosen card (`1 answer`,
   `p merge`, `y go`), then `↑ ↓ ⏎`. The rest of the belt has every other
-  key of the board: `c copy`, `m menu`, `g chain`, `v one line`, `s hosts`,
-  `⇥ machine`, `x kill`, `←`, `→`, `]`, `[`, `/`, `z park`. A
-  key that does not apply is dim and sends nothing. In a pane, the belt
+  key of the board: `c copy`, `m menu`, `g chain`, `s hosts`, `⇥ machine`,
+  `x kill`, `←`, `→`, `]`, `[`, `/`, `z park`. A key that does not apply is
+  dim and sends nothing. In a pane, the belt
   goes back to the layout it had there. A tap on `y go` does not give the
   go. The first tap arms it: the card says what the go does, for example
   `y again: merge #4556`. Tap `y` again to give the go. Any other key or
@@ -406,9 +406,8 @@ others short: `NEEDS YOU 4 −  work 3  ship 3  quiet 5`. A tap on a mark
 opens its page, and a tap on the open page's mark hides the page. A hidden
 page waits at the end of the marks as `+ work 3`.
 
-A phone starts with whole cards in `NEEDS YOU` and one line for each card
-elsewhere. `v` turns every card whole, or every card to one line. The
-chosen card is always whole, with its peek: what the agent said last and
+A phone shows whole cards in `NEEDS YOU` and one line for each card
+elsewhere. The chosen card is always whole, with its peek: what the agent said last and
 the options of its question.
 
 Machine shows usage and the machine.

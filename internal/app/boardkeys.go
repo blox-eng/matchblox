@@ -584,9 +584,6 @@ func (m Model) boardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 		}
 	case bkey.Matches(k, bk.Copy):
 		cmd = m.boardCopy(s, ok)
-	case bkey.Matches(k, bk.Density):
-		cmd = m.once("density", bk.Density.Help().Key+" changes the cards now: verbose, or one line.", "")
-		m.flipOneLine()
 	case bkey.Matches(k, bk.Host):
 		cmd = m.once("host", bk.Host.Help().Key+" changes the host now. The order of a column is fixed.", m.turnHost())
 	case bkey.Matches(k, bk.Chain):
@@ -816,21 +813,17 @@ func (m Model) boardTapGo(s sample.Session) (tea.Model, tea.Cmd) {
 }
 
 // boardHints are the board's keys on the key line: the chosen card's, then
-// c v s, then ←→ and tab. A phone shows c v s only: the chosen card shows
-// its own keys.
+// c s, then ←→ and tab. A phone shows c s only: the chosen card shows its
+// own keys.
 func (m Model) boardHints(w int) []hint {
 	bk, mk := m.keys.board, m.keys.main
 	if m.menu != nil { // the menu takes every key
 		return []hint{hintFor(mk.Up, ""), hintFor(mk.Open, "do"), hintFor(mk.Back, "close")}
 	}
-	density := hintFor(bk.Density, "")
-	if m.oneLine() {
-		density.label = "verbose"
-	}
 	if !m.have && m.opt.Layered { // a host that never answered: the way back
 		return []hint{hintFor(mk.Back, "hosts"), hintFor(mk.Quit, "")}
 	}
-	tail := []hint{hintFor(bk.Copy, ""), density, hintFor(bk.Host, "")}
+	tail := []hint{hintFor(bk.Copy, ""), hintFor(bk.Host, "")}
 	cancel := hintFor(mk.Back, "cancel") // the copy check waits for its paste
 	if b, _ := m.boardDrawOf(); m.have && b.none && m.copyCode == "" && m.boardAbove == 0 {
 		// No session at all: only the keys that act on an empty board.
@@ -1082,7 +1075,6 @@ func (m Model) beltKeys() []beltKey {
 		beltOf(bk.Copy, "", "copy", card),
 		beltOf(bk.Menu, "", "menu", card),
 		beltOf(bk.Chain, "", "chain", card && m.chainLabelOf(s) != ""),
-		beltOf(bk.Density, "", "one line", board),
 		beltOf(bk.Host, "", "hosts", board && m.hostCount() > 1),
 		beltOf(mk.NextTab, "⇥", "machine", !m.consenting()),
 		beltOf(mk.Second, "", "kill", card && !head && !isShipCard(s) && m.killAction(s) != nil),

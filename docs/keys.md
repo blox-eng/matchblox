@@ -9,8 +9,8 @@ the bottom shows the keys of the open tab. A tap on a key presses it.
 
 ## The board
 
-The key line shows the keys of the chosen card first, then `c`, `v` and
-`s`, then `←→` and `Tab`. A key that does not fit leaves whole, from
+The key line shows the keys of the chosen card first, then `c` and `s`,
+then `←→` and `Tab`. A key that does not fit leaves whole, from
 the right.
 
 | Key | What it does |
@@ -25,7 +25,6 @@ the right.
 | `y` | Gives the go that a stoker step waits for. On Pocket the first `y` only arms it, and the card says what it does (`y again: merge #4556`). A second `y` gives it. |
 | `c` | Copies what the agent said last. |
 | `m` | Opens the card's menu: copy, show its chain, go in, hide its column. |
-| `v` | Shows every card whole, or as one line. A phone and a desk each keep their own choice. |
 | `g` | Shows only the chain of the chosen card: its room. `Esc` shows all. |
 | `]`, `[` | Shows the next or the previous chain. |
 | `s` | Shows the next host, then all hosts. |
@@ -47,8 +46,8 @@ the right.
 | `R` | Starts the console again on the binary the service runs. The key line offers it first, `R start again · service v0.43.0, console v0.42.0`, when the service on this machine runs a newer release than the console and the console's own binary was installed over. Otherwise the line says `quit and reopen`. |
 
 A key that changed its job with the board says so once, the first time
-you press it: `c`, `v`, `s`, `g`, `p`, `x` on a card whose ship waits for
-its merge, and a digit.
+you press it: `c`, `s`, `g`, `p`, `x` on a card whose ship waits for its
+merge, and a digit.
 
 ## The list and the chat
 

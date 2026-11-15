@@ -86,9 +86,7 @@ A card has up to four lines:
 4. The keys of the card: `p merge #4556   ⏎ go in`. Cards in `NEEDS YOU`
    and the chosen card show them.
 
-`v` shows every card whole, or as one line. In one line, `NEEDS YOU`
-adds the second line. A phone and a desk each keep their own choice. A
-phone starts with whole cards in `NEEDS YOU` only. A column whose cards
+On a phone, only the cards in `NEEDS YOU` are whole. A column whose cards
 do not fit ends in `↓ 3 more`, and scrolls to show the chosen card whole.
 
 The match of a card plays where it is. In `NEEDS YOU`, the match of each

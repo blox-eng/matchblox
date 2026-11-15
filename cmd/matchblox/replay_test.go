@@ -529,7 +529,7 @@ func replayAt(t *testing.T, z replaySize) {
 	// the console before.
 	views := t.TempDir()
 	if err := os.WriteFile(filepath.Join(views, "view.json"),
-		[]byte(`{"told":["chain","copy","density","digit","host","kill","merge"],"copy_checked_phone":true,"copy_checked_desk":true}`), 0o600); err != nil {
+		[]byte(`{"told":["chain","copy","digit","host","kill","merge"],"copy_checked_phone":true,"copy_checked_desk":true}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	heard := &heardConn{Conn: transport.NewConn(a)}

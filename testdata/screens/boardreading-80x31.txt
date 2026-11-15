@@ -28,4 +28,4 @@
  QUIET   ▴                                                                   −
  + start a new session
 ────────────────────────────────────────────────────────────────────────────────
- c copy   v one line   s hosts   ←→ columns   tab next
+ c copy   s hosts   ←→ columns   tab next

@@ -28,4 +28,4 @@
 │                                          │
 ╰─ ⏎ send ─ esc cancel the ssh ────────────╯
 ────────────────────────────────────────────
- c copy   v one line   s hosts
+ c copy   s hosts

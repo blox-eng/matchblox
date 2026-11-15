@@ -28,4 +28,4 @@
 │ ✓ merges  ○ releases  ○ deploys  ○ kills │
 ╰─ ⏎ start ─ tab chips ─ esc ──────────────╯
 ────────────────────────────────────────────
- c copy   v one line   s hosts
+ c copy   s hosts

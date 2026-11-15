@@ -217,11 +217,6 @@ func chooseCard(name string) func(*Model) {
 	}
 }
 
-func oneLineBoard(m *Model) {
-	yes := true
-	m.viewPrefs.OneLinePhone, m.viewPrefs.OneLineDesk = &yes, true
-}
-
 func frameLines(m Model) []string { return strings.Split(m.render(), "\n") }
 
 func plainFrame(m Model) string { return ansi.Strip(m.render()) }
@@ -229,20 +224,14 @@ func plainFrame(m Model) string { return ansi.Strip(m.render()) }
 func TestBoardFitsItsScreen(t *testing.T) {
 	st := boardFixture(t)
 	for _, size := range [][2]int{{40, 34}, {80, 31}, {104, 38}, {160, 38}} {
-		for _, one := range []bool{false, true} {
-			var edit func(*Model)
-			if one {
-				edit = oneLineBoard
-			}
-			m := boardShot(t, st, size[0], size[1], edit)
-			lines := frameLines(m)
-			if len(lines) != size[1] {
-				t.Errorf("%dx%d, one line %v: %d lines", size[0], size[1], one, len(lines))
-			}
-			for i, l := range lines {
-				if lipgloss.Width(l) != size[0] {
-					t.Errorf("%dx%d, one line %v: line %d is %d cells: %q", size[0], size[1], one, i, lipgloss.Width(l), ansi.Strip(l))
-				}
+		m := boardShot(t, st, size[0], size[1], nil)
+		lines := frameLines(m)
+		if len(lines) != size[1] {
+			t.Errorf("%dx%d: %d lines", size[0], size[1], len(lines))
+		}
+		for i, l := range lines {
+			if lipgloss.Width(l) != size[0] {
+				t.Errorf("%dx%d: line %d is %d cells: %q", size[0], size[1], i, lipgloss.Width(l), ansi.Strip(l))
 			}
 		}
 	}

@@ -100,7 +100,7 @@ func TestAKeyTouchesTheRestOfTheChosenCardsHost(t *testing.T) {
 	m.selPID, m.selHost, m.chose = 1, "", true // Sessions' row: home-1
 	gpu := matchOf(t, m, "gpu-run")
 	m.boardChooseCard(m.columnOf(gpu), gpu)
-	pressAll(m, "v")
+	pressAll(m, "c")
 	if got := stokerActs(conns["gpu-1"]); !slices.Equal(got, []string{"stoker:touch"}) {
 		t.Errorf("gpu-1 got %v, want its rest touched", got)
 	}

@@ -28,4 +28,4 @@
  + start a new session
  RECOMMENDATIONS · 7
 ────────────────────────────────────────────────────────────────────────────────
- 1-2 mark an answer   ⏎ go in   c copy   v one line   s hosts   ←→ columns
+ 1-2 mark an answer   ⏎ go in   c copy   s hosts   ←→ columns   tab next

@@ -705,7 +705,7 @@ func (m Model) boardStack(d *boardDrawn, b *boardDraw, c boardCol, y, x, w, h in
 func (m Model) boardBlockOf(b *boardDraw, c boardCol, s sample.Session, w int, quietRow bool) boardBlock {
 	o := cardOpts{
 		sel:       b.picked && c == b.open && paneOf(s) == paneOf(b.chosen),
-		oneLine:   m.oneLineIn(c),
+		oneLine:   m.upright() && c != colNeed, // a phone keeps NEEDS YOU whole, every other page one line
 		need:      c == colNeed,
 		quietRow:  quietRow,
 		otherHost: m.hostCount() > 1 && m.boardHost == "" && s.Host != m.opt.Host,

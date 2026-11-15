@@ -152,7 +152,6 @@ More in [The console](https://docs.matchblox.com/console/).
 | `y` | Gives the go a stoker step waits for. |
 | `c` | Copies what the agent said last. |
 | `m` | Opens the card's menu. |
-| `v` | Shows each card whole, or as one line. |
 | `g` | Shows only the chain of the chosen card. `Esc` shows all. |
 | `s` | Shows the next host, then all hosts. |
 | `N` | Starts a new session: where, the agent, its account and a first message (none on a new account). |

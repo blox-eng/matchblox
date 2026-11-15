@@ -226,12 +226,12 @@ func TestAfterAnActTheFirstWaitIsChosen(t *testing.T) {
 
 func TestTheKeyLineDropsWholeKeysFromTheRight(t *testing.T) {
 	st := boardFixture(t)
-	m := boardShot(t, st, 70, 31, chooseCard("kindle-web"))
-	hints := m.boardHints(70)
+	m := boardShot(t, st, 64, 20, chooseCard("kindle-web"))
+	hints := m.boardHints(64)
 	if hints[0].key != "p" || !slices.ContainsFunc(hints, func(h hint) bool { return h.key == "tab" }) {
 		t.Fatalf("the board's keys: %+v", hints)
 	}
-	line := strings.TrimSpace(keyText(m.draw(70)))
+	line := strings.TrimSpace(keyText(m.draw(64)))
 	var parts []string
 	whole := -1
 	for i, h := range hints {
@@ -241,14 +241,14 @@ func TestTheKeyLineDropsWholeKeysFromTheRight(t *testing.T) {
 		}
 	}
 	if whole < 0 || whole == len(hints)-1 {
-		t.Errorf("at 70 the key line does not end at a whole key of %d: %q", len(hints), line)
+		t.Errorf("at 64 the key line does not end at a whole key of %d: %q", len(hints), line)
 	}
 	if strings.Contains(line, "sessions") || strings.Contains(line, "rename") {
 		t.Errorf("the key line has the keys of Sessions: %q", line)
 	}
 
 	m = boardShot(t, st, 40, 34, nil)
-	if got := strings.TrimSpace(keyText(m.draw(40))); got != "c copy   v one line   s hosts" {
+	if got := strings.TrimSpace(keyText(m.draw(40))); got != "c copy   s hosts" {
 		t.Errorf("at 40 the key line is %q", got)
 	}
 }
@@ -371,7 +371,6 @@ func TestAChangedKeySaysSoOnce(t *testing.T) {
 	m := open()
 	for _, c := range []struct{ key, once, then string }{
 		{"c", "c copies now. The stoker is on its card.", "copied: last message of spark-search · not checked here"},
-		{"v", "v changes the cards now: verbose, or one line.", ""},
 		{"g", "g shows one chain now. esc shows all.", "spark-search is in no chain"},
 		{"p", "p merges now. The ships are on their cards.", "no ship of spark-search waits for a merge"},
 		{"1", "A digit marks an answer now. Press it again to send.", ""},
@@ -392,7 +391,7 @@ func TestAChangedKeySaysSoOnce(t *testing.T) {
 	}
 
 	m = open()
-	for _, k := range []string{"c", "v", "s", "g", "p", "1"} {
+	for _, k := range []string{"c", "s", "g", "p", "1"} {
 		m = pressOn(m, k)
 		if got := noticeRow(m); strings.Contains(got, " now") {
 			t.Errorf("a new console says %q again on %s", got, k)
@@ -421,32 +420,13 @@ func TestEscNeverLeavesTheConsole(t *testing.T) {
 	}
 }
 
-// TestAPhoneStartsVerboseInNeedsYouOnly: until v is pressed on a phone,
-// NEEDS YOU is verbose and every other page one line; the first v stores a
-// choice for every page. A desk starts verbose.
-func TestAPhoneStartsVerboseInNeedsYouOnly(t *testing.T) {
-	dir := t.TempDir()
-	phone := boardShot(t, boardFixture(t), 40, 34, func(m *Model) { m.opt.StateDir, m.viewPrefs = dir, loadViewPrefs(dir) })
-	if phone.oneLineIn(colNeed) || !phone.oneLineIn(colWork) || !phone.oneLineIn(colQuiet) {
-		t.Fatalf("a fresh phone: NEEDS YOU one line %v, WORKING %v", phone.oneLineIn(colNeed), phone.oneLineIn(colWork))
-	}
+// TestAPhoneKeepsOnlyNeedsYouWhole: on a phone NEEDS YOU is verbose and
+// every other page one line, but for the chosen card.
+func TestAPhoneKeepsOnlyNeedsYouWhole(t *testing.T) {
+	phone := boardShot(t, boardFixture(t), 40, 34, nil)
 	page := func(m Model) string { return strings.Join(plainLines(m.boardPanel(40, m.bodyRows()).lines), "\n") }
 	if f := page(pressOn(phone, "right")); strings.Contains(f, "ctx 22%") {
-		t.Errorf("a card of WORKING that is not chosen is not one line on a fresh phone:\n%s", f)
-	}
-	phone = pressOn(phone, "v")
-	if !phone.oneLineIn(colNeed) || !phone.oneLineIn(colWork) {
-		t.Error("the first v does not make every page one line")
-	}
-	phone = pressOn(phone, "v")
-	if phone.oneLineIn(colNeed) || phone.oneLineIn(colWork) {
-		t.Error("the second v does not make every page verbose")
-	}
-	if p := loadViewPrefs(dir); p.OneLinePhone == nil || *p.OneLinePhone {
-		t.Errorf("the phone's choice is not kept: %v", p.OneLinePhone)
-	}
-	if desk := boardShot(t, boardFixture(t), 104, 38, nil); desk.oneLineIn(colWork) || desk.oneLineIn(colNeed) {
-		t.Error("a desk does not start verbose")
+		t.Errorf("a card of WORKING that is not chosen is not one line on a phone:\n%s", f)
 	}
 }
 
@@ -581,7 +561,7 @@ func TestTheBeltsGoArmsThenGives(t *testing.T) {
 		m.belt.pocket[0].n = m.belt.n
 		return m
 	}
-	for _, between := range []string{"v", "c", "g", "esc"} {
+	for _, between := range []string{"c", "g", "esc"} {
 		now = demoAt
 		m = answered(answered(answered(goBoard(t, &now, pocket), "y"), between), "y")
 		if !m.onPocket() {
@@ -905,7 +885,7 @@ func beltKeyOf(t *testing.T, ks []beltKey, face string) beltKey {
 // TestBeltKeysFollowTheChosenCard (design decision 10): home is ◂, the
 // chosen card's keys, ↑ ↓ ⏎; the tail has every other key of the board.
 func TestBeltKeysFollowTheChosenCard(t *testing.T) {
-	tail := []string{"c", "m", "g", "v", "s", "⇥", "x", "←", "→", "]", "[", "/", "z"}
+	tail := []string{"c", "m", "g", "s", "⇥", "x", "←", "→", "]", "[", "/", "z"}
 	st := boardFixture(t)
 
 	m, _ := flintBoard(t, 80, 34)
@@ -938,7 +918,7 @@ func TestBeltKeysFollowTheChosenCard(t *testing.T) {
 	if g := beltKeyOf(t, ks, "g"); g.On {
 		t.Errorf("kindle-web is in no chain, yet g is %+v", g)
 	}
-	words := map[string]string{"c": "copy", "m": "menu", "g": "chain", "v": "one line", "s": "hosts", "⇥": "machine", "x": "kill", "z": "park"}
+	words := map[string]string{"c": "copy", "m": "menu", "g": "chain", "s": "hosts", "⇥": "machine", "x": "kill", "z": "park"}
 	for face, word := range words {
 		if k := beltKeyOf(t, ks, face); k.Word != word {
 			t.Errorf("%s says %q, want %q", face, k.Word, word)
@@ -997,7 +977,7 @@ func TestTheBeltSignalSaysTheBoardsKeys(t *testing.T) {
 		if !c.consenting() {
 			t.Fatalf("%s does not show", name)
 		}
-		if got := value(c); got != ";c,m,g,v,s,tab,x,left,right,],[,/,z" {
+		if got := value(c); got != ";c,m,g,s,tab,x,left,right,],[,/,z" {
 			t.Errorf("%s: %q, want the home with no card keys", name, got)
 		}
 		if ks := c.beltKeys(); slices.ContainsFunc(ks, func(k beltKey) bool { return k.Act }) {
