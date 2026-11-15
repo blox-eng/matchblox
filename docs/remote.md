@@ -61,7 +61,7 @@ you added, and `+ add a host`. The header says `HOSTS · 3 · 2 SHOWN`.
 
 - The header shows the host filter: `all hosts ▾`, or the one host shown.
 - A row of another host names its host after the name:
-  `train-loop@gpu-1`.
+  `kindle-web@ws-2`.
 - A long host name ends in `…`.
 - `N` starts a session on the host of the chosen session. With no session
   chosen, it starts it on the home host.
@@ -74,13 +74,13 @@ stop the others.
 - A lost host keeps its rows, faint, with `as of 14:02`.
   The header does not count their waits.
 - A reconnect of a few seconds changes nothing on the screen.
-- After 30 seconds, the header says `· gpu-1 stale`.
-- The key line names the lost host: `gpu-1: connection lost. Tries again in
+- After 30 seconds, the header says `· ws-2 stale`.
+- The key line names the lost host: `ws-2: connection lost. Tries again in
   8s.`
-- With two lost hosts, it says `2 hosts lost: gpu-1, ws-1. Tries again in
+- With two lost hosts, it says `2 hosts lost: ws-1, ws-2. Tries again in
   8s.`
 - A host that the console cannot reach is a part of the list's foot:
-  `! gpu-1 not reached`, or `! gpu-1 blocked`. All hosts leaves a hidden
+  `! ws-2 not reached`, or `! ws-2 blocked`. All hosts leaves a hidden
   host out; `s` on that host shows it.
 - `Enter` on the part shows why and the fix in the chat's place.
   `Enter` there runs the fix, or dials the host again.
@@ -96,10 +96,10 @@ stop the others.
 - On a session of another host `Ctrl+O` goes into its pane, and a digit
   answers through its host.
 - Two hosts can have the same pane id. The console never mixes them.
-- The console refuses an act on a lost host: `gpu-1 is not connected. It
+- The console refuses an act on a lost host: `ws-2 is not connected. It
   tries again in 8s.`
 - While the console dials a host for the first time, the text is
-  `gpu-1 is not connected.`
+  `ws-2 is not connected.`
 - If acts to a lost host get no answer, the console says `ws-1: 1 act has
   no answer`.
 - A jump to a lost host works. It uses your own ssh, not the stream.
@@ -111,7 +111,7 @@ stop the others.
 - Machine, History and the stoker's view show one section for each ticked
   host, in Hosts order. Each section has the name of its host.
 - Machine shows one usage row for each account label. Each host adds a
-  short cell to that row, in Hosts order: `work  5h  ws-1 58% · gpu-1
+  short cell to that row, in Hosts order: `work  5h  ws-1 58% · ws-2
   61%`.
 - matchblox never adds or averages the readings of two hosts.
 - A short line drops whole cells and ends in ` …`.

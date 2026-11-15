@@ -25,7 +25,7 @@ the screen; else it types.
 | `Backspace` | Erases the last character of the line. |
 | A digit, 1 to 9 | With the line empty, marks that option of the question on the screen. The same digit again sends it. A question that opened less than half a second ago takes no digit: the digit types. On a session the stoker holds, 1 marks "Let it go", and 1 again lets it go. |
 | `↑`, `↓` | With the line empty, or in the list, chooses the session above or below, as the list draws them. In the list, `↓` past the last row chooses the parts of the foot one by one, and `↑` goes back up. `Enter` opens the chosen part. |
-| `Esc` | Closes the menu. In the line, clears a marked answer, then moves the keys to the list. In the list, clears the search, then closes the chain's room, then shows all chains. It never leaves the console, except on a host that has not answered yet: then it goes back to Hosts. `Ctrl+M`, prefix `m` and the phone's back button do the same in the console. |
+| `Esc` | Closes the menu. In the line, clears a marked answer, then moves the keys to the list. In the list, clears the search, then closes the chain's room, then shows all chains. It never leaves the console, except on a host that has not answered yet: then it goes back to Hosts. `Ctrl+M`, prefix `m` and the phone's back button do the same in the console. On a phone, `Esc` then a quick letter types the letter in the line. |
 | `s` | In the list, shows the next host, then all hosts. It goes to each host, a hidden host too. With one host shown, all hosts is that host, so `s` goes from host to host. With one host only, a notice says so. |
 | `h` | In the list, on a hidden host, shows that host in all hosts again. Machine › Hosts then ticks the host. On another host, a notice says what `h` does. |
 | `g` | In the list, shows only the chain of the chosen session: its room. `Esc` shows all. |
@@ -61,9 +61,10 @@ on a group's head folds the group: the head keeps its count, and its `−`
 turns to a plus sign. A tap on the head again unfolds it. The foot opens
 each of its parts in the chat's place, beside the list: `+ new` opens
 **New session**, `✧ 2 tips` the tips, `! 1 setup` the first open setup
-step, and `! gpu-1 not reached` (or `! gpu-1 blocked`) that host's
-trouble and its fix. `Esc` gives the place back to the chat. A notice shows over
-the lines above the chat's line and the foot, and a tap on it does
+step, and `! ws-2 not reached` (or `! ws-2 blocked`) that host's
+trouble and its fix. `Esc` gives the place back to the chat. A notice
+shows over the lines above the chat's line and the foot, and a tap on it
+does
 nothing. In the tips, `↑` `↓` choose, `Enter` does the chosen tip and `d`
 dismisses it. In a setup step, `Enter` sets it up and `x` closes it, after
 a typed `y`. In a host's trouble, `Enter` runs the fix or dials the host

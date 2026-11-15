@@ -50,8 +50,8 @@ All notable changes to matchblox are in this file. The format follows
 
 ### Changed
 
-- **`Ctrl+O` goes into the agent's pane.** It takes the place of `Enter`
-  and `a` into the pane. `ctrl+a m` comes back, to the chat you left.
+- **`Ctrl+O` goes into the agent's pane.** `ctrl+a m` comes back, to the
+  chat you left.
   ([#411](https://github.com/blox-eng/matchblox/issues/411))
 - **`g` opens the chain's room** from the list, and `h` shows a hidden
   host. `h` no longer folds recommendations: the tips are in the list's

@@ -107,19 +107,20 @@ terminal.`
   (`1 answer`, `p merge`, `y go`), then `↑ ↓ ⏎`. The rest of the belt has
   `⌃o expand` and the list's keys: `s hosts`, `g chain`, `/`, `m menu`,
   `c copy`, `z park`, `N new`, `⇥ machine`, `x kill`. These keys act on
-  the chosen session while you write in its line too, also with a desk
-  attached: a tap on the belt is its own signal, and a letter you type on
-  the keyboard types. While the line holds text, a digit types, so the
+  the chosen session while you write in its line too. A letter you type
+  on the keyboard types. While the line holds text, a digit types, so the
   digits are dim, and in the line `↑ ↓` are dim too. A key that does not
-  apply is dim and sends nothing. With a desk and Pocket on one console,
-  the belt's taps still act, because each tap names its phone. On a phone, `Esc` then a quick letter
-  types the letter in the line. `⌥` and a letter types it too: `⌥s` does not open the
-  room there. In a pane, the belt goes back to the layout it had there. A
-  tap on `y go` does not give the go. The first tap arms it: a notice says
-  what the go does, for example `y again gives the go: merge #4556`. Tap
-  `y` again to give the go. Any other key or tap disarms it. While the
-  consent box shows, the belt is `◂`, `y runs` and `esc cancels`: a tap on
-  a row is never consent.
+  apply is dim and sends nothing. In a pane, the belt goes back to the
+  layout it had there.
+- A tap on the belt is its own signal, and it names its phone. So with a
+  desk and Pocket on one console, the belt's taps still act. On a phone,
+  `Esc` then a quick letter types the letter in the line. `⌥` and a
+  letter types it too: `⌥s` does not open the room there. A tap on
+  `y go` does not give the go. The first tap arms it: a notice says what
+  the go does, for example `y again gives the go: merge #4556`. Tap `y`
+  again to give the go. Any other key or tap disarms it. While the
+  consent box shows, the belt is `◂`, `y runs` and `esc cancels`: a tap
+  on a row is never consent.
 - A swipe on a host in the list removes the host and its key from the
   device. It does not remove the key on the host. Run
   `matchblox devices rm <name>` on the host for that.
@@ -424,8 +425,8 @@ and `Esc`. The matchblox app adds its key belt. See [Keys](keys.md).
 ## The hosts on the phone
 
 The phone shows what the console of its host can open. If you connected
-`ws-1` to `gpu-1` yourself, a phone paired to `ws-1` sees `gpu-1` in the
-combined console and acts on it. The same phone reaches `gpu-1` today from
+`ws-1` to `ws-2` yourself, a phone paired to `ws-1` sees `ws-2` in the
+combined console and acts on it. The same phone reaches `ws-2` today from
 Hosts: on Machine, `Enter` on a host's row opens it. matchblox sets up no key between hosts, so
 a phone never sees a host that its host cannot open.
 
