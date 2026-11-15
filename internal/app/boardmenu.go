@@ -47,6 +47,9 @@ type longPressMsg struct{ id int }
 // chain in its room (the owner, 2026-11-12: "Menu, in the room only"),
 // which waits for a typed y.
 func (m Model) menuFor(s sample.Session) []menuItem {
+	if isShipCard(s) {
+		return m.shipMenu(s)
+	}
 	bk, mk := m.keys.board, m.keys.main
 	items := []menuItem{{"copy last message", bk.Copy.Help().Key, func(m *Model) tea.Cmd { return m.boardCopy(s, true) }}}
 	if q := questionText(s); q != "" && m.asksNow(s) {
@@ -83,6 +86,27 @@ func (m Model) menuFor(s sample.Session) []menuItem {
 		}})
 	}
 	return items
+}
+
+// shipMenu are the lines of the menu on the row of a ship no session
+// drives: no session is there to rename, copy from or act on, so only the
+// ship's link, the row's name and New session on its branch.
+func (m Model) shipMenu(s sample.Session) []menuItem {
+	var items []menuItem
+	if link, n, ok := m.shipLink(s); ok {
+		number := "#" + strconv.Itoa(n)
+		items = append(items, menuItem{"copy the link of " + number, "", func(m *Model) tea.Cmd {
+			return m.copyText(link, "the link of "+number)
+		}})
+	}
+	items = append(items, menuItem{"copy its name", "", func(m *Model) tea.Cmd { return m.copyText(s.Name, s.Name) }})
+	return append(items, menuItem{"new session on its branch", m.keys.side.Enter.Help().Key, func(m *Model) tea.Cmd {
+		next, cmd := m.shipKey(s)
+		if nm, ok := next.(Model); ok {
+			*m = nm
+		}
+		return cmd
+	}})
 }
 
 // actItems are the menu's lines of the acts the list takes on s
@@ -246,11 +270,14 @@ func (m Model) menuOn() (sample.Session, bool) {
 	if m.menu == nil || !m.boardShown() {
 		return sample.Session{}, false
 	}
-	i := slices.IndexFunc(m.snap.Sessions, func(s sample.Session) bool { return paneOf(s) == m.menu.pane })
-	if i < 0 {
-		return sample.Session{}, false
+	on := func(s sample.Session) bool { return paneOf(s) == m.menu.pane }
+	if i := slices.IndexFunc(m.snap.Sessions, on); i >= 0 {
+		return m.snap.Sessions[i], true
 	}
-	return m.snap.Sessions[i], true
+	if cards := m.shipCards(); slices.ContainsFunc(cards, on) { // a ship's row is no session of the snapshot
+		return cards[slices.IndexFunc(cards, on)], true
+	}
+	return sample.Session{}, false
 }
 
 // overlayMenu lays the menu's box over the board, the board left as it is

@@ -221,3 +221,38 @@ func TestShipRowMergesFromTheList(t *testing.T) {
 		t.Fatalf("p y sent %+v", acts)
 	}
 }
+
+// TestShipRowsMenuHoldsNoSessionActs: a ship's row has no session, so its
+// menu offers no rename, no copy of a last message and no act on a
+// session: only what the ship takes. A line that goes nowhere is none.
+func TestShipRowsMenuHoldsNoSessionActs(t *testing.T) {
+	for _, kind := range []string{shipWaits, shipRunning} {
+		m := chooseShip(t, orphanShip(t, kind))
+		m = pressOn(m, "m")
+		if m.menu == nil {
+			t.Fatalf("%s: m on the ship's row opened no menu", kind)
+		}
+		labels := itemLabels(m.menu.items)
+		for _, l := range labels {
+			for _, bad := range []string{"rename", "copy last message", "stoke the chain", "a new order", "go in", "out of"} {
+				if strings.HasPrefix(l, bad) {
+					t.Errorf("%s: the ship's menu offers %q: %q", kind, l, labels)
+				}
+			}
+		}
+		for _, want := range []string{"copy the link of #4570", "new session on its branch"} {
+			if !slices.Contains(labels, want) {
+				t.Errorf("%s: the ship's menu lacks %q: %q", kind, want, labels)
+			}
+		}
+		at := slices.Index(labels, "new session on its branch")
+		if at < 0 {
+			continue
+		}
+		m.menu.at = at
+		nm := pressOn(m, "enter")
+		if nm.form == nil || !strings.Contains(nm.form.first, "#4570") || len(boardFake(nm).acts()) != 0 {
+			t.Errorf("%s: new session on its branch: form %v, sent %+v", kind, nm.form != nil, boardFake(nm).acts())
+		}
+	}
+}
