@@ -591,10 +591,8 @@ type Model struct {
 	lines    map[paneKey]string
 	lineNote lineNote
 	lineActs map[string]lineSent
-	// lineHeld is the one message each busy session waits to get, with
-	// the session's name for when it ends first.
-	lineHeld     map[paneKey]string
-	lineHeldName map[paneKey]string
+	// lineHeld is the one message each busy session waits to get.
+	lineHeld map[paneKey]heldMsg
 	// sideWas is the list's order at the last message, and sideName the
 	// chosen session's name then: what follows a chosen session that ends.
 	sideWas  []paneKey

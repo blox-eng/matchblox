@@ -668,7 +668,7 @@ func TestBusyAgentGetsTheMessageWhenItsTurnEnds(t *testing.T) {
 	if got := chatLineOf(m, 120); !strings.Contains(got, "queued for its next turn") {
 		t.Fatalf("line %q", got)
 	}
-	if m.lines[k] != "" || m.lineHeld[k] != "next please" {
+	if m.lines[k] != "" || m.lineHeld[k].text != "next please" {
 		t.Fatalf("line %q, held %q", m.lines[k], m.lineHeld[k])
 	}
 
@@ -716,5 +716,107 @@ func TestHeldMessageOfAnEndedSessionComesBack(t *testing.T) {
 	}
 	if m.lineNote.text != "hearth-api ended · the text is not sent" {
 		t.Fatalf("note %+v", m.lineNote)
+	}
+}
+
+// heldOn is the console with one message held for hearth-api, an OpenCode
+// session that works.
+func heldOn(t *testing.T, others ...sample.Session) Model {
+	t.Helper()
+	m, _ := sideConsole(t, boardState(append([]sample.Session{workingAs("hearth-api", "opencode")}, others...)...))
+	m = pickSide(t, m, "hearth-api")
+	m = pressOn(typeLine(m, "later"), "enter")
+	if m.lineHeld[paneOf(matchNamed(t, m, "hearth-api"))].text != "later" {
+		t.Fatalf("nothing held: %v", m.lineHeld)
+	}
+	return m
+}
+
+// TestParkWhileHeldGivesTheTextBack: a parked session takes no message.
+func TestParkWhileHeldGivesTheTextBack(t *testing.T) {
+	m := heldOn(t)
+	s := boardMatch("hearth-api", time.Hour)
+	st := boardState(s)
+	st.Holds = append(st.Holds, proto.Hold{SessionID: s.SessionID, Pane: s.Pane, Name: s.Name, By: holdByYou})
+	next, cmd := m.Update(stateMsg(st))
+	drain(cmd)
+	m = next.(Model)
+	if got := messageActs(boardFake(m)); len(got) != 0 {
+		t.Fatalf("sent to a parked session: %+v", got)
+	}
+	if len(m.lineHeld) != 0 || m.lines[paneOf(s)] != "later" {
+		t.Fatalf("held %v, line %q", m.lineHeld, m.lines[paneOf(s)])
+	}
+	if got := chatLineOf(m, 120); !strings.Contains(got, "parked: z lets it go") {
+		t.Fatalf("line %q", got)
+	}
+}
+
+// TestStokerHoldKeepsTheMessageWaiting: the stoker's hold is not the end of
+// the turn.
+func TestStokerHoldKeepsTheMessageWaiting(t *testing.T) {
+	m := heldOn(t)
+	s := boardMatch("hearth-api", time.Hour)
+	st := boardState(s)
+	st.Holds = append(st.Holds, proto.Hold{SessionID: s.SessionID, Pane: s.Pane, Name: s.Name, By: "stoker", Why: "not the priority"})
+	next, cmd := m.Update(stateMsg(st))
+	drain(cmd)
+	m = next.(Model)
+	if got := messageActs(boardFake(m)); len(got) != 0 {
+		t.Fatalf("sent to a held session: %+v", got)
+	}
+	if m.lineHeld[paneOf(s)].text != "later" {
+		t.Fatalf("held %v", m.lineHeld)
+	}
+	if got := chatLineOf(m, 120); !strings.Contains(got, "queued for its next turn") {
+		t.Fatalf("line %q", got)
+	}
+}
+
+// TestReleaseIntoAQuestionComesBackWithWords: the session asks, the
+// message goes, the service refuses, and the text returns with its words.
+func TestReleaseIntoAQuestionComesBackWithWords(t *testing.T) {
+	m := heldOn(t)
+	next, cmd := m.Update(stateMsg(boardState(askingMatch("hearth-api", "Yes", "No"))))
+	drain(cmd)
+	m = next.(Model)
+	got := messageActs(boardFake(m))
+	if len(got) != 1 || got[0].Text != "later" {
+		t.Fatalf("sent %+v", got)
+	}
+	next, _ = m.Update(resultMsg{ActID: "a" + strconv.Itoa(m.acts), Err: "hearth-api asks a question now"})
+	m = next.(Model)
+	if m.lines[m.chosenSide()] != "later" || !strings.Contains(chatLineOf(m, 120), "not sent: hearth-api asks a question now") {
+		t.Fatalf("line %q, says %q", m.lines[m.chosenSide()], chatLineOf(m, 120))
+	}
+}
+
+// TestLostConnWhileHeldKeepsTheText: the service is gone when the turn
+// ends, so the text goes back to the line and says why.
+func TestLostConnWhileHeldKeepsTheText(t *testing.T) {
+	m := heldOn(t)
+	fake := boardFake(m)
+	m.conn = nil // the turn ends while the service conn is down
+	next, cmd := m.Update(stateMsg(boardState(boardMatch("hearth-api", time.Hour))))
+	drain(cmd)
+	m = next.(Model)
+	if got := messageActs(fake); len(got) != 0 {
+		t.Fatalf("sent with no service: %+v", got)
+	}
+	if m.lines[m.chosenSide()] != "later" || !strings.Contains(chatLineOf(m, 120), "not sent: no service") {
+		t.Fatalf("line %q, says %q", m.lines[m.chosenSide()], chatLineOf(m, 120))
+	}
+}
+
+// TestHeldNoteShowsOnlyForItsSession: another session's line says nothing
+// of the message that waits.
+func TestHeldNoteShowsOnlyForItsSession(t *testing.T) {
+	m := heldOn(t, boardMatch("flint-auth", 2*time.Hour))
+	if got := chatLineOf(m, 120); !strings.Contains(got, "queued for its next turn") {
+		t.Fatalf("its own line %q", got)
+	}
+	m = pickSide(t, m, "flint-auth")
+	if got := chatLineOf(m, 120); strings.Contains(got, "queued") {
+		t.Fatalf("flint-auth's line %q", got)
 	}
 }

@@ -374,32 +374,36 @@ func (m *Model) sendLine() tea.Cmd {
 			m.lineNote = lineNote{k, oneHeldNote}
 			return nil
 		}
-		m.lineHeld, m.lineHeldName = maps.Clone(m.lineHeld), maps.Clone(m.lineHeldName)
+		m.lineHeld = maps.Clone(m.lineHeld)
 		if m.lineHeld == nil {
-			m.lineHeld, m.lineHeldName = map[paneKey]string{}, map[paneKey]string{}
+			m.lineHeld = map[paneKey]heldMsg{}
 		}
-		m.lineHeld[k], m.lineHeldName[k] = text, m.cardName(s)
+		m.lineHeld[k] = heldMsg{text, m.cardName(s)}
 		m.setLine(k, "")
 		return nil
 	}
-	cmd := m.sendText(s, text)
-	if busy && m.lineNote.k == (paneKey{}) {
+	cmd, sent := m.sendText(s, text)
+	if busy && sent {
 		m.lineNote = lineNote{k, queuedNote}
 	}
 	return cmd
 }
 
+// heldMsg is the message a busy session waits to get, and the session's
+// name for when it ends first.
+type heldMsg struct{ text, name string }
+
 // sendText sends text to s as a message and empties the line of s, or
-// says why it cannot go and keeps the text there.
-func (m *Model) sendText(s sample.Session, text string) tea.Cmd {
+// says why it cannot go and keeps the text there. sent: the act went.
+func (m *Model) sendText(s sample.Session, text string) (cmd tea.Cmd, sent bool) {
 	k := paneOf(s)
 	if why := m.cannotReach(s.Host); why != "" {
 		if m.lines[k] == text { // still in the line: it stays there
 			m.lineNote = lineNote{k, why}
-			return nil
+			return nil, false
 		}
 		m.giveBack(lineSent{k, s.Host, m.cardName(s), text}, why)
-		return nil
+		return nil, false
 	}
 	id, cmd := m.sendToID(s.Host, proto.Act{RecID: "message:" + s.Pane, Text: text, Confirm: "y"})
 	m.lineActs = maps.Clone(m.lineActs)
@@ -410,29 +414,38 @@ func (m *Model) sendText(s sample.Session, text string) tea.Cmd {
 	if m.lines[k] == text {
 		m.setLine(k, "")
 	}
-	return cmd
+	return cmd, true
 }
 
-// heldRelease sends each held message whose session no longer works, as
-// sendLine does. A session that is gone gives its text back to its line.
-// A "queued" note ends with the turn it was said for.
+// heldRelease sends each held message whose session has left "works", as
+// sendLine does. A session the stoker holds keeps the message waiting. A
+// session the owner parked, or one that is gone, gives the text back to
+// its line, unsent. A "queued" note ends with the turn it was said for.
 func (m Model) heldRelease() (Model, tea.Cmd) {
 	var cmds []tea.Cmd
-	for k, text := range m.lineHeld {
+	for k, h := range m.lineHeld {
 		i := slices.IndexFunc(m.all.sessions, func(s sample.Session) bool { return paneOf(s) == k })
-		if i >= 0 && m.sideStateOf(m.all.sessions[i]) == sideWork {
-			continue
+		if i >= 0 {
+			s := m.all.sessions[i]
+			if by, held := m.holdOf(s); (held && by.By != holdByYou) || m.sideStateOf(s) == sideWork {
+				continue
+			}
 		}
-		name := m.lineHeldName[k]
-		m.lineHeld, m.lineHeldName = maps.Clone(m.lineHeld), maps.Clone(m.lineHeldName)
+		m.lineHeld = maps.Clone(m.lineHeld)
 		delete(m.lineHeld, k)
-		delete(m.lineHeldName, k)
-		if i < 0 {
-			m.setLine(k, strings.TrimSpace(text+" "+m.lines[k]))
-			m.lineNote = lineNote{k, name + " ended · the text is not sent"}
+		if i >= 0 && !m.parked(m.all.sessions[i]) {
+			c, _ := m.sendText(m.all.sessions[i], h.text)
+			cmds = append(cmds, c)
 			continue
 		}
-		cmds = append(cmds, m.sendText(m.all.sessions[i], text))
+		note := h.name + " ended · the text is not sent"
+		if i >= 0 {
+			note = "parked: " + m.keys.main.Park.Help().Key + " lets it go"
+		}
+		m.setLine(k, strings.TrimSpace(h.text+" "+m.lines[k]))
+		if m.lineNote.k == (paneKey{}) || m.lineNote.k == k {
+			m.lineNote = lineNote{k, note}
+		}
 	}
 	if m.lineNote.text == queuedNote {
 		if i := slices.IndexFunc(m.all.sessions, func(s sample.Session) bool { return paneOf(s) == m.lineNote.k }); i < 0 || m.sideStateOf(m.all.sessions[i]) != sideWork {
