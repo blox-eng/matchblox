@@ -89,20 +89,27 @@ func (c *clock) Add(d time.Duration)   { c.mu.Lock(); c.t = c.t.Add(d); c.mu.Unl
 func (c *clock) Ahead(d time.Duration) { c.mu.Lock(); c.ahead += d; c.mu.Unlock() }
 
 // heardConn is the console's end of the service, noting the time of the
-// last snapshot the console has taken in: when it asks for the next
-// message, it is done with the one before.
+// last snapshot, and the pane of the last screen, the console has taken
+// in: when it asks for the next message, it is done with the one before.
 type heardConn struct {
 	transport.Conn
 	mu        sync.Mutex
 	last, had time.Time
+	// screen is the pane of the last screen received; shown, of the last
+	// one the console has taken in.
+	screen, shown string
 }
 
 func (c *heardConn) Recv() (proto.Envelope, error) {
 	c.mu.Lock()
-	c.had = c.last
+	c.had, c.shown = c.last, c.screen
 	c.mu.Unlock()
 	env, err := c.Conn.Recv()
-	if err == nil && env.Kind == proto.KindSnapshot {
+	if err != nil {
+		return env, err
+	}
+	switch env.Kind {
+	case proto.KindSnapshot:
 		var snap struct {
 			At time.Time `json:"at"`
 		}
@@ -111,8 +118,24 @@ func (c *heardConn) Recv() (proto.Envelope, error) {
 			c.last = snap.At
 			c.mu.Unlock()
 		}
+	case proto.KindScreen:
+		var sc proto.Screen
+		if json.Unmarshal(env.Body, &sc) == nil {
+			c.mu.Lock()
+			c.screen = sc.Pane
+			c.mu.Unlock()
+		}
 	}
 	return env, err
+}
+
+// shows says whether the last screen the console has taken in is pane's: a
+// chat opens blank until its pane's screen comes, and a slow machine can
+// draw a frame before it.
+func (c *heardConn) shows(pane string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.shown == pane
 }
 
 // fresh is the latest a console clock may read so that the console's data
@@ -395,6 +418,9 @@ type step struct {
 	keys []string
 	key  string
 	ok   func(screen string) bool
+	// pane, when set, is the pane whose chat the frame shows: the frame
+	// waits until the console has taken in that pane's screen.
+	pane string
 	// hold stops the console's clock until the step's screen shows: the
 	// demo clock runs 40 times faster than the wall's, so a notice of
 	// 2.5 s lives some 60 ms, less than one read of a slow (-race) run.
@@ -625,24 +651,26 @@ func replayAt(t *testing.T, z replaySize) {
 	// settle lets the chat's dead time pass on the demo clock: a digit
 	// marks nothing for 400 ms after the chat opens on a question.
 	settle := func() { time.Sleep(300 * time.Millisecond) }
+	const flint, kindle = "%2", "%5" // the panes of flint-auth and kindle-web
 	steps := []step{
-		// The list: every session in its group, and the chat beside it.
-		{name: "the console", at: 1300 * time.Millisecond, ok: has("need you", "NEEDS YOU", "flint-auth")},
+		// The list: every session in its group, and the chat of the first,
+		// kindle-web, beside it.
+		{name: "the console", at: 1300 * time.Millisecond, pane: kindle, ok: has("need you", "NEEDS YOU", "flint-auth")},
 		// flint-auth asks: its chat shows the question's options.
-		{name: "the question", at: 2600 * time.Millisecond, do: tapOn("flint-auth"), ok: has("send to flint-auth", "1. ", "2. ")},
+		{name: "the question", at: 2600 * time.Millisecond, do: tapOn("flint-auth"), pane: flint, ok: has("send to flint-auth", "1. ", "2. ")},
 		// A digit marks the answer; nothing is sent.
-		{name: "an answer marked", at: 4200 * time.Millisecond, do: settle, key: "2", ok: has("❯ 2. Rotate, keep")},
+		{name: "an answer marked", at: 4200 * time.Millisecond, do: settle, key: "2", pane: flint, ok: has("❯ 2. Rotate, keep")},
 		// The same digit sends it. The frame is the one where flint-auth
 		// left NEEDS YOU (4 need you before): the ones before it race the
 		// samples that carry the answer.
-		{name: "sent", at: 5800 * time.Millisecond, key: "2", hold: true, ok: has("sent 2 to flint-auth", "● 3 need you")},
-		{name: "it works", at: 7400 * time.Millisecond, ok: func(s string) bool {
+		{name: "sent", at: 5800 * time.Millisecond, key: "2", hold: true, pane: flint, ok: has("sent 2 to flint-auth", "● 3 need you")},
+		{name: "it works", at: 7400 * time.Millisecond, pane: flint, ok: func(s string) bool {
 			return has("✦ flint-auth")(s) && !strings.Contains(s, "sent 2 to flint-auth")
 		}},
 		// esc gives the keys to the list; ↑ and ↓ choose kindle-web, which
 		// asks for permission.
-		{name: "the list", at: 9 * time.Second, key: "esc", ok: has("in the list")},
-		{name: "kindle-web asks", at: 10500 * time.Millisecond, do: walk("kindle-web"), ok: func(s string) bool {
+		{name: "the list", at: 9 * time.Second, key: "esc", pane: flint, ok: has("in the list")},
+		{name: "kindle-web asks", at: 10500 * time.Millisecond, do: walk("kindle-web"), pane: kindle, ok: func(s string) bool {
 			return chosen("kindle-web")(s) && has("permission")(s)
 		}},
 		// g opens kindle-web's chain, login: the list shows only the chain,
@@ -650,7 +678,7 @@ func replayAt(t *testing.T, z replaySize) {
 		{name: "one chain", at: 13 * time.Second, key: "g", ok: func(s string) bool {
 			return has("CHAIN login", "≋ login", "kindle-web")(s) && !strings.Contains(s, "spark-docs")
 		}},
-		{name: "every chain", at: 16 * time.Second, key: "esc", ok: func(s string) bool {
+		{name: "every chain", at: 16 * time.Second, key: "esc", pane: kindle, ok: func(s string) bool {
 			return has("≋ login", "spark-docs")(s) && !strings.Contains(s, "CHAIN login")
 		}},
 	}
@@ -658,7 +686,7 @@ func replayAt(t *testing.T, z replaySize) {
 		// The phone draws one pane at a time: a tap on a row opens its
 		// chat, and ◂ comes back to the list.
 		at := slices.IndexFunc(steps, func(st step) bool { return st.name == "it works" })
-		steps[at].do = tapOn("◂")
+		steps[at].do, steps[at].pane = tapOn("◂"), ""
 		steps = slices.Delete(steps, at+1, at+2) // the list has the keys once it shows
 		// The room, then the chat it closes to, take the screen in turn.
 		steps[len(steps)-2].ok = has("CHAIN login", "what should login's stoker do?")
@@ -681,7 +709,9 @@ func replayAt(t *testing.T, z replaySize) {
 		// console: a notice then says the data is old in place of what it
 		// shows. The demo clock runs 40 times faster than the wall's, so
 		// 750 ms behind is 30 s. A frame is kept only once the data is fresh.
-		fresh := func(s string) bool { return st.ok(s) && !strings.Contains(s, "the service is slow") }
+		fresh := func(s string) bool {
+			return st.ok(s) && !strings.Contains(s, "the service is slow") && (st.pane == "" || heard.shows(st.pane))
+		}
 		screen, err := waitFor(capture, fresh, st.name, stepTimeout)
 		if err != nil {
 			t.Fatal(err)
