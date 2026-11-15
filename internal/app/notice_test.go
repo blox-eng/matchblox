@@ -8,16 +8,14 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// boardNoticeRow is the board's notice row on the frame, plain: the lines
-// between the body and the key line's hairline that the notice draws ("":
-// none).
+// boardNoticeRow is what the Sessions tab says over the list's foot and
+// the chat's line, "" for nothing.
 func boardNoticeRow(m Model) string {
-	lines, _ := m.boardNotice(max(m.width, minWidth))
-	if len(lines) == 0 {
+	rows, _, _ := m.noticeAt(max(m.width, minWidth))
+	if len(rows) == 0 {
 		return ""
 	}
-	frame := strings.Split(plainFrame(m), "\n")
-	return strings.Join(frame[len(frame)-2-len(lines):len(frame)-2], "\n")
+	return strings.Join(plainLines(rows), "\n")
 }
 
 func TestANoticeNeverHidesTheCount(t *testing.T) {
@@ -34,19 +32,15 @@ func TestANoticeNeverHidesTheCount(t *testing.T) {
 	if row := boardNoticeRow(m); !strings.Contains(row, "copied hearth-api's last answer") {
 		t.Errorf("the notice row has no notice: %q", row)
 	}
-	rows := m.boardRows(80, m.bodyRows(), false)
 	now = now.Add(noticeFor)
 	next, _ := m.Update(noticeMsg{}) // the notice's tick, delivered at once
 	m = next.(Model)
 	if row := boardNoticeRow(m); row != "" {
 		t.Errorf("the notice row stays after %v: %q", noticeFor, row)
 	}
-	if r := m.boardRows(80, m.bodyRows(), false); r != rows+1 {
-		t.Errorf("the body does not take the notice's row back: %d rows, then %d", rows, r)
-	}
 	m.say("ran: git fetch") // the old console's toast
 	if h := strings.Split(plainFrame(m), "\n")[0]; h != head || !strings.Contains(boardNoticeRow(m), "ran: git fetch") {
-		t.Errorf("a toast on the board is not a notice: header %q, row %q", h, boardNoticeRow(m))
+		t.Errorf("a toast is not a notice: header %q, row %q", h, boardNoticeRow(m))
 	}
 }
 
@@ -54,7 +48,7 @@ func TestALongNoticeIsWholeOnAPhone(t *testing.T) {
 	const text = "not copied: tmux drops it · tmux set -s set-clipboard on"
 	m := boardShot(t, boardFixture(t), 40, 34, nil)
 	m.notice(text)
-	lines, _ := m.boardNotice(40)
+	lines, _, _ := m.noticeAt(40)
 	if len(lines) != 2 {
 		t.Fatalf("the notice is %d lines on a phone, want 2: %q", len(lines), plainLines(lines))
 	}
@@ -84,14 +78,13 @@ var fixedNotices = []string{
 	tmuxDrops, "Now paste here · esc cancels", pasteWrong, pasteChecked,
 	"copied: last message of ember-reports" + notChecked,
 	"copied: 1234 characters" + notChecked,
-	"c copies now. The stoker is on its card.",
+	"c copies now: the last message, whole.",
 	"v changes the cards now: verbose, or one line.",
-	"s changes the host now. The order of a column is fixed.",
 	"g shows one chain now. esc shows all.",
-	"p merges now. The ships are on their cards.",
+	"p merges now: the pull request that waits for you.",
 	"x kills. p merges #4556.",
 	"A digit marks an answer now. Press it again to send.",
-	"not sent: flint-auth is on gpu-1 · ⏎ goes in",
+	"not sent: flint-auth is on gpu-1 · ctrl+o goes in",
 	"not sent: no service · it redials",
 	"not sent: ember-reports asks something new — look again",
 	"look at ember-reports's question first",
@@ -106,7 +99,7 @@ var fixedNotices = []string{
 	"tap y again to give the go",
 	"the service does not answer: stop `matchblox serve`, then start matchblox again",
 	"refused: a tmux move on gpu-1 never runs on this machine",
-	"ember-reports asks in its pane · ⏎ goes in",
+	"ember-reports asks in its pane · ctrl+o goes in",
 	"ember-reports asks no question",
 	"1-2 only",
 }
@@ -116,7 +109,7 @@ func TestEveryNoticeKeepsItsFix(t *testing.T) {
 		m := boardShot(t, boardFixture(t), size[0], size[1], nil)
 		for _, text := range fixedNotices {
 			m.notice(text)
-			lines, _ := m.boardNotice(size[0])
+			lines, _, _ := m.noticeAt(size[0])
 			var said []string
 			for _, l := range lines {
 				said = append(said, strings.TrimSpace(ansi.Strip(l)))

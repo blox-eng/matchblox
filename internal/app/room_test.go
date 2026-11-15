@@ -108,15 +108,8 @@ func TestRoomOfAChainOfOneNamesTheSharedStoker(t *testing.T) {
 	}
 }
 
-// hasCard tells if the board draws the card of the match named name.
 func hasCard(m Model, name string) bool {
-	b, _ := m.boardDrawOf()
-	for _, ss := range b.idx {
-		if slices.ContainsFunc(ss, func(s sample.Session) bool { return s.Name == name }) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(m.sideSessions(), func(s sample.Session) bool { return s.Name == name && m.inBoard(s) })
 }
 
 func TestRoomWithNoStokerAsksForTheOrder(t *testing.T) {
@@ -136,7 +129,7 @@ func TestRoomTalkNamesARunningStoker(t *testing.T) {
 }
 
 // TestATeamWithOneMatchLeftStillHasItsRoom: chainIx drops a team with one
-// present match; its room still shows it, a card on the narrowed board
+// present match; its room still shows it, a row of the narrowed list
 // (eng review correction 5).
 func TestATeamWithOneMatchLeftStillHasItsRoom(t *testing.T) {
 	st := fuseState(t, []string{"hearth-api"})
@@ -147,9 +140,6 @@ func TestATeamWithOneMatchLeftStillHasItsRoom(t *testing.T) {
 	}
 	k := chainKey{host, "c1"}
 	if !hasCard(m.openRoom(k), "hearth-api") {
-		t.Fatal("the room of a team with one match left draws no card of it")
-	}
-	if !slices.Contains(m.roomKeys(), k) {
-		t.Fatalf("rooms %v lack %v", m.roomKeys(), k)
+		t.Fatal("the room of a team with one match left draws no row of it")
 	}
 }

@@ -27,8 +27,6 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		return m.menuTap(ms)
 	case ms.Button == tea.MouseRight && m.sideActive() && m.form == nil && m.sheet == nil: // a box beside the list takes every click
 		return m.sideRightClick(ms)
-	case ms.Button == tea.MouseRight && m.boardShown():
-		return m.boardRightClick(ms)
 	case ms.Button != tea.MouseLeft:
 		return m, nil
 	}
@@ -94,9 +92,6 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		return m, nil
 	case ms.Y == 1:
 		if s, ok := spanAt(sc.tabs, ms.X); ok {
-			if next, crumb := m.boardTabTap(s.press); crumb {
-				return next, nil
-			}
 			if t, ok := tabOfPress(s.press); ok {
 				m.setTab(t)
 				m.flash = ""
@@ -125,21 +120,10 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		}
 		next, cmd := m.sideTap(ms.X, ms.Y-sc.bodyTop)
 		return m.holdPress(next, cmd, ms) // a long press opens the row's menu
-	case m.boardShown() && ms.Y >= sc.bodyTop && ms.Y < sc.bodyTop+len(sc.rows): // on Pocket no key line closes the body
-		if m.tapWaits(ms.X, ms.Y-sc.bodyTop) {
-			m.tapLater = &point{ms.X, ms.Y} // a drag may start here: the tap waits for the release
-			return m.holdPress(m, nil, ms)
-		}
-		next, cmd := m.boardTap(ms.X, ms.Y-sc.bodyTop)
-		if nm, ok := next.(Model); ok && (nm.pending != nil || nm.menu != nil || !nm.chatMarkReach()) {
-			nm.dragFrom, nm.dragLines = nil, nil // the press opened a box: no drag hides it
-			next = nm
-		}
-		return m.holdPress(next, cmd, ms)
 	}
 	i := ms.Y - sc.bodyTop
 	if m.boardShown() || i < 0 || i >= len(sc.rows) {
-		return m, nil // the board took every tap on its body above
+		return m, nil // the list and the chat took every tap on their body above
 	}
 	if sc.rows[i] == headerRow {
 		return m.tapHeader(ms.X)
@@ -204,9 +188,6 @@ func (m Model) tapAct() (string, func(Model) (tea.Model, tea.Cmd), string) {
 		if a.pair {
 			return m.openPairDoor()
 		}
-		if a.ghost {
-			return m.openNewIn(m.opt.Host, a.where, ""), nil
-		}
 		if a.nav && !a.destructive {
 			return m.confirm(*a)
 		}
@@ -225,9 +206,6 @@ func (m Model) wheel(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	if m.sideActive() {
 		return m.sideWheel(ms)
 	}
-	if m.boardShown() && !m.standIn && !m.viewFull() {
-		return m.boardWheel(ms)
-	}
 	if m.overView() {
 		m.armed = ""
 		return m.wheelView(ms.Button == tea.MouseWheelUp)
@@ -240,19 +218,6 @@ func (m Model) wheel(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	}
 	m.armed = ""
 	return m, nil
-}
-
-// boardWheel is a wheel step, or a phone's swipe, on the board: it moves
-// the chosen card as ↑ and ↓ do, by the same keys and their rules.
-func (m Model) boardWheel(ms tea.Mouse) (tea.Model, tea.Cmd) {
-	k := m.keys.main.Down
-	if ms.Button == tea.MouseWheelUp {
-		k = m.keys.main.Up
-	} else if ms.Button != tea.MouseWheelDown {
-		return m, nil
-	}
-	next, cmd, _ := m.boardKey(keyPress(k.Keys()[0]))
-	return next, cmd
 }
 
 // overView tells if the stand-in is under the finger: it is

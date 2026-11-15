@@ -12,7 +12,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/chains"
-	"github.com/blox-eng/matchblox/internal/doors"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
@@ -37,53 +36,6 @@ func tapText(t *testing.T, m Model, sub string) Model {
 	}
 	t.Fatalf("no %q on the frame:\n%s", sub, plainFrame(m))
 	return m
-}
-
-// tapHead taps the head or the page mark of column c.
-func tapHead(t *testing.T, m Model, c boardCol) Model {
-	t.Helper()
-	w := max(m.width, minWidth)
-	d := m.boardPanel(w, m.bodyRows())
-	i := slices.IndexFunc(d.heads, func(h span) bool { return h.press == c.short() })
-	if i < 0 {
-		t.Fatalf("no head of %s: %+v", c.name(), d.heads)
-	}
-	next, cmd := tap(m, d.heads[i].x0, m.draw(w).bodyTop+d.headAt)
-	drain(cmd)
-	return next.(Model)
-}
-
-// drawnNames are the matches whose cards the board draws.
-func drawnNames(m Model) []string {
-	w := max(m.width, minWidth)
-	d := m.boardPanel(w, m.bodyRows())
-	var names []string
-	for _, ss := range m.boardIndex() {
-		for _, s := range ss {
-			for _, k := range d.cards {
-				if k == paneOf(s) && !slices.Contains(names, s.Name) {
-					names = append(names, s.Name)
-				}
-			}
-		}
-	}
-	slices.Sort(names)
-	return names
-}
-
-func TestATapOnAColumnNameOpensIt(t *testing.T) {
-	st := boardFixture(t)
-	for _, size := range [][2]int{{80, 31}, {104, 38}} {
-		m := tapHead(t, boardShot(t, st, size[0], size[1], nil), colWork)
-		if m.boardAt != colWork || chosenName(t, m) != "flint-ui" {
-			t.Errorf("%d: a tap on WORKING's name: open %s, chosen %s", size[0], m.boardAt.name(), chosenName(t, m))
-		}
-	}
-
-	m := tapHead(t, boardShot(t, st, 40, 34, nil), colShip) // a page's mark
-	if m.boardAt != colShip || chosenName(t, m) != "cinder-ci" {
-		t.Errorf("a tap on ship's mark: open %s, chosen %s", m.boardAt.name(), chosenName(t, m))
-	}
 }
 
 func TestAChainKeepsTheBoardsWidth(t *testing.T) {
@@ -122,9 +74,6 @@ func TestTheCountSeesThroughEveryFilter(t *testing.T) {
 	if m.boardChain != "" || m.boardHost != "" || m.filter != "" {
 		t.Fatalf("a tap on the count left a filter: chain %q, host %q, search %q", m.boardChain, m.boardHost, m.filter)
 	}
-	if m.boardAt != colNeed || chosenName(t, m) != "spark-search" {
-		t.Errorf("a tap on the count chose %s in %s, want the first wait", chosenName(t, m), m.boardAt.name())
-	}
 	if f := plainFrame(m); !strings.Contains(f, "hearth-notes") {
 		t.Errorf("the match on gpu-1 that asks is not on the screen:\n%s", f)
 	}
@@ -149,50 +98,6 @@ func chainsFixture(t *testing.T) Model {
 	st.Chains.Chains = append(slices.Clone(st.Chains.Chains), chains.Chain{ID: "c2", Name: "docs", Repo: "/home/user/src/spark",
 		Members: []chains.Member{memberOf(search), memberOf(docs)}})
 	return boardShot(t, st, 80, 31, chooseCard("flint-auth"))
-}
-
-func TestGNarrowsToTheChain(t *testing.T) {
-	now := demoAt
-	m := chainsFixture(t)
-	m.opt.Now = func() time.Time { return now }
-	now = now.Add(time.Second)
-	m = pressOn(m, "g")
-	if m.boardChain != "login" || !m.peekAt.Equal(now) {
-		t.Fatalf("g on flint-auth narrows to %q, peek at %v", m.boardChain, m.peekAt)
-	}
-	if got, want := drawnNames(m), []string{"flint-api", "flint-auth", "flint-ui"}; !slices.Equal(got, want) {
-		t.Errorf("g leaves %v, want %v", got, want)
-	}
-	if row := strings.Split(plainFrame(m), "\n")[1]; !strings.Contains(row, "chain login · 3   esc all") {
-		t.Errorf("the tab row has no crumb: %q", row)
-	}
-	if m = pressOn(m, "]"); m.boardChain != "docs" {
-		t.Errorf("] goes to %q, want docs", m.boardChain)
-	}
-	if got, want := drawnNames(m), []string{"spark-docs", "spark-search"}; !slices.Equal(got, want) {
-		t.Errorf("] leaves %v, want %v", got, want)
-	}
-	if m = pressOn(m, "["); m.boardChain != "login" {
-		t.Errorf("[ goes to %q, want login", m.boardChain)
-	}
-	if m = pressOn(m, "esc"); m.boardChain != "" || len(drawnNames(m)) < 10 {
-		t.Errorf("esc keeps the chain %q: %v", m.boardChain, drawnNames(m))
-	}
-
-	searched := chainsFixture(t)
-	searched.filter = "spark"
-	if searched = pressOn(searched, "]"); searched.boardChain != "docs" {
-		t.Errorf("] with a search of spark goes to %q, want docs: login draws no card", searched.boardChain)
-	}
-	if hosted := pressOn(func() Model { h := chainsFixture(t); h.boardHost = "gpu-1"; return h }(), "]"); hosted.boardChain != "" {
-		t.Errorf("] on gpu-1 alone goes to %q: no chain has a match there", hosted.boardChain)
-	}
-
-	docs := matchOf(t, m, "flint-docs")
-	m.boardChooseCard(m.columnOf(docs), docs)
-	if m = pressOn(m, "g"); m.boardChain != "" || noticeRow(m) != "flint-docs is in no chain" {
-		t.Errorf("g on a card in no chain: chain %q, notice %q", m.boardChain, noticeRow(m))
-	}
 }
 
 func TestSTurnsThroughTheHosts(t *testing.T) {
@@ -258,66 +163,14 @@ func TestAHostThatIsNotReachedKeepsItsRows(t *testing.T) {
 	}
 }
 
-// firstCard chooses the first card of the open column.
+// firstCard chooses the first session the list draws, the keys in the
+// list.
 func firstCard(m Model) Model {
-	b, _ := m.boardDrawOf()
-	m.boardChooseCard(b.open, b.idx[b.open][0])
+	if order := m.sideOrder(); len(order) > 0 {
+		m.sideAt = order[0]
+	}
+	m.toList()
 	return m
-}
-
-// TestTheLinesAboveTheColumnsTakeTheArrows: up from the first card
-// chooses the doors line, then the host line; down goes back down to the
-// first card. A chosen line has the wash, and no card is chosen while it
-// is.
-func TestTheLinesAboveTheColumnsTakeTheArrows(t *testing.T) {
-	m := lostPeer(t, 40*time.Second)
-	m.splashDone = true
-	m.viewPrefs.CopyCheckedPhone, m.viewPrefs.CopyCheckedDesk = true, true // the copy check has its own test
-	m.doors = []doors.Door{{ID: doors.Tmux, Title: "Install tmux", Term: []string{"sh", "-c", "true"}}}
-	m = firstCard(upd(t, m, tea.WindowSizeMsg{Width: 80, Height: 31}))
-	first := chosenName(t, m)
-	chosen := func(m Model) string {
-		line, above := m.aboveChosen()
-		if !above {
-			return "card"
-		}
-		return "line " + line
-	}
-	for _, c := range []struct{ key, want string }{
-		{"up", "line "}, {"up", "line ws-1"}, {"up", "line ws-1"}, {"down", "line "}, {"down", "card"},
-	} {
-		if m = pressOn(m, c.key); chosen(m) != c.want {
-			t.Fatalf("%s chose %s, want %s", c.key, chosen(m), c.want)
-		}
-	}
-	if chosenName(t, m) != first {
-		t.Errorf("down from the doors line chose %s, want %s", chosenName(t, m), first)
-	}
-
-	m = pressOn(m, "up", "up")
-	if _, ok := m.boardSelected(); ok {
-		t.Error("a card is chosen with the host line")
-	}
-	d := m.boardPanel(80, m.bodyRows())
-	if host := slices.IndexFunc(plainLines(d.lines), func(l string) bool { return strings.Contains(l, "ws-1: not reached") }); host < 0 ||
-		!strings.Contains(d.lines[host], washOn(m)) || !strings.HasPrefix(plainLines(d.lines)[host], "▌") {
-		t.Errorf("the chosen host line is not drawn as a chosen row: %q", d.lines[max(host, 0)])
-	}
-	if m = pressOn(m, "1"); m.peekArmed != 0 || len(boardFake(m).acts()) != 0 {
-		t.Errorf("a digit on the host line marked %d, sent %v", m.peekArmed, boardFake(m).acts())
-	}
-	if m = pressOn(m, "x"); m.pending != nil || noticeRow(m) != "no card is chosen · ↓ goes back to the cards" {
-		t.Errorf("x on the host line: pending %v, notice %q", m.pending, noticeRow(m))
-	}
-	if m = pressOn(m, "esc"); chosen(m) != "card" || chosenName(t, m) != first {
-		t.Errorf("esc on the host line: %s", chosen(m))
-	}
-
-	m = pressOn(m, "up")
-	next, _ := key(m, "enter")
-	if p := next.(Model).pending; p == nil || p.door != doors.Tmux {
-		t.Errorf("enter on the doors line opens %+v, want the door's step", p)
-	}
 }
 
 func TestAWaitOnAHostNotReachedIsNotCounted(t *testing.T) {
@@ -337,8 +190,8 @@ func TestAWaitOnAHostNotReachedIsNotCounted(t *testing.T) {
 	if n := m.needCount(); n != 0 {
 		t.Errorf("with ws-1 not reached the count is %d, want 0", n)
 	}
-	if len(m.boardColumn(colNeed)) != 1 {
-		t.Error("the card of ws-1 that asks left NEEDS YOU")
+	if s := matchOf(t, m, "train-loop"); m.sideStateOf(s) != sideNeed {
+		t.Error("the row of ws-1 that asks left NEEDS YOU")
 	}
 }
 
@@ -422,24 +275,12 @@ func TestAStaleHomeSaysNoAsOf(t *testing.T) {
 	}
 }
 
-// openOn opens the QUIET page on name, a quiet match of this machine.
-func openOn(m Model, name string) Model {
-	chooseCard(name)(&m)
-	return m
-}
-
-func TestSearchNarrowsEveryColumn(t *testing.T) {
+func TestSearchNarrowsTheList(t *testing.T) {
 	m := boardShot(t, boardFixture(t), 80, 31, nil)
 	before := drawnNames(m)
 	m = pressOn(m, "/", "l", "o", "g")
 	if got, want := drawnNames(m), []string{"flint-api", "flint-auth", "flint-ui"}; !slices.Equal(got, want) {
 		t.Errorf("a search of log leaves %v, want %v", got, want)
-	}
-	f := plainFrame(m)
-	for _, head := range []string{"NEEDS YOU · 1", "WORKING · 1", "SHIPPING · 1", "QUIET · 0"} {
-		if !strings.Contains(f, head) {
-			t.Errorf("no %s:\n%s", head, f)
-		}
 	}
 	m = pressOn(m, "enter", "esc")
 	if m.filter != "" || !slices.Equal(drawnNames(m), before) {
@@ -460,4 +301,16 @@ func TestTheRoomTurnsTheBoardsChains(t *testing.T) {
 			t.Errorf("%s in the room goes to %q: docs draws no card", k, next.boardChain)
 		}
 	}
+}
+
+// drawnNames are the sessions the list draws, as the filters leave them.
+func drawnNames(m Model) []string {
+	var names []string
+	for _, s := range m.sideSessions() {
+		if m.inView(s.Host) && m.inBoard(s) && !slices.Contains(names, s.Name) {
+			names = append(names, s.Name)
+		}
+	}
+	slices.Sort(names)
+	return names
 }

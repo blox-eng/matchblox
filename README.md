@@ -12,8 +12,8 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-black.svg)](LICENSE)
 
 <p>
-<img src="www/demo/replay-desk.svg" width="74%" alt="The matchblox board on a desk, on a demo machine: four columns, NEEDS YOU, WORKING, SHIPPING and QUIET. A digit marks an answer from the agent's own options, the same digit sends it, and the card strikes into WORKING. p and a typed y merge a pull request. g shows one chain">
-<img src="www/demo/replay-phone.svg" width="24%" alt="The same board on a phone: one column a page, with the page marks at the top. An answer marked and sent from the card's peek, a merge, a page hidden and shown again, and one chain">
+<img src="www/demo/replay-desk.svg" width="74%" alt="The matchblox console on a desk, on a demo machine: the list of every match beside the chat of the chosen one. A tap opens the chat of flint-auth, a digit marks an answer from the agent's own options, the same digit sends it, and flint-auth moves into WORKING. g opens the room of the chain login">
+<img src="www/demo/replay-phone.svg" width="24%" alt="The same console on a phone: the list first, a tap opens a chat, and the back mark goes back to the list. An answer marked and sent from the chat, and the room of one chain">
 </p>
 
 <p>
@@ -57,35 +57,36 @@ session needs you, and answer from anywhere. In beta on TestFlight.
    brew install blox-eng/tap/matchblox
    ```
 
-   matchblox looks for a new release once a day and offers it on the board.
+   matchblox looks for a new release once a day and offers it as a setup step.
    `[update] mode` makes it install by itself, or never look: see
    [Update](https://docs.matchblox.com/config/#update).
 
 2. Run `matchblox` outside tmux (the script starts it for you). Answer
-   "Where do your agents run?", then open the setup steps above the board:
+   "Where do your agents run?", then open the setup steps (`! 1 setup` in the list's foot):
    tmux, the queue hooks, the way back.
 
 3. In another terminal, start your agents in tmux, for example
    `tmux new -s app claude`. When an
-   agent needs you, its card goes into `NEEDS YOU`. `Enter` jumps to
-   it, and `prefix m` comes back.
+   agent needs you, it goes into `NEEDS YOU`, and its chat shows what it
+   asks. `Ctrl+O` jumps to its pane, and `prefix m` comes back.
 
 The full walk is [Get started](https://docs.matchblox.com/start/).
 
 ## What it shows
 
-- **The board**: four columns, `NEEDS YOU`, `WORKING`, `SHIPPING` and
-  `QUIET`. Each match has one card in one column. The header counts what
-  needs you: `● 3 need you`. A match for each: `✦` burning while it works,
-  `╿` at rest, `│` spent. Its card says what it does, its pull request on
-  its track, its context use and its chain.
-- **The peek**: the chosen card shows what the agent said last and the
-  options of its question. A digit marks an answer, and the same digit
-  sends it. `p` merges a pull request that waits for your merge, after a
-  typed `y`. `g` shows one chain, and `s` one host.
-- **Go straight in**: `Enter` goes into the agent's own tmux pane, on this
-  host or another, and moves only your screen. `ctrl+a m` (your tmux
-  prefix, then `m`) comes back, with the next card that needs you chosen.
+- **Every agent, one chat**: the list at the left puts each match in a
+  group, `NEEDS YOU`, `WORKING`, `HELD` or `IDLE`, with what needs you on
+  top. The header counts what needs you: `● 3 need you`. A match for each:
+  `╿` struck when it needs you, `✦` burning while it works, `╵` burnt out
+  at rest. Its row says what it asks, its pull request and its chain.
+- **The chat**: the chosen session's conversation and the options of its
+  question, beside the list. Type in its line and `Enter` sends it. A
+  digit marks an answer, and the same digit sends it. `p` merges a pull
+  request that waits for your merge, after a typed `y`. `g` shows one
+  chain, and `s` one host.
+- **Go straight in**: `Ctrl+O` goes into the agent's own tmux pane, on
+  this host or another, and moves only your screen. `ctrl+a m` (your tmux
+  prefix, then `m`) comes back, to the chat you left.
 - **Switch the agent, keep the seat**: `A` runs another agent in the same
   pane (Claude Code, Codex, OpenCode or Cursor) with the session's name,
   directory and pull request, on the account you last started that agent
@@ -112,8 +113,8 @@ The full walk is [Get started](https://docs.matchblox.com/start/).
   from the shell. The list shows each repo with its worktrees and `N live`,
   the ones in use first. Paste a git URL in `where` and N clones it, then
   starts the agent there.
-- **Ships on their cards**: every pull request your sessions drive, on one
-  track from CI to live, said in words. One that waits for your merge
+- **Ships on their rows**: every pull request your sessions drive, from
+  CI to live, said in words. One that waits for your merge
   merges with `p` and a typed `y`.
 - **A night**: press `n` before you sleep. Each session that fills its
   context compacts itself and leaves one line on how to continue.
@@ -124,13 +125,12 @@ The full walk is [Get started](https://docs.matchblox.com/start/).
   file](https://docs.matchblox.com/ways/) and logs every step on a card.
   A merge, release or deploy you did not give waits on the card for your
   `y`, and what the stoker would wait for, matchblox fires itself.
-- **Three layouts, read from the screen's shape**: one column a page on a
-  phone, three columns and a drawer for `QUIET` on a medium screen, and four
-  columns on a desk.
+- **Read from the screen's shape**: on a phone the list and the chat take
+  turns; on a wider screen the chat is beside the list.
 - **Machine**, the second tab: usage, **machine health**, **detached busy
   loops**, the stoker, **git** worktrees that are safe to remove, 24 hours
-  of **history** and the tmux panes. The board keeps the
-  **recommendations** with their exact command.
+  of **history** and the tmux panes. The list's foot keeps the
+  **tips** with their exact command.
 
 More in [The console](https://docs.matchblox.com/console/).
 
@@ -138,37 +138,42 @@ More in [The console](https://docs.matchblox.com/console/).
 
 | Key | What it does |
 |---|---|
-| `↑` or `k`, `↓` or `j` | Chooses the card above or below. The chosen card shows its peek. |
-| `Enter` | The safe action: go into the chosen agent's pane. |
-| `a` | Goes into the pane, as `Enter` does. |
-| A digit, 1 to 9 | Marks an option of the chosen card's question. The same digit again sends it. |
-| `p` | Merges the card's pull request that waits for your merge. It runs only after a typed `y`. |
-| `x` | Kills the match. It runs only after a typed `y`. |
-| `y` | Gives the go a stoker step waits for. |
-| `c` | Copies what the agent said last. |
-| `m` | Opens the card's menu. |
-| `g` | Shows only the chain of the chosen card. `Esc` shows all. |
-| `s` | Shows the next host, then all hosts. |
-| `N` | Starts a new session: where, the agent, its account and a first message (none on a new account). |
-| `A` | Switches the chosen session to another agent in the same pane. |
-| `Tab` | Goes to the board, or to Machine. |
-| `/` | Searches the board. |
-| `f`, `n` | The stoker on or off; a night that ends in the morning. |
-| `q` | Quits. The service keeps running. |
+The keys go to the chat's line or to the list. `Esc` moves them to the
+list, and `Enter` there moves them back.
+
+| Key | What it does |
+|---|---|
+| `Enter` | In the line, sends the text to the chosen session. In the list, goes back to the line. |
+| `↑`, `↓` | Chooses the session above or below. |
+| A digit, 1 to 9 | With the line empty, marks an option of the chosen session's question. The same digit again sends it. |
+| `Ctrl+O` | Goes into the chosen agent's pane. |
+| `a` | In the list, goes into the pane, as `Ctrl+O` does. |
+| `p` | In the list, merges the pull request that waits for your merge. It runs only after a typed `y`. |
+| `x` | In the list, kills the match. It runs only after a typed `y`. |
+| `y` | In the list, gives the go a stoker step waits for. |
+| `c` | In the list, copies what the agent said last. |
+| `m` | In the list, opens the session's menu. |
+| `g` | In the list, shows only the chain of the chosen session. `Esc` shows all. |
+| `s` | In the list, shows the next host, then all hosts. |
+| `N` | In the list, starts a new session: where, the agent, its account and a first message (none on a new account). |
+| `A` | In the list, switches the chosen session to another agent in the same pane. |
+| `Tab` | Goes to Machine, or back. |
+| `/` | In the list, searches it. |
+| `f`, `n` | In the list, the stoker on or off; a night that ends in the morning. |
+| `Ctrl+C` | Quits. The service keeps running. |
 
 Every key: [Keys](https://docs.matchblox.com/keys/).
 
 ## From a phone
 
 Set the startup snippet of your SSH app (Termius, for example) to
-`matchblox`, or run `ssh -t ws-1 matchblox`. The board is the first
-screen, one column a page: swipe sideways, or tap a page's mark at the top.
-Tap a card to see its peek. Tap an option of its question to mark it, and
-tap it again to send it. Tap the card again to go into its pane. `m` opens
-the card's menu. In Matchblox Pocket a long-press opens it too, a sideways
-swipe turns the page, and the keys of the chosen card are on the key belt's
-Board layout. Tap `◂ matchblox` in the tmux status line
-(with `set -g mouse on`) to come back from a pane, or press `prefix m`. See
+`matchblox`, or run `ssh -t ws-1 matchblox`. The list is the first
+screen. Tap a row to open its chat, and `◂` to come back. Tap an option of
+its question to mark it, and tap it again to send it. `m` in the list
+opens the session's menu. In Matchblox Pocket a long-press opens it too,
+and the keys of the chosen session are on the key belt's Board layout.
+Tap `◂ matchblox` in the tmux status line (with `set -g mouse on`) to
+come back from a pane, or press `prefix m`. See
 [The phone](https://docs.matchblox.com/phone/).
 
 ## Safety

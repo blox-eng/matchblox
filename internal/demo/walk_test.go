@@ -217,7 +217,7 @@ func (w *walker) press(keys ...string) {
 
 // tabWords are the tabs in the tab row's order, each as the row names it
 // while it is open.
-var tabWords = []string{"BOARD", "MACHINE"}
+var tabWords = []string{"SESSIONS", "MACHINE"}
 
 // viewWords are the views that open from Machine's first rows, in their
 // order, each with a word only its screen draws.
@@ -268,8 +268,8 @@ func (w *walker) toView(name string) {
 }
 
 // toTab opens the tab want names: a tap on its name on the tab row, as a
-// person on a phone does, then one wait for the redraw. A digit on the board
-// answers its card (ruling 37). With no tab row on screen, or a box on top
+// person on a phone does, then one wait for the redraw. A digit in the chat
+// answers its question (ruling 37). With no tab row on screen, or a box on top
 // that takes the tap, it walks by Tab.
 func (w *walker) toTab(want string) {
 	w.t.Helper()
@@ -527,11 +527,10 @@ func (w *walker) takes(what, want string, keys ...string) {
 	})
 }
 
-// scrolls opens the chat of the second session from the list, then turns the
-// wheel over the chat, at the screen's right where a wide screen draws it, and
-// presses the page keys. The chat is a window on the agent's pane, so each goes
-// to the agent: the world takes it, and tmux is never asked if the agent reads
-// the mouse.
+// scrolls opens the stand-in of the second session from the list, then turns
+// the wheel over it, at the screen's right, and presses the page keys. The
+// stand-in is a window on the agent's pane, so each goes to the agent: the
+// world takes it, and tmux is never asked if the agent reads the mouse.
 func (w *walker) scrolls(where string) {
 	w.t.Helper()
 	before, from := len(w.d.Ran()), len(w.term.text())
@@ -540,7 +539,7 @@ func (w *walker) scrolls(where string) {
 			w.t.Logf("it drew:\n%s", w.term.text()[from:])
 		}
 	}()
-	w.press("j", "enter")
+	w.press("down", "ctrl+o") // the line is empty: down chooses the next session
 	x := w.cols - 5
 	w.send("wheel up "+where, fmt.Sprintf("\x1b[<64;%d;10M", x))
 	w.send("wheel down "+where, fmt.Sprintf("\x1b[<65;%d;10M", x))
@@ -565,7 +564,7 @@ func (w *walker) scrolls(where string) {
 // the order.
 func (w *walker) walkTheDoors() {
 	w.t.Helper()
-	w.tabByKey("BOARD")
+	w.tabByKey("SESSIONS")
 	w.scrolls("in a chat")
 	w.reset()
 	w.clear()
@@ -577,18 +576,18 @@ func (w *walker) walkTheDoors() {
 	w.press(slices.Repeat([]string{"j"}, 15)...)
 	w.refused("Pair a device", "enter")
 
-	w.tabByKey("BOARD")
+	w.tabByKey("SESSIONS")
 	w.press("N")
 	w.send("a repository", "example/cloned")
 	w.refused("a clone", "enter")
-	w.tabByKey("BOARD")
+	w.tabByKey("SESSIONS")
 	w.press("N")
 	w.send("a folder", "/work/flint-auth")
 	w.press("tab")
 	w.send("a branch", "a-branch")
 	w.refused("a new worktree", "enter")
 
-	w.tabByKey("BOARD")
+	w.tabByKey("SESSIONS")
 	w.press("N")
 	w.send("a folder", "/work/flint-auth")
 	w.press("tab", "tab")
@@ -596,7 +595,7 @@ func (w *walker) walkTheDoors() {
 	w.takes("a new session", "new-session", "enter")
 	w.clear()
 
-	w.tabByKey("BOARD")
+	w.tabByKey("SESSIONS")
 	w.press("/")
 	w.send("a search", "spark-docs")
 	w.press("enter", "r", "backspace")
@@ -605,7 +604,7 @@ func (w *walker) walkTheDoors() {
 	w.clear()
 	w.press("esc", "esc")
 
-	w.tabByKey("BOARD") // the ship is on its card: #214 waits for its merge
+	w.tabByKey("SESSIONS") // the ship is on its row: #214 waits for its merge
 	w.press("/")
 	w.send("a search", "ember-billing")
 	w.press("enter")
@@ -618,7 +617,7 @@ func (w *walker) walkTheDoors() {
 	w.takes("a merged worktree's removal", "worktree remove", "x", "y")
 	w.clear()
 
-	w.tabByKey("BOARD")
+	w.tabByKey("SESSIONS")
 	w.press("/")
 	w.send("a search", "hearth-api")
 	w.takes("a kill", "kill-pane", "enter", "x", "y", "y")
@@ -723,15 +722,16 @@ func TestNoDoorOrKeyLeavesTheDemo(t *testing.T) {
 		t.Errorf("the demo held a socket open: %v", theWalk.open)
 	}
 
-	// The edge swipe, the ‹ and ⌘M all write the home key. In a chat q is the
-	// agent's, so q ending the program proves the chat gave back the keys.
+	// The edge swipe, the ‹ and ⌘M all write the home key. In a stand-in q
+	// is the agent's, so q ending the program on Machine proves the stand-in
+	// gave back the keys.
 	t.Run("the home key leaves a chat", func(t *testing.T) {
 		newMachine(t)
 		w := startWalk(t, 44, 31)
-		w.press("enter")
-		w.saysAfter("ctrl+c in a chat", "This is a demo.", "ctrl+c") // the keys are in the chat
+		w.press("ctrl+o")
+		w.saysAfter("ctrl+c in a chat", "This is a demo.", "ctrl+c") // the keys are in the stand-in
 		w.send("the home key", panes.HomeKey)
-		w.press("q")
+		w.press("tab", "q") // Sessions types q: Machine quits on it
 		select {
 		case <-w.ended:
 		case <-time.After(5 * time.Second):
@@ -750,6 +750,9 @@ func TestQAndCtrlCEnd(t *testing.T) {
 	newMachine(t)
 	for _, key := range quits {
 		w := startWalk(t, 44, 31)
+		if key == "q" {
+			w.press("tab") // Sessions' line and list type q: Machine quits on it
+		}
 		w.pressLast(key)
 		select {
 		case <-w.ended:
@@ -761,8 +764,8 @@ func TestQAndCtrlCEnd(t *testing.T) {
 		}
 	}
 	w := startWalk(t, 132, 32)
-	w.toTab("BOARD")
-	w.press("enter")
+	w.toTab("SESSIONS")
+	w.press("ctrl+o") // the chosen session's stand-in
 	w.flashes("ctrl+c in a chat", "ctrl+c")
 	w.alive()
 }
@@ -1022,10 +1025,21 @@ func (w *walker) opens(what, want, key string) {
 	}
 }
 
-// searched is the screen with the board searched for name, then esc
+// searched is the screen with the list searched for name, then esc
 // clears the search.
+// toList gives the keys to the list when the chat's line has them: there
+// the list's keys type.
+func (w *walker) toList() {
+	w.t.Helper()
+	if strings.Contains(w.term.screen(), "writing to ") {
+		w.press("esc")
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
 func (w *walker) searched(name string) string {
 	w.t.Helper()
+	w.toList()
 	w.press("/")
 	w.send("a search", name)
 	w.press("enter")
@@ -1035,19 +1049,19 @@ func (w *walker) searched(name string) string {
 	return screen
 }
 
-// finds tells if the board, searched for name, shows its card: a line
+// finds tells if the list, searched for name, shows its row: a line
 // with name that is not the notice's "started name".
 func (w *walker) finds(name string) bool {
 	w.t.Helper()
 	return slices.ContainsFunc(strings.Split(w.searched(name), "\n"), func(l string) bool {
-		return strings.Contains(l, name) && !strings.Contains(l, "started "+name) && !strings.Contains(l, "nothing matches")
+		return strings.Contains(l, name) && !strings.Contains(l, "started "+name) && !strings.Contains(strings.ToLower(l), "nothing matches")
 	})
 }
 
-// findsNothing tells if the board, searched for name, says nothing matches.
+// findsNothing tells if the list, searched for name, says nothing matches.
 func (w *walker) findsNothing(name string) bool {
 	w.t.Helper()
-	return strings.Contains(w.searched(name), `nothing matches "`+name+`"`)
+	return strings.Contains(strings.ToLower(w.searched(name)), `nothing matches "`+name+`"`) // the list's "Nothing matches", or a notice
 }
 
 // saysAfter presses keys and waits for want in what the console then draws.
@@ -1080,7 +1094,8 @@ func TestWhatThePhoneCannotDoSaysSo(t *testing.T) {
 	w.flashes("Pair a device", "enter")
 	w.clear()
 
-	w.toTab("BOARD") // the ship is on its card: #214 waits for its merge
+	w.toTab("SESSIONS") // the ship is on its row: #214 waits for its merge
+	w.toList()
 	w.press("/")
 	w.send("a search", "ember-billing")
 	w.press("enter")
@@ -1088,7 +1103,8 @@ func TestWhatThePhoneCannotDoSaysSo(t *testing.T) {
 	w.clear()
 	w.press("esc", "esc")
 
-	w.toTab("BOARD")
+	w.toTab("SESSIONS")
+	w.toList()
 	w.press("N")
 	w.send("a folder", "/work/flint-auth")
 	w.press("tab")
@@ -1138,6 +1154,7 @@ func TestSessionsCanBeStartedAndKilled(t *testing.T) {
 	m := newMachine(t)
 	w := startWalk(t, 132, 32)
 
+	w.toList()
 	w.press("N")
 	w.send("a folder", "/work/flint-auth")
 	w.press("tab", "tab")
@@ -1148,15 +1165,15 @@ func TestSessionsCanBeStartedAndKilled(t *testing.T) {
 		t.Errorf("tmux's list has no new session:\n%s", got)
 	}
 	// The search finds the session only once the console's list holds it: on
-	// a slow machine its sample comes after the word that it started. A new
-	// busy match may land under a column's "↓ n more": the search shows it.
-	eventually(t, 30*time.Second, "the board to show fresh-one", func() bool { return w.finds("fresh-one") })
+	// a slow machine its sample comes after the word that it started.
+	eventually(t, 30*time.Second, "the list to show fresh-one", func() bool { return w.finds("fresh-one") })
 
 	// The new session takes a message like any other.
+	w.toList()
 	w.press("/")
 	w.send("a search", "fresh-one")
 	w.press("enter", "enter")
-	w.term.waitFor(t, "keys go to fresh-one")
+	w.term.waitFor(t, "writing to fresh-one")
 	time.Sleep(500 * time.Millisecond) // its screen comes: a key answers only what the console showed
 	w.send("a message", "hello")
 	from := len(w.term.text())
@@ -1168,6 +1185,7 @@ func TestSessionsCanBeStartedAndKilled(t *testing.T) {
 	w.reset()
 
 	// spark-docs rests, so it renames at once.
+	w.toList()
 	w.press("/")
 	w.send("a search", "spark-docs")
 	w.press("enter", "r")
@@ -1178,28 +1196,29 @@ func TestSessionsCanBeStartedAndKilled(t *testing.T) {
 	w.press("enter")
 	eventually(t, 3*time.Second, "the rename to reach tmux's list", func() bool { return strings.Contains(paneList(t), "renamed-one") })
 	w.press("esc")
-	// The board shows the new name once a sample has read it, and its card
-	// may be under a column's "↓ n more": a search finds it, as a person
-	// looks for a card that is off the screen.
-	eventually(t, 30*time.Second, "the board to show renamed-one", func() bool { return w.finds("renamed-one") })
+	// The list shows the new name once a sample has read it, and its row
+	// may be off the screen: a search finds it, as a person looks for a
+	// row that is off the screen.
+	eventually(t, 30*time.Second, "the list to show renamed-one", func() bool { return w.finds("renamed-one") })
 
 	// The search finds the new name once a sample has read it: until then it finds
 	// no row, and x does nothing.
 	eventually(t, 5*time.Second, "the kill to leave tmux's list", func() bool {
+		w.toList()
 		w.press("/")
 		w.send("a search", "renamed-one")
 		w.press("enter", "x", "y", "y", "esc", "esc")
 		time.Sleep(300 * time.Millisecond)
 		return !strings.Contains(paneList(t), "renamed-one")
 	})
-	// Another tab and back, by the Tab key, draws the board anew: it has the
+	// Another tab and back, by the Tab key, draws the list anew: it has the
 	// new session, not the killed one, once a sample has read tmux's list.
 	// Each look turns two tabs and runs two searches, seconds under -race,
-	// so the wait is the one the new session's card has.
-	eventually(t, 30*time.Second, "the drawn board to lose the killed session", func() bool {
+	// so the wait is the one the new session's row has.
+	eventually(t, 30*time.Second, "the drawn list to lose the killed session", func() bool {
 		w.tabByKey("MACHINE")
 		time.Sleep(200 * time.Millisecond)
-		w.tabByKey("BOARD")
+		w.tabByKey("SESSIONS")
 		return w.finds("fresh-one") && w.findsNothing("renamed-one")
 	})
 	if got := m.spawns(t); got != "" {

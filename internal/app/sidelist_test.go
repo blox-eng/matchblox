@@ -162,26 +162,6 @@ func TestChainTakesItsUrgentMembersPlace(t *testing.T) {
 	}
 }
 
-func TestShipOnlyCardIsNotInTheList(t *testing.T) {
-	s := boardMatch("hearth-api", time.Hour)
-	st := boardState(s)
-	st.Ships.Ships = append(st.Ships.Ships, proto.Ship{Repo: "hearth/hearth-api", Number: 4570, Kind: shipWaits,
-		Note: "green · waits for your merge", Stage: 2, Since: boardAt.Add(-time.Hour)})
-	m := boardModel(t, st)
-	if !slices.ContainsFunc(m.shipCards(), isShipCard) {
-		t.Fatal("the fixture has no ship-only card")
-	}
-	for _, g := range m.sideGroups() {
-		for _, u := range g.units {
-			for _, s := range u.members {
-				if isShipCard(s) {
-					t.Fatalf("%s is a ship-only card in the list", s.Name)
-				}
-			}
-		}
-	}
-}
-
 func TestChainKeepsAMemberTheTeamDoesNotList(t *testing.T) {
 	// spark-docs shares flint-auth's session id: the team names one of them,
 	// and the chain still holds both.

@@ -39,7 +39,7 @@ Claude Code is the default. To use another agent, name its command:
 agent = "codex"
 ```
 
-The stoker agent is not one of your lanes, so the board leaves it out. It
+The stoker agent is not one of your lanes, so the list leaves it out. It
 shows in the header and on Machine's row `stoker`. When it needs you (a
 question, an approval), the header says `stoker needs you`.
 `matchblox sessions --json` keeps its row, with `"stoker": true`.
@@ -149,7 +149,7 @@ that works or needs you.
 `matchblox hold` queues one message, `finish this step, then stop and
 wait`, and marks the session held. It never sends `Esc` or `Ctrl+C`: a
 session in the middle of a turn finishes its step first. `release` tells it
-`carry on`. A held session's card says `⏸ held by stoker` and its reason.
+`carry on`. A held session's row says `held by the stoker` and its reason.
 
 matchblox wakes the stoker agent when something it may care about
 happens, and only when the stoker pane is at rest:
@@ -282,7 +282,7 @@ record of the panes it drove, the session reads that cause instead.
 In a session the stoker messaged, a guarded command runs when its chip is
 on, or when you gave the go for it. Off, the command is denied, and
 matchblox puts it on the stoker's view by itself, under `YOUR GO`, and the
-card of that session goes into `NEEDS YOU` with `y go` among its keys:
+session goes into `NEEDS YOU`, and `y` in the list gives the go:
 
 ```text
  ⏸ 02:40 waits for your go: api-gw wants to run gh pr merge 4556 --squash
@@ -432,21 +432,21 @@ at once. A fifth start is refused:
 
 ### Talk to a chain
 
-A chain's room shows its stoker: `g` on a card of the chain opens it. The
-stoker's card sits above the columns, with its order and the steps of its
-plan, and the talk line sits under them.
+A chain's room shows its stoker: `g` on a session of the chain opens it.
+The stoker's card sits at the top of the room, with its order and the
+steps of its plan, and the talk line sits under them.
 
 - The talk line takes your words to the chain's stoker. By day, a later
   order goes in as `New order: <your words>` and goes onto its card.
-- A chain stoker that asks you has a card of its own in `NEEDS YOU`,
-  named `<chain>'s stoker`, and the header counts it. `⏎` on it opens the
+- A chain stoker that asks you has a row of its own in `NEEDS YOU`,
+  named `<chain>'s stoker`, and the header counts it. `Ctrl+O` on it opens the
   chain's stoker in a popup. It runs on matchblox's own tmux server.
   Answer its prompts; prefix `d` closes the popup.
-- `⏎` on a member's card goes into that member's pane. Answer one match
+- `Ctrl+O` on a member goes into that member's pane. Answer one match
   yourself when you want to.
 - `F` on a member of a chain with no stoker opens the start sheet: a new
   run needs an order and its gos.
-- A stoker's card is no session. `x`, `r`, `A` and `z` on it say
+- A stoker's row is no session. `x`, `r`, `A` and `z` on it say
   `the stoker of chain <name> is no session: Q quits it on Machine ›
   stoker`.
 
@@ -578,7 +578,7 @@ A Claude Code session in tmux that is:
 
 - at rest: its turn ended, even while subagents or background shells it
   started still run (the transcript says so, not Claude Code's busy flag).
-  Its card shows one whose subagents still work as `agents`, not idle,
+  Its row shows one whose subagents still work as `agents`, not idle,
 - due, at the moment that suits it (below),
 - not stopped by its plan's limit (`out`): a compact needs the model too,
 - not waiting for you: no question, no permission prompt,
@@ -728,11 +728,11 @@ compact_at = 80
 
 ## Background work
 
-A session whose turn ended with subagents still working reads `agents` on
-its card, in `WORKING`: it works through them, and their results start its
+A session whose turn ended with subagents still working reads `agents` in
+its chat, in `WORKING`: it works through them, and their results start its
 next turn, so it does not need you. One whose turn ended with only shells
 running reads `tests` or `shell`. A background shell that has run for an
-hour or more is a recommendation under the board: `Enter` jumps to its
+hour or more is a tip in the list's foot: `Enter` jumps to its
 session, `x` and a typed
 `y` end it. A wait loop such as `while pgrep -f "node walk.mjs"` finds its
 own command line and never ends.

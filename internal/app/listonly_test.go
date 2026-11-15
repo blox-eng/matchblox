@@ -8,7 +8,6 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/chains"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -32,8 +31,6 @@ func fullView(m Model) Model {
 	m.viewPrefs = viewPrefs{CopyCheckedPhone: true, CopyCheckedDesk: true}
 	return m
 }
-
-func keyText(sc drawn) string { return ansi.Strip(sc.lines[sc.keysAt]) }
 
 // manyRows is one host with n sessions, list only, 200×60.
 func manyRows(t *testing.T, n int) Model {

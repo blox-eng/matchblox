@@ -1,50 +1,50 @@
  ▰ matchblox                                                                                                                                                                               ● 6 need you
- BOARD 7    machine
+ SESSIONS 7    machine
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- NEEDS YOU · 6                                                         WORKING · 1                                     SHIPPING · 0                                    QUIET · 0
-▌╿ flint-auth                                                  ✻  2m   ✦ hearth-api                            ✻
-  stuck conflicts with main                                             busy
-  #4545 ●━✕┄○┄○┄○  ctx 41%                                              #4551 ●━◉┄○┄○┄○  ctx 79%
-  “The refresh flow works and the tests pass. One choice is yours
-  before I wire the rotation.”
-  ⏎ go in
-
- │ spark-docs                                                  ✻  9m
-  done I rewrote the quick start and the install page.
-  #4540 ●━●━●━●━●  ctx 88%
-  ⏎ go in
-
- ╿ ember-billing                                               ✻  4m
-  green #4552 waits for your merge
-  #4552 ●━●━◉┄○┄○  ctx 32%
-  p merge #4552   ⏎ go in
-
- ╿ kindle-web                                                  ✻  1m
-  asks Claude needs your permission to use Bash
-  ctx 56%
-  ⏎ go in
-
- ╿ cinder-ci                                                   ❋  0s
-  done I am moving the cache key to the go.sum hash.
-  ctx 55%
-  ⏎ go in
-
- ╿ wick-mobile                                                 ▣  0s
-  done ⠙ Working
-  ctx 6%
-  ⏎ go in
-
-
-
-
-
-
-
-
-
-
-
- + start a new session
- RECOMMENDATIONS · 7
+ NEEDS YOU · 6  −                       │ flint-auth ✻ asks · #4545 ci                                                                                                  ctx 41%  ctrl+o expand · m menu
+▌╿ flint-auth                       2m ✻│
+   conflicts with main                  │
+ ╿ spark-docs                       9m ✻│
+   I rewrote the quick start and the in…│
+ ╿ ember-billing                    4m ✻│
+   #4552 waits for your merge           │
+ ╿ kindle-web                       1m ✻│
+   Claude needs your permission to use …│
+ ╿ cinder-ci                        0s ❋│
+   I am moving the cache key to the go.…│
+ ╿ wick-mobile                      0s ▣│
+   ⠙ Working                            │
+────────────────────────────────────────│
+ WORKING · 1  −                         │
+ ✦ hearth-api                 #4551 ci ✻│
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │ ⏺ The refresh endpoint is in and its tests pass.
+                                        │
+                                        │ ────────────────────────────────────────────────────────────────────────────────
+                                        │  ☐ Rotate
+                                        │
+                                        │ Should a refresh also rotate the token?
+                                        │
+                                        │ ❯ 1. Rotate it
+                                        │      The old one stops at once.
+                                        │   2. Rotate, keep the old one a minute
+                                        │   3. Type something.
+                                        │
+ the line is empty
+ + new · ✧ 7 tips                       │ ›                                                                                                                                        ⏎ send to flint-auth
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ⏎ go in   c copy   s hosts   tab next
+ writing to flint-auth · ⏎ send · ↑↓ choose · esc list · ctrl+o expand · tab Machine

@@ -194,13 +194,13 @@ func (m Model) shows() bool {
 }
 
 // selectedBlocked is the blocked host's row under the selection: after
-// the ghost rows.
+// the sessions.
 func (m Model) selectedBlocked() (blockedHost, bool) {
 	if m.tab != tabSessions {
 		return blockedHost{}, false
 	}
 	bs := m.blockedHosts()
-	i := m.sessIndex() - len(m.doors) - len(m.snap.Sessions) - len(m.ghosts())
+	i := m.sessIndex() - len(m.doors) - len(m.snap.Sessions)
 	if i < 0 || i >= len(bs) {
 		return blockedHost{}, false
 	}

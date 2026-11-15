@@ -62,7 +62,7 @@ func (m Model) sideBefore(h sideState, a, b sample.Session) int {
 // stoker's own agent is one only while it asks.
 func (m Model) sideSessions() []sample.Session {
 	return slices.DeleteFunc(slices.Clone(m.all.sessions), func(s sample.Session) bool {
-		return isShipCard(s) || m.isStoker(s) && !m.stokerAsksAsCard(s)
+		return m.isStoker(s) && !m.stokerAsksAsCard(s)
 	})
 }
 

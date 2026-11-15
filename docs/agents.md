@@ -221,7 +221,7 @@ A chain gives a match the right to message its chain-mates, and nothing
 more. It grants no control over them, and every service guard still applies.
 
 A chain can have a stoker of its own. You talk to the chain, and its stoker
-answers: the talk line of the chain's room (`g` on a card of the chain),
+answers: the talk line of the chain's room (`g` on a session of the chain),
 or `matchblox stoker order <chain> "<text>"` from a shell. That stoker drives
 the matches of its chain only. `F` on a member of a chain with no stoker
 starts one, and so does `matchblox stoker new --chain <who>`. See
@@ -345,7 +345,7 @@ the client selected it needs a new switch confirmation.
 Claude Code, Codex and OpenCode show their context use, read from the
 agent's own files: the transcript, the rollout, the session storage.
 Cursor gives it to its status line: open the setup step "Show Cursor's
-context" above the board, or run `matchblox setup`, and each Cursor session shows its
+context" from the list's foot, or run `matchblox setup`, and each Cursor session shows its
 context, model and window from its first turn. A status line of your own
 keeps running inside it; without one, the line shows what Cursor's bar
 showed (`Auto · 5.7%`). Before the first turn a session is "fresh".
@@ -371,7 +371,7 @@ show `—` and "not measured", and have no id:
 A session shows "not measured" while another session in its directory
 writes after it.
 
-A `codex exec` run you start in a pane shows on the board, and takes no
+A `codex exec` run you start in a pane shows in the list, and takes no
 other session's rollout. One that another agent starts does not show.
 
 The context use is a share of the session's window. matchblox uses the
@@ -379,7 +379,7 @@ first window it finds, in this order:
 
 1. The window the agent reports for the session. Codex and OpenCode report
    it in their files. Claude Code gives it to its status line: open the
-   setup step "Show your limits" above the board, or run `matchblox setup`, and each
+   setup step "Show your limits" from the list's foot, or run `matchblox setup`, and each
    session reports its window from its first turn.
 2. `[sessions.windows]` in the [config](config.md), by model-name prefix.
 3. The window of a Claude model that matchblox knows, such as 1M for
@@ -528,7 +528,7 @@ A start on `default` keeps them.
 
 Codex: each account's sessions read their logs and limits from that
 account's home, never from the default's. The app-server process (`codex
-app-server`) is not a session: the board does not show it. An agent that
+app-server`) is not a session: the list does not show it. An agent that
 the app-server runs (such as `codex exec`) is not a session either.
 
 A start or a switch on an account says what happened: each link still

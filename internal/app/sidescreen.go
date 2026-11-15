@@ -208,13 +208,14 @@ func (m Model) setupPanel(w int) []string {
 	ds := m.boardDoors()
 	head := "SET UP"
 	if len(ds) > 1 {
-		head += " · 1 of " + strconv.Itoa(len(ds))
+		head += " · " + strconv.Itoa(m.doorIndex(ds)+1) + " of " + strconv.Itoa(len(ds))
 	}
 	lines := []string{m.placeHead(head, w), strings.Repeat(" ", w)}
 	if len(ds) == 0 {
 		return append(lines, fit(" "+m.st.muted.Render("Every setup step is done."), w))
 	}
-	d := ds[0]
+	at := m.doorIndex(ds)
+	d := ds[at]
 	lines = append(lines, fit(" "+m.st.text.Bold(true).Render(ansi.Truncate(d.Title, max(w-2, 1), "…")), w))
 	text, ink := d.Why, m.st.muted
 	if d.Problem != "" {
@@ -222,6 +223,11 @@ func (m Model) setupPanel(w int) []string {
 	}
 	for _, l := range wrap(text, w-1, ink.Render) {
 		lines = append(lines, fit(" "+l, w))
+	}
+	if p, ok := m.previewDoor(); ok && p.ID == d.ID { // the step's change, read before its y
+		var b body
+		m.preview(&b, d, w)
+		lines = append(append(lines, strings.Repeat(" ", w)), b.lines...)
 	}
 	return lines
 }
@@ -308,6 +314,9 @@ func (m Model) placeHints() []hint {
 		}
 		return []hint{back}
 	}
+	if m.sidePlace == placeSetup && m.copyCode != "" { // the check waits for its paste
+		return []hint{hintFor(mk.Back, "cancel")}
+	}
 	if m.sidePlace == placeSetup {
 		if ds := m.boardDoors(); len(ds) > len(m.copyDoors()) && m.doorIndex(ds) >= len(m.copyDoors()) {
 			return []hint{hintFor(sk.Enter, "set up"), hintFor(mk.Second, "close"), back}
@@ -355,12 +364,21 @@ func (m Model) expand(s sample.Session, ok bool) (tea.Model, tea.Cmd) {
 }
 
 // sideSays is what the Sessions tab says now: a notice while one shows,
-// else the last flash.
+// the copy check while it waits for its paste, a newer release on Pocket,
+// which has no key line to say it, the last flash, else the service's
+// state.
 func (m Model) sideSays() string {
-	if m.noticeText != "" && m.now().Before(m.noticeUntil) {
+	switch {
+	case m.noticeText != "" && m.now().Before(m.noticeUntil):
 		return m.noticeText
+	case m.copyCode != "":
+		return m.pasteHere()
+	case m.newer != "" && !m.lost && m.beltOnly():
+		return m.newer
+	case m.flash != "":
+		return m.flash
 	}
-	return m.flash
+	return m.stateNotice()
 }
 
 // noticeAt is where what the tab says draws, in lines of the body: the
@@ -420,6 +438,9 @@ func (m Model) sideHints() (string, []hint) {
 	if !m.have && m.opt.Layered { // a host that never answered: the way back
 		return "reading the host", []hint{hintFor(mk.Back, "hosts"), hintFor(mk.Quit, "")}
 	}
+	if m.menu != nil {
+		return "in the menu", []hint{hintFor(mk.Up, "move"), hintFor(mk.Open, "do"), hintFor(mk.Back, "close")}
+	}
 	if m.sidePlace != placeChat {
 		return "in the " + m.placeName(), m.placeHints()
 	}
@@ -462,6 +483,9 @@ func (m Model) sideTap(x, y int) (tea.Model, tea.Cmd) {
 	w := max(m.width, minWidth)
 	box := m.sideBoxAt(w)
 	if _, y0, y1 := m.noticeAt(w); y >= y0 && y < y1 {
+		if m.sideSays() == m.newer && m.startsAgain { // Pocket's notice of a newer release: a tap starts again
+			return m.keyed(keyPress(m.keys.main.StartAgain.Keys()[0]))
+		}
 		return m, nil // a notice covers the line: a tap on it does nothing to what is under it
 	}
 	if box.listW > 0 && x < box.listW {
@@ -810,3 +834,6 @@ func (m Model) hostFix(host string) string {
 	}
 	return ""
 }
+
+// boardShown: the Sessions tab is open, the console's home.
+func (m Model) boardShown() bool { return m.tab == tabSessions }

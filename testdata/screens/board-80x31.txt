@@ -1,31 +1,31 @@
  ▰ matchblox · all hosts ▾                                         ● 4 need you
- BOARD 15    machine
+ SESSIONS 15    machine
 ────────────────────────────────────────────────────────────────────────────────
- NEEDS YOU · 4                          WORKING · 3          SHIPPING · 3
-▌╿ spark-search                 ✻ 31m   ✦ flint-ui   ✻       ╿ cinder-ci… ❋  2h
-  stuck CI failed · lint, twice          busy Writing the…    merged deploying
-  #4548 ●━✕┄○┄○┄○  ctx 77%               ctx 40%   ─╴login    #4549 ●━●━●━◉┄○
-  “Lint fails on a file I did not
-  change. I tried twice and stopped.”   ✦ ember-bil… ✻       ╿ flint-api  ✻ 40m
-  ⏎ go in                                agents Three sub…    ci waits for rev…
-                                         ctx 71%              #4560 ●━◉┄○┄○┄○
- ╿ kindle-web                   ✻  9m
-  green #4556 waits for your merge      ✦ spark-docs ✻       ╿ hearth-li… ✻  4m
-  #4556 ●━●━◉┄○┄○  ctx 48%               busy Running the…    ci CI · 6 of 9 j…
-  p merge #4556   ⏎ go in                ctx 22%              #4551 ●━◉┄○┄○┄○
-
- ╿ hearth-api                   ✻  4m
-  asks The plan changes 2 records an…
-  ctx 31%
-  ⏎ go in
-
- ╿ flint-auth                   ✻  2m
-  asks Which way do we fix the login?
-  ctx 62%                     ─╴login
-  ⏎ go in
+ NEEDS YOU · 4  −               │ spark-search ✻ idle · #4548 ci       ctx 77%
+▌╿ spark-search       #4548 ci ✻│
+   CI failed · lint, twice      │
+ ╿ kindle-web      #4556 green ✻│
+   #4556 waits for your merge   │
+ ╿ hearth-api               4m ✻│
+   The plan changes 2 records a…│
+ ≋ login        step 1 of 3 · 3 │
+ ├ ╿ flint-auth             2m ✻│
+ │   Which way do we fix the lo…│
+ ├ ✦ flint-ui                  ✻│
+ └ ╵ flint-api        #4560 ci ✻│
+────────────────────────────────│
+ WORKING · 2  −                 │
+ ✦ ember-billing@gpu-1         ✻│
+ ✦ spark-docs                  ✻│
+────────────────────────────────│
+ HELD · 1  −                    │
+ ╽ kindle-legacy            5h ✻│
+────────────────────────────────│
+ IDLE · 6  −                    │
+ ╵ hearth-limits      #4551 ci ✻│
+ ╵ wick-mobile           23:50 ▣│
+ ╵ hearth-notes@gpu-1       1h ✻│
+ ╵ cinder-ci@gpu… #4549 merged ❋│
+ + new · ✧ 7 tips               │ ›                      ⏎ send to spark-search
 ────────────────────────────────────────────────────────────────────────────────
- QUIET · 5   wick-mobile · hearth-notes · ember-reports · kindle-legacy · tinde…
- + start a new session
- RECOMMENDATIONS · 7
-────────────────────────────────────────────────────────────────────────────────
- ⏎ go in   c copy   s hosts   tab next
+ in the list · ↑↓ choose · ⏎ write · s hosts · g chain · m menu

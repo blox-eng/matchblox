@@ -30,7 +30,7 @@ func flintAt(t *testing.T, w, h int, keys ...string) Model {
 	cur := next
 	for _, k := range keys {
 		var cmd tea.Cmd
-		cur, cmd = keyOrOpen(cur, k)
+		cur, cmd = key(cur, k)
 		drain(cmd)
 	}
 	return cur.(Model)

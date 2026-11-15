@@ -28,7 +28,7 @@ func hostsAt(t *testing.T, now *time.Time, home string, w, h int, peers ...strin
 		conns[p] = newFake()
 		ps = append(ps, Peer{Host: p, Conn: conns[p], Redial: func() (transport.Conn, error) { return newFake(), nil }})
 	}
-	m := boardOnly(New(Options{NoMotion: true, Host: home, Conn: homeConn, Peers: ps, Now: func() time.Time { return *now }}))
+	m := (New(Options{NoMotion: true, Host: home, Conn: homeConn, Peers: ps, Now: func() time.Time { return *now }}))
 	next, _ := m.Update(tea.WindowSizeMsg{Width: w, Height: h})
 	return next.(Model), homeConn, conns
 }

@@ -21,7 +21,7 @@ const demoLine = "This is a demo. Install matchblox to do that."
 func demoConsole(t *testing.T, w int, o Options) Model {
 	t.Helper()
 	o.NoMotion, o.Conn, o.Demo = true, newFake(), demoLine
-	next, _ := boardOnly(New(o)).Update(tea.WindowSizeMsg{Width: w, Height: 30})
+	next, _ := (New(o)).Update(tea.WindowSizeMsg{Width: w, Height: 30})
 	next, _ = next.Update(stateMsg(fixtureState()))
 	m := next.(Model)
 	m.tab, m.splashDone = tabSessions, true
@@ -244,26 +244,17 @@ func standIn(t *testing.T, w int) Model {
 	t.Helper()
 	m := onSession(t, demoSessions(t, w), "flint-auth")
 	m.opt.Demo = demoLine
-	return pressKeys(t, m, "enter")
+	return pressKeys(t, m, "ctrl+o")
 }
 
-func TestCtrlOInTheDemoOpensTheStandInAsEnterDoes(t *testing.T) {
-	m := onSession(t, demoSessions(t, 44), "flint-auth")
-	m.opt.Demo = demoLine
-	m = pressKeys(t, m, "ctrl+o")
+func TestCtrlOInTheDemoOpensTheStandIn(t *testing.T) {
+	m := standIn(t, 44)
 	if !m.standIn || m.flash == demoLine {
 		t.Fatalf("ctrl+o: stand-in %v, flash %q", m.standIn, m.flash)
 	}
-}
-
-func TestEnterInTheDemoOpensTheStandIn(t *testing.T) {
-	m := standIn(t, 44)
-	if !m.standIn {
-		t.Fatal("enter opened no stand-in")
-	}
 	lines := strings.Split(ansi.Strip(m.render()), "\n")
-	if !strings.HasPrefix(strings.TrimSpace(lines[0]), "‹ board") {
-		t.Errorf("row 0 is %q, want the way back to the board", lines[0])
+	if !strings.HasPrefix(strings.TrimSpace(lines[0]), "‹ sessions") {
+		t.Errorf("row 0 is %q, want the way back to Sessions", lines[0])
 	}
 	if last := lines[len(lines)-1]; !strings.Contains(last, standInHint) {
 		t.Errorf("the key line is %q, want %q", last, standInHint)
@@ -277,7 +268,7 @@ func TestTheStandInIsFullScreenOnADesk(t *testing.T) {
 		t.Fatal("132 columns are no desk: the test shows nothing")
 	}
 	lines := strings.Split(ansi.Strip(m.render()), "\n")
-	if !m.standIn || !strings.HasPrefix(strings.TrimSpace(lines[0]), "‹ board") {
+	if !m.standIn || !strings.HasPrefix(strings.TrimSpace(lines[0]), "‹ sessions") {
 		t.Fatalf("stand-in %v, row 0 is %q", m.standIn, lines[0])
 	}
 	if sc := m.draw(132); !sc.placeFull || sc.viewW != 132 {

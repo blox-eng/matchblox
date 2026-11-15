@@ -141,34 +141,37 @@ func TestScreens(t *testing.T) {
 	for _, size := range [][2]int{{44, 31}, {132, 32}} {
 		check(t, twoShipsState(t), "sessionships", size[0], size[1], nil)
 	}
-	night := append([]string{"n"}, strings.Split("merge them on green", "")...)
+	night := append([]string{keysInList, "n"}, strings.Split("merge them on green", "")...)
 	for _, size := range [][2]int{{44, 31}, {104, 38}, {132, 32}} {
-		checkBoard(t, sheetScreen(st, false), "sheet", size[0], size[1], append(night, "tab", "space", "tab"))
+		check(t, sheetScreen(st, false), "sheet", size[0], size[1], append(night, "tab", "space", "tab"))
 	}
 	toStokerTab := []string{"tab", "enter"} // Machine, then its first row: stoker (c copies on the board)
 	for _, size := range [][2]int{{44, 31}, {104, 38}, {132, 32}} {
-		checkBoard(t, tabNight(st), "stoker", size[0], size[1], toStokerTab)
-		checkBoard(t, tabMorning(st), "stokermorning", size[0], size[1], toStokerTab)
+		check(t, tabNight(st), "stoker", size[0], size[1], toStokerTab)
+		check(t, tabMorning(st), "stokermorning", size[0], size[1], toStokerTab)
 	}
-	checkBoard(t, sheetScreen(st, true), "sheetday", 104, 38, []string{"o"})
+	check(t, sheetScreen(st, true), "sheetday", 104, 38, []string{keysInList, "o"})
 	for _, size := range [][2]int{{44, 31}, {104, 38}} {
-		checkBoard(t, tabFamily(st, false), "stokerfamily", size[0], size[1], append(slices.Clone(toStokerTab), "down", "down"))
+		check(t, tabFamily(st, false), "stokerfamily", size[0], size[1], append(slices.Clone(toStokerTab), "down", "down"))
 	}
 	offer := st
 	offer.Doors = []doors.Door{{ID: doors.Update, Title: "Update to v0.43.0", Why: "matchblox v0.43.0 is out. This machine runs v0.42.0.", Sum: "v0.43.0",
 		Preview: "matchblox v0.42.0 → v0.43.0 (linux/amd64)\n  checksum    checked first\n  provenance  checked if gh is installed\n              and logged in\n  replaces\n    /home/user/.local/bin/matchblox"}}
 	offer.Update = &state.UpdateView{Mode: "offer", Current: "v0.42.0", Latest: "v0.43.0"}
-	toDoor := append(slices.Repeat([]string{"up"}, 12), "enter") // up from the cards to the doors line, then its preview
+	// Past the list's last row to its foot's last part, the setup step;
+	// then its preview.
+	toSetup := append(append([]string{keysInList}, slices.Repeat([]string{"down"}, 20)...), "enter")
+	toDoor := append(slices.Clone(toSetup), "enter")
 	for _, size := range [][2]int{{44, 31}, {104, 38}} {
 		check(t, offer, "updatedoor", size[0], size[1], nil)
-		checkBoard(t, offer, "updatedoorpreview", size[0], size[1], toDoor)
+		check(t, offer, "updatedoorpreview", size[0], size[1], toDoor)
 	}
 	failed := offer
 	failed.Doors = slices.Clone(offer.Doors)
 	failed.Doors[0].Why += " The install failed, nothing was changed. Enter tries again, or run: matchblox update. " +
 		"checksum mismatch for matchblox_linux_amd64 · published 3f9a3f9a3f9a… · download c2e1c2e1c2e1…"
 	for _, size := range [][2]int{{44, 31}, {104, 38}} {
-		checkBoard(t, failed, "updatedoorfailed", size[0], size[1], slices.Repeat([]string{"up"}, 12))
+		check(t, failed, "updatedoorfailed", size[0], size[1], toSetup)
 		golden(t, newerNotice(t, st, size[0], size[1], true), "startagain", size[0], size[1])
 	}
 	golden(t, newerNotice(t, st, 44, 31, false), "reopen", 44, 31)
@@ -178,22 +181,22 @@ func TestScreens(t *testing.T) {
 	check(t, twoChains, "familydock", 104, 38, nil)
 	asks := screenMsg{Pane: paneNamed(st, "flint-auth"), At: demoAt, Text: askScreen}
 	for _, size := range [][2]int{{200, 50}, {132, 32}, {44, 31}} {
-		checkBoard(t, st, "chat", size[0], size[1], []string{"enter"}, asks)
+		check(t, st, "chat", size[0], size[1], []string{"enter"}, asks)
 	}
-	checkBoard(t, st, "chatended", 44, 31, []string{"enter"}, screenMsg{Pane: paneNamed(st, "flint-auth"), Gone: true})
+	check(t, st, "chatended", 44, 31, []string{"enter"}, screenMsg{Pane: paneNamed(st, "flint-auth"), Gone: true})
 	for _, size := range surveyGrids {
 		check(t, st, "survey", size[0], size[1], nil, asks)
-		checkBoard(t, st, "surveychat", size[0], size[1], []string{"enter"}, asks)
+		check(t, st, "surveychat", size[0], size[1], []string{"enter"}, asks)
 	}
 	life := st
 	life.Agents = []string{"claude", "codex", "opencode"}
-	newKeys := append([]string{"N", "tab"}, strings.Split("feat/88-rate-limits", "")...)
+	newKeys := append([]string{keysInList, "N", "tab"}, strings.Split("feat/88-rate-limits", "")...)
 	newKeys = append(newKeys, "tab", "tab", "tab")
 	newKeys = append(newKeys, strings.Split("fix the flaky ships test", "")...)
 	for _, size := range [][2]int{{44, 31}, {104, 38}, {132, 32}} {
-		checkBoard(t, life, "new", size[0], size[1], newKeys)
-		checkBoard(t, life, "rename", size[0], size[1], append(append([]string{"r"}, slices.Repeat([]string{"backspace"}, len("spark-docs"))...), strings.Split("docs-1-0", "")...))
-		checkBoard(t, life, "kill", size[0], size[1], []string{"x"})
+		check(t, life, "new", size[0], size[1], newKeys)
+		check(t, life, "rename", size[0], size[1], append(append([]string{keysInList, "r"}, slices.Repeat([]string{"backspace"}, len("spark-docs"))...), strings.Split("docs-1-0", "")...))
+		check(t, life, "kill", size[0], size[1], []string{keysInList, "x"})
 	}
 	pw := askMsg{prompt: askpass.Prompt{Host: "ws-1", Text: "builder@ws-1's password: "}, answer: func(string, bool) {}}
 	hostKey := askMsg{prompt: askpass.Prompt{Host: "ws-1", Confirm: true, Text: "The authenticity of host 'ws-1' can't be established.\n" +
@@ -201,8 +204,8 @@ func TestScreens(t *testing.T) {
 		"+--[ED25519 256]--+\n|    .o+=*o.      |\n|     o=B.+ .     |\n|      +.X o      |\n+----[SHA256]-----+\n" +
 		"This key is not known by any other names.\nAre you sure you want to continue connecting (yes/no/[fingerprint])? "}, answer: func(string, bool) {}}
 	for _, size := range [][2]int{{44, 31}, {104, 38}} {
-		checkBoard(t, st, "ask", size[0], size[1], strings.Split("abc", ""), pw)
-		checkBoard(t, st, "askhostkey", size[0], size[1], []string{"y", "enter"}, hostKey)
+		check(t, st, "ask", size[0], size[1], strings.Split("abc", ""), pw)
+		check(t, st, "askhostkey", size[0], size[1], []string{"y", "enter"}, hostKey)
 	}
 	for _, size := range [][2]int{{44, 31}, {86, 30}, {132, 32}} {
 		golden(t, threeHosts(t, st, size[0], size[1], "fine"), "sessions3", size[0], size[1])
@@ -241,7 +244,7 @@ func threeHosts(t *testing.T, st proto.State, w, h int, gpu string) Model {
 	t.Helper()
 	now := demoAt.Add(-40 * time.Second)
 	conns := map[string]*fakeConn{"gpu-1": newFake(), "ws-1": newFake()}
-	m := boardOnly(New(Options{NoMotion: true, Conn: newFake(), Now: func() time.Time { return now },
+	m := (New(Options{NoMotion: true, Conn: newFake(), Now: func() time.Time { return now },
 		Peers: []Peer{{Host: "gpu-1", Conn: conns["gpu-1"]}, {Host: "ws-1", Conn: conns["ws-1"]}}}))
 	m.viewPrefs.CopyCheckedPhone, m.viewPrefs.CopyCheckedDesk = true, true // the copy check is the board's first-run door
 	next, _ := m.Update(tea.WindowSizeMsg{Width: w, Height: h})
@@ -431,12 +434,9 @@ func check(t *testing.T, st proto.State, name string, w, h int, keys []string, m
 	shoot(t, New(Options{NoMotion: true, Conn: newFake(), Now: func() time.Time { return demoAt }}), st, name, w, h, keys, msgs...)
 }
 
-// checkBoard is check with the old board in the Sessions tab: a shot of
-// the keys only the board has.
-func checkBoard(t *testing.T, st proto.State, name string, w, h int, keys []string, msgs ...tea.Msg) {
-	t.Helper()
-	shoot(t, boardOnly(New(Options{NoMotion: true, Conn: newFake(), Now: func() time.Time { return demoAt }})), st, name, w, h, keys, msgs...)
-}
+// keysInList, first in a shot's keys, gives the keys to the list: a desk
+// starts in the chat's line, where the list's keys type.
+const keysInList = "\x00list"
 
 func shoot(t *testing.T, m Model, st proto.State, name string, w, h int, keys []string, msgs ...tea.Msg) {
 	t.Helper()
@@ -462,8 +462,13 @@ func shoot(t *testing.T, m Model, st proto.State, name string, w, h int, keys []
 		}
 		next, _ = next.Update(msg)
 	}
+	if len(keys) > 0 && keys[0] == keysInList {
+		nm := next.(Model)
+		nm.toList()
+		next, keys = nm, keys[1:]
+	}
 	for _, k := range keys {
-		next, _ = keyOrOpen(next, k)
+		next, _ = key(next, k)
 	}
 	for _, msg := range later {
 		next, _ = next.Update(msg)

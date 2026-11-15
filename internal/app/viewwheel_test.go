@@ -13,7 +13,6 @@ import (
 func deskView(t *testing.T) (Model, *fakeConn) {
 	t.Helper()
 	m := demoSized(t, 160, 32)
-	m.sideOn = true
 	return m, m.conn.(*fakeConn)
 }
 

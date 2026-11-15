@@ -37,10 +37,10 @@ type lineSent struct {
 	host, name, text string
 }
 
-// sideActive: the Sessions tab is the list and the chat, and its keys go
-// to the line or the list before the board's.
+// sideActive: the Sessions tab shows the list and the chat, and its keys
+// go to the line or the list.
 func (m Model) sideActive() bool {
-	return m.sideOn && m.boardShown() && !m.standIn && !m.viewFull()
+	return m.boardShown() && !m.standIn
 }
 
 // sideChosen is the session the list chooses.
@@ -231,6 +231,8 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 		default:
 			cmd = m.listTakes()
 		}
+	case !ok && bkey.Matches(k, append(m.rowActKeys(), bk.Menu, bk.Copy, mk.Park)...):
+		cmd = m.notice(m.noRowWhy())
 	case bkey.Matches(k, bk.Host):
 		if said := m.turnHost(); said != "" {
 			cmd = m.notice(said)
@@ -258,6 +260,17 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 	return m, cmd
 }
 
+// noRowWhy says why the list has no chosen session for a key to act on.
+func (m Model) noRowWhy() string {
+	switch {
+	case m.filter != "":
+		return `nothing matches "` + m.filter + `" · ` + m.keys.main.Back.Help().Key + " clears"
+	case m.boardHost != "":
+		return "no match on " + m.boardHost + " · " + m.keys.board.Host.Help().Key + " turns the host"
+	}
+	return "no session to act on · " + m.keys.main.New.Help().Key + " starts one"
+}
+
 // rowActKeys are the keys that act on the chosen row in the list, as they
 // did on the board's chosen card.
 func (m Model) rowActKeys() []bkey.Binding {
@@ -271,8 +284,6 @@ func (m Model) rowActKeys() []bkey.Binding {
 func (m Model) rowAct(k tea.KeyPressMsg, s sample.Session) (tea.Model, tea.Cmd) {
 	mk := m.keys.main
 	switch {
-	case isShipCard(s) && !bkey.Matches(k, m.keys.board.Merge):
-		return m, m.notice(s.Name + " has no session · " + mk.New.Help().Key + " starts one")
 	case bkey.Matches(k, m.keys.board.Merge):
 		return m, m.boardMerge(s)
 	case bkey.Matches(k, mk.Second):

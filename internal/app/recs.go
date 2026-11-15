@@ -87,6 +87,6 @@ func (m *Model) dismissRec() {
 	}
 	m.refresh()
 	if n := len(m.recs); n > 0 { // the next one takes the selection
-		m.recPick, m.ghostPick = m.recs[min(at, n-1)].ID, 0
+		m.recPick, m.blockedPick = m.recs[min(at, n-1)].ID, 0
 	}
 }

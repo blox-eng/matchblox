@@ -60,3 +60,17 @@ func (m Model) heldWhy(s sample.Session) string {
 	}
 	return "held by the stoker"
 }
+
+// needCount is every session that needs the owner, on every host in view
+// and in every chain, whatever the filters hide: one the owner parked is
+// not counted, nor one on a host that is not reached, nor one on a hidden
+// host that s does not show.
+func (m Model) needCount() int {
+	n := 0
+	for _, s := range m.sideSessions() {
+		if m.sideStateOf(s) == sideNeed && !m.stale(s.Host) && (!m.hostHidden(s.Host) || m.inView(s.Host)) {
+			n++
+		}
+	}
+	return n
+}

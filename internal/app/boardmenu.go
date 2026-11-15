@@ -102,7 +102,7 @@ func (m Model) actItems(s sample.Session) []menuItem {
 		}}
 	}
 	var items []menuItem
-	if _, head := m.headRow(s); !head && !isShipCard(s) && s.Pane != "" {
+	if _, head := m.headRow(s); !head && s.Pane != "" {
 		items = append(items, act("rename", mk.Rename))
 	}
 	if chain := m.chainLabelOf(s); chain != "" {
@@ -151,7 +151,8 @@ func (m Model) shipLink(s sample.Session) (string, int, bool) {
 	return "", 0, false
 }
 
-// openMenu opens s's menu at the cell x, y. It opens only on the board.
+// openMenu opens s's menu at the cell x, y. It opens only on the Sessions
+// tab.
 func (m Model) openMenu(s sample.Session, x, y int) Model {
 	if m.boardShown() {
 		m.menu, m.longPress.on = &boardMenu{pane: paneOf(s), items: m.menuFor(s), x: x, y: y}, false
@@ -160,21 +161,15 @@ func (m Model) openMenu(s sample.Session, x, y int) Model {
 	return m
 }
 
-// openMenuOnChosen is m: the menu of the chosen card, at its first line.
+// openMenuOnChosen is m: the menu of the chosen session, under its row.
 func (m Model) openMenuOnChosen(s sample.Session) Model {
 	w := max(m.width, minWidth)
-	d := m.boardPanel(w, m.bodyRows())
-	x, y := 0, len(d.lines)
-	for spot, k := range d.cards {
-		if k != paneOf(s) || spot.line >= y {
-			continue
-		}
-		x, y = 0, spot.line
-		if i := slices.IndexFunc(d.heads, func(h span) bool { return h.press == spot.col.short() }); i >= 0 && m.layoutAt(w) != Narrow {
-			x = d.heads[i].x0
-		}
+	y := 0
+	if box := m.sideBoxAt(w); box.listW > 0 {
+		_, hits, _ := m.sideList(box.listW, m.bodyRows())
+		y = max(slices.IndexFunc(hits, func(h sideHit) bool { return h.k == paneOf(s) }), 0)
 	}
-	return m.openMenu(s, x+2, m.drawScreen(w).bodyTop+y+1)
+	return m.openMenu(s, 2, m.drawScreen(w).bodyTop+y+1)
 }
 
 // menuKey is k while the menu is open: it takes every key. ↑ ↓ move, ⏎
@@ -289,43 +284,6 @@ func (m Model) menuTap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// boardRightClick is a right-click on the board: on a card it chooses the
-// card and opens its menu at the pointer.
-func (m Model) boardRightClick(ms tea.Mouse) (tea.Model, tea.Cmd) {
-	if !m.chatMarkReach() || m.splashing() {
-		return m, nil
-	}
-	c, s, ok := m.cardAtCell(ms.X, ms.Y)
-	if !ok {
-		return m, nil
-	}
-	m.boardChooseCard(c, s)
-	m.boardMine = paneOf(s)
-	return m.openMenu(s, ms.X, ms.Y), nil
-}
-
-// boardCardOf is the card of pane k on the board, and its column.
-func (m Model) boardCardOf(k paneKey) (boardCol, sample.Session, bool) {
-	b, _ := m.boardDrawOf()
-	for _, c := range boardCols {
-		if i := slices.IndexFunc(b.idx[c], func(s sample.Session) bool { return paneOf(s) == k }); i >= 0 {
-			return c, b.idx[c][i], true
-		}
-	}
-	return 0, sample.Session{}, false
-}
-
-// cardAtCell is the card at the frame's cell x, y, and its column.
-func (m Model) cardAtCell(x, y int) (boardCol, sample.Session, bool) {
-	w := max(m.width, minWidth)
-	sc := m.drawScreen(w)
-	if y < sc.bodyTop || y >= sc.keysAt-1 {
-		return 0, sample.Session{}, false
-	}
-	b, _ := m.boardDrawOf()
-	return m.cardAt(m.boardPanel(w, m.bodyRows()), b, x, y-sc.bodyTop)
-}
-
 // holdPress arms the long press of a left press at ms on a card, after the
 // tap has acted on it: only on a terminal that reports releases, and only
 // while the board takes keys.
@@ -334,19 +292,9 @@ func (m Model) holdPress(next tea.Model, cmd tea.Cmd, ms tea.Mouse) (tea.Model, 
 	if !ok || !nm.sawRelease || !nm.chatMarkReach() {
 		return next, cmd
 	}
-	var pane paneKey
-	if m.sideActive() {
-		k, on := m.sideRowAt(ms.X, ms.Y)
-		if !on {
-			return next, cmd
-		}
-		pane = k
-	} else {
-		_, s, on := m.cardAtCell(ms.X, ms.Y)
-		if !on {
-			return next, cmd
-		}
-		pane = paneOf(s)
+	pane, on := m.sideRowAt(ms.X, ms.Y)
+	if !on {
+		return next, cmd
 	}
 	id := nm.longPress.id + 1
 	nm.longPress = longPress{id: id, x: ms.X, y: ms.Y, pane: pane, on: true}
@@ -372,20 +320,11 @@ func (m Model) pointer(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		return m.dragOn(point{ms.X, ms.Y}), nil
 	case longPressMsg:
-		if m.sideActive() {
-			if !m.longPress.on || msg.id != m.longPress.id || !m.chatMarkReach() {
-				return m, nil
-			}
-			next, _ := m.sideMenuOn(m.longPress.pane, m.longPress.x, m.longPress.y)
-			return next.(Model), nil
-		}
-		c, s, ok := m.boardCardOf(m.longPress.pane)
-		if !m.longPress.on || msg.id != m.longPress.id || !ok || !m.chatMarkReach() {
+		if !m.sideActive() || !m.longPress.on || msg.id != m.longPress.id || !m.chatMarkReach() {
 			return m, nil
 		}
-		m.boardChooseCard(c, s) // a press that waits for its release has not chosen it yet
-		m.boardMine = paneOf(s)
-		return m.openMenu(s, m.longPress.x, m.longPress.y), nil
+		next, _ := m.sideMenuOn(m.longPress.pane, m.longPress.x, m.longPress.y)
+		return next.(Model), nil
 	}
 	return m, nil
 }

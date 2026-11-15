@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -90,24 +91,18 @@ func cutNotice(text string, w int) []string {
 	return wrapPlain(text, w)
 }
 
-// boardNotice is the board's notice row in w columns, over the key line's
-// hairline: a notice, the copy check, a newer release on Pocket or the
-// board's state. tap is the row's tap target (none but for start again).
-// No notice: no row, and the columns take it.
-func (m Model) boardNotice(w int) (lines []string, tap span) {
-	switch {
-	case m.noticeText != "" && m.now().Before(m.noticeUntil):
-		return m.noticeRows(m.noticeText, w), span{}
-	case m.copyCode != "":
-		return m.noticeRows(m.pasteHere(), w), span{}
-	case m.newer != "" && !m.lost && m.beltOnly(): // Pocket has no key line to say it
-		if m.startsAgain {
-			tap = span{0, w, m.keys.main.StartAgain.Keys()[0]}
-		}
-		return m.noticeRows(m.newer, w), tap
+// stateNotice is what the console says of the service's state when
+// nothing else is said: it is lost, its data is old, or the pull requests
+// are read late.
+func (m Model) stateNotice() string {
+	switch age := m.now().Sub(m.snap.At); {
+	case !m.have:
+	case m.lost:
+		return "no service · it redials"
+	case age >= staleAfter && age < 2*time.Minute:
+		return fmt.Sprintf("data is %d s old · the service is slow", int(age.Seconds()))
+	case age >= staleAfter:
+		return fmt.Sprintf("data is %d min old · the service is slow", int(age.Minutes()))
 	}
-	if text := m.boardStateNotice(); text != "" {
-		return m.noticeRows(text, w), span{}
-	}
-	return nil, span{}
+	return strings.Join(m.shipsBehind(), " · ")
 }

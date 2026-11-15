@@ -80,7 +80,6 @@ func choose(m *Model, pid int) {
 	for _, s := range m.snap.Sessions {
 		if s.PID == pid {
 			m.selHost, m.sideAt = s.Host, paneOf(s)
-			m.boardChooseCard(m.columnOf(s), s)
 			return
 		}
 	}

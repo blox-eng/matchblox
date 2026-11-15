@@ -168,8 +168,6 @@ type drawn struct {
 
 // draw is the screen, with an ssh prompt over everything.
 func (m Model) draw(w int) drawn {
-	idx := m.boardIndex()
-	m.frameIdx = &idx
 	sc := m.drawScreen(w)
 	if m.asking() {
 		m.overlayAsk(&sc, w)
@@ -216,12 +214,6 @@ func (m Model) drawScreen(w int) drawn {
 	case m.sideActive():
 		b = m.sideBody(w, room)
 		sc.names, sc.namePanes = named.spans, named.panes
-	case m.boardShown(): // the board draws its tab row from the body's index
-		p := m.boardPanel(w, room)
-		b, sc.lines[1], sc.tabs = p.body, p.tabRow, p.tabSpans
-		if p.noteAt >= 0 {
-			sc.noteAt, sc.noteTap = sc.bodyTop+p.noteAt, p.noteTap
-		}
 	default:
 		b = m.body(w)
 	}
@@ -238,9 +230,6 @@ func (m Model) drawScreen(w int) drawn {
 		sc.keysAt, sc.keys = len(sc.lines)+1, keySpans
 		sc.lines = append(sc.lines, hair, keys)
 	}
-	if m.sideActive() {
-		m.sideNotices(&sc, w)
-	}
 	switch {
 	case m.consenting():
 		m.overlayConsent(&sc, w)
@@ -250,6 +239,9 @@ func (m Model) drawScreen(w int) drawn {
 		m.overlayForm(&sc, w)
 	case m.menu != nil && m.boardShown():
 		m.overlayMenu(&sc, w)
+	}
+	if m.sideActive() { // over a box too: what a box's act says shows
+		m.sideNotices(&sc, w)
 	}
 	return sc
 }
@@ -535,9 +527,6 @@ func (m Model) tabsLine(w int) (string, []span) {
 func (m Model) tabLabel(i int) string {
 	st := m.st
 	name, count := tabNames[i], ""
-	if i == tabSessions && m.sideOn {
-		name = "sessions" // the list and the chat, not the board
-	}
 	switch i {
 	case tabSessions:
 		count = strconv.Itoa(len(m.all.sessions))
@@ -625,9 +614,6 @@ func (m Model) keyLine(w int) (string, []span) {
 	}
 	if m.sideActive() {
 		return m.sideKeyLine(w)
-	}
-	if m.boardShown() {
-		return m.boardKeyLine(w)
 	}
 	hints := slices.DeleteFunc(slices.Clone(m.view().keys(m)), func(h hint) bool { return h == (hint{}) })
 	if _, ok := m.openedView(); ok { // esc comes back to Machine

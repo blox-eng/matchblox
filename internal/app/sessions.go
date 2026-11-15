@@ -210,11 +210,11 @@ func (m Model) firstWaiting() int {
 }
 
 // sessIndex is the selected row of Sessions: the doors, the sessions,
-// the ghost rows, then the recommendations. A door that folds passes the
-// selection to the next door. Nothing picked: the first session that
-// waits, else the first door; with no session, the first ghost row.
+// the blocked hosts, then the recommendations. A door that folds passes
+// the selection to the next door. Nothing picked: the first session that
+// waits, else the first door.
 func (m Model) sessIndex() int {
-	nd, ns, ng := len(m.doors), len(m.snap.Sessions), len(m.ghosts())+len(m.blockedHosts())
+	nd, ns, ng := len(m.doors), len(m.snap.Sessions), len(m.blockedHosts())
 	for i, d := range m.doors {
 		if d.ID == m.doorPick {
 			return i
@@ -228,8 +228,8 @@ func (m Model) sessIndex() int {
 			return nd + ns + ng + i
 		}
 	}
-	if m.ghostPick > 0 {
-		return nd + ns + min(m.ghostPick, ng) - 1
+	if m.blockedPick > 0 {
+		return nd + ns + min(m.blockedPick, ng) - 1
 	}
 	if ns == 0 {
 		return nd
@@ -264,7 +264,7 @@ func (m Model) selectedRec() (advice.Rec, bool) {
 	if m.tab != tabSessions {
 		return advice.Rec{}, false
 	}
-	i := m.sessIndex() - len(m.doors) - len(m.snap.Sessions) - len(m.ghosts()) - len(m.blockedHosts())
+	i := m.sessIndex() - len(m.doors) - len(m.snap.Sessions) - len(m.blockedHosts())
 	if i < 0 || i >= len(m.recs) {
 		return advice.Rec{}, false
 	}
@@ -298,14 +298,6 @@ func (m Model) accountTag(s sample.Session) string {
 		return ""
 	}
 	return accounts.Name(s.AccountDir)
-}
-
-func shift(spans []span, dx int) []span {
-	out := make([]span, len(spans))
-	for i, s := range spans {
-		out[i] = span{s.x0 + dx, s.x1 + dx, s.press}
-	}
-	return out
 }
 
 // lastWords is what the agent said last: its queue row's message while it
@@ -369,15 +361,4 @@ func spread(left, right string, w int) string {
 		return fit(ansi.Truncate(left, max(w-rw-1, 0), "…")+" "+right, w)
 	}
 	return left + strings.Repeat(" ", w-lw-rw) + right
-}
-
-// padTo pads styled text to w cells, cutting it when it is wider.
-func padTo(s string, w int) string {
-	s = ansi.Truncate(s, w, "…")
-	return s + strings.Repeat(" ", max(w-lipgloss.Width(s), 0))
-}
-
-// padLeft right-aligns styled text in w cells.
-func padLeft(s string, w int) string {
-	return strings.Repeat(" ", max(w-lipgloss.Width(s), 0)) + s
 }

@@ -12,6 +12,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/doors"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/state"
@@ -34,15 +35,11 @@ func doorState(ds ...doors.Door) proto.State {
 	return st
 }
 
-// onDoors chooses the board's doors line on its first door, as ↑ from the
-// first card does: the board chooses a card first, where Sessions chose
-// the first door while nobody waited.
+// onDoors opens the setup steps in the chat's place on the first step,
+// as the foot's ! setup does.
 func onDoors(m tea.Model) tea.Model {
 	mm := m.(Model)
-	lines := mm.aboveLines()
-	if i := slices.Index(lines, ""); i >= 0 {
-		mm.boardAbove, mm.boardDoor = len(lines)-i, 0
-	}
+	mm.openPlace(placeSetup)
 	return mm
 }
 
@@ -53,11 +50,12 @@ func onDoor(m tea.Model, i int) tea.Model {
 	return mm
 }
 
-// onRec chooses the recommendation id under the board's columns, as ↓
-// from the last card does.
+// onRec opens the tips in the chat's place on the tip id, as the foot's
+// tips do.
 func onRec(m Model, id string) Model {
-	if i := slices.Index(m.belowLines(), id); i >= 0 {
-		m.boardBelow = i + 1
+	m.openPlace(placeTips)
+	if i := slices.IndexFunc(m.recs, func(r advice.Rec) bool { return r.ID == id }); i >= 0 {
+		m.sideTip = i
 	}
 	return m
 }
@@ -83,24 +81,6 @@ func doorsAndQueue(ds ...doors.Door) proto.State {
 	st := queueState()
 	st.Doors = ds
 	return st
-}
-
-func TestDoorsAboveTheSessions(t *testing.T) {
-	m, _ := doorsBoard(t, 100, doorsAndQueue(tmuxDone, hooksDoor, wayBack))
-	out := ansi.Strip(m.render())
-	if set, waits := lineOf(t, m, "SET UP"), lineOf(t, m, "NEEDS YOU"); set > waits {
-		t.Fatalf("doors are not above the sessions (%d, %d):\n%s", set, waits, out)
-	}
-	if !strings.Contains(out, "Add the queue hooks") || strings.Contains(out, "Install tmux") {
-		t.Fatalf("open doors drawn, done ones folded:\n%s", out)
-	}
-	var next tea.Model = m
-	for range len(m.recs) + 1 {
-		next, _ = key(next, "up")
-	}
-	if !strings.Contains(actionLine(next), "⏎ set up   x close") { // the board's doors line
-		t.Fatalf("no door keys:\n%s", screen(next))
-	}
 }
 
 func TestNoDoorsNoRegion(t *testing.T) {
@@ -318,12 +298,13 @@ func TestDoneDoorFolds(t *testing.T) {
 	done := hooksDoor
 	done.Done = true
 	next, _ := m.Update(stateMsg(doorState(done, wayBack)))
+	next = onDoors(next)
 	out := ansi.Strip(next.(Model).render())
 	if strings.Contains(out, "Add the queue hooks") || !strings.Contains(out, "Add the way back") {
 		t.Fatalf("hooks did not fold:\n%s", out)
 	}
-	if mm := next.(Model); mm.boardDoors()[mm.doorIndex(mm.boardDoors())].ID != doors.WayBack { // the board's doors line
-		t.Fatalf("the doors line names %+v, want the next door", mm.boardDoors()[mm.doorIndex(mm.boardDoors())])
+	if mm := next.(Model); mm.boardDoors()[mm.doorIndex(mm.boardDoors())].ID != doors.WayBack { // the setup place
+		t.Fatalf("the setup place names %+v, want the next door", mm.boardDoors()[mm.doorIndex(mm.boardDoors())])
 	}
 }
 
@@ -348,30 +329,6 @@ func TestDoorsOnAPhone(t *testing.T) {
 	}
 }
 
-func TestTheQueueComesFirstWhenSomeoneWaits(t *testing.T) {
-	m, _ := loadedWith(t, 100, doorsAndQueue(hooksDoor))
-	var ran []string
-	m.opt.Run = func(argv []string) error { ran = argv; return nil }
-	if it, ok := m.selectedSession(); !ok || it.Pane != "%1" {
-		t.Fatalf("selected %+v, %v: an agent that waits comes before a door", it, ok)
-	}
-	next, cmd := key(m, "ctrl+o")
-	if cmd == nil {
-		t.Fatal("no jump")
-	}
-	fed(next, cmd)
-	if strings.Join(ran, " ") != "tmux switch-client -t %1" {
-		t.Fatalf("ran %v", ran)
-	}
-	up := next
-	for range len(next.(Model).recs) + 1 {
-		up, _ = key(up, "up")
-	}
-	if up.(Model).sessIndex() != 0 {
-		t.Fatal("up from the sessions, over the recommendations, does not reach the door")
-	}
-}
-
 func longDoor() doors.Door {
 	d := hooksDoor
 	var b strings.Builder
@@ -384,7 +341,7 @@ func longDoor() doors.Door {
 
 func TestALongDiffIsReadToTheEndBeforeY(t *testing.T) {
 	f := newFake()
-	m := boardOnly(New(Options{NoMotion: true, Conn: f}))
+	m := (New(Options{NoMotion: true, Conn: f}))
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	next, _ = next.Update(stateMsg(doorState(longDoor(), wayBack, guideDoor)))
 	mm := next.(Model)

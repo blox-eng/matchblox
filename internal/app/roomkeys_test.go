@@ -173,19 +173,6 @@ func TestTalkRefusalKeepsTheDraft(t *testing.T) {
 	}
 }
 
-func TestBracketsWalkTheChains(t *testing.T) {
-	m, _ := roomWith(t, fuseState(t, mockupChain, []string{"flint-auth", "spark-docs"}), "hearth-api")
-	first := m.room.k
-	m, _ = send(t, m, "]")
-	if m.room.k == first || m.room.k.id != "c2" {
-		t.Fatalf("] went to %+v", m.room.k)
-	}
-	m, _ = send(t, m, "[")
-	if m.room.k != first {
-		t.Fatalf("[ went to %+v", m.room.k)
-	}
-}
-
 func TestEscStepsBackOneLevel(t *testing.T) {
 	st := headState(t, runningPlan(), true)
 	st.Queue = nil

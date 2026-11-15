@@ -10,7 +10,6 @@ import (
 
 	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/advice"
@@ -256,30 +255,6 @@ func (m Model) recOutcome(r advice.Rec) (mark, out string) {
 	return m.st.accent.Render("✓ "), tilde(run.out)
 }
 
-// recActions are the two steps of a recommendation with their keys.
-func (m Model) recActions(r advice.Rec, w int) []string {
-	st := m.st
-	var out []string
-	for _, a := range []struct {
-		key string
-		act *advice.Action
-	}{{m.keys.main.Open.Help().Key, r.Primary}, {m.keys.main.Second.Help().Key, r.Second}} {
-		if a.act == nil {
-			continue
-		}
-		cmd := strings.Join(a.act.Steps[0], " ")
-		if n := len(a.act.Steps); n > 1 {
-			cmd += fmt.Sprintf("  (+%d more)", n-1)
-		}
-		label := a.act.Label
-		if a.act.Destructive {
-			label += ", asks " + m.keys.confirm.Yes.Help().Key
-		}
-		out = append(out, fit(" "+st.accent.Render(a.key+" ")+st.text.Render(label+": ")+st.muted.Render(cmd), w))
-	}
-	return out
-}
-
 // wrap fits s in lines of w columns, each with a space before it. A word
 // no line holds (a checksum, a long path) breaks across lines.
 func wrap(s string, w int, render func(...string) string) []string {
@@ -400,9 +375,4 @@ func (m Model) historyPanel(w int) []string {
 // dismissMark is the selected recommendation's tap target for d.
 func dismissMark(st styles, b bkey.Binding) string {
 	return keyWord(b, st.accent, st.muted, " "+b.Help().Desc)
-}
-
-// dismissWidth is the width of the dismiss mark and the space after it.
-func (m Model) dismissWidth() int {
-	return lipgloss.Width(dismissMark(m.st, m.keys.main.Dismiss)) + 1
 }

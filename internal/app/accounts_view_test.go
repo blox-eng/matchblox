@@ -66,7 +66,7 @@ func TestDefaultBlocksKeepTheirNames(t *testing.T) {
 func sideOnPane(t *testing.T, w int, st proto.State, pane string) Model {
 	t.Helper()
 	m, _ := loadedWith(t, w, st)
-	m.tab, m.sideOn = tabSessions, true
+	m.tab = tabSessions
 	for _, s := range m.snap.Sessions {
 		if s.Pane == pane {
 			m.sideAt = paneOf(s)
@@ -110,7 +110,8 @@ func TestAsksWinsOverSigningIn(t *testing.T) {
 		m, _ := loadedWith(t, w, st)
 		m = selectPane(t, m, "%1").(Model) // the chosen card says what the row said
 		row := screen(m)
-		if !strings.Contains(row, "asks") || strings.Contains(row, "signing in") {
+		asks := strings.Contains(row, "asks") || strings.Contains(row, "needs your permission") // the chat's head, or the row's words
+		if !asks || strings.Contains(row, "signing in") {
 			t.Errorf("width %d: the row hides its ask: %q", w, row)
 		}
 	}

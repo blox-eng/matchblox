@@ -2,7 +2,6 @@ package app
 
 import (
 	"cmp"
-	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -10,7 +9,6 @@ import (
 
 	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/keycmd"
@@ -34,27 +32,6 @@ func (m *Model) once(key, first, said string) tea.Cmd {
 		return nil
 	}
 	return m.notice(said)
-}
-
-// boardSelected is the chosen card's match.
-func (m Model) boardSelected() (sample.Session, bool) {
-	b, _ := m.boardDrawOf()
-	return b.chosen, b.picked
-}
-
-// boardChooseCard makes s the chosen card of column c, and opens c. A move
-// to another match starts its peek.
-func (m *Model) boardChooseCard(c boardCol, s sample.Session) {
-	if was, ok := m.boardSelected(); !ok || paneOf(was) != paneOf(s) {
-		m.startChatMark(s)
-		m.goArmed = paneKey{}
-	}
-	pick := maps.Clone(m.boardPick)
-	if pick == nil {
-		pick = map[boardCol]paneKey{}
-	}
-	pick[c] = paneOf(s)
-	m.boardAt, m.boardPick, m.boardAbove, m.boardBelow = c, pick, 0, 0
 }
 
 // chooseRow makes s the list's chosen session. A move to another
@@ -81,34 +58,18 @@ func askOf(s sample.Session) string {
 	return s.Ask.ID
 }
 
-// chooseByHand marks the chosen card as the person's choice, after a key
-// that moved it.
-func (m *Model) chooseByHand() {
-	if s, ok := m.boardSelected(); ok {
-		m.boardMine = paneOf(s)
-	}
-}
-
-// chatMarkOn keeps the mark guard on the chosen match. The match coming
-// into reach of the digits (the first frame, a layer over the board that
-// closes, the menu that closes, a line above the columns left), a choice
-// that moved with no key (a card that left its column, a filter) and a
-// new question on the chosen match each start the guard again. A chosen line above the
-// columns that is gone is no choice, and a menu off the board or on a
-// match that is gone closes.
+// chatMarkOn keeps the mark guard on the chosen session. The session
+// coming into reach of the digits (the first frame, a layer over the list
+// that closes, the menu that closes), a choice that moved with no key (a
+// session that ended, a filter) and a new question on the chosen session
+// each start the guard again. A menu off the Sessions tab or on a session
+// that is gone closes.
 func (m Model) chatMarkOn() Model {
-	if m.boardAbove > len(m.aboveLines()) {
-		m.boardAbove = 0
-	}
-	m.boardBelow = min(m.boardBelow, len(m.belowLines())) // a folded or dismissed one gives the choice back up
 	m = m.copyCheckOn()
 	if _, ok := m.menuOn(); m.menu != nil && !ok {
 		m.menu = nil
 	}
-	if b, ok := m.boardSelected(); !ok || paneOf(b) != m.boardMine {
-		m.boardMine = paneKey{} // the choice moved by itself
-	}
-	s, ok := m.markTarget()
+	s, ok := m.sideChosen()
 	reach := ok && m.chatMarkReach()
 	was := m.peekReached
 	m.peekReached = reach
@@ -123,16 +84,7 @@ func (m Model) chatMarkOn() Model {
 	return m
 }
 
-// markTarget is the match the digits answer: the list's chosen session,
-// else the board's chosen card.
-func (m Model) markTarget() (sample.Session, bool) {
-	if m.sideActive() {
-		return m.sideChosen()
-	}
-	return m.boardSelected()
-}
-
-// chatMarkReach: a digit reaches the board, with no layer or menu over it.
+// chatMarkReach: a digit reaches the chat, with no layer or menu over it.
 func (m Model) chatMarkReach() bool {
 	return m.boardShown() && m.menu == nil && !m.standIn && !m.viewFull() && m.focus(keyPress("1")) == layerMain
 }
@@ -163,24 +115,20 @@ func (m Model) chatMarks(s sample.Session) (armed, sent int) {
 // starts, to a question the card did not draw, or while the service is
 // lost.
 func (m Model) answerFromChat(digit string) (tea.Model, tea.Cmd) {
-	s, ok := m.markTarget()
+	s, ok := m.sideChosen()
 	q, _ := m.oneChoice(s)
 	n, _ := strconv.Atoi(digit)
 	armed, sent := m.chatMarks(s)
-	said, answer, queued := "", tea.Cmd(nil), false
+	said, answer := "", tea.Cmd(nil)
 	switch {
 	case !ok || sent > 0:
 		// no card, or the card says its answer is sent
 	case !m.chatAnswers(s) && m.asksNow(s):
-		said = m.cardName(s) + " asks in its pane · " + m.keys.main.Open.Help().Key + " goes in"
+		said = m.cardName(s) + " asks in its pane · " + m.keys.main.Jump.Help().Key + " goes in"
 	case !m.chatAnswers(s):
 		said = m.cardName(s) + " asks no question"
-	case m.sideActive() && m.cannotReach(s.Host) != "":
+	case m.cannotReach(s.Host) != "":
 		m.peekArmed, said = 0, m.cannotReach(s.Host)
-	case !m.sideActive() && (m.lost || m.conn == nil):
-		m.peekArmed, said = 0, "not sent: no service · it redials"
-	case s.Host != m.opt.Host && !m.sideActive(): // the chat draws a question on any host; a card does not
-		said = "not sent: " + m.cardName(s) + " is on " + m.nameOf(s.Host) + " · " + m.keys.main.Open.Help().Key + " goes in"
 	case paneOf(s) != m.peekPane || askOf(s) != m.peekAsk:
 		m.startChatMark(s) // a question the card has not drawn yet
 		said = "not sent: " + m.cardName(s) + " asks something new — look again"
@@ -196,15 +144,12 @@ func (m Model) answerFromChat(digit string) (tea.Model, tea.Cmd) {
 			said = why // not in line: the mark and the digits stay
 			break
 		}
-		m.peekArmed, m.peekSent, m.peekSentAsk, m.peekSentPane, queued = 0, n, askOf(s), s.Pane, true
-		said = "sent " + digit + " to " + m.cardName(s) + " · now in " + colWork.name()
+		m.peekArmed, m.peekSent, m.peekSentAsk, m.peekSentPane = 0, n, askOf(s), s.Pane
+		said = "sent " + digit + " to " + m.cardName(s) + " · now in " + sideWork.head()
 	default:
 		m.peekArmed, m.peekArmedAt = n, m.now()
 	}
 	note := m.once("digit", "A digit marks an answer now. Press it again to send.", said)
-	if queued && !m.sideActive() {
-		return m.boardActed(), tea.Batch(answer, note)
-	}
 	return m, tea.Batch(answer, note)
 }
 
@@ -231,147 +176,49 @@ func isDigit(k tea.KeyPressMsg) bool {
 	return k.Mod == 0 && len(k.Text) == 1 && k.Text[0] >= '0' && k.Text[0] <= '9'
 }
 
-// boardMove chooses the card d cards down the open column.
-// Up from the first card chooses the last line above the columns, and down
-// from the last card the first line under them.
-func (m *Model) boardMove(d int) {
-	b, _ := m.boardDrawOf()
-	ss := b.idx[b.open]
-	i := slices.IndexFunc(ss, func(s sample.Session) bool { return b.picked && paneOf(s) == paneOf(b.chosen) })
-	switch {
-	case d < 0 && i <= 0 && len(m.aboveLines()) > 0:
-		m.boardAbove = 1
-	case d > 0 && b.picked && i == len(ss)-1 && len(m.belowLines()) > 0:
-		m.boardBelow = 1
-	case b.picked:
-		m.boardChooseCard(b.open, ss[clampMove(i, d, len(ss))])
-	}
-}
-
-// aboveMove is ↑ (d -1) and ↓ (d 1) on a line above the columns: up
-// through them, and down from the last one to the first card of the open
-// column.
-func (m *Model) aboveMove(d int) {
-	if m.boardAbove = min(m.boardAbove-d, len(m.aboveLines())); m.boardAbove > 0 {
-		return
-	}
-	m.boardAbove = 0
-	if b, _ := m.boardDrawOf(); len(b.idx[b.open]) > 0 {
-		m.boardChooseCard(b.open, b.idx[b.open][0])
-	}
-}
-
-// belowMove is ↓ (d 1) and ↑ (d -1) on a line under the columns: down
-// through them, and up from the first one back to the card it left.
-func (m *Model) belowMove(d int) {
-	if m.boardBelow = min(m.boardBelow+d, len(m.belowLines())); m.boardBelow <= 0 {
-		m.boardBelow = 0
-		m.recPick, m.ghostPick = "", 0
-	}
-}
-
-// belowKey is ⏎, x or d on a line under the columns: the ghost row and
-// a recommendation take them as their rows in Sessions did.
+// belowKey is ⏎, x or d on the tip with the id line: it takes them as
+// its row in Sessions did.
 func (m Model) belowKey(line string, k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	m.pickBelow(line)
 	return m.key(k)
 }
 
-// pickBelow selects a line under the columns: the recommendation with the
-// id line while it shows, else the ghost row.
+// pickBelow selects the tip with the id line while it shows.
 func (m *Model) pickBelow(line string) {
-	m.doorPick, m.recPick, m.ghostPick = "", "", 1
-	if line != "" && slices.ContainsFunc(m.recs, func(r advice.Rec) bool { return r.ID == line }) {
-		m.recPick, m.ghostPick = line, 0
+	m.doorPick, m.recPick, m.blockedPick = "", "", 0
+	if slices.ContainsFunc(m.recs, func(r advice.Rec) bool { return r.ID == line }) {
+		m.recPick = line
 	}
 }
 
-// boardOnRow: Sessions' selection is what the board chose (onChoice): a
-// card of a session, a line under the columns, or a service's door. A ship
-// card, a host line, the console's own doors, a search that matches nothing,
-// and an open menu have no row.
-func (m Model) boardOnRow() bool {
+// listOnRow: the list's choice is a row of Sessions (onChoice). A search
+// that matches nothing, and an open menu, have no row.
+func (m Model) listOnRow() bool {
 	if m.menu != nil {
 		return false // the menu takes every key; its go in asks for itself
 	}
-	if s, ok := m.boardSelected(); ok {
-		return !isShipCard(s)
-	}
-	if _, ok := m.belowChosen(); ok {
-		return true
-	}
-	line, ok := m.aboveChosen()
-	return ok && line == "" && m.doorIndex(m.boardDoors()) >= len(m.copyDoors())
+	_, ok := m.sideChosen()
+	return ok
 }
 
-// onChoice is m with the selection of Sessions on what the board chose:
-// the layers over the board (the take-over question) read that selection,
-// so they act on the card, or the line, the key was pressed on.
+// onChoice is m with the selection of Sessions on the list's choice: the
+// layers over the list (the take-over question) read that selection, so
+// they act on the session the key was pressed on. With the setup steps in
+// the chat's place, the selection is the step they name.
 func (m Model) onChoice() Model {
-	if m.sideActive() {
-		if s, ok := m.sideChosen(); ok {
-			return m.onCard(s)
-		}
+	if !m.sideActive() {
 		return m
 	}
-	if !m.boardShown() {
-		return m
-	}
-	if s, ok := m.boardSelected(); ok {
-		return m.onCard(s)
-	}
-	if line, ok := m.belowChosen(); ok {
-		m.pickBelow(line)
-	}
-	if line, ok := m.aboveChosen(); ok && line == "" {
-		if i := m.doorIndex(m.boardDoors()) - len(m.copyDoors()); i >= 0 {
+	if m.sidePlace == placeSetup {
+		if i := m.doorIndex(m.boardDoors()) - len(m.copyDoors()); i >= 0 && i < len(m.doors) {
 			m.selectRow(i)
 		}
+		return m
+	}
+	if s, ok := m.sideChosen(); ok {
+		return m.onCard(s)
 	}
 	return m
-}
-
-// doorKey is x on the doors line: a service's door closes, behind its y,
-// as from its row in Sessions. false: the door is the console's own.
-func (m Model) doorKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
-	ds, own := m.boardDoors(), len(m.copyDoors())
-	i := m.doorIndex(ds)
-	if i < own {
-		return m, nil, false
-	}
-	m.selectRow(i - own)
-	next, cmd := m.key(k)
-	return next, cmd, true
-}
-
-// aboveOpen is ⏎ on a line above the columns: a blocked host gets its fix,
-// a host that is not reached is dialed again, and the setup doors open as
-// from their row in Sessions.
-func (m Model) aboveOpen(host string, k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	if host == "" {
-		return m.openBoardDoor()
-	}
-	if b, ok := m.blockedOf(host); ok {
-		return m.unblockHost(b)
-	}
-	if i := m.peerAt(host); i >= 0 {
-		return m.peerTryAgain(i)
-	}
-	return m, nil
-}
-
-// openColumn is a tap on a column's name: it opens the column on the card
-// it had chosen, else its first.
-func (m *Model) openColumn(c boardCol) {
-	b, _ := m.boardDrawOf()
-	ss := b.idx[c]
-	if len(ss) == 0 {
-		m.boardAt = c
-		return
-	}
-	k, ok := m.boardPick[c]
-	at := slices.IndexFunc(ss, func(s sample.Session) bool { return ok && paneOf(s) == k })
-	m.boardChooseCard(c, ss[max(at, 0)])
 }
 
 // clearBoardFilters is a tap on the count: NEEDS YOU shows, every chain,
@@ -382,10 +229,7 @@ func (m *Model) clearBoardFilters() {
 	}
 	m.boardChain, m.boardHost, m.filter, m.searching = "", "", "", false
 	m.refresh()
-	m.peekAt, m.boardAt = m.now(), colNeed
-	if ss := m.boardColumn(colNeed); len(ss) > 0 {
-		m.boardChooseCard(colNeed, ss[0])
-	}
+	m.peekAt = m.now()
 }
 
 // boardChainOf is g: the board narrows to the chosen card's chain. A card
@@ -404,46 +248,6 @@ func (m *Model) boardChainOf(s sample.Session, ok bool) tea.Cmd {
 	return cmd
 }
 
-// turnChain is ] (d 1) and [ (d -1): the next or the previous chain on
-// the board, from the first or the last when none is chosen.
-func (m *Model) turnChain(d int) {
-	names := m.boardChains()
-	if len(names) == 0 {
-		return
-	}
-	i := slices.Index(names, m.boardChain)
-	switch {
-	case i < 0 && d > 0:
-		i = 0
-	case i < 0:
-		i = len(names) - 1
-	default:
-		i = (i + d + len(names)) % len(names)
-	}
-	if k := slices.IndexFunc(m.roomKeys(), func(k chainKey) bool { return m.chainLabel(k) == names[i] }); k >= 0 {
-		*m = m.openRoom(m.roomKeys()[k])
-	}
-}
-
-// boardActed chooses, after an act on the chosen card, the first other card
-// of NEEDS YOU; with none, the choice stays.
-func (m Model) boardActed() Model {
-	if _, below := m.belowChosen(); !m.boardShown() || below {
-		return m // an act on a line under the columns keeps it, with what came of it
-	}
-	b, shown := m.boardDrawOf()
-	if !slices.Contains(shown, colNeed) {
-		return m
-	}
-	for _, s := range b.idx[colNeed] {
-		if !b.picked || paneOf(s) != paneOf(b.chosen) {
-			m.boardChooseCard(colNeed, s)
-			break
-		}
-	}
-	return m
-}
-
 // onCard is m with the selection of Sessions on s, so a key that acts on
 // that selection acts on the chosen card.
 func (m Model) onCard(s sample.Session) Model {
@@ -455,190 +259,17 @@ func (m Model) onCard(s sample.Session) Model {
 	return m
 }
 
-// boardKey is k on the board: its own keys, and the keys that act on a
-// match, on the chosen card. false: the tabs take k.
-func (m Model) boardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
-	if !m.boardShown() || m.standIn || m.viewFull() {
-		return m, nil, false
-	}
-	if m.menu != nil { // the menu takes every key
-		next, cmd := m.menuKey(k)
-		return next, cmd, true
-	}
-	bk, mk := m.keys.board, m.keys.main
-	if bkey.Matches(k, mk.Back) && m.waiting() { // the record wait takes esc before the board
-		cmd := m.switchNow()
-		return m, cmd, true
-	}
-	if !m.have && m.opt.Layered && bkey.Matches(k, mk.Back) {
-		return m, nil, false // a host that never answered: esc goes back to Hosts
-	}
-	if m.room != nil && m.copyCode == "" {
-		if next, cmd, took := m.roomBoardKey(k); took {
-			return next, cmd, true
-		}
-	}
-	s, ok := m.boardSelected()
-	line, above := m.aboveChosen()
-	under, below := m.belowChosen()
-	m.flash = ""
-	var cmd tea.Cmd
-	switch {
-	case ok && (isDigit(k) || bkey.Matches(k, cardKeys(bk, mk)...)) && !m.cardDrawn(s):
-		// A screen too short for the chosen card: no key acts on a card it does not show.
-		cmd = m.notice("no card is shown")
-	case m.copyCode != "" && bkey.Matches(k, mk.Back):
-		m.copyCode = "" // the check closes, unchecked
-		if m.noticeText == m.pasteHere() {
-			m.noticeText = ""
-		}
-	case above && bkey.Matches(k, mk.Up):
-		m.aboveMove(-1)
-	case above && bkey.Matches(k, mk.Down):
-		m.aboveMove(1)
-	case above && bkey.Matches(k, mk.Back):
-		m.boardAbove = 0 // back to the card
-	case above && bkey.Matches(k, mk.Open):
-		next, cmd := m.aboveOpen(line, k)
-		return next, cmd, true
-	case above && line == "" && bkey.Matches(k, mk.Second):
-		if next, cmd, took := m.doorKey(k); took {
-			return next, cmd, true
-		}
-		cmd = m.notice("no card is chosen · ↓ goes back to the cards")
-	case (above || below) && isDigit(k):
-		// a digit answers a card, and no card is chosen
-	case below && bkey.Matches(k, mk.Up):
-		m.belowMove(-1)
-	case below && bkey.Matches(k, mk.Down):
-		m.belowMove(1)
-	case below && bkey.Matches(k, mk.Back):
-		m.belowMove(-m.boardBelow) // back to the card
-	case below && bkey.Matches(k, mk.Open, mk.Second, mk.Dismiss):
-		next, cmd := m.belowKey(under, k)
-		return next, cmd, true
-	case bkey.Matches(k, mk.Up):
-		m.boardMove(-1)
-		m.chooseByHand()
-	case bkey.Matches(k, mk.Down):
-		m.boardMove(1)
-		m.chooseByHand()
-	case bkey.Matches(k, mk.Back):
-		// The menu took esc first; then the mark, the search, the chain.
-		m.goArmed = paneKey{}
-		switch armed, _ := m.chatMarks(s); {
-		case ok && armed > 0:
-			m.peekArmed = 0
-		case m.filter != "":
-			m.filter, m.peekAt = "", m.now()
-			m.refresh()
-		case m.room != nil:
-			m = m.closeRoom()
-		case m.boardChain != "":
-			m.boardChain, m.peekAt = "", m.now()
-		}
-	case bkey.Matches(k, bk.Copy):
-		cmd = m.boardCopy(s, ok)
-	case bkey.Matches(k, bk.Host):
-		cmd = m.once("host", bk.Host.Help().Key+" changes the host now. The order of a column is fixed.", m.turnHost())
-	case bkey.Matches(k, bk.Chain):
-		cmd = m.boardChainOf(s, ok)
-	case bkey.Matches(k, bk.NextChain):
-		m.turnChain(1)
-	case bkey.Matches(k, bk.PrevChain):
-		m.turnChain(-1)
-	case isDigit(k): // never a tab on the board
-		next, cmd := m.answerFromChat(k.Text)
-		return next, cmd, true
-	case !ok && len(m.snap.Sessions) > 0 && bkey.Matches(k, bk.Merge, bk.Menu, mk.Second, mk.Grant, mk.Open, mk.Into, mk.Jump,
-		mk.Park, mk.Rename, mk.Switch, mk.Dismiss, mk.Stoke, mk.StokeChain, mk.Night, mk.Order):
-		// A line above or under the columns is chosen, a search or a host leaves
-		// no card: never a row of Sessions the person
-		// cannot see. The notice names the fix that is true.
-		switch {
-		case above:
-			cmd = m.notice("no card is chosen · ↓ goes back to the cards")
-		case below:
-			cmd = m.notice("no card is chosen · ↑ goes back to the cards")
-		case m.filter != "":
-			cmd = m.notice(`nothing matches "` + m.filter + `" · ` + mk.Back.Help().Key + " clears")
-		case m.boardHost != "":
-			cmd = m.notice("no match on " + m.boardHost + " · " + bk.Host.Help().Key + " turns the host")
-		default:
-			cmd = m.notice("no card is chosen")
-		}
-	case !ok && bkey.Matches(k, bk.Merge, bk.Menu, mk.Second, mk.Grant):
-		// no match at all: nothing to act on
-	case !ok:
-		return m, nil, false
-	case isShipCard(s) && bkey.Matches(k, mk.Open, mk.Into, mk.Jump):
-		next, cmd := m.boardInto(s)
-		return next, cmd, true
-	case isShipCard(s) && !bkey.Matches(k, bk.Menu, bk.Merge):
-		// no session: no pane to act on, nothing to kill, park or rename
-		cmd = m.notice(s.Name + " has no session · " + mk.Open.Help().Key + " starts one")
-	case bkey.Matches(k, bk.Menu):
-		m = m.openMenuOnChosen(s)
-	case bkey.Matches(k, bk.Merge):
-		cmd = m.boardMerge(s)
-	case bkey.Matches(k, mk.Second):
-		cmd = m.boardKill(s)
-	case bkey.Matches(k, mk.Grant) && m.onPocket() && m.goWaitsHere(s): // the belt's y is a tap: arm, then give
-		next, cmd := m.armGo(s, mk.Grant.Help().Key+" again gives the go: "+m.goWhat(s))
-		return next, cmd, true
-	case bkey.Matches(k, mk.Grant):
-		next, cmd := m.boardGo(s)
-		return next, cmd, true
-	case bkey.Matches(k, mk.Open, mk.Into, mk.Jump):
-		next, cmd := m.boardInto(s)
-		return next, cmd, true
-	case bkey.Matches(k, mk.Park, mk.New, mk.Rename, mk.Switch, mk.Exited, mk.Dismiss,
-		mk.Stoke, mk.StokeChain, mk.Night, mk.Order, mk.Search):
-		next, cmd := m.onCard(s).key(k)
-		return next, cmd, true
-	default:
-		return m, nil, false
-	}
-	return m, cmd, true
-}
-
-// cardKeys are the keys that act on the chosen card.
-func cardKeys(bk boardKeys, mk mainKeys) []bkey.Binding {
-	return []bkey.Binding{bk.Merge, bk.Menu, bk.Copy, bk.Chain, mk.Second, mk.Grant, mk.Open, mk.Into, mk.Jump,
-		mk.Park, mk.Rename, mk.Switch, mk.Dismiss, mk.Stoke, mk.StokeChain, mk.Night, mk.Order}
-}
-
-// cardDrawn: the board draws the card of s on the screen it has now.
-func (m Model) cardDrawn(s sample.Session) bool {
-	d := m.boardPanel(max(m.width, minWidth), m.bodyRows())
-	for _, k := range d.cards {
-		if k == paneOf(s) {
-			return true
-		}
-	}
-	return false
-}
-
 // boardInto is ⏎: into the pane of s, then the first other wait is chosen.
 func (m Model) boardInto(s sample.Session) (tea.Model, tea.Cmd) {
-	if sh, ok := m.shipOfCard(s); ok { // a ship no session owns: a session starts on it
-		next := m.takeShip(sh)
-		cmd := next.flashNotice("")
-		return next, cmd
-	}
-	next, cmd := m.onCard(s).intoSelected()
-	if nm, ok := next.(Model); ok && nm.pending == nil && !nm.standIn {
-		next = nm.boardActed() // a jump that waits for its y chooses on the y; the stand-in keeps its match
-	}
-	return next, cmd
+	return m.onCard(s).intoSelected()
 }
 
 // boardCopy is c: the chosen card's last message, whole, on the clipboard.
 func (m *Model) boardCopy(s sample.Session, ok bool) tea.Cmd {
-	first := m.keys.board.Copy.Help().Key + " copies now. The stoker is on its card."
+	first := m.keys.board.Copy.Help().Key + " copies now: the last message, whole."
 	switch {
 	case !ok:
-		return m.once("copy", first, "nothing to copy: no card is chosen")
+		return m.once("copy", first, "nothing to copy: no session is chosen")
 	case m.lastWords(s) == "":
 		return m.once("copy", first, "nothing to copy: "+s.Name+" said nothing yet")
 	}
@@ -662,7 +293,7 @@ func (m *Model) boardMerge(s sample.Session) tea.Cmd {
 	}
 	// once keeps the views, which clears the flash: it goes before refuse,
 	// which says in the flash why a host takes no merge.
-	note := m.once("merge", m.keys.board.Merge.Help().Key+" merges now. The ships are on their cards.", said)
+	note := m.once("merge", m.keys.board.Merge.Help().Key+" merges now: the pull request that waits for you.", said)
 	if ok {
 		m.pending, m.previewTop = m.onRowHost(m.mergeAction(sh)), 0
 		m.refuse()
@@ -727,18 +358,13 @@ func (m Model) goWhat(s sample.Session) string {
 	return m.keys.main.Grant.Help().Desc
 }
 
-// boardGo is y: the go that a stoker step waits for on the chosen match.
-// Once the go is sent, the choice moves on.
+// boardGo is y: the go that a stoker step waits for on the chosen session.
 func (m Model) boardGo(s sample.Session) (tea.Model, tea.Cmd) {
 	r, ok := m.goStep(s)
 	if !ok {
 		return m, m.notice("no step waits for your go on " + s.Name)
 	}
-	next, cmd := m.grant(r)
-	if nm, ok := next.(Model); ok && cmd != nil {
-		next = nm.boardActed()
-	}
-	return next, cmd
+	return m.grant(r)
 }
 
 // goArmedOn: a first tap, or a first y on Pocket, armed the go of s, and
@@ -759,210 +385,6 @@ func (m Model) armGo(s sample.Session, first string) (tea.Model, tea.Cmd) {
 	cmd := m.notice(first)
 	m.goArmed = paneOf(s)
 	return m, cmd
-}
-
-// boardTapGo is a tap on a card's go (armGo).
-func (m Model) boardTapGo(s sample.Session) (tea.Model, tea.Cmd) {
-	g := m.keys.main.Grant
-	return m.armGo(s, "tap "+g.Help().Key+" again to "+g.Help().Desc)
-}
-
-// boardHints are the board's keys on the key line: the chosen card's, then
-// c s, then ←→ and tab. A phone shows c s only: the chosen card shows its
-// own keys.
-func (m Model) boardHints(w int) []hint {
-	bk, mk := m.keys.board, m.keys.main
-	if m.menu != nil { // the menu takes every key
-		return []hint{hintFor(mk.Up, ""), hintFor(mk.Open, "do"), hintFor(mk.Back, "close")}
-	}
-	if !m.have && m.opt.Layered { // a host that never answered: the way back
-		return []hint{hintFor(mk.Back, "hosts"), hintFor(mk.Quit, "")}
-	}
-	tail := []hint{hintFor(bk.Copy, ""), hintFor(bk.Host, "")}
-	cancel := hintFor(mk.Back, "cancel") // the copy check waits for its paste
-	if b, _ := m.boardDrawOf(); m.have && b.none && m.copyCode == "" && m.boardAbove == 0 {
-		// No session at all: only the keys that act on an empty board.
-		return []hint{hintFor(mk.Open, "new session"), hintFor(mk.NextTab, "")}
-	}
-	if m.layoutAt(w) == Narrow {
-		if m.copyCode != "" {
-			return append([]hint{cancel}, tail...)
-		}
-		return tail
-	}
-	var hs []hint
-	line, above := m.aboveChosen()
-	under, below := m.belowChosen()
-	row, own := m.roomChosen()
-	switch b, _ := m.boardDrawOf(); {
-	case m.copyCode != "":
-		hs = []hint{cancel}
-	case own:
-		hs = m.roomHints(row)
-	case above && line == "" && m.doorIndex(m.boardDoors()) >= len(m.copyDoors()):
-		hs = []hint{hintFor(mk.Open, "set up"), hintFor(mk.Second, "close")}
-	case above && line == "":
-		hs = []hint{hintFor(mk.Open, "set up")}
-	case above:
-		hs = []hint{hintFor(mk.Open, "try again")}
-	case below:
-		hs = m.belowHints(under)
-	case b.picked && m.cardDrawn(b.chosen):
-		q, answers := m.offersDigits(b.chosen)
-		armed, sent := m.chatMarks(b.chosen)
-		hs, _ = m.cardHints(b.chosen, cardOpts{sel: true, armed: armed}, len(q.Options), answers && sent == 0)
-	}
-	return append(append(hs, tail...), hintFor(mk.NextTab, ""))
-}
-
-// belowHints are the keys of a line under the columns: the ghost row's,
-// or the recommendation id's.
-func (m Model) belowHints(id string) []hint {
-	mk := m.keys.main
-	i := slices.IndexFunc(m.recs, func(r advice.Rec) bool { return r.ID == id })
-	if id == "" || i < 0 {
-		return []hint{hintFor(mk.Open, "new session")}
-	}
-	hs := []hint{hintFor(mk.Open, "do")}
-	if m.recs[i].Second != nil {
-		hs = append(hs, hintFor(mk.Second, "other"))
-	}
-	return append(hs, hintFor(mk.Dismiss, "dismiss"))
-}
-
-// boardKeyLine is the board's key line: the notice of a newer service
-// first, then its hints, three cells apart. A hint that does not fit
-// leaves whole, with every one after it.
-func (m Model) boardKeyLine(w int) (string, []span) {
-	st := m.st
-	line, x := " ", 1
-	if m.newer != "" { // first: its key stays when the line is cut
-		line += st.warn.Render(m.newer)
-		x += lipgloss.Width(m.newer)
-	}
-	var spans []span
-	for i, h := range m.boardHints(w) {
-		gap := ""
-		if i > 0 || m.newer != "" {
-			gap = "   "
-		}
-		part := st.text.Render(h.key) + st.muted.Render(" "+h.label)
-		if x+len(gap)+lipgloss.Width(part) > w {
-			break
-		}
-		line, x = line+gap+part, x+len(gap)
-		if h.press != "" {
-			spans = append(spans, span{x, x + lipgloss.Width(part), h.press})
-		}
-		x += lipgloss.Width(part)
-	}
-	return fit(line, w), spans
-}
-
-// boardTap is a tap at x on line y of the board's body: on a column's name,
-// the QUIET drawer's too, and on a phone's page mark it opens that column; on a host
-// line it dials the host again. On a card it chooses the card, and a tap
-// on one of the card's keys presses that key. A destructive key only opens
-// the consent box.
-func (m Model) boardTap(x, y int) (tea.Model, tea.Cmd) {
-	w := max(m.width, minWidth)
-	d := m.boardPanel(w, m.bodyRows())
-	b, _ := m.boardDrawOf()
-	if h, ok := spanAt(d.heads, x); ok && y == d.headAt && h.press == stokerMark {
-		return m.openStokerPage(), nil
-	}
-	if at, ok := d.roomAt[y]; ok {
-		return m.roomTap(at)
-	}
-	if h, ok := spanAt(d.heads, x); ok && y == d.headAt {
-		c := boardCols[slices.IndexFunc(boardCols[:], func(c boardCol) bool { return c.short() == h.press })]
-		m.openColumn(c)
-		return m, nil
-	}
-	if host, ok := d.hostAt[y]; ok {
-		return m.aboveOpen(host, keyPress(m.keys.main.Open.Keys()[0]))
-	}
-	if y == d.doorsAt {
-		lines := m.aboveLines()
-		m.boardAbove = len(lines) - slices.Index(lines, "") // counted from the columns up
-		return m.openBoardDoor()
-	}
-	if at, ok := d.underAt[y]; ok {
-		return m.underTap(at, x, w)
-	}
-	if sp, ok := spanAt(d.taps[y], x); ok && sp.press == colQuiet.short() {
-		m.openColumn(colQuiet) // the drawer's name
-		return m, nil
-	}
-	c, s, ok := m.cardAt(d, b, x, y)
-	if !ok {
-		return m, nil
-	}
-	again := m.chosenByHand(s)
-	m.boardChooseCard(c, s)
-	m.boardMine = paneOf(s) // a tap chooses by hand
-	sp, ok := spanAt(d.taps[y], x)
-	goIn := ok && sp.press == m.keys.main.Open.Keys()[0]
-	switch {
-	case (!ok || sp.press == "" || goIn) && again: // the chosen card again: in
-		return m.boardInto(s)
-	case !ok || sp.press == "" || goIn: // a tap goes in only on a card the person chose
-		return m, nil
-	case sp.press == m.keys.main.Grant.Keys()[0]:
-		m.goArmed = m.goArmedTap // the tap disarmed it; a tap on its own go gives it
-		return m.boardTapGo(s)
-	}
-	return m.keyed(keyPress(sp.press))
-}
-
-// underTap is a tap at x on a line under the columns, as on its row in
-// Sessions: the ghost row opens New session, and the chosen
-// recommendation's dismiss mark dismisses it.
-func (m Model) underTap(at string, x, w int) (tea.Model, tea.Cmd) {
-	mk := m.keys.main
-	switch line, below := m.belowChosen(); {
-	case at == atGhost:
-		m.boardBelow = 1
-		return m.belowKey("", keyPress(mk.Open.Keys()[0]))
-	case below && at == line && x >= w-m.dismissWidth():
-		return m.belowKey(line, keyPress(mk.Dismiss.Keys()[0]))
-	}
-	return m, nil
-}
-
-// cardAt is the card at x on line y of the board d draws, and its column.
-func (m Model) cardAt(d boardDrawn, b boardDraw, x, y int) (boardCol, sample.Session, bool) {
-	inColumn := func(c boardCol) bool {
-		if m.layoutAt(max(m.width, minWidth)) == Narrow {
-			return true // the page is the one column
-		}
-		i := slices.IndexFunc(d.heads, func(h span) bool { return h.press == c.short() })
-		return i < 0 || x >= d.heads[i].x0 && x < d.heads[i].x1 // no head: the QUIET drawer, the full width
-	}
-	for _, c := range boardCols {
-		k, ok := d.cards[boardSpot{y, c}]
-		if !ok || !inColumn(c) {
-			continue
-		}
-		at := slices.IndexFunc(b.idx[c], func(s sample.Session) bool { return paneOf(s) == k })
-		if at < 0 {
-			return c, sample.Session{}, false
-		}
-		return c, b.idx[c][at], true
-	}
-	return 0, sample.Session{}, false
-}
-
-// boardTabTap is a tap on the crumb of the tab row: esc all shows every
-// chain. false: the tap is on a tab.
-func (m Model) boardTabTap(press string) (Model, bool) {
-	if !m.boardShown() {
-		return m, false
-	}
-	if press == m.keys.main.Back.Help().Key { // the room is the narrowing: both go
-		return m.closeRoom(), true
-	}
-	return m, false
 }
 
 // beltKey is a key of the board on Pocket's belt (design decision 10): the
@@ -998,26 +420,22 @@ func (m Model) beltKeys() []beltKey {
 		return []beltKey{home, up, down, beltOf(mk.Open, "", "do", true), beltOf(mk.Back, "", "close", true)}
 	}
 	board := m.boardShown() && !m.consenting()
-	s, card := m.boardSelected()
-	_, above := m.aboveChosen()
-	card = board && card && !above
+	s, card := m.sideChosen()
+	card = board && card
 	ks := []beltKey{home}
 	if card {
 		ks = append(ks, m.cardBelt(s)...)
 	}
 	_, head := m.headRow(s)
-	chains := board && len(m.boardChains()) > 0
 	return append(ks, up, down, beltOf(mk.Open, "", "", true),
 		beltOf(bk.Copy, "", "copy", card),
 		beltOf(bk.Menu, "", "menu", card),
 		beltOf(bk.Chain, "", "chain", card && m.chainLabelOf(s) != ""),
 		beltOf(bk.Host, "", "hosts", board && m.hostCount() > 1),
 		beltOf(mk.NextTab, "⇥", "machine", !m.consenting()),
-		beltOf(mk.Second, "", "kill", card && !head && !isShipCard(s) && m.killAction(s) != nil),
-		beltOf(bk.NextChain, "", "", chains),
-		beltOf(bk.PrevChain, "", "", chains),
+		beltOf(mk.Second, "", "kill", card && !head && m.killAction(s) != nil),
 		beltOf(mk.Search, "", "", board),
-		beltOf(mk.Park, "", "park", card && !isShipCard(s)),
+		beltOf(mk.Park, "", "park", card),
 	)
 }
 
@@ -1064,7 +482,7 @@ func (m Model) beltValue() string {
 		return "menu"
 	}
 	armed := ""
-	if s, ok := m.boardSelected(); ok && m.boardShown() {
+	if s, ok := m.sideChosen(); ok && m.boardShown() {
 		if a, _ := m.chatMarks(s); a > 0 {
 			armed = strconv.Itoa(a)
 		} else if m.goArmedOn(s) {
@@ -1082,8 +500,7 @@ func (m Model) beltValue() string {
 //	dim   = "" | tok *( "," tok )   the keys that are off, in the belt's order
 //	key   = tok [ "*" ]
 //
-// A tok is a beltKey's Key: 1 2 3 p y up down enter c m g v s u tab x
-// left right ] [ / z. A card's key that is off (a digit on another host)
+// A tok is a beltKey's Key: 1 2 3 p y up down enter c m g s tab x / z. A card's key that is off (a digit on another host)
 // is a dim tok. ◂ has none and is never sent. At most beltMax bytes:
 // dim toks leave whole from the right, then card keys from the right.
 // The other values ("" off the board, "box", "menu") come from beltValue.

@@ -1,38 +1,38 @@
  ▰ matchblox · all hosts ▾                                                                                                                         ● 4 need you
- BOARD 15    machine
+ SESSIONS 15    machine
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- NEEDS YOU · 4                                            WORKING · 3                           SHIPPING · 3                          QUIET · 5
-▌╿ spark-search                                   ✻ 31m   ✦ flint-ui                    ✻       ╿ cinder-ci @gpu-1            ❋  2h   ╿ wick-mobile     ▣ 23:50
-  stuck CI failed · lint, twice                            busy Writing the test for a token…    merged deploying                     ╿ hearth-notes @gp… ✻  1h
-  #4548 ●━✕┄○┄○┄○  ctx 77%                                 ctx 40%                    ─╴login    #4549 ●━●━●━◉┄○  ctx 37%             ╿ ember-reports     ⬢  3h
-  “Lint fails on a file I did not change. I tried twice                                                                               ╿ kindle-legacy     ✻  5h
-  and stopped.”                                           ✦ ember-billing @gpu-1        ✻       ╿ flint-api                   ✻ 40m   ╿ tinder-scratch @… ·  2d
-  ⏎ go in                                                  agents Three subagents read the i…    ci waits for review
-                                                           ctx 71%                               #4560 ●━◉┄○┄○┄○  ctx 44%   ─╴login
- ╿ kindle-web                                     ✻  9m
-  green #4556 waits for your merge                        ✦ spark-docs                  ✻       ╿ hearth-limits               ✻  4m
-  #4556 ●━●━◉┄○┄○  ctx 48%                                 busy Running the suite.               ci CI · 6 of 9 jobs
-  p merge #4556   ⏎ go in                                  ctx 22%                               #4551 ●━◉┄○┄○┄○  ctx 55%
-
- ╿ hearth-api                                     ✻  4m
-  asks The plan changes 2 records and removes none.
-  ctx 31%
-  ⏎ go in
-
- ╿ flint-auth                                     ✻  2m
-  asks Which way do we fix the login?
-  ctx 62%                                       ─╴login
-  ⏎ go in
-
-
-
-
-
-
-
-
-
- + start a new session
- RECOMMENDATIONS · 7
+ NEEDS YOU · 4  −                       │ spark-search ✻ idle · #4548 ci                                                        ctx 77%  ctrl+o expand · m menu
+▌╿ spark-search               #4548 ci ✻│
+   CI failed · lint, twice              │
+ ╿ kindle-web              #4556 green ✻│
+   #4556 waits for your merge           │
+ ╿ hearth-api                       4m ✻│
+   The plan changes 2 records and remov…│
+ ≋ login                step 1 of 3 · 3 │
+ ├ ╿ flint-auth                     2m ✻│
+ │   Which way do we fix the login?     │
+ ├ ✦ flint-ui                          ✻│
+ └ ╵ flint-api                #4560 ci ✻│
+────────────────────────────────────────│
+ WORKING · 2  −                         │
+ ✦ ember-billing@gpu-1                 ✻│
+ ✦ spark-docs                          ✻│
+────────────────────────────────────────│
+ HELD · 1  −                            │
+ ╽ kindle-legacy                    5h ✻│
+────────────────────────────────────────│
+ IDLE · 6  −                            │
+ ╵ hearth-limits              #4551 ci ✻│
+ ╵ wick-mobile                   23:50 ▣│
+ ╵ hearth-notes@gpu-1               1h ✻│
+ ╵ cinder-ci@gpu-1        #4549 merged ❋│
+ ╵ ember-reports                    3h ⬢│
+ ╵ tinder-scratch@gpu-1             2d ·│
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+ + new · ✧ 7 tips                       │ ›                                                                                              ⏎ send to spark-search
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ⏎ go in   c copy   s hosts   tab next
+ in the list · ↑↓ choose · ⏎ write · s hosts · g chain · m menu

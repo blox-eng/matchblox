@@ -23,7 +23,8 @@ func sideConsole(t *testing.T, st proto.State) (Model, *time.Time) {
 	clock := boardAt
 	m, _ := loadedWith(t, 160, st)
 	m.opt.Now = func() time.Time { return clock }
-	m.tab, m.sideOn = tabSessions, true
+	m.tab = tabSessions
+	m.toLine()
 	m.tell("digit")
 	m.peekReached = false // the guard starts again on the test's clock
 	next, _ := m.Update(noticeMsg{})
@@ -118,7 +119,7 @@ func TestEnterSendsTheLineToItsSession(t *testing.T) {
 	next, _ = next.Update(stateMsg(hostState()))
 	next, _ = next.Update(peerMsg{host: "ws-2", conn: ws, msg: stateMsg(hostState(sess(4242, "flint-auth", "%7", nil)))})
 	p := next.(Model)
-	p.tab, p.sideOn = tabSessions, true
+	p.tab = tabSessions
 	p = pressOn(typeLine(p, "go on"), "enter")
 	if got := messageActs(ws); len(got) != 1 || got[0].RecID != "message:%7" || got[0].Text != "go on" {
 		t.Fatalf("ws-2 got %+v", ws.acts())
@@ -225,7 +226,7 @@ func TestDigitJustBeforeAQuestionTypes(t *testing.T) {
 func TestArrowsChooseInDrawnOrder(t *testing.T) {
 	m := loginChain(t, nil)
 	m.opt.Now = func() time.Time { return boardAt }
-	m.tab, m.sideOn = tabSessions, true
+	m.tab = tabSessions
 	order := m.sideOrder()
 	if len(order) != 3 {
 		t.Fatalf("order %v", order)
@@ -235,8 +236,11 @@ func TestArrowsChooseInDrawnOrder(t *testing.T) {
 			t.Fatalf("↓ %d chose %v, want %v", i, m.chosenSide(), order[i])
 		}
 	}
-	if m = pressOn(m, "down"); m.chosenSide() != order[2] {
-		t.Fatalf("↓ past the last chose %v", m.chosenSide())
+	if m = pressOn(m, "down"); m.chosenSide() != order[2] || m.footAt != 1 {
+		t.Fatalf("↓ past the last chose %v, the foot's part %d", m.chosenSide(), m.footAt)
+	}
+	if m = pressOn(m, "up"); m.chosenSide() != order[2] || m.footAt != 0 {
+		t.Fatalf("↑ from the foot chose %v, the foot's part %d", m.chosenSide(), m.footAt)
 	}
 	if m = pressOn(m, "up"); m.chosenSide() != order[1] {
 		t.Fatalf("↑ chose %v, want %v", m.chosenSide(), order[1])
@@ -298,7 +302,7 @@ func TestListKeys(t *testing.T) {
 	} {
 		t.Run(c.key, func(t *testing.T) {
 			m := loginChain(t, nil)
-			m.tab, m.sideOn = tabSessions, true
+			m.tab = tabSessions
 			m = pickSide(t, m, "flint-auth")
 			m.tell("copy")
 			m = pressOn(m, "esc", c.key)
@@ -311,7 +315,7 @@ func TestListKeys(t *testing.T) {
 		})
 	}
 	m := loginChain(t, nil)
-	m.tab, m.sideOn = tabSessions, true
+	m.tab = tabSessions
 	m = pressOn(m, "esc", "w")
 	if m.keysIn != focusLine || m.lines[m.chosenSide()] != "w" {
 		t.Fatalf("w in the list: keys in %v, the line holds %q", m.keysIn, m.lines[m.chosenSide()])
@@ -423,7 +427,7 @@ func TestUnreachedHostKeepsTheText(t *testing.T) {
 	next, _ = next.Update(stateMsg(hostState()))
 	next, _ = next.Update(peerMsg{host: "ws-2", conn: ws, msg: stateMsg(hostState(sess(4242, "flint-auth", "%7", nil)))})
 	m := next.(Model)
-	m.tab, m.sideOn = tabSessions, true
+	m.tab = tabSessions
 	m.peers[m.peerAt("ws-2")].lost = true
 	m = pressOn(typeLine(m, "go on"), "enter")
 	if got := m.lines[m.chosenSide()]; got != "go on" {
@@ -485,7 +489,7 @@ func peerSide(t *testing.T, home, peer proto.State) (Model, *fakeConn, *fakeConn
 	hc, ws := newFake(), newFake()
 	m := New(Options{NoMotion: true, Conn: hc, Peers: []Peer{{Host: "ws-2", Conn: ws}}})
 	m.opt.Now = func() time.Time { return clock }
-	m.tab, m.sideOn = tabSessions, true
+	m.tab = tabSessions
 	m.tell("digit")
 	var next tea.Model = m
 	next, _ = next.Update(tea.WindowSizeMsg{Width: 160, Height: 38})

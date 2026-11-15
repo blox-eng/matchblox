@@ -30,8 +30,8 @@ func hostsConsole(t *testing.T, hidden ...string) (Model, *time.Time, map[string
 	m = upd(t, m, helloMsg(proto.Hello{Version: proto.Version, Host: "ws-1"}))
 	m = upd(t, m, stateMsg(waiting(1, "hearth-api", "%1", now)))
 	m = upd(t, m, peerMsg{host: "ws-2", conn: conns["ws-2"], msg: stateMsg(waiting(2, "flint-auth", "%2", now))})
-	m = boardOn(m)
-	m.tab, m.sideOn, m.keysIn, m.hiddenHosts = tabSessions, true, focusList, hidden
+	m = consoleOn(m)
+	m.tab, m.keysIn, m.hiddenHosts = tabSessions, focusList, hidden
 	return m, &now, conns
 }
 
@@ -80,8 +80,8 @@ func TestHUnhidesAndAllHostsShowsIt(t *testing.T) {
 	}
 	r.update(stateMsg(waiting(1, "hearth-api", "%1", time.Now())))
 	r.update(peerMsg{host: "ws-2", conn: r.conns["ws-2"], msg: stateMsg(waiting(2, "flint-auth", "%2", time.Now()))})
-	r.sh.cur = boardOn(r.sh.cur)
-	r.sh.cur.tab, r.sh.cur.sideOn, r.sh.cur.keysIn = tabSessions, true, focusList
+	r.sh.cur = consoleOn(r.sh.cur)
+	r.sh.cur.tab, r.sh.cur.keysIn = tabSessions, focusList
 	if strings.Contains(panelText(r.sh.cur, 60, 20), "flint-auth") {
 		t.Fatalf("all hosts shows the hidden ws-2:\n%s", panelText(r.sh.cur, 60, 20))
 	}
@@ -171,9 +171,8 @@ func lostHidden(t *testing.T) Model {
 }
 
 func TestHiddenLostHostIsNamedNowhereInAllHosts(t *testing.T) {
-	for _, side := range []bool{false, true} {
+	for _, side := range []bool{true} {
 		m := lostHidden(t)
-		m.sideOn = side
 		if f := strings.Join(frameOf(m), "\n"); strings.Contains(f, "ws-2") || strings.Contains(f, "stoker") {
 			t.Errorf("side %v: all hosts names the hidden ws-2 or its stoker:\n%s", side, f)
 		}
@@ -207,8 +206,8 @@ func TestHiddenHostShowsItsTroubleWhenShown(t *testing.T) {
 func TestAnUnlinkedHiddenHostSaysWhereToShowIt(t *testing.T) {
 	now := boardAt
 	m, _, _ := hostsAt(t, &now, "ws-1", 160, 40)
-	m = boardOn(upd(t, m, stateMsg(waiting(1, "hearth-api", "%1", now))))
-	m.tab, m.sideOn, m.keysIn, m.hiddenHosts = tabSessions, true, focusList, []string{"this machine"}
+	m = consoleOn(upd(t, m, stateMsg(waiting(1, "hearth-api", "%1", now))))
+	m.tab, m.keysIn, m.hiddenHosts = tabSessions, focusList, []string{"this machine"}
 	for _, k := range []string{"s", "h"} {
 		if got := pressOn(m, k).noticeText; got != "this machine is hidden · Machine › Hosts shows it" {
 			t.Errorf("%s: notice %q", k, got)

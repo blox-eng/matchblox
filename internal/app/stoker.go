@@ -176,11 +176,11 @@ func (m Model) asksTakeOver(k tea.KeyPressMsg) bool {
 	if m.standIn { // the demo's world, which has no stoker
 		return false
 	}
-	if m.sideActive() && !bkey.Matches(k, m.keys.main.Jump) {
-		return false // the line and the list type and choose: only a jump goes into a pane
+	if m.sideActive() && !bkey.Matches(k, m.keys.main.Jump) && (!m.inList() || !bkey.Matches(k, m.rowActKeys()...)) {
+		return false // the line types and the list chooses: only a jump and the row's acts take a session
 	}
-	if m.boardShown() && !m.boardOnRow() {
-		return false // Sessions' row is not what the board shows: the key acts on no session of it
+	if m.boardShown() && !m.listOnRow() {
+		return false // the list chose no session: the key acts on no session
 	}
 	s, onSession := m.selectedSession()
 	if _, head := m.headRow(s); onSession && head && bkey.Matches(k, m.keys.main.Open, m.keys.main.Into, m.keys.main.Jump) {

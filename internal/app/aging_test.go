@@ -14,8 +14,8 @@ import (
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
-// TestExitedAgentsStayQuiet: exited agents are one faint line under the
-// sessions; e lists them with the parent that keeps them and the fix.
+// TestExitedAgentsStayQuiet: exited agents are one faint part of the
+// list's foot; e lists them with the parent that keeps them and the fix.
 func TestExitedAgentsStayQuiet(t *testing.T) {
 	for _, w := range []int{50, 120} {
 		st := fixtureState()
@@ -24,14 +24,13 @@ func TestExitedAgentsStayQuiet(t *testing.T) {
 		}
 		m, _ := loadedWith(t, w, st)
 		var next tea.Model = m
-		next, _ = key(next, "1")
 		out := screen(next)
-		if !strings.Contains(out, "137 exited agents · e shows them") || strings.Contains(out, "7000") {
+		if !strings.Contains(out, "137 exited") || strings.Contains(out, "7000") {
 			t.Fatalf("width %d: the exited agents are not one quiet line:\n%s", w, out)
 		}
 		next, _ = key(next, "e")
 		out = screen(next)
-		for _, want := range []string{"137 EXITED AGENTS", "systemd (pid 3214249) has not reaped them", "systemctl --user daemon-reexec", "7000"} {
+		for _, want := range []string{"137 exited · systemd pid 3214249", "systemctl --user daemon-reexec", "pids 7000"} {
 			if !strings.Contains(out, want) {
 				t.Fatalf("width %d: expanded lacks %q:\n%s", w, want, out)
 			}
@@ -68,18 +67,18 @@ func TestOldSessionsSinkEvenWhenQueued(t *testing.T) {
 }
 
 // TestTheFixFitsTheParent: zombies of PID 1 need the system manager, not
-// the user one; one agent is "agent".
+// the user one.
 func TestTheFixFitsTheParent(t *testing.T) {
 	st := fixtureState()
 	st.Exited = []sample.Exited{{PID: 9001, Parent: 1, ParentComm: "systemd"}}
-	m, _ := loadedWith(t, 120, st)
-	next, _ := key(m, "1")
-	if out := screen(next); !strings.Contains(out, "1 exited agent · e shows it") {
+	var next tea.Model
+	next, _ = loadedWith(t, 120, st)
+	if out := screen(next); !strings.Contains(out, "1 exited") {
 		t.Fatalf("singular:\n%s", out)
 	}
 	next, _ = key(next, "e")
 	out := screen(next)
-	if !strings.Contains(out, "sudo systemctl daemon-reexec reaps them") || strings.Contains(out, "--user") {
+	if !strings.Contains(out, "sudo systemctl daemon-reexec") || strings.Contains(out, "--user") {
 		t.Fatalf("pid 1 fix:\n%s", out)
 	}
 }

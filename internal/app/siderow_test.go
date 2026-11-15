@@ -175,7 +175,7 @@ func TestSideMatchHasAGlyphForEachState(t *testing.T) {
 	m := loginChain(t, nil)
 	want := map[sideState]string{sideNeed: "╿", sideWork: "✦", sideHeld: "╽", sideIdle: "╵"}
 	for h, g := range want {
-		if got := ansi.Strip(m.sideMatch(h)); got != g {
+		if got := ansi.Strip(m.sideMatch(sample.Session{}, h)); got != g {
 			t.Errorf("%s: %q, want %q", h.head(), got, g)
 		}
 	}

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // showHostMsg asks the shell to show host in all hosts again: Show writes
@@ -134,4 +135,46 @@ func (m Model) hostWord() string {
 // unreachedWord is a host that does not answer, and since when.
 func (m Model) unreachedWord(host string) string {
 	return m.nameOf(host) + " not reached · since " + brief(m.now().Sub(m.stateAt(host)))
+}
+
+// unreached are the hosts of the foot's trouble parts: each host the
+// console cannot read (blockedHosts), then each other host that is not
+// reached, whose last state shows. An unnamed home host has no part: its
+// own trouble is the screen's.
+func (m Model) unreached() []string {
+	var out []string
+	for _, b := range m.blockedHosts() {
+		if b.host != "" {
+			out = append(out, b.host)
+		}
+	}
+	for _, h := range m.namedHosts() {
+		if h != m.opt.Host && m.stale(h) && !slices.Contains(out, h) {
+			out = append(out, h)
+		}
+	}
+	return out
+}
+
+// blockedOf is host's blocked row, when the console cannot read it.
+func (m Model) blockedOf(host string) (blockedHost, bool) {
+	bs := m.blockedHosts()
+	if i := slices.IndexFunc(bs, func(b blockedHost) bool { return b.host == host }); i >= 0 {
+		return bs[i], true
+	}
+	return blockedHost{}, false
+}
+
+// boardHostHit is where the header head has the host filter: a tap there
+// does what s does.
+func (m Model) boardHostHit(head string) span {
+	if !m.boardShown() || m.hostCount() == 1 {
+		return span{}
+	}
+	lead, word := " ▰ matchblox · ", m.hostWord()
+	if !strings.HasPrefix(ansi.Strip(head), lead+word) {
+		return span{} // short of room the header drops the host
+	}
+	x := ansi.StringWidth(lead)
+	return span{x, x + ansi.StringWidth(word), m.keys.board.Host.Keys()[0]}
 }

@@ -69,10 +69,6 @@ type Options struct {
 	NoticeFor time.Duration
 	// NoMotion makes every motion an instant change.
 	NoMotion bool
-	// Board draws the old board in the Sessions tab in place of the list
-	// and the chat: the replay's and the demo's stories, until they follow
-	// the new screen.
-	Board bool
 	// OutsideTmux: the console does not run in tmux, so going to a pane
 	// attaches to it, and the console comes back when tmux detaches.
 	OutsideTmux bool
@@ -110,10 +106,6 @@ type Options struct {
 	// Keys finds and sets up the builder's own key for the login to the
 	// host (design §3.3). Nil: the console offers no key.
 	Keys *Keys
-	// Here is the root of the Git repo the console was launched in; "" when
-	// it was launched elsewhere, or over SSH and from the phone, where the
-	// launch folder means nothing. Sessions' ghost row starts there.
-	Here string
 	// Host is the host this console reaches over SSH; "" is this machine.
 	// Its tmux moves and door commands run there, with the builder's own
 	// ssh login.
@@ -235,8 +227,6 @@ type action struct {
 	agent       string                      // a start on a new account: the last agent once it ran
 	paneAgent   string                      // a switch, and the jump after it: the agent the pane runs once the switch ran
 	climb       *climb                      // a rung of the key ladder
-	ghost       bool                        // a ghost row of Sessions: it opens N on where
-	where       string                      // a ghost row: the folder N opens on ("": N as it is)
 	host        string                      // the host of the row it acts on; "": the home host, as a peer is never ""
 	tty         string                      // a jump or a switch: the marked client that asked; "" unmarked
 	asker       bool                        // a jump of this machine's tmux: it moves only its tty's client, else the desk's
@@ -351,7 +341,7 @@ type Model struct {
 	selHost     string // the host of selPID: PIDs repeat across hosts
 	orphanPID   int
 	recPick     string // the selected recommendation, above the sessions
-	ghostPick   int    // the ghost row, then the blocked host's row, picked in Sessions, from 1; 0 is none
+	blockedPick int    // the blocked host's row picked in Sessions, from 1; 0 is none
 	chose       bool   // a session was picked; before, the first that waits is
 	gitSel      int
 	shipReport  *proto.Ships
@@ -471,7 +461,6 @@ type Model struct {
 	used   proto.Used
 	wrepos []whereRepo
 	wfrom  []string
-	wghost []whereRepo // the ghost rows' repos, built with wrepos
 	// clones are the clones the service runs and the ones that ended in
 	// the last minute (#176).
 	clones []proto.Clone
@@ -510,20 +499,10 @@ type Model struct {
 	// Model: a tap and a wheel tick find what they hit in it.
 	shown *shownFrame
 
-	// boardAt is the board's open column, and boardPick the chosen card of
-	// each column.
-	boardAt   boardCol
-	boardPick map[boardCol]paneKey
-	// boardChain and boardHost narrow the board to one chain and one host,
+	// boardChain and boardHost narrow the list to one chain and one host,
 	// each by its name; "" shows all.
 	boardChain, boardHost string
-	// boardAbove is the line above the columns that is chosen in place of a
-	// card, counted up from the columns (aboveLines); 0: none.
-	boardAbove int
-	// boardBelow is the line under the columns that is chosen in place of
-	// a card, counted down from the columns (belowLines); 0: none.
-	boardBelow int
-	// menu is the card's menu while it is open. sawRelease: the terminal
+	// menu is the session's menu while it is open. sawRelease: the terminal
 	// reported the release of a press, so a press held is a long press.
 	menu       *boardMenu
 	sawRelease bool
@@ -537,16 +516,14 @@ type Model struct {
 	dragFrom, dragTo  *point
 	// dragLines is the frame at the press, which the drag copies from, and
 	// dragWithin the cells of a row it may cover: its column's. tapLater
-	// is a press whose tap waits for its release. boardDoor is the door
-	// the board's doors line names.
+	// is a press whose tap waits for its release. boardDoor is the setup
+	// step the setup place names.
 	dragLines  []string
 	dragWithin [2]int
 	tapLater   *point
 	boardDoor  int
-	// boardDoorsOf names the doors boardDoor counts in. boardMine is the
-	// card the person chose, by a key or a tap: a tap on it again goes in.
+	// boardDoorsOf names the doors boardDoor counts in.
 	boardDoorsOf string
-	boardMine    paneKey
 	// peekAt is when the peek last started, and peekAsk the question
 	// (Ask.ID) its card drew then, on the card peekPane. peekNew: a new
 	// question on the same card started it.
@@ -568,10 +545,6 @@ type Model struct {
 	// peekSentAct is the act that carried that answer to a peer: its
 	// refusal gives the digits back.
 	peekSentAct string
-	// frameIdx is the board's index while one frame draws (draw sets it
-	// on its own copy): a frame asks for it five times, and each read of it
-	// is a copy.
-	frameIdx *[4][]sample.Session
 	// noticeText shows in the board's notice row until noticeUntil.
 	noticeText  string
 	noticeNext  string // the notice that shows when this one ends
@@ -584,12 +557,10 @@ type Model struct {
 	// drafts are the words typed to a chain's stoker in its room when the
 	// room closed; the room shows them again when it opens.
 	drafts map[chainKey]string
-	// sideOn: the Sessions tab is the list and the chat, and keysIn is
-	// where the keys go there. lines are the words typed in the chat's
+	// keysIn is where the keys of the list and the chat go. lines are the words typed in the chat's
 	// line, each for the session it was typed for, and lineNote what one
 	// line says of its text. lineActs are the messages the service has not
 	// answered yet, by act id.
-	sideOn   bool
 	keysIn   sideFocus
 	lines    map[paneKey]string
 	lineNote lineNote
@@ -631,7 +602,7 @@ func New(opt Options) Model {
 		opt.Binary = "dev"
 	}
 	m := Model{opt: opt, conn: opt.Conn, st: newStyles(true), dark: true, width: 100, height: 30, history: newSeries(60),
-		recPrefs: loadRecPrefs(opt.StateDir), viewPrefs: loadViewPrefs(opt.StateDir), keys: defaultKeys(), peers: links(opt.Peers), shown: &shownFrame{}, sideOn: !opt.Board}
+		recPrefs: loadRecPrefs(opt.StateDir), viewPrefs: loadViewPrefs(opt.StateDir), keys: defaultKeys(), peers: links(opt.Peers), shown: &shownFrame{}}
 	m.splashAt = m.now()
 	if opt.Ask != nil {
 		m.askCtx, m.askStop = context.WithCancel(context.Background())
@@ -968,7 +939,6 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.homeAll = lists{queue: st.Queue, recs: st.Recommendations, sessions: st.Sessions, orphans: st.Orphans, children: st.Children}
 		if from := m.whereFrom(m.opt.Host); st.Found != nil || st.Used != nil || !slices.Equal(from, m.wfrom) {
 			m.wrepos, m.wfrom = m.whereRepos(m.opt.Host), from
-			m.wghost = m.ghostRepos()
 		}
 		m.clones, m.refreshes = st.Clones, st.Refreshes
 		m.push = st.Push
@@ -1173,9 +1143,6 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var took tea.Cmd
 		if msg.jumped != "" {
 			m = m.pairJumped(msg.tty, msg.jumped)
-			if !msg.watched {
-				m = m.nextAfter(msg.jumped)
-			}
 			if !m.opt.OutsideTmux { // outside, confirm told the host as the attach began
 				took = m.tookOver(cmp.Or(msg.host, m.opt.Host), msg.jumped)
 				m.away = msg.alone
@@ -1340,9 +1307,9 @@ func (m Model) takeFocus(f *proto.Focus) (Model, tea.Cmd) {
 	}
 	m.setTab(tabSessions)
 	m.pending = nil
-	m.doorPick, m.recPick, m.ghostPick, m.chose, m.selPID, m.selHost = "", "", 0, true, s.PID, s.Host
-	if c, card, ok := m.boardCardOf(paneOf(s)); ok && m.boardShown() {
-		m.boardChooseCard(c, card)
+	m.doorPick, m.recPick, m.blockedPick, m.chose, m.selPID, m.selHost = "", "", 0, true, s.PID, s.Host
+	if m.boardShown() {
+		m.chooseRow(s)
 	}
 	if s.Pane == "" {
 		return m, nil // outside tmux: no pane to open
@@ -1539,9 +1506,7 @@ func (m Model) press(f layerID, k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case layerMain:
 		var took bool
 		if next, cmd, took = m.sideKey(k); !took {
-			if next, cmd, took = m.boardKey(k); !took {
-				next, cmd = m.key(k)
-			}
+			next, cmd = m.key(k)
 		}
 	}
 	if f.underOverlays() {
@@ -1589,7 +1554,7 @@ func (m Model) pendingKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	// A destructive action needs a typed y; Enter alone is not consent.
 	if yes || (bkey.Matches(k, m.keys.confirm.Enter) && !a.destructive) {
-		return m.boardActed().confirm(a)
+		return m.confirm(a)
 	}
 	m.flash = "cancelled: " + a.String()
 	return m, nil
@@ -1709,9 +1674,6 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		if a := m.primary(); a != nil && a.pair {
 			return m.openPairDoor()
-		}
-		if a := m.primary(); a != nil && a.ghost {
-			return m.openNewIn(m.opt.Host, a.where, ""), nil
 		}
 		m.pending, m.previewTop = m.primary(), 0
 		m.refuse()
@@ -2043,9 +2005,9 @@ func (m Model) View() tea.View {
 	return v
 }
 
-// nextAfter selects, after a jump to the selected session's pane, the
-// next session that waits, else the next idle one. The way back to the
-// console lands on it.
+// nextAfter chooses, after the stand-in of the selected session's pane,
+// the next session that waits, else the next idle one. A jump into a real
+// pane keeps the choice: the key line says the way back to its chat.
 func (m Model) nextAfter(pane string) Model {
 	if s, ok := m.selectedSession(); !ok || s.Pane != pane {
 		return m
@@ -2058,7 +2020,10 @@ func (m Model) nextAfter(pane string) Model {
 	} {
 		for k := 1; k < len(ss); k++ {
 			if s := ss[(at+k)%len(ss)]; want(s) {
-				m.ghostPick, m.chose, m.selPID, m.selHost = 0, true, s.PID, s.Host
+				m.blockedPick, m.chose, m.selPID, m.selHost = 0, true, s.PID, s.Host
+				if m.sideActive() {
+					m.chooseRow(s)
+				}
 				return m
 			}
 		}

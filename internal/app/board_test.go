@@ -1,15 +1,11 @@
 package app
 
 import (
-	"io"
-	"slices"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/chains"
@@ -19,37 +15,6 @@ import (
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/state"
 )
-
-func TestBoardWidths(t *testing.T) {
-	all := boardCols[:]
-	for _, c := range []struct {
-		l     Layout
-		w     int
-		shown []boardCol
-		cols  []int
-	}{
-		{Medium, 80, []boardCol{colNeed, colWork, colShip}, []int{38, 20, 20}},
-		{Medium, 80, all, []int{38, 20, 20}}, // QUIET is the drawer
-		{Medium, 80, []boardCol{colNeed, colShip}, []int{52, 27}},
-		{Wide, 104, all, []int{36, 24, 24, 17}},
-		{Wide, 151, all, []int{53, 35, 35, 25}},
-		{Wide, 160, all, []int{56, 37, 37, 27}},
-		{Wide, 160, []boardCol{colNeed, colShip, colQuiet}, []int{72, 50, 36}},
-		{Narrow, 40, all, []int{40}},
-	} {
-		cols := boardWidths(c.l, c.w, c.shown)
-		if !slices.Equal(cols, c.cols) {
-			t.Errorf("boardWidths(%v, %d, %v) = %v; want %v", c.l, c.w, c.shown, cols, c.cols)
-		}
-		sum := 0
-		for _, x := range cols {
-			sum += x
-		}
-		if gaps := len(cols) - 1; sum+gaps != c.w {
-			t.Errorf("boardWidths(%v, %d, %v): %v with %d gaps do not fill the width", c.l, c.w, c.shown, cols, gaps)
-		}
-	}
-}
 
 // boardFixture is the board's machine as the sketch draws it: fifteen
 // matches of the demo fleet, four that need you, three at work, three that
@@ -132,13 +97,6 @@ func boardFixture(t testing.TB) proto.State {
 	return st
 }
 
-// boardOnly is m with the old board in the Sessions tab in place of the
-// list and the chat: a test of what only the board does asks for it.
-func boardOnly(m Model) Model {
-	m.sideOn = false
-	return m
-}
-
 // boardShot is the console at w by h with the board on, on the clock of
 // demoAt: st's matches of this machine, and gpu-1's when st has some. edit
 // changes the model before the frame is drawn.
@@ -179,7 +137,7 @@ func boardShot(t testing.TB, st proto.State, w, h int, edit func(*Model)) Model 
 	if len(gpu.Sessions) > 0 {
 		opt.Peers = []Peer{{Host: "gpu-1", Conn: peer}}
 	}
-	var next tea.Model = boardOnly(New(opt))
+	var next tea.Model = (New(opt))
 	next, _ = next.Update(tea.WindowSizeMsg{Width: w, Height: h})
 	next, _ = next.Update(stateMsg(home))
 	if len(gpu.Sessions) > 0 {
@@ -189,295 +147,28 @@ func boardShot(t testing.TB, st proto.State, w, h int, edit func(*Model)) Model 
 	m.splashDone = true
 	// The screens are checked: the copy check's door has its own test.
 	m.viewPrefs.CopyCheckedPhone, m.viewPrefs.CopyCheckedDesk = true, true
+	m.toList()
 	if edit != nil {
 		edit(&m)
 	}
 	return m
 }
 
-// chooseCard picks the card of the match named name, in its column.
+// chooseCard chooses the session named name in the list, the keys in the
+// list.
 func chooseCard(name string) func(*Model) {
 	return func(m *Model) {
-		idx := m.boardIndex()
-		for _, c := range boardCols {
-			for _, s := range idx[c] {
-				if s.Name == name {
-					m.boardAt, m.boardPick = c, map[boardCol]paneKey{c: paneOf(s)}
-					return
-				}
+		for _, s := range m.all.sessions {
+			if s.Name == name {
+				m.chooseRow(s)
+				m.toList()
+				return
 			}
 		}
-		panic(name + " is on no column")
+		panic(name + " is in no row")
 	}
 }
 
 func frameLines(m Model) []string { return strings.Split(m.render(), "\n") }
 
 func plainFrame(m Model) string { return ansi.Strip(m.render()) }
-
-func TestBoardFitsItsScreen(t *testing.T) {
-	st := boardFixture(t)
-	for _, size := range [][2]int{{40, 34}, {80, 31}, {104, 38}, {160, 38}} {
-		m := boardShot(t, st, size[0], size[1], nil)
-		lines := frameLines(m)
-		if len(lines) != size[1] {
-			t.Errorf("%dx%d: %d lines", size[0], size[1], len(lines))
-		}
-		for i, l := range lines {
-			if lipgloss.Width(l) != size[0] {
-				t.Errorf("%dx%d: line %d is %d cells: %q", size[0], size[1], i, lipgloss.Width(l), ansi.Strip(l))
-			}
-		}
-	}
-}
-
-// twelveWaits is a machine where twelve matches wait, the oldest first.
-func twelveWaits() proto.State {
-	names := []string{"hearth-api", "flint-auth", "spark-docs", "kindle-web", "ember-billing", "cinder-ci",
-		"wick-mobile", "hearth-limits", "flint-ui", "spark-search", "ember-reports", "kindle-legacy"}
-	var ss []sample.Session
-	var q []queue.Item
-	for i, n := range names {
-		s := boardMatch(n, time.Hour)
-		s.Permits, s.LastLine = true, "May I run the migration on the test database?"
-		ss = append(ss, s)
-		q = append(q, waitFor(s, queue.StatePermission, time.Duration(20-i)*time.Minute))
-	}
-	st := boardState(ss...)
-	st.Queue = q
-	return st
-}
-
-func TestBoardKeepsTheChosenCardWhole(t *testing.T) {
-	m := boardShot(t, twelveWaits(), 40, 34, chooseCard("flint-ui")) // the 9th
-	d := m.boardPanel(40, m.bodyRows())
-	plain := plainLines(d.lines)
-	col := slices.Index(plain, strings.Repeat("─", 40)) + 1 // under the page marks
-	if col == 0 {
-		t.Fatalf("no hairline under the page marks:\n%s", strings.Join(plain, "\n"))
-	}
-	shown := map[paneKey]int{}
-	var order []paneKey
-	for i := range plain {
-		if k, ok := d.cards[boardSpot{i, colNeed}]; ok {
-			if shown[k] == 0 {
-				order = append(order, k)
-			}
-			shown[k]++
-		}
-	}
-	idx := m.boardIndex()[colNeed]
-	chosen := paneOf(idx[8])
-	lines, _ := m.boardCard(idx[8], 40, cardOpts{sel: true, need: true})
-	if shown[chosen] != len(lines) {
-		t.Errorf("the chosen card shows %d of its %d lines:\n%s", shown[chosen], len(lines), strings.Join(plain, "\n"))
-	}
-	first := slices.IndexFunc(idx, func(s sample.Session) bool { return paneOf(s) == order[0] })
-	last := slices.IndexFunc(idx, func(s sample.Session) bool { return paneOf(s) == order[len(order)-1] })
-	if want := "  ↑ " + strconv.Itoa(first) + " more"; first == 0 || strings.TrimRight(plain[col], " ") != want {
-		t.Errorf("the column starts %q, want %q", plain[col], want)
-	}
-	end := col
-	for i := col; i < len(plain); i++ {
-		if strings.HasPrefix(plain[i], "  ↓ ") {
-			end = i
-		}
-	}
-	if want := "  ↓ " + strconv.Itoa(len(idx)-1-last) + " more"; last == len(idx)-1 || strings.TrimRight(plain[end], " ") != want {
-		t.Errorf("the column ends %q, want %q", plain[end], want)
-	}
-	for i := end + 1; i < len(plain); i++ {
-		if _, ok := d.cards[boardSpot{i, colNeed}]; ok {
-			t.Errorf("a card under the ↓ line: %q", plain[i])
-		}
-	}
-}
-
-func TestEmptyNeedsYouSaysSo(t *testing.T) {
-	st := boardFixture(t)
-	noNeed, noWork := st, st
-	noNeed.Sessions = slices.DeleteFunc(slices.Clone(st.Sessions), func(s sample.Session) bool {
-		return slices.Contains([]string{"flint-auth", "kindle-web", "hearth-api", "spark-search"}, s.Name)
-	})
-	noWork.Sessions = slices.DeleteFunc(slices.Clone(st.Sessions), func(s sample.Session) bool {
-		return slices.Contains([]string{"flint-ui", "ember-billing", "spark-docs"}, s.Name)
-	})
-	for _, w := range []int{80, 104} {
-		if f := plainFrame(boardShot(t, noNeed, w, 38, nil)); !strings.Contains(f, "nothing needs you") || !strings.Contains(f, "NEEDS YOU · 0") {
-			t.Errorf("w=%d: an empty NEEDS YOU does not say so:\n%s", w, f)
-		}
-		m := boardShot(t, noWork, w, 38, nil)
-		d := m.boardPanel(w, m.bodyRows())
-		head := ansi.Strip(d.lines[d.headAt])
-		if !strings.Contains(head, "WORKING · 0") {
-			t.Errorf("w=%d: an empty WORKING has no head: %q", w, head)
-		}
-		cols := boardWidths(m.layoutAt(w), w, boardCols[:])
-		if len(d.heads) < 2 || d.heads[1].x0 != cols[0]+1 || d.heads[1].x1-d.heads[1].x0 != cols[1] {
-			t.Errorf("w=%d: an empty WORKING does not keep its width %d: %+v", w, cols[1], d.heads)
-		}
-	}
-}
-
-func TestTheBoardsStates(t *testing.T) {
-	st := boardFixture(t)
-	t.Run("before the first state", func(t *testing.T) {
-		var next tea.Model = boardOnly(New(Options{NoMotion: true, Conn: newFake(), Now: func() time.Time { return demoAt }}))
-		next, _ = next.Update(tea.WindowSizeMsg{Width: 80, Height: 31})
-		m := next.(Model)
-		m.splashDone = true
-		// The tab row and the key line are not the board's yet: its body.
-		f := strings.Join(plainLines(m.boardPanel(80, m.bodyRows()).lines), "\n")
-		if !strings.Contains(f, "reading your matches…") || !strings.Contains(f, "NEEDS YOU") {
-			t.Errorf("no heads and no reading line:\n%s", f)
-		}
-		if strings.Contains(f, "0") || strings.Contains(f, "nothing needs you") {
-			t.Errorf("a count before the first state:\n%s", f)
-		}
-		golden(t, m, "boardreading", 80, 31)
-	})
-	t.Run("no session", func(t *testing.T) {
-		none := st
-		none.Sessions, none.Queue, none.Ships, none.Holds, none.Chains = nil, nil, nil, nil, nil
-		m := boardShot(t, none, 80, 31, nil)
-		d := m.boardPanel(80, m.bodyRows())
-		plain := plainLines(d.lines)
-		if f := strings.Join(plain, "\n"); strings.Contains(f, "NEEDS YOU") || strings.Contains(f, "WORKING") {
-			t.Errorf("columns with no session:\n%s", f)
-		}
-		if !strings.HasPrefix(plain[0], "▌+ start a new session") {
-			t.Errorf("the ghost row does not lead with the cursor: %q", plain[0])
-		}
-		golden(t, m, "boardnone", 80, 31)
-	})
-	t.Run("the service is lost", func(t *testing.T) {
-		m := boardShot(t, st, 80, 31, nil)
-		if n := m.boardStateNotice(); n != "" {
-			t.Errorf("a notice with the service up: %q", n)
-		}
-		next, _ := m.Update(lostMsg{err: io.EOF, conn: m.conn})
-		m = next.(Model)
-		if n := m.boardStateNotice(); n != "no service · it redials" {
-			t.Errorf("the notice: %q", n)
-		}
-		f := plainFrame(m)
-		if !strings.Contains(f, "spark-search") {
-			t.Errorf("the board does not stay:\n%s", f)
-		}
-		if lines := m.boardPanel(80, m.bodyRows()).lines; strings.Contains(strings.Join(lines, "\n"), m.st.accent.Render("▌")) {
-			t.Errorf("a lost board keeps its accent")
-		}
-		golden(t, m, "boardlost", 80, 31)
-	})
-	t.Run("a search with no match", func(t *testing.T) {
-		m := boardShot(t, st, 80, 31, func(m *Model) {
-			m.filter = "redis"
-			m.refresh()
-		})
-		d := m.boardPanel(80, m.bodyRows())
-		f := strings.Join(plainLines(d.lines), "\n")
-		if !strings.Contains(f, `nothing matches "redis" · esc clears`) {
-			t.Errorf("no line for the search:\n%s", f)
-		}
-		for _, c := range []boardCol{colNeed, colWork, colShip} {
-			if !strings.Contains(f, c.name()+" · 0") {
-				t.Errorf("%s does not keep its name with · 0:\n%s", c.name(), f)
-			}
-		}
-		if strings.Contains(f, "nothing needs you") {
-			t.Errorf("a search says nothing needs you:\n%s", f)
-		}
-		golden(t, m, "boardsearch", 80, 31)
-	})
-}
-
-func TestQuietIsADrawerOnMedium(t *testing.T) {
-	st := boardFixture(t)
-	m := boardShot(t, st, 80, 31, nil)
-	plain := plainLines(m.boardPanel(80, m.bodyRows()).lines)
-	var at []int
-	for i, l := range plain {
-		if strings.Contains(l, "hearth-notes") || strings.Contains(l, "tinder-scratch") {
-			at = append(at, i)
-		}
-	}
-	if len(at) != 1 || !strings.HasPrefix(plain[at[0]], " QUIET · 5 ") {
-		t.Errorf("QUIET is not one line with the names:\n%s", strings.Join(plain, "\n"))
-	}
-
-	m = boardShot(t, st, 80, 31, chooseCard("ember-reports"))
-	plain = plainLines(m.boardPanel(80, m.bodyRows()).lines)
-	head := slices.IndexFunc(plain, func(l string) bool { return strings.HasPrefix(l, " QUIET · 5") })
-	ghost := slices.IndexFunc(plain, func(l string) bool { return strings.Contains(l, "+ start a new session") })
-	if head < 0 || ghost-head-1 != 6 {
-		t.Fatalf("the open drawer is not six rows under its head:\n%s", strings.Join(plain, "\n"))
-	}
-	for _, name := range []string{"ember-reports", "wick-mobile", "kindle-legacy", "hearth-notes", "tinder-scratch"} {
-		if !slices.ContainsFunc(plain[head+1:ghost], func(l string) bool { return strings.Contains(l, name) }) {
-			t.Errorf("the open drawer has no %s:\n%s", name, strings.Join(plain[head:ghost], "\n"))
-		}
-	}
-}
-
-// needStack draws NEEDS YOU of boardFixture, 38 wide and h tall, with
-// name chosen: its lines, and the lines of each card in the column.
-func needStack(t *testing.T, name string, h int) (plain []string, cards [][]string) {
-	t.Helper()
-	m := boardShot(t, boardFixture(t), 80, 31, chooseCard(name))
-	b := boardDraw{idx: m.boardIndex()}
-	m.boardChoose(&b, boardCols[:])
-	for _, s := range b.idx[colNeed] {
-		bl := m.boardBlockOf(&b, colNeed, s, 38, false)
-		cards = append(cards, plainLines(bl.lines[:bl.n]))
-	}
-	d := boardDrawn{cards: map[boardSpot]paneKey{}, taps: map[int][]span{}}
-	m.boardStack(&d, &b, colNeed, 0, 0, 38, h, false)
-	return plainLines(d.lines), cards
-}
-
-func TestTheLastCardTakesNoBlankRow(t *testing.T) {
-	_, cards := needStack(t, "spark-search", 30)
-	h := len(cards) - 1 // a blank between two cards
-	for _, c := range cards {
-		h += len(c)
-	}
-	plain, _ := needStack(t, "spark-search", h)
-	f := strings.Join(plain, "\n")
-	if strings.Contains(f, "↓") || !strings.Contains(f, strings.Join(cards[len(cards)-1], "\n")) {
-		t.Errorf("a last card that fits exactly is not whole in %d rows:\n%s", h, f)
-	}
-
-	// flint-auth, the last, chosen: the ↑ line, hearth-api and a blank, flint-auth.
-	_, cards = needStack(t, "flint-auth", 30)
-	last := len(cards) - 1
-	h = 1 + len(cards[last-1]) + 1 + len(cards[last])
-	plain, _ = needStack(t, "flint-auth", h)
-	if got := strings.TrimRight(plain[0], " "); got != "  ↑ 2 more" {
-		t.Errorf("the chosen last card scrolls to %q, want ↑ 2 more:\n%s", got, strings.Join(plain, "\n"))
-	}
-	if f := strings.Join(plain, "\n"); !strings.Contains(f, strings.Join(cards[last], "\n")) || strings.Contains(f, "↓") {
-		t.Errorf("the chosen last card is not whole:\n%s", f)
-	}
-}
-
-func TestASearchIsSaidAsTyped(t *testing.T) {
-	m := boardShot(t, boardFixture(t), 80, 31, func(m *Model) {
-		m.filter = `say "hi"`
-		m.refresh()
-	})
-	f := strings.Join(plainLines(m.boardPanel(80, m.bodyRows()).lines), "\n")
-	if !strings.Contains(f, `nothing matches "say "hi"" · esc clears`) {
-		t.Errorf("the search is not said as typed:\n%s", f)
-	}
-}
-
-func TestTheEmptyBoardOffersOnlyWhatActs(t *testing.T) {
-	none := boardFixture(t)
-	none.Sessions, none.Queue, none.Ships, none.Holds, none.Chains = nil, nil, nil, nil, nil
-	for _, size := range [][2]int{{40, 34}, {80, 31}, {160, 38}} {
-		m := boardShot(t, none, size[0], size[1], nil)
-		if got := keyLineOf(m); got != "⏎ new session   tab next" {
-			t.Errorf("%dx%d: the empty board offers %q", size[0], size[1], got)
-		}
-	}
-}

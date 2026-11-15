@@ -15,17 +15,8 @@ import (
 
 // The board's tests of the hosts (Task 12 step 0c).
 
-// consoleOn is m with the list and the chat on, its first frame drawn.
+// consoleOn is m with its first frame drawn, the copy check done.
 func consoleOn(m Model) Model {
-	m.sideOn = true
-	m.splashDone = true
-	m.viewPrefs.CopyCheckedPhone, m.viewPrefs.CopyCheckedDesk = true, true
-	return m
-}
-
-// boardOn is m with the board on, its first frame drawn.
-func boardOn(m Model) Model {
-	m = boardOnly(m)
 	m.splashDone = true
 	m.viewPrefs.CopyCheckedPhone, m.viewPrefs.CopyCheckedDesk = true, true
 	return m
@@ -42,7 +33,7 @@ func twoHostBoard(t *testing.T, w int, name string) (Model, map[string]*fakeConn
 	m, _, conns := hostsAt(t, &now, "", w, 30, "ws-1")
 	m = upd(t, m, stateMsg(hostState(sess(1, "hearth-api", "%1", busy))))
 	m = upd(t, m, peerMsg{host: "ws-1", conn: conns["ws-1"], msg: stateMsg(hostState(sess(2, name, "%2", busy)))})
-	return boardOn(m), conns
+	return consoleOn(m), conns
 }
 
 // TestACardNamesAnotherHost: a card names its host only when the console
@@ -52,30 +43,30 @@ func twoHostBoard(t *testing.T, w int, name string) (Model, map[string]*fakeConn
 func TestACardNamesAnotherHost(t *testing.T) {
 	now := lostAt
 	one, _, _ := hostsAt(t, &now, "", 120, 30)
-	one = boardOn(upd(t, one, stateMsg(hostState(sess(1, "hearth-api", "%1", nil)))))
+	one = consoleOn(upd(t, one, stateMsg(hostState(sess(1, "hearth-api", "%1", nil)))))
 	if l := lineWith(frameOf(one), "hearth-api"); l == "" || strings.Contains(l, "@") || strings.Contains(l, hosts1) {
 		t.Fatalf("one host: the card is %q, want no host word", l)
 	}
 	m, _ := twoHostBoard(t, 120, "spark-docs")
 	f := frameOf(m)
-	if l := lineWith(f, "spark-docs"); !strings.Contains(l, "spark-docs @ws-1") {
+	if l := lineWith(f, "spark-docs"); !strings.Contains(l, "spark-docs@ws-1") {
 		t.Errorf("two hosts: ws-1's card is %q, want its host", l)
 	}
 	if l := lineWith(f, "hearth-api"); strings.Contains(l, "@") {
 		t.Errorf("two hosts: the home card is %q, want no host word", l)
 	}
-	// A name too long for the column beside its host word is cut before
-	// it. A Medium screen's 20 cells of a column leave the name under
-	// nameKeep: there the host word goes.
+	// A name too long for the row beside its host word is cut with the
+	// host word: the row keeps its start.
 	for _, w := range []int{60, 104, 160} {
 		m, _ := twoHostBoard(t, w, "ember-billing")
 		f := frameOf(m)
 		if l := lineWith(f, "✦ ember-b"); !strings.Contains(l, "@ws-1") && !strings.Contains(l, "@ws…") {
-			t.Errorf("%d columns: the long name's card lost its host word: %q\n%s", w, l, strings.Join(f, "\n"))
+			t.Errorf("%d columns: the long name's row lost its host word: %q\n%s", w, l, strings.Join(f, "\n"))
 		}
 	}
 
 	m = upd(t, m, helloMsg(proto.Hello{Version: proto.Version, Host: "hearth"}))
+	m.toList()
 	if m = pressOn(m, "s"); m.boardHost != "hearth" || !strings.Contains(frameOf(m)[0], "hearth ▾") {
 		t.Errorf("s turned to %q, header %q: want the home host by its hello's name", m.boardHost, frameOf(m)[0])
 	}
@@ -162,10 +153,10 @@ func TestABlockedHostSaysWhyAndItsFix(t *testing.T) {
 	}
 }
 
-// TestTheSamePaneOnTwoHostsIsTwoCards: the same pane and PID on two hosts
-// are two cards, and the choice stays on its host's card when the other
-// host sends a new state.
-func TestTheSamePaneOnTwoHostsIsTwoCards(t *testing.T) {
+// TestTheSamePaneOnTwoHostsIsTwoRows: the same pane and PID on two hosts
+// are two rows, and the choice stays on its host's row when the other host
+// sends a new state.
+func TestTheSamePaneOnTwoHostsIsTwoRows(t *testing.T) {
 	next, _, _ := samePane(t, nil)
 	m := next.(Model)
 	got := drawnNames(m)
@@ -173,12 +164,12 @@ func TestTheSamePaneOnTwoHostsIsTwoCards(t *testing.T) {
 	if !slices.Equal(got, []string{"home-12", "peer-12"}) {
 		t.Fatalf("the cards are %v, want home-12 and peer-12", got)
 	}
-	if s, ok := m.boardSelected(); !ok || s.Name != "peer-12" || s.Host != "ws-1" {
+	if s, ok := m.sideChosen(); !ok || s.Name != "peer-12" || s.Host != "ws-1" {
 		t.Fatalf("chosen %s on %q, want peer-12 on ws-1", s.Name, s.Host)
 	}
 	home := hostState(sess(4242, "home-12", "%12", func(s *sample.Session) { s.Agent, s.Cwd = "claude", "/src/api" }))
 	next, _ = m.Update(stateMsg(home))
-	if s, ok := next.(Model).boardSelected(); !ok || s.Name != "peer-12" || s.Host != "ws-1" {
+	if s, ok := next.(Model).sideChosen(); !ok || s.Name != "peer-12" || s.Host != "ws-1" {
 		t.Fatalf("a new home state moved the choice to %s on %q", s.Name, s.Host)
 	}
 }

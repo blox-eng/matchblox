@@ -1,38 +1,38 @@
  ▰ matchblox                                                                               ● 6 need you
- BOARD 7    machine
+ SESSIONS 7    machine
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
- NEEDS YOU · 6                        WORKING · 1              SHIPPING · 0             QUIET · 0
-▌╿ flint-auth                 ✻  2m   ✦ hearth-api     ✻
-  stuck conflicts with main            busy
-  #4545 ●━✕┄○┄○┄○  ctx 41%             #4551 ●━◉┄○┄○  ctx 79%
-  “The refresh flow works and the
-  tests pass. One choice is yours
-  before I wire the rotation.”
-  ⏎ go in
-
- │ spark-docs                 ✻  9m
-  done I rewrote the quick start a…
-  #4540 ●━●━●━●━●  ct╭─ New session ──────────────────────────────────────────────╮
-  ⏎ go in            │ where    /work/flint-auth                                  │
-                     │ branch   feat/88-rate-limits                               │
- ╿ ember-billing     │ name     flint-auth-feat-88-rate-limits                    │
-  green #4552 waits f│ agent    ● claude  ○ codex  ○ opencode                     │
-  #4552 ●━●━◉┄○┄○  ct│ first  › fix the flaky ships test▏                         │
-  p merge #4552   ⏎ g╰─ ⏎ start ─ tab next ─ esc ─────────────────────────────────╯
-
- ╿ kindle-web                 ✻  1m
-  asks Claude needs your permissio…
-  ctx 56%
-  ⏎ go in
-
- ╿ cinder-ci                  ❋  0s
-  done I am moving the cache key t…
-  ctx 55%
-  ⏎ go in
-
-  ↓ 1 more
-
- + start a new session
- RECOMMENDATIONS · 7
+ NEEDS YOU · 6  −                       │╭─ New session ───────────────────────────────────────────────╮
+▌╿ flint-auth                       2m ✻││ where    /work/flint-auth                                   │
+   conflicts with main                  ││ branch   feat/88-rate-limits                                │
+ ╿ spark-docs                       9m ✻││ name     flint-auth-feat-88-rate-limits                     │
+   I rewrote the quick start and the in…││ agent    ● claude  ○ codex  ○ opencode                      │
+ ╿ ember-billing                    4m ✻││ first  › fix the flaky ships test▏                          │
+   #4552 waits for your merge           │╰─ ⏎ start ─ tab next ─ esc ──────────────────────────────────╯
+ ╿ kindle-web                       1m ✻│
+   Claude needs your permission to use …│
+ ╿ cinder-ci                        0s ❋│
+   I am moving the cache key to the go.…│
+ ╿ wick-mobile                      0s ▣│
+   ⠙ Working                            │
+────────────────────────────────────────│
+ WORKING · 1  −                         │
+ ✦ hearth-api                 #4551 ci ✻│
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+ + new · ✧ 7 tips                       │
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
- ⏎ go in   c copy   s hosts   tab next
+ in the list · ↑↓ choose · ⏎ write · s hosts · g chain · m menu

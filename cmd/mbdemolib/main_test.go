@@ -56,7 +56,7 @@ func startDemo(t *testing.T) (*syncBuffer, chan struct{}) {
 	}
 	t.Cleanup(stop)
 	b, ended := drawn()
-	b.waitFor(t, "flint-auth") // the board's first card on a phone
+	b.waitFor(t, "flint-auth") // the list's first row on a phone
 	return b, ended
 }
 
@@ -91,7 +91,7 @@ func TestAConsoleThatDiesSaysWhyBeforeTheReadEnds(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chmod(home, 0o700) }) //nolint:gosec // so the test's folder can go
 
-	write([]byte("q"))
+	write([]byte("\x03")) // ctrl+c: Sessions types q
 	endsWithin(t, b, ended)
 
 	if why := errorText(); !strings.Contains(why, copies[0]) {
@@ -110,7 +110,7 @@ func TestACleanStopLeavesNoReason(t *testing.T) {
 
 func TestAfterAConsoleQuitsAWriteReturnsAndAStartWorks(t *testing.T) {
 	b, ended := startDemo(t)
-	write([]byte("q"))
+	write([]byte("\x03")) // ctrl+c: Sessions types q
 	endsWithin(t, b, ended)
 
 	wrote := make(chan struct{})

@@ -94,7 +94,7 @@ func TestTabsFit80WithAlert(t *testing.T) {
 	m, _ := loadedWith(t, 80, st)
 	line, _ := m.tabsLine(80)
 	line = ansi.Strip(line)
-	for _, want := range []string{"BOARD", "machine", "▲ 1 alert"} {
+	for _, want := range []string{"SESSIONS", "machine", "▲ 1 alert"} {
 		if !strings.Contains(line, want) || strings.Contains(line, "…") {
 			t.Fatalf("tab line %q lacks %q", line, want)
 		}
@@ -282,43 +282,6 @@ func TestPanesTabListsEveryPane(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Fatalf("panes tab lacks %q:\n%s", want, out)
 		}
-	}
-}
-
-// TestAJumpMovesTheCursorToTheNextThatWaits: after Enter goes to an agent,
-// the console selects the next one that waits, so the way back lands on it.
-func TestAJumpMovesTheCursorToTheNextThatWaits(t *testing.T) {
-	m, _ := loadedWith(t, 100, queueState())
-	m.opt.Run = func([]string) error { return nil }
-	next, cmd := key(m, "ctrl+o")
-	if it, _ := m.selectedSession(); it.Pane != "%1" {
-		t.Fatalf("starts on %s", it.Pane)
-	}
-	next = fed(next, cmd)
-	if it, _ := next.(Model).selectedSession(); it.Pane != "%2" {
-		t.Fatalf("after the jump to %%1 the queue selects %s, want %%2", it.Pane)
-	}
-
-	st := queueState()
-	m, _ = loadedWith(t, 100, st)
-	m.opt.Run = func([]string) error { return nil }
-	m.tab = tabSessions
-	from, _ := m.selected()
-	armed, cmd := key(m, "ctrl+o")
-	if cmd == nil {
-		t.Fatal("no jump")
-	}
-	nm := fed(armed, cmd)
-	s, _ := nm.(Model).selected()
-	if s.PID == from.PID || s.Busy {
-		t.Fatalf("after the jump to %s Sessions selects %s (busy %v)", from.Name, s.Name, s.Busy)
-	}
-	waits := false
-	for _, it := range nm.(Model).queue {
-		waits = waits || it.Pane == s.Pane
-	}
-	if !waits {
-		t.Fatalf("Sessions selects %s, which does not wait", s.Name)
 	}
 }
 

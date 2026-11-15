@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"slices"
 	"strconv"
 	"strings"
@@ -104,12 +105,36 @@ func (m Model) sideFoot(w int) (string, []span) {
 }
 
 // exitedRows are the agents that exited and wait for their parent, dim at
-// the end of IDLE while e shows them.
+// the end of IDLE while e shows them: each parent with its fix and pids.
 func (m Model) exitedRows(w int) []string {
-	var out []string
+	type parent struct {
+		pid  int
+		comm string
+	}
+	var order []parent
+	pids := map[parent][]string{}
 	for _, e := range m.snap.Exited {
-		left := " " + m.st.faint.Render("╵ pid "+strconv.Itoa(e.PID)+" · "+e.ParentComm+" has not reaped it")
-		out = append(out, spread(left, m.st.faint.Render("exited")+" ", w))
+		p := parent{e.Parent, e.ParentComm}
+		if _, ok := pids[p]; !ok {
+			order = append(order, p)
+		}
+		pids[p] = append(pids[p], strconv.Itoa(e.PID))
+	}
+	st := m.st
+	var out []string
+	for _, p := range order {
+		fix := "they go when it waits for them or exits"
+		switch {
+		case p.comm == "systemd" && p.pid == 1:
+			fix = "sudo systemctl daemon-reexec reaps them" // the system manager
+		case p.comm == "systemd":
+			fix = "systemctl --user daemon-reexec reaps them"
+		}
+		out = append(out, fit(" "+st.faint.Render(fmt.Sprintf("╵ %d exited · %s pid %d", len(pids[p]), p.comm, p.pid)), w))
+		for _, l := range wrapPlain(fix, w-3) {
+			out = append(out, fit("   "+st.muted.Render(l), w))
+		}
+		out = append(out, fit("   "+st.faint.Render("pids "+strings.Join(pids[p], ", ")), w))
 	}
 	return out
 }
@@ -161,7 +186,7 @@ func (m Model) sideList(w, h int) ([]string, []sideHit, []span) {
 	}
 	for _, g := range groups {
 		units := m.sideShows(g)
-		if len(units) == 0 && !(exited && g.state == sideIdle) {
+		if len(units) == 0 && (!exited || g.state != sideIdle) {
 			continue
 		}
 		if len(lines) > 0 {
@@ -247,4 +272,13 @@ func (m Model) sideCount(g sideGroup, units []sideUnit) int {
 		}
 	}
 	return n
+}
+
+// chosenMark is the first cell of a line: ▌ in the accent when it is
+// chosen.
+func (m Model) chosenMark(sel bool) string {
+	if sel {
+		return m.st.accent.Render("▌")
+	}
+	return " "
 }

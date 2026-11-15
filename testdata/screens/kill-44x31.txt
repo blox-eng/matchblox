@@ -1,25 +1,25 @@
  ▰ matchblox                   ● 6 need you
- BOARD 7    machine
+ SESSIONS 7    machine
 ────────────────────────────────────────────
- NEEDS YOU 6  work 1  ship 0  quiet 0
+ NEEDS YOU · 6  −
+▌╿ flint-auth                           2m ✻
+   conflicts with main
+ ╿ spark-docs                           9m ✻
+   I rewrote the quick start and the instal…
+ ╿ ember-billing                        4m ✻
+   #4552 waits for your merge
+ ╿ kindle-web                           1m ✻
+   Claude needs your permission to use Bash
+ ╿ cinder-ci                            0s ❋
+   I am moving the cache key to the go.sum …
+ ╿ wick-mobile                          0s ▣
+   ⠙ Working
 ────────────────────────────────────────────
-▌╿ flint-auth                         ✻  2m
-  stuck conflicts with main
-  #4545 ●━✕┄○┄○┄○  ctx 41%
-  “The refresh flow works and the tests
-  pass. One choice is yours before I wire
-  the rotation.”
-  ⏎ go in
+ WORKING · 1  −
+ ✦ hearth-api                     #4551 ci ✻
 
- │ spark-docs                         ✻  9m
-  done I rewrote the quick start and the i…
-  #4540 ●━●━●━●━●  ctx 88%
-  ⏎ go in
 
- ╿ ember-billing                      ✻  4m
-  green #4552 waits for your merge
-  #4552 ●━●━◉┄○┄○  ctx 32%
-  p merge #4552   ⏎ go in
+
 
 ╭─ Kill flint-auth ────────────────────────╮
 │                                          │

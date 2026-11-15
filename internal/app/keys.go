@@ -122,8 +122,6 @@ func defaultKeys() keymaps {
 		room: roomKeys{
 			Open:  bind(ks("enter"), "⏎", ""),
 			Give:  bind(ks("y"), "y", "give"),
-			Next:  bind(ks("]"), "]", "next"),
-			Prev:  bind(ks("["), "[", "back"),
 			Back:  bind(ks("esc"), "esc", "back"),
 			Erase: bind(ks("backspace"), "⌫", "erase"),
 			Flip:  bind(ks("alt+s"), "⌥s", "room"),
@@ -163,13 +161,11 @@ func defaultKeys() keymaps {
 			Copy:   bind(ks("c"), "c", "copy the link"),
 		},
 		board: boardKeys{
-			Copy:      bind(ks("c"), "c", "copy"),
-			Chain:     bind(ks("g"), "g", "chain"),
-			Host:      bind(ks("s"), "s", "hosts"),
-			NextChain: bind(ks("]"), "]", "next chain"),
-			PrevChain: bind(ks("["), "[", "previous chain"),
-			Menu:      bind(ks("m"), "m", "menu"),
-			Merge:     bind(ks("p"), "p", "merge"),
+			Copy:  bind(ks("c"), "c", "copy"),
+			Chain: bind(ks("g"), "g", "chain"),
+			Host:  bind(ks("s"), "s", "hosts"),
+			Menu:  bind(ks("m"), "m", "menu"),
+			Merge: bind(ks("p"), "p", "merge"),
 		},
 		side: sideKeys{
 			Enter:    bind(ks("enter"), "⏎", "send"),
@@ -295,14 +291,14 @@ type askKeys struct{ Send, Cancel, Erase, Copy bkey.Binding }
 
 func (k askKeys) bindings() []bkey.Binding { return []bkey.Binding{k.Send, k.Cancel, k.Erase, k.Copy} }
 
-// boardKeys are the board's own keys, over mainKeys while the board shows:
-// ↑ ↓ ⏎ x y esc and the rest keep their mainKeys bindings.
+// boardKeys are the list's own keys, over mainKeys while the Sessions tab
+// shows: ↑ ↓ ⏎ x y esc and the rest keep their mainKeys bindings.
 type boardKeys struct {
-	Copy, Chain, Host, NextChain, PrevChain, Menu, Merge bkey.Binding
+	Copy, Chain, Host, Menu, Merge bkey.Binding
 }
 
 func (k boardKeys) bindings() []bkey.Binding {
-	return []bkey.Binding{k.Copy, k.Chain, k.Host, k.NextChain, k.PrevChain, k.Menu, k.Merge}
+	return []bkey.Binding{k.Copy, k.Chain, k.Host, k.Menu, k.Merge}
 }
 
 // sideKeys are the chat's line and the list beside it. In the line every

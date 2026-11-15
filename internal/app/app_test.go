@@ -115,11 +115,13 @@ func (f *fakeConn) allActs() []proto.Act {
 func loadedWith(t *testing.T, width int, st proto.State) (Model, *fakeConn) {
 	t.Helper()
 	f := newFake()
-	m := boardOnly(New(Options{NoMotion: true, Conn: f}))
-	m.viewPrefs.CopyCheckedPhone, m.viewPrefs.CopyCheckedDesk = true, true // the copy check is the board's first-run door
+	m := New(Options{NoMotion: true, Conn: f})
+	m.viewPrefs.CopyCheckedPhone, m.viewPrefs.CopyCheckedDesk = true, true // the copy check is the setup steps' first-run door
 	next, _ := m.Update(tea.WindowSizeMsg{Width: width, Height: 30})
 	next, _ = next.Update(stateMsg(st))
-	return next.(Model), f
+	nm := next.(Model)
+	nm.toList() // the list's keys act on the chosen session
+	return nm, f
 }
 
 // loaded is the console on the fixture machine, on the sessions tab.

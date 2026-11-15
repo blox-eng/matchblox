@@ -1,11 +1,11 @@
  ▰ matchblox                   ● 6 need you
- BOARD 7    machine
+ SESSIONS 7    machine
 ────────────────────────────────────────────
- NEEDS YOU 6  work 1  ship 0  quiet 0
-────────────────────────────────────────────
-▌╿ flint-auth                         ✻  2m
-  stuck conflicts with main
-  #4545 ●━✕┄○┄○┄○  ctx 41%
+ NEEDS YOU · 6  −
+▌╿ flint-auth                           2m ✻
+   conflicts with main
+ ╿ spark-docs                           9m ✻
+   I rewrote the quick start and the instal…
 ╭─ ssh ws-1 asks ──────────────────────────╮
 │                                          │
 │   The authenticity of host 'ws-1'        │
@@ -28,4 +28,4 @@
 │                                          │
 ╰─ ⏎ answer ─ esc cancel the ssh ──────────╯
 ────────────────────────────────────────────
- c copy   s hosts
+ in the list · ↑↓ choose · ⏎ write · s hosts

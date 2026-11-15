@@ -21,4 +21,4 @@
 
 
 ────────────────────────────────────────
- in the room · ] next chain · esc all
+ in the room · esc all · ↑↓ choose

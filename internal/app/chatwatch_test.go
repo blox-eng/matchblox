@@ -3,7 +3,6 @@ package app
 import (
 	"io"
 	"reflect"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -265,29 +264,13 @@ func TestKeyNames(t *testing.T) {
 // a question with three options.
 func demoSized(t testing.TB, w, h int) Model {
 	t.Helper()
-	m := boardOnly(New(Options{NoMotion: true, Conn: newFake(), Now: func() time.Time { return demoAt }}))
+	m := (New(Options{NoMotion: true, Conn: newFake(), Now: func() time.Time { return demoAt }}))
 	next, _ := m.Update(tea.WindowSizeMsg{Width: w, Height: h})
 	next, _ = next.Update(stateMsg(screensState(t)))
 	nm := next.(Model)
 	nm.splashDone = true
 	next, _ = nm.Update(screenMsg{Pane: nm.watching, At: demoAt, Text: askScreen})
 	return next.(Model)
-}
-
-func TestACutListSaysHowManyAreBelow(t *testing.T) {
-	m := demoSized(t, 132, 32)
-	sc := m.draw(132)
-	left := plainLines(sc.lines)
-	if !slices.ContainsFunc(left, func(l string) bool {
-		return strings.HasPrefix(strings.TrimSpace(l), "↓ ") && strings.Contains(l, " more")
-	}) {
-		t.Fatalf("the cut list does not say what is below:\n%s", strings.Join(left, "\n"))
-	}
-	last := pressKeys(t, m, slices.Repeat([]string{"down"}, m.rowCount())...)
-	left = plainLines(last.draw(132).lines)
-	if !slices.ContainsFunc(left, func(l string) bool { return strings.Contains(l, "RECOMMENDATIONS") }) {
-		t.Fatalf("the list does not scroll to its recommendations on a desk:\n%s", strings.Join(left, "\n"))
-	}
 }
 
 // inView is the console with the first session's screen in its chat.

@@ -162,16 +162,16 @@ func (m *Model) watchCmd() tea.Cmd {
 	return tea.Batch(stop, m.watchOn(host, want))
 }
 
-// watchWant is the host and the pane to watch: the board's chosen card in
-// the stand-in, else the list's chosen session
-// on any host; off the board, the selected session of the home host. No
-// pane: the host stays and the pane is "".
+// watchWant is the host and the pane to watch: the stand-in's session,
+// else the list's chosen session on any host; off the Sessions tab, the
+// selected session of the home host. No pane: the host stays and the pane
+// is "".
 func (m Model) watchWant() (host, pane string) {
 	if m.away {
 		return m.watchHost, ""
 	}
 	if m.boardShown() {
-		if s, ok := m.boardSelected(); ok && m.standIn && s.Host == m.opt.Host && !isShipCard(s) {
+		if s, ok := m.selectedSession(); ok && m.standIn && s.Host == m.opt.Host {
 			return s.Host, s.Pane
 		}
 		if k := m.chosenSide(); k.pane != "" {
@@ -179,7 +179,7 @@ func (m Model) watchWant() (host, pane string) {
 		}
 		return m.watchHost, ""
 	}
-	if s, ok := m.selected(); ok && s.Host == m.opt.Host && !isShipCard(s) { // another host's pane id names another pane here
+	if s, ok := m.selected(); ok && s.Host == m.opt.Host { // another host's pane id names another pane here
 		return s.Host, s.Pane
 	}
 	return m.watchHost, ""

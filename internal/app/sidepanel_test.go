@@ -120,8 +120,9 @@ func TestNoChoiceMeansTheFirstInOrder(t *testing.T) {
 	st := boardState(a, b)
 	st.Queue = append(st.Queue, waitFor(b, queue.StatePermission, time.Minute))
 	m := boardModel(t, st)
+	m.sideAt = paneKey{}
 	first := m.sideOrder()[0]
-	if m.sideAt != (paneKey{}) || first != paneOf(b) {
+	if first != paneOf(b) {
 		t.Fatalf("fixture: sideAt %v, first %v", m.sideAt, first)
 	}
 	for _, l := range plainLines(m.sidePanel(50, 12)) {

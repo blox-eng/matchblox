@@ -544,7 +544,7 @@ func TestHidingAPeerKeepsItsStream(t *testing.T) {
 	if !slices.Equal(peerHosts(r.sh.cur), []string{"ws-1"}) || ws.closed || r.redials["ws-1"] != 0 {
 		t.Fatalf("peers %q, ws-1 closed %v, %d redials", peerHosts(r.sh.cur), ws.closed, r.redials["ws-1"])
 	}
-	r.sh.cur = boardOn(r.sh.cur)
+	r.sh.cur = consoleOn(r.sh.cur)
 	r.sh.cur.tab = tabSessions
 	if strings.Contains(r.view(), "api-auth") {
 		t.Fatalf("all hosts shows a hidden host's rows:\n%s", r.view())

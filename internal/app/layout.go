@@ -1,10 +1,6 @@
 package app
 
 import (
-	"fmt"
-	"strconv"
-	"strings"
-
 	"charm.land/lipgloss/v2"
 
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -134,51 +130,6 @@ func (m Model) sessionIn(host, pane string) (sample.Session, bool) {
 		}
 	}
 	return sample.Session{}, false
-}
-
-// exitedLines are the agents that exited and wait for their parent: one
-// faint line, or, after e, each parent with the fix and the pids.
-func (m Model) exitedLines(w int) []string {
-	ex := m.snap.Exited
-	if len(ex) == 0 {
-		return nil
-	}
-	st := m.st
-	if !m.showExited {
-		line := fmt.Sprintf(" %d exited agents · %s shows them", len(ex), m.keys.main.Exited.Help().Key)
-		if len(ex) == 1 {
-			line = " 1 exited agent · " + m.keys.main.Exited.Help().Key + " shows it"
-		}
-		return []string{"", st.faint.Render(fit(line, w))}
-	}
-	lines := []string{"", st.label.Render(fmt.Sprintf(" %d EXITED AGENTS", len(ex))) + st.faint.Render("  · "+m.keys.main.Exited.Help().Key+" hides them")}
-	type parent struct {
-		pid  int
-		comm string
-	}
-	var order []parent
-	pids := map[parent][]string{}
-	for _, e := range ex {
-		p := parent{e.Parent, e.ParentComm}
-		if _, ok := pids[p]; !ok {
-			order = append(order, p)
-		}
-		pids[p] = append(pids[p], strconv.Itoa(e.PID))
-	}
-	for _, p := range order {
-		fix := "they go when it waits for them or exits"
-		switch {
-		case p.comm == "systemd" && p.pid == 1:
-			fix = "sudo systemctl daemon-reexec reaps them" // the system manager
-		case p.comm == "systemd":
-			fix = "systemctl --user daemon-reexec reaps them"
-		}
-		lines = append(lines,
-			fit(" "+st.text.Render(fmt.Sprintf("%s (pid %d) has not reaped them", p.comm, p.pid)), w),
-			fit("   "+st.muted.Render(fix), w),
-			fit("   "+st.faint.Render("pids "+strings.Join(pids[p], ", ")), w))
-	}
-	return lines
 }
 
 // busyWord is the state of a busy session: a turn runs, or only its

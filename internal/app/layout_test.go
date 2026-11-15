@@ -69,19 +69,6 @@ func fitsWidth(t *testing.T, m Model, w int) {
 	}
 }
 
-// sessLine is the screen row of a session's row: its name between
-// spaces, never a recommendation that names it ("Compact x (%1)").
-func sessLine(t *testing.T, m tea.Model, name string) int {
-	t.Helper()
-	for i, line := range strings.Split(ansi.Strip(m.(Model).render()), "\n") {
-		if strings.Contains(line+" ", " "+name+" ") && !strings.Contains(line, "(%") {
-			return i
-		}
-	}
-	t.Fatalf("no row of %q:\n%s", name, ansi.Strip(m.(Model).render()))
-	return -1
-}
-
 func tap(m tea.Model, x, y int) (tea.Model, tea.Cmd) {
 	return m.Update(tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft})
 }
@@ -149,16 +136,7 @@ func TestNoCtrlKeysNeeded(t *testing.T) {
 				t.Fatalf("tab on tab %d does not open the next one", tab)
 			}
 		}
-		m.tab = tabSessions
-		ran := recordRuns(&m)
-		next, _ := key(m, "down") // the second row waits for an answer
-		_, cmd := key(next, "a")
-		drain(cmd)
-		if len(*ran) != 1 {
-			t.Fatal("a does not go into the pane")
-		}
-		// The way back is a tap on the list or the app's home gesture:
-		// TestClicksMoveTheKeys and TestHomeKeyGivesKeysBack.
+		m.tab = tabMachine // on Sessions the list and the line take q as text
 		if next, cmd := key(m, "q"); cmd == nil || !next.(Model).quitting {
 			t.Fatal("q does not quit")
 		}
@@ -190,7 +168,6 @@ func manySessions(n int) proto.State {
 func TestNarrowScrollsToTheSelection(t *testing.T) {
 	m, _ := loadedWith(t, 50, manySessions(30))
 	var next tea.Model = m
-	next, _ = key(next, "1")
 	for range 25 {
 		next, _ = key(next, "down")
 	}

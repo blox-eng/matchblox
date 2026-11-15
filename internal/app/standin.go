@@ -94,13 +94,13 @@ func (m Model) screenLines(w, h int) []string {
 }
 
 // viewScreen is the stand-in: the whole screen under a title row that goes
-// back to the board and says a toast, over the key line, with a step that
+// back to Sessions and says a toast, over the key line, with a step that
 // asks to confirm on top. Its title, hairline and key line always show: a
 // screen under 4 rows has no room for the agent's lines.
 func (m Model) viewScreen(w int) drawn {
 	st := m.st
 	s, _ := m.selectedSession()
-	title := " " + st.accent.Render("‹ board") + st.muted.Render(" · ")
+	title := " " + st.accent.Render("‹ sessions") + st.muted.Render(" · ")
 	head := m.viewTitle(s)
 	if room := w - lipgloss.Width(title); lipgloss.Width(head) > room {
 		head = ansi.Truncate(s.Name, max(room, 1), "…") // the state, then the name, give way
@@ -207,19 +207,18 @@ func (m Model) openStandIn(pane string) Model {
 	if m.tab != tabSessions {
 		m.setTab(tabSessions)
 	}
-	m.doorPick, m.recPick, m.ghostPick, m.chose, m.selPID, m.selHost = "", "", 0, true, s.PID, s.Host
+	m.doorPick, m.recPick, m.blockedPick, m.chose, m.selPID, m.selHost = "", "", 0, true, s.PID, s.Host
 	m.standIn, m.flash = true, ""
 	return m
 }
 
-// leaveStandIn goes back from the stand-in to the board, on the session that
-// waits next, as a jump back from a real pane does.
+// leaveStandIn goes back from the stand-in to the list, on the session
+// that waits next, as a jump back from a real pane does.
 func (m Model) leaveStandIn() Model {
 	s, _ := m.selectedSession()
 	m.standIn = false
 	m.keysOut.queue = nil // typed at a screen that is gone; the key in flight still answers
-	// On the board, the first other wait is chosen.
-	return m.nextAfter(s.Pane).boardActed()
+	return m.nextAfter(s.Pane)
 }
 
 // keepView closes the stand-in once the board or the chosen session's pane

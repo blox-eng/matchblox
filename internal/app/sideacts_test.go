@@ -13,7 +13,6 @@ import (
 func listShot(t *testing.T, st proto.State, w, h int, name string) Model {
 	t.Helper()
 	m := boardShot(t, st, w, h, nil)
-	m.sideOn = true
 	m = pickSide(t, m, name)
 	m.toList()
 	return m
@@ -64,8 +63,8 @@ func TestListOpensTheFormsOfTheChosenSession(t *testing.T) {
 
 func TestLineTypesTheCardLetters(t *testing.T) {
 	m := boardShot(t, boardFixture(t), 160, 38, nil)
-	m.sideOn = true
 	m = pickSide(t, m, "spark-docs")
+	m.toLine()
 	m = typeLine(m, "xrApyfFod")
 	if got := m.lines[m.chosenSide()]; got != "xrApyfFod" {
 		t.Fatalf("the line holds %q", got)

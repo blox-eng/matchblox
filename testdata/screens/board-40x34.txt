@@ -1,34 +1,34 @@
  ▰ matchblox · all hosts ▾ ● 4 need you
- BOARD 15    machine
+ SESSIONS 15    machine
 ────────────────────────────────────────
- NEEDS YOU 4  work 3  ship 3  quiet 5
+ NEEDS YOU · 4  −
+▌╿ spark-search               #4548 ci ✻
+   CI failed · lint, twice
+ ╿ kindle-web              #4556 green ✻
+   #4556 waits for your merge
+ ╿ hearth-api                       4m ✻
+   The plan changes 2 records and remov…
+ ≋ login                step 1 of 3 · 3
+ ├ ╿ flint-auth                     2m ✻
+ │   Which way do we fix the login?
+ ├ ✦ flint-ui                          ✻
+ └ ╵ flint-api                #4560 ci ✻
 ────────────────────────────────────────
-▌╿ spark-search                   ✻ 31m
-  stuck CI failed · lint, twice
-  #4548 ●━✕┄○┄○┄○  ctx 77%
-  “Lint fails on a file I did not
-  change. I tried twice and stopped.”
-  ⏎ go in
-
- ╿ kindle-web                     ✻  9m
-  green #4556 waits for your merge
-  #4556 ●━●━◉┄○┄○  ctx 48%
-  p merge #4556   ⏎ go in
-
- ╿ hearth-api                     ✻  4m
-  asks The plan changes 2 records and …
-  ctx 31%
-  ⏎ go in
-
- ╿ flint-auth                     ✻  2m
-  asks Which way do we fix the login?
-  ctx 62%                       ─╴login
-  ⏎ go in
-
-
-
-
- + start a new session
- RECOMMENDATIONS · 7
+ WORKING · 2  −
+ ✦ ember-billing@gpu-1                 ✻
+ ✦ spark-docs                          ✻
 ────────────────────────────────────────
- c copy   s hosts
+ HELD · 1  −
+ ╽ kindle-legacy                    5h ✻
+────────────────────────────────────────
+ IDLE · 6  −
+ ╵ hearth-limits              #4551 ci ✻
+ ╵ wick-mobile                   23:50 ▣
+ ╵ hearth-notes@gpu-1               1h ✻
+ ╵ cinder-ci@gpu-1        #4549 merged ❋
+ ╵ ember-reports                    3h ⬢
+ ╵ tinder-scratch@gpu-1             2d ·
+
+ + new · ✧ 7 tips
+────────────────────────────────────────
+ in the list · ↑↓ choose · ⏎ write

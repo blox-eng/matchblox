@@ -4,10 +4,6 @@ import (
 	"cmp"
 	"slices"
 	"strconv"
-	"strings"
-	"time"
-
-	"charm.land/lipgloss/v2"
 
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -102,96 +98,8 @@ type hostShips struct {
 // first: stuck, waiting for you, in flight, merged, then live (as the
 // service, the CLI and the stoker find them).
 func (m Model) shipsOf(s sample.Session) []proto.Ship {
-	if sh, ok := m.shipOfCard(s); ok {
-		return []proto.Ship{sh}
-	}
 	// A pane and a session id can repeat on another host.
 	return slices.DeleteFunc(proto.ShipsOf(m.ships(), s.Pane, s.SessionID), func(sh proto.Ship) bool { return sh.Host != s.Host })
-}
-
-// shipsMore is what a row says after its lead ship when the session drives
-// others: " +1 merged" names what the others need (stuck, then waits) or
-// else the furthest stage among them; short is " +1".
-func (m Model) shipsMore(ss []proto.Ship, short bool) string {
-	if len(ss) < 2 {
-		return ""
-	}
-	more := m.st.muted.Render(" +" + strconv.Itoa(len(ss)-1))
-	if short {
-		return more
-	}
-	stage, need := 0, proto.Ship{}
-	for _, sh := range ss[1:] {
-		stage = max(stage, min(sh.Stage, stageLive))
-		if (sh.Kind == shipStuck || sh.Kind == shipWaits) && need.Kind != shipStuck {
-			need = sh
-		}
-	}
-	switch need.Kind {
-	case shipStuck:
-		return more + " " + m.shipStyle(need).Render("stuck")
-	case shipWaits:
-		return more + " " + m.shipStyle(need).Render("waits")
-	}
-	return more + m.st.muted.Render(" "+stageNames[stage])
-}
-
-// shipStyle is the colour of a ship's current stage and note: warn while
-// it runs, the accent when it waits for you, neg when it is stuck.
-func (m Model) shipStyle(sh proto.Ship) lipgloss.Style {
-	switch sh.Kind {
-	case shipRunning:
-		return m.st.warn
-	case shipWaits, shipDone:
-		return m.st.accent
-	case shipStuck:
-		return m.st.neg
-	}
-	return m.st.faint
-}
-
-// trackW is the width of a ship's track: a mark for each stage and a line
-// between two.
-var trackW = 2*len(stageNames) - 1
-
-// track is a ship's five stages, ●━●━◉┄○┄○: done muted, the current one in
-// its colour (✕ when stuck), the rest faint.
-func (m Model) track(sh proto.Ship) string { return m.trackAt(sh, -1) }
-
-// trackAt is the track with its cell spark lit in flame-core, -1 for none.
-func (m Model) trackAt(sh proto.Ship, spark int) string {
-	st := m.st
-	var b strings.Builder
-	x := 0
-	put := func(ink lipgloss.Style, cell string) {
-		if x == spark {
-			ink = m.sparkStyle()
-		}
-		b.WriteString(ink.Render(cell))
-		x++
-	}
-	for i := range stageNames {
-		switch {
-		case i < sh.Stage:
-			put(st.muted, "●")
-		case i == sh.Stage && sh.Kind == shipStuck:
-			put(st.neg, "✕")
-		case i == sh.Stage && sh.Kind == shipDone:
-			put(m.shipStyle(sh), "●")
-		case i == sh.Stage:
-			put(m.shipStyle(sh), "◉")
-		default:
-			put(st.faint, "○")
-		}
-		switch {
-		case i == len(stageNames)-1:
-		case i < sh.Stage:
-			put(st.muted, "━")
-		default:
-			put(st.faint, "┄")
-		}
-	}
-	return b.String()
 }
 
 // shipKey is where a ship's spark is kept among the changes: apart from
@@ -221,20 +129,6 @@ func (m *Model) noteShipSparks(next []proto.Ship) {
 	}
 }
 
-// shipSpark is the cell of sh's track the spark is on now, -1 for none:
-// it runs along the track once, in sparkFor.
-func (m Model) shipSpark(sh proto.Ship) int {
-	c, ok := m.changes[shipKey(sh)]
-	if m.opt.NoMotion || !ok || c.kind != changeSpark {
-		return -1
-	}
-	e := m.now().Sub(c.at)
-	if e < 0 || e >= sparkFor {
-		return -1
-	}
-	return int(e * time.Duration(trackW) / sparkFor)
-}
-
 // shipsBehind are the reasons the ships may be behind, one each, in plain
 // words; with two or more hosts each starts with its host.
 func (m Model) shipsBehind() []string {
@@ -255,17 +149,6 @@ func (m Model) shipsBehind() []string {
 		}
 	}
 	return says
-}
-
-// takeShip opens New session in the checkout of a ship no session owns,
-// its first message to take the ship over (#80); with no checkout of it
-// here it says so.
-func (m Model) takeShip(sh proto.Ship) Model {
-	if sh.Where == "" {
-		m.flash = "no session owns #" + strconv.Itoa(sh.Number) + ", and no checkout of " + sh.Repo + " is here"
-		return m
-	}
-	return m.openNewIn(sh.Host, sh.Where, "Take over #"+strconv.Itoa(sh.Number)+" ("+sh.URL+"): read where it stands, then carry it to live.")
 }
 
 // mergeAction is the merge of sh, behind a typed y; nil when sh has none.

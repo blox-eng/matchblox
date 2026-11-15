@@ -7,47 +7,6 @@ digits, arrows, `Enter` and `Esc`. No key of the console needs `Ctrl`.
 interrupts, and a swipe scrolls. The key line at
 the bottom shows the keys of the open tab. A tap on a key presses it.
 
-## The board
-
-The key line shows the keys of the chosen card first, then `c` and `s`,
-then `Tab`. A key that does not fit leaves whole, from
-the right.
-
-| Key | What it does |
-|---|---|
-| `↑` or `k`, `↓` or `j` | Chooses the card above or below. The chosen card is the peek. From a column's first card, `↑` chooses the setup steps above the board; from its last card, `↓` chooses the ghost row, then the recommendations. |
-| `Enter` or `a` | Goes into the match's pane. On a ship that no session drives, opens New session in its worktree. On a setup step, the ghost row or a recommendation, shows its action. On a phone, a tap on the chosen card does it too. |
-| `Ctrl+O` | Goes into the chosen agent's pane, from every tab. |
-| A digit, 1 to 9 | Marks that option of the chosen card's question. The same digit again sends it. Another digit moves the mark, and `Esc` clears it. See [the peek](console.md#the-peek). |
-| `p` | Merges the card's leading pull request when it waits for your merge: a box shows `gh pr merge <n> --squash --match-head-commit <sha>`, and it runs on a typed `y`. On any other card it says `no ship of <name> waits for a merge`. |
-| `x` | Kills the match: a box shows `tmux kill-pane -t <pane>`, then `kill -TERM <pid>` for an agent still running, and runs them on a typed `y`. A session that works or needs you asks for a second `y`. Its worktree and its transcript stay. On a setup step, closes it; on a recommendation, shows its second action. |
-| `y` | Gives the go that a stoker step waits for. On Pocket the first `y` only arms it, and the card says what it does (`y again: merge #4556`). A second `y` gives it. |
-| `c` | Copies what the agent said last. |
-| `m` | Opens the card's menu: copy, show its chain, go in. |
-| `g` | Shows only the chain of the chosen card: its room. `Esc` shows all. |
-| `]`, `[` | Shows the next or the previous chain. |
-| `s` | Shows the next host, then all hosts. |
-| `Tab` or `Shift+Tab` | Goes to the board, or to Machine. |
-| `/` | Searches the board. A search narrows every column. |
-| `N` | Opens **New session**: where it starts (a path, or `←` `→` through your repositories and worktrees, then the ones found on the host, the most recent first), a branch for a new worktree beside the repository (blank: none), its name, the agent (`←` `→`, from the installed Claude Code, Codex, OpenCode and Cursor), for Claude Code, Codex and Cursor the account (see below), and a first message (blank: it waits for your first prompt; a new account has none). `Tab` goes to the next line. |
-| `r` | Renames the session: its tmux window, its tmux session when it is that session's one window, and Claude Code's own name (`/rename`), all alike. A Claude Code session that works takes its new name when it rests. |
-| `A` | Switches the agent of the session: choose another installed agent (`←` `→`), how it starts (`←` `→` or a tap: **continue** from the handover, or **no task**), and any extra instructions for this switch. The confirm names the switch, its account and its launch settings. A session that works or waits needs a second `y`. A switch that continues first asks an idle Claude Code or Codex agent to write its task record and waits up to 3 minutes, showing the wait in the bottom rows; `Esc` switches now. |
-| `z` | Parks the chosen session: nothing types into it, and the stoker leaves it alone. Its card goes to `QUIET`. `z` again lets it go. |
-| `f` | Turns [the stoker](stoker.md) off while it is on. While it rests, turns it back on. Otherwise opens the launch sheet for a day run. |
-| `F` | Stokes the chain of the chosen card: the start sheet, `Stoke the chain <name> (<n> matches)?`, takes the order and the gos of a stoker for that chain. See [A family of stokers](stoker.md#a-family-of-stokers). |
-| `n` | Opens the launch sheet for a night: the stoker runs until the morning, then turns itself off. While a night runs, `n` ends it. |
-| `o` | Gives a new order while a day run is on: the launch sheet opens with the run's gos, and the order goes to the stoker as one line. The run goes on, and done steps stay done. A night is sealed: `n` stops it first. |
-| `e` | Shows or hides the agents that exited and wait for their parent. |
-| `d` | Dismisses the chosen recommendation until its evidence changes. |
-| `⌥s` | Opens the room of the chosen card's chain, as `g` does. A session in no chain opens its chain of one, which the host's stoker drives. |
-| `Esc` | Closes the menu, then clears a marked answer, then the search, then the chain. It never leaves the console, except on a host that has not answered yet: then it goes back to Hosts. `Ctrl+M`, prefix `m` and the phone's back button do the same in the console. |
-| `q` or `Ctrl+C` | Quits the console. The service keeps running. |
-| `R` | Starts the console again on the binary the service runs. The key line offers it first, `R start again · service v0.43.0, console v0.42.0`, when the service on this machine runs a newer release than the console and the console's own binary was installed over. Otherwise the line says `quit and reopen`. |
-
-A key that changed its job with the board says so once, the first time
-you press it: `c`, `s`, `g`, `p`, `x` on a card whose ship waits for its
-merge, and a digit.
-
 ## The list and the chat
 
 The keys go to one of two places: the chat's line or the list. The key
@@ -64,27 +23,33 @@ the screen; else it types.
 | `Backspace` | Erases the last character of the line. |
 | A digit, 1 to 9 | With the line empty, marks that option of the question on the screen. The same digit again sends it. A question that opened less than half a second ago takes no digit: the digit types. On a session the stoker holds, 1 marks "Let it go", and 1 again lets it go. |
 | `↑`, `↓` | With the line empty, or in the list, chooses the session above or below, as the list draws them. In the list, `↓` past the last row chooses the parts of the foot one by one, and `↑` goes back up. `Enter` opens the chosen part. |
-| `Esc` | In the line, clears a marked answer, then moves the keys to the list. In the list, clears the search, then closes the chain's room, then shows all chains. |
+| `Esc` | Closes the menu. In the line, clears a marked answer, then moves the keys to the list. In the list, clears the search, then closes the chain's room, then shows all chains. It never leaves the console, except on a host that has not answered yet: then it goes back to Hosts. `Ctrl+M`, prefix `m` and the phone's back button do the same in the console. |
 | `s` | In the list, shows the next host, then all hosts. It goes to each host, a hidden host too. With one host shown, all hosts is that host, so `s` goes from host to host. With one host only, a notice says so. |
 | `h` | In the list, on a hidden host, shows that host in all hosts again. Machine › Hosts then ticks the host. On another host, a notice says what `h` does. |
-| `g` | In the list, shows only the chain of the chosen session. `Esc` shows all. |
+| `g` | In the list, shows only the chain of the chosen session: its room. `Esc` shows all. |
+| `⌥s` | Opens the room of the chosen session's chain, as `g` does. A session in no chain opens its chain of one, which the host's stoker drives. |
 | `/` | In the list, searches the list. |
 | `m` | In the list, opens the menu of the chosen session. It names the acts that destroy nothing, with their keys: rename, stoke the chain, a new order. A kill, a merge, a go, a switch and the stoker's stop are keys of the list only. |
 | `c` | In the list, copies what the agent said last. |
-| `z` | In the list, parks the chosen session, or lets it go. In the line of a parked session, lets it go. |
-| `N` | In the list, opens **New session**. |
+| `z` | In the list, parks the chosen session: nothing types into it, and the stoker leaves it alone. `z` again lets it go. In the line of a parked session, lets it go. |
+| `N` | In the list, opens **New session**: where it starts (a path, or `←` `→` through your repositories and worktrees, then the ones found on the host, the most recent first), a branch for a new worktree beside the repository (blank: none), its name, the agent (`←` `→`, from the installed Claude Code, Codex, OpenCode and Cursor), for Claude Code, Codex and Cursor the account (see below), and a first message (blank: it waits for your first prompt; a new account has none). `Tab` goes to the next line. |
 | `x` | In the list, kills the chosen session: a box shows the commands, and they run on a typed `y`. A session that works or needs you asks for a second `y`. |
-| `r` | In the list, renames the chosen session. |
-| `A` | In the list, switches the agent of the chosen session. |
+| `r` | In the list, renames the chosen session: its tmux window, its tmux session when it is that session's one window, and Claude Code's own name (`/rename`), all alike. A Claude Code session that works takes its new name when it rests. |
+| `A` | In the list, switches the agent of the chosen session: choose another installed agent (`←` `→`), how it starts (`←` `→` or a tap: **continue** from the handover, or **no task**), and any extra instructions for this switch. The confirm names the switch, its account and its launch settings. A session that works or waits needs a second `y`. A switch that continues first asks an idle Claude Code or Codex agent to write its task record and waits up to 3 minutes, showing the wait in the bottom rows; `Esc` switches now. |
 | `p` | In the list, merges the pull request of the chosen session when it waits for your merge. A box shows the command, and it runs on a typed `y`. |
 | `y` | In the list, gives the go that a stoker step waits for on the chosen session. On Pocket the first `y` only arms it, and a second `y` gives it. |
-| `f`, `n`, `o` | In the list, the stoker's keys on the host of the chosen session: `f` turns the stoker on or off, `n` starts or ends a night, `o` gives a new order. |
-| `F` | In the list, stokes the chain of the chosen session. |
-| `Tab` | Goes to Machine. |
+| `f` | In the list, on the host of the chosen session, turns [the stoker](stoker.md) off while it is on. While it rests, turns it back on. Otherwise opens the launch sheet for a day run. |
+| `n` | In the list, on the host of the chosen session, opens the launch sheet for a night: the stoker runs until the morning, then turns itself off. While a night runs, `n` ends it. |
+| `o` | In the list, on the host of the chosen session, gives a new order while a day run is on: the launch sheet opens with the run's gos, and the order goes to the stoker as one line. The run goes on, and done steps stay done. A night is sealed: `n` stops it first. |
+| `F` | In the list, stokes the chain of the chosen session: the start sheet, `Stoke the chain <name> (<n> matches)?`, takes the order and the gos of a stoker for that chain. See [A family of stokers](stoker.md#a-family-of-stokers). |
+| `d` | In the tips, dismisses the chosen tip until its evidence changes. |
+| `Tab` or `Shift+Tab` | Goes to Machine, or back to the list and the chat. |
 | `Ctrl+O` | Goes into the chosen agent's pane, from the line or the list. The key line then says the way back, `ctrl+a m`. |
 | `Ctrl+L` | Hides the list, or shows it again. With the list hidden, the chat takes the width, and the header names each session that needs you. A tap on a name opens its chat. On a phone, the list and the chat take turns. |
 | `◂` or `←` | On a phone, goes from the chat back to the list. A tap on `◂` at the left of the chat's head does it too. On a desk, `←` in the line moves the keys to the list, as `◂` does on a phone. |
-| `e` | In the list, shows the agents that exited and wait for their parent, dim at the end of `IDLE`, each with the word `exited`. `e` again hides them. The `IDLE` count counts only the sessions that run. While they are hidden, the foot counts them: `· 1 exited`. |
+| `e` | In the list, shows the agents that exited and wait for their parent, dim at the end of `IDLE`: for each parent, how many, the command that makes it reap them, and their pids. `e` again hides them. The `IDLE` count counts only the sessions that run. While they are hidden, the foot counts them: `· 1 exited`. |
+| `q` or `Ctrl+C` | Quits the console: `Ctrl+C` from every tab, `q` from Machine. In the line and the list, `q` types. The service keeps running. |
+| `R` | Starts the console again on the binary the service runs. The key line offers it first, `R start again · service v0.43.0, console v0.42.0`, when the service on this machine runs a newer release than the console and the console's own binary was installed over. Otherwise the line says `quit and reopen`. |
 
 On a desk the list is 40 columns wide, with the chat beside it. On a
 narrower screen the list is 32 columns wide. A phone, and a screen that
@@ -101,6 +66,10 @@ nothing. In the tips, `↑` `↓` choose, `Enter` does the chosen tip and `d`
 dismisses it. In a setup step, `Enter` sets it up and `x` closes it, after
 a typed `y`. In a host's trouble, `Enter` runs the fix or dials the host
 again. A drag in the chat copies only the chat's text.
+
+A key that changed its job says so once, the first time you press it:
+`c`, `g`, `p`, `x` on a session whose pull request waits for its merge,
+and a digit.
 
 A key with no job in the line or the list does not do nothing: a notice
 names the keys that place takes. Any other letter in the list moves the keys back to the line and types
@@ -140,15 +109,13 @@ the keys. The key line shows the keys of the chosen line.
 | `↑`, `↓` | Chooses the line above or below: the stoker's card, its steps, the talk line. |
 | `Enter` | On `↓ N more`, unfolds the plan. On the talk line, starts typing. On a quiet stoker's line, starts typing to it. |
 | `y` | Gives the go a step waits for. Every go (a merge, a release, a deploy, a kill) acts outside the session: it shows its command first and runs on a typed `y`. |
-| `]` | Opens the next chain's room. |
-| `[` | Opens the previous chain's room. |
 | `⌥s` | Goes back to the session you flipped from. With none, starts typing on the talk line. |
 | `⌥n` | Goes into the chain's first match. |
 | `◂` or `←` | Gives the keys to the list. The room stays open, and the list shows only its chain. |
 | `Esc` | Stops typing (the words stay). Else closes the room, shows every chain and gives the chat its place back. |
 | `Backspace` | Erases the last character while you type. |
 
-`out of <chain>` in a card's menu (`m`) takes the match out of the chain,
+`out of <chain>` in a session's menu (`m`) takes the match out of the chain,
 after a typed `y`. Its agent goes on, and the chain hears that it left.
 The menu has it only while the list shows that chain.
 
@@ -241,14 +208,14 @@ A start on a new account is a destructive action: the plan shows `RUN` and waits
 
 ## Go in
 
-A second tap on the chosen card goes into its pane. A keyboard never
-changes the layout: the shape goes by the tallest height seen at the
-width.
+A keyboard never changes the layout: the shape goes by the tallest
+height seen at the width.
 
 | Key | What it does |
 |---|---|
-| `Enter` or `a` | Goes into the chosen agent's tmux pane (help `go in`). A second tap on the chosen card does it too. |
-| `ctrl+a m` | In the iOS demo, which has no tmux, `Enter` opens a stand-in for the pane: the agent's screen over the whole screen, and every key goes to the agent. Its title is `‹ board`. `ctrl+a`, then `m` within 1 s, goes back to the board. |
+| `Ctrl+O` | Goes into the chosen agent's tmux pane, from the line or the list. |
+| `a` | In the list, goes into the chosen agent's tmux pane, as `Ctrl+O` does (help `go in`). |
+| `ctrl+a m` | In the iOS demo, which has no tmux, `Ctrl+O` opens a stand-in for the pane: the agent's screen over the whole screen, and every key goes to the agent. Its title is `‹ sessions`. `ctrl+a`, then `m` within 1 s, goes back to the list. |
 
 The mouse wheel over the stand-in scrolls it back through the pane's
 history, 3 lines for each wheel step. The key line says how far back you
@@ -308,30 +275,27 @@ On the chips:
 
 ## A phone
 
-The board is one column a page. A tap on a page's mark at the top opens
-that page. In Matchblox
-Pocket, a sideways swipe turns the page too.
+The list is the first screen, full width. A tap on a row opens its chat,
+and `◂` comes back.
 
 | The owner wants to | By hand |
 |---|---|
-| see the next column | Swipe sideways, or tap the column's mark at the top. |
-| peek | Tap a card. |
-| go in | Tap the chosen card again. |
-| answer | Tap an option in the peek, then tap it again to send it. |
-| open the menu | Long-press a card, or press `m`. |
-| act | Tap a key on the card or on the key line. A destructive act still waits for a typed `y`. |
-| come back | The belt's `◂`, or the edge swipe. |
+| open a chat | Tap its row. |
+| answer | Tap an option in the chat, then tap it again to send it. |
+| go in | Press `Ctrl+O`. |
+| open the menu | Long-press a row, or press `m` in the list. |
+| act | Tap a key on the key line. A destructive act still waits for a typed `y`. |
+| come back | `◂`, the belt's `◂`, or the edge swipe. |
 
-A vertical swipe scrolls the column. On a phone a drag never selects text:
-the menu copies. A tap is never consent: a tap on a card's `y go` marks
-the go, and a second tap gives it. A tap on a key of the key line presses
-it, and a tap on `● N need you` shows `NEEDS YOU` and chooses the first
-card that needs you. A tap on the header's stoker word opens the stoker
-agent. On Panes, a tap on a column header sorts by it.
+A vertical swipe scrolls the list or the chat. On a phone a drag never
+selects text: the menu copies. A tap is never consent: a tap on `y`
+marks the go, and a second tap gives it. A tap on a key of the key line
+presses it, and a tap on `● N need you` shows `NEEDS YOU` and chooses the
+first session that needs you. A tap on the header's stoker word opens the
+stoker agent. On Panes, a tap on a column header sorts by it.
 
-A long-press and a sideways swipe need Matchblox Pocket, or a terminal
-that reports the release of a press. Elsewhere, `m` opens the menu and
-`←` `→` turn the page.
+A long-press needs Matchblox Pocket, or a terminal that reports the
+release of a press. Elsewhere, `m` opens the menu.
 
 The app's command keys type a command of the agent into its pane, for
 example `/compact`, with no Return: you send it. The console marks the

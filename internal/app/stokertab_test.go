@@ -522,7 +522,8 @@ func TestDockCountsChains(t *testing.T) {
 		}
 	}
 	m, _ := loadedWith(t, 104, sheetScreen(screensState(t), true))
-	if s := screen(m); strings.Contains(s, "chain") {
+	if s := screen(m); strings.Contains(s, " chains") || strings.Contains(s, "1 chain") { // "g chain" is a key
+
 		t.Fatalf("no chain stoker, and the screen counts chains:\n%s", s)
 	}
 }
