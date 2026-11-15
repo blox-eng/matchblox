@@ -289,8 +289,11 @@ and `◂` comes back.
 | act | Tap a key on the key line. A destructive act still waits for a typed `y`. |
 | come back | `◂`, the belt's `◂`, or the edge swipe. |
 
-A vertical swipe scrolls the list or the chat. On a phone a drag never
-selects text: the menu copies. A tap is never consent: a tap on `y`
+A vertical swipe over the list, or a wheel step there, chooses the session
+above or below. Over the chat it scrolls the chat back through the pane's
+history, and the choice and a marked answer stay. A chat with no screen
+to scroll says so. On a phone a drag never selects text: the menu
+copies. A tap is never consent: a tap on `y`
 marks the go, and a second tap gives it. A tap on a key of the key line
 presses it, and a tap on `● N need you` shows `NEEDS YOU` and chooses the
 first session that needs you. A tap on the header's stoker word opens the

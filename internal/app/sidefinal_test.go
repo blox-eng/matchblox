@@ -184,3 +184,79 @@ func TestADigitAfterTheAnswerSaysWhatItWaitsFor(t *testing.T) {
 		t.Fatalf("a digit after the answer: notice %q", m.noticeText)
 	}
 }
+
+// wheelOn sends one wheel step at x, y.
+func wheelOn(t *testing.T, m Model, x, y int, up bool) Model {
+	t.Helper()
+	b := tea.MouseWheelDown
+	if up {
+		b = tea.MouseWheelUp
+	}
+	next, cmd := m.Update(tea.MouseWheelMsg{X: x, Y: y, Button: b})
+	return fed(next, cmd).(Model)
+}
+
+// wheelConsole is two sessions, flint-auth chosen with its screen watched
+// and its second option marked, at w by h.
+func wheelConsole(t *testing.T, w, h int) Model {
+	t.Helper()
+	m, _ := sideConsole(t, boardState(boardMatch("hearth-api", time.Hour), askingMatch("flint-auth", "Keep the token", "Refresh the token")))
+	m = upd(t, m, tea.WindowSizeMsg{Width: w, Height: h})
+	m = pickSide(t, m, "flint-auth")
+	s := matchNamed(t, m, "flint-auth")
+	m.watchHost, m.watching = s.Host, s.Pane
+	m.screen = proto.Screen{Pane: s.Pane, At: m.now(), Text: "● The login uses a token."}
+	m.startChatMark(s)
+	m.peekAt = m.now().Add(-peekDead)
+	m.toLine()
+	return pressOn(m, "2")
+}
+
+// TestWheelOverTheChatKeepsTheSession: at 160 columns and on a phone, a
+// wheel step over the chat keeps the chosen session and its mark, and
+// scrolls the chat back through the pane's history.
+func TestWheelOverTheChatKeepsTheSession(t *testing.T) {
+	for _, size := range [][2]int{{160, 30}, {40, 34}} {
+		m := wheelConsole(t, size[0], size[1])
+		x := size[0] - 5
+		m = wheelOn(t, m, x, 10, false)
+		if got := chosenName(t, m); got != "flint-auth" {
+			t.Errorf("%d: the wheel over the chat chose %s", size[0], got)
+		}
+		if armed, _ := m.chatMarks(matchNamed(t, m, "flint-auth")); armed != 2 {
+			t.Errorf("%d: the wheel over the chat dropped the mark: %d", size[0], armed)
+		}
+		if got := sent(m); len(got) != 1 || got[0].RecID != proto.KeysPrefix+"%flint-auth" || got[0].Text != proto.WheelDown {
+			t.Errorf("%d: the wheel over the chat sent %+v", size[0], got)
+		}
+	}
+}
+
+// TestWheelOverTheChatWithNoScreenSaysSo: a chat with no screen to scroll
+// says so, and chooses nothing.
+func TestWheelOverTheChatWithNoScreenSaysSo(t *testing.T) {
+	m := wheelConsole(t, 160, 30)
+	m.screen = proto.Screen{}
+	m.noticeText = ""
+	m = wheelOn(t, m, 150, 10, false)
+	if got := chosenName(t, m); got != "flint-auth" || len(sent(m)) != 0 || m.noticeText == "" {
+		t.Fatalf("chose %s, sent %+v, notice %q", got, sent(m), m.noticeText)
+	}
+}
+
+// TestWheelOverTheListChooses: a wheel step over the list's columns
+// chooses the session above or below, as ↑ and ↓ do.
+func TestWheelOverTheListChooses(t *testing.T) {
+	for _, size := range [][2]int{{160, 30}, {40, 34}} {
+		m := wheelConsole(t, size[0], size[1])
+		m.toList()
+		before := chosenName(t, m)
+		m = wheelOn(t, m, 3, 6, false)
+		if got := chosenName(t, m); got == before {
+			t.Errorf("%d: the wheel over the list chose nothing new: %s", size[0], got)
+		}
+		if len(sent(m)) != 0 {
+			t.Errorf("%d: the wheel over the list sent %+v", size[0], sent(m))
+		}
+	}
+}

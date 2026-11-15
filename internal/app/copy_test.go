@@ -652,6 +652,19 @@ func TestTheNamedDoorResetsWhenTheDoorsChange(t *testing.T) {
 	}
 }
 
+// rowOn is the cell of name's row in the list: only a swipe there chooses.
+func rowOn(t *testing.T, m Model, name string) (int, int) {
+	t.Helper()
+	listW := m.sideBoxAt(max(m.width, minWidth)).listW
+	for y, l := range strings.Split(plainFrame(m), "\n") {
+		if i := strings.Index(l, name); i >= 0 && ansi.StringWidth(l[:i]) < listW {
+			return ansi.StringWidth(l[:i]), y
+		}
+	}
+	t.Fatalf("no row of %s in the list:\n%s", name, plainFrame(m))
+	return 0, 0
+}
+
 func TestASwipeMovesTheCardAsTheArrowsDo(t *testing.T) {
 	for _, size := range [][2]int{{40, 34}, {80, 31}} {
 		name := fmt.Sprintf("%dx%d", size[0], size[1])
@@ -662,7 +675,7 @@ func TestASwipeMovesTheCardAsTheArrowsDo(t *testing.T) {
 			b   tea.MouseButton
 		}{{"down", tea.MouseWheelDown}, {"down", tea.MouseWheelDown}, {"up", tea.MouseWheelUp}} {
 			keys = pressOn(keys, step.key)
-			x, y := cardOn(t, swipe, chosenName(t, swipe))
+			x, y := rowOn(t, swipe, chosenName(t, swipe))
 			swipe = mouse(t, swipe, tea.MouseWheelMsg{X: x, Y: y, Button: step.b})
 			if got, want := chosenName(t, swipe), chosenName(t, keys); got != want {
 				t.Errorf("%s: a swipe %s chose %s, the arrow %s", name, step.key, got, want)
@@ -680,7 +693,7 @@ func TestASwipeMovesTheCardAsTheArrowsDo(t *testing.T) {
 	if armed, _ := m.chatMarks(matchNamed(t, m, "flint-auth")); armed != 1 {
 		t.Fatalf("1 marked %d", armed)
 	}
-	x, y := cardOn(t, m, "flint-auth")
+	x, y := rowOn(t, m, "flint-auth")
 	m = mouse(t, m, tea.MouseWheelMsg{X: x, Y: y, Button: tea.MouseWheelUp}) // flint-auth is the column's last
 	if armed, _ := m.chatMarks(matchNamed(t, m, "flint-auth")); armed != 0 {
 		t.Errorf("a swipe kept the mark %d", armed)

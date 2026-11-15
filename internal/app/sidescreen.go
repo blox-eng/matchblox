@@ -11,6 +11,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
@@ -648,16 +649,45 @@ func (m Model) headNames() []string {
 	return names
 }
 
-// sideWheel is a wheel step on the Sessions tab: it chooses the session
-// above or below, as ↑ and ↓ do.
+// sideWheel is a wheel step on the Sessions tab. Over the list's columns
+// it chooses the session above or below, as ↑ and ↓ do. Over the chat it
+// scrolls the chat, and the choice and its mark stay.
 func (m Model) sideWheel(ms tea.Mouse) (tea.Model, tea.Cmd) {
-	switch ms.Button {
-	case tea.MouseWheelUp:
-		m.sideMove(-1)
-	case tea.MouseWheelDown:
-		m.sideMove(1)
+	up := ms.Button == tea.MouseWheelUp
+	if !up && ms.Button != tea.MouseWheelDown {
+		return m, nil
 	}
-	return m, nil
+	if box := m.sideBoxAt(max(m.width, minWidth)); box.listW > 0 && ms.X < box.listW {
+		m.sideMove(map[bool]int{true: -1, false: 1}[up])
+		return m, nil
+	}
+	return m.chatWheel(up)
+}
+
+// chatWheel scrolls the chat of the chosen session through its pane's
+// history, as a wheel in its pane does: the service moves the screen it
+// watches, or gives the wheel to an agent that reads the mouse. A chat
+// with no screen to scroll says so.
+func (m Model) chatWheel(up bool) (tea.Model, tea.Cmd) {
+	s, ok := m.sideChosen()
+	if !ok || s.Pane == "" || isShipCard(s) || m.watchHost != s.Host || m.watching != s.Pane || m.screen.Pane != s.Pane || m.screen.Gone {
+		return m, m.notice("the chat has no screen to scroll")
+	}
+	if why := m.cannotReach(s.Host); why != "" {
+		return m, m.notice(why)
+	}
+	text := proto.WheelDown
+	if up {
+		text = proto.WheelUp
+	}
+	if s.Host == m.opt.Host {
+		cmd, why := m.sendKeySeen(s, text, m.screen.At)
+		if why != "" {
+			return m, m.notice(why)
+		}
+		return m, cmd
+	}
+	return m, m.sendTo(s.Host, proto.Act{RecID: proto.KeysPrefix + s.Pane, Text: text, PID: s.PID, Start: s.Start, Seen: m.screen.At})
 }
 
 // sideChatCols are the columns of the chat on a screen w wide, [0, 0]

@@ -363,7 +363,10 @@ goes dark. Tap it again to let it go. The pane gets ctrl with `b d e f g k l
 n p r t u v w x y`, and with `a` and `c`. It sends no `ctrl+z`, which would
 stop the agent, and no `ctrl+s` or `ctrl+q`, which stop and start the terminal.
 
-A vertical swipe scrolls the console and a tmux pane. The lines move with
+A vertical swipe scrolls the console and a tmux pane. In the console's
+list, a swipe chooses the session above or below. In the chat, a swipe
+scrolls the chat back through the pane's history, and the chosen session
+stays. A chat with no screen to scroll says so. The lines move with
 your finger: one line for each line of travel. In a tmux pane each wheel
 step scrolls 5 lines, so the app sends one step for each 5 lines of travel.
 Swipe down for older lines, and up for newer lines. A flick carries on for
