@@ -9,6 +9,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	uv "github.com/charmbracelet/ultraviolet"
 
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/said"
@@ -905,6 +906,55 @@ func TestBeltActKeysActWhileTheLineHasTheKeys(t *testing.T) {
 	}
 	if nm := pressOn(m, "c"); nm.lines[nm.chosenSide()] != "c" {
 		t.Errorf("a typed c: the line holds %q", nm.lines[nm.chosenSide()])
+	}
+}
+
+// tmuxTap is what the console reads for bytes, the app's belt tap after
+// tmux passed it on: tmux 3.4 sends the super modifier on as alt.
+func tmuxTap(t *testing.T, bytes string) tea.KeyPressMsg {
+	t.Helper()
+	var d uv.EventDecoder
+	n, ev := d.Decode([]byte(bytes))
+	k, ok := ev.(uv.KeyPressEvent)
+	if !ok || n != len(bytes) {
+		t.Fatalf("%q reads as %#v (%d bytes)", bytes, ev, n)
+	}
+	return tea.KeyPressMsg(k)
+}
+
+// TestBeltTapsActThroughTmux: the belt's act keys reach the console as
+// tmux passes them on (super as alt: ESC c, ESC N), and act on the chosen
+// session from the line and from the list. On Pocket ⌥s is the belt's s:
+// it opens no room.
+func TestBeltTapsActThroughTmux(t *testing.T) {
+	m, clipped, _ := sideShot(t, 160, 38)
+	pocketOnly(&m)
+	for _, focus := range []string{"line", "list"} {
+		f := m
+		if focus == "list" {
+			f.toList()
+		} else {
+			f.toLine()
+		}
+		*clipped = nil
+		next, cmd := f.Update(tmuxTap(t, "\x1bc"))
+		if nm := fed(next, cmd).(Model); len(*clipped) != 1 || nm.lines[nm.chosenSide()] != "" {
+			t.Errorf("%s: tmux's ESC c copied %q, the line holds %q", focus, *clipped, nm.lines[nm.chosenSide()])
+		}
+		if next, _ = f.Update(tmuxTap(t, "\x1bm")); next.(Model).menu == nil {
+			t.Errorf("%s: tmux's ESC m opened no menu", focus)
+		}
+		if next, _ = f.Update(tmuxTap(t, "\x1bN")); next.(Model).form == nil && !strings.HasPrefix(next.(Model).flash, "no agent to start here") {
+			t.Errorf("%s: tmux's ESC N started no session: %q", focus, next.(Model).noticeText)
+		}
+		if next, _ = f.Update(tmuxTap(t, "\x1bs")); next.(Model).room != nil {
+			t.Errorf("%s: the belt's s opened a room", focus)
+		}
+	}
+	// The app's own bytes, read with no tmux between: super N is N.
+	next, _ := m.Update(tmuxTap(t, "\x1b[78;9u"))
+	if nm := next.(Model); nm.form == nil && !strings.HasPrefix(nm.flash, "no agent to start here") {
+		t.Errorf("super N started no session: %q", nm.noticeText)
 	}
 }
 

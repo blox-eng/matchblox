@@ -397,11 +397,13 @@ func beltOf(b bkey.Binding, face, word string, on bool) beltKey {
 	return beltKey{Key: b.Keys()[0], Face: cmp.Or(face, b.Help().Key), Word: word, On: on}
 }
 
-// beltKeys are the board's keys on the belt, in its order: home is ◂, the
-// chosen card's keys (at most three), ↑ ↓ ⏎; the tail has every other key
-// of the board. The consent box leaves ◂, y and esc; the menu ◂ ↑ ↓ ⏎ esc.
-// Another consent (the take-over question, the scan's, ⏎'s) is home with no
-// card keys and every key of the tail off.
+// beltKeys are the Sessions tab's keys on the belt, in its order: home is
+// ◂, the chosen session's keys (at most three), ↑ ↓ ⏎; the tail has the
+// keys of the list. The belt follows the focus: while the line holds text
+// a digit types, so the digits are off, and while the line has the keys
+// ↑ ↓ are off too. The consent box leaves ◂, y and esc; the menu ◂ ↑ ↓ ⏎
+// esc. Another consent (the take-over question, the scan's, ⏎'s) is home
+// with no card keys and every key of the tail off.
 func (m Model) beltKeys() []beltKey {
 	bk, mk := m.keys.board, m.keys.main
 	home := beltKey{Face: "◂", On: true}
@@ -417,35 +419,40 @@ func (m Model) beltKeys() []beltKey {
 	board := m.boardShown() && !m.consenting()
 	s, card := m.sideChosen()
 	card = board && card
+	typed := card && m.lines[paneOf(s)] != ""
 	ks := []beltKey{home}
 	if card {
-		ks = append(ks, m.cardBelt(s)...)
+		ks = append(ks, m.cardBelt(s, typed)...)
+	}
+	if typed && !m.inList() {
+		up.On, down.On = false, false
 	}
 	_, head := m.headRow(s)
 	return append(ks, up, down, beltOf(mk.Open, "", "", true),
 		beltOf(mk.Jump, "⌃o", "expand", card),
-		beltOf(bk.Copy, "", "copy", card),
-		beltOf(bk.Menu, "", "menu", card),
-		beltOf(bk.Chain, "", "chain", card && m.chainLabelOf(s) != ""),
 		beltOf(bk.Host, "", "hosts", board && m.hostCount() > 1),
+		beltOf(bk.Chain, "", "chain", card && m.chainLabelOf(s) != ""),
+		beltOf(mk.Search, "", "", board),
+		beltOf(bk.Menu, "", "menu", card),
+		beltOf(bk.Copy, "", "copy", card),
+		beltOf(mk.Park, "", "park", card),
+		beltOf(mk.New, "", "new", board),
 		beltOf(mk.NextTab, "⇥", "machine", !m.consenting()),
 		beltOf(mk.Second, "", "kill", card && !head && m.killAction(s) != nil),
-		beltOf(mk.Search, "", "", board),
-		beltOf(mk.Park, "", "park", card),
 	)
 }
 
-// cardBelt are the chosen card's keys on the belt: the digits of the
+// cardBelt are the chosen session's keys on the belt: the digits of the
 // options it asks (at most three; off on another host, which takes no
-// digit), or p for the ship that waits for its merge and y for the go
-// that waits.
-func (m Model) cardBelt(s sample.Session) []beltKey {
+// digit, and off while its line holds text, where a digit types), or p for
+// the ship that waits for its merge and y for the go that waits.
+func (m Model) cardBelt(s sample.Session, typed bool) []beltKey {
 	var ks []beltKey
 	if q, answers := m.oneChoice(s); answers {
 		if _, sent := m.chatMarks(s); sent == 0 {
 			for i := range min(len(q.Options), 3) {
 				n := strconv.Itoa(i + 1)
-				ks = append(ks, beltKey{Key: n, Face: n, Word: "answer", On: s.Host == m.opt.Host, Act: true})
+				ks = append(ks, beltKey{Key: n, Face: n, Word: "answer", On: s.Host == m.opt.Host && !typed, Act: true})
 			}
 			return ks
 		}
@@ -496,8 +503,9 @@ func (m Model) beltValue() string {
 //	dim   = "" | tok *( "," tok )   the keys that are off, in the belt's order
 //	key   = tok [ "*" ]
 //
-// A tok is a beltKey's Key: 1 2 3 p y up down enter c m g s tab x / z. A card's key that is off (a digit on another host)
-// is a dim tok. ◂ has none and is never sent. At most beltMax bytes:
+// A tok is a beltKey's Key: 1 2 3 p y up down enter ctrl+o s g / m c z N
+// tab x. A card's key that is off (a digit on another host, or one the
+// line types) is a dim tok. ◂ has none and is never sent. At most beltMax bytes:
 // dim toks leave whole from the right, then card keys from the right.
 // The other values ("" off the board, "box", "menu") come from beltValue.
 func beltWord(ks []beltKey, armed string) string {

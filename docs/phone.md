@@ -105,11 +105,11 @@ terminal.`
 - While the console shows Sessions or Machine, the key belt is on its
   Board layout. Home is `◂`, then the keys of the chosen session
   (`1 answer`, `p merge`, `y go`), then `↑ ↓ ⏎`. The rest of the belt has
-  `⌃o expand` and the list's keys: `c copy`, `m menu`, `g chain`,
-  `s hosts`, `⇥ machine`, `x kill`, `/`, `z park`. These keys act on the
-  chosen session while you write in its line too: a letter you type on
-  the keyboard types. A key that does not apply is dim and sends
-  nothing. In a pane, the belt goes back to the layout it had there. A tap
+  `⌃o expand` and the list's keys: `s hosts`, `g chain`, `/`, `m menu`,
+  `c copy`, `z park`, `N new`, `⇥ machine`, `x kill`. These keys act on
+  the chosen session while you write in its line too: a letter you type
+  on the keyboard types. While the line holds text, a digit types, so the
+  digits are dim. A key that does not apply is dim and sends nothing. In a pane, the belt goes back to the layout it had there. A tap
   on `y go` does not give the go. The first tap arms it: a notice says
   what the go does, for example `y again gives the go: merge #4556`. Tap
   `y` again to give the go. Any other key or tap disarms it. While the

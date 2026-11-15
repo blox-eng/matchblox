@@ -560,9 +560,9 @@ func beltKeyOf(t *testing.T, ks []beltKey, face string) beltKey {
 }
 
 // TestBeltKeysFollowTheChosenCard (design decision 10): home is ◂, the
-// chosen card's keys, ↑ ↓ ⏎; the tail has every other key of the board.
+// chosen session's keys, ↑ ↓ ⏎; the tail has the keys of the list.
 func TestBeltKeysFollowTheChosenCard(t *testing.T) {
-	tail := []string{"⌃o", "c", "m", "g", "s", "⇥", "x", "/", "z"}
+	tail := []string{"⌃o", "s", "g", "/", "m", "c", "z", "N", "⇥", "x"}
 	st := boardFixture(t)
 
 	m, _ := flintBoard(t, 80, 34)
@@ -595,7 +595,7 @@ func TestBeltKeysFollowTheChosenCard(t *testing.T) {
 	if g := beltKeyOf(t, ks, "g"); g.On {
 		t.Errorf("kindle-web is in no chain, yet g is %+v", g)
 	}
-	words := map[string]string{"⌃o": "expand", "c": "copy", "m": "menu", "g": "chain", "s": "hosts", "⇥": "machine", "x": "kill", "z": "park"}
+	words := map[string]string{"⌃o": "expand", "c": "copy", "m": "menu", "g": "chain", "s": "hosts", "⇥": "machine", "x": "kill", "z": "park", "N": "new"}
 	for face, word := range words {
 		if k := beltKeyOf(t, ks, face); k.Word != word {
 			t.Errorf("%s says %q, want %q", face, k.Word, word)
@@ -609,6 +609,34 @@ func TestBeltKeysFollowTheChosenCard(t *testing.T) {
 	}
 }
 
+// TestBeltFollowsTheFocus: the belt shows what acts. With the line empty
+// the digits answer and ↑ ↓ choose, in the line and in the list. While
+// the line holds text a digit types, so the digits are off; in the line
+// ↑ ↓ are off too, and in the list they choose.
+func TestBeltFollowsTheFocus(t *testing.T) {
+	m, _ := flintBoard(t, 80, 34)
+	m.toLine()
+	if got := m.beltValue(); got != "1,2;" {
+		t.Errorf("the line, empty: %q, want 1,2;", got)
+	}
+	typed := pressOn(m, "h")
+	if typed.lines[typed.chosenSide()] != "h" {
+		t.Fatalf("the line holds %q, want h", typed.lines[typed.chosenSide()])
+	}
+	if got := typed.beltValue(); got != ";1,2,up,down" {
+		t.Errorf("the line holds text: %q, want ;1,2,up,down", got)
+	}
+	list := typed
+	list.toList()
+	if got := list.beltValue(); got != ";1,2" {
+		t.Errorf("the list, a draft in the line: %q, want ;1,2", got)
+	}
+	m.toList()
+	if got := m.beltValue(); got != "1,2;" {
+		t.Errorf("the list, the line empty: %q, want 1,2;", got)
+	}
+}
+
 // TestTheBeltSignalSaysTheBoardsKeys: the console tells the app the
 // chosen card's keys, an armed one with *, and the dim keys after ;; box
 // and menu while they show; "" when it leaves the board. It says a value
@@ -619,7 +647,7 @@ func TestTheBeltSignalSaysTheBoardsKeys(t *testing.T) {
 
 	empty := st
 	empty.Sessions, empty.Queue, empty.Ships, empty.Chains = nil, nil, &proto.Ships{At: demoAt}, nil
-	if got := value(boardShot(t, empty, 80, 34, nil)); got != ";ctrl+o,c,m,g,s,x,z" {
+	if got := value(boardShot(t, empty, 80, 34, nil)); got != ";ctrl+o,s,g,m,c,z,x" {
 		t.Errorf("no card chosen: %q", got)
 	}
 
@@ -654,7 +682,7 @@ func TestTheBeltSignalSaysTheBoardsKeys(t *testing.T) {
 		if !c.consenting() {
 			t.Fatalf("%s does not show", name)
 		}
-		if got := value(c); got != ";ctrl+o,c,m,g,s,tab,x,/,z" {
+		if got := value(c); got != ";ctrl+o,s,g,/,m,c,z,N,tab,x" {
 			t.Errorf("%s: %q, want the home with no card keys", name, got)
 		}
 		if ks := c.beltKeys(); slices.ContainsFunc(ks, func(k beltKey) bool { return k.Act }) {
