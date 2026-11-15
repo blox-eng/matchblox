@@ -109,9 +109,9 @@ func TestSelectionChangeDropsTheOldScreen(t *testing.T) {
 	m, _ := viewModel(t)
 	sel, _ := m.selected()
 	next, _ := m.Update(screenMsg{Pane: sel.Pane, Text: "old"})
-	next, _ = key(next, "down")
-	if got := next.(Model).screen; got.Text != "" {
-		t.Fatalf("screen of the old pane stayed: %+v", got)
+	next, _ = key(next, "right") // the other column's card: the watch moves to its pane
+	if got := next.(Model); got.watching == sel.Pane || got.screen.Text != "" {
+		t.Fatalf("watching %q, and the screen of the old pane stayed: %+v", got.watching, got.screen)
 	}
 }
 

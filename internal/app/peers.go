@@ -252,6 +252,9 @@ func (m Model) peerUpdate(pm peerMsg) (tea.Model, tea.Cmd) {
 		m.noteChanges(p.host, st.Sessions, st.Chains)
 		first := !p.have
 		p.st, p.at, p.have, p.answered, p.silent = st, m.now(), true, true, false
+		if p.host == m.watchHost {
+			m.watchHeld = ""
+		}
 		p.cpu.push(st.Machine)
 		switch {
 		case msg.History != nil:
@@ -278,7 +281,12 @@ func (m Model) peerUpdate(pm peerMsg) (tea.Model, tea.Cmd) {
 		next, order := m.queuedOrder(p.host)
 		tick := next.waitTick()
 		return next, tea.Batch(next.peerRecv(i), order, tick)
+	case screenMsg:
+		return m.screenFrom(p.host, msg), m.peerRecv(i)
 	case resultMsg:
+		if mm, ok := m.watchRefused(p.host, proto.Result(msg)); ok {
+			return mm, mm.peerRecv(i)
+		}
 		at := slices.Index(p.acts, msg.ActID)
 		if at < 0 {
 			return m, m.peerRecv(i) // not an act sent on this conn: its own went with the lost one

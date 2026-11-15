@@ -139,42 +139,121 @@ func cropScreen(text string, w, h int) []string {
 	return lines
 }
 
-// watchCmd asks the service for the selected session's screen when it is
-// not the one already watched, and for none when the selection has no pane
-// or is another host's, or no screen shows the console (away). A screen of
+// watchCmd asks the service of the watched session's host for its screen
+// when it is not the one already watched, and for none when there is no
+// such session, its host is not reached, or no screen shows the console
+// (away). A new host's watch stops the old host's first. A screen of
 // another pane never stays. The watch names no size: the agent's window
 // keeps its own (#351).
 func (m *Model) watchCmd() tea.Cmd {
-	want := ""
-	if m.conn != nil && !m.lost && !m.mismatch && !m.away {
-		s, ok := m.selected()
-		if m.boardShown() { // the board watches its chosen card beside the live view, or in the stand-in
-			s, ok = m.boardSelected()
-			ok = ok && (m.boardLive() || m.standIn)
-		}
-		if ok && s.Host == m.opt.Host && !isShipCard(s) { // another host's pane id names another pane here
-			want = s.Pane
-		}
+	host, want := m.watchWant()
+	if m.watchConn(host) == nil {
+		host, want = m.watchHost, "" // the service forgot the watch with the connection
 	}
-	if m.watchHeld != "" && want == m.watchHeld {
+	if m.watchHeld != "" && host == m.watchHost && want == m.watchHeld {
 		want = m.watching
 	}
-	if want == m.watching {
+	if host == m.watchHost && want == m.watching {
 		return nil
 	}
-	m.screen = proto.Screen{} // another pane opens blank until its screen comes
-	m.watching = want
-	if m.conn == nil || m.lost || m.mismatch {
-		return nil // the service forgot the watch with the connection
+	var stop tea.Cmd
+	if host != m.watchHost && m.watching != "" {
+		stop = m.watchOn(m.watchHost, "")
 	}
-	c := m.conn
-	act := proto.Act{RecID: proto.WatchPrefix + want}
-	return func() tea.Msg { // not m.send: the watch takes no number from the acts the builder sees
-		if err := c.Send(proto.KindAct, watchActID+want, act); err != nil {
+	m.screen = proto.Screen{} // another pane opens blank until its screen comes
+	m.watchHost, m.watching = host, want
+	return tea.Batch(stop, m.watchOn(host, want))
+}
+
+// watchWant is the host and the pane to watch: the board's chosen card
+// beside the live view or in the stand-in, else the list's chosen session
+// on any host; off the board, the selected session of the home host. No
+// pane: the host stays and the pane is "".
+func (m Model) watchWant() (host, pane string) {
+	if m.away {
+		return m.watchHost, ""
+	}
+	if m.boardShown() {
+		if s, ok := m.boardSelected(); ok && (m.boardLive() || m.standIn) && s.Host == m.opt.Host && !isShipCard(s) {
+			return s.Host, s.Pane
+		}
+		if k := m.chosenSide(); k.pane != "" {
+			return k.host, k.pane
+		}
+		return m.watchHost, ""
+	}
+	if s, ok := m.selected(); ok && s.Host == m.opt.Host && !isShipCard(s) { // another host's pane id names another pane here
+		return s.Host, s.Pane
+	}
+	return m.watchHost, ""
+}
+
+// watchConn is the conn that reaches host's service: the home conn for the
+// home host, else the peer's own. Nil when the host is not reached.
+func (m Model) watchConn(host string) transport.Conn {
+	if host == m.opt.Host {
+		if m.conn == nil || m.lost || m.mismatch {
+			return nil
+		}
+		return m.conn
+	}
+	i := m.peerAt(host)
+	if i < 0 {
+		return nil
+	}
+	if l := m.peers[i]; l.conn != nil && !l.lost && !l.mismatch && !l.redialing {
+		return l.conn
+	}
+	return nil
+}
+
+// watchOn asks host's service to send the screen of pane, or of none for
+// "". It is not m.send: the watch takes no number from the acts the
+// builder sees.
+func (m Model) watchOn(host, pane string) tea.Cmd {
+	c := m.watchConn(host)
+	if c == nil {
+		return nil
+	}
+	act := proto.Act{RecID: proto.WatchPrefix + pane}
+	send := func() tea.Msg {
+		if err := c.Send(proto.KindAct, watchActID+pane, act); err != nil {
 			return lostMsg{err, c}
 		}
 		return nil
 	}
+	if host == m.opt.Host {
+		return send
+	}
+	return toPeer(host, send)
+}
+
+// screenFrom keeps a screen host sent when it is of the watched pane: a
+// screen of another pane, or of the same pane id on another host, never
+// stays. A read that failed flashes, and the last screen stays.
+func (m Model) screenFrom(host string, msg screenMsg) Model {
+	switch {
+	case host != m.watchHost || msg.Pane != m.watching:
+	case msg.Err != "":
+		m.flash = msg.Err
+	default:
+		m.screen = proto.Screen(msg)
+	}
+	return m
+}
+
+// watchRefused holds the watch host refused: a pane that went before the
+// watch came is a race, not the builder's error. false: r is no refused
+// watch.
+func (m Model) watchRefused(host string, r proto.Result) (Model, bool) {
+	pane, ok := strings.CutPrefix(r.ActID, watchActID)
+	if !ok || r.Err == "" {
+		return m, false
+	}
+	if pane != "" && host == m.watchHost && pane == m.watching {
+		m.watchHeld, m.watching, m.screen = pane, "", proto.Screen{}
+	}
+	return m, true
 }
 
 // viewLines is the watched screen fitted to w by h, or what stands in its
@@ -186,7 +265,7 @@ func (m Model) viewLines(w, h int) []string {
 	if !ok || s.Pane == "" || s.Host != m.opt.Host {
 		return lines
 	}
-	shown := m.screen.Pane == s.Pane
+	shown := m.watchHost == s.Host && m.screen.Pane == s.Pane
 	if shown && m.screen.Gone {
 		const text = "That session ended."
 		if h > 0 {

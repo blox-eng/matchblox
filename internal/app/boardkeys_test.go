@@ -700,8 +700,10 @@ func TestTheLiveViewCropsTheChosenCardsScreen(t *testing.T) {
 			t.Errorf("a line %d wide at 160 columns: %q", n, l)
 		}
 	}
-	if m = watched(151); m.watching != "" {
-		t.Errorf("at 151 columns the board watches %q", m.watching)
+	// With no live view the board watches no card: the chat watches the
+	// list's chosen session.
+	if m = watched(151); m.watching != m.chosenSide().pane || m.watching == paneNamed(st, "flint-auth") {
+		t.Errorf("at 151 columns the console watches %q, not the list's chosen %q", m.watching, m.chosenSide().pane)
 	}
 }
 

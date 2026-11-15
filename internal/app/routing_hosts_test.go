@@ -223,23 +223,30 @@ func TestSwitchJumpsOnItsHost(t *testing.T) {
 	}
 }
 
-// TestARemoteRowIsListOnly: the chat watches and sends keys only for the
-// home host's sessions. With the peer's %12 selected, nothing watches
-// home's %12, its screen never shows, a and typing send no keys, and the
-// right side names the row's host and the way into its pane.
+// TestARemoteRowIsListOnly: the board sends keys only for the home host's
+// sessions. With the peer's %12 selected and chosen in the list, the chat
+// watches it on the peer, home's %12 screen never shows, a and typing send
+// no keys, and the right side names the row's host and the way into its
+// pane.
 func TestARemoteRowIsListOnly(t *testing.T) {
 	m, home, ws := samePane(t, nil)
-	if w := m.(Model).watching; w != "" {
-		t.Fatalf("the peer's row watches %q on this machine", w)
+	mm := m.(Model)
+	mm.sideAt = paneKey{"ws-1", "%12"}
+	m, _ = mm.Update(tea.WindowSizeMsg{Width: 132, Height: 30})
+	if nm := m.(Model); nm.watchHost != "ws-1" || nm.watching != "%12" {
+		t.Fatalf("the peer's chosen row watches %q on %q", nm.watching, nm.watchHost)
 	}
 	m, _ = m.Update(screenMsg{Pane: "%12", At: time.Now(), Text: "HOME TWELVE"})
+	if nm := m.(Model); nm.screen.Text != "" {
+		t.Fatalf("home's %%12 screen stays for the peer's: %+v", nm.screen)
+	}
 	m = pressAll(m, "a")
 	if nm := m.(Model); nm.standIn || nm.pending == nil || nm.pending.host != "ws-1" {
 		t.Fatalf("a on a remote row: stand-in %v, pending %+v", nm.standIn, nm.pending)
 	}
 	m = pressAll(m, "x", "y", "1")
 	for _, a := range append(home.allActs(), ws.allActs()...) {
-		if strings.HasPrefix(a.RecID, proto.WatchPrefix) || strings.HasPrefix(a.RecID, proto.KeysPrefix) || strings.HasPrefix(a.RecID, "pick:") {
+		if strings.HasPrefix(a.RecID, proto.KeysPrefix) || strings.HasPrefix(a.RecID, "pick:") {
 			t.Fatalf("a remote row sent %q", a.RecID)
 		}
 	}

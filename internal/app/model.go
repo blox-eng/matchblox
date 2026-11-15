@@ -336,7 +336,8 @@ type Model struct {
 	paneSel    int
 	screen     proto.Screen       // the last capture of the watched pane
 	watching   string             // the pane the service sends, or ""
-	watchHeld  string             // the pane the service refused, until the next snapshot
+	watchHost  string             // the host of watching: a pane id names a pane on one host only
+	watchHeld  string             // the pane of watchHost the service refused, until its next snapshot
 	changes    map[paneKey]change // a match change that plays once
 	animating  bool
 	hist       history.Series
@@ -831,14 +832,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case noticeMsg:
 		return m, m.noticeEnded() // the frame drops it, or the next one shows
 	case screenMsg:
-		if msg.Pane == m.watching && msg.Err != "" {
-			m.flash = msg.Err // a read that failed: the session and its last screen stay
-			return m, m.recv()
-		}
-		if msg.Pane == m.watching {
-			m.screen = proto.Screen(msg)
-		}
-		return m, m.recv()
+		return m.screenFrom(m.opt.Host, msg), m.recv()
 	case peerMsg:
 		return m.peerUpdate(msg)
 	case peerRedialMsg:
@@ -888,7 +882,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.askGone(msg)
 	case stateMsg:
 		first := !m.have
-		m.watchHeld = ""
+		if m.watchHost == m.opt.Host {
+			m.watchHeld = ""
+		}
 		st := proto.State(msg)
 		m.noteChanges(m.opt.Host, st.Sessions, st.Chains) // before the state: a card's column before the change
 		var feel tea.Cmd
@@ -1014,12 +1010,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			next := m.nextKey()
 			return m, tea.Batch(m.recv(), next, note)
 		}
-		if pane, ok := strings.CutPrefix(msg.ActID, watchActID); ok && msg.Err != "" {
-			// A pane that went before the watch came is a race, not the builder's error.
-			if pane != "" && pane == m.watching {
-				m.watchHeld, m.watching, m.screen = pane, "", proto.Screen{}
-			}
-			return m, m.recv()
+		if mm, ok := m.watchRefused(m.opt.Host, proto.Result(msg)); ok {
+			return mm, mm.recv()
 		}
 		mm, cmd := m.result(proto.Result(msg))
 		return mm, tea.Batch(mm.recv(), cmd)
