@@ -1,7 +1,7 @@
  ▰ matchblox                   ● 1 need you
  BOARD 5    machine
 ────────────────────────────────────────────
- NEEDS YOU 1 −  work 2  ship 0  quiet 2
+ NEEDS YOU 1  work 2  ship 0  quiet 2
 ────────────────────────────────────────────
 ▌╿ kindle-web                         ✻  1m
   asks Claude needs your permission to use…

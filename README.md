@@ -12,7 +12,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-black.svg)](LICENSE)
 
 <p>
-<img src="www/demo/replay-desk.svg" width="74%" alt="The matchblox board on a desk, on a demo machine: four columns, NEEDS YOU, WORKING, SHIPPING and QUIET. A digit marks an answer from the agent's own options, the same digit sends it, and the card strikes into WORKING. p and a typed y merge a pull request. A tap hides the WORKING column and brings it back, and g shows one chain">
+<img src="www/demo/replay-desk.svg" width="74%" alt="The matchblox board on a desk, on a demo machine: four columns, NEEDS YOU, WORKING, SHIPPING and QUIET. A digit marks an answer from the agent's own options, the same digit sends it, and the card strikes into WORKING. p and a typed y merge a pull request. g shows one chain">
 <img src="www/demo/replay-phone.svg" width="24%" alt="The same board on a phone: one column a page, with the page marks at the top. An answer marked and sent from the card's peek, a merge, a page hidden and shown again, and one chain">
 </p>
 
@@ -82,8 +82,7 @@ The full walk is [Get started](https://docs.matchblox.com/start/).
 - **The peek**: the chosen card shows what the agent said last and the
   options of its question. A digit marks an answer, and the same digit
   sends it. `p` merges a pull request that waits for your merge, after a
-  typed `y`. A tap on a column's name hides the column. `g` shows one
-  chain, and `s` one host.
+  typed `y`. `g` shows one chain, and `s` one host.
 - **Go straight in**: `Enter` goes into the agent's own tmux pane, on this
   host or another, and moves only your screen. `ctrl+a m` (your tmux
   prefix, then `m`) comes back, with the next card that needs you chosen.

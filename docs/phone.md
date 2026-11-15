@@ -400,9 +400,8 @@ A phone is read by its shape at the tallest height seen at its width, so
 the keyboard coming and going never changes the layout. Upright under 90
 columns, or under 60 columns, the board is one column a page. The page
 marks at the top name the open column in capitals with its count, and the
-others short: `NEEDS YOU 4 −  work 3  ship 3  quiet 5`. A tap on a mark
-opens its page, and a tap on the open page's mark hides the page. A hidden
-page waits at the end of the marks as `+ work 3`.
+others short: `NEEDS YOU 4  work 3  ship 3  quiet 5`. A tap on a mark
+opens its page.
 
 A phone shows whole cards in `NEEDS YOU` and one line for each card
 elsewhere. The chosen card is always whole, with its peek: what the agent said last and

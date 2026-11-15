@@ -279,7 +279,7 @@ func (m *Model) pickBelow(line string) {
 // boardOnRow: Sessions' selection is what the board chose (onChoice): a
 // card of a session, a line under the columns, or a service's door. A ship
 // card, a host line, the console's own doors, a search that matches nothing,
-// every column hidden and an open menu have no row.
+// and an open menu have no row.
 func (m Model) boardOnRow() bool {
 	if m.menu != nil {
 		return false // the menu takes every key; its go in asks for itself
@@ -350,13 +350,9 @@ func (m Model) aboveOpen(host string, k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// openColumn is a tap on a column's name or its + name: it shows the
-// column when it is hidden, and opens it on the card it had chosen, else
-// its first.
+// openColumn is a tap on a column's name: it opens the column on the card
+// it had chosen, else its first.
 func (m *Model) openColumn(c boardCol) {
-	if m.colHidden(c) {
-		m.flipHidden(c)
-	}
 	b, _ := m.boardDrawOf()
 	ss := b.idx[c]
 	if len(ss) == 0 {
@@ -371,9 +367,6 @@ func (m *Model) openColumn(c boardCol) {
 // clearBoardFilters is a tap on the count: NEEDS YOU shows, every chain,
 // host and search goes, and the first wait is chosen.
 func (m *Model) clearBoardFilters() {
-	if m.colHidden(colNeed) {
-		m.flipHidden(colNeed)
-	}
 	if m.room != nil { // the room is the narrowing: both go
 		*m = m.closeRoom()
 	}
@@ -550,7 +543,7 @@ func (m Model) boardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 	case !ok && len(m.snap.Sessions) > 0 && bkey.Matches(k, bk.Merge, bk.Menu, mk.Second, mk.Grant, mk.Open, mk.Into, mk.Jump,
 		mk.Park, mk.Rename, mk.Switch, mk.Dismiss, mk.Stoke, mk.StokeChain, mk.Night, mk.Order):
 		// A line above or under the columns is chosen, a search or a host leaves
-		// no card, or every column is hidden: never a row of Sessions the person
+		// no card: never a row of Sessions the person
 		// cannot see. The notice names the fix that is true.
 		switch {
 		case above:
@@ -559,10 +552,10 @@ func (m Model) boardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 			cmd = m.notice("no card is chosen · ↑ goes back to the cards")
 		case m.filter != "":
 			cmd = m.notice(`nothing matches "` + m.filter + `" · ` + mk.Back.Help().Key + " clears")
-		case m.boardHost != "" && !slices.ContainsFunc(boardCols[:], m.colHidden):
+		case m.boardHost != "":
 			cmd = m.notice("no match on " + m.boardHost + " · " + bk.Host.Help().Key + " turns the host")
 		default:
-			cmd = m.notice("no card is chosen · tap a + name to show a column")
+			cmd = m.notice("no card is chosen")
 		}
 	case !ok && bkey.Matches(k, bk.Merge, bk.Menu, mk.Second, mk.Grant):
 		// no match at all: nothing to act on
@@ -857,8 +850,7 @@ func (m Model) boardKeyLine(w int) (string, []span) {
 }
 
 // boardTap is a tap at x on line y of the board's body: on a column's name,
-// the QUIET drawer's too, it hides the column; on a phone's page mark it
-// opens that page, hides the open one and shows a hidden one; on a host
+// the QUIET drawer's too, and on a phone's page mark it opens that column; on a host
 // line it dials the host again. On a card it chooses the card, and a tap
 // on one of the card's keys presses that key. A destructive key only opens
 // the consent box.
@@ -874,11 +866,7 @@ func (m Model) boardTap(x, y int) (tea.Model, tea.Cmd) {
 	}
 	if h, ok := spanAt(d.heads, x); ok && y == d.headAt {
 		c := boardCols[slices.IndexFunc(boardCols[:], func(c boardCol) bool { return c.short() == h.press })]
-		if m.colHidden(c) || m.layoutAt(w) == Narrow && c != b.open {
-			m.openColumn(c)
-		} else {
-			m.flipHidden(c)
-		}
+		m.openColumn(c)
 		return m, nil
 	}
 	if host, ok := d.hostAt[y]; ok {
@@ -893,7 +881,7 @@ func (m Model) boardTap(x, y int) (tea.Model, tea.Cmd) {
 		return m.underTap(at, x, w)
 	}
 	if sp, ok := spanAt(d.taps[y], x); ok && sp.press == colQuiet.short() {
-		m.flipHidden(colQuiet) // the drawer's name
+		m.openColumn(colQuiet) // the drawer's name
 		return m, nil
 	}
 	c, s, ok := m.cardAt(d, b, x, y)
@@ -956,20 +944,13 @@ func (m Model) cardAt(d boardDrawn, b boardDraw, x, y int) (boardCol, sample.Ses
 }
 
 // boardTabTap is a tap on the crumb of the tab row: esc all shows every
-// chain, and a hidden column's + name shows it and opens it. false: the
-// tap is on a tab.
+// chain. false: the tap is on a tab.
 func (m Model) boardTabTap(press string) (Model, bool) {
 	if !m.boardShown() {
 		return m, false
 	}
 	if press == m.keys.main.Back.Help().Key { // the room is the narrowing: both go
 		return m.closeRoom(), true
-	}
-	for _, c := range boardCols {
-		if press == c.short() {
-			m.openColumn(c)
-			return m, true
-		}
 	}
 	return m, false
 }

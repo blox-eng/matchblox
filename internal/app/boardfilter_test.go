@@ -71,69 +71,29 @@ func drawnNames(m Model) []string {
 	return names
 }
 
-func TestATapOnAColumnNameHidesIt(t *testing.T) {
+func TestATapOnAColumnNameOpensIt(t *testing.T) {
 	st := boardFixture(t)
 	for _, size := range [][2]int{{80, 31}, {104, 38}} {
 		m := tapHead(t, boardShot(t, st, size[0], size[1], nil), colWork)
-		if !m.colHidden(colWork) {
-			t.Fatalf("%d: a tap on WORKING's name does not hide it", size[0])
-		}
-		if f := plainFrame(m); !strings.Contains(strings.Split(f, "\n")[1], "+ work 3") {
-			t.Fatalf("%d: the tab row has no + work 3:\n%s", size[0], f)
-		}
-		m = tapText(t, m, "+ work 3")
-		if m.colHidden(colWork) || m.boardAt != colWork || chosenName(t, m) != "flint-ui" {
-			t.Errorf("%d: a tap on + work 3: hidden %v, open %s, chosen %s", size[0], m.colHidden(colWork), m.boardAt.name(), chosenName(t, m))
+		if m.boardAt != colWork || chosenName(t, m) != "flint-ui" {
+			t.Errorf("%d: a tap on WORKING's name: open %s, chosen %s", size[0], m.boardAt.name(), chosenName(t, m))
 		}
 	}
 
-	m := tapHead(t, boardShot(t, st, 40, 34, nil), colNeed) // the open page
-	if !m.colHidden(colNeed) {
-		t.Fatal("on a phone a tap on the open page's mark does not hide it")
-	}
-	if f := plainFrame(m); !strings.Contains(f, "+ need 4") {
-		t.Fatalf("the page marks have no + need 4:\n%s", f)
-	}
-	m = tapHead(t, m, colShip)
-	if m.colHidden(colShip) || m.boardAt != colShip || chosenName(t, m) != "cinder-ci" {
-		t.Errorf("a tap on ship's mark: hidden %v, open %s", m.colHidden(colShip), m.boardAt.name())
-	}
-	m = tapText(t, m, "+ need 4")
-	if m.colHidden(colNeed) || m.boardAt != colNeed {
-		t.Errorf("a tap on + need 4: hidden %v, open %s", m.colHidden(colNeed), m.boardAt.name())
+	m := tapHead(t, boardShot(t, st, 40, 34, nil), colShip) // a page's mark
+	if m.boardAt != colShip || chosenName(t, m) != "cinder-ci" {
+		t.Errorf("a tap on ship's mark: open %s, chosen %s", m.boardAt.name(), chosenName(t, m))
 	}
 }
 
-func TestAllHiddenSaysHowToComeBack(t *testing.T) {
+func TestAChainKeepsTheBoardsWidth(t *testing.T) {
 	st := boardFixture(t)
 	for _, size := range [][2]int{{40, 34}, {80, 31}, {104, 38}, {160, 38}} {
-		m := boardShot(t, st, size[0], size[1], func(m *Model) {
-			for _, c := range boardCols {
-				m.flipHidden(c)
+		m := boardShot(t, st, size[0], size[1], func(m *Model) { m.boardChain = "login" })
+		for i, l := range frameLines(m) {
+			if w := ansi.StringWidth(l); w != size[0] {
+				t.Errorf("%d: line %d is %d cells: %q", size[0], i, w, ansi.Strip(l))
 			}
-		})
-		f := plainFrame(m)
-		if !strings.Contains(strings.Join(strings.Fields(f), " "), "Every column is hidden. A tap on a + name shows one.") {
-			t.Errorf("%d: the body does not say how to come back:\n%s", size[0], f)
-		}
-		for _, mark := range []string{"+ need 4", "+ work 3", "+ ship 3", "+ quiet 5"} {
-			if !strings.Contains(f, mark) {
-				t.Errorf("%d: no %s to tap:\n%s", size[0], mark, f)
-			}
-		}
-		chain := boardShot(t, st, size[0], size[1], func(m *Model) {
-			m.flipHidden(colWork)
-			m.boardChain = "login"
-		})
-		for _, f := range []Model{m, chain} {
-			for i, l := range frameLines(f) {
-				if w := ansi.StringWidth(l); w != size[0] {
-					t.Errorf("%d: line %d is %d cells: %q", size[0], i, w, ansi.Strip(l))
-				}
-			}
-		}
-		if m = tapText(t, m, "+ ship 3"); m.colHidden(colShip) || chosenName(t, m) != "cinder-ci" {
-			t.Errorf("%d: a tap on + ship 3 does not show it", size[0])
 		}
 	}
 }
@@ -146,7 +106,6 @@ func TestTheCountSeesThroughEveryFilter(t *testing.T) {
 		}
 	}
 	m := boardShot(t, st, 80, 45, func(m *Model) {
-		m.flipHidden(colNeed)
 		m.boardChain, m.boardHost, m.filter = "login", "ws-1", "flint"
 	})
 	f := plainFrame(m)
@@ -160,8 +119,8 @@ func TestTheCountSeesThroughEveryFilter(t *testing.T) {
 	next, cmd := tap(m, sc.waits.x0, 0)
 	drain(cmd)
 	m = next.(Model)
-	if m.colHidden(colNeed) || m.boardChain != "" || m.boardHost != "" || m.filter != "" {
-		t.Fatalf("a tap on the count left a filter: hidden %v, chain %q, host %q, search %q", m.colHidden(colNeed), m.boardChain, m.boardHost, m.filter)
+	if m.boardChain != "" || m.boardHost != "" || m.filter != "" {
+		t.Fatalf("a tap on the count left a filter: chain %q, host %q, search %q", m.boardChain, m.boardHost, m.filter)
 	}
 	if m.boardAt != colNeed || chosenName(t, m) != "spark-search" {
 		t.Errorf("a tap on the count chose %s in %s, want the first wait", chosenName(t, m), m.boardAt.name())

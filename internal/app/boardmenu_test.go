@@ -191,10 +191,10 @@ func TestTheMenuOnlyOffersWhatApplies(t *testing.T) {
 	}
 	m, _, _ := menuBoard(t, 80, 31, withLink)
 	for name, want := range map[string][]string{
-		"flint-auth": {"copy last message", "copy the question", "copy its name", "show only the chain login", "go in", "hide needs you"},
-		"kindle-web": {"copy last message", "copy the link of #4556", "copy its name", "go in", "hide needs you"},
-		"spark-docs": {"copy last message", "copy its name", "go in", "hide working"},
-		"flint-api":  {"copy last message", "copy its name", "show only the chain login", "go in", "hide shipping"},
+		"flint-auth": {"copy last message", "copy the question", "copy its name", "show only the chain login", "go in"},
+		"kindle-web": {"copy last message", "copy the link of #4556", "copy its name", "go in"},
+		"spark-docs": {"copy last message", "copy its name", "go in"},
+		"flint-api":  {"copy last message", "copy its name", "show only the chain login", "go in"},
 	} {
 		var got []string
 		for _, it := range m.menuFor(matchNamed(t, m, name)) {
@@ -360,23 +360,14 @@ func TestAStaleLineAboveIsCleared(t *testing.T) {
 	}
 }
 
-// TestATapOnTheQuietDrawerHidesIt: on Medium the drawer's name hides QUIET
-// as a column's name does, closed and open, and its + quiet brings it back.
-func TestATapOnTheQuietDrawerHidesIt(t *testing.T) {
+// TestATapOnTheQuietDrawerOpensIt: on Medium the drawer's name opens QUIET
+// as a column's name opens its column, closed and open.
+func TestATapOnTheQuietDrawerOpensIt(t *testing.T) {
 	for name, edit := range map[string]func(*Model){"closed": nil, "open": chooseCard("ember-reports")} {
 		m, _, _ := menuBoard(t, 80, 31, edit)
 		_, y := cardOn(t, m, " QUIET · 5")
-		if m = mouse(t, m, tea.MouseClickMsg{X: 3, Y: y, Button: tea.MouseLeft}); !m.colHidden(colQuiet) {
-			t.Fatalf("%s: a tap on QUIET did not hide it:\n%s", name, plainFrame(m))
+		if m = mouse(t, m, tea.MouseClickMsg{X: 3, Y: y, Button: tea.MouseLeft}); m.boardAt != colQuiet {
+			t.Errorf("%s: a tap on QUIET opened %s:\n%s", name, m.boardAt.name(), plainFrame(m))
 		}
-		x, y := cardOn(t, m, "+ quiet 5")
-		if m = mouse(t, m, tea.MouseClickMsg{X: x + 2, Y: y, Button: tea.MouseLeft}); m.colHidden(colQuiet) {
-			t.Errorf("%s: + quiet did not show QUIET again", name)
-		}
-	}
-	m, _, _ := menuBoard(t, 80, 31, nil)
-	_, y := cardOn(t, m, " QUIET · 5")
-	if m = mouse(t, m, tea.MouseClickMsg{X: 40, Y: y, Button: tea.MouseLeft}); m.colHidden(colQuiet) {
-		t.Error("a tap on the drawer's names hid QUIET")
 	}
 }

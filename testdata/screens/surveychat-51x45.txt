@@ -1,7 +1,7 @@
  ▰ matchblox                          ● 6 need you
  BOARD 7    machine
 ───────────────────────────────────────────────────
- NEEDS YOU 6 −  work 1  ship 0  quiet 0
+ NEEDS YOU 6  work 1  ship 0  quiet 0
 ───────────────────────────────────────────────────
 ▌╿ flint-auth                                ✻  2m
   stuck conflicts with main

@@ -1,7 +1,7 @@
  ▰ matchblox · all hosts ▾                                                                 ● 4 need you
  BOARD 15    machine
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
- NEEDS YOU · 4  −                     WORKING · 3  −           SHIPPING · 3  −          QUIET · 5  −
+ NEEDS YOU · 4                        WORKING · 3              SHIPPING · 3             QUIET · 5
 ▌╿ spark-search               ✻ 31m   ✦ flint-ui       ✻       ╿ cinder-ci @gp… ❋  2h   ╿ wick… ▣ 23:50
   stuck CI failed · lint, twice        busy Writing the tes…    merged deploying        ╿ hearth… ✻  1h
   #4548 ●━✕┄○┄○┄○  ctx 77%             ctx 40%       ─╴login    #4549 ●━●━●━◉┄○         ╿ ember-… ⬢  3h

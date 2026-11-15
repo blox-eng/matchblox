@@ -13,7 +13,7 @@ import (
 
 // TestNoBoardKeyActsOnAHiddenRow: with the stoker running the night and
 // Sessions' own row on another match, a key on the board that reaches no
-// card of a session (every column hidden, a search that matches nothing,
+// card of a session (a search that matches nothing,
 // the copy check's door, a host line) never asks to take over that row:
 // no question, or its n arms nothing and runs nothing.
 func TestNoBoardKeyActsOnAHiddenRow(t *testing.T) {
@@ -39,14 +39,6 @@ func TestNoBoardKeyActsOnAHiddenRow(t *testing.T) {
 			t.Errorf("%s: %s armed %+v, ran %q, sent %+v", name, k, nm.pending, *ran, boardFake(nm).acts())
 		}
 	}
-
-	hidden := night(func(m *Model) {
-		for _, c := range boardCols {
-			m.flipHidden(c)
-		}
-	})
-	check(t, "every column hidden", hidden, "x")
-	check(t, "every column hidden", hidden, "enter")
 
 	none := pressOn(night(nil), "/")
 	none = pressOn(typeText(none, "zzzq").(Model), "enter")

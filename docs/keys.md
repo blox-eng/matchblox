@@ -23,7 +23,7 @@ the right.
 | `x` | Kills the match: a box shows `tmux kill-pane -t <pane>`, then `kill -TERM <pid>` for an agent still running, and runs them on a typed `y`. A session that works or needs you asks for a second `y`. Its worktree and its transcript stay. On a setup step, closes it; on a recommendation, shows its second action. |
 | `y` | Gives the go that a stoker step waits for. On Pocket the first `y` only arms it, and the card says what it does (`y again: merge #4556`). A second `y` gives it. |
 | `c` | Copies what the agent said last. |
-| `m` | Opens the card's menu: copy, show its chain, go in, hide its column. |
+| `m` | Opens the card's menu: copy, show its chain, go in. |
 | `g` | Shows only the chain of the chosen card: its room. `Esc` shows all. |
 | `]`, `[` | Shows the next or the previous chain. |
 | `s` | Shows the next host, then all hosts. |
@@ -298,13 +298,12 @@ On the chips:
 ## A phone
 
 The board is one column a page. A tap on a page's mark at the top opens
-that page, and a tap on the open page's mark hides it. In Matchblox
+that page. In Matchblox
 Pocket, a sideways swipe turns the page too.
 
 | The owner wants to | By hand |
 |---|---|
 | see the next column | Swipe sideways, or tap the column's mark at the top. |
-| hide a column | Tap the name of the column on the screen. Tap `+ name` to bring it back. |
 | peek | Tap a card. |
 | go in | Tap the chosen card again. |
 | answer | Tap an option in the peek, then tap it again to send it. |

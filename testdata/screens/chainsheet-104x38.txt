@@ -1,7 +1,7 @@
  ▰ matchblox                                                                               ● 1 need you
  BOARD 5    machine
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
- NEEDS YOU · 1  −                     WORKING · 2  −           SHIPPING · 0  −          QUIET · 2  −
+ NEEDS YOU · 1                        WORKING · 2              SHIPPING · 0             QUIET · 2
 ▌╿ kindle-web                 ✻  1m   ✦ hearth-api     ✻                                ╿ ember-… ✻  3m
   asks Claude needs your permissio…    busy                                             │ spark-… ✻  9m
   ctx 56%                  ━╸hearth    ctx 79%      ━╸hearth

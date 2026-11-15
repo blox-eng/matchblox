@@ -98,40 +98,15 @@ func TestFrameCostWithChains(t *testing.T) {
 	}
 }
 
-// TestBoardPrefsAreKeptForEachShape: a phone and a desk each keep their
-// hidden columns; an old view.json still loads.
-func TestBoardPrefsAreKeptForEachShape(t *testing.T) {
-	dir := t.TempDir()
-	m := demoIn(t, dir, 44, 31)
-	if !m.upright() || m.colHidden(colWork) {
-		t.Fatalf("a fresh phone is not plain: %+v", m.viewPrefs)
-	}
-	m.flipHidden(colWork)
-
-	again := demoIn(t, dir, 44, 31)
-	if !again.colHidden(colWork) || again.colHidden(colNeed) {
-		t.Fatalf("the phone lost its board views: %+v", again.viewPrefs)
-	}
-	desk := demoIn(t, dir, 132, 32)
-	if desk.upright() || desk.colHidden(colWork) {
-		t.Fatalf("the desk took the phone's board views: %+v", desk.viewPrefs)
-	}
-
-	again.flipHidden(colWork)
-	if again.colHidden(colWork) {
-		t.Fatal("a second flip did not show the column again")
-	}
-}
-
-// TestAnOldViewFileStillLoads: a view.json with only list_only_phone keeps it
-// and gives the board its defaults.
+// TestAnOldViewFileStillLoads: a view.json with the hidden columns of an
+// older console loads, and the console ignores them.
 func TestAnOldViewFileStillLoads(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "view.json"), []byte(`{"list_only_phone":false}`), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "view.json"), []byte(`{"list_only_phone":false,"hidden_phone":["work"],"hidden_desk":["need","quiet"],"told":["chain"]}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	p := loadViewPrefs(dir)
-	if p.ListOnlyPhone || len(p.HiddenPhone) != 0 || len(p.Told) != 0 {
+	if p.ListOnlyPhone || len(p.Told) != 1 {
 		t.Fatalf("old file: %+v", p)
 	}
 }

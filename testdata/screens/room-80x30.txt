@@ -8,7 +8,7 @@
      step
    ↓ 2 more
 ────────────────────────────────────────────────────────────────────────────────
- NEEDS YOU · 2  −                       WORKING · 0  −       SHIPPING · 0  −
+ NEEDS YOU · 2                          WORKING · 0          SHIPPING · 0
 ▌╿ hearth-api                   ✻  8h
   asks permission prompt
   ctx 79%                    ━╸hearth
@@ -23,7 +23,7 @@
 
  › tell hearth's stoker…
 ────────────────────────────────────────────────────────────────────────────────
- QUIET · 1   kindle-web   ▴                                                  −
+ QUIET · 1   kindle-web   ▴
  + start a new session
  RECOMMENDATIONS · 7
 ────────────────────────────────────────────────────────────────────────────────

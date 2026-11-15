@@ -66,8 +66,7 @@ func mergeOf(t *testing.T, st proto.State) proto.Ship {
 }
 
 // TestAKeyOnAnEmptySearchSaysEscClears: a card key with no card says the
-// fix that is true: esc clears a search, s turns a host, and a + name
-// shows a column only when one is hidden.
+// fix that is true: esc clears a search, and s turns a host.
 func TestAKeyOnAnEmptySearchSaysEscClears(t *testing.T) {
 	st := boardFixture(t)
 	m := typeText(pressOn(boardShot(t, st, 104, 38, nil), "/"), "zzzz").(Model)
@@ -80,14 +79,6 @@ func TestAKeyOnAnEmptySearchSaysEscClears(t *testing.T) {
 	m = boardShot(t, st, 104, 38, func(m *Model) { m.boardHost = "macbook" })
 	if got := noticeRow(pressOn(m, "x")); got != "no match on macbook · s turns the host" {
 		t.Errorf("x on a host with no match says %q", got)
-	}
-	m = boardShot(t, st, 104, 38, func(m *Model) {
-		for _, c := range boardCols {
-			m.flipHidden(c)
-		}
-	})
-	if got := noticeRow(pressOn(m, "x")); got != "no card is chosen · tap a + name to show a column" {
-		t.Errorf("x with every column hidden says %q", got)
 	}
 }
 
@@ -551,13 +542,12 @@ func TestNoCardChosenActsOnNothing(t *testing.T) {
 	st := boardFixture(t)
 	st.Agents = []string{"claude"}
 	m := boardShot(t, st, 80, 31, func(m *Model) {
-		for _, c := range boardCols {
-			m.flipHidden(c)
-		}
+		m.filter = "zzzz"
+		m.refresh()
 		m.opt.Run = func(argv []string) error { t.Errorf("ran %v", argv); return nil }
 	})
 	if _, ok := m.boardSelected(); ok {
-		t.Fatal("a card is chosen with every column hidden")
+		t.Fatal("a search that matches nothing chose a card")
 	}
 	for _, k := range []string{"enter", "a", "ctrl+o", "z", "r", "A", "d", "f", "F", "n", "o", "x", "p", "y"} {
 		next, cmd := key(m, k)
@@ -566,7 +556,7 @@ func TestNoCardChosenActsOnNothing(t *testing.T) {
 		if nm.pending != nil || nm.form != nil || nm.tab != tabSessions || len(boardFake(nm).acts()) != 0 {
 			t.Errorf("%s acted with no card: pending %v, form %v, tab %d, acts %+v", k, nm.pending, nm.form != nil, nm.tab, boardFake(nm).acts())
 		}
-		if got := noticeRow(nm); got != "no card is chosen · tap a + name to show a column" {
+		if got := noticeRow(nm); got != `nothing matches "zzzz" · esc clears` {
 			t.Errorf("%s says %q", k, got)
 		}
 	}

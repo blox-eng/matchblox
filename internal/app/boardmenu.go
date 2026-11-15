@@ -81,11 +81,7 @@ func (m Model) menuFor(s sample.Session) []menuItem {
 			return nil
 		}})
 	}
-	c := m.columnOf(s)
-	return append(items, menuItem{"hide " + strings.ToLower(c.name()), "", func(m *Model) tea.Cmd {
-		m.flipHidden(c)
-		return nil
-	}})
+	return items
 }
 
 // roomOf is the chain whose room is open on the board with s in it: the

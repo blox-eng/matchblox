@@ -2,7 +2,7 @@
  BOARD 10    machine
 ──────────────────────────────────────────────────────────────────────────────────────
  gpu-1: not reached since 22:49 · ⏎ try again
- NEEDS YOU · 8  −                           WORKING · 2  −        SHIPPING · 0  −
+ NEEDS YOU · 8                              WORKING · 2           SHIPPING · 0
 ▌╿ flint-auth                       ✻  2m   ✦ hearth-api  ✻
   stuck conflicts with main                  busy
   #4545 ●━✕┄○┄○┄○  ctx 41%                   #4551 ●━◉  ctx 79%
@@ -23,7 +23,7 @@
 
   ↓ 5 more
 ──────────────────────────────────────────────────────────────────────────────────────
- QUIET · 0   ▴                                                                     −
+ QUIET · 0   ▴
  + start a new session
  RECOMMENDATIONS · 7
 ──────────────────────────────────────────────────────────────────────────────────────

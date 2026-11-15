@@ -5,7 +5,7 @@ which agent needs you, what loads the machine, the state of every git
 checkout, and the one safe action that resolves each thing. It works on the
 host, over SSH, and from a phone.
 
-![The matchblox board on a demo machine: four columns, NEEDS YOU, WORKING, SHIPPING and QUIET. A digit marks an answer from the agent's own options, the same digit sends it, and the card strikes into WORKING. p and a typed y merge a pull request. A tap hides the WORKING column and brings it back, and g shows one chain](assets/replay.svg)
+![The matchblox board on a demo machine: four columns, NEEDS YOU, WORKING, SHIPPING and QUIET. A digit marks an answer from the agent's own options, the same digit sends it, and the card strikes into WORKING. p and a typed y merge a pull request. g shows one chain](assets/replay.svg)
 
 ## Learn it in five minutes
 

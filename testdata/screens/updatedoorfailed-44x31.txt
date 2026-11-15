@@ -9,7 +9,7 @@
   matchblox_linux_amd64 · published
   3f9a3f9a3f9a… · download
   c2e1c2e1c2e1…
- NEEDS YOU 6 −  work 1  ship 0  quiet 0
+ NEEDS YOU 6  work 1  ship 0  quiet 0
 ────────────────────────────────────────────
  ╿ flint-auth                         ✻  2m
   stuck conflicts with main

@@ -1,7 +1,7 @@
  ▰ matchblox · all hosts ▾                                         ● 4 need you
  BOARD 15    machine
 ────────────────────────────────────────────────────────────────────────────────
- NEEDS YOU · 0  −                       WORKING · 0  −       SHIPPING · 0  −
+ NEEDS YOU · 0                          WORKING · 0          SHIPPING · 0
   nothing matches "redis" · esc clears
 
 
@@ -25,7 +25,7 @@
 
 
 ────────────────────────────────────────────────────────────────────────────────
- QUIET · 0   ▴                                                               −
+ QUIET · 0   ▴
  + start a new session
 ────────────────────────────────────────────────────────────────────────────────
  c copy   s hosts   tab next

@@ -5,7 +5,7 @@
   matchblox v0.43.0 is out. This machine runs v0.42.0. The install failed, nothing was changed. Enter
   tries again, or run: matchblox update. checksum mismatch for matchblox_linux_amd64 · published
   3f9a3f9a3f9a… · download c2e1c2e1c2e1…
- NEEDS YOU · 6  −                     WORKING · 1  −           SHIPPING · 0  −          QUIET · 0  −
+ NEEDS YOU · 6                        WORKING · 1              SHIPPING · 0             QUIET · 0
  ╿ flint-auth                 ✻  2m   ✦ hearth-api     ✻
   stuck conflicts with main            busy
   #4545 ●━✕┄○┄○┄○  ctx 41%             #4551 ●━◉┄○┄○  ctx 79%

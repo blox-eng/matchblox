@@ -668,13 +668,6 @@ func replayAt(t *testing.T, z replaySize) {
 		{name: "merged", at: 12500 * time.Millisecond, key: "y", ok: func(s string) bool {
 			return !strings.Contains(s, "pr merge 4552") && merged.Load() && strings.Contains(s, "merged deploying")
 		}},
-		// A tap on a column's name hides it; a tap on its + name brings it
-		// back. A phone shows one column a page: a tap on a page's mark
-		// opens it, and a tap on the open page's name hides it.
-		{name: "a column hides", at: 14500 * time.Millisecond, do: tapOn("WORKING"), ok: has("+ work")},
-		{name: "and comes back", at: 16500 * time.Millisecond, do: tapOn("+ work"), ok: func(s string) bool {
-			return !strings.Contains(s, "+ work")
-		}},
 		// g narrows the board to the chosen card's chain; esc shows all.
 		{name: "one chain", at: 18500 * time.Millisecond, do: choose("kindle-web"), key: "g", ok: has("chain hearth", "esc all")},
 		{name: "every chain", at: 21 * time.Second, key: "esc", ok: func(s string) bool {
@@ -684,7 +677,7 @@ func replayAt(t *testing.T, z replaySize) {
 	if phone {
 		// The card struck into WORKING, which is another page.
 		steps[slices.IndexFunc(steps, func(st step) bool { return st.name == "it works" })].do = tapOn("work")
-		at := slices.IndexFunc(steps, func(st step) bool { return st.name == "a column hides" })
+		at := slices.IndexFunc(steps, func(st step) bool { return st.name == "one chain" })
 		steps = slices.Insert(steps, at, step{name: "the work page", at: 13700 * time.Millisecond, do: tapOn("work"), ok: has("WORKING")})
 	}
 	var still replay.Frame

@@ -96,7 +96,7 @@ var fixedNotices = []string{
 	"not sent: ember-reports asks something new — look again",
 	"look at ember-reports's question first",
 	"no card is chosen · ↓ goes back to the cards",
-	"no card is chosen · tap a + name to show a column",
+	"no card is chosen",
 	"nothing to copy: no card is chosen",
 	"nothing to copy: kindle-legacy said nothing yet",
 	"no ship of kindle-legacy waits for a merge",

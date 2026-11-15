@@ -417,7 +417,7 @@ func TestOnAPhoneTheStokerIsAPage(t *testing.T) {
 	st.Ships = &proto.Ships{At: demoAt, Ships: []proto.Ship{shipFor(st.Sessions[ember], 4556, shipRunning, "CI · 6 of 9 jobs", 1, time.Hour)}}
 	m, _ := hearthOpen(t, 44, st)
 	marks := func(m Model) string { return strings.TrimSpace(strings.Split(plainFrame(m), "\n")[3]) }
-	if got := marks(m); !strings.HasPrefix(got, "stoker NEEDS YOU 1 −") {
+	if got := marks(m); !strings.HasPrefix(got, "stoker NEEDS YOU 1") {
 		t.Fatalf("the room opens on kindle-web's page: marks %q", got)
 	}
 	if strings.Contains(plainFrame(m), "tell hearth's stoker") || strings.Contains(plainFrame(m), "▸ step") {
@@ -436,7 +436,7 @@ func TestOnAPhoneTheStokerIsAPage(t *testing.T) {
 	if strings.Contains(frame, "kindle-web") {
 		t.Errorf("the stoker's page draws a card:\n%s", frame)
 	}
-	if m = pressOn(m, "down"); chosenName(t, m) != "kindle-web" || !strings.HasPrefix(marks(m), "stoker NEEDS YOU 1 −") {
+	if m = pressOn(m, "down"); chosenName(t, m) != "kindle-web" || !strings.HasPrefix(marks(m), "stoker NEEDS YOU 1") {
 		t.Errorf("↓ from the talk line: marks %q", marks(m))
 	}
 	m = mouse(t, m, tea.MouseClickMsg{X: 2, Y: 3, Button: tea.MouseLeft})

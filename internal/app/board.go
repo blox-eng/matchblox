@@ -138,9 +138,6 @@ func (m Model) boardPanel(w, h int) boardDrawn {
 		for i, g := range m.ghosts() {
 			d.addRow(-1, i == 0, w, st, m.ghostRow(g, i == 0, w))
 		}
-	case len(shown) == 0 && l != Narrow: // the + names wait on the tab row
-		d.add(-1, strings.Repeat(" ", w))
-		d.add(-1, m.allHidden(w)...)
 	case l == Narrow:
 		m.boardPage(&d, &b, shown, w, rows)
 	case l == Medium && slices.Contains(shown, colQuiet): // the talk line closes the columns, over the QUIET drawer
@@ -192,7 +189,7 @@ func (m Model) boardFold(w, h int, none bool) (above, below []roomDrawn, under [
 	switch l := m.layoutAt(w); {
 	case l == Narrow:
 		least = 3 // the marks, their hairline and a card's head
-	case l == Medium && !m.colHidden(colQuiet):
+	case l == Medium:
 		least += 2 // the QUIET drawer under the columns
 	}
 	for !none && h-fixed()-len(under)-len(note) < least && (len(under)+len(note) > 0 || fold < roomFolds && len(above) > 0) {
@@ -328,7 +325,7 @@ func (m Model) boardDrawOf() (boardDraw, []boardCol) {
 	for c := range b.idx {
 		b.idx[c] = slices.DeleteFunc(b.idx[c], func(s sample.Session) bool { return !m.inBoard(s) })
 	}
-	shown := slices.DeleteFunc(slices.Clone(boardCols[:]), m.colHidden)
+	shown := slices.Clone(boardCols[:])
 	m.boardChoose(&b, shown)
 	return b, shown
 }
@@ -337,9 +334,6 @@ func (m Model) boardDrawOf() (boardDraw, []boardCol) {
 // person chose, else the first card of the first shown column that has one.
 func (m Model) boardChoose(b *boardDraw, shown []boardCol) {
 	b.open = m.boardAt
-	if len(shown) == 0 {
-		return // every column is hidden: no card is chosen
-	}
 	if !slices.Contains(shown, b.open) {
 		b.open = shown[0]
 	}
@@ -415,7 +409,7 @@ func (m Model) boardPage(d *boardDrawn, b *boardDraw, shown []boardCol, w, rows 
 	}
 	for _, c := range shown {
 		if c == b.open && !page {
-			marks = append(marks, mark{c.name() + count(c) + " −", st.text.Bold(true), c})
+			marks = append(marks, mark{c.name() + count(c), st.text.Bold(true), c})
 		} else {
 			marks = append(marks, mark{c.short() + count(c), st.faint, c})
 		}
@@ -448,10 +442,6 @@ func (m Model) boardPage(d *boardDrawn, b *boardDraw, shown []boardCol, w, rows 
 	d.add(-1, fit(line, w), st.hair.Render(strings.Repeat("─", w)))
 	if page {
 		m.roomPage(d, w)
-		return
-	}
-	if len(shown) == 0 {
-		d.add(-1, m.allHidden(w)...)
 		return
 	}
 	m.boardStack(d, b, b.open, len(d.lines), 0, w, rows-2, false)
@@ -529,7 +519,7 @@ func (m Model) boardDrawer(d *boardDrawn, b *boardDraw, w int) {
 		name += " · " + strconv.Itoa(len(ss))
 	}
 	if b.open == colQuiet {
-		d.taps[len(d.lines)] = []span{{0, lipgloss.Width(name) + 3, colQuiet.short()}} // with its −
+		d.taps[len(d.lines)] = []span{{0, lipgloss.Width(name), colQuiet.short()}}
 		d.add(-1, m.boardHead(colQuiet, len(ss), w, true))
 		m.boardStack(d, b, colQuiet, len(d.lines), 0, w, quietRows, true)
 		return
@@ -542,12 +532,12 @@ func (m Model) boardDrawer(d *boardDrawn, b *boardDraw, w int) {
 		}
 		line += "   " + strings.Join(names, " · ")
 	}
-	d.taps[len(d.lines)] = []span{{0, lipgloss.Width(name), colQuiet.short()}, {w - 3, w, colQuiet.short()}} // the name and the −
-	d.add(-1, spread(st.faint.Render(line+"   ▴"), st.faint.Render("−")+"  ", w))
+	d.taps[len(d.lines)] = []span{{0, lipgloss.Width(name), colQuiet.short()}}
+	d.add(-1, fit(st.faint.Render(line+"   ▴"), w))
 }
 
-// boardHead is a column's head: its name, its count once the first state
-// came, and the mark that hides it. The open column's name is fg bold.
+// boardHead is a column's head: its name and its count once the first state
+// came. The open column's name is fg bold.
 func (m Model) boardHead(c boardCol, n, w int, open bool) string {
 	name := m.st.faint
 	if open {
@@ -557,7 +547,7 @@ func (m Model) boardHead(c boardCol, n, w int, open bool) string {
 	if m.have {
 		count = " · " + strconv.Itoa(n)
 	}
-	return fit(" "+name.Render(c.name())+m.st.faint.Render(count+"  −"), w)
+	return fit(" "+name.Render(c.name())+m.st.faint.Render(count), w)
 }
 
 // boardBlock is one card in its column, and the blank line under it.
@@ -714,16 +704,6 @@ func (m Model) boardBlockOf(b *boardDraw, c boardCol, s sample.Session, w int, q
 	return bl
 }
 
-// allHidden is what the body says when every column is hidden: the + names
-// are on the tab row, and on a phone in the page marks.
-func (m Model) allHidden(w int) []string {
-	lines := wrapPlain("Every column is hidden. A tap on a + name shows one.", w-3)
-	for i, l := range lines {
-		lines[i] = fit("  "+m.st.faint.Render(l), w)
-	}
-	return lines
-}
-
 // unreached are the hosts of the lines above the columns: each host the
 // console cannot read (blockedHosts), then each other host that is not
 // reached, whose last state shows. An unnamed home host has no line: ""
@@ -828,39 +808,27 @@ func (m Model) boardHostHit(head string) span {
 }
 
 // boardCrumb is what the tab row of a screen w wide adds while the board
-// shows: the chain the board is narrowed to and the key that shows all,
-// then each hidden column with its count (on a phone they are in the page
-// marks). A part that does not fit in w-2 leaves whole, with every one
-// after it. The spans press esc, or a hidden column's short name.
+// shows: the chain the board is narrowed to and the key that shows all. A
+// part that does not fit in w-2 leaves whole, with every one after it. The
+// span presses esc.
 func (m Model) boardCrumb(w int, b *boardDraw) (string, []span) {
-	phone := m.layoutAt(w) == Narrow
 	chain := m.boardChain
 	if m.room != nil && m.room.k.isOne() {
 		chain = "of one"
 	}
-	if chain == "" && (phone || !slices.ContainsFunc(boardCols[:], m.colHidden)) {
+	if chain == "" {
 		return "", nil
 	}
 	st := m.st
 	type part struct{ text, press, gap string }
-	var parts []part
-	if chain != "" {
-		n := 0
-		for _, ss := range b.idx {
-			n += len(ss)
-		}
-		back := m.keys.main.Back.Help().Key
-		parts = append(parts, part{st.text.Render("chain " + chain + " · " + strconv.Itoa(n)), "", ""},
-			part{st.text.Render(back) + st.muted.Render(" all"), back, "   "})
+	n := 0
+	for _, ss := range b.idx {
+		n += len(ss)
 	}
-	if !phone {
-		gap := "   "
-		for _, c := range boardCols {
-			if m.colHidden(c) {
-				parts = append(parts, part{st.faint.Render("+ " + c.short() + " " + strconv.Itoa(len(b.idx[c]))), c.short(), gap})
-				gap = "  "
-			}
-		}
+	back := m.keys.main.Back.Help().Key
+	parts := []part{
+		{st.text.Render("chain " + chain + " · " + strconv.Itoa(n)), "", ""},
+		{st.text.Render(back) + st.muted.Render(" all"), back, "   "},
 	}
 	line, x := "", 0
 	var spans []span

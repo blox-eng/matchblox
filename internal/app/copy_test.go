@@ -678,15 +678,15 @@ func TestADragIsNeverATap(t *testing.T) {
 	m, clipped = releasing(t, true, &ran)
 	h := headOn(t, m, "WORKING")
 	m = letGo(t, drag(t, m, h, point{h.x + 10, h.y + 2}), point{h.x + 10, h.y + 2})
-	if m.colHidden(colWork) || len(*clipped) != 1 {
-		t.Errorf("a drag from a column's name: hidden %v, copied %q", m.colHidden(colWork), *clipped)
+	if m.boardAt == colWork || len(*clipped) != 1 {
+		t.Errorf("a drag from a column's name: open %s, copied %q", m.boardAt.name(), *clipped)
 	}
 	m, _ = releasing(t, true, &ran)
-	if m = pressAt(t, m, h.x, h.y); m.colHidden(colWork) {
-		t.Fatal("a press on a column's name hid it before the release")
+	if m = pressAt(t, m, h.x, h.y); m.boardAt == colWork {
+		t.Fatal("a press on a column's name opened it before the release")
 	}
-	if m = letGo(t, m, h); !m.colHidden(colWork) {
-		t.Error("a click on a column's name did not hide it")
+	if m = letGo(t, m, h); m.boardAt != colWork {
+		t.Error("a click on a column's name did not open it")
 	}
 
 	// A terminal that never reported a release: both act on the press.
@@ -695,8 +695,8 @@ func TestADragIsNeverATap(t *testing.T) {
 	if mouse(t, m, tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft}); strings.Join(ran, " ") != goIn {
 		t.Errorf("with no release seen, a press on the chosen card ran %q", ran)
 	}
-	if m = pressAt(t, m, h.x, h.y); !m.colHidden(colWork) {
-		t.Error("with no release seen, a press on a column's name did not hide it")
+	if m = pressAt(t, m, h.x, h.y); m.boardAt != colWork {
+		t.Error("with no release seen, a press on a column's name did not open it")
 	}
 
 	// A right press opens the menu and starts no drag.

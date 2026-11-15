@@ -10,7 +10,7 @@
                and logged in
    replaces
      /home/user/.local/bin/matchblox
- NEEDS YOU 6 −  work 1  ship 0  quiet 0
+ NEEDS YOU 6  work 1  ship 0  quiet 0
 ────────────────────────────────────────────
  ╿ flint-auth                         ✻  2m
   stuck conflicts with main

@@ -16,10 +16,6 @@ type viewPrefs struct {
 	ListOnlyPhone bool `json:"list_only_phone"`
 	ListOnlyDesk  bool `json:"list_only_desk"`
 
-	// The board's columns hidden for each shape (boardCol.short).
-	HiddenPhone []string `json:"hidden_phone"`
-	HiddenDesk  []string `json:"hidden_desk"`
-
 	// Told is the notices already shown once, for both shapes.
 	Told []string `json:"told"`
 
@@ -47,29 +43,6 @@ func (m *Model) keepViewPrefs() {
 	if err := keepState(m.opt.StateDir, viewPrefsFile, m.viewPrefs); err != nil {
 		m.flash = "not kept: " + err.Error()
 	}
-}
-
-// colHidden: the board leaves this column out, for the shape the screen has
-// now. (Not hidden: Model.hiddenHosts are the hosts the builder hid.)
-func (m Model) colHidden(c boardCol) bool {
-	if m.upright() {
-		return slices.Contains(m.viewPrefs.HiddenPhone, c.short())
-	}
-	return slices.Contains(m.viewPrefs.HiddenDesk, c.short())
-}
-
-// flipHidden hides the column, or shows it again.
-func (m *Model) flipHidden(c boardCol) {
-	list := &m.viewPrefs.HiddenDesk
-	if m.upright() {
-		list = &m.viewPrefs.HiddenPhone
-	}
-	if i := slices.Index(*list, c.short()); i >= 0 {
-		*list = slices.Delete(slices.Clone(*list), i, i+1)
-	} else {
-		*list = append(slices.Clone(*list), c.short())
-	}
-	m.keepViewPrefs()
 }
 
 // copyChecked: a paste proved that a copy reaches the shape the screen has

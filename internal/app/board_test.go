@@ -407,7 +407,7 @@ func TestQuietIsADrawerOnMedium(t *testing.T) {
 
 	m = boardShot(t, st, 80, 31, chooseCard("ember-reports"))
 	plain = plainLines(m.boardPanel(80, m.bodyRows()).lines)
-	head := slices.IndexFunc(plain, func(l string) bool { return strings.HasPrefix(l, " QUIET · 5  −") })
+	head := slices.IndexFunc(plain, func(l string) bool { return strings.HasPrefix(l, " QUIET · 5") })
 	ghost := slices.IndexFunc(plain, func(l string) bool { return strings.Contains(l, "+ start a new session") })
 	if head < 0 || ghost-head-1 != 6 {
 		t.Fatalf("the open drawer is not six rows under its head:\n%s", strings.Join(plain, "\n"))
@@ -468,34 +468,6 @@ func TestASearchIsSaidAsTyped(t *testing.T) {
 	f := strings.Join(plainLines(m.boardPanel(80, m.bodyRows()).lines), "\n")
 	if !strings.Contains(f, `nothing matches "say "hi"" · esc clears`) {
 		t.Errorf("the search is not said as typed:\n%s", f)
-	}
-}
-
-func TestAHiddenColumnGivesItsRoom(t *testing.T) {
-	for _, size := range [][2]int{{80, 31}, {160, 38}} {
-		w := size[0]
-		m := boardShot(t, boardFixture(t), w, size[1], func(m *Model) { m.flipHidden(colWork) })
-		d := m.boardPanel(w, m.bodyRows())
-		for i, l := range d.lines {
-			if lipgloss.Width(l) != w {
-				t.Errorf("w=%d: line %d is %d cells: %q", w, i, lipgloss.Width(l), ansi.Strip(l))
-			}
-		}
-		f := strings.Join(plainLines(d.lines), "\n")
-		for _, name := range []string{"WORKING", "flint-ui", "spark-docs", "ember-billing"} {
-			if strings.Contains(f, name) {
-				t.Errorf("w=%d: the hidden column draws %s:\n%s", w, name, f)
-			}
-		}
-		shown := []boardCol{colNeed, colShip, colQuiet}
-		cols := boardWidths(m.layoutAt(w), w, shown)
-		full := boardWidths(m.layoutAt(w), w, boardCols[:])
-		if len(d.heads) != len(cols) || d.heads[0].x1 != cols[0] {
-			t.Errorf("w=%d: heads %+v, want widths %v", w, d.heads, cols)
-		}
-		if cols[0] <= full[0] {
-			t.Errorf("w=%d: NEEDS YOU does not take the room: %v, was %v", w, cols, full)
-		}
 	}
 }
 

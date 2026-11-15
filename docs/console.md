@@ -136,14 +136,6 @@ of another host takes no digit: `⏎` goes into its pane.
 After an answer, a merge or a go, the board chooses the first card of
 `NEEDS YOU`.
 
-### Hide a column
-
-A tap or a click on a column's name hides the column, and the other
-columns take its room. The tab row then shows it as `+ work 3`: a tap
-there shows it again and chooses it. The card's menu also hides its
-column. A phone and a desk each keep their own hidden columns. When every column is hidden,
-the board says how to show one again.
-
 ### One chain, one host
 
 - `g`, or a tap on a card's stub, shows only the chain of the chosen
@@ -182,7 +174,6 @@ closes. Each line shows only where it applies:
 6. `go in` (also `a`)
 7. `out of login`, only while the board shows that chain: it takes the
    match out of the chain, after a typed `y`.
-8. `hide <column>`
 
 `x` kills, behind its own consent box. It is never in the menu.
 
@@ -217,7 +208,7 @@ rows × 2 are at least its columns.
 
 | Shape | The board |
 |---|---|
-| Narrow (upright under 90 columns, or under 60 columns) | One column a page. The page marks at the top name the open column in capitals with its count, and the others short: `NEEDS YOU 4 −  work 3  ship 3  quiet 5`. A tap on a mark opens its page, and a tap on the open page's mark hides it. |
+| Narrow (upright under 90 columns, or under 60 columns) | One column a page. The page marks at the top name the open column in capitals with its count, and the others short: `NEEDS YOU 4  work 3  ship 3  quiet 5`. A tap on a mark opens its page. |
 | Medium (60 to 99 columns, and upright from 90) | `NEEDS YOU`, `WORKING` and `SHIPPING` side by side. `QUIET` is a drawer under them, one line, which opens when the choice moves into it. |
 | Wide (100 columns and more) | Four columns. |
 

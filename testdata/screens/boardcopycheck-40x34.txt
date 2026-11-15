@@ -4,7 +4,7 @@
 ▌SET UP · 1 · Check that copy reaches y…
   the console copies a code, and you
   paste it here
- NEEDS YOU 4 −  work 3  ship 3  quiet 5
+ NEEDS YOU 4  work 3  ship 3  quiet 5
 ────────────────────────────────────────
  ╿ spark-search                   ✻ 31m
   stuck CI failed · lint, twice
