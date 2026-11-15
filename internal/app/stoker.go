@@ -115,10 +115,10 @@ func stokerWordOf(md proto.StokerMode) string {
 }
 
 // stokersBadge is the stoker's word of two or more hosts: how many of
-// them it runs on, `stoker 2/3`; off when it runs on none.
+// the hosts in view it runs on, `stoker 2/3`; off when it runs on none.
 func (m Model) stokersBadge(short bool) string {
-	st, kept, runs := m.st, false, 0
-	for _, h := range m.hosts() {
+	st, kept, runs, hs := m.st, false, 0, m.viewHosts()
+	for _, h := range hs {
 		if v := m.stokerOf(h); v != nil {
 			kept = true
 			if v.On {
@@ -136,7 +136,7 @@ func (m Model) stokersBadge(short bool) string {
 	case runs == 0:
 		return st.faint.Render("stoker off")
 	}
-	return st.stoker.Render(fmt.Sprintf("stoker %d/%d", runs, m.hostCount()))
+	return st.stoker.Render(fmt.Sprintf("stoker %d/%d", runs, len(hs)))
 }
 
 // resting: the builder took over and the home host's stoker waits for

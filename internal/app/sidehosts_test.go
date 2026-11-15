@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"io"
 	"slices"
 	"strings"
@@ -154,5 +155,66 @@ func TestUnreachedHostDimsItsRows(t *testing.T) {
 	}
 	if panel := panelText(m, 60, 20); !strings.Contains(panel, "flint-auth") {
 		t.Fatalf("ws-2's rows went:\n%s", panel)
+	}
+}
+
+// lostHidden is hostsConsole with ws-2 hidden, its stoker on, lost 2m ago.
+func lostHidden(t *testing.T) Model {
+	t.Helper()
+	m, now, conns := hostsConsole(t, "ws-2")
+	st := waiting(2, "flint-auth", "%2", *now)
+	st.Stoker = &proto.StokerView{On: true}
+	m = upd(t, m, peerMsg{host: "ws-2", conn: conns["ws-2"], msg: stateMsg(st)})
+	m = upd(t, m, peerMsg{host: "ws-2", conn: conns["ws-2"], msg: lostMsg{err: io.EOF, conn: conns["ws-2"]}})
+	*now = now.Add(2 * time.Minute)
+	return m
+}
+
+func TestHiddenLostHostIsNamedNowhereInAllHosts(t *testing.T) {
+	for _, side := range []bool{false, true} {
+		m := lostHidden(t)
+		m.sideOn = side
+		if f := strings.Join(frameOf(m), "\n"); strings.Contains(f, "ws-2") || strings.Contains(f, "stoker") {
+			t.Errorf("side %v: all hosts names the hidden ws-2 or its stoker:\n%s", side, f)
+		}
+		m.peers = slices.Clone(m.peers)
+		m.peers[0].blocked = errors.New("permission denied")
+		if f := strings.Join(frameOf(m), "\n"); strings.Contains(f, "ws-2") {
+			t.Errorf("side %v: all hosts has a blocked row of the hidden ws-2:\n%s", side, f)
+		}
+		if bs := m.blockedHosts(); len(bs) != 0 {
+			t.Errorf("side %v: blocked rows %+v", side, bs)
+		}
+	}
+}
+
+func TestHiddenHostShowsItsTroubleWhenShown(t *testing.T) {
+	m := lostHidden(t)
+	m.sideOn = false
+	m = pressOn(m, "s")
+	f := strings.Join(frameOf(m), "\n")
+	if m.boardHost != "ws-2" || !strings.Contains(f, "ws-2: connection lost.") || !strings.Contains(f, "ws-2: not reached since") {
+		t.Fatalf("the board on ws-2 hides its trouble:\n%s", f)
+	}
+	if !strings.Contains(m.stokerBadge(false), "stoker 1/1") {
+		t.Errorf("the stoker badge on ws-2: %q", m.stokerBadge(false))
+	}
+	m.sideOn = true
+	if got := headerOf(m); !strings.Contains(got, "ws-2 · hidden from all hosts · h shows it") {
+		t.Errorf("side header on ws-2: %q", got)
+	}
+}
+
+// TestAnUnlinkedHiddenHostSaysWhereToShowIt: this machine hidden while
+// ws-1 is home has no link, so s and h say where it shows again.
+func TestAnUnlinkedHiddenHostSaysWhereToShowIt(t *testing.T) {
+	now := boardAt
+	m, _, _ := hostsAt(t, &now, "ws-1", 160, 40)
+	m = boardOn(upd(t, m, stateMsg(waiting(1, "hearth-api", "%1", now))))
+	m.tab, m.sideOn, m.keysIn, m.hiddenHosts = tabSessions, true, focusList, []string{"this machine"}
+	for _, k := range []string{"s", "h"} {
+		if got := pressOn(m, k).noticeText; got != "this machine is hidden · Machine › Hosts shows it" {
+			t.Errorf("%s: notice %q", k, got)
+		}
 	}
 }

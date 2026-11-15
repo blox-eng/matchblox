@@ -83,13 +83,13 @@ func (m Model) hosts() []string {
 	return out
 }
 
-// staleHosts are the hosts that are stale, by name, in Hosts order.
+// staleHosts are the hosts in view that are stale, by name, in Hosts order.
 func (m Model) staleHosts() []string {
 	if m.hostCount() == 1 {
 		return nil
 	}
 	var out []string
-	for _, h := range m.hosts() {
+	for _, h := range m.viewHosts() {
 		if m.stale(h) {
 			out = append(out, m.nameOf(h))
 		}
@@ -105,7 +105,7 @@ func (m Model) lostLine() string {
 	}
 	var names []string
 	var next time.Duration
-	for _, h := range m.hosts() {
+	for _, h := range m.viewHosts() {
 		blocked, redialing, backoff := m.blocked, m.redialing, m.backoff
 		if i := m.peerAt(h); h != m.opt.Host && i >= 0 {
 			blocked, redialing, backoff = m.peers[i].blocked, m.peers[i].redialing, m.peers[i].backoff
@@ -161,8 +161,8 @@ func (m Model) blockOf(host string) (blocked error, older bool) {
 	return nil, false
 }
 
-// blockedHosts are the blocked rows, in Hosts order. One host is the
-// whole screen instead, as today.
+// blockedHosts are the blocked rows of the hosts in view, in Hosts order.
+// One host is the whole screen instead, as today.
 func (m Model) blockedHosts() []blockedHost {
 	if m.hostCount() == 1 {
 		return nil
@@ -183,7 +183,7 @@ func (m Model) blockedHosts() []blockedHost {
 			out = append(out, blockedHost{host: l.host, silent: true})
 		}
 	}
-	return out
+	return slices.DeleteFunc(out, func(b blockedHost) bool { return !m.inView(b.host) })
 }
 
 // shows: the console has rows to draw: a state from a host, or a blocked

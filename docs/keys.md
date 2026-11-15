@@ -69,7 +69,7 @@ the screen; else it types.
 | `↑`, `↓` | With the line empty, or in the list, chooses the session above or below, as the list draws them. |
 | `Esc` | In the line, clears a marked answer, then moves the keys to the list. In the list, clears the search, then closes the chain's room, then shows all chains. |
 | `s` | In the list, shows the next host, then all hosts. It goes to each host, a hidden host too. With one host shown, all hosts is that host, so `s` goes from host to host. With one host only, a notice says so. |
-| `h` | In the list, on a hidden host, shows that host in all hosts again. Machine › Hosts keeps the same list. On another host, a notice says what `h` does. |
+| `h` | In the list, on a hidden host, shows that host in all hosts again. Machine › Hosts then ticks the host. On another host, a notice says what `h` does. |
 | `g` | In the list, shows only the chain of the chosen session. `Esc` shows all. |
 | `/` | In the list, searches the list. |
 | `m` | In the list, opens the menu of the chosen session. |

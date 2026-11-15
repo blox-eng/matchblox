@@ -188,12 +188,12 @@ func (m Model) stripFilterHost() (string, bool) {
 }
 
 // stripHosts are the hosts the strip shows: the one in the filter, else
-// every host with a state, this machine first.
+// every host with a state but the hidden, this machine first.
 func (m Model) stripHosts() []string {
 	if h, ok := m.stripFilterHost(); ok {
 		return []string{h}
 	}
-	if hs := m.statedHosts(); len(hs) > 0 {
+	if hs := slices.DeleteFunc(m.statedHosts(), m.hostHidden); len(hs) > 0 {
 		return hs
 	}
 	return []string{m.opt.Host}

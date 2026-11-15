@@ -307,7 +307,7 @@ func fromAdvice(r advice.Rec, which string) *action {
 }
 
 type Model struct {
-	recPrefs  recPrefs  // dismissed recommendations and the fold
+	recPrefs  recPrefs  // dismissed recommendations
 	viewPrefs viewPrefs // the board's views, for a phone and for a desk
 	opt       Options
 	conn      transport.Conn

@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"io"
 	"slices"
 	"strings"
 	"testing"
@@ -551,6 +552,47 @@ func TestHidingAPeerKeepsItsStream(t *testing.T) {
 	r.sh.cur.boardHost = "ws-1" // s
 	if !strings.Contains(r.view(), "api-a") {
 		t.Fatalf("the hidden host's own view lost its rows:\n%s", r.view())
+	}
+}
+
+// Review Focus 3: a removed peer's late redial tick reopens nothing. A
+// host added again is a new link: the old tick is not its own.
+func TestRemovedHostsStaleRedialDialsNothing(t *testing.T) {
+	r := newShell(t, []string{"ws-1"}, nil, "", false)
+	r.update(stateMsg(fixtureState()))
+	ws := r.conns["ws-1"]
+	r.update(peerMsg{host: "ws-1", conn: ws, msg: lostMsg{err: io.EOF, conn: ws}})
+	late := peerRedialMsg{host: "ws-1", gen: r.sh.cur.opt.Gen, id: r.sh.cur.peers[0].id}
+	r.added = nil // what x and y on ws-1 write
+	r.toHosts(t)
+	r.key(t, "enter")
+	if len(r.sh.cur.peers) != 0 || !ws.closed {
+		t.Fatalf("ws-1 removed: peers %q, closed %v", peerHosts(r.sh.cur), ws.closed)
+	}
+	if cmd := r.update(late); cmd != nil {
+		drain(cmd)
+	}
+	if r.redials["ws-1"] != 0 {
+		t.Fatalf("the late tick of a removed host: %d redials", r.redials["ws-1"])
+	}
+	// Added again: a new stream, lost too; only its own tick dials.
+	r.added = []string{"ws-1"}
+	r.toHosts(t)
+	r.key(t, "enter")
+	again := r.conns["ws-1"]
+	if again == ws || len(r.sh.cur.peers) != 1 {
+		t.Fatalf("ws-1 added again: peers %q", peerHosts(r.sh.cur))
+	}
+	r.update(peerMsg{host: "ws-1", conn: again, msg: lostMsg{err: io.EOF, conn: again}})
+	if cmd := r.update(late); cmd != nil {
+		drain(cmd)
+	}
+	if r.redials["ws-1"] != 0 {
+		t.Fatal("the old link's tick dialed the new one")
+	}
+	own := peerRedialMsg{host: "ws-1", gen: r.sh.cur.opt.Gen, id: r.sh.cur.peers[0].id}
+	if cmd := r.update(own); cmd == nil || cmd() == nil || r.redials["ws-1"] != 1 {
+		t.Fatalf("its own tick: %d redials", r.redials["ws-1"])
 	}
 }
 

@@ -27,6 +27,12 @@ func (m Model) inView(host string) bool {
 	return !m.hostHidden(host)
 }
 
+// viewHosts are the hosts of the view s shows, in Hosts order: the one
+// host, or every host but the hidden.
+func (m Model) viewHosts() []string {
+	return slices.DeleteFunc(m.hosts(), func(h string) bool { return !m.inView(h) })
+}
+
 // shownHosts are the hosts all hosts holds: every host but the hidden.
 func (m Model) shownHosts() []string {
 	return slices.DeleteFunc(m.hosts(), m.hostHidden)
@@ -57,11 +63,14 @@ func (m Model) hostStops() []string {
 	return append(stops, "")
 }
 
-// turnHost is s: the next view of hostStops. With one host and nothing
-// hidden there is no other view, and the words say so.
+// turnHost is s: the next view of hostStops. With one host linked there is
+// no other view, and the words say so.
 func (m *Model) turnHost() string {
 	stops := m.hostStops()
-	if len(stops) == 1 {
+	switch {
+	case len(stops) == 1 && len(m.hiddenHosts) > 0:
+		return m.unlinkedWord()
+	case len(stops) == 1:
 		return m.nameOf(m.opt.Host) + " is the only host · Machine › Hosts adds one"
 	}
 	next := stops[(slices.Index(stops, m.boardHost)+1)%len(stops)]
@@ -78,10 +87,20 @@ func (m *Model) unhide() tea.Cmd {
 		return func() tea.Msg { return showHostMsg{host} }
 	case len(m.hiddenHosts) == 0:
 		return m.notice("no host is hidden")
-	case !slices.ContainsFunc(m.hosts(), m.hostHidden): // this machine, hidden while another host is home
-		return m.notice("Machine › Hosts shows " + strings.Join(m.hiddenHosts, ", "))
+	case !slices.ContainsFunc(m.hosts(), m.hostHidden):
+		return m.notice(m.unlinkedWord())
 	}
 	return m.notice(m.keys.side.Unhide.Help().Key + " shows a hidden host · " + m.keys.board.Host.Help().Key + " goes to it")
+}
+
+// unlinkedWord is the notice of the hidden hosts that have no link: this
+// machine, hidden while another host is home.
+func (m Model) unlinkedWord() string {
+	verb := " is hidden"
+	if len(m.hiddenHosts) > 1 {
+		verb = " are hidden"
+	}
+	return strings.Join(m.hiddenHosts, ", ") + verb + " · Machine › Hosts shows it"
 }
 
 // hostShown is the console after Show of host wrote the hidden file, or
