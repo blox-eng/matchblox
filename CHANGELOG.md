@@ -6,6 +6,75 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **The console is a list of sessions beside one chat.** The list groups
+  every match by state: `NEEDS YOU`, `WORKING`, `HELD` and `IDLE`. A group
+  with no match takes no row. A chain is one unit: its head and its
+  members move together, to the group of its most urgent member.
+  ([#411](https://github.com/blox-eng/matchblox/issues/411))
+- **The chat shows the real pane and a line.** The chosen session's own
+  conversation shows, cut to its words, with matchblox's line under it.
+  `Enter` sends the text to the session the line names, on its own host,
+  even when the list moves while you type.
+  ([#411](https://github.com/blox-eng/matchblox/issues/411))
+- **Answer in two presses.** A digit, or a tap on an option, marks the
+  option. The same press again sends it. `Esc`, a move to another session
+  or a new question clears the mark.
+  ([#411](https://github.com/blox-eng/matchblox/issues/411))
+- **Hosts and hidden hosts.** `s` shows the next host, then all hosts, and
+  it reaches a hidden host too. A hidden host leaves only all hosts, its
+  counts and its list. `h` shows it again.
+  ([#411](https://github.com/blox-eng/matchblox/issues/411))
+- **A paste goes in as one piece.** A text with a new line, or one over
+  500 characters, goes as a bracketed paste. The service takes out control
+  characters, and the text is up to 16384 bytes. It works in the console
+  only: `matchblox send` does not change.
+  ([#411](https://github.com/blox-eng/matchblox/issues/411))
+- **A busy agent's message waits.** An agent that takes no typed text
+  while it works gets the message when its turn ends. The line says so,
+  and a session that ends first gives the text back to the line.
+  ([#411](https://github.com/blox-eng/matchblox/issues/411))
+- **Ship rows.** A pull request that no session drives has a row of its
+  own in the list, with its badge. `Enter` or `N` on it starts a session
+  on its branch.
+  ([#411](https://github.com/blox-eng/matchblox/issues/411))
+- **Pocket's belt taps.** Each key on the belt reaches the console as its
+  own tap, and the tap names its phone. With a desk and Pocket on one
+  console, the belt's taps still act. On a phone, `Esc` then a quick
+  letter types the letter in the line.
+  ([#411](https://github.com/blox-eng/matchblox/issues/411))
+- **`Ctrl+L` hides the list,** and shows it again. With the list hidden,
+  the header names each session that needs you.
+  ([#411](https://github.com/blox-eng/matchblox/issues/411))
+
+### Changed
+
+- **`Ctrl+O` goes into the agent's pane.** It takes the place of `Enter`
+  and `a` into the pane. `ctrl+a m` comes back, to the chat you left.
+  ([#411](https://github.com/blox-eng/matchblox/issues/411))
+- **`g` opens the chain's room** from the list, and `h` shows a hidden
+  host. `h` no longer folds recommendations: the tips are in the list's
+  foot.
+  ([#411](https://github.com/blox-eng/matchblox/issues/411))
+- **The list's foot** holds `+ new`, the tips and the setup steps. Each
+  opens in the chat's place.
+  ([#411](https://github.com/blox-eng/matchblox/issues/411))
+
+### Removed
+
+- **The board's columns,** `SHIPPING` and hiding a column. A pull request
+  is a badge on its row.
+  ([#411](https://github.com/blox-eng/matchblox/issues/411))
+- **`←` `→` between columns,** the peek, the live view, the strip (`u`)
+  and `v`. The chat takes their place.
+  ([#411](https://github.com/blox-eng/matchblox/issues/411))
+- **`Enter` and `a` into the pane,** and `]` and `[`. `Ctrl+O` goes into
+  the pane.
+  ([#411](https://github.com/blox-eng/matchblox/issues/411))
+- **Fold recs** (`h`). `h` shows a hidden host now.
+  ([#411](https://github.com/blox-eng/matchblox/issues/411))
+
 ## [0.45.0] - 2026-11-14
 
 ### Added

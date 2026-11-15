@@ -119,6 +119,26 @@ the shells and the child runs. The line is cut at the chat's width. The
 window fix is never cut: when it does not fit with the other facts, it
 wraps on lines of its own, and the other facts come after it.
 
+### The line
+
+The line sends one message to the session it names, on that session's
+host. The list can move while you type: the message still goes to the
+session in the line's name. A message that cannot go stays in the line,
+with the reason. Nothing sends it again by itself.
+
+- **A short message** goes as typed text, then `Enter`.
+- **A paste** goes in as one piece. A text with a new line, or one over 500
+  characters, goes as a bracketed paste: the agent gets it as one paste,
+  and the console then presses `Enter`. The console strips control
+  characters from it, and it takes up to 16384 bytes. A paste works only in
+  the console. `matchblox send` does not change.
+- **A busy agent** that takes no typed text while it works (OpenCode) gets
+  the message when its turn ends. The line says `queued for its next
+  turn`. One message waits for each session. Claude Code and Codex take
+  the text at once and queue it themselves.
+- **A session that ends** with a message in wait gives the text back to
+  its line: `flint-auth ended · the text is not sent`.
+
 The digits answer a question with one choice, given with its options
 (Claude Code's question tool). Answer every other wait in the agent's
 pane (`Ctrl+O`): a permission prompt, a question from Codex or OpenCode,

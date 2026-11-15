@@ -81,9 +81,13 @@ The full walk is [Get started](https://docs.matchblox.com/start/).
   at rest. Its row says what it asks, its pull request and its chain.
 - **The chat**: the chosen session's conversation and the options of its
   question, beside the list. Type in its line and `Enter` sends it. A
-  digit marks an answer, and the same digit sends it. `p` merges a pull
+  paste goes in as one piece. A busy agent that takes no typed text gets
+  the message when its turn ends. A digit marks an answer, and the same
+  digit sends it. `p` merges a pull
   request that waits for your merge, after a typed `y`. `g` shows one
   chain, and `s` one host.
+- **Hosts**: `s` shows the next host, then all hosts. A host you hide
+  leaves only all hosts: `s` still reaches it, and `h` shows it again.
 - **Go straight in**: `Ctrl+O` goes into the agent's own tmux pane, on
   this host or another, and moves only your screen. `ctrl+a m` (your tmux
   prefix, then `m`) comes back, to the chat you left.

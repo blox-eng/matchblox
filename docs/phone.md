@@ -111,8 +111,9 @@ terminal.`
   attached: a tap on the belt is its own signal, and a letter you type on
   the keyboard types. While the line holds text, a digit types, so the
   digits are dim, and in the line `↑ ↓` are dim too. A key that does not
-  apply is dim and sends nothing. In the app, `Esc` then a letter, or
-  `⌥` and a letter, types the letter in the line: `⌥s` does not open the
+  apply is dim and sends nothing. With a desk and Pocket on one console,
+  the belt's taps still act, because each tap names its phone. On a phone, `Esc` then a quick letter
+  types the letter in the line. `⌥` and a letter types it too: `⌥s` does not open the
   room there. In a pane, the belt goes back to the layout it had there. A
   tap on `y go` does not give the go. The first tap arms it: a notice says
   what the go does, for example `y again gives the go: merge #4556`. Tap
