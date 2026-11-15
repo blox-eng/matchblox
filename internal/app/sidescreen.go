@@ -355,6 +355,9 @@ func (m Model) expand(s sample.Session, ok bool) (tea.Model, tea.Cmd) {
 	if !ok {
 		return m, m.notice("no session to expand · " + m.keys.main.New.Help().Key + " starts one")
 	}
+	if sh, card := m.shipOfCard(s); card {
+		return m, m.notice(m.shipCardWhy(sh))
+	}
 	next, cmd := m.onCard(s).intoSelected()
 	if nm, ok := next.(Model); ok && cmd != nil && nm.flash == "" && nm.pending == nil && nm.held == nil {
 		nm.sideIn = paneOf(s) // the jump runs: the key line says the way back

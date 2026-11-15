@@ -3,6 +3,8 @@ package app
 import (
 	"image/color"
 	"math"
+	"strconv"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -135,7 +137,18 @@ func (m Model) matchCell(s sample.Session) string {
 // paneKey is a pane on a host: pane ids repeat across hosts.
 type paneKey struct{ host, pane string }
 
-func paneOf(s sample.Session) paneKey { return paneKey{s.Host, s.Pane} }
+// paneOf is the key of s: its pane, or outside tmux its process ("pid:4242"),
+// so two sessions with no pane are two keys.
+func paneOf(s sample.Session) paneKey {
+	if s.Pane == "" && s.PID != 0 {
+		return paneKey{s.Host, "pid:" + strconv.Itoa(s.PID)}
+	}
+	return paneKey{s.Host, s.Pane}
+}
+
+// tmuxPane: k names a tmux pane (%12), not a process outside tmux nor the
+// row of a ship no session drives.
+func (k paneKey) tmuxPane() bool { return strings.HasPrefix(k.pane, "%") }
 
 // noteChanges records the changes between a host's last state and its
 // next, so each plays once.

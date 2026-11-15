@@ -232,7 +232,8 @@ func TestSwitchRefusesOutsideTmuxAndOneAgent(t *testing.T) {
 	}
 	m, _ := loadedWith(t, 100, st)
 	s := st.Sessions[0]
-	next, _ := m.onCard(s).key(keyPress("A")) // the list chooses no pane outside tmux: the act goes to its card
+	m.chooseRow(s)
+	next, _ := key(m, "A")
 	if nm := next.(Model); nm.form != nil || nm.flash != s.Name+" is outside tmux: nothing to switch" {
 		t.Fatalf("form %+v flash %q", nm.form, nm.flash)
 	}

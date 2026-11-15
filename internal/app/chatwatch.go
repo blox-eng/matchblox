@@ -174,7 +174,7 @@ func (m Model) watchWant() (host, pane string) {
 		if s, ok := m.selectedSession(); ok && m.standIn && s.Host == m.opt.Host {
 			return s.Host, s.Pane
 		}
-		if k := m.chosenSide(); k.pane != "" {
+		if k := m.chosenSide(); k.tmuxPane() {
 			return k.host, k.pane
 		}
 		return m.watchHost, ""

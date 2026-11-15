@@ -160,6 +160,8 @@ func (m Model) lineKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 		}
 	case bkey.Matches(k, sk.List):
 		m.toList()
+	case ok && isShipCard(s) && bkey.Matches(k, sk.Enter):
+		return m.shipKey(s)
 	case bkey.Matches(k, sk.Enter):
 		cmd = m.sendLine()
 	case bkey.Matches(k, sk.Erase):
@@ -215,6 +217,10 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 	case bkey.Matches(k, sk.Enter) && m.footAt > 0:
 		parts := m.footParts()
 		return m.openFoot(parts[min(m.footAt, len(parts))-1].press)
+	case ok && isShipCard(s) && bkey.Matches(k, sk.Enter, mk.New):
+		return m.shipKey(s)
+	case ok && isShipCard(s) && bkey.Matches(k, append(m.rowActKeys(), mk.Park)...) && !bkey.Matches(k, bk.Merge):
+		cmd = m.notice(m.lineOff(s))
 	case bkey.Matches(k, sk.Enter):
 		m.toLine()
 	case bkey.Matches(k, mk.Exited):
@@ -368,11 +374,33 @@ func (m Model) linePaste(text string) (tea.Model, tea.Cmd) {
 	switch {
 	case !ok:
 		return m, m.notice("no session to write to · " + m.keys.main.New.Help().Key + " starts one")
-	case m.parked(s):
+	case m.lineOff(s) != "":
 		return m, nil // the line says it is off, and why
 	}
 	m.setLine(paneOf(s), m.lines[paneOf(s)]+text)
 	return m, nil
+}
+
+// lineOff is why the line of s takes no text, "" when it takes it: s is
+// parked, or a ship no session drives, or outside tmux.
+func (m Model) lineOff(s sample.Session) string {
+	if sh, ok := m.shipOfCard(s); ok {
+		return m.shipCardWhy(sh)
+	}
+	if m.parked(s) {
+		return "parked: " + m.keys.main.Park.Help().Key + " lets it go"
+	}
+	if s.Pane == "" {
+		return s.Name + " runs outside tmux: no pane to write to"
+	}
+	return ""
+}
+
+// shipKey is ⏎ or N on the row of a ship no session drives: New session
+// on its branch.
+func (m Model) shipKey(s sample.Session) (tea.Model, tea.Cmd) {
+	sh, _ := m.shipOfCard(s)
+	return m.takeShip(sh), nil
 }
 
 // parked: the owner parked s.
@@ -464,7 +492,7 @@ func (m *Model) sendLine() tea.Cmd {
 	k := paneOf(s)
 	text := m.lines[k]
 	switch {
-	case m.parked(s):
+	case m.lineOff(s) != "":
 		return nil // the line says it is off, and why
 	case strings.TrimSpace(text) == "":
 		return m.notice("the line is empty")

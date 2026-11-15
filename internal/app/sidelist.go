@@ -58,12 +58,13 @@ func (m Model) sideBefore(h sideState, a, b sample.Session) int {
 }
 
 // sideSessions are the sessions the list draws: every match on every host
-// the console is linked to. A ship no session owns is no entry, and the
-// stoker's own agent is one only while it asks.
+// the console is linked to, and a row for each ship no session drives.
+// The stoker's own agent is one only while it asks.
 func (m Model) sideSessions() []sample.Session {
-	return slices.DeleteFunc(slices.Clone(m.all.sessions), func(s sample.Session) bool {
+	listed := slices.DeleteFunc(slices.Clone(m.all.sessions), func(s sample.Session) bool {
 		return m.isStoker(s) && !m.stokerAsksAsCard(s)
 	})
+	return append(listed, m.shipCards()...)
 }
 
 // sideGroups are the groups that hold a session of the hosts in view, in

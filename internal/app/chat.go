@@ -237,8 +237,8 @@ var agentMenuLine = regexp.MustCompile(`^\s*[›❯>]?\s*(\d+)\.\s+(.*?)\s*$`)
 func (m Model) chatLine(s sample.Session, w int) string {
 	st := m.st
 	lead := " " + st.accent.Render("›") + " "
-	if m.parked(s) {
-		return fit(lead+st.muted.Render("parked: "+m.keys.main.Park.Help().Key+" lets it go"), w)
+	if off := m.lineOff(s); off != "" {
+		return fit(lead+st.muted.Render(off), w)
 	}
 	right := st.faint.Render(m.keys.side.Enter.Help().Key + " send to " + m.cardName(s))
 	if n := m.lineNote; n.k == paneOf(s) && n.text != "" {
