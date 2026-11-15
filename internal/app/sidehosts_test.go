@@ -196,7 +196,7 @@ func TestHiddenHostShowsItsTroubleWhenShown(t *testing.T) {
 	if m.boardHost != "ws-2" || !strings.Contains(f, "ws-2: connection lost.") || !strings.Contains(f, "ws-2: not reached since") {
 		t.Fatalf("the board on ws-2 hides its trouble:\n%s", f)
 	}
-	if !strings.Contains(m.stokerBadge(false), "stoker 1/1") {
+	if !strings.Contains(m.stokerBadge(false), "stoker 1/2") {
 		t.Errorf("the stoker badge on ws-2: %q", m.stokerBadge(false))
 	}
 	m.sideOn = true
@@ -216,5 +216,36 @@ func TestAnUnlinkedHiddenHostSaysWhereToShowIt(t *testing.T) {
 		if got := pressOn(m, k).noticeText; got != "this machine is hidden · Machine › Hosts shows it" {
 			t.Errorf("%s: notice %q", k, got)
 		}
+	}
+}
+
+// TestOneHostShownStillNamesAnotherLostHost: s on ws-1 leaves out no
+// host's trouble: only all hosts leaves a hidden host out.
+func TestOneHostShownStillNamesAnotherLostHost(t *testing.T) {
+	m, now, conns := hostsConsole(t)
+	st := waiting(2, "flint-auth", "%2", *now)
+	st.Stoker = &proto.StokerView{On: true}
+	m = upd(t, m, peerMsg{host: "ws-2", conn: conns["ws-2"], msg: stateMsg(st)})
+	m = upd(t, m, peerMsg{host: "ws-2", conn: conns["ws-2"], msg: lostMsg{err: io.EOF, conn: conns["ws-2"]}})
+	*now = now.Add(2 * time.Minute)
+	m.sideOn = false
+	m = pressOn(m, "s") // ws-1
+	if m.boardHost != "ws-1" {
+		t.Fatalf("s turned to %q", m.boardHost)
+	}
+	f := strings.Join(frameOf(m), "\n")
+	if !strings.Contains(f, "ws-2: connection lost.") || !strings.Contains(f, "ws-2: not reached since") || !strings.Contains(frameOf(m)[0], "ws-2 stale") {
+		t.Errorf("s on ws-1 hides the lost ws-2:\n%s", f)
+	}
+	if got := m.stokerBadge(false); !strings.Contains(got, "stoker 1/2") {
+		t.Errorf("the stoker badge on ws-1: %q", got)
+	}
+	m.peers = slices.Clone(m.peers)
+	m.peers[0].blocked = errors.New("permission denied")
+	if bs := m.blockedHosts(); len(bs) != 1 || bs[0].host != "ws-2" {
+		t.Fatalf("s on ws-1: blocked rows %+v, want ws-2's", bs)
+	}
+	if got := m.unreached(); !slices.Equal(got, []string{"ws-2"}) {
+		t.Errorf("s on ws-1: the lines ↑ reaches %q", got)
 	}
 }

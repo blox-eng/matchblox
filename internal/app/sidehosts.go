@@ -27,11 +27,13 @@ func (m Model) inView(host string) bool {
 	return !m.hostHidden(host)
 }
 
-// viewHosts are the hosts of the view s shows, in Hosts order: the one
-// host, or every host but the hidden.
-func (m Model) viewHosts() []string {
-	return slices.DeleteFunc(m.hosts(), func(h string) bool { return !m.inView(h) })
-}
+// leftOut: all hosts shows, and host is hidden. Only all hosts leaves a
+// hidden host out: one host shown names every host's trouble, as before.
+func (m Model) leftOut(host string) bool { return m.boardHost == "" && m.hostHidden(host) }
+
+// namedHosts are the hosts whose trouble the lines name, in Hosts order:
+// every host but those all hosts leaves out.
+func (m Model) namedHosts() []string { return slices.DeleteFunc(m.hosts(), m.leftOut) }
 
 // shownHosts are the hosts all hosts holds: every host but the hidden.
 func (m Model) shownHosts() []string {

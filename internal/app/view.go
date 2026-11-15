@@ -401,7 +401,7 @@ func (m Model) stokerHit(word string, w int) span {
 // phone drops the night's end.
 func (m Model) stokerBadge(short bool) string {
 	word, n := m.hostBadge(short), 0
-	for _, h := range m.viewHosts() {
+	for _, h := range m.namedHosts() {
 		n += m.chainsAtWork(h)
 	}
 	if word == "" || n == 0 {

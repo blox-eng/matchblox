@@ -596,6 +596,16 @@ func TestRemovedHostsStaleRedialDialsNothing(t *testing.T) {
 	}
 }
 
+// A connect with no host ticked opens that host alone, and the header
+// still counts the hidden, as Enter does.
+func TestAConnectWithNoneTickedCountsTheHidden(t *testing.T) {
+	r := hidingShell(t, []string{"ws-1"}, []string{"this machine", "ws-1"}, "")
+	r.update(connectedHostMsg{host: "ws-1"})
+	if r.sh.curHost != "ws-1" || !slices.Equal(r.sh.cur.hiddenHosts, []string{"this machine"}) {
+		t.Fatalf("host %q, hidden %q", r.sh.curHost, r.sh.cur.hiddenHosts)
+	}
+}
+
 func TestHeaderCountsHidden(t *testing.T) {
 	r := hidingShell(t, []string{"ws-1", "gpu-1"}, []string{"gpu-1"}, "")
 	r.update(stateMsg(fixtureState()))

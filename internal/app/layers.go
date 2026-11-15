@@ -321,7 +321,9 @@ func (s Shell) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		s.hosts, s.hidden, s.adding = s.readHosts(), s.readHidden(), false
 		if len(s.ticked()) == 0 {
-			return s.open(msg.host, false)
+			s, cmd := s.open(msg.host, false)
+			s.cur.hiddenHosts = s.hiddenNames(msg.host)
+			return s, cmd
 		}
 		return s.openTicked(false) // an added host is ticked: it joins the others
 	}

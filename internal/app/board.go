@@ -770,7 +770,7 @@ func (m Model) unreached() []string {
 			out = append(out, b.host)
 		}
 	}
-	for _, h := range m.viewHosts() {
+	for _, h := range m.namedHosts() {
 		if h != m.opt.Host && m.stale(h) && !slices.Contains(out, h) {
 			out = append(out, h)
 		}
