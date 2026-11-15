@@ -11,7 +11,8 @@ filters, and chooses the first card that needs you. The count holds every
 wait on every host and in every chain, whatever the board hides.
 
 The tabs are `board` and `machine`, turned by `Tab` and `Shift+Tab`, or a
-tap on the name. The open one is uppercase. `machine !` has a problem. The
+tap on the name. The open one is uppercase. `machine !` has a problem: a
+detached busy loop burns, or a plan's window is at 90% or more. The
 stoker, Git, History and Panes are Machine's first rows: `Enter` opens
 one, `Esc` comes back to Machine. The digits answer a card's question.
 
@@ -297,7 +298,9 @@ title is `‹ board`. At a question its key line says `type 2 to answer`.
 
 ## Usage
 
-Machine shows each account's windows, with the machine:
+Machine shows each account's windows, with the machine. A window at 90%
+or more is named at the right of `USAGE`, for example
+`nearly spent: OpenAI Plus wk 92%`, and the tab says `machine !`.
 
 ```
  USAGE

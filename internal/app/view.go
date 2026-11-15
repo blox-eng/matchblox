@@ -542,8 +542,8 @@ func (m Model) tabLabel(i int) string {
 	case tabSessions:
 		count = strconv.Itoa(len(m.all.sessions))
 	case tabMachine:
-		if len(m.all.orphans) > 0 {
-			count = "!" // a detached busy loop burns
+		if len(m.all.orphans) > 0 || len(m.nearlySpent()) > 0 {
+			count = "!" // a detached busy loop burns, or a plan is nearly spent
 		}
 	}
 	switch {
