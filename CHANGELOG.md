@@ -17,7 +17,7 @@ All notable changes to matchblox are in this file. The format follows
   or a permission prompt refused the line's text. The console now queues
   the message and sends it once the menu is answered.
   ([#420](https://github.com/blox-eng/matchblox/issues/420))
-- **A digit answers any agent's menu from the chat.** v0.46.0 sent the
+- **A digit answers any agent's menu.** v0.46.0 sent the
   digit as a key, which the service refuses outside the demo, so no digit
   answered on a real machine. A permission prompt, a question, or a Codex
   or OpenCode menu now takes two presses in the chat, on a peer's
