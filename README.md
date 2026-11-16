@@ -68,7 +68,9 @@ session needs you, and answer from anywhere. In beta on TestFlight.
 3. In another terminal, start your agents in tmux, for example
    `tmux new -s app claude`. When an
    agent needs you, it goes into `NEEDS YOU`, and its chat shows what it
-   asks. `Ctrl+O` jumps to its pane, and `prefix m` comes back.
+   asks. In tmux, the agent's own pane shows beside the list: type in it,
+   and `ctrl+q` flips the keys between the list and the agent. `Ctrl+O`
+   jumps fully into the pane, and `prefix m` comes back.
 
 The full walk is [Get started](https://docs.matchblox.com/start/).
 
@@ -79,7 +81,13 @@ The full walk is [Get started](https://docs.matchblox.com/start/).
   top. The header counts what needs you: `● 3 need you`. A match for each:
   `╿` struck when it needs you, `✦` burning while it works, `╵` burnt out
   at rest. Its row says what it asks, its pull request and its chain.
-- **The chat**: the chosen session's conversation and the options of its
+- **The agent beside the list**: in tmux, the right side is the agent's own
+  pane. Typing there is typing into the agent, with its `/commands`,
+  `@files` and menus. `Enter` on a row shows that agent, and `ctrl+q`
+  flips the keys between the list and the agent. `g` on a chain shows up to
+  4 of its agents side by side.
+- **The chat**: where there is no tmux (the demo, or a console outside its
+  home session), the chosen session's conversation and the options of its
   question, beside the list. Type in its line and `Enter` sends it. A
   paste goes in as one piece. A busy agent that takes no typed text gets
   the message when its turn ends. A digit marks an answer to the agent's
@@ -150,13 +158,13 @@ list, and `Enter` there moves them back.
 | `Enter` | In the line, sends the text to the chosen session. In the list, goes back to the line. |
 | `↑`, `↓` | Chooses the session above or below. |
 | A digit, 1 to 9 | With the line empty, marks an option of the chosen session's question. The same digit again sends it. |
-| `Ctrl+O` | Goes into the chosen agent's pane. |
+| `Ctrl+O` | Goes into the chosen agent's pane. In tmux, `ctrl+q` flips the keys between the list and the agent's pane. |
 | `p` | In the list, merges the pull request that waits for your merge. It runs only after a typed `y`. |
 | `x` | In the list, kills the match. It runs only after a typed `y`. |
 | `y` | In the list, gives the go a stoker step waits for. |
 | `c` | In the list, copies what the agent said last. |
 | `m` | In the list, opens the session's menu. |
-| `g` | In the list, shows only the chain of the chosen session. `Esc` shows all. |
+| `g` | In the list, shows only the chain of the chosen session. `Esc` shows all. With the agent beside the list, it shows the chain's agents side by side, and `G` opens the chain's room. |
 | `s` | In the list, shows the next host, then all hosts. |
 | `N` | In the list, starts a new session: where, the agent, its account and a first message (none on a new account). |
 | `A` | In the list, switches the chosen session to another agent in the same pane. |
@@ -171,7 +179,8 @@ Every key: [Keys](https://docs.matchblox.com/keys/).
 
 Set the startup snippet of your SSH app (Termius, for example) to
 `matchblox`, or run `ssh -t ws-1 matchblox`. The list is the first
-screen. Tap a row to open its chat, and `◂` to come back. Tap an option of
+screen. Tap a row to open its chat, and `◂` to come back. With the agent
+beside the list, a tap shows the agent full screen. Tap an option of
 its question to mark it, and tap it again to send it. `m` in the list
 opens the session's menu. In Matchblox Pocket a long-press opens it too,
 and the keys of the chosen session are on the key belt's Board layout.

@@ -6,6 +6,17 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Type straight into an agent beside the list.** On a desk, the console's
+  window has two panes: the list, and the agent's own pane. Typing there is
+  typing into the agent, with its /commands, @files and menus. ⏎ or a tap
+  on a row shows that agent, and `ctrl+q` flips the keys between the list
+  and the agent.
+- **g shows a chain's agents side by side.** On a chain's row, `g` tiles up
+  to four members' own panes on the right, most urgent first. `G` opens the
+  chain's room.
+
 ### Fixed
 
 - **A digit answers any agent's menu.** v0.46.0 sent the
