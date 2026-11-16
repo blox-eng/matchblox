@@ -39,6 +39,9 @@ type sideBox struct {
 // chat beside the list. A desk pane of the same shape, such as half a
 // laptop screen at 107x60, shows both: only Pocket tells a phone.
 func (m Model) onePane(w int) bool {
+	if m.beside != "" {
+		return m.onePaneAt(max(m.winW, w), m.winH)
+	}
 	return w-listMedium-1 < chatMin || m.onPocket() && (m.upright() || m.layoutAt(w) == Narrow)
 }
 
@@ -47,6 +50,8 @@ func (m Model) onePane(w int) bool {
 // the chat the whole width.
 func (m Model) sideBoxAt(w int) sideBox {
 	switch {
+	case m.beside != "":
+		return sideBox{listW: w} // the agent has its own pane
 	case m.listHidden():
 		return sideBox{chatW: w}
 	case m.onePane(w):
@@ -69,6 +74,9 @@ func (m Model) listStartsHidden() bool {
 
 // listHidden: the chat takes the body, and the list does not draw.
 func (m Model) listHidden() bool {
+	if m.beside != "" {
+		return false
+	}
 	if m.listSet && m.listOne == m.onePane(max(m.width, minWidth)) {
 		return m.listOff
 	}
@@ -87,6 +95,9 @@ func (m Model) listShown() bool { return m.sideBoxAt(max(m.width, minWidth)).lis
 // inList: the keys go to the list. Where one pane shows, they go where the
 // screen is.
 func (m Model) inList() bool {
+	if m.besideMode() { // the agent has its own pane: no line takes keys
+		return true
+	}
 	if w := max(m.width, minWidth); m.onePane(w) {
 		return !m.listHidden()
 	}
@@ -537,7 +548,11 @@ func (m Model) sideHints() (string, []hint) {
 		if m.room != nil { // the room stays open behind the chat: g brings it back
 			chain.label = "room"
 		}
-		return "in the list", []hint{hintFor(sk.Up, ""), hintFor(sk.Enter, "write"), hintFor(bk.Host, ""), chain, hintFor(bk.Menu, "")}
+		enter := "write"
+		if m.besideMode() { // the agent's own pane takes the text: ⏎ shows it
+			enter = "show"
+		}
+		return "in the list", []hint{hintFor(sk.Up, ""), hintFor(sk.Enter, enter), hintFor(bk.Host, ""), chain, hintFor(bk.Menu, "")}
 	}
 	name := "no session"
 	s, ok := m.sideChosen()
@@ -590,6 +605,8 @@ func (m Model) sideTap(x, y int) (tea.Model, tea.Cmd) {
 			fold[hit.state] = !fold[hit.state]
 			m.sideFold = fold
 			return m, nil
+		case hit.k != (paneKey{}) && m.besideMode():
+			return m.chooseSide(hit.k).showChosen()
 		case hit.k != (paneKey{}):
 			return m.chooseSide(hit.k), nil
 		}
@@ -623,7 +640,9 @@ func (m Model) chooseSide(k paneKey) Model {
 		m.startChatMark(s)
 		m.sideName = m.cardName(s)
 	}
-	m.toLine()
+	if !m.besideMode() { // beside, the agent has its own pane: no line
+		m.toLine()
+	}
 	return m
 }
 

@@ -82,7 +82,7 @@ func TestTheNoticeSaysWhyShipsAreBehind(t *testing.T) {
 	for _, w := range []int{80, 132} { // a notice keeps three lines: at 44 the last reason goes
 		m := demoBoard(t, w, st)
 		out := strings.Join(strings.Fields(plainFrame(m)), " ")
-		for _, want := range []string{"ships read again at 23:33", "GitHub cannot be read: gh not signed in", "not read: hearth/hearth-api: HTTP 502"} {
+		for _, want := range []string{"ships read again at 23:33", "GitHub cannot be read: gh not signed in · run gh auth login", "not read: hearth/hearth-api: HTTP 502"} {
 			if !strings.Contains(out, want) {
 				t.Errorf("width %d: the notice row does not say %q:\n%s", w, want, plainFrame(m))
 			}

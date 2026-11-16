@@ -47,6 +47,11 @@ line goes the same way. A `bind m` of your own wins again when you source
 your config, until the console starts again. From a jump, prefix `m` goes
 back to the console and ends the jump.
 
+With the agent beside the list, prefix `m` goes to the list pane of the
+console's window. `ctrl+q` flips the keys between the list and the agent's
+pane, in that window only. In any other pane, `ctrl+q` types as usual.
+The console sets three global hooks on the tmux server, `pane-exited`, `pane-died` and `window-layout-changed`, each at index 950, so that the agent's pane closes with the console and an agent view closes with its agent. They do nothing outside matchblox's own panes.
+
 tmux tells a console's pane by its command name, `matchblox`. A binary under
 another name is not one to tmux: prefix `m` on its pane goes to the session
 `matchblox`, and its key line says `tap back`, as a tap on the hint is the way

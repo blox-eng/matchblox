@@ -102,6 +102,17 @@ the pane only when no report exists.
 
 ## The chat
 
+On a desk, the console runs inside tmux in its home session `matchblox`,
+and the right side is not drawn. It is the agent's own pane, beside the
+list. Typing there is typing into the agent, with its `/commands`,
+`@files`, `Esc`, menus and the mouse wheel. `Enter` or a click on a row
+shows that agent and gives it the keys. `ctrl+q` flips the keys between
+the list and the agent. See
+[The agent beside the list](keys.md#the-agent-beside-the-list).
+
+The chat below is drawn in the demo (and the iOS demo), in a console with
+no tmux, and in a console outside its home session or started for a host.
+
 The chat shows the chosen session: a head line, its conversation, then
 its question with the options when it asks, and at the bottom its line,
 `›   ⏎ send to flint-auth`. The head line holds the name, `@host`, the
@@ -119,6 +130,10 @@ window fix is never cut: when it does not fit with the other facts, it
 wraps on lines of its own, and the other facts come after it.
 
 ### The line
+
+The line is part of the drawn chat. With the agent beside the list, there
+is no line: text typed in the list does not go to the agent, and the key
+line says `the agent pane takes text · ⏎ shows flint-auth`.
 
 The line sends one message to the session it names, on that session's
 host. The list can move while you type: the message still goes to the
@@ -288,6 +303,9 @@ A host on another release says so on its row in Hosts. See
 ### Go in
 
 `Ctrl+O` goes into the chosen agent's pane, from the line or the list.
+Beside the list, the agent's pane is already on the right: `Ctrl+O` goes
+fully into it, and `ctrl+q` flips the keys without leaving the console's
+window.
 The key line then says the way back, `ctrl+a m`. The app's edge swipe,
 ⌘M or ctrl+M (the home gesture) comes back too, to the chat you left.
 
@@ -451,6 +469,11 @@ its head:
 - **The talk line**, under the card: `› tell hearth's stoker…`. Your words
   go to the chain's stoker; to a chain with no stoker they start one
   (`› what should hearth's stoker do?`).
+
+With the agent beside the list, `g` does not open the room. It shows the
+chain's agents side by side: up to 4 members' own panes on the right, most
+urgent first, and `▸` in the list for each one on screen. `G` opens the
+room. See [Keys](keys.md#the-chain-view-beside-the-list).
 
 On a phone the room takes the screen, and `◂` goes back to the list.
 `Esc` closes the room and shows every chain. In the room, the menu of a session adds

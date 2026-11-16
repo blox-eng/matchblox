@@ -27,6 +27,9 @@ type Jump struct {
 	// ClientTTY is the terminal device of the client that asked, the only
 	// client the jump moves. "" means tmux's current client.
 	ClientTTY string
+	// View is true for a view shown beside the list, not a jump: its session
+	// ends with the agent's pane instead of moving to another pane.
+	View bool
 }
 
 const defaultHome = "matchblox"
@@ -77,7 +80,11 @@ func PrefixKey(s string) bool { return prefixRE.MatchString(s) }
 // parses or format-expands is a name or id of a fixed shape, a pane id, or
 // an absolute directory without "#" or ";".
 func JumpAllowed(j Jump) bool {
-	if !ValidHost(j.Host) || !idRE.MatchString(j.ID) || !PrefixKey(j.Prefix) {
+	return ValidHost(j.Host) && jumpShapeAllowed(j)
+}
+
+func jumpShapeAllowed(j Jump) bool {
+	if !idRE.MatchString(j.ID) || !PrefixKey(j.Prefix) {
 		return false
 	}
 	if j.ClientTTY != "" && !ClientTTY(j.ClientTTY) {
@@ -184,6 +191,12 @@ func (j Jump) Remote() []string {
 		cmds = append(cmds,
 			[]string{"run-shell", "-C", "-t", j.Pane, "select-window -t =" + g + ":#{window_id}"},
 			[]string{"select-pane", "-t", j.Pane})
+	}
+	if j.View && j.Pane != "" {
+		cmds = append(cmds, setOption(g, sample.ViewOption, j.Pane),
+			// The agent's window closed: g would move to another window of
+			// the agent's session, maybe the console's own.
+			[]string{"set-hook", "-t", "=" + g + ":", "session-window-changed", `run-shell -C -t "=` + g + `:" "` + ViewGone + `"`})
 	}
 	// destroy-unattached goes last: run-shell lets the server run, and the
 	// server ends an unattached session that has the option (seen in the

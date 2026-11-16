@@ -37,7 +37,10 @@ func why(err error) string {
 	switch {
 	case errors.Is(err, errNoGH):
 		return "gh not installed"
-	case strings.Contains(msg, "auth login"), strings.Contains(msg, "not logged"), strings.Contains(msg, "bad credentials"), strings.Contains(msg, "401"):
+	// A gh whose token is invalid reads GitHub signed out, and GitHub
+	// refuses with the rate limit of a signed-out address, which says so.
+	case strings.Contains(msg, "auth login"), strings.Contains(msg, "not logged"), strings.Contains(msg, "bad credentials"), strings.Contains(msg, "401"),
+		strings.Contains(msg, "authenticated requests get a higher rate limit"):
 		return "gh not signed in"
 	case strings.Contains(msg, "rate limit"):
 		return "GitHub rate limit"

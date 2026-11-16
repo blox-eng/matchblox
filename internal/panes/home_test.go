@@ -114,7 +114,7 @@ func TestHomeKeyArgvBindsPrefixMAsTheKey(t *testing.T) {
 	}
 	ifHome := []string{"if-shell", "-F", "#{==:#{pane_current_command},matchblox}",
 		`if-shell -F "#{pane_in_mode}" "send-keys -X cancel" ; send-keys -H 1b 5f 6d 61 74 63 68 62 6c 6f 78 1b 5c`,
-		`if-shell -F "#{S:#{?#{==:#{session_name},matchblox},1,}}" { switch-client -t =matchblox ; run-shell -C -t =matchblox: "#{W:#{P:#{?#{==:#{pane_current_command},matchblox},select-window -t #{window_id} ; select-pane -t #{pane_id} ; ,}}}" } { if-shell -F "#{S:#{W:#{P:#{?#{==:#{pane_current_command},matchblox},1,}}}}" { run-shell -C "#{S:#{W:#{P:#{?#{==:#{pane_current_command},matchblox},switch-client -t #{pane_id} ; ,}}}}" } { display-message "No matchblox console here: run matchblox in a shell to open one" } }`}
+		`if-shell -F "#{S:#{?#{==:#{session_name},matchblox},1,}}" { switch-client -t =matchblox ; run-shell -C -t =matchblox: "#{W:#{P:#{?#{||:#{==:#{pane_current_command},matchblox},#{==:#{pane_id},#{@matchblox_console}}},select-window -t #{window_id} ; select-pane -Z -t #{pane_id} ; ,}}}" } { if-shell -F "#{S:#{W:#{P:#{?#{==:#{pane_current_command},matchblox},1,}}}}" { run-shell -C "#{S:#{W:#{P:#{?#{==:#{pane_current_command},matchblox},switch-client -t #{pane_id} ; ,}}}}" } { display-message "No matchblox console here: run matchblox in a shell to open one" } }`}
 	if want := append([]string{"bind-key", "-n", "User900"}, ifHome...); !slices.Equal(cmds[1], want) {
 		t.Errorf("the home key:\n got %q\nwant %q", cmds[1], want)
 	}
@@ -199,7 +199,7 @@ func TestNamedConsole(t *testing.T) {
 func TestMarkKeyArgvRunsOnlyAtTheConsole(t *testing.T) {
 	line := strings.Join(MarkKeyArgv(), " ")
 	for _, want := range []string{"user-keys[950]", "bind-key -n User950 if-shell -F",
-		"#{&&:#{==:#{session_name},matchblox},#{==:#{pane_current_command},matchblox}}", "#{client_tty}"} {
+		atConsole, "#{client_tty}"} {
 		if !strings.Contains(line, want) {
 			t.Errorf("MarkKeyArgv lacks %q: %s", want, line)
 		}
@@ -212,7 +212,7 @@ func TestBeltKeyArgvHandsTheAnswerOnlyToTheConsole(t *testing.T) {
 	line := strings.Join(BeltKeyArgv(), " ")
 	slot := strconv.Itoa(keycmd.BeltSlot)
 	for _, want := range []string{"user-keys[" + slot + "] " + keycmd.BeltKey, "bind-key -n User" + slot + " if-shell -F " + atConsole,
-		"send-keys -t #{pane_id} -H " + hexKeys(keycmd.BeltFromPrefix), "#{client_tty}"} {
+		"send-keys -t " + handTarget + " -H " + hexKeys(keycmd.BeltFromPrefix), "#{client_tty}"} {
 		if !strings.Contains(line, want) {
 			t.Errorf("BeltKeyArgv lacks %q: %s", want, line)
 		}
@@ -227,7 +227,7 @@ func TestTapKeysArgvHandsEachTapOnlyToTheConsole(t *testing.T) {
 	for i, k := range keycmd.TapKeys {
 		slot := strconv.Itoa(keycmd.TapSlot + i)
 		for _, want := range []string{"user-keys[" + slot + "] " + keycmd.TapKey(k), "bind-key -n User" + slot + " if-shell -F " + atConsole,
-			"send-keys -t #{pane_id} -H " + hexKeys(keycmd.TappedPrefix+k+";") + " ; send-keys -t #{pane_id} -l #{client_tty}"} {
+			"send-keys -t " + handTarget + " -H " + hexKeys(keycmd.TappedPrefix+k+";") + " ; send-keys -t " + handTarget + " -l #{client_tty}"} {
 			if !strings.Contains(line, want) {
 				t.Errorf("TapKeysArgv lacks %q", want)
 			}
@@ -239,7 +239,7 @@ func TestViewerHookArgvTellsOnlyTheConsole(t *testing.T) {
 	argv := ViewerHookArgv()
 	line := strings.Join(argv, " ")
 	for _, want := range []string{"client-attached[950]", "client-session-changed[950]", "if-shell -F '" + atConsole + "'",
-		"send-keys -t #{pane_id} -H " + hexKeys(keycmd.ViewerKey)} {
+		"send-keys -t " + handTarget + " -H " + hexKeys(keycmd.ViewerKey)} {
 		if !strings.Contains(line, want) {
 			t.Errorf("ViewerHookArgv lacks %q: %s", want, line)
 		}

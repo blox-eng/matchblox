@@ -60,6 +60,11 @@ Outside tmux, the console opens in its own tmux session, `matchblox`. Every
 terminal that runs `matchblox` joins it, and `prefix m` brings you back to
 it from any pane. Inside tmux, it opens in the current pane.
 
+In the session `matchblox`, the console's window has two panes: the list,
+and the agent's own pane beside it. Type in the agent's pane as in the
+agent itself. `Enter` on a row shows that agent, and `ctrl+q` flips the
+keys between the list and the agent.
+
 The service starts with the console and keeps running after it closes: the
 history and the stoker go on. `matchblox serve` runs it in the foreground,
 for a log or a service manager.
@@ -116,7 +121,8 @@ tmux new -s app claude
 
 matchblox finds each agent that runs in a tmux pane, and gives it a row
 in the list. When an agent needs you, it goes into `NEEDS YOU`, and its
-chat shows what it asks. `Ctrl+O` jumps to its pane. The way back (`prefix m`) returns to the
-console.
+chat shows what it asks. `Enter` on its row shows its pane beside the list,
+and `ctrl+q` flips the keys between them. `Ctrl+O` jumps fully into the
+pane. The way back (`prefix m`) returns to the console.
 
 Next: [the console](console.md).

@@ -46,7 +46,7 @@ func (m Model) forHost(host string, a *action) *action {
 // console's pane. Inside tmux the step is a tmux command list that returns
 // at once; outside, the ssh takes this terminal.
 func (m Model) jumpOnHost(host string, a *action) *action {
-	var j remote.Jump
+	j := remote.Jump{Host: host}
 	for _, s := range a.steps {
 		if !remote.NavAllowed(s) {
 			return a
@@ -58,24 +58,45 @@ func (m Model) jumpOnHost(host string, a *action) *action {
 			j.Dir = s[3]
 		}
 	}
-	j.Host, j.Prefix, j.Home, j.ID, j.Outer, j.ClientTTY = host, m.prefix(), m.home(), m.jumpID(), !m.opt.OutsideTmux, a.tty
+	j, ssh, b := m.peerJump(j, a)
+	if ssh == nil {
+		return b
+	}
+	b.steps, b.say, b.remote = [][]string{ssh}, shellLine(ssh), true
+	if j.Outer {
+		b.steps = [][]string{j.Local(ssh)}
+		if j.ClientTTY == "" {
+			b.deskLocal = func(tty string) []string { k := j; k.ClientTTY = tty; return k.Local(ssh) }
+		}
+		b.undo = []string{"tmux", "kill-session", "-t", "=" + remote.HostSessionName(j.Host, j.ID)}
+	}
+	return b
+}
+
+// peerJump checks a jump to j.Host's j.Pane, or to a new shell in j.Dir:
+// the jump's shape, this machine's tmux, the host's tmux, its host key and
+// the master directory. It gives the jump, its ssh argv and a copy of a
+// for its host, or a refusal of a and no argv.
+func (m Model) peerJump(j remote.Jump, a *action) (remote.Jump, []string, *action) {
+	j.Prefix, j.Home, j.ID, j.Outer, j.ClientTTY = m.prefix(), m.home(), m.jumpID(), !m.opt.OutsideTmux, a.tty
+	host := j.Host
 	if !remote.JumpAllowed(j) {
-		return refused(a, jumpRefusal(j))
+		return j, nil, refused(a, jumpRefusal(j))
 	}
 	if j.Outer && remote.TmuxTooOld(m.opt.LocalTmux, remote.MinLocalTmux) {
-		return refused(a, "tmux "+m.opt.LocalTmux+" is older than "+remote.MinLocalTmux+": update tmux, or run the console outside tmux")
+		return j, nil, refused(a, "tmux "+m.opt.LocalTmux+" is older than "+remote.MinLocalTmux+": update tmux, or run the console outside tmux")
 	}
 	if v := m.helloOf(host).Tmux; v == "none" || remote.TmuxTooOld(v, remote.MinHostTmux) {
-		return m.hostTmuxRefusal(host, a)
+		return j, nil, m.hostTmuxRefusal(host, a)
 	}
 	if l := m.loginOf(host); l.login == remote.LoginHostKeyChanged {
-		return refused(a, m.loginNote(host, l.login, ""))
+		return j, nil, refused(a, m.loginNote(host, l.login, ""))
 	}
 	dir, err := m.masterDir()
 	if err != nil && j.Outer {
 		// The jump switches the client at once: with no master to open
 		// first, its ssh would ask in a session of its own.
-		return refused(a, m.masterRefusal(host, err))
+		return j, nil, refused(a, m.masterRefusal(host, err))
 	}
 	b := *a
 	b.host = host
@@ -85,16 +106,7 @@ func (m Model) jumpOnHost(host string, a *action) *action {
 		master = append(master, "-o", "BatchMode=yes")
 		b.master = dir
 	}
-	ssh := remote.JumpSSH(j.Host, j, master)
-	b.steps, b.say, b.remote = [][]string{ssh}, shellLine(ssh), true
-	if j.Outer {
-		b.steps = [][]string{j.Local(ssh)}
-		if j.ClientTTY == "" {
-			b.deskLocal = func(tty string) []string { k := j; k.ClientTTY = tty; return k.Local(ssh) }
-		}
-		b.undo = []string{"tmux", "kill-session", "-t", "=" + remote.HostSessionName(j.Host, j.ID)}
-	}
-	return &b
+	return j, remote.JumpSSH(j.Host, j, master), &b
 }
 
 // refused is an action that runs nothing: its confirm and its flash say
@@ -181,6 +193,9 @@ type connectedMsg struct {
 // inside tmux is a tmux command list instead: it switches the client and
 // returns at once.
 func (m Model) onHost(a action) (tea.Model, tea.Cmd) {
+	if a.beside {
+		return m.startShow(a)
+	}
 	argv := a.steps[0]
 	if a.nav && !m.opt.OutsideTmux {
 		run, undo, read, host := m.opt.Run, a.undo, m.readClients(), m.hostOf(a)

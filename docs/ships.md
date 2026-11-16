@@ -112,7 +112,10 @@ The service reads GitHub with `gh`, one query per repository a minute, and
 only while a ship is in flight. It shares GitHub's rate limit with every
 agent on the machine: when less than a tenth is left it stops until the
 limit resets, and a notice says until when. Without `gh`, or with `gh` not
-signed in, the ships still list, with `state unknown · gh not signed in`.
+signed in, the ships still list, with `state unknown · gh not signed in`,
+and the notice says `run gh auth login`. A `gh` with an invalid token
+counts as not signed in: GitHub then refuses it with the small limit of a
+signed-out address, and matchblox does not take that for the rate limit.
 A repository that cannot be read is asked again after a minute, then less
 and less often, up to every 30 minutes; a PR that was never read leaves
 the list after a day.

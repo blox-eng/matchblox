@@ -316,7 +316,7 @@ func run(args []string) error {
 			binds = append(binds, panes.HomeKeyArgv(), panes.FlipKeysArgv())
 		}
 		if os.Getenv(panes.HomeEnv) == "1" {
-			binds = append(binds, panes.SizeArgv(), panes.CommandKeysArgv(), panes.MarkKeyArgv(), panes.BeltKeyArgv(), panes.TapKeysArgv(), panes.ViewerHookArgv())
+			binds = append(binds, panes.SizeArgv(), panes.CommandKeysArgv(), panes.MarkKeyArgv(), panes.BeltKeyArgv(), panes.TapKeysArgv(), panes.ViewerHookArgv(), panes.BesideKeysArgv(), panes.BesideHookArgv(), remote.ViewHookArgv())
 		}
 		for _, argv := range binds {
 			_ = exec.Command("tmux", argv[1:]...).Run()
@@ -672,6 +672,8 @@ func runConsole(path string, cfg config.Config, root string, noMotion bool, host
 		base.MasterBase = remote.MasterBase(os.Getenv("XDG_RUNTIME_DIR"), "/tmp", os.Getuid())
 	}
 	home, _ := os.UserHomeDir()
+	base.Beside = !base.OutsideTmux && os.Getenv(panes.HomeEnv) == "1" && root == "" && host == ""
+	base.Socket, _, _ = strings.Cut(os.Getenv("TMUX"), ",")
 	base.Pair = consolePair(home, base.Self, defaultHostKey, setup.PairAddress)
 	restore := func() {}
 	if root == "" {
