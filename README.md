@@ -150,14 +150,16 @@ More in [The console](https://docs.matchblox.com/console/).
 
 | Key | What it does |
 |---|---|
-The keys go to the chat's line or to the list. `Esc` moves them to the
-list, and `Enter` there moves them back.
+Without tmux (the drawn chat, as in the demo), the keys go to the chat's
+line or to the list. `Esc` moves them to the list, and `Enter` there moves
+them back. On a desk in tmux there is no line: the keys go to the list or
+to the agent's own pane, and `ctrl+q` flips them.
 
 | Key | What it does |
 |---|---|
-| `Enter` | In the line, sends the text to the chosen session. In the list, goes back to the line. |
+| `Enter` | In the line, sends the text to the chosen session. In the list, goes back to the line. With the agent beside the list, shows the chosen agent and gives it the keys. |
 | `↑`, `↓` | Chooses the session above or below. |
-| A digit, 1 to 9 | With the line empty, marks an option of the chosen session's question. The same digit again sends it. |
+| A digit, 1 to 9 | In the drawn chat, with the line empty, marks an option of the chosen session's question. The same digit again sends it. |
 | `Ctrl+O` | Goes into the chosen agent's pane. In tmux, `ctrl+q` flips the keys between the list and the agent's pane. |
 | `p` | In the list, merges the pull request that waits for your merge. It runs only after a typed `y`. |
 | `x` | In the list, kills the match. It runs only after a typed `y`. |

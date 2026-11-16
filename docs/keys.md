@@ -9,6 +9,12 @@ the bottom shows the keys of the open tab. A tap on a key presses it.
 
 ## The list and the chat
 
+This section is the drawn chat: the demo, a console with no tmux, and a
+console outside its home session. On a desk in tmux there is no line, and
+the keys go to the list or to the agent's pane: see
+[The agent beside the list](#the-agent-beside-the-list). The rows below
+that name the line, or a typed digit, do not act there.
+
 The keys go to one of two places: the chat's line or the list. The key
 line names the place first, `writing to flint-auth` or `in the list`, then
 at most five keys for it.
@@ -21,8 +27,8 @@ the line empty and a question on the screen; else it types.
 
 | Key | What it does |
 |---|---|
-| `Enter` | In the line, sends the text to the session the line names, through its own host. In the list, goes back to the line. |
-| `Backspace` | Erases the last character of the line. |
+| `Enter` | In the line, sends the text to the session the line names, through its own host. In the list, goes back to the line. With the agent beside the list, it shows the chosen agent and gives it the keys. |
+| `Backspace` | In the drawn chat, erases the last character of the line. |
 | A digit, 1 to 9 | With the line empty, marks that option of the question on the screen. The same digit again sends it. A question that opened less than half a second ago takes no digit: the digit types. On a session the stoker holds, 1 marks "Let it go", and 1 again lets it go. |
 | `↑`, `↓` | With the line empty, or in the list, chooses the session above or below, as the list draws them. In the list, `↓` past the last row chooses the parts of the foot one by one, and `↑` goes back up. `Enter` opens the chosen part. |
 | `Esc` | Closes the menu. In the line, clears a marked answer, then moves the keys to the list. In the list, clears the search, then closes the chain view beside the list, then closes the chain's room, then shows all chains. It never leaves the console, except on a host that has not answered yet: then it goes back to Hosts. `Ctrl+M`, prefix `m` and the phone's back button do the same in the console. On a phone, `Esc` then a quick letter types the letter in the line. |
