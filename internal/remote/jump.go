@@ -77,7 +77,11 @@ func PrefixKey(s string) bool { return prefixRE.MatchString(s) }
 // parses or format-expands is a name or id of a fixed shape, a pane id, or
 // an absolute directory without "#" or ";".
 func JumpAllowed(j Jump) bool {
-	if !ValidHost(j.Host) || !idRE.MatchString(j.ID) || !PrefixKey(j.Prefix) {
+	return ValidHost(j.Host) && jumpShapeAllowed(j)
+}
+
+func jumpShapeAllowed(j Jump) bool {
+	if !idRE.MatchString(j.ID) || !PrefixKey(j.Prefix) {
 		return false
 	}
 	if j.ClientTTY != "" && !ClientTTY(j.ClientTTY) {
