@@ -2,12 +2,8 @@ package app
 
 import (
 	"cmp"
-	"path/filepath"
 	"slices"
 	"strconv"
-	"strings"
-
-	"charm.land/lipgloss/v2"
 
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -102,9 +98,6 @@ type hostShips struct {
 // first: stuck, waiting for you, in flight, merged, then live (as the
 // service, the CLI and the stoker find them).
 func (m Model) shipsOf(s sample.Session) []proto.Ship {
-	if sh, ok := m.shipOfCard(s); ok {
-		return []proto.Ship{sh}
-	}
 	// A pane and a session id can repeat on another host.
 	return slices.DeleteFunc(proto.ShipsOf(m.ships(), s.Pane, s.SessionID), func(sh proto.Ship) bool { return sh.Host != s.Host })
 }
@@ -165,143 +158,4 @@ func (m Model) mergeAction(sh proto.Ship) *action {
 	}
 	return &action{label: "merge", steps: [][]string{sh.Merge}, destructive: true,
 		rec: "ship:" + sh.Repo + "#" + strconv.Itoa(sh.Number), which: "secondary", host: sh.Host}
-}
-
-// shipCards are the ships that no session drives, each a row of its own
-// in the list (ruling 31, #80): named by its branch, its pane the ship's
-// mark. A merged or live ship has none.
-func (m Model) shipCards() []sample.Session {
-	var out []sample.Session
-	for _, sh := range m.ships() {
-		if sh.Kind == shipDone || sh.Session.ID != "" || sh.Session.Pane != "" {
-			continue
-		}
-		out = append(out, sample.Session{Host: sh.Host, Name: m.shipCardName(sh), Pane: shipCardPane(sh), Cwd: sh.Where,
-			Status: "idle", Started: sh.Since})
-	}
-	return out
-}
-
-// shipCardPane is the pane of a ship's row: "#4570@hearth/hearth-api". A
-// tmux pane's id starts with %, so it is never a pane's.
-func shipCardPane(sh proto.Ship) string { return "#" + strconv.Itoa(sh.Number) + "@" + sh.Repo }
-
-// isShipCard: s is the row of a ship no session drives, and has no pane.
-func isShipCard(s sample.Session) bool { return strings.HasPrefix(s.Pane, "#") }
-
-// shipCardName is the name of a ship's row: the branch of its checkout,
-// else its repository and number.
-func (m Model) shipCardName(sh proto.Ship) string {
-	if r := m.gitOf(sh.Host); r != nil && sh.Where != "" {
-		for _, repo := range r.Repos {
-			for _, wt := range repo.Worktrees {
-				if wt.Path == sh.Where && wt.Branch != "" {
-					return wt.Branch
-				}
-			}
-		}
-	}
-	return filepath.Base(sh.Repo) + " #" + strconv.Itoa(sh.Number)
-}
-
-// shipOfCard is the ship of a ship's row.
-func (m Model) shipOfCard(s sample.Session) (proto.Ship, bool) {
-	if !isShipCard(s) {
-		return proto.Ship{}, false
-	}
-	i := slices.IndexFunc(m.ships(), func(sh proto.Ship) bool { return sh.Host == s.Host && shipCardPane(sh) == s.Pane })
-	if i < 0 {
-		return proto.Ship{}, false
-	}
-	return m.ships()[i], true
-}
-
-// chosenShip is the chosen row when it is a ship no session drives.
-func (m Model) chosenShip() (sample.Session, proto.Ship, bool) {
-	s, ok := m.sideChosen()
-	if !ok {
-		return s, proto.Ship{}, false
-	}
-	sh, card := m.shipOfCard(s)
-	return s, sh, card
-}
-
-// shipWord is the state of a ship in words, as its row says it.
-func shipWord(sh proto.Ship) string {
-	switch sh.Kind {
-	case shipWaits:
-		return "waits for your merge"
-	case shipStuck:
-		return "stuck"
-	}
-	return stageNames[sh.Stage]
-}
-
-// shipPanel is the chat's place on a ship no session drives: its pull
-// request, its stage and its checks, and the two acts it takes.
-func (m Model) shipPanel(s sample.Session, sh proto.Ship, w, h int) []string {
-	st := m.st
-	lines := []string{m.chatHead(s, w), strings.Repeat(" ", w)}
-	add := func(text string, ink lipgloss.Style) {
-		for _, l := range wrapPlain(text, max(w-2, 1)) {
-			lines = append(lines, fit(" "+ink.Render(l), w))
-		}
-	}
-	add("#"+strconv.Itoa(sh.Number)+" "+sh.Title, st.text.Bold(true))
-	add(sh.Repo+" · "+shipWord(sh), st.muted)
-	if sh.Note != "" && sh.Note != shipWord(sh) {
-		add(sh.Note, st.muted)
-	}
-	if sh.URL != "" {
-		add(sh.URL, st.faint)
-	}
-	lines = append(lines, strings.Repeat(" ", w))
-	acts := m.keys.side.Enter.Help().Key + " new session on its branch"
-	if _, ok := m.mergeable(s); ok {
-		merge := m.keys.board.Merge.Help().Key
-		if !m.inList() {
-			merge = m.keys.side.Leave.Help().Key + ", then " + merge
-		}
-		acts += " · " + merge + " merge, after a typed y"
-	}
-	add(acts, st.text)
-	for len(lines) < h-1 {
-		lines = append(lines, strings.Repeat(" ", w))
-	}
-	return append(lines[:min(len(lines), max(h-1, 0))], m.chatLine(s, w))
-}
-
-// shipCardWhy is what a ship's row says of keys that need a session.
-func (m Model) shipCardWhy(sh proto.Ship) string {
-	return "no session drives #" + strconv.Itoa(sh.Number) + " · " + m.keys.side.Enter.Help().Key + " starts one on its branch"
-}
-
-// takeShip opens New session in the checkout of a ship no session
-// drives, its first message to take the ship over (#80); with no
-// checkout of it here it says so.
-func (m Model) takeShip(sh proto.Ship) Model {
-	if sh.Where == "" {
-		m.flash = "no session drives #" + strconv.Itoa(sh.Number) + ", and no checkout of " + sh.Repo + " is here"
-		return m
-	}
-	return m.openNewIn(sh.Host, sh.Where, "Take over #"+strconv.Itoa(sh.Number)+" ("+sh.URL+"): read where it stands, then carry it to live.")
-}
-
-// openNewIn is N on host with where picked and the cursor on agent, so
-// ⏎ ⏎ starts it, with first as the first message to edit; with no folder,
-// N as it is.
-func (m Model) openNewIn(host, where, first string) Model {
-	if where == "" {
-		next, _ := m.openNew()
-		return next.(Model)
-	}
-	nm := m.openNewAt(host, where, first)
-	if nm.form == nil {
-		return nm
-	}
-	f := *nm.form
-	f.where, f.picked, f.query, f.extra = where, true, "", ""
-	f.listOpen, f.at = false, fieldAgent
-	nm.form = &f
-	return nm
 }

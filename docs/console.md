@@ -56,11 +56,10 @@ or when it is the chosen row, with what it does. A held row says why:
 `held by the stoker · not the priority`, or `parked by you · z lets it
 go`.
 
-A pull request that no session drives has a row of its own, named by
-its branch: in `NEEDS YOU` while it waits for your merge or is stuck,
-else in `IDLE`. `Enter` or `N` on it starts a session on its branch (see
-[Ships](ships.md)). A session outside tmux is a row by its process: its
-line says it takes no text.
+The list shows only sessions. A pull request that no session drives has
+no row, and it does not count as needing you (see [Ships](ships.md)). A
+session outside tmux is a row by its process: its line says it takes no
+text.
 
 A chain is a head row, `≋ login   step 2 of 3 · 3`, then its members in
 step order, each with a link (`├`, the last `└`). The chain sits in the
