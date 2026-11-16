@@ -108,8 +108,8 @@ func (m Model) windowWidth() int {
 	return 0
 }
 
-// sizeCmd follows the window: one pane zoomed where the agent would be too
-// narrow beside the list, else both, the list at its width.
+// sizeCmd follows the window: the pane in use zoomed where the agent would
+// be too narrow beside the list, else both, the list at its width.
 func (m Model) sizeCmd(paneW int) tea.Cmd {
 	run := m.tmuxRun()
 	if m.beside == "" || run == nil {
@@ -122,7 +122,7 @@ func (m Model) sizeCmd(paneW int) tea.Cmd {
 			w = paneW
 		}
 		if m.onePaneAt(w) {
-			_, _ = run(remote.ZoomArgv(console, true)[1:]...)
+			_, _ = run(remote.ZoomArgv(inUse(run, console), true)[1:]...)
 			return besideSizeMsg{w}
 		}
 		// A resize ends a zoom, so it runs only where the window is not one.
@@ -130,6 +130,16 @@ func (m Model) sizeCmd(paneW int) tea.Cmd {
 		_, _ = run(remote.ListWidthArgv(console, m.listWidth(w))[1:]...)
 		return besideSizeMsg{w}
 	}
+}
+
+// inUse is the pane of the console's window that has the keys; the
+// console when tmux does not say.
+func inUse(run func(args ...string) (string, error), console string) string {
+	out, err := run("list-panes", "-t", console, "-F", "#{?pane_active,#{pane_id},}")
+	if pane := strings.TrimSpace(out); err == nil && paneID.MatchString(pane) {
+		return pane
+	}
+	return console
 }
 
 // listWidth is the list pane's width in a window of w columns.

@@ -21,6 +21,7 @@ type besideTmux struct {
 	kept  string   // the window's @matchblox_beside, "" when unset
 	alive bool     // the pane kept answers
 	own   []string // other panes in the console's window
+	using string   // the window's active pane, "" when tmux does not say
 	calls [][]string
 }
 
@@ -45,6 +46,8 @@ func (b *besideTmux) run(args ...string) (string, error) {
 		return b.winW + "\n", nil
 	case "split-window":
 		return "%9\n", nil
+	case "list-panes":
+		return "\n" + b.using + "\n", nil
 	}
 	return "", nil
 }
@@ -156,6 +159,21 @@ func TestTheZoomFollowsTheWindowWidth(t *testing.T) {
 		if got := m.onePane(40); got != c.zoom {
 			t.Errorf("window %s: onePane = %v", c.winW, got)
 		}
+	}
+}
+
+// TestANarrowWindowKeepsTheAgentInUse: the window narrows while the agent
+// has the keys: the agent fills it, and keeps them.
+func TestANarrowWindowKeepsTheAgentInUse(t *testing.T) {
+	m, tm := besideConsole(t, boardFixture(t), 40, 50, "160")
+	tm.using, tm.winW = "%9", "70"
+	next, cmd := m.Update(tea.WindowSizeMsg{Width: 40, Height: 50})
+	feed(t, next.(Model), cmd)
+	if !tm.ran(remote.ZoomArgv("%9", true)) {
+		t.Fatalf("the agent in use is not zoomed: %q", tm.lines())
+	}
+	if tm.ran(remote.ZoomArgv("%1", true)) {
+		t.Fatalf("the list took the window from the agent in use: %q", tm.lines())
 	}
 }
 
