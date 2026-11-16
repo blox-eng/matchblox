@@ -9,6 +9,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/blox-eng/matchblox/internal/menu"
 	"github.com/blox-eng/matchblox/internal/said"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
@@ -233,29 +234,29 @@ func (m Model) chatAsk(s sample.Session, w, room int) []string {
 }
 
 // paneAsks: the cut pane of s on screen draws q's options as the agent's
-// own menu: a line "N. <label>" for each option N, after the menu's
-// mark or blanks. A label in the pane's prose is no menu.
+// own menu (menu.Read): option N starts with the label of q's option N.
+// A label in the pane's prose is no menu.
 func (m Model) paneAsks(s sample.Session, q said.Question) bool {
-	if len(q.Options) == 0 || m.watchConn(s.Host) == nil || m.watchHost != s.Host || m.watching != s.Pane || m.screen.Pane != s.Pane || m.screen.Gone {
+	opts := m.screenMenu(s)
+	if len(q.Options) == 0 || opts == nil {
 		return false
 	}
-	menu := map[string]string{}
-	for _, l := range strings.Split(ansi.Strip(chatCut(s.Agent, m.screen.Text)), "\n") {
-		if g := agentMenuLine.FindStringSubmatch(l); g != nil {
-			menu[g[1]] = g[2]
-		}
-	}
 	for i, o := range q.Options {
-		if !strings.HasPrefix(menu[strconv.Itoa(i+1)], o.Label) {
+		if !strings.HasPrefix(opts[i+1], o.Label) {
 			return false
 		}
 	}
 	return true
 }
 
-// agentMenuLine is a line of an agent's menu: its mark or blanks, the option's
-// number, and its label.
-var agentMenuLine = regexp.MustCompile(`^\s*[›❯>]?\s*(\d+)\.\s+(.*?)\s*$`)
+// screenMenu is the menu at the foot of s's cut pane, while the chat
+// watches s and its screen is here; nil for none.
+func (m Model) screenMenu(s sample.Session) map[int]string {
+	if m.watchConn(s.Host) == nil || m.watchHost != s.Host || m.watching != s.Pane || m.screen.Pane != s.Pane || m.screen.Gone {
+		return nil
+	}
+	return menu.Read(chatCut(s.Agent, m.screen.Text))
+}
 
 // chatLine is the line at the bottom: what the owner types, its end in
 // view, and at the right whom it goes to, or what the line says of its
