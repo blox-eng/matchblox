@@ -6,6 +6,13 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **The list shows only sessions.** A pull request that no session drives
+  no longer has a row of its own or counts as needing you. A session's own
+  pull request stays a badge on its row.
+  ([#424](https://github.com/blox-eng/matchblox/issues/424))
+
 ## [0.46.2] - 2026-11-16
 
 ### Fixed
@@ -17,10 +24,6 @@ All notable changes to matchblox are in this file. The format follows
   session too. The service types the digit only while the menu the chat
   showed still stands.
   ([#422](https://github.com/blox-eng/matchblox/issues/422))
-- **The list shows only sessions.** A pull request that no session drives
-  no longer has a row of its own or counts as needing you. A session's own
-  pull request stays a badge on its row.
-  ([#424](https://github.com/blox-eng/matchblox/issues/424))
 
 ## [0.46.1] - 2026-11-16
 
