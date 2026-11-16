@@ -15,7 +15,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/tmuxtest"
 )
 
-const rawCat = "stty raw -echo; cat -v > "
+const rawCat = "stty raw -echo; exec cat -v > " // exec: the pane runs cat once raw
 
 // besideEnv is a matchblox window with the list pane C, which runs no
 // console (sleep), and the agent pane A beside it, with a client attached.
@@ -43,9 +43,18 @@ func newBesideEnv(t *testing.T) besideEnv {
 	e.a = e.tmux("split-window", "-d", "-h", "-t", e.c, "-P", "-F", "#{pane_id}", "sh", "-c", rawCat+e.aOut)
 	e.tmux("set-option", "-w", "-t", e.c, sample.ConsoleOption, e.c, ";", "set-option", "-w", "-t", e.c, sample.BesideOption, e.a)
 	e.tmux(BesideKeysArgv()[1:]...)
+	e.waitRaw(t, e.c)
+	e.waitRaw(t, e.a)
 	e.term = attach(t, sock, Home)
 	waitFor(t, func() bool { return e.tmux("list-clients", "-F", "#{client_session}") == Home })
 	return e
+}
+
+// waitRaw waits until pane runs cat, after its stty raw: before it the
+// terminal's flow control takes ctrl+q (XON) and the pane reads nothing.
+func (e besideEnv) waitRaw(t *testing.T, pane string) {
+	t.Helper()
+	waitFor(t, func() bool { return e.tmux("display-message", "-p", "-t", pane, "#{pane_current_command}") == "cat" })
 }
 
 func (e besideEnv) active() string {
@@ -96,6 +105,7 @@ func TestTheFlipKeyTypesOutsideTheConsoleWindow(t *testing.T) {
 	e := newBesideEnv(t)
 	out := t.TempDir() + "/q"
 	e.tmux("new-session", "-d", "-s", "kindle-web", "-x", "80", "-y", "20", "sh", "-c", rawCat+out)
+	e.waitRaw(t, "=kindle-web:")
 	e.tmux("switch-client", "-t", "=kindle-web")
 	waitFor(t, func() bool { return e.tmux("list-clients", "-F", "#{client_session}") == "kindle-web" })
 	t.Cleanup(func() {

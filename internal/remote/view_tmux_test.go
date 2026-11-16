@@ -91,8 +91,8 @@ func TestAViewTypesIntoTheAgentsOwnPane(t *testing.T) {
 	waitFor(t, "the view's session", func() bool { return hasSession(e.sock, g) })
 	// the nested client needs a moment to be ready for keys
 	waitFor(t, "the view attached", func() bool {
-		out, _ := tmuxOut(e.sock, "list-clients", "-t", "="+g)
-		return out != ""
+		// list-clients prints "can't find session" before the view's session exists
+		return len(clientsOf(e.sock, g)) > 0
 	})
 	mustTmux(t, e.sock, "send-keys", "-t", view, "echo typed-in-view", "Enter")
 	waitFor(t, "the typed line in the agent's pane", func() bool {
@@ -113,8 +113,8 @@ func TestAViewFitsAWiderAgentToItsPane(t *testing.T) {
 	argv, j := e.argv(t, "kindle-web")
 	view := e.openView(t, argv)
 	waitFor(t, "the view attached", func() bool {
-		out, _ := tmuxOut(e.sock, "list-clients", "-t", "="+JumpSessionName(j.ID))
-		return out != ""
+		// list-clients prints "can't find session" before the view's session exists
+		return len(clientsOf(e.sock, JumpSessionName(j.ID))) > 0
 	})
 	want := mustTmux(t, e.sock, "display", "-p", "-t", view, "#{pane_width}x#{pane_height}")
 	waitFor(t, "kindle-web's window at the view's size "+want, func() bool {
@@ -131,8 +131,8 @@ func TestARespawnEndsTheOldView(t *testing.T) {
 	view := e.openView(t, argv1)
 	g1 := JumpSessionName(j1.ID)
 	waitFor(t, "the first view attached", func() bool {
-		out, _ := tmuxOut(e.sock, "list-clients", "-t", "="+g1)
-		return out != ""
+		// list-clients prints "can't find session" before the view's session exists
+		return len(clientsOf(e.sock, g1)) > 0
 	})
 	argv2, _ := e.argv(t, "flint-auth")
 	args := append([]string{"respawn-pane", "-k", "-t", view, "--"}, argv2...)
@@ -141,8 +141,8 @@ func TestARespawnEndsTheOldView(t *testing.T) {
 	if !hasSession(e.sock, "kindle-web") {
 		t.Fatal("kindle-web ended with its view")
 	}
-	if out, _ := tmuxOut(e.sock, "list-clients", "-t", "=kindle-web"); out != "" {
-		t.Fatalf("kindle-web has clients: %q", out)
+	if cs := clientsOf(e.sock, "kindle-web"); len(cs) > 0 {
+		t.Fatalf("kindle-web has clients: %q", cs)
 	}
 	// Only the new view's file is left: the old wrapper was killed mid-client.
 	waitFor(t, "the old view's temp file removed", func() bool {
@@ -157,8 +157,8 @@ func TestAViewEndsWithItsAgent(t *testing.T) {
 	view := e.openView(t, argv)
 	e.explain(t, view)
 	waitFor(t, "the view attached", func() bool {
-		out, _ := tmuxOut(e.sock, "list-clients", "-t", "="+JumpSessionName(j.ID))
-		return out != ""
+		// list-clients prints "can't find session" before the view's session exists
+		return len(clientsOf(e.sock, JumpSessionName(j.ID))) > 0
 	})
 	mustTmux(t, e.sock, "send-keys", "-t", "=flint-auth:", "C-d")
 	waitFor(t, "the ended line", func() bool {
@@ -238,8 +238,8 @@ func TestAViewEndsWhenItsAgentPaneGoes(t *testing.T) {
 		e.explain(t, view)
 		g := JumpSessionName(j.ID)
 		waitFor(t, "the view attached", func() bool {
-			out, _ := tmuxOut(e.sock, "list-clients", "-t", "="+g)
-			return out != ""
+			// list-clients prints "can't find session" before the view's session exists
+			return len(clientsOf(e.sock, g)) > 0
 		})
 		mustTmux(t, e.sock, "kill-pane", "-t", agent)
 		waitFor(t, "the ended line", func() bool {
@@ -267,8 +267,8 @@ func TestAHostileNameStaysWords(t *testing.T) {
 	}
 	view := e.openView(t, ViewArgv(j, name, e.path))
 	waitFor(t, "the view attached", func() bool {
-		out, _ := tmuxOut(e.sock, "list-clients", "-t", "="+JumpSessionName(j.ID))
-		return out != ""
+		// list-clients prints "can't find session" before the view's session exists
+		return len(clientsOf(e.sock, JumpSessionName(j.ID))) > 0
 	})
 	mustTmux(t, e.sock, "kill-pane", "-t", j.Pane)
 	waitFor(t, "the ended line", func() bool {
