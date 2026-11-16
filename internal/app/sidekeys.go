@@ -526,10 +526,10 @@ func (m Model) stokerHolds(s sample.Session) (proto.Hold, bool) {
 // opens is text.
 func (m Model) digitAnswers(s sample.Session) bool {
 	_, held := m.stokerHolds(s)
-	if _, asks := m.oneChoice(s); !asks && !held {
+	if _, _, asks := m.digitMenu(s); !asks && !held {
 		return false
 	}
-	return paneOf(s) == m.peekPane && askOf(s) == m.peekAsk && m.now().Sub(m.peekAt) >= peekDead
+	return paneOf(s) == m.peekPane && m.menuID(s) == m.peekAsk && m.now().Sub(m.peekAt) >= peekDead
 }
 
 // chatMark is the option a first digit marked on s, 0 for none.
@@ -756,7 +756,7 @@ func actNumber(id string) int {
 	return n
 }
 
-// answerResult is a peer's answer to the act that carried a digit: a
+// answerResult is the answer to the act that carried a digit: a
 // refusal gives the digits back, and the notice says why.
 func (m Model) answerResult(r proto.Result) (Model, tea.Cmd, bool) {
 	if r.ActID == "" || r.ActID != m.peekSentAct {
@@ -771,7 +771,10 @@ func (m Model) answerResult(r proto.Result) (Model, tea.Cmd, bool) {
 		return m, nil, true
 	}
 	m.peekSent, m.peekSentAsk, m.peekSentPane = 0, "", ""
-	return m, m.notice("not sent: " + why), true
+	if !strings.HasPrefix(why, "not sent: ") {
+		why = "not sent: " + why
+	}
+	return m, m.notice(why), true
 }
 
 // answerLost forgets the answer in flight to host: its conn went, and the

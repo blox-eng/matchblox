@@ -193,7 +193,7 @@ func (m Model) chatConversation(s sample.Session, w, rows int) []string {
 // room lines the question keeps its first line, the mark and the options
 // that fit, and says how many more it has.
 func (m Model) chatAsk(s sample.Session, w, room int) []string {
-	q, ok := m.oneChoice(s)
+	q, _, ok := m.digitMenu(s)
 	if _, held := m.stokerHolds(s); held && !ok {
 		q, ok = said.Question{Question: m.cardName(s) + " is " + m.heldWhy(s), Options: []said.Option{{Label: "Let it go"}}}, true
 	}
@@ -249,13 +249,27 @@ func (m Model) paneAsks(s sample.Session, q said.Question) bool {
 	return true
 }
 
-// screenMenu is the menu at the foot of s's cut pane, while the chat
-// watches s and its screen is here; nil for none.
+// screenMenu is the menu at the foot of s's pane, while the chat watches
+// s and its screen is here; nil for none. It reads the whole screen, as
+// the service does when the pick goes.
 func (m Model) screenMenu(s sample.Session) map[int]string {
-	if m.watchConn(s.Host) == nil || m.watchHost != s.Host || m.watching != s.Pane || m.screen.Pane != s.Pane || m.screen.Gone {
+	if !m.screenOf(s) {
 		return nil
 	}
-	return menu.Read(chatCut(s.Agent, m.screen.Text))
+	return menu.Read(m.screen.Text)
+}
+
+// screenSign is menu.Sign of s's screen: what a pick from it carries.
+func (m Model) screenSign(s sample.Session) string {
+	if !m.screenOf(s) {
+		return ""
+	}
+	return menu.Sign(m.screen.Text)
+}
+
+// screenOf: the chat watches s, and s's screen is here.
+func (m Model) screenOf(s sample.Session) bool {
+	return m.watchConn(s.Host) != nil && m.watchHost == s.Host && m.watching == s.Pane && m.screen.Pane == s.Pane && !m.screen.Gone
 }
 
 // chatLine is the line at the bottom: what the owner types, its end in
@@ -272,6 +286,8 @@ func (m Model) chatLine(s sample.Session, w int) string {
 		right = st.warn.Render(n.text)
 	} else if _, waits := m.lineHeld[paneOf(s)]; waits {
 		right = st.warn.Render(queuedNote)
+	} else if m.lines[paneOf(s)] == "" && m.asksNow(s) && !m.chatAnswers(s) {
+		right = st.warn.Render(m.inPane())
 	}
 	text := lineShown(m.lines[paneOf(s)])
 	if room := w - lipgloss.Width(right) - 5; lipgloss.Width(text) > room {

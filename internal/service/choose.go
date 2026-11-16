@@ -4,7 +4,6 @@ import (
 	"context"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/menu"
@@ -63,8 +62,8 @@ func (s *Service) choose(ctx context.Context, pane string, a proto.Act) proto.Re
 		s.undrive(pane) // the pane's last input is the owner's, as with a message
 	}
 	s.kickScreens(pane)
-	for _, after := range keyRereads {
-		time.AfterFunc(after, func() { s.kickScreens(pane) })
+	if res.Err == "" {
+		s.rereadAfter(pane)
 	}
 	return res
 }
