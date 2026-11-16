@@ -19,6 +19,8 @@ All notable changes to matchblox are in this file. The format follows
 
 ### Fixed
 
+- **A session in two chains is one row.** It showed once under each
+  chain, and ↑↓ stopped at its second row.
 - **Signed-out gh no longer shows as rate limit.** A `gh` with an invalid
   token reads GitHub signed out, and GitHub refuses it with a "rate limit
   exceeded" for its address. The console paused and said "GitHub's rate

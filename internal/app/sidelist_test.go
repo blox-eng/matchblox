@@ -106,6 +106,37 @@ func TestChainMovesWhenItsWaitIsAnswered(t *testing.T) {
 	}
 }
 
+// A session in two chains is one row: the list walks by session, so a
+// second row of it stopped ↓ and ↑ there (owner, 2026-11-16).
+func TestASessionInTwoChainsIsOneRow(t *testing.T) {
+	var list []sample.Session
+	for _, n := range []string{"kindle-web", "flint-auth", "ember-billing"} {
+		list = append(list, boardMatch(n, time.Hour))
+	}
+	st := boardState()
+	st.Sessions = list
+	st.Chains = &state.ChainsView{Chains: []chains.Chain{
+		{ID: "c1", Name: "login", Repo: "/home/user/src/hearth", Members: []chains.Member{memberOf(list[0]), memberOf(list[1])}},
+		{ID: "c2", Name: "billing", Repo: "/home/user/src/hearth", Members: []chains.Member{memberOf(list[1]), memberOf(list[2])}},
+	}}
+	m := boardModel(t, st)
+	walk := m.sideWalk()
+	if len(walk) != 3 {
+		t.Fatalf("the list has %d rows for 3 sessions: %v", len(walk), walk)
+	}
+	m.sideAt = walk[0]
+	seen := []paneKey{m.chosenSide()}
+	for range 4 {
+		m.sideMove(1)
+		if c := m.chosenSide(); c != seen[len(seen)-1] {
+			seen = append(seen, c)
+		}
+	}
+	if len(seen) != 3 {
+		t.Fatalf("↓ from the top reached %v, want all 3 sessions", seen)
+	}
+}
+
 func TestOrderInAGroupHoldsWhileStatesHold(t *testing.T) {
 	build := func(order ...int) Model {
 		var ss []sample.Session
