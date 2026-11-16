@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** On a desk, the console's right side is the chosen agent's real tmux pane. `⌥m` flips the keys between the list and the agent. `g` on a chain tiles up to 4 member panes.
+**Goal:** On a desk, the console's right side is the chosen agent's real tmux pane. `ctrl+q` flips the keys between the list and the agent. `g` on a chain tiles up to 4 member panes.
 
 **Architecture:** The console in its home session (`MATCHBLOX_HOME=1`, inside tmux) splits its window once. The right pane runs a nested tmux client (`TMUX` unset) of a session grouped with the agent's. For a peer, it runs the existing `JumpSSH`. A row choice respawns that pane. tmux key bindings flip the focus and keep the zoom on narrow screens. The console's own pane id and the agent pane's id live in window options, so the user-key bindings find the console when the agent pane has the keys.
 
@@ -14,10 +14,10 @@
 
 - Do not change `matchblox sessions --json`, `peek`, `send`, or the `ctrl+o` jump.
 - Never `join-pane`, `move-pane` or `swap-pane` an agent's pane. The agent keeps its own session, window, pane id and name.
-- The toggle key is `M-m` (`⌥m`). It acts only in the `matchblox` session's window that has `@matchblox_beside` set. Everywhere else it is `send-keys M-m`.
+- The toggle key is `C-q` (`ctrl+q`). It acts only in the `matchblox` session's window that has `@matchblox_beside` set. Everywhere else it is `send-keys C-q`.
 - Window options: `@matchblox_console` = the console's pane id; `@matchblox_beside` = the agent pane's id; `@matchblox_chain` = the member panes' ids, space-separated (chain view only).
 - The list is 40 columns (`listWide`), 32 on a mid screen (`listMedium`). The agent pane takes the rest. Where `window_width - listW - 1 < chatMin` (40) or the client is Pocket upright, one pane shows (zoom). The **window's** width decides, not the console pane's.
-- The way back (`prefix m`, APC 900, a tap on "◂ matchblox", `⌥m` from the agent) always ends on the list. Where one pane shows, it keeps the window zoomed (`select-pane -Z`).
+- The way back (`prefix m`, APC 900, a tap on "◂ matchblox", `ctrl+q` from the agent) always ends on the list. Where one pane shows, it keeps the window zoomed (`select-pane -Z`).
 - Beside mode is on only for a console inside tmux in its home session (`MATCHBLOX_HOME=1`) with no demo and no fixtures. The demo, the iOS demo and a console with no tmux keep the drawn chat and the line.
 - The chain view shows at most 4 members: the 4 first in the list's urgency order (`sideOrder`).
 - `app` must not import `panes` (arch test). tmux argv builders that `app` needs go in `internal/remote`. Bindings that `main` installs go in `internal/panes`.
@@ -28,9 +28,9 @@
 ## Review Focus
 
 1. **Two devices on one console** (desk + Pocket): a tap on the phone respawns the desk's right side, and the phone's zoom must not leave the desk zoomed after the phone detaches. Expected: the zoom follows the window width that `window-size latest` gives. Test: Task 3 `TestTheZoomFollowsTheWindowWidth`.
-2. **The agent pane's command fails** (agent gone between the choice and the respawn, peer ssh refused): the pane must say why and name `⌥m`, never stay blank. Test: Task 1 `TestAViewOfAGonePaneSaysSo`.
+2. **The agent pane's command fails** (agent gone between the choice and the respawn, peer ssh refused): the pane must say why and name `ctrl+q`, never stay blank. Test: Task 1 `TestAViewOfAGonePaneSaysSo`.
 3. **The person kills the agent pane** by hand (`prefix x`) or the console restarts: the next ⏎ must make a new agent pane, never respawn a dead id. Test: Task 4 `TestAChoiceRemakesAMissingAgentPane`.
-4. **`⌥m` in an agent pane outside the console's window** (a `ctrl+o` jump, a plain tmux window): the agent must get `⌥m` as typed. Test: Task 2 `TestTheFlipKeyTypesOutsideTheConsoleWindow`.
+4. **`ctrl+q` in an agent pane outside the console's window** (a `ctrl+o` jump, a plain tmux window): the agent must get `ctrl+q` as typed. Test: Task 2 `TestTheFlipKeyTypesOutsideTheConsoleWindow`.
 5. **The chain view while a member ends**: its pane shows the ended line. A new `g` makes the view from the members that still run. Test: Task 6 `TestAChainViewSkipsAnEndedMember`.
 
 ---
@@ -47,15 +47,15 @@
 - Modify: `internal/remote/jump.go`: let `Remote()` take a Jump with `Host == ""` for this machine (only `JumpAllowed` checks the host).
 
 **Interfaces:**
-- Produces: `func ViewArgv(j Jump, name string) []string`. This is the argv that a pane runs to show `j.Pane` of this machine. It is `/bin/sh -c <wrap> sh <name> <session> env -u TMUX <j.Remote()...>`. `wrap` runs the list. It kills `=matchblox-jump-<id>` when the list fails. When the client ends, it prints `<name> ended. ⌥m: back to the list` (or, on a failure, `<name> cannot be shown: <tmux's error>. ⌥m: back to the list`) and then waits for a key, without exiting.
+- Produces: `func ViewArgv(j Jump, name string) []string`. This is the argv that a pane runs to show `j.Pane` of this machine. It is `/bin/sh -c <wrap> sh <name> <session> env -u TMUX <j.Remote()...>`. `wrap` runs the list. It kills `=matchblox-jump-<id>` when the list fails. When the client ends, it prints `<name> ended. ctrl+q: back to the list` (or, on a failure, `<name> cannot be shown: <tmux's error>. ctrl+q: back to the list`) and then waits for a key, without exiting.
 - Produces: `func ViewAllowed(j Jump) bool`. It is `JumpAllowed` with `Host == ""` allowed, `Pane` set and `Dir` empty.
 - Consumes: `Jump.Remote()`, `JumpSessionName`, `tmuxtest.Server`.
 
 - [ ] **Step 1: Write the failing tests** in `view_tmux_test.go` (`//go:build unix`, real server from `tmuxtest.Server`). Each test sets `TMUX` for the nested client to the test socket. The view runs `tmux -L <sock>`, so `ViewArgv` needs the socket. Add an unexported `tmuxBin []string` package var that defaults to `{"tmux"}`, and set it in the tests.
   - `TestAViewTypesIntoTheAgentsOwnPane`: create session `kindle-web`, split the console window, and run `ViewArgv` in the right pane. `send-keys -t <view> 'echo typed-in-view' Enter`. `capture-pane -t kindle-web` contains `typed-in-view`. `list-sessions` shows `matchblox-jump-<id>` with `session_group == kindle-web`.
   - `TestARespawnEndsTheOldView`: respawn the view pane with a view of `flint-auth`. Within 2 s, `matchblox-jump-<id1>` is gone and `kindle-web` still has 0 attached clients.
-  - `TestAViewEndsWithItsAgent`: `send-keys -t flint-auth exit Enter`. The view pane shows `flint-auth ended. ⌥m: back to the list`. No `matchblox-jump-*` session is left.
-  - `TestAViewOfAGonePaneSaysSo`: run a view of `%999`. The pane shows `cannot be shown` and `⌥m`. No `matchblox-jump-*` session is left.
+  - `TestAViewEndsWithItsAgent`: `send-keys -t flint-auth exit Enter`. The view pane shows `flint-auth ended. ctrl+q: back to the list`. No `matchblox-jump-*` session is left.
+  - `TestAViewOfAGonePaneSaysSo`: run a view of `%999`. The pane shows `cannot be shown` and `ctrl+q`. No `matchblox-jump-*` session is left.
 - [ ] **Step 2:** Run `go test ./internal/remote -run View`. Expected: FAIL (`ViewArgv` undefined).
 - [ ] **Step 3:** Implement `ViewArgv` and `ViewAllowed` in `view.go`. `Remote()` stays the same list. `Outer` is `true` for a view (status off).
 - [ ] **Step 4:** Run `go test ./internal/remote`. Expected: ok.
@@ -68,22 +68,22 @@
 - Modify: `internal/panes/home.go`: `atConsole`, `goTo`, and the targets of `MarkKeyArgv`, `BeltKeyArgv`, `TapKeysArgv` and `ViewerHookArgv`. Modify `cmd/matchblox/main.go:306-323`: install `BesideKeysArgv()` beside `FlipKeysArgv()`.
 
 **Interfaces:**
-- Produces in `panes`: `const BesideKey = "M-m"`, `const ConsoleOption = "@matchblox_console"`, `const BesideOption = "@matchblox_beside"`, `const ChainOption = "@matchblox_chain"`, `func BesideKeysArgv() []string`.
+- Produces in `panes`: `const BesideKey = "C-q"`, `const ConsoleOption = "@matchblox_console"`, `const BesideOption = "@matchblox_beside"`, `const ChainOption = "@matchblox_chain"`, `func BesideKeysArgv() []string`.
 - Produces in `remote` (so `app` can use them): the same three option names as `remote.ConsoleOption`, `remote.BesideOption` and `remote.ChainOption`. `panes` refers to the `remote` ones, so there is one owner.
-- `BesideKeysArgv` binds `bind-key -n M-m if-shell -F "#{&&:#{==:#{session_name},matchblox},#{@matchblox_beside}}" <flip> "send-keys M-m"`. `<flip>` runs through `run-shell -C`. On the console pane it runs `last-pane -Z`, and when there is no last pane it runs `select-pane -Z -t #{@matchblox_beside}`. On any other pane it runs `select-pane -Z -t #{@matchblox_console}`.
+- `BesideKeysArgv` binds `bind-key -n C-q if-shell -F "#{&&:#{==:#{session_name},matchblox},#{@matchblox_beside}}" <flip> "send-keys C-q"`. `<flip>` runs through `run-shell -C`. On the console pane it runs `last-pane -Z`, and when there is no last pane it runs `select-pane -Z -t #{@matchblox_beside}`. On any other pane it runs `select-pane -Z -t #{@matchblox_console}`.
 - `atConsole` becomes true in the `matchblox` session when the active pane runs the console, **or** when the window has `@matchblox_console`. The key hands go to `-t #{?@matchblox_console,#{@matchblox_console},#{pane_id}}`.
 - `goTo` selects the console pane with `select-pane -Z`.
 
 - [ ] **Step 1: Write the failing tests** (real tmux):
-  - `TestTheFlipKeyGoesToTheAgentAndBack`: a `matchblox` window with a pane `C` running `sleep` (named so that `pane_current_command` is not the console) and an agent pane `A`. Set both options and attach a client. `send-keys -K M-m` (or type `\x1bm` with the client helper): the active pane is `A`. Again: the active pane is `C`.
-  - `TestTheFlipKeepsTheZoom`: zoom `C` (`resize-pane -Z`), then press M-m. `A` is active, and `window_zoomed_flag` is 1.
-  - `TestTheFlipKeyTypesOutsideTheConsoleWindow`: in a session `kindle-web` with a `cat` pane, M-m reaches the pane (`capture-pane` shows `^[m` or the `cat -v` form).
+  - `TestCtrlQGoesToTheAgentAndBack`: a `matchblox` window with a pane `C` running `sleep` (named so that `pane_current_command` is not the console) and an agent pane `A`. Set both options and attach a client. type `\x11` with the client helper: the active pane is `A`. Again: the active pane is `C`.
+  - `TestTheFlipKeepsTheZoom`: zoom `C` (`resize-pane -Z`), then press C-q. `A` is active, and `window_zoomed_flag` is 1.
+  - `TestTheFlipKeyTypesOutsideTheConsoleWindow`: in a session `kindle-web` with a `cat` pane, C-q reaches the pane (`capture-pane` of `cat -v` shows `^Q`).
   - `TestTheWayBackSelectsTheConsolePane`: with `A` active and zoomed, run the HomeKey binding. `C` is active and the window stays zoomed.
   - `TestAMarkReachesTheConsoleFromTheAgentPane`: with `A` active, send `keycmd.MarkKey`. The bytes arrive in `C` (C runs `cat -v > file`), not in `A`.
 - [ ] **Step 2:** Run `go test ./internal/panes -run 'Flip|WayBack|Mark'`. Expected: the new tests FAIL.
 - [ ] **Step 3:** Implement the changes. Keep the existing home.go tests green, and update their expected strings where the target changes.
 - [ ] **Step 4:** Run `go test ./internal/panes ./cmd/...`. Expected: ok.
-- [ ] **Step 5:** Commit `feat: ⌥m flips between the list and the agent`.
+- [ ] **Step 5:** Commit `feat: ctrl+q flips between the list and the agent`.
 
 ### Task 3: Beside mode: the console splits its window
 
@@ -163,7 +163,7 @@
   - `TestBigGOpensTheRoom`: `G` on `login` opens the room, as `g` does today on the drawn chat.
 - [ ] **Step 2:** Run them. Expected: FAIL.
 - [ ] **Step 3:** Implement.
-- [ ] **Step 4:** Run `go test ./...`. Expected: ok. By hand: on the test socket, `g` on a chain of 3 shows 3 panes, a click types into one, `prefix z` zooms it, and `⌥m` goes to the list and back to the member used last.
+- [ ] **Step 4:** Run `go test ./...`. Expected: ok. By hand: on the test socket, `g` on a chain of 3 shows 3 panes, a click types into one, `prefix z` zooms it, and `ctrl+q` goes to the list and back to the member used last.
 - [ ] **Step 5:** Commit `feat: g shows a chain's agents side by side`.
 
 ### Task 7: Docs, CHANGELOG and the landing brief
@@ -172,14 +172,14 @@
 - Modify: `README.md` ("## Quick start", "## What it shows", "## Keys", "## From a phone"), `docs/console.md` ("## The chat", "### The line", "### Go in", "## A chain's room"), `docs/keys.md` ("## The list and the chat", "## A chain's room", "### The flip from a pane", "## A phone"), `docs/phone.md` ("### Use the app", "## Go into an agent", "### The key belt"), `docs/start.md` (:60, :119), `docs/tmux.md` ("## The way back without config"), `DESIGN.md` §6 (Chat, Chains, Keys), `CHANGELOG.md` (Unreleased, Added).
 
 - [ ] **Step 1:** Write the docs in ASD-STE100.
-  - README first: the right side is the agent's own pane, `⌥m` flips, and `g` shows a chain.
+  - README first: the right side is the agent's own pane, `ctrl+q` flips, and `g` shows a chain.
   - Name where the drawn chat and line remain: the demo, no tmux, a console outside its home session.
-  - In `docs/keys.md`, add `⌥m` to the key table and to the terminal note on Option as Meta (the same note as `⌥s`). Add `G`, and the new meaning of `g` and `esc` in beside mode.
+  - In `docs/keys.md`, add `ctrl+q` to the key table. Add `G`, and the new meaning of `g` and `esc` in beside mode.
 - [ ] **Step 2:** CHANGELOG Added headline, 8 words or fewer: `**Type straight into an agent beside the list.**` (7 words). Add a second bullet for the chain view.
 - [ ] **Step 3:** Run `go test ./internal/docscheck/... ./...`. Expected: ok (docscheck holds the docs to the code's keys).
-- [ ] **Step 4:** Commit `docs: the console shows the agent's own pane and ⌥m flips`.
+- [ ] **Step 4:** Commit `docs: the console shows the agent's own pane and ctrl+q flips`.
 - [ ] **Step 5:** Send matchbloxrelease the landing brief through the fleet (a peer message, no yes needed):
-  - the words: "Type straight into an agent beside the list. ⌥m flips between them. g shows a whole chain at once.";
+  - the words: "Type straight into an agent beside the list. ctrl+q flips between them. g shows a whole chain at once.";
   - the visual: a list beside a real Claude Code pane, and the 2 × 2 chain view of `login`.
 
   The feat PR waits for its `www/` change, or carries `Landing page: unchanged because …` only if matchbloxrelease declines.

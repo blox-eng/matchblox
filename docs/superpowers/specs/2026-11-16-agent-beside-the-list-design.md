@@ -60,13 +60,15 @@ need to reinvent the wheel".
   first, as they do for `ctrl+o` today. (Owner's call 2 below, settled:
   follow on ⏎ only.)
 - **Focus.**
-  - **One key flips between the list and the agent: `⌥m`** (owner,
+  - **One key flips between the list and the agent: `ctrl+q`** (owner,
     2026-11-16, "3 is what i want": one toggle key, as an agent multiplexer
-    has). In the console's window it selects the agent pane from the list,
-    and the list from the agent pane. Anywhere else it types as always, as
-    `⌥s` does. Proposed key `⌥m`, mirror of `prefix m`: Claude Code takes
-    `ctrl+s` (stash) and `⌥o`, `⌥p`, `⌥t`; it takes no `⌥m` outside Windows
-    without VT.
+    has; "can we think about the best key"). In the console's window it
+    selects the agent pane from the list, and the list from the agent pane.
+    Anywhere else it types as always. Why `ctrl+q`: one chord, every
+    terminal and phone sends it with no Option setting, and Claude Code
+    leaves it free. `ctrl+m` is Enter's byte; Claude Code takes `ctrl+s`,
+    `ctrl+o`, `ctrl+]`, `ctrl+g`, `ctrl+t`, `ctrl+r` and `ctrl+b`. tmux
+    turns off flow control, so `ctrl+q` reaches it.
   - The way back to the list: the console's own way-back keys (`prefix m`,
     the APC key 900, a tap on the list) select the list pane when the agent
     pane is in the console's window. A click on the list works too.
@@ -117,7 +119,7 @@ on a single screen I can see (up to X sessions) their panes in one screen".
   `G`), as the chat's place opens it today.
 - Builder's call: the members' panes split the agent pane in the console's
   window (2: one above the other; 3 or 4: a 2 × 2 grid), so `prefix z` and a
-  click act on them as on any tmux pane. `⌥m` from the list goes back to the
+  click act on them as on any tmux pane. `ctrl+q` from the list goes back to the
   member pane used last.
 - This step builds after the single agent pane works: it uses the same view,
   more than once.
@@ -172,7 +174,7 @@ names the way back.
 - At a desk, choose `kindle-web`, press ⏎: its own Claude Code prompt is on
   the right, and typing `/help` there opens Claude Code's help.
 - At its permission prompt, `2` answers it, in the agent's own menu.
-- `⌥m` gives the keys back to the list, and `⌥m` again to the agent; ↓ to `flint-auth`, ⏎: the right
+- `ctrl+q` gives the keys back to the list, and `ctrl+q` again to the agent; ↓ to `flint-auth`, ⏎: the right
   side is flint-auth's own pane.
 - `tmux list-sessions` shows `kindle-web` and `flint-auth` unchanged, and
   `matchblox sessions` names both as before.
