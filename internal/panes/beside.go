@@ -26,14 +26,17 @@ func BesideKeysArgv() []string {
 	return []string{"tmux", "bind-key", "-n", BesideKey, "if-shell", "-F", guard, "run-shell -C '" + flipBeside + "'", "send-keys " + BesideKey}
 }
 
-// endBeside, in a window whose console pane was #{hook_pane}, kills the
-// agent pane and a chain view's panes, and forgets them. Only the console's
+// endBeside, in a window whose console pane was #{hook_pane}, forgets the
+// agent pane and a chain view's panes, and kills them. Only the console's
 // session is read, so a window it shares with a grouped session is ended
-// once: a second kill-pane of a pane gone would stop the list.
+// once: a second kill-pane of a pane gone would stop the list. The options
+// go first: tmux expands the whole list before it runs it, and the last
+// kill-pane ends the window, where a set-option after it would fail. With
+// no client, tmux keeps that error and shows it over the next console.
 const endBeside = `#{S:#{?#{==:#{session_name},` + Home + `},#{W:#{?#{==:#{` + sample.ConsoleOption + `},#{hook_pane}},` +
-	`#{P:#{?#{||:#{==:#{pane_id},#{` + sample.BesideOption + `}},#{m:* #{pane_id} *, #{` + sample.ChainOption + `} }},kill-pane -t #{pane_id} ; ,}}` +
 	`set-option -wu -t #{window_id} ` + sample.BesideOption + ` ; set-option -wu -t #{window_id} ` + sample.ChainOption +
-	` ; set-option -wu -t #{window_id} ` + sample.ConsoleOption + ` ; ,}},}}`
+	` ; set-option -wu -t #{window_id} ` + sample.ConsoleOption + ` ; ` +
+	`#{P:#{?#{||:#{==:#{pane_id},#{` + sample.BesideOption + `}},#{m:* #{pane_id} *, #{` + sample.ChainOption + `} }},kill-pane -t #{pane_id} ; ,}},}},}}`
 
 // BesideHookArgv ends the agent pane with the console's, however the console
 // ended (a crash too), so the next matchblox attaches to no agent without a

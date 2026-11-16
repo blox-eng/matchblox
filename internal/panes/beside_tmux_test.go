@@ -21,6 +21,7 @@ const rawCat = "stty raw -echo; cat -v > "
 // console (sleep), and the agent pane A beside it, with a client attached.
 type besideEnv struct {
 	tmux       func(args ...string) string
+	sock       string
 	term       *os.File
 	c, a       string
 	cOut, aOut string
@@ -29,7 +30,7 @@ type besideEnv struct {
 func newBesideEnv(t *testing.T) besideEnv {
 	t.Helper()
 	sock := tmuxtest.Server(t)
-	e := besideEnv{cOut: t.TempDir() + "/c", aOut: t.TempDir() + "/a"}
+	e := besideEnv{sock: sock, cOut: t.TempDir() + "/c", aOut: t.TempDir() + "/a"}
 	e.tmux = func(args ...string) string {
 		t.Helper()
 		out, err := exec.Command("tmux", append([]string{"-L", sock, "-f", os.DevNull}, args...)...).CombinedOutput() //nolint:gosec // test argv
@@ -153,6 +154,15 @@ func TestTheAgentPanesEndWithTheConsole(t *testing.T) {
 	})
 	if got := e.tmux("list-sessions", "-F", "#{session_name}"); got != "keep" {
 		t.Fatalf("sessions left: %q", got)
+	}
+	// The hook ran with no client: an error of it would cover the next
+	// console, as tmux shows a client the errors kept for it.
+	e.tmux("new-session", "-d", "-s", Home, "sleep", "600")
+	attach(t, e.sock, Home)
+	waitFor(t, func() bool { return strings.Contains(e.tmux("list-clients", "-F", "#{client_session}"), Home) })
+	time.Sleep(200 * time.Millisecond)
+	if m := e.tmux("display-message", "-p", "-t", Home+":", "#{pane_in_mode}"); m != "0" {
+		t.Fatalf("the next console is covered: pane_in_mode = %s", m)
 	}
 }
 
