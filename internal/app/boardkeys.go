@@ -2,6 +2,7 @@ package app
 
 import (
 	"cmp"
+	"encoding/json"
 	"slices"
 	"strconv"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/keycmd"
 	"github.com/blox-eng/matchblox/internal/proto"
+	"github.com/blox-eng/matchblox/internal/said"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
@@ -47,8 +49,28 @@ func (m *Model) chooseRow(s sample.Session) {
 // startChatMark starts the mark guard on s: for peekDead its digits arm
 // nothing, and a mark from before holds no more.
 func (m *Model) startChatMark(s sample.Session) {
-	m.peekAt, m.peekAsk, m.peekPane, m.peekNew = m.now(), askOf(s), paneOf(s), false
+	id := m.menuID(s)
+	if m.peekSentAsk != "" && m.peekSentAsk != id { // the menu the pick went to is gone
+		m.peekSent, m.peekSentAsk, m.peekSentPane = 0, "", ""
+	}
+	m.peekAt, m.peekAsk, m.peekPane, m.peekNew = m.now(), id, paneOf(s), false
 }
+
+// menuID names the menu the digits answer on s: the question tool's call
+// id, or a screen menu's signature, which a prompt drawn again keeps and
+// another prompt with the same options does not. "" for none.
+func (m Model) menuID(s sample.Session) string {
+	switch _, texts, ok := m.digitMenu(s); {
+	case !ok:
+		return ""
+	case texts == nil:
+		return askOf(s)
+	}
+	return m.screenSign(s)
+}
+
+// inPane is what the chat says of a wait the digits do not answer.
+func (m Model) inPane() string { return "answer in its pane · " + m.keys.main.Jump.Help().Key }
 
 // askOf is the question s asks with its options (Ask.ID), "" for none.
 func askOf(s sample.Session) string {
@@ -77,9 +99,9 @@ func (m Model) chatMarkOn() Model {
 	case !reach:
 	case !was || paneOf(s) != m.peekPane:
 		m.startChatMark(s)
-	case askOf(s) != m.peekAsk:
+	case m.menuID(s) != m.peekAsk:
 		m.startChatMark(s)
-		m.peekNew = askOf(s) != ""
+		m.peekNew = m.peekAsk != ""
 	}
 	return m
 }
@@ -92,14 +114,14 @@ func (m Model) chatMarkReach() bool {
 // chatAnswers: the digits answer s's question, one question with one
 // choice, given with its options.
 func (m Model) chatAnswers(s sample.Session) bool {
-	_, ok := m.oneChoice(s)
+	_, _, ok := m.digitMenu(s)
 	return ok
 }
 
 // chatMarks are the option a first digit marked on s's card, and the
 // option sent to its question; 0 for none.
 func (m Model) chatMarks(s sample.Session) (armed, sent int) {
-	switch id := askOf(s); {
+	switch id := m.menuID(s); {
 	case id == "":
 	case id == m.peekSentAsk:
 		sent = m.peekSent
@@ -116,8 +138,9 @@ func (m Model) chatMarks(s sample.Session) (armed, sent int) {
 // lost.
 func (m Model) answerFromChat(digit string) (tea.Model, tea.Cmd) {
 	s, ok := m.sideChosen()
-	q, _ := m.oneChoice(s)
+	q, texts, _ := m.digitMenu(s)
 	n, _ := strconv.Atoi(digit)
+	most := min(len(q.Options), 9)
 	armed, sent := m.chatMarks(s)
 	said, answer := "", tea.Cmd(nil)
 	switch {
@@ -126,27 +149,27 @@ func (m Model) answerFromChat(digit string) (tea.Model, tea.Cmd) {
 	case sent > 0:
 		said = strconv.Itoa(sent) + " went to " + m.cardName(s) + " · a digit answers its next question"
 	case !m.chatAnswers(s) && m.asksNow(s):
-		said = m.cardName(s) + " asks in its pane · " + m.keys.main.Jump.Help().Key + " goes in"
+		said = m.inPane()
 	case !m.chatAnswers(s):
 		said = m.cardName(s) + " asks no question"
 	case m.cannotReach(s.Host) != "":
 		m.peekArmed, said = 0, m.cannotReach(s.Host)
-	case paneOf(s) != m.peekPane || askOf(s) != m.peekAsk:
+	case paneOf(s) != m.peekPane || m.menuID(s) != m.peekAsk:
 		m.startChatMark(s) // a question the card has not drawn yet
 		said = "not sent: " + m.cardName(s) + " asks something new — look again"
 	case m.now().Sub(m.peekAt) < peekDead && m.peekNew:
 		said = "not sent: " + m.cardName(s) + " asks something new — look again"
 	case m.now().Sub(m.peekAt) < peekDead:
 		said = "look at " + m.cardName(s) + "'s question first"
-	case n < 1 || n > len(q.Options):
-		said = "1-" + strconv.Itoa(len(q.Options)) + " only"
+	case n < 1 || n > most:
+		said = "1-" + strconv.Itoa(most) + " only"
 	case n == armed:
 		var why string
-		if answer, why = m.sendAnswer(s, digit); why != "" {
+		if answer, why = m.sendAnswer(s, n, texts); why != "" {
 			said = why // not in line: the mark and the digits stay
 			break
 		}
-		m.peekArmed, m.peekSent, m.peekSentAsk, m.peekSentPane = 0, n, askOf(s), s.Pane
+		m.peekArmed, m.peekSent, m.peekSentAsk, m.peekSentPane = 0, n, m.menuID(s), s.Pane
 		said = "sent " + digit + " to " + m.cardName(s) + " · now in " + sideWork.head()
 	default:
 		m.peekArmed, m.peekArmedAt = n, m.now()
@@ -155,20 +178,31 @@ func (m Model) answerFromChat(digit string) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(answer, note)
 }
 
-// sendAnswer sends digit to the pane of s as sendKey does, seen at the
-// time of the sample that carried the question the card drew: the card's
-// options come from the sample, not from the pane's screen. A peer's
-// session gets it on the peer's own conn. why says why the key did not go
-// and does not wait in line; "" when it did.
-func (m *Model) sendAnswer(s sample.Session, digit string) (tea.Cmd, string) {
-	if s.Host == m.opt.Host {
-		m.peekSentAct = "" // the home keys' refusal comes by the pane (model.go's keyActID)
-		return m.sendKeySeen(s, proto.LitPrefix+digit, m.stateAt(s.Host))
-	}
+// sendAnswer picks option n of s's menu. The question tool's goes by a
+// pick: act, which the service checks against the call. A screen menu's
+// (texts) goes by a choose: act, with the option's whole text and the
+// screen's signature: the service types n only while its own read of the
+// pane gives both. A peer's session gets it on the peer's own conn. why
+// says why it did not go; "" when it did.
+func (m *Model) sendAnswer(s sample.Session, n int, texts map[int]string) (tea.Cmd, string) {
 	if why := m.cannotReach(s.Host); why != "" {
 		return nil, why
 	}
-	id, cmd := m.sendToID(s.Host, proto.Act{RecID: proto.KeysPrefix + s.Pane, Text: proto.LitPrefix + digit, PID: s.PID, Start: s.Start, Seen: m.stateAt(s.Host)})
+	act := proto.Act{RecID: proto.ChoosePrefix + s.Pane, PID: s.PID, Start: s.Start, Confirm: "y"}
+	if texts == nil {
+		b, err := json.Marshal(said.Answer{ID: askOf(s), Choices: []said.Choice{{Picks: []int{n}}}})
+		if err != nil {
+			return nil, "not sent: " + err.Error()
+		}
+		act.RecID, act.Text = proto.PickPrefix+s.Pane, string(b)
+	} else {
+		sign := m.screenSign(s)
+		if texts[n] == "" || sign == "" {
+			return nil, "not sent: " + m.cardName(s) + "'s menu changed — look again"
+		}
+		act.Text = strconv.Itoa(n) + "\x00" + texts[n] + "\x00" + sign
+	}
+	id, cmd := m.sendToID(s.Host, act)
 	m.peekSentAct = id
 	return cmd, ""
 }
@@ -450,11 +484,11 @@ func (m Model) beltKeys() []beltKey {
 // the ship that waits for its merge and y for the go that waits.
 func (m Model) cardBelt(s sample.Session, typed bool) []beltKey {
 	var ks []beltKey
-	if q, answers := m.oneChoice(s); answers {
+	if q, _, answers := m.digitMenu(s); answers {
 		if _, sent := m.chatMarks(s); sent == 0 {
 			for i := range min(len(q.Options), 3) {
 				n := strconv.Itoa(i + 1)
-				ks = append(ks, beltKey{Key: n, Face: n, Word: "answer", On: s.Host == m.opt.Host && !typed, Act: true})
+				ks = append(ks, beltKey{Key: n, Face: n, Word: "answer", On: !typed, Act: true})
 			}
 			return ks
 		}

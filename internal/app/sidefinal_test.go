@@ -227,7 +227,7 @@ func TestWheelOverTheChatKeepsTheSession(t *testing.T) {
 		if armed, _ := m.chatMarks(matchNamed(t, m, "flint-auth")); armed != 2 {
 			t.Errorf("%d: the wheel over the chat dropped the mark: %d", size[0], armed)
 		}
-		if got := sent(m); len(got) != 1 || got[0].RecID != proto.KeysPrefix+"%flint-auth" || got[0].Text != proto.WheelDown {
+		if got := keyActs(boardFake(m)); len(got) != 1 || got[0].RecID != proto.KeysPrefix+"%flint-auth" || got[0].Text != proto.WheelDown {
 			t.Errorf("%d: the wheel over the chat sent %+v", size[0], got)
 		}
 	}
