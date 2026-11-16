@@ -10,7 +10,7 @@ All notable changes to matchblox are in this file. The format follows
 
 ### Added
 
-- **The console is a list of sessions beside one chat.** The list groups
+- **A list of sessions beside one chat.** The console's list groups
   every match by state: `NEEDS YOU`, `WORKING`, `HELD` and `IDLE`. A group
   with no match takes no row. A chain is one unit: its head and its
   members move together, to the group of its most urgent member.
