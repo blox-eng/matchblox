@@ -1,6 +1,11 @@
 package panes
 
-import "github.com/blox-eng/matchblox/internal/sample"
+import (
+	"strconv"
+
+	"github.com/blox-eng/matchblox/internal/keycmd"
+	"github.com/blox-eng/matchblox/internal/sample"
+)
 
 // BesideKey flips between the list and the agent beside it. Only the
 // console's window takes it; anywhere else it types as usual.
@@ -19,4 +24,28 @@ const flipBeside = `#{?#{==:#{pane_id},#{` + sample.ConsoleOption + `}},` +
 func BesideKeysArgv() []string {
 	guard := "#{&&:#{==:#{session_name}," + Home + "},#{" + sample.BesideOption + "}}"
 	return []string{"tmux", "bind-key", "-n", BesideKey, "if-shell", "-F", guard, "run-shell -C '" + flipBeside + "'", "send-keys " + BesideKey}
+}
+
+// endBeside, in a window whose console pane was #{hook_pane}, kills the
+// agent pane and a chain view's panes, and forgets them. Only the console's
+// session is read, so a window it shares with a grouped session is ended
+// once: a second kill-pane of a pane gone would stop the list.
+const endBeside = `#{S:#{?#{==:#{session_name},` + Home + `},#{W:#{?#{==:#{` + sample.ConsoleOption + `},#{hook_pane}},` +
+	`#{P:#{?#{||:#{==:#{pane_id},#{` + sample.BesideOption + `}},#{m:* #{pane_id} *, #{` + sample.ChainOption + `} }},kill-pane -t #{pane_id} ; ,}}` +
+	`set-option -wu -t #{window_id} ` + sample.BesideOption + ` ; set-option -wu -t #{window_id} ` + sample.ChainOption +
+	` ; set-option -wu -t #{window_id} ` + sample.ConsoleOption + ` ; ,}},}}`
+
+// BesideHookArgv ends the agent pane with the console's, however the console
+// ended (a crash too), so the next matchblox attaches to no agent without a
+// list. tmux runs only global hooks for a pane that is gone (3.4: the pane
+// and its window are no target any more), so the hooks are global and find
+// the window by its console. A respawn of the console pane (-k) and the
+// console's own restart, which runs the binary in its place, end no pane:
+// the agent pane stays for the console to adopt. pane-died is the same end
+// under remain-on-exit. The hooks use MarkKey's slot.
+func BesideHookArgv() []string {
+	slot := strconv.Itoa(keycmd.MarkSlot)
+	hook := `run-shell -C "` + endBeside + `"`
+	return []string{"tmux", "set-hook", "-g", "pane-exited[" + slot + "]", hook,
+		";", "set-hook", "-g", "pane-died[" + slot + "]", hook}
 }

@@ -538,3 +538,21 @@ func (m Model) selectPane(pane string) tea.Cmd {
 		return nil
 	}
 }
+
+// endBeside ends the agent pane and a chain view's with the console, so the
+// next matchblox attaches to the list, not to an agent with none. tmux's
+// hook (panes.BesideHookArgv) does the same when the console crashes.
+func endBeside(o Options) {
+	run := Model{opt: o}.tmuxRun()
+	if !o.Beside || run == nil {
+		return
+	}
+	agent := keptPane(run, o.Pane)
+	endChain(run, o.Pane, agent)
+	if agent != "" {
+		_, _ = run("kill-pane", "-t", agent)
+	}
+	for _, opt := range []string{sample.BesideOption, sample.ConsoleOption} {
+		_, _ = run("set-option", "-wu", "-t", o.Pane, opt)
+	}
+}

@@ -783,3 +783,39 @@ func TestTheBesideListHintSaysEnterShowsTheAgent(t *testing.T) {
 		t.Fatalf("beside list hint = %q, want ⏎ show and no write", got)
 	}
 }
+
+// closedShell is a shell of this desk closed on a host's console, as q
+// leaves it, restarting or not; tm is its tmux, a chain view open.
+func closedShell(t *testing.T, restarting bool) *besideTmux {
+	t.Helper()
+	tm := &besideTmux{winW: "160", kept: "%9", alive: true, chain: "%9 %21 %22"}
+	sh := NewShell(ShellOptions{
+		Base: Options{NoMotion: true, Beside: true, Pane: "%1", Tmux: tm.run, Socket: "/tmp/tmux-1000/default"},
+		Open: func(host string) Options { return Options{Conn: newFake(), Host: host} },
+	})
+	sh, _ = sh.open("ws-1", false)
+	sh.cur.restarting = restarting
+	tm.calls = nil
+	sh.Close()
+	return tm
+}
+
+func TestQuittingEndsTheAgentPanes(t *testing.T) {
+	tm := closedShell(t, false)
+	for _, pane := range []string{"%9", "%21", "%22"} {
+		if tm.count("kill-pane -t "+pane) != 1 {
+			t.Errorf("%s not killed once: %q", pane, tm.lines())
+		}
+	}
+	for _, opt := range []string{sample.BesideOption, sample.ChainOption, sample.ConsoleOption} {
+		if !tm.ran([]string{"tmux", "set-option", "-wu", "-t", "%1", opt}) {
+			t.Errorf("%s not unset: %q", opt, tm.lines())
+		}
+	}
+}
+
+func TestARestartKeepsTheAgentPanes(t *testing.T) {
+	if tm := closedShell(t, true); tm.count("kill-pane") != 0 || tm.count("set-option") != 0 {
+		t.Fatalf("a restart ended the agent panes: %q", tm.lines())
+	}
+}

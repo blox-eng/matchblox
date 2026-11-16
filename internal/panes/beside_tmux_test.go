@@ -5,8 +5,10 @@ package panes
 import (
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/blox-eng/matchblox/internal/keycmd"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -121,5 +123,46 @@ func TestAMarkReachesTheConsoleFromTheAgentPane(t *testing.T) {
 	})
 	if b, _ := os.ReadFile(e.aOut); len(b) != 0 {
 		t.Fatalf("the agent pane read %q", b)
+	}
+}
+
+// consoleEnds respawns the console pane with a command that ends once the
+// returned stop is called, and adds a chain pane under the agent's.
+func (e besideEnv) consoleEnds(t *testing.T) (chain string, stop func()) {
+	t.Helper()
+	e.tmux("new-session", "-d", "-s", "keep", "sleep", "600") // the server outlives the console's session
+	chain = e.tmux("split-window", "-d", "-v", "-t", e.a, "-P", "-F", "#{pane_id}", "sleep", "600")
+	e.tmux("set-option", "-w", "-t", e.c, sample.ChainOption, e.a+" "+chain)
+	e.tmux(BesideHookArgv()[1:]...)
+	flag := t.TempDir() + "/stop"
+	e.tmux("respawn-pane", "-k", "-t", e.c, "sh", "-c", "until [ -e "+flag+" ]; do sleep 0.05; done")
+	return chain, func() { _ = os.WriteFile(flag, nil, 0o600) }
+}
+
+func (e besideEnv) panes() []string {
+	return strings.Fields(e.tmux("list-panes", "-a", "-F", "#{pane_id}"))
+}
+
+func TestTheAgentPanesEndWithTheConsole(t *testing.T) {
+	e := newBesideEnv(t)
+	chain, stop := e.consoleEnds(t)
+	stop()
+	waitFor(t, func() bool {
+		p := e.panes()
+		return !slices.Contains(p, e.c) && !slices.Contains(p, e.a) && !slices.Contains(p, chain)
+	})
+	if got := e.tmux("list-sessions", "-F", "#{session_name}"); got != "keep" {
+		t.Fatalf("sessions left: %q", got)
+	}
+}
+
+func TestARespawnedConsoleKeepsItsAgentPane(t *testing.T) {
+	e := newBesideEnv(t)
+	chain, stop := e.consoleEnds(t)
+	defer stop()
+	e.tmux("respawn-pane", "-k", "-t", e.c, "sleep", "600")
+	time.Sleep(300 * time.Millisecond)
+	if p := e.panes(); !slices.Contains(p, e.a) || !slices.Contains(p, chain) || !slices.Contains(p, e.c) {
+		t.Fatalf("panes after a respawn: %q (console %s, agent %s, chain %s)", p, e.c, e.a, chain)
 	}
 }
