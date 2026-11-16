@@ -4,6 +4,8 @@
 package menu
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"regexp"
 	"strconv"
 	"strings"
@@ -27,6 +29,35 @@ var hintLine = regexp.MustCompile(`(?i)\bto (select|navigate|cancel)\b`)
 // reply has other text under it, or the agent's empty input, which a menu
 // takes the place of.
 func Read(screen string) map[int]string {
+	menu, _ := read(screen)
+	return menu
+}
+
+// signLines is how many lines above a menu its signature holds: the
+// question, and the command a permission prompt asks about.
+const signLines = 12
+
+// Sign is the signature of the menu at the foot of screen: a hash of its
+// lines and the signLines lines above it, each with its box and blanks
+// taken off. Two prompts with the same options for two commands sign
+// apart. "" when there is no menu.
+func Sign(screen string) string {
+	menu, top := read(screen)
+	if menu == nil {
+		return ""
+	}
+	lines := strings.Split(ansi.Strip(screen), "\n")
+	h := sha256.New()
+	for _, l := range lines[max(top-signLines, 0):] {
+		if t := strings.TrimSpace(unboxed(l)); t != "" {
+			h.Write([]byte(t + "\n"))
+		}
+	}
+	return hex.EncodeToString(h.Sum(nil))[:16]
+}
+
+// read is Read, and the index of the menu's first line in screen.
+func read(screen string) (map[int]string, int) {
 	lines := strings.Split(ansi.Strip(screen), "\n")
 	i := len(lines) - 1
 	for ; i >= 0; i-- { // the foot
@@ -44,7 +75,7 @@ func Read(screen string) map[int]string {
 		case g != nil:
 			n, err := strconv.Atoi(g[1])
 			if err != nil || n < 1 || want != 0 && n != want-1 {
-				return nil
+				return nil, 0
 			}
 			menu[n] = strings.Join(append([]string{g[2]}, wrapped...), " ")
 			want, wrapped = n, nil
@@ -53,13 +84,13 @@ func Read(screen string) map[int]string {
 		case indent(l) >= 3:
 			wrapped = append([]string{strings.TrimSpace(l)}, wrapped...)
 		default:
-			return nil
+			return nil, 0
 		}
 	}
 	if want != 1 {
-		return nil
+		return nil, 0
 	}
-	return menu
+	return menu, i + 1
 }
 
 // unboxed is a line with a box's sides and its end blanks taken off; ""

@@ -12,11 +12,15 @@ import (
 	"github.com/blox-eng/matchblox/internal/proto"
 )
 
+// badPick is the refusal of a pick that does not read.
+const badPick = "not sent: a pick is a number from 1 to 9, its option's text and its screen's signature"
+
 // choose picks option n of the menu the agent in pane draws, for the
 // owner at a console: it types the number. Under the pane's lock it reads
-// the screen again, and the number goes only while option n still says
-// the text the console showed, and the same agent runs. A new prompt with
-// other options, or a menu that went, is refused: the owner looks again.
+// the screen again. The number goes only while option n says exactly the
+// text the console showed, the menu and the lines above it (its question,
+// the command it asks about) sign as the console's screen did, and the
+// same agent runs. Else the owner looks again.
 func (s *Service) choose(ctx context.Context, pane string, a proto.Act) proto.Result {
 	if !s.aConsole(a.Console, a) {
 		return proto.Result{Err: "not sent: only the console picks from a menu"}
@@ -24,11 +28,15 @@ func (s *Service) choose(ctx context.Context, pane string, a proto.Act) proto.Re
 	if a.Confirm != "y" {
 		return proto.Result{Err: "needs confirm"}
 	}
-	digit, text, ok := strings.Cut(a.Text, "\x00")
-	n, err := strconv.Atoi(digit)
-	if !ok || err != nil || len(digit) != 1 || n < 1 || text == "" {
-		return proto.Result{Err: "not sent: a pick is a number from 1 to 9 and its option's text"}
+	parts := strings.Split(a.Text, "\x00")
+	if len(parts) != 3 {
+		return proto.Result{Err: badPick}
 	}
+	digit, text, sign := parts[0], parts[1], parts[2]
+	if n, err := strconv.Atoi(digit); err != nil || len(digit) != 1 || n < 1 || text == "" || sign == "" {
+		return proto.Result{Err: badPick}
+	}
+	n, _ := strconv.Atoi(digit)
 	unlock := s.holdPane(pane)
 	defer unlock()
 	x, ok := s.sessionAt(pane)
@@ -46,7 +54,7 @@ func (s *Service) choose(ctx context.Context, pane string, a proto.Act) proto.Re
 	if options == nil {
 		return proto.Result{Err: "not sent: " + x.Name + " shows no menu"}
 	}
-	if !strings.HasPrefix(options[n], text) {
+	if options[n] != text || menu.Sign(screen) != sign {
 		return proto.Result{Err: "not sent: " + x.Name + "'s menu changed — look again"}
 	}
 	g := advice.Guard{PID: x.PID, StartTicks: x.Start}

@@ -2,16 +2,24 @@ package service
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
+	"github.com/blox-eng/matchblox/internal/menu"
 	"github.com/blox-eng/matchblox/internal/proto"
 )
 
-const chooseScreen = `Do you want to proceed?
+const chooseScreen = `Bash command
+  go test ./...
+Do you want to proceed?
 ❯ 1. Yes
   2. Yes, and don't ask again for go test commands
   3. No, and tell Claude what to do differently (esc)
 `
+
+// pickOf is a choose: act's text: option n, its whole text, and the
+// signature of the screen the console saw.
+func pickOf(n, text, screen string) string { return n + "\x00" + text + "\x00" + menu.Sign(screen) }
 
 func chooseAct(pane, text string) proto.Act {
 	x := flintAuth()
@@ -40,7 +48,7 @@ func chooseTest(t *testing.T, screen string) (*Service, *[][]string) {
 // console saw: the digit goes, as text, once.
 func TestChooseTypesTheDigitWhenTheMenuStands(t *testing.T) {
 	s, ran := chooseTest(t, chooseScreen)
-	res := s.act(t.Context(), chooseAct("%3", "2\x00Yes, and don't ask again for go test commands"))
+	res := s.act(t.Context(), chooseAct("%3", pickOf("2", "Yes, and don't ask again for go test commands", chooseScreen)))
 	if res.Err != "" || len(res.Ran) != 1 {
 		t.Fatalf("%+v", res)
 	}
@@ -54,7 +62,7 @@ func TestChooseTypesTheDigitWhenTheMenuStands(t *testing.T) {
 func TestChooseTwiceToTwoMenus(t *testing.T) {
 	s, ran := chooseTest(t, chooseScreen)
 	for range 2 {
-		if res := s.act(t.Context(), chooseAct("%3", "1\x00Yes")); res.Err != "" || len(res.Ran) != 1 {
+		if res := s.act(t.Context(), chooseAct("%3", pickOf("1", "Yes", chooseScreen))); res.Err != "" || len(res.Ran) != 1 {
 			t.Fatalf("%+v", res)
 		}
 	}
@@ -67,7 +75,7 @@ func TestChooseTwiceToTwoMenus(t *testing.T) {
 // digit would answer what the owner did not see.
 func TestChooseRefusesAChangedMenu(t *testing.T) {
 	s, ran := chooseTest(t, "Do you want to proceed?\n❯ 1. Yes\n  2. No\n")
-	res := s.act(t.Context(), chooseAct("%3", "2\x00Yes, and don't ask again for go test commands"))
+	res := s.act(t.Context(), chooseAct("%3", pickOf("2", "Yes, and don't ask again for go test commands", chooseScreen)))
 	if res.Err != "not sent: flint-auth's menu changed — look again" || len(*ran) != 0 {
 		t.Fatalf("%+v, ran %q", res, *ran)
 	}
@@ -76,7 +84,7 @@ func TestChooseRefusesAChangedMenu(t *testing.T) {
 // TestChooseRefusesNoMenu: the menu went.
 func TestChooseRefusesNoMenu(t *testing.T) {
 	s, ran := chooseTest(t, "● Done.\n\n❯ \n")
-	res := s.act(t.Context(), chooseAct("%3", "1\x00Yes"))
+	res := s.act(t.Context(), chooseAct("%3", pickOf("1", "Yes", chooseScreen)))
 	if res.Err != "not sent: flint-auth shows no menu" || len(*ran) != 0 {
 		t.Fatalf("%+v, ran %q", res, *ran)
 	}
@@ -85,7 +93,7 @@ func TestChooseRefusesNoMenu(t *testing.T) {
 // TestChooseRefusesAnotherAgent: a new agent runs in the pane.
 func TestChooseRefusesAnotherAgent(t *testing.T) {
 	s, ran := chooseTest(t, chooseScreen)
-	a := chooseAct("%3", "1\x00Yes")
+	a := chooseAct("%3", pickOf("1", "Yes", chooseScreen))
 	a.PID = 77
 	if res := s.act(t.Context(), a); res.Err != "not sent: %3 runs a different agent now" || len(*ran) != 0 {
 		t.Fatalf("%+v, ran %q", res, *ran)
@@ -95,12 +103,12 @@ func TestChooseRefusesAnotherAgent(t *testing.T) {
 // TestChooseIsConsoleOnly: no agent, stoker or CLI picks for the owner.
 func TestChooseIsConsoleOnly(t *testing.T) {
 	s, ran := chooseTest(t, chooseScreen)
-	a := chooseAct("%3", "1\x00Yes")
+	a := chooseAct("%3", pickOf("1", "Yes", chooseScreen))
 	a.Console = false
 	if res := s.act(t.Context(), a); res.Err == "" || len(*ran) != 0 {
 		t.Fatalf("%+v, ran %q", res, *ran)
 	}
-	a = chooseAct("%3", "1\x00Yes")
+	a = chooseAct("%3", pickOf("1", "Yes", chooseScreen))
 	a.From = "%3" // from inside the agent's own pane
 	if res := s.act(t.Context(), a); res.Err == "" || len(*ran) != 0 {
 		t.Fatalf("from the pane: %+v, ran %q", res, *ran)
@@ -110,12 +118,33 @@ func TestChooseIsConsoleOnly(t *testing.T) {
 // TestChooseRefusesABadText: one digit 1-9, then the option's text.
 func TestChooseRefusesABadText(t *testing.T) {
 	s, ran := chooseTest(t, chooseScreen)
-	for _, text := range []string{"x\x00Yes", "0\x00Yes", "10\x00Yes", "1Yes", "1\x00"} {
+	sign := menu.Sign(chooseScreen)
+	for _, text := range []string{"x\x00Yes\x00" + sign, "0\x00Yes\x00" + sign, "10\x00Yes\x00" + sign, "1Yes", "1\x00\x00" + sign, "1\x00Yes", "1\x00Yes\x00"} {
 		if res := s.act(t.Context(), chooseAct("%3", text)); res.Err == "" {
 			t.Errorf("%q: %+v", text, res)
 		}
 	}
 	if len(*ran) != 0 {
 		t.Fatalf("ran %q", *ran)
+	}
+}
+
+// TestChooseRefusesAnotherCommand: a new prompt with the same options asks
+// about another command. "1. Yes" there approves what the owner never saw.
+func TestChooseRefusesAnotherCommand(t *testing.T) {
+	s, ran := chooseTest(t, strings.Replace(chooseScreen, "go test ./...", "rm -rf build/", 1))
+	res := s.act(t.Context(), chooseAct("%3", pickOf("1", "Yes", chooseScreen)))
+	if res.Err != "not sent: flint-auth's menu changed — look again" || len(*ran) != 0 {
+		t.Fatalf("%+v, ran %q", res, *ran)
+	}
+}
+
+// TestChooseNeedsTheWholeText: the start of an option's text is not the
+// option.
+func TestChooseNeedsTheWholeText(t *testing.T) {
+	s, ran := chooseTest(t, chooseScreen)
+	res := s.act(t.Context(), chooseAct("%3", pickOf("2", "Yes, and", chooseScreen)))
+	if res.Err != "not sent: flint-auth's menu changed — look again" || len(*ran) != 0 {
+		t.Fatalf("%+v, ran %q", res, *ran)
 	}
 }

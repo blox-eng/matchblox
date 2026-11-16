@@ -3,6 +3,7 @@ package menu
 import (
 	"maps"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -106,5 +107,21 @@ func TestMenuReadsRealCaptures(t *testing.T) {
 		if got := Read(string(b)); !maps.Equal(got, want) || (want == nil) != (got == nil) {
 			t.Errorf("%s: got %v, want %v", file, got, want)
 		}
+	}
+}
+
+// TestSignTellsTwoPromptsApart: the same options for two commands sign
+// apart; the same prompt drawn again, in other colours, signs the same.
+func TestSignTellsTwoPromptsApart(t *testing.T) {
+	other := strings.Replace(permissionPrompt, "go test ./...  ", "rm -rf build/  ", 1)
+	if Sign(permissionPrompt) == "" || Sign(permissionPrompt) == Sign(other) {
+		t.Fatalf("signs %q and %q", Sign(permissionPrompt), Sign(other))
+	}
+	styled := strings.Replace(permissionPrompt, "❯ 1. Yes", "\x1b[36m❯ 1. Yes\x1b[0m", 1)
+	if Sign(styled) != Sign(permissionPrompt) {
+		t.Fatal("colours change the signature")
+	}
+	if Sign("● Done.\n\n❯ \n") != "" {
+		t.Fatal("a screen with no menu signs")
 	}
 }
