@@ -60,6 +60,13 @@ need to reinvent the wheel".
   first, as they do for `ctrl+o` today. (Owner's call 2 below, settled:
   follow on ⏎ only.)
 - **Focus.**
+  - **One key flips between the list and the agent: `⌥m`** (owner,
+    2026-11-16, "3 is what i want": one toggle key, as an agent multiplexer
+    has). In the console's window it selects the agent pane from the list,
+    and the list from the agent pane. Anywhere else it types as always, as
+    `⌥s` does. Proposed key `⌥m`, mirror of `prefix m`: Claude Code takes
+    `ctrl+s` (stash) and `⌥o`, `⌥p`, `⌥t`; it takes no `⌥m` outside Windows
+    without VT.
   - The way back to the list: the console's own way-back keys (`prefix m`,
     the APC key 900, a tap on the list) select the list pane when the agent
     pane is in the console's window. A click on the list works too.
@@ -108,6 +115,10 @@ on a single screen I can see (up to X sessions) their panes in one screen".
   shows one agent again, the chosen row's.
 - The chain's room (its stoker talk) opens with a key in the list (proposed:
   `G`), as the chat's place opens it today.
+- Builder's call: the members' panes split the agent pane in the console's
+  window (2: one above the other; 3 or 4: a 2 × 2 grid), so `prefix z` and a
+  click act on them as on any tmux pane. `⌥m` from the list goes back to the
+  member pane used last.
 - This step builds after the single agent pane works: it uses the same view,
   more than once.
 
@@ -138,11 +149,10 @@ on a single screen I can see (up to X sessions) their panes in one screen".
 
 ## Calls to check
 
-1. **The phone keeps the drawn chat and line, or zooms the real pane?**
-   Proposed: zoom the real pane, because the owner chose "type straight into
-   the pane" and Pocket's belt already sends keys to a jump. Cost if wrong:
-   the phone's TUI is hard to type into; the drawn chat is still in the code
-   for the demo, so going back is small.
+1. **The phone zooms the real pane.** Settled 2026-11-16: the owner did not
+   contest the recommendation and chose the toggle-key design. Cost if
+   wrong: the drawn chat is still in the code for the demo, so going back is
+   small.
 2. **↑↓ in the list moves the agent pane after a pause, or only ⏎ does?**
    Settled after the builder check: only ⏎, so the take-over question and a
    peer's wait come first. Cost if wrong: the right side lags the choice
@@ -150,12 +160,19 @@ on a single screen I can see (up to X sessions) their panes in one screen".
 3. **The list's width on a desk:** 40 columns as today. The agent gets the
    rest.
 
+## Proven by a spike (2026-11-16)
+
+On a separate tmux server: a client nested in the same server types into the
+agent's own pane; a respawn of the view ends the old view's session; when
+the agent's process exits, the view ends and its pane shows a line that
+names the way back.
+
 ## Done when
 
 - At a desk, choose `kindle-web`, press ⏎: its own Claude Code prompt is on
   the right, and typing `/help` there opens Claude Code's help.
 - At its permission prompt, `2` answers it, in the agent's own menu.
-- `prefix m` gives the keys back to the list; ↓ to `flint-auth`, ⏎: the right
+- `⌥m` gives the keys back to the list, and `⌥m` again to the agent; ↓ to `flint-auth`, ⏎: the right
   side is flint-auth's own pane.
 - `tmux list-sessions` shows `kindle-web` and `flint-auth` unchanged, and
   `matchblox sessions` names both as before.
