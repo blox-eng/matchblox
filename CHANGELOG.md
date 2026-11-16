@@ -8,6 +8,15 @@ All notable changes to matchblox are in this file. The format follows
 
 ### Fixed
 
+- **A desk pane as tall as a phone shows the list beside the chat.** Half
+  a laptop screen at 107 × 60 counted as a phone held upright, so it
+  showed one pane and hid the list. Only Matchblox Pocket shows one pane
+  for an upright screen now.
+  ([#419](https://github.com/blox-eng/matchblox/issues/419))
+- **A message to a session at a menu waits for the answer.** A question
+  or a permission prompt refused the line's text. The console now queues
+  the message and sends it once the menu is answered.
+  ([#420](https://github.com/blox-eng/matchblox/issues/420))
 - **The list shows only sessions.** A pull request that no session drives
   no longer has a row of its own or counts as needing you. A session's own
   pull request stays a badge on its row.

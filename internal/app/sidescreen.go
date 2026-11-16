@@ -34,10 +34,12 @@ type sideBox struct {
 	listW, chatX, chatW int
 }
 
-// onePane: the screen shows the list or the chat, each full width. A phone,
-// a screen held upright, and one too narrow for the chat beside the list.
+// onePane: the screen shows the list or the chat, each full width. Pocket
+// on a phone, held upright or narrow, and any screen too narrow for the
+// chat beside the list. A desk pane of the same shape, such as half a
+// laptop screen at 107x60, shows both: only Pocket tells a phone.
 func (m Model) onePane(w int) bool {
-	return m.layoutAt(w) == Narrow || m.upright() || w-listMedium-1 < chatMin
+	return w-listMedium-1 < chatMin || m.onPocket() && (m.upright() || m.layoutAt(w) == Narrow)
 }
 
 // sideBoxAt lays out the body of w columns. Side by side the list is
