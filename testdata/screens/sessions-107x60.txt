@@ -1,60 +1,60 @@
  ▰ matchblox                                                                                  ● 6 need you
  SESSIONS 7    machine
 ───────────────────────────────────────────────────────────────────────────────────────────────────────────
- NEEDS YOU · 6  −
-▌╿ flint-auth                                                                                          2m ✻
-   conflicts with main
- ╿ spark-docs                                                                                          9m ✻
-   I rewrote the quick start and the install page.
- ╿ ember-billing                                                                                       4m ✻
-   #4552 waits for your merge
- ╿ kindle-web                                                                                          1m ✻
-   Claude needs your permission to use Bash
- ╿ cinder-ci                                                                                           0s ❋
-   I am moving the cache key to the go.sum hash.
- ╿ wick-mobile                                                                                         0s ▣
-   ⠙ Working
+ NEEDS YOU · 6  −               │ flint-auth ✻ asks · #4545 ci             ctx 41%  ctrl+o expand · m menu
+▌╿ flint-auth               2m ✻│
+   conflicts with main          │
+ ╿ spark-docs               9m ✻│
+   I rewrote the quick start an…│
+ ╿ ember-billing            4m ✻│
+   #4552 waits for your merge   │
+ ╿ kindle-web               1m ✻│
+   Claude needs your permission…│
+ ╿ cinder-ci                0s ❋│
+   I am moving the cache key to…│
+ ╿ wick-mobile              0s ▣│
+   ⠙ Working                    │
+────────────────────────────────│
+ WORKING · 1  −                 │
+ ✦ hearth-api         #4551 ci ✻│
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+ + new · ✧ 7 tips               │ ›                                                   ⏎ send to flint-auth
 ───────────────────────────────────────────────────────────────────────────────────────────────────────────
- WORKING · 1  −
- ✦ hearth-api                                                                                    #4551 ci ✻
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
- + new · ✧ 7 tips
-───────────────────────────────────────────────────────────────────────────────────────────────────────────
- in the list · ↑↓ choose · ⏎ write · s hosts · g chain · m menu
+ writing to flint-auth · ⏎ send · ↑↓ choose · esc list · ctrl+o expand · tab Machine
