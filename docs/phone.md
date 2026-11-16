@@ -405,8 +405,9 @@ See [`A` in Keys](keys.md).
 ## The phone layout
 
 A phone is read by its shape at the tallest height seen at its width, so
-the keyboard coming and going never changes the layout. Upright, or under
-60 columns, Sessions shows the list or the chat, one at a time: the list
+the keyboard coming and going never changes the layout. In Matchblox
+Pocket held upright, and on any screen under 73 columns, Sessions shows
+the list or the chat, one at a time: the list
 first. A tap on a row opens its chat, and `◂` comes back.
 
 Machine shows usage and the machine.
@@ -415,7 +416,7 @@ The key line is at the bottom: an SSH app that shrinks the terminal for
 its keyboard keeps it above the keys. A tap on a key presses it. In
 Matchblox Pocket the key belt takes its place.
 
-With a small font that makes the screen 60 columns or more in landscape,
+With a small font that makes the screen 73 columns or more in landscape,
 the list and the chat show side by side. See
 [Shapes](console.md#shapes).
 
