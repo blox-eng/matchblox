@@ -353,7 +353,6 @@ func (s *Service) dispatch(ctx context.Context, a proto.Act) proto.Result {
 		res := s.pick(ctx, askPane, a)
 		ran = len(res.Ran) > 0
 		if ran {
-			s.undrive(askPane) // the pane's last input is the owner's
 			s.kickScreens(askPane)
 			s.rereadAfter(askPane)
 		}

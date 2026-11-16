@@ -4,12 +4,46 @@ import (
 	"context"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/menu"
 	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/proto"
 )
+
+// chooseSettle is how long a pick holds the pane after its digit, while
+// the agent draws what comes next.
+var chooseSettle = time.Second
+
+// liveScreen reads pane's live screen as a console's watch reads it
+// (ScreenOf joins the lines tmux wrapped), so a pick signs what the
+// console showed.
+func (s *Service) liveScreen(pane string) (string, bool) {
+	if s.ScreenOf != nil {
+		text, _, ok := s.ScreenOf(pane)
+		return text, ok
+	}
+	text, ok := s.Capture([]string{pane})[pane]
+	return text, ok
+}
+
+// awaitRedraw waits, for up to chooseSettle, until pane no longer shows
+// the menu signed sign. The caller holds the pane: a second console's pick
+// on the same menu then reads the agent's next screen, never a digit that
+// lands on a prompt its owner did not see.
+func (s *Service) awaitRedraw(ctx context.Context, pane, sign string) {
+	for deadline := time.Now().Add(chooseSettle); time.Now().Before(deadline); {
+		if screen, ok := s.liveScreen(pane); !ok || menu.Sign(screen) != sign {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(25 * time.Millisecond):
+		}
+	}
+}
 
 // badPick is the refusal of a pick that does not read.
 const badPick = "not sent: a pick is a number from 1 to 9, its option's text and its screen's signature"
@@ -45,7 +79,7 @@ func (s *Service) choose(ctx context.Context, pane string, a proto.Act) proto.Re
 	if !sameAgent(x, a) {
 		return proto.Result{Err: "not sent: " + pane + " runs a different agent now"}
 	}
-	screen, read := s.Capture([]string{pane})[pane]
+	screen, read := s.liveScreen(pane)
 	if !read {
 		return proto.Result{Err: "not sent: the pane " + pane + " cannot be read"}
 	}
@@ -59,7 +93,7 @@ func (s *Service) choose(ctx context.Context, pane string, a proto.Act) proto.Re
 	g := advice.Guard{PID: x.PID, StartTicks: x.Start}
 	res := s.Actions.Do(ctx, advice.Action{Label: "choose", Steps: [][]string{panes.Literal(pane, digit)}, Guards: []advice.Guard{g}}, "")
 	if res.Err == "" && len(res.Ran) > 0 {
-		s.undrive(pane) // the pane's last input is the owner's, as with a message
+		s.awaitRedraw(ctx, pane, sign) // still under the lock: no other pick reads this menu
 	}
 	s.kickScreens(pane)
 	if res.Err == "" {

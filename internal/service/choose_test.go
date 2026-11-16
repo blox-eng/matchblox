@@ -3,7 +3,9 @@ package service
 import (
 	"slices"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/blox-eng/matchblox/internal/menu"
 	"github.com/blox-eng/matchblox/internal/proto"
@@ -33,6 +35,9 @@ func chooseTest(t *testing.T, screen string) (*Service, *[][]string) {
 	x := flintAuth()
 	x.Permits, x.Busy, x.Status = true, false, "waiting"
 	s, _ := holdsTest(t, x)
+	was := chooseSettle
+	chooseSettle = 50 * time.Millisecond // a screen that never redraws holds the pane this long
+	t.Cleanup(func() { chooseSettle = was })
 	var ran [][]string
 	s.Actions.Run = func(argv []string) error { ran = append(ran, argv); return nil }
 	s.Capture = func(ps []string) map[string]string {
@@ -146,5 +151,55 @@ func TestChooseNeedsTheWholeText(t *testing.T) {
 	res := s.act(t.Context(), chooseAct("%3", pickOf("2", "Yes, and", chooseScreen)))
 	if res.Err != "not sent: flint-auth's menu changed — look again" || len(*ran) != 0 {
 		t.Fatalf("%+v, ran %q", res, *ran)
+	}
+}
+
+// TestChooseReadsTheScreenTheConsoleSees: the console's screen comes from
+// ScreenOf, which joins the lines tmux wrapped. The service reads the same
+// way, so a prompt with a long, wrapped command still signs alike.
+func TestChooseReadsTheScreenTheConsoleSees(t *testing.T) {
+	long := strings.Replace(chooseScreen, "go test ./...", "go test ./internal/service/... -run TestChooseReadsTheScreenTheConsoleSees -count=1", 1)
+	wrapped := strings.Replace(long, "-run ", "-run\n", 1) // capture-pane with no -J
+	s, ran := chooseTest(t, wrapped)
+	s.ScreenOf = func(pane string) (string, bool, bool) { return long, false, pane == "%3" }
+	res := s.act(t.Context(), chooseAct("%3", pickOf("1", "Yes", long)))
+	if res.Err != "" || len(*ran) != 1 {
+		t.Fatalf("%+v, ran %q", res, *ran)
+	}
+}
+
+// TestASecondChooseWaitsForTheRedraw: two consoles pick on one prompt. The
+// first digit goes; the agent then draws its next prompt, with the same
+// options for another command. The second pick reads the new prompt and
+// is refused: it never lands on a prompt its owner did not see.
+func TestASecondChooseWaitsForTheRedraw(t *testing.T) {
+	next := strings.Replace(chooseScreen, "go test ./...", "rm -rf build/", 1)
+	s, _ := chooseTest(t, chooseScreen)
+	chooseSettle = time.Second
+	var mu sync.Mutex
+	var typed time.Time
+	var ran [][]string
+	s.Actions.Run = func(argv []string) error {
+		mu.Lock()
+		defer mu.Unlock()
+		ran, typed = append(ran, argv), time.Now()
+		return nil
+	}
+	s.Capture = func([]string) map[string]string {
+		mu.Lock()
+		defer mu.Unlock()
+		if !typed.IsZero() && time.Since(typed) > 100*time.Millisecond {
+			return map[string]string{"%3": next} // the agent redrew
+		}
+		return map[string]string{"%3": chooseScreen}
+	}
+	if res := s.act(t.Context(), chooseAct("%3", pickOf("1", "Yes", chooseScreen))); res.Err != "" {
+		t.Fatalf("the first: %+v", res)
+	}
+	res := s.act(t.Context(), chooseAct("%3", pickOf("2", "Yes, and don't ask again for go test commands", chooseScreen)))
+	mu.Lock()
+	defer mu.Unlock()
+	if res.Err != "not sent: flint-auth's menu changed — look again" || len(ran) != 1 {
+		t.Fatalf("the second: %+v, ran %q", res, ran)
 	}
 }
