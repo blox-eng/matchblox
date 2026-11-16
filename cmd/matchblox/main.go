@@ -672,6 +672,7 @@ func runConsole(path string, cfg config.Config, root string, noMotion bool, host
 		base.MasterBase = remote.MasterBase(os.Getenv("XDG_RUNTIME_DIR"), "/tmp", os.Getuid())
 	}
 	home, _ := os.UserHomeDir()
+	base.Beside = !base.OutsideTmux && os.Getenv(panes.HomeEnv) == "1" && root == "" && host == ""
 	base.Pair = consolePair(home, base.Self, defaultHostKey, setup.PairAddress)
 	restore := func() {}
 	if root == "" {

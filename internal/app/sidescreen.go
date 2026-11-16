@@ -39,6 +39,9 @@ type sideBox struct {
 // chat beside the list. A desk pane of the same shape, such as half a
 // laptop screen at 107x60, shows both: only Pocket tells a phone.
 func (m Model) onePane(w int) bool {
+	if m.beside != "" {
+		return m.onePaneAt(max(m.winW, w))
+	}
 	return w-listMedium-1 < chatMin || m.onPocket() && (m.upright() || m.layoutAt(w) == Narrow)
 }
 
@@ -47,6 +50,8 @@ func (m Model) onePane(w int) bool {
 // the chat the whole width.
 func (m Model) sideBoxAt(w int) sideBox {
 	switch {
+	case m.beside != "":
+		return sideBox{listW: w} // the agent has its own pane
 	case m.listHidden():
 		return sideBox{chatW: w}
 	case m.onePane(w):
@@ -69,6 +74,9 @@ func (m Model) listStartsHidden() bool {
 
 // listHidden: the chat takes the body, and the list does not draw.
 func (m Model) listHidden() bool {
+	if m.beside != "" {
+		return false
+	}
 	if m.listSet && m.listOne == m.onePane(max(m.width, minWidth)) {
 		return m.listOff
 	}

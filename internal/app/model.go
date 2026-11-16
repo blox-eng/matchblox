@@ -142,6 +142,9 @@ type Options struct {
 	Clients func() ([]string, error)
 	// Pane is the console's own tmux pane (TMUX_PANE); "" outside tmux.
 	Pane string
+	// Beside: the console splits its tmux window and keeps the agent's pane
+	// beside the list. Set only for the console of the home session.
+	Beside bool
 	// ClientList is tmux list-clients -F '#{client_activity} #{client_tty}
 	// #{pane_id}': who shows the console, for the client a jump moves. Nil:
 	// ask tmux.
@@ -592,6 +595,8 @@ type Model struct {
 	sideTip                   int
 	sideHost                  string // the host whose trouble the host place shows
 	sideIn                    paneKey
+	beside                    string // the agent pane's id; "" before the split, and where it failed
+	winW                      int    // the window's width in beside mode; 0: not read yet
 }
 
 func New(opt Options) Model {
@@ -634,6 +639,7 @@ func (m Model) Init() tea.Cmd {
 		start = append(start, m.peerStart(i))
 	}
 	peers := tea.Batch(start...)
+	peers = tea.Batch(peers, m.besideCmd())
 	if err := m.opt.DialErr; err != nil && m.conn == nil {
 		return tea.Batch(tea.RequestBackgroundColor, func() tea.Msg { return lostMsg{err: err} }, m.splashCmd(), m.waitAsk(), peers)
 	}
@@ -835,6 +841,16 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.tallW, m.tallH = msg.Width, 0
 		}
 		m.tallH = max(m.tallH, msg.Height)
+		return m, m.sizeCmd(msg.Width)
+	case besideMsg:
+		if msg.err != nil {
+			m.flash = "the agent pane did not open: " + msg.err.Error()
+			return m, nil
+		}
+		m.beside = msg.pane
+		return m, m.sizeCmd(m.width)
+	case besideSizeMsg:
+		m.winW = msg.w
 	case fromConn:
 		if msg.conn != m.conn {
 			return m, nil
