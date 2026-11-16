@@ -290,6 +290,9 @@ func (s *Service) dispatch(ctx context.Context, a proto.Act) proto.Result {
 	if pane, ok := strings.CutPrefix(a.RecID, "kill:"); ok {
 		return s.kill(ctx, pane, a)
 	}
+	if pane, ok := strings.CutPrefix(a.RecID, proto.ChoosePrefix); ok {
+		return s.choose(ctx, pane, a) // no repeat guard: the menu it checks is the guard
+	}
 	if pane, ok := strings.CutPrefix(a.RecID, "rename:"); ok {
 		return s.rename(ctx, pane, a)
 	}
