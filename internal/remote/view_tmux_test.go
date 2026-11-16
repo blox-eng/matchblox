@@ -89,6 +89,26 @@ func TestAViewTypesIntoTheAgentsOwnPane(t *testing.T) {
 	}
 }
 
+// A peer's windows keep the size of the terminal that used them last, 240
+// columns from a laptop. A drawn copy cut that at the column's edge (owner,
+// 2026-11-16: "going behind the screen", on the phone too). A view is a
+// client, so the agent's window takes the view's size.
+func TestAViewFitsAWiderAgentToItsPane(t *testing.T) {
+	e := newViewEnv(t)
+	mustTmux(t, e.sock, "new-session", "-d", "-s", "kindle-web", "-x", "240", "-y", "75", "cat")
+	argv, j := e.argv(t, "kindle-web")
+	view := e.openView(t, argv)
+	waitFor(t, "the view attached", func() bool {
+		out, _ := tmuxOut(e.sock, "list-clients", "-t", "="+JumpSessionName(j.ID))
+		return out != ""
+	})
+	want := mustTmux(t, e.sock, "display", "-p", "-t", view, "#{pane_width}x#{pane_height}")
+	waitFor(t, "kindle-web's window at the view's size "+want, func() bool {
+		got, _ := tmuxOut(e.sock, "display", "-p", "-t", e.pane(t, "kindle-web"), "#{window_width}x#{window_height}")
+		return strings.TrimSpace(got) == want
+	})
+}
+
 func TestARespawnEndsTheOldView(t *testing.T) {
 	e := newViewEnv(t, "kindle-web", "flint-auth")
 	tmp := t.TempDir()
