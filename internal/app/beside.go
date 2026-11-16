@@ -10,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/blox-eng/matchblox/internal/remote"
+	"github.com/blox-eng/matchblox/internal/sample"
 )
 
 // Beside mode: the console's tmux window holds two panes, the list and the
@@ -40,20 +41,37 @@ func (m Model) besideCmd() tea.Cmd {
 	}
 	console, accent := m.opt.Pane, hexOf(m.st.theme.Accent)
 	return func() tea.Msg {
-		argv := remote.SplitArgv(console, listWide, windowWidth(run, console))
-		out, err := run(argv[1:]...)
-		if err != nil {
-			return besideMsg{err: err}
-		}
-		pane := strings.TrimSpace(out)
-		if !paneID.MatchString(pane) {
-			return besideMsg{err: fmt.Errorf("tmux answered %q", pane)}
+		pane := keptPane(run, console)
+		if pane == "" {
+			argv := remote.SplitArgv(console, listWide, windowWidth(run, console))
+			out, err := run(argv[1:]...)
+			if err != nil {
+				return besideMsg{err: err}
+			}
+			pane = strings.TrimSpace(out)
+			if !paneID.MatchString(pane) {
+				return besideMsg{err: fmt.Errorf("tmux answered %q", pane)}
+			}
 		}
 		if _, err := run(remote.BesideArgv(console, pane, accent)[1:]...); err != nil {
 			return besideMsg{err: err}
 		}
 		return besideMsg{pane: pane}
 	}
+}
+
+// keptPane is the agent pane an earlier console left in this window, when it
+// still exists; a console that restarts keeps it. "" when there is none.
+func keptPane(run func(args ...string) (string, error), console string) string {
+	out, err := run("show-option", "-wqv", "-t", console, sample.BesideOption)
+	pane := strings.TrimSpace(out)
+	if err != nil || !paneID.MatchString(pane) {
+		return ""
+	}
+	if got, err := run("display", "-p", "-t", pane, "#{pane_id}"); err != nil || strings.TrimSpace(got) != pane {
+		return ""
+	}
+	return pane
 }
 
 // windowWidth is the console window's width; 0 when tmux does not say.

@@ -11,19 +11,30 @@ import (
 
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/remote"
+	"github.com/blox-eng/matchblox/internal/sample"
 )
 
 // besideTmux is a fake tmux that records each command and answers the
 // window's width and the new pane's id.
 type besideTmux struct {
 	winW  string
+	kept  string // the window's @matchblox_beside, "" when unset
+	alive bool   // the pane kept answers
 	calls [][]string
 }
 
 func (b *besideTmux) run(args ...string) (string, error) {
 	b.calls = append(b.calls, args)
 	switch args[0] {
+	case "show-option":
+		return b.kept + "\n", nil
 	case "display":
+		if args[len(args)-1] == "#{pane_id}" {
+			if !b.alive {
+				return "", errors.New("can't find pane: " + args[3])
+			}
+			return args[3] + "\n", nil
+		}
 		return b.winW + "\n", nil
 	case "split-window":
 		return "%9\n", nil
@@ -56,7 +67,11 @@ func (b *besideTmux) count(prefix string) (n int) {
 // split done.
 func besideConsole(t *testing.T, st proto.State, w, h int, winW string) (Model, *besideTmux) {
 	t.Helper()
-	tm := &besideTmux{winW: winW}
+	return besideConsoleWith(t, st, w, h, &besideTmux{winW: winW})
+}
+
+func besideConsoleWith(t *testing.T, st proto.State, w, h int, tm *besideTmux) (Model, *besideTmux) {
+	t.Helper()
 	opt := Options{NoMotion: true, Conn: newFake(), Now: func() time.Time { return demoAt }, Beside: true, Pane: "%1", Tmux: tm.run}
 	var next tea.Model = New(opt)
 	next, _ = next.Update(tea.WindowSizeMsg{Width: w, Height: h})
@@ -184,5 +199,31 @@ func TestAFailedSplitKeepsTheDrawnChat(t *testing.T) {
 	m = feed(t, m, m.besideCmd())
 	if m.beside != "" || !strings.Contains(m.flash, "the agent pane did not open") {
 		t.Fatalf("beside %q, flash %q", m.beside, m.flash)
+	}
+}
+
+func TestARestartedConsoleAdoptsItsAgentPane(t *testing.T) {
+	m, tm := besideConsoleWith(t, boardFixture(t), 40, 50, &besideTmux{winW: "160", kept: "%7", alive: true})
+	if n := tm.count("split-window"); n != 0 {
+		t.Fatalf("a restart split again: %q", tm.lines())
+	}
+	if m.beside != "%7" {
+		t.Fatalf("beside = %q", m.beside)
+	}
+	if got := strings.Join(tm.lines(), "\n"); !strings.Contains(got, "set-option -w -t %1 "+sample.ConsoleOption+" %1") {
+		t.Fatalf("the console pane is not current in %q", got)
+	}
+	if !strings.Contains(strings.Join(tm.lines(), "\n"), "show-option -wqv -t %1 "+sample.BesideOption) {
+		t.Fatalf("the option was not read: %q", tm.lines())
+	}
+}
+
+func TestADeadAgentPaneIsMadeAgain(t *testing.T) {
+	m, tm := besideConsoleWith(t, boardFixture(t), 40, 50, &besideTmux{winW: "160", kept: "%7"})
+	if n := tm.count("split-window"); n != 1 {
+		t.Fatalf("%d splits: %q", n, tm.lines())
+	}
+	if m.beside != "%9" {
+		t.Fatalf("beside = %q", m.beside)
 	}
 }
