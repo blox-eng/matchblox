@@ -218,3 +218,28 @@ func TestAViewEndsWhenItsAgentPaneGoes(t *testing.T) {
 		}
 	}
 }
+
+// TestAHostileNameStaysWords: a view's name is an argument of its script,
+// never script: quotes, $(…) and % print as they are.
+func TestAHostileNameStaysWords(t *testing.T) {
+	e := newViewEnv(t, "flint-auth")
+	j, _ := e.jump(t, "flint-auth")
+	made := t.TempDir() + "/made"
+	name := `it's "$(touch ` + made + `)" 100% $HOME`
+	if !ViewAllowed(j, name, e.path) {
+		t.Fatalf("%q refused", name)
+	}
+	view := e.openView(t, ViewArgv(j, name, e.path))
+	waitFor(t, "the view attached", func() bool {
+		out, _ := tmuxOut(e.sock, "list-clients", "-t", "="+JumpSessionName(j.ID))
+		return out != ""
+	})
+	mustTmux(t, e.sock, "kill-pane", "-t", j.Pane)
+	waitFor(t, "the ended line", func() bool {
+		out, _ := tmuxOut(e.sock, "capture-pane", "-p", "-J", "-t", view)
+		return strings.Contains(out, name+" ended.")
+	})
+	if _, err := os.Stat(made); err == nil {
+		t.Fatal("the name ran as a command")
+	}
+}

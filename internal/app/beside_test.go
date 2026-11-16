@@ -855,3 +855,19 @@ func TestPocketInAnUprightWindowZooms(t *testing.T) {
 		t.Fatalf("an upright window of 100 by 60 did not zoom: %q", tm.lines())
 	}
 }
+
+func TestANameEndingInASemicolonShowsAsItsPane(t *testing.T) {
+	m, _ := shownAt(t, "kindle-web", "160")
+	s, ok := m.sideChosen()
+	if !ok {
+		t.Fatal("nothing chosen")
+	}
+	for i := range m.all.sessions {
+		if m.all.sessions[i].Pane == s.Pane {
+			m.all.sessions[i].Name = "kindle-web;"
+		}
+	}
+	if got := m.besideName(s.Host, s.Pane); got != s.Pane {
+		t.Fatalf("besideName = %q, want the pane %s", got, s.Pane)
+	}
+}

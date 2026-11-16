@@ -308,8 +308,8 @@ and stops with a key at the left side.
 - **Home.** Each layout opens at home. At home, `◂` is at the left, and
   `↑` `↓` `⏎` are at the right (each is two cells wide).
 - **Beside the list.** When the agent's pane shows beside the list, `◂`
-  goes back to the list, and `⏎` shows the chosen agent. `ctrl+q` is not
-  a belt key: it stops and starts the terminal.
+  goes back to the list, and `⏎` shows the chosen agent. The belt has no
+  `ctrl+q`: on the phone the way back to the list is `◂` or a tap on it.
 - **A key sends when you lift.** A touch that moves 8 pt or more is a
   drag. A drag never presses a key.
 - **The feel.** The phone gives one tick each time the belt passes halfway between two stops. Home gives a firmer click.

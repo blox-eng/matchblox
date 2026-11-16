@@ -85,3 +85,26 @@ func sameSet(a, b []string) bool {
 	slices.Sort(b)
 	return slices.Equal(a, b)
 }
+
+// TestTheZoomReadsTheConsolesWindow: the session shows another window, zoomed;
+// the console's window, not zoomed, still zooms.
+func TestTheZoomReadsTheConsolesWindow(t *testing.T) {
+	sock := tmuxtest.Server(t)
+	mustTmux(t, sock, "-f", "/dev/null", "new-session", "-d", "-s", "matchblox", "-x", "120", "-y", "30", "sleep", "600")
+	console := mustTmux(t, sock, "display", "-p", "-t", "=matchblox:", "#{pane_id}")
+	mustTmux(t, sock, SplitArgv(console, 40, 120)[1:]...)
+	other := mustTmux(t, sock, "new-window", "-t", "=matchblox:", "-P", "-F", "#{pane_id}", "sleep", "600")
+	mustTmux(t, sock, "split-window", "-t", other, "sleep", "600")
+	mustTmux(t, sock, "resize-pane", "-Z", "-t", other)
+	mustTmux(t, sock, ZoomArgv(console, true)[1:]...)
+	if z := mustTmux(t, sock, "display", "-p", "-t", console, "#{window_zoomed_flag}"); z != "1" {
+		t.Fatalf("the console's window is not zoomed: %s", z)
+	}
+	mustTmux(t, sock, ZoomArgv(console, false)[1:]...)
+	if z := mustTmux(t, sock, "display", "-p", "-t", console, "#{window_zoomed_flag}"); z != "0" {
+		t.Fatalf("the console's window is still zoomed: %s", z)
+	}
+	if z := mustTmux(t, sock, "display", "-p", "-t", other, "#{window_zoomed_flag}"); z != "1" {
+		t.Fatalf("the other window lost its zoom: %s", z)
+	}
+}

@@ -37,13 +37,13 @@ func ListWidthArgv(console string, listW int) []string {
 }
 
 // ZoomArgv zooms pane to the whole window, or gives the window back to both
-// panes. It acts only when the window is not so already, so the keys stay
+// panes. It acts only when pane's window is not so already, so the keys stay
 // where the person put them.
 func ZoomArgv(pane string, zoom bool) []string {
 	if zoom {
-		return []string{"tmux", "if-shell", "-F", "#{window_zoomed_flag}", "", "select-pane -t " + pane + " ; resize-pane -Z -t " + pane}
+		return []string{"tmux", "if-shell", "-F", "-t", pane, "#{window_zoomed_flag}", "", "select-pane -t " + pane + " ; resize-pane -Z -t " + pane}
 	}
-	return []string{"tmux", "if-shell", "-F", "#{window_zoomed_flag}", "resize-pane -Z -t " + pane}
+	return []string{"tmux", "if-shell", "-F", "-t", pane, "#{window_zoomed_flag}", "resize-pane -Z -t " + pane}
 }
 
 // ChainArgv shows a chain's views in the agent pane beside and in panes

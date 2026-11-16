@@ -21,9 +21,10 @@ func ViewAllowed(j Jump, name, socket string) bool {
 }
 
 // ViewNameAllowed is a name a view prints: not empty, no control
-// characters.
+// characters, and no ";" at its end, where tmux would end its command on
+// the split's command line.
 func ViewNameAllowed(name string) bool {
-	return name != "" && strings.IndexFunc(name, unicode.IsControl) < 0
+	return name != "" && strings.IndexFunc(name, unicode.IsControl) < 0 && !strings.HasSuffix(name, ";")
 }
 
 // viewEnd is the end of a view's script: it says $m and the way back, and

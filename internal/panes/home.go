@@ -116,7 +116,8 @@ func CommandKeysArgv() []string {
 }
 
 // atConsole is true for a client in the console's session, on a pane the
-// console still runs in.
+// console runs in, or on any pane of a window that names its console
+// (@matchblox_console): the agent pane beside the list too.
 const atConsole = "#{&&:#{==:#{session_name}," + Home + "},#{||:" + runsConsole + ",#{" + sample.ConsoleOption + "}}}"
 
 // handTarget is the pane the key hands go to: the window's console when it

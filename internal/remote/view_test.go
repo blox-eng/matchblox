@@ -59,3 +59,18 @@ func TestOnlyAViewEndsWithItsAgentsPane(t *testing.T) {
 		}
 	}
 }
+
+// A name that ends in ";" would end tmux's command on the split's command
+// line: the view's argv would break there.
+func TestAViewNameEndingInASemicolonIsRefused(t *testing.T) {
+	for _, name := range []string{"foo;", ";", "a b;"} {
+		if ViewNameAllowed(name) {
+			t.Errorf("%q allowed", name)
+		}
+	}
+	for _, name := range []string{"foo;bar", "a;b c", `it's "$(x)" 100%`} {
+		if !ViewNameAllowed(name) {
+			t.Errorf("%q refused", name)
+		}
+	}
+}
