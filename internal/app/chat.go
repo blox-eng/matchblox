@@ -285,7 +285,7 @@ func (m Model) chatLine(s sample.Session, w int) string {
 	if n := m.lineNote; n.k == paneOf(s) && n.text != "" {
 		right = st.warn.Render(n.text)
 	} else if _, waits := m.lineHeld[paneOf(s)]; waits {
-		right = st.warn.Render(queuedNote)
+		right = st.warn.Render(m.heldNote(s, false))
 	} else if m.lines[paneOf(s)] == "" && m.asksNow(s) && !m.chatAnswers(s) {
 		right = st.warn.Render(m.inPane())
 	}

@@ -13,6 +13,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/blox-eng/matchblox/internal/proto"
+	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
@@ -581,9 +582,41 @@ func (m Model) cannotReach(host string) string {
 var typesWhileBusy = map[string]bool{"claude": true, "codex": true, "opencode": false}
 
 const (
-	queuedNote  = "queued for its next turn"
-	oneHeldNote = "one message already waits for its next turn"
+	queuedNote      = "queued for its next turn"
+	oneHeldNote     = "one message already waits for its next turn"
+	menuQueuedNote  = "queued until its question is answered"
+	menuOneHeldNote = "one message already waits for the answer"
 )
+
+// menuUp: the pane of s draws a menu, a question to pick from or a
+// permission prompt. A typed line would pick or approve there, and the
+// service refuses it, so the line waits for the menu to go.
+func (m Model) menuUp(s sample.Session) bool {
+	if s.Ask != nil || s.Permits {
+		return true
+	}
+	it, ok := m.waitOf(s)
+	return ok && it.State == queue.StatePermission
+}
+
+// lineWaits: a line sent now cannot reach s. Its menu is up, or it works
+// and its agent takes no typed input while it works.
+func (m Model) lineWaits(s sample.Session) bool {
+	return m.menuUp(s) || m.sideStateOf(s) == sideWork && !typesWhileBusy[s.Agent]
+}
+
+// heldNote is what the line of s says while a message waits for it.
+func (m Model) heldNote(s sample.Session, another bool) string {
+	switch {
+	case m.menuUp(s) && another:
+		return menuOneHeldNote
+	case m.menuUp(s):
+		return menuQueuedNote
+	case another:
+		return oneHeldNote
+	}
+	return queuedNote
+}
 
 // sendLine sends the chosen session's line as a message, on its host's
 // conn. A line that cannot go keeps its text and says why; nothing
@@ -603,9 +636,9 @@ func (m *Model) sendLine() tea.Cmd {
 		return m.notice("the line is empty")
 	}
 	busy := m.sideStateOf(s) == sideWork
-	if busy && !typesWhileBusy[s.Agent] {
+	if m.lineWaits(s) {
 		if _, waits := m.lineHeld[k]; waits {
-			m.lineNote = lineNote{k, oneHeldNote}
+			m.lineNote = lineNote{k, m.heldNote(s, true)}
 			return nil
 		}
 		m.lineHeld = maps.Clone(m.lineHeld)
@@ -674,7 +707,7 @@ func (m Model) heldRelease() (Model, tea.Cmd) {
 		i := slices.IndexFunc(m.all.sessions, func(s sample.Session) bool { return paneOf(s) == k })
 		if i >= 0 {
 			s := m.all.sessions[i]
-			if by, held := m.holdOf(s); (held && by.By != holdByYou) || m.sideStateOf(s) == sideWork {
+			if by, held := m.holdOf(s); (held && by.By != holdByYou) || m.lineWaits(s) {
 				continue
 			}
 		}

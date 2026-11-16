@@ -136,6 +136,10 @@ with the reason. Nothing sends it again by itself.
   the message when its turn ends. The line says `queued for its next
   turn`. One message waits for each session. Claude Code and Codex take
   the text at once and queue it themselves.
+- **A session at a menu**, a question to pick from or a permission
+  prompt, gets the message once the menu is answered: typed text would
+  pick there, and `Enter` would approve. The line says `queued until its
+  question is answered`. Answer the menu with the digits, or in its pane.
 - **A session that ends** with a message in wait gives the text back to
   its line: `flint-auth ended · the text is not sent`.
 
@@ -240,11 +244,13 @@ here`. A wrong paste says that a hop drops the copy.
 ### Shapes
 
 The console reads the screen's shape first: a screen is upright when its
-rows × 2 are at least its columns.
+rows × 2 are at least its columns. Only Matchblox Pocket shows one pane
+for an upright screen. A desk terminal of the same shape, such as half a
+laptop screen at 107 × 60, shows the list beside the chat.
 
 | Shape | Sessions |
 |---|---|
-| Narrow (upright, or under 60 columns), and any screen that leaves the chat less than 40 columns | One of the two at a time: the list first. A tap on a row, or `Enter` in the list, opens its chat, and `◂` comes back. |
+| Narrow in Matchblox Pocket (upright, or under 60 columns), and any screen that leaves the chat less than 40 columns | One of the two at a time: the list first. A tap on a row, or `Enter` in the list, opens its chat, and `◂` comes back. |
 | Medium (60 to 99 columns) | The list, 32 columns wide, and the chat beside it. |
 | Wide (100 columns and more) | The list, 40 columns wide, and the chat beside it. |
 
