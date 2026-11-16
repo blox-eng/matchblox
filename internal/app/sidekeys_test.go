@@ -194,7 +194,7 @@ func TestDigitMarksThenSends(t *testing.T) {
 	}
 	m = pressOn(m, "2")
 	got := sent(m)
-	if len(got) != 1 || got[0].RecID != proto.KeysPrefix+"%flint-auth" || got[0].Text != proto.LitPrefix+"2" {
+	if len(got) != 1 || got[0].RecID != proto.PickPrefix+"%flint-auth" || got[0].Text != `{"id":"toolu_flint-auth","choices":[{"picks":[2]}]}` {
 		t.Fatalf("sent %+v", got)
 	}
 	if m.lines[paneOf(matchNamed(t, m, "flint-auth"))] != "" {
@@ -585,7 +585,7 @@ func TestTypingWithNoSessionSaysSo(t *testing.T) {
 func TestRefusedPeerAnswerClearsAndSays(t *testing.T) {
 	m, _, ws := peerSide(t, hostState(), askingPeer())
 	m = pressOn(m, "1", "1")
-	if !hasAct(ws, proto.KeysPrefix+"%7") {
+	if !hasAct(ws, proto.PickPrefix+"%7") {
 		t.Fatalf("ws-2 got %+v", ws.acts())
 	}
 	s := m.all.sessions[slices.IndexFunc(m.all.sessions, func(s sample.Session) bool { return s.Host == "ws-2" })]
@@ -603,10 +603,10 @@ func TestRefusedPeerAnswerClearsAndSays(t *testing.T) {
 func TestPeerAnswerGoesToThePeerOnly(t *testing.T) {
 	m, home, ws := peerSide(t, hostState(sess(1, "hearth-api", "%7", nil)), askingPeer())
 	pressOn(m, "1", "1")
-	if got := keyActs(ws); len(got) != 1 || got[0].Text != proto.LitPrefix+"1" {
+	if got := answerActs(ws); len(got) != 1 || !strings.Contains(got[0].Text, `"picks":[1]`) {
 		t.Fatalf("ws-2 got %+v", got)
 	}
-	if got := keyActs(home); len(got) != 0 {
+	if got := answerActs(home); len(got) != 0 {
 		t.Fatalf("home got %+v", got)
 	}
 }
@@ -615,8 +615,8 @@ func TestAnswerToAPeerWhileHomeIsDown(t *testing.T) {
 	m, home, ws := peerSide(t, hostState(), askingPeer())
 	m.lost = true
 	m = pressOn(m, "1", "1")
-	if got := keyActs(ws); len(got) != 1 || len(keyActs(home)) != 0 {
-		t.Fatalf("ws-2 got %+v, home %+v", got, keyActs(home))
+	if got := answerActs(ws); len(got) != 1 || len(answerActs(home)) != 0 {
+		t.Fatalf("ws-2 got %+v, home %+v", got, answerActs(home))
 	}
 }
 

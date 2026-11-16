@@ -224,6 +224,17 @@ func keyActs(f *fakeConn) []proto.Act {
 	return out
 }
 
+// answerActs are the acts that answered a menu: a pick or a choice.
+func answerActs(f *fakeConn) []proto.Act {
+	var out []proto.Act
+	for _, a := range f.acts() {
+		if strings.HasPrefix(a.RecID, proto.PickPrefix) || strings.HasPrefix(a.RecID, proto.ChoosePrefix) {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
 // pressKeys is ks on m, with its commands run.
 func pressKeys(t *testing.T, m Model, ks ...string) Model {
 	t.Helper()

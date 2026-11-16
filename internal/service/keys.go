@@ -88,11 +88,17 @@ func (s *Service) keys(ctx context.Context, pane string, a proto.Act) proto.Resu
 	}
 	s.kickScreens(pane)
 	if res.Err == "" {
-		for _, after := range keyRereads {
-			time.AfterFunc(after, func() { s.kickScreens(pane) })
-		}
+		s.rereadAfter(pane)
 	}
 	return res
+}
+
+// rereadAfter reads pane's screen again for its consoles at each of
+// keyRereads: the agent draws what a key did a moment after it.
+func (s *Service) rereadAfter(pane string) {
+	for _, after := range keyRereads {
+		time.AfterFunc(after, func() { s.kickScreens(pane) })
+	}
 }
 
 // sameAgent tells if x is the agent a console's act a names: its pid, and

@@ -156,6 +156,11 @@ func (w *World) Run(argv []string) error {
 			return nil // not an option of the menu: the agent takes nothing
 		}
 		return w.pick(argv[3], argv[6])
+	case len(argv) == 5 && argv[1] == "send-keys" && len(argv[4]) == 1 && argv[4] >= "1" && argv[4] <= "9" && w.atMenu(argv[3]):
+		if !slices.Contains(w.options(argv[3]), argv[4]) {
+			return nil // a pick: act's key, as tmux takes a digit's name
+		}
+		return w.pick(argv[3], argv[4])
 	case len(argv) == 5 && argv[1] == "send-keys" && (argv[4] == "Up" || argv[4] == "Down") && w.atMenu(argv[3]):
 		return w.move(argv[3], argv[4] == "Up")
 	case len(argv) == 5 && argv[1] == "send-keys" && argv[4] == "Enter" && w.atMenu(argv[3]):

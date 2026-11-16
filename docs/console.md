@@ -143,10 +143,12 @@ with the reason. Nothing sends it again by itself.
 - **A session that ends** with a message in wait gives the text back to
   its line: `flint-auth ended · the text is not sent`.
 
-The digits answer a question with one choice, given with its options
-(Claude Code's question tool). Answer every other wait in the agent's
-pane (`Ctrl+O`): a permission prompt, a question from Codex or OpenCode,
-a call with more than one question, or a choice of several options.
+The digits answer the menu the agent draws: a permission prompt, a
+question, a Codex or OpenCode choice, options 1 to 9. Claude Code's
+question tool goes as its structured answer. Any other menu goes as the
+digit, and the service types it only while that option, and the lines
+above the menu, still say what the chat showed. A menu that picks many
+(checkboxes) is answered in the agent's pane (`Ctrl+O`).
 
 - **The first press marks.** A digit, or a tap on an option, marks that
   option (`❯ 2.`), and the key line says `2 again sends · esc clears`.
@@ -162,8 +164,9 @@ For 400 ms after the chat opens on a session, after the console opens,
 and after a tab or a filter changes, a digit marks nothing. A digit is
 sent only while the agent asks the question the chat shows: a newer
 question is refused (`not sent: <name> asks something new — look
-again`). A question that the chat cannot answer says so:
-`<name> asks in its pane · ctrl+o goes in`.
+again`), and so is a menu that changed (`not sent: <name>'s menu
+changed — look again`). A session that needs you with no menu on its
+screen says so on the line: `answer in its pane · ctrl+o`.
 
 After an answer, a merge or a go, the list keeps the session chosen.
 
