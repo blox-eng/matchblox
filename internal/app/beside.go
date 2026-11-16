@@ -195,9 +195,6 @@ func (m Model) showChosen() (tea.Model, tea.Cmd) {
 		return m, m.selectPane(m.chain.panes[m.chainPlace(s)])
 	case !ok:
 		return m, m.notice("no session to show · " + m.keys.main.New.Help().Key + " starts one")
-	case isShipCard(s):
-		m.flash = m.lineOff(s)
-		return m, nil
 	case s.Pane == "":
 		m.flash = noPane(s.Name)
 		return m, nil
@@ -498,7 +495,7 @@ func (m Model) chainBeside(k chainKey) (tea.Model, tea.Cmd) {
 	var on []paneKey
 	for _, p := range m.sideOrder() {
 		s, ok := at[p]
-		if in, member := m.chainKeyOf(s); ok && member && in == k && s.Pane != "" && !isShipCard(s) && len(on) < chainMost {
+		if in, member := m.chainKeyOf(s); ok && member && in == k && s.Pane != "" && len(on) < chainMost {
 			on = append(on, p)
 		}
 	}
@@ -533,7 +530,7 @@ func (m Model) closeChainBeside() (tea.Model, tea.Cmd) {
 		switch i := m.chainPlace(s); {
 		case i > 0:
 			a.keep = m.chain.panes[i]
-		case i < 0 && s.Pane != "" && !isShipCard(s):
+		case i < 0 && s.Pane != "":
 			return m.showChosen()
 		}
 	}

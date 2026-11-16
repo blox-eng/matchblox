@@ -22,12 +22,6 @@ func (h sideState) head() string {
 // go needs the owner even while the session works or the stoker holds it.
 // A session that waits on a ship runs on the agent's own state.
 func (m Model) sideStateOf(s sample.Session) sideState {
-	if sh, ok := m.shipOfCard(s); ok { // no session drives it: it needs you while it waits or is stuck
-		if sh.Kind == shipWaits || sh.Kind == shipStuck {
-			return sideNeed
-		}
-		return sideIdle
-	}
 	h, held := m.holdOf(s)
 	if held && h.By == holdByYou {
 		return sideHeld

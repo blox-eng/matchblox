@@ -153,8 +153,7 @@ func paneOf(s sample.Session) paneKey {
 	return paneKey{s.Host, ""}
 }
 
-// tmuxPane: k names a tmux pane (%12), not a process outside tmux nor the
-// row of a ship no session drives.
+// tmuxPane: k names a tmux pane (%12), not a process outside tmux.
 func (k paneKey) tmuxPane() bool { return strings.HasPrefix(k.pane, "%") }
 
 // noteChanges records the changes between a host's last state and its

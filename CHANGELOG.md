@@ -17,6 +17,17 @@ All notable changes to matchblox are in this file. The format follows
   to four members' own panes on the right, most urgent first. `G` opens the
   chain's room.
 
+## [0.46.3] - 2026-11-16
+
+### Fixed
+
+- **The list shows only sessions.** A pull request that no session drives
+  no longer has a row of its own or counts as needing you. A session's own
+  pull request stays a badge on its row.
+  ([#424](https://github.com/blox-eng/matchblox/issues/424))
+
+## [0.46.2] - 2026-11-16
+
 ### Fixed
 
 - **A digit answers any agent's menu.** v0.46.0 sent the
@@ -1801,7 +1812,9 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.46.1...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.46.3...HEAD
+[0.46.3]: https://github.com/blox-eng/matchblox/compare/v0.46.2...v0.46.3
+[0.46.2]: https://github.com/blox-eng/matchblox/compare/v0.46.1...v0.46.2
 [0.46.1]: https://github.com/blox-eng/matchblox/compare/v0.46.0...v0.46.1
 [0.46.0]: https://github.com/blox-eng/matchblox/compare/v0.45.1...v0.46.0
 [0.45.1]: https://github.com/blox-eng/matchblox/compare/v0.45.0...v0.45.1

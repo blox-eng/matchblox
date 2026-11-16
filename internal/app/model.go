@@ -1659,10 +1659,6 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				m.flash = s.Name + " is outside tmux: nothing to park"
 				break
 			}
-			if isShipCard(s) {
-				m.flash = m.lineOff(s)
-				break
-			}
 			if why := m.refusal(s.Host); why != "" {
 				m.flash = why
 				break
