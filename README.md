@@ -82,8 +82,8 @@ The full walk is [Get started](https://docs.matchblox.com/start/).
 - **The chat**: the chosen session's conversation and the options of its
   question, beside the list. Type in its line and `Enter` sends it. A
   paste goes in as one piece. A busy agent that takes no typed text gets
-  the message when its turn ends. A digit marks an answer, and the same
-  digit sends it. `p` merges a pull
+  the message when its turn ends. A digit marks an answer to the agent's
+  menu, a permission prompt or a question, and the same digit sends it. `p` merges a pull
   request that waits for your merge, after a typed `y`. `g` shows one
   chain, and `s` one host.
 - **Hosts**: `s` shows the next host, then all hosts. A host you hide

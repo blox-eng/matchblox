@@ -6,6 +6,16 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **A digit answers any agent's menu.** v0.46.0 sent the
+  digit as a key, which the service refuses outside the demo, so no digit
+  answered on a real machine. A permission prompt, a question, or a Codex
+  or OpenCode menu now takes two presses in the chat, on a peer's
+  session too. The service types the digit only while the menu the chat
+  showed still stands.
+  ([#422](https://github.com/blox-eng/matchblox/issues/422))
+
 ## [0.46.1] - 2026-11-16
 
 ### Fixed

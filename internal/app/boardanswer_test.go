@@ -2,6 +2,7 @@ package app
 
 import (
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -44,7 +45,7 @@ func matchNamed(t *testing.T, m Model, name string) sample.Session {
 }
 
 // sent are the keys the board sent.
-func sent(m Model) []proto.Act { return keyActs(boardFake(m)) }
+func sent(m Model) []proto.Act { return answerActs(boardFake(m)) }
 
 func armedOn(m Model, n string) bool {
 	return strings.Contains(plainFrame(m), "❯ "+n+".")
@@ -84,7 +85,7 @@ func TestANewQuestionRefusesTheDigit(t *testing.T) {
 		t.Fatalf("sent %+v", acts)
 	}
 	refusal := "not sent: flint-auth asks something new — look again"
-	next, _ := m.Update(resultMsg{ActID: keyActID + strings.TrimPrefix(acts[0].RecID, proto.KeysPrefix), Err: refusal})
+	next, _ := m.Update(resultMsg{ActID: "a" + strconv.Itoa(m.acts), Err: refusal})
 	m = newBoardState(t, next.(Model), askNew(boardFixture(t)))
 	m = pressOn(m, "down", "down", "down") // flint-auth, at the bottom of NEEDS YOU
 	if got := noticeRow(m); got != refusal {
@@ -121,25 +122,6 @@ func TestADigitWhileTheServiceIsLostIsNotSent(t *testing.T) {
 	}
 	if head := strings.Split(plainFrame(m), "\n")[0]; strings.Contains(head, "not sent") {
 		t.Errorf("the header shows the refusal: %q", head)
-	}
-}
-
-func TestAnAnswerThatCannotWaitInLineIsNotSent(t *testing.T) {
-	m, _ := flintBoard(t, 80, 31)
-	m.keysOut = keysOut{conn: m.conn, busy: true, queue: make([]proto.Act, maxKeysAhead)}
-	m = pressOn(m, "1", "1")
-	if got := noticeRow(m); got != "not sent: 64 keys still wait for flint-auth" {
-		t.Errorf("the notice says %q", got)
-	}
-	if head := strings.Split(plainFrame(m), "\n")[0]; strings.Contains(head, "not sent") || m.flash != "" {
-		t.Errorf("the header shows %q, the flash %q", head, m.flash)
-	}
-	if _, sentN := m.chatMarks(matchNamed(t, m, "flint-auth")); sentN != 0 || chosenName(t, m) != "flint-auth" || !armedOn(m, "1") {
-		t.Errorf("a key that did not go counts as sent (%d), or the choice moved to %s", sentN, chosenName(t, m))
-	}
-	m.keysOut.queue = nil
-	if m = pressOn(m, "1"); len(m.keysOut.queue) != 1 || m.keysOut.queue[0].Text != proto.LitPrefix+"1" {
-		t.Errorf("the digits are not live after the line had room: %+v", m.keysOut.queue)
 	}
 }
 

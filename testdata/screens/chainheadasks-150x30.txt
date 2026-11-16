@@ -25,6 +25,6 @@
                                         │
                                         │
                                         │
- + new · ✧ 7 tips                       │ ›                                                                                      ⏎ send to kindle-web
+ + new · ✧ 7 tips                       │ ›                                                                               answer in its pane · ctrl+o
 ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  writing to kindle-web · ⏎ send · ↑↓ choose · esc list · ctrl+o expand · tab Machine
