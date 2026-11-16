@@ -40,7 +40,7 @@ type sideBox struct {
 // laptop screen at 107x60, shows both: only Pocket tells a phone.
 func (m Model) onePane(w int) bool {
 	if m.beside != "" {
-		return m.onePaneAt(max(m.winW, w))
+		return m.onePaneAt(max(m.winW, w), m.winH)
 	}
 	return w-listMedium-1 < chatMin || m.onPocket() && (m.upright() || m.layoutAt(w) == Narrow)
 }

@@ -25,8 +25,8 @@ type besideMsg struct {
 	err  error
 }
 
-// besideSizeMsg is the window's width, as the window changed.
-type besideSizeMsg struct{ w int }
+// besideSizeMsg is the window's size, as the window changed.
+type besideSizeMsg struct{ w, h int }
 
 var paneID = regexp.MustCompile(`^%\d+$`)
 
@@ -50,7 +50,8 @@ func (m Model) besideCmd() tea.Cmd {
 			}
 			return besideMsg{pane: pane}
 		}
-		pane, err := splitBeside(run, console, accent, listWide, windowWidth(run, console))
+		w, _ := windowSize(run, console)
+		pane, err := splitBeside(run, console, accent, listWide, w)
 		return besideMsg{pane: pane, err: err}
 	}
 }
@@ -92,21 +93,21 @@ func livePane(run func(args ...string) (string, error), pane string) bool {
 	return err == nil && strings.TrimSpace(got) == pane
 }
 
-// windowWidth is the console window's width; 0 when tmux does not say.
-func windowWidth(run func(args ...string) (string, error), pane string) int {
-	out, err := run("display", "-p", "-t", pane, "#{window_width}")
+// windowSize is the console window's width and height; 0 for what tmux
+// does not say.
+func windowSize(run func(args ...string) (string, error), pane string) (w, h int) {
+	out, err := run("display", "-p", "-t", pane, "#{window_width} #{window_height}")
 	if err != nil {
-		return 0
+		return 0, 0
 	}
-	w, _ := strconv.Atoi(strings.TrimSpace(out))
-	return w
-}
-
-func (m Model) windowWidth() int {
-	if run := m.tmuxRun(); run != nil {
-		return windowWidth(run, m.opt.Pane)
+	f := strings.Fields(out)
+	if len(f) > 0 {
+		w, _ = strconv.Atoi(f[0])
 	}
-	return 0
+	if len(f) > 1 {
+		h, _ = strconv.Atoi(f[1])
+	}
+	return w, h
 }
 
 // sizeCmd follows the window: the pane in use zoomed where the agent would
@@ -118,18 +119,18 @@ func (m Model) sizeCmd(paneW int) tea.Cmd {
 	}
 	console := m.opt.Pane
 	return func() tea.Msg {
-		w := windowWidth(run, console)
+		w, h := windowSize(run, console)
 		if w == 0 {
 			w = paneW
 		}
-		if m.onePaneAt(w) {
+		if m.onePaneAt(w, h) {
 			_, _ = run(remote.ZoomArgv(inUse(run, console), true)[1:]...)
-			return besideSizeMsg{w}
+			return besideSizeMsg{w, h}
 		}
 		// A resize ends a zoom, so it runs only where the window is not one.
 		_, _ = run(remote.ZoomArgv(console, false)[1:]...)
-		_, _ = run(remote.ListWidthArgv(console, m.listWidth(w))[1:]...)
-		return besideSizeMsg{w}
+		_, _ = run(remote.ListWidthArgv(console, m.listWidth(w, h))[1:]...)
+		return besideSizeMsg{w, h}
 	}
 }
 
@@ -143,17 +144,29 @@ func inUse(run func(args ...string) (string, error), console string) string {
 	return console
 }
 
-// listWidth is the list pane's width in a window of w columns.
-func (m Model) listWidth(w int) int {
-	if layout(w, m.shapeRows()) == Wide {
+// listWidth is the list pane's width in a window of w by h.
+func (m Model) listWidth(w, h int) int {
+	if layout(w, m.windowRows(h)) == Wide {
 		return listWide
 	}
 	return listMedium
 }
 
-// onePaneAt: a window of w columns shows one pane at a time.
-func (m Model) onePaneAt(w int) bool {
-	return w-listMedium-1 < chatMin || m.onPocket() && (m.upright() || layout(w, m.shapeRows()) == Narrow)
+// onePaneAt: a window of w by h shows one pane at a time. The window's shape
+// decides, never the list pane's: beside the list that pane is a narrow
+// part of the window, upright on any screen, and a zoom would change it.
+func (m Model) onePaneAt(w, h int) bool {
+	rows := m.windowRows(h)
+	return w-listMedium-1 < chatMin || m.onPocket() && (portrait(w, rows) || layout(w, rows) == Narrow)
+}
+
+// windowRows is h, or the list pane's rows where tmux did not say: the two
+// are as tall, side by side.
+func (m Model) windowRows(h int) int {
+	if h > 0 {
+		return h
+	}
+	return m.shapeRows()
 }
 
 // besideMode: the agent has a pane beside the list, or the console makes
@@ -290,7 +303,7 @@ func (m Model) besideRun(a action) tea.Cmd {
 	if run == nil || !a.closing && (len(a.steps) == 0 || len(a.steps) > 1 && len(a.chain) != len(a.steps)) {
 		return nil
 	}
-	console, accent, agent, winW, name := m.opt.Pane, hexOf(m.st.theme.Accent), m.beside, m.winW, m.besideName(a.host, a.pane)
+	console, accent, agent, winW, winH, name := m.opt.Pane, hexOf(m.st.theme.Accent), m.beside, m.winW, m.winH, m.besideName(a.host, a.pane)
 	names := make([]string, len(a.chain))
 	for i, k := range a.chain {
 		names[i] = m.besideName(a.host, k.pane)
@@ -327,12 +340,12 @@ func (m Model) besideRun(a action) tea.Cmd {
 			msg.err = errOwnWindow
 			return msg
 		}
-		w := windowWidth(run, console)
+		w, h := windowSize(run, console)
 		if w == 0 {
-			w = winW
+			w, h = winW, winH
 		}
 		if !livePane(run, agent) {
-			pane, err := splitBeside(run, console, accent, m.listWidth(w), w)
+			pane, err := splitBeside(run, console, accent, m.listWidth(w, h), w)
 			if err != nil {
 				msg.err = fmt.Errorf("the agent pane did not open: %w", err)
 				return msg
@@ -357,7 +370,7 @@ func (m Model) besideRun(a action) tea.Cmd {
 			msg.err = err
 			return msg
 		}
-		if m.onePaneAt(w) {
+		if m.onePaneAt(w, h) {
 			_, _ = run(remote.ZoomArgv(msg.agent, true)[1:]...)
 		}
 		return msg

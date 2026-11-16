@@ -20,6 +20,7 @@ import (
 // window's width and the new pane's id.
 type besideTmux struct {
 	winW  string
+	winH  string   // the window's height, "" when tmux does not say
 	kept  string   // the window's @matchblox_beside, "" when unset
 	alive bool     // the pane kept answers
 	own   []string // other panes in the console's window
@@ -50,6 +51,9 @@ func (b *besideTmux) run(args ...string) (string, error) {
 				return "", errors.New("can't find pane: " + args[3])
 			}
 			return args[3] + "\n", nil
+		}
+		if args[len(args)-1] == "#{window_width} #{window_height}" && b.winH != "" {
+			return b.winW + " " + b.winH + "\n", nil
 		}
 		return b.winW + "\n", nil
 	case "split-window":
@@ -820,5 +824,34 @@ func TestQuittingEndsTheAgentPanes(t *testing.T) {
 func TestARestartKeepsTheAgentPanes(t *testing.T) {
 	if tm := closedShell(t, true); tm.count("kill-pane") != 0 || tm.count("set-option") != 0 {
 		t.Fatalf("a restart ended the agent panes: %q", tm.lines())
+	}
+}
+
+// pocketWindow is a console beside the list in a window of w by h, its list
+// pane 40 by h, that Pocket alone views; tm counts the zooms of two sizes.
+func pocketWindow(t *testing.T, w, h string) *besideTmux {
+	t.Helper()
+	rows, _ := strconv.Atoi(h)
+	m, tm := besideConsoleWith(t, boardFixture(t), 40, rows, &besideTmux{winW: w, winH: h})
+	pocketOnly(&m)
+	tm.calls = nil
+	for range 2 {
+		next, cmd := m.Update(tea.WindowSizeMsg{Width: 40, Height: rows})
+		m = feed(t, next.(Model), cmd)
+	}
+	return tm
+}
+
+func TestPocketInALandscapeWindowShowsBothPanes(t *testing.T) {
+	tm := pocketWindow(t, "120", "30")
+	if tm.ran(remote.ZoomArgv("%1", true)) || !tm.ran(remote.ZoomArgv("%1", false)) {
+		t.Fatalf("a landscape window of 120 by 30 zoomed: %q", tm.lines())
+	}
+}
+
+func TestPocketInAnUprightWindowZooms(t *testing.T) {
+	tm := pocketWindow(t, "100", "60")
+	if !tm.ran(remote.ZoomArgv("%1", true)) || tm.ran(remote.ZoomArgv("%1", false)) {
+		t.Fatalf("an upright window of 100 by 60 did not zoom: %q", tm.lines())
 	}
 }

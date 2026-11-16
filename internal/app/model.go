@@ -603,7 +603,7 @@ type Model struct {
 	sideHost                  string // the host whose trouble the host place shows
 	sideIn                    paneKey
 	beside                    string     // the agent pane's id; "" before the split, and where it failed
-	winW                      int        // the window's width in beside mode; 0: not read yet
+	winW, winH                int        // the window's size in beside mode; 0: not read yet
 	showing                   bool       // a choice runs in the agent pane
 	showNext                  *action    // the choice made while one ran: it runs next
 	chain                     *chainView // the chain view beside the list; nil while one agent shows
@@ -860,7 +860,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.beside = msg.pane
 		return m, m.sizeCmd(m.width)
 	case besideSizeMsg:
-		m.winW = msg.w
+		m.winW, m.winH = msg.w, msg.h
 	case shownMsg:
 		return m.besideShown(msg)
 	case fromConn:
