@@ -26,7 +26,7 @@ func (m Model) viewLines(w, h int) []string {
 	h = max(h, 0)
 	lines := make([]string, h)
 	s, ok := m.selected()
-	if !ok || s.Pane == "" || isShipCard(s) || s.Host != m.opt.Host {
+	if !ok || s.Pane == "" || s.Host != m.opt.Host {
 		return lines
 	}
 	shown := m.watchHost == s.Host && m.screen.Pane == s.Pane
@@ -311,7 +311,7 @@ func (m Model) liveKeyLine(w int) (string, []span) {
 // the wheel goes as the keys act, and opens nothing.
 func (m Model) wheelView(up bool) (tea.Model, tea.Cmd) {
 	s, ok := m.selectedSession()
-	if !ok || s.Pane == "" || isShipCard(s) || s.Host != m.opt.Host {
+	if !ok || s.Pane == "" || s.Host != m.opt.Host {
 		return m, nil
 	}
 	text := proto.WheelDown
