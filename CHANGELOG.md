@@ -6,6 +6,13 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **The list shows only sessions.** A pull request that no session drives
+  no longer has a row of its own or counts as needing you. A session's own
+  pull request stays a badge on its row.
+  ([#ISSUE](https://github.com/blox-eng/matchblox/issues/ISSUE))
+
 ### Added
 
 - **The console is a list of sessions beside one chat.** The list groups
@@ -34,10 +41,6 @@ All notable changes to matchblox are in this file. The format follows
 - **A busy agent's message waits.** An agent that takes no typed text
   while it works gets the message when its turn ends. The line says so,
   and a session that ends first gives the text back to the line.
-  ([#411](https://github.com/blox-eng/matchblox/issues/411))
-- **Ship rows.** A pull request that no session drives has a row of its
-  own in the list, with its badge. `Enter` or `N` on it starts a session
-  on its branch.
   ([#411](https://github.com/blox-eng/matchblox/issues/411))
 - **Pocket's belt taps.** Each key on the belt reaches the console as its
   own tap, and the tap names its phone. With a desk and Pocket on one
