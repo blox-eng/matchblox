@@ -497,6 +497,9 @@ func TestAPeerViewWaitsWhenItEnds(t *testing.T) {
 	if r := respawned(tm); !strings.Contains(r, "-- /bin/sh -c") || !strings.Contains(r, "ctrl+q: back to the list") || !strings.Contains(r, " ssh ") {
 		t.Fatalf("the peer's ssh is not wrapped: %q", r)
 	}
+	if r := respawned(tm); !strings.Contains(r, "session-window-changed") || !strings.Contains(r, sample.ViewOption) {
+		t.Fatalf("the peer's view does not end with its agent's pane: %q", r)
+	}
 }
 
 func TestTypingInTheListSaysTheAgentPaneTakesText(t *testing.T) {

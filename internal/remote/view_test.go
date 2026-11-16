@@ -3,6 +3,8 @@ package remote
 import (
 	"strings"
 	"testing"
+
+	"github.com/blox-eng/matchblox/internal/sample"
 )
 
 func TestViewAllowed(t *testing.T) {
@@ -41,5 +43,19 @@ func TestPeerViewArgvKeepsTheNameAnArgument(t *testing.T) {
 	}
 	if strings.Contains(argv[2], "kindle-web") {
 		t.Fatalf("the name is in the script: %q", argv[2])
+	}
+}
+
+func TestOnlyAViewEndsWithItsAgentsPane(t *testing.T) {
+	j := Jump{Pane: "%3", Prefix: "C-b", ID: "0123abcd", Outer: true}
+	if got := strings.Join(j.Remote(), " "); strings.Contains(got, "set-hook") || strings.Contains(got, sample.ViewOption) {
+		t.Fatalf("a ctrl+o jump changed: %q", got)
+	}
+	j.View = true
+	got := strings.Join(j.Remote(), " ")
+	for _, want := range []string{"set-option -t =matchblox-jump-0123abcd: " + sample.ViewOption + " %3", "set-hook -t =matchblox-jump-0123abcd: session-window-changed"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("no %q in %q", want, got)
+		}
 	}
 }

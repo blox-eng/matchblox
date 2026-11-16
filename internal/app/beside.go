@@ -218,7 +218,7 @@ func (m Model) viewsOn(a *action, what string, panes []string) (tea.Model, tea.C
 	if host != "" {
 		b, steps, says := a, [][]string(nil), []string(nil)
 		for _, pane := range panes {
-			_, ssh, next := m.peerJump(remote.Jump{Host: host, Pane: pane}, a)
+			_, ssh, next := m.peerJump(remote.Jump{Host: host, Pane: pane, View: true}, a)
 			if ssh == nil {
 				return m.runInto(next)
 			}

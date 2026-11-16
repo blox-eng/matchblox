@@ -179,3 +179,42 @@ func TestAPeerViewThatEndsSaysSoAndStays(t *testing.T) {
 		t.Fatalf("the view pane must stay: dead=%q err=%v", out, err)
 	}
 }
+
+// twoWindowAgent is the session work: the agent's window, with a second
+// pane there when shared, and a window "other" that says OTHER-WINDOW. It
+// answers the agent's pane.
+func (e viewEnv) twoWindowAgent(t *testing.T, shared bool) string {
+	t.Helper()
+	agent := mustTmux(t, e.sock, "new-session", "-d", "-s", "work", "-n", "agent", "-x", "100", "-y", "20", "-P", "-F", "#{pane_id}", "cat")
+	if shared {
+		mustTmux(t, e.sock, "split-window", "-d", "-t", agent, "sh", "-c", "echo SHARED-PANE; exec sleep 600")
+	}
+	mustTmux(t, e.sock, "new-window", "-d", "-t", "=work:", "-n", "other", "sh", "-c", "echo OTHER-WINDOW; exec sleep 600")
+	return agent
+}
+
+func TestAViewEndsWhenItsAgentPaneGoes(t *testing.T) {
+	for _, shared := range []bool{false, true} {
+		e := newViewEnv(t)
+		mustTmux(t, e.sock, ViewHookArgv()[1:]...)
+		agent := e.twoWindowAgent(t, shared)
+		j := Jump{Pane: agent, Prefix: "C-b", ID: NewJumpID(), Outer: true}
+		view := e.openView(t, ViewArgv(j, "work", e.path))
+		g := JumpSessionName(j.ID)
+		waitFor(t, "the view attached", func() bool {
+			out, _ := tmuxOut(e.sock, "list-clients", "-t", "="+g)
+			return out != ""
+		})
+		mustTmux(t, e.sock, "kill-pane", "-t", agent)
+		waitFor(t, "the ended line", func() bool {
+			return strings.Contains(e.capture(view), "work ended. ctrl+q: back to the list")
+		})
+		if c := e.capture(view); strings.Contains(c, "OTHER-WINDOW") || strings.Contains(c, "SHARED-PANE") {
+			t.Fatalf("shared=%v: the view showed another pane:\n%s", shared, c)
+		}
+		waitFor(t, "no jump session left", func() bool { return len(e.jumpSessions()) == 0 })
+		if !hasSession(e.sock, "work") {
+			t.Fatalf("shared=%v: the agent's session ended with its view", shared)
+		}
+	}
+}

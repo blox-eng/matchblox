@@ -313,3 +313,7 @@ const (
 	BesideOption  = "@matchblox_beside"
 	ChainOption   = "@matchblox_chain"
 )
+
+// ViewOption is the session option of a view's session (a jump's, shown in
+// a pane beside the list): the agent pane it shows.
+const ViewOption = "@matchblox_view"

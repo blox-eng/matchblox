@@ -2,8 +2,12 @@ package remote
 
 import (
 	"path/filepath"
+	"strconv"
 	"strings"
 	"unicode"
+
+	"github.com/blox-eng/matchblox/internal/keycmd"
+	"github.com/blox-eng/matchblox/internal/sample"
 )
 
 // ViewAllowed is what a view may be: a pane of this machine (no host, no
@@ -56,10 +60,25 @@ func PeerViewArgv(name string, ssh []string) []string {
 // respawn-pane): tmux would read a lone ";" as the end of its own command,
 // so the list's ";" are written "\;", which tmux hands to the shell as ";".
 func ViewArgv(j Jump, name, socket string) []string {
-	j.Outer = true
+	j.Outer, j.View = true, true
 	// A failed list leaves the session it made (it is not yet one that
 	// ends when its client goes), so the wrapper kills it.
 	const wrap = `n=$1; g=$2; sock=$3; shift 3; e=$(mktemp) || exit 1; trap 'rm -f "$e"' EXIT; trap 'exit 0' HUP TERM; "$@" 2>"$e"; s=$?; if [ $s = 0 ]; then m="$n ended."; else tmux -S "$sock" kill-session -t "=$g" 2>/dev/null; m="$n cannot be shown: $(tr '\n' ' ' <"$e" | sed 's/ *$//')."; fi; rm -f "$e"; ` + viewEnd
 	argv := []string{"/bin/sh", "-c", wrap, "sh", name, JumpSessionName(j.ID), socket, "env", "-u", "TMUX", "tmux", "-S", socket}
 	return append(argv, tmuxArgs(j.Remote()[1:])...)
+}
+
+// ViewGone, in the context of a view's session, ends the session once the
+// agent pane it shows (ViewOption) is in none of its windows: its client
+// then ends, and the view's wrapper says the agent ended.
+const ViewGone = "#{?#{W:#{P:#{?#{==:#{pane_id},#{" + sample.ViewOption + "}},1,}}},,kill-session -t =#{session_name} ; }"
+
+// ViewHookArgv ends a view whose agent pane goes from a window that keeps
+// other panes, which the view would show in its place. tmux runs a window's
+// hook in the session it finds best for the window, often not the view's
+// (3.4), so the hook is global and walks the views. A window that closes is
+// the view session's own hook (Jump.Remote). It uses MarkKey's slot.
+func ViewHookArgv() []string {
+	return []string{"tmux", "set-hook", "-g", "window-layout-changed[" + strconv.Itoa(keycmd.MarkSlot) + "]",
+		`run-shell -C "#{S:#{?#{` + sample.ViewOption + `},` + ViewGone + `,}}"`}
 }
