@@ -33,8 +33,10 @@ presses the digits already use, on every agent, on a phone and on a desk.
   (`agentMenuLine`). It does not need a question from the transcript.
 - **Answering** stays two presses: a digit or a tap marks the option
   (`❯ 2.`), and the same digit sends it. The 400 ms dead time after a menu
-  appears stays. Claude Code's question tool keeps its `pick:` act: the new
-  path is for every menu `oneChoice` does not cover.
+  appears stays. Every digit answer goes by the new act, Claude Code's
+  question tool too: v0.46.0 sent its digit as a `keys:` act, which the
+  real service refuses (`keys go to an agent in its own pane`; only the
+  demo takes it), so on a real machine no digit answered at all.
 - **The act** is new: `choose:<pane>`, with the digit and the option's text
   as the console read it. The service reads the pane again under the pane's
   lock. It sends the digit key only if line N of the menu still starts with
