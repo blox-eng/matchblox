@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"image/color"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -168,12 +169,17 @@ type shownMsg struct {
 	host, pane string // the session shown
 	name       string
 	err        error
+	chain      *chainView // the chain view it opened
+	chainOff   bool       // it closed the window's chain view
+	skipped    []string   // the members a chain view left out: in the console's own window
 }
 
 // showChosen shows the session the list chooses in the agent pane.
 func (m Model) showChosen() (tea.Model, tea.Cmd) {
 	s, ok := m.sideChosen()
 	switch {
+	case ok && m.chainPlace(s) >= 0:
+		return m, m.selectPane(m.chain.panes[m.chainPlace(s)])
 	case !ok:
 		return m, m.notice("no session to show · " + m.keys.main.New.Help().Key + " starts one")
 	case isShipCard(s):
@@ -201,24 +207,40 @@ func (m Model) showBeside(host, pane string) (tea.Model, tea.Cmd) {
 func (m Model) besideOn(host, pane string) (tea.Model, tea.Cmd) {
 	host = cmp.Or(host, m.opt.Host)
 	name := m.besideName(host, pane)
-	a := &action{label: "show " + name, beside: true, pane: pane, host: host}
+	return m.viewsOn(&action{label: "show " + name, beside: true, pane: pane, host: host}, name, []string{pane})
+}
+
+// viewsOn runs a with a view of each of a.host's panes, what naming them
+// in a refusal: this machine's at once, a peer's after one consent box for
+// all of them.
+func (m Model) viewsOn(a *action, what string, panes []string) (tea.Model, tea.Cmd) {
+	host := a.host
 	if host != "" {
-		_, ssh, b := m.peerJump(remote.Jump{Host: host, Pane: pane}, a)
-		if ssh != nil {
-			b.steps, b.say, b.nav, b.remote = [][]string{remote.PeerViewArgv(name, ssh)}, shellLine(ssh), true, true
+		b, steps, says := a, [][]string(nil), []string(nil)
+		for _, pane := range panes {
+			_, ssh, next := m.peerJump(remote.Jump{Host: host, Pane: pane}, a)
+			if ssh == nil {
+				return m.runInto(next)
+			}
+			b = next
+			steps, says = append(steps, remote.PeerViewArgv(m.besideName(host, pane), ssh)), append(says, shellLine(ssh))
 		}
+		b.steps, b.say, b.nav, b.remote = steps, strings.Join(says, "\n"), true, true
 		return m.runInto(b)
 	}
 	if m.opt.Socket == "" {
-		m.flash = name + " is not shown: the console does not know its tmux socket ($TMUX names none); " + m.keys.main.Jump.Help().Key + " opens it"
+		m.flash = what + " is not shown: the console does not know its tmux socket ($TMUX names none); " + m.keys.main.Jump.Help().Key + " opens it"
 		return m, nil
 	}
-	j := remote.Jump{Pane: pane, Prefix: m.prefix(), ID: m.jumpID(), Outer: true}
-	if !remote.ViewAllowed(j, name, m.opt.Socket) {
-		m.flash = "refused: " + name + " is not shown: its pane, its name or the tmux socket " + m.opt.Socket + " is not one a view takes"
-		return m, nil
+	for _, pane := range panes {
+		name := m.besideName(host, pane)
+		j := remote.Jump{Pane: pane, Prefix: m.prefix(), ID: m.jumpID(), Outer: true}
+		if !remote.ViewAllowed(j, name, m.opt.Socket) {
+			m.flash = "refused: " + name + " is not shown: its pane, its name or the tmux socket " + m.opt.Socket + " is not one a view takes"
+			return m, nil
+		}
+		a.steps = append(a.steps, remote.ViewArgv(j, name, m.opt.Socket))
 	}
-	a.steps = [][]string{remote.ViewArgv(j, name, m.opt.Socket)}
 	return m.runInto(a)
 }
 
@@ -261,16 +283,47 @@ func sameWindow(run func(args ...string) (string, error), console, pane string) 
 
 // besideRun respawns the agent pane with a's view off the update loop, and
 // gives it the keys. Where the agent pane is gone it is made again first.
-// Where one pane shows, the agent's is zoomed.
+// Where one pane shows, the agent's is zoomed. A chain view it replaces
+// closes first; a chain's views split the agent pane.
 func (m Model) besideRun(a action) tea.Cmd {
 	run := m.tmuxRun()
-	if run == nil || len(a.steps) != 1 {
+	if run == nil || !a.closing && (len(a.steps) == 0 || len(a.steps) > 1 && len(a.chain) != len(a.steps)) {
 		return nil
 	}
 	console, accent, agent, winW, name := m.opt.Pane, hexOf(m.st.theme.Accent), m.beside, m.winW, m.besideName(a.host, a.pane)
+	names := make([]string, len(a.chain))
+	for i, k := range a.chain {
+		names[i] = m.besideName(a.host, k.pane)
+	}
 	return func() tea.Msg {
 		msg := shownMsg{agent: agent, host: a.host, pane: a.pane, name: name}
-		if !a.remote && sameWindow(run, console, a.pane) {
+		if a.closing {
+			endChain(run, console, cmp.Or(a.keep, agent))
+			msg.chainOff = true
+			if a.keep != "" && a.keep != agent {
+				if _, err := run(remote.BesideArgv(console, a.keep, accent)[1:]...); err != nil {
+					msg.err = err
+					return msg
+				}
+				msg.agent = a.keep
+			}
+			return msg
+		}
+		steps, on := a.steps, a.chain
+		if !a.remote && len(on) > 0 {
+			steps, on = nil, nil
+			for i, k := range a.chain {
+				if sameWindow(run, console, k.pane) {
+					msg.skipped = append(msg.skipped, names[i])
+					continue
+				}
+				steps, on = append(steps, a.steps[i]), append(on, k)
+			}
+			if len(on) == 0 {
+				msg.err = errOwnWindow
+				return msg
+			}
+		} else if !a.remote && sameWindow(run, console, a.pane) {
 			msg.err = errOwnWindow
 			return msg
 		}
@@ -286,7 +339,16 @@ func (m Model) besideRun(a action) tea.Cmd {
 			}
 			msg.agent = pane
 		}
-		if _, err := run(append([]string{"respawn-pane", "-k", "-t", msg.agent, "--"}, a.steps[0]...)...); err != nil {
+		msg.chainOff = endChain(run, console, msg.agent)
+		if len(on) > 0 {
+			chain, err := showChain(run, msg.agent, steps, on)
+			if err != nil {
+				msg.chainOff = endChain(run, console, msg.agent) || msg.chainOff
+				msg.err = err
+				return msg
+			}
+			msg.chain = chain
+		} else if _, err := run(append([]string{"respawn-pane", "-k", "-t", msg.agent, "--"}, steps[0]...)...); err != nil {
 			msg.err = err
 			return msg
 		}
@@ -302,11 +364,55 @@ func (m Model) besideRun(a action) tea.Cmd {
 	}
 }
 
+// showChain runs the chain's views in agent and the panes split from it,
+// one member of on each.
+func showChain(run func(args ...string) (string, error), agent string, views [][]string, on []paneKey) (*chainView, error) {
+	out, err := run(remote.ChainArgv(agent, views)[1:]...)
+	if err != nil {
+		return nil, err
+	}
+	c := &chainView{on: on, panes: make([]string, len(on))}
+	c.panes[0] = agent
+	for _, l := range strings.Split(strings.TrimSpace(out), "\n") {
+		i, pane, _ := strings.Cut(l, " ")
+		if n, err := strconv.Atoi(i); err == nil && n > 0 && n < len(on) && paneID.MatchString(pane) {
+			c.panes[n] = pane
+		}
+	}
+	if slices.Contains(c.panes, "") {
+		return nil, fmt.Errorf("tmux answered %q", out)
+	}
+	return c, nil
+}
+
+// endChain kills the panes of the window's chain view but keep, and
+// forgets the view. It tells whether there was one.
+func endChain(run func(args ...string) (string, error), console, keep string) bool {
+	out, err := run("show-option", "-wqv", "-t", console, sample.ChainOption)
+	panes := strings.Fields(out)
+	if err != nil || len(panes) == 0 {
+		return false
+	}
+	for _, p := range panes {
+		if p != keep && paneID.MatchString(p) {
+			_, _ = run("kill-pane", "-t", p)
+		}
+	}
+	_, _ = run("set-option", "-wu", "-t", console, sample.ChainOption)
+	return true
+}
+
 // besideShown takes the end of a choice: the agent pane stays current, and a
 // view that did not start says why.
 func (m Model) besideShown(msg shownMsg) (tea.Model, tea.Cmd) {
 	if msg.agent != "" {
 		m.beside = msg.agent
+	}
+	if msg.chainOff {
+		m.chain = nil
+	}
+	if msg.chain != nil {
+		m.chain = msg.chain
 	}
 	m.showing = false
 	if next := m.showNext; next != nil { // this choice is not the latest: it says nothing
@@ -320,6 +426,115 @@ func (m Model) besideShown(msg shownMsg) (tea.Model, tea.Cmd) {
 	case msg.err != nil:
 		m.flash = msg.name + " is not shown: " + msg.err.Error()
 		return m, nil
+	case len(msg.skipped) > 0:
+		m.flash = "not shown, in the console's own window: " + strings.Join(msg.skipped, ", ")
 	}
-	return m, m.tookOver(msg.host, msg.pane)
+	if msg.chain == nil {
+		return m, m.tookOver(msg.host, msg.pane)
+	}
+	var took []tea.Cmd
+	for _, k := range msg.chain.on {
+		took = append(took, m.tookOver(msg.host, k.pane))
+	}
+	return m, tea.Batch(took...)
+}
+
+// chainMost is the most members a chain view shows: 4 leave each agent
+// 60 × 15 or more on a 16-inch laptop.
+const chainMost = 4
+
+// chainView is a chain's members on screen beside the list: on[i] shows in
+// panes[i], and panes[0] is the agent pane.
+type chainView struct {
+	on    []paneKey
+	panes []string
+}
+
+// chainPlace is the place of s in the chain view; -1 where it is not on
+// screen.
+func (m Model) chainPlace(s sample.Session) int {
+	if m.chain == nil || !m.besideMode() {
+		return -1
+	}
+	return slices.Index(m.chain.on, paneOf(s))
+}
+
+// chainToggle is g beside the list: it opens the chosen row's chain view,
+// or closes the one open.
+func (m Model) chainToggle(s sample.Session, ok bool) (tea.Model, tea.Cmd) {
+	if m.chain != nil {
+		return m.closeChainBeside()
+	}
+	k, in := m.chainKeyOf(s)
+	switch {
+	case !ok:
+		return m, m.notice(m.noRowWhy())
+	case !in || k.isOne():
+		return m, m.notice(s.Name + " is in no chain")
+	}
+	return m.chainBeside(k)
+}
+
+// chainBeside shows up to chainMost members of chain k that run in tmux,
+// in the list's order, one pane each beside the list.
+func (m Model) chainBeside(k chainKey) (tea.Model, tea.Cmd) {
+	at := map[paneKey]sample.Session{}
+	for _, s := range m.sideSessions() {
+		at[paneOf(s)] = s
+	}
+	var on []paneKey
+	for _, p := range m.sideOrder() {
+		s, ok := at[p]
+		if in, member := m.chainKeyOf(s); ok && member && in == k && s.Pane != "" && !isShipCard(s) && len(on) < chainMost {
+			on = append(on, p)
+		}
+	}
+	name := m.chainLabel(k)
+	if len(on) == 0 {
+		m.flash = name + " is not shown: no member runs in tmux"
+		return m, nil
+	}
+	if h := cmp.Or(k.host, m.opt.Host); m.takeOverOn(h) {
+		m.held, m.heldOn, m.flash = func(m Model) (tea.Model, tea.Cmd) { return m.chainOn(k.host, name, on) }, h, ""
+		return m, nil
+	}
+	return m.chainOn(k.host, name, on)
+}
+
+// chainOn runs the chain view of host's members on.
+func (m Model) chainOn(host, name string, on []paneKey) (tea.Model, tea.Cmd) {
+	host = cmp.Or(host, m.opt.Host)
+	panes := make([]string, len(on))
+	for i, k := range on {
+		panes[i] = k.pane
+	}
+	return m.viewsOn(&action{label: "show " + name, beside: true, pane: panes[0], host: host, chain: on}, name, panes)
+}
+
+// closeChainBeside closes the chain view: one agent pane shows again, the
+// chosen row's. A member on screen keeps its pane; another row shows as ⏎
+// shows it.
+func (m Model) closeChainBeside() (tea.Model, tea.Cmd) {
+	a := action{label: "close the chain view", beside: true, closing: true}
+	if s, ok := m.sideChosen(); ok {
+		switch i := m.chainPlace(s); {
+		case i > 0:
+			a.keep = m.chain.panes[i]
+		case i < 0 && s.Pane != "" && !isShipCard(s):
+			return m.showChosen()
+		}
+	}
+	return m.startShow(a)
+}
+
+// selectPane gives pane the keys.
+func (m Model) selectPane(pane string) tea.Cmd {
+	run := m.tmuxRun()
+	if run == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		_, _ = run("select-pane", "-Z", "-t", pane)
+		return nil
+	}
 }

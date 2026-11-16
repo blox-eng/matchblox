@@ -238,6 +238,9 @@ type action struct {
 	asker       bool                        // a jump of this machine's tmux: it moves only its tty's client, else the desk's
 	deskLocal   func(tty string) []string   // a host jump of an unmarked key: its local list for the desk's client
 	beside      bool                        // it shows the session in the agent pane: steps[0] is the pane's command
+	chain       []paneKey                   // a chain view: the member each of steps shows
+	closing     bool                        // it closes the chain view and runs no step
+	keep        string                      // a close: the member's pane that stays the agent pane; "" the agent pane
 }
 
 // recRun is an act on a recommendation: the row shows its outcome.
@@ -599,10 +602,11 @@ type Model struct {
 	sideTip                   int
 	sideHost                  string // the host whose trouble the host place shows
 	sideIn                    paneKey
-	beside                    string  // the agent pane's id; "" before the split, and where it failed
-	winW                      int     // the window's width in beside mode; 0: not read yet
-	showing                   bool    // a choice runs in the agent pane
-	showNext                  *action // the choice made while one ran: it runs next
+	beside                    string     // the agent pane's id; "" before the split, and where it failed
+	winW                      int        // the window's width in beside mode; 0: not read yet
+	showing                   bool       // a choice runs in the agent pane
+	showNext                  *action    // the choice made while one ran: it runs next
+	chain                     *chainView // the chain view beside the list; nil while one agent shows
 }
 
 func New(opt Options) Model {

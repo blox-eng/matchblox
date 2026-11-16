@@ -45,3 +45,33 @@ func ZoomArgv(pane string, zoom bool) []string {
 	}
 	return []string{"tmux", "if-shell", "-F", "#{window_zoomed_flag}", "resize-pane -Z -t " + pane}
 }
+
+// ChainArgv shows a chain's views in the agent pane beside and in panes
+// split from it, in the console's right column only: views[0] in beside,
+// 2 views one above the other, 3 or 4 a 2 × 2 grid, the 4th cell only with
+// a 4th view. Each split prints "i %id", the view it shows and its pane, and
+// the window's @matchblox_chain names beside and every pane split.
+func ChainArgv(beside string, views [][]string) []string {
+	cmds := [][]string{
+		append([]string{"respawn-pane", "-k", "-t", beside, "--"}, views[0]...),
+		{"set-option", "-w", "-t", beside, sample.ChainOption, beside},
+	}
+	// A split without -d makes its pane the target of the commands after it
+	// that name none: the 4th view splits the 3rd, and each set-option adds
+	// the pane just split.
+	split := func(i int, dir string, target ...string) {
+		c := append(append([]string{"split-window", dir}, target...), "-P", "-F", strconv.Itoa(i)+" #{pane_id}", "--")
+		cmds = append(cmds, append(c, views[i]...), []string{"set-option", "-awF", sample.ChainOption, " #{pane_id}"})
+	}
+	switch len(views) {
+	case 2:
+		split(1, "-v", "-t", beside)
+	case 3, 4:
+		split(2, "-v", "-t", beside)
+		if len(views) == 4 {
+			split(3, "-h")
+		}
+		split(1, "-h", "-t", beside)
+	}
+	return tmuxList(cmds...)
+}

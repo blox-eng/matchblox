@@ -252,6 +252,8 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 		case m.filter != "":
 			m.filter, m.peekAt = "", m.now()
 			m.refresh()
+		case m.chain != nil && m.besideMode():
+			return m.closeChainBeside()
 		case m.room != nil:
 			m = m.closeRoom()
 		case m.boardChain != "":
@@ -267,6 +269,10 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 		}
 	case bkey.Matches(k, sk.Unhide):
 		cmd = m.unhide()
+	case bkey.Matches(k, bk.Room) && m.besideMode():
+		cmd = m.boardChainOf(s, ok)
+	case bkey.Matches(k, bk.Chain) && m.besideMode():
+		return m.chainToggle(s, ok)
 	case bkey.Matches(k, bk.Chain):
 		cmd = m.boardChainOf(s, ok)
 	case bkey.Matches(k, bk.Menu) && ok:

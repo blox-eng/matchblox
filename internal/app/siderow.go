@@ -69,6 +69,9 @@ func (m Model) sideRow(s sample.Session, w int, chosen bool, link sideLink) []st
 	right := rest.Render(m.sideRight(s)) + " " + rest.Render(harnessMark(s))
 	title := m.sideTitle(s)
 	left := mark + lead + m.sideMatch(s, h) + " "
+	if m.chainPlace(s) >= 0 {
+		left += m.st.accent.Render("▸") + " "
+	}
 	room := w - lipgloss.Width(left+right) - 1
 	line := spread(left+name.Render(ansi.Truncate(title, max(room, 1), "…")), right, w)
 	if !two {

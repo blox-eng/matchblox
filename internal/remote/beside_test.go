@@ -29,3 +29,23 @@ func TestBesideArgvNamesBothPanesAndPaintsTheBorder(t *testing.T) {
 		}
 	}
 }
+
+func TestChainArgvSplitsTheAgentPaneOnly(t *testing.T) {
+	views := [][]string{{"v0"}, {"v1"}, {"v2"}, {"v3"}}
+	two := strings.Join(ChainArgv("%9", views[:2]), " ")
+	for _, want := range []string{"tmux respawn-pane -k -t %9 -- v0 ;", "set-option -w -t %9 @matchblox_chain %9", "split-window -v -t %9 -P -F 1 #{pane_id} -- v1"} {
+		if !strings.Contains(two, want) {
+			t.Errorf("no %q in %q", want, two)
+		}
+	}
+	if strings.Count(two, "split-window") != 1 {
+		t.Errorf("2 views: %q", two)
+	}
+	four := strings.Join(ChainArgv("%9", views), " ")
+	if strings.Count(four, "split-window") != 3 || strings.Count(four, "set-option -awF @matchblox_chain") != 3 {
+		t.Errorf("4 views: %q", four)
+	}
+	if three := strings.Join(ChainArgv("%9", views[:3]), " "); strings.Contains(three, "v3") || strings.Count(three, "split-window") != 2 {
+		t.Errorf("3 views: %q", three)
+	}
+}

@@ -3,12 +3,14 @@ package app
 import (
 	"errors"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/blox-eng/matchblox/internal/chains"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -22,6 +24,7 @@ type besideTmux struct {
 	alive bool     // the pane kept answers
 	own   []string // other panes in the console's window
 	using string   // the window's active pane, "" when tmux does not say
+	chain string   // the window's @matchblox_chain
 	calls [][]string
 }
 
@@ -29,7 +32,12 @@ func (b *besideTmux) run(args ...string) (string, error) {
 	b.calls = append(b.calls, args)
 	switch args[0] {
 	case "show-option":
+		if args[len(args)-1] == sample.ChainOption {
+			return b.chain + "\n", nil
+		}
 		return b.kept + "\n", nil
+	case "respawn-pane":
+		return b.chainList(args), nil
 	case "display":
 		if args[len(args)-1] == "#{window_id}" {
 			if args[3] == "%1" || args[3] == "%9" || slices.Contains(b.own, args[3]) {
@@ -50,6 +58,23 @@ func (b *besideTmux) run(args ...string) (string, error) {
 		return "\n" + b.using + "\n", nil
 	}
 	return "", nil
+}
+
+// chainList answers a chain view's list: each split's "i %2i", and the
+// window's @matchblox_chain.
+func (b *besideTmux) chainList(args []string) string {
+	if !slices.Contains(args, sample.ChainOption) {
+		return ""
+	}
+	var out, ids []string
+	for i, a := range args {
+		if a == "-F" && strings.HasSuffix(args[i+1], " #{pane_id}") {
+			n := strings.TrimSuffix(args[i+1], " #{pane_id}")
+			out, ids = append(out, n+" %2"+n), append(ids, "%2"+n)
+		}
+	}
+	b.chain = strings.Join(append([]string{args[3]}, ids...), " ")
+	return strings.Join(out, "\n") + "\n"
 }
 
 func (b *besideTmux) lines() []string {
@@ -557,5 +582,196 @@ func TestTheShellKeepsTheAgentPane(t *testing.T) {
 	there, _ := sh.open("ws-1", false)
 	if there.cur.opt.Beside {
 		t.Fatal("a host's console splits the window")
+	}
+}
+
+// chainOf is the board's fixture with the chain login made of names, each
+// in a pane of its own outside the console's window: %40, %41 and on.
+func chainOf(t *testing.T, names ...string) proto.State {
+	t.Helper()
+	st := boardFixture(t)
+	var ms []chains.Member
+	for n, name := range names {
+		i := slices.IndexFunc(st.Sessions, func(s sample.Session) bool { return s.Name == name })
+		if i < 0 {
+			t.Fatalf("no %s in the fixture", name)
+		}
+		st.Sessions[i].Pane = "%4" + strconv.Itoa(n)
+		ms = append(ms, memberOf(st.Sessions[i]))
+	}
+	st.Chains.Chains[0].Members = ms
+	return st
+}
+
+// chainShown is a beside console that pressed g on kindle-web, a member of
+// st's chain login.
+func chainShown(t *testing.T, st proto.State) (Model, *besideTmux) {
+	t.Helper()
+	m, tm := besideConsoleWith(t, st, 40, 50, &besideTmux{winW: "160", alive: true})
+	m.opt.Socket = "/tmp/tmux-1000/default"
+	next, cmd := key(chooseNamed(t, m, "kindle-web"), "g")
+	return afterChoice(next, cmd), tm
+}
+
+var loginNames = []string{"kindle-web", "flint-auth", "hearth-api"}
+
+func TestGOpensTheChainBeside(t *testing.T) {
+	m, tm := chainShown(t, chainOf(t, loginNames...))
+	r := respawned(tm)
+	if !strings.HasPrefix(r, "respawn-pane -k -t %9 -- ") || !strings.Contains(r, "set-option -w -t %9 @matchblox_chain %9") {
+		t.Fatalf("respawn %q in %q (flash %q)", r, tm.lines(), m.flash)
+	}
+	for _, n := range loginNames {
+		if !strings.Contains(r, n) {
+			t.Errorf("no view of %s in %q", n, r)
+		}
+	}
+	if n := strings.Count(strings.Join(tm.lines(), "\n"), "split-window"); n != 3 {
+		t.Fatalf("%d splits (one at the start): %q", n, tm.lines())
+	}
+	if n := strings.Count(plainFrame(m), "▸"); n != 3 {
+		t.Fatalf("%d members marked on screen:\n%s", n, plainFrame(m))
+	}
+}
+
+func TestAChainViewShowsAtMostFour(t *testing.T) {
+	six := []string{"kindle-web", "flint-auth", "hearth-api", "spark-search", "hearth-limits", "flint-api"}
+	m, tm := chainShown(t, chainOf(t, six...))
+	var drawn []string
+	for _, k := range m.sideOrder() {
+		for _, s := range m.sideSessions() {
+			if paneOf(s) == k && slices.Contains(six, s.Name) && !slices.Contains(drawn, s.Name) {
+				drawn = append(drawn, s.Name)
+			}
+		}
+	}
+	r := respawned(tm)
+	for i, n := range drawn {
+		if on := strings.Contains(r, "sh "+n+" "); on != (i < 4) {
+			t.Errorf("%s (drawn %d) on screen: %v in %q", n, i+1, on, r)
+		}
+	}
+	if n := strings.Count(r, "split-window"); n != 3 {
+		t.Fatalf("%d splits for 4: %q", n, r)
+	}
+}
+
+func TestAChainViewSkipsAnEndedMember(t *testing.T) {
+	st := chainOf(t, loginNames...)
+	for i := range st.Sessions {
+		if st.Sessions[i].Name == "hearth-api" {
+			st.Sessions[i].Pane = ""
+		}
+	}
+	_, tm := chainShown(t, st)
+	r := respawned(tm)
+	if strings.Contains(r, "hearth-api") || strings.Count(r, "split-window") != 1 {
+		t.Fatalf("respawn %q: want kindle-web and flint-auth, one split", r)
+	}
+}
+
+func TestAChainViewSkipsAMemberInTheConsolesWindow(t *testing.T) {
+	m, tm := besideConsoleWith(t, chainOf(t, loginNames...), 40, 50, &besideTmux{winW: "160", alive: true, own: []string{"%41"}})
+	m.opt.Socket = "/tmp/tmux-1000/default"
+	next, cmd := key(chooseNamed(t, m, "kindle-web"), "g")
+	m = afterChoice(next, cmd)
+	if r := respawned(tm); strings.Contains(r, "flint-auth") || strings.Count(r, "split-window") != 1 {
+		t.Fatalf("respawn %q: want flint-auth left out", r)
+	}
+	if !strings.Contains(m.flash, "console's own window: flint-auth") {
+		t.Fatalf("flash %q", m.flash)
+	}
+}
+
+func TestGAgainClosesTheChainView(t *testing.T) {
+	m, tm := chainShown(t, chainOf(t, loginNames...))
+	next, cmd := key(m, "g")
+	m = afterChoice(next, cmd)
+	lines := strings.Join(tm.lines(), "\n")
+	for _, want := range []string{"kill-pane -t %21", "kill-pane -t %22", "set-option -wu -t %1 @matchblox_chain"} {
+		if !strings.Contains(lines, want) {
+			t.Errorf("no %q in %q", want, lines)
+		}
+	}
+	if strings.Contains(lines, "kill-pane -t %9") {
+		t.Errorf("the agent pane was killed: %q", lines)
+	}
+	if strings.Contains(plainFrame(m), "▸") {
+		t.Fatalf("a member is still marked:\n%s", plainFrame(m))
+	}
+}
+
+func TestEscClosesTheChainViewOnTheChosenMember(t *testing.T) {
+	m, tm := chainShown(t, chainOf(t, loginNames...))
+	m = chooseNamed(t, m, "flint-auth")
+	i := slices.Index(m.chain.on, m.sideAt)
+	if i < 1 {
+		t.Fatalf("flint-auth is view %d", i)
+	}
+	keep := m.chain.panes[i]
+	next, cmd := key(m, "esc")
+	m = afterChoice(next, cmd)
+	lines := strings.Join(tm.lines(), "\n")
+	if !strings.Contains(lines, "kill-pane -t %9") || strings.Contains(lines, "kill-pane -t "+keep) {
+		t.Fatalf("want every pane but flint-auth's %s killed: %q", keep, lines)
+	}
+	if m.beside != keep || !strings.Contains(lines, "@matchblox_beside "+keep) {
+		t.Fatalf("beside = %q, want %s: %q", m.beside, keep, lines)
+	}
+	if m.chain != nil {
+		t.Fatal("the chain view is still open")
+	}
+}
+
+func TestEnterOnAMemberOnScreenGivesItsPaneTheKeys(t *testing.T) {
+	m, tm := chainShown(t, chainOf(t, loginNames...))
+	m = chooseNamed(t, m, "hearth-api")
+	pane := m.chain.panes[slices.Index(m.chain.on, m.sideAt)]
+	before := len(tm.calls)
+	next, cmd := key(m, "enter")
+	afterChoice(next, cmd)
+	got := strings.Join(tm.lines()[before:], "\n")
+	if !strings.Contains(got, "select-pane -Z -t "+pane) || strings.Contains(got, "respawn-pane") || strings.Contains(got, "kill-pane") {
+		t.Fatalf("after ⏎: %q", got)
+	}
+}
+
+func TestBigGOpensTheRoom(t *testing.T) {
+	m, tm := besideConsoleWith(t, chainOf(t, loginNames...), 40, 50, &besideTmux{winW: "160", alive: true})
+	next, cmd := key(chooseNamed(t, m, "kindle-web"), "G")
+	m = afterChoice(next, cmd)
+	if m.room == nil || m.room.k.id != "c1" {
+		t.Fatalf("room %v", m.room)
+	}
+	if r := respawned(tm); r != "" {
+		t.Fatalf("G respawned %q", r)
+	}
+}
+
+func TestAPeerChainAsksOnceBeforeItShows(t *testing.T) {
+	home, ws := newFake(), newFake()
+	tm := &besideTmux{winW: "160", alive: true}
+	opt := Options{NoMotion: true, Conn: home, Now: func() time.Time { return demoAt }, Beside: true, Pane: "%1", Tmux: tm.run,
+		Peers: []Peer{{Host: "ws-1", Conn: ws}}}
+	var next tea.Model = New(opt)
+	next, _ = next.Update(tea.WindowSizeMsg{Width: 40, Height: 50})
+	next, _ = next.Update(stateMsg(proto.State{}))
+	next, _ = next.Update(peerMsg{host: "ws-1", conn: ws, msg: stateMsg(chainOf(t, loginNames...))})
+	m := next.(Model)
+	m.splashDone = true
+	m = feed(t, m, m.besideCmd())
+	next, cmd := key(chooseNamed(t, m, "kindle-web"), "g")
+	m = afterChoice(next, cmd)
+	if m.pending == nil || respawned(tm) != "" {
+		t.Fatalf("pending %v, respawn %q: want one consent box first", m.pending != nil, respawned(tm))
+	}
+	next, cmd = key(m, "y")
+	m = afterChoice(next, cmd)
+	r := respawned(tm)
+	if n := strings.Count(r, " ssh -t "); n != 3 {
+		t.Fatalf("%d ssh views in %q (flash %q)", n, r, m.flash)
+	}
+	if m.pending != nil {
+		t.Fatal("a second consent box")
 	}
 }
