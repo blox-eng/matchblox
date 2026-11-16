@@ -355,6 +355,11 @@ func TestNoGH(t *testing.T) {
 	for err, note := range map[error]string{
 		errors.New("exit status 4: To get started with GitHub CLI, please run:  gh auth login"): "state unknown · gh not signed in",
 		errNoGH: "state unknown · gh not installed",
+		// gh with an invalid token reads GitHub signed out, and signed out
+		// GitHub allows 60 calls an hour per address: its refusal names the
+		// rate limit, but signing in is the fix (owner, 2026-11-16: the
+		// "rate limit is low" line never went away).
+		errors.New("exit status 1: gh: API rate limit exceeded for 203.0.113.7. (But here's the good news: Authenticated requests get a higher rate limit. Check out the documentation for more details.) (HTTP 403)"): "state unknown · gh not signed in",
 	} {
 		w := newWorld(t)
 		w.ghErr = err
@@ -362,6 +367,9 @@ func TestNoGH(t *testing.T) {
 		s := find(rep, 4557)
 		if s == nil || s.Kind != Unknown || s.Note != note || s.URL != "https://github.com/hearth/hearth/pull/4557" {
 			t.Fatalf("%v: %+v", err, s)
+		}
+		if !rep.Paused.IsZero() {
+			t.Fatalf("%v: paused until %v, as if the rate limit were the cause", err, rep.Paused)
 		}
 	}
 }
