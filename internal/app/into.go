@@ -29,7 +29,7 @@ func (m Model) goInto(host, pane string) (tea.Model, tea.Cmd) {
 // or a refusal, waits for Enter, as every act of a host.
 func (m Model) runInto(a *action) (tea.Model, tea.Cmd) {
 	if a.beside && !a.remote {
-		return m, m.besideRun(*a)
+		return m.startShow(*a)
 	}
 	if a.nav && !a.remote {
 		return m.confirm(*a)

@@ -599,8 +599,10 @@ type Model struct {
 	sideTip                   int
 	sideHost                  string // the host whose trouble the host place shows
 	sideIn                    paneKey
-	beside                    string // the agent pane's id; "" before the split, and where it failed
-	winW                      int    // the window's width in beside mode; 0: not read yet
+	beside                    string  // the agent pane's id; "" before the split, and where it failed
+	winW                      int     // the window's width in beside mode; 0: not read yet
+	showing                   bool    // a choice runs in the agent pane
+	showNext                  *action // the choice made while one ran: it runs next
 }
 
 func New(opt Options) Model {

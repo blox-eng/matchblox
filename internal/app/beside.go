@@ -2,6 +2,7 @@ package app
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
 	"image/color"
 	"regexp"
@@ -194,13 +195,9 @@ func (m Model) besideOn(host, pane string) (tea.Model, tea.Cmd) {
 	if host != "" {
 		_, ssh, b := m.peerJump(remote.Jump{Host: host, Pane: pane}, a)
 		if ssh != nil {
-			b.steps, b.say, b.nav, b.remote = [][]string{ssh}, shellLine(ssh), true, true
+			b.steps, b.say, b.nav, b.remote = [][]string{remote.PeerViewArgv(name, ssh)}, shellLine(ssh), true, true
 		}
 		return m.runInto(b)
-	}
-	if pane == m.opt.Pane || pane == m.beside {
-		m.flash = name + " is in the console's own window: " + m.keys.main.Jump.Help().Key + " opens it"
-		return m, nil
 	}
 	if m.opt.Socket == "" {
 		m.flash = name + " is not shown: the console does not know its tmux socket ($TMUX names none); " + m.keys.main.Jump.Help().Key + " opens it"
@@ -216,14 +213,40 @@ func (m Model) besideOn(host, pane string) (tea.Model, tea.Cmd) {
 }
 
 // besideName is the name the list shows for host's pane; the pane id when the
-// list has none.
+// list has none, or a name a view cannot print.
 func (m Model) besideName(host, pane string) string {
 	for _, s := range m.all.sessions {
-		if cmp.Or(s.Host, m.opt.Host) == host && s.Pane == pane {
-			return m.cardName(s)
+		if name := m.cardName(s); cmp.Or(s.Host, m.opt.Host) == host && s.Pane == pane && remote.ViewNameAllowed(name) {
+			return name
 		}
 	}
 	return pane
+}
+
+// startShow runs a choice in the agent pane, one at a time: a choice made
+// while one runs waits, and a later one takes its place.
+func (m Model) startShow(a action) (Model, tea.Cmd) {
+	if m.showing {
+		m.showNext = &a
+		return m, nil
+	}
+	cmd := m.besideRun(a)
+	m.showing = cmd != nil
+	return m, cmd
+}
+
+// errOwnWindow: the chosen pane is in the console's window, and a view of
+// it would show the view itself.
+var errOwnWindow = errors.New("in the console's own window")
+
+// sameWindow: tmux has pane in the console's window.
+func sameWindow(run func(args ...string) (string, error), console, pane string) bool {
+	here, err := run("display", "-p", "-t", console, "#{window_id}")
+	if err != nil {
+		return false
+	}
+	there, err := run("display", "-p", "-t", pane, "#{window_id}")
+	return err == nil && strings.TrimSpace(there) == strings.TrimSpace(here)
 }
 
 // besideRun respawns the agent pane with a's view off the update loop, and
@@ -237,6 +260,10 @@ func (m Model) besideRun(a action) tea.Cmd {
 	console, accent, agent, winW, name := m.opt.Pane, hexOf(m.st.theme.Accent), m.beside, m.winW, m.besideName(a.host, a.pane)
 	return func() tea.Msg {
 		msg := shownMsg{agent: agent, host: a.host, pane: a.pane, name: name}
+		if !a.remote && sameWindow(run, console, a.pane) {
+			msg.err = errOwnWindow
+			return msg
+		}
 		w := windowWidth(run, console)
 		if w == 0 {
 			w = winW
@@ -271,7 +298,16 @@ func (m Model) besideShown(msg shownMsg) (tea.Model, tea.Cmd) {
 	if msg.agent != "" {
 		m.beside = msg.agent
 	}
-	if msg.err != nil {
+	m.showing = false
+	if next := m.showNext; next != nil { // this choice is not the latest: it says nothing
+		m.showNext = nil
+		return m.startShow(*next)
+	}
+	switch {
+	case errors.Is(msg.err, errOwnWindow):
+		m.flash = msg.name + " is in the console's own window: " + m.keys.main.Jump.Help().Key + " opens it"
+		return m, nil
+	case msg.err != nil:
 		m.flash = msg.name + " is not shown: " + msg.err.Error()
 		return m, nil
 	}

@@ -279,6 +279,12 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 		return m.rowAct(k, s)
 	case bkey.Matches(k, mk.New, mk.Search, mk.NextTab, mk.PrevTab):
 		return m.key(k)
+	case printsText(k) && m.besideMode():
+		said := "the agent pane takes text"
+		if ok {
+			said += " · " + sk.Enter.Help().Key + " shows " + m.cardName(s)
+		}
+		cmd = m.notice(said)
 	case printsText(k):
 		m.toLine()
 		return m.lineKey(k, s, ok)

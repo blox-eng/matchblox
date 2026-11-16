@@ -18,8 +18,9 @@ import (
 // window's width and the new pane's id.
 type besideTmux struct {
 	winW  string
-	kept  string // the window's @matchblox_beside, "" when unset
-	alive bool   // the pane kept answers
+	kept  string   // the window's @matchblox_beside, "" when unset
+	alive bool     // the pane kept answers
+	own   []string // other panes in the console's window
 	calls [][]string
 }
 
@@ -29,6 +30,12 @@ func (b *besideTmux) run(args ...string) (string, error) {
 	case "show-option":
 		return b.kept + "\n", nil
 	case "display":
+		if args[len(args)-1] == "#{window_id}" {
+			if args[3] == "%1" || args[3] == "%9" || slices.Contains(b.own, args[3]) {
+				return "@1\n", nil
+			}
+			return "@2\n", nil
+		}
 		if args[len(args)-1] == "#{pane_id}" {
 			if !b.alive {
 				return "", errors.New("can't find pane: " + args[3])
@@ -327,7 +334,7 @@ func TestAPeerAgentAsksBeforeItShows(t *testing.T) {
 	next, cmd = key(m, "y")
 	afterChoice(next, cmd)
 	r := respawned(tm)
-	if !strings.HasPrefix(r, "respawn-pane -k -t %9 -- ssh") || !strings.Contains(r, "ws-1") {
+	if !strings.HasPrefix(r, "respawn-pane -k -t %9 -- /bin/sh") || !strings.Contains(r, " ssh ") || !strings.Contains(r, "ws-1") {
 		t.Fatalf("respawn %q in %q", r, tm.lines())
 	}
 }
@@ -427,4 +434,92 @@ func tapRow(t *testing.T, m Model, name string) (tea.Model, tea.Cmd) {
 	}
 	t.Fatalf("no row of %s", name)
 	return nil, nil
+}
+
+func TestAPeerViewWaitsWhenItEnds(t *testing.T) {
+	home, ws := newFake(), newFake()
+	tm := &besideTmux{winW: "160", alive: true}
+	opt := Options{NoMotion: true, Conn: home, Now: func() time.Time { return demoAt }, Beside: true, Pane: "%1", Tmux: tm.run,
+		Peers: []Peer{{Host: "ws-1", Conn: ws}}}
+	var next tea.Model = New(opt)
+	next, _ = next.Update(tea.WindowSizeMsg{Width: 40, Height: 50})
+	next, _ = next.Update(stateMsg(proto.State{}))
+	next, _ = next.Update(peerMsg{host: "ws-1", conn: ws, msg: stateMsg(boardFixture(t))})
+	m := next.(Model)
+	m.splashDone = true
+	m = feed(t, m, m.besideCmd())
+	next, cmd := key(chooseNamed(t, m, "kindle-web"), "enter")
+	next, cmd = key(afterChoice(next, cmd), "y")
+	afterChoice(next, cmd)
+	if r := respawned(tm); !strings.Contains(r, "-- /bin/sh -c") || !strings.Contains(r, "ctrl+q: back to the list") || !strings.Contains(r, " ssh ") {
+		t.Fatalf("the peer's ssh is not wrapped: %q", r)
+	}
+}
+
+func TestTypingInTheListSaysTheAgentPaneTakesText(t *testing.T) {
+	m, _ := shownAt(t, "kindle-web", "160")
+	said := map[string]string{}
+	for _, k := range []string{"h", "e", "l", "l", "o"} { // h, e and o are the list's own keys
+		next, _ := key(m, k)
+		m = next.(Model)
+		said[k] = m.sideSays()
+	}
+	for k, v := range m.lines {
+		if v != "" {
+			t.Fatalf("typed into the line of %v: %q", k, v)
+		}
+	}
+	if !strings.Contains(said["l"], "the agent pane takes text") || !strings.Contains(said["l"], "⏎ shows kindle-web") {
+		t.Fatalf("l says %q", said["l"])
+	}
+}
+
+func TestTwoQuickChoicesSplitOnceAndShowTheSecond(t *testing.T) {
+	m, tm := besideConsole(t, boardFixture(t), 40, 50, "160") // %9 gone
+	m.opt.Socket = "/tmp/tmux-1000/default"
+	m.opt.Tmux = func(args ...string) (string, error) {
+		if args[0] == "split-window" {
+			defer func() { tm.alive = true }()
+		}
+		return tm.run(args...)
+	}
+	next, first := key(chooseNamed(t, m, "kindle-web"), "enter")
+	next, second := key(chooseNamed(t, next.(Model), "flint-auth"), "enter")
+	m = next.(Model)
+	// The second runs first, as a race would run it.
+	for _, cmd := range []tea.Cmd{second, first} {
+		for _, msg := range cmdMsgs(cmd) {
+			var more tea.Cmd
+			next, more = m.Update(msg)
+			m = afterChoice(next, more)
+		}
+	}
+	if n := tm.count("split-window"); n != 2 {
+		t.Fatalf("%d splits (one at the start): %q", n, tm.lines())
+	}
+	var shown []string
+	for _, l := range tm.lines() {
+		if strings.HasPrefix(l, "respawn-pane") {
+			shown = append(shown, l)
+		}
+	}
+	if len(shown) == 0 || !strings.Contains(shown[len(shown)-1], "flint-auth") {
+		t.Fatalf("respawns %q: the last is not flint-auth", shown)
+	}
+	if m.showing {
+		t.Fatal("a choice still runs")
+	}
+}
+
+func TestAPaneOfTheConsolesWindowIsNotShown(t *testing.T) {
+	m, tm := shownAt(t, "kindle-web", "160")
+	s, _ := m.sideChosen()
+	tm.own = []string{s.Pane}
+	m = enter(t, m)
+	if r := respawned(tm); r != "" {
+		t.Fatalf("respawned %q", r)
+	}
+	if !strings.Contains(m.flash, "console's own window") || !strings.Contains(m.flash, "ctrl+o") {
+		t.Fatalf("flash %q", m.flash)
+	}
 }

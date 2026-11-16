@@ -194,7 +194,7 @@ type connectedMsg struct {
 // returns at once.
 func (m Model) onHost(a action) (tea.Model, tea.Cmd) {
 	if a.beside {
-		return m, m.besideRun(a)
+		return m.startShow(a)
 	}
 	argv := a.steps[0]
 	if a.nav && !m.opt.OutsideTmux {

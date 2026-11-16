@@ -149,3 +149,33 @@ func TestAViewOfAGonePaneSaysSo(t *testing.T) {
 	})
 	waitFor(t, "no jump session left", func() bool { return len(e.jumpSessions()) == 0 })
 }
+
+func TestAPeerViewThatFailsSaysSoAndStays(t *testing.T) {
+	e := newViewEnv(t)
+	ssh := script(t, t.TempDir()+"/ssh", "#!/bin/sh\necho 'ssh: connect to host ws-1 port 22: Connection refused' >&2\nexit 255\n")
+	view := e.openView(t, PeerViewArgv("kindle-web", []string{ssh, "-t", "--", "ws-1", "true"}))
+	joined := func() string { out, _ := tmuxOut(e.sock, "capture-pane", "-p", "-J", "-t", view); return out }
+	waitFor(t, "the failure line", func() bool {
+		return strings.Contains(joined(), "kindle-web cannot be shown: ssh exited 255. ctrl+q: back to the list")
+	})
+	if !strings.Contains(joined(), "Connection refused") {
+		t.Fatalf("ssh's own words are gone:\n%s", joined())
+	}
+	time.Sleep(200 * time.Millisecond)
+	if out, err := tmuxOut(e.sock, "display", "-p", "-t", view, "#{pane_dead}"); err != nil || out != "0" {
+		t.Fatalf("the view pane must stay: dead=%q err=%v", out, err)
+	}
+}
+
+func TestAPeerViewThatEndsSaysSoAndStays(t *testing.T) {
+	e := newViewEnv(t)
+	ssh := script(t, t.TempDir()+"/ssh", "#!/bin/sh\nexit 0\n")
+	view := e.openView(t, PeerViewArgv("kindle-web", []string{ssh, "-t", "--", "ws-1", "true"}))
+	waitFor(t, "the ended line", func() bool {
+		return strings.Contains(e.capture(view), "kindle-web ended. ctrl+q: back to the list")
+	})
+	time.Sleep(200 * time.Millisecond)
+	if out, err := tmuxOut(e.sock, "display", "-p", "-t", view, "#{pane_dead}"); err != nil || out != "0" {
+		t.Fatalf("the view pane must stay: dead=%q err=%v", out, err)
+	}
+}
