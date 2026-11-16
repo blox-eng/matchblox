@@ -120,7 +120,9 @@ func (m Model) buildSideGroups() []sideGroup {
 		have := map[paneKey]bool{}
 		seen, _ := m.members(k)
 		for _, o := range seen {
-			if isListed[paneOf(o)] {
+			// A session in two chains is one row, in the chain it counts
+			// for: a second row would stop ↑↓, which walk by session.
+			if isListed[paneOf(o)] && !m.inOtherChain(o, k) {
 				ms = append(ms, o)
 				have[paneOf(o)] = true
 			}
@@ -202,4 +204,10 @@ func (m Model) buildSidePanes(folded bool) []paneKey {
 		}
 	}
 	return out
+}
+
+// inOtherChain is whether o counts for a chain other than k.
+func (m Model) inOtherChain(o sample.Session, k chainKey) bool {
+	own, ok := m.chainKeyOf(o)
+	return ok && own != k
 }

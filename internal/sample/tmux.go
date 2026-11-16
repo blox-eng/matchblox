@@ -305,3 +305,15 @@ func ClientActivity() time.Time {
 	}
 	return last
 }
+
+// The window options of a console with an agent beside it: the console's
+// pane, the agent's pane, and the chain the agent works in.
+const (
+	ConsoleOption = "@matchblox_console"
+	BesideOption  = "@matchblox_beside"
+	ChainOption   = "@matchblox_chain"
+)
+
+// ViewOption is the session option of a view's session (a jump's, shown in
+// a pane beside the list): the agent pane it shows.
+const ViewOption = "@matchblox_view"

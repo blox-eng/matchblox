@@ -141,7 +141,11 @@ func (m Model) shipsBehind() []string {
 		if !r.Paused.IsZero() {
 			says = append(says, on+"paused · GitHub's rate limit is low, ships read again at "+r.Paused.Local().Format("15:04"))
 		}
-		if r.Unknown != "" {
+		switch r.Unknown {
+		case "":
+		case "gh not signed in":
+			says = append(says, on+"GitHub cannot be read: gh not signed in · run gh auth login")
+		default:
 			says = append(says, on+"GitHub cannot be read: "+r.Unknown)
 		}
 		for _, e := range r.Errors {

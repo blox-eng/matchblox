@@ -28,6 +28,9 @@ func (m Model) goInto(host, pane string) (tea.Model, tea.Cmd) {
 // the app hears which pane, and whose, it goes to. Another host's ssh jump,
 // or a refusal, waits for Enter, as every act of a host.
 func (m Model) runInto(a *action) (tea.Model, tea.Cmd) {
+	if a.beside && !a.remote {
+		return m.startShow(*a)
+	}
 	if a.nav && !a.remote {
 		return m.confirm(*a)
 	}

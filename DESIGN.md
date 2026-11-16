@@ -297,6 +297,12 @@ Reduce Motion.
   the chain; `esc` shows all. On Narrow the stoker is a page of its own,
   first in the marks (`stoker NEEDS YOU 2 −  work 1 …`). The card's menu
   has `out of <chain>` only in its room. A match is never drawn twice.
+  With the agent beside the list (see Chat), `g` on a chain's row, or a
+  member's, tiles up to 4 members' own panes on the right instead, most
+  urgent first (2: one above the other; 3 or 4: a 2×2 grid). A member on
+  screen has `▸` in the list. A click gives a pane the keys, and tmux's
+  prefix `z` zooms one. `g` again, or `esc` (after a search clears), closes
+  the view. `G` opens the chain's room.
 - **Hosts:** a host is a filter: `s`, or a tap on `all hosts ▾`, turns to
   the next host, then all. A host that is not reached keeps one line at
   the top of the board, `macbook: not reached since 14:02 · ⏎ try again`,
@@ -379,6 +385,23 @@ Reduce Motion.
   on any other card it says `no ship of <name> waits for a merge`. `x`
   never merges. Why the ships may be behind (`paused · GitHub's rate limit
   is low, ships read again at 14:33`) shows in the strip's row.
+- **Agent beside the list** (owner, 2026-11-16, replacing the drawn chat
+  on a desk in tmux): the console's window has two panes, the list (40
+  columns; 32 on a mid, tall screen) and the agent's own pane. The right
+  pane is a live tmux view of the agent's pane, so typing there is typing
+  into the agent: `/commands`, `@files`, `esc`, menus, the mouse wheel.
+  `⏎` or a click or tap on a row shows that agent and gives it the keys;
+  `↑` `↓` only move the choice. `ctrl+q` flips the keys between the list
+  and the agent pane, in the console's window only; elsewhere it types.
+  `ctrl+o`, prefix `m`, the `◂` tap and the home APC work as before. A
+  take-over question and a peer's consent box come first; a peer's agent
+  opens over ssh. When the agent ends, the pane says `<name> ended. ctrl+q:
+  back to the list`; when it cannot be shown, it says why. On a narrow
+  window, or Pocket upright, one pane shows at a time. Text typed in the
+  list says `the agent pane takes text · ⏎ shows <name>`. A pane of the
+  console's own window is never shown there. The drawn chat below stays in
+  the demo, a console with no tmux, and a console outside its home session
+  or started for a host.
 - **Chat** (#261, owner 2026-10-29, replacing the peek of design/0006 §6):
   the chosen session's live screen, drawn inside the console. From 152
   columns it is the right side of the board; its frame title is
@@ -464,7 +487,8 @@ Reduce Motion.
   board. At night the wash is `night-wash` and the accent stays. A list
   row of Machine's views is chosen the same way.
 - **Keys:** each key is on a phone SSH key bar: digits, arrows, `Enter`,
-  `Esc` and letters. No `Ctrl` combinations. `Enter` never runs a
+  `Esc` and letters. No `Ctrl` combinations, except `ctrl+q` and `ctrl+o`,
+  which a hardware keyboard has. `Enter` never runs a
   destructive step; that needs its key (`x` kills, `p` merges) and then a
   typed `y`.
 - **Progress** (owner, 2026-10-08): the bar an agent draws in its last reply

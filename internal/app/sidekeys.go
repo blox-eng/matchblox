@@ -235,6 +235,8 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 	case bkey.Matches(k, sk.Enter) && m.footAt > 0:
 		parts := m.footParts()
 		return m.openFoot(parts[min(m.footAt, len(parts))-1].press)
+	case bkey.Matches(k, sk.Enter) && m.besideMode():
+		return m.showChosen()
 	case bkey.Matches(k, sk.Enter):
 		m.toLine()
 	case bkey.Matches(k, mk.Exited):
@@ -244,6 +246,8 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 		case m.filter != "":
 			m.filter, m.peekAt = "", m.now()
 			m.refresh()
+		case m.chain != nil && m.besideMode():
+			return m.closeChainBeside()
 		case m.room != nil:
 			m = m.closeRoom()
 		case m.boardChain != "":
@@ -259,6 +263,10 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 		}
 	case bkey.Matches(k, sk.Unhide):
 		cmd = m.unhide()
+	case bkey.Matches(k, bk.Room) && m.besideMode():
+		cmd = m.boardChainOf(s, ok)
+	case bkey.Matches(k, bk.Chain) && m.besideMode():
+		return m.chainToggle(s, ok)
 	case bkey.Matches(k, bk.Chain):
 		cmd = m.boardChainOf(s, ok)
 	case bkey.Matches(k, bk.Menu) && ok:
@@ -271,6 +279,12 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 		return m.rowAct(k, s)
 	case bkey.Matches(k, mk.New, mk.Search, mk.NextTab, mk.PrevTab):
 		return m.key(k)
+	case printsText(k) && m.besideMode():
+		said := "the agent pane takes text"
+		if ok {
+			said += " · " + sk.Enter.Help().Key + " shows " + m.cardName(s)
+		}
+		cmd = m.notice(said)
 	case printsText(k):
 		m.toLine()
 		return m.lineKey(k, s, ok)

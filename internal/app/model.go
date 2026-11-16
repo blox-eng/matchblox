@@ -142,6 +142,12 @@ type Options struct {
 	Clients func() ([]string, error)
 	// Pane is the console's own tmux pane (TMUX_PANE); "" outside tmux.
 	Pane string
+	// Beside: the console splits its tmux window and keeps the agent's pane
+	// beside the list. Set only for the console of the home session.
+	Beside bool
+	// Socket is the path of the console's own tmux server socket, the first
+	// field of $TMUX: the agent pane's view is a client of that server.
+	Socket string
 	// ClientList is tmux list-clients -F '#{client_activity} #{client_tty}
 	// #{pane_id}': who shows the console, for the client a jump moves. Nil:
 	// ask tmux.
@@ -231,6 +237,10 @@ type action struct {
 	tty         string                      // a jump or a switch: the marked client that asked; "" unmarked
 	asker       bool                        // a jump of this machine's tmux: it moves only its tty's client, else the desk's
 	deskLocal   func(tty string) []string   // a host jump of an unmarked key: its local list for the desk's client
+	beside      bool                        // it shows the session in the agent pane: steps[0] is the pane's command
+	chain       []paneKey                   // a chain view: the member each of steps shows
+	closing     bool                        // it closes the chain view and runs no step
+	keep        string                      // a close: the member's pane that stays the agent pane; "" the agent pane
 }
 
 // recRun is an act on a recommendation: the row shows its outcome.
@@ -592,6 +602,11 @@ type Model struct {
 	sideTip                   int
 	sideHost                  string // the host whose trouble the host place shows
 	sideIn                    paneKey
+	beside                    string     // the agent pane's id; "" before the split, and where it failed
+	winW, winH                int        // the window's size in beside mode; 0: not read yet
+	showing                   bool       // a choice runs in the agent pane
+	showNext                  *action    // the choice made while one ran: it runs next
+	chain                     *chainView // the chain view beside the list; nil while one agent shows
 }
 
 func New(opt Options) Model {
@@ -634,6 +649,7 @@ func (m Model) Init() tea.Cmd {
 		start = append(start, m.peerStart(i))
 	}
 	peers := tea.Batch(start...)
+	peers = tea.Batch(peers, m.besideCmd())
 	if err := m.opt.DialErr; err != nil && m.conn == nil {
 		return tea.Batch(tea.RequestBackgroundColor, func() tea.Msg { return lostMsg{err: err} }, m.splashCmd(), m.waitAsk(), peers)
 	}
@@ -835,6 +851,18 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.tallW, m.tallH = msg.Width, 0
 		}
 		m.tallH = max(m.tallH, msg.Height)
+		return m, m.sizeCmd(msg.Width)
+	case besideMsg:
+		if msg.err != nil {
+			m.flash = "the agent pane did not open: " + msg.err.Error()
+			return m, nil
+		}
+		m.beside = msg.pane
+		return m, m.sizeCmd(m.width)
+	case besideSizeMsg:
+		m.winW, m.winH = msg.w, msg.h
+	case shownMsg:
+		return m.besideShown(msg)
 	case fromConn:
 		if msg.conn != m.conn {
 			return m, nil

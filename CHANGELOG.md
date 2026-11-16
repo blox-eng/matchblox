@@ -6,6 +6,27 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Type straight into an agent beside the list.** On a desk, the console's
+  window has two panes: the list, and the agent's own pane. Typing there is
+  typing into the agent, with its /commands, @files and menus. ⏎ or a tap
+  on a row shows that agent, and `ctrl+q` flips the keys between the list
+  and the agent.
+- **g shows a chain's agents side by side.** On a chain's row, `g` tiles up
+  to four members' own panes on the right, most urgent first. `G` opens the
+  chain's room.
+
+### Fixed
+
+- **A session in two chains is one row.** It showed once under each
+  chain, and ↑↓ stopped at its second row.
+- **Signed-out gh no longer shows as rate limit.** A `gh` with an invalid
+  token reads GitHub signed out, and GitHub refuses it with a "rate limit
+  exceeded" for its address. The console paused and said "GitHub's rate
+  limit is low" all the time. It now says `gh not signed in · run gh auth
+  login`.
+
 ## [0.46.3] - 2026-11-16
 
 ### Fixed
