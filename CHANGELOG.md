@@ -10,7 +10,7 @@ All notable changes to matchblox are in this file. The format follows
 
 ### Fixed
 
-- **A desk pane as tall as a phone shows the list beside the chat.** Half
+- **A half-screen desk pane shows the list.** Half
   a laptop screen at 107 × 60 counted as a phone held upright, so it
   showed one pane and hid the list. Only Matchblox Pocket shows one pane
   for an upright screen now.
