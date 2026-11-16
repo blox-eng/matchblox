@@ -90,6 +90,27 @@ need to reinvent the wheel".
   changes the desk's right side. The tmux tools for agents work the same
   way: devices attach to one shared session. A view per device is not built.
 
+## A chain on one screen (second step)
+
+Owner, 2026-11-16: "on desktop, if I can see all sessions in a chain, like
+on a single screen I can see (up to X sessions) their panes in one screen".
+
+- On a desk, `g` on a chain's row (today: the chain's room) opens the
+  **chain view**: the list stays on the left, and the right side holds one
+  agent pane for each member of the chain, tiled (`select-layout tiled` on
+  the right-hand panes only). Each pane is that member's own view, as above.
+- Up to 4 members show (proposed: 4, the most that leave each agent 60 × 15
+  or more on a 16-inch laptop). A chain with more shows its most urgent 4,
+  and the list marks which members are on screen.
+- A click on a pane, or ⏎ on a member's row, gives that pane the keys.
+  `prefix z` (tmux's zoom) shows one member full size and back.
+- `esc` in the list, or `g` again, closes the chain view: the right side
+  shows one agent again, the chosen row's.
+- The chain's room (its stoker talk) opens with a key in the list (proposed:
+  `G`), as the chat's place opens it today.
+- This step builds after the single agent pane works: it uses the same view,
+  more than once.
+
 ## Non-goals
 
 - `join-pane`, `move-pane` or `swap-pane` of an agent's pane.
@@ -140,3 +161,6 @@ need to reinvent the wheel".
   `matchblox sessions` names both as before.
 - A session on a peer host opens on the right the same way, over ssh.
 - On Pocket, a tap on a row shows the agent full screen; `◂` shows the list.
+- On a desk, `g` on the chain `login` shows `kindle-web`, `flint-auth` and
+  `hearth-api` each in its own pane beside the list; a click on one types
+  into that agent.
