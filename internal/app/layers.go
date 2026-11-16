@@ -249,7 +249,9 @@ func (s Shell) openOn(host string, peers []string, first bool) (Shell, tea.Cmd) 
 	o.Clip = b.Clip
 	if host == "" {
 		o.Restart = b.Restart // a remote host's update leaves this console's binary as it is
+		o.Beside = b.Beside   // the agent pane is this desk's; a host's console keeps the drawn chat
 	}
+	o.Socket = b.Socket // a view is a client of this machine's tmux, whatever the host
 	// A jump starts from this machine's tmux, whatever the host.
 	o.OutsideTmux, o.Prefix, o.Home, o.LocalTmux, o.JumpID = b.OutsideTmux, b.Prefix, b.Home, b.LocalTmux, b.JumpID
 	o.Pane, o.ClientList = b.Pane, b.ClientList // the client a jump moves is one of this machine's

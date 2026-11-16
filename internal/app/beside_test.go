@@ -523,3 +523,21 @@ func TestAPaneOfTheConsolesWindowIsNotShown(t *testing.T) {
 		t.Fatalf("flash %q", m.flash)
 	}
 }
+
+// TestTheShellKeepsTheAgentPane: the console the shell opens for this
+// machine splits its window and shows views on the console's tmux socket,
+// as main asked; a host's console keeps the drawn chat.
+func TestTheShellKeepsTheAgentPane(t *testing.T) {
+	sh := NewShell(ShellOptions{
+		Base: Options{NoMotion: true, Beside: true, Socket: "/tmp/tmux-1000/default"},
+		Open: func(host string) Options { return Options{Conn: newFake(), Host: host} },
+	})
+	here, _ := sh.open("", false)
+	if o := here.cur.opt; !o.Beside || o.Socket != "/tmp/tmux-1000/default" {
+		t.Fatalf("this machine's console lost the agent pane: Beside %v, Socket %q", o.Beside, o.Socket)
+	}
+	there, _ := sh.open("ws-1", false)
+	if there.cur.opt.Beside {
+		t.Fatal("a host's console splits the window")
+	}
+}
