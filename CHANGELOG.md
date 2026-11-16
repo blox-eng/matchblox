@@ -11,7 +11,7 @@ All notable changes to matchblox are in this file. The format follows
 - **The list shows only sessions.** A pull request that no session drives
   no longer has a row of its own or counts as needing you. A session's own
   pull request stays a badge on its row.
-  ([#ISSUE](https://github.com/blox-eng/matchblox/issues/ISSUE))
+  ([#424](https://github.com/blox-eng/matchblox/issues/424))
 
 ## [0.46.0] - 2026-11-15
 
