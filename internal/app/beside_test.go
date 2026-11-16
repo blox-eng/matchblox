@@ -775,3 +775,11 @@ func TestAPeerChainAsksOnceBeforeItShows(t *testing.T) {
 		t.Fatal("a second consent box")
 	}
 }
+
+func TestTheBesideListHintSaysEnterShowsTheAgent(t *testing.T) {
+	m, _ := besideConsole(t, boardFixture(t), 40, 50, "160")
+	got := m.sideKeyWords()
+	if strings.Contains(got, "write") || !strings.Contains(got, "⏎ show") {
+		t.Fatalf("beside list hint = %q, want ⏎ show and no write", got)
+	}
+}

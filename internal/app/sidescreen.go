@@ -566,7 +566,11 @@ func (m Model) sideHints() (string, []hint) {
 		if m.room != nil { // the room stays open behind the chat: g brings it back
 			chain.label = "room"
 		}
-		return "in the list", []hint{hintFor(sk.Up, ""), hintFor(sk.Enter, "write"), hintFor(bk.Host, ""), chain, hintFor(bk.Menu, "")}
+		enter := "write"
+		if m.besideMode() { // the agent's own pane takes the text: ⏎ shows it
+			enter = "show"
+		}
+		return "in the list", []hint{hintFor(sk.Up, ""), hintFor(sk.Enter, enter), hintFor(bk.Host, ""), chain, hintFor(bk.Menu, "")}
 	}
 	name := "no session"
 	s, ok := m.sideChosen()
