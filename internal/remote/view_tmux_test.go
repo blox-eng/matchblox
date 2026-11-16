@@ -58,6 +58,20 @@ func (e viewEnv) capture(pane string) string {
 	return out
 }
 
+// explain logs, when the test fails, what the view showed and which
+// sessions were left: a timeout alone names no cause.
+func (e viewEnv) explain(t *testing.T, view string) {
+	t.Cleanup(func() {
+		if !t.Failed() {
+			return
+		}
+		v, _ := tmuxOut(e.sock, "-V")
+		ls, _ := tmuxOut(e.sock, "list-sessions", "-F", "#{session_name} group=#{session_group} attached=#{session_attached} windows=#{session_windows}")
+		cl, _ := tmuxOut(e.sock, "list-clients", "-F", "#{client_tty} #{client_session}")
+		t.Logf("%s\nsessions:\n%s\nclients:\n%s\nview %s shows:\n%s", v, ls, cl, view, e.capture(view))
+	})
+}
+
 func (e viewEnv) jumpSessions() []string {
 	out, _ := tmuxOut(e.sock, "list-sessions", "-F", "#{session_name}")
 	var names []string
@@ -141,6 +155,7 @@ func TestAViewEndsWithItsAgent(t *testing.T) {
 	e := newViewEnv(t, "flint-auth")
 	argv, j := e.argv(t, "flint-auth")
 	view := e.openView(t, argv)
+	e.explain(t, view)
 	waitFor(t, "the view attached", func() bool {
 		out, _ := tmuxOut(e.sock, "list-clients", "-t", "="+JumpSessionName(j.ID))
 		return out != ""
@@ -220,6 +235,7 @@ func TestAViewEndsWhenItsAgentPaneGoes(t *testing.T) {
 		agent := e.twoWindowAgent(t, shared)
 		j := Jump{Pane: agent, Prefix: "C-b", ID: NewJumpID(), Outer: true}
 		view := e.openView(t, ViewArgv(j, "work", e.path))
+		e.explain(t, view)
 		g := JumpSessionName(j.ID)
 		waitFor(t, "the view attached", func() bool {
 			out, _ := tmuxOut(e.sock, "list-clients", "-t", "="+g)

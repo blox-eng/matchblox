@@ -98,6 +98,13 @@ func TestTheFlipKeyTypesOutsideTheConsoleWindow(t *testing.T) {
 	e.tmux("new-session", "-d", "-s", "kindle-web", "-x", "80", "-y", "20", "sh", "-c", rawCat+out)
 	e.tmux("switch-client", "-t", "=kindle-web")
 	waitFor(t, func() bool { return e.tmux("list-clients", "-F", "#{client_session}") == "kindle-web" })
+	t.Cleanup(func() {
+		if t.Failed() {
+			b, _ := os.ReadFile(out)
+			t.Logf("%s; kindle-web's pane read %q; client in %s; C-q binds %s", e.tmux("-V"), b,
+				e.tmux("list-clients", "-F", "#{client_session}"), e.tmux("list-keys", "-T", "root", BesideKey))
+		}
+	})
 	e.press(t, "\x11")
 	waitFor(t, func() bool { b, _ := os.ReadFile(out); return string(b) == "^Q" })
 }
