@@ -31,7 +31,7 @@ func ViewArgv(j Jump, name, socket string) []string {
 	j.Outer = true
 	// A failed list leaves the session it made (it is not yet one that
 	// ends when its client goes), so the wrapper kills it.
-	const wrap = `n=$1; g=$2; sock=$3; shift 3; e=$(mktemp) || exit 1; "$@" 2>"$e"; s=$?; if [ $s = 0 ]; then m="$n ended."; else tmux -S "$sock" kill-session -t "=$g" 2>/dev/null; m="$n cannot be shown: $(tr '\n' ' ' <"$e" | sed 's/ *$//')."; fi; rm -f "$e"; stty sane 2>/dev/null; printf '\n%s ctrl+q: back to the list\n' "$m"; until read _; do sleep 0.2; done`
+	const wrap = `n=$1; g=$2; sock=$3; shift 3; e=$(mktemp) || exit 1; trap 'rm -f "$e"' EXIT; trap 'exit 0' HUP TERM; "$@" 2>"$e"; s=$?; if [ $s = 0 ]; then m="$n ended."; else tmux -S "$sock" kill-session -t "=$g" 2>/dev/null; m="$n cannot be shown: $(tr '\n' ' ' <"$e" | sed 's/ *$//')."; fi; rm -f "$e"; stty sane 2>/dev/null; printf '\n%s ctrl+q: back to the list\n' "$m"; until read _; do sleep 0.2; done`
 	argv := []string{"/bin/sh", "-c", wrap, "sh", name, JumpSessionName(j.ID), socket, "env", "-u", "TMUX", "tmux", "-S", socket}
 	for _, a := range j.Remote()[1:] {
 		if a == ";" {

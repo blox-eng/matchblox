@@ -3,6 +3,7 @@
 package remote
 
 import (
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -90,6 +91,8 @@ func TestAViewTypesIntoTheAgentsOwnPane(t *testing.T) {
 
 func TestARespawnEndsTheOldView(t *testing.T) {
 	e := newViewEnv(t, "kindle-web", "flint-auth")
+	tmp := t.TempDir()
+	mustTmux(t, e.sock, "set-environment", "-g", "TMPDIR", tmp)
 	argv1, j1 := e.argv(t, "kindle-web")
 	view := e.openView(t, argv1)
 	g1 := JumpSessionName(j1.ID)
@@ -101,9 +104,17 @@ func TestARespawnEndsTheOldView(t *testing.T) {
 	args := append([]string{"respawn-pane", "-k", "-t", view, "--"}, argv2...)
 	mustTmux(t, e.sock, args...)
 	waitFor(t, "the old view's session gone", func() bool { return !hasSession(e.sock, g1) })
+	if !hasSession(e.sock, "kindle-web") {
+		t.Fatal("kindle-web ended with its view")
+	}
 	if out, _ := tmuxOut(e.sock, "list-clients", "-t", "=kindle-web"); out != "" {
 		t.Fatalf("kindle-web has clients: %q", out)
 	}
+	// Only the new view's file is left: the old wrapper was killed mid-client.
+	waitFor(t, "the old view's temp file removed", func() bool {
+		files, _ := os.ReadDir(tmp)
+		return len(files) == 1
+	})
 }
 
 func TestAViewEndsWithItsAgent(t *testing.T) {
