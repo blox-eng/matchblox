@@ -227,3 +227,204 @@ func TestADeadAgentPaneIsMadeAgain(t *testing.T) {
 		t.Fatalf("beside = %q", m.beside)
 	}
 }
+
+// shownAt is a beside console whose list chooses name, its agent pane alive.
+func shownAt(t *testing.T, name, winW string) (Model, *besideTmux) {
+	t.Helper()
+	m, tm := besideConsoleWith(t, boardFixture(t), 40, 50, &besideTmux{winW: winW, alive: true})
+	m.opt.Socket = "/tmp/tmux-1000/default"
+	return chooseNamed(t, m, name), tm
+}
+
+// chooseNamed makes the list choose the session called name.
+func chooseNamed(t *testing.T, m Model, name string) Model {
+	t.Helper()
+	i := slices.IndexFunc(m.sideSessions(), func(s sample.Session) bool { return s.Name == name })
+	if i < 0 {
+		t.Fatalf("no %s in the list", name)
+	}
+	m.sideAt = paneOf(m.sideSessions()[i])
+	return m
+}
+
+// enter presses ⏎ and runs what follows.
+func enter(t *testing.T, m Model) Model {
+	t.Helper()
+	next, cmd := key(m, "enter")
+	return afterChoice(next, cmd)
+}
+
+// afterChoice runs cmd, and gives the console the end of a choice.
+func afterChoice(next tea.Model, cmd tea.Cmd) Model {
+	m := next.(Model)
+	for _, msg := range cmdMsgs(cmd) {
+		if msg, ok := msg.(shownMsg); ok {
+			next, _ := m.Update(msg)
+			m = next.(Model)
+		}
+	}
+	return m
+}
+
+func respawned(tm *besideTmux) string {
+	for _, l := range tm.lines() {
+		if strings.HasPrefix(l, "respawn-pane") {
+			return l
+		}
+	}
+	return ""
+}
+
+func TestEnterShowsTheChosenAgentBeside(t *testing.T) {
+	m, tm := shownAt(t, "kindle-web", "160")
+	m = enter(t, m)
+	r := respawned(tm)
+	if !strings.HasPrefix(r, "respawn-pane -k -t %9 -- /bin/sh") || !strings.Contains(r, "matchblox-jump-") || !strings.Contains(r, "kindle-web") {
+		t.Fatalf("respawn %q in %q (flash %q)", r, tm.lines(), m.flash)
+	}
+	lines := tm.lines()
+	at := slices.Index(lines, r)
+	if sel := slices.Index(lines, "select-pane -Z -t %9"); sel < at {
+		t.Fatalf("the agent pane is not selected after the respawn: %q", lines)
+	}
+	if tm.count("split-window") != 1 {
+		t.Fatalf("a live agent pane was made again: %q", lines)
+	}
+}
+
+func TestArrowsDoNotRespawn(t *testing.T) {
+	m, tm := shownAt(t, "kindle-web", "160")
+	next, cmd := key(m, "down")
+	next, cmd2 := key(afterChoice(next, cmd), "down")
+	afterChoice(next, cmd2)
+	if r := respawned(tm); r != "" {
+		t.Fatalf("an arrow respawned: %q", r)
+	}
+}
+
+func TestAPeerAgentAsksBeforeItShows(t *testing.T) {
+	home, ws := newFake(), newFake()
+	tm := &besideTmux{winW: "160", alive: true}
+	opt := Options{NoMotion: true, Conn: home, Now: func() time.Time { return demoAt }, Beside: true, Pane: "%1", Tmux: tm.run,
+		Peers: []Peer{{Host: "ws-1", Conn: ws}}}
+	var next tea.Model = New(opt)
+	next, _ = next.Update(tea.WindowSizeMsg{Width: 40, Height: 50})
+	next, _ = next.Update(stateMsg(proto.State{}))
+	next, _ = next.Update(peerMsg{host: "ws-1", conn: ws, msg: stateMsg(boardFixture(t))})
+	m := next.(Model)
+	m.splashDone = true
+	m.viewPrefs.CopyCheckedPhone, m.viewPrefs.CopyCheckedDesk = true, true
+	m = feed(t, m, m.besideCmd())
+	m = chooseNamed(t, m, "kindle-web")
+	if s, _ := m.sideChosen(); s.Host != "ws-1" {
+		t.Fatalf("kindle-web is on %q", s.Host)
+	}
+	next, cmd := key(m, "enter")
+	m = afterChoice(next, cmd)
+	if m.pending == nil || respawned(tm) != "" {
+		t.Fatalf("pending %v, respawn %q: want the consent box first", m.pending != nil, respawned(tm))
+	}
+	next, cmd = key(m, "y")
+	afterChoice(next, cmd)
+	r := respawned(tm)
+	if !strings.HasPrefix(r, "respawn-pane -k -t %9 -- ssh") || !strings.Contains(r, "ws-1") {
+		t.Fatalf("respawn %q in %q", r, tm.lines())
+	}
+}
+
+func TestAStokerHostAsksToTakeOver(t *testing.T) {
+	st := boardFixture(t)
+	v := runningNight(demoAt)
+	st.Stoker = &v
+	m, tm := besideConsoleWith(t, st, 40, 50, &besideTmux{winW: "160", alive: true})
+	m.opt.Socket = "/tmp/tmux-1000/default"
+	m = chooseNamed(t, m, "kindle-web")
+	next, cmd := key(m, "enter")
+	m = afterChoice(next, cmd)
+	if m.held == nil || respawned(tm) != "" {
+		t.Fatalf("held %v, respawn %q: want take over? first", m.held != nil, respawned(tm))
+	}
+	next, cmd = key(m, "n")
+	afterChoice(next, cmd)
+	if respawned(tm) == "" {
+		t.Fatalf("no respawn after the answer: %q", tm.lines())
+	}
+}
+
+func TestAChoiceRemakesAMissingAgentPane(t *testing.T) {
+	m, tm := besideConsole(t, boardFixture(t), 40, 50, "160") // %9 does not answer
+	m.opt.Socket = "/tmp/tmux-1000/default"
+	m = enter(t, chooseNamed(t, m, "kindle-web"))
+	lines := tm.lines()
+	r := respawned(tm)
+	at := slices.Index(lines, r)
+	split := -1
+	for i, l := range lines {
+		if strings.HasPrefix(l, "split-window") {
+			split = i // the last split
+		}
+	}
+	if r == "" || split < 0 || split > at || tm.count("split-window") != 2 {
+		t.Fatalf("want a second split before the respawn: %q", lines)
+	}
+	if m.beside != "%9" {
+		t.Fatalf("beside = %q", m.beside)
+	}
+}
+
+func TestOnePaneZoomsTheAgent(t *testing.T) {
+	m, tm := shownAt(t, "kindle-web", "70")
+	enter(t, m)
+	if !tm.ran(remote.ZoomArgv("%9", true)) {
+		t.Fatalf("no zoom of the agent in %q", tm.lines())
+	}
+}
+
+func TestALocalViewNeedsTheSocket(t *testing.T) {
+	m, tm := shownAt(t, "kindle-web", "160")
+	m.opt.Socket = ""
+	m = enter(t, m)
+	if respawned(tm) != "" || !strings.Contains(m.flash, "socket") {
+		t.Fatalf("respawn %q, flash %q", respawned(tm), m.flash)
+	}
+}
+
+func TestAFailedRespawnSaysWhy(t *testing.T) {
+	tm := &besideTmux{winW: "160", alive: true}
+	m, _ := besideConsoleWith(t, boardFixture(t), 40, 50, &besideTmux{winW: "160", alive: true})
+	m.opt.Tmux = func(args ...string) (string, error) {
+		if args[0] == "respawn-pane" {
+			return "", errors.New("no space for new pane")
+		}
+		return tm.run(args...)
+	}
+	m.opt.Socket = "/tmp/tmux-1000/default"
+	m = enter(t, chooseNamed(t, m, "kindle-web"))
+	if !strings.Contains(m.flash, "kindle-web") || !strings.Contains(m.flash, "no space for new pane") {
+		t.Fatalf("flash %q", m.flash)
+	}
+}
+
+func TestATapOnARowShowsItsAgent(t *testing.T) {
+	m, tm := shownAt(t, "kindle-web", "160")
+	next, cmd := tapRow(t, m, "flint-auth")
+	afterChoice(next, cmd)
+	if r := respawned(tm); r == "" || !strings.Contains(r, "flint-auth") {
+		t.Fatalf("respawn %q", r)
+	}
+}
+
+// tapRow taps the list's row of the session called name.
+func tapRow(t *testing.T, m Model, name string) (tea.Model, tea.Cmd) {
+	t.Helper()
+	want := chooseNamed(t, m, name).sideAt
+	box := m.sideBoxAt(max(m.width, minWidth))
+	_, hits, _ := m.sideList(box.listW, m.bodyRows())
+	for y, h := range hits {
+		if h.k == want {
+			return m.sideTap(1, y)
+		}
+	}
+	t.Fatalf("no row of %s", name)
+	return nil, nil
+}

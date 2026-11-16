@@ -95,6 +95,9 @@ func (m Model) listShown() bool { return m.sideBoxAt(max(m.width, minWidth)).lis
 // inList: the keys go to the list. Where one pane shows, they go where the
 // screen is.
 func (m Model) inList() bool {
+	if m.besideMode() { // the agent has its own pane: no line takes keys
+		return true
+	}
 	if w := max(m.width, minWidth); m.onePane(w) {
 		return !m.listHidden()
 	}
@@ -616,6 +619,8 @@ func (m Model) sideTap(x, y int) (tea.Model, tea.Cmd) {
 			fold[hit.state] = !fold[hit.state]
 			m.sideFold = fold
 			return m, nil
+		case hit.k != (paneKey{}) && m.besideMode():
+			return m.chooseSide(hit.k).showChosen()
 		case hit.k != (paneKey{}):
 			return m.chooseSide(hit.k), nil
 		}
@@ -649,7 +654,9 @@ func (m Model) chooseSide(k paneKey) Model {
 		m.startChatMark(s)
 		m.sideName = m.cardName(s)
 	}
-	m.toLine()
+	if !m.besideMode() { // beside, the agent has its own pane: no line
+		m.toLine()
+	}
 	return m
 }
 

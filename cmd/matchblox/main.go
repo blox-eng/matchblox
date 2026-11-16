@@ -673,6 +673,7 @@ func runConsole(path string, cfg config.Config, root string, noMotion bool, host
 	}
 	home, _ := os.UserHomeDir()
 	base.Beside = !base.OutsideTmux && os.Getenv(panes.HomeEnv) == "1" && root == "" && host == ""
+	base.Socket, _, _ = strings.Cut(os.Getenv("TMUX"), ",")
 	base.Pair = consolePair(home, base.Self, defaultHostKey, setup.PairAddress)
 	restore := func() {}
 	if root == "" {

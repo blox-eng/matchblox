@@ -145,6 +145,9 @@ type Options struct {
 	// Beside: the console splits its tmux window and keeps the agent's pane
 	// beside the list. Set only for the console of the home session.
 	Beside bool
+	// Socket is the path of the console's own tmux server socket, the first
+	// field of $TMUX: the agent pane's view is a client of that server.
+	Socket string
 	// ClientList is tmux list-clients -F '#{client_activity} #{client_tty}
 	// #{pane_id}': who shows the console, for the client a jump moves. Nil:
 	// ask tmux.
@@ -234,6 +237,7 @@ type action struct {
 	tty         string                      // a jump or a switch: the marked client that asked; "" unmarked
 	asker       bool                        // a jump of this machine's tmux: it moves only its tty's client, else the desk's
 	deskLocal   func(tty string) []string   // a host jump of an unmarked key: its local list for the desk's client
+	beside      bool                        // it shows the session in the agent pane: steps[0] is the pane's command
 }
 
 // recRun is an act on a recommendation: the row shows its outcome.
@@ -851,6 +855,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.sizeCmd(m.width)
 	case besideSizeMsg:
 		m.winW = msg.w
+	case shownMsg:
+		return m.besideShown(msg)
 	case fromConn:
 		if msg.conn != m.conn {
 			return m, nil

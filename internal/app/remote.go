@@ -193,6 +193,9 @@ type connectedMsg struct {
 // inside tmux is a tmux command list instead: it switches the client and
 // returns at once.
 func (m Model) onHost(a action) (tea.Model, tea.Cmd) {
+	if a.beside {
+		return m, m.besideRun(a)
+	}
 	argv := a.steps[0]
 	if a.nav && !m.opt.OutsideTmux {
 		run, undo, read, host := m.opt.Run, a.undo, m.readClients(), m.hostOf(a)

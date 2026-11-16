@@ -241,6 +241,8 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 		return m.shipKey(s)
 	case ok && isShipCard(s) && bkey.Matches(k, append(m.rowActKeys(), mk.Park)...) && !bkey.Matches(k, bk.Merge):
 		cmd = m.notice(m.lineOff(s))
+	case bkey.Matches(k, sk.Enter) && m.besideMode():
+		return m.showChosen()
 	case bkey.Matches(k, sk.Enter):
 		m.toLine()
 	case bkey.Matches(k, mk.Exited):
