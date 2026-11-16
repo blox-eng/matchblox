@@ -316,7 +316,7 @@ func run(args []string) error {
 			binds = append(binds, panes.HomeKeyArgv(), panes.FlipKeysArgv())
 		}
 		if os.Getenv(panes.HomeEnv) == "1" {
-			binds = append(binds, panes.SizeArgv(), panes.CommandKeysArgv(), panes.MarkKeyArgv(), panes.BeltKeyArgv(), panes.TapKeysArgv(), panes.ViewerHookArgv())
+			binds = append(binds, panes.SizeArgv(), panes.CommandKeysArgv(), panes.MarkKeyArgv(), panes.BeltKeyArgv(), panes.TapKeysArgv(), panes.ViewerHookArgv(), panes.BesideKeysArgv())
 		}
 		for _, argv := range binds {
 			_ = exec.Command("tmux", argv[1:]...).Run()

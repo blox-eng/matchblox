@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/blox-eng/matchblox/internal/keycmd"
+	"github.com/blox-eng/matchblox/internal/sample"
 )
 
 // Home is the tmux session the console lives in, so a phone that connects
@@ -45,6 +46,11 @@ const homeUserKey = "900"
 // console under another name is not one to tmux (NamedConsole).
 const runsConsole = "#{==:#{pane_current_command}," + Home + "}"
 
+// isConsolePane is runsConsole, or the pane the window names as its console
+// (@matchblox_console): an agent beside the list runs a nested tmux, so the
+// console is found by that option when the agent pane has the keys.
+const isConsolePane = "#{||:" + runsConsole + ",#{==:#{pane_id},#{" + sample.ConsoleOption + "}}}"
+
 // goHome is the way back, as the words of a tmux if-shell: on a console's pane
 // the key goes on to that console, whole, so the console reads it itself; a
 // pane in copy mode leaves it first, as copy mode would read the key's bytes
@@ -60,8 +66,8 @@ var goHome = [3]string{
 // with no such session, to a console run in place in a pane of any other
 // session (#354). With no console at all, it says how to open one, not
 // tmux's bare "can't find session".
-var goTo = `if-shell -F "` + homeExists + `" { switch-client -t =` + Home + " ; run-shell -C -t =" + Home + `: "#{W:#{P:#{?` + runsConsole +
-	`,select-window -t #{window_id} ; select-pane -t #{pane_id} ; ,}}}" } { if-shell -F "` + consoleExists +
+var goTo = `if-shell -F "` + homeExists + `" { switch-client -t =` + Home + " ; run-shell -C -t =" + Home + `: "#{W:#{P:#{?` + isConsolePane +
+	`,select-window -t #{window_id} ; select-pane -Z -t #{pane_id} ; ,}}}" } { if-shell -F "` + consoleExists +
 	`" { run-shell -C "#{S:#{W:#{P:#{?` + runsConsole + `,switch-client -t #{pane_id} ; ,}}}}" } { display-message "` + NoHome + `" } }`
 
 // homeExists is "1" while the tmux server has the console's session.
@@ -111,7 +117,11 @@ func CommandKeysArgv() []string {
 
 // atConsole is true for a client in the console's session, on a pane the
 // console still runs in.
-const atConsole = "#{&&:#{==:#{session_name}," + Home + "},#{==:#{pane_current_command}," + Home + "}}"
+const atConsole = "#{&&:#{==:#{session_name}," + Home + "},#{||:" + runsConsole + ",#{" + sample.ConsoleOption + "}}}"
+
+// handTarget is the pane the key hands go to: the window's console when it
+// names one, else the active pane.
+const handTarget = "#{?" + sample.ConsoleOption + ",#{" + sample.ConsoleOption + "},#{pane_id}}"
 
 // MarkKeyArgv makes the app's marker key a key of the tmux server. At the
 // console it hands the console the tty of the client that pressed, without
@@ -119,8 +129,8 @@ const atConsole = "#{&&:#{==:#{session_name}," + Home + "},#{==:#{pane_current_c
 // expands #{client_tty} and #{pane_id} before the three send-keys run.
 func MarkKeyArgv() []string {
 	slot := strconv.Itoa(keycmd.MarkSlot)
-	hand := "run-shell -C 'send-keys -t #{pane_id} -H " + hexKeys(keycmd.MarkedPrefix) +
-		" ; send-keys -t #{pane_id} -l #{client_tty} ; send-keys -t #{pane_id} -H 1b 5c'"
+	hand := "run-shell -C 'send-keys -t " + handTarget + " -H " + hexKeys(keycmd.MarkedPrefix) +
+		" ; send-keys -t " + handTarget + " -l #{client_tty} ; send-keys -t " + handTarget + " -H 1b 5c'"
 	return []string{"tmux", "set-option", "-s", "user-keys[" + slot + "]", keycmd.MarkKey,
 		";", "bind-key", "-n", "User" + slot, "if-shell", "-F", atConsole, hand}
 }
@@ -130,8 +140,8 @@ func MarkKeyArgv() []string {
 // answered, as MarkKeyArgv does; elsewhere it does nothing.
 func BeltKeyArgv() []string {
 	slot := strconv.Itoa(keycmd.BeltSlot)
-	hand := "run-shell -C 'send-keys -t #{pane_id} -H " + hexKeys(keycmd.BeltFromPrefix) +
-		" ; send-keys -t #{pane_id} -l #{client_tty} ; send-keys -t #{pane_id} -H 1b 5c'"
+	hand := "run-shell -C 'send-keys -t " + handTarget + " -H " + hexKeys(keycmd.BeltFromPrefix) +
+		" ; send-keys -t " + handTarget + " -l #{client_tty} ; send-keys -t " + handTarget + " -H 1b 5c'"
 	return []string{"tmux", "set-option", "-s", "user-keys[" + slot + "]", keycmd.BeltKey,
 		";", "bind-key", "-n", "User" + slot, "if-shell", "-F", atConsole, hand}
 }
@@ -144,8 +154,8 @@ func TapKeysArgv() []string {
 	argv := []string{"tmux"}
 	for i, k := range keycmd.TapKeys {
 		slot := strconv.Itoa(keycmd.TapSlot + i)
-		hand := "run-shell -C 'send-keys -t #{pane_id} -H " + hexKeys(keycmd.TappedPrefix+k+";") +
-			" ; send-keys -t #{pane_id} -l #{client_tty} ; send-keys -t #{pane_id} -H 1b 5c'"
+		hand := "run-shell -C 'send-keys -t " + handTarget + " -H " + hexKeys(keycmd.TappedPrefix+k+";") +
+			" ; send-keys -t " + handTarget + " -l #{client_tty} ; send-keys -t " + handTarget + " -H 1b 5c'"
 		if len(argv) > 1 {
 			argv = append(argv, ";")
 		}
@@ -162,7 +172,7 @@ func TapKeysArgv() []string {
 // key before that is taken as the desk's. The hooks use MarkKey's slot.
 func ViewerHookArgv() []string {
 	slot := strconv.Itoa(keycmd.MarkSlot)
-	hook := `if-shell -F '` + atConsole + `' "run-shell -C 'send-keys -t #{pane_id} -H ` + hexKeys(keycmd.ViewerKey) + `'"`
+	hook := `if-shell -F '` + atConsole + `' "run-shell -C 'send-keys -t ` + handTarget + ` -H ` + hexKeys(keycmd.ViewerKey) + `'"`
 	return []string{"tmux", "set-hook", "-g", "client-attached[" + slot + "]", hook,
 		";", "set-hook", "-g", "client-session-changed[" + slot + "]", hook}
 }
