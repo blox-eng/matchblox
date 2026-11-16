@@ -6,95 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
-
-// orphanShip is the console with #4570, a pull request that no session
-// drives, of kind, checked out at /w/wick-mobile on its branch.
-func orphanShip(t *testing.T, kind string) Model {
-	t.Helper()
-	st := screensState(t)
-	st.Agents = []string{"claude"}
-	r := *st.Ships
-	sh := proto.Ship{Repo: "hearth/hearth-api", Number: 4570, Title: "Cache the session store",
-		Kind: kind, Note: "CI · 3 of 9 jobs", Stage: 1, Where: "/w/wick-mobile", Since: demoAt.Add(-time.Hour),
-		URL: "https://github.com/hearth/hearth-api/pull/4570"}
-	if kind == shipWaits {
-		sh.Note, sh.Merge = "waits for your merge", []string{"gh", "pr", "merge", "4570", "--squash"}
-	}
-	r.Ships = append(slices.Clone(r.Ships), sh)
-	st.Ships = &r
-	st.Git = &proto.GitReport{Repos: []gitscan.Repo{{Path: "/w/hearth-api", Worktrees: []gitscan.Worktree{
-		{Path: "/w/hearth-api", Branch: "main"}, {Path: "/w/wick-mobile", Branch: "cache-store"}}}}}
-	m, _, _ := sideShotOf(t, st, 160, 38)
-	return m
-}
-
-// chooseShip chooses the row of the ship no session drives, the keys in
-// the list.
-func chooseShip(t *testing.T, m Model) Model {
-	t.Helper()
-	i := slices.IndexFunc(m.sideSessions(), isShipCard)
-	if i < 0 {
-		t.Fatalf("no row of the ship nobody drives:\n%s", plainFrame(m))
-	}
-	m.chooseRow(m.sideSessions()[i])
-	m.toList()
-	return m
-}
-
-// TestAShipWithNoSessionThatWaitsNeedsYou: a pull request that no session
-// drives and that waits for your merge is a row in NEEDS YOU, named by its
-// branch, with its badge; the header counts it. ⏎ opens New session on its
-// branch, N too, and p merges it behind the typed y.
-func TestAShipWithNoSessionThatWaitsNeedsYou(t *testing.T) {
-	m := orphanShip(t, shipWaits)
-	before := orphanShip(t, shipRunning).needCount()
-	if got := m.needCount(); got != before+1 {
-		t.Errorf("the header counts %d, want %d with the ship that waits", got, before+1)
-	}
-	m = chooseShip(t, m)
-	s, _ := m.sideChosen()
-	if m.sideStateOf(s) != sideNeed || s.Name != "cache-store" {
-		t.Fatalf("the ship's row is %q in %s", s.Name, m.sideStateOf(s).head())
-	}
-	if l := lineWith(frameOf(m), "cache-store"); !strings.Contains(l, "#4570") {
-		t.Errorf("the ship's row has no badge: %q", l)
-	}
-	for _, k := range []string{"enter", "N"} {
-		nm := pressOn(m, k)
-		if nm.form == nil || nm.whereSelectedIn(nm.form).path() != "/w/wick-mobile" || !strings.Contains(nm.form.first, "#4570") {
-			t.Errorf("%s on the ship's row: form %v, flash %q", k, nm.form != nil, nm.flash)
-		}
-	}
-	for _, k := range []string{"x", "z", "r", "A", "y"} {
-		if nm := pressOn(m, k); nm.pending != nil || nm.form != nil || nm.held != nil {
-			t.Errorf("%s on the ship's row opened %+v %+v", k, nm.pending, nm.form)
-		}
-	}
-	nm := pressOn(m, "p")
-	if nm.pending == nil || !strings.Contains(strings.Join(nm.pending.steps[0], " "), "gh pr merge 4570") {
-		t.Fatalf("p on the ship's row: pending %+v, flash %q", nm.pending, nm.flash)
-	}
-}
-
-// TestAShipWithNoSessionStaysInTheList: one that runs (CI) is a row in
-// IDLE with its badge: no pull request leaves the list.
-func TestAShipWithNoSessionStaysInTheList(t *testing.T) {
-	m := chooseShip(t, orphanShip(t, shipRunning))
-	s, _ := m.sideChosen()
-	if m.sideStateOf(s) != sideIdle {
-		t.Fatalf("the running ship's row is in %s", m.sideStateOf(s).head())
-	}
-	if l := lineWith(frameOf(m), "cache-store"); !strings.Contains(l, "#4570") {
-		t.Errorf("the running ship's row has no badge: %q", l)
-	}
-	if got := chatLineOf(m, 100); !strings.Contains(got, "no session drives #4570") {
-		t.Errorf("the ship's chat line %q does not say why it takes no text", got)
-	}
-}
 
 // noPaneConsole is the console with two sessions outside tmux: no pane, each
 // its own process.
@@ -156,107 +70,6 @@ func TestASessionOutsideTmuxSaysWhy(t *testing.T) {
 	}
 }
 
-// TestAShipsRowSaysWhatItsKeysDo: on a ship's row the key line names
-// what ⏎ and p do, the chat's place shows the ship and the same two acts,
-// and its head says the ship's state.
-func TestAShipsRowSaysWhatItsKeysDo(t *testing.T) {
-	m := chooseShip(t, orphanShip(t, shipWaits))
-	keys := keyLineOf(m)
-	if !strings.Contains(keys, "⏎ new session") || !strings.Contains(keys, "p merge") || strings.Contains(keys, "write") {
-		t.Errorf("the key line %q", keys)
-	}
-	chat := strings.Join(plainLines(m.chatPanel(100, 20)), "\n")
-	for _, want := range []string{"Cache the session store", "#4570", "waits for your merge", "new session on its branch", "p merge"} {
-		if !strings.Contains(chat, want) {
-			t.Errorf("the chat's place lacks %q:\n%s", want, chat)
-		}
-	}
-	if head := plainLines(m.chatPanel(100, 20))[0]; strings.Contains(head, "idle") || !strings.Contains(head, "waits for your merge") {
-		t.Errorf("the head %q", head)
-	}
-	m.toLine()
-	if keys = keyLineOf(m); strings.Contains(keys, "send") {
-		t.Errorf("in the line the key line %q offers a send", keys)
-	}
-	leave := m.keys.side.Leave.Help().Key
-	if esc, p := strings.Index(keys, leave), strings.Index(keys, "p merge"); esc < 0 || p < esc {
-		t.Errorf("in the line the key line %q does not say %s, then p merge", keys, leave)
-	}
-	if nm := pressOn(m, "p"); nm.pending != nil {
-		t.Errorf("p in the line opened the merge box: the line acts on nothing")
-	}
-}
-
-// TestTypingHappyInAShipRowsLineMergesNothing: the line of a ship's row
-// takes no text, and its letters act on nothing: "copy happy" opens no
-// merge box, and its y confirms no merge.
-func TestTypingHappyInAShipRowsLineMergesNothing(t *testing.T) {
-	m := chooseShip(t, orphanShip(t, shipWaits))
-	m.toLine()
-	m = typeLine(m, "copy happy")
-	if m.pending != nil || m.consenting() || m.menu != nil || m.form != nil {
-		t.Errorf("typing in the ship's line opened pending %+v, menu %v, form %v", m.pending, m.menu != nil, m.form != nil)
-	}
-	if acts := boardFake(m).acts(); len(acts) != 0 {
-		t.Errorf("typing in the ship's line sent %+v", acts)
-	}
-	if m.inList() || m.lines[m.chosenSide()] != "" {
-		t.Errorf("the ship's line: in the list %v, holds %q", m.inList(), m.lines[m.chosenSide()])
-	}
-	if got := chatLineOf(m, 100); !strings.Contains(got, "no session drives #4570") {
-		t.Errorf("the ship's line %q does not say why it takes no text", got)
-	}
-}
-
-// TestShipRowMergesFromTheList: in the list, p on a ship's row opens the
-// merge box, and the typed y merges it.
-func TestShipRowMergesFromTheList(t *testing.T) {
-	m := chooseShip(t, orphanShip(t, shipWaits))
-	m = pressOn(m, "p")
-	if !m.consenting() || !strings.Contains(consentText(m), "merge 4570") {
-		t.Fatalf("p in the list does not show the merge: %q", consentText(m))
-	}
-	m = pressOn(m, "y")
-	if acts := boardFake(m).acts(); len(acts) != 1 || acts[0].RecID != "ship:hearth/hearth-api#4570" || acts[0].Confirm != "y" {
-		t.Fatalf("p y sent %+v", acts)
-	}
-}
-
-// TestShipRowsMenuHoldsNoSessionActs: a ship's row has no session, so its
-// menu offers no rename, no copy of a last message and no act on a
-// session: only what the ship takes. A line that goes nowhere is none.
-func TestShipRowsMenuHoldsNoSessionActs(t *testing.T) {
-	for _, kind := range []string{shipWaits, shipRunning} {
-		m := chooseShip(t, orphanShip(t, kind))
-		m = pressOn(m, "m")
-		if m.menu == nil {
-			t.Fatalf("%s: m on the ship's row opened no menu", kind)
-		}
-		labels := itemLabels(m.menu.items)
-		for _, l := range labels {
-			for _, bad := range []string{"rename", "copy last message", "stoke the chain", "a new order", "go in", "out of"} {
-				if strings.HasPrefix(l, bad) {
-					t.Errorf("%s: the ship's menu offers %q: %q", kind, l, labels)
-				}
-			}
-		}
-		for _, want := range []string{"copy the link of #4570", "new session on its branch"} {
-			if !slices.Contains(labels, want) {
-				t.Errorf("%s: the ship's menu lacks %q: %q", kind, want, labels)
-			}
-		}
-		at := slices.Index(labels, "new session on its branch")
-		if at < 0 {
-			continue
-		}
-		m.menu.at = at
-		nm := pressOn(m, "enter")
-		if nm.form == nil || !strings.Contains(nm.form.first, "#4570") || len(boardFake(nm).acts()) != 0 {
-			t.Errorf("%s: new session on its branch: form %v, sent %+v", kind, nm.form != nil, boardFake(nm).acts())
-		}
-	}
-}
-
 // TestAReusedPidStartsWithAnEmptyLine: outside tmux a session keys on its
 // process and the process's start, so a new process that reuses the pid
 // of one that ended starts with an empty line and no note of the old one.
@@ -302,5 +115,41 @@ func TestASessionWithNoPidAndNoPaneSharesNoKey(t *testing.T) {
 	}
 	if chat := strings.Join(plainLines(m.chatPanel(100, 20)), "\n"); strings.Contains(chat, "No sessions yet") || !strings.Contains(chat, "wick-mobile") {
 		t.Errorf("the chat on it says:\n%s", chat)
+	}
+}
+
+// TestAPullRequestWithNoSessionHasNoRow: the list shows only sessions. A
+// pull request that no session drives has no row and counts as no need,
+// even when it waits for your merge. A session's own pull request stays
+// the badge on its row.
+func TestAPullRequestWithNoSessionHasNoRow(t *testing.T) {
+	s := boardMatch("flint-auth", time.Hour)
+	st := boardState(s)
+	st.Ships.Ships = []proto.Ship{
+		shipFor(s, 4551, shipRunning, "CI runs", 1, time.Hour),
+		{Repo: "hearth/hearth-api", Number: 4570, Title: "Cache the session store", Kind: shipWaits,
+			Note: "waits for your merge", Stage: 2, Since: boardAt.Add(-time.Hour),
+			Merge: []string{"gh", "pr", "merge", "4570", "--squash"}},
+	}
+	m := boardModel(t, st)
+	var names []string
+	for _, l := range m.sideSessions() {
+		names = append(names, l.Name)
+	}
+	if !slices.Equal(names, []string{"flint-auth"}) {
+		t.Fatalf("the list holds %q, want only flint-auth", names)
+	}
+	if n := m.needCount(); n != 0 {
+		t.Errorf("the header counts %d that need you, want 0", n)
+	}
+	frame := frameOf(m)
+	if l := lineWith(frame, "need you"); l != "" {
+		t.Errorf("the header says %q", l)
+	}
+	if l := lineWith(frame, "#4570"); l != "" {
+		t.Errorf("the pull request no session drives shows: %q", l)
+	}
+	if l := lineWith(frame, "flint-auth"); !strings.Contains(l, "#4551 ci") {
+		t.Errorf("the row %q lacks the badge #4551 ci", l)
 	}
 }

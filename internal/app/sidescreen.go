@@ -414,9 +414,6 @@ func (m Model) expand(s sample.Session, ok bool) (tea.Model, tea.Cmd) {
 	if !ok {
 		return m, m.notice("no session to expand · " + m.keys.main.New.Help().Key + " starts one")
 	}
-	if sh, card := m.shipOfCard(s); card {
-		return m, m.notice(m.shipCardWhy(sh))
-	}
 	next, cmd := m.onCard(s).intoSelected()
 	if nm, ok := next.(Model); ok && cmd != nil && nm.flash == "" && nm.pending == nil && nm.held == nil {
 		nm.sideIn = paneOf(s) // the jump runs: the key line says the way back
@@ -534,21 +531,6 @@ func (m Model) sideHints() (string, []hint) {
 	}
 	if parts := m.footParts(); m.inList() && m.footAt > 0 {
 		return "in the list: " + parts[min(m.footAt, len(parts))-1].text, []hint{hintFor(sk.Enter, "open"), hintFor(sk.Up, "")}
-	}
-	if s, sh, card := m.chosenShip(); card { // no session drives it: its keys are New session and the merge
-		hs := []hint{hintFor(sk.Up, ""), hintFor(sk.Enter, "new session")}
-		_, merges := m.mergeable(s)
-		if !m.inList() { // the line acts on nothing: the merge is a key of the list
-			leave := hintFor(sk.Leave, "")
-			if merges {
-				leave.key, leave.label = leave.key+" then "+bk.Merge.Help().Key, "merge"
-			}
-			return "on #" + strconv.Itoa(sh.Number), append(hs, leave)
-		}
-		if merges {
-			hs = append(hs, hintFor(bk.Merge, "merge"))
-		}
-		return "on #" + strconv.Itoa(sh.Number), append(hs, hintFor(bk.Host, ""), hintFor(bk.Menu, ""))
 	}
 	if m.inList() {
 		chain := hintFor(bk.Chain, "")
@@ -776,7 +758,7 @@ func (m Model) placeWheel(up bool) (tea.Model, tea.Cmd) {
 // with no screen to scroll says so.
 func (m Model) chatWheel(up bool) (tea.Model, tea.Cmd) {
 	s, ok := m.sideChosen()
-	if !ok || s.Pane == "" || isShipCard(s) || m.watchHost != s.Host || m.watching != s.Pane || m.screen.Pane != s.Pane || m.screen.Gone {
+	if !ok || s.Pane == "" || m.watchHost != s.Host || m.watching != s.Pane || m.screen.Pane != s.Pane || m.screen.Gone {
 		return m, m.notice("the chat has no screen to scroll")
 	}
 	if why := m.cannotReach(s.Host); why != "" {

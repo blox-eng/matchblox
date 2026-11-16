@@ -38,13 +38,9 @@ ships along. A pane that another session takes over takes none of them.
 `matchblox ships --json` gives the owner in `session`: its `name`, `pane`,
 `session_id` and `since`, when it became the owner. A ship that no session
 owns has no `name`, `pane` or `session_id`, and `since` says since when.
-A ship that no session owns has a row of its own in the list, named by
-the branch of its checkout (else its repository and number), with its
-badge. It is in `NEEDS YOU` while it waits for your merge or is stuck,
-and in `IDLE` while it runs. `Enter` or `N` on it opens New session in
-its checkout, with a first message to take the pull request over. `p`
-merges it after a typed `y`. The chat's place shows the pull request,
-its state and its checks, and names those two keys. Message the owner by its name, never by its
+A ship that no session owns has no row in the console's list, and it
+does not count as needing you. A ship that a session owns is the badge
+on the row of that session. Message the owner by its name, never by its
 pane.
 
 A Claude Code `/clear` starts a new session id. A ship that the old id

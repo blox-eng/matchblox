@@ -147,10 +147,6 @@ func (m Model) intoSelected() (tea.Model, tea.Cmd) {
 		m.flash = noPane(s.Name)
 		return m, nil
 	}
-	if isShipCard(s) {
-		m.flash = m.lineOff(s)
-		return m, nil
-	}
 	return m.goIntoAsking(s.Host, s.Pane)
 }
 
