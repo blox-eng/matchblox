@@ -690,7 +690,10 @@ func replayAt(t *testing.T, z replaySize) {
 		steps = slices.Delete(steps, at+1, at+2) // the list has the keys once it shows
 		// The room, then the chat it closes to, take the screen in turn.
 		steps[len(steps)-2].ok = has("CHAIN login", "what should login's stoker do?")
-		steps[len(steps)-1].ok = func(s string) bool { return has("send to kindle-web")(s) && !strings.Contains(s, "CHAIN login") }
+		// kindle-web asks in its pane: its chat's line says so.
+		steps[len(steps)-1].ok = func(s string) bool {
+			return has("◂ kindle-web", "answer in its pane")(s) && !strings.Contains(s, "CHAIN login")
+		}
 	}
 	var still replay.Frame
 	for _, st := range steps {
@@ -775,7 +778,8 @@ func replayAt(t *testing.T, z replaySize) {
 		t.Fatalf("the replay jumped %q, want no jump", jumps)
 	}
 	mu.Unlock()
-	if ran, want := world.Ran(), [][]string{{"tmux", "send-keys", "-t", "%2", "-l", "--", "2"}}; !reflect.DeepEqual(ran, want) {
+	// The pick: act types the option's number as a key, as tmux names a digit.
+	if ran, want := world.Ran(), [][]string{{"tmux", "send-keys", "-t", "%2", "2"}}; !reflect.DeepEqual(ran, want) {
 		t.Fatalf("the service ran %q, want %q", ran, want)
 	}
 

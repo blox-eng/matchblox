@@ -1,6 +1,7 @@
 package app
 
 import (
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -120,6 +121,33 @@ func (m Model) oneChoice(s sample.Session) (q said.Question, ok bool) {
 	q = s.Ask.Questions[0]
 	return q, !q.Multi && len(q.Options) > 0
 }
+
+// digitMenu is the menu the digits answer on s, as a question for the
+// chat to draw. The question tool's one question with one choice comes
+// from its call, and a pick: act answers it: texts is nil. Any other menu
+// is the one the agent draws on the chat's screen while s needs you, with
+// its options' whole texts by number, and a choose: act answers it. None
+// for a menu of checkboxes: a digit only ticks a box there, and Submit
+// has no number.
+func (m Model) digitMenu(s sample.Session) (q said.Question, texts map[int]string, ok bool) {
+	if q, one := m.oneChoice(s); one {
+		return q, nil, true
+	}
+	texts = m.screenMenu(s)
+	if texts == nil || !m.asksNow(s) {
+		return q, nil, false
+	}
+	for n := 1; n <= len(texts); n++ {
+		if checkbox.MatchString(texts[n]) {
+			return said.Question{}, nil, false
+		}
+		q.Options = append(q.Options, said.Option{Label: texts[n]})
+	}
+	return q, texts, true
+}
+
+// checkbox starts an option of a menu that picks many.
+var checkbox = regexp.MustCompile(`^\[[ xX✓✔]\]`)
 
 // upTo keeps the first n lines, the last cut with … when there were more.
 func upTo(ls []string, n, w int) []string {

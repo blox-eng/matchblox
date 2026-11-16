@@ -1842,8 +1842,10 @@ func TestStateCarriesChainStokers(t *testing.T) {
 
 	s.fam.mu.Lock()
 	u.link.Ended = true
-	s.Chains.Chains = nil
 	s.fam.mu.Unlock()
+	s.mu.Lock() // chainsLocked reads the chains under s.mu
+	s.Chains.Chains = nil
+	s.mu.Unlock()
 	s.refreshStoker()
 	got = s.State().Stokers
 	if len(got) != 1 || got[0].Name != "api-auth" {
@@ -1857,9 +1859,9 @@ func TestRetiredUnitKeepsItsChainNameAcrossARestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.fam.mu.Lock()
+	s.mu.Lock()           // chainsLocked reads the chains under s.mu
 	s.Chains.Chains = nil // the chain is gone before the retire
-	s.fam.mu.Unlock()
+	s.mu.Unlock()
 	s.retire(t.Context(), u, "its chain ended", "its chain ended")
 
 	again := newTest(t, time.Hour)

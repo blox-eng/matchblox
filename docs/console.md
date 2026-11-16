@@ -136,13 +136,19 @@ with the reason. Nothing sends it again by itself.
   the message when its turn ends. The line says `queued for its next
   turn`. One message waits for each session. Claude Code and Codex take
   the text at once and queue it themselves.
+- **A session at a menu**, a question to pick from or a permission
+  prompt, gets the message once the menu is answered: typed text would
+  pick there, and `Enter` would approve. The line says `queued until its
+  question is answered`. Answer the menu with the digits, or in its pane.
 - **A session that ends** with a message in wait gives the text back to
   its line: `flint-auth ended · the text is not sent`.
 
-The digits answer a question with one choice, given with its options
-(Claude Code's question tool). Answer every other wait in the agent's
-pane (`Ctrl+O`): a permission prompt, a question from Codex or OpenCode,
-a call with more than one question, or a choice of several options.
+The digits answer the menu the agent draws: a permission prompt, a
+question, a Codex or OpenCode choice, options 1 to 9. Claude Code's
+question tool goes as its structured answer. Any other menu goes as the
+digit, and the service types it only while that option, and the lines
+above the menu, still say what the chat showed. A menu that picks many
+(checkboxes) is answered in the agent's pane (`Ctrl+O`).
 
 - **The first press marks.** A digit, or a tap on an option, marks that
   option (`❯ 2.`), and the key line says `2 again sends · esc clears`.
@@ -158,8 +164,9 @@ For 400 ms after the chat opens on a session, after the console opens,
 and after a tab or a filter changes, a digit marks nothing. A digit is
 sent only while the agent asks the question the chat shows: a newer
 question is refused (`not sent: <name> asks something new — look
-again`). A question that the chat cannot answer says so:
-`<name> asks in its pane · ctrl+o goes in`.
+again`), and so is a menu that changed (`not sent: <name>'s menu
+changed — look again`). A session that needs you with no menu on its
+screen says so on the line: `answer in its pane · ctrl+o`.
 
 After an answer, a merge or a go, the list keeps the session chosen.
 
@@ -237,11 +244,13 @@ here`. A wrong paste says that a hop drops the copy.
 ### Shapes
 
 The console reads the screen's shape first: a screen is upright when its
-rows × 2 are at least its columns.
+rows × 2 are at least its columns. Only Matchblox Pocket shows one pane
+for an upright screen. A desk terminal of the same shape, such as half a
+laptop screen at 107 × 60, shows the list beside the chat.
 
 | Shape | Sessions |
 |---|---|
-| Narrow (upright, or under 60 columns), and any screen that leaves the chat less than 40 columns | One of the two at a time: the list first. A tap on a row, or `Enter` in the list, opens its chat, and `◂` comes back. |
+| Narrow in Matchblox Pocket (upright, or under 60 columns), and any screen that leaves the chat less than 40 columns | One of the two at a time: the list first. A tap on a row, or `Enter` in the list, opens its chat, and `◂` comes back. |
 | Medium (60 to 99 columns) | The list, 32 columns wide, and the chat beside it. |
 | Wide (100 columns and more) | The list, 40 columns wide, and the chat beside it. |
 

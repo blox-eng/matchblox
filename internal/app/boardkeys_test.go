@@ -701,7 +701,8 @@ func TestTheBeltSignalSaysTheBoardsKeys(t *testing.T) {
 		}
 	}
 
-	// A card on another host takes no digit: its digits are dim.
+	// A card on another host takes its digits too: the pick goes on the
+	// host's own conn.
 	far := st
 	far.Sessions = slices.Clone(st.Sessions)
 	far.Queue = slices.Clone(st.Queue)
@@ -715,8 +716,8 @@ func TestTheBeltSignalSaysTheBoardsKeys(t *testing.T) {
 			far.Queue[i].Host = "gpu-1"
 		}
 	}
-	if got := value(boardShot(t, far, 80, 34, chooseCard("flint-auth"))); !strings.HasPrefix(got, ";1,2") {
-		t.Errorf("flint-auth on gpu-1: %q, want its digits dim", got)
+	if got := value(boardShot(t, far, 80, 34, chooseCard("flint-auth"))); !strings.HasPrefix(got, "1,2;") {
+		t.Errorf("flint-auth on gpu-1: %q, want its digits live", got)
 	}
 
 	off := kindle

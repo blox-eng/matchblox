@@ -207,6 +207,13 @@ const (
 // after it; its text is the said.Answer.
 const PickPrefix = "pick:"
 
+// ChoosePrefix starts an act that picks an option of the menu the pane
+// after it draws. Its text is the option's number (1 to 9), the option's
+// whole text and menu.Sign of the screen the console read, NUL between
+// them: the service types the number only while its own read of the pane
+// gives the same text and signature. Only a console sends it.
+const ChoosePrefix = "choose:"
+
 // PastePrefix starts an act that pastes its text into the pane after it as
 // one bracketed paste, then presses Enter: a text with a newline, or longer
 // than a message. The service takes out the control characters but \n and
