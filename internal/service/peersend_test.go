@@ -563,6 +563,7 @@ type sendHost struct {
 	inMode  map[string]string
 	stuck   map[string]chan struct{}
 	blocked chan string
+	clients string // what tmux list-clients prints
 }
 
 func newSendHost(t *testing.T, mate sample.Session) *sendHost {
@@ -587,6 +588,9 @@ func newSendHost(t *testing.T, mate sample.Session) *sendHost {
 	s.TmuxOut = func(argv []string) (string, error) {
 		h.mu.Lock()
 		defer h.mu.Unlock()
+		if slices.Contains(argv, "list-clients") {
+			return h.clients, nil
+		}
 		return cmp.Or(h.inMode[argv[slices.Index(argv, "-t")+1]], "0") + "\n", nil
 	}
 	s.Actions.Run = func(argv []string) error {
@@ -754,6 +758,25 @@ func TestSendToOpenCodeIsKept(t *testing.T) {
 	defer h.s.mu.Unlock()
 	if n, _ := h.s.Chains.InboxCount(chains.Member{SessionID: "s2"}); n != 1 {
 		t.Fatalf("inbox %d", n)
+	}
+}
+
+// TestALinePassesOverAPaneAPersonTypesIn: a person who typed in the mate's
+// pane in the last personTypes keeps its prompt: the line waits in the
+// inbox, and an older key gives it no hold.
+func TestALinePassesOverAPaneAPersonTypesIn(t *testing.T) {
+	h := newSendHost(t, idleMate)
+	h.clients = fmt.Sprintf("%d %%2\n", night0.Add(-30*time.Second).Unix())
+	if res := h.send(t, "%2", "hi"); res.Note != "queued for mate: a person types in it. It gets the line at its next rest." {
+		t.Fatalf("%+v", res)
+	}
+	if k := h.keys(); len(k) != 0 {
+		t.Fatalf("ran %q", k)
+	}
+	h2 := newSendHost(t, idleMate)
+	h2.clients = fmt.Sprintf("%d %%2\n", night0.Add(-personTypes-time.Second).Unix())
+	if res := h2.send(t, "%2", "hi"); res.Note != "sent" {
+		t.Fatalf("an old key holds the line: %+v", res)
 	}
 }
 

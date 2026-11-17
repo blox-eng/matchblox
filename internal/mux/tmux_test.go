@@ -1,8 +1,10 @@
 package mux
 
 import (
+	"errors"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/blox-eng/matchblox/internal/panes"
 )
@@ -82,5 +84,30 @@ func TestTmuxLoadPutsTheTextOnStdinAndPasteIsBracketed(t *testing.T) {
 	}
 	if got, want := m.Paste("%1", "matchblox-paste-1"), []string{"tmux", "paste-buffer", "-p", "-d", "-b", "matchblox-paste-1", "-t", "%1"}; !slices.Equal(got, want) {
 		t.Fatalf("paste %q, want %q", got, want)
+	}
+}
+
+func TestTmuxTypedAtIsTheLatestKeyOfAClientOnThePane(t *testing.T) {
+	var ran []string
+	m := Tmux{Run: func(argv []string) (string, error) {
+		ran = argv
+		return "1700000000 %1\n1700000100 %1\n1700000500 %2\ncan't find session: gone\n", nil
+	}}
+	if got := m.TypedAt("%1"); !got.Equal(time.Unix(1700000100, 0)) {
+		t.Fatalf("TypedAt = %v", got)
+	}
+	if want := []string{"tmux", "list-clients", "-F", "#{client_activity} #{pane_id}"}; !slices.Equal(ran, want) {
+		t.Fatalf("ran %q, want %q", ran, want)
+	}
+	if got := m.TypedAt("%3"); !got.IsZero() {
+		t.Fatalf("no client on %%3: %v", got)
+	}
+	m.TypedAt("%4@matchblox")
+	if want := []string{"tmux", "-L", "matchblox", "list-clients", "-F", "#{client_activity} #{pane_id}"}; !slices.Equal(ran, want) {
+		t.Fatalf("ran %q, want %q", ran, want)
+	}
+	m.Run = func([]string) (string, error) { return "", errors.New("no server") }
+	if got := m.TypedAt("%1"); !got.IsZero() {
+		t.Fatalf("no server: %v", got)
 	}
 }

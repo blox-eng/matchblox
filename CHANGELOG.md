@@ -6,6 +6,13 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **A chain's line no longer lands in your prompt.** A line from a
+  chain-mate was typed into an agent you had open, while you typed there
+  too. A key you typed in that pane in the last two minutes now holds the
+  line: it waits, and the sender hears `a person types in it`.
+
 ## [0.47.0] - 2026-11-16
 
 ### Added

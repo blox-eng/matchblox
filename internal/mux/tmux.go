@@ -3,7 +3,9 @@ package mux
 import (
 	"os/exec"
 	"slices"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -68,6 +70,26 @@ func (t Tmux) InMode(pane string) (bool, error) {
 		return false, err
 	}
 	return strings.TrimSpace(out) != "0", nil
+}
+
+func (t Tmux) TypedAt(pane string) time.Time {
+	tmux, id := sample.Tmux(pane)
+	out, err := t.run(slices.Concat(tmux, []string{"list-clients", "-F", "#{client_activity} #{pane_id}"}))
+	if err != nil {
+		return time.Time{}
+	}
+	var last time.Time
+	for l := range strings.Lines(out) {
+		at, on, ok := strings.Cut(strings.TrimSpace(l), " ")
+		secs, err := strconv.ParseInt(at, 10, 64)
+		if !ok || err != nil || on != id {
+			continue
+		}
+		if t := time.Unix(secs, 0); t.After(last) {
+			last = t
+		}
+	}
+	return last
 }
 
 // MatchOption is the pane option that marks an agent pane the service
