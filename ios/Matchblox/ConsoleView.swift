@@ -189,6 +189,9 @@ private struct TerminalRepresentable: UIViewRepresentable {
         screen.onJump = { [weak terminal] in terminal?.jumpToBottom() }
         connection.onCopied = { [weak screen] word, ok in screen?.copied(word, ok: ok) }
         terminal.onAsksCopy = { [weak connection] in connection?.copyAsked() }
+        terminal.onLink = { [weak terminal] link, spot in
+            if let terminal { LinkSheet.present(link, from: terminal, at: spot) }
+        }
         connection.onAgent = { agent in belts.agentChanged(agent) }
         connection.onBoard = { value in belts.boardSaid(value) }
         belts.onAnswer = { [weak connection] in connection?.answerBoard() }
@@ -214,6 +217,29 @@ private struct TerminalRepresentable: UIViewRepresentable {
     }
 
     func updateUIView(_ stack: UIStackView, context: Context) {}
+}
+
+/// A tapped link asks first: `Open in Safari` (http and https only), `Copy link`, `Cancel`.
+@MainActor
+private enum LinkSheet {
+    static func present(_ link: String, from view: UIView, at spot: CGRect) {
+        guard var top = view.window?.rootViewController else { return }
+        while let next = top.presentedViewController { top = next }
+        let sheet = UIAlertController(title: link, message: nil, preferredStyle: .actionSheet)
+        if TerminalLink.opens(link), let url = URL(string: link) {
+            sheet.addAction(UIAlertAction(title: "Open in Safari", style: .default) { _ in
+                UIApplication.shared.open(url)
+            })
+        }
+        sheet.addAction(UIAlertAction(title: "Copy link", style: .default) { _ in
+            UIPasteboard.general.string = link
+        })
+        sheet.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        // An iPad shows the sheet as a popover at the tap.
+        sheet.popoverPresentationController?.sourceView = view
+        sheet.popoverPresentationController?.sourceRect = spot
+        top.present(sheet, animated: true)
+    }
 }
 
 /// The terminal's place on screen. While a matchbox tray is open the place gets shorter, but
@@ -894,6 +920,12 @@ extension ConsoleConnection: @preconcurrency TerminalViewDelegate {
         terminal?.scrollChanged()
     }
 
+    /// SwiftTerm's own link tap (a pointer's hover on an iPad) asks first too.
+    func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {
+        guard let terminal else { return }
+        terminal.onLink(link, CGRect(x: terminal.bounds.midX, y: terminal.bounds.midY, width: 0, height: 0))
+    }
+
     /// The host's copy (OSC 52), as `c copy reply` asks for it. Only a copy the person asked
     /// for reaches the clipboard (`CopyGate`), and only this device's: not Universal Clipboard.
     func clipboardCopy(source: TerminalView, content: Data) {
@@ -910,7 +942,6 @@ extension ConsoleConnection: @preconcurrency TerminalViewDelegate {
 
     func setTerminalTitle(source: TerminalView, title: String) {}
     func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
-    func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {}
     func rangeChanged(source: TerminalView, startY: Int, endY: Int) {}
 }
 

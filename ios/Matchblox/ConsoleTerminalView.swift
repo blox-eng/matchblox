@@ -7,7 +7,8 @@ import UIKit
 /// While the program reads the mouse, a vertical swipe sends wheel steps (`WheelScroll`), and a tap
 /// a click: the console opens the row's chat. While the console shows Sessions or Machine, a
 /// long-press sends a right click (`BoardTouch`) and each step of a swipe ticks once. A sideways
-/// swipe turns no page: the list and the chat have none. A pinch makes the text bigger or smaller.
+/// swipe turns no page: the list and the chat have none. A pinch makes the text bigger or smaller,
+/// and a tap on a link asks what to do with it.
 final class ConsoleTerminalView: TerminalView {
     private struct Coast {
         let link: CADisplayLink
@@ -24,6 +25,8 @@ final class ConsoleTerminalView: TerminalView {
     var onScrolledBack: @MainActor (Bool) -> Void = { _ in }
     /// Called for each key typed into the terminal: the console's own `c` may ask for a copy.
     var onAsksCopy: @MainActor () -> Void = {}
+    /// A tap on a link: the link, and the place on screen it was tapped.
+    var onLink: @MainActor (String, CGRect) -> Void = { _, _ in }
     /// The console shows Sessions or Machine (`BoardFollow`): a long-press opens the row's menu,
     /// and a swipe ticks. Otherwise the terminal's own long-press acts.
     var showsConsole = false
@@ -40,6 +43,7 @@ final class ConsoleTerminalView: TerminalView {
     private var edge: UIScreenEdgePanGestureRecognizer?
     private var labelTap: UITapGestureRecognizer?
     private var clickTap: UITapGestureRecognizer?
+    private var linkTap: UITapGestureRecognizer?
     /// Whether the keyboard was this view's when the touch began. SwiftTerm spends a tap on an
     /// unfocused terminal only on the keyboard and never sends it to the program.
     private var focusedAtTouch = false
@@ -95,6 +99,18 @@ final class ConsoleTerminalView: TerminalView {
         }
         addGestureRecognizer(click)
         clickTap = click
+
+        // A tap on a link asks what to do with it. Every single tap but the label's waits for
+        // this one, which fails at once off a link: a tap on a row still clicks.
+        let link = UITapGestureRecognizer(target: self, action: #selector(linkTapped))
+        link.cancelsTouchesInView = false
+        for other in gestureRecognizers ?? [] where other !== labelTap {
+            if let tap = other as? UITapGestureRecognizer, tap.numberOfTapsRequired == 1 {
+                tap.require(toFail: link)
+            }
+        }
+        addGestureRecognizer(link)
+        linkTap = link
 
         // SwiftTerm's mouse pan sends a drag, which tmux and the console do not scroll on. A
         // vertical swipe goes to this pan first; the scroll view's own pan waits for it too.
@@ -182,6 +198,10 @@ final class ConsoleTerminalView: TerminalView {
         }
         if gesture === labelTap {
             return tapsLabel(at: gesture.location(in: self))
+        }
+        if gesture === linkTap {
+            let point = gesture.location(in: self)
+            return !tapsLabel(at: point) && linkUnder(point) != nil
         }
         if gesture === clickTap {
             let first = !focusedAtTouch
@@ -341,6 +361,25 @@ final class ConsoleTerminalView: TerminalView {
             let flags = terminal.encodeButton(button: 0, release: release, shift: false, meta: false, control: false)
             terminal.sendEvent(buttonFlags: flags, x: spot.col, y: spot.row, pixelX: pixelX, pixelY: pixelY)
         }
+    }
+
+    @objc private func linkTapped(_ tap: UITapGestureRecognizer) {
+        let point = tap.location(in: self)
+        guard tap.state == .ended, let link = linkUnder(point) else { return }
+        haptic.impactOccurred()
+        onLink(link, CGRect(origin: point, size: .zero))
+    }
+
+    /// The link under `point`: a hyperlink the program marked (OSC 8), else an http or https URL
+    /// in the row's text.
+    private func linkUnder(_ point: CGPoint) -> String? {
+        guard let spot = cell(at: point) else { return nil }
+        let terminal = getTerminal()
+        if let marked = terminal.link(at: .screen(Position(col: spot.col, row: spot.row)), mode: .explicitOnly) {
+            return marked
+        }
+        let cells = (0..<terminal.cols).map { terminal.getCharacter(col: $0, row: spot.row) ?? " " }
+        return TerminalLink.url(in: cells, at: spot.col)
     }
 
     @objc private func goHome() {
