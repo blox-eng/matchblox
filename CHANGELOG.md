@@ -8,6 +8,9 @@ All notable changes to matchblox are in this file. The format follows
 
 ### Fixed
 
+- **↑↓ show each agent beside the list again.** In 0.47.0 the right
+  side changed only on ⏎. Now it shows the chosen agent once the list
+  rests on it, and the keys stay in the list; ⏎ gives the agent the keys.
 - **A chain's line no longer lands in your prompt.** A line from a
   chain-mate was typed into an agent you had open, while you typed there
   too. A key you typed in that pane in the last two minutes now holds the

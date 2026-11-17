@@ -105,8 +105,8 @@ the pane only when no report exists.
 On a desk, the console runs inside tmux in its home session `matchblox`,
 and the right side is not drawn. It is the agent's own pane, beside the
 list. Typing there is typing into the agent, with its `/commands`,
-`@files`, `Esc`, menus and the mouse wheel. `Enter` or a click on a row
-shows that agent and gives it the keys. `ctrl+q` flips the keys between
+`@files`, `Esc`, menus and the mouse wheel. `↑` and `↓` show the chosen
+agent there as you move; `Enter` or a click on a row gives it the keys. `ctrl+q` flips the keys between
 the list and the agent. See
 [The agent beside the list](keys.md#the-agent-beside-the-list).
 
@@ -133,7 +133,7 @@ wraps on lines of its own, and the other facts come after it.
 
 The line is part of the drawn chat. With the agent beside the list, there
 is no line: text typed in the list does not go to the agent, and the key
-line says `the agent pane takes text · ⏎ shows flint-auth`.
+line says `the agent pane takes text · ⏎ goes into flint-auth`.
 
 The line sends one message to the session it names, on that session's
 host. The list can move while you type: the message still goes to the

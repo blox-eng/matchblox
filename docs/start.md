@@ -62,7 +62,7 @@ it from any pane. Inside tmux, it opens in the current pane.
 
 In the session `matchblox`, the console's window has two panes: the list,
 and the agent's own pane beside it. Type in the agent's pane as in the
-agent itself. `Enter` on a row shows that agent, and `ctrl+q` flips the
+agent itself. `↑↓` show each agent as you pass, `Enter` goes in, and `ctrl+q` flips the
 keys between the list and the agent.
 
 The service starts with the console and keeps running after it closes: the

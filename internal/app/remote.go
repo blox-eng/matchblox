@@ -2,6 +2,7 @@ package app
 
 import (
 	"errors"
+	"maps"
 	"os/exec"
 	"strings"
 
@@ -194,6 +195,13 @@ type connectedMsg struct {
 // returns at once.
 func (m Model) onHost(a action) (tea.Model, tea.Cmd) {
 	if a.beside {
+		if a.remote && !m.viewed[a.host] { // the builder let a view of this peer run: its rows preview now
+			m.viewed = maps.Clone(m.viewed)
+			if m.viewed == nil {
+				m.viewed = map[string]bool{}
+			}
+			m.viewed[a.host] = true
+		}
 		return m.startShow(a)
 	}
 	argv := a.steps[0]
