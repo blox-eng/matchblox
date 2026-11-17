@@ -20,7 +20,7 @@ final class BoardBeltTests: XCTestCase {
     }
 
     private let arrows = ["↑", "↓", "⏎"]
-    private let tail = ["⌃o", "s hosts", "g chain", "/", "m menu", "c copy", "z park", "N new", "⇥ machine", "x kill"]
+    private let tail = ["c copy reply", "⌃o", "s hosts", "g chain", "/", "m menu", "z park", "N new", "⇥ machine", "x kill"]
 
     // MARK: The keys
 
@@ -30,11 +30,11 @@ final class BoardBeltTests: XCTestCase {
         XCTAssertEqual(try labels(";c,m,g,s,x,z"), ["◂"] + arrows + tail)
     }
 
-    /// The sidebar console's belt: `◂`, the chosen session's answers, `↑ ↓ ⏎`, then `⌃o` and the
-    /// list's keys. The board's column and page keys are gone.
+    /// The sidebar console's belt: `◂`, the chosen session's answers, `↑ ↓ ⏎`, then `c copy reply`,
+    /// `⌃o` and the list's keys. The board's column and page keys are gone.
     func testBeltHasTheSidebarKeys() throws {
-        XCTAssertEqual(try labels("1,2,3;"), ["◂", "1", "2", "3", "↑", "↓", "⏎", "⌃o", "s hosts", "g chain", "/",
-                                             "m menu", "c copy", "z park", "N new", "⇥ machine", "x kill"])
+        XCTAssertEqual(try labels("1,2,3;"), ["◂", "1", "2", "3", "↑", "↓", "⏎", "c copy reply", "⌃o", "s hosts",
+                                             "g chain", "/", "m menu", "z park", "N new", "⇥ machine", "x kill"])
         let ids = board(";").keys.map(\.id)
         for gone in ["board.v", "board.u", "board.]", "board.[", "←", "→"] {
             XCTAssertFalse(ids.contains(gone), gone)
@@ -153,7 +153,7 @@ final class BoardBeltTests: XCTestCase {
         let c = try catalog()
         let spoken = ["board.1", "board.p", "board.y", "board.tab", "board.ctrl+o", "board.N", "board./", "board.c", "board.runs", "◂"]
             .map { KeyFace(BeltKey(id: $0, cells: 1), in: c).spoken }
-        XCTAssertEqual(spoken, ["1, answer", "p, merge", "y, go", "machine", "expand", "new session", "find", "copy", "y, run", "Back to matchblox"])
+        XCTAssertEqual(spoken, ["1, answer", "p, merge", "y, go", "machine", "expand", "new session", "find", "copy the last reply", "y, run", "Back to matchblox"])
     }
 
     // MARK: Away from the board

@@ -183,6 +183,7 @@ private struct TerminalRepresentable: UIViewRepresentable {
         terminal.onFocus = { [weak belts] focused in belts?.focusChanged(focused) }
         terminal.onScrolledBack = { [weak screen] up in screen?.showJump(up) }
         screen.onJump = { [weak terminal] in terminal?.jumpToBottom() }
+        connection.onCopied = { [weak screen] in screen?.copied() }
         connection.onAgent = { agent in belts.agentChanged(agent) }
         connection.onBoard = { value in belts.boardSaid(value) }
         belts.onAnswer = { [weak connection] in connection?.answerBoard() }
@@ -216,6 +217,8 @@ private struct TerminalRepresentable: UIViewRepresentable {
 private final class HeldScreen: UIView {
     private static let jumpSide: CGFloat = 44
     private static let jumpInset: CGFloat = 12
+    private static let noticeHeight: CGFloat = 32
+    private static let noticeTime: TimeInterval = 1.2
 
     private let terminal: UIView
     private var hold = ScreenHold()
@@ -225,6 +228,9 @@ private final class HeldScreen: UIView {
     /// Shows while the terminal is up from its live bottom; a tap goes back down.
     private let jump = UIButton(type: .system)
     var onJump: @MainActor () -> Void = {}
+    /// A short word over the terminal that fades: `Copied`.
+    private let notice = UILabel()
+    private let copiedHaptic = UINotificationFeedbackGenerator()
 
     init(terminal: UIView) {
         self.terminal = terminal
@@ -242,12 +248,34 @@ private final class HeldScreen: UIView {
         jump.isHidden = true
         jump.addAction(UIAction { [weak self] _ in self?.onJump() }, for: .primaryActionTriggered)
         addSubview(jump)
+
+        notice.font = UIFont.monospacedSystemFont(ofSize: 13, weight: .medium)
+        notice.textColor = UIColor(Theme.fg)
+        notice.backgroundColor = UIColor(Theme.hair)
+        notice.textAlignment = .center
+        notice.layer.cornerRadius = Self.noticeHeight / 2
+        notice.layer.masksToBounds = true
+        notice.alpha = 0
+        addSubview(notice)
     }
 
     required init?(coder: NSCoder) { nil }
 
     func showJump(_ shows: Bool) {
         jump.isHidden = !shows
+    }
+
+    /// The host's copy reached the phone's clipboard.
+    func copied() {
+        copiedHaptic.notificationOccurred(.success)
+        notice.text = "Copied"
+        notice.layer.removeAllAnimations()
+        notice.alpha = 1
+        setNeedsLayout()
+        UIView.animate(withDuration: 0.3, delay: Self.noticeTime, options: [], animations: { [weak self] in
+            self?.notice.alpha = 0
+        })
+        UIAccessibility.post(notification: .announcement, argument: "Copied")
     }
 
     func trayMoved(open: Bool) {
@@ -269,6 +297,13 @@ private final class HeldScreen: UIView {
             y: bounds.height - side - Self.jumpInset,
             width: side,
             height: side
+        )
+        let width = notice.intrinsicContentSize.width + 2 * Self.jumpInset
+        notice.frame = CGRect(
+            x: ((bounds.width - width) / 2).rounded(),
+            y: jump.frame.midY - Self.noticeHeight / 2,
+            width: width,
+            height: Self.noticeHeight
         )
     }
 }
@@ -503,6 +538,8 @@ final class ConsoleConnection {
     @ObservationIgnored private var settling: Task<Void, Never>?
     /// Called each time a read has reached the terminal.
     @ObservationIgnored var onOutput: @MainActor () -> Void = {}
+    /// Called each time the host's copy reached the phone's clipboard.
+    @ObservationIgnored var onCopied: @MainActor () -> Void = {}
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private var outgoing: AsyncStream<Outgoing>.Continuation?
     /// One unlock serves every reconnect until the app goes to the background.
@@ -841,6 +878,12 @@ extension ConsoleConnection: @preconcurrency TerminalViewDelegate {
 
     func scrolled(source: TerminalView, position: Double) {
         terminal?.scrollChanged()
+    }
+
+    /// The host's copy (OSC 52), as `c copy reply` sends it: the phone's clipboard takes it.
+    func clipboardCopy(source: TerminalView, content: Data) {
+        UIPasteboard.general.string = String(decoding: content, as: UTF8.self)
+        onCopied()
     }
 
     func setTerminalTitle(source: TerminalView, title: String) {}
