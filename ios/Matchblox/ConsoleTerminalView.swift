@@ -7,7 +7,7 @@ import UIKit
 /// While the program reads the mouse, a vertical swipe sends wheel steps (`WheelScroll`), and a tap
 /// a click: the console opens the row's chat. While the console shows Sessions or Machine, a
 /// long-press sends a right click (`BoardTouch`) and each step of a swipe ticks once. A sideways
-/// swipe turns no page: the list and the chat have none.
+/// swipe turns no page: the list and the chat have none. A pinch makes the text bigger or smaller.
 final class ConsoleTerminalView: TerminalView {
     private struct Coast {
         let link: CADisplayLink
@@ -43,9 +43,18 @@ final class ConsoleTerminalView: TerminalView {
     private var wheel = WheelScroll(cellHeight: 0)
     private var coast: Coast?
     private var hold: UILongPressGestureRecognizer?
+    /// The size the text has now; a pinch changes it, in whole points.
+    private(set) var textSize: TextSize
+    private var pinchStart: TextSize?
+    nonisolated(unsafe) private var sizeObserver: NSObjectProtocol?
 
-    init(font: UIFont) {
-        super.init(frame: .zero, font: font)
+    static func font(_ size: TextSize) -> UIFont {
+        UIFont.monospacedSystemFont(ofSize: CGFloat(size.points), weight: .regular)
+    }
+
+    init(textSize: TextSize) {
+        self.textSize = textSize
+        super.init(frame: .zero, font: Self.font(textSize))
 
         let edge = UIScreenEdgePanGestureRecognizer(target: self, action: #selector(edgeSwiped))
         edge.edges = .left
@@ -96,9 +105,21 @@ final class ConsoleTerminalView: TerminalView {
         }
         addGestureRecognizer(hold)
         self.hold = hold
+
+        // Two fingers: the one-finger pans, the taps and the long-presses fail at once.
+        addGestureRecognizer(UIPinchGestureRecognizer(target: self, action: #selector(pinched)))
+
+        // A change in the Island screen reaches a console that is open.
+        sizeObserver = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) {
+            [weak self] _ in MainActor.assumeIsolated { self?.show(TextSize.load(from: .standard)) }
+        }
     }
 
     required init?(coder: NSCoder) { nil }
+
+    deinit {
+        if let sizeObserver { NotificationCenter.default.removeObserver(sizeObserver) }
+    }
 
     /// SwiftTerm adds its mouse and selection pans only once it needs them: they wait for the
     /// edge swipe and the wheel pan too, or a swipe with the tmux mouse on would drag in the pane.
@@ -146,6 +167,10 @@ final class ConsoleTerminalView: TerminalView {
     }
 
     override func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
+        // Two fingers pinch: the scroll view's pan and SwiftTerm's pans do not take them.
+        if gesture is UIPanGestureRecognizer, gesture.numberOfTouches > 1 {
+            return false
+        }
         if gesture === labelTap {
             return tapsLabel(at: gesture.location(in: self))
         }
@@ -205,6 +230,32 @@ final class ConsoleTerminalView: TerminalView {
         guard hold.state == .began, let spot = cell(at: hold.location(in: self)) else { return }
         haptic.impactOccurred()
         send(BoardTouch.rightClick(col: spot.col, row: spot.row))
+    }
+
+    /// Each whole point of a pinch ticks once. The phone keeps the size when the fingers lift.
+    @objc private func pinched(_ pinch: UIPinchGestureRecognizer) {
+        switch pinch.state {
+        case .began:
+            tick.prepare()
+            pinchStart = textSize
+        case .changed:
+            guard let pinchStart else { return }
+            let before = textSize
+            show(pinchStart.pinched(pinch.scale))
+            if textSize != before { tick.selectionChanged() }
+        case .ended, .cancelled:
+            pinchStart = nil
+            textSize.save(to: .standard)
+        default:
+            pinchStart = nil
+        }
+    }
+
+    /// SwiftTerm counts the columns and rows again, and `sizeChanged` tells the host.
+    private func show(_ size: TextSize) {
+        guard size != textSize else { return }
+        textSize = size
+        font = Self.font(size)
     }
 
     @objc private func coasted(_ link: CADisplayLink) {

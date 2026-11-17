@@ -156,7 +156,7 @@ private struct TerminalRepresentable: UIViewRepresentable {
     let connection: ConsoleConnection
 
     func makeUIView(context: Context) -> UIStackView {
-        let terminal = ConsoleTerminalView(font: UIFont.monospacedSystemFont(ofSize: 13, weight: .regular))
+        let terminal = ConsoleTerminalView(textSize: TextSize.load(from: .standard))
         terminal.onHome = { [weak connection] in connection?.goHome() }
         let bg = UIColor(Theme.bg)
         terminal.backgroundColor = bg
