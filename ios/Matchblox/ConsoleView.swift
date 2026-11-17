@@ -3,6 +3,10 @@ import MatchbloxKit
 import NIOSSH
 import SwiftTerm
 import SwiftUI
+import UniformTypeIdentifiers
+import os
+
+private let consoleLog = Logger(subsystem: "matchblox", category: "console")
 
 /// Where the console's bytes come from and go to. Each source's output comes from its own start.
 protocol ConsoleSource: Sendable {
@@ -183,7 +187,8 @@ private struct TerminalRepresentable: UIViewRepresentable {
         terminal.onFocus = { [weak belts] focused in belts?.focusChanged(focused) }
         terminal.onScrolledBack = { [weak screen] up in screen?.showJump(up) }
         screen.onJump = { [weak terminal] in terminal?.jumpToBottom() }
-        connection.onCopied = { [weak screen] in screen?.copied() }
+        connection.onCopied = { [weak screen] word, ok in screen?.copied(word, ok: ok) }
+        terminal.onAsksCopy = { [weak connection] in connection?.copyAsked() }
         connection.onAgent = { agent in belts.agentChanged(agent) }
         connection.onBoard = { value in belts.boardSaid(value) }
         belts.onAnswer = { [weak connection] in connection?.answerBoard() }
@@ -265,17 +270,17 @@ private final class HeldScreen: UIView {
         jump.isHidden = !shows
     }
 
-    /// The host's copy reached the phone's clipboard.
-    func copied() {
-        copiedHaptic.notificationOccurred(.success)
-        notice.text = "Copied"
+    /// What came of the host's copy: `Copied`, or why it did not.
+    func copied(_ word: String, ok: Bool) {
+        copiedHaptic.notificationOccurred(ok ? .success : .error)
+        notice.text = word
         notice.layer.removeAllAnimations()
         notice.alpha = 1
         setNeedsLayout()
         UIView.animate(withDuration: 0.3, delay: Self.noticeTime, options: [], animations: { [weak self] in
             self?.notice.alpha = 0
         })
-        UIAccessibility.post(notification: .announcement, argument: "Copied")
+        UIAccessibility.post(notification: .announcement, argument: word)
     }
 
     func trayMoved(open: Bool) {
@@ -337,6 +342,7 @@ private final class Belts {
             belt.onScreenHold = { [weak screen] holding in screen?.trayMoved(open: holding) }
             belt.onSend = { [weak terminal] bytes in
                 terminal?.forgetScrollBack()
+                if bytes == Self.copyReply { terminal?.onAsksCopy() }
                 terminal?.send(bytes)
             }
             belt.onCtrl = { [weak self, weak terminal] in
@@ -355,6 +361,8 @@ private final class Belts {
             [weak self] _ in MainActor.assumeIsolated { self?.ctrlChanged(false) }
         }
     }
+
+    private static let copyReply = KeyBar.bytes(for: "board.c")
 
     /// SwiftTerm disarms ctrl after the next typed key and posts this; its name is not public.
     private static let ctrlReset = Notification.Name("SwiftTerm.TerminalView.controlModifierReset")
@@ -538,8 +546,9 @@ final class ConsoleConnection {
     @ObservationIgnored private var settling: Task<Void, Never>?
     /// Called each time a read has reached the terminal.
     @ObservationIgnored var onOutput: @MainActor () -> Void = {}
-    /// Called each time the host's copy reached the phone's clipboard.
-    @ObservationIgnored var onCopied: @MainActor () -> Void = {}
+    /// Called with what came of each copy the person asked for: `Copied`, or why it did not.
+    @ObservationIgnored var onCopied: @MainActor (String, Bool) -> Void = { _, _ in }
+    @ObservationIgnored private var copyGate = CopyGate()
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private var outgoing: AsyncStream<Outgoing>.Continuation?
     /// One unlock serves every reconnect until the app goes to the background.
@@ -594,6 +603,11 @@ final class ConsoleConnection {
 
     func goHome() {
         outgoing?.yield(.input(Data(HomeKey.bytes)))
+    }
+
+    /// The person sent a key that can ask the host for a copy.
+    func copyAsked() {
+        copyGate.asked(at: .now)
     }
 
     /// The answer goes with no mark: the console's binding names the terminal that sent it.
@@ -880,10 +894,18 @@ extension ConsoleConnection: @preconcurrency TerminalViewDelegate {
         terminal?.scrollChanged()
     }
 
-    /// The host's copy (OSC 52), as `c copy reply` sends it: the phone's clipboard takes it.
+    /// The host's copy (OSC 52), as `c copy reply` asks for it. Only a copy the person asked
+    /// for reaches the clipboard (`CopyGate`), and only this device's: not Universal Clipboard.
     func clipboardCopy(source: TerminalView, content: Data) {
-        UIPasteboard.general.string = String(decoding: content, as: UTF8.self)
-        onCopied()
+        switch copyGate.take(content, at: .now) {
+        case .copy(let text):
+            UIPasteboard.general.setItems([[UTType.utf8PlainText.identifier: text]], options: [.localOnly: true])
+            onCopied("Copied", true)
+        case .tooLarge:
+            onCopied("Too large to copy", false)
+        case .unasked:
+            consoleLog.info("a copy nobody asked for is dropped (\(content.count, privacy: .public) bytes)")
+        }
     }
 
     func setTerminalTitle(source: TerminalView, title: String) {}

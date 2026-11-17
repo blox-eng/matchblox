@@ -22,6 +22,8 @@ final class ConsoleTerminalView: TerminalView {
     var onFocus: @MainActor (Bool) -> Void = { _ in }
     /// Called when the terminal goes up from its live bottom (true) or comes back (false).
     var onScrolledBack: @MainActor (Bool) -> Void = { _ in }
+    /// Called for each key typed into the terminal: the console's own `c` may ask for a copy.
+    var onAsksCopy: @MainActor () -> Void = {}
     /// The console shows Sessions or Machine (`BoardFollow`): a long-press opens the row's menu,
     /// and a swipe ticks. Otherwise the terminal's own long-press acts.
     var showsConsole = false
@@ -381,6 +383,7 @@ final class ConsoleTerminalView: TerminalView {
 
     override func insertText(_ text: String) {
         forgetScrollBack()
+        onAsksCopy()
         super.insertText(text)
     }
 
@@ -391,6 +394,7 @@ final class ConsoleTerminalView: TerminalView {
 
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
         forgetScrollBack()
+        onAsksCopy()
         super.pressesBegan(presses, with: event)
     }
 
