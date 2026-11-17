@@ -181,6 +181,8 @@ private struct TerminalRepresentable: UIViewRepresentable {
         terminal.inputAccessoryView = belts.lifted
         terminal.tapRaisesKeyboard = !connection.isDemo
         terminal.onFocus = { [weak belts] focused in belts?.focusChanged(focused) }
+        terminal.onScrolledBack = { [weak screen] up in screen?.showJump(up) }
+        screen.onJump = { [weak terminal] in terminal?.jumpToBottom() }
         connection.onAgent = { agent in belts.agentChanged(agent) }
         connection.onBoard = { value in belts.boardSaid(value) }
         belts.onAnswer = { [weak connection] in connection?.answerBoard() }
@@ -212,20 +214,41 @@ private struct TerminalRepresentable: UIViewRepresentable {
 /// the terminal keeps its size (`ScreenHold`): its lines slide up and the top ones go under the
 /// edge. SwiftTerm resizes only when its bounds change, so the host gets no resize.
 private final class HeldScreen: UIView {
+    private static let jumpSide: CGFloat = 44
+    private static let jumpInset: CGFloat = 12
+
     private let terminal: UIView
     private var hold = ScreenHold()
     private var heldSize: ScreenHold.Size {
         ScreenHold.Size(width: bounds.width, height: bounds.height)
     }
+    /// Shows while the terminal is up from its live bottom; a tap goes back down.
+    private let jump = UIButton(type: .system)
+    var onJump: @MainActor () -> Void = {}
 
     init(terminal: UIView) {
         self.terminal = terminal
         super.init(frame: .zero)
         clipsToBounds = true
         addSubview(terminal)
+
+        var look = UIButton.Configuration.filled()
+        look.title = "↓"
+        look.cornerStyle = .capsule
+        look.baseBackgroundColor = UIColor(Theme.hair)
+        look.baseForegroundColor = UIColor(Theme.fg)
+        jump.configuration = look
+        jump.accessibilityLabel = "Jump to the bottom"
+        jump.isHidden = true
+        jump.addAction(UIAction { [weak self] _ in self?.onJump() }, for: .primaryActionTriggered)
+        addSubview(jump)
     }
 
     required init?(coder: NSCoder) { nil }
+
+    func showJump(_ shows: Bool) {
+        jump.isHidden = !shows
+    }
 
     func trayMoved(open: Bool) {
         if open {
@@ -240,6 +263,13 @@ private final class HeldScreen: UIView {
         super.layoutSubviews()
         let height = hold.height(screen: heldSize)
         terminal.frame = CGRect(x: 0, y: bounds.height - height, width: bounds.width, height: height)
+        let side = Self.jumpSide
+        jump.frame = CGRect(
+            x: bounds.width - side - Self.jumpInset,
+            y: bounds.height - side - Self.jumpInset,
+            width: side,
+            height: side
+        )
     }
 }
 
@@ -270,7 +300,10 @@ private final class Belts {
         for belt in [lifted, dock] {
             belt.isDemo = isDemo
             belt.onScreenHold = { [weak screen] holding in screen?.trayMoved(open: holding) }
-            belt.onSend = { [weak terminal] bytes in terminal?.send(bytes) }
+            belt.onSend = { [weak terminal] bytes in
+                terminal?.forgetScrollBack()
+                terminal?.send(bytes)
+            }
             belt.onCtrl = { [weak self, weak terminal] in
                 guard let terminal else { return }
                 terminal.controlModifier.toggle()
@@ -326,6 +359,7 @@ private final class Belts {
     /// past a pane never lights the keys.
     private func checkLive() {
         let inPane = terminal?.inTmuxPane == true
+        if !inPane { terminal?.forgetScrollBack() }
         onPaneSeen(inPane)
         let layout = board.pane(inPane, on: lifted.layout)
         followBoard(turn: layout)
@@ -686,6 +720,7 @@ final class ConsoleConnection {
         }
 
         terminal?.getTerminal().resetToInitialState()
+        terminal?.forgetScrollBack()
         phase = .live
         let opened = openSession != nil
         openSession = nil
@@ -804,9 +839,12 @@ extension ConsoleConnection: @preconcurrency TerminalViewDelegate {
         outgoing?.yield(.resize(cols: newCols, rows: newRows))
     }
 
+    func scrolled(source: TerminalView, position: Double) {
+        terminal?.scrollChanged()
+    }
+
     func setTerminalTitle(source: TerminalView, title: String) {}
     func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
-    func scrolled(source: TerminalView, position: Double) {}
     func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {}
     func rangeChanged(source: TerminalView, startY: Int, endY: Int) {}
 }

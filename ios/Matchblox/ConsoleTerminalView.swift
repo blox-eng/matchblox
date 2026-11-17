@@ -20,6 +20,8 @@ final class ConsoleTerminalView: TerminalView {
     var onHome: @MainActor () -> Void = {}
     /// Called when the terminal takes or gives up the keyboard.
     var onFocus: @MainActor (Bool) -> Void = { _ in }
+    /// Called when the terminal goes up from its live bottom (true) or comes back (false).
+    var onScrolledBack: @MainActor (Bool) -> Void = { _ in }
     /// The console shows Sessions or Machine (`BoardFollow`): a long-press opens the row's menu,
     /// and a swipe ticks. Otherwise the terminal's own long-press acts.
     var showsConsole = false
@@ -46,6 +48,11 @@ final class ConsoleTerminalView: TerminalView {
     /// The size the text has now; a pinch changes it, in whole points.
     private(set) var textSize: TextSize
     private var pinchStart: TextSize?
+    /// The wheel steps a swipe sent up in a tmux pane, less the steps down.
+    private var scrollBack = ScrollBack()
+    /// The swipe began in a tmux pane: its steps go into `scrollBack`.
+    private var countsBack = false
+    private var scrolledBack = false
     nonisolated(unsafe) private var sizeObserver: NSObjectProtocol?
 
     static func font(_ size: TextSize) -> UIFont {
@@ -212,7 +219,8 @@ final class ConsoleTerminalView: TerminalView {
             if pan.state == .began {
                 if showsConsole { tick.prepare() }
                 stopCoast()
-                wheel = WheelScroll(cellHeight: cellSize.height, linesPerStep: inTmuxPane ? WheelScroll.tmuxLines : 1)
+                countsBack = inTmuxPane
+                wheel = WheelScroll(cellHeight: cellSize.height, linesPerStep: countsBack ? WheelScroll.tmuxLines : 1)
             }
             let dy = pan.translation(in: self).y
             pan.setTranslation(.zero, in: self)
@@ -292,6 +300,10 @@ final class ConsoleTerminalView: TerminalView {
     private func sendWheel(_ steps: [WheelScroll.Step], at point: CGPoint) {
         guard readsMouse, !steps.isEmpty, let spot = cell(at: point) else { return }
         if showsConsole { tick.selectionChanged() }
+        if countsBack {
+            scrollBack.wheeled(steps)
+            scrollChanged()
+        }
         let terminal = getTerminal()
         let pixelX = Int(point.x)
         let pixelY = Int(point.y - contentOffset.y)
@@ -331,7 +343,55 @@ final class ConsoleTerminalView: TerminalView {
 
     @objc private func goHome() {
         haptic.impactOccurred()
+        forgetScrollBack()
         onHome()
+    }
+
+    // MARK: The live bottom
+
+    /// Up from the live bottom: a tmux pane the wheel scrolled up, or SwiftTerm's own scrollback.
+    private var isScrolledBack: Bool {
+        scrollBack.isUp || (canScroll && scrollPosition < 1)
+    }
+
+    /// Tells `onScrolledBack` when the terminal leaves the live bottom or comes back to it.
+    func scrollChanged() {
+        let up = isScrolledBack
+        guard up != scrolledBack else { return }
+        scrolledBack = up
+        onScrolledBack(up)
+    }
+
+    /// The person types, or leaves the pane: the wheel steps no longer say where the pane is.
+    func forgetScrollBack() {
+        guard scrollBack.isUp else { return }
+        scrollBack.typed()
+        scrollChanged()
+    }
+
+    /// The wheel steps that bring the pane back down; at the bottom tmux leaves copy mode. A
+    /// plain `q` would leave it at once, but it types into the agent when the pane is not in copy
+    /// mode; a step down past the bottom does nothing.
+    func jumpToBottom() {
+        stopCoast()
+        sendWheel(scrollBack.jump(), at: CGPoint(x: bounds.midX, y: bounds.midY))
+        if canScroll { scroll(toPosition: 1) }
+        scrollChanged()
+    }
+
+    override func insertText(_ text: String) {
+        forgetScrollBack()
+        super.insertText(text)
+    }
+
+    override func deleteBackward() {
+        forgetScrollBack()
+        super.deleteBackward()
+    }
+
+    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        forgetScrollBack()
+        super.pressesBegan(presses, with: event)
     }
 
     /// SwiftTerm's own cell size (`computeFontDimensions`), which it does not make public.
