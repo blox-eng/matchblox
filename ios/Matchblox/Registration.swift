@@ -178,15 +178,19 @@ enum Registration {
         if lost != nil { IslandSettings.endStrayActivities() }
         do {
             try await run(host: host, key: key, atOpen: true)
+            IslandSettings.clearFailure(host: host)
         } catch {
             islandLog.error("register with \(host.label, privacy: .public): \(String(describing: error), privacy: .public)")
+            keep(error, host: host)
         }
         guard !Task.isCancelled, let lost, let context, let old = hosts.first(where: { $0.fingerprint == lost }) else { return }
         do {
             let oldKey = DeviceKey.nioKey(try DeviceKey.load(host: old.fingerprint, context: context))
             try await run(host: old, key: oldKey)
+            IslandSettings.clearFailure(host: old)
         } catch {
             islandLog.error("register with \(old.label, privacy: .public): \(String(describing: error), privacy: .public)")
+            keep(error, host: old)
         }
     }
 
@@ -224,12 +228,33 @@ enum Registration {
             do {
                 let key = DeviceKey.nioKey(try DeviceKey.load(host: host.fingerprint, context: context))
                 try await run(host: host, key: key)
+                IslandSettings.clearFailure(host: host)
             } catch {
                 islandLog.error("register with \(host.label, privacy: .public): \(String(describing: error), privacy: .public)")
                 change.failed(host, error, cancelled: Task.isCancelled)
+                keep(error, host: host)
             }
         }
         return change
+    }
+
+    /// Keeps why a registration failed, for the Island screen. A cancel is no failure: the app
+    /// went to the background, or a newer change took over.
+    private static func keep(_ error: Error, host: Host) {
+        guard !Task.isCancelled, !(error is CancellationError) else { return }
+        IslandSettings.setFailure(failure(error, at: .now), host: host)
+    }
+
+    static func failure(_ error: Error, at now: Date) -> RegistrationFailure {
+        switch error {
+        case Failure.noDeviceToken: RegistrationFailure(.noDeviceToken, at: now)
+        case Failure.noNotifyKey: RegistrationFailure(.noNotifyKey, at: now)
+        case Failure.noGrant(let kind): RegistrationFailure(.noGrant, detail: kind, at: now)
+        case Attest.Failure.unsupported: RegistrationFailure(.noAppAttest, at: now)
+        case Attest.Failure.relay: RegistrationFailure(.relay, detail: String(describing: error), at: now)
+        case Attest.Failure.badReply: RegistrationFailure(.relayReply, at: now)
+        default: RegistrationFailure.connect(error, at: now)
+        }
     }
 
     private static func askForAlerts() async {
