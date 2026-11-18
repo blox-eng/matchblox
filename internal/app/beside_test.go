@@ -26,6 +26,7 @@ type besideTmux struct {
 	own   []string // other panes in the console's window
 	using string   // the window's active pane, "" when tmux does not say
 	chain string   // the window's @matchblox_chain
+	agent string   // what the agent pane shows, for capture-pane
 	calls [][]string
 }
 
@@ -60,6 +61,8 @@ func (b *besideTmux) run(args ...string) (string, error) {
 		return "%9\n", nil
 	case "list-panes":
 		return "\n" + b.using + "\n", nil
+	case "capture-pane":
+		return b.agent, nil
 	}
 	return "", nil
 }

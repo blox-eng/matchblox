@@ -6,6 +6,14 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **Boxes open over the whole window.** With the agent beside the list, a
+  consent, the launch sheet, a form or the ssh prompt drew inside the
+  list's narrow pane, its words cut. The box now takes the window while it
+  is open, centred, with the list and the agent dim behind it, and gives
+  the window back when it closes.
+
 ## [0.47.0] - 2026-11-16
 
 ### Added
