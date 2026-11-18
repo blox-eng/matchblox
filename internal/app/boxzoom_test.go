@@ -74,3 +74,23 @@ func TestADragBehindABoxSelectsNothing(t *testing.T) {
 		t.Fatal("a press behind the box starts a drag")
 	}
 }
+
+// TestABoxClosedBeforeItsZoomLeavesNoZoom: esc before tmux zoomed for the
+// box. The two tmux runs race; a zoom that lands last must not leave the
+// list zoomed with no box, the agent hidden.
+func TestABoxClosedBeforeItsZoomLeavesNoZoom(t *testing.T) {
+	m, tm := besideConsoleWith(t, boardFixture(t), 32, 50, &besideTmux{winW: "160", winH: "50"})
+	m.sheet = &sheet{chain: "c1", chainName: "flint"}
+	next, zoom := m.Update(besideSizeMsg{160, 50})
+	m = next.(Model)
+	m.sheet = nil
+	next, unzoom := m.Update(besideSizeMsg{160, 50})
+	m = next.(Model)
+	m = feed(t, m, unzoom) // the give-back runs first
+	tm.calls = nil
+	next, cmd := m.Update(zoom()) // then the zoom lands
+	feed(t, next.(Model), cmd)
+	if !tm.ran(remote.ZoomArgv("%1", false)) {
+		t.Fatalf("the late zoom keeps the window: %q", tm.lines())
+	}
+}

@@ -866,9 +866,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case besideSizeMsg:
 		m.winW, m.winH = msg.w, msg.h
 	case boxBackMsg:
-		if m.boxZoom {
-			m.boxBack = msg
+		if !m.boxZoom { // the box closed before its zoom landed: give the window back after it
+			return m, m.sizeCmd(m.width)
 		}
+		m.boxBack = msg
 	case shownMsg:
 		return m.besideShown(msg)
 	case fromConn:
