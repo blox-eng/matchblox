@@ -6,6 +6,19 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **The phone console zooms, copies, and opens links.** A pinch or `A−` /
+  `A+` sets the text size, a `↓` button brings a scrolled pane back to its
+  bottom, `c copy reply` puts the last reply on the clipboard, and a tap on
+  a link asks to open or copy it. The clipboard takes only a copy you ask for.
+
+### Fixed
+
+- **The island says why it is not registered.** The Island screen shows
+  the last failure under each host, with its fix, until a registration
+  succeeds.
+
 ## [0.47.0] - 2026-11-16
 
 ### Added
