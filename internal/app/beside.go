@@ -11,6 +11,8 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -123,6 +125,9 @@ func (m Model) sizeCmd(paneW int) tea.Cmd {
 		if w == 0 {
 			w = paneW
 		}
+		if m.boxZoom { // the box keeps the window
+			return besideSizeMsg{w, h}
+		}
 		if m.onePaneAt(w, h) {
 			_, _ = run(remote.ZoomArgv(inUse(run, console), true)[1:]...)
 			return besideSizeMsg{w, h}
@@ -132,6 +137,55 @@ func (m Model) sizeCmd(paneW int) tea.Cmd {
 		_, _ = run(remote.ListWidthArgv(console, m.listWidth(w, h))[1:]...)
 		return besideSizeMsg{w, h}
 	}
+}
+
+// boxOpen: a box asks over the screen, centred: a consent, the launch
+// sheet, a form or the ssh prompt. The row menu is not one: it stays by
+// its row.
+func (m Model) boxOpen() bool {
+	return m.consenting() || m.sheet != nil || m.form != nil || m.asking()
+}
+
+// boxBackMsg is the agent pane's screen as the box opened.
+type boxBackMsg []string
+
+// boxZoomed lends the window to a box beside the agent: the list's pane
+// zooms, and the box centres over the whole window, not in the list's
+// columns. The agent's screen shows dim beside the list behind it. As the
+// box closes, the window goes back to both panes.
+func (m Model) boxZoomed() (Model, tea.Cmd) {
+	run := m.tmuxRun()
+	if m.beside == "" || run == nil || m.boxOpen() == m.boxZoom {
+		return m, nil
+	}
+	if !m.boxZoom && m.winW > 0 && m.onePaneAt(m.winW, m.winH) { // one pane has the window already
+		return m, nil
+	}
+	m.boxZoom = !m.boxZoom
+	if !m.boxZoom {
+		m.boxBack = nil
+		return m, m.sizeCmd(m.width)
+	}
+	console, agent := m.opt.Pane, m.beside
+	return m, func() tea.Msg {
+		out, _ := run(remote.CaptureArgv(agent)[1:]...)
+		_, _ = run(remote.ZoomArgv(console, true)[1:]...)
+		return boxBackMsg(strings.Split(out, "\n"))
+	}
+}
+
+// agentBack is the agent's screen behind a box, w by h from the body's
+// first row, dim.
+func (m Model) agentBack(w, h int) []string {
+	out := make([]string, h)
+	for i := range out {
+		l := ""
+		if r := i + 3; r < len(m.boxBack) { // the body starts under the header, the tabs and a hairline
+			l = ansi.Truncate(ansi.Strip(m.boxBack[r]), w, "")
+		}
+		out[i] = m.st.faint.Render(l + strings.Repeat(" ", w-lipgloss.Width(l)))
+	}
+	return out
 }
 
 // inUse is the pane of the console's window that has the keys; the
