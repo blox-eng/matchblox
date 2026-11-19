@@ -106,8 +106,10 @@ On a desk, the console runs inside tmux in its home session `matchblox`,
 and the right side is not drawn. It is the agent's own pane, beside the
 list. Typing there is typing into the agent, with its `/commands`,
 `@files`, `Esc`, menus and the mouse wheel. `↑` and `↓` show the chosen
-agent there as you move; `Enter` or a click on a row gives it the keys. `ctrl+q` flips the keys between
-the list and the agent. See
+agent there as you move; `Enter` or a click on a row gives it the keys.
+`ctrl+q` flips the keys between the list and the agent. A box (a consent,
+the launch sheet, a form, the ssh prompt) takes the whole window while it
+is open, with the list and the agent dim behind it. See
 [The agent beside the list](keys.md#the-agent-beside-the-list).
 
 The chat below is drawn in the demo (and the iOS demo), in a console with
