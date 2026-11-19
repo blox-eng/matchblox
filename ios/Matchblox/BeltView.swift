@@ -80,16 +80,17 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
     /// False while the belt turns as the console's board asks: that turn is no pick.
     private var savesLayout = true
 
-    /// The keys the console's board says. Board shows them; another layout keeps them.
+    /// The keys the console's board says. Board shows them; another layout keeps them, and dims
+    /// its console keys as Board would.
     var board = BoardBelt.away {
         didSet {
-            guard board != oldValue, layout == .board else { return }
-            if Self.catalog.keys(.board, agent: agent, mine: [], board: board) != builtKeys {
-                rebuild()
-            } else {
+            guard board != oldValue else { return }
+            if layout != .board || Self.catalog.keys(.board, agent: agent, mine: [], board: board) == builtKeys {
                 paintKeys()
                 spoken = nil
                 place()
+            } else {
+                rebuild()
             }
         }
     }
@@ -488,13 +489,15 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
         Self.paint(piece, pressed: pressed, lit: onBoard && board.isLit(piece.id))
     }
 
-    /// Dim, and sends nothing: a command off its agent's pane, or a Board key that is off.
+    /// Dim, and sends nothing: a command off its agent's pane, or a console key that is off.
     private func isDim(_ piece: Piece) -> Bool {
         (piece.key.isCommand && !commandsLive) || isBoardDim(piece)
     }
 
+    /// A console key is off where Board says so, on any layout: away from the console it would
+    /// type into an agent's pane.
     private func isBoardDim(_ piece: Piece) -> Bool {
-        layout == .board && board.isDim(piece.id)
+        (layout == .board || BoardBelt.label(of: piece.id) != nil) && board.isDim(piece.id)
     }
 
     private static func paint(_ piece: Piece, pressed: Bool, lit: Bool = false) {
