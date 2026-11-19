@@ -114,7 +114,7 @@ struct BeltEditor: View {
             Group {
                 if key.id == KeyBar.wheel {
                     Circle()
-                        .fill(RadialGradient(colors: [Theme.flameAmber, Theme.matchHead], center: .topLeading, startRadius: 1, endRadius: 16))
+                        .fill(RadialGradient(colors: [Theme.matchHead, Theme.matchEmber], center: .topLeading, startRadius: 1, endRadius: 16))
                         .frame(width: 20, height: 20)
                 } else {
                     Text(face.label)
