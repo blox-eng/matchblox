@@ -158,6 +158,9 @@ func (m Model) boxZoomed() (Model, tea.Cmd) {
 	if m.beside == "" || run == nil || m.boxOpen() == m.boxZoom {
 		return m, nil
 	}
+	if !m.boxZoom && m.winW > 0 && m.onePaneAt(m.winW, m.winH) { // one pane has the window already
+		return m, nil
+	}
 	m.boxZoom = !m.boxZoom
 	if !m.boxZoom {
 		m.boxBack = nil

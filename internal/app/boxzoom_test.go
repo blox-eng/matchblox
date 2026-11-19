@@ -94,3 +94,20 @@ func TestABoxClosedBeforeItsZoomLeavesNoZoom(t *testing.T) {
 		t.Fatalf("the late zoom keeps the window: %q", tm.lines())
 	}
 }
+
+// TestABoxInAOnePaneWindowLeavesTheListWhole: a phone or a narrow window
+// shows one pane, which already has the whole window. A box there lends
+// nothing: the list stays whole behind it, with no agent picture.
+func TestABoxInAOnePaneWindowLeavesTheListWhole(t *testing.T) {
+	m, tm := besideConsoleWith(t, boardFixture(t), 70, 50, &besideTmux{winW: "70", winH: "50", agent: "top\n\n\nagent says hello\n"})
+	tm.calls = nil
+	m.sheet = &sheet{chain: "c1", chainName: "flint"}
+	next, cmd := m.Update(besideSizeMsg{70, 50})
+	m = feed(t, next.(Model), cmd)
+	if m.boxZoom || tm.count("capture-pane") != 0 {
+		t.Fatalf("a one-pane window zoomed for the box: %q", tm.lines())
+	}
+	if strings.Contains(plainFrame(m), "agent says hello") {
+		t.Fatal("the agent picture cuts the list in a one-pane window")
+	}
+}
