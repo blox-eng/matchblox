@@ -121,8 +121,6 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
     var onHead: (Int) -> HeadRoute = { _ in .nothing }
     /// VoiceOver paged the terminal with the match head (true: toward older lines).
     var onHeadPage: (Bool) -> HeadRoute = { _ in .nothing }
-    /// The match head rolled sideways `notches` notches (positive: right). True if it scrolled.
-    var onHeadSideways: (Int) -> Bool = { _ in false }
     /// A tap on the Ctrl key: the terminal arms or disarms ctrl for the next typed key.
     var onCtrl: () -> Void = {}
     /// Ctrl is armed: its key stays lit until the next typed key, or a second tap.
@@ -211,7 +209,6 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
     private var head = MatchHead()
     private let feel = HeadFeel()
     private var headTouch: HeadTouch?
-    private var sidewaysTravel: CGFloat = 0
     /// A flick carries on after the thumb lifts, as the terminal's swipe does.
     private var headCoast: (start: TimeInterval, velocity: CGFloat, carried: CGFloat)?
     private var headLink: CADisplayLink?
@@ -757,6 +754,9 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
     private func press(_ i: Int) {
         guard let motion, pieces.indices.contains(i) else { return }
         let piece = pieces[i]
+        // The head scrolls; a tap or a large-text press on it sends nothing.
+        guard piece.head == nil else { return }
+        stopHead()
         if piece.key.isCommand && !commandsLive {
             flash("commands run in an agent's pane")
             return
@@ -839,12 +839,6 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
                 sayOnce("nothing scrolls here · this program has no scrollback")
             }
         }
-        sidewaysTravel += dx
-        let sideways = Int((sidewaysTravel / MatchHead.notch).rounded(.towardZero))
-        if sideways != 0 {
-            sidewaysTravel -= CGFloat(sideways) * MatchHead.notch
-            if onHeadSideways(sideways) { moved = true }
-        }
         if moved, head.tap(at: time) { feel.notch(heat: head.heat) }
         if rolled.strike { feel.strike() }
         if !UIAccessibility.isReduceMotionEnabled {
@@ -866,6 +860,11 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
         }
         if let message { flash(message) }
         return true
+    }
+
+    /// A key or typed text ends a flick, so the coast cannot scroll the pane back up under it.
+    func stopHead() {
+        headCoast = nil
     }
 
     private func pageHead(older: Bool) {

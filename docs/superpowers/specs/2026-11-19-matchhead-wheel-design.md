@@ -19,7 +19,7 @@ The owner runs agents from an iPhone with Matchblox Pocket. One hand holds the p
 3. A slow roll moves 1 line a notch. A faster roll moves more lines a notch, up to 10. Taps come closer together as the roll gets faster, up to about 30 a second. Above that, the taps stay at that rate and each notch moves more lines.
 4. The head shows its speed. Cold red, then ember, then amber. Rolled too fast, it **strikes**: it lights, and one rigid tap marks the strike. It cools when the roll slows.
 5. A flick keeps the head turning with slower taps, and it cools out. A touch stops it.
-6. A sideways roll scrolls sideways where the program reads a sideways wheel. Elsewhere a sideways roll does nothing and plays no tap.
+6. A sideways roll turns the head and scrolls nothing (ruling of 2026-11-20).
 7. A tap on the head without a roll sends nothing.
 
 **With no head on the layout.** A swipe on the terminal scrolls as today, now with a tap per step in tmux too. A hold on the terminal, then a swipe, is the fast scroll: the same speed-up as the head.
@@ -60,6 +60,7 @@ The owner runs agents from an iPhone with Matchblox Pocket. One hand holds the p
 - 2026-11-19 — With no head: swipe on the screen scrolls, and hold then swipe is the fast scroll — because the owner said so in the same answer. — the owner.
 - 2026-11-19 — Keys stay 44 pt or larger — because 7 cells and a head go below 44 pt on 375 and 393 pt phones (measured from `BeltGeometry`). — proposed, not confirmed.
 - 2026-11-19: spec approved. Decided by: the owner.
+- 2026-11-20 — A sideways roll scrolls nothing — because SwiftTerm 1.20.0 sends wheel right (67) in SGR mode as `CSI <64;…m`, a wheel-up release, so the console scrolled up on a sideways roll (found in review). — proposed, not confirmed.
 
 ## Left to the builder
 

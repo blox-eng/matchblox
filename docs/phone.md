@@ -423,13 +423,14 @@ with your thumb to scroll, as a trackball:
   stays there.
 - On a screen with no history that does not read the mouse, the handle row
   says `nothing scrolls here · this program has no scrollback`.
-- A sideways roll scrolls sideways in a program outside tmux that reads the
-  mouse. Elsewhere it does nothing.
+- A sideways roll turns the head and scrolls nothing.
 - A tap on the head sends nothing. With VoiceOver, the head is "Scroll
   wheel": swipe up or down on it to scroll a page.
 
 A belt key after a scroll in a tmux pane first brings the pane back to its
-bottom, so the key reaches the agent, not tmux's copy mode.
+bottom, so the key reaches the agent, not tmux's copy mode. `Esc` there only
+brings the pane back: it does not reach the agent, where it would interrupt.
+A key, or typing, stops a flick of the head.
 
 A vertical swipe scrolls the console and a tmux pane. In the console's
 list, a swipe chooses the session above or below. In the chat, a swipe

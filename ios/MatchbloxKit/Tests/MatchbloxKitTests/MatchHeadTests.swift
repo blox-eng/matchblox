@@ -61,18 +61,15 @@ final class MatchHeadTests: XCTestCase {
         XCTAssertFalse(head.struck)
     }
 
-    func testEventsCarryLines() {
-        var burst = WheelBurst(linesPerStep: 5)
-        XCTAssertEqual(burst.events(lines: 3), 0)
-        XCTAssertEqual(burst.events(lines: 3), 1)
-        XCTAssertEqual(burst.events(lines: 10), 2)
-        XCTAssertEqual(burst.events(lines: -11), -2)
-    }
-
-    func testConsoleOneLineEach() {
-        var burst = WheelBurst(linesPerStep: 1)
-        XCTAssertEqual(burst.events(lines: 4), 4)
-        XCTAssertEqual(burst.events(lines: -2), -2)
+    /// Every notch the thumb feels moves the pane: a notch is at least one wheel step, even
+    /// where a step is 5 lines (tmux), and nothing carries over to the next notch.
+    func testEveryNotchSendsAStep() {
+        XCTAssertEqual(WheelBurst.steps(lines: 1, linesPerStep: 5), 1)
+        XCTAssertEqual(WheelBurst.steps(lines: 6, linesPerStep: 5), 2)
+        XCTAssertEqual(WheelBurst.steps(lines: 10, linesPerStep: 5), 2)
+        XCTAssertEqual(WheelBurst.steps(lines: -1, linesPerStep: 5), -1)
+        XCTAssertEqual(WheelBurst.steps(lines: 4, linesPerStep: 1), 4)
+        XCTAssertEqual(WheelBurst.steps(lines: 0, linesPerStep: 5), 0)
     }
 
     func testRollReportsLines() {

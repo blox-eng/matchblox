@@ -24,6 +24,9 @@ final class ConsoleTerminalView: TerminalView {
     var onFocus: @MainActor (Bool) -> Void = { _ in }
     /// Called when the terminal goes up from its live bottom (true) or comes back (false).
     var onScrolledBack: @MainActor (Bool) -> Void = { _ in }
+    /// Called for each key typed or deleted: the match head's coast stops, so it cannot scroll
+    /// the pane back into copy mode under the new text.
+    var onTyped: @MainActor () -> Void = {}
     /// Called for each key typed into the terminal: the console's own `c` may ask for a copy.
     var onAsksCopy: @MainActor () -> Void = {}
     /// A tap on a link: the link, and the place on screen it was tapped.
@@ -64,8 +67,6 @@ final class ConsoleTerminalView: TerminalView {
     /// The swipe began in a tmux pane: its steps go into `scrollBack`.
     private var countsBack = false
     private var scrolledBack = false
-    /// The match head's lines that do not fill a wheel step yet.
-    private var headBurst = WheelBurst(linesPerStep: 1)
     nonisolated(unsafe) private var sizeObserver: NSObjectProtocol?
 
     static func font(_ size: TextSize) -> UIFont {
@@ -246,6 +247,8 @@ final class ConsoleTerminalView: TerminalView {
             pan.setTranslation(.zero, in: self)
             sendWheel(wheel.move(dy), at: pan.location(in: self))
         case .ended:
+            // A rested flick coasts at one step a cell: its speed-up ends with the finger.
+            wheel.boost = 1
             let link = CADisplayLink(target: self, selector: #selector(coasted))
             coast = Coast(link: link, start: CACurrentMediaTime(), velocity: pan.velocity(in: self).y, point: pan.location(in: self))
             link.add(to: .main, forMode: .common)
@@ -399,9 +402,7 @@ final class ConsoleTerminalView: TerminalView {
                                     position: scrollPosition, scrollBackSteps: scrollBack.steps, older: lines > 0)
         switch route {
         case .wheel:
-            let stepLines = inTmuxPane ? WheelScroll.tmuxLines : 1
-            if headBurst.linesPerStep != stepLines { headBurst = WheelBurst(linesPerStep: stepLines) }
-            let events = headBurst.events(lines: lines)
+            let events = WheelBurst.steps(lines: lines, linesPerStep: inTmuxPane ? WheelScroll.tmuxLines : 1)
             countsBack = inTmuxPane
             let step: WheelScroll.Step = events > 0 ? .up : .down
             sendWheel(Array(repeating: step, count: abs(events)), at: CGPoint(x: bounds.midX, y: bounds.midY), ticks: false)
@@ -419,21 +420,10 @@ final class ConsoleTerminalView: TerminalView {
         head(lines: (older ? 1 : -1) * max(getTerminal().rows, 1))
     }
 
-    /// The match head rolled sideways: wheel left and right, for a program outside tmux that
-    /// reads the mouse. tmux takes no sideways wheel. True if any step went.
-    func headSideways(_ notches: Int) -> Bool {
-        guard notches != 0, readsMouse, !inTmuxPane, let spot = cell(at: CGPoint(x: bounds.midX, y: bounds.midY)) else { return false }
-        let terminal = getTerminal()
-        // xterm's wheel right and left. SwiftTerm's encodeButton knows only 4 and 5, and turns any
-        // other button into a left click.
-        let flags = notches > 0 ? 67 : 66
-        for _ in 0..<abs(notches) {
-            terminal.sendEvent(buttonFlags: flags, x: spot.col, y: spot.row, pixelX: Int(bounds.midX), pixelY: Int(bounds.midY))
-        }
-        return true
-    }
-
     // MARK: The live bottom
+
+    /// A tmux pane the wheel scrolled up: it is in copy mode.
+    var isUpInPane: Bool { scrollBack.isUp }
 
     /// Up from the live bottom: a tmux pane the wheel scrolled up, or SwiftTerm's own scrollback.
     private var isScrolledBack: Bool {
@@ -466,17 +456,20 @@ final class ConsoleTerminalView: TerminalView {
     }
 
     override func insertText(_ text: String) {
+        onTyped()
         forgetScrollBack()
         onAsksCopy()
         super.insertText(text)
     }
 
     override func deleteBackward() {
+        onTyped()
         forgetScrollBack()
         super.deleteBackward()
     }
 
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        onTyped()
         forgetScrollBack()
         onAsksCopy()
         super.pressesBegan(presses, with: event)
