@@ -126,13 +126,26 @@ type ChainsView struct {
 }
 
 // MateView is what the room shows of one member: Inbox items wait, Full
-// when some were dropped, and Unseen when its pane lives but shows no agent
-// (zero: seen).
+// when some were dropped, Unseen when its pane lives but shows no agent
+// (zero: seen), and Wait when its tmux server is gone and it waits for
+// recover (nil: it does not wait).
 type MateView struct {
 	Member chains.Member `json:"member"`
 	Inbox  int           `json:"inbox,omitempty"`
 	Full   bool          `json:"full,omitempty"`
 	Unseen time.Time     `json:"unseen,omitzero"`
+	Wait   *WaitView     `json:"wait,omitempty"`
+}
+
+// WaitView is a member that waits for recover: the name its mates knew, its
+// agent and conversation, when the recovery record last saw it (Since), and
+// when the record forgets it (Forget).
+type WaitView struct {
+	Name         string    `json:"name"`
+	Agent        string    `json:"agent"`
+	Conversation string    `json:"conversation"`
+	Since        time.Time `json:"since"`
+	Forget       time.Time `json:"forget"`
 }
 
 // Focus is the session to open: its pane, or Gone when its number's

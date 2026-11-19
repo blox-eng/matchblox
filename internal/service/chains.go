@@ -14,6 +14,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/chains"
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/proto"
+	"github.com/blox-eng/matchblox/internal/recovery"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/state"
 	"github.com/blox-eng/matchblox/internal/stoker"
@@ -94,7 +95,7 @@ func (s *Service) changeChains(arg string, a proto.Act) (res proto.Result, chang
 	st := s.chainsLocked()
 	if s.refreshChainsLocked(st) { // the act finds a cleared chat by its new id
 		changed = true
-		s.cur.Chains = chainsView(st)
+		s.cur.Chains = chainsView(st, s.waiting)
 		if err := s.saveChainsLocked(); err != nil {
 			return proto.Result{Err: "chains: " + err.Error()}, true
 		}
@@ -114,7 +115,7 @@ func (s *Service) changeChains(arg string, a proto.Act) (res proto.Result, chang
 		return res, changed
 	}
 	s.noteChainsLocked(before)
-	s.cur.Chains = chainsView(st)
+	s.cur.Chains = chainsView(st, s.waiting)
 	if err := s.saveChainsLocked(); err != nil {
 		res.Err = "chains: " + err.Error()
 	}
@@ -287,10 +288,11 @@ func (s *Service) pruneChainsLocked(now time.Time, prev []sample.Session) error 
 			s.mateNames[x.Pane] = x.Name
 		}
 	}
-	var waiting map[string]string // read once, at the first member with no session
+	var waiting map[string]recovery.Entry // read once, at the first member with no session
 	if s.waitNames == nil {
 		s.waitNames = map[string]string{}
 	}
+	kept := map[string]state.WaitView{}
 	live := func(m chains.Member) bool {
 		if x, ok := s.sessionOfLocked(m); ok {
 			st.MarkSeen(m)
@@ -300,7 +302,7 @@ func (s *Service) pruneChainsLocked(now time.Time, prev []sample.Session) error 
 		if waiting == nil && m.SessionID != "" {
 			waiting = s.waitingLocked()
 		}
-		if name, ok := waiting[m.SessionID]; ok && m.SessionID != "" {
+		if e, ok := waiting[m.SessionID]; ok && m.SessionID != "" {
 			// Its pane went with its server; recover reopens it. Its pane id
 			// may name another agent on a new server: no switch ends there,
 			// and no old unseen mark stays.
@@ -309,10 +311,15 @@ func (s *Service) pruneChainsLocked(now time.Time, prev []sample.Session) error 
 			if _, had := s.waitNames[m.SessionID]; !had {
 				// The name its mates knew, from the sample before the loss;
 				// after a restart, its tmux session's from the record.
+				name := e.Session
 				if i := slices.IndexFunc(prev, func(x sample.Session) bool { return memberOf(x).Same(m) }); i >= 0 {
 					name = prev[i].Name
 				}
 				s.waitNames[m.SessionID] = name // its mates hear it if it leaves
+			}
+			kept[m.SessionID] = state.WaitView{
+				Name: s.waitNames[m.SessionID], Agent: e.Agent, Conversation: e.ConversationID,
+				Since: e.Seen, Forget: e.Seen.Add(recovery.ExpireAfter),
 			}
 			return true
 		}
@@ -328,6 +335,7 @@ func (s *Service) pruneChainsLocked(now time.Time, prev []sample.Session) error 
 		return true
 	}
 	left := st.Prune(live, now)
+	s.waiting = kept
 	defer maps.DeleteFunc(s.mateNames, func(pane, _ string) bool { return !panes[pane] })
 	defer maps.DeleteFunc(s.waitNames, func(id, _ string) bool { _, ok := waiting[id]; return !ok })
 	maps.DeleteFunc(s.cleared, func(id string, _ bool) bool {
@@ -470,19 +478,19 @@ func (s *Service) leftText(l chains.Left, prev []sample.Session) string {
 	return name + " left the chain"
 }
 
-// waitingLocked are the conversations the recovery record keeps from a tmux
-// server that no longer runs, with the name of the tmux session each ran
-// in. A lost server is not a leave: recover can reopen each one, so its
-// match keeps its teams until the record forgets it (#391). Callers hold mu.
-func (s *Service) waitingLocked() map[string]string {
-	waiting := map[string]string{}
+// waitingLocked are the record entries of the conversations from a tmux
+// server that no longer runs, by conversation id. A lost server is not a
+// leave: recover can reopen each one, so its match keeps its teams until
+// the record forgets it (#391). Callers hold mu.
+func (s *Service) waitingLocked() map[string]recovery.Entry {
+	waiting := map[string]recovery.Entry{}
 	if s.Recovery == nil {
 		return waiting
 	}
 	_, alive := recordable(nil, s.cur.Panes)
 	for _, e := range s.Recovery.List() {
 		if e.Lost(alive) {
-			waiting[e.ConversationID] = e.Session
+			waiting[e.ConversationID] = e
 		}
 	}
 	return waiting
@@ -530,7 +538,7 @@ func (s *Service) saveChainsLocked() error {
 
 // chainsView copies what the doc shows, so a later change to the store does
 // not reach a doc already sent. Nil: no chain.
-func chainsView(st *chains.Store) *state.ChainsView {
+func chainsView(st *chains.Store, waiting map[string]state.WaitView) *state.ChainsView {
 	if len(st.Chains) == 0 {
 		return nil
 	}
@@ -544,6 +552,9 @@ func chainsView(st *chains.Store) *state.ChainsView {
 			mv := state.MateView{Member: m}
 			mv.Inbox, mv.Full = st.InboxCount(m)
 			mv.Unseen, _ = st.UnseenSince(m)
+			if w, ok := waiting[m.SessionID]; ok && m.SessionID != "" {
+				mv.Wait = &w
+			}
 			v.Mates = append(v.Mates, mv)
 		}
 	}

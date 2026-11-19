@@ -216,3 +216,42 @@ func TestAWaitingMateKeepsTheNameItsMatesKnew(t *testing.T) {
 		t.Fatalf("one's inbox = %q", got)
 	}
 }
+
+// TestTheDocShowsAWaitingMate: the doc names a member that waits for
+// recover, with its agent, its conversation and when the record forgets it.
+// A live mate has no wait.
+func TestTheDocShowsAWaitingMate(t *testing.T) {
+	s, one, _ := rebootPair(t)
+	loseServer(s)
+	publishOn(s, "200", reopened(one, "%5", 201))
+	s.mu.Lock()
+	v := s.cur.Chains
+	s.mu.Unlock()
+	if v == nil || len(v.Mates) != 2 {
+		t.Fatalf("chains = %+v", v)
+	}
+	var seen time.Time // when the record last saw two, on the lost server
+	for _, e := range s.Recovery.List() {
+		if e.ConversationID == "s2" {
+			seen = e.Seen
+		}
+	}
+	met := map[string]bool{}
+	for _, mv := range v.Mates {
+		met[mv.Member.SessionID] = true
+		switch mv.Member.SessionID {
+		case "s1":
+			if mv.Wait != nil {
+				t.Fatalf("one, live, waits: %+v", mv.Wait)
+			}
+		case "s2":
+			w := mv.Wait
+			if w == nil || w.Name != "two" || w.Agent != "claude" || w.Conversation != "s2" || seen.IsZero() || !w.Since.Equal(seen) || !w.Forget.Equal(seen.Add(14*24*time.Hour)) {
+				t.Fatalf("two's wait = %+v, the record saw it at %v", w, seen)
+			}
+		}
+	}
+	if !met["s1"] || !met["s2"] {
+		t.Fatalf("mates = %+v", v.Mates)
+	}
+}

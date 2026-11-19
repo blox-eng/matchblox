@@ -427,7 +427,7 @@ func (s *Service) spark(chainID string, now time.Time) {
 	s.mu.Lock()
 	st := s.chainsLocked()
 	st.Spark(chainID, now)
-	s.cur.Chains = chainsView(st)
+	s.cur.Chains = chainsView(st, s.waiting)
 	s.mu.Unlock()
 	s.broadcast()
 }
