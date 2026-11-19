@@ -1,7 +1,6 @@
 package service
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"os/exec"
@@ -10,7 +9,6 @@ import (
 	"unicode"
 
 	"github.com/blox-eng/matchblox/internal/proto"
-	"github.com/blox-eng/matchblox/internal/sample"
 )
 
 // A copy made in a tmux server the service watches (a drag, a double-click,
@@ -20,13 +18,9 @@ import (
 // the console's guard (spec R7 and the 2026-11-20 ruling).
 
 const (
-	// copyWatchSession is the watcher's own session: a control-mode client
-	// needs one. It carries JumpMark, so the sampler does not list it.
-	copyWatchSession = "matchblox-copywatch"
 	copyLimit        = 1 << 20
-	copyAgain        = time.Second
+	copyEvery        = 300 * time.Millisecond
 	copyServersEvery = 5 * time.Second
-	noConsole        = "not copied: no matchblox console is connected · open the console"
 )
 
 // copyLoop keeps one copy watcher on each tmux server the sessions run on.
@@ -71,14 +65,36 @@ func (s *Service) copySockets() map[string]bool {
 }
 
 // copyWatch watches the paste buffers of the tmux server at sock until ctx
-// ends, attached again when its client ends.
+// ends: it reads the list every copyEvery and sends each buffer that came
+// since the last read. It adds no session or client to the server and never
+// starts one: on a socket with no server the read fails, and it reads again.
 func (s *Service) copyWatch(ctx context.Context, sock string) {
-	for ctx.Err() == nil {
-		s.copyWatchOnce(ctx, sock)
+	var seen map[string]bool // nil until the first read: what is there then is no new copy
+	t := time.NewTicker(copyEvery)
+	defer t.Stop()
+	for {
+		out, err := copyTmux(ctx, sock, "list-buffers", "-F", "#{buffer_name}\t#{buffer_created}\t#{buffer_size}")
+		if err == nil {
+			now := map[string]bool{}
+			newest := ""
+			for _, l := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+				if l == "" {
+					continue
+				}
+				now[l] = true
+				if seen != nil && !seen[l] && newest == "" {
+					newest = l // list-buffers lists the newest first
+				}
+			}
+			if name, _, ok := strings.Cut(newest, "\t"); ok {
+				s.copied(ctx, sock, name)
+			}
+			seen = now
+		}
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(copyAgain):
+		case <-t.C:
 		}
 	}
 }
@@ -87,45 +103,8 @@ func copyTmux(ctx context.Context, sock string, args ...string) ([]byte, error) 
 	return exec.CommandContext(ctx, "tmux", append([]string{"-S", sock}, args...)...).Output() //nolint:gosec // argv, never a shell string
 }
 
-// copyWatchOnce attaches one control-mode client and reads its notices until
-// it ends. It never starts a server: on a socket with none it returns.
-func (s *Service) copyWatchOnce(ctx context.Context, sock string) {
-	if _, err := copyTmux(ctx, sock, "list-sessions"); err != nil {
-		return
-	}
-	if _, err := copyTmux(ctx, sock, "has-session", "-t", "="+copyWatchSession); err != nil {
-		target := "=" + copyWatchSession + ":"
-		if _, err := copyTmux(ctx, sock, "new-session", "-d", "-s", copyWatchSession, ";",
-			"set-option", "-t", target, "destroy-unattached", "off", ";",
-			"set-option", "-t", target, sample.JumpMark, "1"); err != nil {
-			return
-		}
-	}
-	cmd := exec.CommandContext(ctx, "tmux", "-S", sock, "-C", "attach-session", //nolint:gosec // argv, never a shell string
-		"-f", "no-output,ignore-size,read-only", "-t", "="+copyWatchSession)
-	in, err := cmd.StdinPipe() // a control client ends when its input does
-	if err != nil {
-		return
-	}
-	defer func() { _ = in.Close() }()
-	out, err := cmd.StdoutPipe()
-	if err != nil {
-		return
-	}
-	if cmd.Start() != nil {
-		return
-	}
-	defer cmd.Wait() //nolint:errcheck // the client ends when the session or the server does
-	sc := bufio.NewScanner(out)
-	for sc.Scan() {
-		if name, ok := strings.CutPrefix(sc.Text(), "%paste-buffer-changed "); ok {
-			s.copied(ctx, sock, name)
-		}
-	}
-}
-
-// copied sends the buffer name to each console, or tells the people at
-// the server why it did not.
+// copied sends the buffer name to each console. With no console it says
+// nothing: tmux's own copy reaches a terminal attached to it.
 func (s *Service) copied(ctx context.Context, sock, name string) {
 	if strings.HasPrefix(name, proto.CopyBuffer) {
 		return // a console's own copy, on its way to a screen
@@ -135,18 +114,16 @@ func (s *Service) copied(ctx context.Context, sock, name string) {
 		return // the buffer went before we read it
 	}
 	if len(text) > copyLimit {
-		copyNotice(ctx, sock, fmt.Sprintf("not copied: %.1f MB is over the 1 MB copy limit", float64(len(text))/(1<<20)))
+		copyNotice(ctx, sock, fmt.Sprintf("not carried: %.1f MB is over matchblox's 1 MB copy limit", float64(len(text))/(1<<20)))
 		return
 	}
-	if !s.sendCopy(noControls(string(text))) {
-		copyNotice(ctx, sock, noConsole)
-	}
+	s.sendCopy(noControls(string(text)))
 }
 
-// sendCopy sends text to each console; false when none is connected. A
-// copy, as a screen, goes only to a console: a client in an agent's pane is
-// none, whatever its hello says, and the pane is read again at each copy.
-func (s *Service) sendCopy(text string) bool {
+// sendCopy sends text to each console. A copy, as a screen, goes only to a
+// console: a client in an agent's pane is none, whatever its hello says, and
+// the pane is read again at each copy.
+func (s *Service) sendCopy(text string) {
 	s.mu.Lock()
 	var said []*client
 	for cl := range s.clients {
@@ -164,7 +141,6 @@ func (s *Service) sendCopy(text string) bool {
 	for _, cl := range consoles {
 		go cl.c.Send(proto.KindCopy, "", proto.Copy{Text: text}) //nolint:errcheck // a console that left misses it
 	}
-	return len(consoles) > 0
 }
 
 // copyNotice shows text to each person's client of the server at sock.

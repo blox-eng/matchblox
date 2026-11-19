@@ -267,8 +267,7 @@ cannot fill your clipboard while you look elsewhere.
 | What happens | What you see | What to do |
 |---|---|---|
 | No screen of yours had input lately | `not copied: no screen of yours had input in the last 10 s` | Press a key on the screen you use, and copy again. |
-| No console is connected where you copied | tmux says `not copied: no matchblox console is connected · open the console` | Run `matchblox`. |
-| The copy is over 1 MB | tmux says `not copied: 1.4 MB is over the 1 MB copy limit` | Copy less. |
+| The copy is over 1 MB | tmux says `not carried: 1.4 MB is over matchblox's 1 MB copy limit` | Copy less. In a pane of your own tmux the copy still reaches you. |
 | tmux refuses the copy | `not copied: <tmux's words>` | Follow tmux's words. |
 
 An agent's own copy command, such as `/copy` in Claude Code, writes OSC 52.

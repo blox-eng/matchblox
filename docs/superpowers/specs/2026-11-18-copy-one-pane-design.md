@@ -54,6 +54,7 @@ Ways it goes wrong:
 - 2026-11-18 — Tap-a-link and copy on the phone stay with matchblox-board's branch — because that work is built and waits for the owner's push. — proposed, not confirmed.
 
 - 2026-11-20 — A host's copy reaches the clipboard only while the console shows that host (beside the list, or in a jump to it) and the person's screen had input in the last 2 s; each says `copied: N characters from <host>`. Every copy loses its control codes, and a client in an agent's pane gets none (checked at each copy). — because a program on a host could otherwise put text on the desk clipboard with `tmux set-buffer` (paste-jacking), which a remote host cannot do today; found by the security review of the build. Remaining risk: a host program that repeats set-buffer while the person works in that host's pane. — the owner.
+- 2026-11-20 — Build: each service reads its tmux's paste buffers every 300 ms instead of a control-mode client, which needed a session a plain `tmux attach` landed in (review finding). R7's approved scope holds. — proposed, not confirmed.
 - 2026-11-19: spec approved. Decided by: the owner. (U1 and U2 stay open; the plan keeps them out of scope.)
 
 ## Left to the builder

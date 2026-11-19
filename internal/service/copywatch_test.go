@@ -45,15 +45,13 @@ func copyOf(t *testing.T, c transport.Conn) string {
 	return cp.Text
 }
 
-// watching starts the copy watcher of s on sock and waits until it is
-// attached.
+// watching starts the copy watcher of s on sock and gives it two reads, so
+// the buffers that were there before are its baseline.
 func watching(t *testing.T, s *Service, sock string, tm func(args ...string) string) {
 	t.Helper()
 	ctx := run(t, s)
 	go s.copyWatch(ctx, sock)
-	waitUntil(t, "the copy watcher attaches", func() bool {
-		return strings.Contains(tm("list-clients", "-F", "#{client_control_mode} #{session_name}"), "1 "+copyWatchSession)
-	})
+	time.Sleep(3 * copyEvery)
 }
 
 func waitUntil(t *testing.T, what string, ok func() bool) {
@@ -113,35 +111,44 @@ func TestTheConsolesOwnBufferIsNotSentBack(t *testing.T) {
 	}
 }
 
-// TestTheWatcherComesBack: the watcher's control client can end (a person
-// kills its session); a later copy still arrives.
-func TestTheWatcherComesBack(t *testing.T) {
-	sock, tm := copyServer(t)
+// TestTheWatcherWaitsForAServer: on a socket with no server it starts none,
+// and once a server runs there its copies arrive.
+func TestTheWatcherWaitsForAServer(t *testing.T) {
+	name := tmuxtest.Server(t)
+	sock := sample.SocketPath(name)
 	s := newTest(t, time.Hour)
-	watching(t, s, sock, tm)
+	ctx := run(t, s)
+	go s.copyWatch(ctx, sock)
 	console := connectAs(t, t.Context(), s, proto.ClientConsole)
-	tm("kill-session", "-t", "="+copyWatchSession)
-	waitUntil(t, "the copy watcher attaches again", func() bool {
-		out, _ := exec.Command("tmux", "-S", sock, "list-clients", "-F", "#{client_control_mode} #{session_name}").Output() //nolint:gosec // a test's own server
-		return strings.Contains(string(out), "1 "+copyWatchSession)
-	})
-	tm("set-buffer", "-b", "buffer2", "again")
-	if got := copyOf(t, console); got != "again" {
-		t.Fatalf("console got %q, want again", got)
+	time.Sleep(3 * copyEvery)
+	if err := exec.Command("tmux", "-L", name, "list-sessions").Run(); err == nil { //nolint:gosec // a test's own server
+		t.Fatal("the watcher started a tmux server")
+	}
+	tm := func(args ...string) {
+		if out, err := exec.Command("tmux", append([]string{"-L", name}, args...)...).CombinedOutput(); err != nil { //nolint:gosec // a test's own server
+			t.Fatalf("tmux %v: %v: %s", args, err, out)
+		}
+	}
+	tm("-f", "/dev/null", "new-session", "-d", "-s", "work", "sleep", "600")
+	time.Sleep(3 * copyEvery)
+	tm("set-buffer", "-b", "buffer2", "later")
+	if got := copyOf(t, console); got != "later" {
+		t.Fatalf("console got %q, want later", got)
 	}
 }
 
-// TestTheWatcherLeavesWindowSizesAlone: its control client sizes nothing,
-// and its session is not one the sampler lists.
-func TestTheWatcherLeavesWindowSizesAlone(t *testing.T) {
+// TestTheWatcherLeavesNoSession: the watcher adds no session and no client
+// to the person's tmux: a plain tmux attach lands in the person's own
+// session, and tmux ls lists only theirs.
+func TestTheWatcherLeavesNoSession(t *testing.T) {
 	sock, tm := copyServer(t)
 	s := newTest(t, time.Hour)
 	watching(t, s, sock, tm)
-	if got := tm("display", "-p", "-t", "=work:", "#{window_width}x#{window_height}"); got != "100x30" {
-		t.Fatalf("the work window is %s, want 100x30", got)
+	if got := tm("list-sessions", "-F", "#{session_name}"); got != "work" {
+		t.Fatalf("tmux ls lists %q, want only work", got)
 	}
-	if got := tm("show-option", "-qv", "-t", "="+copyWatchSession+":", sample.JumpMark); got != "1" {
-		t.Fatalf("the watcher's session has %s %q, want 1: the sampler would list it", sample.JumpMark, got)
+	if got := tm("list-clients", "-F", "#{client_name}"); got != "" {
+		t.Fatalf("the watcher added clients %q", got)
 	}
 }
 
@@ -205,26 +212,28 @@ func TestABigCopyIsCut(t *testing.T) {
 		t.Fatal(err)
 	}
 	tm("load-buffer", "-b", "buffer3", big)
-	tm("set-buffer", "-b", "buffer4", "small")
+	waitUntil(t, "tmux tells the person", func() bool {
+		return strings.Contains(messages(sock, person), "not carried: 2.0 MB is over matchblox's 1 MB copy limit")
+	})
+	tm("set-buffer", "-b", "buffer4", "small") // a person's next copy, later than one read
 	if got := copyOf(t, console); got != "small" {
 		t.Fatalf("console got %d bytes first, want the small copy", len(got))
 	}
-	waitUntil(t, "tmux tells the person", func() bool {
-		return strings.Contains(messages(sock, person), "not copied: 2.0 MB is over the 1 MB copy limit")
-	})
 }
 
-// TestACopyWithNoConsoleSaysSo: with no console to put it on a screen, tmux
-// says so where the copy was made.
-func TestACopyWithNoConsoleSaysSo(t *testing.T) {
+// TestACopyWithNoConsoleSaysNothing: with no console, tmux's own copy
+// reaches a terminal attached to it, so matchblox says nothing there: a
+// "not copied" would be false.
+func TestACopyWithNoConsoleSaysNothing(t *testing.T) {
 	sock, tm := copyServer(t)
 	s := newTest(t, time.Hour)
 	watching(t, s, sock, tm)
 	person := attachedClient(t, sock, "work")
-	tm("set-buffer", "-b", "buffer5", "lost")
-	waitUntil(t, "tmux tells the person", func() bool {
-		return strings.Contains(messages(sock, person), "not copied: no matchblox console is connected · open the console")
-	})
+	tm("set-buffer", "-b", "buffer5", "fine")
+	time.Sleep(3 * copyEvery)
+	if got := messages(sock, person); strings.Contains(got, "copied") {
+		t.Fatalf("tmux showed %q", got)
+	}
 }
 
 // TestAnAgentThatSaysConsoleGetsNoCopies: a client whose process runs in an
