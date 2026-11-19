@@ -4,9 +4,10 @@ import UIKit
 
 /// The console's terminal, with three ways back to matchblox: a swipe in from the left edge,
 /// a tap on "◂ matchblox" in the tmux status line, and ⌘M or ctrl+M. Each one sends `HomeKey`.
-/// While the program reads the mouse, a vertical swipe sends wheel steps (`WheelScroll`), and a tap
-/// a click: the console opens the row's chat. While the console shows Sessions or Machine, a
-/// long-press sends a right click (`BoardTouch`) and each step of a swipe ticks once. A sideways
+/// While the program reads the mouse, a vertical swipe sends wheel steps (`WheelScroll`), each step
+/// ticks once, and a finger that rests before its swipe scrolls fast. A tap sends a click: the
+/// console opens the row's chat. While the console shows Sessions or Machine, a long-press sends a
+/// right click (`BoardTouch`). The match head on the belt scrolls through `head(lines:)`. A sideways
 /// swipe turns no page: the list and the chat have none. A pinch makes the text bigger or smaller,
 /// and a tap on a link asks what to do with it.
 final class ConsoleTerminalView: TerminalView {
@@ -27,8 +28,8 @@ final class ConsoleTerminalView: TerminalView {
     var onAsksCopy: @MainActor () -> Void = {}
     /// A tap on a link: the link, and the place on screen it was tapped.
     var onLink: @MainActor (String, CGRect) -> Void = { _, _ in }
-    /// The console shows Sessions or Machine (`BoardFollow`): a long-press opens the row's menu,
-    /// and a swipe ticks. Otherwise the terminal's own long-press acts.
+    /// The console shows Sessions or Machine (`BoardFollow`): a long-press opens the row's menu.
+    /// Otherwise the terminal's own long-press acts.
     var showsConsole = false
     /// False on the demo: a tap only clicks, and the keyboard comes from the belt's key, so it does
     /// not cover the question the demo shows.
@@ -38,8 +39,11 @@ final class ConsoleTerminalView: TerminalView {
     @objc var inlinePredictionType: UITextInlinePredictionType = .no
 
     private let haptic = UIImpactFeedbackGenerator(style: .light)
-    /// The console's tick: one for each step a swipe moves.
+    /// The swipe's tick: one for each step it moves, never closer than `MatchHead.tapGap`.
     private let tick = UISelectionFeedbackGenerator()
+    private var lastTick: TimeInterval = 0
+    /// When the finger went down: a finger that rests before its swipe scrolls fast.
+    private var touchedAt: TimeInterval = 0
     private var edge: UIScreenEdgePanGestureRecognizer?
     private var labelTap: UITapGestureRecognizer?
     private var clickTap: UITapGestureRecognizer?
@@ -48,6 +52,8 @@ final class ConsoleTerminalView: TerminalView {
     private var focusedAtTouch = false
     private var wheelPan: UIPanGestureRecognizer?
     private var wheel = WheelScroll(cellHeight: 0)
+    /// The swipe began after the finger rested: it scrolls with the match head's speed-up.
+    private var fastSwipe = false
     private var coast: Coast?
     private var hold: UILongPressGestureRecognizer?
     /// The size the text has now; a pinch changes it, in whole points.
@@ -153,6 +159,7 @@ final class ConsoleTerminalView: TerminalView {
 
     /// A touch stops a flick, as in a scroll view.
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        touchedAt = touches.first?.timestamp ?? ProcessInfo.processInfo.systemUptime
         stopCoast()
         focusedAtTouch = isFirstResponder
         super.touchesBegan(touches, with: event)
@@ -228,11 +235,13 @@ final class ConsoleTerminalView: TerminalView {
         switch pan.state {
         case .began, .changed:
             if pan.state == .began {
-                if showsConsole { tick.prepare() }
+                tick.prepare()
                 stopCoast()
                 countsBack = inTmuxPane
                 wheel = WheelScroll(cellHeight: cellSize.height, linesPerStep: countsBack ? WheelScroll.tmuxLines : 1)
+                fastSwipe = WheelScroll.isFast(restedFor: ProcessInfo.processInfo.systemUptime - touchedAt)
             }
+            if fastSwipe { wheel.boost = MatchHead.lines(atSpeed: pan.velocity(in: self).y) }
             let dy = pan.translation(in: self).y
             pan.setTranslation(.zero, in: self)
             sendWheel(wheel.move(dy), at: pan.location(in: self))
@@ -311,7 +320,11 @@ final class ConsoleTerminalView: TerminalView {
     /// match head plays its own taps, so its steps do not tick.
     private func sendWheel(_ steps: [WheelScroll.Step], at point: CGPoint, ticks: Bool = true) {
         guard readsMouse, !steps.isEmpty, let spot = cell(at: point) else { return }
-        if ticks, showsConsole { tick.selectionChanged() }
+        let now = ProcessInfo.processInfo.systemUptime
+        if ticks, now - lastTick >= MatchHead.tapGap {
+            lastTick = now
+            tick.selectionChanged()
+        }
         if countsBack {
             scrollBack.wheeled(steps)
             scrollChanged()

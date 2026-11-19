@@ -32,7 +32,7 @@ public struct MatchHead: Sendable {
     static let maxLines = 10
 
     /// Taps closer than this blur into a buzz on the Taptic Engine.
-    static let tapGap: TimeInterval = 1.0 / 30
+    public static let tapGap: TimeInterval = 1.0 / 30
 
     private var travel: CGFloat = 0
     private var lastTap: TimeInterval?

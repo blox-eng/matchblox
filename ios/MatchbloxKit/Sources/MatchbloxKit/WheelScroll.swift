@@ -23,8 +23,13 @@ public struct WheelScroll: Sendable {
     /// UIScrollView's normal deceleration (0.998 of the speed each millisecond), per second.
     private static let decay = -1000 * log(0.998)
 
+    /// A finger that rests this long before its swipe scrolls fast: each step counts `boost` times.
+    public static let fastRest: TimeInterval = 0.25
+
     public let cellHeight: CGFloat
     public let linesPerStep: Int
+    /// Wheel steps for each step of travel: 1, or the match head's lines a notch on a fast swipe.
+    public var boost = 1
     private var travel: CGFloat = 0
 
     public init(cellHeight: CGFloat, linesPerStep: Int = 1) {
@@ -39,7 +44,11 @@ public struct WheelScroll: Sendable {
         travel += dy
         let steps = (travel / stepHeight).rounded(.towardZero)
         travel -= steps * stepHeight
-        return Array(repeating: steps > 0 ? Step.up : Step.down, count: Int(abs(steps)))
+        return Array(repeating: steps > 0 ? Step.up : Step.down, count: Int(abs(steps)) * max(boost, 1))
+    }
+
+    public static func isFast(restedFor rest: TimeInterval) -> Bool {
+        rest >= fastRest
     }
 
     /// How far a flick that left the finger at `velocity` points a second has carried after

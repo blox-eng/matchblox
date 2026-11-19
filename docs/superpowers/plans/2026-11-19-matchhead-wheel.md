@@ -205,3 +205,5 @@ What the code has today (read 2026-11-19):
 
 - Task 5: the route's direction argument is `older:` (true: toward older lines), not `down:`. It names what the person sees, so a reader does not need WheelScroll's sign rule. (2026-11-20)
 - Task 6: the head's id is `KeyBar.wheel` ("Wheel") and its bytes are `[]`, not nil, as Ctrl's are. `testEveryKeyHasBytes` pins that every catalog key has bytes; Ctrl is the precedent for a key that sends nothing itself. (2026-11-20)
+- Task 12: `boost` is a settable property of `WheelScroll`, not an init argument: the pan updates it on each change from the finger's speed. `MatchHead.tapGap` is public, so the swipe's ticks share the head's 30-a-second cap. (2026-11-20)
+- Task 8: a sideways roll sends xterm's wheel codes 66 and 67 by hand. SwiftTerm 1.20.0's `encodeButton` maps buttons 6 and 7 to 0, a left click. (2026-11-20)
