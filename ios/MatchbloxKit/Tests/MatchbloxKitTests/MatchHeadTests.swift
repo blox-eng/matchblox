@@ -61,6 +61,20 @@ final class MatchHeadTests: XCTestCase {
         XCTAssertFalse(head.struck)
     }
 
+    func testEventsCarryLines() {
+        var burst = WheelBurst(linesPerStep: 5)
+        XCTAssertEqual(burst.events(lines: 3), 0)
+        XCTAssertEqual(burst.events(lines: 3), 1)
+        XCTAssertEqual(burst.events(lines: 10), 2)
+        XCTAssertEqual(burst.events(lines: -11), -2)
+    }
+
+    func testConsoleOneLineEach() {
+        var burst = WheelBurst(linesPerStep: 1)
+        XCTAssertEqual(burst.events(lines: 4), 4)
+        XCTAssertEqual(burst.events(lines: -2), -2)
+    }
+
     func testRollReportsLines() {
         var head = MatchHead()
         let roll = head.roll(dy: -30, speed: 2400)

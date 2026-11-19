@@ -74,3 +74,22 @@ public struct MatchHead: Sendable {
         return 1 + Int((CGFloat(maxLines - 1) * t * t).rounded())
     }
 }
+
+/// The head's lines as mouse wheel steps. A step scrolls `linesPerStep` lines (tmux scrolls 5),
+/// so lines that do not fill a step wait for the next notch.
+public struct WheelBurst: Sendable {
+    public let linesPerStep: Int
+    private var carry = 0
+
+    public init(linesPerStep: Int) {
+        self.linesPerStep = max(linesPerStep, 1)
+    }
+
+    /// The wheel steps for `lines` more lines: positive scrolls up (older), as `WheelScroll.Step.up`.
+    public mutating func events(lines: Int) -> Int {
+        carry += lines
+        let steps = carry / linesPerStep
+        carry -= steps * linesPerStep
+        return steps
+    }
+}
