@@ -433,8 +433,12 @@ func (m Model) pairKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case bkey.Matches(k, m.keys.pair.Copy):
 		if p.live() {
+			cmd, err := m.clip(p.link)
 			m.flash = "link copied"
-			return m, m.clip(p.link)
+			if err != nil {
+				m.flash = "not copied: " + err.Error()
+			}
+			return m, cmd
 		}
 	case bkey.Matches(k, m.keys.pair.Close):
 		why := ""

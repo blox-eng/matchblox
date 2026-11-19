@@ -220,3 +220,24 @@ func TestAHostCopyDuringAJump(t *testing.T) {
 		t.Fatalf("a jump to ws-2 took ws-1's copy: %q", tm.loads)
 	}
 }
+
+// TestCCopiesThroughTheConsolesClient: c puts the last message on the
+// screen of the person who pressed it, by tmux's load-buffer -w, not by an
+// OSC 52 that a tmux at external drops.
+func TestCCopiesThroughTheConsolesClient(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0)
+	tm := &screenTmux{clients: []string{"/dev/pts/4\t" + activeAt(now) + "\t/dev/pts/4\tmatchblox"}}
+	m, _, _ := menuBoard(t, 80, 31, func(m *Model) {
+		chooseCard("flint-auth")(m)
+		m.opt.Clip, m.opt.Pane, m.opt.Tmux = nil, "%1", tm.run
+		m.opt.Now = func() time.Time { return now }
+	})
+	m = pressOn(m, "c")
+	want := [][]string{{"load-buffer", "-w", "-b", proto.CopyBuffer, "-t", "/dev/pts/4"}}
+	if !slices.EqualFunc(tm.loads, want, slices.Equal) || len(tm.loaded) != 1 || tm.loaded[0] == "" {
+		t.Fatalf("c loaded %q with %q, want the last message with %q", tm.loaded, tm.loads, want)
+	}
+	if !strings.HasPrefix(m.noticeText, "copied: last message of flint-auth") {
+		t.Errorf("c said %q", m.noticeText)
+	}
+}

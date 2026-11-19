@@ -211,8 +211,12 @@ func (m Model) askKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		l := m.loginOf(host)
 		switch {
 		case bkey.Matches(k, ak.Copy) && l.loginURL != "":
+			cmd, err := m.clip(l.loginURL)
 			m.flash = "link copied"
-			return m, m.clip(l.loginURL)
+			if err != nil {
+				m.flash = "not copied: " + err.Error()
+			}
+			return m, cmd
 		case !bkey.Matches(k, ak.Cancel, m.keys.global.Quit):
 		case l.openStop != nil:
 			l.openStop()

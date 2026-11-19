@@ -22,7 +22,6 @@ import (
 
 // The words of a copy (the spec's "Copy").
 const (
-	tmuxDrops     = "not copied: tmux drops it · tmux set -s set-clipboard on"
 	notChecked    = " · not checked here"
 	pasteWrong    = `That is not the code. A hop drops the copy: see docs/console.md, "Copy".`
 	pasteChecked  = "Copy reaches this screen."
@@ -36,42 +35,28 @@ type point struct{ x, y int }
 // ends a long press; a move of one cell is neither.
 func farFrom(a, b point) bool { return max(abs(a.x-b.x), abs(a.y-b.y)) > 1 }
 
-// clip puts text on the clipboard. Without a Clip, the program writes OSC 52
-// with its output, between frames: it works over SSH and through tmux.
-func (m Model) clip(text string) tea.Cmd {
+// clip puts text on the clipboard of the screen the person uses: by Clip
+// where the app gives one (Pocket), by tmux's own load-buffer -w inside
+// tmux, so its set-clipboard stays as the person has it, else by OSC 52
+// to the terminal.
+func (m Model) clip(text string) (tea.Cmd, error) {
 	if m.opt.Clip != nil {
 		m.opt.Clip(text)
-		return nil
+		return nil, nil
 	}
-	return tea.SetClipboard(text)
-}
-
-// tmuxPassesClipboard reads the set-clipboard of the tmux that run runs.
-// Only on passes an application's copy on to the terminal: external, the
-// default, and off drop it. known is false outside tmux, or for a value it
-// does not know.
-func tmuxPassesClipboard(run func(args ...string) (string, error)) (ok, known bool) {
-	out, err := run("show", "-sv", "set-clipboard")
-	if err != nil {
-		return false, false
-	}
-	switch strings.TrimSpace(out) {
-	case "on":
-		return true, true
-	case "external", "off":
-		return false, true
-	}
-	return false, false
-}
-
-// readClip reads again whether the console's own tmux passes a copy on.
-func (m *Model) readClip() (ok, known bool) {
-	m.clipOK, m.clipKnown = false, false
 	if run := m.tmuxRun(); run != nil {
-		m.clipOK, m.clipKnown = tmuxPassesClipboard(run)
+		client, ok := activeClient(run, m.now(), copyActive, func(string) bool { return true })
+		if !ok {
+			return nil, errNoScreen
+		}
+		return nil, loadTo(run, client, text)
 	}
-	return m.clipOK, m.clipKnown
+	return tea.SetClipboard(text), nil
 }
+
+// errNoScreen: no screen of the person's had input lately, so a copy has
+// nowhere to go.
+var errNoScreen = errors.New("no screen of yours had input in the last 10 s")
 
 // tmuxRun runs a command of the console's own tmux; nil outside tmux.
 func (m Model) tmuxRun() func(args ...string) (string, error) {
@@ -84,39 +69,23 @@ func (m Model) tmuxRun() func(args ...string) (string, error) {
 	return tmuxOut
 }
 
-// clipMsg is what the console's tmux said of a copy at the start.
-type clipMsg struct{ ok, known bool }
-
-// clipRead reads, off the update loop, whether the console's tmux passes a
-// copy on, so the board offers its door before the first copy.
-func (m Model) clipRead() tea.Cmd {
-	run := m.tmuxRun()
-	if run == nil {
-		return nil
-	}
-	return func() tea.Msg {
-		ok, known := tmuxPassesClipboard(run)
-		return clipMsg{ok, known}
-	}
-}
-
-// copyText puts text on the clipboard and says so, with what it was. When
-// the console's tmux drops the write, nothing is written and the notice
-// says the fix. Until a paste proves the whole way, it says so too.
+// copyText puts text on the clipboard and says so, with what it was, or
+// why it did not. Until a paste proves the whole way, it says so too.
 func (m *Model) copyText(text, what string) tea.Cmd {
-	if ok, known := m.readClip(); known && !ok {
-		return m.notice(tmuxDrops)
+	cmd, err := m.clip(text)
+	if err != nil {
+		return m.notice("not copied: " + err.Error())
 	}
 	said := "copied: " + what
 	if !m.copyChecked() {
 		said += notChecked
 	}
-	return tea.Batch(m.clip(text), m.notice(said))
+	return tea.Batch(cmd, m.notice(said))
 }
 
 // copyDoors are the doors of the copy, on the board only and, as the
 // service's doors, from the first state: the check until a paste proves
-// this screen, and the fix while the console's tmux drops a copy.
+// this screen.
 func (m Model) copyDoors() []doors.Door {
 	if !m.have {
 		return nil
@@ -124,9 +93,6 @@ func (m Model) copyDoors() []doors.Door {
 	var ds []doors.Door
 	if !m.copyChecked() {
 		ds = append(ds, doors.CopyCheckDoor())
-	}
-	if m.clipKnown && !m.clipOK {
-		ds = append(ds, doors.CopyThroughDoor())
 	}
 	return ds
 }
@@ -165,9 +131,6 @@ func (m Model) openBoardDoor() (tea.Model, tea.Cmd) {
 	case doors.CopyCheck:
 		cmd := m.openCopyCheck()
 		return m, cmd
-	case doors.CopyThrough:
-		m.pending, m.previewTop = m.doorAction(d), 0 // this machine's tmux, whatever the host
-		return m, nil
 	}
 	m.selectRow(i - len(m.copyDoors()))
 	return m.key(keyPress(m.keys.main.Open.Keys()[0]))
@@ -176,15 +139,16 @@ func (m Model) openBoardDoor() (tea.Model, tea.Cmd) {
 // openCopyCheck copies a new code of six letters; a paste of it checks
 // this screen.
 func (m *Model) openCopyCheck() tea.Cmd {
-	if ok, known := m.readClip(); known && !ok {
-		return m.notice(tmuxDrops)
-	}
 	code := make([]byte, 6)
 	for i := range code {
 		code[i] = copyCodeChars[rand.N(len(copyCodeChars))] //nolint:gosec // a check of the screen, no secret
 	}
+	cmd, err := m.clip(string(code))
+	if err != nil {
+		return m.notice("not copied: " + err.Error())
+	}
 	m.copyCode = string(code)
-	return tea.Batch(m.clip(m.copyCode), m.notice(m.pasteHere()))
+	return tea.Batch(cmd, m.notice(m.pasteHere()))
 }
 
 // pasteHere is what the copy check says while it waits for its paste.
@@ -223,16 +187,6 @@ func (m Model) copyPasted(text string) (Model, tea.Cmd) {
 	}
 	m.keepViewPrefs()
 	return m, m.notice(pasteChecked)
-}
-
-// copyRan is the fix's door back from tmux: the console reads again.
-func (m Model) copyRan() Model {
-	if ok, _ := m.readClip(); ok {
-		m.flash = "tmux lets a copy through now"
-	} else {
-		m.flash = "tmux still drops a copy"
-	}
-	return m
 }
 
 // dragStart keeps a left press as the start of a drag: on the board, on a
