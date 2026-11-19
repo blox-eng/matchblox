@@ -6,7 +6,7 @@ The owner runs agents from an iPhone with Matchblox Pocket. One hand holds the p
 
 ## Why it matters
 
-- A long read-back takes many swipes, about 20 for 300 lines in tmux at 5 lines a step with today's linear swipe (estimated).
+- A long read-back takes many swipes, about 20 for 300 lines in tmux at 5 lines a step with today's one-speed swipe (estimated).
 - In a tmux pane a swipe gives no haptic, because ticks play only while the console shows (`ConsoleTerminalView.swift`, measured by reading the code).
 - To put a console key such as `g` or `ctrl+o` on a layout, the owner types it by hand in the belt editor (measured: the editor has no list of keys).
 
