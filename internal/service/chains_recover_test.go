@@ -288,3 +288,35 @@ func TestTakeOutAWaitingMateBySessionID(t *testing.T) {
 		t.Fatalf("team one = %+v", c)
 	}
 }
+
+// TestALineToAWaitingMateWaits: a mate sends to a member that waits for
+// recover by its session id. The line waits in its inbox, and the sender
+// hears that it waits. The member gets it when recover reopens it.
+func TestALineToAWaitingMateWaits(t *testing.T) {
+	s, one, two := rebootPair(t)
+	loseServer(s)
+	one2 := reopened(one, "%5", 201)
+	three := sample.Session{Pane: "%7", PID: 203, Start: 203, SessionID: "s3", Name: "three", Agent: "claude", Target: "three:1.0", Cwd: "/src/three"}
+	publishOn(s, "200", one2, three)
+	send := func(from, recID, text string) proto.Result {
+		return s.act(context.Background(), proto.Act{RecID: recID, Confirm: "y", Text: text, From: from, FromKnown: true, FromPlaced: true})
+	}
+	bad := "the fix\nis on main"
+	if res, want := send("%5", "message:sid:s2", bad), checkPeerText(bad).Error(); res.Err != want {
+		t.Fatalf("a line with a newline = %+v, want %q", res, want)
+	}
+	if res := send("%7", "message:sid:s2", "hello"); res.Err != "you are not chained with two" {
+		t.Fatalf("an unchained send = %+v", res)
+	}
+	if res := send("%5", "message:sid:nope", "hello"); res.Err != "no match waits for recover as nope" {
+		t.Fatalf("a send to no waiting match = %+v", res)
+	}
+	if res := send("%5", "message:sid:s2", "the fix is on main"); res.Err != "" || res.Note != "two waits for recover: your line waits in its inbox (1 now)" {
+		t.Fatalf("send = %+v", res)
+	}
+	two2 := reopened(two, "%6", 202)
+	publishOn(s, "200", one2, three, two2)
+	if got := chainInbox(s, two2); !slices.Equal(got, []string{"[from one %5] the fix is on main"}) {
+		t.Fatalf("two's inbox = %q", got)
+	}
+}

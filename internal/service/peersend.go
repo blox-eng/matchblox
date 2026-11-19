@@ -73,6 +73,9 @@ func (s *Service) peerSend(ctx context.Context, sender sample.Session, pane stri
 	if err := checkPeerText(a.Text); err != nil {
 		return proto.Result{Err: err.Error()}
 	}
+	if id, ok := strings.CutPrefix(pane, "sid:"); ok {
+		return s.sendToWaiting(sender, id, a)
+	}
 	_, own := s.unitOf(proto.Act{From: pane})
 	switch {
 	case own:
@@ -404,6 +407,36 @@ func (s *Service) clearLine(ctx context.Context, pane string) bool {
 		return false
 	}
 	return true
+}
+
+// sendToWaiting puts sender's line in the inbox of the chain-mate whose
+// conversation id waits for recover: its pane went with its server.
+// Recover reopens it with the same id, and then it reads the line.
+func (s *Service) sendToWaiting(sender sample.Session, id string, a proto.Act) proto.Result {
+	s.mu.Lock()
+	w, ok := s.waiting[id]
+	s.mu.Unlock()
+	if !ok {
+		return proto.Result{Err: "no match waits for recover as " + id}
+	}
+	to := chains.Member{SessionID: id}
+	chainID, ok := s.mateChain(memberOf(sender), to)
+	if !ok {
+		return proto.Result{Err: "you are not chained with " + w.Name}
+	}
+	now := s.now()
+	if _, err := s.peers.reserve(a.From, "sid:"+id, w.Name, now); err != nil {
+		return proto.Result{Err: err.Error()}
+	}
+	s.mu.Lock()
+	st := s.chainsLocked()
+	st.PostLine(to, memberOf(sender), peerTag(sender)+" "+a.Text, now)
+	n, _ := st.InboxCount(to)
+	s.mu.Unlock()
+	s.spark(chainID, now)
+	s.logPeer(peerRecord{At: now, From: sender.Name, FromPane: a.From, To: w.Name, ToPane: "sid:" + id,
+		Len: len(a.Text), SHA256: sum(a.Text), Via: "inbox", Result: "queued"})
+	return proto.Result{Note: fmt.Sprintf("%s waits for recover: your line waits in its inbox (%d now)", w.Name, n)}
 }
 
 // mateChain is the id of the chain from and to are both in.
