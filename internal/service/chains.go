@@ -14,6 +14,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/chains"
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/proto"
+	"github.com/blox-eng/matchblox/internal/recovery"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/state"
 	"github.com/blox-eng/matchblox/internal/stoker"
@@ -278,11 +279,16 @@ func (s *Service) pruneChainsLocked(now time.Time, prev []sample.Session) error 
 			s.mateNames[x.Pane] = x.Name
 		}
 	}
+	waiting, named := s.waitingLocked(), map[string]bool{}
 	live := func(m chains.Member) bool {
 		if x, ok := s.sessionOfLocked(m); ok {
 			st.MarkSeen(m)
 			s.mateNames[m.Pane] = x.Name
 			return true
+		}
+		if m.SessionID != "" && waiting[m.SessionID] {
+			named[m.Pane] = true // its mates still hear its name if it leaves
+			return true          // its pane went with its server; recover reopens it
 		}
 		if !panes[m.Pane] {
 			return false
@@ -296,7 +302,7 @@ func (s *Service) pruneChainsLocked(now time.Time, prev []sample.Session) error 
 		return true
 	}
 	left := st.Prune(live, now)
-	defer maps.DeleteFunc(s.mateNames, func(pane, _ string) bool { return !panes[pane] })
+	defer maps.DeleteFunc(s.mateNames, func(pane, _ string) bool { return !panes[pane] && !named[pane] })
 	maps.DeleteFunc(s.cleared, func(id string, _ bool) bool {
 		return !slices.ContainsFunc(s.cur.Sessions, func(x sample.Session) bool { return x.SessionID == id })
 	})
@@ -367,6 +373,12 @@ func (s *Service) refreshMembersLocked(st *chains.Store) bool {
 				return n, true
 			}
 		}
+		if m.SessionID != "" {
+			// Reopened by recover: the same conversation in a new pane.
+			if x, ok := s.sessionOfLocked(m); ok {
+				return memberOf(x), true
+			}
+		}
 		return chains.Member{}, false
 	})
 }
@@ -426,6 +438,24 @@ func (s *Service) leftText(l chains.Left, prev []sample.Session) string {
 		name = n
 	}
 	return name + " left the chain"
+}
+
+// waitingLocked are the conversations the recovery record keeps from a tmux
+// server that no longer runs. A lost server is not a leave: recover can
+// reopen each one, so its match keeps its teams until the record forgets
+// it (#391). Callers hold mu.
+func (s *Service) waitingLocked() map[string]bool {
+	if s.Recovery == nil {
+		return nil
+	}
+	_, alive := recordable(nil, s.cur.Panes)
+	waiting := map[string]bool{}
+	for _, e := range s.Recovery.List() {
+		if alive[e.Socket] != recovery.Server(e.ServerPID, e.ServerStart) {
+			waiting[e.ConversationID] = true
+		}
+	}
+	return waiting
 }
 
 // sampleMissedLocked tells if the last sample did not read its sessions.
