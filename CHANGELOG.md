@@ -15,6 +15,14 @@ All notable changes to matchblox are in this file. The format follows
 
 ### Fixed
 
+- **The island says why it is not registered.** The Island screen shows
+  the last failure under each host, with its fix, until a registration
+  succeeds.
+
+## [0.47.1] - 2026-11-19
+
+### Fixed
+
 - **↑↓ show each agent beside the list again.** In 0.47.0 the right
   side changed only on ⏎. Now it shows the chosen agent once the list
   rests on it, and the keys stay in the list; ⏎ gives the agent the keys.
@@ -27,9 +35,6 @@ All notable changes to matchblox are in this file. The format follows
   list's narrow pane, its words cut. The box now takes the window while it
   is open, centred, with the list and the agent dim behind it, and gives
   the window back when it closes.
-- **The island says why it is not registered.** The Island screen shows
-  the last failure under each host, with its fix, until a registration
-  succeeds.
 
 ## [0.47.0] - 2026-11-16
 
@@ -1849,7 +1854,8 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.47.0...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.47.1...HEAD
+[0.47.1]: https://github.com/blox-eng/matchblox/compare/v0.47.0...v0.47.1
 [0.47.0]: https://github.com/blox-eng/matchblox/compare/v0.46.3...v0.47.0
 [0.46.3]: https://github.com/blox-eng/matchblox/compare/v0.46.2...v0.46.3
 [0.46.2]: https://github.com/blox-eng/matchblox/compare/v0.46.1...v0.46.2
