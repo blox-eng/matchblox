@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -106,4 +107,71 @@ func TestAClickReachesTheAgentWholeOnRelease(t *testing.T) {
 			t.Fatalf("a pane that reads no mouse got %q", got)
 		}
 	})
+}
+
+// buffer is the host tmux's newest copy, once copy mode has had time.
+func (r *mouseRig) buffer() string {
+	r.t.Helper()
+	var out string
+	waitFor(r.t, "a copy on the host", func() bool {
+		var err error
+		out, err = tmuxOut(r.inner, "show-buffer")
+		return err == nil
+	})
+	return out
+}
+
+// longLine is wider than the 120-column pane, so tmux wraps it.
+var longLine = strings.Repeat("0123456789", 15)
+
+// TestADragSelectsInTmuxAndTheAgentGetsNothing: a drag over an agent that
+// reads the mouse selects in tmux's copy mode (spec ruling 2); the copy has
+// no padding spaces and a wrapped line comes back as one line.
+func TestADragSelectsInTmuxAndTheAgentGetsNothing(t *testing.T) {
+	r := newMouseRig(t, sgrMouse, `abc     \n`+longLine)
+	r.mouse(0, 0, 0, false)
+	r.mouse(32, 0, 0, false)
+	r.mouse(32, 10, 1, false)
+	r.mouse(32, 30, 2, false) // a person drags past the end of the text:
+	r.mouse(0, 30, 2, true)   // tmux's drag stops before the cell under the pointer
+	if got, want := r.buffer(), "abc\n"+longLine; got != want {
+		t.Errorf("copy = %q, want %q", got, want)
+	}
+	if got := r.got(); got != "" {
+		t.Errorf("the agent got mouse reports from a drag: %q", got)
+	}
+}
+
+// TestADoubleClickCopiesAWord and the triple-click: tmux's own word and line
+// select, which a jump's key table hid (spec R4).
+func TestADoubleClickCopiesAWord(t *testing.T) {
+	r := newMouseRig(t, sgrMouse, `abc def\n`)
+	for range 2 {
+		r.mouse(0, 5, 0, false)
+		r.mouse(0, 5, 0, true)
+	}
+	if got := r.buffer(); got != "def" {
+		t.Errorf("a double-click copied %q, want %q", got, "def")
+	}
+}
+
+func TestATripleClickCopiesALine(t *testing.T) {
+	r := newMouseRig(t, sgrMouse, `abc def   \n`)
+	for range 3 {
+		r.mouse(0, 1, 0, false)
+		r.mouse(0, 1, 0, true)
+	}
+	if got := r.buffer(); got != "abc def" {
+		t.Errorf("a triple-click copied %q, want %q", got, "abc def")
+	}
+}
+
+// TestTheWheelStillReachesTheAgent: an agent that reads the mouse scrolls
+// itself.
+func TestTheWheelStillReachesTheAgent(t *testing.T) {
+	r := newMouseRig(t, sgrMouse, "")
+	r.mouse(64, 4, 2, false)
+	if got, want := r.got(), "\x1b[<64;5;3M"; got != want {
+		t.Errorf("agent got %q, want %q", got, want)
+	}
 }

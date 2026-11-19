@@ -145,13 +145,26 @@ func relayMouse(table string) [][]string {
 // goes to no agent: tmux holds it back, and a release with no drag gives the
 // agent the whole click (wholeClick). An agent that got the press of a drag
 // would never get its release, which tmux's copy mode takes.
+//
+// A drag, a double-click and a triple-click select in tmux's copy mode in
+// every agent, as tmux's own defaults do for a pane that reads no mouse: the
+// copy is tmux's, of this pane only, with no padding and soft wraps joined.
 func paneMouse(table string) [][]string {
-	const app = "#{||:#{pane_in_mode},#{mouse_any_flag}}"
+	const (
+		app   = "#{||:#{pane_in_mode},#{mouse_any_flag}}"
+		inUse = "#{pane_in_mode}"
+	)
+	sel := func(what string) string {
+		return "select-pane -t = ; if -F '" + inUse + "' '' 'copy-mode -H' ; send-keys -X " + what +
+			" ; run-shell -d 0.3 ; send-keys -X copy-pipe-and-cancel"
+	}
 	return [][]string{
 		{"bind-key", "-T", table, "WheelUpPane", "if", "-F", app, "send-keys -M", "copy-mode -e"},
-		{"bind-key", "-T", table, "MouseDown1Pane", "if", "-F", "#{pane_in_mode}", "select-pane -t = ; send-keys -M", "select-pane -t ="},
-		{"bind-key", "-T", table, "MouseUp1Pane", "if", "-F", "#{&&:#{mouse_any_flag},#{!:#{pane_in_mode}}}", "run-shell '" + wholeClick + "'", ""},
-		{"bind-key", "-T", table, "MouseDrag1Pane", "if", "-F", app, "send-keys -M", "copy-mode -M"},
+		{"bind-key", "-T", table, "MouseDown1Pane", "if", "-F", inUse, "select-pane -t = ; send-keys -M", "select-pane -t ="},
+		{"bind-key", "-T", table, "MouseUp1Pane", "if", "-F", "#{&&:#{mouse_any_flag},#{!:" + inUse + "}}", "run-shell '" + wholeClick + "'", ""},
+		{"bind-key", "-T", table, "MouseDrag1Pane", "if", "-F", inUse, "send-keys -M", "copy-mode -M"},
+		{"bind-key", "-T", table, "DoubleClick1Pane", "if", "-F", "1", sel("select-word"), ""},
+		{"bind-key", "-T", table, "TripleClick1Pane", "if", "-F", "1", sel("select-line"), ""},
 		{"bind-key", "-T", table, "MouseDrag1Border", "resize-pane", "-M"},
 	}
 }

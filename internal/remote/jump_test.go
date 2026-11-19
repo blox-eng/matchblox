@@ -26,8 +26,16 @@ func mouseIn(table string) string {
 		b + " MouseDown1Pane if -F '#{pane_in_mode}' 'select-pane -t = ; send-keys -M' 'select-pane -t =' ';'" +
 		b + " MouseUp1Pane if -F '#{&&:#{mouse_any_flag},#{!:#{pane_in_mode}}}' " +
 		Quote([]string{"run-shell '" + wholeClick + "'"}) + " '' ';'" +
-		b + " MouseDrag1Pane if -F " + app + " 'send-keys -M' 'copy-mode -M' ';'" +
+		b + " MouseDrag1Pane if -F '#{pane_in_mode}' 'send-keys -M' 'copy-mode -M' ';'" +
+		b + " DoubleClick1Pane if -F 1 " + selIn("select-word") + " '' ';'" +
+		b + " TripleClick1Pane if -F 1 " + selIn("select-line") + " '' ';'" +
 		b + " MouseDrag1Border resize-pane -M ';'"
+}
+
+// selIn is a double- or triple-click's select and copy, as a word of a line.
+func selIn(what string) string {
+	return Quote([]string{"select-pane -t = ; if -F '#{pane_in_mode}' '' 'copy-mode -H' ; send-keys -X " + what +
+		" ; run-shell -d 0.3 ; send-keys -X copy-pipe-and-cancel"})
 }
 
 // pageIn is panePage(table) as a line.
