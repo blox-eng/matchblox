@@ -1,10 +1,14 @@
 package app
 
 import (
+	"errors"
 	"math/rand/v2"
+	"os"
+	"os/exec"
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
@@ -12,6 +16,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/doors"
+	"github.com/blox-eng/matchblox/internal/proto"
 )
 
 // The words of a copy (the spec's "Copy").
@@ -394,4 +399,95 @@ func (m Model) doorKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 	m.selectRow(i - own)
 	next, cmd := m.key(k)
 	return next, cmd, true
+}
+
+// copyActive is how recent the person's input on a screen must be for a
+// copy to go to that screen: older, the person is at another one.
+const copyActive = 10 * time.Second
+
+// tookCopy puts a copy that a service sent (a tmux copy on that host) on
+// the screen the person uses; from names a peer host, "" for this one. A
+// console with its own clipboard (Pocket) takes none: the phone copies by
+// its own key.
+func (m Model) tookCopy(text, from string) (Model, tea.Cmd) {
+	if m.opt.Clip != nil {
+		return m, nil
+	}
+	what := characters(utf8.RuneCountInString(text))
+	if from != "" {
+		what += " from " + from
+	}
+	run := m.tmuxRun()
+	if run == nil {
+		cmd := m.notice("copied: " + what)
+		return m, tea.Batch(tea.SetClipboard(text), cmd)
+	}
+	client, ok := activeClient(run, m.opt.Pane, m.now())
+	if !ok {
+		return m, nil
+	}
+	if err := loadTo(run, client, text); err != nil {
+		return m, m.notice("not copied: " + err.Error())
+	}
+	said := "copied: " + what
+	if !m.copyChecked() {
+		said += notChecked
+	}
+	return m, m.notice(said)
+}
+
+// activeClient is the client of the console's session that had input last,
+// within copyActive of now. A client on a pane's terminal (a nested view)
+// is never a person's screen.
+func activeClient(run func(args ...string) (string, error), pane string, now time.Time) (string, bool) {
+	sess, err := run("display", "-p", "-t", pane, "#{session_name}")
+	if err != nil {
+		return "", false
+	}
+	clients, err := run("list-clients", "-t", "="+strings.TrimSpace(sess), "-F", "#{client_name}\t#{client_activity}\t#{client_tty}")
+	if err != nil {
+		return "", false
+	}
+	ttys, _ := run("list-panes", "-a", "-F", "#{pane_tty}")
+	nested := strings.Fields(ttys)
+	var best string
+	var bestAt int64
+	for _, l := range strings.Split(strings.TrimSpace(clients), "\n") {
+		f := strings.Split(l, "\t")
+		if len(f) != 3 || slices.Contains(nested, f[2]) {
+			continue
+		}
+		at, err := strconv.ParseInt(f[1], 10, 64)
+		if err != nil || now.Sub(time.Unix(at, 0)) > copyActive || at <= bestAt {
+			continue
+		}
+		best, bestAt = f[0], at
+	}
+	return best, best != ""
+}
+
+// loadTo puts text in the console's buffer and on client's clipboard, by
+// tmux itself: tmux's set-clipboard does not stop that. The text goes by a
+// file of the person's own, as a copy can be longer than an argument.
+func loadTo(run func(args ...string) (string, error), client, text string) error {
+	f, err := os.CreateTemp("", "matchblox-copy-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(f.Name())
+	if _, err := f.WriteString(text); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	if _, err := run("load-buffer", "-w", "-b", proto.CopyBuffer, "-t", client, f.Name()); err != nil {
+		var ee *exec.ExitError
+		if errors.As(err, &ee) && len(ee.Stderr) > 0 {
+			return errors.New(strings.TrimSpace(string(ee.Stderr)))
+		}
+		return err
+	}
+	return nil
 }

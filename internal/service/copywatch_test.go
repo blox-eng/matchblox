@@ -3,6 +3,7 @@ package service
 import (
 	"encoding/json"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -224,4 +225,50 @@ func TestACopyWithNoConsoleSaysSo(t *testing.T) {
 	waitUntil(t, "tmux tells the person", func() bool {
 		return strings.Contains(messages(sock, person), "not copied: no matchblox console is connected · open the console")
 	})
+}
+
+// TestAnAgentThatSaysConsoleGetsNoCopies: a client whose process runs in an
+// agent's pane is no console, whatever its hello says, as for screens: it
+// gets no copy of what the person copied.
+func TestAnAgentThatSaysConsoleGetsNoCopies(t *testing.T) {
+	sock, tm := copyServer(t)
+	s := newTest(t, time.Hour)
+	s.PeerPane = func(pid int) string { return map[int]string{100: "%1"}[pid] }
+	watching(t, s, sock, tm)
+	waitUntil(t, "the first sample", func() bool { s.mu.Lock(); defer s.mu.Unlock(); return s.have })
+	s.mu.Lock()
+	s.cur.Sessions = append(s.cur.Sessions, sample.Session{Name: "flint-auth", Pane: "%1"})
+	s.mu.Unlock()
+
+	a, b := net.Pipe()
+	go s.HandlePeer(t.Context(), transport.NewConn(b), 100) //nolint:errcheck // ends with the test
+	agent := transport.NewConn(a)
+	t.Cleanup(func() { agent.Close() })
+	go func() {
+		_ = agent.Send(proto.KindHello, "", proto.Hello{Version: proto.Version, Client: proto.ClientConsole})
+	}()
+	next(t, agent, proto.KindHello)
+	person := connectAs(t, t.Context(), s, proto.ClientConsole)
+	agentCopies := make(chan string, 1)
+	go func() {
+		for {
+			env, err := agent.Recv()
+			if err != nil {
+				return
+			}
+			if env.Kind == proto.KindCopy {
+				agentCopies <- string(env.Body)
+				return
+			}
+		}
+	}()
+	tm("set-buffer", "-b", "buffer6", "secret")
+	if got := copyOf(t, person); got != "secret" {
+		t.Fatalf("the person's console got %q", got)
+	}
+	select {
+	case got := <-agentCopies:
+		t.Fatalf("an agent's pane got the person's copy: %s", got)
+	case <-time.After(500 * time.Millisecond):
+	}
 }

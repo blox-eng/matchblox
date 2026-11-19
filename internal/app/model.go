@@ -853,6 +853,9 @@ func (m Model) scanShows() Model {
 
 func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case copyMsg:
+		next, cmd := m.tookCopy(msg.Text, "")
+		return next, tea.Batch(cmd, next.recv())
 	case tea.BackgroundColorMsg:
 		m.dark = msg.IsDark()
 		m.st = newStyles(m.dark)
