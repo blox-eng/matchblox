@@ -43,7 +43,6 @@ final class ConsoleTerminalView: TerminalView {
     private var edge: UIScreenEdgePanGestureRecognizer?
     private var labelTap: UITapGestureRecognizer?
     private var clickTap: UITapGestureRecognizer?
-    private var linkTap: UITapGestureRecognizer?
     /// Whether the keyboard was this view's when the touch began. SwiftTerm spends a tap on an
     /// unfocused terminal only on the keyboard and never sends it to the program.
     private var focusedAtTouch = false
@@ -99,18 +98,6 @@ final class ConsoleTerminalView: TerminalView {
         }
         addGestureRecognizer(click)
         clickTap = click
-
-        // A tap on a link asks what to do with it. Every single tap but the label's waits for
-        // this one, which fails at once off a link: a tap on a row still clicks.
-        let link = UITapGestureRecognizer(target: self, action: #selector(linkTapped))
-        link.cancelsTouchesInView = false
-        for other in gestureRecognizers ?? [] where other !== labelTap {
-            if let tap = other as? UITapGestureRecognizer, tap.numberOfTapsRequired == 1 {
-                tap.require(toFail: link)
-            }
-        }
-        addGestureRecognizer(link)
-        linkTap = link
 
         // SwiftTerm's mouse pan sends a drag, which tmux and the console do not scroll on. A
         // vertical swipe goes to this pan first; the scroll view's own pan waits for it too.
@@ -199,11 +186,11 @@ final class ConsoleTerminalView: TerminalView {
         if gesture === labelTap {
             return tapsLabel(at: gesture.location(in: self))
         }
-        if gesture === linkTap {
-            let point = gesture.location(in: self)
-            return !tapsLabel(at: point) && linkUnder(point) != nil
-        }
         if gesture === clickTap {
+            // A tap on a link asks what to do with it, focused or not.
+            if linkUnder(gesture.location(in: self)) != nil, !tapsLabel(at: gesture.location(in: self)) {
+                return true
+            }
             let first = !focusedAtTouch
             let clicks = sendsClicks && (first || !tapRaisesKeyboard)
             return (clicks || (first && tapRaisesKeyboard)) && !tapsLabel(at: gesture.location(in: self))
@@ -348,7 +335,13 @@ final class ConsoleTerminalView: TerminalView {
     /// The press and release at the touch's cell, then the keyboard on a first tap.
     @objc private func clicked(_ tap: UITapGestureRecognizer) {
         guard tap.state == .ended else { return }
-        sendClick(at: tap.location(in: self))
+        let point = tap.location(in: self)
+        if let link = linkUnder(point) {
+            haptic.impactOccurred()
+            onLink(link, CGRect(origin: point, size: .zero))
+            return
+        }
+        sendClick(at: point)
         if tapRaisesKeyboard, !focusedAtTouch { _ = becomeFirstResponder() }
     }
 
@@ -361,13 +354,6 @@ final class ConsoleTerminalView: TerminalView {
             let flags = terminal.encodeButton(button: 0, release: release, shift: false, meta: false, control: false)
             terminal.sendEvent(buttonFlags: flags, x: spot.col, y: spot.row, pixelX: pixelX, pixelY: pixelY)
         }
-    }
-
-    @objc private func linkTapped(_ tap: UITapGestureRecognizer) {
-        let point = tap.location(in: self)
-        guard tap.state == .ended, let link = linkUnder(point) else { return }
-        haptic.impactOccurred()
-        onLink(link, CGRect(origin: point, size: .zero))
     }
 
     /// The link under `point`: a hyperlink the program marked (OSC 8), else an http or https URL
