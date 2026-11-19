@@ -15,6 +15,7 @@ enum IslandSettings {
     private static let prefsKey = IslandShelf.prefsKey
     private static func recordKey(_ host8: String) -> String { "island-registered-\(host8)" }
     private static func channelKey(_ host8: String) -> String { "island-channel-\(host8)" }
+    private static func failureKey(_ host8: String) -> String { "island-failure-\(host8)" }
 
     /// Follow, Show and Buzz. Defaults: Sessions, the host opened last, Buzz on.
     static var prefs: IslandPrefs {
@@ -40,8 +41,16 @@ enum IslandSettings {
     static func channel(host: Host) -> ChannelGrant? { read(channelKey(host8(host.fingerprint))) }
     static func setChannel(_ channel: ChannelGrant, host: Host) { write(channel, channelKey(host8(host.fingerprint))) }
     static func removeChannel(host: Host) { defaults.removeObject(forKey: channelKey(host8(host.fingerprint))) }
+    /// Why the last registration with the host failed; nil after one that succeeded, or none.
+    static func failure(host: Host) -> RegistrationFailure? { read(failureKey(host8(host.fingerprint))) }
+    static func setFailure(_ failure: RegistrationFailure, host: Host) { write(failure, failureKey(host8(host.fingerprint))) }
+    static func clearFailure(host: Host) { defaults.removeObject(forKey: failureKey(host8(host.fingerprint))) }
+
     /// A removed host leaves no record behind: adding it again registers anew.
-    static func forget(host: Host) { defaults.removeObject(forKey: recordKey(host8(host.fingerprint))) }
+    static func forget(host: Host) {
+        defaults.removeObject(forKey: recordKey(host8(host.fingerprint)))
+        clearFailure(host: host)
+    }
 
     /// The names of the numbers, as `island-names-<host8>.json` in the App Group, and the
     /// host's short name, which the island shows after `▰`.

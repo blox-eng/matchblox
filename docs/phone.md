@@ -110,8 +110,9 @@ terminal.`
 - While the console shows Sessions or Machine, the key belt is on its
   Board layout. Home is `◂`, then the keys of the chosen session
   (`1 answer`, `p merge`, `y go`), then `↑ ↓ ⏎`. The rest of the belt has
-  `⌃o expand` and the list's keys: `s hosts`, `g chain`, `/`, `m menu`,
-  `c copy`, `z park`, `N new`, `⇥ machine`, `x kill`. These keys act on
+  `c copy reply` first, then `⌃o expand` and the list's keys: `s hosts`,
+  `g chain`, `/`, `m menu`, `z park`, `N new`, `⇥ machine`, `x kill`. With
+  a short card, `c copy reply` shows at rest. These keys act on
   the chosen session while you write in its line too. A letter you type
   on the keyboard types. While the line holds text, a digit types, so the
   digits are dim, and in the line `↑ ↓` are dim too. A key that does not
@@ -126,6 +127,22 @@ terminal.`
   again to give the go. Any other key or tap disarms it. While the
   consent box shows, the belt is `◂`, `y runs` and `esc cancels`: a tap
   on a row is never consent.
+- **Text size:** pinch the terminal, or tap `A−` or `A+` under
+  `Console text` in the Island screen. The size goes from 9 to 24 pt, and
+  the phone keeps it for every host. The host gets the new columns and
+  rows.
+- **Back to the bottom:** after a swipe scrolls an agent's pane up, a `↓`
+  button shows at the bottom right. Tap it to go back to the live output:
+  tmux leaves its copy mode. A key you type hides it too.
+- **Copy the last reply:** tap `c copy reply` on the Board layout. The
+  console copies the chosen session's last message, whole, and the phone
+  says `Copied`. The phone takes a copy from the host only in the 3 s after
+  that tap or a key you type, and only up to 1 MB. The copy stays on this
+  device.
+- **Links:** tap a link in the terminal. The phone shows the link with
+  `Open in Safari`, `Copy link` and `Cancel`. Only an http or https link
+  opens; any other link can only be copied. A tap off a link clicks as
+  before.
 - A swipe on a host in the list removes the host and its key from the
   device. It does not remove the key on the host. Run
   `matchblox devices rm <name>` on the host for that.
@@ -203,6 +220,11 @@ Nothing connects to a host from the background.
   is `Sessions`, `Usage` or `Auto (Usage while the stoker runs)`. `Buzz` is
   on or off for each host. A host out of reach keeps its old setting until
   the next connect.
+- **If the app could not register,** the Island screen says why under the
+  host, with the time and the fix, for example `Not registered: no APNs
+  device token — allow notifications for matchblox in Settings`. The line
+  goes when a registration with that host succeeds. A host the app never
+  tried has no line.
 - **If a push fails,** the Machine tab says `push: <why>`. If the island
   needs the app, it says `island: open matchblox on the phone to renew`.
 - **`[push] off = true`** in the config stops the sender: no buzz, no island

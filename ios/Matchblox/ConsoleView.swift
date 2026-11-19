@@ -3,6 +3,10 @@ import MatchbloxKit
 import NIOSSH
 import SwiftTerm
 import SwiftUI
+import UniformTypeIdentifiers
+import os
+
+private let consoleLog = Logger(subsystem: "matchblox", category: "console")
 
 /// Where the console's bytes come from and go to. Each source's output comes from its own start.
 protocol ConsoleSource: Sendable {
@@ -156,7 +160,7 @@ private struct TerminalRepresentable: UIViewRepresentable {
     let connection: ConsoleConnection
 
     func makeUIView(context: Context) -> UIStackView {
-        let terminal = ConsoleTerminalView(font: UIFont.monospacedSystemFont(ofSize: 13, weight: .regular))
+        let terminal = ConsoleTerminalView(textSize: TextSize.load(from: .standard))
         terminal.onHome = { [weak connection] in connection?.goHome() }
         let bg = UIColor(Theme.bg)
         terminal.backgroundColor = bg
@@ -181,6 +185,13 @@ private struct TerminalRepresentable: UIViewRepresentable {
         terminal.inputAccessoryView = belts.lifted
         terminal.tapRaisesKeyboard = !connection.isDemo
         terminal.onFocus = { [weak belts] focused in belts?.focusChanged(focused) }
+        terminal.onScrolledBack = { [weak screen] up in screen?.showJump(up) }
+        screen.onJump = { [weak terminal] in terminal?.jumpToBottom() }
+        connection.onCopied = { [weak screen] word, ok in screen?.copied(word, ok: ok) }
+        terminal.onAsksCopy = { [weak connection] in connection?.copyAsked() }
+        terminal.onLink = { [weak terminal] link, spot in
+            if let terminal { LinkSheet.present(link, from: terminal, at: spot) }
+        }
         connection.onAgent = { agent in belts.agentChanged(agent) }
         connection.onBoard = { value in belts.boardSaid(value) }
         belts.onAnswer = { [weak connection] in connection?.answerBoard() }
@@ -208,24 +219,95 @@ private struct TerminalRepresentable: UIViewRepresentable {
     func updateUIView(_ stack: UIStackView, context: Context) {}
 }
 
+/// A tapped link asks first: `Open in Safari` (http and https only), `Copy link`, `Cancel`.
+@MainActor
+private enum LinkSheet {
+    static func present(_ link: String, from view: UIView, at spot: CGRect) {
+        guard var top = view.window?.rootViewController else { return }
+        while let next = top.presentedViewController { top = next }
+        let sheet = UIAlertController(title: link, message: nil, preferredStyle: .actionSheet)
+        if TerminalLink.opens(link), let url = URL(string: link) {
+            sheet.addAction(UIAlertAction(title: "Open in Safari", style: .default) { _ in
+                UIApplication.shared.open(url)
+            })
+        }
+        sheet.addAction(UIAlertAction(title: "Copy link", style: .default) { _ in
+            UIPasteboard.general.string = link
+        })
+        sheet.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        // An iPad shows the sheet as a popover at the tap.
+        sheet.popoverPresentationController?.sourceView = view
+        sheet.popoverPresentationController?.sourceRect = spot
+        top.present(sheet, animated: true)
+    }
+}
+
 /// The terminal's place on screen. While a matchbox tray is open the place gets shorter, but
 /// the terminal keeps its size (`ScreenHold`): its lines slide up and the top ones go under the
 /// edge. SwiftTerm resizes only when its bounds change, so the host gets no resize.
 private final class HeldScreen: UIView {
+    private static let jumpSide: CGFloat = 44
+    private static let jumpInset: CGFloat = 12
+    private static let noticeHeight: CGFloat = 32
+    private static let noticeTime: TimeInterval = 1.2
+
     private let terminal: UIView
     private var hold = ScreenHold()
     private var heldSize: ScreenHold.Size {
         ScreenHold.Size(width: bounds.width, height: bounds.height)
     }
+    /// Shows while the terminal is up from its live bottom; a tap goes back down.
+    private let jump = UIButton(type: .system)
+    var onJump: @MainActor () -> Void = {}
+    /// A short word over the terminal that fades: `Copied`.
+    private let notice = UILabel()
+    private let copiedHaptic = UINotificationFeedbackGenerator()
 
     init(terminal: UIView) {
         self.terminal = terminal
         super.init(frame: .zero)
         clipsToBounds = true
         addSubview(terminal)
+
+        var look = UIButton.Configuration.filled()
+        look.title = "↓"
+        look.cornerStyle = .capsule
+        look.baseBackgroundColor = UIColor(Theme.hair)
+        look.baseForegroundColor = UIColor(Theme.fg)
+        jump.configuration = look
+        jump.accessibilityLabel = "Jump to the bottom"
+        jump.isHidden = true
+        jump.addAction(UIAction { [weak self] _ in self?.onJump() }, for: .primaryActionTriggered)
+        addSubview(jump)
+
+        notice.font = UIFont.monospacedSystemFont(ofSize: 13, weight: .medium)
+        notice.textColor = UIColor(Theme.fg)
+        notice.backgroundColor = UIColor(Theme.hair)
+        notice.textAlignment = .center
+        notice.layer.cornerRadius = Self.noticeHeight / 2
+        notice.layer.masksToBounds = true
+        notice.alpha = 0
+        addSubview(notice)
     }
 
     required init?(coder: NSCoder) { nil }
+
+    func showJump(_ shows: Bool) {
+        jump.isHidden = !shows
+    }
+
+    /// What came of the host's copy: `Copied`, or why it did not.
+    func copied(_ word: String, ok: Bool) {
+        copiedHaptic.notificationOccurred(ok ? .success : .error)
+        notice.text = word
+        notice.layer.removeAllAnimations()
+        notice.alpha = 1
+        setNeedsLayout()
+        UIView.animate(withDuration: 0.3, delay: Self.noticeTime, options: [], animations: { [weak self] in
+            self?.notice.alpha = 0
+        })
+        UIAccessibility.post(notification: .announcement, argument: word)
+    }
 
     func trayMoved(open: Bool) {
         if open {
@@ -240,6 +322,20 @@ private final class HeldScreen: UIView {
         super.layoutSubviews()
         let height = hold.height(screen: heldSize)
         terminal.frame = CGRect(x: 0, y: bounds.height - height, width: bounds.width, height: height)
+        let side = Self.jumpSide
+        jump.frame = CGRect(
+            x: bounds.width - side - Self.jumpInset,
+            y: bounds.height - side - Self.jumpInset,
+            width: side,
+            height: side
+        )
+        let width = notice.intrinsicContentSize.width + 2 * Self.jumpInset
+        notice.frame = CGRect(
+            x: ((bounds.width - width) / 2).rounded(),
+            y: jump.frame.midY - Self.noticeHeight / 2,
+            width: width,
+            height: Self.noticeHeight
+        )
     }
 }
 
@@ -270,7 +366,11 @@ private final class Belts {
         for belt in [lifted, dock] {
             belt.isDemo = isDemo
             belt.onScreenHold = { [weak screen] holding in screen?.trayMoved(open: holding) }
-            belt.onSend = { [weak terminal] bytes in terminal?.send(bytes) }
+            belt.onSend = { [weak terminal] bytes in
+                terminal?.forgetScrollBack()
+                if bytes == Self.copyReply { terminal?.onAsksCopy() }
+                terminal?.send(bytes)
+            }
             belt.onCtrl = { [weak self, weak terminal] in
                 guard let terminal else { return }
                 terminal.controlModifier.toggle()
@@ -287,6 +387,8 @@ private final class Belts {
             [weak self] _ in MainActor.assumeIsolated { self?.ctrlChanged(false) }
         }
     }
+
+    private static let copyReply = KeyBar.bytes(for: "board.c")
 
     /// SwiftTerm disarms ctrl after the next typed key and posts this; its name is not public.
     private static let ctrlReset = Notification.Name("SwiftTerm.TerminalView.controlModifierReset")
@@ -326,6 +428,7 @@ private final class Belts {
     /// past a pane never lights the keys.
     private func checkLive() {
         let inPane = terminal?.inTmuxPane == true
+        if !inPane { terminal?.forgetScrollBack() }
         onPaneSeen(inPane)
         let layout = board.pane(inPane, on: lifted.layout)
         followBoard(turn: layout)
@@ -469,6 +572,9 @@ final class ConsoleConnection {
     @ObservationIgnored private var settling: Task<Void, Never>?
     /// Called each time a read has reached the terminal.
     @ObservationIgnored var onOutput: @MainActor () -> Void = {}
+    /// Called with what came of each copy the person asked for: `Copied`, or why it did not.
+    @ObservationIgnored var onCopied: @MainActor (String, Bool) -> Void = { _, _ in }
+    @ObservationIgnored private var copyGate = CopyGate()
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private var outgoing: AsyncStream<Outgoing>.Continuation?
     /// One unlock serves every reconnect until the app goes to the background.
@@ -523,6 +629,11 @@ final class ConsoleConnection {
 
     func goHome() {
         outgoing?.yield(.input(Data(HomeKey.bytes)))
+    }
+
+    /// The person sent a key that can ask the host for a copy.
+    func copyAsked() {
+        copyGate.asked(at: .now)
     }
 
     /// The answer goes with no mark: the console's binding names the terminal that sent it.
@@ -686,6 +797,7 @@ final class ConsoleConnection {
         }
 
         terminal?.getTerminal().resetToInitialState()
+        terminal?.forgetScrollBack()
         phase = .live
         let opened = openSession != nil
         openSession = nil
@@ -804,10 +916,32 @@ extension ConsoleConnection: @preconcurrency TerminalViewDelegate {
         outgoing?.yield(.resize(cols: newCols, rows: newRows))
     }
 
+    func scrolled(source: TerminalView, position: Double) {
+        terminal?.scrollChanged()
+    }
+
+    /// SwiftTerm's own link tap (a pointer's hover on an iPad) asks first too.
+    func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {
+        guard let terminal else { return }
+        terminal.onLink(link, CGRect(x: terminal.bounds.midX, y: terminal.bounds.midY, width: 0, height: 0))
+    }
+
+    /// The host's copy (OSC 52), as `c copy reply` asks for it. Only a copy the person asked
+    /// for reaches the clipboard (`CopyGate`), and only this device's: not Universal Clipboard.
+    func clipboardCopy(source: TerminalView, content: Data) {
+        switch copyGate.take(content, at: .now) {
+        case .copy(let text):
+            UIPasteboard.general.setItems([[UTType.utf8PlainText.identifier: text]], options: [.localOnly: true])
+            onCopied("Copied", true)
+        case .tooLarge:
+            onCopied("Too large to copy", false)
+        case .unasked:
+            consoleLog.info("a copy nobody asked for is dropped (\(content.count, privacy: .public) bytes)")
+        }
+    }
+
     func setTerminalTitle(source: TerminalView, title: String) {}
     func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
-    func scrolled(source: TerminalView, position: Double) {}
-    func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {}
     func rangeChanged(source: TerminalView, startY: Int, endY: Int) {}
 }
 
