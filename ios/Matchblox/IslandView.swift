@@ -4,7 +4,8 @@ import SwiftUI
 import UserNotifications
 
 /// The Island setting (design 0010 §4.3). Show changes only the phone; Follow and Buzz
-/// register again with the hosts concerned, with one Face ID.
+/// register again with the hosts concerned, with one Face ID. It also holds the console's text
+/// size, the app's only other setting.
 struct IslandView: View {
     let store: HostStore
     let onBack: () -> Void
@@ -15,6 +16,10 @@ struct IslandView: View {
     @State private var blocked: [String] = []
     @State private var pending: Set<String> = []
     @State private var task: Task<Void, Never>?
+    /// The console's text size: here, or a pinch on the terminal.
+    @State private var textSize = TextSize.load(from: .standard)
+    /// Why the last registration with each host failed; a host with none has no line.
+    @State private var failures: [String: RegistrationFailure] = [:]
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -54,7 +59,27 @@ struct IslandView: View {
                 Section("Buzz") {
                     ForEach(hosts) { host in
                         Toggle(host.label, isOn: buzz(host))
+                        if let failure = failures[host.fingerprint] {
+                            Text("\(failure.at.formatted(date: .abbreviated, time: .shortened)) · \(failure.line)")
+                                .font(.footnote)
+                                .foregroundStyle(Theme.neg)
+                        }
                     }
+                }
+                .listRowBackground(Theme.bg)
+                Section("Console text") {
+                    HStack(spacing: 24) {
+                        Button("A−") { textSize = textSize.smaller }
+                            .disabled(textSize.isSmallest)
+                            .accessibilityLabel("Smaller text")
+                        Text("\(textSize.points) pt")
+                            .monospacedDigit()
+                        Button("A+") { textSize = textSize.bigger }
+                            .disabled(textSize.isBiggest)
+                            .accessibilityLabel("Bigger text")
+                    }
+                    // Each button takes its own taps, not the whole row's.
+                    .buttonStyle(.borderless)
                 }
                 .listRowBackground(Theme.bg)
             }
@@ -67,7 +92,10 @@ struct IslandView: View {
         .onAppear {
             hosts = store.real()
             prefs = IslandSettings.prefs
+            textSize = TextSize.load(from: .standard)
+            readFailures()
         }
+        .onChange(of: textSize) { _, size in size.save(to: .standard) }
         .task { await checkBlocked() }
         .onChange(of: scenePhase) { _, phase in
             switch phase {
@@ -77,6 +105,7 @@ struct IslandView: View {
             case .active:
                 // The builder may come back from Settings.
                 Task { await checkBlocked() }
+                readFailures()
                 if task?.isCancelled == true { schedule() }
             default:
                 break
@@ -124,7 +153,13 @@ struct IslandView: View {
             pending.formUnion(untried)
             let tried = Set(due.filter { !untried.contains($0.fingerprint) }.map(\.label))
             notChanged = notChanged.filter { !tried.contains($0.label) } + change.notChanged
+            readFailures()
         }
+    }
+
+    private func readFailures() {
+        let kept = hosts.compactMap { host in IslandSettings.failure(host: host).map { (host.fingerprint, $0) } }
+        failures = Dictionary(kept) { first, _ in first }
     }
 
     /// Buzz and the island need what iOS can keep from the phone: notifications and Live Activities.
