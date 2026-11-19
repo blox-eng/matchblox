@@ -398,7 +398,7 @@ func TestQuickArrowsPreviewOnlyWhereTheyStop(t *testing.T) {
 	if r := respawned(tm); r != "" {
 		t.Fatalf("a passed row was shown: %q", r)
 	}
-	m = rest(t, m, third)
+	rest(t, m, third)
 	if r := respawned(tm); !strings.Contains(r, "spark-docs") {
 		t.Fatalf("respawn %q, want spark-docs", r)
 	}
