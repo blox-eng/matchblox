@@ -7,12 +7,25 @@ import (
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
-// mouseIn is paneMouse(table) as a line.
-func mouseIn(table string) string {
+// relayIn is relayMouse(table) as a line.
+func relayIn(table string) string {
 	const app = "'#{||:#{pane_in_mode},#{mouse_any_flag}}'"
 	b := " bind-key -T " + table
 	return b + " WheelUpPane if -F " + app + " 'send-keys -M' 'copy-mode -e' ';'" +
 		b + " MouseDown1Pane if -F 1 'select-pane -t = ; send-keys -M' '' ';'" +
+		b + " MouseDrag1Pane if -F " + app + " 'send-keys -M' 'copy-mode -M' ';'" +
+		b + " MouseDrag1Border resize-pane -M ';'"
+}
+
+// mouseIn is paneMouse(table) as a line: the press waits for the release
+// (mouse_tmux_test.go proves what the agent gets).
+func mouseIn(table string) string {
+	const app = "'#{||:#{pane_in_mode},#{mouse_any_flag}}'"
+	b := " bind-key -T " + table
+	return b + " WheelUpPane if -F " + app + " 'send-keys -M' 'copy-mode -e' ';'" +
+		b + " MouseDown1Pane if -F '#{pane_in_mode}' 'select-pane -t = ; send-keys -M' 'select-pane -t =' ';'" +
+		b + " MouseUp1Pane if -F '#{&&:#{mouse_any_flag},#{!:#{pane_in_mode}}}' " +
+		Quote([]string{"run-shell '" + wholeClick + "'"}) + " '' ';'" +
 		b + " MouseDrag1Pane if -F " + app + " 'send-keys -M' 'copy-mode -M' ';'" +
 		b + " MouseDrag1Border resize-pane -M ';'"
 }
@@ -90,7 +103,7 @@ func TestJumpLocal(t *testing.T) {
 		" set-option -t " + s + " status-left '#[range=user|matchblox] ◂ console #[norange]' ';'" +
 		" bind-key -T matchblox-host-0a1b2c3d User900 if -F 1 " + back + " '' ';'" +
 		" bind-key -T matchblox-host-0a1b2c3d MouseDown1Status if -F '#{==:#{mouse_status_range},matchblox}' " + back + " '' ';'" +
-		mouseIn("matchblox-host-0a1b2c3d") +
+		relayIn("matchblox-host-0a1b2c3d") +
 		" switch-client -t '=matchblox-ws-1-0a1b2c3d' ';'" +
 		" set-option -t " + s + " destroy-unattached on"
 	j := Jump{Host: "ws-1", Pane: "%12", Prefix: "C-b", ID: "0a1b2c3d"}

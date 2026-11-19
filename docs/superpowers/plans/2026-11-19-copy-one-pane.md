@@ -177,3 +177,7 @@ Architecture lens:
 - The plan lives at docs/superpowers/plans/2026-11-19-copy-one-pane.md, next to the earlier plans.
 - Spec U1 (self-drawn sidebars in opencode) and U2 (an opt-in for agents' own copy commands) stay open and out of this plan, as the approval said.
 - One PR, a `feat` (the landing page changes in Task 8).
+
+## Changes during build
+
+- Task 1: the plan put the new binds in `paneMouse` alone, but `paneMouse` also binds the desk side of a host jump (jump.go, the host jump list), where the pane runs ssh to a nested tmux. Holding the press there starves the host's tmux of it: `TestJumpSwipeScrolls` failed ("a drag selects in the agent's pane" timed out). Change: the old binds move to `relayMouse` for the desk side; `paneMouse` (the agent's own pane: Remote, so jumps and views) gets the new binds. Test file: `mouse_tmux_test.go` reuses the existing jump rig (`newJumpEnv`, a real desk server, host server and fake ssh), Linux only like that rig. Decided in build (a correction inside Task 1's scope, no spec change).
