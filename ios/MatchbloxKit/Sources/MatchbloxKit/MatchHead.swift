@@ -7,7 +7,22 @@ public struct MatchHead: Sendable {
     public struct Roll: Equatable, Sendable {
         public let notches: Int
         public let lines: Int
+        /// The head struck on this roll: play the rigid tap once.
+        public let strike: Bool
     }
+
+    /// The speed (pt/s) at which heat is 1.
+    static let white: CGFloat = 2600
+    /// The head strikes at this heat, and goes out below `outHeat`.
+    static let strikeHeat: CGFloat = 0.92
+    static let outHeat: CGFloat = 0.5
+    /// The share of heat left after one 60 Hz frame with no roll.
+    static let coolPerFrame: CGFloat = 0.94
+
+    /// 0 cold to 1 white hot: how fast the head turns now.
+    public private(set) var heat: CGFloat = 0
+    /// The head is alight.
+    public private(set) var struck = false
 
     public static let notch: CGFloat = 10
     /// Up to this speed (pt/s) a notch moves one line.
@@ -37,7 +52,20 @@ public struct MatchHead: Sendable {
         let notches = (travel / Self.notch).rounded(.towardZero)
         travel -= notches * Self.notch
         let count = Int(notches)
-        return Roll(notches: count, lines: count * Self.lines(atSpeed: speed))
+        heat = min(abs(speed) / Self.white, 1)
+        let strike = !struck && heat >= Self.strikeHeat
+        settle(strike: strike)
+        return Roll(notches: count, lines: count * Self.lines(atSpeed: speed), strike: strike)
+    }
+
+    /// A frame of `frame` seconds passed with no roll: the head cools, and goes out.
+    public mutating func cool(frame: TimeInterval) {
+        heat *= pow(Self.coolPerFrame, CGFloat(frame * 60))
+        settle(strike: false)
+    }
+
+    private mutating func settle(strike: Bool) {
+        if strike { struck = true } else if heat < Self.outHeat { struck = false }
     }
 
     /// Lines a notch moves: 1 up to `slow`, rising on a curve to `maxLines` at `fast`.

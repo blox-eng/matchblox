@@ -36,6 +36,31 @@ final class MatchHeadTests: XCTestCase {
         XCTAssertEqual([0, 0.1, 0.2, 0.3].map { head.tap(at: $0) }, [true, true, true, true])
     }
 
+    func testHeatFollowsSpeed() {
+        var head = MatchHead()
+        _ = head.roll(dy: 1, speed: 1300)
+        XCTAssertEqual(head.heat, 0.5, accuracy: 0.001)
+        _ = head.roll(dy: 1, speed: 0)
+        XCTAssertEqual(head.heat, 0)
+        _ = head.roll(dy: 1, speed: -5200)
+        XCTAssertEqual(head.heat, 1)
+    }
+
+    func testStrikesOnce() {
+        var head = MatchHead()
+        XCTAssertTrue(head.roll(dy: 1, speed: 2400).strike)
+        XCTAssertTrue(head.struck)
+        XCTAssertFalse(head.roll(dy: 1, speed: 2500).strike, "one rigid tap per strike")
+    }
+
+    func testCoolsWithinASecond() {
+        var head = MatchHead()
+        _ = head.roll(dy: 1, speed: 2600)
+        for _ in 0..<60 { head.cool(frame: 1.0 / 60) }
+        XCTAssertLessThan(head.heat, 0.05)
+        XCTAssertFalse(head.struck)
+    }
+
     func testRollReportsLines() {
         var head = MatchHead()
         let roll = head.roll(dy: -30, speed: 2400)
