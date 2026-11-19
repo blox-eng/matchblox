@@ -15,8 +15,9 @@ import (
 
 // A copy made in a tmux server the service watches (a drag, a double-click,
 // any new paste buffer) goes to each console, which puts it on the screen
-// its person uses. tmux's set-clipboard stays as the person has it: no pane
-// reads or writes the clipboard through tmux (spec R7).
+// its person uses. tmux's set-clipboard stays as the person has it, so no
+// pane reads the clipboard; a buffer a program sets reaches it only under
+// the console's guard (spec R7 and the 2026-11-20 ruling).
 
 const (
 	// copyWatchSession is the watcher's own session: a control-mode client
@@ -106,7 +107,7 @@ func (s *Service) copyWatchOnce(ctx context.Context, sock string) {
 	if err != nil {
 		return
 	}
-	defer in.Close()
+	defer func() { _ = in.Close() }()
 	out, err := cmd.StdoutPipe()
 	if err != nil {
 		return
