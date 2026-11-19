@@ -230,8 +230,10 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 		cmd = m.notice("no session to choose")
 	case bkey.Matches(k, sk.Up):
 		m.sideMove(-1)
+		cmd = m.previewSoon()
 	case bkey.Matches(k, sk.Down):
 		m.sideMove(1)
+		cmd = m.previewSoon()
 	case bkey.Matches(k, sk.Enter) && m.footAt > 0:
 		parts := m.footParts()
 		return m.openFoot(parts[min(m.footAt, len(parts))-1].press)
@@ -282,7 +284,7 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 	case printsText(k) && m.besideMode():
 		said := "the agent pane takes text"
 		if ok {
-			said += " · " + sk.Enter.Help().Key + " shows " + m.cardName(s)
+			said += " · " + sk.Enter.Help().Key + " goes into " + m.cardName(s)
 		}
 		cmd = m.notice(said)
 	case printsText(k):

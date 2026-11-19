@@ -3,6 +3,8 @@
 // implements it; muxtest has a fake for tests.
 package mux
 
+import "time"
+
 // Mux is one multiplexer. Type and Keys give steps, not runs: the service
 // runs each step behind its guard, as it runs a stoker step.
 type Mux interface {
@@ -16,6 +18,10 @@ type Mux interface {
 	// InMode tells if pane shows copy mode or another mode, where keys
 	// move a cursor instead of reaching the agent.
 	InMode(pane string) (bool, error)
+	// TypedAt is the last key of a person in pane: the latest key of a
+	// terminal that shows it. Zero when no terminal shows it, or the
+	// multiplexer cannot tell.
+	TypedAt(pane string) time.Time
 	// Load puts text into the paste buffer name on the server of pane. The
 	// text goes on stdin: no argv word and no shell holds it.
 	Load(pane, name, text string) error

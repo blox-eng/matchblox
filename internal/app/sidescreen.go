@@ -555,8 +555,8 @@ func (m Model) sideHints() (string, []hint) {
 			chain.label = "room"
 		}
 		enter := "write"
-		if m.besideMode() { // the agent's own pane takes the text: ⏎ shows it
-			enter = "show"
+		if m.besideMode() { // the agent's own pane takes the text: ⏎ goes into it
+			enter = "go in"
 		}
 		return "in the list", []hint{hintFor(sk.Up, ""), hintFor(sk.Enter, enter), hintFor(bk.Host, ""), chain, hintFor(bk.Menu, "")}
 	}
@@ -751,7 +751,7 @@ func (m Model) sideWheel(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	}
 	if box := m.sideBoxAt(max(m.width, minWidth)); box.listW > 0 && ms.X < box.listW {
 		m.sideMove(map[bool]int{true: -1, false: 1}[up])
-		return m, nil
+		return m, m.previewSoon()
 	}
 	if m.sidePlace != placeChat {
 		return m.placeWheel(up)
