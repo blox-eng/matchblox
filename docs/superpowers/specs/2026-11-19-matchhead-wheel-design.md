@@ -60,7 +60,7 @@ The owner runs agents from an iPhone with Matchblox Pocket. One hand holds the p
 - 2026-11-19 — With no head: swipe on the screen scrolls, and hold then swipe is the fast scroll — because the owner said so in the same answer. — the owner.
 - 2026-11-19 — Keys stay 44 pt or larger — because 7 cells and a head go below 44 pt on 375 and 393 pt phones (measured from `BeltGeometry`). — proposed, not confirmed.
 - 2026-11-19: spec approved. Decided by: the owner.
-- 2026-11-20 — A sideways roll scrolls nothing — because SwiftTerm 1.20.0 sends wheel right (67) in SGR mode as `CSI <64;…m`, a wheel-up release, so the console scrolled up on a sideways roll (found in review). — proposed, not confirmed.
+- 2026-11-20 — A sideways roll scrolls nothing — because SwiftTerm 1.20.0 sends wheel right (67) in SGR mode as `CSI <64;…m`, a wheel-up release, so the console scrolled up on a sideways roll (found in review). — the owner.
 
 ## Left to the builder
 
