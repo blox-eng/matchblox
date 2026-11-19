@@ -235,27 +235,54 @@ and run on a typed `y`.
 
 ### Copy
 
-`c` and the menu copy to your clipboard. A drag over text on a desk
-selects it and copies it when you let go: a notice says `copied 42
-characters`. On a phone a drag never selects: the menu copies.
+A drag over an agent's words selects them in tmux and copies them when you
+let go. A double-click copies a word, and a triple-click copies a line.
+This works in every agent: Claude Code, Codex, OpenCode, Cursor and any
+other. The selection stays inside the agent's pane, so a paste never holds
+the list beside it. tmux drops the padding spaces at the line ends, and a
+line that only wrapped on the screen pastes as one line.
 
-The console copies with OSC 52, through each hop between it and your
-screen. When the console's own tmux drops the copy, a notice says
-`not copied: tmux drops it · tmux set -s set-clipboard on`, and the setup
-step "Let copy through" makes that change on a typed `y`. tmux passes a
-copy on only with `set-clipboard on`: `external`, tmux's default, and
-`off` drop it.
+A click still reaches the agent. It arrives when the button comes up. A
+drag never clicks anything in the agent. The wheel scrolls the agent as
+before.
 
-The console cannot see the hops after its own tmux. So, once for a phone
-and once for a desk, the setup step "Check that copy reaches you" copies a
-6-letter code and asks you to paste it. A paste of that code marks the
-screen as checked. Until then each copy says `copied: <what> · not checked
-here`. A wrong paste says that a hop drops the copy.
+`c` and the menu copy too. A drag over the list's own text copies it.
 
-| Hop | The setting it needs |
-|---|---|
-| The console's tmux | `set -s set-clipboard on`. The setup step "Let copy through" sets it. |
-| Any other hop (SSH, your terminal, a tmux on your side, Matchblox Pocket) | Not checked yet. Each must pass OSC 52 on. Run "Check that copy reaches you" to prove the whole way. |
+Each copy goes to the screen that you use: the screen that had your last
+key or click in the last 10 seconds. A notice says `copied: 42
+characters`. A copy that comes from a host says so: `copied: 42
+characters from ws-1`. The copy reaches you over SSH, also from an agent
+on another host beside the list.
+
+matchblox never changes tmux's `set-clipboard`. With `set-clipboard on`,
+any program in any pane can read your last copy. Instead, the console
+puts each copy on your screen with tmux's own `load-buffer -w`, which
+works with every value of the option.
+
+A copy from a host goes to your clipboard only while your console shows
+that host (its agent beside the list, or a jump into it), and only when
+you touched the screen in the last 2 seconds. A program on a host then
+cannot fill your clipboard while you look elsewhere.
+
+| What happens | What you see | What to do |
+|---|---|---|
+| No screen of yours had input lately | `not copied: no screen of yours had input in the last 10 s` | Press a key on the screen you use, and copy again. |
+| No console is connected where you copied | tmux says `not copied: no matchblox console is connected · open the console` | Run `matchblox`. |
+| The copy is over 1 MB | tmux says `not copied: 1.4 MB is over the 1 MB copy limit` | Copy less. |
+| tmux refuses the copy | `not copied: <tmux's words>` | Follow tmux's words. |
+
+An agent's own copy command, such as `/copy` in Claude Code, writes OSC 52.
+tmux drops it unless you set `set-clipboard on` yourself. Your terminal's
+own selection (Shift-drag on most terminals) does not know the panes: it
+takes the list too. Press `ctrl+q` first to show one pane.
+
+On a phone a drag never selects: the menu and `c copy reply` copy.
+
+Once for a phone and once for a desk, the setup step "Check that copy
+reaches you" copies a 6-letter code and asks you to paste it. A paste of
+that code marks the screen as checked. Until then each copy says
+`copied: <what> · not checked here`. A wrong paste says that a hop drops
+the copy.
 
 ### Shapes
 
