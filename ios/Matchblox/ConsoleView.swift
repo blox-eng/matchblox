@@ -367,7 +367,9 @@ private final class Belts {
             belt.isDemo = isDemo
             belt.onScreenHold = { [weak screen] holding in screen?.trayMoved(open: holding) }
             belt.onSend = { [weak terminal] bytes in
-                terminal?.forgetScrollBack()
+                // A pane scrolled up is in tmux copy mode, which would take the key as its own
+                // command: the steps back down leave it first.
+                terminal?.jumpToBottom()
                 if bytes == Self.copyReply { terminal?.onAsksCopy() }
                 terminal?.send(bytes)
             }
