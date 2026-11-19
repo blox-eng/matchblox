@@ -207,6 +207,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
     }
 
     private var head = MatchHead()
+    private let feel = HeadFeel()
     private var headTouch: HeadTouch?
     private var sidewaysTravel: CGFloat = 0
     /// A flick carries on after the thumb lifts, as the terminal's swipe does.
@@ -791,6 +792,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
     private func headBegan(_ finger: UITouch) {
         // A touch stops a flick, as in a scroll view.
         headCoast = nil
+        feel.prepare()
         headTouch = HeadTouch(last: finger.location(in: belt), time: finger.timestamp)
     }
 
@@ -822,13 +824,14 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
     /// The head turned `dx`, `dy` points at `speed` points a second: scroll, and draw it.
     private func roll(dx: CGFloat, dy: CGFloat, speed: CGFloat, at time: TimeInterval) {
         let rolled = head.roll(dy: dy, speed: speed)
+        var moved = false
         if rolled.lines != 0 {
             switch onHead(rolled.lines) {
             case .wheel, .scrollback:
-                break
+                moved = true
             case .end:
                 headCoast = nil
-                sayOnce(nil)
+                if sayOnce(nil) { feel.end() }
             case .nothing:
                 headCoast = nil
                 sayOnce("nothing scrolls here · this program has no scrollback")
@@ -838,8 +841,10 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
         let sideways = Int((sidewaysTravel / MatchHead.notch).rounded(.towardZero))
         if sideways != 0 {
             sidewaysTravel -= CGFloat(sideways) * MatchHead.notch
-            _ = onHeadSideways(sideways)
+            if onHeadSideways(sideways) { moved = true }
         }
+        if moved, head.tap(at: time) { feel.notch(heat: head.heat) }
+        if rolled.strike { feel.strike() }
         if !UIAccessibility.isReduceMotionEnabled {
             headTurn.x += dy / Self.headRadius
             headTurn.y += dx / Self.headRadius
@@ -848,14 +853,17 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
         startHeadLink()
     }
 
-    /// An end or an empty screen speaks once a touch; a flick's end says it once too.
-    private func sayOnce(_ message: String?) {
+    /// An end or an empty screen speaks once a touch; a flick's end says it once too. True the
+    /// first time.
+    @discardableResult
+    private func sayOnce(_ message: String?) -> Bool {
         if var t = headTouch {
-            guard !t.said else { return }
+            guard !t.said else { return false }
             t.said = true
             headTouch = t
         }
         if let message { flash(message) }
+        return true
     }
 
     private func drawHead() {

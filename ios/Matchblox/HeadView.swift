@@ -1,4 +1,4 @@
-import MatchbloxKit
+import CoreHaptics
 import UIKit
 
 /// The match head on the belt: a ball whose speckles turn with the thumb's roll, cold red at
@@ -84,6 +84,54 @@ final class HeadLayer: CALayer {
         case ..<0.33: cold.mixed(with: warm, by: heat / 0.33)
         case ..<0.75: warm.mixed(with: hot, by: (heat - 0.33) / 0.42)
         default: hot.mixed(with: white, by: min((heat - 0.75) / 0.25, 1))
+        }
+    }
+}
+
+/// What the thumb feels on the head: a short, sharp tap a notch, sharper as the head heats; one
+/// hard tap when it strikes; one heavy bump at an end. A phone with no haptics plays nothing.
+@MainActor
+final class HeadFeel {
+    private let engine: CHHapticEngine?
+
+    init() {
+        if CHHapticEngine.capabilitiesForHardware().supportsHaptics, let engine = try? CHHapticEngine() {
+            engine.isAutoShutdownEnabled = true
+            self.engine = engine
+        } else {
+            engine = nil
+        }
+    }
+
+    /// The thumb is on the head: wake the engine before the first notch.
+    func prepare() {
+        try? engine?.start()
+    }
+
+    func notch(heat: CGFloat) {
+        play(intensity: 0.5 + 0.4 * Float(heat), sharpness: 0.6 + 0.4 * Float(heat))
+    }
+
+    func strike() {
+        play(intensity: 1, sharpness: 0.3)
+    }
+
+    func end() {
+        play(intensity: 1, sharpness: 0.1)
+    }
+
+    /// A tap that cannot play is lost: the scroll it marks still happens.
+    private func play(intensity: Float, sharpness: Float) {
+        guard let engine else { return }
+        let tap = CHHapticEvent(eventType: .hapticTransient, parameters: [
+            CHHapticEventParameter(parameterID: .hapticIntensity, value: min(intensity, 1)),
+            CHHapticEventParameter(parameterID: .hapticSharpness, value: min(sharpness, 1)),
+        ], relativeTime: 0)
+        guard let pattern = try? CHHapticPattern(events: [tap], parameters: []),
+              let player = try? engine.makePlayer(with: pattern) else { return }
+        if (try? player.start(atTime: CHHapticTimeImmediate)) == nil {
+            try? engine.start()
+            try? player.start(atTime: CHHapticTimeImmediate)
         }
     }
 }
