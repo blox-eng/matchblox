@@ -104,7 +104,7 @@ final class BoardBeltTests: XCTestCase {
     func testMachineDimsTheTailButMachine() {
         let b = board(";ctrl+o,s,g,/,m,c,z,N,x")
         let dim = b.keys.map(\.id).filter(b.isDim)
-        XCTAssertEqual(dim, ["board.ctrl+o", "board.s", "board.g", "board./", "board.m", "board.c", "board.z",
+        XCTAssertEqual(dim, ["board.c", "board.ctrl+o", "board.s", "board.g", "board./", "board.m", "board.z",
                              "board.N", "board.x"])
         XCTAssertFalse(b.isDim("board.tab"))
     }
@@ -144,7 +144,7 @@ final class BoardBeltTests: XCTestCase {
         let three = board("1,2,3;").keys
         XCTAssertEqual(three.prefix(7).map(\.id), ["◂", "board.1", "board.2", "board.3", "↑", "↓", "⏎"])
         XCTAssertEqual(three.prefix(7).map(\.cells), [1, 1, 1, 1, 1, 1, 1])
-        XCTAssertEqual(board("p;").keys.prefix(6).map(\.id), ["◂", "board.p", "↑", "↓", "⏎", "board.ctrl+o"])
+        XCTAssertEqual(board("p;").keys.prefix(6).map(\.id), ["◂", "board.p", "↑", "↓", "⏎", "board.c"])
         XCTAssertEqual(board("menu").keys.map(\.cells), [1, 1, 1, 2, 2])
         XCTAssertEqual(board("box").keys.map(\.cells), [1, 2, 2])
     }
