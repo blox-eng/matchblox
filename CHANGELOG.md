@@ -6,6 +6,8 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+## [0.47.1] - 2026-11-19
+
 ### Fixed
 
 - **Boxes open over the whole window.** With the agent beside the list, a
@@ -1832,7 +1834,8 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.47.0...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.47.1...HEAD
+[0.47.1]: https://github.com/blox-eng/matchblox/compare/v0.47.0...v0.47.1
 [0.47.0]: https://github.com/blox-eng/matchblox/compare/v0.46.3...v0.47.0
 [0.46.3]: https://github.com/blox-eng/matchblox/compare/v0.46.2...v0.46.3
 [0.46.2]: https://github.com/blox-eng/matchblox/compare/v0.46.1...v0.46.2
