@@ -605,6 +605,7 @@ func (s *Service) Run(ctx context.Context) {
 	go s.gitLoop(ctx)
 	go s.shipsLoop(ctx)
 	go s.foundLoop(ctx)
+	go s.copyLoop(ctx)
 	s.loadHistory()
 	t := time.NewTicker(s.interval)
 	defer t.Stop()
@@ -970,6 +971,8 @@ func (s *Service) resting(pane string) bool {
 type client struct {
 	c    transport.Conn
 	kick chan struct{}
+	// console: the hello said a console; only consoles get copies.
+	console bool
 	// watch is the pane this console streams; screenKick wakes watchLoop
 	// before its next tick.
 	watch      atomic.Pointer[watched]
@@ -1106,7 +1109,7 @@ func (s *Service) HandlePeer(ctx context.Context, c transport.Conn, pid int) err
 	// The first wake-up goes in before the console joins: a broadcast
 	// after the join fills kick, and a send then would wait for a reader
 	// that starts below.
-	cl := &client{c: c, kick: make(chan struct{}, 1), screenKick: make(chan struct{}, 1)}
+	cl := &client{c: c, kick: make(chan struct{}, 1), screenKick: make(chan struct{}, 1), console: h.Client == proto.ClientConsole}
 	cl.kick <- struct{}{}
 	s.join(cl)
 	defer s.leave(cl)

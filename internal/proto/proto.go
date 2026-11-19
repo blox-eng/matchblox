@@ -58,6 +58,10 @@ const (
 	KindCopy Kind = "copy"
 )
 
+// CopyBuffer names the paste buffer a console loads to put a copy on its
+// screen, and starts each name it uses: a service sends no copy of it on.
+const CopyBuffer = "matchblox-copy"
+
 // Copy is the text of one tmux copy.
 type Copy struct {
 	Text string `json:"text"`
