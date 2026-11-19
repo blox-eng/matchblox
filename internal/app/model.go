@@ -604,6 +604,8 @@ type Model struct {
 	sideIn                    paneKey
 	beside                    string     // the agent pane's id; "" before the split, and where it failed
 	winW, winH                int        // the window's size in beside mode; 0: not read yet
+	boxZoom                   bool       // a box has the window: the list's pane is zoomed for it
+	boxBack                   []string   // the agent pane's screen, drawn dim behind the box
 	showing                   bool       // a choice runs in the agent pane
 	showNext                  *action    // the choice made while one ran: it runs next
 	chain                     *chainView // the chain view beside the list; nil while one agent shows
@@ -812,7 +814,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		nm = nm.scanShows().keepView().inDemo().sideKeep().chatMarkOn().onChoice() // what reads Sessions' selection reads the board's choice
 		again := nm.beltPoll(msg)
 		nm, belt := nm.tellBelt(again)
-		cmd = tea.Batch(cmd, belt)
+		var zoom tea.Cmd
+		nm, zoom = nm.boxZoomed()
+		cmd = tea.Batch(cmd, belt, zoom)
 		if note := nm.flashNotice(was); note != nil {
 			cmd = tea.Batch(cmd, note)
 		}
@@ -861,6 +865,11 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.sizeCmd(m.width)
 	case besideSizeMsg:
 		m.winW, m.winH = msg.w, msg.h
+	case boxBackMsg:
+		if !m.boxZoom { // the box closed before its zoom landed: give the window back after it
+			return m, m.sizeCmd(m.width)
+		}
+		m.boxBack = msg
 	case shownMsg:
 		return m.besideShown(msg)
 	case fromConn:

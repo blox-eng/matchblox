@@ -50,6 +50,9 @@ func (m Model) onePane(w int) bool {
 // the chat the whole width.
 func (m Model) sideBoxAt(w int) sideBox {
 	switch {
+	case m.beside != "" && m.boxZoom: // the list at its width, the agent's screen beside it
+		lw := m.listWidth(w, m.height)
+		return sideBox{listW: lw, chatX: lw + 1, chatW: max(w-lw-1, 0)}
 	case m.beside != "":
 		return sideBox{listW: w} // the agent has its own pane
 	case m.listHidden():
@@ -126,7 +129,10 @@ func (m Model) sideBody(w, h int) body {
 	if box.listW > 0 {
 		list = m.sidePanel(box.listW, h)
 	}
-	if box.chatW > 0 {
+	switch {
+	case box.chatW > 0 && m.beside != "":
+		chat = m.agentBack(box.chatW, h)
+	case box.chatW > 0:
 		chat = m.chatPlace(box.chatW, h)
 	}
 	var b body
