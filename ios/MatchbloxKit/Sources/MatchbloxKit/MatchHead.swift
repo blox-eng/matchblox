@@ -16,9 +16,20 @@ public struct MatchHead: Sendable {
     static let fast: CGFloat = 2400
     static let maxLines = 10
 
+    /// Taps closer than this blur into a buzz on the Taptic Engine.
+    static let tapGap: TimeInterval = 1.0 / 30
+
     private var travel: CGFloat = 0
+    private var lastTap: TimeInterval?
 
     public init() {}
+
+    /// Whether a notch at `time` (seconds) taps: never two taps within `tapGap`.
+    public mutating func tap(at time: TimeInterval) -> Bool {
+        if let lastTap, time - lastTap < Self.tapGap { return false }
+        lastTap = time
+        return true
+    }
 
     /// The thumb rolled the head `dy` points down (up when negative) at `speed` points a second.
     public mutating func roll(dy: CGFloat, speed: CGFloat) -> Roll {

@@ -26,6 +26,16 @@ final class MatchHeadTests: XCTestCase {
         }
     }
 
+    func testTapRateCap() {
+        var head = MatchHead()
+        XCTAssertEqual([0, 0.010, 0.020, 0.034].map { head.tap(at: $0) }, [true, false, false, true])
+    }
+
+    func testEveryNotchTapsWhenSlow() {
+        var head = MatchHead()
+        XCTAssertEqual([0, 0.1, 0.2, 0.3].map { head.tap(at: $0) }, [true, true, true, true])
+    }
+
     func testRollReportsLines() {
         var head = MatchHead()
         let roll = head.roll(dy: -30, speed: 2400)
