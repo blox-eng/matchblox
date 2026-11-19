@@ -52,7 +52,16 @@ const (
 	// holds a NewsReply. A hook that printed the news sends one more, with
 	// no body, to say it heard it.
 	KindNews Kind = "news"
+	// KindCopy is a copy made in the service's tmux (a new paste buffer),
+	// sent to each console: one Copy. A console that does not know the kind
+	// skips it.
+	KindCopy Kind = "copy"
 )
+
+// Copy is the text of one tmux copy.
+type Copy struct {
+	Text string `json:"text"`
+}
 
 type Envelope struct {
 	Kind Kind            `json:"kind"`

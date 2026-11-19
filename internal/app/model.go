@@ -169,6 +169,7 @@ type Options struct {
 type helloMsg proto.Hello
 type stateMsg proto.State
 type resultMsg proto.Result
+type copyMsg proto.Copy
 type lostMsg struct {
 	err  error
 	conn transport.Conn
@@ -716,6 +717,11 @@ func recvOn(c transport.Conn) tea.Cmd {
 				var sc proto.Screen
 				if json.Unmarshal(env.Body, &sc) == nil {
 					return fromConn{c, screenMsg(sc)}
+				}
+			case proto.KindCopy:
+				var cp proto.Copy
+				if json.Unmarshal(env.Body, &cp) == nil {
+					return fromConn{c, copyMsg(cp)}
 				}
 			}
 		}
