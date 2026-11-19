@@ -66,6 +66,9 @@ public struct BoardBelt: Equatable, Sendable {
         }
     }
 
+    /// The list's keys, for a layout of the builder's own.
+    public static var tailKeys: [BeltKey] { tail.map(key) }
+
     /// The layout's keys, in order.
     public var keys: [BeltKey] {
         var row = [Self.key("◂")]

@@ -111,11 +111,19 @@ struct BeltEditor: View {
         return Button {
             tap(key)
         } label: {
-            Text(face.label)
-                .font(.system(size: 12, weight: .medium, design: .monospaced))
-                .foregroundStyle(on ? Theme.fg : Theme.muted)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
+            Group {
+                if key.id == KeyBar.wheel {
+                    Circle()
+                        .fill(RadialGradient(colors: [Theme.flameAmber, Theme.matchHead], center: .topLeading, startRadius: 1, endRadius: 16))
+                        .frame(width: 20, height: 20)
+                } else {
+                    Text(face.label)
+                        .font(.system(size: 12, weight: .medium, design: .monospaced))
+                        .foregroundStyle(on ? Theme.fg : Theme.muted)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                }
+            }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Theme.wash, in: shape)
                 .overlay(shape.strokeBorder(edge, lineWidth: 1))

@@ -204,3 +204,4 @@ What the code has today (read 2026-11-19):
 ## Changes during build
 
 - Task 5: the route's direction argument is `older:` (true: toward older lines), not `down:`. It names what the person sees, so a reader does not need WheelScroll's sign rule. (2026-11-20)
+- Task 6: the head's id is `KeyBar.wheel` ("Wheel") and its bytes are `[]`, not nil, as Ctrl's are. `testEveryKeyHasBytes` pins that every catalog key has bytes; Ctrl is the precedent for a key that sends nothing itself. (2026-11-20)
