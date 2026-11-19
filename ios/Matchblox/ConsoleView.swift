@@ -373,6 +373,7 @@ private final class Belts {
             }
             belt.onHead = { [weak terminal] lines in terminal?.head(lines: lines) ?? .nothing }
             belt.onHeadSideways = { [weak terminal] notches in terminal?.headSideways(notches) ?? false }
+            belt.onHeadPage = { [weak terminal] older in terminal?.headPage(older: older) ?? .nothing }
             belt.onCtrl = { [weak self, weak terminal] in
                 guard let terminal else { return }
                 terminal.controlModifier.toggle()

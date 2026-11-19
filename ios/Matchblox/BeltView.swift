@@ -119,6 +119,8 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
     var onSend: ([UInt8]) -> Void = { _ in }
     /// The match head rolled `lines` lines (positive: older). The answer says where they went.
     var onHead: (Int) -> HeadRoute = { _ in .nothing }
+    /// VoiceOver paged the terminal with the match head (true: toward older lines).
+    var onHeadPage: (Bool) -> HeadRoute = { _ in .nothing }
     /// The match head rolled sideways `notches` notches (positive: right). True if it scrolled.
     var onHeadSideways: (Int) -> Bool = { _ in false }
     /// A tap on the Ctrl key: the terminal arms or disarms ctrl for the next typed key.
@@ -866,6 +868,14 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
         return true
     }
 
+    private func pageHead(older: Bool) {
+        switch onHeadPage(older) {
+        case .wheel, .scrollback: break
+        case .end: UIAccessibility.post(notification: .announcement, argument: older ? "at the top" : "at the bottom")
+        case .nothing: UIAccessibility.post(notification: .announcement, argument: "nothing scrolls here")
+        }
+    }
+
     private func drawHead() {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -1122,7 +1132,11 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
 
     private final class Element: UIAccessibilityElement {
         var activate: () -> Bool = { false }
+        /// The match head: a swipe up or down pages the terminal (true: toward older lines).
+        var adjust: (Bool) -> Void = { _ in }
         override func accessibilityActivate() -> Bool { activate() }
+        override func accessibilityIncrement() { adjust(false) }
+        override func accessibilityDecrement() { adjust(true) }
     }
 
     override var accessibilityElements: [Any]? {
@@ -1149,7 +1163,8 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
                 let x0 = motion.x(ofKeyAt: i)
                 let key = Element(accessibilityContainer: self)
                 key.accessibilityLabel = piece.key.spoken
-                key.accessibilityTraits = isDim(piece) ? [.button, .notEnabled] : .button
+                key.accessibilityTraits = piece.head != nil ? .adjustable : isDim(piece) ? [.button, .notEnabled] : .button
+                key.adjust = { [weak self] older in self?.pageHead(older: older) }
                 key.accessibilityFrameInContainerSpace = CGRect(
                     x: belt.frame.minX + x0, y: belt.frame.minY + Self.keyTop, width: piece.width, height: BeltGeometry.keyHeight)
                 // A key element outlives its key when the belt rebuilds or pages: it finds its key

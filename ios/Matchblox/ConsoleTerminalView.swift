@@ -401,6 +401,11 @@ final class ConsoleTerminalView: TerminalView {
         return route
     }
 
+    /// VoiceOver pages with the match head: a screen of lines at once.
+    func headPage(older: Bool) -> HeadRoute {
+        head(lines: (older ? 1 : -1) * max(getTerminal().rows, 1))
+    }
+
     /// The match head rolled sideways: wheel left and right, for a program outside tmux that
     /// reads the mouse. tmux takes no sideways wheel. True if any step went.
     func headSideways(_ notches: Int) -> Bool {
