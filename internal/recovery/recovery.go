@@ -70,6 +70,10 @@ func Server(pid, start string) string { return pid + "@" + start }
 
 func (e Entry) server() string { return Server(e.ServerPID, e.ServerStart) }
 
+// Lost tells if e's tmux server no longer runs, given the server of each
+// socket the last sample read.
+func (e Entry) Lost(alive map[string]string) bool { return alive[e.Socket] != e.server() }
+
 func (e Entry) key() string { return e.Socket + "\x00" + e.server() + "\x00" + e.Pane }
 
 func (e Entry) conversation() string { return e.Agent + "\x00" + e.ConversationID }
@@ -184,7 +188,7 @@ func (s *Store) Update(live []Entry, alive map[string]string, now time.Time) err
 		if here[k] {
 			continue
 		}
-		if running[e.conversation()] || alive[e.Socket] == e.server() || now.Sub(e.Seen) >= ExpireAfter {
+		if running[e.conversation()] || !e.Lost(alive) || now.Sub(e.Seen) >= ExpireAfter {
 			delete(s.by, k)
 			changed = true
 		}

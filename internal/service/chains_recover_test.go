@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -104,6 +105,114 @@ func TestAMatchThatQuitsOnALiveServerLeavesAtOnce(t *testing.T) {
 	s, one, _ := rebootPair(t)
 	publishOn(s, "100", one)
 	if got := chainInbox(s, one); !slices.Equal(got, []string{"two left the chain"}) {
+		t.Fatalf("one's inbox = %q", got)
+	}
+}
+
+// forget expires the record's entry of each conversation but keep's: the
+// record no longer holds them, so recover cannot bring them back.
+func forget(t *testing.T, s *Service, keep ...sample.Session) {
+	t.Helper()
+	var panes []sample.Pane
+	for _, x := range keep {
+		panes = append(panes, sample.Pane{ID: x.Pane, Socket: recSock, Server: "200", ServerStart: "1200"})
+	}
+	live, alive := recordable(keep, panes)
+	if err := s.Recovery.Update(live, alive, time.Now().Add(15*24*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestAForgottenMateIsNamedAfterARestart: a reboot restarts the service
+// too, so nothing it held in memory names the waiting member; its mates
+// still hear its name when the record forgets it.
+func TestAForgottenMateIsNamedAfterARestart(t *testing.T) {
+	s, one, _ := rebootPair(t)
+	loseServer(s)
+	s.mu.Lock()
+	s.mateNames, s.waitNames = nil, nil // what a restart forgets
+	s.mu.Unlock()
+	one2 := reopened(one, "%5", 201)
+	publishOn(s, "200", one2)
+	forget(t, s, one2)
+	publishOn(s, "200", one2)
+	if got := chainInbox(s, one2); !slices.Equal(got, []string{"two left the chain"}) {
+		t.Fatalf("one's inbox = %q", got)
+	}
+}
+
+// TestAReusedPaneDoesNotRenameAForgottenMate: the new server gives one's
+// old pane id to another chained agent; when the record forgets one, its
+// mate hears one's name, not the other agent's.
+func TestAReusedPaneDoesNotRenameAForgottenMate(t *testing.T) {
+	s, _, two := rebootPair(t)
+	loseServer(s)
+	other := sample.Session{Pane: "%1", PID: 300, Start: 300, SessionID: "x", Name: "other", Agent: "claude", Target: "other:1.0", Cwd: "/src/other"}
+	third := sample.Session{Pane: "%7", PID: 301, Start: 301, SessionID: "y", Name: "third", Agent: "claude", Target: "third:1.0", Cwd: "/src/third"}
+	two2 := reopened(two, "%6", 202)
+	publishOn(s, "200", other, third, two2)
+	if res := chainFrom(t, s, "%1", proto.ChainPrefix+"%7"); res.Err != "" {
+		t.Fatalf("chain = %+v", res)
+	}
+	publishOn(s, "200", other, third, two2)
+	chainInbox(s, two2)
+	forget(t, s, other, third, two2)
+	publishOn(s, "200", other, third, two2)
+	if got := chainInbox(s, two2); !slices.Equal(got, []string{"one left the chain"}) {
+		t.Fatalf("two's inbox = %q", got)
+	}
+}
+
+// TestTakeOutPicksTheLiveMemberAtAReusedPane: a waiting member and a
+// reopened one share a pane id; out of team takes the live one.
+func TestTakeOutPicksTheLiveMemberAtAReusedPane(t *testing.T) {
+	s, _, two := rebootPair(t)
+	loseServer(s)
+	two2 := reopened(two, "%1", 202) // one's old pane id
+	publishOn(s, "200", two2)
+	res := s.act(context.Background(), proto.Act{RecID: proto.ChainPrefix + "out:%1@one", Console: true})
+	if res.Err != "" || res.Note != "took two out of one" {
+		t.Fatalf("out = %+v", res)
+	}
+	if got := chainInbox(s, two2); !slices.Contains(got, "[matchblox] the owner took you out of one") {
+		t.Fatalf("two's inbox = %q", got)
+	}
+}
+
+// TestASwitchCutByALostServerTakesNoNewAgent: one's agent switch was under
+// way when its server died. The new server gives one's old pane id to
+// another agent: that agent is not one's new agent, and joins no team.
+func TestASwitchCutByALostServerTakesNoNewAgent(t *testing.T) {
+	s, one, _ := rebootPair(t)
+	s.mu.Lock()
+	s.chainsLocked().Move(memberOf(one), time.Now())
+	s.mu.Unlock()
+	loseServer(s)
+	other := sample.Session{Pane: "%1", PID: 300, Start: 300, SessionID: "x", Name: "other", Agent: "claude", Target: "other:1.0", Cwd: "/src/other"}
+	publishOn(s, "200", other)
+	publishOn(s, "200", other)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if teams := s.chainsLocked().TeamsOf(memberOf(other)); len(teams) != 0 {
+		t.Fatalf("other took one's place in %+v", teams)
+	}
+	if teams := s.chainsLocked().TeamsOf(memberOf(one)); len(teams) != 1 {
+		t.Fatalf("one, waiting for recover, is in %+v", teams)
+	}
+}
+
+// TestAWaitingMateKeepsTheNameItsMatesKnew: a match named by its window is
+// announced by that name, not by its tmux session's.
+func TestAWaitingMateKeepsTheNameItsMatesKnew(t *testing.T) {
+	s, one, two := rebootPair(t)
+	two.Name = "reviewer" // its window's name; its tmux session is "two"
+	publishOn(s, "100", one, two)
+	loseServer(s)
+	one2 := reopened(one, "%5", 201)
+	publishOn(s, "200", one2)
+	forget(t, s, one2)
+	publishOn(s, "200", one2)
+	if got := chainInbox(s, one2); !slices.Equal(got, []string{"reviewer left the chain"}) {
 		t.Fatalf("one's inbox = %q", got)
 	}
 }

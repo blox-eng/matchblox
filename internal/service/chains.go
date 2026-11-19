@@ -14,7 +14,6 @@ import (
 	"github.com/blox-eng/matchblox/internal/chains"
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/proto"
-	"github.com/blox-eng/matchblox/internal/recovery"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/state"
 	"github.com/blox-eng/matchblox/internal/stoker"
@@ -221,13 +220,21 @@ func (s *Service) takeOutLocked(st *chains.Store, out string, a proto.Act) (prot
 	if !ok {
 		return refuseText("no chain is named " + team), false
 	}
-	i := slices.IndexFunc(c.Members, func(m chains.Member) bool { return m.Pane == pane })
+	at := func(m chains.Member) bool { return m.Pane == pane }
+	// After a lost server, a member that waits for recover may keep a pane id
+	// the new server gave a live match: the live one is meant.
+	i := slices.IndexFunc(c.Members, func(m chains.Member) bool { _, ok := s.sessionOfLocked(m); return at(m) && ok })
+	if i < 0 {
+		i = slices.IndexFunc(c.Members, at)
+	}
 	if i < 0 {
 		return refuseText("no match in " + pane + " is in " + team), false
 	}
 	m, name := c.Members[i], pane
 	if x, ok := s.sessionOfLocked(m); ok {
 		name = x.Name
+	} else if n, ok := s.waitNames[m.SessionID]; ok && m.SessionID != "" {
+		name = n
 	}
 	st.LeaveTeam(m, team)
 	st.Post(m, "[matchblox] the owner took you out of "+team, s.now())
@@ -255,8 +262,9 @@ func (s *Service) chainable(st *chains.Store, from, to sample.Session) (repo, wh
 
 // pruneChainsLocked keeps up the members whose session id changed in their
 // pane, keeps a member whose pane lives but shows no agent (unseen since its
-// first miss), drops a member whose pane is gone or shows another agent that
-// no switch started, tells the mates of a match
+// first miss), keeps a member whose tmux server is gone while recover can
+// reopen its conversation (#391), drops a member whose pane is gone or shows
+// another agent that no switch started, tells the mates of a match
 // that left, and saves on a change. prev are the sessions
 // of the sample before, which name a match that is gone. Callers hold mu.
 func (s *Service) pruneChainsLocked(now time.Time, prev []sample.Session) error {
@@ -279,16 +287,34 @@ func (s *Service) pruneChainsLocked(now time.Time, prev []sample.Session) error 
 			s.mateNames[x.Pane] = x.Name
 		}
 	}
-	waiting, named := s.waitingLocked(), map[string]bool{}
+	var waiting map[string]string // read once, at the first member with no session
+	if s.waitNames == nil {
+		s.waitNames = map[string]string{}
+	}
 	live := func(m chains.Member) bool {
 		if x, ok := s.sessionOfLocked(m); ok {
 			st.MarkSeen(m)
 			s.mateNames[m.Pane] = x.Name
 			return true
 		}
-		if m.SessionID != "" && waiting[m.SessionID] {
-			named[m.Pane] = true // its mates still hear its name if it leaves
-			return true          // its pane went with its server; recover reopens it
+		if waiting == nil && m.SessionID != "" {
+			waiting = s.waitingLocked()
+		}
+		if name, ok := waiting[m.SessionID]; ok && m.SessionID != "" {
+			// Its pane went with its server; recover reopens it. Its pane id
+			// may name another agent on a new server: no switch ends there,
+			// and no old unseen mark stays.
+			st.Stay(m)
+			st.MarkSeen(m)
+			if _, had := s.waitNames[m.SessionID]; !had {
+				// The name its mates knew, from the sample before the loss;
+				// after a restart, its tmux session's from the record.
+				if i := slices.IndexFunc(prev, func(x sample.Session) bool { return memberOf(x).Same(m) }); i >= 0 {
+					name = prev[i].Name
+				}
+				s.waitNames[m.SessionID] = name // its mates hear it if it leaves
+			}
+			return true
 		}
 		if !panes[m.Pane] {
 			return false
@@ -302,7 +328,8 @@ func (s *Service) pruneChainsLocked(now time.Time, prev []sample.Session) error 
 		return true
 	}
 	left := st.Prune(live, now)
-	defer maps.DeleteFunc(s.mateNames, func(pane, _ string) bool { return !panes[pane] && !named[pane] })
+	defer maps.DeleteFunc(s.mateNames, func(pane, _ string) bool { return !panes[pane] })
+	defer maps.DeleteFunc(s.waitNames, func(id, _ string) bool { _, ok := waiting[id]; return !ok })
 	maps.DeleteFunc(s.cleared, func(id string, _ bool) bool {
 		return !slices.ContainsFunc(s.cur.Sessions, func(x sample.Session) bool { return x.SessionID == id })
 	})
@@ -328,7 +355,8 @@ func (s *Service) pruneChainsLocked(now time.Time, prev []sample.Session) error 
 
 // refreshChainsLocked renames each stored member whose pane, pid and start
 // a session holds now under another id (a cleared chat), and tells if any
-// changed. A chained member that a clear renamed is told its chain at its
+// changed, and moves a member that recover reopened to its new pane by its
+// session id. A chained member that a clear renamed is told its chain at its
 // next news. A sample that read no id keeps the one stored, so a clear seen
 // through it is still a clear. A partial session list renames no one
 // wrongly. Callers hold mu.
@@ -434,6 +462,8 @@ func (s *Service) leftText(l chains.Left, prev []sample.Session) string {
 		name = x.Name
 	} else if i := slices.IndexFunc(prev, func(x sample.Session) bool { return memberOf(x).Same(l.Who) }); i >= 0 {
 		name = prev[i].Name
+	} else if n, ok := s.waitNames[l.Who.SessionID]; ok && l.Who.SessionID != "" {
+		name = n // its pane id may name another agent now
 	} else if n, ok := s.mateNames[l.Who.Pane]; ok {
 		name = n
 	}
@@ -441,18 +471,18 @@ func (s *Service) leftText(l chains.Left, prev []sample.Session) string {
 }
 
 // waitingLocked are the conversations the recovery record keeps from a tmux
-// server that no longer runs. A lost server is not a leave: recover can
-// reopen each one, so its match keeps its teams until the record forgets
-// it (#391). Callers hold mu.
-func (s *Service) waitingLocked() map[string]bool {
+// server that no longer runs, with the name of the tmux session each ran
+// in. A lost server is not a leave: recover can reopen each one, so its
+// match keeps its teams until the record forgets it (#391). Callers hold mu.
+func (s *Service) waitingLocked() map[string]string {
+	waiting := map[string]string{}
 	if s.Recovery == nil {
-		return nil
+		return waiting
 	}
 	_, alive := recordable(nil, s.cur.Panes)
-	waiting := map[string]bool{}
 	for _, e := range s.Recovery.List() {
-		if alive[e.Socket] != recovery.Server(e.ServerPID, e.ServerStart) {
-			waiting[e.ConversationID] = true
+		if e.Lost(alive) {
+			waiting[e.ConversationID] = e.Session
 		}
 	}
 	return waiting
