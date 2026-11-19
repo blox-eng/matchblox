@@ -200,3 +200,7 @@ What the code has today (read 2026-11-19):
 | Anti-goal: a strike that never cools | Task 3 |
 | Anti-goal: a hold meant for the menu starts the fast scroll | Task 12 |
 | Surface: an agent's tools | Task 7, Task 11 |
+
+## Changes during build
+
+- Task 5: the route's direction argument is `older:` (true: toward older lines), not `down:`. It names what the person sees, so a reader does not need WheelScroll's sign rule. (2026-11-20)
