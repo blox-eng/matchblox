@@ -9,8 +9,11 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -123,6 +126,9 @@ func (m Model) sizeCmd(paneW int) tea.Cmd {
 		if w == 0 {
 			w = paneW
 		}
+		if m.boxZoom { // the box keeps the window
+			return besideSizeMsg{w, h}
+		}
 		if m.onePaneAt(w, h) {
 			_, _ = run(remote.ZoomArgv(inUse(run, console), true)[1:]...)
 			return besideSizeMsg{w, h}
@@ -132,6 +138,55 @@ func (m Model) sizeCmd(paneW int) tea.Cmd {
 		_, _ = run(remote.ListWidthArgv(console, m.listWidth(w, h))[1:]...)
 		return besideSizeMsg{w, h}
 	}
+}
+
+// boxOpen: a box asks over the screen, centred: a consent, the launch
+// sheet, a form or the ssh prompt. The row menu is not one: it stays by
+// its row.
+func (m Model) boxOpen() bool {
+	return m.consenting() || m.sheet != nil || m.form != nil || m.asking()
+}
+
+// boxBackMsg is the agent pane's screen as the box opened.
+type boxBackMsg []string
+
+// boxZoomed lends the window to a box beside the agent: the list's pane
+// zooms, and the box centres over the whole window, not in the list's
+// columns. The agent's screen shows dim beside the list behind it. As the
+// box closes, the window goes back to both panes.
+func (m Model) boxZoomed() (Model, tea.Cmd) {
+	run := m.tmuxRun()
+	if m.beside == "" || run == nil || m.boxOpen() == m.boxZoom {
+		return m, nil
+	}
+	if !m.boxZoom && m.winW > 0 && m.onePaneAt(m.winW, m.winH) { // one pane has the window already
+		return m, nil
+	}
+	m.boxZoom = !m.boxZoom
+	if !m.boxZoom {
+		m.boxBack = nil
+		return m, m.sizeCmd(m.width)
+	}
+	console, agent := m.opt.Pane, m.beside
+	return m, func() tea.Msg {
+		out, _ := run(remote.CaptureArgv(agent)[1:]...)
+		_, _ = run(remote.ZoomArgv(console, true)[1:]...)
+		return boxBackMsg(strings.Split(out, "\n"))
+	}
+}
+
+// agentBack is the agent's screen behind a box, w by h from the body's
+// first row, dim.
+func (m Model) agentBack(w, h int) []string {
+	out := make([]string, h)
+	for i := range out {
+		l := ""
+		if r := i + 3; r < len(m.boxBack) { // the body starts under the header, the tabs and a hairline
+			l = ansi.Truncate(ansi.Strip(m.boxBack[r]), w, "")
+		}
+		out[i] = m.st.faint.Render(l + strings.Repeat(" ", w-lipgloss.Width(l)))
+	}
+	return out
 }
 
 // inUse is the pane of the console's window that has the keys; the
@@ -185,6 +240,9 @@ type shownMsg struct {
 	chain      *chainView // the chain view it opened
 	chainOff   bool       // it closed the window's chain view
 	skipped    []string   // the members a chain view left out: in the console's own window
+	preview    bool       // a look: the keys stayed with the list
+	focused    bool       // ⏎ on the session shown: no view started
+	ended      bool       // focused, but the view had ended: it shows again
 }
 
 // showChosen shows the session the list chooses in the agent pane.
@@ -198,8 +256,57 @@ func (m Model) showChosen() (tea.Model, tea.Cmd) {
 	case s.Pane == "":
 		m.flash = noPane(s.Name)
 		return m, nil
+	case m.besideShows == m.shownKey(s.Host, s.Pane) && !m.showing:
+		name := m.besideName(m.besideShows.host, s.Pane)
+		return m.startShow(action{label: "show " + name, beside: true, focus: true, pane: s.Pane, host: m.besideShows.host})
 	}
 	return m.showBeside(s.Host, s.Pane)
+}
+
+// shownKey is the key m.besideShows has for host's pane.
+func (m Model) shownKey(host, pane string) paneKey {
+	return paneKey{cmp.Or(host, m.opt.Host), pane}
+}
+
+// previewRest is how long the list rests on a row before the agent pane
+// shows it: a run of ↑↓ shows only the row it stops on.
+var previewRest = 150 * time.Millisecond
+
+// previewMsg is the end of a rest after the list's move seq.
+type previewMsg struct{ seq int }
+
+// previewSoon shows the chosen session once the list rests.
+func (m *Model) previewSoon() tea.Cmd {
+	if !m.besideMode() {
+		return nil
+	}
+	m.previewSeq++
+	seq := m.previewSeq
+	return tea.Tick(previewRest, func(time.Time) tea.Msg { return previewMsg{seq} })
+}
+
+// look shows the session the list rests on in the agent pane, and the
+// keys stay with the list. A look never asks: a host whose stoker asks to
+// take over, and a peer the builder did not yet let a view run on, show it
+// on ⏎ only. One pane and a chain view show no look either.
+func (m Model) look(msg previewMsg) (tea.Model, tea.Cmd) {
+	s, ok := m.sideChosen()
+	host := cmp.Or(s.Host, m.opt.Host)
+	if msg.seq != m.previewSeq || !ok || s.Pane == "" || m.chain != nil || !m.besideMode() ||
+		m.onePaneAt(m.winW, m.winH) || m.besideShows == m.shownKey(host, s.Pane) || m.takeOverOn(host) ||
+		host != "" && !m.viewed[host] {
+		return m, nil
+	}
+	name := m.besideName(host, s.Pane)
+	return m.viewsOn(&action{label: "show " + name, beside: true, preview: true, pane: s.Pane, host: host}, name, []string{s.Pane})
+}
+
+// viewing: pane runs a view still, its tmux client or its ssh; an ended
+// view waits in its shell for a key.
+func viewing(run func(args ...string) (string, error), pane string) bool {
+	out, err := run("display", "-p", "-t", pane, "#{pane_current_command}")
+	cmd := strings.TrimSpace(out)
+	return err == nil && (cmd == "tmux" || cmd == "ssh")
 }
 
 // showBeside is goIntoAsking for the agent pane: on a host the stoker
@@ -229,6 +336,9 @@ func (m Model) viewsOn(a *action, what string, panes []string) (tea.Model, tea.C
 		b, steps, says := a, [][]string(nil), []string(nil)
 		for _, pane := range panes {
 			_, ssh, next := m.peerJump(remote.Jump{Host: host, Pane: pane, View: true}, a)
+			if ssh == nil && a.preview {
+				return m, nil
+			}
 			if ssh == nil {
 				return m.runInto(next)
 			}
@@ -236,6 +346,9 @@ func (m Model) viewsOn(a *action, what string, panes []string) (tea.Model, tea.C
 			steps, says = append(steps, remote.PeerViewArgv(m.besideName(host, pane), ssh)), append(says, shellLine(ssh))
 		}
 		b.steps, b.say, b.nav, b.remote = steps, strings.Join(says, "\n"), true, true
+		if a.preview {
+			return m.startShow(*b)
+		}
 		return m.runInto(b)
 	}
 	if m.opt.Socket == "" {
@@ -297,6 +410,20 @@ func sameWindow(run func(args ...string) (string, error), console, pane string) 
 // closes first; a chain's views split the agent pane.
 func (m Model) besideRun(a action) tea.Cmd {
 	run := m.tmuxRun()
+	if a.focus && run != nil {
+		agent := m.beside
+		return func() tea.Msg {
+			msg := shownMsg{agent: agent, host: a.host, pane: a.pane, name: m.besideName(a.host, a.pane), focused: true}
+			if !viewing(run, agent) {
+				msg.ended = true
+				return msg
+			}
+			if _, err := run("select-pane", "-Z", "-t", agent); err != nil {
+				msg.err = err
+			}
+			return msg
+		}
+	}
 	if run == nil || !a.closing && (len(a.steps) == 0 || len(a.steps) > 1 && len(a.chain) != len(a.steps)) {
 		return nil
 	}
@@ -306,7 +433,7 @@ func (m Model) besideRun(a action) tea.Cmd {
 		names[i] = m.besideName(a.host, k.pane)
 	}
 	return func() tea.Msg {
-		msg := shownMsg{agent: agent, host: a.host, pane: a.pane, name: name}
+		msg := shownMsg{agent: agent, host: a.host, pane: a.pane, name: name, preview: a.preview}
 		if a.closing {
 			endChain(run, console, cmp.Or(a.keep, agent))
 			msg.chainOff = true
@@ -360,6 +487,9 @@ func (m Model) besideRun(a action) tea.Cmd {
 			msg.chain = chain
 		} else if _, err := run(append([]string{"respawn-pane", "-k", "-t", msg.agent, "--"}, steps[0]...)...); err != nil {
 			msg.err = err
+			return msg
+		}
+		if a.preview {
 			return msg
 		}
 		// -Z keeps a zoom: a zoomed list hands it to the agent.
@@ -425,9 +555,23 @@ func (m Model) besideShown(msg shownMsg) (tea.Model, tea.Cmd) {
 		m.chain = msg.chain
 	}
 	m.showing = false
+	switch {
+	case msg.ended:
+		m.besideShows = paneKey{}
+	case msg.focused:
+	case msg.err != nil || msg.chainOff && msg.chain == nil:
+		m.besideShows = paneKey{}
+	case msg.chain != nil:
+		m.besideShows = paneKey{}
+	default:
+		m.besideShows = m.shownKey(msg.host, msg.pane)
+	}
 	if next := m.showNext; next != nil { // this choice is not the latest: it says nothing
 		m.showNext = nil
 		return m.startShow(*next)
+	}
+	if msg.ended {
+		return m.showBeside(msg.host, msg.pane)
 	}
 	switch {
 	case errors.Is(msg.err, errOwnWindow):
@@ -438,6 +582,9 @@ func (m Model) besideShown(msg shownMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case len(msg.skipped) > 0:
 		m.flash = "not shown, in the console's own window: " + strings.Join(msg.skipped, ", ")
+	}
+	if msg.preview {
+		return m, nil
 	}
 	if msg.chain == nil {
 		return m, m.tookOver(msg.host, msg.pane)

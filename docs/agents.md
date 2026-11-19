@@ -191,7 +191,9 @@ wakes it. Any other mate keeps the line, and the sender hears why it waits:
 `queued for web-cart: it asks a question now. It gets the line at its next
 rest.` A question menu or a permission prompt holds the line, as text typed
 there would answer it; so do a park, a draft, copy mode and work in
-progress. None refuses it. At the mate's next rest with an empty prompt
+progress. So does a person: a key typed in the mate's pane in the last two
+minutes keeps the line out of the prompt (`a person types in it`). None
+refuses it. At the mate's next rest with an empty prompt
 the line is typed, one a sample; a Claude Code mate that takes a step first
 hears it then. A line waits as long as the mate's pane lives. Once a line
 that waited lands, its sender hears, at its next step, `[matchblox]

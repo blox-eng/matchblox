@@ -26,6 +26,8 @@ type besideTmux struct {
 	own   []string // other panes in the console's window
 	using string   // the window's active pane, "" when tmux does not say
 	chain string   // the window's @matchblox_chain
+	cmd   string   // the agent pane's current command
+	agent string   // what the agent pane shows, for capture-pane
 	calls [][]string
 }
 
@@ -52,6 +54,9 @@ func (b *besideTmux) run(args ...string) (string, error) {
 			}
 			return args[3] + "\n", nil
 		}
+		if args[len(args)-1] == "#{pane_current_command}" {
+			return b.cmd + "\n", nil
+		}
 		if args[len(args)-1] == "#{window_width} #{window_height}" && b.winH != "" {
 			return b.winW + " " + b.winH + "\n", nil
 		}
@@ -60,6 +65,8 @@ func (b *besideTmux) run(args ...string) (string, error) {
 		return "%9\n", nil
 	case "list-panes":
 		return "\n" + b.using + "\n", nil
+	case "capture-pane":
+		return b.agent, nil
 	}
 	return "", nil
 }
@@ -308,13 +315,13 @@ func enter(t *testing.T, m Model) Model {
 	return afterChoice(next, cmd)
 }
 
-// afterChoice runs cmd, and gives the console the end of a choice.
+// afterChoice runs cmd, and gives the console the end of each choice.
 func afterChoice(next tea.Model, cmd tea.Cmd) Model {
 	m := next.(Model)
 	for _, msg := range cmdMsgs(cmd) {
 		if msg, ok := msg.(shownMsg); ok {
-			next, _ := m.Update(msg)
-			m = next.(Model)
+			next, cmd := m.Update(msg)
+			m = afterChoice(next, cmd) // a choice may start the next one
 		}
 	}
 	return m
@@ -346,13 +353,108 @@ func TestEnterShowsTheChosenAgentBeside(t *testing.T) {
 	}
 }
 
-func TestArrowsDoNotRespawn(t *testing.T) {
-	m, tm := shownAt(t, "kindle-web", "160")
-	next, cmd := key(m, "down")
-	next, cmd2 := key(afterChoice(next, cmd), "down")
-	afterChoice(next, cmd2)
+// rest runs cmd as the list rests after a move: the preview's timer, then
+// the end of the choice it starts.
+func rest(t *testing.T, next tea.Model, cmd tea.Cmd) Model {
+	t.Helper()
+	m := next.(Model)
+	for _, msg := range cmdMsgs(cmd) {
+		if msg, ok := msg.(previewMsg); ok {
+			next, cmd := m.Update(msg)
+			m = afterChoice(next, cmd)
+		}
+	}
+	return m
+}
+
+// restNow makes the preview's rest 0 for the test.
+func restNow(t *testing.T) {
+	t.Helper()
+	old := previewRest
+	previewRest = 0
+	t.Cleanup(func() { previewRest = old })
+}
+
+func TestArrowsPreviewTheChosenAgent(t *testing.T) {
+	restNow(t)
+	m, tm := shownAt(t, "kindle-legacy", "160")
+	next, cmd := key(m, "up")
+	m = rest(t, next, cmd)
+	s, _ := m.sideChosen()
+	r := respawned(tm)
+	if r == "" || !strings.Contains(r, s.Name) || strings.Contains(r, "kindle-legacy") {
+		t.Fatalf("respawn %q, want a view of %s: %q", r, s.Name, tm.lines())
+	}
+	if tm.count("select-pane") != 0 || tm.count("resize-pane -Z") != 0 {
+		t.Fatalf("a preview took the keys: %q", tm.lines())
+	}
+}
+
+func TestQuickArrowsPreviewOnlyWhereTheyStop(t *testing.T) {
+	restNow(t)
+	m, tm := shownAt(t, "kindle-legacy", "160")
+	next, first := key(m, "up")
+	next, second := key(next, "down")
+	next, third := key(next, "up")
+	m = rest(t, next, first)
+	m = rest(t, m, second)
 	if r := respawned(tm); r != "" {
-		t.Fatalf("an arrow respawned: %q", r)
+		t.Fatalf("a passed row was shown: %q", r)
+	}
+	rest(t, m, third)
+	if r := respawned(tm); !strings.Contains(r, "spark-docs") {
+		t.Fatalf("respawn %q, want spark-docs", r)
+	}
+}
+
+func TestEnterOnAPreviewGivesItTheKeys(t *testing.T) {
+	restNow(t)
+	m, tm := shownAt(t, "kindle-legacy", "160")
+	next, cmd := key(m, "up")
+	m = rest(t, next, cmd)
+	tm.cmd = "tmux"
+	tm.calls = nil
+	enter(t, m)
+	if r := respawned(tm); r != "" || !slices.Contains(tm.lines(), "select-pane -Z -t %9") {
+		t.Fatalf("want the keys and no new view: %q", tm.lines())
+	}
+}
+
+func TestEnterOnAnEndedPreviewShowsItAgain(t *testing.T) {
+	restNow(t)
+	m, tm := shownAt(t, "kindle-legacy", "160")
+	next, cmd := key(m, "up")
+	m = rest(t, next, cmd)
+	tm.cmd = "sh" // the view ended: its pane waits for a key
+	tm.calls = nil
+	enter(t, m)
+	if respawned(tm) == "" {
+		t.Fatalf("an ended view was not shown again: %q", tm.lines())
+	}
+}
+
+func TestOnePaneDoesNotPreview(t *testing.T) {
+	restNow(t)
+	m, tm := shownAt(t, "kindle-web", "70")
+	next, cmd := key(m, "up")
+	rest(t, next, cmd)
+	if r := respawned(tm); r != "" {
+		t.Fatalf("one pane previewed: %q", r)
+	}
+}
+
+func TestAStokerHostDoesNotPreview(t *testing.T) {
+	restNow(t)
+	st := boardFixture(t)
+	v := runningNight(demoAt)
+	st.Stoker = &v
+	m, tm := besideConsoleWith(t, st, 40, 50, &besideTmux{winW: "160", alive: true})
+	m.opt.Socket = "/tmp/tmux-1000/default"
+	m = chooseNamed(t, m, "kindle-web")
+	next, cmd := key(m, "up")
+	m = rest(t, next, cmd)
+	if m.held != nil || respawned(tm) != "" {
+		t.Fatalf("held %v, respawn %q: a look asked or showed", m.held != nil, respawned(tm))
 	}
 }
 
@@ -379,10 +481,43 @@ func TestAPeerAgentAsksBeforeItShows(t *testing.T) {
 		t.Fatalf("pending %v, respawn %q: want the consent box first", m.pending != nil, respawned(tm))
 	}
 	next, cmd = key(m, "y")
-	afterChoice(next, cmd)
+	m = afterChoice(next, cmd)
 	r := respawned(tm)
 	if !strings.HasPrefix(r, "respawn-pane -k -t %9 -- /bin/sh") || !strings.Contains(r, " ssh ") || !strings.Contains(r, "ws-1") {
 		t.Fatalf("respawn %q in %q", r, tm.lines())
+	}
+}
+
+func TestAPeerPreviewsOnlyAfterItsConsent(t *testing.T) {
+	restNow(t)
+	home, ws := newFake(), newFake()
+	tm := &besideTmux{winW: "160", alive: true}
+	opt := Options{NoMotion: true, Conn: home, Now: func() time.Time { return demoAt }, Beside: true, Pane: "%1", Tmux: tm.run,
+		Peers: []Peer{{Host: "ws-1", Conn: ws}}}
+	var next tea.Model = New(opt)
+	next, _ = next.Update(tea.WindowSizeMsg{Width: 40, Height: 50})
+	next, _ = next.Update(stateMsg(proto.State{}))
+	next, _ = next.Update(peerMsg{host: "ws-1", conn: ws, msg: stateMsg(boardFixture(t))})
+	m := next.(Model)
+	m.splashDone = true
+	m.viewPrefs.CopyCheckedPhone, m.viewPrefs.CopyCheckedDesk = true, true
+	m = feed(t, m, m.besideCmd())
+	m = chooseNamed(t, m, "kindle-web")
+	next, cmd := key(m, "down")
+	m = rest(t, next, cmd)
+	if m.pending != nil || respawned(tm) != "" {
+		t.Fatalf("pending %v, respawn %q: a look at a peer asked or showed", m.pending != nil, respawned(tm))
+	}
+	m = chooseNamed(t, m, "kindle-web")
+	next, cmd = key(m, "enter")
+	next, cmd = key(afterChoice(next, cmd), "y")
+	m = afterChoice(next, cmd)
+	tm.calls = nil
+	next, cmd = key(m, "down")
+	m = rest(t, next, cmd)
+	s, _ := m.sideChosen()
+	if r := respawned(tm); m.pending != nil || !strings.Contains(r, " ssh ") || !strings.Contains(r, s.Name) {
+		t.Fatalf("after the consent: pending %v, respawn %q", m.pending != nil, r)
 	}
 }
 
@@ -519,7 +654,7 @@ func TestTypingInTheListSaysTheAgentPaneTakesText(t *testing.T) {
 			t.Fatalf("typed into the line of %v: %q", k, v)
 		}
 	}
-	if !strings.Contains(said["l"], "the agent pane takes text") || !strings.Contains(said["l"], "⏎ shows kindle-web") {
+	if !strings.Contains(said["l"], "the agent pane takes text") || !strings.Contains(said["l"], "⏎ goes into kindle-web") {
 		t.Fatalf("l says %q", said["l"])
 	}
 }
@@ -786,8 +921,8 @@ func TestAPeerChainAsksOnceBeforeItShows(t *testing.T) {
 func TestTheBesideListHintSaysEnterShowsTheAgent(t *testing.T) {
 	m, _ := besideConsole(t, boardFixture(t), 40, 50, "160")
 	got := m.sideKeyWords()
-	if strings.Contains(got, "write") || !strings.Contains(got, "⏎ show") {
-		t.Fatalf("beside list hint = %q, want ⏎ show and no write", got)
+	if strings.Contains(got, "write") || !strings.Contains(got, "⏎ go in") {
+		t.Fatalf("beside list hint = %q, want ⏎ go in and no write", got)
 	}
 }
 

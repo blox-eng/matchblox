@@ -241,6 +241,8 @@ type action struct {
 	chain       []paneKey                   // a chain view: the member each of steps shows
 	closing     bool                        // it closes the chain view and runs no step
 	keep        string                      // a close: the member's pane that stays the agent pane; "" the agent pane
+	preview     bool                        // a look as the list rests on a row: the keys stay with the list
+	focus       bool                        // ⏎ on the session the agent pane shows: a view that still runs only gets the keys
 }
 
 // recRun is an act on a recommendation: the row shows its outcome.
@@ -602,11 +604,16 @@ type Model struct {
 	sideTip                   int
 	sideHost                  string // the host whose trouble the host place shows
 	sideIn                    paneKey
-	beside                    string     // the agent pane's id; "" before the split, and where it failed
-	winW, winH                int        // the window's size in beside mode; 0: not read yet
-	showing                   bool       // a choice runs in the agent pane
-	showNext                  *action    // the choice made while one ran: it runs next
-	chain                     *chainView // the chain view beside the list; nil while one agent shows
+	beside                    string          // the agent pane's id; "" before the split, and where it failed
+	winW, winH                int             // the window's size in beside mode; 0: not read yet
+	boxZoom                   bool            // a box has the window: the list's pane is zoomed for it
+	boxBack                   []string        // the agent pane's screen, drawn dim behind the box
+	showing                   bool            // a choice runs in the agent pane
+	showNext                  *action         // the choice made while one ran: it runs next
+	besideShows               paneKey         // the session the agent pane shows; zero when none or a chain view
+	previewSeq                int             // the list's latest move: only its preview runs
+	viewed                    map[string]bool // the peers whose view the builder let run in this run: their rows preview
+	chain                     *chainView      // the chain view beside the list; nil while one agent shows
 }
 
 func New(opt Options) Model {
@@ -812,7 +819,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		nm = nm.scanShows().keepView().inDemo().sideKeep().chatMarkOn().onChoice() // what reads Sessions' selection reads the board's choice
 		again := nm.beltPoll(msg)
 		nm, belt := nm.tellBelt(again)
-		cmd = tea.Batch(cmd, belt)
+		var zoom tea.Cmd
+		nm, zoom = nm.boxZoomed()
+		cmd = tea.Batch(cmd, belt, zoom)
 		if note := nm.flashNotice(was); note != nil {
 			cmd = tea.Batch(cmd, note)
 		}
@@ -861,8 +870,15 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.sizeCmd(m.width)
 	case besideSizeMsg:
 		m.winW, m.winH = msg.w, msg.h
+	case boxBackMsg:
+		if !m.boxZoom { // the box closed before its zoom landed: give the window back after it
+			return m, m.sizeCmd(m.width)
+		}
+		m.boxBack = msg
 	case shownMsg:
 		return m.besideShown(msg)
+	case previewMsg:
+		return m.look(msg)
 	case fromConn:
 		if msg.conn != m.conn {
 			return m, nil

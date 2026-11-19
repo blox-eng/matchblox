@@ -5,17 +5,20 @@ import (
 	"maps"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/blox-eng/matchblox/internal/mux"
 )
 
 // Fake is a multiplexer in memory: Screen is each pane's text, Mode the
-// panes in copy mode, NoBracket the panes that take no bracketed paste. Its steps are argv words that name no program.
+// panes in copy mode, NoBracket the panes that take no bracketed paste,
+// Typed the last key of a person in each pane. Its steps are argv words that name no program.
 type Fake struct {
 	mu        sync.Mutex
 	Screen    map[string]string
 	Mode      map[string]bool
 	NoBracket map[string]bool
+	Typed     map[string]time.Time
 	marked    map[string]bool
 	marks     int
 	loads     []Load
@@ -85,6 +88,12 @@ func (f *Fake) InMode(pane string) (bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.Mode[pane], nil
+}
+
+func (f *Fake) TypedAt(pane string) time.Time {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.Typed[pane]
 }
 
 // SetScreen sets pane's text.

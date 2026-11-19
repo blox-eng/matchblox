@@ -83,7 +83,7 @@ The full walk is [Get started](https://docs.matchblox.com/start/).
   at rest. Its row says what it asks, its pull request and its chain.
 - **The agent beside the list**: in tmux, the right side is the agent's own
   pane. Typing there is typing into the agent, with its `/commands`,
-  `@files` and menus. `Enter` on a row shows that agent, and `ctrl+q`
+  `@files` and menus. `↑↓` show each agent as you pass, `Enter` goes in, and `ctrl+q`
   flips the keys between the list and the agent. `g` on a chain shows up to
   4 of its agents side by side.
 - **The chat**: where there is no tmux (the demo, or a console outside its

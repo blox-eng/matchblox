@@ -236,7 +236,7 @@ func (m Model) copyRan() Model {
 func (m Model) dragStart(x, y int) Model {
 	m.dragFrom, m.dragTo, m.dragLines, m.tapLater = nil, nil, nil, nil // a release that never came leaves no tap
 	w := max(m.width, minWidth)
-	if m.boardShown() && m.menu == nil && m.layoutAt(w) != Narrow {
+	if m.boardShown() && m.menu == nil && !m.boxZoom && m.layoutAt(w) != Narrow { // behind a box the agent is a picture: it copies nothing
 		sc := m.drawScreen(w)
 		m.dragFrom, m.dragLines, m.dragWithin = &point{x, y}, sc.lines, m.dragColumn(x, y-sc.bodyTop, w)
 	}
