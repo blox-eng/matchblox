@@ -222,6 +222,11 @@ func (s *Service) takeOutLocked(st *chains.Store, out string, a proto.Act) (prot
 		return refuseText("no chain is named " + team), false
 	}
 	at := func(m chains.Member) bool { return m.Pane == pane }
+	// The pane id of a member that waits for recover is stale: the console
+	// names that member by its session id.
+	if sid, ok := strings.CutPrefix(pane, "sid:"); ok {
+		at = func(m chains.Member) bool { return sid != "" && m.SessionID == sid }
+	}
 	// After a lost server, a member that waits for recover may keep a pane id
 	// the new server gave a live match: the live one is meant.
 	i := slices.IndexFunc(c.Members, func(m chains.Member) bool { _, ok := s.sessionOfLocked(m); return at(m) && ok })

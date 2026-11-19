@@ -255,3 +255,36 @@ func TestTheDocShowsAWaitingMate(t *testing.T) {
 		t.Fatalf("mates = %+v", v.Mates)
 	}
 }
+
+// TestTakeOutAWaitingMateBySessionID: a waiting member's pane id is stale,
+// so the console names it by its session id to take it out of its team.
+func TestTakeOutAWaitingMateBySessionID(t *testing.T) {
+	s, one, two := rebootPair(t)
+	three := sample.Session{Pane: "%3", PID: 103, Start: 3, SessionID: "s3", Name: "three", Agent: "claude", Target: "three:1.0", Cwd: "/src/three"}
+	publishOn(s, "100", one, two, three)
+	if res := chainFrom(t, s, "%3", proto.ChainPrefix+"%1"); res.Err != "" {
+		t.Fatalf("chain = %+v", res)
+	}
+	publishOn(s, "100", one, two, three)
+	loseServer(s)
+	one2, three2 := reopened(one, "%5", 201), reopened(three, "%7", 203)
+	publishOn(s, "200", one2, three2)
+	out := proto.Act{RecID: proto.ChainPrefix + "out:sid:s2@one"}
+	if res := s.act(context.Background(), out); res.Err != "only the person at the console takes a match out of a chain" {
+		t.Fatalf("a non-console out = %+v", res)
+	}
+	out.Console = true
+	if res := s.act(context.Background(), out); res.Err != "" || res.Note != "took two out of one" {
+		t.Fatalf("out = %+v", res)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	st := s.chainsLocked()
+	if teams := st.TeamsOf(memberOf(two)); len(teams) != 0 {
+		t.Fatalf("two is still in %+v", teams)
+	}
+	c, ok := st.Team("one")
+	if !ok || len(c.Members) != 2 || !slices.ContainsFunc(c.Members, memberOf(one2).Same) || !slices.ContainsFunc(c.Members, memberOf(three2).Same) {
+		t.Fatalf("team one = %+v", c)
+	}
+}
