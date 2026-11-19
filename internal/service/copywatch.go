@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -136,21 +137,29 @@ func (s *Service) copied(ctx context.Context, sock, name string) {
 		copyNotice(ctx, sock, fmt.Sprintf("not copied: %.1f MB is over the 1 MB copy limit", float64(len(text))/(1<<20)))
 		return
 	}
-	if !s.sendCopy(string(text)) {
+	if !s.sendCopy(noControls(string(text))) {
 		copyNotice(ctx, sock, noConsole)
 	}
 }
 
-// sendCopy sends text to each console; false when none is connected.
+// sendCopy sends text to each console; false when none is connected. A
+// copy, as a screen, goes only to a console: a client in an agent's pane is
+// none, whatever its hello says, and the pane is read again at each copy.
 func (s *Service) sendCopy(text string) bool {
 	s.mu.Lock()
-	var consoles []*client
+	var said []*client
 	for cl := range s.clients {
 		if cl.console {
-			consoles = append(consoles, cl)
+			said = append(said, cl)
 		}
 	}
 	s.mu.Unlock()
+	var consoles []*client
+	for _, cl := range said {
+		if s.aConsole(true, cl.from) {
+			consoles = append(consoles, cl)
+		}
+	}
 	for _, cl := range consoles {
 		go cl.c.Send(proto.KindCopy, "", proto.Copy{Text: text}) //nolint:errcheck // a console that left misses it
 	}
@@ -168,4 +177,16 @@ func copyNotice(ctx context.Context, sock, text string) {
 			_, _ = copyTmux(ctx, sock, "display-message", "-c", name, "-d", "4000", text)
 		}
 	}
+}
+
+// noControls drops the control codes from a copy, but tab and newline: a
+// person's tmux copy has none, and an escape code from a program's buffer
+// must not reach a clipboard a person pastes into a terminal.
+func noControls(text string) string {
+	return strings.Map(func(r rune) rune {
+		if r == '\t' || r == '\n' || !unicode.IsControl(r) {
+			return r
+		}
+		return -1
+	}, text)
 }

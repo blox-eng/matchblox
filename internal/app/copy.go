@@ -17,6 +17,7 @@ import (
 
 	"github.com/blox-eng/matchblox/internal/doors"
 	"github.com/blox-eng/matchblox/internal/proto"
+	"github.com/blox-eng/matchblox/internal/remote"
 )
 
 // The words of a copy (the spec's "Copy").
@@ -401,9 +402,14 @@ func (m Model) doorKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 	return next, cmd, true
 }
 
-// copyActive is how recent the person's input on a screen must be for a
-// copy to go to that screen: older, the person is at another one.
-const copyActive = 10 * time.Second
+// A copy reaches the clipboard only from a screen the person just used:
+// within copyActive for this host's copy, and within hostCopyActive, with
+// that host on the screen, for a peer's (owner, 2026-11-20). A program on
+// a host then cannot fill the clipboard while the person looks elsewhere.
+const (
+	copyActive     = 10 * time.Second
+	hostCopyActive = 2 * time.Second
+)
 
 // tookCopy puts a copy that a service sent (a tmux copy on that host) on
 // the screen the person uses; from names a peer host, "" for this one. A
@@ -419,10 +425,21 @@ func (m Model) tookCopy(text, from string) (Model, tea.Cmd) {
 	}
 	run := m.tmuxRun()
 	if run == nil {
+		if from != "" {
+			return m, nil // no screen to tell it shows the host
+		}
 		cmd := m.notice("copied: " + what)
 		return m, tea.Batch(tea.SetClipboard(text), cmd)
 	}
-	client, ok := activeClient(run, m.opt.Pane, m.now())
+	window, shows := copyActive, func(string) bool { return true }
+	if from != "" {
+		own, _ := run("display", "-p", "-t", m.opt.Pane, "#{session_name}")
+		own = strings.TrimSpace(own)
+		window, shows = hostCopyActive, func(session string) bool {
+			return session == own && m.besideShowsHost(from) || jumpOf(session, from)
+		}
+	}
+	client, ok := activeClient(run, m.now(), window, shows)
 	if !ok {
 		return m, nil
 	}
@@ -436,15 +453,33 @@ func (m Model) tookCopy(text, from string) (Model, tea.Cmd) {
 	return m, m.notice(said)
 }
 
-// activeClient is the client of the console's session that had input last,
-// within copyActive of now. A client on a pane's terminal (a nested view)
-// is never a person's screen.
-func activeClient(run func(args ...string) (string, error), pane string, now time.Time) (string, bool) {
-	sess, err := run("display", "-p", "-t", pane, "#{session_name}")
-	if err != nil {
-		return "", false
+// besideShowsHost: the agent pane beside the list shows a session of host,
+// alone or in a chain view.
+func (m Model) besideShowsHost(host string) bool {
+	if m.besideShows.host == host && m.besideShows.pane != "" {
+		return true
 	}
-	clients, err := run("list-clients", "-t", "="+strings.TrimSpace(sess), "-F", "#{client_name}\t#{client_activity}\t#{client_tty}")
+	if m.chain != nil {
+		for _, k := range m.chain.on {
+			if k.host == host {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// jumpOf: session is this machine's session of a jump to host.
+func jumpOf(session, host string) bool {
+	id, ok := strings.CutPrefix(session, remote.HostSessionName(host, ""))
+	return ok && len(id) == 8
+}
+
+// activeClient is the person's client that had input last, within window of
+// now, on a session shows accepts. A client on a pane's terminal (a nested
+// view) is never a person's screen.
+func activeClient(run func(args ...string) (string, error), now time.Time, window time.Duration, shows func(session string) bool) (string, bool) {
+	clients, err := run("list-clients", "-F", "#{client_name}\t#{client_activity}\t#{client_tty}\t#{client_session}")
 	if err != nil {
 		return "", false
 	}
@@ -454,11 +489,11 @@ func activeClient(run func(args ...string) (string, error), pane string, now tim
 	var bestAt int64
 	for _, l := range strings.Split(strings.TrimSpace(clients), "\n") {
 		f := strings.Split(l, "\t")
-		if len(f) != 3 || slices.Contains(nested, f[2]) {
+		if len(f) != 4 || slices.Contains(nested, f[2]) || !shows(f[3]) {
 			continue
 		}
 		at, err := strconv.ParseInt(f[1], 10, 64)
-		if err != nil || now.Sub(time.Unix(at, 0)) > copyActive || at <= bestAt {
+		if err != nil || now.Sub(time.Unix(at, 0)) > window || at <= bestAt {
 			continue
 		}
 		best, bestAt = f[0], at

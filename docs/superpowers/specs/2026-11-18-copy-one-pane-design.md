@@ -53,6 +53,7 @@ Ways it goes wrong:
 - 2026-11-18 — tmux owns every drag in an agent pane, in every harness, even for an agent that reads the mouse. The ways: (a) tmux owns every drag: the same in every harness, wraps join, trailing spaces trim, but Claude Code's own drag-select is bypassed; (b) each agent's own selection: no change of feel, but it differs per harness and Claude Code's breaks stay hard; (c) a copy-view key: an extra step on each copy. Pick (a) — because the owner wants one behaviour everywhere. — the owner.
 - 2026-11-18 — Tap-a-link and copy on the phone stay with matchblox-board's branch — because that work is built and waits for the owner's push. — proposed, not confirmed.
 
+- 2026-11-20 — A host's copy reaches the clipboard only while the console shows that host (beside the list, or in a jump to it) and the person's screen had input in the last 2 s; each says `copied: N characters from <host>`. Every copy loses its control codes, and a client in an agent's pane gets none (checked at each copy). — because a program on a host could otherwise put text on the desk clipboard with `tmux set-buffer` (paste-jacking), which a remote host cannot do today; found by the security review of the build. Remaining risk: a host program that repeats set-buffer while the person works in that host's pane. — the owner.
 - 2026-11-19: spec approved. Decided by: the owner. (U1 and U2 stay open; the plan keeps them out of scope.)
 
 ## Left to the builder

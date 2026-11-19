@@ -233,11 +233,11 @@ func TestACopyWithNoConsoleSaysSo(t *testing.T) {
 func TestAnAgentThatSaysConsoleGetsNoCopies(t *testing.T) {
 	sock, tm := copyServer(t)
 	s := newTest(t, time.Hour)
-	s.PeerPane = func(pid int) string { return map[int]string{100: "%1"}[pid] }
+	s.PeerPane = func(pid int) string { return map[int]string{100: "%77"}[pid] }
 	watching(t, s, sock, tm)
 	waitUntil(t, "the first sample", func() bool { s.mu.Lock(); defer s.mu.Unlock(); return s.have })
 	s.mu.Lock()
-	s.cur.Sessions = append(s.cur.Sessions, sample.Session{Name: "flint-auth", Pane: "%1"})
+	s.cur.Sessions = append(s.cur.Sessions, sample.Session{Name: "flint-auth", Pane: "%77"})
 	s.mu.Unlock()
 
 	a, b := net.Pipe()
@@ -262,13 +262,72 @@ func TestAnAgentThatSaysConsoleGetsNoCopies(t *testing.T) {
 			}
 		}
 	}()
-	tm("set-buffer", "-b", "buffer6", "secret")
+	tm("set-buffer", "-b", "buffer6", "secret") // %77 is no fixture session's: only the one added above
 	if got := copyOf(t, person); got != "secret" {
 		t.Fatalf("the person's console got %q", got)
 	}
 	select {
 	case got := <-agentCopies:
 		t.Fatalf("an agent's pane got the person's copy: %s", got)
+	case <-time.After(500 * time.Millisecond):
+	}
+}
+
+// TestACopyCarriesNoControlCodes: a person's tmux copy holds none, so a
+// buffer with escape codes loses them before it reaches any clipboard.
+func TestACopyCarriesNoControlCodes(t *testing.T) {
+	sock, tm := copyServer(t)
+	s := newTest(t, time.Hour)
+	watching(t, s, sock, tm)
+	console := connectAs(t, t.Context(), s, proto.ClientConsole)
+	tm("set-buffer", "-b", "buffer7", "\x1b]52;c;eA==\x07ok\tgo\nnext\r")
+	if got, want := copyOf(t, console), "]52;c;eA==ok\tgo\nnext"; got != want {
+		t.Fatalf("console got %q, want %q", got, want)
+	}
+}
+
+// TestAnAgentPaneFoundLaterGetsNoCopies: the console rule runs at each copy:
+// a client whose pane turns out to be an agent's after it said hello gets no
+// copy from then on.
+func TestAnAgentPaneFoundLaterGetsNoCopies(t *testing.T) {
+	sock, tm := copyServer(t)
+	s := newTest(t, time.Hour)
+	s.PeerPane = func(pid int) string { return map[int]string{100: "%77"}[pid] }
+	watching(t, s, sock, tm)
+	waitUntil(t, "the first sample", func() bool { s.mu.Lock(); defer s.mu.Unlock(); return s.have })
+	a, b := net.Pipe()
+	go s.HandlePeer(t.Context(), transport.NewConn(b), 100) //nolint:errcheck // ends with the test
+	agent := transport.NewConn(a)
+	t.Cleanup(func() { agent.Close() })
+	go func() {
+		_ = agent.Send(proto.KindHello, "", proto.Hello{Version: proto.Version, Client: proto.ClientConsole})
+	}()
+	next(t, agent, proto.KindHello)
+	next(t, agent, proto.KindSnapshot) // it has joined, as a console
+	s.mu.Lock()
+	s.cur.Sessions = append(s.cur.Sessions, sample.Session{Name: "flint-auth", Pane: "%77"})
+	s.mu.Unlock()
+	person := connectAs(t, t.Context(), s, proto.ClientConsole)
+	agentCopies := make(chan string, 1)
+	go func() {
+		for {
+			env, err := agent.Recv()
+			if err != nil {
+				return
+			}
+			if env.Kind == proto.KindCopy {
+				agentCopies <- string(env.Body)
+				return
+			}
+		}
+	}()
+	tm("set-buffer", "-b", "buffer8", "secret")
+	if got := copyOf(t, person); got != "secret" {
+		t.Fatalf("the person's console got %q", got)
+	}
+	select {
+	case got := <-agentCopies:
+		t.Fatalf("a pane found to be an agent's got the copy: %s", got)
 	case <-time.After(500 * time.Millisecond):
 	}
 }
