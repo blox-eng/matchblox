@@ -58,6 +58,8 @@ final class ConsoleTerminalView: TerminalView {
     /// The swipe began in a tmux pane: its steps go into `scrollBack`.
     private var countsBack = false
     private var scrolledBack = false
+    /// The match head's lines that do not fill a wheel step yet.
+    private var headBurst = WheelBurst(linesPerStep: 1)
     nonisolated(unsafe) private var sizeObserver: NSObjectProtocol?
 
     static func font(_ size: TextSize) -> UIFont {
@@ -305,10 +307,11 @@ final class ConsoleTerminalView: TerminalView {
         }
     }
 
-    /// Each step at the touch's cell, encoded by SwiftTerm for the program's mouse protocol.
-    private func sendWheel(_ steps: [WheelScroll.Step], at point: CGPoint) {
+    /// Each step at the touch's cell, encoded by SwiftTerm for the program's mouse protocol. The
+    /// match head plays its own taps, so its steps do not tick.
+    private func sendWheel(_ steps: [WheelScroll.Step], at point: CGPoint, ticks: Bool = true) {
         guard readsMouse, !steps.isEmpty, let spot = cell(at: point) else { return }
-        if showsConsole { tick.selectionChanged() }
+        if ticks, showsConsole { tick.selectionChanged() }
         if countsBack {
             scrollBack.wheeled(steps)
             scrollChanged()
@@ -372,6 +375,44 @@ final class ConsoleTerminalView: TerminalView {
         haptic.impactOccurred()
         forgetScrollBack()
         onHome()
+    }
+
+    // MARK: The match head
+
+    /// The match head on the belt rolled `lines` lines (positive: older). Returns where they went.
+    func head(lines: Int) -> HeadRoute {
+        stopCoast()
+        let route = HeadRoute.route(readsMouse: readsMouse, inTmuxPane: inTmuxPane, canScroll: canScroll,
+                                    position: scrollPosition, scrollBackSteps: scrollBack.steps, older: lines > 0)
+        switch route {
+        case .wheel:
+            let stepLines = inTmuxPane ? WheelScroll.tmuxLines : 1
+            if headBurst.linesPerStep != stepLines { headBurst = WheelBurst(linesPerStep: stepLines) }
+            let events = headBurst.events(lines: lines)
+            countsBack = inTmuxPane
+            let step: WheelScroll.Step = events > 0 ? .up : .down
+            sendWheel(Array(repeating: step, count: abs(events)), at: CGPoint(x: bounds.midX, y: bounds.midY), ticks: false)
+        case .scrollback:
+            if lines > 0 { scrollUp(lines: lines) } else { scrollDown(lines: -lines) }
+            scrollChanged()
+        case .end, .nothing:
+            break
+        }
+        return route
+    }
+
+    /// The match head rolled sideways: wheel left and right, for a program outside tmux that
+    /// reads the mouse. tmux takes no sideways wheel. True if any step went.
+    func headSideways(_ notches: Int) -> Bool {
+        guard notches != 0, readsMouse, !inTmuxPane, let spot = cell(at: CGPoint(x: bounds.midX, y: bounds.midY)) else { return false }
+        let terminal = getTerminal()
+        // xterm's wheel right and left. SwiftTerm's encodeButton knows only 4 and 5, and turns any
+        // other button into a left click.
+        let flags = notches > 0 ? 67 : 66
+        for _ in 0..<abs(notches) {
+            terminal.sendEvent(buttonFlags: flags, x: spot.col, y: spot.row, pixelX: Int(bounds.midX), pixelY: Int(bounds.midY))
+        }
+        return true
     }
 
     // MARK: The live bottom

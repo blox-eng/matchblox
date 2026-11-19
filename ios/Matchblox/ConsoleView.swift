@@ -371,6 +371,8 @@ private final class Belts {
                 if bytes == Self.copyReply { terminal?.onAsksCopy() }
                 terminal?.send(bytes)
             }
+            belt.onHead = { [weak terminal] lines in terminal?.head(lines: lines) ?? .nothing }
+            belt.onHeadSideways = { [weak terminal] notches in terminal?.headSideways(notches) ?? false }
             belt.onCtrl = { [weak self, weak terminal] in
                 guard let terminal else { return }
                 terminal.controlModifier.toggle()
