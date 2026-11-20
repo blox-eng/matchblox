@@ -655,8 +655,8 @@ func (m Model) heldNote(s sample.Session, another bool) string {
 func (m *Model) sendLine() tea.Cmd {
 	s, ok := m.sideChosen()
 	switch {
-	case !ok && m.chosenSide().waits(): // the line takes no text there: ⏎ reopens it
-		return m.reopenChosen()
+	case !ok && m.chosenSide().waits(): // ⏎ in the list reopens it, never a typed line
+		return m.notice(m.noRowWhy())
 	case !ok:
 		return m.notice("no session to write to")
 	}

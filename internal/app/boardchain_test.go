@@ -622,8 +622,8 @@ func reopenAct(t *testing.T, m Model) (proto.Act, []string) {
 	return acts[0], r.Conversations
 }
 
-// TestEnterReopensAWaitingMatch: ⏎ on a waiting row, on a desk or not and
-// with the line open, sends recover for its conversation, as JSON: never
+// TestEnterReopensAWaitingMatch: ⏎ on a waiting row, on a desk or not,
+// sends recover for its conversation, as JSON: never
 // its name, which the record may not know. The result shows as one notice
 // that names the fix.
 func TestEnterReopensAWaitingMatch(t *testing.T) {
@@ -631,7 +631,7 @@ func TestEnterReopensAWaitingMatch(t *testing.T) {
 	for _, c := range []struct {
 		name       string
 		desk, line bool
-	}{{"kindle-web", false, false}, {"kindle-web", true, false}, {"kindle-web", false, true}, {"kindle\"web\nx", false, false}} {
+	}{{"kindle-web", false, false}, {"kindle-web", true, false}, {"kindle\"web\nx", false, false}} {
 		m := pressOn(waitingKindle(t, since, 0), "down")
 		for _, v := range m.chains.Mates {
 			if v.Wait != nil {
@@ -664,6 +664,22 @@ func TestEnterReopensAWaitingMatch(t *testing.T) {
 		if got := next.(Model).noticeText; got != c.want {
 			t.Errorf("%s: the notice is %q, want %q", c.row.State, got, c.want)
 		}
+	}
+}
+
+// TestEnterInTheLineOnAWaitingRowDoesNotReopen: in the line, ⏎ sends what
+// was typed; on a waiting row it starts no agent. It says why, and sends
+// nothing: ⏎ in the list reopens.
+func TestEnterInTheLineOnAWaitingRowDoesNotReopen(t *testing.T) {
+	m := pressOn(waitingKindle(t, time.Date(2026, 10, 1, 22, 14, 0, 0, time.Local), 0), "down")
+	m.toLine()
+	before := len(boardFake(m).allActs())
+	m = pressOn(m, "enter")
+	if acts := boardFake(m).allActs(); len(acts) != before {
+		t.Fatalf("⏎ in the line on a waiting row sent %+v", acts[before:])
+	}
+	if want := "kindle-web waits for recover · matchblox recover reopens it"; m.noticeText != want {
+		t.Fatalf("the notice is %q, want %q", m.noticeText, want)
 	}
 }
 
