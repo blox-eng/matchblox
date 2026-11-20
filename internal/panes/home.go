@@ -26,23 +26,94 @@ func HomeMarkArgv(pane string) []string {
 	return []string{"tmux", "set-option", "-t", pane, HomeOption, "1"}
 }
 
-// HomeArgv is the command that runs the console in its own tmux session:
-// -A attaches when the session is already there, so a second connection
-// sees the same console. Inside tmux, or without tmux, it is nil and the
-// console runs in place. -u keeps the client UTF-8: an ssh session with no
-// locale, such as the phone's, would else see every glyph of the console
-// as "_".
-func HomeArgv(inTmux, haveTmux bool, self []string) []string {
+// HomeArgv is the command that runs the console in its own tmux session,
+// name (HomeSession): -A attaches when the session is already there. Inside
+// tmux, or without tmux, it is nil and the console runs in place. -u keeps
+// the client UTF-8: an ssh session with no locale, such as the phone's,
+// would else see every glyph of the console as "_".
+func HomeArgv(inTmux, haveTmux bool, name string, self []string) []string {
 	if inTmux || !haveTmux || len(self) == 0 {
 		return nil
 	}
-	return append([]string{"tmux", "-u", "new-session", "-A", "-s", Home, "-e", HomeEnv + "=1"}, self...)
+	return append([]string{"tmux", "-u", "new-session", "-A", "-s", name, "-e", HomeEnv + "=1"}, self...)
 }
 
-// SizeArgv makes the home window take the size of the device used last, so a
-// phone that rotates, or a laptop that attaches, resizes the shared console.
-func SizeArgv() []string {
-	return []string{"tmux", "set-option", "-w", "-t", "=" + Home + ":", "window-size", "latest"}
+// JoinEnv, set to 1, makes a console join the first console, shown or not:
+// the phone shows the desk's console, not one of its own.
+const JoinEnv = "MATCHBLOX_JOIN"
+
+// HomeSession is the session a new console runs in, from the terminals each
+// session has: the first console's while no terminal shows it, or to join
+// it; else matchblox-<n>, the first that no session has, so each terminal
+// has a console of its own.
+func HomeSession(attached map[string]int, join bool) string {
+	if join || attached[Home] == 0 {
+		return Home
+	}
+	for n := 2; ; n++ {
+		if name := Home + "-" + strconv.Itoa(n); attached[name] == 0 {
+			if _, taken := attached[name]; !taken {
+				return name
+			}
+		}
+	}
+}
+
+// HomeListArgv lists each session with its terminals, for HomeSession.
+func HomeListArgv() []string {
+	return []string{"tmux", "list-sessions", "-F", "#{session_name} #{session_attached}"}
+}
+
+// ParseHomeList reads HomeListArgv's listing.
+func ParseHomeList(listing string) map[string]int {
+	attached := map[string]int{}
+	for _, line := range strings.Split(listing, "\n") {
+		if name, n, ok := strings.Cut(strings.TrimSpace(line), " "); ok {
+			attached[name], _ = strconv.Atoi(n)
+		}
+	}
+	return attached
+}
+
+// OrphanListArgv lists each session with its terminals and the console it
+// went into an agent from, for Orphaned.
+func OrphanListArgv() []string {
+	return []string{"tmux", "list-sessions", "-F", "#{session_name}\t#{session_attached}\t#{" + sample.BackOption + "}"}
+}
+
+// Orphaned tells if the console of the session name has no terminal any
+// more: no terminal shows it, and none is in an agent it opened. The first
+// console is never orphaned: it waits for the next terminal, as before.
+func Orphaned(name, listing string) bool {
+	if name == Home {
+		return false
+	}
+	own := false
+	for _, line := range strings.Split(listing, "\n") {
+		f := strings.SplitN(line, "\t", 3)
+		if len(f) < 2 {
+			continue
+		}
+		f = append(f, "") // a line trimmed of its empty last field
+		shown := f[1] != "0"
+		if f[0] == name {
+			if shown {
+				return false
+			}
+			own = true
+		}
+		if f[2] == name && shown {
+			return false
+		}
+	}
+	return own
+}
+
+// SizeArgv makes the window of the console's pane take the size of the
+// device used last, so a phone that rotates, or a laptop that attaches,
+// resizes the shared console.
+func SizeArgv(pane string) []string {
+	return []string{"tmux", "set-option", "-w", "-t", pane, "window-size", "latest"}
 }
 
 // HomeKey is what the app sends to go back to the console: an APC string,

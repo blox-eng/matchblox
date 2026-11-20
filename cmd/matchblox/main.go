@@ -316,7 +316,7 @@ func run(args []string) error {
 			binds = append(binds, panes.HomeKeyArgv(), panes.FlipKeysArgv())
 		}
 		if os.Getenv(panes.HomeEnv) == "1" {
-			binds = append(binds, panes.HomeMarkArgv(os.Getenv("TMUX_PANE")), panes.SizeArgv(), panes.CommandKeysArgv(), panes.MarkKeyArgv(), panes.BeltKeyArgv(), panes.TapKeysArgv(), panes.ViewerHookArgv(), panes.BesideKeysArgv(), panes.BesideHookArgv(), remote.ViewHookArgv())
+			binds = append(binds, panes.HomeMarkArgv(os.Getenv("TMUX_PANE")), panes.SizeArgv(os.Getenv("TMUX_PANE")), panes.CommandKeysArgv(), panes.MarkKeyArgv(), panes.BeltKeyArgv(), panes.TapKeysArgv(), panes.ViewerHookArgv(), panes.BesideKeysArgv(), panes.BesideHookArgv(), remote.ViewHookArgv())
 		}
 		for _, argv := range binds {
 			_ = exec.Command("tmux", argv[1:]...).Run()
@@ -491,14 +491,21 @@ func parseCommand(args []string) (cmd, host string, rest []string, err error) {
 }
 
 // goHome replaces this process with `tmux new-session -A -s matchblox
-// matchblox …` outside tmux. It returns only when the console runs in place.
+// matchblox …` outside tmux, or with matchblox-<n> when a terminal shows
+// the first console already (panes.HomeSession). It returns only when the
+// console runs in place.
 func goHome() error {
 	tmux, err := exec.LookPath("tmux")
 	self := invokedPath(os.Args[0])
 	if self == "" {
 		return nil
 	}
-	argv := panes.HomeArgv(os.Getenv("TMUX") != "", err == nil, append([]string{self}, os.Args[1:]...))
+	var listing []byte
+	if err == nil {
+		listing, _ = exec.Command(tmux, panes.HomeListArgv()[1:]...).Output() // no server: no session
+	}
+	name := panes.HomeSession(panes.ParseHomeList(string(listing)), os.Getenv(panes.JoinEnv) == "1")
+	argv := panes.HomeArgv(os.Getenv("TMUX") != "", err == nil, name, append([]string{self}, os.Args[1:]...))
 	if argv == nil {
 		return nil
 	}
@@ -730,7 +737,13 @@ func runConsole(path string, cfg config.Config, root string, noMotion bool, host
 		Answered:      func() { _ = os.MkdirAll(filepath.Dir(asked), 0o700); _ = os.WriteFile(asked, nil, 0o600) },
 		TailscaleGate: setup.TailscaleGateMessage,
 	})
-	final, err := tea.NewProgram(sh, tea.WithFPS(consoleFPS)).Run()
+	p := tea.NewProgram(sh, tea.WithFPS(consoleFPS))
+	if base.HomeSession != "" && base.HomeSession != panes.Home {
+		stop := make(chan struct{})
+		defer close(stop)
+		go watchOrphan(base.HomeSession, listSessions, p.Quit, orphanEvery, stop)
+	}
+	final, err := p.Run()
 	s, ok := final.(app.Shell)
 	if !ok {
 		return nil, err

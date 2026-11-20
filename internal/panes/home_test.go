@@ -22,21 +22,69 @@ import (
 )
 
 func TestHomeArgvOutsideTmux(t *testing.T) {
-	got := HomeArgv(false, true, []string{"/usr/local/bin/matchblox", "--no-motion"})
-	want := []string{"tmux", "-u", "new-session", "-A", "-s", "matchblox", "-e", "MATCHBLOX_HOME=1", "/usr/local/bin/matchblox", "--no-motion"}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("got %q, want %q", got, want)
+	for _, name := range []string{"matchblox", "matchblox-2"} {
+		got := HomeArgv(false, true, name, []string{"/usr/local/bin/matchblox", "--no-motion"})
+		want := []string{"tmux", "-u", "new-session", "-A", "-s", name, "-e", "MATCHBLOX_HOME=1", "/usr/local/bin/matchblox", "--no-motion"}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("got %q, want %q", got, want)
+		}
 	}
 }
 
 func TestHomeArgvInsideTmuxRunsInPlace(t *testing.T) {
-	if got := HomeArgv(true, true, []string{"matchblox"}); got != nil {
+	if got := HomeArgv(true, true, Home, []string{"matchblox"}); got != nil {
 		t.Fatalf("inside tmux the console runs in place, got %q", got)
 	}
 }
 
+// TestHomeSessionName: a terminal joins the first console while no other
+// terminal shows it, or when it asks to join (the phone); else it opens the
+// first console name that no session has.
+func TestHomeSessionName(t *testing.T) {
+	for _, c := range []struct {
+		why      string
+		attached map[string]int
+		join     bool
+		want     string
+	}{
+		{"no tmux server", nil, false, "matchblox"},
+		{"no console yet", map[string]int{"work": 1}, false, "matchblox"},
+		{"the first console with no terminal", map[string]int{"matchblox": 0}, false, "matchblox"},
+		{"the first console shown", map[string]int{"matchblox": 1}, false, "matchblox-2"},
+		{"two consoles shown", map[string]int{"matchblox": 1, "matchblox-2": 1}, false, "matchblox-3"},
+		{"a gap", map[string]int{"matchblox": 2, "matchblox-3": 1}, false, "matchblox-2"},
+		{"the phone joins", map[string]int{"matchblox": 1}, true, "matchblox"},
+	} {
+		if got := HomeSession(c.attached, c.join); got != c.want {
+			t.Errorf("%s: HomeSession(%v, %v) = %q, want %q", c.why, c.attached, c.join, got, c.want)
+		}
+	}
+}
+
+// TestOrphaned: a second console no terminal shows, directly or from an
+// agent it opened, is orphaned; the first console never is.
+func TestOrphaned(t *testing.T) {
+	for _, c := range []struct {
+		why, name, listing string
+		want               bool
+	}{
+		{"shown", "matchblox-2", "matchblox\t1\t\nmatchblox-2\t1\t\n", false},
+		{"no terminal", "matchblox-2", "matchblox\t1\t\nmatchblox-2\t0\t\n", true},
+		{"its terminal went into an agent", "matchblox-2", "matchblox-2\t0\t\nmatchblox-in-5\t1\tmatchblox-2\n", false},
+		{"another console's terminal went into an agent", "matchblox-2", "matchblox-2\t0\t\nmatchblox-in-5\t1\tmatchblox\n", true},
+		{"an agent session with no terminal left", "matchblox-2", "matchblox-2\t0\t\nmatchblox-in-5\t0\tmatchblox-2\n", true},
+		{"the first console", "matchblox", "matchblox\t0\t\n", false},
+		{"tmux listed nothing", "matchblox-2", "", false},
+		{"a trimmed last line", "matchblox-2", "matchblox\t1\t\nmatchblox-2\t0", true},
+	} {
+		if got := Orphaned(c.name, c.listing); got != c.want {
+			t.Errorf("%s: Orphaned(%q) = %v, want %v", c.why, c.name, got, c.want)
+		}
+	}
+}
+
 func TestHomeArgvWithoutTmuxRunsInPlace(t *testing.T) {
-	if got := HomeArgv(false, false, []string{"matchblox"}); got != nil {
+	if got := HomeArgv(false, false, Home, []string{"matchblox"}); got != nil {
 		t.Fatalf("without tmux the console runs in place, got %q", got)
 	}
 }
@@ -127,8 +175,8 @@ func TestHomeKeyArgvBindsPrefixMAsTheKey(t *testing.T) {
 }
 
 func TestSizeArgv(t *testing.T) {
-	want := []string{"tmux", "set-option", "-w", "-t", "=matchblox:", "window-size", "latest"}
-	if got := SizeArgv(); !slices.Equal(got, want) {
+	want := []string{"tmux", "set-option", "-w", "-t", "%3", "window-size", "latest"}
+	if got := SizeArgv("%3"); !slices.Equal(got, want) {
 		t.Errorf("SizeArgv() = %q, want %q", got, want)
 	}
 }
