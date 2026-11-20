@@ -22,7 +22,7 @@ const flipBeside = `#{?#{==:#{pane_id},#{` + sample.ConsoleOption + `}},` +
 // BesideKeysArgv binds BesideKey on the console's tmux server, in the
 // console's session and in windows that have an agent beside the list.
 func BesideKeysArgv() []string {
-	guard := "#{&&:#{==:#{session_name}," + Home + "},#{" + sample.BesideOption + "}}"
+	guard := "#{&&:" + atHome + ",#{" + sample.BesideOption + "}}"
 	return []string{"tmux", "bind-key", "-n", BesideKey, "if-shell", "-F", guard, "run-shell -C '" + flipBeside + "'", "send-keys " + BesideKey}
 }
 

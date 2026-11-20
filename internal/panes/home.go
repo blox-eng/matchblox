@@ -14,6 +14,18 @@ import (
 // lands in it and every pane has one way back to it.
 const Home = "matchblox"
 
+// HomeOption marks a tmux session as a console's own: each terminal has one.
+// Every guard reads it, never the session's name.
+const HomeOption = "@matchblox_home"
+
+// atHome is true in a console's own session.
+const atHome = "#{" + HomeOption + "}"
+
+// HomeMarkArgv marks the session of the console's pane as a console's own.
+func HomeMarkArgv(pane string) []string {
+	return []string{"tmux", "set-option", "-t", pane, HomeOption, "1"}
+}
+
 // HomeArgv is the command that runs the console in its own tmux session:
 // -A attaches when the session is already there, so a second connection
 // sees the same console. Inside tmux, or without tmux, it is nil and the
@@ -118,7 +130,7 @@ func CommandKeysArgv() []string {
 // atConsole is true for a client in the console's session, on a pane the
 // console runs in, or on any pane of a window that names its console
 // (@matchblox_console): the agent pane beside the list too.
-const atConsole = "#{&&:#{==:#{session_name}," + Home + "},#{||:" + runsConsole + ",#{" + sample.ConsoleOption + "}}}"
+const atConsole = "#{&&:" + atHome + ",#{||:" + runsConsole + ",#{" + sample.ConsoleOption + "}}}"
 
 // handTarget is the pane the key hands go to: the window's console when it
 // names one, else the active pane.

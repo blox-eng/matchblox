@@ -146,3 +146,7 @@ Load `builder:review` with the spec (#448), this plan and the test command. Run 
 | Anti-goal: closed terminals leave consoles running | Task 4 |
 | Surface: an agent's tools | Task 1 |
 | Call: the phone joins the first console | Task 4 |
+
+## Changes during build
+
+- Task 1 also adds `HomeMarkArgv(pane)`, and the console runs it at start (from Task 4). Because: once the guards read `HomeOption`, a console that does not set it loses `ctrl+q` and the marks. Each commit must work on its own. Task 4 adds `destroy-unattached` to it. Test: `TestAConsoleMarksItsOwnSession`.
