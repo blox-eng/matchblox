@@ -317,6 +317,7 @@ func (m *Model) reopenChosen() tea.Cmd {
 		return m.notice(why)
 	}
 	text, _ := json.Marshal(proto.Recover{Conversations: []string{v.Wait.Conversation}})
+	m.reopening = map[string]string{v.Wait.Conversation: v.Wait.Name}
 	cmd := m.sendTo(host, proto.Act{RecID: recoverID, Confirm: "y", Text: string(text)})
 	return tea.Batch(cmd, m.notice("reopening "+v.Wait.Name))
 }

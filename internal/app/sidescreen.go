@@ -693,8 +693,10 @@ func (m Model) openFoot(press string) (tea.Model, tea.Cmd) {
 func (m Model) askReopen(host string) (tea.Model, tea.Cmd) {
 	_, all := m.waitingByHost()
 	var names, convs []string
+	m.reopening = map[string]string{}
 	for _, w := range all[host] {
 		names, convs = append(names, w.Name), append(convs, w.Conversation)
+		m.reopening[w.Conversation] = w.Name
 	}
 	if len(names) == 0 {
 		return m, nil

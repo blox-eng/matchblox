@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"slices"
@@ -322,6 +323,9 @@ type Model struct {
 	// hiddenHosts are the hosts the builder hid, by name, never the home
 	// host: all hosts leaves them out, and the header counts them (R6).
 	hiddenHosts []string
+	// reopening names the rows the last reopen asked for, by conversation:
+	// the reopened agent may show live before recover answers.
+	reopening   map[string]string
 	st          styles
 	width       int
 	height      int
@@ -1337,7 +1341,10 @@ const recoverID = "recover"
 // conversation (recover's own name is the record's tmux session). A row
 // that cannot reopen gives recover's own why, which names the fix.
 func (m Model) recovered(rows []proto.Recovered) string {
-	named := map[string]string{}
+	named := maps.Clone(m.reopening)
+	if named == nil {
+		named = map[string]string{}
+	}
 	_, waits := m.waitingByHost()
 	for _, ws := range waits {
 		for _, w := range ws {

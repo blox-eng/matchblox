@@ -740,3 +740,19 @@ func TestTheMenuOfAWaitingMatch(t *testing.T) {
 		t.Errorf("reopen it sent %+v, conversations %q", a, convs)
 	}
 }
+
+// TestTheReopenNoticeNamesTheRowAfterItIsLive: the reopened agent shows
+// in the list before recover answers, so no row waits with its
+// conversation any more. The notice still names the row the owner chose,
+// not recover's tmux session.
+func TestTheReopenNoticeNamesTheRowAfterItIsLive(t *testing.T) {
+	m := pressOn(pressOn(waitingKindle(t, time.Date(2026, 10, 1, 22, 14, 0, 0, time.Local), 0), "down"), "enter")
+	for i := range m.chains.Mates {
+		m.chains.Mates[i].Wait = nil
+	}
+	rows := []proto.Recovered{{Name: "work", Conversation: "c-3", State: proto.RecoverReopened, As: "work"}}
+	next, _ := m.Update(resultMsg(proto.Result{ActID: "a1", Recover: rows}))
+	if got, want := next.(Model).noticeText, "kindle-web reopened"; got != want {
+		t.Fatalf("the notice is %q, want %q", got, want)
+	}
+}
