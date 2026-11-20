@@ -5,7 +5,7 @@ import UIKit
 /// The console's terminal, with three ways back to matchblox: a swipe in from the left edge,
 /// a tap on "◂ matchblox" in the tmux status line, and ⌘M or ctrl+M. Each one sends `HomeKey`.
 /// While the program reads the mouse, a vertical swipe sends wheel steps (`WheelScroll`), each step
-/// ticks once, and a finger that rests before its swipe scrolls fast. A tap sends a click: the
+/// ticks once, and a finger that rests, then moves, calls up the match head. A tap sends a click: the
 /// console opens the row's chat. While the console shows Sessions or Machine, a long-press sends a
 /// right click (`BoardTouch`). The match head on the belt scrolls through `head(lines:)`. A sideways
 /// swipe turns no page: the list and the chat have none. A pinch makes the text bigger or smaller,
@@ -45,7 +45,7 @@ final class ConsoleTerminalView: TerminalView {
     /// The swipe's tick: one for each step it moves, never closer than `MatchHead.tapGap`.
     private let tick = UISelectionFeedbackGenerator()
     private var lastTick: TimeInterval = 0
-    /// When the finger went down: a finger that rests before its swipe scrolls fast.
+    /// When the finger went down: a finger that rests, then moves, calls up the match head.
     private var touchedAt: TimeInterval = 0
     private var edge: UIScreenEdgePanGestureRecognizer?
     private var labelTap: UITapGestureRecognizer?
@@ -55,8 +55,10 @@ final class ConsoleTerminalView: TerminalView {
     private var focusedAtTouch = false
     private var wheelPan: UIPanGestureRecognizer?
     private var wheel = WheelScroll(cellHeight: 0)
-    /// The swipe began after the finger rested: it scrolls with the match head's speed-up.
-    private var fastSwipe = false
+    /// The match head that a rest, then a move, calls up; the screen owns it.
+    weak var summoned: SummonedHead?
+    /// This pan rested first: the finger rolls the called-up head, not the wheel.
+    private var summoning = false
     private var coast: Coast?
     private var hold: UILongPressGestureRecognizer?
     /// The size the text has now; a pinch changes it, in whole points.
@@ -213,7 +215,19 @@ final class ConsoleTerminalView: TerminalView {
         }
         if gesture === wheelPan, let pan = gesture as? UIPanGestureRecognizer {
             let velocity = pan.velocity(in: self)
-            return readsMouse && !selection.active && abs(velocity.y) > abs(velocity.x)
+            guard !selection.active, abs(velocity.y) > abs(velocity.x) else { return false }
+            let moved = pan.translation(in: self)
+            switch WheelScroll.gesture(restedFor: ProcessInfo.processInfo.systemUptime - touchedAt, moved: hypot(moved.x, moved.y)) {
+            case .swipe:
+                summoning = false
+                return readsMouse
+            case .summon:
+                // Where the program reads no mouse the head scrolls the terminal's own history.
+                summoning = summoned != nil
+                return summoning
+            case .rest, .menu:
+                return false
+            }
         }
         if gesture === hold {
             return showsConsole && sendsClicks && !inTmuxPane && !tapsLabel(at: gesture.location(in: self))
@@ -233,6 +247,7 @@ final class ConsoleTerminalView: TerminalView {
     }
 
     @objc private func wheelPanned(_ pan: UIPanGestureRecognizer) {
+        if summoning { return summonPanned(pan) }
         switch pan.state {
         case .began, .changed:
             if pan.state == .began {
@@ -240,18 +255,32 @@ final class ConsoleTerminalView: TerminalView {
                 stopCoast()
                 countsBack = inTmuxPane
                 wheel = WheelScroll(cellHeight: cellSize.height, linesPerStep: countsBack ? WheelScroll.tmuxLines : 1)
-                fastSwipe = WheelScroll.isFast(restedFor: ProcessInfo.processInfo.systemUptime - touchedAt)
             }
-            if fastSwipe { wheel.boost = MatchHead.lines(atSpeed: pan.velocity(in: self).y) }
             let dy = pan.translation(in: self).y
             pan.setTranslation(.zero, in: self)
             sendWheel(wheel.move(dy), at: pan.location(in: self))
         case .ended:
-            // A rested flick coasts at one step a cell: its speed-up ends with the finger.
-            wheel.boost = 1
             let link = CADisplayLink(target: self, selector: #selector(coasted))
             coast = Coast(link: link, start: CACurrentMediaTime(), velocity: pan.velocity(in: self).y, point: pan.location(in: self))
             link.add(to: .main, forMode: .common)
+        default:
+            break
+        }
+    }
+
+    /// The finger rested, then moved: the match head comes under it and the finger rolls it.
+    private func summonPanned(_ pan: UIPanGestureRecognizer) {
+        guard let summoned else { return }
+        let now = ProcessInfo.processInfo.systemUptime
+        switch pan.state {
+        case .began:
+            stopCoast()
+            summoned.grab(at: pan.location(in: self), in: self, time: now)
+        case .changed:
+            summoned.drag(to: pan.location(in: self), time: now)
+        case .ended, .cancelled, .failed:
+            summoned.release(time: now)
+            summoning = false
         default:
             break
         }

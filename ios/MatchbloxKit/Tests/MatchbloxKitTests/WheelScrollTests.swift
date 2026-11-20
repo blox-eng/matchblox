@@ -85,10 +85,12 @@ final class WheelScrollTests: XCTestCase {
         XCTAssertFalse(WheelScroll.isFast(restedFor: 0.20))
     }
 
-    func testBoostMultipliesSteps() {
-        var wheel = WheelScroll(cellHeight: 16)
-        wheel.boost = 4
-        XCTAssertEqual(wheel.move(16), Array(repeating: .up, count: 4))
-        XCTAssertEqual(wheel.move(-32), Array(repeating: .down, count: 8))
+    /// One owner per moment: a quick move swipes, a rest then a move calls up the match head, and
+    /// a still hold belongs to the menu, which no later move takes back.
+    func testRestThenMoveTimeline() {
+        XCTAssertEqual(WheelScroll.gesture(restedFor: 0.1, moved: 10), .swipe)
+        XCTAssertEqual(WheelScroll.gesture(restedFor: 0.3, moved: 10), .summon)
+        XCTAssertEqual(WheelScroll.gesture(restedFor: 0.5, moved: 10), .menu)
+        XCTAssertEqual(WheelScroll.gesture(restedFor: 0.3, moved: 5), .rest, "under the 6 pt slop the finger still rests")
     }
 }
