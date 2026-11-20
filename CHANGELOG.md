@@ -6,6 +6,11 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **A new session opens on a desk again.** Beside an agent, the form
+  crashed the console before tmux gave it the window (#451).
+
 ## [0.51.0] - 2026-11-20
 
 ### Added

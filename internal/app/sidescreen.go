@@ -866,11 +866,13 @@ func (m Model) sideRightClick(ms tea.Mouse) (tea.Model, tea.Cmd) {
 
 // formInChat draws the open form in the chat's place, beside the list:
 // the form's box from the body's first line, blank under it. Where one
-// pane shows, the form takes the width.
+// pane shows, the form takes the width. Before tmux zooms the list's pane
+// for the form, the chat beside the list is a sliver: the form takes the
+// pane until the zoom lands.
 func (m Model) formInChat(sc *drawn, w int) {
 	box := m.sideBoxAt(w)
 	x, bw := box.chatX, box.chatW
-	if bw == 0 {
+	if bw < chatMin {
 		x, bw = 0, w
 	}
 	lines, press, spans, agentsAt, agents := m.formBox(bw)
