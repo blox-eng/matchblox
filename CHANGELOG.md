@@ -6,6 +6,18 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **A kill, rename or park shows at once.** After you confirm it, the
+  row turns faint: `killing`, the new name, or `parking` in HELD. The next
+  sample confirms it. A refusal, or three samples without the change, bring
+  the row back with the reason. HELD is now the last group of the list.
+- **The console tells you things in one corner.** Messages are toasts at
+  the top right, at the foot on a phone, and the key line keeps its keys. A
+  key ends what was said. An error that lasts, such as ships that GitHub
+  cannot read, shows once with its fix, then waits as a `⚠` mark in the
+  header. A tap on the mark says it again.
+
 ## [0.52.0] - 2026-11-20
 
 ### Added
@@ -17,16 +29,6 @@ All notable changes to matchblox are in this file. The format follows
   terminal, then move it: the head comes under your finger, rolls as the
   belt's does, and waits 3 seconds for another roll or a tap. It replaces
   the fast swipe.
-- **A kill, rename or park shows at once.** After you confirm it, the
-  row turns faint: `killing`, the new name, or `parking` in HELD. The next
-  sample confirms it. A refusal, or three samples without the change, bring
-  the row back with the reason. HELD is now the last group of the list.
-- **The console tells you things in one corner.** Messages are toasts at
-  the top right, at the foot on a phone, and the key line keeps its keys. A
-  key ends what was said. An error that lasts, such as ships that GitHub
-  cannot read, shows once with its fix, then waits as a `⚠` mark in the
-  header. A tap on the mark says it again.
-
 ### Fixed
 
 - **The match strikes in the middle again.** Beside an agent, the start
