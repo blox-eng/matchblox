@@ -6,6 +6,8 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+## [0.51.0] - 2026-11-20
+
 ### Added
 
 - **Each terminal holds its own console.** A second terminal that runs
@@ -1898,7 +1900,8 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.50.0...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.51.0...HEAD
+[0.51.0]: https://github.com/blox-eng/matchblox/compare/v0.50.0...v0.51.0
 [0.50.0]: https://github.com/blox-eng/matchblox/compare/v0.49.0...v0.50.0
 [0.49.0]: https://github.com/blox-eng/matchblox/compare/v0.48.0...v0.49.0
 [0.48.0]: https://github.com/blox-eng/matchblox/compare/v0.47.1...v0.48.0
