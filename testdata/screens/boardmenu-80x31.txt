@@ -18,14 +18,14 @@
  ✦│   rename                           r │
  ✦│   stoke the chain login            F │
 ──│   go in                       ctrl+o │
- H╰─ ⏎ do ─ esc close ───────────────────╯
- ╽ kindle-legacy            5h ✻│
-────────────────────────────────│
- IDLE · 6  −                    │
+ I╰─ ⏎ do ─ esc close ───────────────────╯
  ╵ hearth-limits      #4551 ci ✻│
- ╵ wick-mobile           23:50 ▣│ Which way do we fix the login?
- ╵ hearth-notes@gpu-1       1h ✻│  1. Patch the token check
- ↓ 3 more                       │  2. Move to the new session store
+ ╵ wick-mobile           23:50 ▣│
+ ╵ hearth-notes@gpu-1       1h ✻│
+ ╵ cinder-ci@gpu… #4549 merged ❋│
+ ╵ ember-reports            3h ⬢│ Which way do we fix the login?
+ ╵ tinder-scratch@gpu-1     2d ·│  1. Patch the token check
+ ↓ 1 more                       │  2. Move to the new session store
  + new · ✧ 7 tips               │ ›                        ⏎ send to flint-auth
 ────────────────────────────────────────────────────────────────────────────────
  in the menu · ↑↓ move · ⏎ do · esc close

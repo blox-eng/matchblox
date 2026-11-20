@@ -182,7 +182,11 @@ func (m Model) sideList(w, h int) ([]string, []sideHit, []span) {
 		groups = nil
 	}
 	if exited && !slices.ContainsFunc(groups, func(g sideGroup) bool { return g.state == sideIdle }) {
-		groups = append(groups, sideGroup{state: sideIdle}) // its head holds the exited agents
+		at := slices.IndexFunc(groups, func(g sideGroup) bool { return g.state > sideIdle })
+		if at < 0 {
+			at = len(groups)
+		}
+		groups = slices.Insert(groups, at, sideGroup{state: sideIdle}) // its head holds the exited agents
 	}
 	for _, g := range groups {
 		units := m.sideShows(g)

@@ -9,12 +9,12 @@ type sideState int
 const (
 	sideNeed sideState = iota
 	sideWork
-	sideHeld
 	sideIdle
+	sideHeld // last: the builder put it away (#211)
 )
 
 func (h sideState) head() string {
-	return [...]string{"NEEDS YOU", "WORKING", "HELD", "IDLE"}[h]
+	return [...]string{"NEEDS YOU", "WORKING", "IDLE", "HELD"}[h]
 }
 
 // sideStateOf is the state of a session: the first rule that holds. A park
