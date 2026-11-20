@@ -20,8 +20,8 @@ import (
 const tickEvery = 25 * time.Millisecond
 
 // After a hangup or a stop passed on to it, an agent keeps its terminal
-// for closeWait, as long as tmux gives a pane. The guard ends it at killWait,
-// so that a save on the hangup can finish (#404).
+// for closeWait; then the terminal goes, as its pane did. The guard ends
+// the agent only at killWait, so that a save on the hangup can finish (#404).
 var (
 	closeWait = 3 * time.Second
 	killWait  = 30 * time.Second

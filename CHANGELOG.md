@@ -18,9 +18,10 @@ All notable changes to matchblox are in this file. The format follows
 
 ### Fixed
 
-- **A closed pane lets Cursor finish saving.** The redraw guard ended
-  the agent 3 s after the hangup. Now it takes the agent's terminal away
-  at 3 s and ends the agent only at 30 s (#404).
+- **Cursor gets 30 s to end after its pane closes.** The redraw guard
+  ended the agent 3 s after the hangup, so a longer save was lost. Now
+  it takes the agent's terminal away at 3 s and ends the agent at 30 s
+  (#404).
 - **The app declares the APIs Apple asks about.** The app, its Live
   Activity and its notification extension say why they read their
   settings, the uptime clock and file dates.

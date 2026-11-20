@@ -549,3 +549,28 @@ func waits(t *testing.T, close, kill time.Duration) {
 	closeWait, killWait = close, kill
 	t.Cleanup(func() { closeWait, killWait = c, k })
 }
+
+// TestGuardTakesTheTerminalFirst (#404): the agent's terminal goes at
+// closeWait, as its pane did, while the agent may still run to its end.
+func TestGuardTakesTheTerminalFirst(t *testing.T) {
+	waits(t, 200*time.Millisecond, 3*time.Second)
+	gone := filepath.Join(t.TempDir(), "gone")
+	s := newScreen(t, 100, 30)
+	done := s.run("sh", "-c", "trap '' HUP; printf ready; while printf . 2>/dev/null; do sleep 0.05; done; echo yes > "+gone)
+	s.waitFor("ready", func(text string) bool { return strings.Contains(text, "ready") })
+	if err := syscall.Kill(os.Getpid(), syscall.SIGHUP); err != nil { // as tmux sends the pane's program
+		t.Fatal(err)
+	}
+	done()
+	if _, err := os.Stat(gone); err != nil {
+		t.Fatalf("the agent kept its terminal until the guard ended it: %v", err)
+	}
+}
+
+// TestGuardWaitsLongEnough (#404): a save on the hangup has many times the
+// terminal's last seconds before the guard ends the agent.
+func TestGuardWaitsLongEnough(t *testing.T) {
+	if killWait < 10*closeWait {
+		t.Fatalf("the guard ends the agent at %v, %v after a hangup takes its terminal: a save needs longer", killWait, closeWait)
+	}
+}
