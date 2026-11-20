@@ -37,12 +37,18 @@ func lastClientOf(out string) (tty string, created time.Time) {
 	return tty, created
 }
 
-// tmuxLastClient asks tmux which client of the home session was active
-// last. A tmux error or no session gives "": the guard is not a wall.
-func tmuxLastClient() (string, time.Time, error) {
+// lastClientArgv lists the clients of this console's own session.
+func (m Model) lastClientArgv() []string {
+	return []string{"tmux", "list-clients", "-t", "=" + m.consoleSession(), "-F", "#{client_activity} #{client_created} #{client_tty}"}
+}
+
+// tmuxLastClient asks tmux which client of the console's session (argv,
+// lastClientArgv) was active last. A tmux error or no session gives "":
+// the guard is not a wall.
+func tmuxLastClient(argv []string) (string, time.Time, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, "tmux", "list-clients", "-t", "=matchblox", "-F", "#{client_activity} #{client_created} #{client_tty}").Output()
+	out, err := exec.CommandContext(ctx, argv[0], argv[1:]...).Output() //nolint:gosec // lastClientArgv: tmux and the console's own session
 	if err != nil {
 		return "", time.Time{}, nil
 	}
@@ -55,7 +61,8 @@ func tmuxLastClient() (string, time.Time, error) {
 func (m Model) lastClient() (string, time.Time) {
 	last := m.opt.LastClient
 	if last == nil {
-		last = tmuxLastClient
+		argv := m.lastClientArgv()
+		last = func() (string, time.Time, error) { return tmuxLastClient(argv) }
 	}
 	tty, created, err := last()
 	if err != nil {
