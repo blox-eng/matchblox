@@ -174,7 +174,7 @@ func (p pendingAct) notTaken() string {
 // settleResult reads the service's answer to a pending act. A refusal
 // ends it and says why (true: the answer is said); a skip ends it, and
 // the usual words say why; a run leaves it to the samples. A rename's
-// form says its own refusal.
+// form keeps its refusal too.
 func (m *Model) settleResult(r proto.Result) bool {
 	p, ok := m.pendingActs[r.ActID]
 	if !ok || r.Err == "" && len(r.Skipped) == 0 {
@@ -184,11 +184,11 @@ func (m *Model) settleResult(r proto.Result) bool {
 	if m.side != nil {
 		m.side = &sideMemo{}
 	}
-	if r.Err == "" || p.kind == actRename {
+	if r.Err == "" {
 		return false
 	}
 	m.sayError(p.kind.String() + " failed: " + r.Err)
-	return true
+	return p.kind != actRename // a rename's form also keeps the reason, by the name typed
 }
 
 // actsLost ends the pending acts of host when its connection drops: no

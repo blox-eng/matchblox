@@ -211,6 +211,9 @@ func TestARenameTheServiceRefusesComesBack(t *testing.T) {
 	if len(m.pendingActs) != 0 || m.form == nil || m.form.err != "tmux: no such pane" {
 		t.Fatalf("pending %+v, form %+v", m.pendingActs, m.form)
 	}
+	if now := m.sayingNow(); len(now) == 0 || now[0].text != "rename failed: tmux: no such pane" || !now[0].err {
+		t.Fatalf("a refused rename said %+v, want the error toast \"rename failed: tmux: no such pane\"", now)
+	}
 }
 
 func TestARenameThatWaitsForARestIsNotPending(t *testing.T) {
