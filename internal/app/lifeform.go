@@ -1278,7 +1278,8 @@ func (m Model) formBox(bw int) (box, press []string, spans []span, agentsAt int,
 		room := iw - 9
 		shown := tilde(value)
 		if w := lipgloss.Width(shown); w > room-1 {
-			shown = "…" + string([]rune(shown)[len([]rune(shown))-(room-2):])
+			r := []rune(shown)
+			shown = "…" + string(r[len(r)-min(max(room-2, 0), len(r)):])
 		}
 		body := st.text.Render(shown)
 		switch {

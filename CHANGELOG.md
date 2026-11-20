@@ -22,6 +22,13 @@ All notable changes to matchblox are in this file. The format follows
   Activity and its notification extension say why they read their
   settings, the uptime clock and file dates.
 
+## [0.51.1] - 2026-11-20
+
+### Fixed
+
+- **A new session opens on a desk again.** Beside an agent, the form
+  crashed the console before tmux gave it the window (#451).
+
 ## [0.51.0] - 2026-11-20
 
 ### Added
@@ -1916,7 +1923,8 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.51.0...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.51.1...HEAD
+[0.51.1]: https://github.com/blox-eng/matchblox/compare/v0.51.0...v0.51.1
 [0.51.0]: https://github.com/blox-eng/matchblox/compare/v0.50.0...v0.51.0
 [0.50.0]: https://github.com/blox-eng/matchblox/compare/v0.49.0...v0.50.0
 [0.49.0]: https://github.com/blox-eng/matchblox/compare/v0.48.0...v0.49.0
