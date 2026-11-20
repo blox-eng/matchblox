@@ -166,6 +166,7 @@ Surface: personal data
 
 ## Changes during build
 
+- Task 7: the drawing is inline SVG on the page and in `docs/phone.md`, not `www/assets/match-head.svg`: an `<img>` cannot follow the site's light and dark tokens. `TestTheMatchHeadIsOneDrawing` (internal/docscheck) keeps the two copies identical, so the docs workflow needs no copy step.
 - Task 6: three manifests, not two: the widget and the notification extension (`MatchbloxBuzz`) link MatchbloxKit, whose Swift uses UserDefaults. SwiftTerm 1.20.0 (`5d14406`) uses none of the required-reason APIs; swift-nio and swift-crypto ship their own manifests. The manifests declare no collected data: that is the App Store label's job, and the owner sets it.
 - Task 5: `HeadDriver.began` takes `canClick:`. The terminal's pan begins only after about 10 pt of travel, so a call-up and a quick lift looked like a still tap and sent Enter; a grab from the terminal never clicks, only a fresh touch on the waiting head does.
 - Task 5: the console screen (`HeldScreen`) owns the called-up head, places it (`headCenter`), dismisses it in `hitTest`, and gains `say(_:)` for its notice; `BeltView.enter` is shared with it. `WheelScroll.gesture` uses `BoardTouch.longPress` for the menu's moment. A call-up needs a vertical move, as the swipe does, so a sideways drag stays a selection.

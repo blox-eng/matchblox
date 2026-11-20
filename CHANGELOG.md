@@ -6,6 +6,22 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Tap the match head for Enter.** A short tap on a still head sends
+  Enter, with two firm taps you feel. A touch that stops a flick sends
+  nothing.
+- **Rest a finger to call up the match head.** Rest a finger on the
+  terminal, then move it: the head comes under your finger, rolls as the
+  belt's does, and waits 3 seconds for another roll or a tap. It replaces
+  the fast swipe.
+
+### Fixed
+
+- **The app declares the APIs Apple asks about.** The app, its Live
+  Activity and its notification extension say why they read their settings
+  and the uptime clock.
+
 ## [0.50.0] - 2026-11-20
 
 ### Added
