@@ -254,6 +254,26 @@ func TestAClosedTerminalOrphansItsConsole(t *testing.T) {
 	}
 }
 
+// TestATerminalThatWentInAtOnceStillEndsItsConsole: the terminal goes into
+// an agent before the console's first check; the console still ends once
+// that terminal closes.
+func TestATerminalThatWentInAtOnceStillEndsItsConsole(t *testing.T) {
+	s := newOwnServer(t)
+	two := s.console(t, Home+"-2")
+	f := s.focus(t, two.name)
+	seen := map[string]bool{}
+	orphaned := func() bool { return Orphaned(two.name, seen, s.tmux(ClientsArgv()[1:]...)) }
+	if orphaned() {
+		t.Fatal("orphaned while its terminal is in an agent it opened")
+	}
+	pid, err := strconv.Atoi(s.tmux("list-clients", "-t", f.name, "-F", "#{client_pid}"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = syscall.Kill(pid, syscall.SIGHUP)
+	waitFor(t, orphaned)
+}
+
 // TestAnUnmarkedFirstConsoleKeepsItsKeys: a first console that an older
 // matchblox started has no mark; a newer console's keys still flip in it.
 func TestAnUnmarkedFirstConsoleKeepsItsKeys(t *testing.T) {

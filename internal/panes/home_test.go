@@ -75,22 +75,26 @@ func TestAConsoleWhoseTerminalIsInAnAgentIsTaken(t *testing.T) {
 }
 
 // TestOrphaned: a second console is orphaned once every terminal that
-// showed it has gone from the server; a terminal that only looks at
-// another session still has it. The first console never is.
+// showed it, or went into an agent from it, has gone from the server; a
+// terminal that only looks at another session still has it. A terminal is
+// its client's process, not its tty, which a new terminal can take over.
+// The first console never is orphaned.
 func TestOrphaned(t *testing.T) {
 	for _, c := range []struct {
 		why, name string
-		listings  []string // one per check, in order
+		listings  []string // one per check, in order: pid, session, its way back
 		want      bool     // after the last check
 	}{
-		{"shown", "matchblox-2", []string{"/dev/pts/1\tmatchblox\n/dev/pts/2\tmatchblox-2\n"}, false},
-		{"its terminal looks at another session", "matchblox-2", []string{"/dev/pts/2\tmatchblox-2\n", "/dev/pts/2\twork\n"}, false},
-		{"its terminal went into an agent", "matchblox-2", []string{"/dev/pts/2\tmatchblox-2\n", "/dev/pts/2\tmatchblox-in-5\n"}, false},
-		{"its terminal closed", "matchblox-2", []string{"/dev/pts/2\tmatchblox-2\n", "/dev/pts/1\tmatchblox\n"}, true},
-		{"its terminal closed from an agent", "matchblox-2", []string{"/dev/pts/2\tmatchblox-2\n", "/dev/pts/2\tmatchblox-in-5\n", "/dev/pts/1\tmatchblox"}, true},
-		{"one of two terminals closed", "matchblox-2", []string{"/dev/pts/2\tmatchblox-2\n/dev/pts/3\tmatchblox-2\n", "/dev/pts/3\twork\n"}, false},
-		{"no terminal seen yet", "matchblox-2", []string{"/dev/pts/1\tmatchblox\n"}, false},
-		{"the first console", "matchblox", []string{"/dev/pts/1\tmatchblox\n", ""}, false},
+		{"shown", "matchblox-2", []string{"101\tmatchblox\t\n202\tmatchblox-2\t\n"}, false},
+		{"its terminal looks at another session", "matchblox-2", []string{"202\tmatchblox-2\t\n", "202\twork\t\n"}, false},
+		{"its terminal went into an agent", "matchblox-2", []string{"202\tmatchblox-2\t\n", "202\tmatchblox-in-5\tmatchblox-2\n"}, false},
+		{"its terminal closed", "matchblox-2", []string{"202\tmatchblox-2\t\n", "101\tmatchblox\t\n"}, true},
+		{"its terminal closed from an agent", "matchblox-2", []string{"202\tmatchblox-2\t\n", "202\tmatchblox-in-5\tmatchblox-2\n", "101\tmatchblox"}, true},
+		{"it went into an agent before the first check, then closed", "matchblox-2", []string{"202\tmatchblox-in-5\tmatchblox-2\n", "101\tmatchblox\t\n"}, true},
+		{"a new terminal took its tty", "matchblox-2", []string{"202\tmatchblox-2\t\n", "303\tmatchblox-3\t\n"}, true},
+		{"one of two terminals closed", "matchblox-2", []string{"202\tmatchblox-2\t\n303\tmatchblox-2\t\n", "303\twork\t\n"}, false},
+		{"no terminal seen yet", "matchblox-2", []string{"101\tmatchblox\t\n"}, false},
+		{"the first console", "matchblox", []string{"101\tmatchblox\t\n", ""}, false},
 	} {
 		seen, got := map[string]bool{}, false
 		for _, l := range c.listings {

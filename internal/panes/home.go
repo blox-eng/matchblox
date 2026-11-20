@@ -85,31 +85,33 @@ func ParseHomeList(listing string) map[string]int {
 	return attached
 }
 
-// ClientsArgv lists each terminal of the server with the session it shows,
-// for Orphaned.
+// ClientsArgv lists each terminal of the server by its client's process,
+// with the session it shows and that session's way back, for Orphaned.
 func ClientsArgv() []string {
-	return []string{"tmux", "list-clients", "-F", "#{client_tty}\t#{client_session}"}
+	return []string{"tmux", "list-clients", "-F", "#{client_pid}\t#{client_session}\t#{" + sample.BackOption + "}"}
 }
 
 // Orphaned tells, from a ClientsArgv listing, if the console of the session
-// name has lost its terminal: each terminal seen in that session (seen,
-// which it updates) has left the server. A terminal that only looks at
-// another session, or went into an agent, still has it. The first console
-// is never orphaned: it waits for the next terminal, as before.
+// name has lost its terminal: each terminal seen in that session, or in an
+// agent's session whose way back is that console (seen, which it updates),
+// has left the server. A terminal that only looks at another session still
+// has it. A terminal is its client's process: a new terminal can take a
+// closed one's tty. The first console is never orphaned: it waits for the
+// next terminal, as before.
 func Orphaned(name string, seen map[string]bool, listing string) bool {
 	if name == Home {
 		return false
 	}
 	here := false
 	for _, line := range strings.Split(listing, "\n") {
-		tty, session, ok := strings.Cut(strings.TrimSpace(line), "\t")
-		if !ok {
+		f := strings.SplitN(strings.TrimSpace(line), "\t", 3)
+		if len(f) < 2 {
 			continue
 		}
-		if session == name {
-			seen[tty] = true
+		if f[1] == name || len(f) == 3 && f[2] == name {
+			seen[f[0]] = true
 		}
-		here = here || seen[tty]
+		here = here || seen[f[0]]
 	}
 	return len(seen) > 0 && !here
 }

@@ -8,7 +8,7 @@ import (
 // TestTheWatchQuitsAfterTwoOrphanedChecks: one orphaned check is a terminal
 // between two sessions; two in a row quit the console, once.
 func TestTheWatchQuitsAfterTwoOrphanedChecks(t *testing.T) {
-	shown, alone := "/dev/pts/2\tmatchblox-2\n", "/dev/pts/1\tmatchblox\n"
+	shown, alone := "202\tmatchblox-2\t\n", "101\tmatchblox\t\n"
 	listings := []string{shown, alone, shown, alone, alone, alone}
 	checks, quits := 0, 0
 	list := func() (string, error) {
