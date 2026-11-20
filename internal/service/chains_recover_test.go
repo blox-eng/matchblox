@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -445,5 +446,31 @@ func TestALineToAWaitingMateOutlivesARestart(t *testing.T) {
 	publishOn(s, "200", one2, two2)
 	if got := chainInbox(s, two2); len(got) != 0 {
 		t.Fatalf("after a second restart two's inbox = %q", got)
+	}
+}
+
+// TestADeliveredLineDoesNotComeBack: a match hears its line, and the
+// service stops before the next sample saves. After the restart the line
+// is not in its inbox again.
+func TestADeliveredLineDoesNotComeBack(t *testing.T) {
+	s, one, two := rebootPair(t)
+	publishOn(s, "100", one, two)
+	s.mu.Lock()
+	s.chainsLocked().PostLine(memberOf(two), memberOf(one), "[from one %1] the fix is on main", time.Now())
+	if err := s.saveChainsLocked(); err != nil {
+		t.Fatal(err)
+	}
+	s.mu.Unlock()
+	d := s.news(proto.News{Pane: two.Pane})
+	if !strings.Contains(d.text, "the fix is on main") {
+		t.Fatalf("news = %q", d.text)
+	}
+	s.heard(d)
+	restart(s)
+	s.mu.Lock()
+	got := s.chainsLocked().Take(memberOf(two)).Texts()
+	s.mu.Unlock()
+	if len(got) != 0 {
+		t.Fatalf("after a restart two's inbox = %q", got)
 	}
 }

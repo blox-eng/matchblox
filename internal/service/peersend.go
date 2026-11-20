@@ -299,6 +299,7 @@ func (s *Service) typeInboxAtRest(now time.Time) {
 		default:
 			st.Post(it.From, gotYourLine(x.Name, "typed", now), now)
 		}
+		s.saveTakenLocked()
 		s.mu.Unlock()
 	}
 }
