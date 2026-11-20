@@ -6,6 +6,8 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+## [0.53.0] - 2026-11-20
+
 ### Added
 
 - **A kill, rename or park shows at once.** After you confirm it, the
@@ -1939,7 +1941,8 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.52.0...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.53.0...HEAD
+[0.53.0]: https://github.com/blox-eng/matchblox/compare/v0.52.0...v0.53.0
 [0.52.0]: https://github.com/blox-eng/matchblox/compare/v0.51.1...v0.52.0
 [0.51.1]: https://github.com/blox-eng/matchblox/compare/v0.51.0...v0.51.1
 [0.51.0]: https://github.com/blox-eng/matchblox/compare/v0.50.0...v0.51.0
