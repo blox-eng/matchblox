@@ -20,6 +20,12 @@ All notable changes to matchblox are in this file. The format follows
   cannot read, shows once with its fix, then waits as a `⚠` mark in the
   header. A tap on the mark says it again.
 
+### Fixed
+
+- **The match strikes in the middle again.** Beside an agent, the start
+  screen and the pairing page played in the sidebar. They now take the
+  whole window while they play.
+
 ## [0.52.0] - 2026-11-20
 
 ### Added
@@ -31,11 +37,9 @@ All notable changes to matchblox are in this file. The format follows
   terminal, then move it: the head comes under your finger, rolls as the
   belt's does, and waits 3 seconds for another roll or a tap. It replaces
   the fast swipe.
+
 ### Fixed
 
-- **The match strikes in the middle again.** Beside an agent, the start
-  screen and the pairing page played in the sidebar. They now take the
-  whole window while they play.
 - **The app declares the APIs Apple asks about.** The app, its Live
   Activity and its notification extension say why they read their
   settings, the uptime clock and file dates.
