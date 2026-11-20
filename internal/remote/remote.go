@@ -24,6 +24,7 @@ import (
 
 	"github.com/blox-eng/matchblox/internal/keycmd"
 	"github.com/blox-eng/matchblox/internal/proto"
+	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/transport"
 )
 
@@ -467,12 +468,21 @@ func ClientTTY(tty string) bool { return ttyRE.MatchString(tty) }
 // once the terminal leaves it. Every step names that session: a bare
 // set-option would land on the session of the pane tmux runs from, the
 // console's own, and end the console when the terminal leaves it (#354).
-func FocusArgv(tty, pane string, at time.Time) []string {
+// The session names back, the console's session it came from, so the way
+// back goes to that console (sample.BackOption).
+func FocusArgv(tty, pane string, at time.Time, back string) []string {
 	name := focusPrefix + strconv.FormatInt(at.UnixNano(), 10)
 	return []string{"tmux", "new-session", "-d", "-t", pane, "-s", name,
 		";", "set-option", "-t", name, "destroy-unattached", "on",
+		";", "set-option", "-t", name, sample.BackOption, back,
 		";", "switch-client", "-c", tty, "-t", pane}
 }
+
+// ConsoleSession tells if name is the name of a console's own session:
+// matchblox, or matchblox-<n> for each terminal after the first.
+func ConsoleSession(name string) bool { return consoleName.MatchString(name) }
+
+var consoleName = regexp.MustCompile(`^matchblox(-[0-9]{1,4})?$`)
 
 // focusPrefix starts the name of a session FocusArgv makes.
 const focusPrefix = "matchblox-in-"
@@ -489,14 +499,14 @@ func FocusAllowed(argv []string) bool {
 // FocusOf is the terminal and the pane of a FocusArgv; ok is false for any
 // other argv.
 func FocusOf(argv []string) (tty, pane string, ok bool) {
-	if len(argv) != 19 || !focusName.MatchString(argv[6]) {
+	if len(argv) != 25 || !focusName.MatchString(argv[6]) || !ConsoleSession(argv[18]) {
 		return "", "", false
 	}
 	n, err := strconv.ParseInt(strings.TrimPrefix(argv[6], focusPrefix), 10, 64)
-	if err != nil || !slices.Equal(argv, FocusArgv(argv[16], argv[4], time.Unix(0, n))) {
+	if err != nil || !slices.Equal(argv, FocusArgv(argv[22], argv[4], time.Unix(0, n), argv[18])) {
 		return "", "", false
 	}
-	return argv[16], argv[4], true
+	return argv[22], argv[4], true
 }
 
 // AgentMarkArgv marks pane as running agent, in the pane option the

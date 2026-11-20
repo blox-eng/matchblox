@@ -6,6 +6,13 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Each terminal holds its own console.** A second terminal that runs
+  `matchblox` opens a console of its own, with its own list and its own
+  agent beside it, and the way back returns to it. A click on the list
+  takes the keys back from the agent and keeps them there.
+
 ## [0.50.0] - 2026-11-20
 
 ### Added

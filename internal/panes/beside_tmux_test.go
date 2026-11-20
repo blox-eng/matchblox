@@ -40,6 +40,7 @@ func newBesideEnv(t *testing.T) besideEnv {
 		return strings.TrimSpace(string(out))
 	}
 	e.c = e.tmux("new-session", "-d", "-s", Home, "-x", "100", "-y", "30", "-P", "-F", "#{pane_id}", "sh", "-c", rawCat+e.cOut)
+	e.tmux("set-option", "-t", e.c, HomeOption, "1")
 	e.a = e.tmux("split-window", "-d", "-h", "-t", e.c, "-P", "-F", "#{pane_id}", "sh", "-c", rawCat+e.aOut)
 	e.tmux("set-option", "-w", "-t", e.c, sample.ConsoleOption, e.c, ";", "set-option", "-w", "-t", e.c, sample.BesideOption, e.a)
 	e.tmux(BesideKeysArgv()[1:]...)
