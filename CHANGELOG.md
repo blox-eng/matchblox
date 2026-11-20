@@ -6,6 +6,8 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+## [0.52.0] - 2026-11-20
+
 ### Added
 
 - **Tap the match head for Enter.** A short tap on a still head sends
@@ -27,6 +29,9 @@ All notable changes to matchblox are in this file. The format follows
 
 ### Fixed
 
+- **The match strikes in the middle again.** Beside an agent, the start
+  screen and the pairing page played in the sidebar. They now take the
+  whole window while they play.
 - **The app declares the APIs Apple asks about.** The app, its Live
   Activity and its notification extension say why they read their
   settings, the uptime clock and file dates.
@@ -1932,7 +1937,8 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.51.1...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.52.0...HEAD
+[0.52.0]: https://github.com/blox-eng/matchblox/compare/v0.51.1...v0.52.0
 [0.51.1]: https://github.com/blox-eng/matchblox/compare/v0.51.0...v0.51.1
 [0.51.0]: https://github.com/blox-eng/matchblox/compare/v0.50.0...v0.51.0
 [0.50.0]: https://github.com/blox-eng/matchblox/compare/v0.49.0...v0.50.0

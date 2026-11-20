@@ -126,7 +126,7 @@ func (m Model) sizeCmd(paneW int) tea.Cmd {
 		if w == 0 {
 			w = paneW
 		}
-		if m.boxZoom { // the box keeps the window
+		if m.boxZoom || m.lendsWindow() && !m.onePaneAt(w, h) { // the box or the animation keeps the window
 			return besideSizeMsg{w, h}
 		}
 		if m.onePaneAt(w, h) {
@@ -147,16 +147,23 @@ func (m Model) boxOpen() bool {
 	return m.consenting() || m.sheet != nil || m.form != nil || m.asking()
 }
 
+// lendsWindow: the list's pane takes the whole window, so that what it
+// shows centres in the window, not in the sidebar: a box, the start
+// screen, or the pairing page's knock and opening.
+func (m Model) lendsWindow() bool {
+	return m.boxOpen() || m.splashing() || m.pair.owns()
+}
+
 // boxBackMsg is the agent pane's screen as the box opened.
 type boxBackMsg []string
 
-// boxZoomed lends the window to a box beside the agent: the list's pane
-// zooms, and the box centres over the whole window, not in the list's
-// columns. The agent's screen shows dim beside the list behind it. As the
-// box closes, the window goes back to both panes.
+// boxZoomed lends the window to a box, or to an animation, beside the
+// agent: the list's pane zooms, and the box centres over the whole window,
+// not in the list's columns. The agent's screen shows dim beside the list
+// behind a box. As the box closes, the window goes back to both panes.
 func (m Model) boxZoomed() (Model, tea.Cmd) {
 	run := m.tmuxRun()
-	if m.beside == "" || run == nil || m.boxOpen() == m.boxZoom {
+	if m.beside == "" || run == nil || m.lendsWindow() == m.boxZoom {
 		return m, nil
 	}
 	if !m.boxZoom && m.winW > 0 && m.onePaneAt(m.winW, m.winH) { // one pane has the window already
