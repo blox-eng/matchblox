@@ -1025,6 +1025,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.recRun = recRun{} // its rec is gone: a later one with the same id starts fresh
 		}
 		m.merge()
+		m.settle(m.opt.Host)
 		if m.lost {
 			m.lost, m.backoff, m.flash = false, 0, ""
 		}

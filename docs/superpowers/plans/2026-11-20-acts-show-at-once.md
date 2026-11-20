@@ -69,7 +69,7 @@ Next: builder:build
   - `TestAKillThatDidNotTakeComesBack`: three snapshots of the host that still have it: the row is back, not faint, and `tell` said `kindle-web is still running after the kill. Press x to kill it again.`
   - `TestAReusedPidIsNotKilling`: a snapshot with the same pane and pid but another start: the row is not faint, and the pending act is gone.
 - **Run:** fails; after, passes.
-- **Do:** `m.settle()` at the end of `merge()`, before `refresh()`. It counts a sample only when that host's snapshot time is newer than the act's `since`. Kill: gone, or another start → drop; still there at 3 → drop and tell the error. Rename: the session's name equals the new one → drop. Park: the hold by you matches the wanted one → drop. Rename or park still unchanged at 3 → drop and tell "the rename did not take" / "the park did not take".
+- **Do:** `m.settle(host)` right after `merge()` where a host's state lands (`model.go` for home, `peers.go` for a peer). Each call is one sample of that host. Kill: gone, or another start → drop; still there at 3 → drop and tell the error. Rename: the session's name equals the new one → drop. Park: the hold by you matches the wanted one → drop. Rename or park still unchanged at 3 → drop and tell "the rename did not take" / "the park did not take".
 - **Done when:** the three tests pass.
 - **Commit:** `feat: the next samples confirm a kill, or bring the row back with why`
 
@@ -139,6 +139,10 @@ Next: builder:build
 
 - Load `builder:review` on the branch against `origin/main`, with the spec above. Run `go test $(go list ./... | grep -v /internal/demo$)` and `go test ./internal/demo`, and quote both.
 - **Done when:** no open Critical or Important finding.
+
+## Changes during build
+
+- Task 4: `settle(host)` runs where a host's state lands, not inside `merge()`, and counts calls instead of comparing snapshot times. Reason: the tests' clock is fixed, so snapshot times cannot tell samples apart, and `merge()` does not know which host sent. The `since` field is gone.
 
 ## Lens findings
 

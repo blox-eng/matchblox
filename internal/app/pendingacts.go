@@ -2,7 +2,6 @@ package app
 
 import (
 	"slices"
-	"time"
 
 	"github.com/blox-eng/matchblox/internal/sample"
 )
@@ -33,11 +32,10 @@ type pendingAct struct {
 	key   paneKey
 	pid   int
 	start uint64
-	name  string    // the session's name when the act went
-	to    string    // a rename's new name
-	park  bool      // a park's wanted hold: true parks, false lets go
-	since time.Time // the host's last snapshot when the act went
-	seen  int       // the samples since that still show the old state
+	name  string // the session's name when the act went
+	to    string // a rename's new name
+	park  bool   // a park's wanted hold: true parks, false lets go
+	seen  int    // the samples of its host since, that still show the old state
 }
 
 // expect remembers act id on s. An act that did not go (no id) gets none:
@@ -53,7 +51,7 @@ func (m *Model) expect(id string, kind actKind, s sample.Session, to string, par
 		m.stepOff(paneOf(s))
 	}
 	m.pendingActs[id] = pendingAct{kind: kind, key: paneOf(s), pid: s.PID, start: s.Start,
-		name: s.Name, to: to, park: park, since: m.snapAt(s.Host)}
+		name: s.Name, to: to, park: park}
 	if m.side != nil {
 		m.side = &sideMemo{} // the list's groups and walk change with it
 	}
@@ -67,17 +65,6 @@ func (m Model) sessionAt(host, pane string) (sample.Session, bool) {
 		}
 	}
 	return sample.Session{}, false
-}
-
-// snapAt is when host's last snapshot came.
-func (m Model) snapAt(host string) time.Time {
-	if host != m.opt.Host {
-		if i := m.peerAt(host); i >= 0 {
-			return m.peers[i].at
-		}
-		return time.Time{}
-	}
-	return m.at
 }
 
 // pendingOf is the act pending on s: the same pane, pid and start.
@@ -111,4 +98,57 @@ func (m *Model) stepOff(k paneKey) {
 	case i > 0:
 		m.sideAt = order[i-1]
 	}
+}
+
+// settleAfter is how many samples of its host an act waits for before it
+// counts as not taken: the agent can take a sample or two to exit after
+// its pane goes (the owner, 2026-10-24).
+const settleAfter = 3
+
+// settle reads a new sample of host against its pending acts: each one
+// the sample shows is done, and one it still does not show after
+// settleAfter samples comes back with why.
+func (m *Model) settle(host string) {
+	changed := false
+	for id, p := range m.pendingActs {
+		if p.key.host != host {
+			continue
+		}
+		s, ok := m.sessionAt(p.key.host, p.key.pane)
+		same := ok && s.PID == p.pid && s.Start == p.start
+		var done bool
+		switch p.kind {
+		case actKill:
+			done = !same
+		case actRename:
+			done = !same || s.Name == p.to
+		case actPark:
+			_, held := m.holdOf(s)
+			done = !same || held == p.park
+		}
+		if !done {
+			p.seen++
+			m.pendingActs[id] = p
+			if p.seen < settleAfter {
+				continue
+			}
+			m.flash = p.notTaken()
+		}
+		delete(m.pendingActs, id)
+		changed = true
+	}
+	if changed && m.side != nil {
+		m.side = &sideMemo{}
+	}
+}
+
+// notTaken says that p did not take, and the key that tries again.
+func (p pendingAct) notTaken() string {
+	switch p.kind {
+	case actKill:
+		return p.name + " is still running after the kill. Press x to kill it again."
+	case actRename:
+		return p.name + ": the rename did not take. Press r to rename it again."
+	}
+	return p.name + ": the park did not take. Press z to try again."
 }

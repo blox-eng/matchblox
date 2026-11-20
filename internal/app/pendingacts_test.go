@@ -7,6 +7,9 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/blox-eng/matchblox/internal/proto"
+	"github.com/blox-eng/matchblox/internal/sample"
 )
 
 // onlyPending is the one pending act of m.
@@ -91,5 +94,80 @@ func TestAKilledRowSaysKillingAtOnce(t *testing.T) {
 	}
 	if slices.Contains(m.sideOrder(), paneKey{m.opt.Host, paneNamed(st, "kindle-web")}) {
 		t.Fatal("the walk still holds the killed row")
+	}
+}
+
+// homeSample is the next sample of boardShot's home host: st's sessions
+// off gpu-1, each changed by edit; a session edit drops is gone.
+func homeSample(st proto.State, edit func(*sample.Session) bool) proto.State {
+	home := st
+	home.Sessions, home.Queue = nil, nil
+	home.Ships = &proto.Ships{At: demoAt}
+	for _, s := range st.Sessions {
+		if s.Host == "gpu-1" || edit != nil && !edit(&s) {
+			continue
+		}
+		home.Sessions = append(home.Sessions, s)
+	}
+	for _, it := range st.Queue {
+		if it.Host != "gpu-1" {
+			home.Queue = append(home.Queue, it)
+		}
+	}
+	return home
+}
+
+// sampled is m after n samples of home.
+func sampled(m Model, home proto.State, n int) Model {
+	for range n {
+		next, _ := m.Update(stateMsg(home))
+		m = next.(Model)
+	}
+	return m
+}
+
+func without(name string) func(*sample.Session) bool {
+	return func(s *sample.Session) bool { return s.Name != name }
+}
+
+func TestAKillGoesWithTheSampleThatLacksIt(t *testing.T) {
+	st := boardFixture(t)
+	m := pressOn(listShot(t, st, 160, 38, "kindle-web"), "x", "y", "y")
+	m = sampled(m, homeSample(st, without("kindle-web")), 1)
+	if len(m.pendingActs) != 0 {
+		t.Fatalf("the kill is still pending: %+v", m.pendingActs)
+	}
+	if lines, _, _ := m.sideList(80, 60); strings.Contains(ansi.Strip(strings.Join(lines, "\n")), "kindle-web") {
+		t.Fatal("the killed row is still drawn")
+	}
+}
+
+func TestAKillThatDidNotTakeComesBack(t *testing.T) {
+	st := boardFixture(t)
+	m := pressOn(listShot(t, st, 160, 38, "kindle-web"), "x", "y", "y")
+	m = sampled(m, homeSample(st, nil), 2)
+	if len(m.pendingActs) != 1 {
+		t.Fatalf("two samples ended the kill: %+v", m.pendingActs)
+	}
+	m = sampled(m, homeSample(st, nil), 1)
+	if row := drawnRow(t, m, "kindle-web"); strings.Contains(row, "killing") || len(m.pendingActs) != 0 {
+		t.Fatalf("after three samples the row reads %q, pending %+v", row, m.pendingActs)
+	}
+	if want := "kindle-web is still running after the kill. Press x to kill it again."; !strings.Contains(m.flash, want) {
+		t.Fatalf("said %q, want %q", m.flash, want)
+	}
+}
+
+func TestAReusedPidIsNotKilling(t *testing.T) {
+	st := boardFixture(t)
+	m := pressOn(listShot(t, st, 160, 38, "kindle-web"), "x", "y", "y")
+	m = sampled(m, homeSample(st, func(s *sample.Session) bool {
+		if s.Name == "kindle-web" {
+			s.Start++
+		}
+		return true
+	}), 1)
+	if row := drawnRow(t, m, "kindle-web"); strings.Contains(row, "killing") || len(m.pendingActs) != 0 {
+		t.Fatalf("a new process in the pane reads %q, pending %+v", row, m.pendingActs)
 	}
 }
