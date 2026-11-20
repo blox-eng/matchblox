@@ -6,6 +6,12 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **The match strikes in the middle again.** Beside an agent, the start
+  screen and the pairing page played in the sidebar. They now take the
+  whole window while they play.
+
 ## [0.51.1] - 2026-11-20
 
 ### Fixed

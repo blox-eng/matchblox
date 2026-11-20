@@ -608,7 +608,7 @@ type Model struct {
 	sideIn                    paneKey
 	beside                    string          // the agent pane's id; "" before the split, and where it failed
 	winW, winH                int             // the window's size in beside mode; 0: not read yet
-	boxZoom                   bool            // a box has the window: the list's pane is zoomed for it
+	boxZoom                   bool            // a box or an animation has the window: the list's pane is zoomed for it
 	boxBack                   []string        // the agent pane's screen, drawn dim behind the box
 	showing                   bool            // a choice runs in the agent pane
 	showNext                  *action         // the choice made while one ran: it runs next
