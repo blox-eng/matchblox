@@ -220,3 +220,42 @@ func TestARenameThatWaitsForARestIsNotPending(t *testing.T) {
 		t.Fatalf("a rename the service holds back is pending: %+v", m.pendingActs)
 	}
 }
+
+func TestARenameShowsAtOnce(t *testing.T) {
+	m, _ := loadedWith(t, 100, lifeState())
+	next, _ := key(m, "r")
+	for range len(next.(Model).form.name) {
+		next, _ = key(next, "backspace")
+	}
+	next = typeText(next, "ships")
+	next, _ = key(next, "enter")
+	m = next.(Model)
+	s, _ := m.sessionAt(m.opt.Host, "%1")
+	if got := m.sideTitle(s); got != "ships" {
+		t.Fatalf("the row's title is %q before any sample, want ships", got)
+	}
+}
+
+func TestAParkShowsInHeldAtOnce(t *testing.T) {
+	st := boardFixture(t)
+	m := pressOn(listShot(t, st, 160, 38, "kindle-web"), "z")
+	s, _ := m.sessionAt(m.opt.Host, paneNamed(st, "kindle-web"))
+	if h := m.sideStateOf(s); h != sideHeld {
+		t.Fatalf("a parked row is in %s before any sample, want HELD", h.head())
+	}
+	if row := drawnRow(t, m, "kindle-web"); !strings.Contains(row, "parking") {
+		t.Fatalf("the parked row reads %q, want parking", row)
+	}
+}
+
+func TestALetGoLeavesHeldAtOnce(t *testing.T) {
+	st := boardFixture(t)
+	m := pressOn(listShot(t, st, 160, 38, "kindle-legacy"), "z")
+	s, _ := m.sessionAt(m.opt.Host, paneNamed(st, "kindle-legacy"))
+	if h := m.sideStateOf(s); h == sideHeld {
+		t.Fatal("a row let go stays in HELD before any sample")
+	}
+	if row := drawnRow(t, m, "kindle-legacy"); !strings.Contains(row, "letting go") {
+		t.Fatalf("the row let go reads %q, want letting go", row)
+	}
+}

@@ -23,6 +23,12 @@ func (h sideState) head() string {
 // A session that waits on a ship runs on the agent's own state.
 func (m Model) sideStateOf(s sample.Session) sideState {
 	h, held := m.holdOf(s)
+	if p, ok := m.pendingOf(s); ok && p.kind == actPark { // a park sent shows at once
+		if p.park {
+			return sideHeld
+		}
+		held = false
+	}
 	if held && h.By == holdByYou {
 		return sideHeld
 	}

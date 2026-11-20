@@ -46,8 +46,14 @@ func (m Model) sideRow(s sample.Session, w int, chosen bool, link sideLink) []st
 		says = word
 	}
 	pending, isPending := m.pendingOf(s)
-	if isPending && pending.kind == actKill {
+	switch {
+	case !isPending:
+	case pending.kind == actKill:
 		says = "killing"
+	case pending.kind == actPark && pending.park:
+		says = "parking"
+	case pending.kind == actPark:
+		says = "letting go"
 	}
 	two := says != "" && (h == sideNeed || chosen || isPending)
 

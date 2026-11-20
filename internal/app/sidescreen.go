@@ -728,6 +728,9 @@ func (m Model) sideWaits() []sample.Session {
 // for another host while all hosts show.
 func (m Model) sideTitle(s sample.Session) string {
 	title := m.cardName(s)
+	if p, ok := m.pendingOf(s); ok && p.kind == actRename { // a rename sent shows at once
+		title = p.to
+	}
 	if m.hostCount() > 1 && m.boardHost == "" && s.Host != m.opt.Host {
 		title += "@" + m.nameOf(s.Host)
 	}
