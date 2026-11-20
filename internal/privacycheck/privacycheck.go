@@ -69,22 +69,28 @@ func Check(dirs []string, manifest string, linked ...string) error {
 func uses(dirs []string) (map[string]string, error) {
 	used := map[string]string{}
 	for _, dir := range dirs {
-		err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		root, err := os.OpenRoot(dir)
+		if err != nil {
+			return nil, err
+		}
+		files := root.FS()
+		err = fs.WalkDir(files, ".", func(path string, d fs.DirEntry, err error) error {
 			if err != nil || d.IsDir() || filepath.Ext(path) != ".swift" {
 				return err
 			}
-			data, err := os.ReadFile(path)
+			data, err := fs.ReadFile(files, path)
 			if err != nil {
 				return err
 			}
 			code := comments.ReplaceAllString(string(data), "")
 			for category, re := range apis {
 				if _, seen := used[category]; !seen && re.MatchString(code) {
-					used[category] = path
+					used[category] = filepath.Join(dir, path)
 				}
 			}
 			return nil
 		})
+		_ = root.Close()
 		if err != nil {
 			return nil, err
 		}
