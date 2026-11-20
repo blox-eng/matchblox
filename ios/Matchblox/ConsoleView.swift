@@ -262,12 +262,16 @@ private final class HeldScreen: UIView {
     /// A short word over the terminal that fades: `Copied`.
     private let notice = UILabel()
     private let copiedHaptic = UINotificationFeedbackGenerator()
+    /// The match head a rest, then a move, calls up: above the terminal, under ↓ and the notice.
+    let summoned = SummonedHead()
 
     init(terminal: UIView) {
         self.terminal = terminal
         super.init(frame: .zero)
         clipsToBounds = true
         addSubview(terminal)
+        addSubview(summoned)
+        summoned.place = { [weak self] finger in self?.headCenter(for: finger) ?? finger }
 
         var look = UIButton.Configuration.filled()
         look.title = "↓"
@@ -299,6 +303,11 @@ private final class HeldScreen: UIView {
     /// What came of the host's copy: `Copied`, or why it did not.
     func copied(_ word: String, ok: Bool) {
         copiedHaptic.notificationOccurred(ok ? .success : .error)
+        say(word)
+    }
+
+    /// A short word over the terminal that fades.
+    func say(_ word: String) {
         notice.text = word
         notice.layer.removeAllAnimations()
         notice.alpha = 1
@@ -307,6 +316,25 @@ private final class HeldScreen: UIView {
             self?.notice.alpha = 0
         })
         UIAccessibility.post(notification: .announcement, argument: word)
+    }
+
+    /// The called-up head sits under the finger, in the safe area, above the keyboard, and
+    /// never over ↓ or the notice, so a tap meant for them cannot send Enter.
+    private func headCenter(for finger: CGPoint) -> CGPoint {
+        var avoid: [CGRect] = []
+        if !jump.isHidden { avoid.append(jump.frame) }
+        if notice.alpha > 0 { avoid.append(notice.frame) }
+        return HeadSummon.center(
+            finger: finger, bounds: bounds.inset(by: safeAreaInsets),
+            keyboardTop: keyboardLayoutGuide.layoutFrame.minY, avoid: avoid)
+    }
+
+    /// A touch anywhere but on the called-up head sends the head away, and reaches what it
+    /// touched.
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        let hit = super.hitTest(point, with: event)
+        if summoned.isShown, hit !== summoned, event?.type == .touches { summoned.go() }
+        return hit
     }
 
     func trayMoved(open: Bool) {
@@ -346,6 +374,7 @@ private final class Belts {
     let lifted = BeltView()
     let dock = BeltView()
     private weak var terminal: ConsoleTerminalView?
+    private weak var summoned: SummonedHead?
     private var agent: String?
     /// The Mine editor while it shows: never a second one over it.
     private weak var editor: UIViewController?
@@ -363,20 +392,11 @@ private final class Belts {
 
     init(terminal: ConsoleTerminalView, screen: HeldScreen, isDemo: Bool) {
         self.terminal = terminal
+        summoned = screen.summoned
         for belt in [lifted, dock] {
             belt.isDemo = isDemo
             belt.onScreenHold = { [weak screen] holding in screen?.trayMoved(open: holding) }
-            belt.onSend = { [weak terminal] bytes in
-                guard let terminal else { return }
-                // A pane scrolled up is in tmux copy mode, which would take the key as its own
-                // command: the steps back down leave it first. Esc there only comes back down:
-                // the agent would read it as an interrupt.
-                let wasUp = terminal.isUpInPane
-                terminal.jumpToBottom()
-                if wasUp, bytes == Self.esc { return }
-                if bytes == Self.copyReply { terminal.onAsksCopy() }
-                terminal.send(bytes)
-            }
+            belt.onSend = { [weak self] bytes in self?.send(bytes) }
             belt.onHead = { [weak terminal] lines in terminal?.head(lines: lines) ?? .nothing }
             belt.onHeadPage = { [weak terminal] older in terminal?.headPage(older: older) ?? .nothing }
             belt.onCtrl = { [weak self, weak terminal] in
@@ -394,7 +414,13 @@ private final class Belts {
         terminal.onTyped = { [weak self] in
             self?.lifted.stopHead()
             self?.dock.stopHead()
+            self?.summoned?.driver.stop()
         }
+        terminal.summoned = screen.summoned
+        let head = screen.summoned.driver
+        head.onLines = { [weak terminal] lines in terminal?.head(lines: lines) ?? .nothing }
+        head.onClick = { [weak self] in self?.send(BeltView.enter) }
+        head.say = { [weak screen] word in screen?.say(word) }
         ctrlObserver = NotificationCenter.default.addObserver(forName: Self.ctrlReset, object: terminal, queue: .main) {
             [weak self] _ in MainActor.assumeIsolated { self?.ctrlChanged(false) }
         }
@@ -477,6 +503,20 @@ private final class Belts {
         } else {
             dock.follow(lifted)
         }
+    }
+
+    /// A belt key, or a tap on the match head, reaches the terminal.
+    private func send(_ bytes: [UInt8]) {
+        guard let terminal else { return }
+        // A pane scrolled up is in tmux copy mode, which would take the key as its own
+        // command: the steps back down leave it first. Esc there only comes back down:
+        // the agent would read it as an interrupt.
+        summoned?.driver.stop()
+        let wasUp = terminal.isUpInPane
+        terminal.jumpToBottom()
+        if wasUp, bytes == Self.esc { return }
+        if bytes == Self.copyReply { terminal.onAsksCopy() }
+        terminal.send(bytes)
     }
 
     /// A layout picked on one belt is the layout of both. A pick of Board while the console

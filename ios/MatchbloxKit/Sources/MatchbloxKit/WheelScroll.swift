@@ -23,13 +23,25 @@ public struct WheelScroll: Sendable {
     /// UIScrollView's normal deceleration (0.998 of the speed each millisecond), per second.
     private static let decay = -1000 * log(0.998)
 
-    /// A finger that rests this long before its swipe scrolls fast: each step counts `boost` times.
+    /// A finger that rests this long, then moves, calls up the match head.
     public static let fastRest: TimeInterval = 0.25
+    /// The most a resting finger may travel, in points.
+    public static let restSlop: CGFloat = 6
+
+    /// Who owns a touch on the terminal, from how long the finger rested and how far it moved.
+    public enum Gesture: Equatable, Sendable {
+        /// It moved at once: a swipe scrolls.
+        case swipe
+        /// It rests.
+        case rest
+        /// It rested, then moved: the match head comes under it.
+        case summon
+        /// It held still until the menu opened, which keeps the touch.
+        case menu
+    }
 
     public let cellHeight: CGFloat
     public let linesPerStep: Int
-    /// Wheel steps for each step of travel: 1, or the match head's lines a notch on a fast swipe.
-    public var boost = 1
     private var travel: CGFloat = 0
 
     public init(cellHeight: CGFloat, linesPerStep: Int = 1) {
@@ -44,11 +56,17 @@ public struct WheelScroll: Sendable {
         travel += dy
         let steps = (travel / stepHeight).rounded(.towardZero)
         travel -= steps * stepHeight
-        return Array(repeating: steps > 0 ? Step.up : Step.down, count: Int(abs(steps)) * max(boost, 1))
+        return Array(repeating: steps > 0 ? Step.up : Step.down, count: Int(abs(steps)))
     }
 
     public static func isFast(restedFor rest: TimeInterval) -> Bool {
         rest >= fastRest
+    }
+
+    public static func gesture(restedFor rest: TimeInterval, moved: CGFloat) -> Gesture {
+        if rest >= BoardTouch.longPress { return .menu }
+        guard isFast(restedFor: rest) else { return .swipe }
+        return moved > restSlop ? .summon : .rest
     }
 
     /// How far a flick that left the finger at `velocity` points a second has carried after
