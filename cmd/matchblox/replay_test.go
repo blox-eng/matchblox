@@ -656,14 +656,18 @@ func replayAt(t *testing.T, z replaySize) {
 		// The list: every session in its group, and the chat of the first,
 		// kindle-web, beside it.
 		{name: "the console", at: 1300 * time.Millisecond, pane: kindle, ok: has("need you", "NEEDS YOU", "flint-auth")},
-		// flint-auth asks: its chat shows the question's options.
-		{name: "the question", at: 2600 * time.Millisecond, do: tapOn("flint-auth"), pane: flint, ok: has("send to flint-auth", "1. ", "2. ")},
+		// flint-auth asks: its chat shows the question's options as the pane
+		// draws them, with the descriptions. The transcript's short form,
+		// which a slow run can draw first, has none.
+		{name: "the question", at: 2600 * time.Millisecond, do: tapOn("flint-auth"), pane: flint, ok: has("send to flint-auth", "1. ", "2. ", "the old one stops at once")},
 		// A digit marks the answer; nothing is sent.
 		{name: "an answer marked", at: 4200 * time.Millisecond, do: settle, key: "2", pane: flint, ok: has("❯ 2. Rotate, keep")},
 		// The same digit sends it. The frame is the one where flint-auth
-		// left NEEDS YOU (4 need you before): the ones before it race the
-		// samples that carry the answer.
-		{name: "sent", at: 5800 * time.Millisecond, key: "2", hold: true, pane: flint, ok: has("sent 2 to flint-auth", "● 3 need you")},
+		// left NEEDS YOU (4 need you before) and its chat no longer asks:
+		// the ones before it race the samples that carry the answer.
+		{name: "sent", at: 5800 * time.Millisecond, key: "2", hold: true, pane: flint, ok: func(s string) bool {
+			return has("sent 2 to flint-auth", "● 3 need you")(s) && !strings.Contains(s, "Should a refresh also rotate")
+		}},
 		{name: "it works", at: 7400 * time.Millisecond, pane: flint, ok: func(s string) bool {
 			return has("✦ flint-auth")(s) && !strings.Contains(s, "sent 2 to flint-auth")
 		}},
@@ -671,7 +675,10 @@ func replayAt(t *testing.T, z replaySize) {
 		// asks for permission.
 		{name: "the list", at: 9 * time.Second, key: "esc", pane: flint, ok: has("in the list")},
 		{name: "kindle-web asks", at: 10500 * time.Millisecond, do: walk("kindle-web"), pane: kindle, ok: func(s string) bool {
-			return chosen("kindle-web")(s) && has("permission")(s)
+			// Beside the list, the preview of kindle-web's pane comes a
+			// moment after the last arrow; a slow run reads the screen
+			// before it. The phone shows no chat beside the list.
+			return chosen("kindle-web")(s) && has("permission")(s) && (phone || has("one-tap checkout")(s))
 		}},
 		// g opens kindle-web's chain, login: the list shows only the chain,
 		// and its room takes the chat's place. esc closes it.

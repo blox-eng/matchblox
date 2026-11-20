@@ -6,6 +6,73 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+## [0.50.0] - 2026-11-20
+
+### Added
+
+- **Roll a match head to scroll by feel.** Add the match head to Mine and
+  roll it with your thumb: each notch taps, a faster roll moves more lines,
+  and rolled too fast it strikes. The Mine editor also lists the console's
+  own keys. A rested swipe on the terminal scrolls fast, and a swipe ticks
+  in a tmux pane too.
+
+### Fixed
+
+- **A belt key after a scroll reaches the agent.** It used to go to
+  tmux's copy mode.
+
+## [0.49.0] - 2026-11-20
+
+### Added
+
+- **A drag copies exactly the agent's words.** In every agent, a drag
+  selects in tmux inside the agent's pane only, with no list text and no
+  padding, and a wrapped line pastes whole. A double-click copies a word
+  and a triple-click a line. The copy reaches the screen you use, over SSH
+  too, and tmux's `set-clipboard` stays as you have it.
+
+### Changed
+
+- **A click reaches the agent when you let go.** A drag never clicks
+  anything in an agent.
+
+### Removed
+
+- **The setup step "Let copy through".** It turned tmux's
+  `set-clipboard on`, which lets any pane read your last copy.
+
+## [0.48.0] - 2026-11-19
+
+### Added
+
+- **The phone console zooms, copies, and opens links.** A pinch or `A−` /
+  `A+` sets the text size, a `↓` button brings a scrolled pane back to its
+  bottom, `c copy reply` puts the last reply on the clipboard, and a tap on
+  a link asks to open or copy it. The clipboard takes only a copy you ask for.
+
+### Fixed
+
+- **The island says why it is not registered.** The Island screen shows
+  the last failure under each host, with its fix, until a registration
+  succeeds.
+
+## [0.47.1] - 2026-11-19
+
+### Fixed
+
+- **↑↓ show each agent beside the list again.** In 0.47.0 the right
+  side changed only on ⏎. Now it shows the chosen agent once the list
+  rests on it, and the keys stay in the list; ⏎ gives the agent the keys.
+- **A chain's line no longer lands in your prompt.** A line from a
+  chain-mate was typed into an agent you had open, while you typed there
+  too. A key you typed in that pane in the last two minutes now holds the
+  line: it waits, and the sender hears `a person types in it`.
+- **Boxes open over the whole window.** With the agent beside the list, a
+  consent, the launch sheet, a form or the ssh prompt drew inside the
+  list's narrow pane, its words cut. The box now takes the window while it
+  is open, centred, with the list and the agent dim behind it, and gives
+  the window back when it closes.
+
 ## [0.47.0] - 2026-11-16
 
 ### Added
@@ -1824,7 +1891,11 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.47.0...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.50.0...HEAD
+[0.50.0]: https://github.com/blox-eng/matchblox/compare/v0.49.0...v0.50.0
+[0.49.0]: https://github.com/blox-eng/matchblox/compare/v0.48.0...v0.49.0
+[0.48.0]: https://github.com/blox-eng/matchblox/compare/v0.47.1...v0.48.0
+[0.47.1]: https://github.com/blox-eng/matchblox/compare/v0.47.0...v0.47.1
 [0.47.0]: https://github.com/blox-eng/matchblox/compare/v0.46.3...v0.47.0
 [0.46.3]: https://github.com/blox-eng/matchblox/compare/v0.46.2...v0.46.3
 [0.46.2]: https://github.com/blox-eng/matchblox/compare/v0.46.1...v0.46.2

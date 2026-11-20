@@ -59,13 +59,33 @@ final class BeltLayoutsTests: XCTestCase {
 
     func testGroups() throws {
         let groups = try catalog().groups
-        XCTAssertEqual(groups.map(\.name), ["Steer", "Edit", "Digits", "Ctrl", "Claude Code", "Codex", "OpenCode", "Cursor"])
-        XCTAssertEqual(groups[0].keys.map(\.id), ["◂", "↑", "↓", "⏎", "Esc", "^C", "⇞", "⇟"])
-        XCTAssertEqual(groups[1].keys.map(\.id), ["Tab", "⇧Tab", "←", "→", "⌫"])
-        XCTAssertEqual(groups[2].keys.map(\.id), (1...9).map(String.init))
-        XCTAssertEqual(groups[3].keys.map(\.id), ["Ctrl", "^A", "^B", "^D", "^L", "^R"])
-        XCTAssertEqual(groups[7].keys.map(\.id), ["cursor-summarize", "cursor-clear", "cursor-model"])
-        XCTAssertTrue(groups[4...].allSatisfy { $0.keys.allSatisfy { $0.cells == 2 } })
+        XCTAssertEqual(groups.map(\.name), ["Scroll", "Steer", "Edit", "Digits", "Ctrl", "Console", "Claude Code", "Codex", "OpenCode", "Cursor"])
+        XCTAssertEqual(groups[0].keys, [BeltKey(id: "Wheel", cells: 1)])
+        XCTAssertEqual(groups[1].keys.map(\.id), ["◂", "↑", "↓", "⏎", "Esc", "^C", "⇞", "⇟"])
+        XCTAssertEqual(groups[2].keys.map(\.id), ["Tab", "⇧Tab", "←", "→", "⌫"])
+        XCTAssertEqual(groups[3].keys.map(\.id), (1...9).map(String.init))
+        XCTAssertEqual(groups[4].keys.map(\.id), ["Ctrl", "^A", "^B", "^D", "^L", "^R"])
+        XCTAssertEqual(groups[9].keys.map(\.id), ["cursor-summarize", "cursor-clear", "cursor-model"])
+        XCTAssertTrue(groups[6...].allSatisfy { $0.keys.allSatisfy { $0.cells == 2 } })
+    }
+
+    func testConsoleGroup() throws {
+        let console = try catalog().groups.first { $0.name == "Console" }?.keys
+        XCTAssertEqual(console?.map(\.id), ["board.c", "board.ctrl+o", "board.s", "board.g", "board./",
+                                            "board.m", "board.z", "board.N", "board.tab", "board.x"])
+        XCTAssertEqual(console?.map(\.cells), [2, 2, 2, 2, 1, 2, 2, 2, 2, 2])
+    }
+
+    func testMineKeepsHeadAndConsoleKeys() throws {
+        let kept = [BeltKey(id: "◂", cells: 1), BeltKey(id: "Wheel", cells: 1), BeltKey(id: "board.g", cells: 2)]
+        XCTAssertEqual(try catalog().keys(.mine, agent: nil, mine: kept), kept)
+        let mine = Mine(keys: kept)
+        XCTAssertEqual(try JSONDecoder().decode(Mine.self, from: JSONEncoder().encode(mine)), mine)
+    }
+
+    func testWheelSendsNothingAndSaysWhatItIs() throws {
+        XCTAssertEqual(KeyBar.bytes(for: KeyBar.wheel), [], "the head sends nothing itself, as Ctrl")
+        XCTAssertEqual(KeyFace(BeltKey(id: "Wheel", cells: 1), in: try catalog()).spoken, "Scroll wheel")
     }
 
     func testMineLayoutKeepsKnownKeysOnly() throws {

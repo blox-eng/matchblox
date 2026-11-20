@@ -4,10 +4,12 @@ import UIKit
 
 /// The console's terminal, with three ways back to matchblox: a swipe in from the left edge,
 /// a tap on "◂ matchblox" in the tmux status line, and ⌘M or ctrl+M. Each one sends `HomeKey`.
-/// While the program reads the mouse, a vertical swipe sends wheel steps (`WheelScroll`), and a tap
-/// a click: the console opens the row's chat. While the console shows Sessions or Machine, a
-/// long-press sends a right click (`BoardTouch`) and each step of a swipe ticks once. A sideways
-/// swipe turns no page: the list and the chat have none.
+/// While the program reads the mouse, a vertical swipe sends wheel steps (`WheelScroll`), each step
+/// ticks once, and a finger that rests before its swipe scrolls fast. A tap sends a click: the
+/// console opens the row's chat. While the console shows Sessions or Machine, a long-press sends a
+/// right click (`BoardTouch`). The match head on the belt scrolls through `head(lines:)`. A sideways
+/// swipe turns no page: the list and the chat have none. A pinch makes the text bigger or smaller,
+/// and a tap on a link asks what to do with it.
 final class ConsoleTerminalView: TerminalView {
     private struct Coast {
         let link: CADisplayLink
@@ -20,8 +22,17 @@ final class ConsoleTerminalView: TerminalView {
     var onHome: @MainActor () -> Void = {}
     /// Called when the terminal takes or gives up the keyboard.
     var onFocus: @MainActor (Bool) -> Void = { _ in }
-    /// The console shows Sessions or Machine (`BoardFollow`): a long-press opens the row's menu,
-    /// and a swipe ticks. Otherwise the terminal's own long-press acts.
+    /// Called when the terminal goes up from its live bottom (true) or comes back (false).
+    var onScrolledBack: @MainActor (Bool) -> Void = { _ in }
+    /// Called for each key typed or deleted: the match head's coast stops, so it cannot scroll
+    /// the pane back into copy mode under the new text.
+    var onTyped: @MainActor () -> Void = {}
+    /// Called for each key typed into the terminal: the console's own `c` may ask for a copy.
+    var onAsksCopy: @MainActor () -> Void = {}
+    /// A tap on a link: the link, and the place on screen it was tapped.
+    var onLink: @MainActor (String, CGRect) -> Void = { _, _ in }
+    /// The console shows Sessions or Machine (`BoardFollow`): a long-press opens the row's menu.
+    /// Otherwise the terminal's own long-press acts.
     var showsConsole = false
     /// False on the demo: a tap only clicks, and the keyboard comes from the belt's key, so it does
     /// not cover the question the demo shows.
@@ -31,8 +42,11 @@ final class ConsoleTerminalView: TerminalView {
     @objc var inlinePredictionType: UITextInlinePredictionType = .no
 
     private let haptic = UIImpactFeedbackGenerator(style: .light)
-    /// The console's tick: one for each step a swipe moves.
+    /// The swipe's tick: one for each step it moves, never closer than `MatchHead.tapGap`.
     private let tick = UISelectionFeedbackGenerator()
+    private var lastTick: TimeInterval = 0
+    /// When the finger went down: a finger that rests before its swipe scrolls fast.
+    private var touchedAt: TimeInterval = 0
     private var edge: UIScreenEdgePanGestureRecognizer?
     private var labelTap: UITapGestureRecognizer?
     private var clickTap: UITapGestureRecognizer?
@@ -41,11 +55,27 @@ final class ConsoleTerminalView: TerminalView {
     private var focusedAtTouch = false
     private var wheelPan: UIPanGestureRecognizer?
     private var wheel = WheelScroll(cellHeight: 0)
+    /// The swipe began after the finger rested: it scrolls with the match head's speed-up.
+    private var fastSwipe = false
     private var coast: Coast?
     private var hold: UILongPressGestureRecognizer?
+    /// The size the text has now; a pinch changes it, in whole points.
+    private(set) var textSize: TextSize
+    private var pinchStart: TextSize?
+    /// The wheel steps a swipe sent up in a tmux pane, less the steps down.
+    private var scrollBack = ScrollBack()
+    /// The swipe began in a tmux pane: its steps go into `scrollBack`.
+    private var countsBack = false
+    private var scrolledBack = false
+    nonisolated(unsafe) private var sizeObserver: NSObjectProtocol?
 
-    init(font: UIFont) {
-        super.init(frame: .zero, font: font)
+    static func font(_ size: TextSize) -> UIFont {
+        UIFont.monospacedSystemFont(ofSize: CGFloat(size.points), weight: .regular)
+    }
+
+    init(textSize: TextSize) {
+        self.textSize = textSize
+        super.init(frame: .zero, font: Self.font(textSize))
 
         let edge = UIScreenEdgePanGestureRecognizer(target: self, action: #selector(edgeSwiped))
         edge.edges = .left
@@ -96,9 +126,21 @@ final class ConsoleTerminalView: TerminalView {
         }
         addGestureRecognizer(hold)
         self.hold = hold
+
+        // Two fingers: the one-finger pans, the taps and the long-presses fail at once.
+        addGestureRecognizer(UIPinchGestureRecognizer(target: self, action: #selector(pinched)))
+
+        // A change in the Island screen reaches a console that is open.
+        sizeObserver = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) {
+            [weak self] _ in MainActor.assumeIsolated { self?.show(TextSize.load(from: .standard)) }
+        }
     }
 
     required init?(coder: NSCoder) { nil }
+
+    deinit {
+        if let sizeObserver { NotificationCenter.default.removeObserver(sizeObserver) }
+    }
 
     /// SwiftTerm adds its mouse and selection pans only once it needs them: they wait for the
     /// edge swipe and the wheel pan too, or a swipe with the tmux mouse on would drag in the pane.
@@ -118,6 +160,7 @@ final class ConsoleTerminalView: TerminalView {
 
     /// A touch stops a flick, as in a scroll view.
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        touchedAt = touches.first?.timestamp ?? ProcessInfo.processInfo.systemUptime
         stopCoast()
         focusedAtTouch = isFirstResponder
         super.touchesBegan(touches, with: event)
@@ -146,10 +189,18 @@ final class ConsoleTerminalView: TerminalView {
     }
 
     override func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
+        // Two fingers pinch: the scroll view's pan and SwiftTerm's pans do not take them.
+        if gesture is UIPanGestureRecognizer, gesture.numberOfTouches > 1 {
+            return false
+        }
         if gesture === labelTap {
             return tapsLabel(at: gesture.location(in: self))
         }
         if gesture === clickTap {
+            // A tap on a link asks what to do with it, focused or not.
+            if linkUnder(gesture.location(in: self)) != nil, !tapsLabel(at: gesture.location(in: self)) {
+                return true
+            }
             let first = !focusedAtTouch
             let clicks = sendsClicks && (first || !tapRaisesKeyboard)
             return (clicks || (first && tapRaisesKeyboard)) && !tapsLabel(at: gesture.location(in: self))
@@ -185,14 +236,19 @@ final class ConsoleTerminalView: TerminalView {
         switch pan.state {
         case .began, .changed:
             if pan.state == .began {
-                if showsConsole { tick.prepare() }
+                tick.prepare()
                 stopCoast()
-                wheel = WheelScroll(cellHeight: cellSize.height, linesPerStep: inTmuxPane ? WheelScroll.tmuxLines : 1)
+                countsBack = inTmuxPane
+                wheel = WheelScroll(cellHeight: cellSize.height, linesPerStep: countsBack ? WheelScroll.tmuxLines : 1)
+                fastSwipe = WheelScroll.isFast(restedFor: ProcessInfo.processInfo.systemUptime - touchedAt)
             }
+            if fastSwipe { wheel.boost = MatchHead.lines(atSpeed: pan.velocity(in: self).y) }
             let dy = pan.translation(in: self).y
             pan.setTranslation(.zero, in: self)
             sendWheel(wheel.move(dy), at: pan.location(in: self))
         case .ended:
+            // A rested flick coasts at one step a cell: its speed-up ends with the finger.
+            wheel.boost = 1
             let link = CADisplayLink(target: self, selector: #selector(coasted))
             coast = Coast(link: link, start: CACurrentMediaTime(), velocity: pan.velocity(in: self).y, point: pan.location(in: self))
             link.add(to: .main, forMode: .common)
@@ -205,6 +261,32 @@ final class ConsoleTerminalView: TerminalView {
         guard hold.state == .began, let spot = cell(at: hold.location(in: self)) else { return }
         haptic.impactOccurred()
         send(BoardTouch.rightClick(col: spot.col, row: spot.row))
+    }
+
+    /// Each whole point of a pinch ticks once. The phone keeps the size when the fingers lift.
+    @objc private func pinched(_ pinch: UIPinchGestureRecognizer) {
+        switch pinch.state {
+        case .began:
+            tick.prepare()
+            pinchStart = textSize
+        case .changed:
+            guard let pinchStart else { return }
+            let before = textSize
+            show(pinchStart.pinched(pinch.scale))
+            if textSize != before { tick.selectionChanged() }
+        case .ended, .cancelled:
+            pinchStart = nil
+            textSize.save(to: .standard)
+        default:
+            pinchStart = nil
+        }
+    }
+
+    /// SwiftTerm counts the columns and rows again, and `sizeChanged` tells the host.
+    private func show(_ size: TextSize) {
+        guard size != textSize else { return }
+        textSize = size
+        font = Self.font(size)
     }
 
     @objc private func coasted(_ link: CADisplayLink) {
@@ -237,10 +319,19 @@ final class ConsoleTerminalView: TerminalView {
         }
     }
 
-    /// Each step at the touch's cell, encoded by SwiftTerm for the program's mouse protocol.
-    private func sendWheel(_ steps: [WheelScroll.Step], at point: CGPoint) {
+    /// Each step at the touch's cell, encoded by SwiftTerm for the program's mouse protocol. The
+    /// match head plays its own taps, so its steps do not tick.
+    private func sendWheel(_ steps: [WheelScroll.Step], at point: CGPoint, ticks: Bool = true) {
         guard readsMouse, !steps.isEmpty, let spot = cell(at: point) else { return }
-        if showsConsole { tick.selectionChanged() }
+        let now = ProcessInfo.processInfo.systemUptime
+        if ticks, now - lastTick >= MatchHead.tapGap {
+            lastTick = now
+            tick.selectionChanged()
+        }
+        if countsBack {
+            scrollBack.wheeled(steps)
+            scrollChanged()
+        }
         let terminal = getTerminal()
         let pixelX = Int(point.x)
         let pixelY = Int(point.y - contentOffset.y)
@@ -263,7 +354,13 @@ final class ConsoleTerminalView: TerminalView {
     /// The press and release at the touch's cell, then the keyboard on a first tap.
     @objc private func clicked(_ tap: UITapGestureRecognizer) {
         guard tap.state == .ended else { return }
-        sendClick(at: tap.location(in: self))
+        let point = tap.location(in: self)
+        if let link = linkUnder(point) {
+            haptic.impactOccurred()
+            onLink(link, CGRect(origin: point, size: .zero))
+            return
+        }
+        sendClick(at: point)
         if tapRaisesKeyboard, !focusedAtTouch { _ = becomeFirstResponder() }
     }
 
@@ -278,9 +375,104 @@ final class ConsoleTerminalView: TerminalView {
         }
     }
 
+    /// The link under `point`: a hyperlink the program marked (OSC 8), else an http or https URL
+    /// in the row's text.
+    private func linkUnder(_ point: CGPoint) -> String? {
+        guard let spot = cell(at: point) else { return nil }
+        let terminal = getTerminal()
+        if let marked = terminal.link(at: .screen(Position(col: spot.col, row: spot.row)), mode: .explicitOnly) {
+            return marked
+        }
+        let cells = (0..<terminal.cols).map { terminal.getCharacter(col: $0, row: spot.row) ?? " " }
+        return TerminalLink.url(in: cells, at: spot.col)
+    }
+
     @objc private func goHome() {
         haptic.impactOccurred()
+        forgetScrollBack()
         onHome()
+    }
+
+    // MARK: The match head
+
+    /// The match head on the belt rolled `lines` lines (positive: older). Returns where they went.
+    func head(lines: Int) -> HeadRoute {
+        stopCoast()
+        let route = HeadRoute.route(readsMouse: readsMouse, inTmuxPane: inTmuxPane, canScroll: canScroll,
+                                    position: scrollPosition, scrollBackSteps: scrollBack.steps, older: lines > 0)
+        switch route {
+        case .wheel:
+            let events = WheelBurst.steps(lines: lines, linesPerStep: inTmuxPane ? WheelScroll.tmuxLines : 1)
+            countsBack = inTmuxPane
+            let step: WheelScroll.Step = events > 0 ? .up : .down
+            sendWheel(Array(repeating: step, count: abs(events)), at: CGPoint(x: bounds.midX, y: bounds.midY), ticks: false)
+        case .scrollback:
+            if lines > 0 { scrollUp(lines: lines) } else { scrollDown(lines: -lines) }
+            scrollChanged()
+        case .end, .nothing:
+            break
+        }
+        return route
+    }
+
+    /// VoiceOver pages with the match head: a screen of lines at once.
+    func headPage(older: Bool) -> HeadRoute {
+        head(lines: (older ? 1 : -1) * max(getTerminal().rows, 1))
+    }
+
+    // MARK: The live bottom
+
+    /// A tmux pane the wheel scrolled up: it is in copy mode.
+    var isUpInPane: Bool { scrollBack.isUp }
+
+    /// Up from the live bottom: a tmux pane the wheel scrolled up, or SwiftTerm's own scrollback.
+    private var isScrolledBack: Bool {
+        scrollBack.isUp || (canScroll && scrollPosition < 1)
+    }
+
+    /// Tells `onScrolledBack` when the terminal leaves the live bottom or comes back to it.
+    func scrollChanged() {
+        let up = isScrolledBack
+        guard up != scrolledBack else { return }
+        scrolledBack = up
+        onScrolledBack(up)
+    }
+
+    /// The person types, or leaves the pane: the wheel steps no longer say where the pane is.
+    func forgetScrollBack() {
+        guard scrollBack.isUp else { return }
+        scrollBack.typed()
+        scrollChanged()
+    }
+
+    /// The wheel steps that bring the pane back down; at the bottom tmux leaves copy mode. A
+    /// plain `q` would leave it at once, but it types into the agent when the pane is not in copy
+    /// mode; a step down past the bottom does nothing.
+    func jumpToBottom() {
+        stopCoast()
+        sendWheel(scrollBack.jump(), at: CGPoint(x: bounds.midX, y: bounds.midY))
+        if canScroll { scroll(toPosition: 1) }
+        scrollChanged()
+    }
+
+    override func insertText(_ text: String) {
+        onTyped()
+        forgetScrollBack()
+        onAsksCopy()
+        super.insertText(text)
+    }
+
+    override func deleteBackward() {
+        onTyped()
+        forgetScrollBack()
+        super.deleteBackward()
+    }
+
+    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        onTyped()
+        forgetScrollBack()
+        onAsksCopy()
+        super.pressesBegan(presses, with: event)
     }
 
     /// SwiftTerm's own cell size (`computeFontDimensions`), which it does not make public.

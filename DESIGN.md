@@ -187,7 +187,11 @@ app, iOS Reduce Motion does the same. The app holds the stood frame for
 
 **Haptics** (the app): lock is a light impact, the strike is a rigid
 impact, a stand is success, and a failure is error. Haptics play with
-Reduce Motion.
+Reduce Motion. The match head on the belt taps each notch with one short
+transient, sharper as it heats, never more than 30 a second; it strikes
+with one hard transient and bumps once, heavy and dull, at an end. A swipe
+on the terminal ticks each wheel step, at the same cap. With Reduce Motion
+the head's speckles stand still; its heat colour still shows.
 
 ## 6. Console layout
 

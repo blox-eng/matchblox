@@ -4,7 +4,9 @@ Every key of the console works on the key bar of a phone SSH app: letters,
 digits, arrows, `Enter` and `Esc`. No key of the console needs `Ctrl`.
 `Ctrl+O` is for a hardware keyboard. On a phone,
 `◂` on the app's key belt (or its edge swipe) goes back, `^C` on the belt
-interrupts, and a swipe scrolls. The key line at
+interrupts, and a swipe or the match head scrolls. In the matchblox app,
+your own belt layout can hold the console's keys: see
+[Mine](phone.md#mine). The key line at
 the bottom shows the keys of the open tab. A tap on a key presses it.
 
 ## The list and the chat
@@ -71,8 +73,8 @@ mid, tall screen.
 
 | Key | What it does |
 |---|---|
-| `Enter` | In the list, shows the chosen agent on the right and gives it the keys. A click or a tap on a row does the same. |
-| `↑`, `↓` | Choose the next row. They only move the choice: the right side stays. |
+| `Enter` | In the list, gives the agent on the right the keys. If the right side does not show the chosen agent yet, it shows it first. A click or a tap on a row does the same. |
+| `↑`, `↓` | Choose the next row. When the choice rests, the right side shows that agent, and the keys stay in the list. A peer's rows show after you let one of its agents show in this run; on a host the stoker drives, and on one pane at a time, only `Enter` shows. |
 | `Ctrl+O` | Still goes fully into the agent, as before. |
 
 tmux takes these chords, not the console, so they are in a table of their
@@ -91,7 +93,7 @@ shown, the pane says why. A pane of the console's own window never shows
 on the right: `Ctrl+O` opens it.
 
 Text typed in the list does not go to the agent. The key line says
-`the agent pane takes text · ⏎ shows flint-auth`.
+`the agent pane takes text · ⏎ goes into flint-auth`.
 
 On a narrow window, and on Matchblox Pocket held upright, one pane shows
 at a time. A tap on a row shows the agent full screen, and `◂` goes back

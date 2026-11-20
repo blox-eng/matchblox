@@ -46,6 +46,11 @@ func ZoomArgv(pane string, zoom bool) []string {
 	return []string{"tmux", "if-shell", "-F", "-t", pane, "#{window_zoomed_flag}", "resize-pane -Z -t " + pane}
 }
 
+// CaptureArgv prints what pane shows, as plain text.
+func CaptureArgv(pane string) []string {
+	return []string{"tmux", "capture-pane", "-p", "-t", pane}
+}
+
 // ChainArgv shows a chain's views in the agent pane beside and in panes
 // split from it, in the console's right column only: views[0] in beside,
 // 2 views one above the other, 3 or 4 a 2 × 2 grid, the 4th cell only with

@@ -438,6 +438,10 @@ func (s *Service) sessionOf(m chains.Member) (sample.Session, bool) {
 	return s.sessionOfLocked(m)
 }
 
+// personTypes is how long a person's key in a pane keeps chain lines out
+// of it.
+const personTypes = 2 * time.Minute
+
 // peerWait is why the receiver cannot take a typed line now, read now:
 // "" when it can. err: the receiver is gone, or another agent runs in its
 // pane, so the line has nobody to wait for.
@@ -469,6 +473,11 @@ func (s *Service) peerWait(pane string, x sample.Session) (why string, err error
 		return "its pane cannot be read", nil
 	} else if mode {
 		return "its pane is in copy mode", nil
+	}
+	// A prompt can be empty while a person starts to type: the line would
+	// mix into theirs.
+	if at := s.mux().TypedAt(pane); !at.IsZero() && s.now().Sub(at) < personTypes {
+		return "a person types in it", nil
 	}
 	screen, ok := s.mux().Screens([]string{pane})[pane]
 	if !ok {

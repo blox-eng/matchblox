@@ -169,6 +169,7 @@ type Options struct {
 type helloMsg proto.Hello
 type stateMsg proto.State
 type resultMsg proto.Result
+type copyMsg proto.Copy
 type lostMsg struct {
 	err  error
 	conn transport.Conn
@@ -241,6 +242,8 @@ type action struct {
 	chain       []paneKey                   // a chain view: the member each of steps shows
 	closing     bool                        // it closes the chain view and runs no step
 	keep        string                      // a close: the member's pane that stays the agent pane; "" the agent pane
+	preview     bool                        // a look as the list rests on a row: the keys stay with the list
+	focus       bool                        // ⏎ on the session the agent pane shows: a view that still runs only gets the keys
 }
 
 // recRun is an act on a recommendation: the row shows its outcome.
@@ -522,12 +525,10 @@ type Model struct {
 	sawRelease bool
 	longPress  longPress
 	// copyCode is the code the copy check copied, while it waits for its
-	// paste. clipOK, clipKnown: the console's tmux passes a copy on, as it
-	// was read last. dragFrom, dragTo: a drag over the board's text, from
+	// paste. dragFrom, dragTo: a drag over the board's text, from
 	// the press to the pointer; dragTo is nil until it is a drag.
-	copyCode          string
-	clipOK, clipKnown bool
-	dragFrom, dragTo  *point
+	copyCode         string
+	dragFrom, dragTo *point
 	// dragLines is the frame at the press, which the drag copies from, and
 	// dragWithin the cells of a row it may cover: its column's. tapLater
 	// is a press whose tap waits for its release. boardDoor is the setup
@@ -602,11 +603,16 @@ type Model struct {
 	sideTip                   int
 	sideHost                  string // the host whose trouble the host place shows
 	sideIn                    paneKey
-	beside                    string     // the agent pane's id; "" before the split, and where it failed
-	winW, winH                int        // the window's size in beside mode; 0: not read yet
-	showing                   bool       // a choice runs in the agent pane
-	showNext                  *action    // the choice made while one ran: it runs next
-	chain                     *chainView // the chain view beside the list; nil while one agent shows
+	beside                    string          // the agent pane's id; "" before the split, and where it failed
+	winW, winH                int             // the window's size in beside mode; 0: not read yet
+	boxZoom                   bool            // a box has the window: the list's pane is zoomed for it
+	boxBack                   []string        // the agent pane's screen, drawn dim behind the box
+	showing                   bool            // a choice runs in the agent pane
+	showNext                  *action         // the choice made while one ran: it runs next
+	besideShows               paneKey         // the session the agent pane shows; zero when none or a chain view
+	previewSeq                int             // the list's latest move: only its preview runs
+	viewed                    map[string]bool // the peers whose view the builder let run in this run: their rows preview
+	chain                     *chainView      // the chain view beside the list; nil while one agent shows
 }
 
 func New(opt Options) Model {
@@ -653,7 +659,7 @@ func (m Model) Init() tea.Cmd {
 	if err := m.opt.DialErr; err != nil && m.conn == nil {
 		return tea.Batch(tea.RequestBackgroundColor, func() tea.Msg { return lostMsg{err: err} }, m.splashCmd(), m.waitAsk(), peers)
 	}
-	return tea.Batch(tea.RequestBackgroundColor, m.hello(), m.recv(), m.watchSilence(), m.splashCmd(), m.graphicsTick(0), m.waitAsk(), m.clipRead(), peers)
+	return tea.Batch(tea.RequestBackgroundColor, m.hello(), m.recv(), m.watchSilence(), m.splashCmd(), m.graphicsTick(0), m.waitAsk(), peers)
 }
 
 func (m Model) watchSilence() tea.Cmd {
@@ -709,6 +715,11 @@ func recvOn(c transport.Conn) tea.Cmd {
 				var sc proto.Screen
 				if json.Unmarshal(env.Body, &sc) == nil {
 					return fromConn{c, screenMsg(sc)}
+				}
+			case proto.KindCopy:
+				var cp proto.Copy
+				if json.Unmarshal(env.Body, &cp) == nil {
+					return fromConn{c, copyMsg(cp)}
 				}
 			}
 		}
@@ -812,7 +823,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		nm = nm.scanShows().keepView().inDemo().sideKeep().chatMarkOn().onChoice() // what reads Sessions' selection reads the board's choice
 		again := nm.beltPoll(msg)
 		nm, belt := nm.tellBelt(again)
-		cmd = tea.Batch(cmd, belt)
+		var zoom tea.Cmd
+		nm, zoom = nm.boxZoomed()
+		cmd = tea.Batch(cmd, belt, zoom)
 		if note := nm.flashNotice(was); note != nil {
 			cmd = tea.Batch(cmd, note)
 		}
@@ -838,6 +851,9 @@ func (m Model) scanShows() Model {
 
 func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case copyMsg:
+		next, cmd := m.tookCopy(msg.Text, "")
+		return next, tea.Batch(cmd, next.recv())
 	case tea.BackgroundColorMsg:
 		m.dark = msg.IsDark()
 		m.st = newStyles(m.dark)
@@ -861,8 +877,15 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.sizeCmd(m.width)
 	case besideSizeMsg:
 		m.winW, m.winH = msg.w, msg.h
+	case boxBackMsg:
+		if !m.boxZoom { // the box closed before its zoom landed: give the window back after it
+			return m, m.sizeCmd(m.width)
+		}
+		m.boxBack = msg
 	case shownMsg:
 		return m.besideShown(msg)
+	case previewMsg:
+		return m.look(msg)
 	case fromConn:
 		if msg.conn != m.conn {
 			return m, nil
@@ -1218,9 +1241,6 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return next, tea.Batch(touch, cmd)
 	case tea.MouseReleaseMsg, tea.MouseMotionMsg, longPressMsg:
 		return m.pointer(msg)
-	case clipMsg:
-		m.clipOK, m.clipKnown = msg.ok, msg.known
-		return m, nil
 	case tea.KeyPressMsg:
 		if m.splashing() {
 			m.splashDone = true // any key stops the start screen, and does nothing else

@@ -28,7 +28,8 @@ public struct BoardBelt: Equatable, Sendable {
 
     private static let cardTokens: Set<String> = ["1", "2", "3", "p", "y"]
     private static let maxCard = 3
-    private static let tail = ["ctrl+o", "s", "g", "/", "m", "c", "z", "N", "tab", "x"]
+    /// `c copy reply` comes first, so with a short card it shows at rest: no drag to copy.
+    private static let tail = ["c", "ctrl+o", "s", "g", "/", "m", "z", "N", "tab", "x"]
 
     private init(shape: Shape, card: [String], armed: String?, dim: Set<String>) {
         self.shape = shape
@@ -64,6 +65,9 @@ public struct BoardBelt: Equatable, Sendable {
             self.init(shape: .board, card: Array(card.prefix(Self.maxCard)), armed: armed, dim: Set(dim))
         }
     }
+
+    /// The list's keys, for a layout of the builder's own.
+    public static var tailKeys: [BeltKey] { tail.map(key) }
 
     /// The layout's keys, in order.
     public var keys: [BeltKey] {
@@ -142,7 +146,7 @@ public struct BoardBelt: Equatable, Sendable {
             "p": act("p", "p", "p, merge"), "y": act("y", "y", "y, go"),
             "ctrl+o": word("ctrl+o", "⌃o", "expand", [0x0f]),
             "s": act("s", "s hosts", "hosts"), "g": act("g", "g chain", "chain"), "/": act("/", "/", "find"),
-            "m": act("m", "m menu", "menu"), "c": act("c", "c copy", "copy"), "z": act("z", "z park", "park"),
+            "m": act("m", "m menu", "menu"), "c": act("c", "c copy reply", "copy the last reply"), "z": act("z", "z park", "park"),
             "N": act("N", "N new", "new session"), "tab": word("tab", "⇥ machine", "machine", [0x09]),
             "x": act("x", "x kill", "kill"),
             "runs": word("runs", "y runs", "y, run", Array("y".utf8)),

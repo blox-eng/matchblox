@@ -78,4 +78,17 @@ final class WheelScrollTests: XCTestCase {
         let end = WheelScroll.coast(velocity: 2000, after: 0.5)
         XCTAssertEqual(WheelScroll.coast(velocity: 2000, after: 3), end)
     }
+
+    func testRestedSwipeIsFast() {
+        XCTAssertTrue(WheelScroll.isFast(restedFor: 0.30))
+        XCTAssertTrue(WheelScroll.isFast(restedFor: 0.25))
+        XCTAssertFalse(WheelScroll.isFast(restedFor: 0.20))
+    }
+
+    func testBoostMultipliesSteps() {
+        var wheel = WheelScroll(cellHeight: 16)
+        wheel.boost = 4
+        XCTAssertEqual(wheel.move(16), Array(repeating: .up, count: 4))
+        XCTAssertEqual(wheel.move(-32), Array(repeating: .down, count: 8))
+    }
 }
