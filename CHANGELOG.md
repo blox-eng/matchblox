@@ -18,6 +18,9 @@ All notable changes to matchblox are in this file. The format follows
 
 ### Fixed
 
+- **The match strikes in the middle again.** Beside an agent, the start
+  screen and the pairing page played in the sidebar. They now take the
+  whole window while they play.
 - **The app declares the APIs Apple asks about.** The app, its Live
   Activity and its notification extension say why they read their
   settings, the uptime clock and file dates.
