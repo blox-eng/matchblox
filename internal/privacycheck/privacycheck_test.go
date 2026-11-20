@@ -58,18 +58,21 @@ func TestAMentionInACommentIsNoUse(t *testing.T) {
 func TestRepoTargetsMatchTheirManifests(t *testing.T) {
 	ios := filepath.Join("..", "..", "ios")
 	for _, tc := range []struct {
-		name string
-		dirs []string
+		name   string
+		dirs   []string
+		linked []string
 	}{
-		{"Matchblox", []string{"Matchblox", "MatchbloxKit/Sources", "Shared"}},
-		{"MatchbloxIsland", []string{"MatchbloxIsland", "MatchbloxKit/Sources", "Shared"}},
-		{"MatchbloxBuzz", []string{"MatchbloxBuzz", "MatchbloxKit/Sources"}},
+		// The app links the Go demo library (cmd/mbdemolib), whose darwin build calls stat,
+		// fstat, lstat and fstatat: Apple counts those as file timestamps.
+		{"Matchblox", []string{"Matchblox", "MatchbloxKit/Sources", "Shared"}, []string{"NSPrivacyAccessedAPICategoryFileTimestamp"}},
+		{"MatchbloxIsland", []string{"MatchbloxIsland", "MatchbloxKit/Sources", "Shared"}, nil},
+		{"MatchbloxBuzz", []string{"MatchbloxBuzz", "MatchbloxKit/Sources"}, nil},
 	} {
 		var dirs []string
 		for _, d := range tc.dirs {
 			dirs = append(dirs, filepath.Join(ios, d))
 		}
-		if err := Check(dirs, filepath.Join(ios, tc.name, "PrivacyInfo.xcprivacy")); err != nil {
+		if err := Check(dirs, filepath.Join(ios, tc.name, "PrivacyInfo.xcprivacy"), tc.linked...); err != nil {
 			t.Errorf("%s: %v", tc.name, err)
 		}
 	}

@@ -27,12 +27,17 @@ var (
 	comments = regexp.MustCompile(`(?s)/\*.*?\*/|//[^\n]*`)
 )
 
-// Check fails when the Swift under dirs uses a category that manifest does not declare, or the
-// manifest declares one that the Swift does not use.
-func Check(dirs []string, manifest string) error {
+// Check fails when the Swift under dirs, or a linked library's category in linked, is not
+// declared in manifest, or the manifest declares one that neither uses.
+func Check(dirs []string, manifest string, linked ...string) error {
 	used, err := uses(dirs)
 	if err != nil {
 		return err
+	}
+	for _, category := range linked {
+		if _, ok := used[category]; !ok {
+			used[category] = "a linked library"
+		}
 	}
 	data, err := os.ReadFile(manifest)
 	if err != nil {
