@@ -222,32 +222,34 @@ func TestFlipHandsOffToItsOwnConsole(t *testing.T) {
 
 // TestAClosedTerminalOrphansItsConsole reads a real server: the second
 // console is not orphaned while its terminal shows it, nor while that
-// terminal is in an agent it opened; once the terminal closes, it is.
+// terminal is in an agent it opened, nor while it looks at another session;
+// once the terminal closes, it is.
 func TestAClosedTerminalOrphansItsConsole(t *testing.T) {
 	s := newOwnServer(t)
 	one, two := s.console(t, Home), s.console(t, Home+"-2")
 	s.attach(t, &one)
 	s.attach(t, &two)
-	orphaned := func() bool { return Orphaned(two.name, s.tmux(OrphanListArgv()[1:]...)) }
+	seen, seenOne := map[string]bool{}, map[string]bool{}
+	orphaned := func() bool { return Orphaned(two.name, seen, s.tmux(ClientsArgv()[1:]...)) }
 	if orphaned() {
 		t.Fatal("orphaned while its terminal shows it")
 	}
 	tty := strings.Fields(s.tmux("list-clients", "-t", two.name, "-F", "#{client_tty}"))[0]
-	s.tmux(strings.Fields("new-session -d -s matchblox-in-1 sleep 600")...)
-	s.tmux("set-option", "-t", "matchblox-in-1:", sample.BackOption, two.name)
-	s.tmux("switch-client", "-c", tty, "-t", "matchblox-in-1")
-	waitFor(t, func() bool { return strings.Contains(s.sessions(), "matchblox-in-1") })
-	s.tmux("set-option", "-t", "matchblox-in-1:", "destroy-unattached", "on")
-	if orphaned() {
-		t.Fatal("orphaned while its terminal is in an agent it opened")
+	for _, to := range []string{"matchblox-in-1", "work"} {
+		s.tmux("new-session", "-d", "-s", to, "sleep", "600")
+		s.tmux("switch-client", "-c", tty, "-t", to)
+		waitFor(t, func() bool { return strings.Contains(s.sessions(), to) })
+		if orphaned() {
+			t.Fatalf("orphaned while its terminal is in %s", to)
+		}
 	}
-	pid, err := strconv.Atoi(s.tmux("list-clients", "-t", "matchblox-in-1", "-F", "#{client_pid}"))
+	pid, err := strconv.Atoi(s.tmux("list-clients", "-t", "work", "-F", "#{client_pid}"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	_ = syscall.Kill(pid, syscall.SIGHUP) // the terminal closes
 	waitFor(t, orphaned)
-	if Orphaned(one.name, s.tmux(OrphanListArgv()[1:]...)) {
+	if Orphaned(one.name, seenOne, s.tmux(ClientsArgv()[1:]...)) {
 		t.Error("the first console is orphaned")
 	}
 }

@@ -76,38 +76,33 @@ func ParseHomeList(listing string) map[string]int {
 	return attached
 }
 
-// OrphanListArgv lists each session with its terminals and the console it
-// went into an agent from, for Orphaned.
-func OrphanListArgv() []string {
-	return []string{"tmux", "list-sessions", "-F", "#{session_name}\t#{session_attached}\t#{" + sample.BackOption + "}"}
+// ClientsArgv lists each terminal of the server with the session it shows,
+// for Orphaned.
+func ClientsArgv() []string {
+	return []string{"tmux", "list-clients", "-F", "#{client_tty}\t#{client_session}"}
 }
 
-// Orphaned tells if the console of the session name has no terminal any
-// more: no terminal shows it, and none is in an agent it opened. The first
-// console is never orphaned: it waits for the next terminal, as before.
-func Orphaned(name, listing string) bool {
+// Orphaned tells, from a ClientsArgv listing, if the console of the session
+// name has lost its terminal: each terminal seen in that session (seen,
+// which it updates) has left the server. A terminal that only looks at
+// another session, or went into an agent, still has it. The first console
+// is never orphaned: it waits for the next terminal, as before.
+func Orphaned(name string, seen map[string]bool, listing string) bool {
 	if name == Home {
 		return false
 	}
-	own := false
+	here := false
 	for _, line := range strings.Split(listing, "\n") {
-		f := strings.SplitN(line, "\t", 3)
-		if len(f) < 2 {
+		tty, session, ok := strings.Cut(strings.TrimSpace(line), "\t")
+		if !ok {
 			continue
 		}
-		f = append(f, "") // a line trimmed of its empty last field
-		shown := f[1] != "0"
-		if f[0] == name {
-			if shown {
-				return false
-			}
-			own = true
+		if session == name {
+			seen[tty] = true
 		}
-		if f[2] == name && shown {
-			return false
-		}
+		here = here || seen[tty]
 	}
-	return own
+	return len(seen) > 0 && !here
 }
 
 // SizeArgv makes the window of the console's pane take the size of the

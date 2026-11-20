@@ -61,24 +61,30 @@ func TestHomeSessionName(t *testing.T) {
 	}
 }
 
-// TestOrphaned: a second console no terminal shows, directly or from an
-// agent it opened, is orphaned; the first console never is.
+// TestOrphaned: a second console is orphaned once every terminal that
+// showed it has gone from the server; a terminal that only looks at
+// another session still has it. The first console never is.
 func TestOrphaned(t *testing.T) {
 	for _, c := range []struct {
-		why, name, listing string
-		want               bool
+		why, name string
+		listings  []string // one per check, in order
+		want      bool     // after the last check
 	}{
-		{"shown", "matchblox-2", "matchblox\t1\t\nmatchblox-2\t1\t\n", false},
-		{"no terminal", "matchblox-2", "matchblox\t1\t\nmatchblox-2\t0\t\n", true},
-		{"its terminal went into an agent", "matchblox-2", "matchblox-2\t0\t\nmatchblox-in-5\t1\tmatchblox-2\n", false},
-		{"another console's terminal went into an agent", "matchblox-2", "matchblox-2\t0\t\nmatchblox-in-5\t1\tmatchblox\n", true},
-		{"an agent session with no terminal left", "matchblox-2", "matchblox-2\t0\t\nmatchblox-in-5\t0\tmatchblox-2\n", true},
-		{"the first console", "matchblox", "matchblox\t0\t\n", false},
-		{"tmux listed nothing", "matchblox-2", "", false},
-		{"a trimmed last line", "matchblox-2", "matchblox\t1\t\nmatchblox-2\t0", true},
+		{"shown", "matchblox-2", []string{"/dev/pts/1\tmatchblox\n/dev/pts/2\tmatchblox-2\n"}, false},
+		{"its terminal looks at another session", "matchblox-2", []string{"/dev/pts/2\tmatchblox-2\n", "/dev/pts/2\twork\n"}, false},
+		{"its terminal went into an agent", "matchblox-2", []string{"/dev/pts/2\tmatchblox-2\n", "/dev/pts/2\tmatchblox-in-5\n"}, false},
+		{"its terminal closed", "matchblox-2", []string{"/dev/pts/2\tmatchblox-2\n", "/dev/pts/1\tmatchblox\n"}, true},
+		{"its terminal closed from an agent", "matchblox-2", []string{"/dev/pts/2\tmatchblox-2\n", "/dev/pts/2\tmatchblox-in-5\n", "/dev/pts/1\tmatchblox"}, true},
+		{"one of two terminals closed", "matchblox-2", []string{"/dev/pts/2\tmatchblox-2\n/dev/pts/3\tmatchblox-2\n", "/dev/pts/3\twork\n"}, false},
+		{"no terminal seen yet", "matchblox-2", []string{"/dev/pts/1\tmatchblox\n"}, false},
+		{"the first console", "matchblox", []string{"/dev/pts/1\tmatchblox\n", ""}, false},
 	} {
-		if got := Orphaned(c.name, c.listing); got != c.want {
-			t.Errorf("%s: Orphaned(%q) = %v, want %v", c.why, c.name, got, c.want)
+		seen, got := map[string]bool{}, false
+		for _, l := range c.listings {
+			got = Orphaned(c.name, seen, l)
+		}
+		if got != c.want {
+			t.Errorf("%s: Orphaned = %v, want %v", c.why, got, c.want)
 		}
 	}
 }
