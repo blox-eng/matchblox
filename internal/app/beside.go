@@ -333,7 +333,7 @@ func (m Model) besideOn(host, pane string) (tea.Model, tea.Cmd) {
 func (m Model) viewsOn(a *action, what string, panes []string) (tea.Model, tea.Cmd) {
 	host := a.host
 	if host != "" {
-		b, steps, says := a, [][]string(nil), []string(nil)
+		b, steps := a, [][]string(nil)
 		for _, pane := range panes {
 			_, ssh, next := m.peerJump(remote.Jump{Host: host, Pane: pane, View: true}, a)
 			if ssh == nil && a.preview {
@@ -343,9 +343,10 @@ func (m Model) viewsOn(a *action, what string, panes []string) (tea.Model, tea.C
 				return m.runInto(next)
 			}
 			b = next
-			steps, says = append(steps, remote.PeerViewArgv(m.besideName(host, pane), ssh)), append(says, shellLine(ssh))
+			steps = append(steps, remote.PeerViewArgv(m.besideName(host, pane), ssh))
 		}
-		b.steps, b.say, b.nav, b.remote = steps, strings.Join(says, "\n"), true, true
+		// In words: a view's ssh line holds every key it binds on the host.
+		b.steps, b.say, b.nav, b.remote = steps, "Show "+what+" from "+host+": ssh "+host+" shows it beside the list", true, true
 		if a.preview {
 			return m.startShow(*b)
 		}

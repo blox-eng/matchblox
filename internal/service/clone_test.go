@@ -260,7 +260,7 @@ func TestCloneStartRunsAndReports(t *testing.T) {
 	s, root := cloneTest(t)
 	src := filepath.Join(t.TempDir(), "src-r")
 	repoWith(t, src, "")
-	gitIn(t, "-C", src, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "x")
+	gitIn(t, "-C", src, "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit", "-q", "--allow-empty", "-m", "x")
 	s.cloneRemote = func(string) (gitremote.Remote, bool) {
 		return gitremote.Remote{URL: src, Host: "github.com", Owner: "o", Repo: "r"}, true
 	}
@@ -618,7 +618,7 @@ func urlRepo(t *testing.T, s *Service) {
 	t.Helper()
 	src := filepath.Join(t.TempDir(), "src-r")
 	repoWith(t, src, "")
-	gitIn(t, "-C", src, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "x")
+	gitIn(t, "-C", src, "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit", "-q", "--allow-empty", "-m", "x")
 	s.cloneRemote = func(text string) (gitremote.Remote, bool) {
 		if text != "https://github.com/o/r" {
 			return gitremote.Remote{}, false
