@@ -432,7 +432,11 @@ func (s *Service) sendToWaiting(sender sample.Session, id string, a proto.Act) p
 	st := s.chainsLocked()
 	st.PostLine(to, memberOf(sender), peerTag(sender)+" "+a.Text, now)
 	n, _ := st.InboxCount(to)
+	err := s.saveChainsLocked() // it may wait for days, across restarts
 	s.mu.Unlock()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "matchblox: chains.json:", err)
+	}
 	s.spark(chainID, now)
 	s.logPeer(peerRecord{At: now, From: sender.Name, FromPane: a.From, To: w.Name, ToPane: "sid:" + id,
 		Len: len(a.Text), SHA256: sum(a.Text), Via: "inbox", Result: "queued"})

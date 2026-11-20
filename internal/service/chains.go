@@ -279,8 +279,8 @@ func (s *Service) pruneChainsLocked(now time.Time, prev []sample.Session) error 
 	if s.sampleMissedLocked() {
 		return nil // every match would look gone
 	}
-	refreshed := s.refreshChainsLocked(st)
-	before, offs, unseen := slices.Clone(st.Chains), len(st.Off), maps.Clone(st.Unseen)
+	s.refreshChainsLocked(st)
+	before := slices.Clone(st.Chains)
 	panes := map[string]bool{}
 	for _, p := range s.cur.Panes {
 		panes[p.ID] = true
@@ -360,10 +360,7 @@ func (s *Service) pruneChainsLocked(now time.Time, prev []sample.Session) error 
 			}
 		}
 	}
-	if !refreshed && len(left) == 0 && len(st.Off) == offs && maps.Equal(st.Unseen, unseen) {
-		return nil
-	}
-	return s.saveChainsLocked()
+	return s.saveChainsLocked() // also an inbox that changed: it writes only a change
 }
 
 // refreshChainsLocked renames each stored member whose pane, pid and start

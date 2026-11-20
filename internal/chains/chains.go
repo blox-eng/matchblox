@@ -102,8 +102,9 @@ type Move struct {
 	At   time.Time `json:"at"`
 }
 
-// Store is every chain of a host. The exported fields are saved; the inboxes
-// live in memory only.
+// Store is every chain of a host. The exported fields and the inboxes are
+// saved: a line waits for a match that waits for recover, which may take
+// days and service restarts.
 type Store struct {
 	Chains []Chain  `json:"chains,omitempty"`
 	Off    []Member `json:"off,omitempty"`
@@ -119,6 +120,9 @@ type Store struct {
 	// renamed is the key each refreshed member had before, to its key now:
 	// news given back under an old name reaches the match.
 	renamed map[string]string
+	// wrote is what Save last wrote, and where: a Save with nothing new
+	// writes nothing.
+	wrote, wroteTo string
 }
 
 func (s *Store) isOff(m Member) bool {
@@ -554,24 +558,76 @@ func (s *Store) GiveBack(m Member, t Taken) {
 	s.put(m, k, t.Items, t.Dropped, true)
 }
 
-// Load reads path. A missing file is an empty store.
+// saved is the Store as chains.json holds it. A file with no inbox (saved
+// before inboxes were) loads with empty ones; an older matchblox ignores
+// the inbox of a newer file.
+type saved struct {
+	*plainStore
+	Inbox   map[string][]Item `json:"inbox,omitempty"`
+	Dropped map[string]int    `json:"dropped,omitempty"`
+}
+
+type plainStore Store // Store's fields, with no MarshalJSON
+
+// MarshalJSON saves the exported fields and the inboxes.
+func (s *Store) MarshalJSON() ([]byte, error) {
+	return json.Marshal(saved{(*plainStore)(s), s.inbox, s.dropped})
+}
+
+// UnmarshalJSON loads what MarshalJSON saved. Each item is numbered again
+// in the order its inbox holds it, which is the order it was posted in.
+func (s *Store) UnmarshalJSON(b []byte) error {
+	v := saved{plainStore: (*plainStore)(s)}
+	if err := json.Unmarshal(b, &v); err != nil {
+		return err
+	}
+	s.inbox, s.dropped = v.Inbox, v.Dropped
+	if s.inbox == nil {
+		s.inbox = map[string][]Item{}
+	}
+	if s.dropped == nil {
+		s.dropped = map[string]int{}
+	}
+	for _, k := range slices.Sorted(maps.Keys(s.inbox)) {
+		for i := range s.inbox[k] {
+			s.posted++
+			s.inbox[k][i].seq = s.posted
+		}
+	}
+	return nil
+}
+
+// Load reads path. A missing file is an empty store, which Save does not
+// write there. Save writes to path only what differs from what Load read.
 func Load(path string) (*Store, error) {
 	s := &Store{}
 	b, err := os.ReadFile(path) //nolint:gosec // our own state dir
-	if errors.Is(err, fs.ErrNotExist) {
-		return s, nil
-	}
-	if err != nil {
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		b, err = json.Marshal(s)
+		if err != nil {
+			return nil, err
+		}
+	case err != nil:
 		return nil, err
+	default:
+		if err := json.Unmarshal(b, s); err != nil {
+			return s, err
+		}
 	}
-	return s, json.Unmarshal(b, s)
+	s.wrote, s.wroteTo = string(b), path
+	return s, nil
 }
 
-// Save replaces path atomically.
+// Save replaces path atomically, when the store changed since it last
+// wrote there.
 func (s *Store) Save(path string) error {
 	b, err := json.Marshal(s)
 	if err != nil {
 		return err
+	}
+	if path == s.wroteTo && string(b) == s.wrote {
+		return nil
 	}
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -586,5 +642,9 @@ func (s *Store) Save(path string) error {
 		_ = os.Remove(f.Name())
 		return err
 	}
-	return os.Rename(f.Name(), path)
+	if err := os.Rename(f.Name(), path); err != nil {
+		return err
+	}
+	s.wrote, s.wroteTo = string(b), path
+	return nil
 }

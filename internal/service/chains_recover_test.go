@@ -412,3 +412,38 @@ func TestRecoverRefusesAnUnknownConversation(t *testing.T) {
 		t.Fatalf("recover = %+v, want %q", res, want)
 	}
 }
+
+// restart is what a service restart forgets: the chains it holds in memory
+// load again from chains.json.
+func restart(s *Service) {
+	s.mu.Lock()
+	s.Chains, s.mateNames, s.waitNames = nil, nil, nil
+	s.mu.Unlock()
+}
+
+// TestALineToAWaitingMateOutlivesARestart: a mate sends to a member that
+// waits for recover, and the service restarts before recover reopens it.
+// The member still gets the line; once it took it, a further restart
+// gives it no second copy.
+func TestALineToAWaitingMateOutlivesARestart(t *testing.T) {
+	s, one, two := rebootPair(t)
+	loseServer(s)
+	one2 := reopened(one, "%5", 201)
+	publishOn(s, "200", one2)
+	res := s.act(context.Background(), proto.Act{RecID: "message:sid:s2", Confirm: "y", Text: "the fix is on main", From: "%5", FromKnown: true, FromPlaced: true})
+	if res.Err != "" {
+		t.Fatalf("send = %+v", res)
+	}
+	restart(s)
+	two2 := reopened(two, "%6", 202)
+	publishOn(s, "200", one2, two2)
+	if got := chainInbox(s, two2); !slices.Equal(got, []string{"[from one %5] the fix is on main"}) {
+		t.Fatalf("after a restart two's inbox = %q", got)
+	}
+	publishOn(s, "200", one2, two2)
+	restart(s)
+	publishOn(s, "200", one2, two2)
+	if got := chainInbox(s, two2); len(got) != 0 {
+		t.Fatalf("after a second restart two's inbox = %q", got)
+	}
+}
