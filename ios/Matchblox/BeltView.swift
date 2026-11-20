@@ -786,7 +786,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
 
     /// Points of roll for a radian of turn: the head is about 34 pt round.
     private static let headRadius: CGFloat = 34
-    private static let enter = KeyBar.bytes(for: "⏎") ?? [0x0d]
+    static let enter = KeyBar.bytes(for: "⏎") ?? [0x0d]
 
     /// A key or typed text ends a flick, so the coast cannot scroll the pane back up under it.
     func stopHead() {

@@ -166,6 +166,8 @@ Surface: personal data
 
 ## Changes during build
 
+- Task 5: `HeadDriver.began` takes `canClick:`. The terminal's pan begins only after about 10 pt of travel, so a call-up and a quick lift looked like a still tap and sent Enter; a grab from the terminal never clicks, only a fresh touch on the waiting head does.
+- Task 5: the console screen (`HeldScreen`) owns the called-up head, places it (`headCenter`), dismisses it in `hitTest`, and gains `say(_:)` for its notice; `BeltView.enter` is shared with it. `WheelScroll.gesture` uses `BoardTouch.longPress` for the menu's moment. A call-up needs a vertical move, as the swipe does, so a sideways drag stays a selection.
 - Task 2: `HeadSummon.center` takes `avoid: [CGRect]` (↓, notices) and `HeadSummon.frame(center:)` exists, for design review 2A. Tests import Foundation, not CoreGraphics (Linux has none).
 
 ## Design review: NOT in scope

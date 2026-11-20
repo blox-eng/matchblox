@@ -49,13 +49,17 @@ final class HeadDriver: NSObject {
 
     var isTouched: Bool { touch != nil }
 
-    func began(at point: CGPoint, time: TimeInterval) {
+    var isCoasting: Bool { coast != nil }
+
+    /// A thumb came onto the head. `canClick` is false for a thumb that was already moving, as
+    /// when a rest and a move call the head up: its lift is no tap and sends no Enter.
+    func began(at point: CGPoint, time: TimeInterval, canClick: Bool = true) {
         // A touch stops a flick, as in a scroll view, and says so: it sends nothing.
         let coasting = coast != nil
         coast = nil
         feel.prepare()
         if coasting { feel.stop() }
-        click.began(at: time, coasting: coasting, lastRoll: lastRoll)
+        click.began(at: time, coasting: coasting || !canClick, lastRoll: lastRoll)
         touch = Touch(last: point, time: time)
     }
 
@@ -88,6 +92,11 @@ final class HeadDriver: NSObject {
     func cancelled() {
         touch = nil
         startLink()
+    }
+
+    /// The head came under the thumb.
+    func seat() {
+        feel.seat()
     }
 
     /// The head's view left the screen: no touch, no flick, no frames.

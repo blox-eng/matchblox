@@ -142,6 +142,11 @@ final class HeadFeel {
         play(intensity: 1, sharpness: 0.1)
     }
 
+    /// A rest, then a move, called the head up under the thumb: one light tap.
+    func seat() {
+        play(intensity: 0.5, sharpness: 0.5)
+    }
+
     /// Enter went: two firm taps 60 ms apart, unlike any notch or strike.
     func click() {
         play(intensity: 0.9, sharpness: 0.6, at: [0, 0.06])
