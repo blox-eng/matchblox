@@ -18,7 +18,7 @@ Kill and rename are the console's most common acts on a row. Each one leaves 2 s
   - The service answers with an error: the row comes back as it was, and the console says `kill failed: <the service's reason>`. `x` kills again.
   - Three samples still have the session: the row comes back, and the console says `<name> is still running after the kill. Press x to kill it again.`
 - **Rename.** After the form closes, the row shows the new name at once, faint until a sample shows it.
-  - The service answers with an error: the row shows the old name again, and the console says `rename failed: <the service's reason>`.
+  - The service answers with an error: the row shows the old name again, and the rename form, still open with the typed name, says the service's reason.
   - Three samples still show the old name: the row shows the old name, and the console says the same words with "the rename did not take".
 - **Park.** After `z`, the row moves to HELD at once, faint, with `parking`. A second `z` on a parked row lets it go the same way, with `letting go`.
   - The service answers with an error: the row goes back to its group, and the console says `park failed: <the service's reason>`.
@@ -50,10 +50,6 @@ Today the console has three forms for one idea: `flash` (the key line, about 245
 - A standing error goes away from the screen while it still holds.
 - A toast covers the row the cursor is on, or the key line.
 - A failed kill or rename looks like it worked. The pending state always ends in the sample's truth or a visible error.
-- Park a session: it shows in HELD, faint with `parking`, before any new sample; an `Err` result puts it back with `park failed: <reason>`.
-- Open the console on the desktop with one session of each state: the groups read NEEDS YOU, WORKING, IDLE, HELD, top to bottom.
-- A ship read error shows one toast with its fix, then a `⚠ 1` mark; the key line keeps its keys. The mark goes when the read works again.
-- Grep finds one function that shows a message to the person: no `m.flash =`, `m.toast =` or `notice(` write outside it.
 - A new session that reuses the pid of a killed one shows as `killing`.
 - A pending row stays faint after the session is truly gone, or after the console reconnects.
 
@@ -73,6 +69,7 @@ No sensitive surface touched. Checked: authentication, money, uploads, webhooks,
   - **C. Ask for a sample at once after each act's result.** Pro: tiny. Con: the kill still lags while the agent exits, and there is no `killing` mark.
 
 - 2026-11-20: spec approved. Decided by: the owner.
+- 2026-11-20: a refused rename says its reason in the open form, not in a `rename failed:` toast, because the person is still in the form with the name typed. A "sample" is a new snapshot time of the act's host; a snapshot sent again does not count. Decided by: the builder, after review; proposed, not confirmed.
 
 ## Left to the builder
 
@@ -91,7 +88,7 @@ No sensitive surface touched. Checked: authentication, money, uploads, webhooks,
 - In the console, confirm a kill: the row reads `killing` and is faint before any new sample, and the cursor skips it. After a sample without the session, the row is gone.
 - Make the service refuse a kill (a test service that answers `Err`): the row comes back with `kill failed: <reason>`.
 - Keep the session alive through 3 samples after a kill: the row comes back with the "still running" words.
-- Rename a session: the new name shows before any new sample. After an `Err` result, the old name is back with `rename failed: <reason>`.
+- Rename a session: the new name shows before any new sample. After an `Err` result, the old name is back, and the open form says the service's reason.
 - Park a session: it shows in HELD, faint with `parking`, before any new sample; an `Err` result puts it back with `park failed: <reason>`.
 - Open the console on the desktop with one session of each state: the groups read NEEDS YOU, WORKING, IDLE, HELD, top to bottom.
 - A ship read error shows one toast with its fix, then a `⚠ 1` mark; the key line keeps its keys. The mark goes when the read works again.

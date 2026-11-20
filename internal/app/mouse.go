@@ -59,6 +59,10 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	if m.form != nil {
 		return m.tapForm(ms, sc)
 	}
+	if ms.Y >= sc.sayY0 && ms.Y < sc.sayY1 && ms.X >= sc.sayX0 { // a tap on the toasts ends them: the rows under them are hidden
+		m.saying = nil
+		return m, nil
+	}
 	if sc.placeFull && ms.Y != sc.keysAt {
 		switch {
 		case ms.Y == 0:

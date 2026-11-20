@@ -83,8 +83,8 @@ func (m *Model) sayUnder(text string) {
 	}
 	now := m.sayingNow()
 	m.saying = append(now, toast{text: text, err: true, until: m.now().Add(2 * m.noticeLife())})
-	if len(m.saying) > sayMax {
-		m.saying = m.saying[len(m.saying)-sayMax:]
+	if len(m.saying) > sayMax { // the standing error gives way: its ⚠ mark still counts it
+		m.saying = m.saying[:sayMax]
 	}
 }
 
@@ -181,6 +181,7 @@ func (m Model) overlaySaying(sc *drawn, w int, box [2]int) {
 	if top < 0 { // a box takes the body: the stack shows when it closes
 		return
 	}
+	sc.sayY0, sc.sayY1, sc.sayX0 = top, top+len(rows), w-tw
 	for i, r := range rows {
 		y := top + i
 		if y >= len(sc.lines) {

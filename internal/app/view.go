@@ -153,6 +153,9 @@ type drawn struct {
 	formAgents   []span
 	stokerAt     span // the header's stoker word
 	warnAt       span // the header's ⚠ mark: a tap says the standing errors again
+	// sayY0, sayY1, sayX0: the toast stack's lines and its first column; a
+	// tap there ends the toasts and reaches nothing under them.
+	sayY0, sayY1, sayX0 int
 	// names are the sessions that need you, which the header names while
 	// the list is hidden, and namePanes the session of each.
 	names     []span

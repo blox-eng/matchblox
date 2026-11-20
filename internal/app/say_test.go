@@ -1,6 +1,8 @@
 package app
 
 import (
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/blox-eng/matchblox/internal/proto"
 
 	"go/ast"
@@ -265,5 +267,53 @@ func TestAShipReadErrorIsOneToastThenAMark(t *testing.T) {
 	m = sampled(m, homeSample(st, nil), 1)
 	if head := ansi.Strip(m.draw(160).lines[0]); strings.Contains(head, "⚠") {
 		t.Fatalf("the mark stays after the read works: %q", head)
+	}
+}
+
+// TestATapOnAToastOpensNothing: a toast hides the rows under it, so a tap
+// on it ends the toasts and opens nothing (review of #211, finding 2).
+func TestATapOnAToastOpensNothing(t *testing.T) {
+	m := listShot(t, boardFixture(t), 40, 34, "kindle-web")
+	m.say("sent: kill api")
+	m.say("sent: rename web")
+	m.sayError("kindle-web is still running after the kill. Press x to kill it again.")
+	sc := m.draw(40)
+	if sc.sayY1 <= sc.sayY0 {
+		t.Fatal("no toast drawn")
+	}
+	chosen := m.chosenSide()
+	for y := sc.sayY0; y < sc.sayY1; y++ {
+		next, _ := m.tap(tea.Mouse{X: sc.sayX0 + 2, Y: y, Button: tea.MouseLeft})
+		nm := next.(Model)
+		if nm.chosenSide() != chosen || nm.form != nil || nm.pending != nil {
+			t.Fatalf("a tap on the toast's line %d chose %v (was %v)", y, nm.chosenSide(), chosen)
+		}
+		if len(nm.sayingNow()) != 0 {
+			t.Fatalf("a tap on the toast's line %d left the toasts %v", y, nm.sayingNow())
+		}
+	}
+}
+
+// TestAStandingErrorNeverPushesOutTheNewestToast: the newest toast names
+// what happened to the person's own act; a standing error gives way, and
+// its ⚠ mark still counts it (review of #211, finding 3).
+func TestAStandingErrorNeverPushesOutTheNewestToast(t *testing.T) {
+	m := listShot(t, boardFixture(t), 160, 38, "kindle-web")
+	m.say("sent: kill api")
+	m.say("sent: rename web")
+	m.sayError("kindle-web is still running after the kill. Press x to kill it again.")
+	m.sayUnder("not read: blox-eng/x: HTTP 502")
+	if got := toastNow(m); !strings.HasPrefix(got, "kindle-web is still running") {
+		t.Fatalf("the newest toast is %q", got)
+	}
+}
+
+// TestAGenericActErrorIsAnErrorToast: a refused act says so as an error,
+// which stays longer (review of #211, finding 5).
+func TestAGenericActErrorIsAnErrorToast(t *testing.T) {
+	m := listShot(t, boardFixture(t), 160, 38, "kindle-web")
+	next, _ := m.Update(resultMsg(proto.Result{ActID: "a99", Err: "the pane is gone"}))
+	if now := next.(Model).sayingNow(); len(now) == 0 || !now[0].err {
+		t.Fatalf("a refused act said %+v, want an error toast", now)
 	}
 }

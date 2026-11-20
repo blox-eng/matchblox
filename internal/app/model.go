@@ -1111,6 +1111,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if blocking(msg.err) {
 			// Trying again cannot help: connecting the host can.
 			m.blocked, m.flash = msg.err, ""
+			if notConfirmed != "" { // its screen says how to connect; the act's fate is said too
+				said := m.sayError(notConfirmed)
+				return m, said
+			}
 			return m, nil
 		}
 		// Two or more hosts: a short loss shows nothing, as a peer's;
@@ -1341,8 +1345,12 @@ func (m Model) result(r proto.Result) (Model, tea.Cmd) {
 	if text := describe(r); text != "" && r.Err == "" && len(r.Skipped) == 0 {
 		toast := m.say(tilde(text))
 		return m, toast
+	} else if text != "" && r.Err != "" {
+		said := m.sayError(tilde(text))
+		return m, said
 	} else if text != "" {
-		m.say(tilde(text))
+		said := m.say(tilde(text))
+		return m, said
 	}
 	return m, nil
 }
