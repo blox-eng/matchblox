@@ -76,8 +76,9 @@ its server stopped and what the keys do: `its server stopped 22:14 · ⏎
 reopen · m menu` (a day, `19 Nov`, when it was not today). `⏎` reopens
 that one match, with no confirm, and a notice says the result:
 `kindle-web reopened`, or `kindle-web not reopened: <why>` with the fix.
-A waiting row is no session: `x`, `p`, `r`, `c` and typed text show
-`kindle-web waits for recover · matchblox recover reopens it`.
+A waiting row is no session: `x`, `p`, `r`, `c`, typed text and `⏎` in
+the line show `kindle-web waits for recover · matchblox recover reopens
+it`, and send nothing.
 
 The foot is one line: `+ new · ✧ 2 tips · ! 1 setup`. Each part opens in
 the chat's place: `+ new` opens **New session**, `✧ 2 tips` the tips, `!

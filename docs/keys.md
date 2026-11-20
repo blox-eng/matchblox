@@ -27,7 +27,7 @@ the line empty and a question on the screen; else it types.
 
 | Key | What it does |
 |---|---|
-| `Enter` | In the line, sends the text to the session the line names, through its own host. In the list, goes back to the line. With the agent beside the list, it shows the chosen agent and gives it the keys. On a match that waits for recover (`◌`), it reopens that match. |
+| `Enter` | In the line, sends the text to the session the line names, through its own host. In the list, goes back to the line. With the agent beside the list, it shows the chosen agent and gives it the keys. In the list, on a match that waits for recover (`◌`), it reopens that match alone; in the line there, it sends nothing. |
 | `Backspace` | In the drawn chat, erases the last character of the line. |
 | A digit, 1 to 9 | With the line empty, marks that option of the question on the screen. The same digit again sends it. A question that opened less than half a second ago takes no digit: the digit types. On a session the stoker holds, 1 marks "Let it go", and 1 again lets it go. |
 | `↑`, `↓` | With the line empty, or in the list, chooses the session above or below, as the list draws them. In the list, `↓` past the last row chooses the parts of the foot one by one, and `↑` goes back up. `Enter` opens the chosen part. |
