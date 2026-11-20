@@ -398,3 +398,72 @@ func TestARightClickOpensTheMenuOfAWaitingMatch(t *testing.T) {
 		t.Fatalf("menu = %+v", mm.menu)
 	}
 }
+
+// waitingInTwoTeams is loginChain with kindle-web and wick-mobile gone from
+// the host: both wait for recover. kindle-web is in login and in hearth.
+func waitingInTwoTeams(t *testing.T) Model {
+	t.Helper()
+	st := loginState(nil)
+	var kindle chains.Member
+	st.Sessions = slices.DeleteFunc(st.Sessions, func(s sample.Session) bool {
+		if s.Name != "kindle-web" && s.Name != "wick-mobile" {
+			return false
+		}
+		if s.Name == "kindle-web" {
+			kindle = memberOf(s)
+		}
+		st.Chains.Mates = append(st.Chains.Mates, state.MateView{Member: memberOf(s), Wait: &state.WaitView{Name: s.Name, Agent: "claude"}})
+		return true
+	})
+	st.Chains.Chains = append(st.Chains.Chains, chains.Chain{ID: "c2", Name: "hearth", Members: []chains.Member{kindle, st.Chains.Chains[0].Members[1]}})
+	return boardModel(t, st)
+}
+
+// footReopenSpan is the span of the foot's ↻ part, and the foot's words.
+func footReopenSpan(m Model) (span, string, bool) {
+	line, spans := m.sideFoot(80)
+	for _, sp := range spans {
+		if strings.HasPrefix(sp.press, footReopen) {
+			return sp, plainLines([]string{line})[0], true
+		}
+	}
+	return span{}, plainLines([]string{line})[0], false
+}
+
+// TestTheFootCountsMatchesToReopen: the foot counts each match that waits
+// for recover once, also when it waits in two teams. With none, the foot
+// has no ↻ part.
+func TestTheFootCountsMatchesToReopen(t *testing.T) {
+	if _, line, ok := footReopenSpan(waitingInTwoTeams(t)); !ok || !strings.Contains(line, "↻ 2 to reopen") {
+		t.Fatalf("the foot reads %q, want ↻ 2 to reopen", line)
+	}
+	if _, line, ok := footReopenSpan(loginChain(t, nil)); ok || strings.Contains(line, "↻") {
+		t.Fatalf("with no waiting match the foot reads %q", line)
+	}
+}
+
+// TestTheFootReopensThemAll: a tap on ↻ asks for a typed y and names the
+// matches. y sends one recover act with all their names, as JSON.
+func TestTheFootReopensThemAll(t *testing.T) {
+	m := waitingInTwoTeams(t)
+	sp, _, ok := footReopenSpan(m)
+	if !ok {
+		t.Fatal("the foot has no ↻ part")
+	}
+	next, _ := m.footTap([]span{sp}, sp.x0)
+	asked := next.(Model)
+	f := boardFake(asked)
+	if len(f.acts()) != 0 || asked.pending == nil || !asked.pending.destructive || asked.pending.String() != "reopen 2 matches: kindle-web, wick-mobile?" {
+		t.Fatalf("a tap on ↻: acts %+v, pending %+v", f.acts(), asked.pending)
+	}
+	if a, names := reopenAct(t, pressOn(asked, "y")); a.RecID != "recover" || a.Confirm != "y" || !slices.Equal(names, []string{"kindle-web", "wick-mobile"}) {
+		t.Fatalf("y sent %+v, names %q", a, names)
+	}
+
+	one := waitingLogin(t, "kindle-web")
+	sp, _, _ = footReopenSpan(one)
+	next, _ = one.footTap([]span{sp}, sp.x0)
+	if p := next.(Model).pending; p == nil || p.String() != "reopen kindle-web?" {
+		t.Fatalf("one waiting match: pending %+v", p)
+	}
+}

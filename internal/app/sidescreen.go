@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/json"
 	"maps"
 	"slices"
 	"strconv"
@@ -661,7 +662,8 @@ func (m Model) footTap(foot []span, x int) (tea.Model, tea.Cmd) {
 }
 
 // openFoot opens a part of the list's foot in the chat's place: New
-// session, the tips, the first open setup step; or shows the exited agents.
+// session, the tips, the first open setup step; or shows the exited agents;
+// or asks to reopen the matches that wait for recover on a host.
 func (m Model) openFoot(press string) (tea.Model, tea.Cmd) {
 	m.footAt = 0
 	switch press {
@@ -679,6 +681,30 @@ func (m Model) openFoot(press string) (tea.Model, tea.Cmd) {
 		m.openPlace(placeHost)
 		m.sideHost = host
 	}
+	if host, ok := strings.CutPrefix(press, footReopen); ok {
+		return m.askReopen(host)
+	}
+	return m, nil
+}
+
+// askReopen asks for a typed y to reopen all the matches that wait for
+// recover on host. Reopening starts agents, so the confirm names each one.
+// The names go into the act as JSON, never as shell words.
+func (m Model) askReopen(host string) (tea.Model, tea.Cmd) {
+	_, all := m.waitingByHost()
+	names := all[host]
+	if len(names) == 0 {
+		return m, nil
+	}
+	text, err := json.Marshal(proto.Recover{Names: names})
+	if err != nil {
+		return m, m.notice("not reopened: " + err.Error())
+	}
+	say := "reopen " + names[0] + "?"
+	if len(names) > 1 {
+		say = "reopen " + strconv.Itoa(len(names)) + " matches: " + strings.Join(names, ", ") + "?"
+	}
+	m.pending = &action{label: say, say: say, rec: recoverID, text: string(text), destructive: true, host: host}
 	return m, nil
 }
 

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strconv"
@@ -51,14 +52,16 @@ const (
 	footTips   = "foot:tips"
 	footSetup  = "foot:setup"
 	footExited = "foot:exited"
-	footHost   = "foot:host:" // then the host's routing key
+	footHost   = "foot:host:"   // then the host's routing key
+	footReopen = "foot:reopen:" // then the host's routing key
 )
 
 // listFootPart is a part of the list's foot: its words, and what it opens.
 type listFootPart struct{ text, press string }
 
 // footParts are the parts the foot shows: a new session, the tips, the
-// setup steps still open, and the exited agents while they are hidden.
+// setup steps still open, the matches that wait for recover on each host,
+// and the exited agents while they are hidden.
 func (m Model) footParts() []listFootPart {
 	parts := []listFootPart{{"+ new", footNew}}
 	if n := len(m.recs); n > 0 {
@@ -78,10 +81,38 @@ func (m Model) footParts() []listFootPart {
 		}
 		parts = append(parts, listFootPart{"! " + m.nameOf(h) + word, footHost + h})
 	}
+	hosts, names := m.waitingByHost()
+	for _, h := range hosts {
+		text := "↻ " + strconv.Itoa(len(names[h])) + " to reopen"
+		if h != m.opt.Host {
+			text += " on " + m.nameOf(h)
+		}
+		parts = append(parts, listFootPart{text, footReopen + h})
+	}
 	if n := len(m.snap.Exited); n > 0 && !m.showExited {
 		parts = append(parts, listFootPart{strconv.Itoa(n) + " exited", footExited})
 	}
 	return parts
+}
+
+// waitingByHost are the names of the members that wait for recover, by
+// host, in the list's order. The list places a member of two teams once,
+// so each name counts once.
+func (m Model) waitingByHost() ([]string, map[string][]string) {
+	var hosts []string
+	names := map[string][]string{}
+	for _, g := range m.sideGroups() {
+		for _, u := range g.units {
+			for _, v := range u.waiting {
+				h := cmp.Or(u.chain.host, m.opt.Host)
+				if _, ok := names[h]; !ok {
+					hosts = append(hosts, h)
+				}
+				names[h] = append(names[h], v.Wait.Name)
+			}
+		}
+	}
+	return hosts, names
 }
 
 // sideFoot is the panel's last line, the foot's parts: the spans are where
@@ -100,7 +131,11 @@ func (m Model) sideFoot(w int) (string, []span) {
 			x += 3
 		}
 		ink, ok := ink[p.press]
-		if !ok { // a host's trouble
+		switch {
+		case ok:
+		case strings.HasPrefix(p.press, footReopen):
+			ink = st.wait
+		default: // a host's trouble
 			ink = st.warn
 		}
 		text := ink.Render(p.text)
