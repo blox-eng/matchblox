@@ -316,7 +316,7 @@ func run(args []string) error {
 			binds = append(binds, panes.HomeKeyArgv(), panes.FlipKeysArgv())
 		}
 		if os.Getenv(panes.HomeEnv) == "1" {
-			binds = append(binds, panes.HomeMarkArgv(os.Getenv("TMUX_PANE")), panes.SizeArgv(os.Getenv("TMUX_PANE")), panes.CommandKeysArgv(), panes.MarkKeyArgv(), panes.BeltKeyArgv(), panes.TapKeysArgv(), panes.ViewerHookArgv(), panes.BesideKeysArgv(), panes.BesideHookArgv(), remote.ViewHookArgv())
+			binds = append(binds, homeBinds(os.Getenv("TMUX_PANE"))...)
 		}
 		for _, argv := range binds {
 			_ = exec.Command("tmux", argv[1:]...).Run()
@@ -488,6 +488,17 @@ func parseCommand(args []string) (cmd, host string, rest []string, err error) {
 		return "", "", nil, fmt.Errorf("%q is not a command or a host; the commands are %s", args[0], strings.Join(commands, ", "))
 	}
 	return "console", args[0], args[1:], nil
+}
+
+// homeBinds are the tmux settings of a console in its home session. The
+// console's mark and size take its own pane, from the environment, only
+// when it is a tmux pane id.
+func homeBinds(pane string) [][]string {
+	var binds [][]string
+	if remote.PaneID(pane) {
+		binds = append(binds, panes.HomeMarkArgv(pane), panes.SizeArgv(pane))
+	}
+	return append(binds, panes.CommandKeysArgv(), panes.MarkKeyArgv(), panes.BeltKeyArgv(), panes.TapKeysArgv(), panes.ViewerHookArgv(), panes.BesideKeysArgv(), panes.BesideHookArgv(), remote.ViewHookArgv())
 }
 
 // goHome replaces this process with `tmux new-session -A -s matchblox
