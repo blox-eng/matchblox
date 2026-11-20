@@ -321,6 +321,10 @@ func (m Model) peerLost(i int, err error) (tea.Model, tea.Cmd) {
 	first := !p.lost
 	p.lost, p.silent = true, false
 	m = m.roomLost(p.host).lineLost(p.host)
+	m, notConfirmed := m.actsLost(p.host)
+	if notConfirmed != "" {
+		m.flash = notConfirmed
+	}
 	m, answer := m.answerLost(p.host, p.acts)
 	p = &m.peers[i]
 	news := tea.Batch(m.noAnswer(*p), answer)
@@ -407,6 +411,7 @@ func (m Model) reconcile(peers []Peer) (Model, tea.Cmd) {
 		}
 		news = append(news, m.noAnswer(l))
 		m.batchLost(l.host, l.acts)
+		m, _ = m.actsLost(l.host) // the host is gone: its rows go with it
 		m.dropLogin(l.host)
 	}
 	m.peers = next

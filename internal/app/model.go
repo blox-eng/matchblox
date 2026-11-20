@@ -1108,6 +1108,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		first := !m.lost
 		m.lost = true
 		m = m.roomLost(m.opt.Host).lineLost(m.opt.Host)
+		m, notConfirmed := m.actsLost(m.opt.Host)
 		if blocking(msg.err) {
 			// Trying again cannot help: connecting the host can.
 			m.blocked, m.flash = msg.err, ""
@@ -1118,6 +1119,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var lost []string
 		if m.hostCount() == 1 {
 			lost = append(lost, "connection lost: "+msg.err.Error())
+		}
+		if notConfirmed != "" {
+			lost = append(lost, notConfirmed)
 		}
 		if m.batch != nil {
 			// Their results went with the connection; a peer's still come.

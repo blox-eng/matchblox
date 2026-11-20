@@ -1,6 +1,7 @@
 package app
 
 import (
+	"maps"
 	"slices"
 
 	"github.com/blox-eng/matchblox/internal/proto"
@@ -172,4 +173,19 @@ func (m *Model) settleResult(r proto.Result) bool {
 	}
 	m.flash = p.kind.String() + " failed: " + r.Err
 	return true
+}
+
+// actsLost ends the pending acts of host when its connection drops: no
+// sample can confirm them now, and the list must not wait on them. It
+// says so, or "" when none was pending.
+func (m Model) actsLost(host string) (Model, string) {
+	n := len(m.pendingActs)
+	maps.DeleteFunc(m.pendingActs, func(_ string, p pendingAct) bool { return p.key.host == host })
+	if len(m.pendingActs) == n {
+		return m, ""
+	}
+	if m.side != nil {
+		m.side = &sideMemo{}
+	}
+	return m, "not confirmed: the connection to " + m.nameOf(host) + " dropped. Look at the list when it is back."
 }

@@ -259,3 +259,16 @@ func TestALetGoLeavesHeldAtOnce(t *testing.T) {
 		t.Fatalf("the row let go reads %q, want letting go", row)
 	}
 }
+
+func TestALostHostEndsItsPendingActs(t *testing.T) {
+	st := boardFixture(t)
+	m := pressOn(listShot(t, st, 160, 38, "kindle-web"), "x", "y", "y")
+	next, _ := m.Update(lostMsg{})
+	m = next.(Model)
+	if row := drawnRow(t, m, "kindle-web"); strings.Contains(row, "killing") || len(m.pendingActs) != 0 {
+		t.Fatalf("after the connection dropped the row reads %q, pending %+v", row, m.pendingActs)
+	}
+	if want := "not confirmed: the connection to " + m.nameOf(m.opt.Host) + " dropped"; !strings.Contains(m.flash, want) {
+		t.Fatalf("said %q, want %q", m.flash, want)
+	}
+}
