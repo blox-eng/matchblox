@@ -71,13 +71,13 @@ func (m Model) card() *proto.StokerCard {
 func (m Model) stokerKey(night bool) (tea.Model, tea.Cmd) {
 	host := m.rowHost()
 	if why := m.unsent(host); why != "" {
-		m.flash = why
-		return m, nil
+		said := m.sayError(why)
+		return m, said
 	}
 	v := m.stokerOf(host)
 	if v == nil {
-		m.flash = "this service keeps no stoker"
-		return m, nil
+		said := m.sayError("this service keeps no stoker")
+		return m, said
 	}
 	var verb, say string
 	switch {
@@ -88,7 +88,7 @@ func (m Model) stokerKey(night bool) (tea.Model, tea.Cmd) {
 	default:
 		return m.openSheet(host, night, false)
 	}
-	m.flash = say
+	m.say(say)
 	return m, m.sendTo(host, proto.Act{RecID: "stoker:" + verb, Which: "primary"})
 }
 
@@ -268,7 +268,7 @@ func (m Model) answerTakeOver(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	send := m.sendTo(host, proto.Act{RecID: "stoker:" + verb, Which: "primary"})
 	next, run := held(m)
 	if nm, ok := next.(Model); ok && nm.flash == "" {
-		nm.flash = say
+		nm.say(say)
 		next = nm
 	}
 	return next, tea.Sequence(send, run) // the rest goes first: the jump's into: needs it

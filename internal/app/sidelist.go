@@ -140,7 +140,7 @@ func (m Model) buildSideGroups() []sideGroup {
 		states = append(states, hs)
 	}
 	var out []sideGroup
-	for h := sideNeed; h <= sideIdle; h++ {
+	for h := sideNeed; h <= sideHeld; h++ {
 		g := sideGroup{state: h}
 		for i, u := range units {
 			lead, n := -1, 0
@@ -199,7 +199,9 @@ func (m Model) buildSidePanes(folded bool) []paneKey {
 		}
 		for _, u := range m.sideShows(g) {
 			for _, s := range u.members {
-				out = append(out, paneOf(s))
+				if !m.killing(s) {
+					out = append(out, paneOf(s))
+				}
 			}
 		}
 	}

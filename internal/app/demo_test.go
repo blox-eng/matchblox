@@ -358,18 +358,16 @@ func paneNamedIn(t *testing.T, m Model, name string) string {
 	return ""
 }
 
-// The line is longer than a phone is wide: it takes the hair's row, all of it.
+// The line is longer than a phone is wide: its toast says it whole.
 func TestTheLineReadsWholeOnAPhone(t *testing.T) {
 	m := enterOnPanes(t, 44)
-	lines := strings.Split(ansi.Strip(m.render()), "\n")
-	last := strings.TrimSpace(lines[len(lines)-2]) + " " + strings.TrimSpace(lines[len(lines)-1])
-	if last != demoLine || strings.TrimSpace(lines[len(lines)-1]) != "Install matchblox to do that." {
-		t.Errorf("the last two rows read %q", last)
+	if said := shownSaid(m); said != demoLine {
+		t.Errorf("the phone says %q", said)
 	}
 	m = enterOnPanes(t, 100)
-	lines = strings.Split(ansi.Strip(m.render()), "\n")
-	if got := strings.TrimSpace(lines[len(lines)-1]); got != demoLine {
-		t.Errorf("wide: the key line reads %q", got)
+	lines := strings.Split(ansi.Strip(m.render()), "\n")
+	if said := shownSaid(m); said != demoLine {
+		t.Errorf("wide: the console says %q", said)
 	}
 	if !strings.HasPrefix(lines[len(lines)-2], "─") {
 		t.Errorf("wide: the hair went: %q", lines[len(lines)-2])

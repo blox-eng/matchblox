@@ -138,7 +138,7 @@ func (m Model) closeAsk(answer string, ok bool, flash string) (Model, tea.Cmd) {
 	clear(f.typed)
 	m.ask = nil
 	if flash != "" {
-		m.flash = flash
+		m.say(flash)
 	}
 	m, next := m.nextAsk()
 	return m, tea.Batch(m.waitAsk(), next)
@@ -212,20 +212,20 @@ func (m Model) askKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		switch {
 		case bkey.Matches(k, ak.Copy) && l.loginURL != "":
 			cmd, err := m.clip(l.loginURL)
-			m.flash = "link copied"
+			m.say("link copied")
 			if err != nil {
-				m.flash = "not copied: " + err.Error()
+				m.sayError("not copied: " + err.Error())
 			}
 			return m, cmd
 		case !bkey.Matches(k, ak.Cancel, m.keys.global.Quit):
 		case l.openStop != nil:
 			l.openStop()
 			l.askCancelled = true
-			m.flash = "cancelled: the login to " + host + "…"
+			m.say("cancelled: the login to " + host + "…")
 		case l.checking && l.checkStop != nil:
 			l.checkStop()
 			l.checkCancelled = true
-			m.flash = "cancelled: the Tailscale check of " + host + "…"
+			m.say("cancelled: the Tailscale check of " + host + "…")
 		}
 		m.setLogin(host, l)
 		return m, nil

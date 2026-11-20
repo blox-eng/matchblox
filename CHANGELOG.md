@@ -6,6 +6,28 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+## [0.53.0] - 2026-11-20
+
+### Added
+
+- **A kill, rename or park shows at once.** After you confirm it, the
+  row turns faint: `killing`, the new name, or `parking` in HELD. The next
+  sample confirms it. A refusal, or three samples without the change, bring
+  the row back with the reason. HELD is now the last group of the list.
+- **The console tells you things in one corner.** Messages are toasts at
+  the top right, at the foot on a phone, and the key line keeps its keys. A
+  key ends what was said. An error that lasts, such as ships that GitHub
+  cannot read, shows once with its fix, then waits as a `⚠` mark in the
+  header. A tap on the mark says it again.
+
+### Fixed
+
+- **The match strikes in the middle again.** Beside an agent, the start
+  screen and the pairing page played in the sidebar. They now take the
+  whole window while they play.
+
+## [0.52.0] - 2026-11-20
+
 ### Added
 
 - **Tap the match head for Enter.** A short tap on a still head sends
@@ -1927,7 +1949,9 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.51.1...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.53.0...HEAD
+[0.53.0]: https://github.com/blox-eng/matchblox/compare/v0.52.0...v0.53.0
+[0.52.0]: https://github.com/blox-eng/matchblox/compare/v0.51.1...v0.52.0
 [0.51.1]: https://github.com/blox-eng/matchblox/compare/v0.51.0...v0.51.1
 [0.51.0]: https://github.com/blox-eng/matchblox/compare/v0.50.0...v0.51.0
 [0.50.0]: https://github.com/blox-eng/matchblox/compare/v0.49.0...v0.50.0

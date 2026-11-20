@@ -194,8 +194,8 @@ func TestConsoleStartsAgainAfterItsUpdate(t *testing.T) {
 	if n != 0 || quits(cmd) {
 		t.Fatalf("an install beside this console's binary started it again %d times, quit: %v", n, quits(cmd))
 	}
-	if out := ansi.Strip(m.render()); !strings.Contains(out, "updated to v0.43.0 · quit and open matchblox again") {
-		t.Fatalf("no word to open it again:\n%s", out)
+	if said := shownSaid(m); !strings.Contains(said, "updated to v0.43.0 · quit and open matchblox again") {
+		t.Fatalf("no word to open it again: %q\n%s", said, ansi.Strip(m.render()))
 	}
 	m, cmd, n = install(t, proto.Result{Err: "the checksum does not match"}, true)
 	if n != 0 || quits(cmd) {

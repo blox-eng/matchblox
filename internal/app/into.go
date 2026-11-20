@@ -147,8 +147,8 @@ func (m Model) intoSelected() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if s.Pane == "" {
-		m.flash = noPane(s.Name)
-		return m, nil
+		said := m.sayError(noPane(s.Name))
+		return m, said
 	}
 	return m.goIntoAsking(s.Host, s.Pane)
 }

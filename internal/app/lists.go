@@ -286,10 +286,11 @@ func (m *Model) sortOn(col int) {
 	} else {
 		*s = sortBy{col: col}
 	}
-	m.flash = "sort: " + paneCols[s.col]
+	said := "sort: " + paneCols[s.col]
 	if s.rev {
-		m.flash += ", reversed"
+		said += ", reversed"
 	}
+	m.say(said)
 	m.refresh()
 }
 
@@ -403,7 +404,7 @@ func (m *Model) mark() {
 	case m.picked[r.key()]:
 		delete(m.picked, r.key())
 	case !r.wt.Safe:
-		m.flash = "not safe to remove: " + unsafeWhy(r.wt)
+		m.sayError("not safe to remove: " + unsafeWhy(r.wt))
 	default:
 		if m.picked == nil {
 			m.picked = map[wtKey]bool{}
@@ -444,7 +445,7 @@ func (m *Model) markAllSafe() {
 		m.picked[p] = true
 	}
 	if len(safe) == 0 {
-		m.flash = "no worktree is safe to remove"
+		m.sayError("no worktree is safe to remove")
 	}
 }
 
@@ -494,9 +495,9 @@ func (m Model) sendBatch(a action) (tea.Model, tea.Cmd) {
 		b.ids["a"+strconv.Itoa(m.acts)] = true
 	}
 	m.batch, m.picked = b, nil
-	m.flash = fmt.Sprintf("removing %d worktrees…", len(a.batch))
+	m.say(fmt.Sprintf("removing %d worktrees…", len(a.batch)))
 	if len(a.batch) == 1 {
-		m.flash = "removing 1 worktree…"
+		m.say("removing 1 worktree…")
 	}
 	return m, tea.Batch(cmds...)
 }
@@ -556,5 +557,6 @@ func (m *Model) endBatch() {
 	if b.why != "" {
 		text += ": " + b.why
 	}
-	m.flash, m.batch = text, nil
+	m.batch = nil
+	m.say(text)
 }

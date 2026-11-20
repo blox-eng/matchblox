@@ -399,7 +399,7 @@ func TestTheCopyCheckSaysHowToLeave(t *testing.T) {
 		}
 		*clock = clock.Add(time.Hour)
 		m = upd(t, m, noticeMsg{})
-		if row := boardNoticeRow(m); !strings.Contains(row, "Now paste here · esc cancels") {
+		if row := m.footSays(); !strings.Contains(row, "Now paste here · esc cancels") { // a question: it waits on the foot
 			t.Errorf("%s: an hour on, the check's row says %q", name, row)
 		}
 		if keys := keyLineOf(m); !strings.Contains(keys, "esc cancel") || strings.Contains(keys, "set up") {

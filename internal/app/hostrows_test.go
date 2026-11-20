@@ -332,7 +332,7 @@ func TestRemoteHomeConsoleGetsTheCommand(t *testing.T) {
 		st.Update = behind
 		m = upd(t, m, stateMsg(st))
 		notice := "run matchblox update · console v0.41.0, latest v0.43.0"
-		if got := strings.Contains(strings.Join(frameOf(m), "\n"), notice); got != c.say {
+		if got := strings.Contains(shownSaid(m), notice); got != c.say {
 			t.Errorf("local %v, console %s: notice %v, want %v\n%s", c.local, c.console, got, c.say, strings.Join(frameOf(m), "\n"))
 		}
 		for _, a := range conn.acts() {

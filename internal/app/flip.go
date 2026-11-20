@@ -50,7 +50,7 @@ func (m Model) homeSession(pane string) (sample.Session, bool) {
 func (m Model) flipFrom(tty, pane string) Model {
 	s, ok := m.homeSession(pane)
 	if !ok {
-		m.flash = m.keys.room.Flip.Help().Key + ": no session in " + pane
+		m.sayError(m.keys.room.Flip.Help().Key + ": no session in " + pane)
 		return m
 	}
 	k := m.roomKeyOf(s)
@@ -116,8 +116,8 @@ func (m Model) cameFrom() (tty, pane string) {
 func (m Model) walkFrom(tty, pane string) (tea.Model, tea.Cmd) {
 	s, ok := m.homeSession(pane)
 	if !ok {
-		m.flash = m.keys.room.Walk.Help().Key + ": no session in " + pane
-		return m, nil
+		said := m.sayError(m.keys.room.Walk.Help().Key + ": no session in " + pane)
+		return m, said
 	}
 	seen, _ := m.members(m.roomKeyOf(s))
 	i := slices.IndexFunc(seen, func(x sample.Session) bool { return x.Pane == pane })

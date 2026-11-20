@@ -510,9 +510,8 @@ func TestSilentServiceShowsFix(t *testing.T) {
 	f := newFake()
 	m := New(Options{NoMotion: true, Conn: f, Owner: func() int { return 4321 }})
 	next, _ := m.Update(silentMsg{conn: f})
-	out := next.(Model).render()
-	if !strings.Contains(out, "does not answer") || !strings.Contains(out, "kill 4321") {
-		t.Fatalf("view lacks the fix:\n%s", out)
+	if said := shownSaid(next.(Model)); !strings.Contains(said, "does not answer") || !strings.Contains(said, "kill 4321") {
+		t.Fatalf("view lacks the fix: %q\n%s", said, next.(Model).render())
 	}
 	// Once the state arrives, a late timer changes nothing.
 	m2, _ := loadedWith(t, 100, fixtureState())
@@ -535,7 +534,7 @@ func TestASilentServicesFixFitsAShortPane(t *testing.T) {
 		if len(lines) > h {
 			t.Errorf("%dx%d: %d lines in the pane", w, h, len(lines))
 		}
-		if said := strings.Join(strings.Fields(strings.Join(lines, " ")), " "); !strings.Contains(said, "kill 4321") {
+		if said := shownSaid(next.(Model)); !strings.Contains(said, "kill 4321") {
 			t.Errorf("%dx%d: the fix fell off the pane:\n%s", w, h, strings.Join(lines, "\n"))
 		}
 	}

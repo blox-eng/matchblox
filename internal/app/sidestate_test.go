@@ -1,6 +1,7 @@
 package app
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -64,13 +65,29 @@ func TestSideStateOf(t *testing.T) {
 
 func TestSideHeads(t *testing.T) {
 	var got []string
-	for h := sideNeed; h <= sideIdle; h++ {
+	for h := sideNeed; h <= sideHeld; h++ {
 		got = append(got, h.head())
 	}
-	want := []string{"NEEDS YOU", "WORKING", "HELD", "IDLE"}
+	want := []string{"NEEDS YOU", "WORKING", "IDLE", "HELD"}
 	for i := range want {
 		if got[i] != want[i] {
 			t.Fatalf("heads %v, want %v", got, want)
 		}
+	}
+}
+
+// TestTheListEndsInHeld: a session the builder parked sits below the idle
+// ones, at the end of the list (the owner, 2026-11-20, #211).
+func TestTheListEndsInHeld(t *testing.T) {
+	idle, parked := boardMatch("cinder-ci", time.Hour), boardMatch("ember-billing", time.Hour)
+	idle.Status = "stopped"
+	st := boardState()
+	st.Sessions = []sample.Session{parked, idle}
+	st.Holds = []proto.Hold{{SessionID: parked.SessionID, Pane: parked.Pane, Name: parked.Name, By: holdByYou}}
+	lines, _, _ := boardModel(t, st).sideList(80, 30)
+	text := strings.Join(lines, "\n")
+	i, h := strings.Index(text, "IDLE"), strings.Index(text, "HELD")
+	if i < 0 || h < 0 || h < i {
+		t.Fatalf("IDLE at %d, HELD at %d, want HELD last:\n%s", i, h, text)
 	}
 }

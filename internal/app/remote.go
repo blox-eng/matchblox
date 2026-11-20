@@ -220,7 +220,7 @@ func (m Model) onHost(a action) (tea.Model, tea.Cmd) {
 			return ranMsg{cmd: a.String(), err: err, jumped: a.pane, host: host}
 		}
 	}
-	m.flash = "running: " + shellLine(argv)
+	m.say("running: " + shellLine(argv))
 	return m, m.exec(argv, func(err error) tea.Msg {
 		switch {
 		case a.connect:
@@ -241,7 +241,8 @@ func (m Model) exec(argv []string, done func(error) tea.Msg) tea.Cmd {
 
 // tryAgain dials again, after the builder fixed what the console showed.
 func (m Model) tryAgain() (tea.Model, tea.Cmd) {
-	m.blocked, m.flash = nil, "trying "+m.opt.Host+" again…"
+	m.blocked = nil
+	m.say("trying " + m.opt.Host + " again…")
 	if m.opt.Redial == nil {
 		return m, nil
 	}
@@ -253,19 +254,19 @@ func (m Model) tryAgain() (tea.Model, tea.Cmd) {
 // connected dials again after `matchblox connect`.
 func (m Model) connected(msg connectedMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
-		m.flash = "not connected: " + msg.err.Error() + "; " + m.keys.main.Open.Help().Key + " tries again"
-		return m, nil
+		said := m.sayError("not connected: " + msg.err.Error() + "; " + m.keys.main.Open.Help().Key + " tries again")
+		return m, said
 	}
 	if i := m.peerAt(msg.host); msg.host != m.opt.Host && i >= 0 {
 		next, cmd := m.peerTryAgain(i)
 		nm := next.(Model)
 		if cmd != nil {
-			nm.flash = "connected " + msg.host + ", opening…"
+			nm.say("connected " + msg.host + ", opening…")
 		}
 		return nm, cmd
 	}
 	m.blocked, m.mismatch = nil, false
-	m.flash = "connected " + m.opt.Host + ", opening…"
+	m.say("connected " + m.opt.Host + ", opening…")
 	if m.conn != nil {
 		_ = m.conn.Close()
 	}
