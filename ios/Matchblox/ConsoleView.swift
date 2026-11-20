@@ -367,10 +367,18 @@ private final class Belts {
             belt.isDemo = isDemo
             belt.onScreenHold = { [weak screen] holding in screen?.trayMoved(open: holding) }
             belt.onSend = { [weak terminal] bytes in
-                terminal?.forgetScrollBack()
-                if bytes == Self.copyReply { terminal?.onAsksCopy() }
-                terminal?.send(bytes)
+                guard let terminal else { return }
+                // A pane scrolled up is in tmux copy mode, which would take the key as its own
+                // command: the steps back down leave it first. Esc there only comes back down:
+                // the agent would read it as an interrupt.
+                let wasUp = terminal.isUpInPane
+                terminal.jumpToBottom()
+                if wasUp, bytes == Self.esc { return }
+                if bytes == Self.copyReply { terminal.onAsksCopy() }
+                terminal.send(bytes)
             }
+            belt.onHead = { [weak terminal] lines in terminal?.head(lines: lines) ?? .nothing }
+            belt.onHeadPage = { [weak terminal] older in terminal?.headPage(older: older) ?? .nothing }
             belt.onCtrl = { [weak self, weak terminal] in
                 guard let terminal else { return }
                 terminal.controlModifier.toggle()
@@ -383,12 +391,17 @@ private final class Belts {
             belt.onLayout = { [weak self] layout in self?.layoutPicked(layout) }
             belt.onEditMine = { [weak self] in self?.editMine() }
         }
+        terminal.onTyped = { [weak self] in
+            self?.lifted.stopHead()
+            self?.dock.stopHead()
+        }
         ctrlObserver = NotificationCenter.default.addObserver(forName: Self.ctrlReset, object: terminal, queue: .main) {
             [weak self] _ in MainActor.assumeIsolated { self?.ctrlChanged(false) }
         }
     }
 
     private static let copyReply = KeyBar.bytes(for: "board.c")
+    private static let esc = KeyBar.bytes(for: "Esc")
 
     /// SwiftTerm disarms ctrl after the next typed key and posts this; its name is not public.
     private static let ctrlReset = Notification.Name("SwiftTerm.TerminalView.controlModifierReset")

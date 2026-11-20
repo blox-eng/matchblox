@@ -400,13 +400,48 @@ goes dark. Tap it again to let it go. The pane gets ctrl with `b d e f g k l
 n p r t u v w x y`, and with `a` and `c`. It sends no `ctrl+z`, which would
 stop the agent, and no `ctrl+s` or `ctrl+q`, which stop and start the terminal.
 
+The Console group has the console's own keys: `c copy reply`, `⌃o expand`,
+`s hosts`, `g chain`, `/`, `m menu`, `z park`, `N new`, `⇥ machine` and
+`x kill`. On Mine they act where Board's keys act: in the console. In an
+agent's pane they are dim and send nothing.
+
+#### The match head
+
+The Scroll group has one key, the match head. Add it to Mine, and roll it
+with your thumb to scroll, as a trackball:
+
+- Roll down for older lines, and up for newer lines. Each notch, 10 pt of
+  roll, scrolls and taps once.
+- A slow roll moves 1 line a notch. A faster roll moves more, up to 10
+  lines a notch. The taps come closer together as you roll faster, up to 30
+  a second; past that each notch moves more lines.
+- The head heats as it turns: cold red, ember, then amber. Roll it too fast
+  and it strikes: it lights, with one hard tap. It cools within a second.
+- A flick keeps it turning with slower taps. A touch stops it.
+- At the end of the lines it bumps once and stops. In a tmux pane the app
+  knows the bottom, not the top: the head turns on at the top, and tmux
+  stays there.
+- On a screen with no history that does not read the mouse, the handle row
+  says `nothing scrolls here · this program has no scrollback`.
+- A sideways roll turns the head and scrolls nothing.
+- A tap on the head sends nothing. With VoiceOver, the head is "Scroll
+  wheel": swipe up or down on it to scroll a page.
+
+A belt key after a scroll in a tmux pane first brings the pane back to its
+bottom, so the key reaches the agent, not tmux's copy mode. `Esc` there only
+brings the pane back: it does not reach the agent, where it would interrupt.
+A key, or typing, stops a flick of the head.
+
 A vertical swipe scrolls the console and a tmux pane. In the console's
 list, a swipe chooses the session above or below. In the chat, a swipe
 scrolls the chat back through the pane's history, and the chosen session
 stays. A chat with no screen to scroll says so. The lines move with
 your finger: one line for each line of travel. In a tmux pane each wheel
 step scrolls 5 lines, so the app sends one step for each 5 lines of travel.
-Swipe down for older lines, and up for newer lines. A flick carries on for
+Swipe down for older lines, and up for newer lines. Each step ticks, in the
+console and in a pane. Rest your finger for a quarter of a second, then
+swipe, and the swipe scrolls fast, as the match head does. A finger that
+rests still opens the row's menu as before. A flick carries on for
 at most 0.5 s, and scrolls the same lines in the console and in a pane.
 To select text, touch and hold, then tap Select and drag. Where the
 program does not read the mouse, the terminal scrolls its own history.
