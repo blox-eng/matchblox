@@ -111,3 +111,28 @@ func TestABoxInAOnePaneWindowLeavesTheListWhole(t *testing.T) {
 		t.Fatal("the agent picture cuts the list in a one-pane window")
 	}
 }
+
+// TestAFormDrawsBeforeItsZoomLands: on a desk the list's pane is 40 wide.
+// The form opens, and its first frame comes before tmux zooms the pane:
+// the chat beside a 32-column list was 7 columns, and the form panicked
+// (v0.50.0, 2026-11-20).
+func TestAFormDrawsBeforeItsZoomLands(t *testing.T) {
+	m, _ := besideConsoleWith(t, boardFixture(t), listWide, 50, &besideTmux{winW: "160", winH: "50"})
+	m.form = &form{}
+	m.boxZoom = true // asked for; tmux has not zoomed the pane yet
+	sc := m.draw(listWide)
+	if sc.boxW < listWide-2 {
+		t.Fatalf("the form draws %d wide in a %d-column pane", sc.boxW, listWide)
+	}
+}
+
+// TestAFormFitsAnyWidth: a form box never panics, however narrow.
+func TestAFormFitsAnyWidth(t *testing.T) {
+	m, _ := besideConsoleWith(t, boardFixture(t), listWide, 50, &besideTmux{winW: "160", winH: "50"})
+	for _, f := range []form{{}, {where: "~/dev/matchblox"}, {rename: true, name: "a-long-session-name"}, {pick: true, roots: "~/dev ~/work"}} {
+		m.form = &f
+		for bw := 0; bw <= 20; bw++ {
+			m.formBox(bw)
+		}
+	}
+}
