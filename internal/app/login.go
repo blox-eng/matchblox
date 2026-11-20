@@ -114,9 +114,9 @@ func (m Model) linkShown(msg urlMsg) (tea.Model, tea.Cmd) {
 	host := msg.host
 	switch {
 	case !msg.tailscale:
-		m.flash = host + " printed an unexpected login link: nothing was opened"
+		m.sayError(host + " printed an unexpected login link: nothing was opened")
 	case msg.url == "":
-		m.flash = "Tailscale SSH on " + host + " printed a link that is not login.tailscale.com: nothing was opened"
+		m.sayError("Tailscale SSH on " + host + " printed a link that is not login.tailscale.com: nothing was opened")
 	default:
 		m.editLogin(host, func(l *hostLogin) { l.loginURL = msg.url })
 		m.pending, m.held = nil, nil // the field is on top: nothing waits under it
@@ -140,13 +140,13 @@ func (m Model) checkLogin(host string) (Model, tea.Cmd) {
 	dir, err := m.masterDir()
 	switch {
 	case err != nil && m.opt.OutsideTmux:
-		m.flash = "jumps to " + host + " ask your login each time: " + masterWhy(err)
+		m.say("jumps to " + host + " ask your login each time: " + masterWhy(err))
 	case err != nil:
-		m.flash = m.masterRefusal(host, err)
+		m.sayError(m.masterRefusal(host, err))
 	case m.opt.Ask == nil && m.opt.NoAsk != "":
-		m.flash = "jumps to " + host + " ask your login in the terminal: " + m.opt.NoAsk
+		m.say("jumps to " + host + " ask your login in the terminal: " + m.opt.NoAsk)
 	case !m.opt.OutsideTmux && m.opt.Prefix != nil && m.opt.Prefix() != "" && !remote.PrefixKey(m.opt.Prefix()):
-		m.flash = "jumps to " + host + " answer C-b, not your tmux prefix " + m.opt.Prefix() + ": a jump binds one key with C-, M- or C-M-"
+		m.sayError("jumps to " + host + " answer C-b, not your tmux prefix " + m.opt.Prefix() + ": a jump binds one key with C-, M- or C-M-")
 	}
 	check, gen := m.checker(host), m.opt.Gen
 	argv := remote.CheckArgv(host, dir)
@@ -197,15 +197,15 @@ func (m Model) loggedIn(msg loginMsg) (tea.Model, tea.Cmd) {
 	}
 	m.setLogin(msg.host, l)
 	if l.checkCancelled {
-		m.flash = "cancelled: the Tailscale check of " + msg.host + "; the next jump asks for it again"
+		m.say("cancelled: the Tailscale check of " + msg.host + "; the next jump asks for it again")
 		if a != nil {
-			m.flash = "cancelled: the Tailscale check of " + msg.host + ", and the jump did not run"
+			m.say("cancelled: the Tailscale check of " + msg.host + ", and the jump did not run")
 		}
 		return m, nil
 	}
 	var cmd tea.Cmd
 	if note := m.loginNote(msg.host, msg.login, msg.detail); note != "" {
-		m.flash = note
+		m.say(note)
 	}
 	if a != nil {
 		var next tea.Model
@@ -223,11 +223,11 @@ func (m Model) jumpAfterLogin(a action) (tea.Model, tea.Cmd) {
 	switch {
 	case l.checking:
 		m.editLogin(host, func(l *hostLogin) { l.jumpLater = &a })
-		m.flash = "checking your ssh login to " + host + "…"
-		return m, nil
+		said := m.say("checking your ssh login to " + host + "…")
+		return m, said
 	case l.login == remote.LoginHostKeyChanged:
-		m.flash = m.loginNote(host, l.login, "")
-		return m, nil
+		said := m.say(m.loginNote(host, l.login, ""))
+		return m, said
 	case m.offersLadder(host):
 		return m.findStep(a)
 	}
@@ -254,8 +254,8 @@ func (m Model) runJump(a action) (tea.Model, tea.Cmd) {
 	host := m.hostOf(a)
 	l := m.loginOf(host)
 	if l.opening {
-		m.flash = "the login to " + host + " runs: answer it, or " + m.keys.ask.Cancel.Help().Key + " to cancel it"
-		return m, nil
+		said := m.say("the login to " + host + " runs: answer it, or " + m.keys.ask.Cancel.Help().Key + " to cancel it")
+		return m, said
 	}
 	// The open lives as long as the console, and esc on its field ends it.
 	ctx, stop := context.WithCancel(m.askCtx)
@@ -263,7 +263,7 @@ func (m Model) runJump(a action) (tea.Model, tea.Cmd) {
 	l.note = m.flash
 	m.setLogin(host, l)
 	m.pending, m.held = nil, nil // the field is on top: nothing waits under it
-	m.flash = "logging in to " + host + "…"
+	m.say("logging in to " + host + "…")
 	ssh, env, gen := m.ssh(), m.opt.Ask.Env(host), m.opt.Gen
 	up, open := remote.MasterUpArgv(host, a.master), remote.OpenArgv(host, a.master)
 	// The open has no -v: the host's kind comes from its check.
@@ -289,21 +289,21 @@ func (m Model) masterOpened(msg masterMsg) (tea.Model, tea.Cmd) {
 	l.opening, l.openStop, l.loginURL, l.note = false, nil, "", ""
 	m.setLogin(host, l)
 	if msg.exit == 0 && !l.askCancelled {
-		m.flash = note
+		m.say(note)
 		return m.onHost(msg.a)
 	}
 	login, detail := remote.ClassifyAs(msg.stderr, msg.exit, l.tailscale)
 	switch {
 	case l.askCancelled:
-		m.flash = "cancelled: the login to " + host + ", and the jump did not run"
+		m.say("cancelled: the login to " + host + ", and the jump did not run")
 	case login == remote.LoginTailscaleCheck:
-		m.flash = "the jump did not run: the Tailscale check of " + host + " was not approved in time; jump again for a new link"
+		m.sayError("the jump did not run: the Tailscale check of " + host + " was not approved in time; jump again for a new link")
 	case login == remote.LoginPassword:
-		m.flash = "the jump did not run: " + host + " refused your login: jump again to type it again, or put your key there (ssh-copy-id " + host + ")"
+		m.sayError("the jump did not run: " + host + " refused your login: jump again to type it again, or put your key there (ssh-copy-id " + host + ")")
 	case login == remote.LoginOK: // an exit that says nothing
-		m.flash = "the jump did not run: ssh " + host + " exited " + strconv.Itoa(msg.exit) + "; check that ssh " + host + " works in a terminal"
+		m.sayError("the jump did not run: ssh " + host + " exited " + strconv.Itoa(msg.exit) + "; check that ssh " + host + " works in a terminal")
 	default:
-		m.flash = "the jump did not run: " + m.loginNote(host, login, detail)
+		m.sayError("the jump did not run: " + m.loginNote(host, login, detail))
 	}
 	return m, nil
 }

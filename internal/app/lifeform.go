@@ -193,13 +193,13 @@ func (m Model) openNewAt(host, at, first string) Model {
 	st := m.stateOf(host)
 	switch why := m.refusal(host); {
 	case why != "":
-		m.flash = why
+		m.sayError(why)
 		return m
 	case host == m.opt.Host && (m.conn == nil || m.lost):
-		m.flash = "not sent, no connection"
+		m.sayError("not sent, no connection")
 		return m
 	case len(st.Agents) == 0:
-		m.flash = "no agent to start here: install claude, codex, opencode or cursor-agent"
+		m.sayError("no agent to start here: install claude, codex, opencode or cursor-agent")
 		return m
 	}
 	f := &form{host: host, at: fieldWhere, agent: st.Agents[0], accts: st.Accounts, skipped: st.AccountsSkipped, last: st.LastAccount, first: first}
@@ -227,14 +227,14 @@ func (m Model) openRename() (tea.Model, tea.Cmd) {
 	case !ok:
 		return m, nil
 	case s.Pane == "":
-		m.flash = s.Name + " is outside tmux: nothing to rename"
-		return m, nil
+		said := m.sayError(s.Name + " is outside tmux: nothing to rename")
+		return m, said
 	case m.refusal(s.Host) != "":
-		m.flash = m.refusal(s.Host)
-		return m, nil
+		said := m.sayError(m.refusal(s.Host))
+		return m, said
 	case s.Host == m.opt.Host && (m.conn == nil || m.lost):
-		m.flash = "not sent, no connection"
-		return m, nil
+		said := m.sayError("not sent, no connection")
+		return m, said
 	}
 	name := s.Name
 	if proto.CheckName(name) != nil {
@@ -252,14 +252,14 @@ func (m Model) openSwitch() (tea.Model, tea.Cmd) {
 	case !ok:
 		return m, nil
 	case s.Pane == "":
-		m.flash = s.Name + " is outside tmux: nothing to switch"
-		return m, nil
+		said := m.sayError(s.Name + " is outside tmux: nothing to switch")
+		return m, said
 	case m.refusal(s.Host) != "":
-		m.flash = m.refusal(s.Host)
-		return m, nil
+		said := m.sayError(m.refusal(s.Host))
+		return m, said
 	case s.Host == m.opt.Host && (m.conn == nil || m.lost):
-		m.flash = "not sent, no connection"
-		return m, nil
+		said := m.sayError("not sent, no connection")
+		return m, said
 	}
 	st := m.stateOf(s.Host)
 	f := &form{host: s.Host, swap: true, pane: s.Pane, who: s.Name, from: s.Agent, where: s.Cwd, at: fieldAgent, accts: st.Accounts, skipped: st.AccountsSkipped, last: st.LastAccount}
@@ -270,8 +270,8 @@ func (m Model) openSwitch() (tea.Model, tea.Cmd) {
 		}
 	}
 	if f.agent == "" {
-		m.flash = "no other agent to switch to here"
-		return m, nil
+		said := m.sayError("no other agent to switch to here")
+		return m, said
 	}
 	m.form, m.pending = f, nil
 	return m, nil
@@ -548,8 +548,9 @@ func (m Model) formKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	m.form = &f
 	fk := m.keys.form
 	if f.at == fieldWhere && bkey.Matches(k, fk.Enter, fk.Next) && m.demoRefusesClone(&f) {
-		m.form, m.flash = nil, m.opt.Demo
-		return m, nil
+		m.form = nil
+		said := m.sayError(m.opt.Demo)
+		return m, said
 	}
 	if f.whereList() {
 		f.err = ""
@@ -766,7 +767,12 @@ func (m Model) formEnter() (tea.Model, tea.Cmd) {
 	}
 	var cmd tea.Cmd
 	if f.rename {
-		cmd = m.sendTo(m.formHostOf(&f), proto.Act{RecID: "rename:" + f.pane, Confirm: "y", Text: name})
+		var id string
+		host := m.formHostOf(&f)
+		id, cmd = m.sendToID(host, proto.Act{RecID: "rename:" + f.pane, Confirm: "y", Text: name})
+		if s, ok := m.sessionAt(host, f.pane); ok {
+			m.expect(id, actRename, s, name, false)
+		}
 		m = m.pairActed(action{rec: "rename:" + f.pane, host: f.host})
 	} else {
 		if strings.TrimSpace(f.where) == "" {
@@ -831,7 +837,7 @@ func (m *Model) startNew(f *form, n proto.NewSession) tea.Cmd {
 		return nil
 	}
 	if n.Account != "" && n.Account != "default" {
-		m.flash = fmt.Sprintf("start %s in %s on %s", n.Agent, tilde(n.Where), n.Account)
+		m.say(fmt.Sprintf("start %s in %s on %s", n.Agent, tilde(n.Where), n.Account))
 	}
 	return m.sendNew(f, n)
 }
@@ -954,7 +960,7 @@ func (m Model) stopResult(r proto.Result) (Model, tea.Cmd, bool) {
 	if i := slices.IndexFunc(m.stopQuiet, func(s cloneStop) bool { return s.act == id }); i >= 0 {
 		m.stopQuiet = slices.Delete(slices.Clone(m.stopQuiet), i, i+1)
 		if r.Note != "" { // the clone was done: its folder is there
-			m.flash = tilde(r.Note)
+			m.say(tilde(r.Note))
 		}
 		return m, nil, true
 	}
@@ -1180,26 +1186,27 @@ func (m Model) formResult(r proto.Result) (Model, tea.Cmd, bool) {
 	case f.pick: // as the box's yes: the reply says how it went
 		m = m.closeScan()
 		roots, _ := splitFolders(f.roots)
-		m.flash = m.scanFlash(r, showFolders(roots))
+		m.say(m.scanFlash(r, showFolders(roots)))
 	case len(r.Skipped) > 0 && f.rename && strings.HasSuffix(r.Skipped[0], "renames when it rests"):
-		m.flash = r.Skipped[0]
+		m.sayError(r.Skipped[0])
 	case len(r.Skipped) > 0:
 		f.err = strings.Join(r.Skipped, "; ")
 		return m, nil, true
 	case f.rename:
-		m.flash = "renamed " + f.who + " to " + strings.TrimSpace(f.name)
+		m.say("renamed " + f.who + " to " + strings.TrimSpace(f.name))
 	default:
 		name := strings.TrimSpace(f.name)
 		if !f.named {
 			name = f.autoName()
 		}
-		m.flash = "started " + name + ": it shows on the board in a few seconds"
+		said := "started " + name + ": it shows on the board in a few seconds"
 		if r.Note != "" { // what its where came to
-			m.flash = tilde(r.Note) + " · " + m.flash
+			said = tilde(r.Note) + " · " + said
 		}
 		if len(notes) > 0 {
-			m.flash += "; " + strings.Join(notes, "; ")
+			said += "; " + strings.Join(notes, "; ")
 		}
+		m.say(said)
 		m.lastAgent = f.agent
 	}
 	m.form = nil
@@ -1564,7 +1571,8 @@ func (m Model) tapForm(ms tea.Mouse, sc drawn) (tea.Model, tea.Cmd) {
 	var id int
 	if _, err := fmt.Sscanf(sc.boxRows[i], "row:%d", &id); err == nil && f.whereList() && id < len(f.rows) && f.rows[id].kind != rowLabel {
 		if m.demoRefusesClone(&f) {
-			m.form, m.flash = nil, m.opt.Demo
+			m.form = nil
+			m.sayError(m.opt.Demo)
 			return m, nil
 		}
 		m.form = &f

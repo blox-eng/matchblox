@@ -238,15 +238,17 @@ func (m Model) unblockHost(b blockedHost) (tea.Model, tea.Cmd) {
 	}
 	if b.silent {
 		why, fix := m.blockedWords(b)
-		m.flash = b.host + " " + why + ": " + fix
-		return m, nil
+		said := m.sayError(b.host + " " + why + ": " + fix)
+		return m, said
 	}
 	i := m.peerAt(b.host)
 	if errors.Is(m.peers[i].blocked, remote.ErrHostKeyChanged) {
 		return m.peerTryAgain(i)
 	}
 	if m.pending = m.connectOn(b.host); m.pending == nil {
-		_, m.flash = m.blockedWords(b)
+		_, fix := m.blockedWords(b)
+		said := m.sayError(fix)
+		return m, said
 	}
 	return m, nil
 }
@@ -255,13 +257,13 @@ func (m Model) unblockHost(b blockedHost) (tea.Model, tea.Cmd) {
 // showed.
 func (m Model) peerTryAgain(i int) (tea.Model, tea.Cmd) {
 	if m.peers[i].redial == nil {
-		m.flash = m.peers[i].host + " cannot try again from this console"
-		return m, nil
+		said := m.sayError(m.peers[i].host + " cannot try again from this console")
+		return m, said
 	}
 	m.peers = slices.Clone(m.peers)
 	p := &m.peers[i]
 	p.blocked, p.mismatch = nil, false
-	m.flash = "trying " + p.host + " again…"
+	m.say("trying " + p.host + " again…")
 	p.lost, p.redialing = true, true
 	host, gen, id := p.host, m.opt.Gen, p.id
 	return m, func() tea.Msg { return peerRedialMsg{host, gen, id} }
@@ -368,8 +370,8 @@ func (m Model) updateOf(host string) *state.UpdateView {
 // screen that shows says how it went.
 func (m Model) updateHost(host string) (Model, tea.Cmd) {
 	if why := m.refusal(host); why != "" {
-		m.flash = why
-		return m, nil
+		said := m.sayError(why)
+		return m, said
 	}
 	a := proto.Act{RecID: proto.HostUpdateAct, Confirm: "y"}
 	var cmd tea.Cmd
@@ -380,8 +382,9 @@ func (m Model) updateHost(host string) (Model, tea.Cmd) {
 		cmd = m.sendPeer(i, a)
 		m.hostAct = m.peers[i].acts[len(m.peers[i].acts)-1]
 	}
-	m.hostActOn, m.flash = host, "updating "+m.nameOf(host)+"…"
-	return m, cmd
+	m.hostActOn = host
+	said := tea.Batch(cmd, m.say("updating "+m.nameOf(host)+"…"))
+	return m, said
 }
 
 // hostUpdated is what the update act on a host came to.

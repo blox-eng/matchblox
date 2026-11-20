@@ -232,7 +232,7 @@ func (m Model) screenFrom(host string, msg screenMsg) Model {
 	switch {
 	case host != m.watchHost || msg.Pane != m.watching:
 	case msg.Err != "":
-		m.flash = msg.Err
+		m.sayError(msg.Err)
 	default:
 		m.screen = proto.Screen(msg)
 	}
@@ -278,7 +278,7 @@ func (m *Model) sendKey(s sample.Session, text string) tea.Cmd {
 	}
 	cmd, why := m.sendKeySeen(s, text, seen)
 	if why != "" {
-		m.flash = why
+		m.sayError(why)
 	}
 	return cmd
 }

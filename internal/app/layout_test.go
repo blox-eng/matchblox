@@ -206,26 +206,31 @@ func selectPane(t *testing.T, m tea.Model, pane string) tea.Model {
 	return m
 }
 
-// TestAToastSaysWhatRan: after an action the header's right says what ran,
-// cut before the name is, then goes; a failure stays on the key line.
+// TestAToastSaysWhatRan: after an action a toast says what ran, cut before
+// it takes the screen, then goes; a failure says so as a toast too, and
+// the header keeps its count (#450).
 func TestAToastSaysWhatRan(t *testing.T) {
 	m, _ := loadedWith(t, 44, queueState())
-	m.tab = tabMachine // the board says what ran in its notice row (TestEveryNoticeKeepsItsFix)
+	m.tab = tabMachine
 	next, cmd := m.Update(resultMsg(proto.Result{Ran: [][]string{{"tmux", "send-keys", "-t", "%2", "-l", "--", "a long answer for a narrow screen"}}}))
-	head := strings.Split(screen(next), "\n")[0]
-	if !strings.HasPrefix(head, " ▰ matchblox") || !strings.Contains(head, "ran: tmux") || !strings.Contains(head, "…") {
+	if !strings.Contains(screen(next), "ran: tmux") {
+		t.Fatalf("no toast says what ran:\n%s", screen(next))
+	}
+	if head := strings.Split(screen(next), "\n")[0]; !strings.HasPrefix(head, " ▰ matchblox") || strings.Contains(head, "ran:") {
 		t.Fatalf("header %q", head)
 	}
 	if cmd == nil {
 		t.Fatal("the toast never goes")
 	}
-	gone, _ := next.Update(toastMsg{n: next.(Model).toasts})
-	if head := strings.Split(screen(gone), "\n")[0]; strings.Contains(head, "ran:") || !strings.Contains(head, "● 2") {
-		t.Fatalf("after the toast: %q", head)
+	nm := next.(Model)
+	nm.saying[0].until = nm.now() // its life ended
+	gone, _ := nm.Update(sayEndsMsg{})
+	if strings.Contains(screen(gone), "ran: tmux") {
+		t.Fatal("the toast stays after its life")
 	}
 	failed, _ := m.Update(resultMsg(proto.Result{Err: "the pane is gone"}))
-	if !strings.Contains(actionLine(failed), "failed: the pane is gone") || failed.(Model).toast != "" {
-		t.Fatalf("a failure: key line %q, toast %q", actionLine(failed), failed.(Model).toast)
+	if !strings.Contains(screen(failed), "failed: the pane is gone") {
+		t.Fatalf("a failure is not said:\n%s", screen(failed))
 	}
 }
 
