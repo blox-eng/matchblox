@@ -6,6 +6,13 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **A match that waits for recover shows.** After a lost tmux server,
+  each match that `matchblox recover` can reopen stays in its team as a
+  `◌` row. `⏎` reopens it, its menu takes it out, and `↻ N to reopen` in
+  the foot reopens them all. A line sent to it waits in its inbox.
+
 ### Fixed
 
 - **A reboot no longer breaks up the chains.** A match whose tmux server

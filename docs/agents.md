@@ -200,6 +200,13 @@ that waited lands, its sender hears, at its next step, `[matchblox]
 web-cart got your line (typed 14:02)` or `(heard 14:02)`. A line sent at
 once gets no second notice.
 
+A mate whose tmux server stopped stays in its chain and waits for
+`matchblox recover`. `matchblox send kindle-web "<text>"` still reaches it
+by its name. The line waits in its inbox, and the sender hears
+`kindle-web waits for recover: your line waits in its inbox (1 now)`. The
+line arrives after recover reopens the match. When the recovery record
+forgets the match first, its mates hear `kindle-web left the chain`.
+
 A mate keeps at most 20 items. When a full inbox drops a line, its sender
 hears `[matchblox] 1 line to web-cart dropped: its inbox is full`. When the
 mate leaves the chain before it hears a line, the sender hears `web-cart

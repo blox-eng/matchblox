@@ -27,7 +27,7 @@ the line empty and a question on the screen; else it types.
 
 | Key | What it does |
 |---|---|
-| `Enter` | In the line, sends the text to the session the line names, through its own host. In the list, goes back to the line. With the agent beside the list, it shows the chosen agent and gives it the keys. |
+| `Enter` | In the line, sends the text to the session the line names, through its own host. In the list, goes back to the line. With the agent beside the list, it shows the chosen agent and gives it the keys. On a match that waits for recover (`◌`), it reopens that match. |
 | `Backspace` | In the drawn chat, erases the last character of the line. |
 | A digit, 1 to 9 | With the line empty, marks that option of the question on the screen. The same digit again sends it. A question that opened less than half a second ago takes no digit: the digit types. On a session the stoker holds, 1 marks "Let it go", and 1 again lets it go. |
 | `↑`, `↓` | With the line empty, or in the list, chooses the session above or below, as the list draws them. In the list, `↓` past the last row chooses the parts of the foot one by one, and `↑` goes back up. `Enter` opens the chosen part. |
@@ -38,7 +38,7 @@ the line empty and a question on the screen; else it types.
 | `G` | With the agent beside the list, opens the room of the chosen session's chain, as `g` does without it. |
 | `⌥s` | Opens the room of the chosen session's chain, as `g` does. A session in no chain opens its chain of one, which the host's stoker drives. In the matchblox app, `⌥s` types `s` in the line, and the belt's `g` opens the room. |
 | `/` | In the list, searches the list. |
-| `m` | In the list, opens the menu of the chosen session. It names the acts that destroy nothing, with their keys: rename, stoke the chain, a new order. A kill, a merge, a go, a switch and the stoker's stop are keys of the list only. |
+| `m` | In the list, opens the menu of the chosen session. It names the acts that destroy nothing, with their keys: rename, stoke the chain, a new order. A kill, a merge, a go, a switch and the stoker's stop are keys of the list only. On a match that waits for recover, it opens that match's menu: reopen it, copy its name or its conversation id, or take it out of its team. |
 | `c` | In the list, copies what the agent said last. |
 | `z` | In the list, parks the chosen session: nothing types into it, and the stoker leaves it alone. `z` again lets it go. In the line of a parked session, `z` does nothing: `Esc`, then `z`. |
 | `N` | In the list, opens **New session**: where it starts (a path, or `←` `→` through your repositories and worktrees, then the ones found on the host, the most recent first), a branch for a new worktree beside the repository (blank: none), its name, the agent (`←` `→`, from the installed Claude Code, Codex, OpenCode and Cursor), for Claude Code, Codex and Cursor the account (see below), and a first message (blank: it waits for your first prompt; a new account has none). `Tab` goes to the next line. |
