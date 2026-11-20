@@ -73,7 +73,8 @@ mid, tall screen.
 
 | Key | What it does |
 |---|---|
-| `Enter` | In the list, gives the agent on the right the keys. If the right side does not show the chosen agent yet, it shows it first. A click or a tap on a row does the same. |
+| `Enter` | In the list, gives the agent on the right the keys. If the right side does not show the chosen agent yet, it shows it first. |
+| A click on a row | Chooses the row and shows its agent on the right at once. The keys stay in the list, so `↑` and `↓` go on choosing. From the agent's pane, a click on the list takes the keys back to the list. A click on the agent's pane gives it the keys. |
 | `↑`, `↓` | Choose the next row. When the choice rests, the right side shows that agent, and the keys stay in the list. A peer's rows show after you let one of its agents show in this run; on a host the stoker drives, and on one pane at a time, only `Enter` shows. |
 | `Ctrl+O` | Still goes fully into the agent, as before. |
 
@@ -97,8 +98,20 @@ Text typed in the list does not go to the agent. The key line says
 
 On a narrow window, and on Matchblox Pocket held upright, one pane shows
 at a time. A tap on a row shows the agent full screen, and `◂` goes back
-to the list. Devices share one view: a choice on the phone changes the
-right side of the desk.
+to the list. The phone shares the first console: a choice on the phone
+changes the right side of that console.
+
+### Each terminal, its own console
+
+`matchblox` in a terminal joins the console `matchblox` while no terminal
+shows it. Another terminal opens a console of its own, `matchblox-2`,
+with its own list, its own choice and its own agent beside it. A key, a
+click or `↑` `↓` in one terminal never moves another. `ctrl+q`, `ctrl+a m`
+and a tap on `◂ matchblox` go to the console of the terminal that pressed
+them, also from an agent opened with `Ctrl+O`. Two terminals can show one
+agent: the one that acted last sets its size. When a terminal closes, its
+console ends and the agents run on. The first console stays for the next
+terminal, and the phone always joins it.
 
 The drawn chat and its line stay in the demo (and the iOS demo), in a
 console with no tmux, and in a console outside its home session or started
