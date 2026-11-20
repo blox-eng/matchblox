@@ -232,7 +232,7 @@ func TestAMovedCloneKeepsItsIdent(t *testing.T) {
 	repo := func(name string) string {
 		dir := filepath.Join(base, name)
 		must(t, os.MkdirAll(dir, 0o700))
-		for _, args := range [][]string{{"init", "-q", "-b", "main"}, {"-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", name}} {
+		for _, args := range [][]string{{"init", "-q", "-b", "main"}, {"-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit", "-q", "--allow-empty", "-m", name}} {
 			if out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput(); err != nil { //nolint:gosec // test argv
 				t.Fatalf("git %v: %v %s", args, err, out)
 			}
