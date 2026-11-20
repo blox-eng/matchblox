@@ -61,6 +61,19 @@ func TestHomeSessionName(t *testing.T) {
 	}
 }
 
+// TestAConsoleWhoseTerminalIsInAnAgentIsTaken: the first console's
+// terminal went into an agent with Ctrl+O, so no terminal shows the console
+// now, but that terminal comes back to it: a new terminal opens its own.
+func TestAConsoleWhoseTerminalIsInAnAgentIsTaken(t *testing.T) {
+	listing := "matchblox\t0\t\nmatchblox-in-1\t1\tmatchblox\nwork\t0\t\n"
+	if got := HomeSession(ParseHomeList(listing), false); got != "matchblox-2" {
+		t.Errorf("HomeSession = %q, want matchblox-2", got)
+	}
+	if got := HomeSession(ParseHomeList("matchblox\t0\t\nwork\t1\t\n"), false); got != Home {
+		t.Errorf("HomeSession with no terminal for the console = %q, want %s", got, Home)
+	}
+}
+
 // TestOrphaned: a second console is orphaned once every terminal that
 // showed it has gone from the server; a terminal that only looks at
 // another session still has it. The first console never is.

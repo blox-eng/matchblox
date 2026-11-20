@@ -60,17 +60,26 @@ func HomeSession(attached map[string]int, join bool) string {
 	}
 }
 
-// HomeListArgv lists each session with its terminals, for HomeSession.
+// HomeListArgv lists each session with its terminals and the console it
+// went into an agent from, for HomeSession.
 func HomeListArgv() []string {
-	return []string{"tmux", "list-sessions", "-F", "#{session_name} #{session_attached}"}
+	return []string{"tmux", "list-sessions", "-F", "#{session_name}\t#{session_attached}\t#{" + sample.BackOption + "}"}
 }
 
-// ParseHomeList reads HomeListArgv's listing.
+// ParseHomeList reads HomeListArgv's listing: the terminals of each
+// session, where a terminal in an agent's session counts for the console
+// it went in from, as it comes back there.
 func ParseHomeList(listing string) map[string]int {
 	attached := map[string]int{}
 	for _, line := range strings.Split(listing, "\n") {
-		if name, n, ok := strings.Cut(strings.TrimSpace(line), " "); ok {
-			attached[name], _ = strconv.Atoi(n)
+		f := strings.SplitN(strings.TrimSpace(line), "\t", 3)
+		if len(f) < 2 {
+			continue
+		}
+		n, _ := strconv.Atoi(f[1])
+		attached[f[0]] += n
+		if len(f) == 3 && f[2] != "" {
+			attached[f[2]] += n
 		}
 	}
 	return attached
