@@ -171,3 +171,52 @@ func TestAReusedPidIsNotKilling(t *testing.T) {
 		t.Fatalf("a new process in the pane reads %q, pending %+v", row, m.pendingActs)
 	}
 }
+
+// resulted is m after the service's answer to the one pending act.
+func resulted(t *testing.T, m Model, r proto.Result) Model {
+	t.Helper()
+	r.ActID, _ = onlyPending(t, m)
+	next, _ := m.Update(resultMsg(r))
+	return next.(Model)
+}
+
+func TestAKillTheServiceRefusesComesBack(t *testing.T) {
+	m := pressOn(listShot(t, boardFixture(t), 160, 38, "kindle-web"), "x", "y", "y")
+	m = resulted(t, m, proto.Result{Err: "no such pane"})
+	if row := drawnRow(t, m, "kindle-web"); strings.Contains(row, "killing") || len(m.pendingActs) != 0 {
+		t.Fatalf("a refused kill reads %q, pending %+v", row, m.pendingActs)
+	}
+	if want := "kill failed: no such pane"; !strings.Contains(m.flash, want) {
+		t.Fatalf("said %q, want %q", m.flash, want)
+	}
+}
+
+func TestAParkTheServiceRefusesComesBack(t *testing.T) {
+	m := pressOn(listShot(t, boardFixture(t), 160, 38, "kindle-web"), "z")
+	m = resulted(t, m, proto.Result{Err: "parking is off"})
+	if len(m.pendingActs) != 0 || !strings.Contains(m.flash, "park failed: parking is off") {
+		t.Fatalf("pending %+v, said %q", m.pendingActs, m.flash)
+	}
+}
+
+func TestARenameTheServiceRefusesComesBack(t *testing.T) {
+	m, _ := loadedWith(t, 100, lifeState())
+	next, _ := key(m, "r")
+	next = typeText(next, "x")
+	next, _ = key(next, "enter")
+	m = resulted(t, next.(Model), proto.Result{Err: "tmux: no such pane"})
+	if len(m.pendingActs) != 0 || m.form == nil || m.form.err != "tmux: no such pane" {
+		t.Fatalf("pending %+v, form %+v", m.pendingActs, m.form)
+	}
+}
+
+func TestARenameThatWaitsForARestIsNotPending(t *testing.T) {
+	m, _ := loadedWith(t, 100, lifeState())
+	next, _ := key(m, "r")
+	next = typeText(next, "x")
+	next, _ = key(next, "enter")
+	m = resulted(t, next.(Model), proto.Result{Skipped: []string{"alpha renames when it rests"}})
+	if len(m.pendingActs) != 0 {
+		t.Fatalf("a rename the service holds back is pending: %+v", m.pendingActs)
+	}
+}

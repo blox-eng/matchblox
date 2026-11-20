@@ -3,6 +3,7 @@ package app
 import (
 	"slices"
 
+	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
@@ -151,4 +152,24 @@ func (p pendingAct) notTaken() string {
 		return p.name + ": the rename did not take. Press r to rename it again."
 	}
 	return p.name + ": the park did not take. Press z to try again."
+}
+
+// settleResult reads the service's answer to a pending act. A refusal
+// ends it and says why (true: the answer is said); a skip ends it, and
+// the usual words say why; a run leaves it to the samples. A rename's
+// form says its own refusal.
+func (m *Model) settleResult(r proto.Result) bool {
+	p, ok := m.pendingActs[r.ActID]
+	if !ok || r.Err == "" && len(r.Skipped) == 0 {
+		return false
+	}
+	delete(m.pendingActs, r.ActID)
+	if m.side != nil {
+		m.side = &sideMemo{}
+	}
+	if r.Err == "" || p.kind == actRename {
+		return false
+	}
+	m.flash = p.kind.String() + " failed: " + r.Err
+	return true
 }

@@ -1285,6 +1285,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // conn r came on.
 func (m Model) result(r proto.Result) (Model, tea.Cmd) {
 	m.endRec(r.ActID, r)
+	if m.settleResult(r) {
+		return m, nil
+	}
 	if mm, cmd, ok := m.lineResult(r); ok {
 		return mm, cmd
 	}
