@@ -496,9 +496,7 @@ func TestGuardWritesNoFile(t *testing.T) {
 // hangup does not live on behind its guard. With no guard its terminal
 // would be gone; the guard takes its terminal away too, and ends it.
 func TestGuardEndsWhenPaneGoes(t *testing.T) {
-	wait := killWait
-	killWait = 200 * time.Millisecond
-	t.Cleanup(func() { killWait = wait })
+	waits(t, 200*time.Millisecond, 400*time.Millisecond)
 	pidFile := filepath.Join(t.TempDir(), "pid")
 	s := newScreen(t, 100, 30)
 	done := s.run("sh", "-c", "trap '' HUP; echo $$ > "+pidFile+"; printf ready; while :; do sleep 1; done")
@@ -525,4 +523,29 @@ func TestGuardEndsWhenPaneGoes(t *testing.T) {
 			t.Fatalf("the agent (pid %d) lives on after its pane went", pid)
 		}
 	}
+}
+
+// TestGuardLetsASaveFinish (#404): an agent that saves on a hangup, and
+// needs longer than its terminal has, still saves before the guard ends it.
+func TestGuardLetsASaveFinish(t *testing.T) {
+	waits(t, 200*time.Millisecond, 3*time.Second)
+	saved := filepath.Join(t.TempDir(), "saved")
+	s := newScreen(t, 100, 30)
+	done := s.run("sh", "-c", "trap 'sleep 0.6; echo yes > "+saved+"; exit 0' HUP; printf ready; while :; do sleep 0.1; done")
+	s.waitFor("ready", func(text string) bool { return strings.Contains(text, "ready") })
+	if err := syscall.Kill(os.Getpid(), syscall.SIGHUP); err != nil { // as tmux sends the pane's program
+		t.Fatal(err)
+	}
+	done()
+	if _, err := os.Stat(saved); err != nil {
+		t.Fatalf("the agent's save on the hangup did not finish: %v", err)
+	}
+}
+
+// waits sets how long the guard waits after a hangup to close the agent's
+// terminal and to end it, for one test.
+func waits(t *testing.T, close, kill time.Duration) {
+	c, k := closeWait, killWait
+	closeWait, killWait = close, kill
+	t.Cleanup(func() { closeWait, killWait = c, k })
 }
