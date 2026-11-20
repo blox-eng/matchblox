@@ -392,41 +392,42 @@ type Model struct {
 	// the host it acts on, whose stoker the question is about (R14).
 	// touched is the last key that kept each host's stoker resting; it is
 	// copied on write.
-	held        func(Model) (tea.Model, tea.Cmd)
-	heldOn      string
-	keysOut     keysOut   // the keys the stand-in sends, one at a time
-	standIn     bool      // the demo's stand-in for a pane: it forwards the keys to the demo's world
-	backArmed   time.Time // when ctrl+a, the first key of the stand-in's way back, was pressed; zero: not armed
-	touched     map[string]time.Time
-	all         lists  // what every host sent, merged; queue, recs and snap hold the drawn copies
-	homeAll     lists  // what the home host sent
-	filter      string // the search of the open tab
-	searching   bool   // the search line takes the keys
-	holds       []proto.Hold
-	chains      *state.ChainsView
-	chainIx     chainIndex // worked out in refresh
-	room        *room      // the chain room on screen; nil when none
-	reasons     map[string]proto.IdleReason
-	agents      []string                          // the agents a new session can start on the host
-	renames     map[string]string                 // the names sessions take at their next rest, by pane
-	accounts    map[string][]string               // the accounts each agent can start on: default first
-	skipped     map[string][]accounts.Skip        // the folders the service did not list, per agent
-	lastAccount map[string]string                 // the account last started, per agent
-	signIns     map[string]string                 // how a new account's sign-in goes, by pane: "by hand" when matchblox gave up driving it
-	found       *proto.Found                      // the host's repositories and the scan's consent; nil: the service scans nothing
-	scanLater   bool                              // the scan question was closed or answered at this console
-	scanAct     string                            // the act of the box's yes, for its result
-	form        *form                             // the open New session, Rename, Switch agent or scan folders form; nil none
-	saying      []toast                           // the toasts the console shows now, newest first (#450)
-	pendingActs map[string]pendingAct             // the kills, renames and parks sent and not yet in a sample, by act id (#211)
-	jumpAfter   switchSent                        // a switch sent: the pane to jump to when it runs, its new agent, for the client that asked
-	startAfter  struct{ act, agent, done string } // a start on a new account sent: its agent, the last once it runs, and what it says then
-	lastAgent   string                            // the agent this console last started
-	keptAgent   string                            // the agent last started, as the service keeps it
-	paneSort    sortBy
-	picked      map[wtKey]bool // worktrees x removes
-	batch       *batch
-	showExited  bool // e: the exited agents, one by one
+	held         func(Model) (tea.Model, tea.Cmd)
+	heldOn       string
+	keysOut      keysOut   // the keys the stand-in sends, one at a time
+	standIn      bool      // the demo's stand-in for a pane: it forwards the keys to the demo's world
+	backArmed    time.Time // when ctrl+a, the first key of the stand-in's way back, was pressed; zero: not armed
+	touched      map[string]time.Time
+	all          lists  // what every host sent, merged; queue, recs and snap hold the drawn copies
+	homeAll      lists  // what the home host sent
+	filter       string // the search of the open tab
+	searching    bool   // the search line takes the keys
+	holds        []proto.Hold
+	chains       *state.ChainsView
+	chainIx      chainIndex // worked out in refresh
+	room         *room      // the chain room on screen; nil when none
+	reasons      map[string]proto.IdleReason
+	agents       []string                          // the agents a new session can start on the host
+	renames      map[string]string                 // the names sessions take at their next rest, by pane
+	accounts     map[string][]string               // the accounts each agent can start on: default first
+	skipped      map[string][]accounts.Skip        // the folders the service did not list, per agent
+	lastAccount  map[string]string                 // the account last started, per agent
+	signIns      map[string]string                 // how a new account's sign-in goes, by pane: "by hand" when matchblox gave up driving it
+	found        *proto.Found                      // the host's repositories and the scan's consent; nil: the service scans nothing
+	scanLater    bool                              // the scan question was closed or answered at this console
+	scanAct      string                            // the act of the box's yes, for its result
+	form         *form                             // the open New session, Rename, Switch agent or scan folders form; nil none
+	standingSaid []string                          // the standing errors said once, by standingKey
+	saying       []toast                           // the toasts the console shows now, newest first (#450)
+	pendingActs  map[string]pendingAct             // the kills, renames and parks sent and not yet in a sample, by act id (#211)
+	jumpAfter    switchSent                        // a switch sent: the pane to jump to when it runs, its new agent, for the client that asked
+	startAfter   struct{ act, agent, done string } // a start on a new account sent: its agent, the last once it runs, and what it says then
+	lastAgent    string                            // the agent this console last started
+	keptAgent    string                            // the agent last started, as the service keeps it
+	paneSort     sortBy
+	picked       map[wtKey]bool // worktrees x removes
+	batch        *batch
+	showExited   bool // e: the exited agents, one by one
 	// stokerSel is the selected row of the STOKER tab, stokerShown the row
 	// whose command it shows, ackSent when the steps were last marked seen.
 	stokerSel    int
@@ -824,8 +825,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var held tea.Cmd
 		nm, held = nm.heldRelease()
 		cmd = tea.Batch(cmd, held)
-		nm.side = &sideMemo{}                                                      // the steps after the message read the list and change nothing it is built from
-		nm = nm.scanShows().keepView().inDemo().sideKeep().chatMarkOn().onChoice() // what reads Sessions' selection reads the board's choice
+		nm.side = &sideMemo{}                                                                     // the steps after the message read the list and change nothing it is built from
+		nm = nm.scanShows().keepView().inDemo().standingNews().sideKeep().chatMarkOn().onChoice() // what reads Sessions' selection reads the board's choice
 		again := nm.beltPoll(msg)
 		nm, belt := nm.tellBelt(again)
 		var zoom tea.Cmd

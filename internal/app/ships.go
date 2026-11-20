@@ -149,7 +149,7 @@ func (m Model) shipsBehind() []string {
 			says = append(says, on+"GitHub cannot be read: "+r.Unknown)
 		}
 		for _, e := range r.Errors {
-			says = append(says, on+"not read: "+e)
+			says = append(says, on+"not read: "+e+" · ships read it again on their next pass")
 		}
 	}
 	return says

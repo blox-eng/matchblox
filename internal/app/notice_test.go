@@ -123,8 +123,12 @@ func TestOldDataSaysSo(t *testing.T) {
 		at := m.snap.At.Add(40 * time.Second)
 		m.opt.Now = func() time.Time { return at }
 	})
-	if row := strings.TrimSpace(boardNoticeRow(m)); row != "data is 40 s old · the service is slow" {
-		t.Errorf("the notice row on old data is %q", row)
+	m = upd(t, m, noticeMsg{}) // the next message: in use, the stale tick
+	if said := toastNow(m); said != "data is 40 s old · the service is slow" {
+		t.Errorf("the toast on old data is %q", said)
+	}
+	if head := strings.Split(plainFrame(m), "\n")[0]; !strings.Contains(head, "⚠ 1") {
+		t.Errorf("the header does not mark old data: %q", head)
 	}
 	fresh := boardShot(t, boardFixture(t), 80, 31, nil)
 	if row := boardNoticeRow(fresh); strings.Contains(row, "old") {

@@ -1,6 +1,8 @@
 package app
 
 import (
+	"github.com/blox-eng/matchblox/internal/proto"
+
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -222,5 +224,46 @@ func TestAShortToastIsOneLine(t *testing.T) {
 	m.sayError("This is a demo. Install matchblox to do that.")
 	if _, at := toastLines(m, 132, "This is a demo. Install matchblox to do that."); len(at) != 1 {
 		t.Fatalf("a short toast is cut: on lines %v", at)
+	}
+}
+
+// shipsFail is st with the ships of the home host not read for repo.
+func shipsFail(st proto.State, repo string) proto.State {
+	sh := *st.Ships
+	sh.Errors = []string{repo + ": HTTP 502"}
+	st.Ships = &sh
+	return st
+}
+
+func TestAShipReadErrorIsOneToastThenAMark(t *testing.T) {
+	st := boardFixture(t)
+	m := listShot(t, st, 160, 38, "kindle-web")
+	keys := ansi.Strip(m.draw(160).lines[m.draw(160).keysAt])
+	m = sampled(m, shipsFail(homeSample(st, nil), "blox-eng/x"), 1)
+	if said := toastNow(m); !strings.Contains(said, "not read: blox-eng/x: HTTP 502") || !strings.Contains(said, "·") {
+		t.Fatalf("the error's toast says %q, want it with its fix", said)
+	}
+	m = sampled(m, shipsFail(homeSample(st, nil), "blox-eng/x"), 1)
+	if n := len(m.sayingNow()); n != 1 {
+		t.Fatalf("a second sample said the error again: %v", stackSays(m))
+	}
+	m.saying = nil // its life ended
+	sc := m.draw(160)
+	if head := ansi.Strip(sc.lines[0]); !strings.Contains(head, "⚠ 1") {
+		t.Fatalf("the header has no mark: %q", head)
+	}
+	if got := ansi.Strip(sc.lines[sc.keysAt]); got != keys {
+		t.Fatalf("the key line changed:\n%q\nwant\n%q", got, keys)
+	}
+	if frame := ansi.Strip(strings.Join(sc.lines, "\n")); strings.Count(frame, "not read:") != 0 {
+		t.Fatalf("the error still shows in the body:\n%s", frame)
+	}
+	m.sayStanding()
+	if !strings.Contains(toastNow(m), "not read: blox-eng/x") {
+		t.Fatalf("a tap on the mark says %q", toastNow(m))
+	}
+	m = sampled(m, homeSample(st, nil), 1)
+	if head := ansi.Strip(m.draw(160).lines[0]); strings.Contains(head, "⚠") {
+		t.Fatalf("the mark stays after the read works: %q", head)
 	}
 }

@@ -71,21 +71,28 @@ func demoBoard(t *testing.T, w int, st proto.State) Model {
 	return consoleOn(next.(Model))
 }
 
-// TestTheNoticeSaysWhyShipsAreBehind: the notice row says plainly why the
+// TestTheNoticeSaysWhyShipsAreBehind: the console says plainly why the
 // ships may be behind: GitHub's rate limit, gh that cannot read, and a
-// repository whose poll failed.
+// repository whose poll failed. Each is a toast once; the header's mark
+// counts them while they hold (#450).
 func TestTheNoticeSaysWhyShipsAreBehind(t *testing.T) {
 	st := screensState(t)
 	r := *st.Ships
 	r.Paused, r.Unknown, r.Errors = time.Date(2026, 10, 1, 23, 33, 0, 0, time.Local), "gh not signed in", []string{"hearth/hearth-api: HTTP 502"}
 	st.Ships = &r
-	for _, w := range []int{80, 132} { // a notice keeps three lines: at 44 the last reason goes
+	for _, w := range []int{80, 132} {
 		m := demoBoard(t, w, st)
-		out := strings.Join(strings.Fields(plainFrame(m)), " ")
+		var said []string
+		for _, s := range m.sayingNow() {
+			said = append(said, s.text)
+		}
 		for _, want := range []string{"ships read again at 23:33", "GitHub cannot be read: gh not signed in · run gh auth login", "not read: hearth/hearth-api: HTTP 502"} {
-			if !strings.Contains(out, want) {
-				t.Errorf("width %d: the notice row does not say %q:\n%s", w, want, plainFrame(m))
+			if !strings.Contains(strings.Join(said, "\n"), want) {
+				t.Errorf("width %d: no toast says %q: %q", w, want, said)
 			}
+		}
+		if head := strings.Split(plainFrame(m), "\n")[0]; !strings.Contains(head, "⚠ 3") {
+			t.Errorf("width %d: the header does not count the three: %q", w, head)
 		}
 	}
 	if out := plainFrame(demoBoard(t, 132, screensState(t))); strings.Contains(out, "read again") || strings.Contains(out, "cannot be read") {

@@ -74,6 +74,20 @@ func (m Model) sayingNow() []toast {
 	return slices.DeleteFunc(slices.Clone(m.saying), func(t toast) bool { return !m.now().Before(t.until) })
 }
 
+// sayUnder says a standing error as an error toast under the ones shown
+// now: it is not the last thing said, and the message's own words stay
+// on top.
+func (m *Model) sayUnder(text string) {
+	if text == "" || m.sayingIt(text) {
+		return
+	}
+	now := m.sayingNow()
+	m.saying = append(now, toast{text: text, err: true, until: m.now().Add(2 * m.noticeLife())})
+	if len(m.saying) > sayMax {
+		m.saying = m.saying[len(m.saying)-sayMax:]
+	}
+}
+
 // sayEnded drops the toasts whose life ended. The last thing said goes
 // with its toast: it never comes back on another line.
 func (m *Model) sayEnded() {

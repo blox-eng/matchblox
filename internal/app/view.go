@@ -152,6 +152,7 @@ type drawn struct {
 	formAgentsAt int
 	formAgents   []span
 	stokerAt     span // the header's stoker word
+	warnAt       span // the header's ⚠ mark: a tap says the standing errors again
 	// names are the sessions that need you, which the header names while
 	// the list is hidden, and namePanes the session of each.
 	names     []span
@@ -187,7 +188,7 @@ func (m Model) drawScreen(w int) drawn {
 	head, waits, stokerAt, named := m.headerOf(w)
 	tabs, tabSpans := m.tabsLine(w)
 	sc := drawn{lines: []string{head, tabs, m.st.rule.Render(strings.Repeat("─", w))}, waits: waits, stokerAt: stokerAt, tabs: tabSpans,
-		bodyTop: 3, noteAt: -1, keysAt: -1, hostAt: m.boardHostHit(head)}
+		bodyTop: 3, noteAt: -1, keysAt: -1, hostAt: m.boardHostHit(head), warnAt: warnHit(head)}
 	switch {
 	case m.hostCount() > 1 && m.shows():
 		// A blocked host of two or more is a row, never the screen.
@@ -356,6 +357,13 @@ func (m Model) headerOf(w int) (string, span, span, headNamed) {
 	}
 	n, count := m.needCount(), "● %d need you"
 	stoker := m.stokerBadge(m.layoutAt(w) == Narrow)
+	if n := len(m.standing()); n > 0 && m.have { // the errors that last: a tap says them again
+		warn := st.warn.Render(fmt.Sprintf("⚠ %d", n))
+		if stoker != "" {
+			warn += " "
+		}
+		stoker = warn + stoker
+	}
 	// Short of room the host goes first (a phone), then the words of who
 	// waits; the count stays.
 	waits := []string{""}
@@ -798,4 +806,15 @@ func (m Model) mismatchText(w int) string {
 		m.connectKeys(w),
 	}
 	return strings.Join(lines, "\n")
+}
+
+// warnHit is where the header's ⚠ mark is, if it shows.
+func warnHit(head string) span {
+	plain := ansi.Strip(head)
+	i := strings.Index(plain, "⚠ ")
+	if i < 0 {
+		return span{}
+	}
+	x := ansi.StringWidth(plain[:i])
+	return span{x, x + 2 + len(strings.Fields(plain[i+len("⚠ "):])[0]), "warn"}
 }

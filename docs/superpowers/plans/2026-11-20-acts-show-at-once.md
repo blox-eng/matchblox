@@ -155,6 +155,8 @@ Next: builder:build
 - Placement: on a phone (under 60 columns) the stack sits at the body's foot, since the top holds the pane's title and its way back; at the foot it keeps off the last body line (the list's foot, the chat's line). When no place is clear of the chosen row, it still draws where no box is: it never hides.
 - `TestReplay`'s frames (`www/demo/frames-*.json`) regenerate for the "sent" step; `www/index.html` and the SVGs keep their committed animation phase.
 
+- Task 10: the mark opens by a tap only, no key. Reason: in the list a printable key types into the line, so a key such as `!` would collide. A standing error is said under the message's own toasts and does not become the last thing said, so a lost connection's "not confirmed" and the take-over prompt keep their words. "not read:" gains its fix: "ships read it again on their next pass".
+
 ## Lens findings
 
 - Engineering: `merge()` runs on every host's snapshot. Counting "3 samples" there would count other hosts' samples. Changed Task 4: count only when the act's host has a newer snapshot time.

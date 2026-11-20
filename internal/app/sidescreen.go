@@ -463,7 +463,7 @@ func (m Model) footSays() string {
 	case m.askingAgain() && m.beltOnly(): // Pocket has no key line to ask on
 		return m.flash
 	}
-	return m.stateNotice()
+	return "" // a standing error is the header's mark
 }
 
 // noticeAt is where what the tab says draws, in lines of the body: the

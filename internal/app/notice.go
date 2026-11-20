@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -80,18 +81,55 @@ func cutNotice(text string, w int) []string {
 	return wrapPlain(text, w)
 }
 
-// stateNotice is what the console says of the service's state when
-// nothing else is said: it is lost, its data is old, or the pull requests
-// are read late.
-func (m Model) stateNotice() string {
+// standing are the errors that last, each with its fix, while they hold:
+// the service is lost, its data is old, or the pull requests are read
+// late. A toast says each once; then the header's mark counts them
+// (#450).
+func (m Model) standing() []string {
+	var out []string
 	switch age := m.now().Sub(m.snap.At); {
 	case !m.have:
 	case m.lost:
-		return "no service · it redials"
+		out = append(out, "no service · it redials")
 	case age >= staleAfter && age < 2*time.Minute:
-		return fmt.Sprintf("data is %d s old · the service is slow", int(age.Seconds()))
+		out = append(out, fmt.Sprintf("data is %d s old · the service is slow", int(age.Seconds())))
 	case age >= staleAfter:
-		return fmt.Sprintf("data is %d min old · the service is slow", int(age.Minutes()))
+		out = append(out, fmt.Sprintf("data is %d min old · the service is slow", int(age.Minutes())))
 	}
-	return strings.Join(m.shipsBehind(), " · ")
+	return append(out, m.shipsBehind()...)
+}
+
+// standingKey is an error's words without its numbers: data that ages
+// by the second is one error, said once.
+func standingKey(text string) string {
+	return strings.Map(func(r rune) rune {
+		if r >= '0' && r <= '9' {
+			return -1
+		}
+		return r
+	}, text)
+}
+
+// standingNews says each standing error once, when it begins: under what
+// the message itself said, which names what happened to this act.
+func (m Model) standingNews() Model {
+	var keys []string
+	for _, e := range m.standing() {
+		k := standingKey(e)
+		if !slices.Contains(m.standingSaid, k) {
+			m.sayUnder(e)
+		}
+		keys = append(keys, k)
+	}
+	m.standingSaid = keys
+	return m
+}
+
+// sayStanding says every standing error again: a tap on the mark.
+func (m *Model) sayStanding() tea.Cmd {
+	var cmds []tea.Cmd
+	for _, e := range m.standing() {
+		cmds = append(cmds, m.sayError(e))
+	}
+	return tea.Batch(cmds...)
 }
