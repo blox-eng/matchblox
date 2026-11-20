@@ -29,8 +29,19 @@ func (m Model) chosenSide() paneKey {
 // s keep: a chain stays whole while one of its members is kept.
 func (m Model) sideShows(g sideGroup) []sideUnit {
 	return slices.DeleteFunc(slices.Clone(g.units), func(u sideUnit) bool {
+		if len(u.members) == 0 {
+			return !m.waitShows(u)
+		}
 		return !slices.ContainsFunc(u.members, m.inBoard)
 	})
+}
+
+// waitShows tells if the list shows unit u, whose members all wait: no
+// search and no other chain narrows the list.
+func (m Model) waitShows(u sideUnit) bool {
+	r := m.room
+	return m.filter == "" && (r == nil || !r.k.isOne()) &&
+		(m.boardChain == "" || m.chainLabel(u.chain) == m.boardChain || (r != nil && r.k == u.chain))
 }
 
 // The foot's parts, as a tap on each names it.
@@ -205,14 +216,18 @@ func (m Model) sideList(w, h int) ([]string, []sideHit, []span) {
 			if u.chain != (chainKey{}) {
 				add(m.chainHead(u, w, lit), sideHit{}, false)
 			}
+			n := len(u.members) + len(u.waiting)
 			for i, s := range u.members {
 				link := sideLink{}
 				if u.chain != (chainKey{}) {
-					link = sideLink{i: i, n: len(u.members), lit: lit}
+					link = sideLink{i: i, n: n, lit: lit}
 				}
 				for _, l := range m.sideRow(s, w, paneOf(s) == chosen, link) {
 					add(l, sideHit{k: paneOf(s), state: g.state}, paneOf(s) == chosen)
 				}
+			}
+			for j, v := range u.waiting {
+				add(m.waitRow(v, w, sideLink{i: len(u.members) + j, n: n, lit: lit}), sideHit{}, false)
 			}
 		}
 		if exited && g.state == sideIdle {
@@ -320,6 +335,9 @@ func (m Model) sideCount(g sideGroup, units []sideUnit) int {
 	}
 	n := 0
 	for _, u := range units {
+		if len(u.members) == 0 {
+			n += len(u.waiting)
+		}
 		for _, s := range u.members {
 			if m.inBoard(s) && m.sideStateOf(s) == g.state {
 				n++

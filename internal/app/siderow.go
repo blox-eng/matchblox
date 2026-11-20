@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/sample"
+	"github.com/blox-eng/matchblox/internal/state"
 )
 
 // sideLink is a row's place in a chain: member i of n, lit while the
@@ -93,16 +94,40 @@ func (m Model) sideRight(s sample.Session) string {
 	return m.waitCell(s)
 }
 
-// chainHead is the head row of a chain: "≋ login   step 2 of 3 · 3".
+// chainHead is the head row of a chain: "≋ login   step 2 of 3 · 3". With
+// members that wait for recover it reads "step 2 of 3 · 2 + 1 wait", and
+// "3 wait" when all wait.
 func (m Model) chainHead(u sideUnit, w int, lit bool) string {
 	n, of := u.step()
-	right := "step " + strconv.Itoa(n) + " of " + strconv.Itoa(of) + " · " + strconv.Itoa(len(u.members))
+	count := "step " + strconv.Itoa(n) + " of " + strconv.Itoa(of) + " · " + strconv.Itoa(len(u.members))
+	waits := m.st.wait.Render(strconv.Itoa(len(u.waiting)) + " wait")
+	right := m.st.muted.Render(count)
+	switch {
+	case len(u.members) == 0:
+		right = waits
+	case len(u.waiting) > 0:
+		right = m.st.muted.Render(count+" + ") + waits
+	}
 	name := m.st.text.Bold(true)
 	if lit {
 		name = m.st.accent.Bold(true)
 	}
 	left := " " + name.Render(ansi.Truncate("≋ "+m.chainLabel(u.chain), max(w-lipgloss.Width(right)-2, 1), "…"))
-	return spread(left, m.st.muted.Render(right)+" ", w)
+	return spread(left, right+" ", w)
+}
+
+// waitRow is the row of a chain member that waits for recover: the link,
+// ◌ and its name, and "waits for recover", in the wait color.
+func (m Model) waitRow(v state.MateView, w int, link sideLink) string {
+	ink := m.st.faint
+	if link.lit {
+		ink = m.st.accent
+	}
+	first, _ := linkOf(link.i, link.n, false)
+	right := m.st.wait.Render("waits for recover") + " "
+	left := " " + ink.Render(first) + " "
+	room := w - lipgloss.Width(left+right) - 1
+	return spread(left+m.st.wait.Render(ansi.Truncate("◌ "+v.Wait.Name, max(room, 1), "…")), right, w)
 }
 
 // askedOf is what a session asks, whether or not a hold covers it.

@@ -8,9 +8,10 @@ import (
 
 // Theme is near-monochrome and warm. Color is an event: the accent marks the
 // selected row and the active panel only; status uses muted tints and always
-// carries a glyph and a word, never hue alone.
+// carries a glyph and a word, never hue alone. Wait marks a match that
+// waits for recover.
 type Theme struct {
-	Text, Muted, Faint, Hair, Accent, AccentWash, Warn, Neg color.Color
+	Text, Muted, Faint, Hair, Accent, AccentWash, Warn, Neg, Wait color.Color
 }
 
 var darkTheme = Theme{
@@ -22,6 +23,7 @@ var darkTheme = Theme{
 	AccentWash: lipgloss.Color("#221D14"),
 	Warn:       lipgloss.Color("#B98F44"),
 	Neg:        lipgloss.Color("#B0563F"),
+	Wait:       lipgloss.Color("#A99CF2"),
 }
 
 var lightTheme = Theme{
@@ -33,6 +35,7 @@ var lightTheme = Theme{
 	AccentWash: lipgloss.Color("#ECE3CF"),
 	Warn:       lipgloss.Color("#8A6420"),
 	Neg:        lipgloss.Color("#9E4A34"),
+	Wait:       lipgloss.Color("#6B5BD6"),
 }
 
 // nightTheme is the console while the stoker is in charge: the room goes
@@ -47,6 +50,7 @@ var nightTheme = Theme{
 	AccentWash: lipgloss.Color("#18202F"),
 	Warn:       darkTheme.Warn,
 	Neg:        darkTheme.Neg,
+	Wait:       darkTheme.Wait,
 }
 
 var (
@@ -58,6 +62,7 @@ type styles struct {
 	theme                                 Theme
 	text, muted, faint, hair, accent      lipgloss.Style
 	label, selected, warn, neg, tabActive lipgloss.Style
+	wait                                  lipgloss.Style
 	// stoker is the stoker's word in the header, rule the line under the
 	// tabs: the night token at night.
 	stoker, rule lipgloss.Style
@@ -95,6 +100,7 @@ func themed(t Theme) styles {
 		selected:  lipgloss.NewStyle().Foreground(t.Text).Background(t.AccentWash),
 		warn:      fg(t.Warn),
 		neg:       fg(t.Neg),
+		wait:      fg(t.Wait),
 		tabActive: fg(t.Accent).Underline(true),
 	}
 }

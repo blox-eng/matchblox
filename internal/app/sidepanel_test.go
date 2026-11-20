@@ -10,6 +10,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/doors"
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
+	"github.com/blox-eng/matchblox/internal/state"
 )
 
 func panelText(m Model, w, h int) string {
@@ -186,5 +187,60 @@ func TestACutListSaysHowManyAreBelow(t *testing.T) {
 	}
 	if !strings.Contains(strings.Join(lines, "\n"), "need") {
 		t.Errorf("the marks do not say how many hidden sessions need you:\n%s", strings.Join(lines, "\n"))
+	}
+}
+
+// TestAWaitingMateDrawsInItsTeam: a member that waits for recover draws
+// under its chain's head, after the live members, in the wait color.
+func TestAWaitingMateDrawsInItsTeam(t *testing.T) {
+	m := waitingLogin(t, "kindle-web")
+	out := m.sidePanel(60, 20)
+	plain := plainLines(out)
+	head := slices.IndexFunc(plain, func(l string) bool { return strings.Contains(l, "≋ login") })
+	row := slices.IndexFunc(plain, func(l string) bool { return strings.Contains(l, "◌ kindle-web") })
+	if head < 0 || row < head {
+		t.Fatalf("no waiting row under the head:\n%s", strings.Join(plain, "\n"))
+	}
+	if !strings.Contains(plain[row], "waits for recover") || !strings.Contains(plain[row], "└") {
+		t.Fatalf("row %q, want the last link and waits for recover", plain[row])
+	}
+	if !strings.Contains(plain[head], "step 2 of 3 · 2 + 1 wait") {
+		t.Fatalf("head %q, want step 2 of 3 · 2 + 1 wait", plain[head])
+	}
+	if !strings.Contains(out[row], m.st.wait.Render("◌ kindle-web")) || !strings.Contains(out[head], m.st.wait.Render("1 wait")) {
+		t.Fatalf("the waiting row or the head's wait is not in the wait color:\n%q\n%q", out[head], out[row])
+	}
+}
+
+// TestATeamOfWaitingMatesStillDraws: a chain whose members all wait still
+// draws its head and its rows, in the IDLE group.
+func TestATeamOfWaitingMatesStillDraws(t *testing.T) {
+	m := waitingLogin(t, "kindle-web", "flint-auth", "wick-mobile")
+	plain := plainLines(m.sidePanel(60, 20))
+	text := strings.Join(plain, "\n")
+	idle := slices.IndexFunc(plain, func(l string) bool { return strings.Contains(l, "IDLE") })
+	head := slices.IndexFunc(plain, func(l string) bool { return strings.Contains(l, "≋ login") })
+	if idle < 0 || head < idle || strings.Count(text, "◌ ") != 3 || strings.Contains(text, "NEEDS YOU") {
+		t.Fatalf("the waiting team does not draw in IDLE:\n%s", text)
+	}
+	if !strings.Contains(plain[head], "3 wait") || !strings.Contains(plain[head+3], "└ ◌ wick-mobile") {
+		t.Fatalf("head %q, last row %q", plain[head], plain[head+3])
+	}
+}
+
+// TestNoWaitingMateNoChange: a doc with no member that waits draws the list
+// as it did before a member could wait.
+func TestNoWaitingMateNoChange(t *testing.T) {
+	const before = " \x1b[38;2;119;111;96mNEEDS YOU · 1\x1b[m\x1b[38;2;119;111;96m  −\x1b[m                                           \n \x1b[1;38;2;195;165;106m≋ login\x1b[m                                    \x1b[38;2;166;157;141mstep 2 of 3 · 3\x1b[m \n\x1b[38;2;195;165;106m▌\x1b[m\x1b[38;2;195;165;106m├\x1b[m \x1b[38;2;119;111;96m╵\x1b[m \x1b[1;38;2;235;230;220mkindle-web\x1b[m                                        \x1b[38;2;166;157;141m10m\x1b[m \x1b[38;2;166;157;141m✻\x1b[m\n \x1b[38;2;195;165;106m│\x1b[m   \x1b[38;2;119;111;96midle\x1b[m                                                   \n \x1b[38;2;195;165;106m├\x1b[m \x1b[1;38;2;119;111;96m│\x1b[m \x1b[1;38;2;235;230;220mflint-auth\x1b[m                                         \x1b[38;2;166;157;141m4m\x1b[m \x1b[38;2;166;157;141m✻\x1b[m\n \x1b[38;2;195;165;106m│\x1b[m   \x1b[38;2;119;111;96masks\x1b[m                                                   \n \x1b[38;2;195;165;106m└\x1b[m \x1b[38;2;232;130;46m✦\x1b[m \x1b[38;2;235;230;220mwick-mobile\x1b[m                                          \x1b[38;2;166;157;141m\x1b[m \x1b[38;2;166;157;141m✻\x1b[m\n                                                            \n                                                            \n                                                            \n                                                            \n                                                            \n                                                            \n                                                            \n                                                            \n                                                            \n                                                            \n                                                            \n                                                            \n \x1b[38;2;195;165;106m+ new\x1b[m                                                      "
+	plain := loginChain(t, nil)
+	st := loginState(nil)
+	for _, s := range st.Sessions {
+		st.Chains.Mates = append(st.Chains.Mates, state.MateView{Member: memberOf(s)})
+	}
+	mates := boardModel(t, st)
+	for name, m := range map[string]Model{"no mates": plain, "mates with no wait": mates} {
+		if got := strings.Join(m.sidePanel(60, 20), "\n"); got != before {
+			t.Errorf("%s: the list changed:\n%q", name, got)
+		}
 	}
 }
