@@ -5,10 +5,12 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/proto"
+	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
@@ -117,9 +119,10 @@ func homeSample(st proto.State, edit func(*sample.Session) bool) proto.State {
 	return home
 }
 
-// sampled is m after n samples of home.
+// sampled is m after n samples of home: each a new sample, 2 s on.
 func sampled(m Model, home proto.State, n int) Model {
 	for range n {
+		home.At = m.snap.At.Add(2 * time.Second)
 		next, _ := m.Update(stateMsg(home))
 		m = next.(Model)
 	}
@@ -270,5 +273,37 @@ func TestALostHostEndsItsPendingActs(t *testing.T) {
 	}
 	if want := "not confirmed: the connection to " + m.nameOf(m.opt.Host) + " dropped"; !strings.Contains(m.flash, want) {
 		t.Fatalf("said %q, want %q", m.flash, want)
+	}
+}
+
+// TestAResentSnapshotIsNotASample: the service sends its last sample again
+// on every kick (a hook, git, ships, a door): only a new sample counts
+// towards "did not take" (review of #211, finding 1).
+func TestAResentSnapshotIsNotASample(t *testing.T) {
+	st := boardFixture(t)
+	m := pressOn(listShot(t, st, 160, 38, "kindle-web"), "x", "y", "y")
+	again := homeSample(st, nil)
+	again.At = m.snap.At
+	for range 5 {
+		next, _ := m.Update(stateMsg(again))
+		m = next.(Model)
+	}
+	if len(m.pendingActs) != 1 || strings.Contains(m.flash, "still running") {
+		t.Fatalf("five re-sends of one sample ended the kill: pending %+v, said %q", m.pendingActs, m.flash)
+	}
+	m = sampled(m, homeSample(st, nil), 3)
+	if len(m.pendingActs) != 0 || !strings.Contains(m.flash, "still running") {
+		t.Fatalf("three new samples did not end the kill: pending %+v, said %q", m.pendingActs, m.flash)
+	}
+}
+
+// TestABlockingLossSaysThePendingActIsNotConfirmed: a loss that trying
+// again cannot fix still says the act is not confirmed (review of #211,
+// finding 4).
+func TestABlockingLossSaysThePendingActIsNotConfirmed(t *testing.T) {
+	m := pressOn(listShot(t, boardFixture(t), 160, 38, "kindle-web"), "x", "y", "y")
+	next, _ := m.Update(lostMsg{err: remote.ErrNotConnected})
+	if said := next.(Model).sideSays(); !strings.Contains(said, "not confirmed") {
+		t.Fatalf("a blocking loss said %q", said)
 	}
 }

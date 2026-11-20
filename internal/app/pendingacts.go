@@ -3,6 +3,7 @@ package app
 import (
 	"maps"
 	"slices"
+	"time"
 
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -34,10 +35,11 @@ type pendingAct struct {
 	key   paneKey
 	pid   int
 	start uint64
-	name  string // the session's name when the act went
-	to    string // a rename's new name
-	park  bool   // a park's wanted hold: true parks, false lets go
-	seen  int    // the samples of its host since, that still show the old state
+	name  string    // the session's name when the act went
+	to    string    // a rename's new name
+	park  bool      // a park's wanted hold: true parks, false lets go
+	at    time.Time // the time of its host's last sample read against it
+	seen  int       // the samples of its host since, that still show the old state
 }
 
 // expect remembers act id on s. An act that did not go (no id) gets none:
@@ -53,7 +55,7 @@ func (m *Model) expect(id string, kind actKind, s sample.Session, to string, par
 		m.stepOff(paneOf(s))
 	}
 	m.pendingActs[id] = pendingAct{kind: kind, key: paneOf(s), pid: s.PID, start: s.Start,
-		name: s.Name, to: to, park: park}
+		name: s.Name, to: to, park: park, at: m.sampleAt(s.Host)}
 	if m.side != nil {
 		m.side = &sideMemo{} // the list's groups and walk change with it
 	}
@@ -102,6 +104,17 @@ func (m *Model) stepOff(k paneKey) {
 	}
 }
 
+// sampleAt is the time of host's last sample.
+func (m Model) sampleAt(host string) time.Time {
+	if host == m.opt.Host {
+		return m.snap.At
+	}
+	if i := m.peerAt(host); i >= 0 {
+		return m.peers[i].st.At
+	}
+	return time.Time{}
+}
+
 // settleAfter is how many samples of its host an act waits for before it
 // counts as not taken: the agent can take a sample or two to exit after
 // its pane goes (the owner, 2026-10-24).
@@ -129,7 +142,10 @@ func (m *Model) settle(host string) {
 			done = !same || held == p.park
 		}
 		if !done {
-			p.seen++
+			if at := m.sampleAt(host); at.After(p.at) { // a sample sent again is not a new one
+				p.at = at
+				p.seen++
+			}
 			m.pendingActs[id] = p
 			if p.seen < settleAfter {
 				continue
