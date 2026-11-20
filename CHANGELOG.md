@@ -6,6 +6,8 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+## [0.52.0] - 2026-11-20
+
 ### Added
 
 - **Tap the match head for Enter.** A short tap on a still head sends
@@ -1926,7 +1928,8 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.51.1...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.52.0...HEAD
+[0.52.0]: https://github.com/blox-eng/matchblox/compare/v0.51.1...v0.52.0
 [0.51.1]: https://github.com/blox-eng/matchblox/compare/v0.51.0...v0.51.1
 [0.51.0]: https://github.com/blox-eng/matchblox/compare/v0.50.0...v0.51.0
 [0.50.0]: https://github.com/blox-eng/matchblox/compare/v0.49.0...v0.50.0
