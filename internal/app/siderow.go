@@ -3,6 +3,7 @@ package app
 import (
 	"cmp"
 	"strconv"
+	"time"
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -117,17 +118,40 @@ func (m Model) chainHead(u sideUnit, w int, lit bool) string {
 }
 
 // waitRow is the row of a chain member that waits for recover: the link,
-// ◌ and its name, and "waits for recover", in the wait color.
-func (m Model) waitRow(v state.MateView, w int, link sideLink) string {
+// ◌ and its name, and "waits for recover", in the wait color. The chosen
+// row has a second line: when its server stopped, and the keys. On a desk
+// the console draws no chat, so this line carries the facts.
+func (m Model) waitRow(v state.MateView, w int, link sideLink, chosen bool) []string {
 	ink := m.st.faint
 	if link.lit {
 		ink = m.st.accent
 	}
-	first, _ := linkOf(link.i, link.n, false)
+	mark := " "
+	if chosen {
+		mark = m.st.accent.Render("▌")
+	}
+	first, rest := linkOf(link.i, link.n, chosen)
 	right := m.st.wait.Render("waits for recover") + " "
-	left := " " + ink.Render(first) + " "
+	left := mark + ink.Render(first) + " "
 	room := w - lipgloss.Width(left+right) - 1
-	return spread(left+m.st.wait.Render(ansi.Truncate("◌ "+v.Wait.Name, max(room, 1), "…")), right, w)
+	line := spread(left+m.st.wait.Render(ansi.Truncate("◌ "+v.Wait.Name, max(room, 1), "…")), right, w)
+	if !chosen {
+		return []string{line}
+	}
+	at, _ := m.stoppedAt(v.Wait.Since)
+	says := "its server stopped " + at + " · " + m.keys.side.Enter.Help().Key + " reopen · " + m.keys.board.Menu.Help().Key + " menu"
+	pad := " " + ink.Render(rest) + "  "
+	return []string{line, fit(pad+m.st.faint.Render(ansi.Truncate(says, max(w-lipgloss.Width(pad), 0), "…")), w)}
+}
+
+// stoppedAt is t in local time: the clock when t is today, else the day
+// ("30 Sep"). today tells which.
+func (m Model) stoppedAt(t time.Time) (at string, today bool) {
+	t = t.Local()
+	if t.Format(time.DateOnly) == m.now().Local().Format(time.DateOnly) {
+		return t.Format("15:04"), true
+	}
+	return t.Format("2 Jan"), false
 }
 
 // askedOf is what a session asks, whether or not a hold covers it.

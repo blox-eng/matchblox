@@ -66,7 +66,11 @@ func (m Model) sideKeep() Model {
 	}
 	order := m.sideOrder()
 	at := m.sideAt
-	if at != (paneKey{}) && !slices.ContainsFunc(m.sideSessions(), func(s sample.Session) bool { return paneOf(s) == at }) {
+	gone := !slices.ContainsFunc(m.sideSessions(), func(s sample.Session) bool { return paneOf(s) == at })
+	if at.waits() { // a waiting row is no session: it stays while the list draws it
+		gone = !slices.Contains(order, at)
+	}
+	if at != (paneKey{}) && gone {
 		m.sideAt = m.sideAfter(at, order)
 		if strings.TrimSpace(m.lines[at]) != "" && m.sideAt != (paneKey{}) {
 			m.lineNote = lineNote{m.sideAt, m.sideName + " ended · the text is not sent"}
@@ -298,7 +302,10 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 
 // noRowWhy says why the list has no chosen session for a key to act on.
 func (m Model) noRowWhy() string {
+	v, _, waits := m.sideWaiting()
 	switch {
+	case waits:
+		return v.Wait.Name + " waits for recover · matchblox recover reopens it"
 	case m.filter != "":
 		return `nothing matches "` + m.filter + `" · ` + m.keys.main.Back.Help().Key + " clears"
 	case m.boardHost != "":
@@ -482,6 +489,8 @@ func (m Model) linePaste(text string) (tea.Model, tea.Cmd) {
 	m.toLine()
 	s, ok := m.sideChosen()
 	switch {
+	case !ok && m.chosenSide().waits():
+		return m, m.notice(m.noRowWhy())
 	case !ok:
 		return m, m.notice("no session to write to · " + m.keys.main.New.Help().Key + " starts one")
 	case m.lineOff(s) != "":

@@ -12,6 +12,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/menu"
 	"github.com/blox-eng/matchblox/internal/said"
 	"github.com/blox-eng/matchblox/internal/sample"
+	"github.com/blox-eng/matchblox/internal/state"
 )
 
 // chatPanel is the chosen session's chat in h lines of w cells: the head
@@ -31,6 +32,11 @@ func (m Model) chatPanel(w, h int) []string {
 	case !m.have: // the chat waits for the first state
 	case m.filter != "" && !slices.ContainsFunc(listed, m.inBoard):
 		lines = append([]string{blank}, m.sideWords(w)...)
+	case k.waits():
+		if v, c, ok := m.sideWaiting(); ok {
+			lines = m.waitChat(v, c, w)
+			lines = lines[:min(len(lines), h)]
+		}
 	case k.pane == "" && i >= 0: // outside tmux, with no process and no session id to know it by
 		lines = append(lines, blank)
 		for _, l := range wrapPlain(listed[i].Name+" runs outside tmux, and its process is not known: nothing to write to", max(w-2, 1)) {
@@ -59,6 +65,38 @@ func (m Model) chatPanel(w, h int) []string {
 	for len(lines) < h {
 		lines = append(lines, blank)
 	}
+	return lines
+}
+
+// waitChat is the chat's place of v, a member of chain c that waits for
+// recover: when its server stopped, what the record keeps, the lines that
+// wait for it, and the keys that act on it.
+func (m Model) waitChat(v state.MateView, c chainKey, w int) []string {
+	st, team, blank := m.st, m.chainLabel(c), strings.Repeat(" ", w)
+	at, today := m.stoppedAt(v.Wait.Since)
+	if today {
+		at = "at " + at
+	} else {
+		at = "on " + at
+	}
+	lines := []string{fit(" "+st.text.Bold(true).Render(v.Wait.Name)+"  "+st.wait.Render("waits for recover · in "+team), w), blank}
+	say := func(ink lipgloss.Style, text string) {
+		for _, l := range wrapPlain(text, max(w-2, 1)) {
+			lines = append(lines, fit(" "+ink.Render(l), w))
+		}
+	}
+	say(st.muted, "Its tmux server stopped "+at+".")
+	say(st.muted, "Its conversation is saved: "+v.Wait.Agent+" "+v.Wait.Conversation)
+	say(st.muted, "It stays in "+team+" until it is back, or until the record forgets it on "+v.Wait.Forget.Local().Format("2 Jan")+".")
+	switch {
+	case v.Inbox == 1:
+		say(st.text, "✉ 1 line waits for it")
+	case v.Inbox > 1:
+		say(st.text, "✉ "+strconv.Itoa(v.Inbox)+" lines wait for it")
+	}
+	lines = append(lines, blank)
+	say(st.text, m.keys.side.Enter.Help().Key+" reopen it")
+	say(st.text, m.keys.board.Menu.Help().Key+" out of "+team)
 	return lines
 }
 

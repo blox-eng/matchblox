@@ -223,8 +223,10 @@ func TestATeamOfWaitingMatesStillDraws(t *testing.T) {
 	if idle < 0 || head < idle || strings.Count(text, "◌ ") != 3 || strings.Contains(text, "NEEDS YOU") {
 		t.Fatalf("the waiting team does not draw in IDLE:\n%s", text)
 	}
-	if !strings.Contains(plain[head], "3 wait") || !strings.Contains(plain[head+3], "└ ◌ wick-mobile") {
-		t.Fatalf("head %q, last row %q", plain[head], plain[head+3])
+	// No live row is drawn: the list chooses the first waiting row, and it
+	// takes its second line.
+	if !strings.Contains(plain[head], "3 wait") || !strings.Contains(plain[head+1], "▌├ ◌ kindle-web") || !strings.Contains(plain[head+4], "└ ◌ wick-mobile") {
+		t.Fatalf("head %q, first row %q, last row %q", plain[head], plain[head+1], plain[head+4])
 	}
 }
 
@@ -241,6 +243,97 @@ func TestNoWaitingMateNoChange(t *testing.T) {
 	for name, m := range map[string]Model{"no mates": plain, "mates with no wait": mates} {
 		if got := strings.Join(m.sidePanel(60, 20), "\n"); got != before {
 			t.Errorf("%s: the list changed:\n%q", name, got)
+		}
+	}
+}
+
+// waitingKindle is loginChain with kindle-web gone from the host: it waits
+// for recover since since, with conversation c-3 and inbox lines that
+// wait. The clock reads 22:50 on 1 Oct, local time. wick-mobile is chosen.
+func waitingKindle(t *testing.T, since time.Time, inbox int) Model {
+	t.Helper()
+	st := loginState(nil)
+	st.Sessions = slices.DeleteFunc(st.Sessions, func(s sample.Session) bool {
+		if s.Name != "kindle-web" {
+			return false
+		}
+		st.Chains.Mates = append(st.Chains.Mates, state.MateView{Member: memberOf(s), Inbox: inbox, Wait: &state.WaitView{
+			Name: s.Name, Agent: "claude", Conversation: "c-3", Since: since,
+			Forget: time.Date(2026, 10, 31, 22, 14, 0, 0, time.Local),
+		}})
+		return true
+	})
+	m := boardModel(t, st)
+	m.opt.Now = func() time.Time { return time.Date(2026, 10, 1, 22, 50, 0, 0, time.Local) }
+	m.sideAt = paneOf(matchOf(t, m, "wick-mobile"))
+	m.toList()
+	return m
+}
+
+// TestAWaitingRowIsChosen: ↓ from the last live member chooses the waiting
+// row. Its second line says when its server stopped and names the keys.
+func TestAWaitingRowIsChosen(t *testing.T) {
+	for _, c := range []struct {
+		since time.Time
+		want  string
+	}{
+		{time.Date(2026, 10, 1, 22, 14, 0, 0, time.Local), "its server stopped 22:14 · ⏎ reopen · m menu"},
+		{time.Date(2026, 9, 30, 9, 5, 0, 0, time.Local), "its server stopped 30 Sep · ⏎ reopen · m menu"},
+	} {
+		m := pressOn(waitingKindle(t, c.since, 0), "down")
+		if k := m.chosenSide(); !strings.HasPrefix(k.pane, "wait:") {
+			t.Fatalf("↓ from the last live member chose %v, want the waiting row", k)
+		}
+		if s, ok := m.sideChosen(); ok {
+			t.Fatalf("the waiting row gives the session %s to act on", s.Name)
+		}
+		plain := plainLines(m.sidePanel(60, 20))
+		row := slices.IndexFunc(plain, func(l string) bool { return strings.Contains(l, "◌ kindle-web") })
+		if row < 0 || row+1 >= len(plain) {
+			t.Fatalf("no waiting row:\n%s", strings.Join(plain, "\n"))
+		}
+		if !strings.HasPrefix(plain[row], "▌") || !strings.Contains(plain[row+1], c.want) {
+			t.Errorf("the chosen waiting row reads:\n%s\n%s\nwant the mark and %q", plain[row], plain[row+1], c.want)
+		}
+	}
+}
+
+// TestTheChatShowsAWaitingMate: with no agent pane beside the list, the
+// chat's place of a waiting row tells why it waits and what to do.
+func TestTheChatShowsAWaitingMate(t *testing.T) {
+	m := pressOn(waitingKindle(t, time.Date(2026, 10, 1, 22, 14, 0, 0, time.Local), 2), "down")
+	chat := strings.Join(plainLines(m.chatPanel(100, 14)), "\n")
+	for _, want := range []string{
+		"kindle-web  waits for recover · in login",
+		"Its tmux server stopped at 22:14.",
+		"Its conversation is saved: claude c-3",
+		"It stays in login until it is back, or until the record forgets it on 31 Oct.",
+		"✉ 2 lines wait for it",
+		"⏎ reopen it",
+		"m out of login",
+	} {
+		if !strings.Contains(chat, want) {
+			t.Errorf("the chat's place has no %q:\n%s", want, chat)
+		}
+	}
+	none := pressOn(waitingKindle(t, time.Date(2026, 10, 1, 22, 14, 0, 0, time.Local), 0), "down")
+	if chat := strings.Join(plainLines(none.chatPanel(100, 14)), "\n"); strings.Contains(chat, "✉") {
+		t.Errorf("with no line waiting, the chat's place still says ✉:\n%s", chat)
+	}
+}
+
+// TestAWaitingRowTakesNoSessionKey: the keys that act on a session do
+// nothing on a waiting row. They say why, and send no act.
+func TestAWaitingRowTakesNoSessionKey(t *testing.T) {
+	for _, key := range []string{"x", "p", "r", "c", "m"} {
+		m := pressOn(waitingKindle(t, time.Date(2026, 10, 1, 22, 14, 0, 0, time.Local), 0), "down")
+		before := len(boardFake(m).allActs())
+		m = pressOn(m, key)
+		if n := len(boardFake(m).allActs()); n != before || m.form != nil || m.pending != nil {
+			t.Errorf("%s on a waiting row: %d acts, form %v, pending %v", key, n-before, m.form != nil, m.pending)
+		}
+		if !strings.Contains(m.noticeText, "kindle-web waits for recover") {
+			t.Errorf("%s on a waiting row says %q", key, m.noticeText)
 		}
 	}
 }

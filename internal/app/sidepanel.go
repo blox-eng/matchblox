@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/sample"
+	"github.com/blox-eng/matchblox/internal/state"
 )
 
 // chosenSide is the session the list chooses: sideAt, or the first one
@@ -212,7 +213,8 @@ func (m Model) sideList(w, h int) ([]string, []sideHit, []span) {
 			continue
 		}
 		for _, u := range units {
-			lit := slices.ContainsFunc(u.members, func(s sample.Session) bool { return paneOf(s) == chosen })
+			lit := slices.ContainsFunc(u.members, func(s sample.Session) bool { return paneOf(s) == chosen }) ||
+				slices.ContainsFunc(u.waiting, func(v state.MateView) bool { return waitKey(u.chain, v) == chosen })
 			if u.chain != (chainKey{}) {
 				add(m.chainHead(u, w, lit), sideHit{}, false)
 			}
@@ -227,7 +229,10 @@ func (m Model) sideList(w, h int) ([]string, []sideHit, []span) {
 				}
 			}
 			for j, v := range u.waiting {
-				add(m.waitRow(v, w, sideLink{i: len(u.members) + j, n: n, lit: lit}), sideHit{}, false)
+				k := waitKey(u.chain, v)
+				for _, l := range m.waitRow(v, w, sideLink{i: len(u.members) + j, n: n, lit: lit}, k == chosen) {
+					add(l, sideHit{k: k, state: g.state}, k == chosen)
+				}
 			}
 		}
 		if exited && g.state == sideIdle {

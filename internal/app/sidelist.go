@@ -3,6 +3,7 @@ package app
 import (
 	"cmp"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/blox-eng/matchblox/internal/chains"
@@ -282,9 +283,41 @@ func (m Model) buildSidePanes(folded bool) []paneKey {
 			for _, s := range u.members {
 				out = append(out, paneOf(s))
 			}
+			for _, v := range u.waiting {
+				out = append(out, waitKey(u.chain, v))
+			}
 		}
 	}
 	return out
+}
+
+// waitKey is the list's key of v, a member of chain k that waits for
+// recover. Its pane starts with "wait:", which no pane key has: no live
+// row and no act takes it for a session.
+func waitKey(k chainKey, v state.MateView) paneKey {
+	return paneKey{k.host, "wait:" + v.Member.SessionID}
+}
+
+// waits tells if k is the key of a member that waits for recover.
+func (k paneKey) waits() bool { return strings.HasPrefix(k.pane, "wait:") }
+
+// sideWaiting is the member that waits for recover whose row the list
+// chooses, and its chain. false: the list chooses no such row.
+func (m Model) sideWaiting() (state.MateView, chainKey, bool) {
+	k := m.chosenSide()
+	if !k.waits() {
+		return state.MateView{}, chainKey{}, false
+	}
+	for _, g := range m.sideGroups() {
+		for _, u := range g.units {
+			for _, v := range u.waiting {
+				if waitKey(u.chain, v) == k {
+					return v, u.chain, true
+				}
+			}
+		}
+	}
+	return state.MateView{}, chainKey{}, false
 }
 
 // inOtherChain is whether o counts for a chain other than k.
