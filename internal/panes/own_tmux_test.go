@@ -251,3 +251,15 @@ func TestAClosedTerminalOrphansItsConsole(t *testing.T) {
 		t.Error("the first console is orphaned")
 	}
 }
+
+// TestAnUnmarkedFirstConsoleKeepsItsKeys: a first console that an older
+// matchblox started has no mark; a newer console's keys still flip in it.
+func TestAnUnmarkedFirstConsoleKeepsItsKeys(t *testing.T) {
+	s := newOwnServer(t)
+	one := s.console(t, Home)
+	s.tmux("set-option", "-u", "-t", one.c, HomeOption)
+	s.tmux(BesideKeysArgv()[1:]...)
+	s.attach(t, &one)
+	press(t, one, "\x11") // ctrl+q
+	waitFor(t, func() bool { return s.active(one) == one.a })
+}

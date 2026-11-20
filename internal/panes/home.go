@@ -18,8 +18,9 @@ const Home = "matchblox"
 // Every guard reads it, never the session's name.
 const HomeOption = "@matchblox_home"
 
-// atHome is true in a console's own session.
-const atHome = "#{" + HomeOption + "}"
+// atHome is true in a console's own session. The first console's name
+// counts too: a console an older matchblox started has no mark.
+const atHome = "#{||:#{" + HomeOption + "},#{==:#{session_name}," + Home + "}}"
 
 // HomeMarkArgv marks the session of the console's pane as a console's own.
 func HomeMarkArgv(pane string) []string {
