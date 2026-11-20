@@ -6,6 +6,19 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Roll a match head to scroll by feel.** Add the match head to Mine and
+  roll it with your thumb: each notch taps, a faster roll moves more lines,
+  and rolled too fast it strikes. The Mine editor also lists the console's
+  own keys. A rested swipe on the terminal scrolls fast, and a swipe ticks
+  in a tmux pane too.
+
+### Fixed
+
+- **A belt key after a scroll reaches the agent.** It used to go to
+  tmux's copy mode.
+
 ## [0.49.0] - 2026-11-20
 
 ### Added

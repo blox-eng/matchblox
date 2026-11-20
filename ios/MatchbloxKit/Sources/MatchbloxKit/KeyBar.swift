@@ -5,6 +5,8 @@ public enum KeyBar {
     /// The Ctrl key. It sends nothing itself: a tap arms ctrl for the next key the keyboard
     /// types, as a Ctrl key on a keyboard does, and the terminal disarms it after that key.
     public static let ctrl = "Ctrl"
+    /// The match head. It sends nothing itself: a roll on it scrolls the terminal.
+    public static let wheel = "Wheel"
 
     private static let fixed: [String: [UInt8]] = {
         var keys: [String: [UInt8]] = [
@@ -34,7 +36,7 @@ public enum KeyBar {
     /// a lowercase letter, then has lowercase letters, digits and dashes, is an agent command:
     /// the console runs it, and refuses an id it does not know.
     public static func bytes(for id: String) -> [UInt8]? {
-        if id == ctrl { return [] }
+        if id == ctrl || id == wheel { return [] }
         if let bytes = fixed[id] { return bytes }
         if let bytes = BoardBelt.bytes(for: id) { return bytes }
         guard isCommandID(id) else { return nil }

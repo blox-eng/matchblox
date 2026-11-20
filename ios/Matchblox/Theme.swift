@@ -16,6 +16,7 @@ enum Theme {
     static let flameAmber = Tokens.flameAmber
     static let flameCore = Tokens.flameCore
     static let matchHead = Tokens.matchHead
+    static let matchEmber = Tokens.matchEmber
     static let markTop = Tokens.markTop
     static let markLeft = Tokens.markLeft
     static let markRight = Tokens.markRight
