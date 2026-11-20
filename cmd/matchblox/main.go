@@ -657,6 +657,16 @@ func console(path string, cfg config.Config, root string, noMotion bool, host st
 	return restart()
 }
 
+// consoleSession is the name of the console's own tmux session, the
+// session of its pane; "" when tmux does not say one.
+func consoleSession(pane string) string {
+	out, err := exec.Command("tmux", "display-message", "-p", "-t", pane, "#{session_name}").Output()
+	if name := strings.TrimSpace(string(out)); err == nil && remote.ConsoleSession(name) {
+		return name
+	}
+	return ""
+}
+
 // runConsole runs the console until it ends, and returns what starts it
 // again when it ended for that.
 func runConsole(path string, cfg config.Config, root string, noMotion bool, host string) (func() error, error) {
@@ -674,6 +684,9 @@ func runConsole(path string, cfg config.Config, root string, noMotion bool, host
 	home, _ := os.UserHomeDir()
 	base.Beside = !base.OutsideTmux && os.Getenv(panes.HomeEnv) == "1" && root == "" && host == ""
 	base.Socket, _, _ = strings.Cut(os.Getenv("TMUX"), ",")
+	if os.Getenv(panes.HomeEnv) == "1" && base.Pane != "" {
+		base.HomeSession = consoleSession(base.Pane)
+	}
 	base.Pair = consolePair(home, base.Self, defaultHostKey, setup.PairAddress)
 	restore := func() {}
 	if root == "" {

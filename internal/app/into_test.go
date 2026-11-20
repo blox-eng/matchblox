@@ -200,6 +200,20 @@ func TestAnUnmarkedEnterMovesTheDesk(t *testing.T) {
 	}
 }
 
+// TestGoingInFromASecondConsoleNamesItsWayBack: Ctrl+O in the second
+// terminal's console marks the session it opens with that console, so the
+// way back comes to it and not to the first console.
+func TestGoingInFromASecondConsoleNamesItsWayBack(t *testing.T) {
+	m, ran := jumpRig(t, deskAndPad)
+	m.opt.HomeSession = "matchblox-2"
+	_, cmd := key(m, "ctrl+o")
+	drain(cmd)
+	i := slices.IndexFunc(*ran, func(a []string) bool { return isFocus(a, "/dev/pts/1", "%1") })
+	if i < 0 || !slices.Contains((*ran)[i], "matchblox-2") {
+		t.Errorf("ran %q, want a FocusArgv back to matchblox-2", *ran)
+	}
+}
+
 func TestAMarkedKeyOfAGoneClientIsRefused(t *testing.T) {
 	m, ran := jumpRig(t, deskAndPad)
 	m.opt.ClientList = clients("1794089220 /dev/pts/1 %99") // the iPad left after its mark

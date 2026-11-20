@@ -142,6 +142,9 @@ type Options struct {
 	Clients func() ([]string, error)
 	// Pane is the console's own tmux pane (TMUX_PANE); "" outside tmux.
 	Pane string
+	// HomeSession is the console's own tmux session, one per terminal; ""
+	// outside its home session.
+	HomeSession string
 	// Beside: the console splits its tmux window and keeps the agent's pane
 	// beside the list. Set only for the console of the home session.
 	Beside bool
@@ -1386,6 +1389,11 @@ func (m Model) takeFocus(f *proto.Focus) (Model, tea.Cmd) {
 	return m, m.focusJump(f.Client, s.Pane)
 }
 
+// consoleSession is the console's own tmux session: the way back from an
+// agent this console opens comes to it. A console with none known (one run
+// in place) names the first console's, as the way back did before.
+func (m Model) consoleSession() string { return cmp.Or(m.opt.HomeSession, "matchblox") }
+
 // clients is how this console reads the clients of its tmux server.
 func (m Model) clients() func() ([]string, error) {
 	if m.opt.Clients != nil {
@@ -1412,9 +1420,9 @@ func tmuxClients() ([]string, error) {
 func (m Model) focusJump(tty, pane string) tea.Cmd {
 	clients, read, run := m.clients(), m.readClients(), m.opt.Run
 	agent := m.agentOfPane(pane)
-	say, mark, at := sayAgent(keycmd.PaneSignal(agent, pane), m.opt), paneMark(pane, agent), m.now()
+	say, mark, at, back := sayAgent(keycmd.PaneSignal(agent, pane), m.opt), paneMark(pane, agent), m.now(), m.consoleSession()
 	return func() tea.Msg {
-		argv := remote.FocusArgv(tty, pane, at)
+		argv := remote.FocusArgv(tty, pane, at, back)
 		if !remote.FocusAllowed(argv) {
 			return nil
 		}

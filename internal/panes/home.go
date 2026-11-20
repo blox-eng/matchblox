@@ -73,14 +73,33 @@ var goHome = [3]string{
 	goTo,
 }
 
-// goTo takes the client to a console: to the console's session and on to
-// the console's pane there, as another window may be the one on screen;
-// with no such session, to a console run in place in a pane of any other
-// session (#354). With no console at all, it says how to open one, not
-// tmux's bare "can't find session".
-var goTo = `if-shell -F "` + homeExists + `" { switch-client -t =` + Home + " ; run-shell -C -t =" + Home + `: "#{W:#{P:#{?` + isConsolePane +
+// goTo takes the client to its own console: the console of the session it
+// is in, or of the session it went into an agent from (sample.BackOption); with
+// neither, or when that console has ended, to the first console's session.
+// It goes on to the console's pane there, as another window may be the one
+// on screen. With no such session, it goes to a console run in place in a
+// pane of any other session (#354). With no console at all, it says how to
+// open one, not tmux's bare "can't find session". The console's name waits
+// in the server option goToOption, as a format in a session's loop reads
+// that session's options, never the client's.
+var goTo = `run-shell -C "set-option -g ` + goToOption + ` ` + consoleOf + `" ; if-shell -F "` + toAlive + `" { run-shell -C "` + jumpTo + `" } { ` +
+	`if-shell -F "` + homeExists + `" { switch-client -t =` + Home + " ; run-shell -C -t =" + Home + `: "#{W:#{P:#{?` + isConsolePane +
 	`,select-window -t #{window_id} ; select-pane -Z -t #{pane_id} ; ,}}}" } { if-shell -F "` + consoleExists +
-	`" { run-shell -C "#{S:#{W:#{P:#{?` + runsConsole + `,switch-client -t #{pane_id} ; ,}}}}" } { display-message "` + NoHome + `" } }`
+	`" { run-shell -C "#{S:#{W:#{P:#{?` + runsConsole + `,switch-client -t #{pane_id} ; ,}}}}" } { display-message "` + NoHome + `" } } }`
+
+// goToOption is the console the way back goes to, as goTo found it.
+const goToOption = "@matchblox_to"
+
+// consoleOf is the name of the client's own console's session.
+const consoleOf = "#{?" + atHome + ",#{session_name},#{?#{" + sample.BackOption + "},#{" + sample.BackOption + "}," + Home + "}}"
+
+// toAlive is "1" while the console in goToOption has its session.
+const toAlive = "#{S:#{?#{&&:#{==:#{session_name},#{" + goToOption + "}}," + atHome + "},1,}}"
+
+// jumpTo switches the client to the session in goToOption and selects its
+// console's pane there.
+const jumpTo = "#{S:#{?#{==:#{session_name},#{" + goToOption + "}},switch-client -t #{session_id} ; #{W:#{P:#{?" + isConsolePane +
+	",select-window -t #{window_id} ; select-pane -Z -t #{pane_id} ; ,}}},}}"
 
 // homeExists is "1" while the tmux server has the console's session.
 const homeExists = "#{S:#{?#{==:#{session_name}," + Home + "},1,}}"

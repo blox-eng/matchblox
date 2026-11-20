@@ -310,8 +310,11 @@ func ClientActivity() time.Time {
 // pane, the agent's pane, and the chain the agent works in.
 const (
 	ConsoleOption = "@matchblox_console"
-	BesideOption  = "@matchblox_beside"
-	ChainOption   = "@matchblox_chain"
+	// BackOption names, on a session the console makes to go into an
+	// agent, the console's session it came from: the way back goes there.
+	BackOption   = "@matchblox_back"
+	BesideOption = "@matchblox_beside"
+	ChainOption  = "@matchblox_chain"
 )
 
 // ViewOption is the session option of a view's session (a jump's, shown in

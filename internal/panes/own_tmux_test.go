@@ -139,3 +139,81 @@ func TestAConsoleEndsOnlyItsOwnAgentPane(t *testing.T) {
 		t.Errorf("panes left %q, want the first console's %s and %s", p, one.c, one.a)
 	}
 }
+
+// sessions are the sessions of sock's clients, one per line.
+func (s ownServer) sessions() string { return s.tmux("list-clients", "-F", "#{client_session}") }
+
+// TestTheWayBackStaysInItsOwnConsole: from the agent beside its list, the
+// second terminal's way back shows its own list; the first console stays
+// as it was.
+func TestTheWayBackStaysInItsOwnConsole(t *testing.T) {
+	s := newOwnServer(t)
+	one, two := s.console(t, Home), s.console(t, Home+"-2")
+	s.tmux(HomeKeyArgv()[1:]...)
+	s.attach(t, &one)
+	s.attach(t, &two)
+	s.tmux("select-pane", "-t", two.a)
+	s.tmux("select-pane", "-t", one.a)
+	press(t, two, HomeKey)
+	waitFor(t, func() bool { return s.active(two) == two.c })
+	if got := strings.Fields(s.sessions()); len(got) != 2 || !slices.Contains(got, one.name) || !slices.Contains(got, two.name) {
+		t.Errorf("clients are in %q, want one in each console", got)
+	}
+	if got := s.active(one); got != one.a {
+		t.Errorf("the first console's active pane is %s, want its agent %s", got, one.a)
+	}
+}
+
+// focus is a session the way Ctrl+O makes it, marked with the console it
+// came from, with a terminal in it.
+func (s ownServer) focus(t *testing.T, back string) ownConsole {
+	t.Helper()
+	f := ownConsole{name: "matchblox-in-1"}
+	f.a = s.tmux("new-session", "-d", "-s", f.name, "-P", "-F", "#{pane_id}", "sleep", "600")
+	s.tmux("set-option", "-t", f.a, sample.BackOption, back)
+	s.attach(t, &f)
+	return f
+}
+
+// TestTheWayBackFromAFocusGoesToItsConsole: a terminal that went into an
+// agent from the second console comes back to the second console.
+func TestTheWayBackFromAFocusGoesToItsConsole(t *testing.T) {
+	s := newOwnServer(t)
+	s.console(t, Home)
+	two := s.console(t, Home+"-2")
+	s.tmux(HomeKeyArgv()[1:]...)
+	f := s.focus(t, two.name)
+	press(t, f, HomeKey)
+	waitFor(t, func() bool { return s.sessions() == two.name })
+	if got := s.active(two); got != two.c {
+		t.Errorf("the console's active pane is %s, want its list %s", got, two.c)
+	}
+}
+
+// TestTheWayBackFromAFocusOfAGoneConsoleGoesToTheFirst: the console the
+// terminal came from has ended: the way back goes to the first console,
+// not to a dead end.
+func TestTheWayBackFromAFocusOfAGoneConsoleGoesToTheFirst(t *testing.T) {
+	s := newOwnServer(t)
+	s.console(t, Home)
+	s.tmux(HomeKeyArgv()[1:]...)
+	f := s.focus(t, Home+"-9")
+	press(t, f, HomeKey)
+	waitFor(t, func() bool { return s.sessions() == Home })
+}
+
+// TestFlipHandsOffToItsOwnConsole: ⌥s in an agent's pane reached from the
+// second console hands off to the second console, and to no other.
+func TestFlipHandsOffToItsOwnConsole(t *testing.T) {
+	s := newOwnServer(t)
+	one, two := s.console(t, Home), s.console(t, Home+"-2")
+	s.tmux(FlipKeysArgv()[1:]...)
+	f := s.focus(t, two.name)
+	s.tmux("set-option", "-p", "-t", f.a, MatchOption, "1")
+	press(t, f, "\x1bs")
+	waitFor(t, func() bool { return s.sessions() == two.name && read(two.cOut) != "" })
+	time.Sleep(100 * time.Millisecond)
+	if got := read(one.cOut); got != "" {
+		t.Errorf("the first console read %q", got)
+	}
+}

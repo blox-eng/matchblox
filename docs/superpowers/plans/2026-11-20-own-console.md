@@ -150,3 +150,4 @@ Load `builder:review` with the spec (#448), this plan and the test command. Run 
 ## Changes during build
 
 - Task 1 also adds `HomeMarkArgv(pane)`, and the console runs it at start (from Task 4). Because: once the guards read `HomeOption`, a console that does not set it loses `ctrl+q` and the marks. Each commit must work on its own. Task 4 adds `destroy-unattached` to it. Test: `TestAConsoleMarksItsOwnSession`.
+- Task 3: `BackOption` lives in `internal/sample` (with `ConsoleOption`), as `panes` and `remote` both read it and neither imports the other. `ConsoleSession` (the name rule) is in `remote`. `handOff` finds the console by `isConsolePane` in the client's session now, not by `runsConsole` in `=matchblox`. `TestGoingInFromASecondConsoleNamesItsWayBack` in `internal/app/into_test.go` is added. The way back reads its target through a server option (`@matchblox_to`), as a format in a session loop reads that session's options.
