@@ -169,6 +169,7 @@ type Options struct {
 type helloMsg proto.Hello
 type stateMsg proto.State
 type resultMsg proto.Result
+type copyMsg proto.Copy
 type lostMsg struct {
 	err  error
 	conn transport.Conn
@@ -524,12 +525,10 @@ type Model struct {
 	sawRelease bool
 	longPress  longPress
 	// copyCode is the code the copy check copied, while it waits for its
-	// paste. clipOK, clipKnown: the console's tmux passes a copy on, as it
-	// was read last. dragFrom, dragTo: a drag over the board's text, from
+	// paste. dragFrom, dragTo: a drag over the board's text, from
 	// the press to the pointer; dragTo is nil until it is a drag.
-	copyCode          string
-	clipOK, clipKnown bool
-	dragFrom, dragTo  *point
+	copyCode         string
+	dragFrom, dragTo *point
 	// dragLines is the frame at the press, which the drag copies from, and
 	// dragWithin the cells of a row it may cover: its column's. tapLater
 	// is a press whose tap waits for its release. boardDoor is the setup
@@ -660,7 +659,7 @@ func (m Model) Init() tea.Cmd {
 	if err := m.opt.DialErr; err != nil && m.conn == nil {
 		return tea.Batch(tea.RequestBackgroundColor, func() tea.Msg { return lostMsg{err: err} }, m.splashCmd(), m.waitAsk(), peers)
 	}
-	return tea.Batch(tea.RequestBackgroundColor, m.hello(), m.recv(), m.watchSilence(), m.splashCmd(), m.graphicsTick(0), m.waitAsk(), m.clipRead(), peers)
+	return tea.Batch(tea.RequestBackgroundColor, m.hello(), m.recv(), m.watchSilence(), m.splashCmd(), m.graphicsTick(0), m.waitAsk(), peers)
 }
 
 func (m Model) watchSilence() tea.Cmd {
@@ -716,6 +715,11 @@ func recvOn(c transport.Conn) tea.Cmd {
 				var sc proto.Screen
 				if json.Unmarshal(env.Body, &sc) == nil {
 					return fromConn{c, screenMsg(sc)}
+				}
+			case proto.KindCopy:
+				var cp proto.Copy
+				if json.Unmarshal(env.Body, &cp) == nil {
+					return fromConn{c, copyMsg(cp)}
 				}
 			}
 		}
@@ -847,6 +851,9 @@ func (m Model) scanShows() Model {
 
 func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case copyMsg:
+		next, cmd := m.tookCopy(msg.Text, "")
+		return next, tea.Batch(cmd, next.recv())
 	case tea.BackgroundColorMsg:
 		m.dark = msg.IsDark()
 		m.st = newStyles(m.dark)
@@ -1234,9 +1241,6 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return next, tea.Batch(touch, cmd)
 	case tea.MouseReleaseMsg, tea.MouseMotionMsg, longPressMsg:
 		return m.pointer(msg)
-	case clipMsg:
-		m.clipOK, m.clipKnown = msg.ok, msg.known
-		return m, nil
 	case tea.KeyPressMsg:
 		if m.splashing() {
 			m.splashDone = true // any key stops the start screen, and does nothing else
