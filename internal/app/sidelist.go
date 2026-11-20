@@ -148,6 +148,17 @@ func (m Model) buildSideGroups() []sideGroup {
 	var units []sideUnit
 	var states [][]sideState
 	done := map[chainKey]bool{}
+	// A member that waits in two teams is one row, in the first: a second
+	// row with the same key would stop ↓, as for a session in two chains.
+	placed := map[paneKey]bool{}
+	once := func(k chainKey, ws []state.MateView) []state.MateView {
+		return slices.DeleteFunc(ws, func(v state.MateView) bool {
+			key := waitKey(k, v)
+			had := placed[key]
+			placed[key] = true
+			return had
+		})
+	}
 	listed := slices.DeleteFunc(m.sideSessions(), func(s sample.Session) bool { return !m.inView(s.Host) })
 	isListed := map[paneKey]bool{}
 	inChain := map[chainKey][]sample.Session{} // the listed matches of each chain, in list order
@@ -188,7 +199,7 @@ func (m Model) buildSideGroups() []sideGroup {
 		for i, o := range ms {
 			hs[i] = m.sideStateOf(o)
 		}
-		ws := m.waitsOf(k, unseen)
+		ws := once(k, m.waitsOf(k, unseen))
 		units = append(units, sideUnit{chain: k, members: ms, waiting: ws, ahead: m.aheadOf(k, ms, ws)})
 		states = append(states, hs)
 	}
@@ -203,7 +214,7 @@ func (m Model) buildSideGroups() []sideGroup {
 				continue
 			}
 			_, unseen := m.members(k)
-			if ws := m.waitsOf(k, unseen); len(ws) > 0 {
+			if ws := once(k, m.waitsOf(k, unseen)); len(ws) > 0 {
 				units = append(units, sideUnit{chain: k, lead: -1, waiting: ws})
 				states = append(states, nil)
 			}

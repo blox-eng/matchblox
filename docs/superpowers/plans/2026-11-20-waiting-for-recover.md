@@ -168,3 +168,4 @@ Next: builder:build
 - Task 5 check: `sideCount` lost a branch no list reaches; a test pins that a gone member with no `Wait` draws no row.
 - Task 6: the list key of a waiting row is `wait:<session id>`, not `wait:<conversation>`: every act on it goes by session id (Tasks 2, 3, 7). `sideChosen()` stays false on a waiting row, so no session act runs there; `x`, `p`, `r`, `c`, typed text and (on a desk) `⏎` show `<name> waits for recover · matchblox recover reopens it` until Task 7.
 - Task 4: `send` now prints the service's note when it typed nothing; a live mate's `queued for its next turn` shows too.
+- Task 6 check: a member that waits in two teams is one row, in the first team (as a live match in two chains); a right-click or a long press on a waiting row opens its menu.

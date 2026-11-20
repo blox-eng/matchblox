@@ -841,6 +841,9 @@ func (m Model) sideRowAt(x, y int) (paneKey, bool) {
 // right-click or a long press on its row.
 func (m Model) sideMenuOn(k paneKey, x, y int) (tea.Model, tea.Cmd) {
 	m = m.chooseSide(k)
+	if v, c, ok := m.sideWaiting(); ok {
+		return m.openWaitMenu(v, c, x, y), nil
+	}
 	s, ok := m.sideChosen()
 	if !ok {
 		return m, nil

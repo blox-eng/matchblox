@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/chains"
 	"github.com/blox-eng/matchblox/internal/doors"
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -348,5 +349,52 @@ func TestAWaitingRowTakesNoSessionKey(t *testing.T) {
 		if !strings.Contains(m.noticeText, "kindle-web waits for recover") {
 			t.Errorf("%s on a waiting row says %q", key, m.noticeText)
 		}
+	}
+}
+
+// TestAMatchWaitingInTwoTeamsIsOneRow: a waiting match in two teams draws
+// once, in the first team, as a live match in two chains does: a second
+// row with the same key would stop ↓ and draw two chosen rows.
+func TestAMatchWaitingInTwoTeamsIsOneRow(t *testing.T) {
+	st := loginState(nil)
+	var kindle chains.Member
+	st.Sessions = slices.DeleteFunc(st.Sessions, func(s sample.Session) bool {
+		if s.Name != "kindle-web" {
+			return false
+		}
+		kindle = memberOf(s)
+		st.Chains.Mates = append(st.Chains.Mates, state.MateView{Member: kindle, Wait: &state.WaitView{Name: s.Name, Agent: "claude"}})
+		return true
+	})
+	st.Chains.Chains = append(st.Chains.Chains, chains.Chain{ID: "c2", Name: "hearth", Members: []chains.Member{kindle, st.Chains.Chains[0].Members[1]}})
+	m := boardModel(t, st)
+	var keys []paneKey
+	for _, k := range m.sideOrder() {
+		if k.waits() {
+			keys = append(keys, k)
+		}
+	}
+	if len(keys) != 1 {
+		t.Fatalf("waiting keys = %v, want one", keys)
+	}
+	if got := strings.Count(strings.Join(m.sidePanel(60, 20), "\n"), "◌ kindle-web"); got != 1 {
+		t.Fatalf("kindle-web draws %d times", got)
+	}
+}
+
+// TestARightClickOpensTheMenuOfAWaitingMatch: a right-click, or a long
+// press on a phone, opens the waiting match's menu, as m does.
+func TestARightClickOpensTheMenuOfAWaitingMatch(t *testing.T) {
+	m := waitingLogin(t, "kindle-web")
+	var k paneKey
+	for _, o := range m.sideOrder() {
+		if o.waits() {
+			k = o
+		}
+	}
+	got, _ := m.sideMenuOn(k, 2, 5)
+	mm := got.(Model)
+	if mm.menu == nil || len(mm.menu.items) == 0 || mm.menu.items[0].label != "reopen it" {
+		t.Fatalf("menu = %+v", mm.menu)
 	}
 }
