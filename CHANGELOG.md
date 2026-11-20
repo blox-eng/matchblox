@@ -6,11 +6,24 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Tap the match head for Enter.** A short tap on a still head sends
+  Enter, with two firm taps you feel. A touch that stops a flick sends
+  nothing.
+- **Rest a finger to call up the match head.** Rest a finger on the
+  terminal, then move it: the head comes under your finger, rolls as the
+  belt's does, and waits 3 seconds for another roll or a tap. It replaces
+  the fast swipe.
+
 ### Fixed
 
 - **A closed pane lets Cursor finish saving.** The redraw guard ended
   the agent 3 s after the hangup. Now it takes the agent's terminal away
   at 3 s and ends the agent only at 30 s (#404).
+- **The app declares the APIs Apple asks about.** The app, its Live
+  Activity and its notification extension say why they read their
+  settings, the uptime clock and file dates.
 
 ## [0.51.1] - 2026-11-20
 

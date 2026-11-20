@@ -71,6 +71,13 @@ jobs:
         run: test -f ios/build/Build/Products/Debug-iphonesimulator/Matchblox.app/commands.json
       - name: The app holds the demo's machine
         run: test -f ios/build/Build/Products/Debug-iphonesimulator/Matchblox.app/machine.tar
+      - name: The app and its extensions hold their privacy manifests
+        run: |
+          app=ios/build/Build/Products/Debug-iphonesimulator/Matchblox.app
+          for m in "$app" "$app/PlugIns/MatchbloxIsland.appex" "$app/PlugIns/MatchbloxBuzz.appex"; do
+            test -f "$m/PrivacyInfo.xcprivacy" || { echo "::error::$m has no PrivacyInfo.xcprivacy"; exit 1; }
+            plutil -lint "$m/PrivacyInfo.xcprivacy"
+          done
       - name: Compile the app in Release
         # The same action, configuration and platform as the TestFlight archive,
         # without signing: an unsigned device build that links the demo library.
