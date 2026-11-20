@@ -81,9 +81,9 @@ func (m Model) footParts() []listFootPart {
 		}
 		parts = append(parts, listFootPart{"! " + m.nameOf(h) + word, footHost + h})
 	}
-	hosts, names := m.waitingByHost()
+	hosts, waits := m.waitingByHost()
 	for _, h := range hosts {
-		text := "↻ " + strconv.Itoa(len(names[h])) + " to reopen"
+		text := "↻ " + strconv.Itoa(len(waits[h])) + " to reopen"
 		if h != m.opt.Host {
 			text += " on " + m.nameOf(h)
 		}
@@ -95,24 +95,24 @@ func (m Model) footParts() []listFootPart {
 	return parts
 }
 
-// waitingByHost are the names of the members that wait for recover, by
+// waitingByHost are the waits of the members that wait for recover, by
 // host, in the list's order. The list places a member of two teams once,
-// so each name counts once.
-func (m Model) waitingByHost() ([]string, map[string][]string) {
+// so each counts once.
+func (m Model) waitingByHost() ([]string, map[string][]state.WaitView) {
 	var hosts []string
-	names := map[string][]string{}
+	waits := map[string][]state.WaitView{}
 	for _, g := range m.sideGroups() {
 		for _, u := range g.units {
 			for _, v := range u.waiting {
 				h := cmp.Or(u.chain.host, m.opt.Host)
-				if _, ok := names[h]; !ok {
+				if _, ok := waits[h]; !ok {
 					hosts = append(hosts, h)
 				}
-				names[h] = append(names[h], v.Wait.Name)
+				waits[h] = append(waits[h], *v.Wait)
 			}
 		}
 	}
-	return hosts, names
+	return hosts, waits
 }
 
 // sideFoot is the panel's last line, the foot's parts: the spans are where

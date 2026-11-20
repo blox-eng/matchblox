@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -318,5 +319,96 @@ func TestALineToAWaitingMateWaits(t *testing.T) {
 	publishOn(s, "200", one2, three, two2)
 	if got := chainInbox(s, two2); !slices.Equal(got, []string{"[from one %5] the fix is on main"}) {
 		t.Fatalf("two's inbox = %q", got)
+	}
+}
+
+// chainedOnWork is a service that keeps chains, and one, an agent with a
+// saved history in a folder that is there.
+func chainedOnWork(t *testing.T) (*Service, sample.Session) {
+	t.Helper()
+	s, _ := recoverTest(t)
+	one := agentIn(t, s, "claude", "s1", "one", "%1")
+	s.mu.Lock()
+	s.ChainsPath, s.Chains = filepath.Join(t.TempDir(), "chains.json"), nil
+	s.mu.Unlock()
+	return s, one
+}
+
+// inWork is an agent with a saved history in tmux session work, window
+// window, its window named name.
+func inWork(t *testing.T, s *Service, id, name, pane string, window int) sample.Session {
+	t.Helper()
+	x := agentIn(t, s, "claude", id, name, pane)
+	x.Target = fmt.Sprintf("work:%d.0", window)
+	return x
+}
+
+// waitOf is the wait the doc shows for the member of conversation id.
+func waitOf(t *testing.T, s *Service, id string) state.WaitView {
+	t.Helper()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if v := s.cur.Chains; v != nil {
+		for _, mv := range v.Mates {
+			if mv.Member.SessionID == id && mv.Wait != nil {
+				return *mv.Wait
+			}
+		}
+	}
+	t.Fatalf("the doc shows no wait for %s: %+v", id, s.cur.Chains)
+	return state.WaitView{}
+}
+
+// TestReopenAWindowNamedWaitingMate: a match whose window is named api, in
+// tmux session work, waits for recover. Its mates know it as api, and the
+// record by its tmux session. Recover by the conversation the doc shows
+// reopens it.
+func TestReopenAWindowNamedWaitingMate(t *testing.T) {
+	s, one := chainedOnWork(t)
+	api := inWork(t, s, "s2", "api", "%2", 2)
+	publishOn(s, "100", one, api)
+	if res := chainFrom(t, s, "%1", proto.ChainPrefix+"%2"); res.Err != "" {
+		t.Fatalf("chain = %+v", res)
+	}
+	publishOn(s, "100", one, api)
+	loseServer(s)
+	w := waitOf(t, s, "s2")
+	if w.Name != "api" {
+		t.Fatalf("the wait is named %q, want api", w.Name)
+	}
+	res := recoverAct(t, s, proto.Recover{Conversations: []string{w.Conversation}}, "")
+	if res.Err != "" || len(res.Recover) != 1 || res.Recover[0].Conversation != "s2" || res.Recover[0].State != proto.RecoverReopened {
+		t.Fatalf("recover = %+v", res)
+	}
+}
+
+// TestReopenOneWaitingMateStartsOnlyIt: two conversations ran in tmux
+// session work, and only one is chained. Recover by its conversation
+// starts it, not the other agent of its tmux session.
+func TestReopenOneWaitingMateStartsOnlyIt(t *testing.T) {
+	s, one := chainedOnWork(t)
+	api := inWork(t, s, "s2", "api", "%2", 2)
+	web := inWork(t, s, "s3", "web", "%3", 3)
+	publishOn(s, "100", one, api, web)
+	if res := chainFrom(t, s, "%1", proto.ChainPrefix+"%2"); res.Err != "" {
+		t.Fatalf("chain = %+v", res)
+	}
+	publishOn(s, "100", one, api, web)
+	loseServer(s)
+	res := recoverAct(t, s, proto.Recover{Conversations: []string{waitOf(t, s, "s2").Conversation}}, "")
+	if res.Err != "" || len(res.Recover) != 1 || res.Recover[0].Conversation != "s2" || res.Recover[0].State != proto.RecoverReopened {
+		t.Fatalf("recover = %+v", res)
+	}
+}
+
+// TestRecoverRefusesAnUnknownConversation: recover names the conversation
+// the record does not hold, and how to see those it does.
+func TestRecoverRefusesAnUnknownConversation(t *testing.T) {
+	s, one := chainedOnWork(t)
+	publishOn(s, "100", one)
+	loseServer(s)
+	res := recoverAct(t, s, proto.Recover{Conversations: []string{"s1", "gone"}}, "")
+	if want := "no conversation gone in the recovery record: matchblox recover lists them"; res.Err != want || len(res.Recover) != 0 {
+		t.Fatalf("recover = %+v, want %q", res, want)
 	}
 }

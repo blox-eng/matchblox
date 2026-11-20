@@ -689,17 +689,17 @@ func (m Model) openFoot(press string) (tea.Model, tea.Cmd) {
 
 // askReopen asks for a typed y to reopen all the matches that wait for
 // recover on host. Reopening starts agents, so the confirm names each one.
-// The names go into the act as JSON, never as shell words.
+// The act names their conversations, as JSON (reopenChosen says why).
 func (m Model) askReopen(host string) (tea.Model, tea.Cmd) {
 	_, all := m.waitingByHost()
-	names := all[host]
+	var names, convs []string
+	for _, w := range all[host] {
+		names, convs = append(names, w.Name), append(convs, w.Conversation)
+	}
 	if len(names) == 0 {
 		return m, nil
 	}
-	text, err := json.Marshal(proto.Recover{Names: names})
-	if err != nil {
-		return m, m.notice("not reopened: " + err.Error())
-	}
+	text, _ := json.Marshal(proto.Recover{Conversations: convs})
 	say := "reopen " + names[0] + "?"
 	if len(names) > 1 {
 		say = "reopen " + strconv.Itoa(len(names)) + " matches: " + strings.Join(names, ", ") + "?"

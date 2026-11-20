@@ -603,8 +603,9 @@ func TestLeavingTheRoomSaysGReopensIt(t *testing.T) {
 	}
 }
 
-// reopenAct is the act ⏎ sent on the waiting row of m, and the names its
-// Text asks recover to reopen.
+// reopenAct is the act ⏎ sent on the waiting row of m, and the
+// conversations its Text asks recover to reopen. The Text names nothing
+// else: a tmux session's name would start each agent of that session.
 func reopenAct(t *testing.T, m Model) (proto.Act, []string) {
 	t.Helper()
 	acts := boardFake(m).acts()
@@ -615,12 +616,16 @@ func reopenAct(t *testing.T, m Model) (proto.Act, []string) {
 	if err := json.Unmarshal([]byte(acts[0].Text), &r); err != nil {
 		t.Fatalf("the act's Text %q is no JSON: %v", acts[0].Text, err)
 	}
-	return acts[0], r.Names
+	if want, _ := json.Marshal(proto.Recover{Conversations: r.Conversations}); string(want) != acts[0].Text {
+		t.Fatalf("the act's Text is %s, want only conversations", acts[0].Text)
+	}
+	return acts[0], r.Conversations
 }
 
 // TestEnterReopensAWaitingMatch: ⏎ on a waiting row, on a desk or not and
-// with the line open, sends recover for its name. The name goes into the act as JSON, never
-// as a shell word. The result shows as one notice that names the fix.
+// with the line open, sends recover for its conversation, as JSON: never
+// its name, which the record may not know. The result shows as one notice
+// that names the fix.
 func TestEnterReopensAWaitingMatch(t *testing.T) {
 	since := time.Date(2026, 10, 1, 22, 14, 0, 0, time.Local)
 	for _, c := range []struct {
@@ -640,9 +645,9 @@ func TestEnterReopensAWaitingMatch(t *testing.T) {
 			m.toLine()
 		}
 		m = pressOn(m, "enter")
-		a, names := reopenAct(t, m)
-		if a.RecID != "recover" || a.Confirm != "y" || !slices.Equal(names, []string{c.name}) {
-			t.Errorf("desk %v, line %v: ⏎ sent %+v, names %q; want recover for %q", c.desk, c.line, a, names, c.name)
+		a, convs := reopenAct(t, m)
+		if a.RecID != "recover" || a.Confirm != "y" || !slices.Equal(convs, []string{"c-3"}) {
+			t.Errorf("desk %v, line %v, name %q: ⏎ sent %+v, conversations %q; want recover for c-3", c.desk, c.line, c.name, a, convs)
 		}
 	}
 
@@ -695,7 +700,7 @@ func TestTheMenuOfAWaitingMatch(t *testing.T) {
 	}
 
 	reopen := pressOn(pressOn(waitingKindle(t, time.Date(2026, 10, 1, 22, 14, 0, 0, time.Local), 0), "down"), "m", "enter")
-	if a, names := reopenAct(t, reopen); a.RecID != "recover" || !slices.Equal(names, []string{"kindle-web"}) {
-		t.Errorf("reopen it sent %+v, names %q", a, names)
+	if a, convs := reopenAct(t, reopen); a.RecID != "recover" || !slices.Equal(convs, []string{"c-3"}) {
+		t.Errorf("reopen it sent %+v, conversations %q", a, convs)
 	}
 }

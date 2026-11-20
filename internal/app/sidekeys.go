@@ -304,8 +304,9 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 }
 
 // reopenChosen sends recover for the chosen member that waits for it. The
-// owner chose this one match, so it sends with no confirm. The name goes
-// into the act as JSON, never as a shell word.
+// owner chose this one match, so it sends with no confirm. It names the
+// conversation, as JSON: the record knows no window name, and a tmux
+// session's name would start each agent of that session.
 func (m *Model) reopenChosen() tea.Cmd {
 	v, c, ok := m.sideWaiting()
 	if !ok {
@@ -315,10 +316,7 @@ func (m *Model) reopenChosen() tea.Cmd {
 	if why := m.refusal(host); why != "" {
 		return m.notice(why)
 	}
-	text, err := json.Marshal(proto.Recover{Names: []string{v.Wait.Name}})
-	if err != nil {
-		return m.notice("not reopened: " + err.Error())
-	}
+	text, _ := json.Marshal(proto.Recover{Conversations: []string{v.Wait.Conversation}})
 	cmd := m.sendTo(host, proto.Act{RecID: recoverID, Confirm: "y", Text: string(text)})
 	return tea.Batch(cmd, m.notice("reopening "+v.Wait.Name))
 }

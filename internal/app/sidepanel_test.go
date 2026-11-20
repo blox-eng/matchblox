@@ -412,7 +412,7 @@ func waitingInTwoTeams(t *testing.T) Model {
 		if s.Name == "kindle-web" {
 			kindle = memberOf(s)
 		}
-		st.Chains.Mates = append(st.Chains.Mates, state.MateView{Member: memberOf(s), Wait: &state.WaitView{Name: s.Name, Agent: "claude"}})
+		st.Chains.Mates = append(st.Chains.Mates, state.MateView{Member: memberOf(s), Wait: &state.WaitView{Name: s.Name, Agent: "claude", Conversation: "c-" + s.Name}})
 		return true
 	})
 	st.Chains.Chains = append(st.Chains.Chains, chains.Chain{ID: "c2", Name: "hearth", Members: []chains.Member{kindle, st.Chains.Chains[0].Members[1]}})
@@ -443,7 +443,7 @@ func TestTheFootCountsMatchesToReopen(t *testing.T) {
 }
 
 // TestTheFootReopensThemAll: a tap on ↻ asks for a typed y and names the
-// matches. y sends one recover act with all their names, as JSON.
+// matches. y sends one recover act with all their conversations, as JSON.
 func TestTheFootReopensThemAll(t *testing.T) {
 	m := waitingInTwoTeams(t)
 	sp, _, ok := footReopenSpan(m)
@@ -456,8 +456,8 @@ func TestTheFootReopensThemAll(t *testing.T) {
 	if len(f.acts()) != 0 || asked.pending == nil || !asked.pending.destructive || asked.pending.String() != "reopen 2 matches: kindle-web, wick-mobile?" {
 		t.Fatalf("a tap on ↻: acts %+v, pending %+v", f.acts(), asked.pending)
 	}
-	if a, names := reopenAct(t, pressOn(asked, "y")); a.RecID != "recover" || a.Confirm != "y" || !slices.Equal(names, []string{"kindle-web", "wick-mobile"}) {
-		t.Fatalf("y sent %+v, names %q", a, names)
+	if a, convs := reopenAct(t, pressOn(asked, "y")); a.RecID != "recover" || a.Confirm != "y" || !slices.Equal(convs, []string{"c-kindle-web", "c-wick-mobile"}) {
+		t.Fatalf("y sent %+v, conversations %q", a, convs)
 	}
 
 	one := waitingLogin(t, "kindle-web")
