@@ -1,3 +1,6 @@
+#if canImport(CoreGraphics)
+import CoreGraphics
+#endif
 import Foundation
 
 /// The match head that a rest, then a move, calls up over the terminal: where it sits, and when
