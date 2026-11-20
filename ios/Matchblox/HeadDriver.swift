@@ -11,6 +11,10 @@ final class HeadDriver: NSObject {
     var draw: (_ turn: CGPoint, _ heat: CGFloat, _ struck: Bool) -> Void = { _, _, _ in }
     /// A short message for the person: nothing to scroll here.
     var say: (String) -> Void = { _ in }
+    /// A still tap: send Enter.
+    var onClick: () -> Void = {}
+    /// Show that Enter went.
+    var flash: () -> Void = {}
 
     /// A thumb on the head: where it was last, when, and how fast it rolls (pt/s).
     private struct Touch {
@@ -33,6 +37,10 @@ final class HeadDriver: NSObject {
     private var link: CADisplayLink?
     private var lastFrame: CFTimeInterval?
     private var turn = CGPoint.zero
+    /// Whether the touch is a tap that sends Enter (`HeadClick`).
+    private var click = HeadClick()
+    /// When the head last rolled, by a thumb or a coast.
+    private var lastRoll: TimeInterval?
 
     init(radius: CGFloat) {
         self.radius = radius
@@ -42,9 +50,12 @@ final class HeadDriver: NSObject {
     var isTouched: Bool { touch != nil }
 
     func began(at point: CGPoint, time: TimeInterval) {
-        // A touch stops a flick, as in a scroll view.
+        // A touch stops a flick, as in a scroll view, and says so: it sends nothing.
+        let coasting = coast != nil
         coast = nil
         feel.prepare()
+        if coasting { feel.stop() }
+        click.began(at: time, coasting: coasting, lastRoll: lastRoll)
         touch = Touch(last: point, time: time)
     }
 
@@ -52,6 +63,7 @@ final class HeadDriver: NSObject {
         guard var t = touch else { return }
         let dt = max(time - t.time, 1.0 / 240)
         let d = CGPoint(x: point.x - t.last.x, y: point.y - t.last.y)
+        click.moved(by: hypot(d.x, d.y))
         t.velocity = CGPoint(x: t.velocity.x * 0.6 + d.x / dt * 0.4, y: t.velocity.y * 0.6 + d.y / dt * 0.4)
         t.last = point
         t.time = time
@@ -59,10 +71,14 @@ final class HeadDriver: NSObject {
         roll(dx: d.x, dy: d.y, speed: t.velocity.y, at: time)
     }
 
-    func ended() {
+    func ended(at time: TimeInterval) {
         guard let t = touch else { return }
         touch = nil
-        if abs(t.velocity.y) > Self.flick {
+        if click.isClick(endedAt: time) {
+            feel.click()
+            flash()
+            onClick()
+        } else if abs(t.velocity.y) > Self.flick {
             coast = (CACurrentMediaTime(), t.velocity.y, 0)
         }
         startLink()
@@ -89,6 +105,7 @@ final class HeadDriver: NSObject {
     /// The head turned `dx`, `dy` points at `speed` points a second: scroll, and draw it.
     private func roll(dx: CGFloat, dy: CGFloat, speed: CGFloat, at time: TimeInterval) {
         let rolled = head.roll(dy: dy, speed: speed)
+        if dx != 0 || dy != 0 { lastRoll = time }
         var moved = false
         if rolled.lines != 0 {
             switch onLines(rolled.lines) {

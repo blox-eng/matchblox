@@ -366,17 +366,7 @@ private final class Belts {
         for belt in [lifted, dock] {
             belt.isDemo = isDemo
             belt.onScreenHold = { [weak screen] holding in screen?.trayMoved(open: holding) }
-            belt.onSend = { [weak terminal] bytes in
-                guard let terminal else { return }
-                // A pane scrolled up is in tmux copy mode, which would take the key as its own
-                // command: the steps back down leave it first. Esc there only comes back down:
-                // the agent would read it as an interrupt.
-                let wasUp = terminal.isUpInPane
-                terminal.jumpToBottom()
-                if wasUp, bytes == Self.esc { return }
-                if bytes == Self.copyReply { terminal.onAsksCopy() }
-                terminal.send(bytes)
-            }
+            belt.onSend = { [weak self] bytes in self?.send(bytes) }
             belt.onHead = { [weak terminal] lines in terminal?.head(lines: lines) ?? .nothing }
             belt.onHeadPage = { [weak terminal] older in terminal?.headPage(older: older) ?? .nothing }
             belt.onCtrl = { [weak self, weak terminal] in
@@ -481,6 +471,19 @@ private final class Belts {
 
     /// A layout picked on one belt is the layout of both. A pick of Board while the console
     /// shows the board answers the last value the console sent.
+    /// A belt key, or a tap on the match head, reaches the terminal.
+    private func send(_ bytes: [UInt8]) {
+        guard let terminal else { return }
+        // A pane scrolled up is in tmux copy mode, which would take the key as its own
+        // command: the steps back down leave it first. Esc there only comes back down:
+        // the agent would read it as an interrupt.
+        let wasUp = terminal.isUpInPane
+        terminal.jumpToBottom()
+        if wasUp, bytes == Self.esc { return }
+        if bytes == Self.copyReply { terminal.onAsksCopy() }
+        terminal.send(bytes)
+    }
+
     private func layoutPicked(_ layout: BeltLayout) {
         lifted.layout = layout
         dock.layout = layout

@@ -85,7 +85,7 @@ final class BeltLayoutsTests: XCTestCase {
 
     func testWheelSendsNothingAndSaysWhatItIs() throws {
         XCTAssertEqual(KeyBar.bytes(for: KeyBar.wheel), [], "the head sends nothing itself, as Ctrl")
-        XCTAssertEqual(KeyFace(BeltKey(id: "Wheel", cells: 1), in: try catalog()).spoken, "Scroll wheel")
+        XCTAssertEqual(KeyFace(BeltKey(id: "Wheel", cells: 1), in: try catalog()).spoken, "Match head")
     }
 
     func testMineLayoutKeepsKnownKeysOnly() throws {

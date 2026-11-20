@@ -203,6 +203,8 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
         driver.onLines = { [weak self] lines in self?.onHead(lines) ?? .nothing }
         driver.say = { [weak self] message in self?.flash(message) }
         driver.draw = { [weak self] turn, heat, struck in self?.drawHead(turn: turn, heat: heat, struck: struck) }
+        driver.onClick = { [weak self] in self?.onSend(Self.enter) }
+        driver.flash = { [weak self] in self?.pieces.forEach { $0.head?.flash() } }
         return driver
     }()
 
@@ -630,7 +632,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
         guard let first = touches.first, first.view === belt else {
             return super.touchesEnded(touches, with: event)
         }
-        if headDriver.isTouched { return headDriver.ended() }
+        if headDriver.isTouched { return headDriver.ended(at: first.timestamp) }
         guard touch != nil else { return super.touchesEnded(touches, with: event) }
         measure(first)
         if let touch, !touch.tap.isDrag, touch.wasAtRest, let i = keyIndex(at: first.location(in: belt)) {
@@ -744,9 +746,10 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
     private func press(_ i: Int) {
         guard let motion, pieces.indices.contains(i) else { return }
         let piece = pieces[i]
-        // The head scrolls; a tap or a large-text press on it sends nothing.
-        guard piece.head == nil else { return }
         stopHead()
+        // A tap on the head reaches its driver; VoiceOver's activate and a large-text press send
+        // Enter, as its tap does.
+        guard piece.head == nil else { return onSend(Self.enter) }
         if piece.key.isCommand && !commandsLive {
             flash("commands run in an agent's pane")
             return
@@ -783,6 +786,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
 
     /// Points of roll for a radian of turn: the head is about 34 pt round.
     private static let headRadius: CGFloat = 34
+    private static let enter = KeyBar.bytes(for: "⏎") ?? [0x0d]
 
     /// A key or typed text ends a flick, so the coast cannot scroll the pane back up under it.
     func stopHead() {
@@ -1049,6 +1053,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
                 let key = Element(accessibilityContainer: self)
                 key.accessibilityLabel = piece.key.spoken
                 key.accessibilityTraits = piece.head != nil ? .adjustable : isDim(piece) ? [.button, .notEnabled] : .button
+                if piece.head != nil { key.accessibilityHint = "Swipe up or down to scroll. Double-tap to send Enter." }
                 key.adjust = { [weak self] older in self?.pageHead(older: older) }
                 key.accessibilityFrameInContainerSpace = CGRect(
                     x: belt.frame.minX + x0, y: belt.frame.minY + Self.keyTop, width: piece.width, height: BeltGeometry.keyHeight)

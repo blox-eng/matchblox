@@ -78,6 +78,28 @@ final class HeadLayer: CALayer {
         ctx.strokeEllipse(in: CGRect(x: c.x - r, y: c.y - r, width: 2 * r, height: 2 * r))
     }
 
+    /// Enter went: a `flame-core` ring at the rim for 140 ms (DESIGN.md §5), never the strike's
+    /// glow, which means "rolled too fast".
+    func flash() {
+        let r = min(bounds.width, bounds.height) / 2 - 2
+        let ring = CAShapeLayer()
+        ring.frame = bounds
+        ring.path = UIBezierPath(ovalIn: CGRect(x: bounds.midX - r, y: bounds.midY - r, width: 2 * r, height: 2 * r)).cgPath
+        ring.fillColor = nil
+        ring.strokeColor = UIColor(Theme.flameCore).cgColor
+        ring.lineWidth = 2
+        ring.opacity = 0
+        addSublayer(ring)
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = 1
+        fade.toValue = 0
+        fade.duration = 0.14
+        CATransaction.begin()
+        CATransaction.setCompletionBlock { ring.removeFromSuperlayer() }
+        ring.add(fade, forKey: "flash")
+        CATransaction.commit()
+    }
+
     /// Cold red through ember and amber to the flame's core.
     private static func color(heat: CGFloat) -> UIColor {
         switch heat {
@@ -120,14 +142,26 @@ final class HeadFeel {
         play(intensity: 1, sharpness: 0.1)
     }
 
+    /// Enter went: two firm taps 60 ms apart, unlike any notch or strike.
+    func click() {
+        play(intensity: 0.9, sharpness: 0.6, at: [0, 0.06])
+    }
+
+    /// A touch stopped a flick and sent nothing: one soft, dull tap.
+    func stop() {
+        play(intensity: 0.4, sharpness: 0.1)
+    }
+
     /// A tap that cannot play is lost: the scroll it marks still happens.
-    private func play(intensity: Float, sharpness: Float) {
+    private func play(intensity: Float, sharpness: Float, at times: [TimeInterval] = [0]) {
         guard let engine else { return }
-        let tap = CHHapticEvent(eventType: .hapticTransient, parameters: [
-            CHHapticEventParameter(parameterID: .hapticIntensity, value: min(intensity, 1)),
-            CHHapticEventParameter(parameterID: .hapticSharpness, value: min(sharpness, 1)),
-        ], relativeTime: 0)
-        guard let pattern = try? CHHapticPattern(events: [tap], parameters: []),
+        let taps = times.map { time in
+            CHHapticEvent(eventType: .hapticTransient, parameters: [
+                CHHapticEventParameter(parameterID: .hapticIntensity, value: min(intensity, 1)),
+                CHHapticEventParameter(parameterID: .hapticSharpness, value: min(sharpness, 1)),
+            ], relativeTime: time)
+        }
+        guard let pattern = try? CHHapticPattern(events: taps, parameters: []),
               let player = try? engine.makePlayer(with: pattern) else { return }
         if (try? player.start(atTime: CHHapticTimeImmediate)) == nil {
             try? engine.start()
