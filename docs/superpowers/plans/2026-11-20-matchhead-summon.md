@@ -166,6 +166,8 @@ Surface: personal data
 
 ## Changes during build
 
+- Task 2: `HeadSummon.center` takes `avoid: [CGRect]` (↓, notices) and `HeadSummon.frame(center:)` exists, for design review 2A. Tests import Foundation, not CoreGraphics (Linux has none).
+
 ## Design review: NOT in scope
 
 - Mockups of the called-up head: the designer tool was rate limited (429, 0 of 3 saved); the device check after build replaces them.
