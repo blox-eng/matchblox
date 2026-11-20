@@ -8,6 +8,13 @@ All notable changes to matchblox are in this file. The format follows
 
 ### Added
 
+- **Tap the match head for Enter.** A short tap on a still head sends
+  Enter, with two firm taps you feel. A touch that stops a flick sends
+  nothing.
+- **Rest a finger to call up the match head.** Rest a finger on the
+  terminal, then move it: the head comes under your finger, rolls as the
+  belt's does, and waits 3 seconds for another roll or a tap. It replaces
+  the fast swipe.
 - **A kill, rename or park shows at once.** After you confirm it, the
   row turns faint: `killing`, the new name, or `parking` in HELD. The next
   sample confirms it. A refusal, or three samples without the change, bring
@@ -17,6 +24,12 @@ All notable changes to matchblox are in this file. The format follows
   key ends what was said. An error that lasts, such as ships that GitHub
   cannot read, shows once with its fix, then waits as a `⚠` mark in the
   header. A tap on the mark says it again.
+
+### Fixed
+
+- **The app declares the APIs Apple asks about.** The app, its Live
+  Activity and its notification extension say why they read their
+  settings, the uptime clock and file dates.
 
 ## [0.51.1] - 2026-11-20
 
