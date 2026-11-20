@@ -197,23 +197,14 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
     /// VoiceOver's elements, built when asked and dropped when the keys change or come to rest.
     private var spoken: [Any]?
 
-    /// A thumb on the match head: where it was last, when, and how fast it rolls (pt/s).
-    private struct HeadTouch {
-        var last: CGPoint
-        var time: TimeInterval
-        var velocity = CGPoint.zero
-        /// The head hit an end, or found nothing to scroll: said once a touch.
-        var said = false
-    }
-
-    private var head = MatchHead()
-    private let feel = HeadFeel()
-    private var headTouch: HeadTouch?
-    /// A flick carries on after the thumb lifts, as the terminal's swipe does.
-    private var headCoast: (start: TimeInterval, velocity: CGFloat, carried: CGFloat)?
-    private var headLink: CADisplayLink?
-    private var headFrame: CFTimeInterval?
-    private var headTurn = CGPoint.zero
+    /// The match head's roll, coast and cooling; the belt hit-tests and draws.
+    private lazy var headDriver: HeadDriver = {
+        let driver = HeadDriver(radius: Self.headRadius)
+        driver.onLines = { [weak self] lines in self?.onHead(lines) ?? .nothing }
+        driver.say = { [weak self] message in self?.flash(message) }
+        driver.draw = { [weak self] turn, heat, struck in self?.drawHead(turn: turn, heat: heat, struck: struck) }
+        return driver
+    }()
 
     init() {
         let layout = BeltLayout.load(from: .standard)
@@ -604,10 +595,12 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
     // MARK: Touch
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let first = touches.first, first.view === belt, touch == nil, headTouch == nil else {
+        guard let first = touches.first, first.view === belt, touch == nil, !headDriver.isTouched else {
             return super.touchesBegan(touches, with: event)
         }
-        if isOnHead(first.location(in: belt)) { return headBegan(first) }
+        if isOnHead(first.location(in: belt)) {
+            return headDriver.began(at: first.location(in: belt), time: first.timestamp)
+        }
         selection.prepare()
         impact.prepare()
         // A touch during a layout change ends it, and is no tap: the keys under it just came.
@@ -628,7 +621,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
         guard let first = touches.first, first.view === belt else {
             return super.touchesMoved(touches, with: event)
         }
-        if headTouch != nil { return headMoved(first) }
+        if headDriver.isTouched { return headDriver.moved(to: first.location(in: belt), time: first.timestamp) }
         guard touch != nil else { return super.touchesMoved(touches, with: event) }
         measure(first)
     }
@@ -637,7 +630,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
         guard let first = touches.first, first.view === belt else {
             return super.touchesEnded(touches, with: event)
         }
-        if headTouch != nil { return headEnded() }
+        if headDriver.isTouched { return headDriver.ended() }
         guard touch != nil else { return super.touchesEnded(touches, with: event) }
         measure(first)
         if let touch, !touch.tap.isDrag, touch.wasAtRest, let i = keyIndex(at: first.location(in: belt)) {
@@ -652,10 +645,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
         guard touches.first?.view === belt else {
             return super.touchesCancelled(touches, with: event)
         }
-        if headTouch != nil {
-            headTouch = nil
-            return startHeadLink()
-        }
+        if headDriver.isTouched { return headDriver.cancelled() }
         touch = nil
         if pan.state != .began && pan.state != .changed { settleIfHeld() }
     }
@@ -791,80 +781,12 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
         return pieces[i].head != nil
     }
 
-    private func headBegan(_ finger: UITouch) {
-        // A touch stops a flick, as in a scroll view.
-        headCoast = nil
-        feel.prepare()
-        headTouch = HeadTouch(last: finger.location(in: belt), time: finger.timestamp)
-    }
-
-    private func headMoved(_ finger: UITouch) {
-        guard var t = headTouch else { return }
-        let p = finger.location(in: belt)
-        let dt = max(finger.timestamp - t.time, 1.0 / 240)
-        let d = CGPoint(x: p.x - t.last.x, y: p.y - t.last.y)
-        t.velocity = CGPoint(x: t.velocity.x * 0.6 + d.x / dt * 0.4, y: t.velocity.y * 0.6 + d.y / dt * 0.4)
-        t.last = p
-        t.time = finger.timestamp
-        headTouch = t
-        roll(dx: d.x, dy: d.y, speed: t.velocity.y, at: finger.timestamp)
-    }
-
-    private func headEnded() {
-        guard let t = headTouch else { return }
-        headTouch = nil
-        if abs(t.velocity.y) > Self.headFlick {
-            headCoast = (CACurrentMediaTime(), t.velocity.y, 0)
-        }
-        startHeadLink()
-    }
-
-    private static let headFlick: CGFloat = 150
     /// Points of roll for a radian of turn: the head is about 34 pt round.
     private static let headRadius: CGFloat = 34
 
-    /// The head turned `dx`, `dy` points at `speed` points a second: scroll, and draw it.
-    private func roll(dx: CGFloat, dy: CGFloat, speed: CGFloat, at time: TimeInterval) {
-        let rolled = head.roll(dy: dy, speed: speed)
-        var moved = false
-        if rolled.lines != 0 {
-            switch onHead(rolled.lines) {
-            case .wheel, .scrollback:
-                moved = true
-            case .end:
-                headCoast = nil
-                if sayOnce(nil) { feel.end() }
-            case .nothing:
-                headCoast = nil
-                sayOnce("nothing scrolls here · this program has no scrollback")
-            }
-        }
-        if moved, head.tap(at: time) { feel.notch(heat: head.heat) }
-        if rolled.strike { feel.strike() }
-        if !UIAccessibility.isReduceMotionEnabled {
-            headTurn.x += dy / Self.headRadius
-            headTurn.y += dx / Self.headRadius
-        }
-        drawHead()
-        startHeadLink()
-    }
-
-    /// An end or an empty screen speaks once a touch; a flick's end says it once too. True the
-    /// first time.
-    @discardableResult
-    private func sayOnce(_ message: String?) -> Bool {
-        if var t = headTouch {
-            guard !t.said else { return false }
-            t.said = true
-            headTouch = t
-        }
-        if let message { flash(message) }
-        return true
-    }
-
     /// A key or typed text ends a flick, so the coast cannot scroll the pane back up under it.
     func stopHead() {
-        headCoast = nil
+        headDriver.stop()
     }
 
     private func pageHead(older: Bool) {
@@ -875,51 +797,17 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
         }
     }
 
-    private func drawHead() {
+    private func drawHead(turn: CGPoint, heat: CGFloat, struck: Bool) {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         for piece in pieces {
             guard let layer = piece.head else { continue }
-            layer.turnX = headTurn.x
-            layer.turnY = headTurn.y
-            layer.heat = head.heat
-            layer.struck = head.struck
+            layer.turnX = turn.x
+            layer.turnY = turn.y
+            layer.heat = heat
+            layer.struck = struck
         }
         CATransaction.commit()
-    }
-
-    private func startHeadLink() {
-        guard headLink == nil else { return }
-        let link = CADisplayLink(target: self, selector: #selector(headStepped))
-        link.add(to: .main, forMode: .common)
-        headLink = link
-        headFrame = nil
-    }
-
-    private func stopHeadLink() {
-        headLink?.invalidate()
-        headLink = nil
-        headFrame = nil
-    }
-
-    /// Each frame: a flick carries the head on; with no roll, the head cools and goes out.
-    @objc private func headStepped(_ link: CADisplayLink) {
-        let frame = headFrame.map { link.timestamp - $0 } ?? link.duration
-        headFrame = link.timestamp
-        if let coast = headCoast {
-            let elapsed = CACurrentMediaTime() - coast.start
-            let carried = WheelScroll.coast(velocity: coast.velocity, after: elapsed)
-            let dy = carried - coast.carried
-            headCoast = (coast.start, coast.velocity, carried)
-            roll(dx: 0, dy: dy, speed: dy / CGFloat(max(frame, 1.0 / 240)), at: link.timestamp)
-            if elapsed >= WheelScroll.coastTime { headCoast = nil }
-            return
-        }
-        if headTouch.map({ link.timestamp - $0.time > frame * 2 }) ?? true {
-            head.cool(frame: frame)
-            drawHead()
-        }
-        if headTouch == nil, head.heat < 0.01 { stopHeadLink() }
     }
 
     // MARK: Coast, settle and run-off
@@ -990,9 +878,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
         setTray(open: false, animated: false)
         touch = nil
         stopLink()
-        headTouch = nil
-        headCoast = nil
-        stopHeadLink()
+        headDriver.leave()
         if runOffLeft > 0 { rebuild() }
         // A belt that leaves the screen mid-coast rests on its nearest detent at once.
         guard motion?.atRest == false else { return }
