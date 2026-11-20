@@ -746,10 +746,10 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
     private func press(_ i: Int) {
         guard let motion, pieces.indices.contains(i) else { return }
         let piece = pieces[i]
+        // A tap on the head goes to its driver, which sends Enter only for a still tap; a press
+        // here, by a lift from a neighbour or the large-text view, sends nothing.
+        guard piece.head == nil else { return }
         stopHead()
-        // A tap on the head reaches its driver; VoiceOver's activate and a large-text press send
-        // Enter, as its tap does.
-        guard piece.head == nil else { return onSend(Self.enter) }
         if piece.key.isCommand && !commandsLive {
             flash("commands run in an agent's pane")
             return
@@ -1063,6 +1063,12 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
                 key.activate = { [weak self] in
                     guard let self, let i = self.pieces.firstIndex(where: { $0.layer === layer }),
                           self.motion?.onScreen.contains(i) == true, !self.isBoardDim(self.pieces[i]) else { return false }
+                    // VoiceOver's double-tap on the head is a deliberate Enter; its hint says so.
+                    if self.pieces[i].head != nil {
+                        self.stopHead()
+                        self.onSend(Self.enter)
+                        return true
+                    }
                     self.press(i)
                     return true
                 }
@@ -1091,7 +1097,8 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
     }
 
     func largeContentViewerInteraction(_ interaction: UILargeContentViewerInteraction, itemAt point: CGPoint) -> (any UILargeContentViewerItem)? {
-        guard let i = keyIndex(at: point) else { return nil }
+        // The head has no label to show, and a hold on it must not end in a press.
+        guard let i = keyIndex(at: point), pieces[i].head == nil else { return nil }
         return LargeKey(pieces[i].key.label)
     }
 

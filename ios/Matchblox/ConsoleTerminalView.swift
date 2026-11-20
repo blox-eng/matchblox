@@ -5,7 +5,7 @@ import UIKit
 /// The console's terminal, with three ways back to matchblox: a swipe in from the left edge,
 /// a tap on "◂ matchblox" in the tmux status line, and ⌘M or ctrl+M. Each one sends `HomeKey`.
 /// While the program reads the mouse, a vertical swipe sends wheel steps (`WheelScroll`), each step
-/// ticks once, and a finger that rests before its swipe scrolls fast. A tap sends a click: the
+/// ticks once, and a finger that rests, then moves, calls up the match head. A tap sends a click: the
 /// console opens the row's chat. While the console shows Sessions or Machine, a long-press sends a
 /// right click (`BoardTouch`). The match head on the belt scrolls through `head(lines:)`. A sideways
 /// swipe turns no page: the list and the chat have none. A pinch makes the text bigger or smaller,
@@ -45,7 +45,7 @@ final class ConsoleTerminalView: TerminalView {
     /// The swipe's tick: one for each step it moves, never closer than `MatchHead.tapGap`.
     private let tick = UISelectionFeedbackGenerator()
     private var lastTick: TimeInterval = 0
-    /// When the finger went down: a finger that rests before its swipe scrolls fast.
+    /// When the finger went down: a finger that rests, then moves, calls up the match head.
     private var touchedAt: TimeInterval = 0
     private var edge: UIScreenEdgePanGestureRecognizer?
     private var labelTap: UITapGestureRecognizer?

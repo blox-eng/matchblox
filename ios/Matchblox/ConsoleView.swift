@@ -505,8 +505,6 @@ private final class Belts {
         }
     }
 
-    /// A layout picked on one belt is the layout of both. A pick of Board while the console
-    /// shows the board answers the last value the console sent.
     /// A belt key, or a tap on the match head, reaches the terminal.
     private func send(_ bytes: [UInt8]) {
         guard let terminal else { return }
@@ -521,6 +519,8 @@ private final class Belts {
         terminal.send(bytes)
     }
 
+    /// A layout picked on one belt is the layout of both. A pick of Board while the console
+    /// shows the board answers the last value the console sent.
     private func layoutPicked(_ layout: BeltLayout) {
         lifted.layout = layout
         dock.layout = layout
