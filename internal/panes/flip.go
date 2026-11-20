@@ -28,13 +28,13 @@ const flipFrom = "@matchblox_flip"
 
 // handOff is what the flip key does in a marked pane, as a tmux command
 // list: note the client's tty and pane, take the client to the console as
-// the way back does (goHome), and hand the console the kind, the tty and
-// the pane, as one APC.
+// the way back does (goHome), and hand the console of the session it is
+// in now the kind, the tty and the pane, as one APC.
 func handOff(kind string) string {
 	note := `run-shell -C "set-option -g ` + flipFrom + ` '#{client_tty} #{pane_id}'"`
-	hand := `run-shell -C -t =` + Home + `: "#{W:#{P:#{?` + runsConsole +
+	hand := `run-shell -C "#{S:#{?#{==:#{session_name},#{client_session}},#{W:#{P:#{?` + isConsolePane +
 		`,send-keys -t #{pane_id} -H ` + hexKeys(keycmd.FlipPrefix(kind)) +
-		` ; send-keys -t #{pane_id} -l '#{` + flipFrom + `}' ; send-keys -t #{pane_id} -H 1b 5c ; ,}}}"`
+		` ; send-keys -t #{pane_id} -l '#{` + flipFrom + `}' ; send-keys -t #{pane_id} -H 1b 5c ; ,}}},}}"`
 	return note + " ; " + goHome[2] + " ; " + hand
 }
 

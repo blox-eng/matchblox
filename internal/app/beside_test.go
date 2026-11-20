@@ -603,6 +603,49 @@ func TestATapOnARowShowsItsAgent(t *testing.T) {
 	}
 }
 
+// TestAClickOnARowKeepsTheKeysInTheList: a click on a row shows its agent
+// at once, and the keys stay in the list, so ↑ and ↓ go on choosing.
+func TestAClickOnARowKeepsTheKeysInTheList(t *testing.T) {
+	m, tm := shownAt(t, "kindle-web", "160")
+	next, cmd := tapRow(t, m, "flint-auth")
+	m = afterChoice(next, cmd)
+	if r := respawned(tm); r == "" || !strings.Contains(r, "flint-auth") {
+		t.Fatalf("respawn %q", r)
+	}
+	if tm.count("select-pane") != 0 {
+		t.Fatalf("the click gave the agent the keys: %q", tm.lines())
+	}
+	if s, _ := m.sideChosen(); s.Name != "flint-auth" {
+		t.Fatalf("the list chose %s, want flint-auth", s.Name)
+	}
+}
+
+// TestAClickOnTheShownRowKeepsTheKeysInTheList: a click on the row the
+// agent pane shows already, from the agent's pane, leaves the keys in the
+// list it lands in.
+func TestAClickOnTheShownRowKeepsTheKeysInTheList(t *testing.T) {
+	m, tm := shownAt(t, "kindle-web", "160")
+	m = enter(t, m)
+	tm.cmd = "tmux" // the view runs
+	tm.calls = nil
+	next, cmd := tapRow(t, m, "kindle-web")
+	afterChoice(next, cmd)
+	if tm.count("select-pane") != 0 || respawned(tm) != "" {
+		t.Fatalf("want no new view and the keys in the list: %q", tm.lines())
+	}
+}
+
+// TestATapOnARowStillOpensItOnOnePane: where one pane shows at a time, a tap
+// on a row still opens its agent full screen.
+func TestATapOnARowStillOpensItOnOnePane(t *testing.T) {
+	m, tm := shownAt(t, "kindle-web", "70")
+	next, cmd := tapRow(t, m, "flint-auth")
+	afterChoice(next, cmd)
+	if r := respawned(tm); r == "" || !strings.Contains(r, "flint-auth") || tm.count("select-pane") == 0 {
+		t.Fatalf("want flint-auth full screen: %q", tm.lines())
+	}
+}
+
 // tapRow taps the list's row of the session called name.
 func tapRow(t *testing.T, m Model, name string) (tea.Model, tea.Cmd) {
 	t.Helper()

@@ -22,18 +22,18 @@ const flipBeside = `#{?#{==:#{pane_id},#{` + sample.ConsoleOption + `}},` +
 // BesideKeysArgv binds BesideKey on the console's tmux server, in the
 // console's session and in windows that have an agent beside the list.
 func BesideKeysArgv() []string {
-	guard := "#{&&:#{==:#{session_name}," + Home + "},#{" + sample.BesideOption + "}}"
+	guard := "#{&&:" + atHome + ",#{" + sample.BesideOption + "}}"
 	return []string{"tmux", "bind-key", "-n", BesideKey, "if-shell", "-F", guard, "run-shell -C '" + flipBeside + "'", "send-keys " + BesideKey}
 }
 
 // endBeside, in a window whose console pane was #{hook_pane}, forgets the
-// agent pane and a chain view's panes, and kills them. Only the console's
-// session is read, so a window it shares with a grouped session is ended
+// agent pane and a chain view's panes, and kills them. Only the consoles'
+// sessions are read, so a window it shares with a grouped session is ended
 // once: a second kill-pane of a pane gone would stop the list. The options
 // go first: tmux expands the whole list before it runs it, and the last
 // kill-pane ends the window, where a set-option after it would fail. With
 // no client, tmux keeps that error and shows it over the next console.
-const endBeside = `#{S:#{?#{==:#{session_name},` + Home + `},#{W:#{?#{==:#{` + sample.ConsoleOption + `},#{hook_pane}},` +
+const endBeside = `#{S:#{?` + atHome + `,#{W:#{?#{==:#{` + sample.ConsoleOption + `},#{hook_pane}},` +
 	`set-option -wu -t #{window_id} ` + sample.BesideOption + ` ; set-option -wu -t #{window_id} ` + sample.ChainOption +
 	` ; set-option -wu -t #{window_id} ` + sample.ConsoleOption + ` ; ` +
 	`#{P:#{?#{||:#{==:#{pane_id},#{` + sample.BesideOption + `}},#{m:* #{pane_id} *, #{` + sample.ChainOption + `} }},kill-pane -t #{pane_id} ; ,}},}},}}`
