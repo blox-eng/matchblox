@@ -804,6 +804,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg, tea.MouseClickMsg, tea.MouseWheelMsg, tea.PasteMsg:
 		m.askedBy, m.marked, m.away = m.marked.spend(m.now()), clientMark{}, false
 		m = m.dragDropped(msg)
+		if c, ok := msg.(tea.MouseClickMsg); ok && len(m.sayingNow()) > 0 {
+			if sc := m.draw(max(m.width, minWidth)); c.Y >= sc.sayY0 && c.Y < sc.sayY1 && c.X >= sc.sayX0 {
+				m.saying = nil // a tap on the toasts ends them: the rows under them are hidden
+				return m, nil
+			}
+		}
 		if _, wheel := msg.(tea.MouseWheelMsg); m.held == nil && !wheel {
 			m.saying = nil // a key ends what was said before it (#450)
 			if m.boardShown() {

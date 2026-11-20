@@ -283,7 +283,7 @@ func TestATapOnAToastOpensNothing(t *testing.T) {
 	}
 	chosen := m.chosenSide()
 	for y := sc.sayY0; y < sc.sayY1; y++ {
-		next, _ := m.tap(tea.Mouse{X: sc.sayX0 + 2, Y: y, Button: tea.MouseLeft})
+		next, _ := m.Update(tea.MouseClickMsg{X: sc.sayX0 + 2, Y: y, Button: tea.MouseLeft}) // as a real click comes
 		nm := next.(Model)
 		if nm.chosenSide() != chosen || nm.form != nil || nm.pending != nil {
 			t.Fatalf("a tap on the toast's line %d chose %v (was %v)", y, nm.chosenSide(), chosen)
