@@ -417,6 +417,7 @@ type Model struct {
 	scanLater   bool                              // the scan question was closed or answered at this console
 	scanAct     string                            // the act of the box's yes, for its result
 	form        *form                             // the open New session, Rename, Switch agent or scan folders form; nil none
+	pendingActs map[string]pendingAct             // the kills, renames and parks sent and not yet in a sample, by act id (#211)
 	jumpAfter   switchSent                        // a switch sent: the pane to jump to when it runs, its new agent, for the client that asked
 	startAfter  struct{ act, agent, done string } // a start on a new account sent: its agent, the last once it runs, and what it says then
 	lastAgent   string                            // the agent this console last started
@@ -1693,7 +1694,9 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				m.flash = why
 				break
 			}
-			cmd := m.sendTo(s.Host, proto.Act{RecID: "park:" + s.Pane})
+			_, held := m.holdOf(s)
+			id, cmd := m.sendToID(s.Host, proto.Act{RecID: "park:" + s.Pane})
+			m.expect(id, actPark, s, "", !held)
 			return m.pairActed(action{rec: "park:" + s.Pane, host: s.Host}), cmd
 		}
 	case bkey.Matches(k, mk.Mark):
@@ -1883,8 +1886,13 @@ func (m Model) confirmed(a action) (tea.Model, tea.Cmd) {
 		confirm = "y"
 	}
 	m.flash = "sent: " + a.String()
-	cmd := m.sendTo(host, proto.Act{RecID: a.rec, Which: a.which, Confirm: confirm, Text: a.text})
+	id, cmd := m.sendToID(host, proto.Act{RecID: a.rec, Which: a.which, Confirm: confirm, Text: a.text})
 	m.startRec(a, "a"+strconv.Itoa(m.acts))
+	if pane, ok := strings.CutPrefix(a.rec, "kill:"); ok {
+		if s, ok := m.sessionAt(host, pane); ok {
+			m.expect(id, actKill, s, "", false)
+		}
+	}
 	if pane, ok := strings.CutPrefix(a.rec, "switch:"); ok {
 		m.jumpAfter = switchSent{act: "a" + strconv.Itoa(m.acts), host: a.host, pane: pane, done: a.done, tty: a.tty, agent: a.paneAgent}
 	}

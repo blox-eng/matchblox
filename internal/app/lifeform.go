@@ -766,7 +766,12 @@ func (m Model) formEnter() (tea.Model, tea.Cmd) {
 	}
 	var cmd tea.Cmd
 	if f.rename {
-		cmd = m.sendTo(m.formHostOf(&f), proto.Act{RecID: "rename:" + f.pane, Confirm: "y", Text: name})
+		var id string
+		host := m.formHostOf(&f)
+		id, cmd = m.sendToID(host, proto.Act{RecID: "rename:" + f.pane, Confirm: "y", Text: name})
+		if s, ok := m.sessionAt(host, f.pane); ok {
+			m.expect(id, actRename, s, name, false)
+		}
 		m = m.pairActed(action{rec: "rename:" + f.pane, host: f.host})
 	} else {
 		if strings.TrimSpace(f.where) == "" {
