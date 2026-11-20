@@ -21,6 +21,15 @@ All notable changes to matchblox are in this file. The format follows
   `matchblox` opens a console of its own, with its own list and its own
   agent beside it, and the way back returns to it. A click on the list
   takes the keys back from the agent and keeps them there.
+- **A kill, rename or park shows at once.** After you confirm it, the
+  row turns faint: `killing`, the new name, or `parking` in HELD. The next
+  sample confirms it. A refusal, or three samples without the change, bring
+  the row back with the reason. HELD is now the last group of the list.
+- **The console tells you things in one corner.** Messages are toasts at
+  the top right, at the foot on a phone, and the key line keeps its keys. A
+  key ends what was said. An error that lasts, such as ships that GitHub
+  cannot read, shows once with its fix, then waits as a `⚠` mark in the
+  header. A tap on the mark says it again.
 
 ## [0.50.0] - 2026-11-20
 
