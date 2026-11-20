@@ -114,7 +114,7 @@ func TestJoinToastNarrow(t *testing.T) {
 
 // saidNow is the news the console said last: the header's toast, or on the
 // board its notice.
-func saidNow(m Model) string { return cmp.Or(m.toast, m.noticeText) }
+func saidNow(m Model) string { return cmp.Or(toastNow(m), m.noticeText) }
 
 func TestNewTeamToast(t *testing.T) {
 	if m := joinModel(t, 160, mockupChain[:2], []string{"flint-auth", "spark-docs"}); saidNow(m) != "web formed: flint-auth, spark-docs" {
@@ -123,8 +123,8 @@ func TestNewTeamToast(t *testing.T) {
 }
 
 func TestNoJoinNoToast(t *testing.T) {
-	if m := joinModel(t, 160, mockupChain[:2]); m.toast != "" {
-		t.Fatalf("toast = %q", m.toast)
+	if m := joinModel(t, 160, mockupChain[:2]); toastNow(m) != "" {
+		t.Fatalf("toast = %q", toastNow(m))
 	}
 }
 
@@ -159,7 +159,7 @@ func TestAClearIsNoJoin(t *testing.T) {
 		}
 	}
 	m, _ = m.Update(stateMsg(st))
-	if got := m.(Model).toast; got != "" {
+	if got := toastNow(m.(Model)); got != "" {
 		t.Fatalf("toast = %q", got)
 	}
 }

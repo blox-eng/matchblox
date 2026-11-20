@@ -11,11 +11,7 @@ import (
 // boardNoticeRow is what the Sessions tab says over the list's foot and
 // the chat's line, "" for nothing.
 func boardNoticeRow(m Model) string {
-	rows, _, _ := m.noticeAt(max(m.width, minWidth))
-	if len(rows) == 0 {
-		return ""
-	}
-	return strings.Join(plainLines(rows), "\n")
+	return strings.Join(saidRows(m, max(m.width, minWidth)), "\n")
 }
 
 func TestANoticeNeverHidesTheCount(t *testing.T) {
@@ -48,11 +44,11 @@ func TestALongNoticeIsWholeOnAPhone(t *testing.T) {
 	const text = "not sent: flint-auth is on gpu-1 · ctrl+o goes in to answer it"
 	m := boardShot(t, boardFixture(t), 40, 34, nil)
 	m.notice(text)
-	lines, _, _ := m.noticeAt(40)
+	lines := saidRows(m, 40)
 	if len(lines) != 2 {
-		t.Fatalf("the notice is %d lines on a phone, want 2: %q", len(lines), plainLines(lines))
+		t.Fatalf("the notice is %d lines on a phone, want 2: %q", len(lines), lines)
 	}
-	first, second := strings.TrimSpace(ansi.Strip(lines[0])), strings.TrimSpace(ansi.Strip(lines[1]))
+	first, second := lines[0], lines[1]
 	if first+" "+second != text {
 		t.Errorf("a word is lost or cut: %q / %q", first, second)
 	}
@@ -62,12 +58,12 @@ func TestALongNoticeIsWholeOnAPhone(t *testing.T) {
 	if first != "not sent: flint-auth is on gpu-1 ·" {
 		t.Errorf("the cut is not at the ·: %q / %q", first, second)
 	}
-	for _, l := range lines {
+	for _, l := range strings.Split(m.render(), "\n") {
 		if ansi.StringWidth(l) != 40 {
-			t.Errorf("a notice line is %d wide: %q", ansi.StringWidth(l), ansi.Strip(l))
+			t.Errorf("a line with the notice is %d wide: %q", ansi.StringWidth(l), ansi.Strip(l))
 		}
 	}
-	if !strings.Contains(boardNoticeRow(m), second) {
+	if !strings.Contains(plainFrame(m), second) {
 		t.Errorf("the frame does not draw the notice's second line:\n%s", plainFrame(m))
 	}
 }
@@ -108,17 +104,15 @@ func TestEveryNoticeKeepsItsFix(t *testing.T) {
 	for _, size := range [][2]int{{40, 34}, {80, 31}, {104, 38}, {160, 38}} {
 		m := boardShot(t, boardFixture(t), size[0], size[1], nil)
 		for _, text := range fixedNotices {
+			m.saying = nil
 			m.notice(text)
-			lines, _, _ := m.noticeAt(size[0])
-			var said []string
-			for _, l := range lines {
-				said = append(said, strings.TrimSpace(ansi.Strip(l)))
-			}
+			said := saidRows(m, size[0])
 			if got := strings.Join(said, " "); got != text {
 				t.Errorf("%dx%d: the notice shows %q, want %q", size[0], size[1], said, text)
+				continue
 			}
-			if row := boardNoticeRow(m); !strings.Contains(row, said[len(said)-1]) {
-				t.Errorf("%dx%d: the frame does not draw the notice's last line %q:\n%s", size[0], size[1], said[len(said)-1], row)
+			if frame := plainFrame(m); !strings.Contains(frame, said[len(said)-1]) {
+				t.Errorf("%dx%d: the frame does not draw the notice's last line %q:\n%s", size[0], size[1], said[len(said)-1], frame)
 			}
 		}
 	}

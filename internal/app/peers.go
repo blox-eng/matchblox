@@ -227,7 +227,7 @@ func (m Model) peerUpdate(pm peerMsg) (tea.Model, tea.Cmd) {
 		p := &m.peers[i]
 		p.conn, p.redialing, p.answered, p.silent, p.acts = msg.conn, false, false, false, nil
 		if stale {
-			m.flash = p.host + ": connected again"
+			m.say(p.host + ": connected again")
 		}
 		return m, tea.Batch(toPeer(p.host, helloOn(p.conn, m.opt.Binary)), m.peerRecv(i), m.watchPeer(i))
 	}
@@ -323,7 +323,7 @@ func (m Model) peerLost(i int, err error) (tea.Model, tea.Cmd) {
 	m = m.roomLost(p.host).lineLost(p.host)
 	m, notConfirmed := m.actsLost(p.host)
 	if notConfirmed != "" {
-		m.flash = notConfirmed
+		m.sayError(notConfirmed)
 	}
 	m, answer := m.answerLost(p.host, p.acts)
 	p = &m.peers[i]

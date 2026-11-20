@@ -39,7 +39,7 @@ func (m Model) noticeLife() time.Duration {
 // shows it.
 func (m *Model) notice(text string) tea.Cmd {
 	m.noticeText, m.noticeUntil, m.goArmed, m.noticeNext = text, m.now().Add(m.noticeLife()), paneKey{}, ""
-	return noticeEnds(m.noticeLife())
+	return tea.Batch(noticeEnds(m.noticeLife()), m.stack(text, false))
 }
 
 // noticeEnded shows the notice that waits for the one that ends.
@@ -48,17 +48,6 @@ func (m *Model) noticeEnded() tea.Cmd {
 		return nil
 	}
 	return m.notice(m.noticeNext)
-}
-
-// flashNotice puts a new flash in the notice row while the board shows,
-// so the board's key line keeps its keys. was: the flash before the
-// update. A take-over question keeps its flash on the key line, and the
-// pair page on its own.
-func (m *Model) flashNotice(was string) tea.Cmd {
-	if !m.boardShown() || m.viewFull() || m.held != nil || m.pair.owns() || m.flash == "" || m.flash == was {
-		return nil
-	}
-	return m.notice(m.flash)
 }
 
 // noticeRows are a notice in w columns: one line, more on every shape

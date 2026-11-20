@@ -87,7 +87,7 @@ func (m Model) offersLadder(host string) bool {
 // findStep finds the ladder's first step for the jump a, in the
 // background.
 func (m Model) findStep(a action) (tea.Model, tea.Cmd) {
-	m.flash = "looking for your ssh keys…"
+	m.say("looking for your ssh keys…")
 	find, gen := m.opt.Keys.Step, m.opt.Gen
 	return m, func() tea.Msg { return stepMsg{step: find(), jump: &a, gen: gen} }
 }
@@ -178,16 +178,17 @@ func (m Model) climbed(c climb) (tea.Model, tea.Cmd) {
 func (m Model) declined(c climb, esc bool) (tea.Model, tea.Cmd) {
 	switch {
 	case c.door != nil:
-		m.flash = c.door.Path + " stays as it is"
+		m.say(c.door.Path + " stays as it is")
 	case esc:
-		m.flash = "cancelled: your key is not on " + c.host
+		said := "cancelled: your key is not on " + c.host
 		if c.jump != nil {
-			m.flash += ", and the jump did not run"
+			said += ", and the jump did not run"
 		}
-		return m, nil
+		cmd := m.say(said)
+		return m, cmd
 	default:
 		m.editLogin(c.host, func(l *hostLogin) { l.notNow = true })
-		m.flash = "not now: " + c.host + " asks your password at a jump"
+		m.say("not now: " + c.host + " asks your password at a jump")
 	}
 	if c.jump == nil {
 		return m, nil
@@ -201,7 +202,7 @@ func (m Model) startLogin(host, flash string) (Model, context.Context, context.C
 	ctx, stop := context.WithCancel(m.askCtx)
 	m.editLogin(host, func(l *hostLogin) { l.opening, l.openStop, l.askCancelled = true, stop, false })
 	m.pending, m.held = nil, nil
-	m.flash = flash
+	m.say(flash)
 	return m, ctx, stop
 }
 
@@ -211,8 +212,8 @@ func (m Model) install(c climb) (tea.Model, tea.Cmd) {
 	host := c.host
 	argv, err := m.installArgv(host, c.step.Line)
 	if err != nil {
-		m.flash = "refused: " + err.Error()
-		return m, nil
+		said := m.sayError("refused: " + err.Error())
+		return m, said
 	}
 	m, ctx, stop := m.startLogin(host, "putting your key on "+host+"…")
 	ssh, env, check, gen := m.ssh(), m.opt.Ask.Env(host), m.checker(host), m.opt.Gen
@@ -245,23 +246,25 @@ func (m Model) installed(msg installedMsg) (tea.Model, tea.Cmd) {
 	host, s := msg.c.host, msg.c.step
 	m.editLogin(host, func(l *hostLogin) { l.opening, l.openStop = false, nil })
 	if m.loginOf(host).askCancelled || msg.exit != 0 {
-		m.flash = m.notInstalled(msg)
+		said := m.notInstalled(msg)
 		if msg.c.jump != nil {
-			m.flash += ", and the jump did not run"
+			said += ", and the jump did not run"
 		}
-		return m, nil
+		cmd := m.sayError(said)
+		return m, cmd
 	}
 	m.editLogin(host, func(l *hostLogin) { l.notNow = true })
-	m.flash = "your key " + s.Fingerprint + " is on " + host
+	said := "your key " + s.Fingerprint + " is on " + host
 	if msg.check == remote.LoginOK {
 		m.editLogin(host, func(l *hostLogin) { l.login = remote.LoginOK })
-		m.flash += ": your login uses it, no password"
+		said += ": your login uses it, no password"
 	} else {
-		m.flash += ", but ssh cannot use it without a prompt: a jump asks its passphrase here"
+		said += ", but ssh cannot use it without a prompt: a jump asks its passphrase here"
 		if s.Path != "" {
-			m.flash += "; ssh-add " + s.Path + " keeps it in your agent"
+			said += "; ssh-add " + s.Path + " keeps it in your agent"
 		}
 	}
+	m.say(said)
 	if msg.door != nil {
 		m.pending = m.offer(climb{host: host, step: s, jump: msg.c.jump, door: msg.door})
 		return m, nil
@@ -340,15 +343,15 @@ func (m Model) keyMade(msg keyMadeMsg) (tea.Model, tea.Cmd) {
 	path := msg.c.step.Path
 	switch {
 	case m.loginOf(host).askCancelled:
-		m.flash = "cancelled: no key made"
+		m.say("cancelled: no key made")
 	case msg.refused != "":
-		m.flash = "refused: " + msg.refused
+		m.sayError("refused: " + msg.refused)
 	case msg.exit != 0:
-		m.flash = "no key made: ssh-keygen exited " + strconv.Itoa(msg.exit)
+		m.sayError("no key made: ssh-keygen exited " + strconv.Itoa(msg.exit))
 	case msg.open && msg.removed != nil:
-		m.flash = "refused: the new key " + path + " is not locked by a passphrase, and not all of it was removed (" + msg.removed.Error() + "): remove it yourself, then jump again and type a passphrase"
+		m.sayError("refused: the new key " + path + " is not locked by a passphrase, and not all of it was removed (" + msg.removed.Error() + "): remove it yourself, then jump again and type a passphrase")
 	case msg.open:
-		m.flash = "refused: the new key " + path + " is not locked by a passphrase, so matchblox removed it and put nothing on " + host + ": jump again and type a passphrase"
+		m.sayError("refused: the new key " + path + " is not locked by a passphrase, so matchblox removed it and put nothing on " + host + ": jump again and type a passphrase")
 	default:
 		c := msg.c
 		if !msg.added {
@@ -365,11 +368,11 @@ func (m Model) openKeychain(c climb) (tea.Model, tea.Cmd) {
 	backup, err := m.opt.Keys.OpenKeychain(c.host, c.door.Sum)
 	switch {
 	case err != nil:
-		m.flash = c.door.Path + " not changed: " + err.Error()
+		m.sayError(c.door.Path + " not changed: " + err.Error())
 	case backup != "":
-		m.flash = "added to " + c.door.Path + " (backup: " + backup + ")"
+		m.say("added to " + c.door.Path + " (backup: " + backup + ")")
 	default:
-		m.flash = "added to " + c.door.Path
+		m.say("added to " + c.door.Path)
 	}
 	if c.jump == nil {
 		return m, nil

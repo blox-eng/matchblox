@@ -144,6 +144,17 @@ Next: builder:build
 
 - Task 4: `settle(host)` runs where a host's state lands, not inside `merge()`, and counts calls instead of comparing snapshot times. Reason: the tests' clock is fixed, so snapshot times cannot tell samples apart, and `merge()` does not know which host sent. The `since` field is gone.
 
+- Task 8: the one function is `say(text)` for an event and `sayError(text)` for an error, in `say.go`, with the stack in `m.saying`. Reason: `tell` and `told` already name the once-only notices of `listonly.go`; `say` already is the header toast's function, so its callers stay.
+
+- Tasks 8 and 9 land in one commit. Reason: between them, a raw `m.flash` write draws at the list foot while `say` draws a toast, so tests see two places; fixing those tests after Task 8 would redo them after Task 9.
+- Task 9: a question that waits for a key (the take-over prompt with `m.held`, the tap-again prompt with `m.armed`) keeps the key line. The guard exempts those writes by name.
+- `sideSays()` is what the tab says now (the newest toast, else the foot); `footSays()` draws the list foot and skips what a toast says.
+
+- Task 9 (fresh agent): the stack keeps off an open box (consent, form) and draws in the full-screen chat too; `unsay` ends the copy check's toast; the key line draws `m.flash` only for the tap-again prompt (`askingAgain`); `flashNotice` and the demo's two-row key line are gone; `sayEnds` is stubbed in tests like `noticeEnds`.
+- Found by `internal/demo`: a key, a click or a paste ends the toasts said before it (the flash's old "a key clears it"); a toast is cut only when it is too wide; the demo's refusal replaces the failure that carries it instead of showing twice.
+- Placement: on a phone (under 60 columns) the stack sits at the body's foot, since the top holds the pane's title and its way back; at the foot it keeps off the last body line (the list's foot, the chat's line). When no place is clear of the chosen row, it still draws where no box is: it never hides.
+- `TestReplay`'s frames (`www/demo/frames-*.json`) regenerate for the "sent" step; `www/index.html` and the SVGs keep their committed animation phase.
+
 ## Lens findings
 
 - Engineering: `merge()` runs on every host's snapshot. Counting "3 samples" there would count other hosts' samples. Changed Task 4: count only when the act's host has a newer snapshot time.

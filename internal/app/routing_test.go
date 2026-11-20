@@ -424,7 +424,21 @@ func TestKeyLinesUnchanged(t *testing.T) {
 		if got := keyLineOf(s.m); got != want {
 			t.Errorf("%s:\n got %q\nwant %q", s.name, got, want)
 		}
+		if said, ok := keyLineSays[s.name]; ok {
+			if m, _ := s.m.(Model); toastNow(m) != said {
+				t.Errorf("%s: the toast says %q, want %q", s.name, toastNow(m), said)
+			}
+		}
 	}
+}
+
+// keyLineSays are what the console says beside the keys, in its toast,
+// on the states whose key once said it (#450).
+var keyLineSays = map[string]string{
+	"stoker step ask/100":  "go given: gh release create v1.4",
+	"stoker step look/100": "kindle-web is gone: there is no pane to go into",
+	"stoker step ask/50":   "go given: gh release create v1.4",
+	"stoker step look/50":  "kindle-web is gone: there is no pane to go into",
 }
 
 // keyLines are the key lines and box feet of main, read from its output.
@@ -600,8 +614,8 @@ var keyLines = map[string]string{
 	"sheet f/100":                        "in the list · ↑↓ choose · ⏎ write · s hosts · g chain · m menu || ╰─ ⏎ start ─ tab chips ─ esc ────────────────────────────────╯",
 	"sheet n/100":                        "in the list · ↑↓ choose · ⏎ write · s hosts · g chain · m menu || ╰─ ⏎ send ─ tab chips ─ esc ─────────────────────────────────╯",
 	"sheet chips/100":                    "in the list · ↑↓ choose · ⏎ write · s hosts · g chain · m menu || ╰─ ⏎ send ─ space toggle ─ tab back ─────────────────────────╯",
-	"stoker step ask/100":                "go given: gh release create v1.4",
-	"stoker step look/100":               "kindle-web is gone: there is no pane to go into",
+	"stoker step ask/100":                "↑↓ move  esc machine  y give the go  ⏎ command  n stop night  / find  q quit",
+	"stoker step look/100":               "↑↓ move  esc machine  ⏎ command  f stoker  / find  q quit",
 	"stoker command/100":                 "↑↓ move  esc machine  y give the go  ⏎ command  n stop night  / find  q quit",
 	"stoker quit agent/100":              "Quit the stoker agent: tmux -L matchblox kill-session -t =stoker · y run ─ any other key cancels || ╰─ y run ─ any other key cancels ───────────────╯",
 	"search/50":                          "/ app▏  ⏎ keep  esc clear",
@@ -621,8 +635,8 @@ var keyLines = map[string]string{
 	"sheet f/50":                         "in the list · ↑↓ choose · ⏎ write · s hosts || ╰─ ⏎ start ─ tab chips ─ esc ────────────────────╯",
 	"sheet n/50":                         "in the list · ↑↓ choose · ⏎ write · s hosts || ╰─ ⏎ send ─ tab chips ─ esc ─────────────────────╯",
 	"sheet chips/50":                     "in the list · ↑↓ choose · ⏎ write · s hosts || ╰─ ⏎ send ─ space toggle ─ tab back ─────────────╯",
-	"stoker step ask/50":                 "go given: gh release create v1.4",
-	"stoker step look/50":                "kindle-web is gone: there is no pane to go into",
+	"stoker step ask/50":                 "y give the go  ⏎ command  n stop night",
+	"stoker step look/50":                "esc machine  ⏎ command  f stoker",
 	"stoker command/50":                  "y give the go  ⏎ command  n stop night",
 	"stoker quit agent/50":               "Quit the stoker agent: tmux -L matchblox kill-session -t =stoker · y run ─ any other key cancels || ╰─ y run ─ any other key cancels ────────────────╯",
 	"pair page":                          "Scan with the matchblox app, or paste the link.   5:00 / c copies the link · esc stops / Port 22. For another port, run matchblox pair --port <n>.",

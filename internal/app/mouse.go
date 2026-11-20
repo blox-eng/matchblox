@@ -42,8 +42,9 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if m.pending != nil {
-		m.flash, m.pending = "cancelled: "+m.pending.String(), nil
-		return m, nil
+		said := m.say("cancelled: " + m.pending.String())
+		m.pending = nil
+		return m, said
 	}
 	if !m.shows() || m.hostCount() == 1 && m.mismatch {
 		return m, nil
@@ -163,8 +164,9 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	}
 	say, run, host := m.tapAct()
 	if run == nil {
-		m.armed, m.flash = "", "nothing to do here"
-		return m, nil
+		m.armed = ""
+		said := m.say("nothing to do here")
+		return m, said
 	}
 	// The second tap runs what the first one showed, and only that: a row
 	// that moved under the finger shows its own step first.

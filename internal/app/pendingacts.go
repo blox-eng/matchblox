@@ -134,7 +134,7 @@ func (m *Model) settle(host string) {
 			if p.seen < settleAfter {
 				continue
 			}
-			m.flash = p.notTaken()
+			m.sayError(p.notTaken())
 		}
 		delete(m.pendingActs, id)
 		changed = true
@@ -171,7 +171,7 @@ func (m *Model) settleResult(r proto.Result) bool {
 	if r.Err == "" || p.kind == actRename {
 		return false
 	}
-	m.flash = p.kind.String() + " failed: " + r.Err
+	m.sayError(p.kind.String() + " failed: " + r.Err)
 	return true
 }
 

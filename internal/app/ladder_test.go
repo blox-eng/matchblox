@@ -430,8 +430,8 @@ func TestLadderDeclines(t *testing.T) {
 			m = settle(t, next, cmd)
 			next, cmd = key(m, k)
 			m = settle(t, next, cmd)
-			if len(opened) != 0 || len(*h.ran) != 1 || !strings.Contains(m.flash, "/h/.ssh/config stays as it is") {
-				t.Fatalf("opened %q, ran %q, flash %q", opened, *h.ran, m.flash)
+			if len(opened) != 0 || len(*h.ran) != 1 || !strings.Contains(stackSays(m), "/h/.ssh/config stays as it is") {
+				t.Fatalf("opened %q, ran %q, toasts %q", opened, *h.ran, stackSays(m))
 			}
 		})
 	}
@@ -478,8 +478,8 @@ func TestInstallFailureSaysWhy(t *testing.T) {
 		m := jumpOffer(t, h)
 		next, cmd := key(m, "y")
 		m = settle(t, next, cmd)
-		if !strings.Contains(m.flash, "ssh cannot use it without a prompt") || len(*h.ran) != 1 {
-			t.Fatalf("ran %q, flash %q", *h.ran, m.flash)
+		if !strings.Contains(stackSays(m), "ssh cannot use it without a prompt") || len(*h.ran) != 1 {
+			t.Fatalf("ran %q, toasts %q", *h.ran, stackSays(m))
 		}
 	})
 }

@@ -156,8 +156,8 @@ func (m Model) give(row roomRow) (tea.Model, tea.Cmd) {
 	k := m.room.k
 	g, ok := m.goOf(k, row)
 	if !ok {
-		m.flash = m.keys.room.Give.Help().Key + " gives the go a step waits for"
-		return m, nil
+		said := m.say(m.keys.room.Give.Help().Key + " gives the go a step waits for")
+		return m, said
 	}
 	argv := strings.Fields(g.want)
 	if len(argv) == 0 {
@@ -180,8 +180,8 @@ func (m Model) talk() (tea.Model, tea.Cmd) {
 	}
 	k := r.k
 	if why := m.cannotSend(k.host); why != "" {
-		m.flash = "not sent: " + why
-		return m, nil
+		said := m.sayError("not sent: " + why)
+		return m, said
 	}
 	r.sent, r.draft = words, ""
 	if k.isOne() {
@@ -284,7 +284,7 @@ func (m Model) roomResult(res proto.Result) (Model, tea.Cmd, bool) {
 		if starts {
 			r.failed = res.Err // the card says it, in neg
 		} else {
-			m.flash = "not sent: " + res.Err
+			m.sayError("not sent: " + res.Err)
 		}
 		if r.draft == "" {
 			r.draft = r.sent

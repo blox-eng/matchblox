@@ -84,15 +84,15 @@ func (m Model) orderKey() (tea.Model, tea.Cmd) {
 	v := m.stokerOf(host)
 	switch why := m.unsent(host); {
 	case why != "":
-		m.flash = why
+		m.sayError(why)
 	case v == nil:
-		m.flash = "this service keeps no stoker"
+		m.sayError("this service keeps no stoker")
 	case v.On && !v.Until.IsZero():
-		m.flash = m.sealedText()
+		m.sayError(m.sealedText())
 	case v.On:
 		return m.openSheet(host, false, true)
 	default:
-		m.flash = m.keys.main.Order.Help().Key + " gives a new order to a running stoker: " + m.keys.main.Stoke.Help().Key + " starts it"
+		m.sayError(m.keys.main.Order.Help().Key + " gives a new order to a running stoker: " + m.keys.main.Stoke.Help().Key + " starts it")
 	}
 	return m, nil
 }

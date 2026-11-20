@@ -210,7 +210,9 @@ func (m Model) drawScreen(w int) drawn {
 		return sc
 	}
 	if m.viewFull() { // the stand-in takes the screen
-		return m.viewScreen(w)
+		sc := m.viewScreen(w)
+		m.overlaySaying(&sc, w, [2]int{sc.boxAt, sc.boxAt + len(sc.boxRows)})
+		return sc
 	}
 	room := m.bodyRows()
 	var b body
@@ -244,9 +246,11 @@ func (m Model) drawScreen(w int) drawn {
 	case m.menu != nil && m.boardShown():
 		m.overlayMenu(&sc, w)
 	}
+	box := [2]int{sc.boxAt, sc.boxAt + len(sc.boxRows)}
 	if m.sideActive() { // over a box too: what a box's act says shows
 		m.sideNotices(&sc, w)
 	}
+	m.overlaySaying(&sc, w, box)
 	return sc
 }
 
@@ -349,15 +353,6 @@ func (m Model) headerOf(w int) (string, span, span, headNamed) {
 			left += st.faint.Render(" · ") + st.muted.Render(host)
 		}
 		return fit(left, w), span{}, span{}, headNamed{}
-	}
-	if m.toast != "" && !m.boardShown() { // the board's toasts are notices
-		// A long toast is cut, never the name; the host stays when the
-		// toast still has room.
-		if host != "" && w-lipgloss.Width(left+lost)-len(host)-6 >= 20 {
-			left += st.faint.Render(" · ") + st.muted.Render(host)
-		}
-		room := max(w-lipgloss.Width(left+lost)-3, 1)
-		return spread(left+lost, st.accent.Render(ansi.Truncate(m.toast, room, "…"))+" ", w), span{}, span{}, headNamed{}
 	}
 	n, count := m.needCount(), "● %d need you"
 	stoker := m.stokerBadge(m.layoutAt(w) == Narrow)
@@ -570,7 +565,8 @@ func (m Model) alert() string {
 
 // keyLine is the bottom line: the keys of the open tab, each a tap target,
 // or what the person acts on now: an answer, a search, the take-over
-// question, a pending step and its confirm, or what the last key said.
+// question, a pending step and its confirm, or the tap again. What the
+// console says is a toast (#450), never here.
 func (m Model) keyLine(w int) (string, []span) {
 	st := m.st
 	if m.searching {
@@ -601,10 +597,10 @@ func (m Model) keyLine(w int) (string, []span) {
 		}
 		return fit(" "+st.label.Render("RUN ")+st.text.Render(m.pending.String())+"   "+st.muted.Render(confirm), w), nil
 	}
-	if m.pair.strips() && (m.pair.beat == 4 || m.flash == "") {
+	if m.pair.strips() && (m.pair.beat == 4 || !m.askingAgain()) {
 		return fit(" "+st.text.Render(m.pair.line), w), nil
 	}
-	if m.flash != "" && (!m.boardShown() || m.viewFull()) { // the board's flash is a notice
+	if m.askingAgain() {
 		return fit(" "+st.text.Render(m.flash), w), nil
 	}
 	if l := m.lostLine(); l != "" { // a lost host outranks the stand-in's keys, which may not go

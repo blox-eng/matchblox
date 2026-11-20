@@ -49,7 +49,7 @@ type Options struct {
 	CompactAt     float64
 	CompactTokens int
 	// Demo, when set, is the demo host's line: what would leave the demo
-	// answers with it in the key line and no command runs. The console shows
+	// answers with it in a toast and no command runs. The console shows
 	// no stoker badge in its header, for the host's name to keep its room on
 	// a phone.
 	Demo string
@@ -417,6 +417,7 @@ type Model struct {
 	scanLater   bool                              // the scan question was closed or answered at this console
 	scanAct     string                            // the act of the box's yes, for its result
 	form        *form                             // the open New session, Rename, Switch agent or scan folders form; nil none
+	saying      []toast                           // the toasts the console shows now, newest first (#450)
 	pendingActs map[string]pendingAct             // the kills, renames and parks sent and not yet in a sample, by act id (#211)
 	jumpAfter   switchSent                        // a switch sent: the pane to jump to when it runs, its new agent, for the client that asked
 	startAfter  struct{ act, agent, done string } // a start on a new account sent: its agent, the last once it runs, and what it says then
@@ -433,8 +434,6 @@ type Model struct {
 	ackSent      time.Time
 	sheet        *sheet       // the launch sheet, while it is open
 	stokerServer string       // the tmux server (-L) the stoker agent runs on; "" none
-	toast        string       // what an action did, on the header's right
-	toasts       int          // counts the toasts: a later one outlives the timer of an earlier one
 	devices      []PairDevice // the keys that open this host, read when the Machine tab opens
 	devErr       error        // why the keys could not be read
 	devPick      string       // the selected device row: its fingerprint, or devPlus
@@ -804,13 +803,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg, tea.MouseClickMsg, tea.MouseWheelMsg, tea.PasteMsg:
 		m.askedBy, m.marked, m.away = m.marked.spend(m.now()), clientMark{}, false
 		m = m.dragDropped(msg)
-		if _, wheel := msg.(tea.MouseWheelMsg); m.boardShown() && m.held == nil && !wheel {
-			m.flash = "" // a flash after the key is new: it goes to the notice row
+		if _, wheel := msg.(tea.MouseWheelMsg); m.held == nil && !wheel {
+			m.saying = nil // a key ends what was said before it (#450)
+			if m.boardShown() {
+				m.flash = "" // a key ends the last thing said
+			}
 		}
 	default:
 		m.askedBy = ""
 	}
-	was := m.flash
 	var anchor roomRow
 	if _, input := msg.(tea.KeyPressMsg); !input && m.room != nil { // the rows may move under the cursor
 		if rows := m.roomRows(m.room.k); m.room.at >= 0 && m.room.at < len(rows) {
@@ -830,9 +831,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var zoom tea.Cmd
 		nm, zoom = nm.boxZoomed()
 		cmd = tea.Batch(cmd, belt, zoom)
-		if note := nm.flashNotice(was); note != nil {
-			cmd = tea.Batch(cmd, note)
-		}
 		if watch := nm.watchCmd(); watch != nil {
 			cmd = tea.Batch(cmd, watch)
 		}
@@ -874,8 +872,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.sizeCmd(msg.Width)
 	case besideMsg:
 		if msg.err != nil {
-			m.flash = "the agent pane did not open: " + msg.err.Error()
-			return m, nil
+			said := m.sayError("the agent pane did not open: " + msg.err.Error())
+			return m, said
 		}
 		m.beside = msg.pane
 		return m, m.sizeCmd(m.width)
@@ -924,7 +922,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.olderLocal() {
 			// The old service exits; the redial starts this binary.
 			m.replaced = true
-			m.flash = fmt.Sprintf("replacing the service %s with %s…", m.host.Binary, m.opt.Binary)
+			m.say(fmt.Sprintf("replacing the service %s with %s…", m.host.Binary, m.opt.Binary))
 			return m, tea.Batch(m.send(proto.Act{RecID: "service:replace"}), m.recv())
 		}
 		m.newer, m.startsAgain = "", false
@@ -978,10 +976,12 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.stoker, m.stokerServer, m.stokers = st.Stoker, st.StokerServer, st.Stokers
 		m.doors, m.updateView = m.shownDoors(st.Doors), st.Update
 		if n := m.behindNotice(); n != "" && n != m.behindSaid {
-			m.flash, m.behindSaid = n, n // once for each release: a key clears it
+			m.behindSaid = n // once for each release: a key clears it
+			m.say(n)
 		}
 		if news, key := m.updateNews(); news != "" {
-			m.flash, m.recPrefs.Updated = news, key
+			m.recPrefs.Updated = key
+			m.say(news)
 			_ = m.recPrefs.save(m.opt.StateDir) // not kept: the next console says it again
 		}
 		m.snap, m.git, m.recs, m.have, m.answered, m.at = st.Snapshot, st.Git, st.Recommendations, true, true, m.now()
@@ -1068,10 +1068,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.waitTicking = false
 		tick := m.waitTick()
 		return m, tick
-	case toastMsg:
-		if msg.n == m.toasts {
-			m.toast = ""
-		}
+	case sayEndsMsg:
+		m.sayEnded()
 	case planTickMsg:
 		return m.planTick(msg)
 	case resultMsg:
@@ -1088,7 +1086,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				note = m.notice(why)
 			case why != "":
-				m.flash = why
+				m.sayError(why)
 			}
 			next := m.nextKey()
 			return m, tea.Batch(m.recv(), next, note)
@@ -1142,17 +1140,19 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if first {
 			stale = m.staleTick(m.at)
 		}
-		m.flash = strings.Join(lost, "; ")
+		said := strings.Join(lost, "; ")
 		if m.opt.Redial == nil {
-			return m, stale
+			cmd := tea.Batch(stale, m.sayError(said))
+			return m, cmd
 		}
 		m.redialing = true
 		m.backoff = redialAfter(m.backoff)
 		if m.hostCount() == 1 {
-			m.flash += "; trying again in " + m.backoff.String()
+			said += "; trying again in " + m.backoff.String()
 		}
 		gen := m.opt.Gen
-		return m, tea.Batch(stale, tea.Tick(m.backoff, func(time.Time) tea.Msg { return redialMsg{gen} }))
+		cmd := tea.Batch(stale, m.sayError(said), tea.Tick(m.backoff, func(time.Time) tea.Msg { return redialMsg{gen} }))
+		return m, cmd
 	case redialMsg:
 		if msg.gen != m.opt.Gen || !m.redialing || m.quitting {
 			return m, nil // a tick from a console that was closed
@@ -1170,17 +1170,17 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if m.opt.Host != "" {
-			m.flash = m.opt.Host + " does not answer: run ssh " + m.opt.Host + " matchblox status to see why"
-			return m, nil
+			said := m.sayError(m.opt.Host + " does not answer: run ssh " + m.opt.Host + " matchblox status to see why")
+			return m, said
 		}
 		pid := 0
 		if m.opt.Owner != nil {
 			pid = m.opt.Owner()
 		}
 		if pid > 0 {
-			m.flash = fmt.Sprintf("the service (pid %d) does not answer: kill %d, then start matchblox again", pid, pid)
+			m.sayError(fmt.Sprintf("the service (pid %d) does not answer: kill %d, then start matchblox again", pid, pid))
 		} else {
-			m.flash = "the service does not answer: stop `matchblox serve`, then start matchblox again"
+			m.sayError("the service does not answer: stop `matchblox serve`, then start matchblox again")
 		}
 		return m, nil
 	case redialFailed:
@@ -1197,7 +1197,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if m.hostCount() == 1 || m.stale(m.opt.Host) {
-			m.flash = "connected again" // a short loss of two or more hosts showed nothing: its end shows nothing
+			m.say("connected again") // a short loss of two or more hosts showed nothing: its end shows nothing
 		}
 		m.conn, m.redialing, m.answered = msg.conn, false, false
 		return m, tea.Batch(m.hello(), m.recv(), m.watchSilence())
@@ -1208,12 +1208,12 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.endRec("nav", proto.Result{Ran: [][]string{strings.Fields(msg.cmd)}})
 		}
 		if errors.Is(msg.err, errNotAttached) || errors.Is(msg.err, errNoClient) {
-			m.flash = msg.err.Error()
-			return m, nil
+			said := m.sayError(msg.err.Error())
+			return m, said
 		}
 		if msg.err != nil {
-			m.flash = "failed: " + msg.cmd + ": " + msg.err.Error()
-			return m, nil
+			said := m.sayError("failed: " + msg.cmd + ": " + msg.err.Error())
+			return m, said
 		}
 		var took tea.Cmd
 		if msg.jumped != "" {
@@ -1326,8 +1326,13 @@ func (m Model) result(r proto.Result) (Model, tea.Cmd) {
 	}
 	m = mm // a failed install lets go of its act
 	if r.ActID != "" && r.ActID == m.hostAct {
-		m.flash, m.hostAct = m.hostUpdated(r), ""
-		return m, nil
+		say := m.say
+		if r.Err != "" {
+			say = m.sayError
+		}
+		said := say(m.hostUpdated(r))
+		m.hostAct = ""
+		return m, said
 	}
 	if m.tally(r) {
 		return m, nil
@@ -1336,7 +1341,7 @@ func (m Model) result(r proto.Result) (Model, tea.Cmd) {
 		toast := m.say(tilde(text))
 		return m, toast
 	} else if text != "" {
-		m.flash = tilde(text)
+		m.say(tilde(text))
 	}
 	return m, nil
 }
@@ -1376,8 +1381,8 @@ func (m Model) takeFocus(f *proto.Focus) (Model, tea.Cmd) {
 			m.setTab(tabSessions)
 			m.pending = nil
 		}
-		m.flash = focusGone
-		return m, nil
+		said := m.say(focusGone)
+		return m, said
 	}
 	if busy {
 		return m, nil
@@ -1500,7 +1505,7 @@ func (m Model) updated(r proto.Result) (Model, tea.Cmd, bool) {
 		mm, cmd := m.startAgain()
 		return mm, cmd, true
 	}
-	m.flash = "updated to " + tag + " · " + reopen
+	m.say("updated to " + tag + " · " + reopen)
 	return m, nil, true
 }
 
@@ -1638,8 +1643,8 @@ func (m Model) pendingKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if yes || (bkey.Matches(k, m.keys.confirm.Enter) && !a.destructive) {
 		return m.confirm(a)
 	}
-	m.flash = "cancelled: " + a.String()
-	return m, nil
+	said := m.say("cancelled: " + a.String())
+	return m, said
 }
 
 // key is k on the tabs, with nothing on top.
@@ -1661,8 +1666,8 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	m.flash = ""
 	if s, ok := m.selectedSession(); ok && bkey.Matches(k, mk.Second, mk.Rename, mk.Switch, mk.Park) {
 		if u, head := m.headRow(s); head { // its agent is the stoker's, not a session of the builder's
-			m.flash = "the stoker of chain " + u.Name + " is no session: " + m.quitStokerWhere()
-			return m, nil
+			said := m.sayError("the stoker of chain " + u.Name + " is no session: " + m.quitStokerWhere())
+			return m, said
 		}
 	}
 	switch {
@@ -1695,11 +1700,11 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case bkey.Matches(k, mk.Park):
 		if s, ok := m.selectedSession(); ok {
 			if s.Pane == "" {
-				m.flash = s.Name + " is outside tmux: nothing to park"
+				m.sayError(s.Name + " is outside tmux: nothing to park")
 				break
 			}
 			if why := m.refusal(s.Host); why != "" {
-				m.flash = why
+				m.sayError(why)
 				break
 			}
 			_, held := m.holdOf(s)
@@ -1821,7 +1826,8 @@ func (m *Model) refuse() {
 		return
 	}
 	if why := m.refusal(m.hostOf(*a)); why != "" {
-		m.pending, m.flash = nil, why
+		m.pending = nil
+		m.sayError(why)
 	}
 }
 
@@ -1840,15 +1846,15 @@ func (m Model) confirm(a action) (tea.Model, tea.Cmd) {
 
 func (m Model) confirmed(a action) (tea.Model, tea.Cmd) {
 	if m.opt.Demo != "" && a.leavesTheDemo() {
-		m.flash = m.opt.Demo
-		return m, nil
+		said := m.say(m.opt.Demo)
+		return m, said
 	}
 	if a.climb != nil {
 		return m.climbed(*a.climb)
 	}
 	if a.local != nil {
 		next, msg := a.local(m)
-		next.flash = msg
+		next.say(msg)
 		return next, nil
 	}
 	if a.remote {
@@ -1861,13 +1867,13 @@ func (m Model) confirmed(a action) (tea.Model, tea.Cmd) {
 	if (a.nav || a.attach) && host != "" {
 		// A tmux move of a host names the host's panes: here it would move
 		// this machine's tmux. Only a jump (remote) goes there.
-		m.flash = "refused: a tmux move on " + host + " never runs on this machine"
-		return m, nil
+		said := m.sayError("refused: a tmux move on " + host + " never runs on this machine")
+		return m, said
 	}
 	if len(a.batch) > 0 {
 		if why := m.batchRefusal(a); why != "" {
-			m.flash = why
-			return m, nil
+			said := m.sayError(why)
+			return m, said
 		}
 		return m.sendBatch(a)
 	}
@@ -1882,18 +1888,18 @@ func (m Model) confirmed(a action) (tea.Model, tea.Cmd) {
 		return m, m.signalled(a, m.intoCmd(a))
 	}
 	if why := m.refusal(host); why != "" {
-		m.flash = why
-		return m, nil
+		said := m.sayError(why)
+		return m, said
 	}
 	if host == m.opt.Host && (m.conn == nil || m.lost) {
-		m.flash = "not sent, no connection: " + a.String()
-		return m, nil
+		said := m.sayError("not sent, no connection: " + a.String())
+		return m, said
 	}
 	confirm := ""
 	if a.destructive {
 		confirm = "y"
 	}
-	m.flash = "sent: " + a.String()
+	m.say("sent: " + a.String())
 	id, cmd := m.sendToID(host, proto.Act{RecID: a.rec, Which: a.which, Confirm: confirm, Text: a.text})
 	m.startRec(a, "a"+strconv.Itoa(m.acts))
 	if pane, ok := strings.CutPrefix(a.rec, "kill:"); ok {
@@ -1928,10 +1934,11 @@ func (m Model) started(r proto.Result) (Model, bool) {
 		return m, false
 	}
 	m.lastAgent = a.agent
-	m.flash = a.done
+	said := a.done
 	if len(notes) > 0 {
-		m.flash += "; " + strings.Join(notes, "; ")
+		said += "; " + strings.Join(notes, "; ")
 	}
+	m.say(said)
 	return m, true
 }
 
@@ -1951,16 +1958,16 @@ func (m Model) switched(r proto.Result) (Model, tea.Cmd) {
 	notes, ran := proto.StartNotes(r)
 	switch {
 	case r.Err != "":
-		m.flash = tilde(r.Err)
-		return m, nil
+		said := m.sayError(tilde(r.Err))
+		return m, said
 	case len(r.Skipped) > 0 && !ran:
-		m.flash = tilde(r.Skipped[len(r.Skipped)-1])
-		return m, nil
+		said := m.sayError(tilde(r.Skipped[len(r.Skipped)-1]))
+		return m, said
 	}
 	m.flash = ""
 	if m.opt.Demo != "" { // the switch ran: only the jump into its pane cannot
-		m.flash = j.done
-		return m, nil
+		said := m.say(j.done)
+		return m, said
 	}
 	m.askedBy = j.tty // the jump moves the client that asked for the switch
 	a := m.forHost(j.host, m.jumpOn(j.host, j.pane))
@@ -1974,7 +1981,7 @@ func (m Model) switched(r proto.Result) (Model, tea.Cmd) {
 	if nm.flash != "" { // the jump refused, or waits for its host's login
 		say = append(say, nm.flash)
 	}
-	nm.flash = strings.Join(say, "; ")
+	nm.say(strings.Join(say, "; "))
 	return nm, jump
 }
 
@@ -2068,23 +2075,6 @@ func (m *Model) keepSelection() {
 	if s, ok := m.selected(); ok {
 		m.selPID, m.selHost = s.PID, s.Host
 	}
-}
-
-// toastMsg ends the toast it counts.
-type toastMsg struct{ n int }
-
-// toastFor is how long a toast stays on the header.
-const toastFor = 2500 * time.Millisecond
-
-// say shows what an action did on the header's right, for toastFor.
-func (m *Model) say(text string) tea.Cmd {
-	if m.boardShown() {
-		return m.notice(text)
-	}
-	m.toasts++
-	m.toast = text
-	n := m.toasts
-	return tea.Tick(toastFor, func(time.Time) tea.Msg { return toastMsg{n} })
 }
 
 func (m Model) View() tea.View {
