@@ -550,3 +550,21 @@ func TestJoinIDAddsAStokersSession(t *testing.T) {
 		t.Fatal("z joined a team that is not there")
 	}
 }
+
+// A team of two breaks up: the one left gets the news and then goes too,
+// before its next turn. No team names its inbox; it must not stay for good.
+func TestAGoneMatchsLeftoverNewsIsDropped(t *testing.T) {
+	var s Store
+	chainOf(t, &s, "a", "b")
+	s.Prune(func(m Member) bool { return m.SessionID != "a" }, t0)
+	s.Post(mem("b"), "a left the chain", t0)
+	s.Post(Member{Pane: "%9", PID: 7, Start: 3}, "news", t0) // a match with no session id
+	s.Prune(func(Member) bool { return true }, t0)
+	if n, _ := s.InboxCount(mem("b")); n != 1 {
+		t.Fatalf("a live match lost its news: %d", n)
+	}
+	s.Prune(func(Member) bool { return false }, t0)
+	if len(s.inbox) != 0 || len(s.dropped) != 0 {
+		t.Fatalf("inbox = %+v, dropped = %+v", s.inbox, s.dropped)
+	}
+}

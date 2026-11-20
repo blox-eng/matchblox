@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -349,6 +350,16 @@ func (s *Store) Prune(live func(Member) bool, now time.Time) (left []Left) {
 			left = append(left, Left{Who: m, Chain: id})
 		}
 	}
+	for k := range s.inbox {
+		if m := memberOfKey(k); !s.names(k) && !live(m) {
+			s.leave(m)
+		}
+	}
+	for k := range s.dropped {
+		if m := memberOfKey(k); !s.names(k) && !live(m) {
+			s.leave(m)
+		}
+	}
 	s.Off = slices.DeleteFunc(s.Off, func(m Member) bool { return !live(m) })
 	s.Moves = slices.DeleteFunc(s.Moves, func(mv Move) bool { return !s.holds(mv.From.key()) })
 	maps.DeleteFunc(s.renamed, func(_, now string) bool { return !s.holds(now) })
@@ -358,9 +369,28 @@ func (s *Store) Prune(live func(Member) bool, now time.Time) (left []Left) {
 
 // holds tells if any chain, off mark or inbox still names the key k.
 func (s *Store) holds(k string) bool {
+	return s.names(k) || len(s.inbox[k]) > 0 || s.dropped[k] > 0
+}
+
+// names tells if any chain or off mark names the key k.
+func (s *Store) names(k string) bool {
 	named := func(m Member) bool { return m.key() == k }
 	return slices.ContainsFunc(s.Chains, func(c Chain) bool { return slices.ContainsFunc(c.Members, named) }) ||
-		slices.ContainsFunc(s.Off, named) || len(s.inbox[k]) > 0 || s.dropped[k] > 0
+		slices.ContainsFunc(s.Off, named)
+}
+
+// memberOfKey is the member that key k names: its session id, or its pane,
+// pid and start.
+func memberOfKey(k string) Member {
+	pane, rest, ok := strings.Cut(k, "/")
+	if !ok {
+		return Member{SessionID: k}
+	}
+	pid, start, _ := strings.Cut(rest, "/")
+	m := Member{Pane: pane}
+	m.PID, _ = strconv.Atoi(pid)
+	m.Start, _ = strconv.ParseUint(start, 10, 64)
+	return m
 }
 
 // MarkUnseen notes that m's pane lives but shows no agent at now; the
