@@ -5,6 +5,7 @@ package panes
 import (
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -117,5 +118,24 @@ func TestAConsoleMarksItsOwnSession(t *testing.T) {
 	}
 	if got := s.tmux("display-message", "-p", "-t", "work:", "#{"+HomeOption+"}"); got != "" {
 		t.Errorf("work has %s = %q, want none", HomeOption, got)
+	}
+}
+
+// TestAConsoleEndsOnlyItsOwnAgentPane: the second console exits; its agent
+// pane goes with it, and the first console keeps both of its panes.
+func TestAConsoleEndsOnlyItsOwnAgentPane(t *testing.T) {
+	s := newOwnServer(t)
+	one, two := s.console(t, Home), s.console(t, Home+"-2")
+	s.tmux(BesideHookArgv()[1:]...)
+	flag := t.TempDir() + "/stop"
+	s.tmux("respawn-pane", "-k", "-t", two.c, "sh", "-c", "until [ -e "+flag+" ]; do sleep 0.05; done")
+	if err := os.WriteFile(flag, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	panes := func() []string { return strings.Fields(s.tmux("list-panes", "-a", "-F", "#{pane_id}")) }
+	waitFor(t, func() bool { return !slices.Contains(panes(), two.c) })
+	waitFor(t, func() bool { return !slices.Contains(panes(), two.a) })
+	if p := panes(); !slices.Contains(p, one.c) || !slices.Contains(p, one.a) {
+		t.Errorf("panes left %q, want the first console's %s and %s", p, one.c, one.a)
 	}
 }
