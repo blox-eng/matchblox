@@ -309,7 +309,7 @@ func (m *Model) boardCopy(s sample.Session, ok bool) tea.Cmd {
 		return m.once("copy", first, "nothing to copy: "+s.Name+" said nothing yet")
 	}
 	copied := m.copyText(m.lastWords(s), "last message of "+s.Name)
-	if m.clipKnown && !m.clipOK || m.told("copy") {
+	if m.told("copy") {
 		return copied // the fix comes before the news of the key
 	}
 	said := m.noticeText
