@@ -585,7 +585,9 @@ func (m Model) sideKeyWords() string {
 }
 
 // sideTap is a tap at x on line y of the Sessions body. On a row it
-// chooses the session and opens its chat; on a group's head it folds or
+// chooses the session and opens its chat; beside the list it shows the
+// session's agent at once, as a rest on the row does, and the keys stay in
+// the list (a phone, one pane at a time, opens the agent); on a group's head it folds or
 // unfolds the group; on the foot it opens that part in the chat's place.
 // In the chat, a tap on ◂ goes back to the list, and any other tap gives
 // the keys to the line.
@@ -611,6 +613,10 @@ func (m Model) sideTap(x, y int) (tea.Model, tea.Cmd) {
 			fold[hit.state] = !fold[hit.state]
 			m.sideFold = fold
 			return m, nil
+		case hit.k != (paneKey{}) && m.besideMode() && !m.onePaneAt(m.winW, m.winH):
+			m = m.chooseSide(hit.k)
+			m.previewSeq++
+			return m.look(previewMsg{m.previewSeq})
 		case hit.k != (paneKey{}) && m.besideMode():
 			return m.chooseSide(hit.k).showChosen()
 		case hit.k != (paneKey{}):
