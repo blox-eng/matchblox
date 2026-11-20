@@ -106,11 +106,11 @@ changes the right side of that console.
 `matchblox` in a terminal joins the console `matchblox` while no terminal
 shows it. Another terminal opens a console of its own, `matchblox-2`,
 with its own list, its own choice and its own agent beside it. A key, a
-click or `↑` `↓` in one terminal never moves another. `ctrl+q`, `ctrl+a m`
-and a tap on `◂ matchblox` go to the console of the terminal that pressed
-them, also from an agent opened with `Ctrl+O`. Two terminals can show one
-agent: the one that acted last sets its size. When a terminal closes, its
-console ends and the agents run on. The first console stays for the next
+click or `↑` `↓` in one terminal never moves another. `ctrl+q` flips the
+keys in the terminal's own console. `ctrl+a m` and a tap on `◂ matchblox`
+go back to the console of the terminal that pressed them, also from an
+agent opened with `Ctrl+O`. When a terminal closes, its console ends and
+the agents run on; a look at another tmux session keeps it. The first console stays for the next
 terminal, and the phone always joins it.
 
 The drawn chat and its line stay in the demo (and the iOS demo), in a
