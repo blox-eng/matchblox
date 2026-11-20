@@ -340,9 +340,6 @@ func (m Model) sideCount(g sideGroup, units []sideUnit) int {
 	}
 	n := 0
 	for _, u := range units {
-		if len(u.members) == 0 {
-			n += len(u.waiting)
-		}
 		for _, s := range u.members {
 			if m.inBoard(s) && m.sideStateOf(s) == g.state {
 				n++

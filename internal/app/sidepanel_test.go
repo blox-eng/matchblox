@@ -245,6 +245,19 @@ func TestNoWaitingMateNoChange(t *testing.T) {
 			t.Errorf("%s: the list changed:\n%q", name, got)
 		}
 	}
+	// A member that is gone with no wait (its pane lives, no agent shows)
+	// draws no waiting row.
+	gone := loginState(nil)
+	gone.Sessions = slices.DeleteFunc(gone.Sessions, func(s sample.Session) bool {
+		if s.Name != "kindle-web" {
+			return false
+		}
+		gone.Chains.Mates = append(gone.Chains.Mates, state.MateView{Member: memberOf(s), Unseen: time.Now()})
+		return true
+	})
+	if got := strings.Join(boardModel(t, gone).sidePanel(60, 20), "\n"); strings.Contains(got, "◌") || strings.Contains(got, "kindle-web") {
+		t.Errorf("a gone member with no wait draws:\n%s", got)
+	}
 }
 
 // waitingKindle is loginChain with kindle-web gone from the host: it waits
