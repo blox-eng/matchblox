@@ -1294,6 +1294,9 @@ func (m Model) result(r proto.Result) (Model, tea.Cmd) {
 	if mm, cmd, ok := m.roomResult(r); ok {
 		return mm, cmd
 	}
+	if len(r.Recover) > 0 {
+		return m, m.notice(recovered(r.Recover))
+	}
 	if mm, ok := m.sheetResult(r); ok {
 		if r.Err == "" && mm.sheet == nil {
 			toast := mm.say("the order is on")
@@ -1323,6 +1326,28 @@ func (m Model) result(r proto.Result) (Model, tea.Cmd) {
 		m.flash = tilde(text)
 	}
 	return m, nil
+}
+
+// recoverID is the service's act that reopens the conversations of the
+// recovery record (service.RecoverID).
+const recoverID = "recover"
+
+// recovered is the notice of a recover act's rows: what recover did with
+// each one. A row that cannot reopen gives recover's own why, which names
+// the fix.
+func recovered(rows []proto.Recovered) string {
+	var said []string
+	for _, r := range rows {
+		switch r.State {
+		case proto.RecoverReopened:
+			said = append(said, r.Name+" reopened")
+		case proto.RecoverCannot:
+			said = append(said, r.Name+" not reopened: "+r.Why)
+		default:
+			said = append(said, r.Name+" is "+r.State)
+		}
+	}
+	return strings.Join(said, " · ")
 }
 
 // focusWait is how long a focus waits for the phone's tmux client to

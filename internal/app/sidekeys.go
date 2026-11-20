@@ -2,6 +2,7 @@ package app
 
 import (
 	"cmp"
+	"encoding/json"
 	"maps"
 	"slices"
 	"strconv"
@@ -241,6 +242,8 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 	case bkey.Matches(k, sk.Enter) && m.footAt > 0:
 		parts := m.footParts()
 		return m.openFoot(parts[min(m.footAt, len(parts))-1].press)
+	case bkey.Matches(k, sk.Enter) && m.chosenSide().waits():
+		cmd = m.reopenChosen()
 	case bkey.Matches(k, sk.Enter) && m.besideMode():
 		return m.showChosen()
 	case bkey.Matches(k, sk.Enter):
@@ -261,6 +264,8 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 		default:
 			cmd = m.listTakes()
 		}
+	case bkey.Matches(k, bk.Menu) && (ok || m.chosenSide().waits()):
+		m = m.openMenuOnChosen()
 	case !ok && bkey.Matches(k, append(m.rowActKeys(), bk.Menu, bk.Copy, mk.Park)...):
 		cmd = m.notice(m.noRowWhy())
 	case bkey.Matches(k, bk.Host):
@@ -275,8 +280,6 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 		return m.chainToggle(s, ok)
 	case bkey.Matches(k, bk.Chain):
 		cmd = m.boardChainOf(s, ok)
-	case bkey.Matches(k, bk.Menu) && ok:
-		m = m.openMenuOnChosen(s)
 	case bkey.Matches(k, bk.Copy):
 		cmd = m.boardCopy(s, ok)
 	case bkey.Matches(k, mk.Park) && ok:
@@ -298,6 +301,26 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 		cmd = m.listTakes()
 	}
 	return m, cmd
+}
+
+// reopenChosen sends recover for the chosen member that waits for it. The
+// owner chose this one match, so it sends with no confirm. The name goes
+// into the act as JSON, never as a shell word.
+func (m *Model) reopenChosen() tea.Cmd {
+	v, c, ok := m.sideWaiting()
+	if !ok {
+		return nil
+	}
+	host := cmp.Or(c.host, m.opt.Host)
+	if why := m.refusal(host); why != "" {
+		return m.notice(why)
+	}
+	text, err := json.Marshal(proto.Recover{Names: []string{v.Wait.Name}})
+	if err != nil {
+		return m.notice("not reopened: " + err.Error())
+	}
+	cmd := m.sendTo(host, proto.Act{RecID: recoverID, Confirm: "y", Text: string(text)})
+	return tea.Batch(cmd, m.notice("reopening "+v.Wait.Name))
 }
 
 // noRowWhy says why the list has no chosen session for a key to act on.
@@ -633,7 +656,10 @@ func (m Model) heldNote(s sample.Session, another bool) string {
 // input, the message waits for the end of its turn.
 func (m *Model) sendLine() tea.Cmd {
 	s, ok := m.sideChosen()
-	if !ok {
+	switch {
+	case !ok && m.chosenSide().waits(): // the line takes no text there: ⏎ reopens it
+		return m.reopenChosen()
+	case !ok:
 		return m.notice("no session to write to")
 	}
 	k := paneOf(s)

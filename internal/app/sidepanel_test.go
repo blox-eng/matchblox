@@ -338,7 +338,7 @@ func TestTheChatShowsAWaitingMate(t *testing.T) {
 // TestAWaitingRowTakesNoSessionKey: the keys that act on a session do
 // nothing on a waiting row. They say why, and send no act.
 func TestAWaitingRowTakesNoSessionKey(t *testing.T) {
-	for _, key := range []string{"x", "p", "r", "c", "m"} {
+	for _, key := range []string{"x", "p", "r", "c"} {
 		m := pressOn(waitingKindle(t, time.Date(2026, 10, 1, 22, 14, 0, 0, time.Local), 0), "down")
 		before := len(boardFake(m).allActs())
 		m = pressOn(m, key)

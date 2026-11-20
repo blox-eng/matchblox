@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/sample"
+	"github.com/blox-eng/matchblox/internal/state"
 )
 
 // longPressFor is how long a press is held before it opens the menu.
@@ -77,12 +78,31 @@ func (m Model) menuFor(s sample.Session) []menuItem {
 	if k, ok := m.roomOf(s); ok {
 		name := m.roomName(k)
 		items = append(items, menuItem{"out of " + name, "", func(m *Model) tea.Cmd {
-			a := m.outOfTeam(s, name) // destructive: the consent box waits for a typed y
+			a := m.outOfTeam(s.Name, s.Pane, s.Host, name) // destructive: the consent box waits for a typed y
 			m.pending, m.previewTop = &a, 0
 			return nil
 		}})
 	}
 	return items
+}
+
+// waitMenu are the lines of the menu of v, a member of chain c that waits
+// for recover. It is in its team with the room closed too, so out of its
+// team is a line here: it acts on v by its session id, never by its pane.
+func (m Model) waitMenu(v state.MateView, c chainKey) []menuItem {
+	team := m.roomName(c)
+	return []menuItem{
+		{"reopen it", "", func(m *Model) tea.Cmd { return m.reopenChosen() }},
+		{"copy its name", "", func(m *Model) tea.Cmd { return m.copyText(v.Wait.Name, v.Wait.Name) }},
+		{"copy its conversation id", "", func(m *Model) tea.Cmd {
+			return m.copyText(v.Wait.Conversation, "the conversation id of "+v.Wait.Name)
+		}},
+		{"out of " + team, "", func(m *Model) tea.Cmd {
+			a := m.outOfTeam(v.Wait.Name, "sid:"+v.Member.SessionID, c.host, team) // destructive: the consent box waits for a typed y
+			m.pending, m.previewTop = &a, 0
+			return nil
+		}},
+	}
 }
 
 // actItems are the menu's lines of the acts the list takes on s
@@ -161,15 +181,33 @@ func (m Model) openMenu(s sample.Session, x, y int) Model {
 	return m
 }
 
-// openMenuOnChosen is m: the menu of the chosen session, under its row.
-func (m Model) openMenuOnChosen(s sample.Session) Model {
-	w := max(m.width, minWidth)
+// openMenuOnChosen is m: the menu of the chosen row, under it. A row
+// that waits for recover gets its own menu.
+func (m Model) openMenuOnChosen() Model {
+	w, k := max(m.width, minWidth), m.chosenSide()
 	y := 0
 	if box := m.sideBoxAt(w); box.listW > 0 {
 		_, hits, _ := m.sideList(box.listW, m.bodyRows())
-		y = max(slices.IndexFunc(hits, func(h sideHit) bool { return h.k == paneOf(s) }), 0)
+		y = max(slices.IndexFunc(hits, func(h sideHit) bool { return h.k == k }), 0)
 	}
-	return m.openMenu(s, 2, m.drawScreen(w).bodyTop+y+1)
+	y += m.drawScreen(w).bodyTop + 1
+	if v, c, ok := m.sideWaiting(); ok {
+		return m.openWaitMenu(v, c, 2, y)
+	}
+	if s, ok := m.sideChosen(); ok {
+		return m.openMenu(s, 2, y)
+	}
+	return m
+}
+
+// openWaitMenu opens the menu of v, a member of chain c that waits for
+// recover, at the cell x, y. It opens only on the Sessions tab.
+func (m Model) openWaitMenu(v state.MateView, c chainKey, x, y int) Model {
+	if m.boardShown() {
+		m.menu, m.longPress.on = &boardMenu{pane: waitKey(c, v), items: m.waitMenu(v, c), x: x, y: y}, false
+		m.dragFrom, m.dragTo, m.tapLater = nil, nil, nil
+	}
+	return m
 }
 
 // menuKey is k while the menu is open: it takes every key. ↑ ↓ move, ⏎
@@ -212,6 +250,8 @@ func (m Model) menuBox(w, h int) (lines []string, x, y int) {
 	name := ""
 	if s, ok := m.menuOn(); ok {
 		name = m.cardName(s)
+	} else if v, _, ok := m.sideWaiting(); ok {
+		name = v.Wait.Name
 	}
 	labelW, keyW := 0, 0
 	for _, it := range mn.items {
@@ -238,6 +278,21 @@ func (m Model) menuBox(w, h int) (lines []string, x, y int) {
 		x, y = 0, bottom-len(lines)
 	}
 	return lines, x, max(y, 1)
+}
+
+// menuGone tells if the menu is open on a row that is gone: a match that
+// ended, or a waiting member the list no longer chooses. Off the board the
+// menu is gone too.
+func (m Model) menuGone() bool {
+	if m.menu == nil {
+		return false
+	}
+	if m.menu.pane.waits() {
+		_, _, ok := m.sideWaiting()
+		return !ok || !m.boardShown() || m.chosenSide() != m.menu.pane
+	}
+	_, ok := m.menuOn()
+	return !ok
 }
 
 // menuOn is the match the menu is open on; false with no menu, off the
