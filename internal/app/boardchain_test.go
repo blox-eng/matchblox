@@ -667,6 +667,26 @@ func TestEnterReopensAWaitingMatch(t *testing.T) {
 	}
 }
 
+// TestTheReopenNoticeNamesTheRow: recover answers with the record's tmux
+// session, work; the notice names the row the owner chose, api. A row of
+// a conversation no member waits with keeps recover's name.
+func TestTheReopenNoticeNamesTheRow(t *testing.T) {
+	m := pressOn(waitingKindle(t, time.Date(2026, 10, 1, 22, 14, 0, 0, time.Local), 0), "down")
+	for _, v := range m.chains.Mates {
+		if v.Wait != nil {
+			v.Wait.Name = "api"
+		}
+	}
+	rows := []proto.Recovered{
+		{Name: "work", Conversation: "c-3", State: proto.RecoverReopened, As: "work"},
+		{Name: "other", Conversation: "c-9", State: proto.RecoverReady},
+	}
+	next, _ := m.Update(resultMsg(proto.Result{ActID: "a1", Recover: rows}))
+	if got, want := next.(Model).noticeText, "api reopened · other is ready"; got != want {
+		t.Fatalf("the notice is %q, want %q", got, want)
+	}
+}
+
 // TestTheMenuOfAWaitingMatch: m on a waiting row opens its menu, with the
 // room closed. out of login asks for a typed y, then takes the member out
 // by its session id, never by its pane.

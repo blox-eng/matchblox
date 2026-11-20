@@ -1295,7 +1295,7 @@ func (m Model) result(r proto.Result) (Model, tea.Cmd) {
 		return mm, cmd
 	}
 	if len(r.Recover) > 0 {
-		return m, m.notice(recovered(r.Recover))
+		return m, m.notice(m.recovered(r.Recover))
 	}
 	if mm, ok := m.sheetResult(r); ok {
 		if r.Err == "" && mm.sheet == nil {
@@ -1333,18 +1333,27 @@ func (m Model) result(r proto.Result) (Model, tea.Cmd) {
 const recoverID = "recover"
 
 // recovered is the notice of a recover act's rows: what recover did with
-// each one. A row that cannot reopen gives recover's own why, which names
-// the fix.
-func recovered(rows []proto.Recovered) string {
+// each one, by the name of the list's row that waits with its
+// conversation (recover's own name is the record's tmux session). A row
+// that cannot reopen gives recover's own why, which names the fix.
+func (m Model) recovered(rows []proto.Recovered) string {
+	named := map[string]string{}
+	_, waits := m.waitingByHost()
+	for _, ws := range waits {
+		for _, w := range ws {
+			named[w.Conversation] = w.Name
+		}
+	}
 	var said []string
 	for _, r := range rows {
+		name := cmp.Or(named[r.Conversation], r.Name)
 		switch r.State {
 		case proto.RecoverReopened:
-			said = append(said, r.Name+" reopened")
+			said = append(said, name+" reopened")
 		case proto.RecoverCannot:
-			said = append(said, r.Name+" not reopened: "+r.Why)
+			said = append(said, name+" not reopened: "+r.Why)
 		default:
-			said = append(said, r.Name+" is "+r.State)
+			said = append(said, name+" is "+r.State)
 		}
 	}
 	return strings.Join(said, " · ")
