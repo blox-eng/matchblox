@@ -199,7 +199,9 @@ func (m Model) buildSidePanes(folded bool) []paneKey {
 		}
 		for _, u := range m.sideShows(g) {
 			for _, s := range u.members {
-				out = append(out, paneOf(s))
+				if !m.killing(s) {
+					out = append(out, paneOf(s))
+				}
 			}
 		}
 	}

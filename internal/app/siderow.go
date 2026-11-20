@@ -45,10 +45,14 @@ func (m Model) sideRow(s sample.Session, w int, chosen bool, link sideLink) []st
 	case says == "":
 		says = word
 	}
-	two := says != "" && (h == sideNeed || chosen)
+	pending, isPending := m.pendingOf(s)
+	if isPending && pending.kind == actKill {
+		says = "killing"
+	}
+	two := says != "" && (h == sideNeed || chosen || isPending)
 
 	mark, name, rest := " ", m.st.text, m.st.muted
-	if m.stale(s.Host) { // its host does not answer: the row is its last state, dimmed
+	if m.stale(s.Host) || isPending { // its host does not answer, or an act on it waits for the sample: dimmed
 		name, rest = m.st.faint, m.st.faint
 	}
 	if chosen {

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"slices"
 	"time"
 
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -48,8 +49,14 @@ func (m *Model) expect(id string, kind actKind, s sample.Session, to string, par
 	if m.pendingActs == nil {
 		m.pendingActs = map[string]pendingAct{}
 	}
+	if kind == actKill {
+		m.stepOff(paneOf(s))
+	}
 	m.pendingActs[id] = pendingAct{kind: kind, key: paneOf(s), pid: s.PID, start: s.Start,
 		name: s.Name, to: to, park: park, since: m.snapAt(s.Host)}
+	if m.side != nil {
+		m.side = &sideMemo{} // the list's groups and walk change with it
+	}
 }
 
 // sessionAt is the listed session of pane on host.
@@ -71,4 +78,37 @@ func (m Model) snapAt(host string) time.Time {
 		return time.Time{}
 	}
 	return m.at
+}
+
+// pendingOf is the act pending on s: the same pane, pid and start.
+func (m Model) pendingOf(s sample.Session) (pendingAct, bool) {
+	k := paneOf(s)
+	for _, p := range m.pendingActs {
+		if p.key == k && p.pid == s.PID && p.start == s.Start {
+			return p, true
+		}
+	}
+	return pendingAct{}, false
+}
+
+// killing is whether s goes: a kill of it is pending.
+func (m Model) killing(s sample.Session) bool {
+	p, ok := m.pendingOf(s)
+	return ok && p.kind == actKill
+}
+
+// stepOff moves the choice off k to the row after it, else the one
+// before: a row that goes takes no keys.
+func (m *Model) stepOff(k paneKey) {
+	if m.chosenSide() != k {
+		return
+	}
+	order := m.sideOrder()
+	i := slices.Index(order, k)
+	switch {
+	case i+1 < len(order):
+		m.sideAt = order[i+1]
+	case i > 0:
+		m.sideAt = order[i-1]
+	}
 }

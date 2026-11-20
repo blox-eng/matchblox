@@ -1,8 +1,12 @@
 package app
 
 import (
+	"slices"
 	"strconv"
+	"strings"
 	"testing"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
 // onlyPending is the one pending act of m.
@@ -56,5 +60,36 @@ func TestAnActWithNoConnectionIsNotPending(t *testing.T) {
 	m = pressOn(m, "x", "y", "y")
 	if len(m.pendingActs) != 0 {
 		t.Fatalf("an act that did not go is pending: %+v", m.pendingActs)
+	}
+}
+
+// drawnRow is the drawn list line of the session named name, and the line
+// after it.
+func drawnRow(t *testing.T, m Model, name string) string {
+	t.Helper()
+	lines, _, _ := m.sideList(80, 60)
+	for i, l := range lines {
+		if strings.Contains(ansi.Strip(l), name) {
+			if i+1 < len(lines) {
+				return ansi.Strip(l + "\n" + lines[i+1])
+			}
+			return ansi.Strip(l)
+		}
+	}
+	t.Fatalf("no row of %s in:\n%s", name, ansi.Strip(strings.Join(lines, "\n")))
+	return ""
+}
+
+func TestAKilledRowSaysKillingAtOnce(t *testing.T) {
+	st := boardFixture(t)
+	m := pressOn(listShot(t, st, 160, 38, "kindle-web"), "x", "y", "y")
+	if row := drawnRow(t, m, "kindle-web"); !strings.Contains(row, "killing") {
+		t.Fatalf("the killed row reads %q, want killing", row)
+	}
+	if got := m.chosenSide(); got == (paneKey{m.opt.Host, paneNamed(st, "kindle-web")}) {
+		t.Fatal("the cursor stays on the killed row")
+	}
+	if slices.Contains(m.sideOrder(), paneKey{m.opt.Host, paneNamed(st, "kindle-web")}) {
+		t.Fatal("the walk still holds the killed row")
 	}
 }
