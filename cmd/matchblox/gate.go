@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/service"
@@ -53,7 +54,11 @@ func gateMain(args []string) error {
 	_ = os.Setenv("PATH", os.ExpandEnv(remote.HostPath)+string(os.PathListSeparator)+os.Getenv("PATH"))
 	_ = os.Unsetenv("SSH_ORIGINAL_COMMAND")
 	// The console re-runs itself in the home session with these arguments:
-	// without "gate" it is the builder's own `matchblox`.
+	// without "gate" it is the builder's own `matchblox`. A phone shows the
+	// desk's first console, not one of its own.
+	if mode == phoneMode {
+		_ = os.Setenv(panes.JoinEnv, "1")
+	}
 	os.Args = os.Args[:1]
 	if open {
 		// The console's home session ignores arguments: the service tells

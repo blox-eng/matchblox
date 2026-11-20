@@ -15,12 +15,16 @@ All notable changes to matchblox are in this file. The format follows
   terminal, then move it: the head comes under your finger, rolls as the
   belt's does, and waits 3 seconds for another roll or a tap. It replaces
   the fast swipe.
+- **Each terminal holds its own console.** A second terminal that runs
+  `matchblox` opens a console of its own, with its own list and its own
+  agent beside it, and the way back returns to it. A click on the list
+  takes the keys back from the agent and keeps them there.
 
 ### Fixed
 
 - **The app declares the APIs Apple asks about.** The app, its Live
-  Activity and its notification extension say why they read their settings
-  and the uptime clock.
+  Activity and its notification extension say why they read their
+  settings, the uptime clock and file dates.
 
 ## [0.50.0] - 2026-11-20
 

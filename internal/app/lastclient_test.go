@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -149,5 +150,15 @@ func TestTmuxErrorIsTheBuilders(t *testing.T) {
 	m.opt.LastClient = func() (string, time.Time, error) { return "", time.Time{}, nil }
 	if m.fromDevice() {
 		t.Fatal("no client counted as a device")
+	}
+}
+
+// TestASecondConsoleAsksItsOwnClients: a second terminal's console asks
+// tmux for its own session's clients, so a phone active last in the first
+// console does not count as the one who pressed here.
+func TestASecondConsoleAsksItsOwnClients(t *testing.T) {
+	m := Model{opt: Options{HomeSession: "matchblox-2"}}
+	if got := m.lastClientArgv(); !slices.Contains(got, "=matchblox-2") || slices.Contains(got, "=matchblox") {
+		t.Errorf("lastClientArgv = %q, want the clients of =matchblox-2", got)
 	}
 }

@@ -166,6 +166,7 @@ Surface: personal data
 
 ## Changes during build
 
+- Ship: main's #449 added 8 words to the lede, so the page went to 486 words against the 480 cap (`TestTheLandingIsShort`). The Pocket line from design review 8A becomes "Tap to peek, twice to answer. Rest a finger to roll the match head; tap for Enter." (16 words).
 - Task 7: the drawing is inline SVG on the page and in `docs/phone.md`, not `www/assets/match-head.svg`: an `<img>` cannot follow the site's light and dark tokens. `TestTheMatchHeadIsOneDrawing` (internal/docscheck) keeps the two copies identical, so the docs workflow needs no copy step.
 - Task 6: three manifests, not two: the widget and the notification extension (`MatchbloxBuzz`) link MatchbloxKit, whose Swift uses UserDefaults. SwiftTerm 1.20.0 (`5d14406`) uses none of the required-reason APIs; swift-nio and swift-crypto ship their own manifests. The manifests declare no collected data: that is the App Store label's job, and the owner sets it.
 - Task 5: `HeadDriver.began` takes `canClick:`. The terminal's pan begins only after about 10 pt of travel, so a call-up and a quick lift looked like a still tap and sent Enter; a grab from the terminal never clicks, only a fresh touch on the waiting head does.

@@ -22,21 +22,92 @@ import (
 )
 
 func TestHomeArgvOutsideTmux(t *testing.T) {
-	got := HomeArgv(false, true, []string{"/usr/local/bin/matchblox", "--no-motion"})
-	want := []string{"tmux", "-u", "new-session", "-A", "-s", "matchblox", "-e", "MATCHBLOX_HOME=1", "/usr/local/bin/matchblox", "--no-motion"}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("got %q, want %q", got, want)
+	for _, name := range []string{"matchblox", "matchblox-2"} {
+		got := HomeArgv(false, true, name, []string{"/usr/local/bin/matchblox", "--no-motion"})
+		want := []string{"tmux", "-u", "new-session", "-A", "-s", name, "-e", "MATCHBLOX_HOME=1", "/usr/local/bin/matchblox", "--no-motion"}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("got %q, want %q", got, want)
+		}
 	}
 }
 
 func TestHomeArgvInsideTmuxRunsInPlace(t *testing.T) {
-	if got := HomeArgv(true, true, []string{"matchblox"}); got != nil {
+	if got := HomeArgv(true, true, Home, []string{"matchblox"}); got != nil {
 		t.Fatalf("inside tmux the console runs in place, got %q", got)
 	}
 }
 
+// TestHomeSessionName: a terminal joins the first console while no other
+// terminal shows it, or when it asks to join (the phone); else it opens the
+// first console name that no session has.
+func TestHomeSessionName(t *testing.T) {
+	for _, c := range []struct {
+		why      string
+		attached map[string]int
+		join     bool
+		want     string
+	}{
+		{"no tmux server", nil, false, "matchblox"},
+		{"no console yet", map[string]int{"work": 1}, false, "matchblox"},
+		{"the first console with no terminal", map[string]int{"matchblox": 0}, false, "matchblox"},
+		{"the first console shown", map[string]int{"matchblox": 1}, false, "matchblox-2"},
+		{"two consoles shown", map[string]int{"matchblox": 1, "matchblox-2": 1}, false, "matchblox-3"},
+		{"a gap", map[string]int{"matchblox": 2, "matchblox-3": 1}, false, "matchblox-2"},
+		{"the phone joins", map[string]int{"matchblox": 1}, true, "matchblox"},
+	} {
+		if got := HomeSession(c.attached, c.join); got != c.want {
+			t.Errorf("%s: HomeSession(%v, %v) = %q, want %q", c.why, c.attached, c.join, got, c.want)
+		}
+	}
+}
+
+// TestAConsoleWhoseTerminalIsInAnAgentIsTaken: the first console's
+// terminal went into an agent with Ctrl+O, so no terminal shows the console
+// now, but that terminal comes back to it: a new terminal opens its own.
+func TestAConsoleWhoseTerminalIsInAnAgentIsTaken(t *testing.T) {
+	listing := "matchblox\t0\t\nmatchblox-in-1\t1\tmatchblox\nwork\t0\t\n"
+	if got := HomeSession(ParseHomeList(listing), false); got != "matchblox-2" {
+		t.Errorf("HomeSession = %q, want matchblox-2", got)
+	}
+	if got := HomeSession(ParseHomeList("matchblox\t0\t\nwork\t1\t\n"), false); got != Home {
+		t.Errorf("HomeSession with no terminal for the console = %q, want %s", got, Home)
+	}
+}
+
+// TestOrphaned: a second console is orphaned once every terminal that
+// showed it, or went into an agent from it, has gone from the server; a
+// terminal that only looks at another session still has it. A terminal is
+// its client's process, not its tty, which a new terminal can take over.
+// The first console never is orphaned.
+func TestOrphaned(t *testing.T) {
+	for _, c := range []struct {
+		why, name string
+		listings  []string // one per check, in order: pid, session, its way back
+		want      bool     // after the last check
+	}{
+		{"shown", "matchblox-2", []string{"101\tmatchblox\t\n202\tmatchblox-2\t\n"}, false},
+		{"its terminal looks at another session", "matchblox-2", []string{"202\tmatchblox-2\t\n", "202\twork\t\n"}, false},
+		{"its terminal went into an agent", "matchblox-2", []string{"202\tmatchblox-2\t\n", "202\tmatchblox-in-5\tmatchblox-2\n"}, false},
+		{"its terminal closed", "matchblox-2", []string{"202\tmatchblox-2\t\n", "101\tmatchblox\t\n"}, true},
+		{"its terminal closed from an agent", "matchblox-2", []string{"202\tmatchblox-2\t\n", "202\tmatchblox-in-5\tmatchblox-2\n", "101\tmatchblox"}, true},
+		{"it went into an agent before the first check, then closed", "matchblox-2", []string{"202\tmatchblox-in-5\tmatchblox-2\n", "101\tmatchblox\t\n"}, true},
+		{"a new terminal took its tty", "matchblox-2", []string{"202\tmatchblox-2\t\n", "303\tmatchblox-3\t\n"}, true},
+		{"one of two terminals closed", "matchblox-2", []string{"202\tmatchblox-2\t\n303\tmatchblox-2\t\n", "303\twork\t\n"}, false},
+		{"no terminal seen yet", "matchblox-2", []string{"101\tmatchblox\t\n"}, false},
+		{"the first console", "matchblox", []string{"101\tmatchblox\t\n", ""}, false},
+	} {
+		seen, got := map[string]bool{}, false
+		for _, l := range c.listings {
+			got = Orphaned(c.name, seen, l)
+		}
+		if got != c.want {
+			t.Errorf("%s: Orphaned = %v, want %v", c.why, got, c.want)
+		}
+	}
+}
+
 func TestHomeArgvWithoutTmuxRunsInPlace(t *testing.T) {
-	if got := HomeArgv(false, false, []string{"matchblox"}); got != nil {
+	if got := HomeArgv(false, false, Home, []string{"matchblox"}); got != nil {
 		t.Fatalf("without tmux the console runs in place, got %q", got)
 	}
 }
@@ -114,7 +185,7 @@ func TestHomeKeyArgvBindsPrefixMAsTheKey(t *testing.T) {
 	}
 	ifHome := []string{"if-shell", "-F", "#{==:#{pane_current_command},matchblox}",
 		`if-shell -F "#{pane_in_mode}" "send-keys -X cancel" ; send-keys -H 1b 5f 6d 61 74 63 68 62 6c 6f 78 1b 5c`,
-		`if-shell -F "#{S:#{?#{==:#{session_name},matchblox},1,}}" { switch-client -t =matchblox ; run-shell -C -t =matchblox: "#{W:#{P:#{?#{||:#{==:#{pane_current_command},matchblox},#{==:#{pane_id},#{@matchblox_console}}},select-window -t #{window_id} ; select-pane -Z -t #{pane_id} ; ,}}}" } { if-shell -F "#{S:#{W:#{P:#{?#{==:#{pane_current_command},matchblox},1,}}}}" { run-shell -C "#{S:#{W:#{P:#{?#{==:#{pane_current_command},matchblox},switch-client -t #{pane_id} ; ,}}}}" } { display-message "No matchblox console here: run matchblox in a shell to open one" } }`}
+		"run-shell -C \"set-option -g @matchblox_to #{?#{||:#{@matchblox_home},#{==:#{session_name},matchblox}},#{session_name},#{?#{@matchblox_back},#{@matchblox_back},matchblox}}\" ; if-shell -F \"#{S:#{?#{&&:#{==:#{session_name},#{@matchblox_to}},#{||:#{@matchblox_home},#{==:#{session_name},matchblox}}},1,}}\" { run-shell -C \"#{S:#{?#{==:#{session_name},#{@matchblox_to}},switch-client -t #{session_id} ; #{W:#{P:#{?#{||:#{==:#{pane_current_command},matchblox},#{==:#{pane_id},#{@matchblox_console}}},select-window -t #{window_id} ; select-pane -Z -t #{pane_id} ; ,}}},}}\" } { if-shell -F \"#{S:#{?#{==:#{session_name},matchblox},1,}}\" { switch-client -t =matchblox ; run-shell -C -t =matchblox: \"#{W:#{P:#{?#{||:#{==:#{pane_current_command},matchblox},#{==:#{pane_id},#{@matchblox_console}}},select-window -t #{window_id} ; select-pane -Z -t #{pane_id} ; ,}}}\" } { if-shell -F \"#{S:#{W:#{P:#{?#{==:#{pane_current_command},matchblox},1,}}}}\" { run-shell -C \"#{S:#{W:#{P:#{?#{==:#{pane_current_command},matchblox},switch-client -t #{pane_id} ; ,}}}}\" } { display-message \"No matchblox console here: run matchblox in a shell to open one\" } } }"}
 	if want := append([]string{"bind-key", "-n", "User900"}, ifHome...); !slices.Equal(cmds[1], want) {
 		t.Errorf("the home key:\n got %q\nwant %q", cmds[1], want)
 	}
@@ -127,8 +198,8 @@ func TestHomeKeyArgvBindsPrefixMAsTheKey(t *testing.T) {
 }
 
 func TestSizeArgv(t *testing.T) {
-	want := []string{"tmux", "set-option", "-w", "-t", "=matchblox:", "window-size", "latest"}
-	if got := SizeArgv(); !slices.Equal(got, want) {
+	want := []string{"tmux", "set-option", "-w", "-t", "%3", "window-size", "latest"}
+	if got := SizeArgv("%3"); !slices.Equal(got, want) {
 		t.Errorf("SizeArgv() = %q, want %q", got, want)
 	}
 }
