@@ -45,7 +45,7 @@ func TestANoticeNeverHidesTheCount(t *testing.T) {
 }
 
 func TestALongNoticeIsWholeOnAPhone(t *testing.T) {
-	const text = "not copied: tmux drops it · tmux set -s set-clipboard on"
+	const text = "not sent: flint-auth is on gpu-1 · ctrl+o goes in to answer it"
 	m := boardShot(t, boardFixture(t), 40, 34, nil)
 	m.notice(text)
 	lines, _, _ := m.noticeAt(40)
@@ -59,7 +59,7 @@ func TestALongNoticeIsWholeOnAPhone(t *testing.T) {
 	if !strings.HasSuffix(first, "·") && !strings.HasSuffix(first, " ") && strings.Contains(text, first+" ") {
 		t.Errorf("the cut is not at a · or a space: %q", first)
 	}
-	if first != "not copied: tmux drops it ·" {
+	if first != "not sent: flint-auth is on gpu-1 ·" {
 		t.Errorf("the cut is not at the ·: %q / %q", first, second)
 	}
 	for _, l := range lines {
@@ -75,7 +75,7 @@ func TestALongNoticeIsWholeOnAPhone(t *testing.T) {
 // fixedNotices are the notices the board says in words of its own: the
 // copy's, the once-notices of the keys that changed, and the refusals.
 var fixedNotices = []string{
-	tmuxDrops, "Now paste here · esc cancels", pasteWrong, pasteChecked,
+	"not copied: " + errNoScreen.Error(), "Now paste here · esc cancels", pasteWrong, pasteChecked,
 	"copied: last message of ember-reports" + notChecked,
 	"copied: 1234 characters" + notChecked,
 	"c copies now: the last message, whole.",

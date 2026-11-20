@@ -294,83 +294,19 @@ func TestADragIsNoLongPress(t *testing.T) {
 	}
 }
 
-func TestTmuxPassesClipboard(t *testing.T) {
-	for _, c := range []struct {
-		value     string
-		err       error
-		ok, known bool
-	}{
-		{"on", nil, true, true},
-		{"external", nil, false, true}, // tmux's default sets the terminal's clipboard, never from an application
-		{"off", nil, false, true},
-		{"", errors.New("no server running on /tmp/tmux-1000/default"), false, false},
-	} {
-		var ran [][]string
-		run := tmuxSays(c.value, &ran)
-		if c.err != nil {
-			run = func(args ...string) (string, error) { ran = append(ran, args); return "", c.err }
-		}
-		if ok, known := tmuxPassesClipboard(run); ok != c.ok || known != c.known {
-			t.Errorf("set-clipboard %q, %v: ok %v known %v, want %v %v", c.value, c.err, ok, known, c.ok, c.known)
-		}
-		if want := [][]string{{"show", "-sv", "set-clipboard"}}; !slices.EqualFunc(ran, want, slices.Equal) {
-			t.Errorf("it ran %q, want only the read %q", ran, want)
-		}
-	}
-}
-
-func TestCopyNeverClaimsWhatTmuxDrops(t *testing.T) {
-	for _, value := range []string{"off", "external"} {
-		t.Run(value, func(t *testing.T) { copyThroughTmux(t, value) })
-	}
-}
-
-func copyThroughTmux(t *testing.T, value string) {
-	const fix = "not copied: tmux drops it · tmux set -s set-clipboard on"
-	var ran [][]string
-	var execd [][]string
-	m, clipped, _ := menuBoard(t, 80, 31, func(m *Model) {
+// TestCNeverClaimsACopyThatFailed: when no screen of the person's had
+// input lately, c copies nothing and says why, never copied.
+func TestCNeverClaimsACopyThatFailed(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0)
+	tm := &screenTmux{clients: []string{"/dev/pts/4\t" + activeAt(now.Add(-time.Minute)) + "\t/dev/pts/4\tmatchblox"}}
+	m, _, _ := menuBoard(t, 80, 31, func(m *Model) {
 		chooseCard("flint-auth")(m)
-		m.opt.Pane, m.opt.Tmux = "%1", tmuxSays(value, &ran)
-		m.opt.Exec = func(argv []string, done func(error) tea.Msg) tea.Cmd {
-			execd = append(execd, argv)
-			return func() tea.Msg { return done(nil) }
-		}
+		m.opt.Clip, m.opt.Pane, m.opt.Tmux = nil, "%1", tm.run
+		m.opt.Now = func() time.Time { return now }
 	})
 	m = pressOn(m, "c")
-	if len(*clipped) != 0 {
-		t.Errorf("c copied %q through a tmux that drops it", *clipped)
-	}
-	if got := noticeRow(m); got != fix {
-		t.Errorf("c says %q, want %q", got, fix)
-	}
-	if !slices.Contains(boardDoorIDs(m), doors.CopyThrough) {
-		t.Errorf("the board's doors are %q, want copy-through", boardDoorIDs(m))
-	}
-	first := m
-	first.viewPrefs.Told = nil
-	if got := noticeRow(pressOn(first, "c")); got != fix {
-		t.Errorf("the first c ever, through a tmux that drops it, says %q", got)
-	}
-	m = menuDo(t, m, "copy its name")
-	if len(*clipped) != 0 || noticeRow(m) != fix {
-		t.Errorf("the menu copied %q and said %q", *clipped, noticeRow(m))
-	}
-
-	// ⏎ on the doors line asks for its y, and only the y runs the setting.
-	m = pressOn(toDoors(t, m), "enter")
-	if m.pending == nil || !m.consenting() || len(execd) != 0 {
-		t.Fatalf("⏎ on copy-through: pending %v, ran %q", m.pending, execd)
-	}
-	next, cmd := key(m, "y")
-	fed(next, cmd)
-	if want := [][]string{{"tmux", "set", "-s", "set-clipboard", "on"}}; !slices.EqualFunc(execd, want, slices.Equal) {
-		t.Errorf("y ran %q, want %q", execd, want)
-	}
-	for _, args := range ran {
-		if !slices.Equal(args, []string{"show", "-sv", "set-clipboard"}) {
-			t.Errorf("the console ran tmux %q by itself", args)
-		}
+	if len(tm.loads) != 0 || m.noticeText != "not copied: "+errNoScreen.Error() {
+		t.Errorf("c loaded %q and said %q", tm.loads, m.noticeText)
 	}
 }
 
@@ -383,9 +319,6 @@ func TestOutsideTmuxCopyGoesOn(t *testing.T) {
 	m = pressOn(m, "c")
 	if len(*clipped) != 1 || noticeRow(m) != "copied: last message of flint-auth" || len(ran) != 0 {
 		t.Errorf("outside tmux: copied %q, said %q, tmux ran %q", *clipped, noticeRow(m), ran)
-	}
-	if slices.Contains(boardDoorIDs(m), doors.CopyThrough) {
-		t.Error("outside tmux the board offers copy-through")
 	}
 
 	// A tmux that answers no value it knows: the copy goes on too.
