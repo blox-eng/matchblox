@@ -18,14 +18,14 @@
  ✦ ember-billing@gpu-1         ✻│
  ✦ spark-docs                  ✻│
 ────────────────────────────────│
- HELD · 1  −                    │
- ╽ kindle-legacy            5h ✻│
-────────────────────────────────│
  IDLE · 6  −                    │
  ╵ hearth-limits      #4551 ci ✻│
  ╵ wick-mobile           23:50 ▣│
  ╵ hearth-notes@gpu-1       1h ✻│
- ↓ 3 more                       │
+ ╵ cinder-ci@gpu… #4549 merged ❋│
+ ╵ ember-reports            3h ⬢│
+ ╵ tinder-scratch@gpu-1     2d ·│
+ ↓ 1 more                       │
  + new · ✧ 7 tips               │ ›                      ⏎ send to spark-search
 ────────────────────────────────────────────────────────────────────────────────
  in the list · ↑↓ choose · ⏎ write · s hosts · g chain · m menu

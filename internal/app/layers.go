@@ -551,8 +551,8 @@ func (s Shell) enterTicked(host string) (Shell, tea.Cmd) {
 	case len(t) == 0:
 		s, cmd := s.open(host, false)
 		s.cur.hiddenHosts = s.hiddenNames(host)
-		s.cur.flash = "No host is ticked: " + s.cur.nameOf(host) + " opens alone."
-		return s, tea.Batch(cmd, s.cur.flashNotice("")) // the board says it in its notice row
+		said := s.cur.say("No host is ticked: " + s.cur.nameOf(host) + " opens alone.")
+		return s, tea.Batch(cmd, said)
 	case s.live() && t[0] == s.curHost:
 		return s.keep(s.linked()[1:])
 	}

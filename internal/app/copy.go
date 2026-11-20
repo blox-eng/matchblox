@@ -169,6 +169,7 @@ func (m Model) copyCheckOn() Model {
 		if m.noticeText == m.pasteHere() {
 			m.noticeText = ""
 		}
+		m.unsay(m.pasteHere())
 	}
 	return m
 }
@@ -180,6 +181,7 @@ func (m Model) copyPasted(text string) (Model, tea.Cmd) {
 		return m, m.notice(pasteWrong)
 	}
 	m.copyCode = ""
+	m.unsay(m.pasteHere())
 	if m.upright() {
 		m.viewPrefs.CopyCheckedPhone = true
 	} else {

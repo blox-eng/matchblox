@@ -227,7 +227,7 @@ func (m Model) peerUpdate(pm peerMsg) (tea.Model, tea.Cmd) {
 		p := &m.peers[i]
 		p.conn, p.redialing, p.answered, p.silent, p.acts = msg.conn, false, false, false, nil
 		if stale {
-			m.flash = p.host + ": connected again"
+			m.say(p.host + ": connected again")
 		}
 		return m, tea.Batch(toPeer(p.host, helloOn(p.conn, m.opt.Binary)), m.peerRecv(i), m.watchPeer(i))
 	}
@@ -283,6 +283,7 @@ func (m Model) peerUpdate(pm peerMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		m.merge()
+		m.settle(p.host)
 		m.keepSelection()
 		next, order := m.queuedOrder(p.host)
 		tick := next.waitTick()
@@ -320,6 +321,10 @@ func (m Model) peerLost(i int, err error) (tea.Model, tea.Cmd) {
 	first := !p.lost
 	p.lost, p.silent = true, false
 	m = m.roomLost(p.host).lineLost(p.host)
+	m, notConfirmed := m.actsLost(p.host)
+	if notConfirmed != "" {
+		m.sayError(notConfirmed)
+	}
 	m, answer := m.answerLost(p.host, p.acts)
 	p = &m.peers[i]
 	news := tea.Batch(m.noAnswer(*p), answer)
@@ -406,6 +411,7 @@ func (m Model) reconcile(peers []Peer) (Model, tea.Cmd) {
 		}
 		news = append(news, m.noAnswer(l))
 		m.batchLost(l.host, l.acts)
+		m, _ = m.actsLost(l.host) // the host is gone: its rows go with it
 		m.dropLogin(l.host)
 	}
 	m.peers = next

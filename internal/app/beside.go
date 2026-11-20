@@ -261,8 +261,8 @@ func (m Model) showChosen() (tea.Model, tea.Cmd) {
 	case !ok:
 		return m, m.notice("no session to show · " + m.keys.main.New.Help().Key + " starts one")
 	case s.Pane == "":
-		m.flash = noPane(s.Name)
-		return m, nil
+		said := m.sayError(noPane(s.Name))
+		return m, said
 	case m.besideShows == m.shownKey(s.Host, s.Pane) && !m.showing:
 		name := m.besideName(m.besideShows.host, s.Pane)
 		return m.startShow(action{label: "show " + name, beside: true, focus: true, pane: s.Pane, host: m.besideShows.host})
@@ -359,15 +359,15 @@ func (m Model) viewsOn(a *action, what string, panes []string) (tea.Model, tea.C
 		return m.runInto(b)
 	}
 	if m.opt.Socket == "" {
-		m.flash = what + " is not shown: the console does not know its tmux socket ($TMUX names none); " + m.keys.main.Jump.Help().Key + " opens it"
-		return m, nil
+		said := m.sayError(what + " is not shown: the console does not know its tmux socket ($TMUX names none); " + m.keys.main.Jump.Help().Key + " opens it")
+		return m, said
 	}
 	for _, pane := range panes {
 		name := m.besideName(host, pane)
 		j := remote.Jump{Pane: pane, Prefix: m.prefix(), ID: m.jumpID(), Outer: true}
 		if !remote.ViewAllowed(j, name, m.opt.Socket) {
-			m.flash = "refused: " + name + " is not shown: its pane, its name or the tmux socket " + m.opt.Socket + " is not one a view takes"
-			return m, nil
+			said := m.sayError("refused: " + name + " is not shown: its pane, its name or the tmux socket " + m.opt.Socket + " is not one a view takes")
+			return m, said
 		}
 		a.steps = append(a.steps, remote.ViewArgv(j, name, m.opt.Socket))
 	}
@@ -582,13 +582,13 @@ func (m Model) besideShown(msg shownMsg) (tea.Model, tea.Cmd) {
 	}
 	switch {
 	case errors.Is(msg.err, errOwnWindow):
-		m.flash = msg.name + " is in the console's own window: " + m.keys.main.Jump.Help().Key + " opens it"
-		return m, nil
+		said := m.say(msg.name + " is in the console's own window: " + m.keys.main.Jump.Help().Key + " opens it")
+		return m, said
 	case msg.err != nil:
-		m.flash = msg.name + " is not shown: " + msg.err.Error()
-		return m, nil
+		said := m.sayError(msg.name + " is not shown: " + msg.err.Error())
+		return m, said
 	case len(msg.skipped) > 0:
-		m.flash = "not shown, in the console's own window: " + strings.Join(msg.skipped, ", ")
+		m.sayError("not shown, in the console's own window: " + strings.Join(msg.skipped, ", "))
 	}
 	if msg.preview {
 		return m, nil
@@ -655,8 +655,8 @@ func (m Model) chainBeside(k chainKey) (tea.Model, tea.Cmd) {
 	}
 	name := m.chainLabel(k)
 	if len(on) == 0 {
-		m.flash = name + " is not shown: no member runs in tmux"
-		return m, nil
+		said := m.sayError(name + " is not shown: no member runs in tmux")
+		return m, said
 	}
 	if h := cmp.Or(k.host, m.opt.Host); m.takeOverOn(h) {
 		m.held, m.heldOn, m.flash = func(m Model) (tea.Model, tea.Cmd) { return m.chainOn(k.host, name, on) }, h, ""

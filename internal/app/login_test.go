@@ -165,7 +165,8 @@ func TestJumpWaitsForLoginCheck(t *testing.T) {
 	m = next.(Model)
 	hostJump(&m, remote.Jump{Pane: "%1"})
 	next, cmd = m.confirm(*m.forHost(m.opt.Host, m.jump("%1")))
-	if cmd != nil || len(ran) != 0 {
+	drain(cmd) // the toast's end, and no jump
+	if len(ran) != 0 {
 		t.Fatalf("the jump ran before the check: %q", ran)
 	}
 	next, _ = next.(Model).confirm(*m.forHost(m.opt.Host, m.jump("%2")))

@@ -279,8 +279,8 @@ func (m *Model) showCommand() {
 func (m Model) grantStep() (tea.Model, tea.Cmd) {
 	r, ok := m.stokerSelected()
 	if !ok || r.state() != "waits" || r.e.Needs == "" {
-		m.flash = m.keys.main.Grant.Help().Key + " gives the go a step waits for"
-		return m, nil
+		said := m.say(m.keys.main.Grant.Help().Key + " gives the go a step waits for")
+		return m, said
 	}
 	return m.grant(r)
 }
@@ -288,14 +288,14 @@ func (m Model) grantStep() (tea.Model, tea.Cmd) {
 // grant gives the go that step r waits for.
 func (m Model) grant(r stokerRow) (tea.Model, tea.Cmd) {
 	if m.conn == nil || m.lost {
-		m.flash = "not sent, no connection"
-		return m, nil
+		said := m.sayError("not sent, no connection")
+		return m, said
 	}
 	what := r.e.Needs
 	if r.e.Want != "" {
 		what = r.e.Want
 	}
-	m.flash = "go given: " + what
+	m.say("go given: " + what)
 	text := r.e.ID
 	if r.unit != "" {
 		text = r.unit + " " + r.e.ID
@@ -352,8 +352,8 @@ func (m Model) stokerTarget() (pane, why string) {
 func (m Model) stokerInto() (tea.Model, tea.Cmd) {
 	pane, why := m.stokerTarget()
 	if pane == "" {
-		m.flash = why
-		return m, nil
+		said := m.sayError(why)
+		return m, said
 	}
 	return m.goInto(m.opt.Host, pane)
 }

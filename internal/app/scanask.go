@@ -60,13 +60,13 @@ func (m Model) answerScan(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case bkey.Matches(k, sk.Find):
 		m = m.closeScan()
-		m.flash = "finding your Git repositories…"
+		m.say("finding your Git repositories…")
 		cmd := m.send(proto.Act{RecID: "scan:yes", Confirm: "y"})
 		m.scanAct = fmt.Sprintf("a%d", m.acts)
 		return m, cmd
 	case bkey.Matches(k, sk.Never):
 		m = m.closeScan()
-		m.flash = "no scan: matchblox scan finds them later"
+		m.say("no scan: matchblox scan finds them later")
 		return m, m.send(proto.Act{RecID: "scan:no"})
 	case bkey.Matches(k, sk.Pick):
 		m.form = &form{pick: true, at: fieldFolders, roots: defaultRoots}
@@ -85,7 +85,7 @@ func (m Model) scanResult(r proto.Result) (Model, bool) {
 	if len(m.found.Roots) > 0 {
 		roots = showFolders(m.found.Roots)
 	}
-	m.flash = m.scanFlash(r, roots)
+	m.say(m.scanFlash(r, roots))
 	return m, true
 }
 
