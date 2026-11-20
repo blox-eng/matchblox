@@ -125,10 +125,13 @@ func setOption(session, name, value string) []string {
 	return []string{"set-option", "-t", "=" + session + ":", name, value}
 }
 
-// paneMouse binds in table tmux's own mouse keys for a pane (its defaults
-// in 3.2 to 3.5). A session's key-table hides root, so without them a
-// swipe scrolls nothing in a jump and a drag selects nothing (#240).
-func paneMouse(table string) [][]string {
+// A session's key-table hides root, so a jump binds its own mouse keys:
+// without them a swipe scrolls nothing and a drag selects nothing (#240).
+
+// relayMouse binds in table tmux's own mouse keys (its defaults in 3.2 to
+// 3.5), for a pane whose program is another tmux client (the desk side of a
+// host jump): that client gets every event as it comes.
+func relayMouse(table string) [][]string {
 	const app = "#{||:#{pane_in_mode},#{mouse_any_flag}}"
 	return [][]string{
 		{"bind-key", "-T", table, "WheelUpPane", "if", "-F", app, "send-keys -M", "copy-mode -e"},
@@ -137,6 +140,49 @@ func paneMouse(table string) [][]string {
 		{"bind-key", "-T", table, "MouseDrag1Border", "resize-pane", "-M"},
 	}
 }
+
+// paneMouse binds in table the mouse keys of an agent's own pane. A press
+// goes to no agent: tmux holds it back, and a release with no drag gives the
+// agent the whole click (wholeClick). An agent that got the press of a drag
+// would never get its release, which tmux's copy mode takes.
+//
+// A drag, a double-click and a triple-click select in tmux's copy mode in
+// every agent, as tmux's own defaults do for a pane that reads no mouse: the
+// copy is tmux's, of this pane only, with no padding and soft wraps joined.
+func paneMouse(table string) [][]string {
+	const (
+		app   = "#{||:#{pane_in_mode},#{mouse_any_flag}}"
+		inUse = "#{pane_in_mode}"
+	)
+	sel := func(what string) string {
+		return "select-pane -t = ; if -F '" + inUse + "' '' 'copy-mode -H' ; send-keys -X " + what +
+			" ; run-shell -d 0.3 ; send-keys -X copy-pipe-and-cancel"
+	}
+	return [][]string{
+		{"bind-key", "-T", table, "WheelUpPane", "if", "-F", app, "send-keys -M", "copy-mode -e"},
+		{"bind-key", "-T", table, "MouseDown1Pane", "if", "-F", inUse, "select-pane -t = ; send-keys -M", "select-pane -t ="},
+		{"bind-key", "-T", table, "MouseUp1Pane", "if", "-F", "#{&&:#{mouse_any_flag},#{!:" + inUse + "}}", "run-shell '" + wholeClick + "'", ""},
+		{"bind-key", "-T", table, "MouseDrag1Pane", "if", "-F", inUse, "send-keys -M", "copy-mode -M"},
+		{"bind-key", "-T", table, "DoubleClick1Pane", "if", "-F", "1", sel("select-word"), ""},
+		{"bind-key", "-T", table, "TripleClick1Pane", "if", "-F", "1", sel("select-line"), ""},
+		{"bind-key", "-T", table, "MouseDrag1Border", "resize-pane", "-M"},
+	}
+}
+
+// wholeClick is the shell line that gives the pane under the mouse a press
+// and a release of button 1 at the mouse's cell, in the pane's own mouse
+// encoding, as hex bytes: tmux puts only digits into it.
+const wholeClick = "tmux send-keys -t #{pane_id} -H #{?mouse_sgr_flag," + sgrClick + "," + normalClick + "}"
+
+const (
+	sgrX   = "$(printf %s #{e|+:#{mouse_x},1} | od -An -tx1)"
+	sgrY   = "$(printf %s #{e|+:#{mouse_y},1} | od -An -tx1)"
+	normXY = "$(printf %x #{e|+:#{mouse_x},33}) $(printf %x #{e|+:#{mouse_y},33})"
+	// ESC [ < 0 ; x ; y M, then the same ending in m.
+	sgrClick = "1b 5b 3c 30 3b " + sgrX + " 3b " + sgrY + " 4d 1b 5b 3c 30 3b " + sgrX + " 3b " + sgrY + " 6d"
+	// ESC [ M with button 0, then 3 (a release), each plus 32.
+	normalClick = "1b 5b 4d 20 " + normXY + " 1b 5b 4d 23 " + normXY
+)
 
 // panePage binds in table PgUp to a page up in tmux's copy mode; in it,
 // copy mode's own table pages, and paging back to the bottom leaves it, so
@@ -255,7 +301,7 @@ func (j Jump) Local(ssh []string) []string {
 		setOption(s, "status-left", "#[range=user|matchblox] ◂ console #[norange]"),
 		{"bind-key", "-T", table, "User900", "if", "-F", "1", back, ""},
 		{"bind-key", "-T", table, "MouseDown1Status", "if", "-F", "#{==:#{mouse_status_range},matchblox}", back, ""},
-	}, paneMouse(table), [][]string{
+	}, relayMouse(table), [][]string{
 		j.switchClient(s),
 		// After the switch: an unattached session with it would end at once.
 		setOption(s, "destroy-unattached", "on"),

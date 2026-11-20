@@ -289,6 +289,9 @@ func (m Model) peerUpdate(pm peerMsg) (tea.Model, tea.Cmd) {
 		return next, tea.Batch(next.peerRecv(i), order, tick)
 	case screenMsg:
 		return m.screenFrom(p.host, msg), m.peerRecv(i)
+	case copyMsg:
+		next, cmd := m.tookCopy(msg.Text, p.host)
+		return next, tea.Batch(cmd, next.peerRecv(i))
 	case resultMsg:
 		if mm, ok := m.watchRefused(p.host, proto.Result(msg)); ok {
 			return mm, mm.peerRecv(i)

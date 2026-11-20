@@ -14,6 +14,26 @@ All notable changes to matchblox are in this file. The format follows
   It leaves, and its mates hear it, only when the recovery record forgets
   it.
 
+## [0.49.0] - 2026-11-20
+
+### Added
+
+- **A drag copies exactly the agent's words.** In every agent, a drag
+  selects in tmux inside the agent's pane only, with no list text and no
+  padding, and a wrapped line pastes whole. A double-click copies a word
+  and a triple-click a line. The copy reaches the screen you use, over SSH
+  too, and tmux's `set-clipboard` stays as you have it.
+
+### Changed
+
+- **A click reaches the agent when you let go.** A drag never clicks
+  anything in an agent.
+
+### Removed
+
+- **The setup step "Let copy through".** It turned tmux's
+  `set-clipboard on`, which lets any pane read your last copy.
+
 ## [0.48.0] - 2026-11-19
 
 ### Added
@@ -1864,7 +1884,8 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.48.0...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.49.0...HEAD
+[0.49.0]: https://github.com/blox-eng/matchblox/compare/v0.48.0...v0.49.0
 [0.48.0]: https://github.com/blox-eng/matchblox/compare/v0.47.1...v0.48.0
 [0.47.1]: https://github.com/blox-eng/matchblox/compare/v0.47.0...v0.47.1
 [0.47.0]: https://github.com/blox-eng/matchblox/compare/v0.46.3...v0.47.0
