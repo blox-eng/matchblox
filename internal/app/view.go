@@ -152,6 +152,10 @@ type drawn struct {
 	formAgentsAt int
 	formAgents   []span
 	stokerAt     span // the header's stoker word
+	warnAt       span // the header's ⚠ mark: a tap says the standing errors again
+	// sayY0, sayY1, sayX0: the toast stack's lines and its first column; a
+	// tap there ends the toasts and reaches nothing under them.
+	sayY0, sayY1, sayX0 int
 	// names are the sessions that need you, which the header names while
 	// the list is hidden, and namePanes the session of each.
 	names     []span
@@ -187,7 +191,7 @@ func (m Model) drawScreen(w int) drawn {
 	head, waits, stokerAt, named := m.headerOf(w)
 	tabs, tabSpans := m.tabsLine(w)
 	sc := drawn{lines: []string{head, tabs, m.st.rule.Render(strings.Repeat("─", w))}, waits: waits, stokerAt: stokerAt, tabs: tabSpans,
-		bodyTop: 3, noteAt: -1, keysAt: -1, hostAt: m.boardHostHit(head)}
+		bodyTop: 3, noteAt: -1, keysAt: -1, hostAt: m.boardHostHit(head), warnAt: warnHit(head)}
 	switch {
 	case m.hostCount() > 1 && m.shows():
 		// A blocked host of two or more is a row, never the screen.
@@ -210,7 +214,9 @@ func (m Model) drawScreen(w int) drawn {
 		return sc
 	}
 	if m.viewFull() { // the stand-in takes the screen
-		return m.viewScreen(w)
+		sc := m.viewScreen(w)
+		m.overlaySaying(&sc, w, [2]int{sc.boxAt, sc.boxAt + len(sc.boxRows)})
+		return sc
 	}
 	room := m.bodyRows()
 	var b body
@@ -244,9 +250,11 @@ func (m Model) drawScreen(w int) drawn {
 	case m.menu != nil && m.boardShown():
 		m.overlayMenu(&sc, w)
 	}
+	box := [2]int{sc.boxAt, sc.boxAt + len(sc.boxRows)}
 	if m.sideActive() { // over a box too: what a box's act says shows
 		m.sideNotices(&sc, w)
 	}
+	m.overlaySaying(&sc, w, box)
 	return sc
 }
 
@@ -350,17 +358,15 @@ func (m Model) headerOf(w int) (string, span, span, headNamed) {
 		}
 		return fit(left, w), span{}, span{}, headNamed{}
 	}
-	if m.toast != "" && !m.boardShown() { // the board's toasts are notices
-		// A long toast is cut, never the name; the host stays when the
-		// toast still has room.
-		if host != "" && w-lipgloss.Width(left+lost)-len(host)-6 >= 20 {
-			left += st.faint.Render(" · ") + st.muted.Render(host)
-		}
-		room := max(w-lipgloss.Width(left+lost)-3, 1)
-		return spread(left+lost, st.accent.Render(ansi.Truncate(m.toast, room, "…"))+" ", w), span{}, span{}, headNamed{}
-	}
 	n, count := m.needCount(), "● %d need you"
 	stoker := m.stokerBadge(m.layoutAt(w) == Narrow)
+	if n := len(m.standing()); n > 0 && m.have { // the errors that last: a tap says them again
+		warn := st.warn.Render(fmt.Sprintf("⚠ %d", n))
+		if stoker != "" {
+			warn += " "
+		}
+		stoker = warn + stoker
+	}
 	// Short of room the host goes first (a phone), then the words of who
 	// waits; the count stays.
 	waits := []string{""}
@@ -570,7 +576,8 @@ func (m Model) alert() string {
 
 // keyLine is the bottom line: the keys of the open tab, each a tap target,
 // or what the person acts on now: an answer, a search, the take-over
-// question, a pending step and its confirm, or what the last key said.
+// question, a pending step and its confirm, or the tap again. What the
+// console says is a toast (#450), never here.
 func (m Model) keyLine(w int) (string, []span) {
 	st := m.st
 	if m.searching {
@@ -601,10 +608,10 @@ func (m Model) keyLine(w int) (string, []span) {
 		}
 		return fit(" "+st.label.Render("RUN ")+st.text.Render(m.pending.String())+"   "+st.muted.Render(confirm), w), nil
 	}
-	if m.pair.strips() && (m.pair.beat == 4 || m.flash == "") {
+	if m.pair.strips() && (m.pair.beat == 4 || !m.askingAgain()) {
 		return fit(" "+st.text.Render(m.pair.line), w), nil
 	}
-	if m.flash != "" && (!m.boardShown() || m.viewFull()) { // the board's flash is a notice
+	if m.askingAgain() {
 		return fit(" "+st.text.Render(m.flash), w), nil
 	}
 	if l := m.lostLine(); l != "" { // a lost host outranks the stand-in's keys, which may not go
@@ -802,4 +809,15 @@ func (m Model) mismatchText(w int) string {
 		m.connectKeys(w),
 	}
 	return strings.Join(lines, "\n")
+}
+
+// warnHit is where the header's ⚠ mark is, if it shows.
+func warnHit(head string) span {
+	plain := ansi.Strip(head)
+	i := strings.Index(plain, "⚠ ")
+	if i < 0 {
+		return span{}
+	}
+	x := ansi.StringWidth(plain[:i])
+	return span{x, x + 2 + len(strings.Fields(plain[i+len("⚠ "):])[0]), "warn"}
 }

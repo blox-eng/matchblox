@@ -126,7 +126,7 @@ func (m Model) sizeCmd(paneW int) tea.Cmd {
 		if w == 0 {
 			w = paneW
 		}
-		if m.boxZoom { // the box keeps the window
+		if m.boxZoom || m.lendsWindow() && !m.onePaneAt(w, h) { // the box or the animation keeps the window
 			return besideSizeMsg{w, h}
 		}
 		if m.onePaneAt(w, h) {
@@ -147,16 +147,23 @@ func (m Model) boxOpen() bool {
 	return m.consenting() || m.sheet != nil || m.form != nil || m.asking()
 }
 
+// lendsWindow: the list's pane takes the whole window, so that what it
+// shows centres in the window, not in the sidebar: a box, the start
+// screen, or the pairing page's knock and opening.
+func (m Model) lendsWindow() bool {
+	return m.boxOpen() || m.splashing() || m.pair.owns()
+}
+
 // boxBackMsg is the agent pane's screen as the box opened.
 type boxBackMsg []string
 
-// boxZoomed lends the window to a box beside the agent: the list's pane
-// zooms, and the box centres over the whole window, not in the list's
-// columns. The agent's screen shows dim beside the list behind it. As the
-// box closes, the window goes back to both panes.
+// boxZoomed lends the window to a box, or to an animation, beside the
+// agent: the list's pane zooms, and the box centres over the whole window,
+// not in the list's columns. The agent's screen shows dim beside the list
+// behind a box. As the box closes, the window goes back to both panes.
 func (m Model) boxZoomed() (Model, tea.Cmd) {
 	run := m.tmuxRun()
-	if m.beside == "" || run == nil || m.boxOpen() == m.boxZoom {
+	if m.beside == "" || run == nil || m.lendsWindow() == m.boxZoom {
 		return m, nil
 	}
 	if !m.boxZoom && m.winW > 0 && m.onePaneAt(m.winW, m.winH) { // one pane has the window already
@@ -254,8 +261,8 @@ func (m Model) showChosen() (tea.Model, tea.Cmd) {
 	case !ok:
 		return m, m.notice("no session to show · " + m.keys.main.New.Help().Key + " starts one")
 	case s.Pane == "":
-		m.flash = noPane(s.Name)
-		return m, nil
+		said := m.sayError(noPane(s.Name))
+		return m, said
 	case m.besideShows == m.shownKey(s.Host, s.Pane) && !m.showing:
 		name := m.besideName(m.besideShows.host, s.Pane)
 		return m.startShow(action{label: "show " + name, beside: true, focus: true, pane: s.Pane, host: m.besideShows.host})
@@ -333,7 +340,7 @@ func (m Model) besideOn(host, pane string) (tea.Model, tea.Cmd) {
 func (m Model) viewsOn(a *action, what string, panes []string) (tea.Model, tea.Cmd) {
 	host := a.host
 	if host != "" {
-		b, steps, says := a, [][]string(nil), []string(nil)
+		b, steps := a, [][]string(nil)
 		for _, pane := range panes {
 			_, ssh, next := m.peerJump(remote.Jump{Host: host, Pane: pane, View: true}, a)
 			if ssh == nil && a.preview {
@@ -343,24 +350,25 @@ func (m Model) viewsOn(a *action, what string, panes []string) (tea.Model, tea.C
 				return m.runInto(next)
 			}
 			b = next
-			steps, says = append(steps, remote.PeerViewArgv(m.besideName(host, pane), ssh)), append(says, shellLine(ssh))
+			steps = append(steps, remote.PeerViewArgv(m.besideName(host, pane), ssh))
 		}
-		b.steps, b.say, b.nav, b.remote = steps, strings.Join(says, "\n"), true, true
+		// In words: a view's ssh line holds every key it binds on the host.
+		b.steps, b.say, b.nav, b.remote = steps, "Show "+what+" from "+host+": ssh "+host+" shows it beside the list", true, true
 		if a.preview {
 			return m.startShow(*b)
 		}
 		return m.runInto(b)
 	}
 	if m.opt.Socket == "" {
-		m.flash = what + " is not shown: the console does not know its tmux socket ($TMUX names none); " + m.keys.main.Jump.Help().Key + " opens it"
-		return m, nil
+		said := m.sayError(what + " is not shown: the console does not know its tmux socket ($TMUX names none); " + m.keys.main.Jump.Help().Key + " opens it")
+		return m, said
 	}
 	for _, pane := range panes {
 		name := m.besideName(host, pane)
 		j := remote.Jump{Pane: pane, Prefix: m.prefix(), ID: m.jumpID(), Outer: true}
 		if !remote.ViewAllowed(j, name, m.opt.Socket) {
-			m.flash = "refused: " + name + " is not shown: its pane, its name or the tmux socket " + m.opt.Socket + " is not one a view takes"
-			return m, nil
+			said := m.sayError("refused: " + name + " is not shown: its pane, its name or the tmux socket " + m.opt.Socket + " is not one a view takes")
+			return m, said
 		}
 		a.steps = append(a.steps, remote.ViewArgv(j, name, m.opt.Socket))
 	}
@@ -575,13 +583,13 @@ func (m Model) besideShown(msg shownMsg) (tea.Model, tea.Cmd) {
 	}
 	switch {
 	case errors.Is(msg.err, errOwnWindow):
-		m.flash = msg.name + " is in the console's own window: " + m.keys.main.Jump.Help().Key + " opens it"
-		return m, nil
+		said := m.say(msg.name + " is in the console's own window: " + m.keys.main.Jump.Help().Key + " opens it")
+		return m, said
 	case msg.err != nil:
-		m.flash = msg.name + " is not shown: " + msg.err.Error()
-		return m, nil
+		said := m.sayError(msg.name + " is not shown: " + msg.err.Error())
+		return m, said
 	case len(msg.skipped) > 0:
-		m.flash = "not shown, in the console's own window: " + strings.Join(msg.skipped, ", ")
+		m.sayError("not shown, in the console's own window: " + strings.Join(msg.skipped, ", "))
 	}
 	if msg.preview {
 		return m, nil
@@ -648,8 +656,8 @@ func (m Model) chainBeside(k chainKey) (tea.Model, tea.Cmd) {
 	}
 	name := m.chainLabel(k)
 	if len(on) == 0 {
-		m.flash = name + " is not shown: no member runs in tmux"
-		return m, nil
+		said := m.sayError(name + " is not shown: no member runs in tmux")
+		return m, said
 	}
 	if h := cmp.Or(k.host, m.opt.Host); m.takeOverOn(h) {
 		m.held, m.heldOn, m.flash = func(m Model) (tea.Model, tea.Cmd) { return m.chainOn(k.host, name, on) }, h, ""

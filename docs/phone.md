@@ -400,13 +400,61 @@ goes dark. Tap it again to let it go. The pane gets ctrl with `b d e f g k l
 n p r t u v w x y`, and with `a` and `c`. It sends no `ctrl+z`, which would
 stop the agent, and no `ctrl+s` or `ctrl+q`, which stop and start the terminal.
 
+The Console group has the console's own keys: `c copy reply`, `⌃o expand`,
+`s hosts`, `g chain`, `/`, `m menu`, `z park`, `N new`, `⇥ machine` and
+`x kill`. On Mine they act where Board's keys act: in the console. In an
+agent's pane they are dim and send nothing.
+
+#### The match head
+
+<svg class="match-head" width="40" height="40" viewBox="0 0 40 40" role="img" aria-label="The match head"><defs><radialGradient id="match-head-shade" cx="0.33" cy="0.33" r="0.75"><stop offset="0" style="stop-color:#fff;stop-opacity:.25"/><stop offset="0.6" style="stop-color:var(--t-match-head,#C2452D)"/><stop offset="1" style="stop-color:var(--t-match-ember,#9C5A46)"/></radialGradient><clipPath id="match-head-ball"><circle cx="20" cy="20" r="17"/></clipPath></defs><circle cx="20" cy="20" r="17" style="fill:var(--t-match-head,#C2452D)"/><circle cx="20" cy="20" r="17" fill="url(#match-head-shade)"/><g clip-path="url(#match-head-ball)" fill="#000"><circle cx="7.1" cy="17.9" r="0.49" fill-opacity="0.21"/><circle cx="23.6" cy="4.6" r="0.30" fill-opacity="0.07"/><circle cx="11.5" cy="28.9" r="0.48" fill-opacity="0.23"/><circle cx="17.8" cy="4.4" r="0.33" fill-opacity="0.08"/><circle cx="18.8" cy="18.8" r="0.71" fill-opacity="0.35"/><circle cx="13.8" cy="12.0" r="0.49" fill-opacity="0.27"/><circle cx="17.1" cy="34.6" r="0.36" fill-opacity="0.14"/><circle cx="21.3" cy="29.0" r="0.56" fill-opacity="0.29"/><circle cx="29.9" cy="24.0" r="0.52" fill-opacity="0.26"/><circle cx="15.3" cy="5.1" r="0.31" fill-opacity="0.09"/><circle cx="23.5" cy="31.6" r="0.63" fill-opacity="0.23"/><circle cx="11.1" cy="31.9" r="0.47" fill-opacity="0.14"/><circle cx="4.9" cy="21.9" r="0.44" fill-opacity="0.11"/><circle cx="16.9" cy="12.0" r="0.53" fill-opacity="0.30"/><circle cx="17.2" cy="34.1" r="0.45" fill-opacity="0.16"/><circle cx="7.5" cy="10.5" r="0.34" fill-opacity="0.08"/><circle cx="4.6" cy="17.4" r="0.42" fill-opacity="0.09"/><circle cx="14.2" cy="12.7" r="0.69" fill-opacity="0.29"/><circle cx="7.6" cy="11.6" r="0.50" fill-opacity="0.13"/><circle cx="21.1" cy="34.8" r="0.43" fill-opacity="0.14"/></g><circle cx="20" cy="20" r="17" fill="none" stroke="#000" stroke-opacity=".6"/></svg>
+
+The Scroll group has one key, the match head. Add it to Mine, and roll it
+with your thumb to scroll, as a trackball:
+
+- Roll down for older lines, and up for newer lines. Each notch, 10 pt of
+  roll, scrolls and taps once.
+- A slow roll moves 1 line a notch. A faster roll moves more, up to 10
+  lines a notch. The taps come closer together as you roll faster, up to 30
+  a second; past that each notch moves more lines.
+- The head heats as it turns: cold red, ember, then amber. Roll it too fast
+  and it strikes: it lights, with one hard tap. It cools within a second.
+- A flick keeps it turning with slower taps. A touch stops it, with one
+  soft, dull tap, and sends nothing: tap again for Enter.
+- Tap the head for Enter. You feel two firm taps and the rim flashes. Only a
+  short tap on a still head counts: a tap right after a roll, or one that
+  moves, sends nothing.
+- At the end of the lines it bumps once and stops. In a tmux pane the app
+  knows the bottom, not the top: the head turns on at the top, and tmux
+  stays there.
+- On a screen with no history that does not read the mouse, the handle row
+  says `nothing scrolls here · this program has no scrollback`.
+- A sideways roll turns the head and scrolls nothing.
+- With VoiceOver, the head is "Match head": swipe up or down on it to
+  scroll a page, and double-tap it to send Enter.
+
+You do not need the head on your belt to use it. Rest a finger on the
+terminal for a quarter of a second, then move it up or down: the head
+comes under your finger with one light tap, and your finger rolls it. Lift,
+and the head waits 3 seconds where it is, for another roll or a tap for
+Enter. It never covers ↓ or a message. A touch anywhere else, or the
+keyboard, sends it away; with no touch it fades. A finger that rests and
+does not move still opens the row's menu.
+
+A belt key after a scroll in a tmux pane first brings the pane back to its
+bottom, so the key reaches the agent, not tmux's copy mode. `Esc` there only
+brings the pane back: it does not reach the agent, where it would interrupt.
+A key, or typing, stops a flick of the head.
+
 A vertical swipe scrolls the console and a tmux pane. In the console's
 list, a swipe chooses the session above or below. In the chat, a swipe
 scrolls the chat back through the pane's history, and the chosen session
 stays. A chat with no screen to scroll says so. The lines move with
 your finger: one line for each line of travel. In a tmux pane each wheel
 step scrolls 5 lines, so the app sends one step for each 5 lines of travel.
-Swipe down for older lines, and up for newer lines. A flick carries on for
+Swipe down for older lines, and up for newer lines. Each step ticks, in the
+console and in a pane. Rest your finger for a quarter of a second, then
+move it, and the match head comes under it (see The match head). A flick carries on for
 at most 0.5 s, and scrolls the same lines in the console and in a pane.
 To select text, touch and hold, then tap Select and drag. Where the
 program does not read the mouse, the terminal scrolls its own history.

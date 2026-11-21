@@ -294,4 +294,13 @@ final class BoardBeltTests: XCTestCase {
         XCTAssertNil(follow.heard("", on: .board))
         XCTAssertFalse(follow.answers(on: .board))
     }
+
+    /// A console key on the builder's own layout follows Board's rule: away from the console,
+    /// `x kill` and the rest are dim and send nothing into an agent's pane.
+    func testAwayDimsConsoleKeys() {
+        for key in BoardBelt.tailKeys {
+            XCTAssertTrue(BoardBelt.away.isDim(key.id), key.id)
+            XCTAssertFalse(BoardBelt.plain.isDim(key.id), key.id)
+        }
+    }
 }

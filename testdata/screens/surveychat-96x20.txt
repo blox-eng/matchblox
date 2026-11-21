@@ -1,7 +1,7 @@
  ▰ matchblox                                                                       ● 6 need you
  SESSIONS 7    machine
 ────────────────────────────────────────────────────────────────────────────────────────────────
- NEEDS YOU · 6  −               │ flint-auth ✻ asks · #4545 ci  ctx 41%  ctrl+o expand · m menu
+ NEEDS YOU · 6  −               │ flint-auth ✻ asks · #4545 ci  ctx 41%  ct   the line is empty
 ▌╿ flint-auth               2m ✻│ ⏺ The refresh endpoint is in and its tests pass.
    conflicts with main          │
  ╿ spark-docs               9m ✻│ ──────────────────────────────────────────────────────────────
@@ -14,7 +14,7 @@
    I am moving the cache key to…│   2. Rotate, keep the old one a minute
  ╿ wick-mobile              0s ▣│   3. Type something.
    ⠙ Working                    │
- the line is empty
+ ↓ 1 more                       │ Enter to select · ↑/↓ to navigate · Esc to cancel
  + new · ✧ 7 tips               │ ›                                        ⏎ send to flint-auth
 ────────────────────────────────────────────────────────────────────────────────────────────────
  writing to flint-auth · ⏎ send · ↑↓ choose · esc list · ctrl+o expand · tab Machine

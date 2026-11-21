@@ -128,6 +128,28 @@ func TestFocusMovesOnlyThePhonesClient(t *testing.T) {
 	}
 }
 
+// TestASecondConsoleLeavesThePhonesFocusAlone: the phone joins the first
+// console; a second terminal's console neither moves the phone's client
+// nor changes its own choice for the phone's tap.
+func TestASecondConsoleLeavesThePhonesFocusAlone(t *testing.T) {
+	old := focusWait
+	focusWait = 300 * time.Millisecond
+	t.Cleanup(func() { focusWait = old })
+	m, _ := loadedWith(t, 100, fixtureState())
+	m.opt.HomeSession = "matchblox-2"
+	var ran []string
+	m.opt.Run = func(argv []string) error { ran = append(ran, strings.Join(argv, " ")); return nil }
+	m.opt.Clients = func() ([]string, error) { return []string{"/dev/ttys001", "/dev/ttys004"}, nil }
+	before, _ := m.selectedSession()
+	st := focused("%1", time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC))
+	st.Focus.Client = "/dev/ttys004"
+	next, cmd := m.Update(stateMsg(st))
+	runFocus(t, cmd)
+	if s, _ := next.(Model).selectedSession(); s.Pane != before.Pane || len(ran) != 0 {
+		t.Errorf("selected %q (was %q), ran %q", s.Pane, before.Pane, ran)
+	}
+}
+
 // A number whose session ended says so, and nothing else moves.
 func TestFocusOfAGoneSessionSaysSo(t *testing.T) {
 	m, _ := loadedWith(t, 100, fixtureState())

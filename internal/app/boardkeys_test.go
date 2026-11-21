@@ -48,14 +48,9 @@ func newBoardState(t *testing.T, m Model, st proto.State) Model {
 	return next.(Model)
 }
 
-// noticeRow is the row over the key line's hairline.
+// noticeRow is what the console says now, on one line.
 func noticeRow(m Model) string {
-	rows, _, _ := m.noticeAt(max(m.width, minWidth))
-	var said []string
-	for _, r := range plainLines(rows) {
-		said = append(said, strings.TrimSpace(r))
-	}
-	return strings.Join(said, " ")
+	return strings.Join(saidRows(m, max(m.width, minWidth)), " ")
 }
 
 func mergeOf(t *testing.T, st proto.State) proto.Ship {
@@ -236,12 +231,12 @@ func TestTheNoticeIsGoneAfterItsTime(t *testing.T) {
 	if !strings.Contains(ansi.Strip(m.render()), "● 4 need you") {
 		t.Error("the header changed for a notice")
 	}
-	msg := tick() // the tick ends the notice; it waits noticeFor
-	if _, ok := msg.(noticeMsg); !ok {
-		t.Fatalf("the notice's tick is %T", msg)
+	msgs := cmdMsgs(tick) // the tick ends the notice; it waits noticeFor
+	if !slices.ContainsFunc(msgs, func(msg tea.Msg) bool { _, ok := msg.(noticeMsg); return ok }) {
+		t.Fatalf("the notice's ticks are %T", msgs)
 	}
 	now = now.Add(noticeFor)
-	next, _ := m.Update(msg)
+	next, _ := m.Update(noticeMsg{})
 	if f := plainFrame(next.(Model)); strings.Contains(f, "not copied") {
 		t.Errorf("the notice stays after %v:\n%s", noticeFor, f)
 	}

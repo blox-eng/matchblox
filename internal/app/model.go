@@ -49,7 +49,7 @@ type Options struct {
 	CompactAt     float64
 	CompactTokens int
 	// Demo, when set, is the demo host's line: what would leave the demo
-	// answers with it in the key line and no command runs. The console shows
+	// answers with it in a toast and no command runs. The console shows
 	// no stoker badge in its header, for the host's name to keep its room on
 	// a phone.
 	Demo string
@@ -142,6 +142,9 @@ type Options struct {
 	Clients func() ([]string, error)
 	// Pane is the console's own tmux pane (TMUX_PANE); "" outside tmux.
 	Pane string
+	// HomeSession is the console's own tmux session, one per terminal; ""
+	// outside its home session.
+	HomeSession string
 	// Beside: the console splits its tmux window and keeps the agent's pane
 	// beside the list. Set only for the console of the home session.
 	Beside bool
@@ -389,39 +392,42 @@ type Model struct {
 	// the host it acts on, whose stoker the question is about (R14).
 	// touched is the last key that kept each host's stoker resting; it is
 	// copied on write.
-	held        func(Model) (tea.Model, tea.Cmd)
-	heldOn      string
-	keysOut     keysOut   // the keys the stand-in sends, one at a time
-	standIn     bool      // the demo's stand-in for a pane: it forwards the keys to the demo's world
-	backArmed   time.Time // when ctrl+a, the first key of the stand-in's way back, was pressed; zero: not armed
-	touched     map[string]time.Time
-	all         lists  // what every host sent, merged; queue, recs and snap hold the drawn copies
-	homeAll     lists  // what the home host sent
-	filter      string // the search of the open tab
-	searching   bool   // the search line takes the keys
-	holds       []proto.Hold
-	chains      *state.ChainsView
-	chainIx     chainIndex // worked out in refresh
-	room        *room      // the chain room on screen; nil when none
-	reasons     map[string]proto.IdleReason
-	agents      []string                          // the agents a new session can start on the host
-	renames     map[string]string                 // the names sessions take at their next rest, by pane
-	accounts    map[string][]string               // the accounts each agent can start on: default first
-	skipped     map[string][]accounts.Skip        // the folders the service did not list, per agent
-	lastAccount map[string]string                 // the account last started, per agent
-	signIns     map[string]string                 // how a new account's sign-in goes, by pane: "by hand" when matchblox gave up driving it
-	found       *proto.Found                      // the host's repositories and the scan's consent; nil: the service scans nothing
-	scanLater   bool                              // the scan question was closed or answered at this console
-	scanAct     string                            // the act of the box's yes, for its result
-	form        *form                             // the open New session, Rename, Switch agent or scan folders form; nil none
-	jumpAfter   switchSent                        // a switch sent: the pane to jump to when it runs, its new agent, for the client that asked
-	startAfter  struct{ act, agent, done string } // a start on a new account sent: its agent, the last once it runs, and what it says then
-	lastAgent   string                            // the agent this console last started
-	keptAgent   string                            // the agent last started, as the service keeps it
-	paneSort    sortBy
-	picked      map[wtKey]bool // worktrees x removes
-	batch       *batch
-	showExited  bool // e: the exited agents, one by one
+	held         func(Model) (tea.Model, tea.Cmd)
+	heldOn       string
+	keysOut      keysOut   // the keys the stand-in sends, one at a time
+	standIn      bool      // the demo's stand-in for a pane: it forwards the keys to the demo's world
+	backArmed    time.Time // when ctrl+a, the first key of the stand-in's way back, was pressed; zero: not armed
+	touched      map[string]time.Time
+	all          lists  // what every host sent, merged; queue, recs and snap hold the drawn copies
+	homeAll      lists  // what the home host sent
+	filter       string // the search of the open tab
+	searching    bool   // the search line takes the keys
+	holds        []proto.Hold
+	chains       *state.ChainsView
+	chainIx      chainIndex // worked out in refresh
+	room         *room      // the chain room on screen; nil when none
+	reasons      map[string]proto.IdleReason
+	agents       []string                          // the agents a new session can start on the host
+	renames      map[string]string                 // the names sessions take at their next rest, by pane
+	accounts     map[string][]string               // the accounts each agent can start on: default first
+	skipped      map[string][]accounts.Skip        // the folders the service did not list, per agent
+	lastAccount  map[string]string                 // the account last started, per agent
+	signIns      map[string]string                 // how a new account's sign-in goes, by pane: "by hand" when matchblox gave up driving it
+	found        *proto.Found                      // the host's repositories and the scan's consent; nil: the service scans nothing
+	scanLater    bool                              // the scan question was closed or answered at this console
+	scanAct      string                            // the act of the box's yes, for its result
+	form         *form                             // the open New session, Rename, Switch agent or scan folders form; nil none
+	standingSaid []string                          // the standing errors said once, by standingKey
+	saying       []toast                           // the toasts the console shows now, newest first (#450)
+	pendingActs  map[string]pendingAct             // the kills, renames and parks sent and not yet in a sample, by act id (#211)
+	jumpAfter    switchSent                        // a switch sent: the pane to jump to when it runs, its new agent, for the client that asked
+	startAfter   struct{ act, agent, done string } // a start on a new account sent: its agent, the last once it runs, and what it says then
+	lastAgent    string                            // the agent this console last started
+	keptAgent    string                            // the agent last started, as the service keeps it
+	paneSort     sortBy
+	picked       map[wtKey]bool // worktrees x removes
+	batch        *batch
+	showExited   bool // e: the exited agents, one by one
 	// stokerSel is the selected row of the STOKER tab, stokerShown the row
 	// whose command it shows, ackSent when the steps were last marked seen.
 	stokerSel    int
@@ -429,8 +435,6 @@ type Model struct {
 	ackSent      time.Time
 	sheet        *sheet       // the launch sheet, while it is open
 	stokerServer string       // the tmux server (-L) the stoker agent runs on; "" none
-	toast        string       // what an action did, on the header's right
-	toasts       int          // counts the toasts: a later one outlives the timer of an earlier one
 	devices      []PairDevice // the keys that open this host, read when the Machine tab opens
 	devErr       error        // why the keys could not be read
 	devPick      string       // the selected device row: its fingerprint, or devPlus
@@ -605,7 +609,7 @@ type Model struct {
 	sideIn                    paneKey
 	beside                    string          // the agent pane's id; "" before the split, and where it failed
 	winW, winH                int             // the window's size in beside mode; 0: not read yet
-	boxZoom                   bool            // a box has the window: the list's pane is zoomed for it
+	boxZoom                   bool            // a box or an animation has the window: the list's pane is zoomed for it
 	boxBack                   []string        // the agent pane's screen, drawn dim behind the box
 	showing                   bool            // a choice runs in the agent pane
 	showNext                  *action         // the choice made while one ran: it runs next
@@ -800,13 +804,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg, tea.MouseClickMsg, tea.MouseWheelMsg, tea.PasteMsg:
 		m.askedBy, m.marked, m.away = m.marked.spend(m.now()), clientMark{}, false
 		m = m.dragDropped(msg)
-		if _, wheel := msg.(tea.MouseWheelMsg); m.boardShown() && m.held == nil && !wheel {
-			m.flash = "" // a flash after the key is new: it goes to the notice row
+		if c, ok := msg.(tea.MouseClickMsg); ok && len(m.sayingNow()) > 0 {
+			if sc := m.draw(max(m.width, minWidth)); c.Y >= sc.sayY0 && c.Y < sc.sayY1 && c.X >= sc.sayX0 {
+				m.saying = nil // a tap on the toasts ends them: the rows under them are hidden
+				return m, nil
+			}
+		}
+		if _, wheel := msg.(tea.MouseWheelMsg); m.held == nil && !wheel {
+			m.saying = nil // a key ends what was said before it (#450)
+			if m.boardShown() {
+				m.flash = "" // a key ends the last thing said
+			}
 		}
 	default:
 		m.askedBy = ""
 	}
-	was := m.flash
 	var anchor roomRow
 	if _, input := msg.(tea.KeyPressMsg); !input && m.room != nil { // the rows may move under the cursor
 		if rows := m.roomRows(m.room.k); m.room.at >= 0 && m.room.at < len(rows) {
@@ -819,16 +831,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var held tea.Cmd
 		nm, held = nm.heldRelease()
 		cmd = tea.Batch(cmd, held)
-		nm.side = &sideMemo{}                                                      // the steps after the message read the list and change nothing it is built from
-		nm = nm.scanShows().keepView().inDemo().sideKeep().chatMarkOn().onChoice() // what reads Sessions' selection reads the board's choice
+		nm.side = &sideMemo{}                                                                     // the steps after the message read the list and change nothing it is built from
+		nm = nm.scanShows().keepView().inDemo().standingNews().sideKeep().chatMarkOn().onChoice() // what reads Sessions' selection reads the board's choice
 		again := nm.beltPoll(msg)
 		nm, belt := nm.tellBelt(again)
 		var zoom tea.Cmd
 		nm, zoom = nm.boxZoomed()
 		cmd = tea.Batch(cmd, belt, zoom)
-		if note := nm.flashNotice(was); note != nil {
-			cmd = tea.Batch(cmd, note)
-		}
 		if watch := nm.watchCmd(); watch != nil {
 			cmd = tea.Batch(cmd, watch)
 		}
@@ -870,8 +879,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.sizeCmd(msg.Width)
 	case besideMsg:
 		if msg.err != nil {
-			m.flash = "the agent pane did not open: " + msg.err.Error()
-			return m, nil
+			said := m.sayError("the agent pane did not open: " + msg.err.Error())
+			return m, said
 		}
 		m.beside = msg.pane
 		return m, m.sizeCmd(m.width)
@@ -920,7 +929,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.olderLocal() {
 			// The old service exits; the redial starts this binary.
 			m.replaced = true
-			m.flash = fmt.Sprintf("replacing the service %s with %s…", m.host.Binary, m.opt.Binary)
+			m.say(fmt.Sprintf("replacing the service %s with %s…", m.host.Binary, m.opt.Binary))
 			return m, tea.Batch(m.send(proto.Act{RecID: "service:replace"}), m.recv())
 		}
 		m.newer, m.startsAgain = "", false
@@ -974,10 +983,12 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.stoker, m.stokerServer, m.stokers = st.Stoker, st.StokerServer, st.Stokers
 		m.doors, m.updateView = m.shownDoors(st.Doors), st.Update
 		if n := m.behindNotice(); n != "" && n != m.behindSaid {
-			m.flash, m.behindSaid = n, n // once for each release: a key clears it
+			m.behindSaid = n // once for each release: a key clears it
+			m.say(n)
 		}
 		if news, key := m.updateNews(); news != "" {
-			m.flash, m.recPrefs.Updated = news, key
+			m.recPrefs.Updated = key
+			m.say(news)
 			_ = m.recPrefs.save(m.opt.StateDir) // not kept: the next console says it again
 		}
 		m.snap, m.git, m.recs, m.have, m.answered, m.at = st.Snapshot, st.Git, st.Recommendations, true, true, m.now()
@@ -1021,6 +1032,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.recRun = recRun{} // its rec is gone: a later one with the same id starts fresh
 		}
 		m.merge()
+		m.settle(m.opt.Host)
 		if m.lost {
 			m.lost, m.backoff, m.flash = false, 0, ""
 		}
@@ -1063,10 +1075,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.waitTicking = false
 		tick := m.waitTick()
 		return m, tick
-	case toastMsg:
-		if msg.n == m.toasts {
-			m.toast = ""
-		}
+	case sayEndsMsg:
+		m.sayEnded()
 	case planTickMsg:
 		return m.planTick(msg)
 	case resultMsg:
@@ -1083,7 +1093,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				note = m.notice(why)
 			case why != "":
-				m.flash = why
+				m.sayError(why)
 			}
 			next := m.nextKey()
 			return m, tea.Batch(m.recv(), next, note)
@@ -1103,9 +1113,14 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		first := !m.lost
 		m.lost = true
 		m = m.roomLost(m.opt.Host).lineLost(m.opt.Host)
+		m, notConfirmed := m.actsLost(m.opt.Host)
 		if blocking(msg.err) {
 			// Trying again cannot help: connecting the host can.
 			m.blocked, m.flash = msg.err, ""
+			if notConfirmed != "" { // its screen says how to connect; the act's fate is said too
+				said := m.sayError(notConfirmed)
+				return m, said
+			}
 			return m, nil
 		}
 		// Two or more hosts: a short loss shows nothing, as a peer's;
@@ -1113,6 +1128,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var lost []string
 		if m.hostCount() == 1 {
 			lost = append(lost, "connection lost: "+msg.err.Error())
+		}
+		if notConfirmed != "" {
+			lost = append(lost, notConfirmed)
 		}
 		if m.batch != nil {
 			// Their results went with the connection; a peer's still come.
@@ -1133,17 +1151,19 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if first {
 			stale = m.staleTick(m.at)
 		}
-		m.flash = strings.Join(lost, "; ")
+		said := strings.Join(lost, "; ")
 		if m.opt.Redial == nil {
-			return m, stale
+			cmd := tea.Batch(stale, m.sayError(said))
+			return m, cmd
 		}
 		m.redialing = true
 		m.backoff = redialAfter(m.backoff)
 		if m.hostCount() == 1 {
-			m.flash += "; trying again in " + m.backoff.String()
+			said += "; trying again in " + m.backoff.String()
 		}
 		gen := m.opt.Gen
-		return m, tea.Batch(stale, tea.Tick(m.backoff, func(time.Time) tea.Msg { return redialMsg{gen} }))
+		cmd := tea.Batch(stale, m.sayError(said), tea.Tick(m.backoff, func(time.Time) tea.Msg { return redialMsg{gen} }))
+		return m, cmd
 	case redialMsg:
 		if msg.gen != m.opt.Gen || !m.redialing || m.quitting {
 			return m, nil // a tick from a console that was closed
@@ -1161,17 +1181,17 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if m.opt.Host != "" {
-			m.flash = m.opt.Host + " does not answer: run ssh " + m.opt.Host + " matchblox status to see why"
-			return m, nil
+			said := m.sayError(m.opt.Host + " does not answer: run ssh " + m.opt.Host + " matchblox status to see why")
+			return m, said
 		}
 		pid := 0
 		if m.opt.Owner != nil {
 			pid = m.opt.Owner()
 		}
 		if pid > 0 {
-			m.flash = fmt.Sprintf("the service (pid %d) does not answer: kill %d, then start matchblox again", pid, pid)
+			m.sayError(fmt.Sprintf("the service (pid %d) does not answer: kill %d, then start matchblox again", pid, pid))
 		} else {
-			m.flash = "the service does not answer: stop `matchblox serve`, then start matchblox again"
+			m.sayError("the service does not answer: stop `matchblox serve`, then start matchblox again")
 		}
 		return m, nil
 	case redialFailed:
@@ -1188,7 +1208,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if m.hostCount() == 1 || m.stale(m.opt.Host) {
-			m.flash = "connected again" // a short loss of two or more hosts showed nothing: its end shows nothing
+			m.say("connected again") // a short loss of two or more hosts showed nothing: its end shows nothing
 		}
 		m.conn, m.redialing, m.answered = msg.conn, false, false
 		return m, tea.Batch(m.hello(), m.recv(), m.watchSilence())
@@ -1199,12 +1219,12 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.endRec("nav", proto.Result{Ran: [][]string{strings.Fields(msg.cmd)}})
 		}
 		if errors.Is(msg.err, errNotAttached) || errors.Is(msg.err, errNoClient) {
-			m.flash = msg.err.Error()
-			return m, nil
+			said := m.sayError(msg.err.Error())
+			return m, said
 		}
 		if msg.err != nil {
-			m.flash = "failed: " + msg.cmd + ": " + msg.err.Error()
-			return m, nil
+			said := m.sayError("failed: " + msg.cmd + ": " + msg.err.Error())
+			return m, said
 		}
 		var took tea.Cmd
 		if msg.jumped != "" {
@@ -1280,6 +1300,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // conn r came on.
 func (m Model) result(r proto.Result) (Model, tea.Cmd) {
 	m.endRec(r.ActID, r)
+	if m.settleResult(r) {
+		return m, nil
+	}
 	if mm, cmd, ok := m.lineResult(r); ok {
 		return mm, cmd
 	}
@@ -1314,8 +1337,13 @@ func (m Model) result(r proto.Result) (Model, tea.Cmd) {
 	}
 	m = mm // a failed install lets go of its act
 	if r.ActID != "" && r.ActID == m.hostAct {
-		m.flash, m.hostAct = m.hostUpdated(r), ""
-		return m, nil
+		say := m.say
+		if r.Err != "" {
+			say = m.sayError
+		}
+		said := say(m.hostUpdated(r))
+		m.hostAct = ""
+		return m, said
 	}
 	if m.tally(r) {
 		return m, nil
@@ -1323,8 +1351,12 @@ func (m Model) result(r proto.Result) (Model, tea.Cmd) {
 	if text := describe(r); text != "" && r.Err == "" && len(r.Skipped) == 0 {
 		toast := m.say(tilde(text))
 		return m, toast
+	} else if text != "" && r.Err != "" {
+		said := m.sayError(tilde(text))
+		return m, said
 	} else if text != "" {
-		m.flash = tilde(text)
+		said := m.say(tilde(text))
+		return m, said
 	}
 	return m, nil
 }
@@ -1339,9 +1371,11 @@ const focusGone = "That session ended."
 // takeFocus opens the session a tap on the island or a buzz asked for, once
 // for each focus the service sends, on Sessions: its pane on the phone's own
 // tmux client. A form, sheet, pair page or take-over keeps the keys: what the
-// person types there is not thrown away, nor sent to another agent.
+// person types there is not thrown away, nor sent to another agent. Only
+// the first console takes it: the phone joins that one, and a second
+// terminal's console is not the phone's.
 func (m Model) takeFocus(f *proto.Focus) (Model, tea.Cmd) {
-	if f == nil || f.At.Equal(m.focusAt) {
+	if f == nil || f.At.Equal(m.focusAt) || m.consoleSession() != "matchblox" {
 		return m, nil
 	}
 	m.focusAt = f.At
@@ -1362,8 +1396,8 @@ func (m Model) takeFocus(f *proto.Focus) (Model, tea.Cmd) {
 			m.setTab(tabSessions)
 			m.pending = nil
 		}
-		m.flash = focusGone
-		return m, nil
+		said := m.say(focusGone)
+		return m, said
 	}
 	if busy {
 		return m, nil
@@ -1385,6 +1419,11 @@ func (m Model) takeFocus(f *proto.Focus) (Model, tea.Cmd) {
 	}
 	return m, m.focusJump(f.Client, s.Pane)
 }
+
+// consoleSession is the console's own tmux session: the way back from an
+// agent this console opens comes to it. A console with none known (one run
+// in place) names the first console's, as the way back did before.
+func (m Model) consoleSession() string { return cmp.Or(m.opt.HomeSession, "matchblox") }
 
 // clients is how this console reads the clients of its tmux server.
 func (m Model) clients() func() ([]string, error) {
@@ -1412,9 +1451,9 @@ func tmuxClients() ([]string, error) {
 func (m Model) focusJump(tty, pane string) tea.Cmd {
 	clients, read, run := m.clients(), m.readClients(), m.opt.Run
 	agent := m.agentOfPane(pane)
-	say, mark, at := sayAgent(keycmd.PaneSignal(agent, pane), m.opt), paneMark(pane, agent), m.now()
+	say, mark, at, back := sayAgent(keycmd.PaneSignal(agent, pane), m.opt), paneMark(pane, agent), m.now(), m.consoleSession()
 	return func() tea.Msg {
-		argv := remote.FocusArgv(tty, pane, at)
+		argv := remote.FocusArgv(tty, pane, at, back)
 		if !remote.FocusAllowed(argv) {
 			return nil
 		}
@@ -1481,7 +1520,7 @@ func (m Model) updated(r proto.Result) (Model, tea.Cmd, bool) {
 		mm, cmd := m.startAgain()
 		return mm, cmd, true
 	}
-	m.flash = "updated to " + tag + " · " + reopen
+	m.say("updated to " + tag + " · " + reopen)
 	return m, nil, true
 }
 
@@ -1619,8 +1658,8 @@ func (m Model) pendingKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if yes || (bkey.Matches(k, m.keys.confirm.Enter) && !a.destructive) {
 		return m.confirm(a)
 	}
-	m.flash = "cancelled: " + a.String()
-	return m, nil
+	said := m.say("cancelled: " + a.String())
+	return m, said
 }
 
 // key is k on the tabs, with nothing on top.
@@ -1642,8 +1681,8 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	m.flash = ""
 	if s, ok := m.selectedSession(); ok && bkey.Matches(k, mk.Second, mk.Rename, mk.Switch, mk.Park) {
 		if u, head := m.headRow(s); head { // its agent is the stoker's, not a session of the builder's
-			m.flash = "the stoker of chain " + u.Name + " is no session: " + m.quitStokerWhere()
-			return m, nil
+			said := m.sayError("the stoker of chain " + u.Name + " is no session: " + m.quitStokerWhere())
+			return m, said
 		}
 	}
 	switch {
@@ -1676,14 +1715,16 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case bkey.Matches(k, mk.Park):
 		if s, ok := m.selectedSession(); ok {
 			if s.Pane == "" {
-				m.flash = s.Name + " is outside tmux: nothing to park"
+				m.sayError(s.Name + " is outside tmux: nothing to park")
 				break
 			}
 			if why := m.refusal(s.Host); why != "" {
-				m.flash = why
+				m.sayError(why)
 				break
 			}
-			cmd := m.sendTo(s.Host, proto.Act{RecID: "park:" + s.Pane})
+			_, held := m.holdOf(s)
+			id, cmd := m.sendToID(s.Host, proto.Act{RecID: "park:" + s.Pane})
+			m.expect(id, actPark, s, "", !held)
 			return m.pairActed(action{rec: "park:" + s.Pane, host: s.Host}), cmd
 		}
 	case bkey.Matches(k, mk.Mark):
@@ -1800,7 +1841,8 @@ func (m *Model) refuse() {
 		return
 	}
 	if why := m.refusal(m.hostOf(*a)); why != "" {
-		m.pending, m.flash = nil, why
+		m.pending = nil
+		m.sayError(why)
 	}
 }
 
@@ -1819,15 +1861,15 @@ func (m Model) confirm(a action) (tea.Model, tea.Cmd) {
 
 func (m Model) confirmed(a action) (tea.Model, tea.Cmd) {
 	if m.opt.Demo != "" && a.leavesTheDemo() {
-		m.flash = m.opt.Demo
-		return m, nil
+		said := m.say(m.opt.Demo)
+		return m, said
 	}
 	if a.climb != nil {
 		return m.climbed(*a.climb)
 	}
 	if a.local != nil {
 		next, msg := a.local(m)
-		next.flash = msg
+		next.say(msg)
 		return next, nil
 	}
 	if a.remote {
@@ -1840,13 +1882,13 @@ func (m Model) confirmed(a action) (tea.Model, tea.Cmd) {
 	if (a.nav || a.attach) && host != "" {
 		// A tmux move of a host names the host's panes: here it would move
 		// this machine's tmux. Only a jump (remote) goes there.
-		m.flash = "refused: a tmux move on " + host + " never runs on this machine"
-		return m, nil
+		said := m.sayError("refused: a tmux move on " + host + " never runs on this machine")
+		return m, said
 	}
 	if len(a.batch) > 0 {
 		if why := m.batchRefusal(a); why != "" {
-			m.flash = why
-			return m, nil
+			said := m.sayError(why)
+			return m, said
 		}
 		return m.sendBatch(a)
 	}
@@ -1861,20 +1903,25 @@ func (m Model) confirmed(a action) (tea.Model, tea.Cmd) {
 		return m, m.signalled(a, m.intoCmd(a))
 	}
 	if why := m.refusal(host); why != "" {
-		m.flash = why
-		return m, nil
+		said := m.sayError(why)
+		return m, said
 	}
 	if host == m.opt.Host && (m.conn == nil || m.lost) {
-		m.flash = "not sent, no connection: " + a.String()
-		return m, nil
+		said := m.sayError("not sent, no connection: " + a.String())
+		return m, said
 	}
 	confirm := ""
 	if a.destructive {
 		confirm = "y"
 	}
-	m.flash = "sent: " + a.String()
-	cmd := m.sendTo(host, proto.Act{RecID: a.rec, Which: a.which, Confirm: confirm, Text: a.text})
+	m.say("sent: " + a.String())
+	id, cmd := m.sendToID(host, proto.Act{RecID: a.rec, Which: a.which, Confirm: confirm, Text: a.text})
 	m.startRec(a, "a"+strconv.Itoa(m.acts))
+	if pane, ok := strings.CutPrefix(a.rec, "kill:"); ok {
+		if s, ok := m.sessionAt(host, pane); ok {
+			m.expect(id, actKill, s, "", false)
+		}
+	}
 	if pane, ok := strings.CutPrefix(a.rec, "switch:"); ok {
 		m.jumpAfter = switchSent{act: "a" + strconv.Itoa(m.acts), host: a.host, pane: pane, done: a.done, tty: a.tty, agent: a.paneAgent}
 	}
@@ -1902,10 +1949,11 @@ func (m Model) started(r proto.Result) (Model, bool) {
 		return m, false
 	}
 	m.lastAgent = a.agent
-	m.flash = a.done
+	said := a.done
 	if len(notes) > 0 {
-		m.flash += "; " + strings.Join(notes, "; ")
+		said += "; " + strings.Join(notes, "; ")
 	}
+	m.say(said)
 	return m, true
 }
 
@@ -1925,16 +1973,16 @@ func (m Model) switched(r proto.Result) (Model, tea.Cmd) {
 	notes, ran := proto.StartNotes(r)
 	switch {
 	case r.Err != "":
-		m.flash = tilde(r.Err)
-		return m, nil
+		said := m.sayError(tilde(r.Err))
+		return m, said
 	case len(r.Skipped) > 0 && !ran:
-		m.flash = tilde(r.Skipped[len(r.Skipped)-1])
-		return m, nil
+		said := m.sayError(tilde(r.Skipped[len(r.Skipped)-1]))
+		return m, said
 	}
 	m.flash = ""
 	if m.opt.Demo != "" { // the switch ran: only the jump into its pane cannot
-		m.flash = j.done
-		return m, nil
+		said := m.say(j.done)
+		return m, said
 	}
 	m.askedBy = j.tty // the jump moves the client that asked for the switch
 	a := m.forHost(j.host, m.jumpOn(j.host, j.pane))
@@ -1948,7 +1996,7 @@ func (m Model) switched(r proto.Result) (Model, tea.Cmd) {
 	if nm.flash != "" { // the jump refused, or waits for its host's login
 		say = append(say, nm.flash)
 	}
-	nm.flash = strings.Join(say, "; ")
+	nm.say(strings.Join(say, "; "))
 	return nm, jump
 }
 
@@ -2042,23 +2090,6 @@ func (m *Model) keepSelection() {
 	if s, ok := m.selected(); ok {
 		m.selPID, m.selHost = s.PID, s.Host
 	}
-}
-
-// toastMsg ends the toast it counts.
-type toastMsg struct{ n int }
-
-// toastFor is how long a toast stays on the header.
-const toastFor = 2500 * time.Millisecond
-
-// say shows what an action did on the header's right, for toastFor.
-func (m *Model) say(text string) tea.Cmd {
-	if m.boardShown() {
-		return m.notice(text)
-	}
-	m.toasts++
-	m.toast = text
-	n := m.toasts
-	return tea.Tick(toastFor, func(time.Time) tea.Msg { return toastMsg{n} })
 }
 
 func (m Model) View() tea.View {

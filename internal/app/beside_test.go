@@ -377,12 +377,12 @@ func restNow(t *testing.T) {
 
 func TestArrowsPreviewTheChosenAgent(t *testing.T) {
 	restNow(t)
-	m, tm := shownAt(t, "kindle-legacy", "160")
+	m, tm := shownAt(t, "hearth-limits", "160")
 	next, cmd := key(m, "up")
 	m = rest(t, next, cmd)
 	s, _ := m.sideChosen()
 	r := respawned(tm)
-	if r == "" || !strings.Contains(r, s.Name) || strings.Contains(r, "kindle-legacy") {
+	if r == "" || !strings.Contains(r, s.Name) || strings.Contains(r, "hearth-limits") {
 		t.Fatalf("respawn %q, want a view of %s: %q", r, s.Name, tm.lines())
 	}
 	if tm.count("select-pane") != 0 || tm.count("resize-pane -Z") != 0 {
@@ -392,7 +392,7 @@ func TestArrowsPreviewTheChosenAgent(t *testing.T) {
 
 func TestQuickArrowsPreviewOnlyWhereTheyStop(t *testing.T) {
 	restNow(t)
-	m, tm := shownAt(t, "kindle-legacy", "160")
+	m, tm := shownAt(t, "hearth-limits", "160")
 	next, first := key(m, "up")
 	next, second := key(next, "down")
 	next, third := key(next, "up")
@@ -409,7 +409,7 @@ func TestQuickArrowsPreviewOnlyWhereTheyStop(t *testing.T) {
 
 func TestEnterOnAPreviewGivesItTheKeys(t *testing.T) {
 	restNow(t)
-	m, tm := shownAt(t, "kindle-legacy", "160")
+	m, tm := shownAt(t, "hearth-limits", "160")
 	next, cmd := key(m, "up")
 	m = rest(t, next, cmd)
 	tm.cmd = "tmux"
@@ -422,7 +422,7 @@ func TestEnterOnAPreviewGivesItTheKeys(t *testing.T) {
 
 func TestEnterOnAnEndedPreviewShowsItAgain(t *testing.T) {
 	restNow(t)
-	m, tm := shownAt(t, "kindle-legacy", "160")
+	m, tm := shownAt(t, "hearth-limits", "160")
 	next, cmd := key(m, "up")
 	m = rest(t, next, cmd)
 	tm.cmd = "sh" // the view ended: its pane waits for a key
@@ -600,6 +600,49 @@ func TestATapOnARowShowsItsAgent(t *testing.T) {
 	afterChoice(next, cmd)
 	if r := respawned(tm); r == "" || !strings.Contains(r, "flint-auth") {
 		t.Fatalf("respawn %q", r)
+	}
+}
+
+// TestAClickOnARowKeepsTheKeysInTheList: a click on a row shows its agent
+// at once, and the keys stay in the list, so ↑ and ↓ go on choosing.
+func TestAClickOnARowKeepsTheKeysInTheList(t *testing.T) {
+	m, tm := shownAt(t, "kindle-web", "160")
+	next, cmd := tapRow(t, m, "flint-auth")
+	m = afterChoice(next, cmd)
+	if r := respawned(tm); r == "" || !strings.Contains(r, "flint-auth") {
+		t.Fatalf("respawn %q", r)
+	}
+	if tm.count("select-pane") != 0 {
+		t.Fatalf("the click gave the agent the keys: %q", tm.lines())
+	}
+	if s, _ := m.sideChosen(); s.Name != "flint-auth" {
+		t.Fatalf("the list chose %s, want flint-auth", s.Name)
+	}
+}
+
+// TestAClickOnTheShownRowKeepsTheKeysInTheList: a click on the row the
+// agent pane shows already, from the agent's pane, leaves the keys in the
+// list it lands in.
+func TestAClickOnTheShownRowKeepsTheKeysInTheList(t *testing.T) {
+	m, tm := shownAt(t, "kindle-web", "160")
+	m = enter(t, m)
+	tm.cmd = "tmux" // the view runs
+	tm.calls = nil
+	next, cmd := tapRow(t, m, "kindle-web")
+	afterChoice(next, cmd)
+	if tm.count("select-pane") != 0 || respawned(tm) != "" {
+		t.Fatalf("want no new view and the keys in the list: %q", tm.lines())
+	}
+}
+
+// TestATapOnARowStillOpensItOnOnePane: where one pane shows at a time, a tap
+// on a row still opens its agent full screen.
+func TestATapOnARowStillOpensItOnOnePane(t *testing.T) {
+	m, tm := shownAt(t, "kindle-web", "70")
+	next, cmd := tapRow(t, m, "flint-auth")
+	afterChoice(next, cmd)
+	if r := respawned(tm); r == "" || !strings.Contains(r, "flint-auth") || tm.count("select-pane") == 0 {
+		t.Fatalf("want flint-auth full screen: %q", tm.lines())
 	}
 }
 

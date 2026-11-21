@@ -18,9 +18,9 @@
  ✦ ember-billing@gpu-1                 ✻
  ✦ spark-docs                          ✻
 ────────────────────────────────────────
- HELD · 1  −
- ╽ kindle-legacy                    5h ✻
-────────────────────────────────────────
+ IDLE · 6  −
+ ╵ hearth-limits              #4551 ci ✻
+ ╵ wick-mobile                   23:50 ▣
 ╭─ flint-auth ─────────────────────────╮
 │ ▌ copy last message                c │
 │   copy the question                  │

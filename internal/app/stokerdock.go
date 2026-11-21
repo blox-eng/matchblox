@@ -39,13 +39,13 @@ func (m Model) attachTo(session string) string {
 func (m Model) openAgent() (tea.Model, tea.Cmd) {
 	switch {
 	case !m.hasAgent():
-		m.flash = "this service starts no stoker agent"
+		m.sayError("this service starts no stoker agent")
 	case !m.stoker.PaneUp && !m.stoker.Starting:
-		m.flash = "the stoker is not running: " + m.keys.main.Stoke.Help().Key + " or " + m.keys.main.Night.Help().Key + " starts it"
+		m.sayError("the stoker is not running: " + m.keys.main.Stoke.Help().Key + " or " + m.keys.main.Night.Help().Key + " starts it")
 	case m.opt.Host != "":
-		m.flash = "on " + m.opt.Host + ", run: " + m.stokerAttach()
+		m.say("on " + m.opt.Host + ", run: " + m.stokerAttach())
 	case m.opt.OutsideTmux:
-		m.flash = "outside tmux: run " + m.stokerAttach() + " (prefix d comes back)"
+		m.sayError("outside tmux: run " + m.stokerAttach() + " (prefix d comes back)")
 	default:
 		m.pending, m.previewTop = &action{label: "open the stoker", nav: true, steps: [][]string{remote.StokerPopup(m.stokerServer)}}, 0
 	}
@@ -57,9 +57,9 @@ func (m Model) openAgent() (tea.Model, tea.Cmd) {
 func (m Model) quitAgent() (tea.Model, tea.Cmd) {
 	switch {
 	case !m.hasAgent():
-		m.flash = "this service starts no stoker agent"
+		m.sayError("this service starts no stoker agent")
 	case !m.stoker.PaneUp && !m.stoker.Starting:
-		m.flash = "the stoker is not running"
+		m.sayError("the stoker is not running")
 	default:
 		m.pending = &action{label: "quit the stoker agent", destructive: true, rec: "stoker:quit", which: "primary",
 			steps: [][]string{{"tmux", "-L", m.stokerServer, "kill-session", "-t", "=stoker"}}}
@@ -73,11 +73,11 @@ func (m Model) openUnit(u state.ChainStoker) (tea.Model, tea.Cmd) {
 	session := unitSession(u.ID)
 	switch {
 	case !u.View.PaneUp && !u.View.Starting:
-		m.flash = "the stoker of chain " + u.Name + " is not running"
+		m.sayError("the stoker of chain " + u.Name + " is not running")
 	case m.opt.Host != "":
-		m.flash = "on " + m.opt.Host + ", run: " + m.attachTo(session)
+		m.say("on " + m.opt.Host + ", run: " + m.attachTo(session))
 	case m.opt.OutsideTmux:
-		m.flash = "outside tmux: run " + m.attachTo(session) + " (prefix d comes back)"
+		m.sayError("outside tmux: run " + m.attachTo(session) + " (prefix d comes back)")
 	default:
 		m.pending, m.previewTop = &action{label: "open the stoker of chain " + u.Name, nav: true, steps: [][]string{remote.StokerPopupOf(m.stokerServer, session)}}, 0
 	}
@@ -89,8 +89,8 @@ func (m Model) openUnit(u state.ChainStoker) (tea.Model, tea.Cmd) {
 // that is on with no agent quits too.
 func (m Model) quitUnit(u state.ChainStoker) (tea.Model, tea.Cmd) {
 	if !chainAlive(u) {
-		m.flash = "the stoker of chain " + u.Name + " is not running"
-		return m, nil
+		said := m.sayError("the stoker of chain " + u.Name + " is not running")
+		return m, said
 	}
 	m.pending = &action{label: "quit the stoker of chain " + u.Name, destructive: true, rec: "stoker:quit", which: "primary", text: u.ID,
 		steps: [][]string{{"tmux", "-L", m.stokerServer, "kill-session", "-t", "=" + unitSession(u.ID)}}}
@@ -198,7 +198,7 @@ func (m Model) stokerLines(w int, full bool) []string {
 // openStoker is c off the board: the STOKER screen, Machine's row stoker.
 func (m Model) openStoker() Model {
 	if m.stoker == nil {
-		m.flash = "this service keeps no stoker"
+		m.sayError("this service keeps no stoker")
 		return m
 	}
 	m.setTab(tabStoker)
