@@ -241,3 +241,35 @@ func TestCCopiesThroughTheConsolesClient(t *testing.T) {
 		t.Errorf("c said %q", m.noticeText)
 	}
 }
+
+// TestAWrappedURLIsCopiedWhole: an agent draws a long URL over several
+// lines, each after a line break and an indent. A copy of it pastes as the
+// one URL; any other copy stays as it was.
+func TestAWrappedURLIsCopiedWhole(t *testing.T) {
+	for _, c := range []struct{ name, in, want string }{
+		{"agent-wrapped URL", "   https://accounts.example.com/auth?redirect_uri=https%3A%2F\n     %2Fsdk.example.com%2Fcode&scope=openid\n     &state=Bkxx\n", "https://accounts.example.com/auth?redirect_uri=https%3A%2F%2Fsdk.example.com%2Fcode&scope=openid&state=Bkxx"},
+		{"one URL on one line", "  https://example.com/a  ", "https://example.com/a"},
+		{"two URLs", "https://a.example/x\nhttps://b.example/y", "https://a.example/x\nhttps://b.example/y"},
+		{"words after a URL", "https://a.example/x\nsee the page above", "https://a.example/x\nsee the page above"},
+		{"prose", "run this\n  then that", "run this\n  then that"},
+		{"a word, not a URL", "abc\n  def", "abc\n  def"},
+	} {
+		if got := wholeURL(c.in); got != c.want {
+			t.Errorf("%s: got %q, want %q", c.name, got, c.want)
+		}
+	}
+}
+
+// TestAHostCopyOfAWrappedURLLoadsWhole: the URL a host's agent wrapped
+// reaches the clipboard as one line.
+func TestAHostCopyOfAWrappedURLLoadsWhole(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0)
+	tm := &screenTmux{clients: []string{"/dev/pts/4\t" + activeAt(now) + "\t/dev/pts/4" + "\tmatchblox"}}
+	ws := newFake()
+	m := copyConsole(tm, now, Peer{Host: "ws-1", Conn: ws})
+	m.besideShows = paneKey{"ws-1", "%7"}
+	_, _ = m.Update(peerMsg{host: "ws-1", conn: ws, msg: copyMsg{Text: "   https://a.example/x%2F\n     %2Fy\n"}})
+	if !slices.Equal(tm.loaded, []string{"https://a.example/x%2F%2Fy"}) {
+		t.Fatalf("loaded %q, want the URL whole", tm.loaded)
+	}
+}

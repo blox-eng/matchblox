@@ -5,7 +5,7 @@ import UIKit
 /// The console's terminal, with three ways back to matchblox: a swipe in from the left edge,
 /// a tap on "◂ matchblox" in the tmux status line, and ⌘M or ctrl+M. Each one sends `HomeKey`.
 /// While the program reads the mouse, a vertical swipe sends wheel steps (`WheelScroll`), each step
-/// ticks once, and a finger that rests, then moves, calls up the match head. A tap sends a click: the
+/// ticks once. In a chat, a long-press selects text to copy. A tap sends a click: the
 /// console opens the row's chat. While the console shows Sessions or Machine, a long-press sends a
 /// right click (`BoardTouch`). The match head on the belt scrolls through `head(lines:)`. A sideways
 /// swipe turns no page: the list and the chat have none. A pinch makes the text bigger or smaller,
@@ -31,6 +31,8 @@ final class ConsoleTerminalView: TerminalView {
     var onAsksCopy: @MainActor () -> Void = {}
     /// A tap on a link: the link, and the place on screen it was tapped.
     var onLink: @MainActor (String, CGRect) -> Void = { _, _ in }
+    /// Called as the selection changes: the URL it holds, whole, or nil.
+    var onSelectedLink: @MainActor (String?) -> Void = { _ in }
     /// The console shows Sessions or Machine (`BoardFollow`): a long-press opens the row's menu.
     /// Otherwise the terminal's own long-press acts.
     var showsConsole = false
@@ -45,8 +47,6 @@ final class ConsoleTerminalView: TerminalView {
     /// The swipe's tick: one for each step it moves, never closer than `MatchHead.tapGap`.
     private let tick = UISelectionFeedbackGenerator()
     private var lastTick: TimeInterval = 0
-    /// When the finger went down: a finger that rests, then moves, calls up the match head.
-    private var touchedAt: TimeInterval = 0
     private var edge: UIScreenEdgePanGestureRecognizer?
     private var labelTap: UITapGestureRecognizer?
     private var clickTap: UITapGestureRecognizer?
@@ -55,10 +55,6 @@ final class ConsoleTerminalView: TerminalView {
     private var focusedAtTouch = false
     private var wheelPan: UIPanGestureRecognizer?
     private var wheel = WheelScroll(cellHeight: 0)
-    /// The match head that a rest, then a move, calls up; the screen owns it.
-    weak var summoned: SummonedHead?
-    /// This pan rested first: the finger rolls the called-up head, not the wheel.
-    private var summoning = false
     private var coast: Coast?
     private var hold: UILongPressGestureRecognizer?
     /// The size the text has now; a pinch changes it, in whole points.
@@ -162,7 +158,6 @@ final class ConsoleTerminalView: TerminalView {
 
     /// A touch stops a flick, as in a scroll view.
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        touchedAt = touches.first?.timestamp ?? ProcessInfo.processInfo.systemUptime
         stopCoast()
         focusedAtTouch = isFirstResponder
         super.touchesBegan(touches, with: event)
@@ -215,19 +210,7 @@ final class ConsoleTerminalView: TerminalView {
         }
         if gesture === wheelPan, let pan = gesture as? UIPanGestureRecognizer {
             let velocity = pan.velocity(in: self)
-            guard !selection.active, abs(velocity.y) > abs(velocity.x) else { return false }
-            let moved = pan.translation(in: self)
-            switch WheelScroll.gesture(restedFor: ProcessInfo.processInfo.systemUptime - touchedAt, moved: hypot(moved.x, moved.y)) {
-            case .swipe:
-                summoning = false
-                return readsMouse
-            case .summon:
-                // Where the program reads no mouse the head scrolls the terminal's own history.
-                summoning = summoned != nil
-                return summoning
-            case .rest, .menu:
-                return false
-            }
+            return readsMouse && !selection.active && abs(velocity.y) > abs(velocity.x)
         }
         if gesture === hold {
             return showsConsole && sendsClicks && !inTmuxPane && !tapsLabel(at: gesture.location(in: self))
@@ -247,7 +230,6 @@ final class ConsoleTerminalView: TerminalView {
     }
 
     @objc private func wheelPanned(_ pan: UIPanGestureRecognizer) {
-        if summoning { return summonPanned(pan) }
         switch pan.state {
         case .began, .changed:
             if pan.state == .began {
@@ -263,24 +245,6 @@ final class ConsoleTerminalView: TerminalView {
             let link = CADisplayLink(target: self, selector: #selector(coasted))
             coast = Coast(link: link, start: CACurrentMediaTime(), velocity: pan.velocity(in: self).y, point: pan.location(in: self))
             link.add(to: .main, forMode: .common)
-        default:
-            break
-        }
-    }
-
-    /// The finger rested, then moved: the match head comes under it and the finger rolls it.
-    private func summonPanned(_ pan: UIPanGestureRecognizer) {
-        guard let summoned else { return }
-        let now = ProcessInfo.processInfo.systemUptime
-        switch pan.state {
-        case .began:
-            stopCoast()
-            summoned.grab(at: pan.location(in: self), in: self, time: now)
-        case .changed:
-            summoned.drag(to: pan.location(in: self), time: now)
-        case .ended, .cancelled, .failed:
-            summoned.release(time: now)
-            summoning = false
         default:
             break
         }
@@ -406,14 +370,19 @@ final class ConsoleTerminalView: TerminalView {
 
     /// The link under `point`: a hyperlink the program marked (OSC 8), else an http or https URL
     /// in the row's text.
+    override func selectionChanged(source: Terminal) {
+        super.selectionChanged(source: source)
+        onSelectedLink(selection.active ? TerminalLink.url(inSelection: selection.getSelectedText()) : nil)
+    }
+
     private func linkUnder(_ point: CGPoint) -> String? {
         guard let spot = cell(at: point) else { return nil }
         let terminal = getTerminal()
         if let marked = terminal.link(at: .screen(Position(col: spot.col, row: spot.row)), mode: .explicitOnly) {
             return marked
         }
-        let cells = (0..<terminal.cols).map { terminal.getCharacter(col: $0, row: spot.row) ?? " " }
-        return TerminalLink.url(in: cells, at: spot.col)
+        let rows = (0..<terminal.rows).map { row in (0..<terminal.cols).map { terminal.getCharacter(col: $0, row: row) ?? " " } }
+        return TerminalLink.url(in: rows, row: spot.row, col: spot.col)
     }
 
     @objc private func goHome() {
