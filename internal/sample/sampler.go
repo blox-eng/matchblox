@@ -38,6 +38,10 @@ type Session struct {
 	Tab    string `json:"tab"` // tmux window name
 	Name   string `json:"name"`
 	Agent  string `json:"agent"` // the command it was found by: claude, codex, opencode, ...
+	// Version is the agent's version, read from its install path or its
+	// session file; VersionWhy says why it is empty.
+	Version    string `json:"version,omitempty"`
+	VersionWhy string `json:"version_why,omitempty"`
 	// Account is a short label of the login it runs under ("a@b.c · Max",
 	// "API key"), never a credential.
 	Account string `json:"account,omitempty"`
@@ -692,7 +696,8 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 		s.codexSaved = now
 	}
 	for pid, p := range procs {
-		agent := s.agentName(pid, p)
+		ref := s.agentRef(pid, p)
+		agent := ref.name
 		if agent == "" {
 			continue
 		}
@@ -729,7 +734,7 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 		cpu, n := s.treeCPU(pid, procs, children, dt)
 		sess := Session{
 			PID: pid, Start: p.StartTime, Pane: paneID, Target: pane.Target, Tab: pane.Window, Cwd: s.FS.Cwd(pid),
-			Agent: agent, CPU: cpu, Procs: n, Context: "unknown",
+			Agent: agent, Version: ref.version, VersionWhy: ref.versionWhy, CPU: cpu, Procs: n, Context: "unknown",
 		}
 		env := s.envOf(pid, key)
 		sess.MatchContext = env.matchContext
@@ -818,7 +823,11 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 			var lim *limits.Reading
 			if path != "" {
 				sess.Transcript = path
-				sess.SessionID = s.agents.metaOf(path).id // z parks it by this id
+				meta := s.agents.metaOf(path)
+				sess.SessionID = meta.id // z parks it by this id
+				if versionSegment.MatchString(meta.version) {
+					sess.Version, sess.VersionWhy = meta.version, ""
+				}
 				var u Usage
 				var found codexFound
 				switch u, lim, found = s.agents.codexUsage(path); found {
@@ -999,17 +1008,15 @@ func (s *Sampler) agentName(pid int, p procfs.Proc) string {
 // agentRef is what agentName reads of a process: the agent it runs, and
 // whether it is Codex's app-server daemon.
 func (s *Sampler) agentRef(pid int, p procfs.Proc) agentRef {
-	if s.isAgent(p.Comm) && p.Comm != "codex" {
-		return agentRef{p.Comm, p.Comm, false}
-	}
 	key := procKey{pid, p.StartTime}
 	if c, ok := s.names[key]; ok && c.comm == p.Comm {
 		return c
 	}
 	name, daemon := "", false
-	if argv := s.FS.Argv(pid); s.isAgent(p.Comm) {
+	argv := s.FS.Argv(pid)
+	if s.isAgent(p.Comm) {
 		name = p.Comm
-		if codexDaemon(argv, 0) {
+		if name == "codex" && codexDaemon(argv, 0) {
 			name, daemon = "", true
 		}
 	} else if len(argv) > 0 {
@@ -1037,14 +1044,19 @@ func (s *Sampler) agentRef(pid int, p procfs.Proc) agentRef {
 			name, daemon = "", true
 		}
 	}
-	ref := agentRef{p.Comm, name, daemon}
+	ref := agentRef{comm: p.Comm, name: name, daemon: daemon}
+	if name != "" {
+		exe, _ := s.FS.Exe(pid) // none: the argv alone
+		ref.version, ref.versionWhy = versionOf(name, exe, argv)
+	}
 	s.names[key] = ref
 	return ref
 }
 
 type agentRef struct {
-	comm, name string
-	daemon     bool // Codex's app-server daemon
+	comm, name          string
+	daemon              bool // Codex's app-server daemon
+	version, versionWhy string
 }
 
 // WindowNamed: p's window has a name of its own, not the one tmux gives it

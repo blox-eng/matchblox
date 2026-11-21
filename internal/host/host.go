@@ -31,6 +31,8 @@ const tick = float64(procfs.ClockTicks)
 
 var errPID = errors.New("pid out of range")
 
+var errNoExe = errors.New("this system gives no process path")
+
 // newProcess refuses a pid that does not fit int32, so it cannot wrap around
 // to some other process.
 func newProcess(pid int) (*process.Process, error) {
@@ -117,6 +119,9 @@ func (Host) Cwd(pid int) string {
 	}
 	return ""
 }
+
+// Exe gives no path: the sampler reads an agent's version from its argv.
+func (Host) Exe(int) (string, error) { return "", errNoExe }
 
 func (Host) OpenFiles(pid int) ([]string, bool) {
 	p, err := newProcess(pid)

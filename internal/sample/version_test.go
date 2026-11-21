@@ -3,9 +3,11 @@ package sample
 import (
 	"go/parser"
 	"go/token"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 const noVersion = "the install path names no version"
@@ -69,5 +71,43 @@ func TestAnAgentHasAName(t *testing.T) {
 		if got := AgentLabel(agent); got != want {
 			t.Errorf("AgentLabel(%q) = %q, want %q", agent, got, want)
 		}
+	}
+}
+
+// claudeAt is a sampler over the fixture with one Claude Code, pid 950,
+// whose exe and argv are given.
+func claudeAt(t *testing.T, comm, exe string, argv []string) *Sampler {
+	t.Helper()
+	root := copyFixture(t)
+	addProc(t, root, 950, 1, comm, argv, "%50")
+	addPane(t, root, "%50\tver:1.1\tw\t950\t"+comm+"\t/work")
+	if exe != "" {
+		symlink(t, exe, filepath.Join(root, "proc", "950", "exe"))
+	}
+	return newFixtureSampler(root)
+}
+
+func TestASessionCarriesItsVersion(t *testing.T) {
+	const exe = "/home/u/.local/share/claude/versions/2.3.1"
+	got := sessionOf(t, claudeAt(t, "claude", exe, []string{"claude"}).Sample(), 950)
+	if got.Version != "2.3.1" || got.VersionWhy != "" {
+		t.Errorf("version %q, why %q; want 2.3.1 and no why", got.Version, got.VersionWhy)
+	}
+}
+
+func TestAnUnreadVersionSaysWhy(t *testing.T) {
+	argv := []string{"node", "/usr/lib/node_modules/@anthropic-ai/claude-code/cli.js"}
+	got := sessionOf(t, claudeAt(t, "claude", "/usr/bin/node", argv).Sample(), 950)
+	if got.Version != "" || got.VersionWhy != noVersion {
+		t.Errorf("version %q, why %q; want none and %q", got.Version, got.VersionWhy, noVersion)
+	}
+}
+
+func TestACodexSessionTakesTheRolloutVersion(t *testing.T) {
+	smp, root := daemonSession(t)
+	held := daemonFile(t, filepath.Join(root, "home", ".codex"), "held", "/work/app", daemonStart.Add(time.Minute), 11)
+	symlink(t, held, filepath.Join(root, "proc", "900", "fd", "21"))
+	if got := sessionOf(t, smp.Sample(), 900); got.Version != "0.163.0" || got.VersionWhy != "" {
+		t.Errorf("version %q, why %q; want the rollout's 0.163.0 and no why", got.Version, got.VersionWhy)
 	}
 }

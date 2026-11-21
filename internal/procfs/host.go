@@ -8,6 +8,8 @@ type Host interface {
 	Proc(pid int) (Proc, bool)
 	Environ(pid int, key string) (string, bool)
 	Cwd(pid int) string
+	// Exe is the path of the process's executable.
+	Exe(pid int) (string, error)
 	Cmdline(pid int) string
 	// Argv is the process's arguments, argv[0] first.
 	Argv(pid int) []string

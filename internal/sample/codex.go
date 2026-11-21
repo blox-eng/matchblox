@@ -346,11 +346,12 @@ func (r *agentReader) codexResumed(home, id string, now time.Time) string {
 // rolloutMeta is what a rollout's session_meta, its first line, says: the
 // session's id, its directory, what started it (codex-tui, codex_exec),
 // when it began, and whether it is a subagent's (or a review thread's) of
-// another session.
+// another session, and the version of Codex that wrote it.
 type rolloutMeta struct {
 	id, cwd, originator string
 	began               time.Time
 	subagent            bool
+	version             string
 }
 
 func (r *agentReader) metaOf(path string) rolloutMeta {
@@ -375,12 +376,13 @@ func (r *agentReader) metaOf(path string) rolloutMeta {
 			Timestamp  time.Time       `json:"timestamp"`
 			Source     json.RawMessage `json:"source"` // "cli", or {"subagent": …}
 			Parent     string          `json:"parent_thread_id"`
+			Version    string          `json:"cli_version"`
 		} `json:"payload"`
 	}
 	var m rolloutMeta
 	if json.Unmarshal(line, &meta) == nil && meta.Type == "session_meta" {
 		p := meta.Payload
-		m = rolloutMeta{p.ID, p.Cwd, p.Originator, p.Timestamp, bytes.HasPrefix(bytes.TrimSpace(p.Source), []byte("{")) || p.Parent != ""}
+		m = rolloutMeta{p.ID, p.Cwd, p.Originator, p.Timestamp, bytes.HasPrefix(bytes.TrimSpace(p.Source), []byte("{")) || p.Parent != "", p.Version}
 	}
 	r.rolloutMeta[path] = m
 	return m
