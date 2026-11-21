@@ -6,6 +6,8 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+## [0.55.0] - 2026-11-21
+
 ### Added
 
 - **A match that waits for recover shows.** After a lost tmux server,
@@ -13,9 +15,11 @@ All notable changes to matchblox are in this file. The format follows
   `◌` row. `⏎` reopens it, its menu takes it out, and `↻ N to reopen` in
   the foot reopens them all. A line sent to it waits in its inbox.
 
+## [0.54.0] - 2026-11-21
+
 ### Fixed
 
-- **A reboot no longer breaks up the chains.** A match whose tmux server
+- **A reboot keeps the chains.** A match whose tmux server
   is gone keeps its teams while `matchblox recover` can reopen its
   conversation. Once reopened, it is back in each team, in its new pane.
   It leaves, and its mates hear it, only when the recovery record forgets
@@ -1977,7 +1981,9 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.53.2...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.55.0...HEAD
+[0.55.0]: https://github.com/blox-eng/matchblox/compare/v0.54.0...v0.55.0
+[0.54.0]: https://github.com/blox-eng/matchblox/compare/v0.53.2...v0.54.0
 [0.53.2]: https://github.com/blox-eng/matchblox/compare/v0.53.1...v0.53.2
 [0.53.1]: https://github.com/blox-eng/matchblox/compare/v0.53.0...v0.53.1
 [0.53.0]: https://github.com/blox-eng/matchblox/compare/v0.52.0...v0.53.0
