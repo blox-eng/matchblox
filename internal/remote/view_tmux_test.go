@@ -134,6 +134,10 @@ func TestARespawnEndsTheOldView(t *testing.T) {
 		// list-clients prints "can't find session" before the view's session exists
 		return len(clientsOf(e.sock, g1)) > 0
 	})
+	old := tempFiles(tmp)
+	if len(old) != 1 {
+		t.Fatalf("the first view's temp files = %q, want one", old)
+	}
 	argv2, _ := e.argv(t, "flint-auth")
 	args := append([]string{"respawn-pane", "-k", "-t", view, "--"}, argv2...)
 	mustTmux(t, e.sock, args...)
@@ -145,10 +149,22 @@ func TestARespawnEndsTheOldView(t *testing.T) {
 		t.Fatalf("kindle-web has clients: %q", cs)
 	}
 	// Only the new view's file is left: the old wrapper was killed mid-client.
-	waitFor(t, "the old view's temp file removed", func() bool {
-		files, _ := os.ReadDir(tmp)
-		return len(files) == 1
+	// A count alone passed with the old file still there and the new one not
+	// yet made, and the new wrapper then wrote into the directory as the test's
+	// cleanup removed it (CI on #470, 2026-11-21).
+	waitFor(t, "the old view's temp file removed and the new one made", func() bool {
+		files := tempFiles(tmp)
+		return len(files) == 1 && files[0] != old[0]
 	})
+}
+
+func tempFiles(dir string) []string {
+	entries, _ := os.ReadDir(dir)
+	names := make([]string, 0, len(entries))
+	for _, f := range entries {
+		names = append(names, f.Name())
+	}
+	return names
 }
 
 func TestAViewEndsWithItsAgent(t *testing.T) {
