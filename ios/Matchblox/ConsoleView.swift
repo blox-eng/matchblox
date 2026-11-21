@@ -192,6 +192,10 @@ private struct TerminalRepresentable: UIViewRepresentable {
         terminal.onLink = { [weak terminal] link, spot in
             if let terminal { LinkSheet.present(link, from: terminal, at: spot) }
         }
+        terminal.onSelectedLink = { [weak screen] link in screen?.showLink(link) }
+        screen.onOpenLink = { [weak terminal] link, spot in
+            if let terminal { LinkSheet.present(link, from: terminal, at: spot) }
+        }
         connection.onAgent = { agent in belts.agentChanged(agent) }
         connection.onBoard = { value in belts.boardSaid(value) }
         belts.onAnswer = { [weak connection] in connection?.answerBoard() }
@@ -259,19 +263,19 @@ private final class HeldScreen: UIView {
     /// Shows while the terminal is up from its live bottom; a tap goes back down.
     private let jump = UIButton(type: .system)
     var onJump: @MainActor () -> Void = {}
+    /// Shows while the selection holds a URL; a tap offers it whole, as a tap on a link does.
+    private let openLink = UIButton(type: .system)
+    private var selectedLink: String?
+    var onOpenLink: @MainActor (String, CGRect) -> Void = { _, _ in }
     /// A short word over the terminal that fades: `Copied`.
     private let notice = UILabel()
     private let copiedHaptic = UINotificationFeedbackGenerator()
-    /// The match head a rest, then a move, calls up: above the terminal, under ↓ and the notice.
-    let summoned = SummonedHead()
 
     init(terminal: UIView) {
         self.terminal = terminal
         super.init(frame: .zero)
         clipsToBounds = true
         addSubview(terminal)
-        addSubview(summoned)
-        summoned.place = { [weak self] finger in self?.headCenter(for: finger) ?? finger }
 
         var look = UIButton.Configuration.filled()
         look.title = "↓"
@@ -283,6 +287,16 @@ private final class HeldScreen: UIView {
         jump.isHidden = true
         jump.addAction(UIAction { [weak self] _ in self?.onJump() }, for: .primaryActionTriggered)
         addSubview(jump)
+
+        var linkLook = look
+        linkLook.title = "Open link"
+        openLink.configuration = linkLook
+        openLink.isHidden = true
+        openLink.addAction(UIAction { [weak self] _ in
+            guard let self, let link = self.selectedLink else { return }
+            self.onOpenLink(link, self.openLink.frame)
+        }, for: .primaryActionTriggered)
+        addSubview(openLink)
 
         notice.font = UIFont.monospacedSystemFont(ofSize: 13, weight: .medium)
         notice.textColor = UIColor(Theme.fg)
@@ -298,6 +312,12 @@ private final class HeldScreen: UIView {
 
     func showJump(_ shows: Bool) {
         jump.isHidden = !shows
+    }
+
+    func showLink(_ link: String?) {
+        selectedLink = link
+        openLink.isHidden = link == nil
+        setNeedsLayout()
     }
 
     /// What came of the host's copy: `Copied`, or why it did not.
@@ -316,25 +336,6 @@ private final class HeldScreen: UIView {
             self?.notice.alpha = 0
         })
         UIAccessibility.post(notification: .announcement, argument: word)
-    }
-
-    /// The called-up head sits under the finger, in the safe area, above the keyboard, and
-    /// never over ↓ or the notice, so a tap meant for them cannot send Enter.
-    private func headCenter(for finger: CGPoint) -> CGPoint {
-        var avoid: [CGRect] = []
-        if !jump.isHidden { avoid.append(jump.frame) }
-        if notice.alpha > 0 { avoid.append(notice.frame) }
-        return HeadSummon.center(
-            finger: finger, bounds: bounds.inset(by: safeAreaInsets),
-            keyboardTop: keyboardLayoutGuide.layoutFrame.minY, avoid: avoid)
-    }
-
-    /// A touch anywhere but on the called-up head sends the head away, and reaches what it
-    /// touched.
-    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-        let hit = super.hitTest(point, with: event)
-        if summoned.isShown, hit !== summoned, event?.type == .touches { summoned.go() }
-        return hit
     }
 
     func trayMoved(open: Bool) {
@@ -357,6 +358,12 @@ private final class HeldScreen: UIView {
             width: side,
             height: side
         )
+        openLink.frame = CGRect(
+            x: Self.jumpInset,
+            y: jump.frame.minY,
+            width: openLink.intrinsicContentSize.width,
+            height: side
+        )
         let width = notice.intrinsicContentSize.width + 2 * Self.jumpInset
         notice.frame = CGRect(
             x: ((bounds.width - width) / 2).rounded(),
@@ -374,7 +381,6 @@ private final class Belts {
     let lifted = BeltView()
     let dock = BeltView()
     private weak var terminal: ConsoleTerminalView?
-    private weak var summoned: SummonedHead?
     private var agent: String?
     /// The Mine editor while it shows: never a second one over it.
     private weak var editor: UIViewController?
@@ -392,7 +398,6 @@ private final class Belts {
 
     init(terminal: ConsoleTerminalView, screen: HeldScreen, isDemo: Bool) {
         self.terminal = terminal
-        summoned = screen.summoned
         for belt in [lifted, dock] {
             belt.isDemo = isDemo
             belt.onScreenHold = { [weak screen] holding in screen?.trayMoved(open: holding) }
@@ -414,13 +419,7 @@ private final class Belts {
         terminal.onTyped = { [weak self] in
             self?.lifted.stopHead()
             self?.dock.stopHead()
-            self?.summoned?.driver.stop()
         }
-        terminal.summoned = screen.summoned
-        let head = screen.summoned.driver
-        head.onLines = { [weak terminal] lines in terminal?.head(lines: lines) ?? .nothing }
-        head.onClick = { [weak self] in self?.send(BeltView.enter) }
-        head.say = { [weak screen] word in screen?.say(word) }
         ctrlObserver = NotificationCenter.default.addObserver(forName: Self.ctrlReset, object: terminal, queue: .main) {
             [weak self] _ in MainActor.assumeIsolated { self?.ctrlChanged(false) }
         }
@@ -511,7 +510,6 @@ private final class Belts {
         // A pane scrolled up is in tmux copy mode, which would take the key as its own
         // command: the steps back down leave it first. Esc there only comes back down:
         // the agent would read it as an interrupt.
-        summoned?.driver.stop()
         let wasUp = terminal.isUpInPane
         terminal.jumpToBottom()
         if wasUp, bytes == Self.esc { return }
