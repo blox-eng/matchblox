@@ -1,0 +1,22 @@
+
+ ▐▛███▛█   Claude Code v2.3.1
+▝▜██████▀  Opus 5.5 · Claude Max
+ ▝▝   ▝▝   ~/work
+
+❯ Clean the build directory, then run the tests.
+
+● I'll remove the old build output first.
+
+● Bash(rm -rf build/)
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Bash command
+
+   rm -rf build/
+   Remove the old build output
+
+ Shall Claude run this command?
+ ❯ 1. Go ahead
+   2. Go ahead, and allow rm in this folder
+   3. Not now, and tell Claude what to do instead
+
+ Esc to cancel

@@ -80,7 +80,7 @@ func (s *Service) keys(ctx context.Context, pane string, a proto.Act) proto.Resu
 		return proto.Result{Err: why}
 	}
 	if x.UnknownScreen && answers(a.Text) {
-		return proto.Result{Err: "matchblox cannot read this screen: answer it in its pane"}
+		return proto.Result{Err: unknownScreenRefusal}
 	}
 	if why := s.unseen(pane, x.Name, a, x.Permits || x.Asks || x.Ask != nil); why != "" {
 		return proto.Result{Err: why}

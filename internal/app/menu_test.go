@@ -140,7 +140,28 @@ func TestACheckboxMenuIsAnsweredInItsPane(t *testing.T) {
 // knows: no numbers, and a keys line in other words.
 func unknownWording(t *testing.T) string {
 	t.Helper()
-	b, err := os.ReadFile("../../testdata/menus/unknown-wording.txt")
+	screen := menuFile(t, "unknown-wording.txt")
+	if menu.Read(screen) != nil {
+		t.Fatalf("menu.Read reads %v", menu.Read(screen))
+	}
+	return screen
+}
+
+// unknownNumbered is a Claude Code approval box with numbered choices in
+// words no rule knows: the console's digit reader reads them, the
+// sampler's rule does not.
+func unknownNumbered(t *testing.T) string {
+	t.Helper()
+	screen := menuFile(t, "unknown-numbered.txt")
+	if menu.Read(screen) == nil {
+		t.Fatal("menu.Read reads nothing")
+	}
+	return screen
+}
+
+func menuFile(t *testing.T, name string) string {
+	t.Helper()
+	b, err := os.ReadFile("../../testdata/menus/" + name)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,9 +173,6 @@ func unknownWording(t *testing.T) string {
 // peekDead. edit changes the session first.
 func unknownConsole(t *testing.T, screen string, edit ...func(*sample.Session)) (Model, sample.Session) {
 	t.Helper()
-	if menu.Read(screen) != nil {
-		t.Fatalf("menu.Read reads %v", menu.Read(screen))
-	}
 	if q, ok := said.Menu(screen); ok {
 		t.Fatalf("said.Menu reads %q", q)
 	}
@@ -188,6 +206,17 @@ func noDigits(t *testing.T, m Model, s sample.Session) {
 func TestNoDigitsOnAnUnknownWording(t *testing.T) {
 	m, s := unknownConsole(t, unknownWording(t))
 	noDigits(t, m, s)
+}
+
+// The agent rewords its numbered menu: the console reads the options, but
+// the service marked the screen unknown, so the digits stay out of it and
+// the chat says why.
+func TestNoDigitsOnANumberedUnknownWording(t *testing.T) {
+	m, s := unknownConsole(t, unknownNumbered(t))
+	noDigits(t, m, s)
+	if got := chatLineOf(m, 120); !strings.HasSuffix(strings.TrimRight(got, " "), unknownNote) {
+		t.Fatalf("line %q", got)
+	}
 }
 
 // The agent's reply quotes an old menu with numbers above a live menu

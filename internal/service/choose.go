@@ -79,6 +79,9 @@ func (s *Service) choose(ctx context.Context, pane string, a proto.Act) proto.Re
 	if !sameAgent(x, a) {
 		return proto.Result{Err: "not sent: " + pane + " runs a different agent now"}
 	}
+	if x.UnknownScreen {
+		return proto.Result{Err: unknownScreenRefusal}
+	}
 	screen, read := s.liveScreen(pane)
 	if !read {
 		return proto.Result{Err: "not sent: the pane " + pane + " cannot be read"}

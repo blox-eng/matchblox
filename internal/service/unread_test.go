@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/blox-eng/matchblox/internal/hooks"
+	"github.com/blox-eng/matchblox/internal/menu"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/said"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -155,6 +156,32 @@ func TestChooseRefusesAnUnknownScreen(t *testing.T) {
 	res := s.act(t.Context(), chooseAct("%3", pickOf("1", "Yes", chooseScreen)))
 	if res.Err != "not sent: flint-auth shows no menu — answer it in its pane" || len(*ran) != 0 {
 		t.Fatalf("%+v, ran %q", res, *ran)
+	}
+}
+
+// The agent rewords its numbered menu: menu.Read still reads the options,
+// but no rule does, so no digit goes to the screen the row calls unknown.
+func TestChooseRefusesAnUnknownScreenThatTheConsoleReads(t *testing.T) {
+	b, err := os.ReadFile("../../testdata/menus/unknown-numbered.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := string(b)
+	if menu.Read(screen) == nil {
+		t.Fatal("menu.Read reads nothing")
+	}
+	s := unreadTest(t, hooks.KindPermission)
+	sampleFlint(s, time.Second, flintAt(false))
+	if !sampleFlint(s, 3*time.Second, flintAt(false)) {
+		t.Fatal("no unknown screen")
+	}
+	var ran [][]string
+	s.Actions.Run = func(argv []string) error { ran = append(ran, argv); return nil }
+	s.Capture = func([]string) map[string]string { return map[string]string{"%1": screen} }
+	x := flintAt(false)
+	a := proto.Act{RecID: proto.ChoosePrefix + "%1", Text: pickOf("1", "Go ahead", screen), PID: x.PID, Start: x.Start, Confirm: "y", Console: true}
+	if res := s.act(t.Context(), a); res.Err != "matchblox cannot read this screen: answer it in its pane" || len(ran) != 0 {
+		t.Fatalf("res %+v ran %q", res, ran)
 	}
 }
 

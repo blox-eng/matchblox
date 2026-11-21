@@ -10,6 +10,9 @@ import (
 // its screen is unknown: Claude Code fires the hook before it draws.
 const unreadGrace = 3 * time.Second
 
+// unknownScreenRefusal refuses an answer typed into a screen no rule reads.
+const unknownScreenRefusal = "matchblox cannot read this screen: answer it in its pane"
+
 type unreadWait struct {
 	since   time.Time // the wait's start
 	samples int       // the samples taken since then that read no menu

@@ -77,7 +77,7 @@ When it goes wrong:
 
 ## Calls to check
 
-- The grace time before the note shows. Recommend 3 s, or two samples, whichever is longer — because Claude Code fires the hook before it draws the menu. Cost if wrong: too short gives false alarms; too long lets a builder press a digit on a misread menu first. The digit block holds from the hook's first second either way, so a wrong value costs only the note's timing.
+- The grace time before the note shows. Recommend 3 s, or two samples, whichever is longer — because Claude Code fires the hook before it draws the menu. Cost if wrong: too short gives false alarms; too long lets a builder press a digit on a misread menu first. The digit block holds once the note shows. Within the grace time a digit still reaches a numbered menu that the console reads and no rule does, so a longer grace time leaves that window open longer.
 - Whether the digit block holds during the grace time too. Recommend yes: digits wait until a rule reads the menu — because a digit sent in that time is the same wrong approval. Cost if wrong: a builder who is very fast waits a moment longer.
 - Codex's version. Recommend that it comes from its install path, not `codex --version` — because the anti-goal forbids running a binary that the builder did not start. Cost if wrong: Codex shows `not read` until a later slice.
 
