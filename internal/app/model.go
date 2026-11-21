@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"slices"
@@ -326,6 +327,9 @@ type Model struct {
 	// hiddenHosts are the hosts the builder hid, by name, never the home
 	// host: all hosts leaves them out, and the header counts them (R6).
 	hiddenHosts []string
+	// reopening names the rows the last reopen asked for, by conversation:
+	// the reopened agent may show live before recover answers.
+	reopening   map[string]string
 	st          styles
 	width       int
 	height      int
@@ -1321,6 +1325,9 @@ func (m Model) result(r proto.Result) (Model, tea.Cmd) {
 	if mm, cmd, ok := m.roomResult(r); ok {
 		return mm, cmd
 	}
+	if len(r.Recover) > 0 {
+		return m, m.notice(m.recovered(r.Recover))
+	}
 	if mm, ok := m.sheetResult(r); ok {
 		if r.Err == "" && mm.sheet == nil {
 			toast := mm.say("the order is on")
@@ -1359,6 +1366,40 @@ func (m Model) result(r proto.Result) (Model, tea.Cmd) {
 		return m, said
 	}
 	return m, nil
+}
+
+// recoverID is the service's act that reopens the conversations of the
+// recovery record (service.RecoverID).
+const recoverID = "recover"
+
+// recovered is the notice of a recover act's rows: what recover did with
+// each one, by the name of the list's row that waits with its
+// conversation (recover's own name is the record's tmux session). A row
+// that cannot reopen gives recover's own why, which names the fix.
+func (m Model) recovered(rows []proto.Recovered) string {
+	named := maps.Clone(m.reopening)
+	if named == nil {
+		named = map[string]string{}
+	}
+	_, waits := m.waitingByHost()
+	for _, ws := range waits {
+		for _, w := range ws {
+			named[w.Conversation] = w.Name
+		}
+	}
+	var said []string
+	for _, r := range rows {
+		name := cmp.Or(named[r.Conversation], r.Name)
+		switch r.State {
+		case proto.RecoverReopened:
+			said = append(said, name+" reopened")
+		case proto.RecoverCannot:
+			said = append(said, name+" not reopened: "+r.Why)
+		default:
+			said = append(said, name+" is "+r.State)
+		}
+	}
+	return strings.Join(said, " · ")
 }
 
 // focusWait is how long a focus waits for the phone's tmux client to

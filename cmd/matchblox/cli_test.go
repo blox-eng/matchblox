@@ -1185,3 +1185,32 @@ func TestSendCommandIsUnchanged(t *testing.T) {
 		t.Fatalf("printed %q, err %v, want %q", buf.String(), err, want)
 	}
 }
+
+// TestSendResolvesAWaitingMate: send names a mate that waits for recover by
+// its name and reaches it by its session id. A live session wins the name,
+// and other commands do not see a waiting mate.
+func TestSendResolvesAWaitingMate(t *testing.T) {
+	d := cliDoc()
+	d.Chains = &state.ChainsView{Mates: []state.MateView{
+		{Member: chains.Member{SessionID: "c-3"}, Wait: &state.WaitView{Name: "hearth-api", Conversation: "c-3"}},
+		{Member: chains.Member{SessionID: "c-4"}, Wait: &state.WaitView{Name: "api", Conversation: "c-4"}},
+	}}
+	a, err := handAct(d, "send", []string{"hearth-api", "the fix is on main"}, 0, "", "%3")
+	if err != nil || a.RecID != "message:sid:c-3" || a.Text != "the fix is on main" {
+		t.Fatalf("waiting mate: %+v %v", a, err)
+	}
+	if a, err := handAct(d, "send", []string{"api", "hi"}, 0, "", "%9"); err != nil || a.RecID != "message:%3" {
+		t.Fatalf("live session: %+v %v", a, err)
+	}
+	if _, err := handAct(d, "send", []string{"nope", "hi"}, 0, "", "%3"); err == nil || err.Error() != "no session named nope" {
+		t.Fatalf("nope: %v", err)
+	}
+	if _, err := handAct(d, "hold", []string{"hearth-api"}, 0, "not now", ""); err == nil || err.Error() != "no session named hearth-api" {
+		t.Fatalf("hold: %v", err)
+	}
+	var buf bytes.Buffer
+	note := "hearth-api waits for recover: your line waits in its inbox (1 now)"
+	if err := handOutcome(&buf, "send", "hearth-api", proto.Result{Note: note}, nil); err != nil || buf.String() != note+"\n" {
+		t.Fatalf("printed %q, err %v", buf.String(), err)
+	}
+}

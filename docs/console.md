@@ -66,11 +66,31 @@ step order, each with a link (`├`, the last `└`). The chain sits in the
 group of its most urgent member, and all its members draw under its head
 there. Each group's count counts only the matches in that state.
 
+A member whose tmux server stopped waits for `matchblox recover`. It
+stays in its team, after the live members: `└ ◌ kindle-web    waits for
+recover`, in its own lavender color. The head counts it apart: `step 2
+of 3 · 2 + 1 wait`. A team whose members all wait reads `3 wait` and
+sits last in `IDLE`. A match that waits in two teams is one row, in the
+first team. `↑` `↓` choose a waiting row too. Its second line says when
+its server stopped and what the keys do: `its server stopped 22:14 · ⏎
+reopen · m menu` (a day, `19 Nov`, when it was not today). `⏎` reopens
+that one match, with no confirm, and a notice says the result:
+`kindle-web reopened`, or `kindle-web not reopened: <why>` with the fix.
+A waiting row is no session: `x`, `p`, `r`, `c`, typed text and `⏎` in
+the line show `kindle-web waits for recover · matchblox recover reopens
+it`, and send nothing.
+
 The foot is one line: `+ new · ✧ 2 tips · ! 1 setup`. Each part opens in
 the chat's place: `+ new` opens **New session**, `✧ 2 tips` the tips, `!
 1 setup` the first open setup step, and `! ws-1 not reached` (or `!
 ws-1 blocked`) that host's trouble and its fix. `Esc` gives the place
 back to the chat. A part that has nothing to show takes no room.
+
+While matches wait for recover, the foot adds `↻ 2 to reopen`, one part
+for each host (`↻ 1 to reopen on ws-1` for another host). Each match
+counts once. The part asks for a typed `y` and names the matches:
+`reopen 2 matches: kindle-web, wick-mobile?`. With nothing to reopen, the
+part takes no room.
 
 The match of a row plays where it is. The match of each session that
 asks breathes. A burning match flickers. `--no-motion` shows each end at
@@ -229,6 +249,15 @@ closes. Each line shows only where it applies:
 7. `go in` (also `Ctrl+O`)
 8. `out of login`, only while the list shows that chain: it takes the
    match out of the chain, after a typed `y`.
+
+The menu of a match that waits for recover has its own lines. `m`, a
+right-click or a long-press on its row opens it:
+
+1. `reopen it` (also `⏎`, with no menu)
+2. `copy its name`
+3. `copy its conversation id`
+4. `out of login`, with the room open or closed: it takes the match out
+   of its team, after a typed `y`.
 
 The menu destroys nothing. A kill (`x`), a merge (`p`), a go (`y`), a
 switch of the agent (`A`) and the stoker's stop (`f`) are keys of the
@@ -478,6 +507,17 @@ In the list, a chain is a head row with its members under it (see
 [The list](#the-list)). When the chosen session is in a chain, the links
 of that chain light up. A match in two chains shows the chain that formed
 first. A match is never drawn twice.
+
+A match whose tmux server is gone stays in its teams. It waits there
+until `matchblox recover` reopens it, or until the recovery record
+forgets it after 14 days. The list draws it as a waiting row (see
+[The list](#the-list)). Where the console draws the chat, the chat's
+place of a chosen waiting row says why it waits: `kindle-web  waits for
+recover · in login`, when its tmux server stopped, its saved
+conversation (`claude c-3`), the day the record forgets it, the lines
+that wait for it (`✉ 1 line waits for it`), then `⏎ reopen it` and
+`m out of login`. On a desk the right side is the agent's own pane: the
+row's second line carries these facts.
 
 - When a match joins a chain, a notice says so for 2.5 seconds
   (`docs-bot joined hearth`). A new chain shows `hearth formed: hearth,

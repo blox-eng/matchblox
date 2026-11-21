@@ -16,6 +16,11 @@ import (
 // (works) in one chain, in that team order. edit changes the state first.
 func loginChain(t *testing.T, edit func(*proto.State, map[string]*sample.Session)) Model {
 	t.Helper()
+	return boardModel(t, loginState(edit))
+}
+
+// loginState is the state of loginChain.
+func loginState(edit func(*proto.State, map[string]*sample.Session)) proto.State {
 	ss := map[string]*sample.Session{}
 	var list []sample.Session
 	for _, n := range []string{"kindle-web", "flint-auth", "wick-mobile"} {
@@ -36,6 +41,21 @@ func loginChain(t *testing.T, edit func(*proto.State, map[string]*sample.Session
 	for _, s := range list {
 		st.Chains.Chains[0].Members = append(st.Chains.Chains[0].Members, memberOf(s))
 	}
+	return st
+}
+
+// waitingLogin is loginChain with the named members gone from the host:
+// each waits for recover.
+func waitingLogin(t *testing.T, names ...string) Model {
+	t.Helper()
+	st := loginState(nil)
+	st.Sessions = slices.DeleteFunc(st.Sessions, func(s sample.Session) bool {
+		if !slices.Contains(names, s.Name) {
+			return false
+		}
+		st.Chains.Mates = append(st.Chains.Mates, state.MateView{Member: memberOf(s), Wait: &state.WaitView{Name: s.Name, Agent: "claude"}})
+		return true
+	})
 	return boardModel(t, st)
 }
 

@@ -3,11 +3,13 @@ package app
 import (
 	"cmp"
 	"strconv"
+	"time"
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/sample"
+	"github.com/blox-eng/matchblox/internal/state"
 )
 
 // sideLink is a row's place in a chain: member i of n, lit while the
@@ -103,16 +105,63 @@ func (m Model) sideRight(s sample.Session) string {
 	return m.waitCell(s)
 }
 
-// chainHead is the head row of a chain: "≋ login   step 2 of 3 · 3".
+// chainHead is the head row of a chain: "≋ login   step 2 of 3 · 3". With
+// members that wait for recover it reads "step 2 of 3 · 2 + 1 wait", and
+// "3 wait" when all wait.
 func (m Model) chainHead(u sideUnit, w int, lit bool) string {
 	n, of := u.step()
-	right := "step " + strconv.Itoa(n) + " of " + strconv.Itoa(of) + " · " + strconv.Itoa(len(u.members))
+	count := "step " + strconv.Itoa(n) + " of " + strconv.Itoa(of) + " · " + strconv.Itoa(len(u.members))
+	waits := m.st.wait.Render(strconv.Itoa(len(u.waiting)) + " wait")
+	right := m.st.muted.Render(count)
+	switch {
+	case len(u.members) == 0:
+		right = waits
+	case len(u.waiting) > 0:
+		right = m.st.muted.Render(count+" + ") + waits
+	}
 	name := m.st.text.Bold(true)
 	if lit {
 		name = m.st.accent.Bold(true)
 	}
 	left := " " + name.Render(ansi.Truncate("≋ "+m.chainLabel(u.chain), max(w-lipgloss.Width(right)-2, 1), "…"))
-	return spread(left, m.st.muted.Render(right)+" ", w)
+	return spread(left, right+" ", w)
+}
+
+// waitRow is the row of a chain member that waits for recover: the link,
+// ◌ and its name, and "waits for recover", in the wait color. The chosen
+// row has a second line: when its server stopped, and the keys. On a desk
+// the console draws no chat, so this line carries the facts.
+func (m Model) waitRow(v state.MateView, w int, link sideLink, chosen bool) []string {
+	ink := m.st.faint
+	if link.lit {
+		ink = m.st.accent
+	}
+	mark := " "
+	if chosen {
+		mark = m.st.accent.Render("▌")
+	}
+	first, rest := linkOf(link.i, link.n, chosen)
+	right := m.st.wait.Render("waits for recover") + " "
+	left := mark + ink.Render(first) + " "
+	room := w - lipgloss.Width(left+right) - 1
+	line := spread(left+m.st.wait.Render(ansi.Truncate("◌ "+v.Wait.Name, max(room, 1), "…")), right, w)
+	if !chosen {
+		return []string{line}
+	}
+	at, _ := m.stoppedAt(v.Wait.Since)
+	says := "its server stopped " + at + " · " + m.keys.side.Enter.Help().Key + " reopen · " + m.keys.board.Menu.Help().Key + " menu"
+	pad := " " + ink.Render(rest) + "  "
+	return []string{line, fit(pad+m.st.faint.Render(ansi.Truncate(says, max(w-lipgloss.Width(pad), 0), "…")), w)}
+}
+
+// stoppedAt is t in local time: the clock when t is today, else the day
+// ("30 Sep"). today tells which.
+func (m Model) stoppedAt(t time.Time) (at string, today bool) {
+	t = t.Local()
+	if t.Format(time.DateOnly) == m.now().Local().Format(time.DateOnly) {
+		return t.Format("15:04"), true
+	}
+	return t.Format("2 Jan"), false
 }
 
 // askedOf is what a session asks, whether or not a hold covers it.

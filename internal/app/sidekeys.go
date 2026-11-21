@@ -2,6 +2,7 @@ package app
 
 import (
 	"cmp"
+	"encoding/json"
 	"maps"
 	"slices"
 	"strconv"
@@ -66,7 +67,11 @@ func (m Model) sideKeep() Model {
 	}
 	order := m.sideOrder()
 	at := m.sideAt
-	if at != (paneKey{}) && !slices.ContainsFunc(m.sideSessions(), func(s sample.Session) bool { return paneOf(s) == at }) {
+	gone := !slices.ContainsFunc(m.sideSessions(), func(s sample.Session) bool { return paneOf(s) == at })
+	if at.waits() { // a waiting row is no session: it stays while the list draws it
+		gone = !slices.Contains(order, at)
+	}
+	if at != (paneKey{}) && gone {
 		m.sideAt = m.sideAfter(at, order)
 		if strings.TrimSpace(m.lines[at]) != "" && m.sideAt != (paneKey{}) {
 			m.lineNote = lineNote{m.sideAt, m.sideName + " ended · the text is not sent"}
@@ -237,6 +242,8 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 	case bkey.Matches(k, sk.Enter) && m.footAt > 0:
 		parts := m.footParts()
 		return m.openFoot(parts[min(m.footAt, len(parts))-1].press)
+	case bkey.Matches(k, sk.Enter) && m.chosenSide().waits():
+		cmd = m.reopenChosen()
 	case bkey.Matches(k, sk.Enter) && m.besideMode():
 		return m.showChosen()
 	case bkey.Matches(k, sk.Enter):
@@ -257,6 +264,8 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 		default:
 			cmd = m.listTakes()
 		}
+	case bkey.Matches(k, bk.Menu) && (ok || m.chosenSide().waits()):
+		m = m.openMenuOnChosen()
 	case !ok && bkey.Matches(k, append(m.rowActKeys(), bk.Menu, bk.Copy, mk.Park)...):
 		cmd = m.notice(m.noRowWhy())
 	case bkey.Matches(k, bk.Host):
@@ -271,8 +280,6 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 		return m.chainToggle(s, ok)
 	case bkey.Matches(k, bk.Chain):
 		cmd = m.boardChainOf(s, ok)
-	case bkey.Matches(k, bk.Menu) && ok:
-		m = m.openMenuOnChosen(s)
 	case bkey.Matches(k, bk.Copy):
 		cmd = m.boardCopy(s, ok)
 	case bkey.Matches(k, mk.Park) && ok:
@@ -296,9 +303,31 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 	return m, cmd
 }
 
+// reopenChosen sends recover for the chosen member that waits for it. The
+// owner chose this one match, so it sends with no confirm. It names the
+// conversation, as JSON: the record knows no window name, and a tmux
+// session's name would start each agent of that session.
+func (m *Model) reopenChosen() tea.Cmd {
+	v, c, ok := m.sideWaiting()
+	if !ok {
+		return nil
+	}
+	host := cmp.Or(c.host, m.opt.Host)
+	if why := m.refusal(host); why != "" {
+		return m.notice(why)
+	}
+	text, _ := json.Marshal(proto.Recover{Conversations: []string{v.Wait.Conversation}})
+	m.reopening = map[string]string{v.Wait.Conversation: v.Wait.Name}
+	cmd := m.sendTo(host, proto.Act{RecID: recoverID, Confirm: "y", Text: string(text)})
+	return tea.Batch(cmd, m.notice("reopening "+v.Wait.Name))
+}
+
 // noRowWhy says why the list has no chosen session for a key to act on.
 func (m Model) noRowWhy() string {
+	v, _, waits := m.sideWaiting()
 	switch {
+	case waits:
+		return v.Wait.Name + " waits for recover · matchblox recover reopens it"
 	case m.filter != "":
 		return `nothing matches "` + m.filter + `" · ` + m.keys.main.Back.Help().Key + " clears"
 	case m.boardHost != "":
@@ -482,6 +511,8 @@ func (m Model) linePaste(text string) (tea.Model, tea.Cmd) {
 	m.toLine()
 	s, ok := m.sideChosen()
 	switch {
+	case !ok && m.chosenSide().waits():
+		return m, m.notice(m.noRowWhy())
 	case !ok:
 		return m, m.notice("no session to write to · " + m.keys.main.New.Help().Key + " starts one")
 	case m.lineOff(s) != "":
@@ -624,7 +655,10 @@ func (m Model) heldNote(s sample.Session, another bool) string {
 // input, the message waits for the end of its turn.
 func (m *Model) sendLine() tea.Cmd {
 	s, ok := m.sideChosen()
-	if !ok {
+	switch {
+	case !ok && m.chosenSide().waits(): // ⏎ in the list reopens it, never a typed line
+		return m.notice(m.noRowWhy())
+	case !ok:
 		return m.notice("no session to write to")
 	}
 	k := paneOf(s)

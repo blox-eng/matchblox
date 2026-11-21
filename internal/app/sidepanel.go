@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strconv"
@@ -10,6 +11,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/sample"
+	"github.com/blox-eng/matchblox/internal/state"
 )
 
 // chosenSide is the session the list chooses: sideAt, or the first one
@@ -29,8 +31,19 @@ func (m Model) chosenSide() paneKey {
 // s keep: a chain stays whole while one of its members is kept.
 func (m Model) sideShows(g sideGroup) []sideUnit {
 	return slices.DeleteFunc(slices.Clone(g.units), func(u sideUnit) bool {
+		if len(u.members) == 0 {
+			return !m.waitShows(u)
+		}
 		return !slices.ContainsFunc(u.members, m.inBoard)
 	})
+}
+
+// waitShows tells if the list shows unit u, whose members all wait: no
+// search and no other chain narrows the list.
+func (m Model) waitShows(u sideUnit) bool {
+	r := m.room
+	return m.filter == "" && (r == nil || !r.k.isOne()) &&
+		(m.boardChain == "" || m.chainLabel(u.chain) == m.boardChain || (r != nil && r.k == u.chain))
 }
 
 // The foot's parts, as a tap on each names it.
@@ -39,14 +52,16 @@ const (
 	footTips   = "foot:tips"
 	footSetup  = "foot:setup"
 	footExited = "foot:exited"
-	footHost   = "foot:host:" // then the host's routing key
+	footHost   = "foot:host:"   // then the host's routing key
+	footReopen = "foot:reopen:" // then the host's routing key
 )
 
 // listFootPart is a part of the list's foot: its words, and what it opens.
 type listFootPart struct{ text, press string }
 
 // footParts are the parts the foot shows: a new session, the tips, the
-// setup steps still open, and the exited agents while they are hidden.
+// setup steps still open, the matches that wait for recover on each host,
+// and the exited agents while they are hidden.
 func (m Model) footParts() []listFootPart {
 	parts := []listFootPart{{"+ new", footNew}}
 	if n := len(m.recs); n > 0 {
@@ -66,10 +81,38 @@ func (m Model) footParts() []listFootPart {
 		}
 		parts = append(parts, listFootPart{"! " + m.nameOf(h) + word, footHost + h})
 	}
+	hosts, waits := m.waitingByHost()
+	for _, h := range hosts {
+		text := "↻ " + strconv.Itoa(len(waits[h])) + " to reopen"
+		if h != m.opt.Host {
+			text += " on " + m.nameOf(h)
+		}
+		parts = append(parts, listFootPart{text, footReopen + h})
+	}
 	if n := len(m.snap.Exited); n > 0 && !m.showExited {
 		parts = append(parts, listFootPart{strconv.Itoa(n) + " exited", footExited})
 	}
 	return parts
+}
+
+// waitingByHost are the waits of the members that wait for recover, by
+// host, in the list's order. The list places a member of two teams once,
+// so each counts once.
+func (m Model) waitingByHost() ([]string, map[string][]state.WaitView) {
+	var hosts []string
+	waits := map[string][]state.WaitView{}
+	for _, g := range m.sideGroups() {
+		for _, u := range g.units {
+			for _, v := range u.waiting {
+				h := cmp.Or(u.chain.host, m.opt.Host)
+				if _, ok := waits[h]; !ok {
+					hosts = append(hosts, h)
+				}
+				waits[h] = append(waits[h], *v.Wait)
+			}
+		}
+	}
+	return hosts, waits
 }
 
 // sideFoot is the panel's last line, the foot's parts: the spans are where
@@ -88,7 +131,11 @@ func (m Model) sideFoot(w int) (string, []span) {
 			x += 3
 		}
 		ink, ok := ink[p.press]
-		if !ok { // a host's trouble
+		switch {
+		case ok:
+		case strings.HasPrefix(p.press, footReopen):
+			ink = st.wait
+		default: // a host's trouble
 			ink = st.warn
 		}
 		text := ink.Render(p.text)
@@ -205,17 +252,25 @@ func (m Model) sideList(w, h int) ([]string, []sideHit, []span) {
 			continue
 		}
 		for _, u := range units {
-			lit := slices.ContainsFunc(u.members, func(s sample.Session) bool { return paneOf(s) == chosen })
+			lit := slices.ContainsFunc(u.members, func(s sample.Session) bool { return paneOf(s) == chosen }) ||
+				slices.ContainsFunc(u.waiting, func(v state.MateView) bool { return waitKey(u.chain, v) == chosen })
 			if u.chain != (chainKey{}) {
 				add(m.chainHead(u, w, lit), sideHit{}, false)
 			}
+			n := len(u.members) + len(u.waiting)
 			for i, s := range u.members {
 				link := sideLink{}
 				if u.chain != (chainKey{}) {
-					link = sideLink{i: i, n: len(u.members), lit: lit}
+					link = sideLink{i: i, n: n, lit: lit}
 				}
 				for _, l := range m.sideRow(s, w, paneOf(s) == chosen, link) {
 					add(l, sideHit{k: paneOf(s), state: g.state}, paneOf(s) == chosen)
+				}
+			}
+			for j, v := range u.waiting {
+				k := waitKey(u.chain, v)
+				for _, l := range m.waitRow(v, w, sideLink{i: len(u.members) + j, n: n, lit: lit}, k == chosen) {
+					add(l, sideHit{k: k, state: g.state}, k == chosen)
 				}
 			}
 		}

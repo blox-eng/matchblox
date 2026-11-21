@@ -3,6 +3,7 @@ package service
 import (
 	"fmt"
 	"maps"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -109,6 +110,16 @@ func (s *Service) heard(d delivery) {
 			s.noticed = map[pair][2]string{}
 		}
 		s.noticed[p] = b
+	}
+	s.saveTakenLocked()
+}
+
+// saveTakenLocked saves the chains once a match took its inbox: a restart
+// before the next sample's save would give the match its lines again.
+// Callers hold mu.
+func (s *Service) saveTakenLocked() {
+	if err := s.saveChainsLocked(); err != nil {
+		fmt.Fprintln(os.Stderr, "matchblox: chains.json:", err)
 	}
 }
 

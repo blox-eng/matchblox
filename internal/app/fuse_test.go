@@ -136,7 +136,7 @@ func TestOutOfTeamAsks(t *testing.T) {
 			s = x
 		}
 	}
-	a := m.outOfTeam(s, "hearth")
+	a := m.outOfTeam(s.Name, s.Pane, s.Host, "hearth")
 	if a.label != "take ember-billing out of hearth" || a.rec != "chain:out:"+s.Pane+"@hearth" || !a.destructive {
 		t.Fatalf("%+v", a)
 	}

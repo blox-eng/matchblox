@@ -333,6 +333,9 @@ type Service struct {
 	// session id: the recovery record's, so it outlives a restart and a
 	// reused pane id. Under mu.
 	waitNames map[string]string
+	// waiting is each chain member that waits for recover, by its session
+	// id, as the doc shows it. Under mu.
+	waiting map[string]state.WaitView
 	// found goes to each console when foundGen passes the one it has.
 	found     gitscan.Found
 	foundGen  uint64
@@ -706,7 +709,7 @@ func (s *Service) publish(snap sample.Snapshot, rec func(state.Doc)) {
 	if err := s.pruneChainsLocked(s.now(), prev); err != nil {
 		s.cur.Errors = append(s.cur.Errors, "chains: "+err.Error())
 	}
-	s.cur.Chains = chainsView(s.Chains)
+	s.cur.Chains = chainsView(s.Chains, s.waiting)
 	var live []recovery.Entry
 	var alive map[string]string
 	if s.Recovery != nil {

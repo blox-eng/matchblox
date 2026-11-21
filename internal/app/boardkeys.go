@@ -88,7 +88,7 @@ func askOf(s sample.Session) string {
 // that is gone closes.
 func (m Model) chatMarkOn() Model {
 	m = m.copyCheckOn()
-	if _, ok := m.menuOn(); m.menu != nil && !ok {
+	if m.menuGone() {
 		m.menu = nil
 	}
 	s, ok := m.sideChosen()

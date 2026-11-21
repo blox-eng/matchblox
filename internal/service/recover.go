@@ -74,7 +74,8 @@ func recordable(sessions []sample.Session, ps []sample.Pane) ([]recovery.Entry, 
 }
 
 // recover answers a recover act: each entry of the record (or of the named
-// sessions) and its state. With All or Names it reopens the entries that
+// sessions or conversations) and its state. With All, Names or
+// Conversations it reopens the entries that
 // can, each in a tmux session of its own on the builder's server, and says
 // reopened only for an agent that still runs after recoverSettle. It runs
 // no git command that changes anything, and starts no turn.
@@ -88,7 +89,7 @@ func (s *Service) recover(ctx context.Context, a proto.Act) proto.Result {
 			return refuseText("recover: " + err.Error())
 		}
 	}
-	reopen := r.All || len(r.Names) > 0
+	reopen := r.All || len(r.Names) > 0 || len(r.Conversations) > 0
 	if _, ok := s.sessionAt(a.From); ok && reopen {
 		return proto.Result{Err: notTheBuilders}
 	}
@@ -104,11 +105,20 @@ func (s *Service) recover(ctx context.Context, a proto.Act) proto.Result {
 	if len(unknown) > 0 {
 		return refuseText(fmt.Sprintf("no session %s in the recovery record: matchblox recover lists them", strings.Join(unknown, ", ")))
 	}
+	for _, id := range r.Conversations {
+		if !slices.ContainsFunc(entries, func(e recovery.Entry) bool { return e.ConversationID == id }) {
+			unknown = append(unknown, id)
+		}
+	}
+	if len(unknown) > 0 {
+		return refuseText(fmt.Sprintf("no conversation %s in the recovery record: matchblox recover lists them", strings.Join(unknown, ", ")))
+	}
 	live, taken := s.recoverLive()
 	var rows []proto.Recovered
 	started := map[int]string{} // row → the agent's command, to check it runs
 	for _, e := range entries {
-		if len(r.Names) > 0 && !slices.Contains(r.Names, e.Session) {
+		if len(r.Names) > 0 && !slices.Contains(r.Names, e.Session) ||
+			len(r.Conversations) > 0 && !slices.Contains(r.Conversations, e.ConversationID) {
 			continue
 		}
 		row, argv, cmd := s.recoverRow(e, r.Dirs[e.Session], live, taken)

@@ -258,6 +258,8 @@ func (m Model) showChosen() (tea.Model, tea.Cmd) {
 	switch {
 	case ok && m.chainPlace(s) >= 0:
 		return m, m.selectPane(m.chain.panes[m.chainPlace(s)])
+	case !ok && m.chosenSide().waits():
+		return m, m.notice(m.noRowWhy())
 	case !ok:
 		return m, m.notice("no session to show · " + m.keys.main.New.Help().Key + " starts one")
 	case s.Pane == "":

@@ -1,18 +1,26 @@
 package app
 
 import (
+	"cmp"
 	"slices"
+	"strings"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/chains"
 	"github.com/blox-eng/matchblox/internal/sample"
+	"github.com/blox-eng/matchblox/internal/state"
 )
 
 // sideUnit is one entry of the list: a chain with its members in team
-// order, or one session in no chain.
+// order, or one session in no chain. waiting are the chain's members that
+// wait for recover, in team order. ahead[i] is the count of them before
+// member i in team order (nil when none waits).
 type sideUnit struct {
 	chain   chainKey // zero for a session in no chain
 	members []sample.Session
-	lead    int // the place of the most urgent member
+	lead    int // the place of the most urgent member; -1 when all wait
+	waiting []state.MateView
+	ahead   []int
 }
 
 // sideGroup is the units of one state. count is the sessions of its units
@@ -27,8 +35,52 @@ type sideGroup struct {
 func (u sideUnit) urgent() sample.Session { return u.members[u.lead] }
 
 // step is the place of the most urgent member in team order, and the
-// member count.
-func (u sideUnit) step() (n, of int) { return u.lead + 1, len(u.members) }
+// member count with the waiting members.
+func (u sideUnit) step() (n, of int) {
+	n = u.lead + 1
+	if u.ahead != nil && u.lead >= 0 {
+		n += u.ahead[u.lead]
+	}
+	return n, len(u.members) + len(u.waiting)
+}
+
+// waitsOf are the members of unseen that wait for recover, as the doc of
+// chain k's host tells them.
+func (m Model) waitsOf(k chainKey, unseen []chains.Member) []state.MateView {
+	cv := m.chainsOf(k.host)
+	if cv == nil {
+		return nil
+	}
+	var out []state.MateView
+	for _, mb := range unseen {
+		if i := slices.IndexFunc(cv.Mates, func(v state.MateView) bool { return v.Wait != nil && v.Member.Same(mb) }); i >= 0 {
+			out = append(out, cv.Mates[i])
+		}
+	}
+	return out
+}
+
+// aheadOf is, for each member of ms, the count of waiting members before it
+// in chain k's team order. A match the team does not name comes after all.
+func (m Model) aheadOf(k chainKey, ms []sample.Session, waiting []state.MateView) []int {
+	if len(waiting) == 0 {
+		return nil
+	}
+	ahead := make([]int, len(ms))
+	for j := range ahead {
+		ahead[j] = len(waiting)
+	}
+	c, _ := m.teamOf(k)
+	n := 0
+	for _, mb := range c.Members {
+		if slices.ContainsFunc(waiting, func(v state.MateView) bool { return v.Member.Same(mb) }) {
+			n++
+		} else if j := slices.IndexFunc(ms, func(s sample.Session) bool { return mb.Same(memberOf(s)) }); j >= 0 {
+			ahead[j] = n
+		}
+	}
+	return ahead
+}
 
 // sideTime is what a group orders its sessions by, as the board did: the
 // wait, else the start, and the quiet ones by the last activity.
@@ -96,6 +148,17 @@ func (m Model) buildSideGroups() []sideGroup {
 	var units []sideUnit
 	var states [][]sideState
 	done := map[chainKey]bool{}
+	// A member that waits in two teams is one row, in the first: a second
+	// row with the same key would stop ↓, as for a session in two chains.
+	placed := map[paneKey]bool{}
+	once := func(k chainKey, ws []state.MateView) []state.MateView {
+		return slices.DeleteFunc(ws, func(v state.MateView) bool {
+			key := waitKey(k, v)
+			had := placed[key]
+			placed[key] = true
+			return had
+		})
+	}
 	listed := slices.DeleteFunc(m.sideSessions(), func(s sample.Session) bool { return !m.inView(s.Host) })
 	isListed := map[paneKey]bool{}
 	inChain := map[chainKey][]sample.Session{} // the listed matches of each chain, in list order
@@ -118,7 +181,7 @@ func (m Model) buildSideGroups() []sideGroup {
 		done[k] = true
 		var ms []sample.Session
 		have := map[paneKey]bool{}
-		seen, _ := m.members(k)
+		seen, unseen := m.members(k)
 		for _, o := range seen {
 			// A session in two chains is one row, in the chain it counts
 			// for: a second row would stop ↑↓, which walk by session.
@@ -136,13 +199,38 @@ func (m Model) buildSideGroups() []sideGroup {
 		for i, o := range ms {
 			hs[i] = m.sideStateOf(o)
 		}
-		units = append(units, sideUnit{chain: k, members: ms})
+		ws := once(k, m.waitsOf(k, unseen))
+		units = append(units, sideUnit{chain: k, members: ms, waiting: ws, ahead: m.aheadOf(k, ms, ws)})
 		states = append(states, hs)
+	}
+	for _, host := range m.hosts() { // a chain with no listed match still shows the members that wait
+		cv := m.chainsOf(host)
+		if cv == nil || !m.inView(host) {
+			continue
+		}
+		for _, c := range cv.Chains {
+			k := chainKey{host, c.ID}
+			if done[k] {
+				continue
+			}
+			_, unseen := m.members(k)
+			if ws := once(k, m.waitsOf(k, unseen)); len(ws) > 0 {
+				units = append(units, sideUnit{chain: k, lead: -1, waiting: ws})
+				states = append(states, nil)
+			}
+		}
 	}
 	var out []sideGroup
 	for h := sideNeed; h <= sideHeld; h++ {
 		g := sideGroup{state: h}
 		for i, u := range units {
+			if len(u.members) == 0 { // all its members wait: the team sits in IDLE
+				if h == sideIdle {
+					g.count += len(u.waiting)
+					g.units = append(g.units, u)
+				}
+				continue
+			}
 			lead, n := -1, 0
 			for j, o := range u.members {
 				if states[i][j] != h {
@@ -163,7 +251,12 @@ func (m Model) buildSideGroups() []sideGroup {
 		if len(g.units) == 0 {
 			continue
 		}
-		slices.SortStableFunc(g.units, func(a, b sideUnit) int { return m.sideBefore(h, a.urgent(), b.urgent()) })
+		slices.SortStableFunc(g.units, func(a, b sideUnit) int {
+			if a.lead < 0 || b.lead < 0 { // a team whose members all wait goes last
+				return cmp.Compare(b.lead, a.lead)
+			}
+			return m.sideBefore(h, a.urgent(), b.urgent())
+		})
 		out = append(out, g)
 	}
 	return out
@@ -203,9 +296,41 @@ func (m Model) buildSidePanes(folded bool) []paneKey {
 					out = append(out, paneOf(s))
 				}
 			}
+			for _, v := range u.waiting {
+				out = append(out, waitKey(u.chain, v))
+			}
 		}
 	}
 	return out
+}
+
+// waitKey is the list's key of v, a member of chain k that waits for
+// recover. Its pane starts with "wait:", which no pane key has: no live
+// row and no act takes it for a session.
+func waitKey(k chainKey, v state.MateView) paneKey {
+	return paneKey{k.host, "wait:" + v.Member.SessionID}
+}
+
+// waits tells if k is the key of a member that waits for recover.
+func (k paneKey) waits() bool { return strings.HasPrefix(k.pane, "wait:") }
+
+// sideWaiting is the member that waits for recover whose row the list
+// chooses, and its chain. false: the list chooses no such row.
+func (m Model) sideWaiting() (state.MateView, chainKey, bool) {
+	k := m.chosenSide()
+	if !k.waits() {
+		return state.MateView{}, chainKey{}, false
+	}
+	for _, g := range m.sideGroups() {
+		for _, u := range g.units {
+			for _, v := range u.waiting {
+				if waitKey(u.chain, v) == k {
+					return v, u.chain, true
+				}
+			}
+		}
+	}
+	return state.MateView{}, chainKey{}, false
 }
 
 // inOtherChain is whether o counts for a chain other than k.
