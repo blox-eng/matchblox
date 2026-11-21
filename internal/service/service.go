@@ -329,6 +329,10 @@ type Service struct {
 	// mateNames is the last name of the chained match in each live pane,
 	// for the news that it left once its session is gone. Under mu.
 	mateNames map[string]string
+	// waitNames is the name of each match that waits for recover, by its
+	// session id: the recovery record's, so it outlives a restart and a
+	// reused pane id. Under mu.
+	waitNames map[string]string
 	// found goes to each console when foundGen passes the one it has.
 	found     gitscan.Found
 	foundGen  uint64

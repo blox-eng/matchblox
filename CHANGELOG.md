@@ -6,6 +6,14 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **A reboot no longer breaks up the chains.** A match whose tmux server
+  is gone keeps its teams while `matchblox recover` can reopen its
+  conversation. Once reopened, it is back in each team, in its new pane.
+  It leaves, and its mates hear it, only when the recovery record forgets
+  it.
+
 ## [0.53.2] - 2026-11-21
 
 ### Fixed
