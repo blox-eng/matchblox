@@ -10,7 +10,7 @@ All notable changes to matchblox are in this file. The format follows
 
 ### Fixed
 
-- **Cursor gets 30 s to end after its pane closes.** The redraw guard
+- **Cursor gets 30 s to save on close.** The redraw guard
   ended the agent 3 s after the hangup, so a longer save was lost. Now
   it takes the agent's terminal away at 3 s and ends the agent at 30 s
   (#404).
