@@ -375,6 +375,7 @@ func (m Model) tookCopy(text, from string) (Model, tea.Cmd) {
 	if m.opt.Clip != nil {
 		return m, nil
 	}
+	text = wholeURL(text)
 	what := characters(utf8.RuneCountInString(text))
 	if from != "" {
 		what += " from " + from
@@ -408,6 +409,24 @@ func (m Model) tookCopy(text, from string) (Model, tea.Cmd) {
 	}
 	return m, m.notice(said)
 }
+
+// wholeURL is a copy of one URL that an agent drew over several lines,
+// each after a line break and an indent, as that URL on one line: tmux
+// joins only the lines the terminal wrapped. Any other copy stays as it is.
+func wholeURL(text string) string {
+	lines := strings.Fields(text)
+	if len(lines) == 0 || len(lines) != len(strings.Split(strings.TrimSpace(text), "\n")) || !isURL(lines[0]) {
+		return text
+	}
+	for _, l := range lines[1:] {
+		if isURL(l) {
+			return text
+		}
+	}
+	return strings.Join(lines, "")
+}
+
+func isURL(s string) bool { return strings.HasPrefix(s, "https://") || strings.HasPrefix(s, "http://") }
 
 // besideShowsHost: the agent pane beside the list shows a session of host,
 // alone or in a chain view.
