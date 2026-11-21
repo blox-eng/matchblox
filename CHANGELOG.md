@@ -12,7 +12,11 @@ All notable changes to matchblox are in this file. The format follows
   before a view beside the list, says where it goes and the way back. It
   no longer prints the ssh line with every key the jump binds.
 
-- **Cursor gets 30 s to end after its pane closes.** The redraw guard
+## [0.53.1] - 2026-11-20
+
+### Fixed
+
+- **Cursor gets 30 s to save on close.** The redraw guard
   ended the agent 3 s after the hangup, so a longer save was lost. Now
   it takes the agent's terminal away at 3 s and ends the agent at 30 s
   (#404).
@@ -1956,7 +1960,8 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.53.0...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.53.1...HEAD
+[0.53.1]: https://github.com/blox-eng/matchblox/compare/v0.53.0...v0.53.1
 [0.53.0]: https://github.com/blox-eng/matchblox/compare/v0.52.0...v0.53.0
 [0.52.0]: https://github.com/blox-eng/matchblox/compare/v0.51.1...v0.52.0
 [0.51.1]: https://github.com/blox-eng/matchblox/compare/v0.51.0...v0.51.1
