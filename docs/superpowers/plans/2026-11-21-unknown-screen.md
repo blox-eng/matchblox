@@ -95,10 +95,10 @@ Next: builder:build
 - **Files:** `internal/app/sessions.go`, `internal/app/chat.go`, their tests.
 - **Test first:**
   - `TestTheRowSaysUnknownScreen`: a session with `UnknownScreen` and an ask → the state word is `unknown screen`, in the warn tone.
-  - `TestTheChatNamesTheVersionAndTheFix`: the chat of that session shows `unknown screen · Claude Code 2.3.1 — answer it in its pane: ⏎ opens it`.
-  - `TestTheChatSaysVersionNotRead`: `Version == ""` → `unknown screen · Claude Code, version not read — answer it in its pane: ⏎ opens it`.
+  - `TestTheChatNamesTheVersionAndTheFix`: the chat of that session shows `unknown screen · Claude Code 2.3.1 — answer it in its pane: ctrl+o opens it`.
+  - `TestTheChatSaysVersionNotRead`: `Version == ""` → `unknown screen · Claude Code, version not read — answer it in its pane: ctrl+o opens it`.
   - `TestTheNoteGoesWithTheFlag`: the same session with `UnknownScreen == false` shows its question as today.
-  - Phone width: the chat line at 44 columns wraps and keeps `⏎ opens it` whole.
+  - Phone width: the chat line at 44 columns wraps and keeps `ctrl+o opens it` whole.
 - **Run:** `go test ./internal/app/ -run 'UnknownScreen|VersionAndTheFix|VersionNotRead|GoesWithTheFlag'` → fails. After: passes.
 - **Do:** in `stateWord` (sessions.go:~118), when `asks && s.UnknownScreen`, return `unknown screen` in `st.warn`. In chat.go, where the ask line is drawn, draw the note instead when `UnknownScreen`. Use `sample.AgentLabel`.
 - **Done when:** the five tests pass.
@@ -163,3 +163,4 @@ Next: builder:build
 
 - Task 1: `Exe` is a method on `procfs.FS` (`fs.Exe(pid)`), as every reader in the package is; it returns the error.
 - Task 2: on macOS and iOS `Exe` returns an error and the version comes from argv alone; the why stays "the install path names no version", not a macOS wording — because a why for each system needs one more branch and test for no change in what the builder does.
+- Task 5: the note names ctrl+o, not ⏎. In the chat ⏎ sends the line; the jump key (`keys.main.Jump`, internal/app/keys.go:95) opens the pane, and the chat already says so for waits digits cannot answer (`inPane()`, internal/app/boardkeys.go:73). The note builds the key from the binding, as `inPane()` does — because "⏎ opens it" would be false. The spec's experience lines 25-26 carry the same fix. Decided by: the agent, as a fact correction; no scope change.

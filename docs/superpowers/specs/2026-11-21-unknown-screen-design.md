@@ -22,8 +22,8 @@ Evidence: issue #199. `internal/sample/sampler.go` `readMenus` reads a hooked se
 Happy path:
 
 1. A session waits. Its hook says "permission", and the console reads the menu or the prompt on its screen. Nothing changes from today.
-2. A session waits, the hook says so, and no screen rule reads a menu or a prompt on its screen for a short time. The row and the chat say `unknown screen · Claude Code 2.3.1`. The chat adds the fix: `answer it in its pane: ⏎ opens it`.
-3. The console offers no digits for that session, and a digit sends nothing to it. ⏎ opens the agent's pane, as it does today.
+2. A session waits, the hook says so, and no screen rule reads a menu or a prompt on its screen for a short time. The row and the chat say `unknown screen · Claude Code 2.3.1`. The chat adds the fix: `answer it in its pane: ctrl+o opens it` (the key that goes into a pane; the chat names whatever it is bound to).
+3. The console offers no digits for that session, and a digit sends nothing to it. ctrl+o opens the agent's pane, as it does today.
 4. When the screen reads again, or the session stops waiting, the note goes away.
 5. `matchblox agents` lists each agent on this host: its name, the version seen, the number of its sessions, and how many show `unknown screen` now.
    ```
