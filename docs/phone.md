@@ -142,7 +142,8 @@ terminal.`
 - **Links:** tap a link in the terminal. The phone shows the link with
   `Open in Safari`, `Copy link` and `Cancel`. Only an http or https link
   opens; any other link can only be copied. A tap off a link clicks as
-  before.
+  before. An agent draws a long link over several lines: a tap on any of
+  them gives the whole link.
 - A swipe on a host in the list removes the host and its key from the
   device. It does not remove the key on the host. Run
   `matchblox devices rm <name>` on the host for that.

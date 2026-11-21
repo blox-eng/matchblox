@@ -60,4 +60,36 @@ final class TerminalLinkTests: XCTestCase {
         XCTAssertFalse(TerminalLink.opens("javascript:alert(1)"))
         XCTAssertFalse(TerminalLink.opens("not a link"))
     }
+
+    /// An agent draws a long URL over several rows, each after a line break and an indent.
+    private let wrapped = [
+        "   https://accounts.kindle-web.example/auth?redirect_uri=https%3A%2F",
+        "     %2Fsdk.kindle-web.example%2Fcode&scope=openid+https%3A%2F%2Fwww",
+        "     .kindle-web.example%2Fauth&state=Bkxx",
+        "",
+        "  Then paste the code here.",
+    ].map { Array($0.padding(toLength: 70, withPad: " ", startingAt: 0)) }
+    private let whole = "https://accounts.kindle-web.example/auth?redirect_uri=https%3A%2F%2Fsdk.kindle-web.example%2Fcode&scope=openid+https%3A%2F%2Fwww.kindle-web.example%2Fauth&state=Bkxx"
+
+    func testATapOnAnyRowOfAWrappedURLGivesItWhole() {
+        XCTAssertEqual(TerminalLink.url(in: wrapped, row: 0, col: 5), whole)
+        XCTAssertEqual(TerminalLink.url(in: wrapped, row: 1, col: 10), whole)
+        XCTAssertEqual(TerminalLink.url(in: wrapped, row: 2, col: 8), whole)
+        XCTAssertNil(TerminalLink.url(in: wrapped, row: 1, col: 2), "the indent is no part of it")
+        XCTAssertNil(TerminalLink.url(in: wrapped, row: 4, col: 4))
+    }
+
+    func testAURLThatEndsShortOfTheEdgeEndsThere() {
+        let rows = ["see https://kindle-web.example/a", "  next"].map { Array($0.padding(toLength: 70, withPad: " ", startingAt: 0)) }
+        XCTAssertEqual(TerminalLink.url(in: rows, row: 0, col: 10), "https://kindle-web.example/a")
+        XCTAssertNil(TerminalLink.url(in: rows, row: 1, col: 3))
+    }
+
+    func testAWordAfterTheIndentGoesOnOnlyAlone() {
+        let rows = ["  https://kindle-web.example/aaaa", "  bbbb and more"].map { Array($0) }
+        XCTAssertEqual(TerminalLink.url(in: rows, row: 0, col: 5), "https://kindle-web.example/aaaa")
+        let next = ["  https://kindle-web.example/aaaa", "  https://kindle-web.example/b"].map { Array($0) }
+        XCTAssertEqual(TerminalLink.url(in: next, row: 0, col: 5), "https://kindle-web.example/aaaa")
+        XCTAssertEqual(TerminalLink.url(in: next, row: 1, col: 5), "https://kindle-web.example/b")
+    }
 }

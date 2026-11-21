@@ -374,8 +374,8 @@ final class ConsoleTerminalView: TerminalView {
         if let marked = terminal.link(at: .screen(Position(col: spot.col, row: spot.row)), mode: .explicitOnly) {
             return marked
         }
-        let cells = (0..<terminal.cols).map { terminal.getCharacter(col: $0, row: spot.row) ?? " " }
-        return TerminalLink.url(in: cells, at: spot.col)
+        let rows = (0..<terminal.rows).map { row in (0..<terminal.cols).map { terminal.getCharacter(col: $0, row: row) ?? " " } }
+        return TerminalLink.url(in: rows, row: spot.row, col: spot.col)
     }
 
     @objc private func goHome() {

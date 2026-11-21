@@ -16,6 +16,10 @@ All notable changes to matchblox are in this file. The format follows
   on the terminal opens the iPhone's own selection and Copy again. The
   match head is now on the belt only: a rest, then a move, on the
   terminal no longer calls it up.
+- **A tap opens a wrapped link whole.** An agent draws a long URL
+  over several lines, each with a line break and an indent. On the phone,
+  a tap on any of those lines now offers the whole URL to open in Safari
+  or copy. Before, it offered the first line only, or nothing.
 
 ## [0.55.0] - 2026-11-21
 
