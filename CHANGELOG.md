@@ -6,6 +6,13 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **The console says when it cannot read.** A session that waits for a
+  permission on a screen matchblox cannot read shows `unknown screen` and
+  the agent's version. Digits send nothing to it; `ctrl+o` opens its pane.
+  `matchblox agents` lists each agent, its version and its unknown screens.
+
 ## [0.55.0] - 2026-11-21
 
 ### Added

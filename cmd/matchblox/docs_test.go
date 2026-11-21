@@ -32,6 +32,7 @@ var commandFlags = map[string][]string{
 	"sessions": {"json"},
 	"ships":    {"json"},
 	"usage":    {"json"},
+	"agents":   {"json"},
 	"send":     {"pick"},
 	"compact":  {},
 	"hold":     {"why"},

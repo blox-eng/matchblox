@@ -61,6 +61,8 @@ func cliRead(cmd string, w io.Writer, path string, asJSON bool) error {
 		return writeSessions(w, doc, asJSON)
 	case "ships":
 		return writeShips(w, doc, asJSON)
+	case "agents":
+		return writeAgents(w, doc, asJSON)
 	}
 	return writeUsage(w, doc, asJSON)
 }

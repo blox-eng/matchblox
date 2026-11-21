@@ -491,6 +491,33 @@ default, 0 for all); `--json` prints `name`, `pane`, `target`, `said`,
 `asks` (the first line of the question), `questions` (each with its
 `options`) and `approval`.
 
+## Agents and their versions
+
+`matchblox agents` lists each agent on this host. A row is one agent at one
+version: its name, the version, the number of its sessions, and how many of
+them show `unknown screen` now.
+
+```
+AGENT        VERSION   SESSIONS  UNKNOWN SCREEN
+Claude Code  2.3.1     4         1
+Cursor       2025.11   1         0
+Codex        0.9.0     1         no hooks: screen only
+```
+
+- Two versions of one agent are two rows. matchblox never guesses a version.
+- `not read` means matchblox cannot read the version. The reason is under
+  the table, as `Claude Code: the install path names no version`.
+- Codex and OpenCode have no hooks. Their sessions never show
+  `unknown screen`, so the last column says `no hooks: screen only`.
+- An installed agent with no session shows a dash as its version, and 0.
+- When a count is above zero, the last line says what to do:
+  `a screen matchblox cannot read: update matchblox, or report it with this table`.
+
+The output has no session names, folders, host names or user names. You can
+paste it in a report. `matchblox agents --json` prints each row with
+`agent`, `version`, `why`, `sessions` and `unknown`. It needs
+`matchblox serve` running (or a console).
+
 ## Chain matches
 
 A chain is a team of matches on one host that all hear each other, in one
