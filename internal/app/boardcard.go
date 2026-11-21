@@ -128,15 +128,17 @@ func (m Model) oneChoice(s sample.Session) (q said.Question, ok bool) {
 // is the one the agent draws on the chat's screen while s needs you, with
 // its options' whole texts by number, and a choose: act answers it. None
 // for a menu of checkboxes: a digit only ticks a box there, and Submit
-// has no number. None while the service reads no menu on a hooked
-// permission wait, from the hook's first second: the console's reader may
-// still find numbers there, but no rule says what they answer.
+// has no number. None on a hooked permission wait that no sample read
+// since the hook (MenuUnread) while no rule reads the screen shown here:
+// the console's reader may still find numbers there, but no rule says
+// what they answer. A rule's read of this screen goes before the next
+// sample.
 func (m Model) digitMenu(s sample.Session) (q said.Question, texts map[int]string, ok bool) {
 	if q, one := m.oneChoice(s); one {
 		return q, nil, true
 	}
 	texts = m.screenMenu(s)
-	if texts == nil || !m.asksNow(s) || s.MenuUnread || s.UnknownScreen {
+	if texts == nil || !m.asksNow(s) || s.UnknownScreen || s.MenuUnread && !m.ruleReads() {
 		return q, nil, false
 	}
 	for n := 1; n <= len(texts); n++ {
@@ -146,6 +148,12 @@ func (m Model) digitMenu(s sample.Session) (q said.Question, texts map[int]strin
 		q.Options = append(q.Options, said.Option{Label: texts[n]})
 	}
 	return q, texts, true
+}
+
+// ruleReads: a rule reads a menu on the chat's screen.
+func (m Model) ruleReads() bool {
+	_, ok := said.Menu(m.screen.Text)
+	return ok
 }
 
 // checkbox starts an option of a menu that picks many.

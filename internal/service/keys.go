@@ -82,6 +82,9 @@ func (s *Service) keys(ctx context.Context, pane string, a proto.Act) proto.Resu
 	if x.UnknownScreen && answers(a.Text) {
 		return proto.Result{Err: unknownScreenRefusal}
 	}
+	if x.MenuUnread && answers(a.Text) {
+		return proto.Result{Err: menuUnreadRefusal}
+	}
 	if why := s.unseen(pane, x.Name, a, x.Permits || x.Asks || x.Ask != nil); why != "" {
 		return proto.Result{Err: why}
 	}

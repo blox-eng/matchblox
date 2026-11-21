@@ -27,7 +27,8 @@ type unreadWait struct {
 // markUnread marks the sessions whose hook waits for a permission while no
 // rule reads a menu on their screen: MenuUnread at once, UnknownScreen
 // after the grace time and two samples. now is the sample's time: a hook
-// with no new sample counts no sample. Hold s.mu.
+// with no new sample counts no sample, and a sample from before the wait
+// read the menu before it, not this one. Hold s.mu.
 func (s *Service) markUnread(now time.Time) {
 	waits := map[string]queue.Item{}
 	for _, it := range s.cur.Queue {
@@ -40,7 +41,7 @@ func (s *Service) markUnread(now time.Time) {
 	for i, sess := range s.cur.Sessions {
 		it, ok := waits[sess.Pane]
 		unread, unknown := false, false
-		if ok && sess.Pane != "" && !sess.Permits && sess.Ask == nil {
+		if ok && sess.Pane != "" && !(sess.Permits && now.After(it.Since)) && sess.Ask == nil {
 			unread = true
 			w, had := s.unread[sess.Pane]
 			if !had {
@@ -61,4 +62,17 @@ func (s *Service) markUnread(now time.Time) {
 		s.cur.Sessions[i].MenuUnread, s.cur.Sessions[i].UnknownScreen = unread, unknown
 	}
 	s.unread = next
+}
+
+// hookedPermission: pane's hook waits for a permission, the wait
+// markUnread watches.
+func (s *Service) hookedPermission(pane string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, it := range s.cur.Queue {
+		if it.Pane == pane && it.State == queue.StatePermission && s.queue.Waits(it.SessionID) {
+			return true
+		}
+	}
+	return false
 }

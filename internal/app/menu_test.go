@@ -230,19 +230,46 @@ func TestNoDigitsBeforeARuleReadsTheMenu(t *testing.T) {
 	}
 }
 
-// A permission wait whose menu a rule reads takes digits at once.
-func TestDigitsAtOnceOnAMenuARuleReads(t *testing.T) {
-	screen := menuFile(t, "../demo/panes/5.txt")
-	if _, ok := said.Menu(screen); !ok {
+// readMenu is the demo's Claude Code approval box, which said.Menu reads.
+func readMenu(t *testing.T) string {
+	t.Helper()
+	b, err := os.ReadFile("../../testdata/demo/panes/5.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := said.Menu(string(b)); !ok {
 		t.Fatal("no rule reads the demo's menu")
 	}
+	return string(b)
+}
+
+// readConsole is kindle-web at a permission wait, chosen, screen on the
+// chat for peekDead. edit changes the session first.
+func readConsole(t *testing.T, screen string, edit func(*sample.Session)) (Model, sample.Session) {
+	t.Helper()
 	s := boardMatch("kindle-web", time.Hour)
-	s.Agent, s.Permits = "claude", true
+	s.Agent = "claude"
+	edit(&s)
 	st := boardState(s)
 	st.Queue = []queue.Item{waitFor(s, queue.StatePermission, time.Second)}
 	m, clock := sideConsole(t, st)
 	m = showScreen(t, m, clock, screen)
 	s, _ = m.sideChosen()
+	return m, s
+}
+
+// A permission wait whose menu a sample read takes digits.
+func TestDigitsOnAMenuASampleRead(t *testing.T) {
+	m, s := readConsole(t, readMenu(t), func(s *sample.Session) { s.Permits = true })
+	if _, texts, ok := m.digitMenu(s); !ok || texts[1] != "Yes" {
+		t.Fatalf("digits %v, %v", texts, ok)
+	}
+}
+
+// The service still says no sample read the menu since the hook, but the
+// screen the console shows reads: its digits go before the next sample.
+func TestAReadMenuTakesADigitBeforeTheNextSampleOnTheConsole(t *testing.T) {
+	m, s := readConsole(t, readMenu(t), func(s *sample.Session) { s.MenuUnread = true })
 	if _, texts, ok := m.digitMenu(s); !ok || texts[1] != "Yes" {
 		t.Fatalf("digits %v, %v", texts, ok)
 	}

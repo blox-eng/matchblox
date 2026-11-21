@@ -10,6 +10,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/menu"
 	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/proto"
+	"github.com/blox-eng/matchblox/internal/said"
 )
 
 // chooseSettle is how long a pick holds the pane after its digit, while
@@ -53,7 +54,8 @@ const badPick = "not sent: a pick is a number from 1 to 9, its option's text and
 // the screen again. The number goes only while option n says exactly the
 // text the console showed, the menu and the lines above it (its question,
 // the command it asks about) sign as the console's screen did, and the
-// same agent runs. Else the owner looks again.
+// same agent runs. Else the owner looks again. At a hooked permission
+// wait, a rule must read the menu on that screen too.
 func (s *Service) choose(ctx context.Context, pane string, a proto.Act) proto.Result {
 	if !s.aConsole(a.Console, a) {
 		return proto.Result{Err: "not sent: only the console picks from a menu"}
@@ -82,12 +84,12 @@ func (s *Service) choose(ctx context.Context, pane string, a proto.Act) proto.Re
 	if x.UnknownScreen {
 		return proto.Result{Err: unknownScreenRefusal}
 	}
-	if x.MenuUnread {
-		return proto.Result{Err: menuUnreadRefusal}
-	}
 	screen, read := s.liveScreen(pane)
 	if !read {
 		return proto.Result{Err: "not sent: the pane " + pane + " cannot be read"}
+	}
+	if _, ok := said.Menu(screen); !ok && x.Ask == nil && s.hookedPermission(pane) {
+		return proto.Result{Err: menuUnreadRefusal} // the screen now decides, not the last sample
 	}
 	options := menu.Read(screen)
 	if options == nil {

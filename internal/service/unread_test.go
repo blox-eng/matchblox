@@ -162,55 +162,31 @@ func TestChooseRefusesAnUnknownScreen(t *testing.T) {
 	}
 }
 
-// The agent rewords its numbered menu: menu.Read still reads the options,
-// but no rule does, so no digit goes to the screen the row calls unknown.
-func TestChooseRefusesAnUnknownScreenThatTheConsoleReads(t *testing.T) {
+// numberedScreen is a Claude Code approval box with numbered choices in
+// words no rule knows: menu.Read reads them, said.Menu does not.
+func numberedScreen(t *testing.T) string {
+	t.Helper()
 	b, err := os.ReadFile("../../testdata/menus/unknown-numbered.txt")
 	if err != nil {
 		t.Fatal(err)
 	}
-	screen := string(b)
-	if menu.Read(screen) == nil {
+	if menu.Read(string(b)) == nil {
 		t.Fatal("menu.Read reads nothing")
 	}
-	s := unreadTest(t, hooks.KindPermission)
-	sampleFlint(s, time.Second, flintAt(false))
-	if !sampleFlint(s, 3*time.Second, flintAt(false)) {
-		t.Fatal("no unknown screen")
-	}
-	var ran [][]string
-	s.Actions.Run = func(argv []string) error { ran = append(ran, argv); return nil }
-	s.Capture = func([]string) map[string]string { return map[string]string{"%1": screen} }
-	x := flintAt(false)
-	a := proto.Act{RecID: proto.ChoosePrefix + "%1", Text: pickOf("1", "Go ahead", screen), PID: x.PID, Start: x.Start, Confirm: "y", Console: true}
-	if res := s.act(t.Context(), a); res.Err != "matchblox cannot read this screen: answer it in its pane" || len(ran) != 0 {
-		t.Fatalf("res %+v ran %q", res, ran)
-	}
+	return string(b)
 }
 
-// Claude Code reports busy while its confirmation menu waits: a busy
-// session on a screen no rule reads is still an unknown screen, and no
-// digit goes to it.
-func TestABusyMenuNoRuleReadsIsAnUnknownScreen(t *testing.T) {
-	b, err := os.ReadFile("../../testdata/menus/unknown-numbered.txt")
+// readScreen is the demo's Claude Code approval box, which said.Menu reads.
+func readScreen(t *testing.T) string {
+	t.Helper()
+	b, err := os.ReadFile("../../testdata/demo/panes/5.txt")
 	if err != nil {
 		t.Fatal(err)
 	}
-	screen := string(b)
-	s := unreadTest(t, hooks.KindPermission)
-	busy := flintAt(false)
-	busy.Busy, busy.Status = true, "busy"
-	sampleFlint(s, time.Second, busy)
-	if !sampleFlint(s, 3*time.Second, busy) {
-		t.Fatal("no unknown screen on a busy session at a menu no rule reads")
+	if _, ok := said.Menu(string(b)); !ok {
+		t.Fatal("no rule reads the demo's menu")
 	}
-	var ran [][]string
-	s.Actions.Run = func(argv []string) error { ran = append(ran, argv); return nil }
-	s.Capture = func([]string) map[string]string { return map[string]string{"%1": screen} }
-	a := proto.Act{RecID: proto.ChoosePrefix + "%1", Text: pickOf("1", "Go ahead", screen), PID: busy.PID, Start: busy.Start, Confirm: "y", Console: true}
-	if res := s.act(t.Context(), a); res.Err != unknownScreenRefusal || len(ran) != 0 {
-		t.Fatalf("res %+v ran %q", res, ran)
-	}
+	return string(b)
 }
 
 // chooseOn is a choose: act from the console for option 1 of screen, to
@@ -225,36 +201,76 @@ func chooseOn(t *testing.T, s *Service, screen, text string) (proto.Result, [][]
 	return s.act(t.Context(), a), ran
 }
 
-// Within the grace time the row does not say unknown screen yet, but no
-// rule reads the menu: the digit waits, from the hook's first second.
-func TestNoDigitBeforeARuleReadsTheMenu(t *testing.T) {
-	b, err := os.ReadFile("../../testdata/menus/unknown-numbered.txt")
-	if err != nil {
-		t.Fatal(err)
-	}
+// The agent rewords its numbered menu: menu.Read still reads the options,
+// but no rule does, so no digit goes to the screen the row calls unknown.
+func TestChooseRefusesAnUnknownScreenThatTheConsoleReads(t *testing.T) {
 	s := unreadTest(t, hooks.KindPermission)
-	if sampleFlint(s, time.Second, flintAt(false)) {
-		t.Fatal("unknown screen within the grace time")
+	sampleFlint(s, time.Second, flintAt(false))
+	if !sampleFlint(s, 3*time.Second, flintAt(false)) {
+		t.Fatal("no unknown screen")
 	}
-	res, ran := chooseOn(t, s, string(b), "Go ahead")
-	if res.Err != menuUnreadRefusal || len(ran) != 0 {
+	if res, ran := chooseOn(t, s, numberedScreen(t), "Go ahead"); res.Err != unknownScreenRefusal || len(ran) != 0 {
 		t.Fatalf("res %+v ran %q", res, ran)
 	}
 }
 
-// A menu the rule reads takes its digit at once: the gate is no wait.
-func TestADigitGoesAtOnceToAMenuARuleReads(t *testing.T) {
-	b, err := os.ReadFile("../../testdata/demo/panes/5.txt")
-	if err != nil {
-		t.Fatal(err)
+// Claude Code reports busy while its confirmation menu waits: a busy
+// session on a screen no rule reads is still an unknown screen, and no
+// digit goes to it.
+func TestABusyMenuNoRuleReadsIsAnUnknownScreen(t *testing.T) {
+	s := unreadTest(t, hooks.KindPermission)
+	busy := flintAt(false)
+	busy.Busy, busy.Status = true, "busy"
+	sampleFlint(s, time.Second, busy)
+	if !sampleFlint(s, 3*time.Second, busy) {
+		t.Fatal("no unknown screen on a busy session at a menu no rule reads")
 	}
-	if _, ok := said.Menu(string(b)); !ok {
-		t.Fatal("no rule reads the demo's menu")
+	if res, ran := chooseOn(t, s, numberedScreen(t), "Go ahead"); res.Err != unknownScreenRefusal || len(ran) != 0 {
+		t.Fatalf("res %+v ran %q", res, ran)
 	}
+}
+
+// Within the grace time the row does not say unknown screen yet, but no
+// rule reads the menu: the digit waits, from the hook's first second.
+func TestNoDigitBeforeARuleReadsTheMenu(t *testing.T) {
+	s := unreadTest(t, hooks.KindPermission)
+	if sampleFlint(s, time.Second, flintAt(false)) {
+		t.Fatal("unknown screen within the grace time")
+	}
+	if res, ran := chooseOn(t, s, numberedScreen(t), "Go ahead"); res.Err != menuUnreadRefusal || len(ran) != 0 {
+		t.Fatalf("res %+v ran %q", res, ran)
+	}
+}
+
+// A sample that read the menu after the hook leaves the digit free.
+func TestADigitGoesToAMenuASampleRead(t *testing.T) {
 	s := unreadTest(t, hooks.KindPermission)
 	sampleFlint(s, time.Second, flintAt(true))
-	res, ran := chooseOn(t, s, string(b), "Yes")
-	if res.Err != "" || len(ran) != 1 {
+	if res, ran := chooseOn(t, s, readScreen(t), "Yes"); res.Err != "" || len(ran) != 1 {
+		t.Fatalf("res %+v ran %q", res, ran)
+	}
+}
+
+// The digit follows the screen the pane shows now, not the last sample: a
+// menu the rule reads takes it before any sample after the hook.
+func TestAReadMenuTakesADigitBeforeTheNextSample(t *testing.T) {
+	s := unreadTest(t, hooks.KindPermission)
+	if res, ran := chooseOn(t, s, readScreen(t), "Yes"); res.Err != "" || len(ran) != 1 {
+		t.Fatalf("res %+v ran %q", res, ran)
+	}
+}
+
+// Menu A reads and is answered; menu B's hook comes before the next
+// sample, in words no rule reads. A's read is no read of B.
+func TestABackToBackMenuNoRuleReadsGetsNoDigit(t *testing.T) {
+	s := unreadTest(t, hooks.KindPermission)
+	sampleFlint(s, time.Second, flintAt(true))
+	s.Hook(hooks.Event{Name: "PostToolUse", SessionID: "s1", Pane: "%1", At: unread0.Add(2 * time.Second)})
+	s.Hook(hooks.Event{Name: "Notification", Kind: hooks.KindPermission, SessionID: "s1", Pane: "%1", At: unread0.Add(3 * time.Second), Message: "Claude needs your permission to use Bash"})
+	if x, _ := s.sessionAt("%1"); !x.MenuUnread {
+		t.Fatal("A's sample counts as a read of B")
+	}
+	if res, ran := chooseOn(t, s, numberedScreen(t), "Go ahead"); res.Err != menuUnreadRefusal || len(ran) != 0 {
 		t.Fatalf("res %+v ran %q", res, ran)
 	}
 }
