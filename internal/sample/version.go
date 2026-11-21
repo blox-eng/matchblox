@@ -9,8 +9,11 @@ var versionSegment = regexp.MustCompile(`^[0-9A-Za-z][0-9A-Za-z.+_-]{0,39}$`)
 
 // versionOf reads an agent's version from the install path in its exe or argv,
 // <agent>/versions/<version>. It never runs the agent: a binary's own
-// --version could run anything.
+// --version could run anything. An agent's updater deletes the old binary
+// while its sessions run it, and the kernel then ends the exe link with
+// " (deleted)": the version is still the one that runs.
 func versionOf(agent, exe string, argv []string) (version, why string) {
+	exe = strings.TrimSuffix(exe, " (deleted)")
 	for _, path := range append([]string{exe}, argv...) {
 		parts := strings.Split(path, "/")
 		for i := 1; i+1 < len(parts); i++ {

@@ -26,6 +26,9 @@ var versionCases = []struct {
 	{name: "a shell command", agent: "claude", exe: "/x/claude/versions/2.3.1;rm -rf ~", why: noVersion},
 	{name: "a 300-byte segment", agent: "claude", exe: "/x/claude/versions/" + strings.Repeat("a", 300), why: noVersion},
 	{name: "a terminal escape", agent: "claude", exe: "/x/claude/versions/\x1b[2J", why: noVersion},
+	{name: "a deleted binary keeps its version", agent: "claude", exe: "/home/u/.local/share/claude/versions/2.3.1 (deleted)", version: "2.3.1"},
+	{name: "a command after the deleted mark", agent: "claude", exe: "/x/claude/versions/2.3.1 (deleted);rm", why: noVersion},
+	{name: "a deleted mark in argv", agent: "claude", argv: []string{"/x/claude/versions/2.3.1 (deleted)"}, why: noVersion},
 }
 
 func TestAVersionComesFromThePath(t *testing.T) {
