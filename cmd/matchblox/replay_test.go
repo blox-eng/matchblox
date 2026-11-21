@@ -677,8 +677,9 @@ func replayAt(t *testing.T, z replaySize) {
 		{name: "kindle-web asks", at: 10500 * time.Millisecond, do: walk("kindle-web"), pane: kindle, ok: func(s string) bool {
 			// Beside the list, the preview of kindle-web's pane comes a
 			// moment after the last arrow; a slow run reads the screen
-			// before it. The phone shows no chat beside the list.
-			return chosen("kindle-web")(s) && has("permission")(s) && (phone || has("one-tap checkout")(s))
+			// before it. The phone shows no chat beside the list. The row
+			// says the question of the menu a rule reads.
+			return chosen("kindle-web")(s) && has("Do you want to proceed?")(s) && (phone || has("one-tap checkout")(s))
 		}},
 		// g opens kindle-web's chain, login: the list shows only the chain,
 		// and its room takes the chat's place. esc closes it.
