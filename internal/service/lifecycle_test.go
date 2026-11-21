@@ -252,7 +252,7 @@ func TestNewAddsAWorktreeForABranch(t *testing.T) {
 		t.Fatal(err)
 	}
 	repo := filepath.Join(tmp, "blox-api")
-	for _, c := range [][]string{{"init", "-q", repo}, {"-C", repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "x"}} {
+	for _, c := range [][]string{{"init", "-q", repo}, {"-C", repo, "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit", "-q", "--allow-empty", "-m", "x"}} {
 		if out, err := exec.Command("git", c...).CombinedOutput(); err != nil {
 			t.Fatalf("%s: %s", err, out)
 		}

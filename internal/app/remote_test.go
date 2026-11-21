@@ -50,8 +50,8 @@ func TestRemoteJumpInsideTmuxOpensItsOwnSession(t *testing.T) {
 	m.opt.Run = func(argv []string) error { ran = append(ran, argv); return nil }
 	ssh := remote.JumpSSH("ws-1", j, nil)
 	next, _ := key(m, "ctrl+o")
-	if a := next.(Model).pending; a == nil || a.say != shellLine(ssh) {
-		t.Fatalf("the confirm must show the ssh line %q: %+v", shellLine(ssh), a)
+	if a := next.(Model).pending; a == nil || a.say != "Go into app-feature on ws-1: ssh ws-1 opens it in a tmux session of its own, then C-b m takes you back" {
+		t.Fatalf("the confirm must say where the jump goes and the way back, not the ssh line: %+v", a)
 	}
 	_, cmd := key(next, "enter")
 	if cmd == nil {
@@ -63,6 +63,27 @@ func TestRemoteJumpInsideTmuxOpensItsOwnSession(t *testing.T) {
 	}
 	if want := j.Local(ssh); len(ran) != 1 || !slices.Equal(ran[0], want) {
 		t.Fatalf("ran %q, want %q", ran, want)
+	}
+}
+
+// TestRemoteJumpConfirmIsShort: the jump's ssh line holds every key the
+// jump binds on the host, some 40 lines in a box (the owner, 2026-11-21:
+// "super big and shows me so much info"). The box says where the jump goes
+// and the way back, in a few lines.
+func TestRemoteJumpConfirmIsShort(t *testing.T) {
+	m, _ := onHost(t, fixtureState())
+	m.tab = tabSessions
+	hostJump(&m, remote.Jump{Pane: "%1"})
+	next, _ := key(m, "ctrl+o")
+	rows := frameOf(next.(Model))
+	frame := strings.Join(rows, "\n")
+	if strings.Contains(frame, "bind-key") || !strings.Contains(frame, "Go into app-feature on ws-1") {
+		t.Fatalf("the confirm must name the agent and host, not the tmux script:\n%s", frame)
+	}
+	top := slices.IndexFunc(rows, func(r string) bool { return strings.Contains(r, "╭─") })
+	bottom := slices.IndexFunc(rows, func(r string) bool { return strings.Contains(r, "╰─") })
+	if top < 0 || bottom < 0 || bottom-top+1 > 8 {
+		t.Fatalf("the confirm takes rows %d to %d, want 8 at most:\n%s", top, bottom, frame)
 	}
 }
 
@@ -78,8 +99,8 @@ func TestRemoteJumpOutsideTmuxTakesTheTerminal(t *testing.T) {
 		t.Fatal("outside tmux the jump is not Outer")
 	}
 	next, _ := key(m, "ctrl+o")
-	if a := next.(Model).pending; a == nil || a.say != shellLine(want) {
-		t.Fatalf("the confirm must show the ssh line %q: %+v", shellLine(want), a)
+	if a := next.(Model).pending; a == nil || a.say != "Go into app-feature on ws-1: ssh ws-1 takes this terminal, then C-b m takes you back" {
+		t.Fatalf("the confirm must say where the jump goes and the way back, not the ssh line: %+v", a)
 	}
 	next, cmd := key(next, "enter")
 	if cmd == nil {
@@ -447,5 +468,20 @@ func TestAnUnmarkedHostJumpFindsTheDeskWhenItRuns(t *testing.T) {
 	drain(cmd)
 	if len(*ran) != 1 || !strings.Contains(strings.Join((*ran)[0], " "), "switch-client -c /dev/pts/1") || reads != 1 {
 		t.Errorf("ran %q after %d reads, want the desk's client switched", *ran, reads)
+	}
+}
+
+// TestPeerViewConfirmIsShort: a view of a peer's pane beside the list asks
+// first, in words: its ssh line is the jump's, some 40 lines of tmux keys.
+func TestPeerViewConfirmIsShort(t *testing.T) {
+	m, _ := onHost(t, fixtureState())
+	hostJump(&m, remote.Jump{Pane: "%1"})
+	next, _ := m.besideOn("ws-1", "%1")
+	a := next.(Model).pending
+	if a == nil || a.say != "Show app-feature from ws-1: ssh ws-1 shows it beside the list" {
+		t.Fatalf("the confirm must say what shows where, not the ssh line: %+v", a)
+	}
+	if len(a.steps) != 1 || !strings.Contains(strings.Join(a.steps[0], " "), "ssh") {
+		t.Fatalf("the view must still run its ssh: %q", a.steps)
 	}
 }
