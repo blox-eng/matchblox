@@ -697,9 +697,9 @@ func replayAt(t *testing.T, z replaySize) {
 		steps = slices.Delete(steps, at+1, at+2) // the list has the keys once it shows
 		// The room, then the chat it closes to, take the screen in turn.
 		steps[len(steps)-2].ok = has("CHAIN login", "what should login's stoker do?")
-		// kindle-web asks in its pane: its chat's line says so.
+		// kindle-web asks for permission: its chat shows the menu.
 		steps[len(steps)-1].ok = func(s string) bool {
-			return has("◂ kindle-web", "answer in its pane")(s) && !strings.Contains(s, "CHAIN login")
+			return has("◂ kindle-web", "Do you want to proceed?")(s) && !strings.Contains(s, "CHAIN login")
 		}
 	}
 	var still replay.Frame
