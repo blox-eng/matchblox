@@ -192,6 +192,10 @@ private struct TerminalRepresentable: UIViewRepresentable {
         terminal.onLink = { [weak terminal] link, spot in
             if let terminal { LinkSheet.present(link, from: terminal, at: spot) }
         }
+        terminal.onSelectedLink = { [weak screen] link in screen?.showLink(link) }
+        screen.onOpenLink = { [weak terminal] link, spot in
+            if let terminal { LinkSheet.present(link, from: terminal, at: spot) }
+        }
         connection.onAgent = { agent in belts.agentChanged(agent) }
         connection.onBoard = { value in belts.boardSaid(value) }
         belts.onAnswer = { [weak connection] in connection?.answerBoard() }
@@ -259,6 +263,10 @@ private final class HeldScreen: UIView {
     /// Shows while the terminal is up from its live bottom; a tap goes back down.
     private let jump = UIButton(type: .system)
     var onJump: @MainActor () -> Void = {}
+    /// Shows while the selection holds a URL; a tap offers it whole, as a tap on a link does.
+    private let openLink = UIButton(type: .system)
+    private var selectedLink: String?
+    var onOpenLink: @MainActor (String, CGRect) -> Void = { _, _ in }
     /// A short word over the terminal that fades: `Copied`.
     private let notice = UILabel()
     private let copiedHaptic = UINotificationFeedbackGenerator()
@@ -280,6 +288,16 @@ private final class HeldScreen: UIView {
         jump.addAction(UIAction { [weak self] _ in self?.onJump() }, for: .primaryActionTriggered)
         addSubview(jump)
 
+        var linkLook = look
+        linkLook.title = "Open link"
+        openLink.configuration = linkLook
+        openLink.isHidden = true
+        openLink.addAction(UIAction { [weak self] _ in
+            guard let self, let link = self.selectedLink else { return }
+            self.onOpenLink(link, self.openLink.frame)
+        }, for: .primaryActionTriggered)
+        addSubview(openLink)
+
         notice.font = UIFont.monospacedSystemFont(ofSize: 13, weight: .medium)
         notice.textColor = UIColor(Theme.fg)
         notice.backgroundColor = UIColor(Theme.hair)
@@ -294,6 +312,12 @@ private final class HeldScreen: UIView {
 
     func showJump(_ shows: Bool) {
         jump.isHidden = !shows
+    }
+
+    func showLink(_ link: String?) {
+        selectedLink = link
+        openLink.isHidden = link == nil
+        setNeedsLayout()
     }
 
     /// What came of the host's copy: `Copied`, or why it did not.
@@ -332,6 +356,12 @@ private final class HeldScreen: UIView {
             x: bounds.width - side - Self.jumpInset,
             y: bounds.height - side - Self.jumpInset,
             width: side,
+            height: side
+        )
+        openLink.frame = CGRect(
+            x: Self.jumpInset,
+            y: jump.frame.minY,
+            width: openLink.intrinsicContentSize.width,
             height: side
         )
         let width = notice.intrinsicContentSize.width + 2 * Self.jumpInset

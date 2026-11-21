@@ -31,6 +31,8 @@ final class ConsoleTerminalView: TerminalView {
     var onAsksCopy: @MainActor () -> Void = {}
     /// A tap on a link: the link, and the place on screen it was tapped.
     var onLink: @MainActor (String, CGRect) -> Void = { _, _ in }
+    /// Called as the selection changes: the URL it holds, whole, or nil.
+    var onSelectedLink: @MainActor (String?) -> Void = { _ in }
     /// The console shows Sessions or Machine (`BoardFollow`): a long-press opens the row's menu.
     /// Otherwise the terminal's own long-press acts.
     var showsConsole = false
@@ -368,6 +370,11 @@ final class ConsoleTerminalView: TerminalView {
 
     /// The link under `point`: a hyperlink the program marked (OSC 8), else an http or https URL
     /// in the row's text.
+    override func selectionChanged(source: Terminal) {
+        super.selectionChanged(source: source)
+        onSelectedLink(selection.active ? TerminalLink.url(inSelection: selection.getSelectedText()) : nil)
+    }
+
     private func linkUnder(_ point: CGPoint) -> String? {
         guard let spot = cell(at: point) else { return nil }
         let terminal = getTerminal()

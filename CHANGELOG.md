@@ -6,6 +6,12 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Open a link from a selection.** On the phone, a selection that holds
+  a URL shows `Open link`. A tap offers the whole URL to open in Safari or
+  copy, without the words or the list round it.
+
 ### Fixed
 
 - **A wrapped link copies whole.** An agent draws a long URL over

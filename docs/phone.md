@@ -144,6 +144,10 @@ terminal.`
   opens; any other link can only be copied. A tap off a link clicks as
   before. An agent draws a long link over several lines: a tap on any of
   them gives the whole link.
+- **Select a link:** press and hold, then drag over text that holds a
+  link. `Open link` shows at the bottom left while the selection holds
+  one; a tap on it offers the whole link, as a tap on the link does. Text
+  around the link, and a list beside the pane, stay out of it.
 - A swipe on a host in the list removes the host and its key from the
   device. It does not remove the key on the host. Run
   `matchblox devices rm <name>` on the host for that.

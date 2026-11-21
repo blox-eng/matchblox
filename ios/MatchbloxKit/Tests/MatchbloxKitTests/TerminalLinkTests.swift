@@ -92,4 +92,26 @@ final class TerminalLinkTests: XCTestCase {
         XCTAssertEqual(TerminalLink.url(in: next, row: 0, col: 5), "https://kindle-web.example/aaaa")
         XCTAssertEqual(TerminalLink.url(in: next, row: 1, col: 5), "https://kindle-web.example/b")
     }
+
+    func testASelectionGivesItsURLWhole() {
+        let text = "   https://accounts.kindle-web.example/auth?redirect_uri=https%3A%2F\n     %2Fsdk.kindle-web.example%2Fcode&scope=openid+https%3A%2F%2Fwww\n     .kindle-web.example%2Fauth&state=Bkxx\n\n  Then paste the code here."
+        XCTAssertEqual(TerminalLink.url(inSelection: text), whole)
+    }
+
+    func testASelectionDropsTheSidebar() {
+        let text = """
+         mbux      busy │   https://kindle-web.example/a%2F
+         mbcopy    idle │     %2Fb&c=d
+                        │
+        """
+        XCTAssertEqual(TerminalLink.url(inSelection: text), "https://kindle-web.example/a%2F%2Fb&c=d")
+    }
+
+    func testASelectionKeepsTheWordsAfterItsURLOut() {
+        XCTAssertEqual(TerminalLink.url(inSelection: "open https://kindle-web.example/a.\nthen sign in"), "https://kindle-web.example/a")
+        XCTAssertEqual(TerminalLink.url(inSelection: "https://kindle-web.example/a then\n  more"), "https://kindle-web.example/a")
+        XCTAssertEqual(TerminalLink.url(inSelection: "https://kindle-web.example/a\nhttps://kindle-web.example/b"), "https://kindle-web.example/a")
+        XCTAssertNil(TerminalLink.url(inSelection: "no link here"))
+        XCTAssertNil(TerminalLink.url(inSelection: ""))
+    }
 }

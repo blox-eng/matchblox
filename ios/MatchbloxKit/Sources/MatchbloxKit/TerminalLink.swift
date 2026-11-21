@@ -52,6 +52,40 @@ public enum TerminalLink {
         return text
     }
 
+    /// The first http or https URL in a selection's text, whole: a line after it that holds an
+    /// indent and one word only goes on with it. A pane's border (a box line) ends what comes
+    /// before it, so a list beside the pane is never part of the URL.
+    public static func url(inSelection text: String) -> String? {
+        let rows = text.split(separator: "\n", omittingEmptySubsequences: false).map { Array($0) }
+        for (i, cells) in rows.enumerated() {
+            guard let head = cells.indices.first(where: { startsScheme(cells, at: $0) }),
+                  var url = run(in: cells, at: head).map({ Array(cells[head..<$0.upperBound]) }) else { continue }
+            let ends = cells[(head + url.count)...].allSatisfy(isFiller)
+            for next in rows.dropFirst(i + 1) {
+                guard ends, let word = loneWord(next) else { break }
+                url += word
+            }
+            while let last = url.last, trailing.contains(last) || isUnpaired(last, in: url) {
+                url.removeLast()
+            }
+            let found = String(url)
+            return URLComponents(string: found)?.host?.isEmpty == false ? found : nil
+        }
+        return nil
+    }
+
+    /// The one word of URL characters after a row's last box line, or in the whole row when it
+    /// has none; nil when the row holds anything else, or a URL of its own.
+    private static func loneWord(_ cells: [Character]) -> [Character]? {
+        let tail = cells.lastIndex(where: isBoxLine).map { Array(cells[($0 + 1)...]) } ?? cells
+        guard let found = onlyRun(tail), !startsScheme(tail, at: found.lowerBound) else { return nil }
+        return Array(tail[found])
+    }
+
+    private static func isBoxLine(_ c: Character) -> Bool {
+        c.unicodeScalars.allSatisfy { (0x2500...0x257F).contains($0.value) }
+    }
+
     /// The cells of URL characters round `col`.
     private static func run(in cells: [Character], at col: Int) -> Range<Int>? {
         guard cells.indices.contains(col), urlCharacters.contains(cells[col]) else { return nil }
@@ -88,7 +122,7 @@ public enum TerminalLink {
 
     /// A blank, a cell never drawn, or a box line.
     private static func isFiller(_ c: Character) -> Bool {
-        c == " " || c == "\0" || c.unicodeScalars.allSatisfy { (0x2500...0x257F).contains($0.value) }
+        c == " " || c == "\0" || isBoxLine(c)
     }
 
     /// Only a web link opens in the browser; any other link may only be copied.
