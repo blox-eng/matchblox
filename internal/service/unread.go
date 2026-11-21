@@ -23,7 +23,9 @@ type unreadWait struct {
 // markUnread marks the sessions whose hook waits for a permission while no
 // rule reads a menu on their screen, after the grace time and two samples.
 // now is the sample's time: a hook with no new sample counts no sample.
-// Hold s.mu.
+// A session that works is no unread menu: the wait holds until PostToolUse
+// while the tool the builder approved in the pane runs, and a drawn menu
+// holds still. Hold s.mu.
 func (s *Service) markUnread(now time.Time) {
 	waits := map[string]queue.Item{}
 	for _, it := range s.cur.Queue {
@@ -36,7 +38,7 @@ func (s *Service) markUnread(now time.Time) {
 	for i, sess := range s.cur.Sessions {
 		it, ok := waits[sess.Pane]
 		unknown := false
-		if ok && sess.Pane != "" && !sess.Permits && sess.Ask == nil {
+		if ok && sess.Pane != "" && !sess.Permits && sess.Ask == nil && !sess.Busy {
 			w, had := s.unread[sess.Pane]
 			if !had {
 				w.since = it.Since

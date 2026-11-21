@@ -54,6 +54,20 @@ func TestAnUnreadPermissionIsAnUnknownScreen(t *testing.T) {
 	}
 }
 
+// The builder approves in the pane, and the tool runs for minutes: the
+// permission waits until PostToolUse, but the screen works, so it is no
+// unknown screen.
+func TestAnApprovedToolThatRunsIsNotUnknown(t *testing.T) {
+	s := unreadTest(t, hooks.KindPermission)
+	working := flintAt(false)
+	working.Busy, working.Status, working.FromPane = true, "busy", true
+	for d := time.Second; d <= 10*time.Second; d += time.Second {
+		if sampleFlint(s, d, working) {
+			t.Fatalf("unknown screen at +%s while the approved tool runs", d)
+		}
+	}
+}
+
 func TestOneSampleIsNotEnough(t *testing.T) {
 	s := unreadTest(t, hooks.KindPermission)
 	if sampleFlint(s, 5*time.Second, flintAt(false)) {
