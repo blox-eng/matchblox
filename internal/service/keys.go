@@ -58,8 +58,9 @@ func cut(text string, n int) string {
 
 // keys sends one key to the agent in pane. The console names the agent it
 // saw, and the time it saw the screen: a key never lands on a new agent,
-// and a key that answers never on a wait the person did not see. The checks
-// run under the pane's lock, so nothing changes between them and the key.
+// and a key that answers never on a wait the person did not see, nor on a
+// screen no rule reads. The checks run under the pane's lock, so nothing
+// changes between them and the key.
 func (s *Service) keys(ctx context.Context, pane string, a proto.Act) proto.Result {
 	if !s.KeysToWorld || !s.aConsole(a.Console, a) {
 		return proto.Result{Err: keysOnlyInDemo}
@@ -77,6 +78,9 @@ func (s *Service) keys(ctx context.Context, pane string, a proto.Act) proto.Resu
 	step, why := s.stepOf(pane, x.Name, a.Text)
 	if why != "" {
 		return proto.Result{Err: why}
+	}
+	if x.UnknownScreen && answers(a.Text) {
+		return proto.Result{Err: "matchblox cannot read this screen: answer it in its pane"}
 	}
 	if why := s.unseen(pane, x.Name, a, x.Permits || x.Asks || x.Ask != nil); why != "" {
 		return proto.Result{Err: why}

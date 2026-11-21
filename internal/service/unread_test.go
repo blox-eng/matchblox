@@ -1,10 +1,12 @@
 package service
 
 import (
+	"os"
 	"testing"
 	"time"
 
 	"github.com/blox-eng/matchblox/internal/hooks"
+	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/said"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/state"
@@ -141,5 +143,34 @@ func TestNoBlink(t *testing.T) {
 	s.Hook(hooks.Event{Name: "PreToolUse", SessionID: "s1", Pane: "%1", At: unread0.Add(9 * time.Second)})
 	if !unknownScreen(s) {
 		t.Fatal("a hook with no new sample cleared the unknown screen")
+	}
+}
+
+func TestChooseRefusesAnUnknownScreen(t *testing.T) {
+	b, err := os.ReadFile("../../testdata/menus/unknown-wording.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, ran := chooseTest(t, string(b))
+	res := s.act(t.Context(), chooseAct("%3", pickOf("1", "Yes", chooseScreen)))
+	if res.Err != "not sent: flint-auth shows no menu — answer it in its pane" || len(*ran) != 0 {
+		t.Fatalf("%+v, ran %q", res, *ran)
+	}
+}
+
+func TestKeysRefuseAnUnknownScreen(t *testing.T) {
+	s := unreadTest(t, hooks.KindPermission)
+	sampleFlint(s, time.Second, flintAt(false))
+	if !sampleFlint(s, 3*time.Second, flintAt(false)) {
+		t.Fatal("no unknown screen")
+	}
+	var ran [][]string
+	s.Actions.Run = func(argv []string) error { ran = append(ran, argv); return nil }
+	for _, text := range []string{proto.LitPrefix + "1", "Enter"} {
+		a := key(text)
+		a.Seen = unread0.Add(4 * time.Second)
+		if res := s.act(t.Context(), a); res.Err != "matchblox cannot read this screen: answer it in its pane" || len(ran) != 0 {
+			t.Fatalf("%s: res %+v ran %q", text, res, ran)
+		}
 	}
 }

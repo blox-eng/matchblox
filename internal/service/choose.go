@@ -85,7 +85,7 @@ func (s *Service) choose(ctx context.Context, pane string, a proto.Act) proto.Re
 	}
 	options := menu.Read(screen)
 	if options == nil {
-		return proto.Result{Err: "not sent: " + x.Name + " shows no menu"}
+		return proto.Result{Err: "not sent: " + x.Name + " shows no menu — answer it in its pane"}
 	}
 	if options[n] != text || menu.Sign(screen) != sign {
 		return proto.Result{Err: "not sent: " + x.Name + "'s menu changed — look again"}

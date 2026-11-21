@@ -1,6 +1,7 @@
 package app
 
 import (
+	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -8,6 +9,9 @@ import (
 
 	"github.com/blox-eng/matchblox/internal/menu"
 	"github.com/blox-eng/matchblox/internal/proto"
+	"github.com/blox-eng/matchblox/internal/queue"
+	"github.com/blox-eng/matchblox/internal/said"
+	"github.com/blox-eng/matchblox/internal/sample"
 )
 
 const promptScreen = `● Bash(go test ./...)
@@ -127,4 +131,66 @@ func TestACheckboxMenuIsAnsweredInItsPane(t *testing.T) {
 	if got := chatLineOf(m, 120); !strings.Contains(got, "answer in its pane") {
 		t.Fatalf("line %q", got)
 	}
+}
+
+// unknownWording is a Claude Code approval box whose choices no rule
+// knows: no numbers, and a keys line in other words.
+func unknownWording(t *testing.T) string {
+	t.Helper()
+	b, err := os.ReadFile("../../testdata/menus/unknown-wording.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
+// unknownConsole is kindle-web at a permission wait the service marked an
+// unknown screen, chosen, screen on the chat for peekDead.
+func unknownConsole(t *testing.T, screen string) (Model, sample.Session) {
+	t.Helper()
+	if menu.Read(screen) != nil {
+		t.Fatalf("menu.Read reads %v", menu.Read(screen))
+	}
+	if q, ok := said.Menu(screen); ok {
+		t.Fatalf("said.Menu reads %q", q)
+	}
+	s := boardMatch("kindle-web", time.Hour)
+	s.Agent, s.UnknownScreen = "claude", true
+	st := boardState(s)
+	st.Queue = []queue.Item{waitFor(s, queue.StatePermission, time.Minute)}
+	m, clock := sideConsole(t, st)
+	m = showScreen(t, m, clock, screen)
+	s, _ = m.sideChosen()
+	return m, s
+}
+
+// noDigits: the chat offers no digits for s, and 1 pressed twice sends
+// nothing to it.
+func noDigits(t *testing.T, m Model, s sample.Session) {
+	t.Helper()
+	if q, _, ok := m.digitMenu(s); ok {
+		t.Fatalf("digits offered for %+v", q)
+	}
+	before := len(boardFake(m).acts())
+	m = pressOn(m, "1", "1")
+	if acts := boardFake(m).acts()[before:]; len(acts) != 0 {
+		t.Fatalf("a digit sent %+v", acts)
+	}
+}
+
+func TestNoDigitsOnAnUnknownWording(t *testing.T) {
+	m, s := unknownConsole(t, unknownWording(t))
+	noDigits(t, m, s)
+}
+
+// The agent's reply quotes an old menu with numbers above a live menu
+// in words no rule knows: the quote is not the menu.
+func TestAQuotedOldMenuGivesNoDigits(t *testing.T) {
+	quote := "● The prompt used to read:\n\n  Do you want to proceed?\n  ❯ 1. Yes\n    2. No\n\n"
+	screen := strings.Replace(unknownWording(t), "● Bash(rm -rf build/)", quote+"● Bash(rm -rf build/)", 1)
+	if !strings.Contains(screen, "1. Yes") {
+		t.Fatal("no quoted menu")
+	}
+	m, s := unknownConsole(t, screen)
+	noDigits(t, m, s)
 }
