@@ -219,6 +219,35 @@ func TestNoDigitsOnANumberedUnknownWording(t *testing.T) {
 	}
 }
 
+// Within the grace time the service has not marked the screen unknown,
+// but no rule reads its menu: the console offers no digit the service
+// would refuse, and says to answer in the pane.
+func TestNoDigitsBeforeARuleReadsTheMenu(t *testing.T) {
+	m, s := unknownConsole(t, unknownNumbered(t), func(s *sample.Session) { s.UnknownScreen, s.MenuUnread = false, true })
+	noDigits(t, m, s)
+	if got := chatLineOf(m, 120); !strings.HasSuffix(strings.TrimRight(got, " "), m.inPane()) {
+		t.Fatalf("line %q", got)
+	}
+}
+
+// A permission wait whose menu a rule reads takes digits at once.
+func TestDigitsAtOnceOnAMenuARuleReads(t *testing.T) {
+	screen := menuFile(t, "../demo/panes/5.txt")
+	if _, ok := said.Menu(screen); !ok {
+		t.Fatal("no rule reads the demo's menu")
+	}
+	s := boardMatch("kindle-web", time.Hour)
+	s.Agent, s.Permits = "claude", true
+	st := boardState(s)
+	st.Queue = []queue.Item{waitFor(s, queue.StatePermission, time.Second)}
+	m, clock := sideConsole(t, st)
+	m = showScreen(t, m, clock, screen)
+	s, _ = m.sideChosen()
+	if _, texts, ok := m.digitMenu(s); !ok || texts[1] != "Yes" {
+		t.Fatalf("digits %v, %v", texts, ok)
+	}
+}
+
 // The agent's reply quotes an old menu with numbers above a live menu
 // in words no rule knows: the quote is not the menu.
 func TestAQuotedOldMenuGivesNoDigits(t *testing.T) {

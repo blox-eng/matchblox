@@ -125,6 +125,9 @@ func TestAReportedPermissionIsNeverUnknown(t *testing.T) {
 		if sampleFlint(s, d, opencode) {
 			t.Fatalf("unknown screen at +%s on a reported wait", d)
 		}
+		if x, _ := s.sessionAt("%1"); x.MenuUnread {
+			t.Fatalf("the digits wait at +%s on a reported wait", d)
+		}
 	}
 }
 
@@ -206,6 +209,52 @@ func TestABusyMenuNoRuleReadsIsAnUnknownScreen(t *testing.T) {
 	s.Capture = func([]string) map[string]string { return map[string]string{"%1": screen} }
 	a := proto.Act{RecID: proto.ChoosePrefix + "%1", Text: pickOf("1", "Go ahead", screen), PID: busy.PID, Start: busy.Start, Confirm: "y", Console: true}
 	if res := s.act(t.Context(), a); res.Err != unknownScreenRefusal || len(ran) != 0 {
+		t.Fatalf("res %+v ran %q", res, ran)
+	}
+}
+
+// chooseOn is a choose: act from the console for option 1 of screen, to
+// flint, and the commands it ran.
+func chooseOn(t *testing.T, s *Service, screen, text string) (proto.Result, [][]string) {
+	t.Helper()
+	var ran [][]string
+	s.Actions.Run = func(argv []string) error { ran = append(ran, argv); return nil }
+	s.Capture = func([]string) map[string]string { return map[string]string{"%1": screen} }
+	x := flintAt(false)
+	a := proto.Act{RecID: proto.ChoosePrefix + "%1", Text: pickOf("1", text, screen), PID: x.PID, Start: x.Start, Confirm: "y", Console: true}
+	return s.act(t.Context(), a), ran
+}
+
+// Within the grace time the row does not say unknown screen yet, but no
+// rule reads the menu: the digit waits, from the hook's first second.
+func TestNoDigitBeforeARuleReadsTheMenu(t *testing.T) {
+	b, err := os.ReadFile("../../testdata/menus/unknown-numbered.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := unreadTest(t, hooks.KindPermission)
+	if sampleFlint(s, time.Second, flintAt(false)) {
+		t.Fatal("unknown screen within the grace time")
+	}
+	res, ran := chooseOn(t, s, string(b), "Go ahead")
+	if res.Err != menuUnreadRefusal || len(ran) != 0 {
+		t.Fatalf("res %+v ran %q", res, ran)
+	}
+}
+
+// A menu the rule reads takes its digit at once: the gate is no wait.
+func TestADigitGoesAtOnceToAMenuARuleReads(t *testing.T) {
+	b, err := os.ReadFile("../../testdata/demo/panes/5.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := said.Menu(string(b)); !ok {
+		t.Fatal("no rule reads the demo's menu")
+	}
+	s := unreadTest(t, hooks.KindPermission)
+	sampleFlint(s, time.Second, flintAt(true))
+	res, ran := chooseOn(t, s, string(b), "Yes")
+	if res.Err != "" || len(ran) != 1 {
 		t.Fatalf("res %+v ran %q", res, ran)
 	}
 }

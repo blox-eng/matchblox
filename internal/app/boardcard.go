@@ -128,14 +128,15 @@ func (m Model) oneChoice(s sample.Session) (q said.Question, ok bool) {
 // is the one the agent draws on the chat's screen while s needs you, with
 // its options' whole texts by number, and a choose: act answers it. None
 // for a menu of checkboxes: a digit only ticks a box there, and Submit
-// has no number. None on a screen the service cannot read: the console's
-// reader may still find numbers there, but no rule says what they answer.
+// has no number. None while the service reads no menu on a hooked
+// permission wait, from the hook's first second: the console's reader may
+// still find numbers there, but no rule says what they answer.
 func (m Model) digitMenu(s sample.Session) (q said.Question, texts map[int]string, ok bool) {
 	if q, one := m.oneChoice(s); one {
 		return q, nil, true
 	}
 	texts = m.screenMenu(s)
-	if texts == nil || !m.asksNow(s) || s.UnknownScreen {
+	if texts == nil || !m.asksNow(s) || s.MenuUnread || s.UnknownScreen {
 		return q, nil, false
 	}
 	for n := 1; n <= len(texts); n++ {

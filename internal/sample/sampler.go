@@ -98,6 +98,10 @@ type Session struct {
 	// UnknownScreen: its hook waits for a permission and no rule reads a
 	// menu on its screen. The service sets it.
 	UnknownScreen bool `json:"unknown_screen,omitempty"`
+	// MenuUnread: its hook waits for a permission and no rule reads a menu
+	// on its screen yet. No digit goes to it, from the hook's first second;
+	// UnknownScreen follows after the grace time. The service sets it.
+	MenuUnread bool `json:"menu_unread,omitempty"`
 	// Said is the current turn's newest reply with text, plain, its end
 	// kept up to a bound; Ask is the question tool's call it waits on
 	// (Claude Code).

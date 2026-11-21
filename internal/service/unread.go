@@ -13,6 +13,10 @@ const unreadGrace = 3 * time.Second
 // unknownScreenRefusal refuses an answer typed into a screen no rule reads.
 const unknownScreenRefusal = "matchblox cannot read this screen: answer it in its pane"
 
+// menuUnreadRefusal refuses a digit within the grace time, while no rule
+// reads the menu yet: the agent may still be drawing it.
+const menuUnreadRefusal = "not sent: matchblox has not read this menu yet: answer it in its pane"
+
 type unreadWait struct {
 	since   time.Time // the wait's start
 	samples int       // the samples taken since then that read no menu
@@ -21,9 +25,9 @@ type unreadWait struct {
 }
 
 // markUnread marks the sessions whose hook waits for a permission while no
-// rule reads a menu on their screen, after the grace time and two samples.
-// now is the sample's time: a hook with no new sample counts no sample.
-// Hold s.mu.
+// rule reads a menu on their screen: MenuUnread at once, UnknownScreen
+// after the grace time and two samples. now is the sample's time: a hook
+// with no new sample counts no sample. Hold s.mu.
 func (s *Service) markUnread(now time.Time) {
 	waits := map[string]queue.Item{}
 	for _, it := range s.cur.Queue {
@@ -35,8 +39,9 @@ func (s *Service) markUnread(now time.Time) {
 	copied := false
 	for i, sess := range s.cur.Sessions {
 		it, ok := waits[sess.Pane]
-		unknown := false
+		unread, unknown := false, false
 		if ok && sess.Pane != "" && !sess.Permits && sess.Ask == nil {
+			unread = true
 			w, had := s.unread[sess.Pane]
 			if !had {
 				w.since = it.Since
@@ -47,13 +52,13 @@ func (s *Service) markUnread(now time.Time) {
 			w.unknown = w.unknown || now.Sub(w.since) >= unreadGrace && w.samples >= 2
 			next[sess.Pane], unknown = w, w.unknown
 		}
-		if unknown == sess.UnknownScreen {
+		if unread == sess.MenuUnread && unknown == sess.UnknownScreen {
 			continue
 		}
 		if !copied { // cur.Sessions can share its array with the sample
 			s.cur.Sessions, copied = append(s.cur.Sessions[:0:0], s.cur.Sessions...), true
 		}
-		s.cur.Sessions[i].UnknownScreen = unknown
+		s.cur.Sessions[i].MenuUnread, s.cur.Sessions[i].UnknownScreen = unread, unknown
 	}
 	s.unread = next
 }
