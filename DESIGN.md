@@ -179,7 +179,6 @@ Rules:
 | Knock | 240 ms | a device reached the pair page's code: the box moves one cell left and back, twice |
 | Open | about 1 s | a device claimed the code: the drawer slides out (260 ms), the match comes out (280 ms), strikes (150 ms, ease-in) and stands (320 ms) while the drawer shuts (260 ms) |
 | Lock | 180 ms | the app found a pair code: its outline moves to the corners of the code |
-| Wait | 3 s | the match head called up over the terminal, from the last touch or the end of its coast; it comes and goes with Fade |
 
 There are no spinners. `--no-motion` and `NO_MOTION=1` make every motion an
 instant change; on the site, `prefers-reduced-motion` does the same. In the
@@ -193,8 +192,7 @@ transient, sharper as it heats, never more than 30 a second; it strikes
 with one hard transient and bumps once, heavy and dull, at an end. A tap
 that sends Enter is two firm transients 60 ms apart, with a `flame-core`
 ring at the rim for 140 ms, never the strike's glow. A touch that stops a
-flick is one soft, dull transient and sends nothing. The head called up
-over the terminal arrives with one light transient. A swipe on the
+flick is one soft, dull transient and sends nothing. A swipe on the
 terminal ticks each wheel step, at the same cap. With Reduce Motion
 the head's speckles stand still; its heat colour still shows.
 

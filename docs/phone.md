@@ -433,13 +433,8 @@ with your thumb to scroll, as a trackball:
 - With VoiceOver, the head is "Match head": swipe up or down on it to
   scroll a page, and double-tap it to send Enter.
 
-You do not need the head on your belt to use it. Rest a finger on the
-terminal for a quarter of a second, then move it up or down: the head
-comes under your finger with one light tap, and your finger rolls it. Lift,
-and the head waits 3 seconds where it is, for another roll or a tap for
-Enter. It never covers ↓ or a message. A touch anywhere else, or the
-keyboard, sends it away; with no touch it fades. A finger that rests and
-does not move still opens the row's menu.
+In a chat, press and hold on the text to copy it: the iPhone's own
+selection opens, with its handles and its Copy button.
 
 A belt key after a scroll in a tmux pane first brings the pane back to its
 bottom, so the key reaches the agent, not tmux's copy mode. `Esc` there only

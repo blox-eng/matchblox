@@ -6,6 +6,13 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **Press and hold selects text again.** On the phone, a finger held
+  on the terminal opens the iPhone's own selection and Copy again. The
+  match head is now on the belt only: a rest, then a move, on the
+  terminal no longer calls it up.
+
 ## [0.55.0] - 2026-11-21
 
 ### Added
