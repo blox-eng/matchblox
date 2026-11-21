@@ -19,9 +19,13 @@ import (
 // tickEvery is how often the filter hears that time passes.
 const tickEvery = 25 * time.Millisecond
 
-// killWait is how long an agent has to end after a hangup or a stop
-// passed on to it, before the guard takes its terminal away and ends it.
-var killWait = 3 * time.Second
+// After a hangup or a stop passed on to it, an agent keeps its terminal
+// for closeWait; then the terminal goes, as its pane did. The guard ends
+// the agent only at killWait, so that a save on the hangup can finish (#404).
+var (
+	closeWait = 3 * time.Second
+	killWait  = 30 * time.Second
+)
 
 // drainWait is how long the guard reads on after the agent ends, for the
 // last of its output.
@@ -152,10 +156,8 @@ func Run(argv []string, in, out *os.File) (int, error) {
 					resize()
 				} else {
 					_ = cmd.Process.Signal(sig)
-					time.AfterFunc(killWait, func() {
-						_ = master.Close() // its terminal goes, as its pane did
-						_ = cmd.Process.Kill()
-					})
+					time.AfterFunc(closeWait, func() { _ = master.Close() }) // its terminal goes, as its pane did
+					time.AfterFunc(killWait, func() { _ = cmd.Process.Kill() })
 				}
 			}
 		}

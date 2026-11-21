@@ -39,12 +39,12 @@ func (m Model) shownDoors(ds []doors.Door) []doors.Door {
 // screen and its keys, so nothing else stays open under it.
 func (m Model) openPairDoor() (Model, tea.Cmd) {
 	if m.opt.Demo != "" {
-		m.flash = m.opt.Demo
-		return m, nil
+		said := m.say(m.opt.Demo)
+		return m, said
 	}
 	if m.fromDevice() {
-		m.flash = pairFromDeviceLine
-		return m, nil
+		said := m.say(pairFromDeviceLine)
+		return m, said
 	}
 	m.pending, m.sheet, m.form, m.held, m.searching = nil, nil, nil, nil, false
 	m.armed = ""
@@ -113,11 +113,11 @@ type doorRanMsg struct {
 func (m Model) runDoor(a action) (tea.Model, tea.Cmd) {
 	argv := a.steps[0]
 	if !doors.TermAllowed(argv) {
-		m.flash = "refused: a door runs only the tmux install or the guide"
-		return m, nil
+		said := m.sayError("refused: a door runs only the tmux install or the guide")
+		return m, said
 	}
 	cmd := strings.Join(argv, " ")
-	m.flash = "running: " + cmd
+	m.say("running: " + cmd)
 	return m, m.exec(argv, func(err error) tea.Msg { // argv checked by TermAllowed
 		return doorRanMsg{door: a.door, cmd: cmd, err: err}
 	})
@@ -126,12 +126,12 @@ func (m Model) runDoor(a action) (tea.Model, tea.Cmd) {
 func (m Model) doorRan(msg doorRanMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case msg.err != nil:
-		m.flash = fmt.Sprintf("failed: %s: %v", msg.cmd, msg.err)
-		return m, nil
+		said := m.sayError(fmt.Sprintf("failed: %s: %v", msg.cmd, msg.err))
+		return m, said
 	case msg.door == doors.Tmux:
-		m.flash = "tmux is installed: " + m.keys.main.Quit.Help().Key + ", then matchblox, opens the console in tmux"
+		m.say("tmux is installed: " + m.keys.main.Quit.Help().Key + ", then matchblox, opens the console in tmux")
 	case msg.door == doors.Guide:
-		m.flash = "the guide runs in its window"
+		m.say("the guide runs in its window")
 		if m.conn != nil && !m.lost {
 			// The guide is opened once; matchblox setup offers it again.
 			return m, m.send(proto.Act{RecID: "door:" + doors.Guide, Which: "secondary", Confirm: "y"})

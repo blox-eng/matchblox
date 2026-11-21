@@ -43,15 +43,15 @@ func (m Model) rescan() (tea.Model, tea.Cmd) {
 		host = r.host
 	}
 	if why := m.refusal(host); why != "" {
-		m.flash = why
-		return m, nil
+		said := m.sayError(why)
+		return m, said
 	}
 	if host == m.opt.Host && (m.conn == nil || m.lost) {
 		return m, nil
 	}
-	m.flash = "scanning git…"
+	m.say("scanning git…")
 	if m.hostCount() > 1 {
-		m.flash = "scanning git on " + m.nameOf(host) + "…"
+		m.say("scanning git on " + m.nameOf(host) + "…")
 	}
 	return m, m.sendTo(host, proto.Act{RecID: "rescan:git", Which: "primary"})
 }

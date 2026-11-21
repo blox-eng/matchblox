@@ -70,7 +70,7 @@ func (p recPrefs) dismissed(r advice.Rec) bool {
 func (m *Model) dismissRec() {
 	r, ok := m.selectedRec()
 	if !ok {
-		m.flash = "d dismisses the selected recommendation"
+		m.say("d dismisses the selected recommendation")
 		return
 	}
 	p := m.recPrefs
@@ -81,9 +81,9 @@ func (m *Model) dismissRec() {
 	p.Dismissed[r.ID] = r.Evidence
 	m.recPrefs = p
 	at := slices.IndexFunc(m.recs, func(x advice.Rec) bool { return x.ID == r.ID })
-	m.flash = "dismissed: " + r.Title + " · back when it changes"
+	m.say("dismissed: " + r.Title + " · back when it changes")
 	if err := p.save(m.opt.StateDir); err != nil {
-		m.flash = "dismissed for now, not kept: " + err.Error()
+		m.sayError("dismissed for now, not kept: " + err.Error())
 	}
 	m.refresh()
 	if n := len(m.recs); n > 0 { // the next one takes the selection

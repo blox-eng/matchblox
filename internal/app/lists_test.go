@@ -164,7 +164,7 @@ func TestRemoveEverySafeWorktree(t *testing.T) {
 	}
 	next, _ = next.Update(resultMsg(proto.Result{ActID: "a1", Ran: [][]string{{"git"}}}))
 	next, _ = next.Update(resultMsg(proto.Result{ActID: "a2", Skipped: []string{"has changes"}}))
-	if line := actionLine(next); !strings.Contains(line, "removed 1, skipped 1: has changes") {
+	if line := shownSaid(next.(Model)); !strings.Contains(line, "removed 1, skipped 1: has changes") {
 		t.Fatalf("no summary: %q", line)
 	}
 	if strings.Contains(screen(next), "●") {
@@ -180,8 +180,8 @@ func TestSpaceMarksOnlyASafeWorktree(t *testing.T) {
 		next, _ = key(next, "down")
 	}
 	next, _ = key(next, " ")
-	if strings.Contains(screen(next), "●") || !strings.Contains(actionLine(next), "not safe to remove") {
-		t.Fatalf("an unsafe worktree was marked, or no reason: %q", actionLine(next))
+	if strings.Contains(screen(next), "●") || !strings.Contains(shownSaid(next.(Model)), "not safe to remove") {
+		t.Fatalf("an unsafe worktree was marked, or no reason: %q", shownSaid(next.(Model)))
 	}
 	next, _ = key(next, "up")
 	next, _ = key(next, " ")
@@ -229,8 +229,8 @@ func TestBatchWithoutAConnectionIsNotSent(t *testing.T) {
 			next, _ = next.Update(msg)
 		}
 	}
-	if len(f.acts()) != 0 || !strings.Contains(actionLine(next), "not sent, no connection") {
-		t.Fatalf("sent %v, line %q", f.acts(), actionLine(next))
+	if len(f.acts()) != 0 || !strings.Contains(shownSaid(next.(Model)), "not sent, no connection") {
+		t.Fatalf("sent %v, line %q", f.acts(), shownSaid(next.(Model)))
 	}
 	if n := strings.Count(screen(next), "●"); n != 2 {
 		t.Fatalf("the marks went: %d", n)
@@ -280,7 +280,7 @@ func TestRemovingOneWorktreeSaysWorktree(t *testing.T) {
 	for _, k := range []string{"X", "x", "y"} {
 		next, _ = key(next, k)
 	}
-	if line := actionLine(next); !strings.Contains(line, "removing 1 worktree…") {
+	if line := shownSaid(next.(Model)); !strings.Contains(line, "removing 1 worktree…") {
 		t.Fatalf("action line %q", line)
 	}
 }

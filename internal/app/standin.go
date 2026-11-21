@@ -106,9 +106,6 @@ func (m Model) viewScreen(w int) drawn {
 		head = ansi.Truncate(s.Name, max(room, 1), "…") // the state, then the name, give way
 	}
 	title += st.accent.Render(head)
-	if m.toast != "" { // as the header says it, where there is one
-		title = spread(title, st.accent.Render(ansi.Truncate(m.toast, max(w/2, 1), "…"))+" ", w)
-	}
 	title = fit(title, w)
 	_, rows := m.viewPlacement()
 	sc := drawn{lines: []string{title}, bodyTop: 1, placeFull: true, viewRows: rows, viewAt: 1, viewW: w}
@@ -240,7 +237,8 @@ func (m Model) keepView() Model {
 	case !ok || m.tab != tabSessions || s.Pane == "" || s.Host != m.opt.Host || place == placeNone:
 		m.standIn = false
 	case m.screen.Pane == s.Pane && m.screen.Gone:
-		m.standIn, m.flash = false, "That session ended."
+		m.standIn = false
+		m.say(focusGone)
 	}
 	if !m.standIn {
 		m.keysOut.queue = nil
