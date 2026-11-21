@@ -41,7 +41,7 @@ func (s *Service) markUnread(now time.Time) {
 	for i, sess := range s.cur.Sessions {
 		it, ok := waits[sess.Pane]
 		unread, unknown := false, false
-		if ok && sess.Pane != "" && !(sess.Permits && now.After(it.Since)) && sess.Ask == nil {
+		if ok && sess.Pane != "" && (!sess.Permits || !now.After(it.Since)) && sess.Ask == nil {
 			unread = true
 			w, had := s.unread[sess.Pane]
 			if !had {
