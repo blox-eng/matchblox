@@ -158,3 +158,8 @@ Next: builder:build
 - 2026-11-21: the trigger is a permission wait only (see Lens findings). Decided by: the owner, with the plan approval.
 - macOS: the sampler reads processes through procfs only, so on macOS `Exe` gives nothing and the version shows `not read`, with the why `this system gives no process path`. Codex still reads its version from the rollout.
 - The plan lives in docs/superpowers/plans/, beside the earlier plans.
+
+## Changes during build
+
+- Task 1: `Exe` is a method on `procfs.FS` (`fs.Exe(pid)`), as every reader in the package is; it returns the error.
+- Task 2: on macOS and iOS `Exe` returns an error and the version comes from argv alone; the why stays "the install path names no version", not a macOS wording — because a why for each system needs one more branch and test for no change in what the builder does.
