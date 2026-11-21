@@ -6,6 +6,13 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **A wrapped link copies whole.** An agent draws a long URL over
+  several lines, each with a line break and an indent. A drag over it now
+  puts the one URL on your clipboard, from this host or another. Any other
+  copy stays as it was.
+
 ## [0.55.0] - 2026-11-21
 
 ### Added
