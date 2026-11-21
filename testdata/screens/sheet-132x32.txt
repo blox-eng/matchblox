@@ -9,7 +9,7 @@
  ╿ ember-billing                    4m ✻│
    #4552 waits for your merge           │
  ╿ kindle-web                       1m ✻│
-   Claude needs your permission to ╭─ ☾ Night ──────────────────────────────────────────────────╮
+   Do you want to proceed?         ╭─ ☾ Night ──────────────────────────────────────────────────╮
  ╿ cinder-ci                       │ How should I run tonight?                                  │
    I am moving the cache key to the│                                                            │
  ╿ wick-mobile                     │ › merge them on green▏                                     │

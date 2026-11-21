@@ -4,7 +4,7 @@
  NEEDS YOU · 1  −
  ≋ hearth                   step 1 of 3 · 3
 ▌├ ╿ kindle-web                         1m ✻
- │   Claude needs your permission to use Ba…
+ │   Do you want to proceed?
  ├ ✦ hearth-api                            ✻
  └ ╵ ember-billing                      3m ✻
 ────────────────────────────────────────────

@@ -9,7 +9,7 @@
  ╿ ember-billing            4m ✻│
    #4552 waits for your merge   │
  ╿ kindle-web               1m ✻│
-   Claude needs your permission…│
+   Do you want to proceed?      │
  ╿ cinder-ci                0s ❋│
    I am moving the cache key to…│
  ╿ wick-mobile              0s ▣│

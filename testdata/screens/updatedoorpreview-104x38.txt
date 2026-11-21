@@ -9,7 +9,7 @@
  ╿ ember-billing                    4m ✻│ matchblox v0.42.0 → v0.43.0 (linux/amd64)
    #4552 waits for your merge           │   checksum    checked first
  ╿ kindle-web                       1m ✻│   provenance  checked if gh is installed
-   Claude needs your permission to use …│               and logged in
+   Do you want to proceed?              │               and logged in
  ╿ cinder-ci                        0s ❋│   replaces
    I am moving the cache key to the go.…│     /home/user/.local/bin/matchblox
  ╿ wick-mobile                      0s ▣│

@@ -4,7 +4,7 @@
  NEEDS YOU · 1  −                       │ kindle-web ✻ asks             ctx 56%  ctrl+o expand · m menu
  ≋ hearth               step 1 of 3 · 3 │ chain hearth · step 1 of 3   kindle-web needs you → hearth-ap…
 ▌├ ╿ kindle-web                     1m ✻│
- │   Claude needs your permission to us…│
+ │   Do you want to proceed?            │
  ├ ✦ hearth-api                        ✻│
  └ ╵ ember-billing                  3m ✻│
 ────────────────────────────────────────│
