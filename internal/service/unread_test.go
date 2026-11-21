@@ -54,20 +54,6 @@ func TestAnUnreadPermissionIsAnUnknownScreen(t *testing.T) {
 	}
 }
 
-// The builder approves in the pane, and the tool runs for minutes: the
-// permission waits until PostToolUse, but the screen works, so it is no
-// unknown screen.
-func TestAnApprovedToolThatRunsIsNotUnknown(t *testing.T) {
-	s := unreadTest(t, hooks.KindPermission)
-	working := flintAt(false)
-	working.Busy, working.Status, working.FromPane = true, "busy", true
-	for d := time.Second; d <= 10*time.Second; d += time.Second {
-		if sampleFlint(s, d, working) {
-			t.Fatalf("unknown screen at +%s while the approved tool runs", d)
-		}
-	}
-}
-
 func TestOneSampleIsNotEnough(t *testing.T) {
 	s := unreadTest(t, hooks.KindPermission)
 	if sampleFlint(s, 5*time.Second, flintAt(false)) {
@@ -195,6 +181,31 @@ func TestChooseRefusesAnUnknownScreenThatTheConsoleReads(t *testing.T) {
 	x := flintAt(false)
 	a := proto.Act{RecID: proto.ChoosePrefix + "%1", Text: pickOf("1", "Go ahead", screen), PID: x.PID, Start: x.Start, Confirm: "y", Console: true}
 	if res := s.act(t.Context(), a); res.Err != "matchblox cannot read this screen: answer it in its pane" || len(ran) != 0 {
+		t.Fatalf("res %+v ran %q", res, ran)
+	}
+}
+
+// Claude Code reports busy while its confirmation menu waits: a busy
+// session on a screen no rule reads is still an unknown screen, and no
+// digit goes to it.
+func TestABusyMenuNoRuleReadsIsAnUnknownScreen(t *testing.T) {
+	b, err := os.ReadFile("../../testdata/menus/unknown-numbered.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := string(b)
+	s := unreadTest(t, hooks.KindPermission)
+	busy := flintAt(false)
+	busy.Busy, busy.Status = true, "busy"
+	sampleFlint(s, time.Second, busy)
+	if !sampleFlint(s, 3*time.Second, busy) {
+		t.Fatal("no unknown screen on a busy session at a menu no rule reads")
+	}
+	var ran [][]string
+	s.Actions.Run = func(argv []string) error { ran = append(ran, argv); return nil }
+	s.Capture = func([]string) map[string]string { return map[string]string{"%1": screen} }
+	a := proto.Act{RecID: proto.ChoosePrefix + "%1", Text: pickOf("1", "Go ahead", screen), PID: busy.PID, Start: busy.Start, Confirm: "y", Console: true}
+	if res := s.act(t.Context(), a); res.Err != unknownScreenRefusal || len(ran) != 0 {
 		t.Fatalf("res %+v ran %q", res, ran)
 	}
 }
