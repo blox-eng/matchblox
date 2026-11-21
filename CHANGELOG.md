@@ -6,6 +6,8 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+## [0.54.0] - 2026-11-21
+
 ### Fixed
 
 - **A reboot no longer breaks up the chains.** A match whose tmux server
@@ -1970,7 +1972,8 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.53.2...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.54.0...HEAD
+[0.54.0]: https://github.com/blox-eng/matchblox/compare/v0.53.2...v0.54.0
 [0.53.2]: https://github.com/blox-eng/matchblox/compare/v0.53.1...v0.53.2
 [0.53.1]: https://github.com/blox-eng/matchblox/compare/v0.53.0...v0.53.1
 [0.53.0]: https://github.com/blox-eng/matchblox/compare/v0.52.0...v0.53.0
