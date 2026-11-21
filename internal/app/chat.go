@@ -55,11 +55,12 @@ func (m Model) chatPanel(w, h int) []string {
 		if l, ok := m.chatChain(s, w); ok {
 			top = append(top, l)
 		}
-		ask := m.chatAsk(s, w, max(h-len(top)-1, 0))
-		rows := h - len(top) - len(ask) - 1
+		line := m.chatLine(s, w)
+		ask := m.chatAsk(s, w, max(h-len(top)-len(line), 0))
+		rows := h - len(top) - len(ask) - len(line)
 		lines = append(top, m.chatConversation(s, w, max(rows, 0))...)
 		lines = append(lines, ask...)
-		lines = append(lines, m.chatLine(s, w))
+		lines = append(lines, line...)
 		lines = lines[max(len(lines)-h, 0):] // the line stays in view
 	}
 	for len(lines) < h {
@@ -302,26 +303,61 @@ func (m Model) screenOf(s sample.Session) bool {
 
 // chatLine is the line at the bottom: what the owner types, its end in
 // view, and at the right whom it goes to, or what the line says of its
-// text. A parked session's line is off.
-func (m Model) chatLine(s sample.Session, w int) string {
+// text. A parked session's line is off. A note too long for the right
+// of the line goes on the lines above it, wrapped.
+func (m Model) chatLine(s sample.Session, w int) []string {
 	st := m.st
 	lead := " " + st.accent.Render("›") + " "
 	if off := m.lineOff(s); off != "" {
-		return fit(lead+st.muted.Render(off), w)
+		return []string{fit(lead+st.muted.Render(off), w)}
 	}
-	right := st.faint.Render(m.keys.side.Enter.Help().Key + " send to " + m.cardName(s))
+	send := st.faint.Render(m.keys.side.Enter.Help().Key + " send to " + m.cardName(s))
+	right := send
+	var above []string
 	if n := m.lineNote; n.k == paneOf(s) && n.text != "" {
 		right = st.warn.Render(n.text)
 	} else if _, waits := m.lineHeld[paneOf(s)]; waits {
 		right = st.warn.Render(m.heldNote(s, false))
 	} else if m.lines[paneOf(s)] == "" && m.asksNow(s) && !m.chatAnswers(s) {
 		right = st.warn.Render(m.inPane())
+		if s.UnknownScreen {
+			what, fix := m.unknownNote(s)
+			right = st.warn.Render(what + " " + fix)
+			if lipgloss.Width(lead+right)+2 > w {
+				right = send
+				for _, l := range wrapKeeping(what, fix, max(w-2, 1)) {
+					above = append(above, fit(" "+st.warn.Render(l), w))
+				}
+			}
+		}
 	}
 	text := lineShown(m.lines[paneOf(s)])
 	if room := w - lipgloss.Width(right) - 5; lipgloss.Width(text) > room {
 		text = ansi.TruncateLeft(text, lipgloss.Width(text)-max(room-1, 0), "…")
 	}
-	return spread(lead+st.text.Render(text), right+" ", w)
+	return append(above, spread(lead+st.text.Render(text), right+" ", w))
+}
+
+// unknownNote is what the chat says of a wait whose screen no rule reads:
+// the agent and its version, then the fix, which names the key that goes
+// into the pane.
+func (m Model) unknownNote(s sample.Session) (what, fix string) {
+	agent := sample.AgentLabel(s.Agent) + " " + s.Version
+	if s.Version == "" {
+		agent = sample.AgentLabel(s.Agent) + ", version not read"
+	}
+	return "unknown screen · " + agent + " — answer it in its pane:", m.keys.main.Jump.Help().Key + " opens it"
+}
+
+// wrapKeeping is text and then tail wrapped to w, with tail whole on one
+// line.
+func wrapKeeping(text, tail string, w int) []string {
+	lines := wrapPlain(text, w)
+	if last := len(lines) - 1; last >= 0 && lipgloss.Width(lines[last]+" "+tail) <= w {
+		lines[last] += " " + tail
+		return lines
+	}
+	return append(lines, tail)
 }
 
 // menuOption is an option of an agent's menu, not its prompt: "❯ 1. Yes".

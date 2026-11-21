@@ -131,6 +131,9 @@ func (m Model) rowWord(s sample.Session) (word string, merged bool) {
 	if r, ok := m.stateOf(s.Host).Reasons[s.Pane]; ok && r.Word != "" && s.Pane != "" && !asks {
 		return m.tone(r.Tone).Render(r.Word), true
 	}
+	if asks && s.UnknownScreen {
+		return st.warn.Render("unknown screen"), true
+	}
 	if m.groupOf(s) == groupWaits {
 		return st.accent.Render(plain), false
 	}

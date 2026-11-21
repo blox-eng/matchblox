@@ -2,10 +2,13 @@ package app
 
 import (
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	"charm.land/lipgloss/v2"
 
 	"github.com/blox-eng/matchblox/internal/menu"
 	"github.com/blox-eng/matchblox/internal/proto"
@@ -144,9 +147,10 @@ func unknownWording(t *testing.T) string {
 	return string(b)
 }
 
-// unknownConsole is kindle-web at a permission wait the service marked an
-// unknown screen, chosen, screen on the chat for peekDead.
-func unknownConsole(t *testing.T, screen string) (Model, sample.Session) {
+// unknownConsole is kindle-web, Claude Code 2.3.1, at a permission wait
+// the service marked an unknown screen, chosen, screen on the chat for
+// peekDead. edit changes the session first.
+func unknownConsole(t *testing.T, screen string, edit ...func(*sample.Session)) (Model, sample.Session) {
 	t.Helper()
 	if menu.Read(screen) != nil {
 		t.Fatalf("menu.Read reads %v", menu.Read(screen))
@@ -155,7 +159,10 @@ func unknownConsole(t *testing.T, screen string) (Model, sample.Session) {
 		t.Fatalf("said.Menu reads %q", q)
 	}
 	s := boardMatch("kindle-web", time.Hour)
-	s.Agent, s.UnknownScreen = "claude", true
+	s.Agent, s.Version, s.UnknownScreen = "claude", "2.3.1", true
+	for _, e := range edit {
+		e(&s)
+	}
 	st := boardState(s)
 	st.Queue = []queue.Item{waitFor(s, queue.StatePermission, time.Minute)}
 	m, clock := sideConsole(t, st)
@@ -193,4 +200,74 @@ func TestAQuotedOldMenuGivesNoDigits(t *testing.T) {
 	}
 	m, s := unknownConsole(t, screen)
 	noDigits(t, m, s)
+}
+
+func TestTheRowSaysUnknownScreen(t *testing.T) {
+	m, s := unknownConsole(t, unknownWording(t))
+	if w, _ := m.rowWord(s); w != m.st.warn.Render("unknown screen") {
+		t.Fatalf("state word %q, want %q", w, m.st.warn.Render("unknown screen"))
+	}
+}
+
+const unknownNote = "unknown screen · Claude Code 2.3.1 — answer it in its pane: ctrl+o opens it"
+
+func TestTheChatNamesTheVersionAndTheFix(t *testing.T) {
+	m, _ := unknownConsole(t, unknownWording(t))
+	if got := chatLineOf(m, 120); !strings.HasSuffix(strings.TrimRight(got, " "), unknownNote) {
+		t.Fatalf("line %q", got)
+	}
+	m.keys.main.Jump = bind(ks("ctrl+g"), "ctrl+g", "go in")
+	if got := chatLineOf(m, 120); !strings.Contains(got, "answer it in its pane: ctrl+g opens it") {
+		t.Fatalf("a rebound jump: line %q", got)
+	}
+}
+
+func TestTheChatSaysVersionNotRead(t *testing.T) {
+	m, _ := unknownConsole(t, unknownWording(t), func(s *sample.Session) {
+		s.Version, s.VersionWhy = "", "the install path names no version"
+	})
+	want := "unknown screen · Claude Code, version not read — answer it in its pane: ctrl+o opens it"
+	if got := chatLineOf(m, 120); !strings.HasSuffix(strings.TrimRight(got, " "), want) {
+		t.Fatalf("line %q", got)
+	}
+}
+
+func TestTheNoteGoesWithTheFlag(t *testing.T) {
+	m, s := unknownConsole(t, unknownWording(t), func(s *sample.Session) { s.UnknownScreen = false })
+	if got := chatLineOf(m, 120); !strings.HasSuffix(strings.TrimRight(got, " "), m.inPane()) {
+		t.Fatalf("line %q", got)
+	}
+	if got := strings.Join(plainLines(m.chatPanel(120, 30)), "\n"); strings.Contains(got, "unknown screen") {
+		t.Fatalf("the chat says unknown screen:\n%s", got)
+	}
+	if w, _ := m.rowWord(s); w != m.st.accent.Render("asks") {
+		t.Fatalf("state word %q", w)
+	}
+}
+
+// At a phone's 44 columns the note wraps above the line, its key whole.
+func TestTheNoteWrapsOnAPhone(t *testing.T) {
+	m, _ := unknownConsole(t, unknownWording(t))
+	lines := plainLines(m.chatPanel(44, 30))
+	var note []string
+	for _, l := range lines {
+		if lipgloss.Width(l) > 44 {
+			t.Fatalf("line %q is wider than 44", l)
+		}
+		if l := strings.TrimSpace(l); strings.HasPrefix(l, "unknown screen") || len(note) > 0 && !strings.HasPrefix(l, "›") {
+			note = append(note, l)
+		}
+	}
+	if len(note) < 2 || strings.Join(note, " ") != unknownNote {
+		t.Fatalf("note lines %q", note)
+	}
+	if !slices.ContainsFunc(note, func(l string) bool { return strings.HasSuffix(l, "ctrl+o opens it") }) {
+		t.Fatalf("ctrl+o opens it is cut: %q", note)
+	}
+	if last := strings.TrimSpace(lines[len(lines)-1]); !strings.HasPrefix(last, "›") {
+		t.Fatalf("the last line %q is not the line", last)
+	}
+	if !strings.HasPrefix(strings.TrimSpace(lines[0]), "kindle-web") {
+		t.Fatalf("the note pushed the head out: %q", lines[0])
+	}
 }
