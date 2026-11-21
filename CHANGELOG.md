@@ -6,6 +6,12 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **A jump to another host asks briefly.** The box before a jump, or
+  before a view beside the list, says where it goes and the way back. It
+  no longer prints the ssh line with every key the jump binds.
+
 ## [0.53.1] - 2026-11-20
 
 ### Fixed

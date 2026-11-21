@@ -63,7 +63,7 @@ func (m Model) jumpOnHost(host string, a *action) *action {
 	if ssh == nil {
 		return b
 	}
-	b.steps, b.say, b.remote = [][]string{ssh}, shellLine(ssh), true
+	b.steps, b.say, b.remote = [][]string{ssh}, m.jumpWords(j), true
 	if j.Outer {
 		b.steps = [][]string{j.Local(ssh)}
 		if j.ClientTTY == "" {
@@ -72,6 +72,21 @@ func (m Model) jumpOnHost(host string, a *action) *action {
 		b.undo = []string{"tmux", "kill-session", "-t", "=" + remote.HostSessionName(j.Host, j.ID)}
 	}
 	return b
+}
+
+// jumpWords are a jump's confirm: where it goes, how, and the way back. The
+// ssh line holds every key the jump binds on the host, too long to read in
+// a box; the steps keep it exact.
+func (m Model) jumpWords(j remote.Jump) string {
+	what := "Go into " + m.besideName(j.Host, j.Pane) + " on " + j.Host
+	if j.Pane == "" {
+		what = "Open a shell in " + j.Dir + " on " + j.Host
+	}
+	how := "ssh " + j.Host + " opens it in a tmux session of its own"
+	if !j.Outer {
+		how = "ssh " + j.Host + " takes this terminal"
+	}
+	return what + ": " + how + ", then " + j.Prefix + " m takes you back"
 }
 
 // peerJump checks a jump to j.Host's j.Pane, or to a new shell in j.Dir:
