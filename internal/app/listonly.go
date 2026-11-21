@@ -41,7 +41,7 @@ func loadViewPrefs(dir string) viewPrefs {
 func (m *Model) keepViewPrefs() {
 	m.flash = ""
 	if err := keepState(m.opt.StateDir, viewPrefsFile, m.viewPrefs); err != nil {
-		m.flash = "not kept: " + err.Error()
+		m.sayError("not kept: " + err.Error())
 	}
 }
 

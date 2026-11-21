@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/blox-eng/matchblox/internal/doors"
+	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/setup"
@@ -148,6 +149,18 @@ func TestGatePhoneWithIDMarksTheDevice(t *testing.T) {
 	at, tty, ok := setup.DeviceIn(home, "0123456789ab")
 	if !ok || tty != "/dev/ttys004" || at.Before(before) {
 		t.Fatalf("note = %v, %q, %v", at, tty, ok)
+	}
+}
+
+// TestAPhoneJoinsTheFirstConsole: a phone shows the desk's first console,
+// not a console of its own.
+func TestAPhoneJoinsTheFirstConsole(t *testing.T) {
+	t.Setenv(panes.JoinEnv, "")
+	if _, ran := gateWith(t, "/dev/ttys004", "phone"); ran == nil {
+		t.Fatal("the console did not run")
+	}
+	if got := os.Getenv(panes.JoinEnv); got != "1" {
+		t.Errorf("%s = %q, want 1", panes.JoinEnv, got)
 	}
 }
 

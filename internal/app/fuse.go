@@ -485,8 +485,8 @@ func (m Model) headAct(s sample.Session, u state.ChainStoker) (tea.Model, tea.Cm
 		// switch-client reaches: it opens in a popup, as on the STOKER tab.
 		return m.openUnit(u)
 	case m.sealedNight(s.Host):
-		m.flash = sealedFamily
-		return m, nil
+		said := m.sayError(sealedFamily)
+		return m, said
 	}
 	return m.openChainSheet(m.chainIx.of[keyOf(s)]), nil
 }
@@ -503,8 +503,8 @@ func (m Model) stokeChain() (tea.Model, tea.Cmd) {
 	}
 	k, chained := m.chainKeyOf(s)
 	if !chained {
-		m.flash = s.Name + " is in no chain"
-		return m, nil
+		said := m.sayError(s.Name + " is in no chain")
+		return m, said
 	}
 	for i, h := range m.snap.Sessions {
 		if u, head := m.headRow(h); head && m.chainIx.of[keyOf(h)] == k {
@@ -519,7 +519,7 @@ func (m Model) stokeChain() (tea.Model, tea.Cmd) {
 // sealed night starts nothing.
 func (m Model) startChain(k chainKey) Model {
 	if m.sealedNight(k.host) {
-		m.flash = sealedFamily
+		m.sayError(sealedFamily)
 		return m
 	}
 	return m.openChainSheet(k)

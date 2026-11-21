@@ -221,7 +221,7 @@ func (m Model) buildSideGroups() []sideGroup {
 		}
 	}
 	var out []sideGroup
-	for h := sideNeed; h <= sideIdle; h++ {
+	for h := sideNeed; h <= sideHeld; h++ {
 		g := sideGroup{state: h}
 		for i, u := range units {
 			if len(u.members) == 0 { // all its members wait: the team sits in IDLE
@@ -292,7 +292,9 @@ func (m Model) buildSidePanes(folded bool) []paneKey {
 		}
 		for _, u := range m.sideShows(g) {
 			for _, s := range u.members {
-				out = append(out, paneOf(s))
+				if !m.killing(s) {
+					out = append(out, paneOf(s))
+				}
 			}
 			for _, v := range u.waiting {
 				out = append(out, waitKey(u.chain, v))

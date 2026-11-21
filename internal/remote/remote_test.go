@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/sample"
+
 	"github.com/blox-eng/matchblox/internal/proto"
 )
 
@@ -396,7 +398,7 @@ func TestClientTTYIsADeviceName(t *testing.T) {
 // session of its own that every step names: nothing else.
 func TestFocusAllowedIsExact(t *testing.T) {
 	at := time.Unix(1762700000, 5)
-	ok := FocusArgv("/dev/ttys004", "%1", at)
+	ok := FocusArgv("/dev/ttys004", "%1", at, "matchblox-2")
 	bare := slices.Clone(ok)
 	bare = slices.Delete(bare, 9, 11) // set-option with no -t: the session tmux runs from (#354)
 	renamed := slices.Clone(ok)
@@ -406,12 +408,17 @@ func TestFocusAllowedIsExact(t *testing.T) {
 		ok   bool
 	}{
 		{ok, true},
-		{FocusArgv("/dev/tty;x", "%1", at), false},
-		{FocusArgv("/dev/ttys004", "%1;x", at), false},
+		{FocusArgv("/dev/tty;x", "%1", at, "matchblox"), false},
+		{FocusArgv("/dev/ttys004", "%1;x", at, "matchblox"), false},
+		{FocusArgv("/dev/ttys004", "%1", at, "matchblox"), true},
+		{FocusArgv("/dev/ttys004", "%1", at, "x;kill-server"), false},
+		{FocusArgv("/dev/ttys004", "%1", at, "../a"), false},
+		{FocusArgv("/dev/ttys004", "%1", at, "work"), false},
+		{FocusArgv("/dev/ttys004", "%1", at, ""), false},
 		{bare, false},
 		{renamed, false},
 		{[]string{"tmux", "switch-client", "-c", "/dev/ttys004", "-t", "%1"}, false},
-		{append(slices.Clone(ok)[:18:18], "%2"), false},
+		{append(slices.Clone(ok)[:len(ok)-1:len(ok)-1], "%2"), false},
 		{[]string{"tmux", "switch-client", "-t", "%1"}, false},
 		{[]string{"tmux", "attach-session", "-c", "/dev/ttys004", "-t", "%1"}, false},
 	} {
@@ -425,6 +432,16 @@ func TestFocusAllowedIsExact(t *testing.T) {
 	// The gate's and the console's nav allowlist does not grow.
 	if NavAllowed(ok) {
 		t.Error("NavAllowed takes the focus's -c")
+	}
+}
+
+// TestFocusArgvMarksItsConsole: the session a focus makes names the
+// console's session it came from, so the way back goes there.
+func TestFocusArgvMarksItsConsole(t *testing.T) {
+	argv := FocusArgv("/dev/ttys004", "%1", time.Unix(1762700000, 5), "matchblox-2")
+	name := argv[6]
+	if want := []string{"set-option", "-t", name, sample.BackOption, "matchblox-2"}; !slices.Contains(strings.Split(strings.Join(argv, "\x00"), "\x00;\x00"), strings.Join(want, "\x00")) {
+		t.Errorf("FocusArgv = %q, want the step %q", argv, want)
 	}
 }
 
@@ -506,7 +523,7 @@ func TestFocusMovesOnlyThePhone(t *testing.T) {
 	home := tmux("display-message", "-p", "-t", "=matchblox:", "#{pane_id}")
 	fromConsole := append(slices.Clone(env), "TMUX="+tmux("display-message", "-p", "#{socket_path},#{pid},0"), "TMUX_PANE="+home)
 	for i := range 2 { // a second focus moves the phone again, and leaves no session behind
-		argv := FocusArgv(phone, pane, time.Now())
+		argv := FocusArgv(phone, pane, time.Now(), "matchblox")
 		if !FocusAllowed(argv) {
 			t.Fatalf("FocusAllowed(%q) = false", argv)
 		}

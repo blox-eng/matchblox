@@ -24,6 +24,7 @@ public struct KeyCatalog: Sendable {
     /// The agents of the command table, as the console names them.
     public static let agentNames = ["claude": "Claude Code", "codex": "Codex", "opencode": "OpenCode", "cursor": "Cursor"]
 
+    static let scroll = [BeltKey(id: KeyBar.wheel, cells: 1)]
     static let homeRow = row("◂", "↑", "↓", "⏎")
     static let steer = homeRow + row("Esc", "^C", "⇞", "⇟")
     static let edit = row("Tab", "⇧Tab", "←", "→", "⌫")
@@ -44,7 +45,7 @@ public struct KeyCatalog: Sendable {
         if let bad = commands.first(where: { !KeyBar.isCommandID($0.id) }) {
             throw Failure.badCommand(bad.id)
         }
-        let fixed = Self.steer + Self.edit + Self.digits + Self.ctrl
+        let fixed = Self.scroll + Self.steer + Self.edit + Self.digits + Self.ctrl + BoardBelt.tailKeys
         known = Dictionary((fixed + commands.map(Self.key)).map { ($0.id, $0) }) { first, _ in first }
     }
 
@@ -65,12 +66,14 @@ public struct KeyCatalog: Sendable {
         }
     }
 
-    /// The editor's groups: Steer, Edit, Digits, Ctrl, then one for each agent in table order.
+    /// The editor's groups: Scroll, Steer, Edit, Digits, Ctrl, Console, then one for each agent
+    /// in table order.
     public var groups: [(name: String, keys: [BeltKey])] {
         var agents: [String] = []
         for c in commands where !agents.contains(c.agent) { agents.append(c.agent) }
         var groups: [(name: String, keys: [BeltKey])] = [
-            ("Steer", Self.steer), ("Edit", Self.edit), ("Digits", Self.digits), ("Ctrl", Self.ctrl),
+            ("Scroll", Self.scroll), ("Steer", Self.steer), ("Edit", Self.edit), ("Digits", Self.digits),
+            ("Ctrl", Self.ctrl), ("Console", BoardBelt.tailKeys),
         ]
         for agent in agents {
             groups.append((Self.agentNames[agent] ?? agent, commands.filter { $0.agent == agent }.map(Self.key)))

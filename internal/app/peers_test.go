@@ -153,8 +153,8 @@ func TestResultOfAnActLostWithItsPeer(t *testing.T) {
 	_ = m.sendPeer(0, proto.Act{RecID: "answer:%12", Text: "yes"})()
 	next, _ := m.Update(peerMsg{host: "ws-1", conn: x, msg: lostMsg{err: io.EOF, conn: x}})
 	nm := next.(Model)
-	if want := "ws-1: 1 act has no answer"; saidNow(nm) != want || nm.flash != "" {
-		t.Fatalf("toast %q, flash %q; want the toast %q", saidNow(nm), nm.flash, want)
+	if want := "ws-1: 1 act has no answer"; saidNow(nm) != want || strings.Contains(keyLineOf(nm), want) {
+		t.Fatalf("toast %q, key line %q; want the toast %q alone", saidNow(nm), keyLineOf(nm), want)
 	}
 	if len(nm.peers[0].acts) != 0 {
 		t.Fatal("the lost acts are still in flight")
@@ -233,8 +233,9 @@ func TestTryAgainWithNoRedialKeepsTheRow(t *testing.T) {
 	next, _ := m.Update(peerMsg{host: "ws-1", conn: ws, msg: lostMsg{err: err, conn: ws}})
 	next, cmd := next.(Model).peerTryAgain(0)
 	nm := next.(Model)
-	if cmd != nil || len(nm.blockedHosts()) != 1 {
-		t.Fatalf("cmd %v, blocked rows %+v; want the row kept and no dial", cmd, nm.blockedHosts())
+	dials := slices.DeleteFunc(cmdMsgs(cmd), func(msg tea.Msg) bool { _, ok := msg.(sayEndsMsg); return ok }) // the toast's end is no dial
+	if len(dials) != 0 || len(nm.blockedHosts()) != 1 {
+		t.Fatalf("cmd %v, blocked rows %+v; want the row kept and no dial", dials, nm.blockedHosts())
 	}
 	if want := "ws-1 cannot try again from this console"; nm.flash != want {
 		t.Fatalf("flash %q, want %q", nm.flash, want)

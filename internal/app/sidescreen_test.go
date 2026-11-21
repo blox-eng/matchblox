@@ -247,8 +247,11 @@ func TestFootItemOpensInTheChatsPlace(t *testing.T) {
 	if m = pressOn(m, "d"); len(m.recs) != n-1 {
 		t.Fatalf("d left %d of %d tips", len(m.recs), n)
 	}
-	if m = pressOn(m, "esc"); m.sidePlace != placeChat || ansi.Cut(bodyLine(m, 0), listWide+1, 160) != chat {
-		t.Fatalf("esc did not give the place back to the chat: %q", bodyLine(m, 0))
+	m = pressOn(m, "esc")
+	bare := m
+	bare.saying = nil // the toast of the dismiss is over the chat's top
+	if m.sidePlace != placeChat || ansi.Cut(bodyLine(bare, 0), listWide+1, 160) != chat {
+		t.Fatalf("esc did not give the place back to the chat: %q", bodyLine(bare, 0))
 	}
 	if setup := strings.Index(footLine, "! "); setup >= 0 {
 		m = tapOn(t, m, point{ansi.StringWidth(footLine[:setup]) + 1, foot})
@@ -427,16 +430,16 @@ func TestANoticeLeavesTheChatLineAndTheFoot(t *testing.T) {
 	if !strings.Contains(foot, "+ new") || !strings.Contains(foot, "⏎ send to") {
 		t.Fatalf("the notice covers the foot or the chat line: %q", foot)
 	}
-	at := -1
+	at, x := -1, -1
 	for i, l := range strings.Split(plainFrame(m), "\n") {
-		if strings.Contains(l, "the line takes text") {
-			at = i
+		if c := strings.Index(l, "the line takes text"); c >= 0 {
+			at, x = i, ansi.StringWidth(l[:c])
 		}
 	}
 	if at < 0 || at >= y {
 		t.Fatalf("the notice is at line %d, the foot at %d", at, y)
 	}
-	m = tapOn(t, m, point{3, at})
+	m = tapOn(t, m, point{x + 3, at})
 	if chosenSideName(m) != chosen || len(m.sideFold) != 0 {
 		t.Fatalf("a tap on the notice chose %q, folds %v", chosenSideName(m), m.sideFold)
 	}

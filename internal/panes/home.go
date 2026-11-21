@@ -14,23 +14,113 @@ import (
 // lands in it and every pane has one way back to it.
 const Home = "matchblox"
 
-// HomeArgv is the command that runs the console in its own tmux session:
-// -A attaches when the session is already there, so a second connection
-// sees the same console. Inside tmux, or without tmux, it is nil and the
-// console runs in place. -u keeps the client UTF-8: an ssh session with no
-// locale, such as the phone's, would else see every glyph of the console
-// as "_".
-func HomeArgv(inTmux, haveTmux bool, self []string) []string {
+// HomeOption marks a tmux session as a console's own: each terminal has one.
+// Every guard reads it, never the session's name.
+const HomeOption = "@matchblox_home"
+
+// atHome is true in a console's own session. The first console's name
+// counts too: a console an older matchblox started has no mark.
+const atHome = "#{||:#{" + HomeOption + "},#{==:#{session_name}," + Home + "}}"
+
+// HomeMarkArgv marks the session of the console's pane as a console's own.
+func HomeMarkArgv(pane string) []string {
+	return []string{"tmux", "set-option", "-t", pane, HomeOption, "1"}
+}
+
+// HomeArgv is the command that runs the console in its own tmux session,
+// name (HomeSession): -A attaches when the session is already there. Inside
+// tmux, or without tmux, it is nil and the console runs in place. -u keeps
+// the client UTF-8: an ssh session with no locale, such as the phone's,
+// would else see every glyph of the console as "_".
+func HomeArgv(inTmux, haveTmux bool, name string, self []string) []string {
 	if inTmux || !haveTmux || len(self) == 0 {
 		return nil
 	}
-	return append([]string{"tmux", "-u", "new-session", "-A", "-s", Home, "-e", HomeEnv + "=1"}, self...)
+	return append([]string{"tmux", "-u", "new-session", "-A", "-s", name, "-e", HomeEnv + "=1"}, self...)
 }
 
-// SizeArgv makes the home window take the size of the device used last, so a
-// phone that rotates, or a laptop that attaches, resizes the shared console.
-func SizeArgv() []string {
-	return []string{"tmux", "set-option", "-w", "-t", "=" + Home + ":", "window-size", "latest"}
+// JoinEnv, set to 1, makes a console join the first console, shown or not:
+// the phone shows the desk's console, not one of its own.
+const JoinEnv = "MATCHBLOX_JOIN"
+
+// HomeSession is the session a new console runs in, from the terminals each
+// session has: the first console's while no terminal shows it, or to join
+// it; else matchblox-<n>, the first that no session has, so each terminal
+// has a console of its own.
+func HomeSession(attached map[string]int, join bool) string {
+	if join || attached[Home] == 0 {
+		return Home
+	}
+	for n := 2; ; n++ {
+		if name := Home + "-" + strconv.Itoa(n); attached[name] == 0 {
+			if _, taken := attached[name]; !taken {
+				return name
+			}
+		}
+	}
+}
+
+// HomeListArgv lists each session with its terminals and the console it
+// went into an agent from, for HomeSession.
+func HomeListArgv() []string {
+	return []string{"tmux", "list-sessions", "-F", "#{session_name}\t#{session_attached}\t#{" + sample.BackOption + "}"}
+}
+
+// ParseHomeList reads HomeListArgv's listing: the terminals of each
+// session, where a terminal in an agent's session counts for the console
+// it went in from, as it comes back there.
+func ParseHomeList(listing string) map[string]int {
+	attached := map[string]int{}
+	for _, line := range strings.Split(listing, "\n") {
+		f := strings.SplitN(strings.TrimSpace(line), "\t", 3)
+		if len(f) < 2 {
+			continue
+		}
+		n, _ := strconv.Atoi(f[1])
+		attached[f[0]] += n
+		if len(f) == 3 && f[2] != "" {
+			attached[f[2]] += n
+		}
+	}
+	return attached
+}
+
+// ClientsArgv lists each terminal of the server by its client's process,
+// with the session it shows and that session's way back, for Orphaned.
+func ClientsArgv() []string {
+	return []string{"tmux", "list-clients", "-F", "#{client_pid}\t#{client_session}\t#{" + sample.BackOption + "}"}
+}
+
+// Orphaned tells, from a ClientsArgv listing, if the console of the session
+// name has lost its terminal: each terminal seen in that session, or in an
+// agent's session whose way back is that console (seen, which it updates),
+// has left the server. A terminal that only looks at another session still
+// has it. A terminal is its client's process: a new terminal can take a
+// closed one's tty. The first console is never orphaned: it waits for the
+// next terminal, as before.
+func Orphaned(name string, seen map[string]bool, listing string) bool {
+	if name == Home {
+		return false
+	}
+	here := false
+	for _, line := range strings.Split(listing, "\n") {
+		f := strings.SplitN(strings.TrimSpace(line), "\t", 3)
+		if len(f) < 2 {
+			continue
+		}
+		if f[1] == name || len(f) == 3 && f[2] == name {
+			seen[f[0]] = true
+		}
+		here = here || seen[f[0]]
+	}
+	return len(seen) > 0 && !here
+}
+
+// SizeArgv makes the window of the console's pane take the size of the
+// device used last, so a phone that rotates, or a laptop that attaches,
+// resizes the shared console.
+func SizeArgv(pane string) []string {
+	return []string{"tmux", "set-option", "-w", "-t", pane, "window-size", "latest"}
 }
 
 // HomeKey is what the app sends to go back to the console: an APC string,
@@ -61,14 +151,33 @@ var goHome = [3]string{
 	goTo,
 }
 
-// goTo takes the client to a console: to the console's session and on to
-// the console's pane there, as another window may be the one on screen;
-// with no such session, to a console run in place in a pane of any other
-// session (#354). With no console at all, it says how to open one, not
-// tmux's bare "can't find session".
-var goTo = `if-shell -F "` + homeExists + `" { switch-client -t =` + Home + " ; run-shell -C -t =" + Home + `: "#{W:#{P:#{?` + isConsolePane +
+// goTo takes the client to its own console: the console of the session it
+// is in, or of the session it went into an agent from (sample.BackOption); with
+// neither, or when that console has ended, to the first console's session.
+// It goes on to the console's pane there, as another window may be the one
+// on screen. With no such session, it goes to a console run in place in a
+// pane of any other session (#354). With no console at all, it says how to
+// open one, not tmux's bare "can't find session". The console's name waits
+// in the server option goToOption, as a format in a session's loop reads
+// that session's options, never the client's.
+var goTo = `run-shell -C "set-option -g ` + goToOption + ` ` + consoleOf + `" ; if-shell -F "` + toAlive + `" { run-shell -C "` + jumpTo + `" } { ` +
+	`if-shell -F "` + homeExists + `" { switch-client -t =` + Home + " ; run-shell -C -t =" + Home + `: "#{W:#{P:#{?` + isConsolePane +
 	`,select-window -t #{window_id} ; select-pane -Z -t #{pane_id} ; ,}}}" } { if-shell -F "` + consoleExists +
-	`" { run-shell -C "#{S:#{W:#{P:#{?` + runsConsole + `,switch-client -t #{pane_id} ; ,}}}}" } { display-message "` + NoHome + `" } }`
+	`" { run-shell -C "#{S:#{W:#{P:#{?` + runsConsole + `,switch-client -t #{pane_id} ; ,}}}}" } { display-message "` + NoHome + `" } } }`
+
+// goToOption is the console the way back goes to, as goTo found it.
+const goToOption = "@matchblox_to"
+
+// consoleOf is the name of the client's own console's session.
+const consoleOf = "#{?" + atHome + ",#{session_name},#{?#{" + sample.BackOption + "},#{" + sample.BackOption + "}," + Home + "}}"
+
+// toAlive is "1" while the console in goToOption has its session.
+const toAlive = "#{S:#{?#{&&:#{==:#{session_name},#{" + goToOption + "}}," + atHome + "},1,}}"
+
+// jumpTo switches the client to the session in goToOption and selects its
+// console's pane there.
+const jumpTo = "#{S:#{?#{==:#{session_name},#{" + goToOption + "}},switch-client -t #{session_id} ; #{W:#{P:#{?" + isConsolePane +
+	",select-window -t #{window_id} ; select-pane -Z -t #{pane_id} ; ,}}},}}"
 
 // homeExists is "1" while the tmux server has the console's session.
 const homeExists = "#{S:#{?#{==:#{session_name}," + Home + "},1,}}"
@@ -118,7 +227,7 @@ func CommandKeysArgv() []string {
 // atConsole is true for a client in the console's session, on a pane the
 // console runs in, or on any pane of a window that names its console
 // (@matchblox_console): the agent pane beside the list too.
-const atConsole = "#{&&:#{==:#{session_name}," + Home + "},#{||:" + runsConsole + ",#{" + sample.ConsoleOption + "}}}"
+const atConsole = "#{&&:" + atHome + ",#{||:" + runsConsole + ",#{" + sample.ConsoleOption + "}}}"
 
 // handTarget is the pane the key hands go to: the window's console when it
 // names one, else the active pane.

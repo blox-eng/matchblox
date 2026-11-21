@@ -7,7 +7,6 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/x/ansi"
 )
 
 // closeTheMachine answers each seam left to the real machine with the demo's
@@ -55,13 +54,16 @@ func (m Model) inDemo() Model {
 		return m
 	}
 	if m.pending != nil && m.pending.leavesTheDemo() {
-		m.pending, m.flash = nil, line
+		m.pending = nil
+		m.sayError(line)
 	}
 	if m.form != nil && strings.Contains(m.form.err, line) {
-		m.form, m.flash = nil, line
+		m.form = nil
+		m.sayError(line)
 	}
-	if strings.Contains(m.flash, line) {
-		m.flash = line
+	if m.flash != line && strings.Contains(m.flash, line) {
+		m.unsay(m.flash) // the line says it alone, once
+		m.sayError(line)
 	}
 	if strings.Contains(m.recRun.out, line) {
 		m.recRun.out = line
@@ -71,21 +73,11 @@ func (m Model) inDemo() Model {
 
 // keyRows are the hair above the key line and the key line. While this
 // console's switch waits for the record, the wait takes the hair's row and
-// esc's word the key line. The demo's line
-// does not fit a phone's width: where it shows, it takes the hair's row too.
+// esc's word the key line.
 func (m Model) keyRows(w int) (hair, keys string, spans []span) {
 	if wait, keys, spans, ok := m.waitRows(w); ok {
 		return wait, keys, spans
 	}
-	hair = m.st.hair.Render(strings.Repeat("─", w))
 	keys, spans = m.keyLine(w)
-	if m.opt.Demo == "" || ansi.StringWidth(m.opt.Demo)+1 <= w || m.flash != m.opt.Demo ||
-		keys != fit(" "+m.st.text.Render(m.flash), w) {
-		return hair, keys, spans
-	}
-	first, second, ok := strings.Cut(m.opt.Demo, ". ") // each sentence its own row
-	if !ok || ansi.StringWidth(first)+2 > w || ansi.StringWidth(second)+1 > w {
-		return hair, keys, spans
-	}
-	return fit(" "+m.st.text.Render(first+"."), w), fit(" "+m.st.text.Render(second), w), nil
+	return m.st.hair.Render(strings.Repeat("─", w)), keys, spans
 }

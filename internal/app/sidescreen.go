@@ -440,29 +440,38 @@ func (m Model) expand(s sample.Session, ok bool) (tea.Model, tea.Cmd) {
 	return next, cmd
 }
 
-// sideSays is what the Sessions tab says now: a notice while one shows,
-// the copy check while it waits for its paste, a newer release on Pocket,
-// which has no key line to say it, the last flash, else the service's
-// state.
+// sideSays is what the Sessions tab says now: the newest toast, else
+// what its foot says.
 func (m Model) sideSays() string {
+	if now := m.sayingNow(); len(now) > 0 {
+		return now[0].text
+	}
+	return m.footSays()
+}
+
+// footSays is what the list's foot says: the copy check while it waits
+// for its paste, a newer release or the tap again on Pocket, which has no
+// key line to say them, else the service's state. A text a toast says now is not said
+// again here (#450).
+func (m Model) footSays() string {
 	switch {
-	case m.noticeText != "" && m.now().Before(m.noticeUntil):
+	case m.noticeText != "" && m.now().Before(m.noticeUntil) && !m.sayingIt(m.noticeText):
 		return m.noticeText
-	case m.copyCode != "":
+	case m.copyCode != "" && !m.sayingIt(m.pasteHere()):
 		return m.pasteHere()
 	case m.newer != "" && !m.lost && m.beltOnly():
 		return m.newerSaid()
-	case m.flash != "":
+	case m.askingAgain() && m.beltOnly(): // Pocket has no key line to ask on
 		return m.flash
 	}
-	return m.stateNotice()
+	return "" // a standing error is the header's mark
 }
 
 // noticeAt is where what the tab says draws, in lines of the body: the
 // lines just over its last one, which holds the chat's line and the
 // list's foot. y0 == y1: nothing is said.
 func (m Model) noticeAt(w int) (rows []string, y0, y1 int) {
-	text := m.sideSays()
+	text := m.footSays()
 	if text == "" {
 		return nil, 0, 0
 	}
@@ -586,15 +595,17 @@ func (m Model) sideKeyWords() string {
 }
 
 // sideTap is a tap at x on line y of the Sessions body. On a row it
-// chooses the session and opens its chat; on a group's head it folds or
-// unfolds the group; on the foot it opens that part in the chat's place.
+// chooses the session and opens its chat; beside the list it shows the
+// session's agent at once, as a rest on the row does, and the keys stay in
+// the list (a phone, one pane at a time, opens the agent). On a group's
+// head it folds or unfolds the group; on the foot it opens that part in the chat's place.
 // In the chat, a tap on ◂ goes back to the list, and any other tap gives
 // the keys to the line.
 func (m Model) sideTap(x, y int) (tea.Model, tea.Cmd) {
 	w := max(m.width, minWidth)
 	box := m.sideBoxAt(w)
 	if _, y0, y1 := m.noticeAt(w); y >= y0 && y < y1 {
-		if m.newer != "" && m.sideSays() == m.newerSaid() && m.startsAgain { // Pocket's notice of a newer release: a tap starts again
+		if m.newer != "" && m.footSays() == m.newerSaid() && m.startsAgain { // Pocket's notice of a newer release: a tap starts again
 			return m.startAgain()
 		}
 		return m, nil // a notice covers the line: a tap on it does nothing to what is under it
@@ -612,6 +623,10 @@ func (m Model) sideTap(x, y int) (tea.Model, tea.Cmd) {
 			fold[hit.state] = !fold[hit.state]
 			m.sideFold = fold
 			return m, nil
+		case hit.k != (paneKey{}) && m.besideMode() && !m.onePaneAt(m.winW, m.winH):
+			m = m.chooseSide(hit.k)
+			m.previewSeq++
+			return m.look(previewMsg{m.previewSeq})
 		case hit.k != (paneKey{}) && m.besideMode():
 			return m.chooseSide(hit.k).showChosen()
 		case hit.k != (paneKey{}):
@@ -750,6 +765,9 @@ func (m Model) sideWaits() []sample.Session {
 // for another host while all hosts show.
 func (m Model) sideTitle(s sample.Session) string {
 	title := m.cardName(s)
+	if p, ok := m.pendingOf(s); ok && p.kind == actRename { // a rename sent shows at once
+		title = p.to
+	}
 	if m.hostCount() > 1 && m.boardHost == "" && s.Host != m.opt.Host {
 		title += "@" + m.nameOf(s.Host)
 	}
@@ -891,11 +909,13 @@ func (m Model) sideRightClick(ms tea.Mouse) (tea.Model, tea.Cmd) {
 
 // formInChat draws the open form in the chat's place, beside the list:
 // the form's box from the body's first line, blank under it. Where one
-// pane shows, the form takes the width.
+// pane shows, the form takes the width. Before tmux zooms the list's pane
+// for the form, the chat beside the list is a sliver: the form takes the
+// pane until the zoom lands.
 func (m Model) formInChat(sc *drawn, w int) {
 	box := m.sideBoxAt(w)
 	x, bw := box.chatX, box.chatW
-	if bw == 0 {
+	if bw < chatMin {
 		x, bw = 0, w
 	}
 	lines, press, spans, agentsAt, agents := m.formBox(bw)

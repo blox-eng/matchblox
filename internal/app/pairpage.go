@@ -200,7 +200,7 @@ func (m Model) closePairPage(why string) Model {
 	if p == nil {
 		return m
 	}
-	m.flash = why
+	m.sayError(why)
 	if p.offer != nil && m.opt.Pair != nil {
 		p.offer.cancel(m.opt.Pair)
 	}
@@ -211,7 +211,7 @@ func (m Model) closePairPage(why string) Model {
 	if err == nil && !removed && p.live() {
 		if d, ok := m.opt.Pair.Claim(p.id); ok {
 			p.device = d // the page that ended names it, for matchblox pair
-			m.flash = pairedLine(d)
+			m.say(pairedLine(d))
 		}
 	}
 	return m
@@ -434,9 +434,9 @@ func (m Model) pairKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case bkey.Matches(k, m.keys.pair.Copy):
 		if p.live() {
 			cmd, err := m.clip(p.link)
-			m.flash = "link copied"
+			m.say("link copied")
 			if err != nil {
-				m.flash = "not copied: " + err.Error()
+				m.sayError("not copied: " + err.Error())
 			}
 			return m, cmd
 		}
@@ -452,8 +452,8 @@ func (m Model) pairKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		if p.phase == boxExpired || p.failed {
 			if m.fromDevice() {
-				m.flash = pairFromDeviceLine
-				return m, nil
+				said := m.say(pairFromDeviceLine)
+				return m, said
 			}
 			return m.closePairPage("").openPairPage()
 		}

@@ -124,6 +124,9 @@ func consolePaneIn(t *testing.T, session string) (sock string, tmux func(args ..
 	}
 	got = t.TempDir() + "/events"
 	tmux("new-session", "-d", "-s", session, "-e", decodeTo+"="+got, consoleBinary(t), "-test.run=^TestDecodePane$")
+	if session == Home {
+		tmux("set-option", "-t", "="+Home+":", HomeOption, "1")
+	}
 	waitFor(t, func() bool {
 		b, _ := os.ReadFile(got)
 		return strings.HasPrefix(string(b), "ready")

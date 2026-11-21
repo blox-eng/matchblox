@@ -316,7 +316,7 @@ func run(args []string) error {
 			binds = append(binds, panes.HomeKeyArgv(), panes.FlipKeysArgv())
 		}
 		if os.Getenv(panes.HomeEnv) == "1" {
-			binds = append(binds, panes.SizeArgv(), panes.CommandKeysArgv(), panes.MarkKeyArgv(), panes.BeltKeyArgv(), panes.TapKeysArgv(), panes.ViewerHookArgv(), panes.BesideKeysArgv(), panes.BesideHookArgv(), remote.ViewHookArgv())
+			binds = append(binds, homeBinds(os.Getenv("TMUX_PANE"))...)
 		}
 		for _, argv := range binds {
 			_ = exec.Command("tmux", argv[1:]...).Run()
@@ -490,15 +490,33 @@ func parseCommand(args []string) (cmd, host string, rest []string, err error) {
 	return "console", args[0], args[1:], nil
 }
 
+// homeBinds are the tmux settings of a console in its home session. The
+// console's mark and size take its own pane, from the environment, only
+// when it is a tmux pane id.
+func homeBinds(pane string) [][]string {
+	var binds [][]string
+	if remote.PaneID(pane) {
+		binds = append(binds, panes.HomeMarkArgv(pane), panes.SizeArgv(pane))
+	}
+	return append(binds, panes.CommandKeysArgv(), panes.MarkKeyArgv(), panes.BeltKeyArgv(), panes.TapKeysArgv(), panes.ViewerHookArgv(), panes.BesideKeysArgv(), panes.BesideHookArgv(), remote.ViewHookArgv())
+}
+
 // goHome replaces this process with `tmux new-session -A -s matchblox
-// matchblox …` outside tmux. It returns only when the console runs in place.
+// matchblox …` outside tmux, or with matchblox-<n> when a terminal shows
+// the first console already (panes.HomeSession). It returns only when the
+// console runs in place.
 func goHome() error {
 	tmux, err := exec.LookPath("tmux")
 	self := invokedPath(os.Args[0])
 	if self == "" {
 		return nil
 	}
-	argv := panes.HomeArgv(os.Getenv("TMUX") != "", err == nil, append([]string{self}, os.Args[1:]...))
+	var listing []byte
+	if err == nil {
+		listing, _ = exec.Command(tmux, panes.HomeListArgv()[1:]...).Output() // no server: no session
+	}
+	name := panes.HomeSession(panes.ParseHomeList(string(listing)), os.Getenv(panes.JoinEnv) == "1")
+	argv := panes.HomeArgv(os.Getenv("TMUX") != "", err == nil, name, append([]string{self}, os.Args[1:]...))
 	if argv == nil {
 		return nil
 	}
@@ -657,6 +675,16 @@ func console(path string, cfg config.Config, root string, noMotion bool, host st
 	return restart()
 }
 
+// consoleSession is the name of the console's own tmux session, the
+// session of its pane; "" when tmux does not say one.
+func consoleSession(pane string) string {
+	out, err := exec.Command("tmux", "display-message", "-p", "-t", pane, "#{session_name}").Output()
+	if name := strings.TrimSpace(string(out)); err == nil && remote.ConsoleSession(name) {
+		return name
+	}
+	return ""
+}
+
 // runConsole runs the console until it ends, and returns what starts it
 // again when it ended for that.
 func runConsole(path string, cfg config.Config, root string, noMotion bool, host string) (func() error, error) {
@@ -674,6 +702,9 @@ func runConsole(path string, cfg config.Config, root string, noMotion bool, host
 	home, _ := os.UserHomeDir()
 	base.Beside = !base.OutsideTmux && os.Getenv(panes.HomeEnv) == "1" && root == "" && host == ""
 	base.Socket, _, _ = strings.Cut(os.Getenv("TMUX"), ",")
+	if os.Getenv(panes.HomeEnv) == "1" && base.Pane != "" {
+		base.HomeSession = consoleSession(base.Pane)
+	}
 	base.Pair = consolePair(home, base.Self, defaultHostKey, setup.PairAddress)
 	restore := func() {}
 	if root == "" {
@@ -717,7 +748,13 @@ func runConsole(path string, cfg config.Config, root string, noMotion bool, host
 		Answered:      func() { _ = os.MkdirAll(filepath.Dir(asked), 0o700); _ = os.WriteFile(asked, nil, 0o600) },
 		TailscaleGate: setup.TailscaleGateMessage,
 	})
-	final, err := tea.NewProgram(sh, tea.WithFPS(consoleFPS)).Run()
+	p := tea.NewProgram(sh, tea.WithFPS(consoleFPS))
+	if base.HomeSession != "" && base.HomeSession != panes.Home {
+		stop := make(chan struct{})
+		defer close(stop)
+		go watchOrphan(base.HomeSession, listSessions, p.Quit, orphanEvery, stop)
+	}
+	final, err := p.Run()
 	s, ok := final.(app.Shell)
 	if !ok {
 		return nil, err
