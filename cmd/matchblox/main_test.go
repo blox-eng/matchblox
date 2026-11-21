@@ -279,14 +279,15 @@ const waitLimit = 10 * time.Second
 // it stops for a restart once it has the socket.
 func TestServeOfTheUnitStopsForAnInstallWhileItWaits(t *testing.T) {
 	path := isolate(t)
-	old := socketWait
+	old, oldSelf := socketWait, selfPath
 	socketWait = 20 * time.Millisecond
-	t.Cleanup(func() { socketWait = old })
+	t.Cleanup(func() { socketWait, selfPath = old, oldSelf })
 	t.Setenv(unitEnv, "1")
 	exe := filepath.Join(t.TempDir(), "matchblox")
 	if err := os.WriteFile(exe, []byte("v1"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	selfPath = func() string { return exe }
 	l, err := transport.Listen(path)
 	if err != nil {
 		t.Fatal(err)
@@ -320,6 +321,51 @@ func TestServeOfTheUnitStopsForAnInstallWhileItWaits(t *testing.T) {
 		}
 	case <-time.After(waitLimit):
 		t.Fatal("the unit's serve runs the old code on, after the install")
+	}
+}
+
+// TestServeOfTheUnitStopsForAnInstallWhileTheOtherServes: a console's
+// serve updates by running the new binary in its own place, so it keeps
+// the socket. The unit's serve, waiting, must not run the old code on for
+// ever (2026-11-21: a unit's serve ran a deleted binary for two days): it
+// stops for the unit to start the new one, while the other still serves.
+func TestServeOfTheUnitStopsForAnInstallWhileTheOtherServes(t *testing.T) {
+	path := isolate(t)
+	old, oldSelf := socketWait, selfPath
+	socketWait = 20 * time.Millisecond
+	t.Cleanup(func() { socketWait, selfPath = old, oldSelf })
+	t.Setenv(unitEnv, "1")
+	exe := filepath.Join(t.TempDir(), "matchblox")
+	if err := os.WriteFile(exe, []byte("v1"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	selfPath = func() string { return exe }
+	l, err := transport.Listen(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	go func() { _ = newService(config.Default(), fixtures(t)).Serve(ctx, l) }()
+	at, err := os.Stat(exe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() {
+		done <- serve(path, at, func() *service.Service {
+			t.Error("the unit's serve built its service while another serve owned the socket")
+			return newService(config.Default(), fixtures(t))
+		})
+	}()
+	installOver(t, exe, path)
+	select {
+	case err := <-done:
+		if !errors.Is(err, errRestart) {
+			t.Fatalf("serve returned %v, want a restart", err)
+		}
+	case <-time.After(waitLimit):
+		t.Fatal("the unit's serve waits on in the old code, after the install")
 	}
 }
 

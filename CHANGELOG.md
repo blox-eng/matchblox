@@ -6,6 +6,13 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **The waiting service follows each update.** The service your
+  user unit starts waits while a console's service runs. It ran the
+  binary it started on until it took over, which could be never. Now an
+  update stops it, and the unit starts it again on the new binary.
+
 ## [0.56.0] - 2026-11-21
 
 ### Added
