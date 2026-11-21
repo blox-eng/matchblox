@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/json"
 	"slices"
 	"strings"
 	"testing"
@@ -599,5 +600,159 @@ func TestLeavingTheRoomSaysGReopensIt(t *testing.T) {
 	}
 	if m = pressOn(m, "g"); m.sidePlace != placeRoom {
 		t.Errorf("g did not open the room again: place %d", m.sidePlace)
+	}
+}
+
+// reopenAct is the act ⏎ sent on the waiting row of m, and the
+// conversations its Text asks recover to reopen. The Text names nothing
+// else: a tmux session's name would start each agent of that session.
+func reopenAct(t *testing.T, m Model) (proto.Act, []string) {
+	t.Helper()
+	acts := boardFake(m).acts()
+	if len(acts) != 1 {
+		t.Fatalf("⏎ on a waiting row sent %d acts: %+v", len(acts), acts)
+	}
+	var r proto.Recover
+	if err := json.Unmarshal([]byte(acts[0].Text), &r); err != nil {
+		t.Fatalf("the act's Text %q is no JSON: %v", acts[0].Text, err)
+	}
+	if want, _ := json.Marshal(proto.Recover{Conversations: r.Conversations}); string(want) != acts[0].Text {
+		t.Fatalf("the act's Text is %s, want only conversations", acts[0].Text)
+	}
+	return acts[0], r.Conversations
+}
+
+// TestEnterReopensAWaitingMatch: ⏎ on a waiting row, on a desk or not,
+// sends recover for its conversation, as JSON: never
+// its name, which the record may not know. The result shows as one notice
+// that names the fix.
+func TestEnterReopensAWaitingMatch(t *testing.T) {
+	since := time.Date(2026, 10, 1, 22, 14, 0, 0, time.Local)
+	for _, c := range []struct {
+		name       string
+		desk, line bool
+	}{{"kindle-web", false, false}, {"kindle-web", true, false}, {"kindle\"web\nx", false, false}} {
+		m := pressOn(waitingKindle(t, since, 0), "down")
+		for _, v := range m.chains.Mates {
+			if v.Wait != nil {
+				v.Wait.Name = c.name
+			}
+		}
+		if c.desk {
+			m.beside = "%agent"
+		}
+		if c.line {
+			m.toLine()
+		}
+		m = pressOn(m, "enter")
+		a, convs := reopenAct(t, m)
+		if a.RecID != "recover" || a.Confirm != "y" || !slices.Equal(convs, []string{"c-3"}) {
+			t.Errorf("desk %v, line %v, name %q: ⏎ sent %+v, conversations %q; want recover for c-3", c.desk, c.line, c.name, a, convs)
+		}
+	}
+
+	m := pressOn(pressOn(waitingKindle(t, since, 0), "down"), "enter")
+	for _, c := range []struct {
+		row  proto.Recovered
+		want string
+	}{
+		{proto.Recovered{Name: "kindle-web", State: proto.RecoverReopened, As: "kindle-web"}, "kindle-web reopened"},
+		{proto.Recovered{Name: "kindle-web", State: proto.RecoverCannot, Why: "claude is not installed here: install it, then run matchblox recover again"},
+			"kindle-web not reopened: claude is not installed here: install it, then run matchblox recover again"},
+	} {
+		next, _ := m.Update(resultMsg(proto.Result{ActID: "a1", Recover: []proto.Recovered{c.row}}))
+		if got := next.(Model).noticeText; got != c.want {
+			t.Errorf("%s: the notice is %q, want %q", c.row.State, got, c.want)
+		}
+	}
+}
+
+// TestEnterInTheLineOnAWaitingRowDoesNotReopen: in the line, ⏎ sends what
+// was typed; on a waiting row it starts no agent. It says why, and sends
+// nothing: ⏎ in the list reopens.
+func TestEnterInTheLineOnAWaitingRowDoesNotReopen(t *testing.T) {
+	m := pressOn(waitingKindle(t, time.Date(2026, 10, 1, 22, 14, 0, 0, time.Local), 0), "down")
+	m.toLine()
+	before := len(boardFake(m).allActs())
+	m = pressOn(m, "enter")
+	if acts := boardFake(m).allActs(); len(acts) != before {
+		t.Fatalf("⏎ in the line on a waiting row sent %+v", acts[before:])
+	}
+	if want := "kindle-web waits for recover · matchblox recover reopens it"; m.noticeText != want {
+		t.Fatalf("the notice is %q, want %q", m.noticeText, want)
+	}
+}
+
+// TestTheReopenNoticeNamesTheRow: recover answers with the record's tmux
+// session, work; the notice names the row the owner chose, api. A row of
+// a conversation no member waits with keeps recover's name.
+func TestTheReopenNoticeNamesTheRow(t *testing.T) {
+	m := pressOn(waitingKindle(t, time.Date(2026, 10, 1, 22, 14, 0, 0, time.Local), 0), "down")
+	for _, v := range m.chains.Mates {
+		if v.Wait != nil {
+			v.Wait.Name = "api"
+		}
+	}
+	rows := []proto.Recovered{
+		{Name: "work", Conversation: "c-3", State: proto.RecoverReopened, As: "work"},
+		{Name: "other", Conversation: "c-9", State: proto.RecoverReady},
+	}
+	next, _ := m.Update(resultMsg(proto.Result{ActID: "a1", Recover: rows}))
+	if got, want := next.(Model).noticeText, "api reopened · other is ready"; got != want {
+		t.Fatalf("the notice is %q, want %q", got, want)
+	}
+}
+
+// TestTheMenuOfAWaitingMatch: m on a waiting row opens its menu, with the
+// room closed. out of login asks for a typed y, then takes the member out
+// by its session id, never by its pane.
+func TestTheMenuOfAWaitingMatch(t *testing.T) {
+	m := pressOn(waitingKindle(t, time.Date(2026, 10, 1, 22, 14, 0, 0, time.Local), 0), "down")
+	if m.room != nil {
+		t.Fatal("the room is open")
+	}
+	m = pressOn(m, "m")
+	if m.menu == nil {
+		t.Fatalf("m on a waiting row opened no menu; the notice says %q", m.noticeText)
+	}
+	want := []string{"reopen it", "copy its name", "copy its conversation id", "out of login"}
+	if got := itemLabels(m.menu.items); !slices.Equal(got, want) {
+		t.Fatalf("the menu reads %q, want %q", got, want)
+	}
+	if !strings.Contains(plainFrame(m), "kindle-web") {
+		t.Errorf("the menu's box does not name kindle-web:\n%s", plainFrame(m))
+	}
+	for range 3 {
+		m = pressOn(m, "down")
+	}
+	asked := pressOn(m, "enter")
+	f := boardFake(asked)
+	if len(f.acts()) != 0 || asked.pending == nil || !asked.pending.destructive || asked.pending.label != "take kindle-web out of login" {
+		t.Fatalf("⏎ on out of login: acts %+v, pending %+v", f.acts(), asked.pending)
+	}
+	pressOn(asked, "y")
+	if a := f.acts(); len(a) != 1 || a[0].RecID != "chain:out:sid:sid-kindle-web@login" || a[0].Confirm != "y" {
+		t.Fatalf("y: acts %+v", a)
+	}
+
+	reopen := pressOn(pressOn(waitingKindle(t, time.Date(2026, 10, 1, 22, 14, 0, 0, time.Local), 0), "down"), "m", "enter")
+	if a, convs := reopenAct(t, reopen); a.RecID != "recover" || !slices.Equal(convs, []string{"c-3"}) {
+		t.Errorf("reopen it sent %+v, conversations %q", a, convs)
+	}
+}
+
+// TestTheReopenNoticeNamesTheRowAfterItIsLive: the reopened agent shows
+// in the list before recover answers, so no row waits with its
+// conversation any more. The notice still names the row the owner chose,
+// not recover's tmux session.
+func TestTheReopenNoticeNamesTheRowAfterItIsLive(t *testing.T) {
+	m := pressOn(pressOn(waitingKindle(t, time.Date(2026, 10, 1, 22, 14, 0, 0, time.Local), 0), "down"), "enter")
+	for i := range m.chains.Mates {
+		m.chains.Mates[i].Wait = nil
+	}
+	rows := []proto.Recovered{{Name: "work", Conversation: "c-3", State: proto.RecoverReopened, As: "work"}}
+	next, _ := m.Update(resultMsg(proto.Result{ActID: "a1", Recover: rows}))
+	if got, want := next.(Model).noticeText, "kindle-web reopened"; got != want {
+		t.Fatalf("the notice is %q, want %q", got, want)
 	}
 }

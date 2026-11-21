@@ -79,7 +79,7 @@ func resolve(doc state.Doc, who string) (sample.Session, error) {
 	}
 	switch len(hit) {
 	case 0:
-		return sample.Session{}, fmt.Errorf("no session named %s", who)
+		return sample.Session{}, fmt.Errorf("%w %s", errNoSession, who)
 	case 1:
 		return hit[0], nil
 	}
@@ -88,6 +88,29 @@ func resolve(doc state.Doc, who string) (sample.Session, error) {
 		panes[i] = s.Pane
 	}
 	return sample.Session{}, fmt.Errorf("%s is %d sessions: %s; name the pane", who, len(hit), strings.Join(panes, ", "))
+}
+
+var errNoSession = errors.New("no session named")
+
+// waitingMate is the chain-mate named who that waits for recover. Its pane
+// went with its tmux server, so its Pane is "sid:" and its conversation id.
+// A name two waiting mates share is refused, never guessed.
+func waitingMate(doc state.Doc, who string) (sample.Session, error) {
+	var ids []string
+	if doc.Chains != nil {
+		for _, m := range doc.Chains.Mates {
+			if m.Wait != nil && m.Wait.Name == who {
+				ids = append(ids, m.Wait.Conversation)
+			}
+		}
+	}
+	switch len(ids) {
+	case 0:
+		return sample.Session{}, fmt.Errorf("%w %s", errNoSession, who)
+	case 1:
+		return sample.Session{Name: who, Pane: "sid:" + ids[0]}, nil
+	}
+	return sample.Session{}, fmt.Errorf("%s is %d matches that wait for recover: %s", who, len(ids), strings.Join(ids, ", "))
 }
 
 type shipJSON struct {
@@ -779,6 +802,9 @@ func handAct(doc state.Doc, cmd string, words []string, pick int, why, from stri
 		return proto.Act{}, fmt.Errorf("%s needs a session: matchblox %s <who>", cmd, cmd)
 	}
 	sess, err := resolve(doc, words[0])
+	if errors.Is(err, errNoSession) && cmd == "send" {
+		sess, err = waitingMate(doc, words[0])
+	}
 	if err != nil {
 		return proto.Act{}, err
 	}
@@ -870,8 +896,14 @@ func handOutcome(w io.Writer, cmd, who string, res proto.Result, err error) erro
 		}
 		return fmt.Errorf("%s: refused: %w", name, err)
 	}
-	if cmd == "send" && len(res.Ran) > 0 {
+	switch {
+	case cmd == "send" && len(res.Ran) > 0:
 		if _, err := fmt.Fprintf(w, "%s: typed\n", name); err != nil {
+			return err
+		}
+	case cmd == "send" && res.Note != "":
+		// Nothing was typed: the service kept the line, and its note says where.
+		if _, err := fmt.Fprintln(w, res.Note); err != nil {
 			return err
 		}
 	}

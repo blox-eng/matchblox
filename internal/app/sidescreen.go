@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/json"
 	"maps"
 	"slices"
 	"strconv"
@@ -676,7 +677,8 @@ func (m Model) footTap(foot []span, x int) (tea.Model, tea.Cmd) {
 }
 
 // openFoot opens a part of the list's foot in the chat's place: New
-// session, the tips, the first open setup step; or shows the exited agents.
+// session, the tips, the first open setup step; or shows the exited agents;
+// or asks to reopen the matches that wait for recover on a host.
 func (m Model) openFoot(press string) (tea.Model, tea.Cmd) {
 	m.footAt = 0
 	switch press {
@@ -694,6 +696,32 @@ func (m Model) openFoot(press string) (tea.Model, tea.Cmd) {
 		m.openPlace(placeHost)
 		m.sideHost = host
 	}
+	if host, ok := strings.CutPrefix(press, footReopen); ok {
+		return m.askReopen(host)
+	}
+	return m, nil
+}
+
+// askReopen asks for a typed y to reopen all the matches that wait for
+// recover on host. Reopening starts agents, so the confirm names each one.
+// The act names their conversations, as JSON (reopenChosen says why).
+func (m Model) askReopen(host string) (tea.Model, tea.Cmd) {
+	_, all := m.waitingByHost()
+	var names, convs []string
+	m.reopening = map[string]string{}
+	for _, w := range all[host] {
+		names, convs = append(names, w.Name), append(convs, w.Conversation)
+		m.reopening[w.Conversation] = w.Name
+	}
+	if len(names) == 0 {
+		return m, nil
+	}
+	text, _ := json.Marshal(proto.Recover{Conversations: convs})
+	say := "reopen " + names[0] + "?"
+	if len(names) > 1 {
+		say = "reopen " + strconv.Itoa(len(names)) + " matches: " + strings.Join(names, ", ") + "?"
+	}
+	m.pending = &action{label: say, say: say, rec: recoverID, text: string(text), destructive: true, host: host}
 	return m, nil
 }
 
@@ -859,6 +887,9 @@ func (m Model) sideRowAt(x, y int) (paneKey, bool) {
 // right-click or a long press on its row.
 func (m Model) sideMenuOn(k paneKey, x, y int) (tea.Model, tea.Cmd) {
 	m = m.chooseSide(k)
+	if v, c, ok := m.sideWaiting(); ok {
+		return m.openWaitMenu(v, c, x, y), nil
+	}
 	s, ok := m.sideChosen()
 	if !ok {
 		return m, nil

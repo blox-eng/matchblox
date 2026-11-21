@@ -276,7 +276,7 @@ func (s *Service) postLocked(from []chains.Member, text string, spark bool, now 
 		st.Post(o, text+s.elsewhereLocked(from[0], o), now)
 	}
 	if spark {
-		s.cur.Chains = chainsView(st)
+		s.cur.Chains = chainsView(st, s.waiting)
 	}
 }
 

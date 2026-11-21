@@ -290,13 +290,15 @@ type Result struct {
 
 // Recover is the Text of a "recover" act: reopen the conversations of the
 // recovery record that no agent runs now (#215). All reopens each one that
-// can; Names reopens those of these tmux sessions. Neither: a preview,
-// which changes nothing. Dirs is the new folder of a session whose folder
-// moved, by its name.
+// can; Names reopens those of these tmux sessions; Conversations reopens
+// those of these conversation ids, and no other entry of their tmux
+// sessions. None: a preview, which changes nothing. Dirs is the new folder
+// of a session whose folder moved, by its name.
 type Recover struct {
-	All   bool              `json:"all,omitempty"`
-	Names []string          `json:"names,omitempty"`
-	Dirs  map[string]string `json:"dirs,omitempty"`
+	All           bool              `json:"all,omitempty"`
+	Names         []string          `json:"names,omitempty"`
+	Conversations []string          `json:"conversations,omitempty"`
+	Dirs          map[string]string `json:"dirs,omitempty"`
 }
 
 // The states of a Recovered.

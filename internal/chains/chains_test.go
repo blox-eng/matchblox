@@ -273,12 +273,62 @@ func TestSaveAndLoad(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got.Chains) != 1 || got.Chains[0].Name != "a" || len(got.Off) != 1 || len(got.Take(mem("a")).Items) != 0 {
+	if len(got.Chains) != 1 || got.Chains[0].Name != "a" || len(got.Off) != 1 || len(got.Take(mem("a")).Items) != 1 {
 		t.Fatalf("loaded = %+v", got)
 	}
 	empty, err := Load(filepath.Join(t.TempDir(), "none.json"))
 	if err != nil || len(empty.Chains) != 0 {
 		t.Fatalf("missing: %+v, %v", empty, err)
+	}
+}
+
+// TestALineToAWaitingMateOutlivesARestart: a match may wait for recover
+// for days, across service restarts. A line a mate sent it, and the count
+// of news its full inbox dropped, are in the saved file.
+func TestALineToAWaitingMateOutlivesARestart(t *testing.T) {
+	var s Store
+	chainOf(t, &s, "a", "b")
+	for i := range InboxMax + 2 {
+		s.Post(mem("b"), "news "+strconv.Itoa(i), t0)
+	}
+	s.PostLine(mem("b"), mem("a"), "[from a %a] the fix is on main", t0)
+	want, _ := s.TakeLine(mem("b"))
+	s.PostLine(mem("b"), mem("a"), want.Text, t0)
+	path := filepath.Join(t.TempDir(), "chains.json")
+	if err := s.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n, full := got.InboxCount(mem("b")); n != InboxMax || !full {
+		t.Fatalf("after a restart b's inbox holds %d, full %v; want %d, full", n, full, InboxMax)
+	}
+	it, ok := got.TakeLine(mem("b"))
+	if !ok || it.Text != want.Text || !it.At.Equal(want.At) || it.From != want.From {
+		t.Fatalf("after a restart b's line = %+v, %v; want %+v", it, ok, want)
+	}
+	got.Post(mem("b"), "after", t0) // a loaded inbox takes more
+	if n, _ := got.InboxCount(mem("b")); n != InboxMax {
+		t.Fatalf("b's inbox holds %d, want %d", n, InboxMax)
+	}
+}
+
+// TestAnOldFileLoads: a chains.json saved before inboxes were saved loads,
+// with empty inboxes that take news.
+func TestAnOldFileLoads(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "chains.json")
+	if err := os.WriteFile(path, []byte(`{"chains":[{"id":"%a#1","name":"a","repo":"","members":[{"session_id":"a"},{"session_id":"b"}]}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Load(path)
+	if err != nil || len(got.Chains) != 1 {
+		t.Fatalf("load = %+v, %v", got, err)
+	}
+	got.Post(mem("b"), "news", t0)
+	if n, full := got.InboxCount(mem("b")); n != 1 || full {
+		t.Fatalf("b's inbox holds %d, full %v", n, full)
 	}
 }
 
@@ -498,5 +548,23 @@ func TestJoinIDAddsAStokersSession(t *testing.T) {
 	}
 	if err := s.JoinID("gone", mem("z")); err == nil {
 		t.Fatal("z joined a team that is not there")
+	}
+}
+
+// A team of two breaks up: the one left gets the news and then goes too,
+// before its next turn. No team names its inbox; it must not stay for good.
+func TestAGoneMatchsLeftoverNewsIsDropped(t *testing.T) {
+	var s Store
+	chainOf(t, &s, "a", "b")
+	s.Prune(func(m Member) bool { return m.SessionID != "a" }, t0)
+	s.Post(mem("b"), "a left the chain", t0)
+	s.Post(Member{Pane: "%9", PID: 7, Start: 3}, "news", t0) // a match with no session id
+	s.Prune(func(Member) bool { return true }, t0)
+	if n, _ := s.InboxCount(mem("b")); n != 1 {
+		t.Fatalf("a live match lost its news: %d", n)
+	}
+	s.Prune(func(Member) bool { return false }, t0)
+	if len(s.inbox) != 0 || len(s.dropped) != 0 {
+		t.Fatalf("inbox = %+v, dropped = %+v", s.inbox, s.dropped)
 	}
 }
