@@ -170,3 +170,20 @@ func TestTTYNrOutOfRangeIsNoTerminal(t *testing.T) {
 		}
 	}
 }
+
+func TestExeIsTheTargetOfTheExeLink(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "7"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("/home/u/.local/share/claude/versions/2.3.1", filepath.Join(root, "7", "exe")); err != nil {
+		t.Fatal(err)
+	}
+	fs := FS{Root: root}
+	if got, err := fs.Exe(7); err != nil || got != "/home/u/.local/share/claude/versions/2.3.1" {
+		t.Fatalf("exe = %q, %v", got, err)
+	}
+	if _, err := fs.Exe(8); err == nil {
+		t.Fatal("a process with no exe link gives no error")
+	}
+}
