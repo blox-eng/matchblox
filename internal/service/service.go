@@ -308,6 +308,9 @@ type Service struct {
 	// headReads count the hook reads of a worktree's HEAD in flight: its
 	// head stays while one runs. Under mu.
 	headReads map[string]int
+	// unread are the permission waits whose menu no rule reads, by pane.
+	// Under mu.
+	unread map[string]unreadWait
 	// headRun reads the HEADs of chained worktrees, restRun types the lines
 	// that wait for a rest: each one run at a time, out of the sample loop.
 	headRun, restRun lone
@@ -790,6 +793,7 @@ func (s *Service) mergeQueue() {
 	s.cur.Sessions = s.queue.WithJoined(s.queue.WithAsks(s.sampled))
 	s.cur.Queue = s.queue.Items()
 	s.cur.StokerServer = s.StokerServer
+	s.markUnread(now)
 	s.setReasons()
 }
 

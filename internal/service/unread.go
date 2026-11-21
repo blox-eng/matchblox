@@ -1,0 +1,56 @@
+package service
+
+import (
+	"time"
+
+	"github.com/blox-eng/matchblox/internal/queue"
+)
+
+// unreadGrace is how long a permission wait goes with no menu read before
+// its screen is unknown: Claude Code fires the hook before it draws.
+const unreadGrace = 3 * time.Second
+
+type unreadWait struct {
+	since   time.Time // the wait's start
+	samples int       // the samples taken since then that read no menu
+	last    time.Time // the newest of them
+	unknown bool
+}
+
+// markUnread marks the sessions whose hook waits for a permission while no
+// rule reads a menu on their screen, after the grace time and two samples.
+// now is the sample's time: a hook with no new sample counts no sample.
+// Hold s.mu.
+func (s *Service) markUnread(now time.Time) {
+	waits := map[string]queue.Item{}
+	for _, it := range s.cur.Queue {
+		if it.State == queue.StatePermission && s.queue.Waits(it.SessionID) {
+			waits[it.Pane] = it
+		}
+	}
+	next := map[string]unreadWait{}
+	copied := false
+	for i, sess := range s.cur.Sessions {
+		it, ok := waits[sess.Pane]
+		unknown := false
+		if ok && sess.Pane != "" && !sess.Permits && sess.Ask == nil {
+			w, had := s.unread[sess.Pane]
+			if !had {
+				w.since = it.Since
+			}
+			if now.After(w.last) && !now.Before(w.since) {
+				w.samples, w.last = w.samples+1, now
+			}
+			w.unknown = w.unknown || now.Sub(w.since) >= unreadGrace && w.samples >= 2
+			next[sess.Pane], unknown = w, w.unknown
+		}
+		if unknown == sess.UnknownScreen {
+			continue
+		}
+		if !copied { // cur.Sessions can share its array with the sample
+			s.cur.Sessions, copied = append(s.cur.Sessions[:0:0], s.cur.Sessions...), true
+		}
+		s.cur.Sessions[i].UnknownScreen = unknown
+	}
+	s.unread = next
+}

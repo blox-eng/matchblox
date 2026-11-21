@@ -95,6 +95,9 @@ type Session struct {
 	Asks     bool   `json:"asks,omitempty"`
 	// Permits: an approval menu, where Enter takes the selected choice.
 	Permits bool `json:"permits,omitempty"`
+	// UnknownScreen: its hook waits for a permission and no rule reads a
+	// menu on its screen. The service sets it.
+	UnknownScreen bool `json:"unknown_screen,omitempty"`
 	// Said is the current turn's newest reply with text, plain, its end
 	// kept up to a bound; Ask is the question tool's call it waits on
 	// (Claude Code).
