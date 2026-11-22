@@ -996,6 +996,9 @@ const unitEnv = "MATCHBLOX_UNIT"
 // socketWait is how often the unit's serve tries the socket again.
 var socketWait = time.Second
 
+// selfPath is the binary this process was started by, as an install replaces it.
+var selfPath = func() string { return invokedPath(os.Args[0]) }
+
 // serve runs the service on the socket until a signal, or until the binary
 // on disk is installed over (serve runs the new one in its place) or the
 // socket removed (the user unit or the next console starts a new one).
@@ -1055,6 +1058,12 @@ func serveOn(path string, exeAt os.FileInfo, mk func() *service.Service, unit bo
 			case <-ctx.Done():
 				return "", nil
 			case <-time.After(socketWait):
+			}
+			if filestamp.Changed(exeAt, selfPath()) {
+				// The other serve updates in its own place and keeps the socket:
+				// waiting on would run this old code for ever.
+				fmt.Fprintln(os.Stderr, "matchblox: a newer binary is installed: stopping for the unit to start it")
+				return "", errRestart
 			}
 			l, err = transport.Listen(path)
 		}
