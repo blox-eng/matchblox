@@ -90,7 +90,7 @@ func TestChooseRefusesAChangedMenu(t *testing.T) {
 func TestChooseRefusesNoMenu(t *testing.T) {
 	s, ran := chooseTest(t, "● Done.\n\n❯ \n")
 	res := s.act(t.Context(), chooseAct("%3", pickOf("1", "Yes", chooseScreen)))
-	if res.Err != "not sent: flint-auth shows no menu" || len(*ran) != 0 {
+	if res.Err != "not sent: flint-auth shows no menu — answer it in its pane" || len(*ran) != 0 {
 		t.Fatalf("%+v, ran %q", res, *ran)
 	}
 }

@@ -9,7 +9,7 @@
  ╿ ember-billing                    4m ✻│  run: matchblox update. checksum mismatch for
    #4552 waits for your merge           │  matchblox_linux_amd64 · published 3f9a3f9a3f9a… ·
  ╿ kindle-web                       1m ✻│  download c2e1c2e1c2e1…
-   Claude needs your permission to use …│
+   Do you want to proceed?              │
  ╿ cinder-ci                        0s ❋│
    I am moving the cache key to the go.…│
  ╿ wick-mobile                      0s ▣│

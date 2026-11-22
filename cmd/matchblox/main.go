@@ -199,7 +199,7 @@ func run(args []string) error {
 		return nil
 	case "update":
 		return updateCmd(os.Stdout)
-	case "sessions", "ships", "usage":
+	case "sessions", "ships", "usage", "agents":
 		return cliRead(cmd, os.Stdout, transport.SocketPath(), *o.json)
 	case "peek":
 		words, err := positionals(fl, args)
@@ -360,7 +360,7 @@ func askpassMain(prompt string) error {
 
 // commands are the commands a builder types. hook, authorize and gate run
 // from a hook, an ssh forced command and a connect.
-var commands = []string{"connect", "serve", "sessions", "ships", "status", "setup", "pair", "devices", "usage", "update", "version", "send", "compact", "hold", "release", "stoker", "peek", "new", "rename", "kill", "switch", "scan", "recover", "chain", "unchain"}
+var commands = []string{"connect", "serve", "sessions", "ships", "agents", "status", "setup", "pair", "devices", "usage", "update", "version", "send", "compact", "hold", "release", "stoker", "peek", "new", "rename", "kill", "switch", "scan", "recover", "chain", "unchain"}
 
 type flags struct {
 	cfgPath, root         *string
@@ -403,6 +403,7 @@ Commands:
   matchblox sessions               every session, one line a row (--json)
   matchblox ships                  the pull requests the sessions drive (--json)
   matchblox usage                  each account's plan windows (--json)
+  matchblox agents                 each agent, its version and its unknown screens (--json)
   matchblox peek <who>             what a session said last and what it asks (--lines, --json)
   matchblox send <who> "<text>"    type a line and Enter into a session (--pick n answers its question)
   matchblox compact <who>          compact a Claude Code session at rest
@@ -441,7 +442,7 @@ func newFlags() (*flag.FlagSet, flags) {
 		root:       fl.String("fixtures", "", "read proc/, sys/, home/ and tmux-panes.txt from this directory instead of the live machine"),
 		text:       fl.Bool("text", false, "status: print a summary instead of JSON"),
 		stdio:      fl.Bool("stdio", false, "serve: speak on stdin and stdout, joined to the local service"),
-		json:       fl.Bool("json", false, "sessions, ships, usage, peek, recover, chain: print JSON instead of text"),
+		json:       fl.Bool("json", false, "sessions, ships, usage, agents, peek, recover, chain: print JSON instead of text"),
 		pick:       fl.Int("pick", 0, "send: answer the question the session asks with this option (from 1)"),
 		lines:      fl.Int("lines", 20, "peek: the last lines of what the session said (0: all)"),
 		why:        fl.String("why", "", "hold, stoker when … hold: why the session is held"),

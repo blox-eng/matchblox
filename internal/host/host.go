@@ -118,6 +118,9 @@ func (Host) Cwd(pid int) string {
 	return ""
 }
 
+// Exe gives no path: the sampler reads an agent's version from its argv.
+func (Host) Exe(int) (string, error) { return "", errors.ErrUnsupported }
+
 func (Host) OpenFiles(pid int) ([]string, bool) {
 	p, err := newProcess(pid)
 	if err != nil {

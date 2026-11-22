@@ -9,7 +9,7 @@
  ╿ ember-billing                    4m ✻││ first  › fix the flaky ships test▏                                                      │
    #4552 waits for your merge           │╰─ ⏎ start ─ tab next ─ esc ──────────────────────────────────────────────────────────────╯
  ╿ kindle-web                       1m ✻│
-   Claude needs your permission to use …│
+   Do you want to proceed?              │
  ╿ cinder-ci                        0s ❋│
    I am moving the cache key to the go.…│
  ╿ wick-mobile                      0s ▣│

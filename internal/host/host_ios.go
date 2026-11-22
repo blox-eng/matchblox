@@ -19,6 +19,7 @@ func (Host) Procs() (map[int]procfs.Proc, error) { return nil, errIOS }
 func (Host) Proc(int) (procfs.Proc, bool)        { return procfs.Proc{}, false }
 func (Host) Environ(int, string) (string, bool)  { return "", false }
 func (Host) Cwd(int) string                      { return "" }
+func (Host) Exe(int) (string, error)             { return "", errIOS }
 func (Host) Cmdline(int) string                  { return "" }
 func (Host) Argv(int) []string                   { return nil }
 func (Host) OpenFiles(int) ([]string, bool)      { return nil, false }

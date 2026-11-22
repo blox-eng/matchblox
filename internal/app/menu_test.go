@@ -1,13 +1,20 @@
 package app
 
 import (
+	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"charm.land/lipgloss/v2"
+
 	"github.com/blox-eng/matchblox/internal/menu"
 	"github.com/blox-eng/matchblox/internal/proto"
+	"github.com/blox-eng/matchblox/internal/queue"
+	"github.com/blox-eng/matchblox/internal/said"
+	"github.com/blox-eng/matchblox/internal/sample"
 )
 
 const promptScreen = `● Bash(go test ./...)
@@ -126,5 +133,226 @@ func TestACheckboxMenuIsAnsweredInItsPane(t *testing.T) {
 	m, _ := promptConsole(t, "Which toppings?\n❯ 1. [ ] Cheese\n  2. [ ] Olives\n     Submit\n")
 	if got := chatLineOf(m, 120); !strings.Contains(got, "answer in its pane") {
 		t.Fatalf("line %q", got)
+	}
+}
+
+// unknownWording is a Claude Code approval box whose choices no rule
+// knows: no numbers, and a keys line in other words.
+func unknownWording(t *testing.T) string {
+	t.Helper()
+	screen := menuFile(t, "unknown-wording.txt")
+	if menu.Read(screen) != nil {
+		t.Fatalf("menu.Read reads %v", menu.Read(screen))
+	}
+	return screen
+}
+
+// unknownNumbered is a Claude Code approval box with numbered choices in
+// words no rule knows: the console's digit reader reads them, the
+// sampler's rule does not.
+func unknownNumbered(t *testing.T) string {
+	t.Helper()
+	screen := menuFile(t, "unknown-numbered.txt")
+	if menu.Read(screen) == nil {
+		t.Fatal("menu.Read reads nothing")
+	}
+	return screen
+}
+
+func menuFile(t *testing.T, name string) string {
+	t.Helper()
+	b, err := os.ReadFile("../../testdata/menus/" + name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
+// unknownConsole is kindle-web, Claude Code 2.3.1, at a permission wait
+// the service marked an unknown screen, chosen, screen on the chat for
+// peekDead. edit changes the session first.
+func unknownConsole(t *testing.T, screen string, edit ...func(*sample.Session)) (Model, sample.Session) {
+	t.Helper()
+	if q, ok := said.Menu(screen); ok {
+		t.Fatalf("said.Menu reads %q", q)
+	}
+	s := boardMatch("kindle-web", time.Hour)
+	s.Agent, s.Version, s.UnknownScreen = "claude", "2.3.1", true
+	for _, e := range edit {
+		e(&s)
+	}
+	st := boardState(s)
+	st.Queue = []queue.Item{waitFor(s, queue.StatePermission, time.Minute)}
+	m, clock := sideConsole(t, st)
+	m = showScreen(t, m, clock, screen)
+	s, _ = m.sideChosen()
+	return m, s
+}
+
+// noDigits: the chat offers no digits for s, and 1 pressed twice sends
+// nothing to it.
+func noDigits(t *testing.T, m Model, s sample.Session) {
+	t.Helper()
+	if q, _, ok := m.digitMenu(s); ok {
+		t.Fatalf("digits offered for %+v", q)
+	}
+	before := len(boardFake(m).acts())
+	m = pressOn(m, "1", "1")
+	if acts := boardFake(m).acts()[before:]; len(acts) != 0 {
+		t.Fatalf("a digit sent %+v", acts)
+	}
+}
+
+func TestNoDigitsOnAnUnknownWording(t *testing.T) {
+	m, s := unknownConsole(t, unknownWording(t))
+	noDigits(t, m, s)
+}
+
+// The agent rewords its numbered menu: the console reads the options, but
+// the service marked the screen unknown, so the digits stay out of it and
+// the chat says why.
+func TestNoDigitsOnANumberedUnknownWording(t *testing.T) {
+	m, s := unknownConsole(t, unknownNumbered(t))
+	noDigits(t, m, s)
+	if got := chatLineOf(m, 120); !strings.HasSuffix(strings.TrimRight(got, " "), unknownNote) {
+		t.Fatalf("line %q", got)
+	}
+}
+
+// Within the grace time the service has not marked the screen unknown,
+// but no rule reads its menu: the console offers no digit the service
+// would refuse, and says to answer in the pane.
+func TestNoDigitsBeforeARuleReadsTheMenu(t *testing.T) {
+	m, s := unknownConsole(t, unknownNumbered(t), func(s *sample.Session) { s.UnknownScreen, s.MenuUnread = false, true })
+	noDigits(t, m, s)
+	if got := chatLineOf(m, 120); !strings.HasSuffix(strings.TrimRight(got, " "), m.inPane()) {
+		t.Fatalf("line %q", got)
+	}
+}
+
+// readMenu is the demo's Claude Code approval box, which said.Menu reads.
+func readMenu(t *testing.T) string {
+	t.Helper()
+	b, err := os.ReadFile("../../testdata/demo/panes/5.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := said.Menu(string(b)); !ok {
+		t.Fatal("no rule reads the demo's menu")
+	}
+	return string(b)
+}
+
+// readConsole is kindle-web at a permission wait, chosen, screen on the
+// chat for peekDead. edit changes the session first.
+func readConsole(t *testing.T, screen string, edit func(*sample.Session)) (Model, sample.Session) {
+	t.Helper()
+	s := boardMatch("kindle-web", time.Hour)
+	s.Agent = "claude"
+	edit(&s)
+	st := boardState(s)
+	st.Queue = []queue.Item{waitFor(s, queue.StatePermission, time.Second)}
+	m, clock := sideConsole(t, st)
+	m = showScreen(t, m, clock, screen)
+	s, _ = m.sideChosen()
+	return m, s
+}
+
+// A permission wait whose menu a sample read takes digits.
+func TestDigitsOnAMenuASampleRead(t *testing.T) {
+	m, s := readConsole(t, readMenu(t), func(s *sample.Session) { s.Permits = true })
+	if _, texts, ok := m.digitMenu(s); !ok || texts[1] != "Yes" {
+		t.Fatalf("digits %v, %v", texts, ok)
+	}
+}
+
+// The service still says no sample read the menu since the hook, but the
+// screen the console shows reads: its digits go before the next sample.
+func TestAReadMenuTakesADigitBeforeTheNextSampleOnTheConsole(t *testing.T) {
+	m, s := readConsole(t, readMenu(t), func(s *sample.Session) { s.MenuUnread = true })
+	if _, texts, ok := m.digitMenu(s); !ok || texts[1] != "Yes" {
+		t.Fatalf("digits %v, %v", texts, ok)
+	}
+}
+
+// The agent's reply quotes an old menu with numbers above a live menu
+// in words no rule knows: the quote is not the menu.
+func TestAQuotedOldMenuGivesNoDigits(t *testing.T) {
+	quote := "● The prompt used to read:\n\n  Do you want to proceed?\n  ❯ 1. Yes\n    2. No\n\n"
+	screen := strings.Replace(unknownWording(t), "● Bash(rm -rf build/)", quote+"● Bash(rm -rf build/)", 1)
+	if !strings.Contains(screen, "1. Yes") {
+		t.Fatal("no quoted menu")
+	}
+	m, s := unknownConsole(t, screen)
+	noDigits(t, m, s)
+}
+
+func TestTheRowSaysUnknownScreen(t *testing.T) {
+	m, s := unknownConsole(t, unknownWording(t))
+	if w, _ := m.rowWord(s); w != m.st.warn.Render("unknown screen") {
+		t.Fatalf("state word %q, want %q", w, m.st.warn.Render("unknown screen"))
+	}
+}
+
+const unknownNote = "unknown screen · Claude Code 2.3.1 — answer it in its pane: ctrl+o opens it"
+
+func TestTheChatNamesTheVersionAndTheFix(t *testing.T) {
+	m, _ := unknownConsole(t, unknownWording(t))
+	if got := chatLineOf(m, 120); !strings.HasSuffix(strings.TrimRight(got, " "), unknownNote) {
+		t.Fatalf("line %q", got)
+	}
+	m.keys.main.Jump = bind(ks("ctrl+g"), "ctrl+g", "go in")
+	if got := chatLineOf(m, 120); !strings.Contains(got, "answer it in its pane: ctrl+g opens it") {
+		t.Fatalf("a rebound jump: line %q", got)
+	}
+}
+
+func TestTheChatSaysVersionNotRead(t *testing.T) {
+	m, _ := unknownConsole(t, unknownWording(t), func(s *sample.Session) {
+		s.Version, s.VersionWhy = "", "the install path names no version"
+	})
+	want := "unknown screen · Claude Code, version not read — answer it in its pane: ctrl+o opens it"
+	if got := chatLineOf(m, 120); !strings.HasSuffix(strings.TrimRight(got, " "), want) {
+		t.Fatalf("line %q", got)
+	}
+}
+
+func TestTheNoteGoesWithTheFlag(t *testing.T) {
+	m, s := unknownConsole(t, unknownWording(t), func(s *sample.Session) { s.UnknownScreen = false })
+	if got := chatLineOf(m, 120); !strings.HasSuffix(strings.TrimRight(got, " "), m.inPane()) {
+		t.Fatalf("line %q", got)
+	}
+	if got := strings.Join(plainLines(m.chatPanel(120, 30)), "\n"); strings.Contains(got, "unknown screen") {
+		t.Fatalf("the chat says unknown screen:\n%s", got)
+	}
+	if w, _ := m.rowWord(s); w != m.st.accent.Render("asks") {
+		t.Fatalf("state word %q", w)
+	}
+}
+
+// At a phone's 44 columns the note wraps above the line, its key whole.
+func TestTheNoteWrapsOnAPhone(t *testing.T) {
+	m, _ := unknownConsole(t, unknownWording(t))
+	lines := plainLines(m.chatPanel(44, 30))
+	var note []string
+	for _, l := range lines {
+		if lipgloss.Width(l) > 44 {
+			t.Fatalf("line %q is wider than 44", l)
+		}
+		if l := strings.TrimSpace(l); strings.HasPrefix(l, "unknown screen") || len(note) > 0 && !strings.HasPrefix(l, "›") {
+			note = append(note, l)
+		}
+	}
+	if len(note) < 2 || strings.Join(note, " ") != unknownNote {
+		t.Fatalf("note lines %q", note)
+	}
+	if !slices.ContainsFunc(note, func(l string) bool { return strings.HasSuffix(l, "ctrl+o opens it") }) {
+		t.Fatalf("ctrl+o opens it is cut: %q", note)
+	}
+	if last := strings.TrimSpace(lines[len(lines)-1]); !strings.HasPrefix(last, "›") {
+		t.Fatalf("the last line %q is not the line", last)
+	}
+	if !strings.HasPrefix(strings.TrimSpace(lines[0]), "kindle-web") {
+		t.Fatalf("the note pushed the head out: %q", lines[0])
 	}
 }

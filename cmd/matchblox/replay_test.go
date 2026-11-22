@@ -677,8 +677,9 @@ func replayAt(t *testing.T, z replaySize) {
 		{name: "kindle-web asks", at: 10500 * time.Millisecond, do: walk("kindle-web"), pane: kindle, ok: func(s string) bool {
 			// Beside the list, the preview of kindle-web's pane comes a
 			// moment after the last arrow; a slow run reads the screen
-			// before it. The phone shows no chat beside the list.
-			return chosen("kindle-web")(s) && has("permission")(s) && (phone || has("one-tap checkout")(s))
+			// before it. The phone shows no chat beside the list. The row
+			// says the question of the menu a rule reads.
+			return chosen("kindle-web")(s) && has("Do you want to proceed?")(s) && (phone || has("one-tap checkout")(s))
 		}},
 		// g opens kindle-web's chain, login: the list shows only the chain,
 		// and its room takes the chat's place. esc closes it.
@@ -697,9 +698,9 @@ func replayAt(t *testing.T, z replaySize) {
 		steps = slices.Delete(steps, at+1, at+2) // the list has the keys once it shows
 		// The room, then the chat it closes to, take the screen in turn.
 		steps[len(steps)-2].ok = has("CHAIN login", "what should login's stoker do?")
-		// kindle-web asks in its pane: its chat's line says so.
+		// kindle-web asks for permission: its chat shows the menu.
 		steps[len(steps)-1].ok = func(s string) bool {
-			return has("◂ kindle-web", "answer in its pane")(s) && !strings.Contains(s, "CHAIN login")
+			return has("◂ kindle-web", "Do you want to proceed?")(s) && !strings.Contains(s, "CHAIN login")
 		}
 	}
 	var still replay.Frame

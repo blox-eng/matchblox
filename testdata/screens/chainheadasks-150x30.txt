@@ -3,7 +3,7 @@
 ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  NEEDS YOU · 2  −                       │ kindle-web ✻ asks                                                           ctx 56%  ctrl+o expand · m menu
 ▌╿ kindle-web                       1m ✻│
-   Claude needs your permission to use …│
+   Do you want to proceed?              │
  ≋ hearth               step 3 of 3 · 3 │
  ├ ✦ hearth-api                        ✻│
  ├ ╵ ember-billing                  3m ✻│

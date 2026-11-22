@@ -9,7 +9,7 @@
  ╿ ember-billing                    4m ✻│
    #4552 waits f╭─ ssh ws-1 asks ──────────────────────────────────────────────────────╮
  ╿ kindle-web   │                                                                      │
-   Claude needs │   The authenticity of host 'ws-1' can't be established.              │
+   Do you want t│   The authenticity of host 'ws-1' can't be established.              │
  ╿ cinder-ci    │   ED25519 key fingerprint is                                         │
    I am moving t│   SHA256:Hx1T4cGQ0bZp6Yd3lq9m0f8aJk2sWvR7uNcE5yXoLtI.                │
  ╿ wick-mobile  │   +--[ED25519 256]--+                                                │

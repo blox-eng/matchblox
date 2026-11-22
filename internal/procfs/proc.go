@@ -149,6 +149,11 @@ func (fs FS) Cwd(pid int) string {
 	return s
 }
 
+// Exe returns the target of /proc/<pid>/exe.
+func (fs FS) Exe(pid int) (string, error) {
+	return os.Readlink(fs.path(strconv.Itoa(pid), "exe"))
+}
+
 // Cmdline returns argv joined by spaces.
 func (fs FS) Cmdline(pid int) string {
 	b, _ := os.ReadFile(fs.path(strconv.Itoa(pid), "cmdline"))

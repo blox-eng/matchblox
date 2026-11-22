@@ -11,7 +11,7 @@
  │ train-loop@gpu-1                 4m ✻│
    I rewrote the quick start and the in…│
  ╿ kindle-web                       1m ✻│
-   Claude needs your permission to use …│
+   Do you want to proceed?              │
  │ api-auth@ws-1                    1m ✻│
    I rewrote the quick start and the in…│
  ╿ cinder-ci                        0s ❋│
