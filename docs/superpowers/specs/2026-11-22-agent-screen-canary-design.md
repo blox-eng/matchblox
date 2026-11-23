@@ -23,7 +23,7 @@ Happy path:
 
 1. Each day, CI installs the latest release of Claude Code, Codex and OpenCode.
 2. CI starts each one in a terminal against a stand-in model, in the mode where it asks before a tool runs (Claude Code now defaults to auto mode, which asks nothing). The stand-in asks for one tool run, so the agent draws its real approval menu.
-3. matchblox's own rules read that screen: the menu, the waiting state, and the options. The options read well when they are numbered 1 to n with no gap, n is two or more, the first starts with Yes and the last with No.
+3. matchblox's own rules read that screen, per agent (see Rulings): for Claude Code the menu, the waiting state, and the options; for Codex and OpenCode the waiting state. The options read well when they are numbered 1 to n with no gap, n is two or more, the first starts with Yes and the last with No.
 4. All agents read well. Nothing is said. The run is green.
 
 When it goes wrong:
@@ -31,7 +31,7 @@ When it goes wrong:
 - A rule does not read an agent's screen. CI opens one issue: `Claude Code 2.1.331 draws a screen matchblox cannot read`. The issue holds the version, the check that failed (no menu, wrong options, no waiting state) and the screen as text. The fix it names: add the screen to `testdata/menus` and change the rule in `internal/said`.
 - The same break happens on the next day. CI adds a comment to the open issue with the newer version, and opens no second issue.
 - The agent will not start, or never draws a menu, for example because its install or its stand-in model changed. CI opens an issue that says so (`the canary could not run Codex 0.99: <reason>`), and it is not an issue about a screen. A canary that tests nothing must not be green.
-- A fix merges and the next run reads the screen. The issue gets a comment that the screen reads again. The owner closes it.
+- A fix merges and the next run reads the screen. The issue gets a comment that the screen reads again, and the canary closes it.
 
 ## Non-goals
 
@@ -65,6 +65,9 @@ When it goes wrong:
 - 2026-11-23 — The report job checks out matchblox's own script, without the token saved, instead of nothing — because a script in the repository has tests, and one inline in the workflow has none. — the owner, with the plan.
 - 2026-11-23 — The agents install and run as an unprivileged user with no sudo, not as the runner's user. The ways were: (A) an unprivileged user: the runner's memory and its Actions token are out of the agents' reach, at the cost of a more complex job; (B) accept the risk: smallest, but a hostile agent release could write caches that main's jobs restore, the iOS release build among them; (C) a separate repository: strongest, but a new repository whose results must reach issues here. Picked A — because main's caches feed the release builds. — the owner, in the build review.
 - 2026-11-23 — The canary job proves on each run that the user canary cannot read the runner's home, and blocks canary's traffic to the cloud metadata services (168.63.129.16, 169.254.169.254). The ways were: (A) a self-check and the block: each run proves it, at two more steps; (B) the self-check only: the metadata services stay open; (C) accept the image as it is. Picked A — because only a run on GitHub shows the image's permissions, so each run must show them. — the owner, in review round 2.
+- 2026-11-23 — The check is per agent. Claude Code must read as a menu with numbered options, Yes first and No last, because matchblox sends digits to it. Codex and OpenCode must read as a waiting state (`asks`), because matchblox reads only that from them and the builder answers in the pane. The ways were: (A) per agent: matches what matchblox does; (B) one full check: OpenCode is red until matchblox parses its Allow/Reject menu. Picked A — because the PR's first run showed OpenCode 1.19.6 read as `asks` and fail the Claude-only check. — the owner, after the first CI run.
+- 2026-11-23 — On a pull request, the canary's own tests and wiring fail the job; each agent's result is a warning with its screen. The schedule still files issues. The ways were: (A) agents warn on a pull request; (B) agents fail it, so an upstream release blocks unrelated pull requests. Picked A — because a pull request cannot fix an agent's release. — the owner.
+- 2026-11-23 — The `reads again` comment closes the issue; a later break opens a new one. The ways were: (A) close on recovery: one issue per break, with the right version in its title; (B) the owner closes: one issue gathers every flip, and past 100 comments its last marker goes stale. Picked A. This replaces "The owner closes it." — the owner.
 - 2026-11-23: spec approved. Decided by: the owner.
 
 ## Left to the builder
@@ -78,7 +81,7 @@ When it goes wrong:
 ## Calls to check
 
 - Retry before an issue. Recommend: one failed check runs again once, and only two failures in a row file an issue — because a slow runner can catch the menu mid-draw. Cost if wrong: one false issue, or a break known one run later.
-- Codex and OpenCode in the first version. Recommend yes, all three — because the stand-in model costs the same for each, and each has an approval menu that `internal/said` reads. Cost if wrong: if one cannot use a stand-in model, it ships later, and the issue for it says why. Not yet proven: the eng review drew Claude Code 2.1.330's menu against a stand-in, but Codex and OpenCode are not installed on the review host.
+- Codex and OpenCode in the first version. Recommend yes, all three — because the stand-in model costs the same for each, and each has an approval screen that `internal/said` reads (Claude Code's as a menu, Codex's and OpenCode's as `asks`). Cost if wrong: if one cannot use a stand-in model, it ships later, and the issue for it says why. Not yet proven: the eng review drew Claude Code 2.1.330's menu against a stand-in, but Codex and OpenCode are not installed on the review host.
 - The fixture. Recommend that the issue names the exact file name for `testdata/menus` and holds the screen ready to paste — because the fix then starts with a failing test. Cost if wrong: the owner copies the screen by hand.
 
 ## Done when

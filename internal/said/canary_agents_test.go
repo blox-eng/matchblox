@@ -30,6 +30,10 @@ type agent struct {
 	env            func(home, url, binDir string) []string
 	argv           func() []string
 	stand          func() standIn
+	// check is what matchblox must read on the agent's screen, and reads
+	// names it for the log.
+	check func(screen string) (string, bool)
+	reads string
 }
 
 const fakeAnthropicKey = "sk-ant-canary-not-a-real-key-00000000000000000000"
@@ -74,6 +78,8 @@ var agents = []agent{
 			return []string{"claude", "--permission-mode", "default", "make the canary file"}
 		},
 		stand: func() standIn { return &anthropicStandIn{} },
+		check: canaryCheck,
+		reads: "waiting state, menu and options",
 	},
 	{
 		key:  "codex",
@@ -117,6 +123,8 @@ trust_level = "trusted"
 			return []string{"codex", "make the canary file"}
 		},
 		stand: func() standIn { return &responsesStandIn{} },
+		check: waitingCheck,
+		reads: "waiting state",
 	},
 	{
 		key:  "opencode",
@@ -161,6 +169,8 @@ trust_level = "trusted"
 			return []string{"opencode", "--prompt", "make the canary file"}
 		},
 		stand: func() standIn { return &chatStandIn{} },
+		check: waitingCheck,
+		reads: "waiting state",
 	},
 }
 

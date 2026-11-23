@@ -68,7 +68,7 @@ func TestCanary(t *testing.T) {
 			case !versionRe.MatchString(res.Version):
 				t.Errorf("%s version %q is not a version", a.name, res.Version)
 			default:
-				t.Logf("%s %s: waiting state, menu and options read well", a.name, res.Version)
+				t.Logf("%s %s: %s read well", a.name, res.Version, a.reads)
 			}
 		})
 	}
@@ -121,7 +121,7 @@ func runCanary(t *testing.T, a agent) canaryResult {
 			return fail(err.Error())
 		}
 
-		screen, check, err := drawMenu(t, fmt.Sprintf("mbc-%d-%s-%d", os.Getpid(), a.key, attempt), work, env, a.argv())
+		screen, check, err := drawMenu(t, fmt.Sprintf("mbc-%d-%s-%d", os.Getpid(), a.key, attempt), work, env, a.argv(), a.check)
 		res.Screen = scrub(screen, work, home, host, name)
 		if err != nil {
 			res.Check = couldNotRun
@@ -151,9 +151,9 @@ func runCanary(t *testing.T, a agent) canaryResult {
 var errSessionEnded = errors.New("the agent's terminal closed before it drew a menu")
 
 // drawMenu starts argv in a tmux server of its own and returns the last
-// screen it drew, with canaryCheck's verdict, once the menu reads well or
-// 30 s have passed.
-func drawMenu(t *testing.T, sock, work string, env, argv []string) (screen, check string, err error) {
+// screen it drew, with verdict's, once the screen reads well or 30 s have
+// passed.
+func drawMenu(t *testing.T, sock, work string, env, argv []string, verdict func(string) (string, bool)) (screen, check string, err error) {
 	tmux := func(args ...string) *exec.Cmd {
 		return exec.Command("tmux", append([]string{"-L", sock}, args...)...) //nolint:gosec // the test's own socket and argv
 	}
@@ -189,7 +189,7 @@ func drawMenu(t *testing.T, sock, work string, env, argv []string) (screen, chec
 			return screen, check, errSessionEnded
 		}
 		var ok bool
-		if check, ok = canaryCheck(screen); ok {
+		if check, ok = verdict(screen); ok {
 			return screen, "", nil
 		}
 	}
@@ -215,6 +215,7 @@ func TestHungVersionCouldNotRun(t *testing.T) {
 		env:     func(home, _, _ string) []string { return []string{"HOME=" + home, "PATH=/usr/bin:/bin"} },
 		argv:    func() []string { return []string{bin} },
 		stand:   func() standIn { return &anthropicStandIn{} },
+		check:   canaryCheck,
 	}
 	start := time.Now()
 	res := runCanary(t, a)
@@ -240,6 +241,7 @@ func TestQuitKeepsTheLastScreen(t *testing.T) {
 		env:     func(home, _, _ string) []string { return []string{"HOME=" + home, "PATH=/usr/bin:/bin"} },
 		argv:    func() []string { return []string{bin} },
 		stand:   func() standIn { return &anthropicStandIn{} },
+		check:   canaryCheck,
 	}
 	res := runCanary(t, a)
 	if res.Check != couldNotRun || !strings.HasPrefix(res.Screen, errSessionEnded.Error()) ||

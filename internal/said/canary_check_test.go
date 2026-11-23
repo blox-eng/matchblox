@@ -7,13 +7,27 @@ import (
 	"testing"
 )
 
-// canaryCheck is the check an agent's live screen fails, or "" and true when
-// matchblox's rules read its waiting state, its menu and its options.
+// standInCommand is the one shell command each stand-in model asks for.
+const standInCommand = "touch canary-ran"
+
+// waitingCheck is the check for Codex and OpenCode: matchblox reads only that
+// they wait (`asks`), and the builder answers in the pane.
+func waitingCheck(screen string) (string, bool) {
+	if _, kind := Screen(screen); kind != Permits {
+		return "no waiting state", false
+	}
+	return "", true
+}
+
+// canaryCheck is the check for Claude Code, which matchblox answers with a
+// digit: the check its live screen fails, or "" and true when matchblox's
+// rules read its waiting state, its menu and its options.
 func canaryCheck(screen string) (string, bool) {
 	if _, kind := Screen(screen); kind != Permits {
 		return "no waiting state", false
 	}
-	if _, ok := Menu(screen); !ok {
+	// The question must be the menu's own, not the command it asks about.
+	if q, ok := Menu(screen); !ok || !strings.HasSuffix(q, "?") || strings.Contains(q, standInCommand) {
 		return "no menu", false
 	}
 	var labels []string
@@ -33,35 +47,52 @@ func canaryCheck(screen string) (string, bool) {
 	return "", true
 }
 
-func TestCanaryCheck(t *testing.T) {
-	b, err := os.ReadFile(filepath.Join("..", "..", "testdata", "menus", "claude-bash-2.1.330.txt"))
+func menuFixture(t *testing.T, name string) string {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join("..", "..", "testdata", "menus", name))
 	if err != nil {
 		t.Fatal(err)
 	}
-	screen := string(b)
+	return string(b)
+}
+
+func TestCanaryCheck(t *testing.T) {
+	screen := menuFixture(t, "claude-bash-2.1.330.txt")
 	lastLine := strings.TrimSuffix(screen, " Esc to cancel · Tab to amend\n")
 	swapped := strings.Replace(screen,
 		"1. Yes\n   2. Yes, and always allow access to <work> from this project",
 		"1. Allow access to <work> from this project\n   2. Yes", 1)
 	single := " Do you want to proceed?\n ❯ 1. Yes\n\n Esc to cancel · Tab to amend\n"
 	idle := " ▐██████   Claude Code v2.1.330\n\n❯ \n\n  ? for shortcuts\n"
+	noQuestion := strings.Replace(screen, " Do you want to proceed?\n", "", 1)
+	asksTheCommand := strings.Replace(screen, "Do you want to proceed?", "Run "+standInCommand+"?", 1)
+	opencode := menuFixture(t, "opencode-bash-1.19.6.txt")
+	reworded := strings.NewReplacer("Permission required", "Approval needed", "Allow once", "Run once").Replace(opencode)
 
 	for _, c := range []struct {
-		name, screen, check string
-		ok                  bool
+		name, screen string
+		check        func(string) (string, bool)
+		want         string
+		ok           bool
 	}{
-		{"live screen", screen, "", true},
-		{"last line removed", lastLine, "no menu", false},
-		{"option 4 renumbered 5", strings.Replace(screen, "4. No", "5. No", 1), "wrong options", false},
-		{"Yes not first", swapped, "wrong options", false},
-		{"last option not No", strings.Replace(screen, "4. No", "4. Never", 1), "wrong options", false},
-		{"one option", single, "wrong options", false},
-		{"idle prompt", idle, "no waiting state", false},
+		{"live screen", screen, canaryCheck, "", true},
+		{"last line removed", lastLine, canaryCheck, "no menu", false},
+		{"option 4 renumbered 5", strings.Replace(screen, "4. No", "5. No", 1), canaryCheck, "wrong options", false},
+		{"Yes not first", swapped, canaryCheck, "wrong options", false},
+		{"last option not No", strings.Replace(screen, "4. No", "4. Never", 1), canaryCheck, "wrong options", false},
+		{"one option", single, canaryCheck, "wrong options", false},
+		{"idle prompt", idle, canaryCheck, "no waiting state", false},
+		{"no question", noQuestion, canaryCheck, "no menu", false},
+		{"the question is the command", asksTheCommand, canaryCheck, "no menu", false},
+		{"OpenCode waits", opencode, waitingCheck, "", true},
+		{"OpenCode has no Claude Code menu", opencode, canaryCheck, "no menu", false},
+		{"OpenCode reworded", reworded, waitingCheck, "no waiting state", false},
+		{"idle prompt does not wait", idle, waitingCheck, "no waiting state", false},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			check, ok := canaryCheck(c.screen)
-			if check != c.check || ok != c.ok {
-				t.Errorf("canaryCheck = %q, %v; want %q, %v", check, ok, c.check, c.ok)
+			check, ok := c.check(c.screen)
+			if check != c.want || ok != c.ok {
+				t.Errorf("check = %q, %v; want %q, %v", check, ok, c.want, c.ok)
 			}
 		})
 	}
