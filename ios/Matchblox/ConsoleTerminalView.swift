@@ -451,7 +451,11 @@ final class ConsoleTerminalView: TerminalView {
 
     /// The link under `point`: a hyperlink the program marked (OSC 8), else an http or https URL
     /// in the row's text.
+    /// SwiftTerm drops a selection at each output while mouse reporting is on (`feedPrepare`),
+    /// and tmux and the agents write all the time (#492): a selection turns it off, and its end
+    /// turns it back on.
     override func selectionChanged(source: Terminal) {
+        allowMouseReporting = !selection.active
         super.selectionChanged(source: source)
         onSelectedLink(selection.active ? TerminalLink.url(inSelection: selection.getSelectedText()) : nil)
     }
