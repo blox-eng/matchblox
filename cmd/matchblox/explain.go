@@ -126,6 +126,11 @@ func screenChanged(s sample.Session, t said.Trace) bool {
 	if s.UnknownScreen || s.MenuUnread {
 		return t.MenuRead
 	}
+	if !s.FromPane {
+		// A hooked agent's note comes from its reply and the menu reader,
+		// not from the pane's last lines: only the menu can disagree.
+		return s.Permits != t.MenuRead || s.Permits && s.Ask == nil && s.LastLine != t.Line
+	}
 	note := said.None
 	switch {
 	case s.Ask != nil && len(s.Ask.Questions) > 0:
@@ -195,7 +200,7 @@ func traceOut(t said.Trace, screen string, scrub func(string) string) explainOut
 	if t.Kind == said.Permits {
 		rows := menu.Read(screen)
 		for n := 1; n <= len(rows); n++ {
-			out.Options = append(out.Options, explainRow{N: n, Label: scrub(rows[n])})
+			out.Options = append(out.Options, explainRow{N: n, Label: scrub(said.Clean(rows[n]))})
 		}
 	}
 	for _, l := range t.Lines {

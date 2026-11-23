@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -276,6 +278,13 @@ func TestExplainSaysTheScreenChanged(t *testing.T) {
 	asks.Sessions[0].Asks, asks.Sessions[0].LastLine = true, "Should I also update the docs?"
 	edit := explainDoc()
 	edit.Sessions[0].UnknownScreen, edit.Sessions[0].Permits, edit.Sessions[0].LastLine = false, true, "Do you want to make this edit?"
+	// A hooked agent's note comes from its reply and its menu, not from the
+	// pane's last lines, so a question further up its reply is no change.
+	rest := explainDoc()
+	rest.Sessions[0].UnknownScreen, rest.Sessions[0].LastLine, rest.Queue = false, "Done.", nil
+	tool := explainDoc()
+	tool.Sessions[0].UnknownScreen, tool.Sessions[0].Permits = false, true
+	tool.Sessions[0].Ask = &said.Ask{Questions: []said.Question{{Question: "Run the tests now?", Options: []said.Option{{Label: "Yes"}, {Label: "No"}}}}}
 	for _, c := range []struct {
 		name    string
 		doc     state.Doc
@@ -291,6 +300,8 @@ func TestExplainSaysTheScreenChanged(t *testing.T) {
 		{"an approval note, another approval on screen", edit, readMenu, true},
 		{"no note, the same line", none, "  All tests pass.\n", false},
 		{"a question read from the pane, the same question", asks, "  Should I also update the docs?\n", false},
+		{"a hooked session at rest, a question further up its reply", rest, "  Should I also update the docs?\n  The tests pass on Linux.\n  The tests pass on macOS.\n  The build is green.\n  Done.\n", false},
+		{"the question tool, its Yes option on screen", tool, readMenu, false},
 	} {
 		var buf bytes.Buffer
 		if err := writeExplain(&buf, c.doc, "api", explainEnvOf(c.screen), false); err != nil {
@@ -337,6 +348,23 @@ func TestExplainNeedsOneOf(t *testing.T) {
 		err := cliExplain(c.words, &buf, "", c.file, false)
 		if err == nil || err.Error() != c.want {
 			t.Errorf("words %q, file %q: %v, want %q", c.words, c.file, err, c.want)
+		}
+	}
+}
+
+func TestExplainFileMenuDropsControlKeys(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "screen.txt")
+	screen := " Do you want to proceed?\n \u276f 1. Yes\x1b]52;c;aGk=\x07 ok\r\x08\x1b[2J\n   2. No\n Esc to cancel \u00b7 Tab to amend\n"
+	if err := os.WriteFile(path, []byte(screen), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	if err := explainFile(&buf, path, explainEnvOf(""), false); err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range buf.String() {
+		if r < 0x20 && r != '\n' {
+			t.Fatalf("the output carries control key %q:\n%q", r, buf.String())
 		}
 	}
 }
