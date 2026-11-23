@@ -750,6 +750,48 @@ func TestCanaryReportNeedsResults(t *testing.T) {
 	}
 }
 
+// The tested-nothing issue hears once when results arrive again, then
+// nothing while they keep arriving, and again when a later outage starts.
+func TestCanaryReportSaysItRunsAgain(t *testing.T) {
+	const (
+		title = "the canary tested nothing"
+		down  = "<!-- canary run none norun -->"
+		up    = "<!-- canary run none pass -->"
+	)
+	dir := canaryResults(t, nil)
+	r := canaryReport(t, openIssue(15, title, down), dir)
+	w := r.writes()
+	if r.code != 0 || len(w) != 1 || !w[0].is("issue", "comment", "15") {
+		t.Fatalf("exit %d, want 0 and one comment on #15: %v\n%s", r.code, r.calls, r.out)
+	}
+	if want := "The canary runs again.\n\n" + up + "\n"; w[0].body != want {
+		t.Errorf("comment %q, want %q", w[0].body, want)
+	}
+	again := w[0].body
+
+	r = canaryReport(t, openIssue(15, title, down, again), dir)
+	if r.code != 0 || len(r.writes()) != 0 {
+		t.Fatalf("a second run with results: exit %d, writes %v\n%s", r.code, r.writes(), r.out)
+	}
+
+	// While the outage goes on, nothing new.
+	r = canaryReport(t, openIssue(15, title, down), t.TempDir())
+	if r.code != 1 || len(r.writes()) != 0 || !strings.Contains(r.out, title+": still #15, nothing new") {
+		t.Fatalf("the outage goes on: exit %d, writes %v\n%s", r.code, r.writes(), r.out)
+	}
+
+	// After the canary ran again, a new outage is news on the same issue.
+	r = canaryReport(t, openIssue(15, title, down, again), t.TempDir())
+	w = r.writes()
+	if r.code != 1 || len(w) != 1 || !w[0].is("issue", "comment", "15") || !strings.Contains(w[0].body, down) {
+		t.Fatalf("a new outage: exit %d, want 1 and one comment on #15 with %s: %v\n%s", r.code, down, r.calls, r.out)
+	}
+	r = canaryReport(t, openIssue(15, title, down, again, w[0].body), t.TempDir())
+	if r.code != 1 || len(r.writes()) != 0 {
+		t.Fatalf("the new outage goes on: exit %d, writes %v\n%s", r.code, r.writes(), r.out)
+	}
+}
+
 type workflowStep struct {
 	Name            string            `yaml:"name"`
 	ID              string            `yaml:"id"`

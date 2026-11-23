@@ -4,7 +4,8 @@
 # when the version or the kind of break changes, and comments once when the
 # screen reads again. The same break on the next day writes nothing. An agent
 # with no result file could not run, and a folder with no results at all
-# opens one issue: the canary tested nothing.
+# opens one issue: the canary tested nothing. That issue hears once when
+# results arrive again, and once when a later outage starts.
 #
 # The files come from a job that ran agent code nobody reviewed, so every
 # field is data: checked against an allow-list, never run.
@@ -58,27 +59,52 @@ label() {
   fi
 }
 
+# find_tested: the open "the canary tested nothing" issue in $tested, and the
+# last marker on it in $tested_last.
+tested_title="the canary tested nothing"
+find_tested() {
+  local issues
+  issues="$(gh issue list --label canary --state open --search "$tested_title in:title" --json number,title,body,comments)"
+  tested="$(jq -r --arg title "$tested_title" '[.[] | select(.title | contains($title))] | first | .number // empty' <<<"$issues")"
+  tested_last=
+  if [ -n "$tested" ]; then
+    tested_last="$(jq -r --argjson n "$tested" '.[] | select(.number == $n) | .body, (.comments[]?.body // empty)' <<<"$issues" |
+      grep -oE "<!-- canary run [^ ]+ (pass|norun) -->" | tail -n 1 || true)"
+  fi
+}
+
 shopt -s nullglob
 files=("$dir"/*.json)
+find_tested
 if [ ${#files[@]} -eq 0 ]; then
   echo "no canary results: the canary tested nothing" >&2
-  title="the canary tested nothing"
-  issues="$(gh issue list --label canary --state open --search "$title in:title" --json number,title)"
-  number="$(jq -r --arg title "$title" '[.[] | select(.title | contains($title))] | first | .number // empty' <<<"$issues")"
-  if [ -n "$number" ]; then
-    echo "$title: still #$number, nothing new"
+  marker="<!-- canary run none norun -->"
+  if [ -n "$tested" ] && [ "$tested_last" = "$marker" ]; then
+    echo "$tested_title: still #$tested, nothing new"
     exit 1
   fi
   body="$(mktemp)"
   {
     printf 'The canary wrote no result for any agent, so it tested nothing. The run is not green.\n\n'
     printf "The canary job's log says why: an install, the run, or the artifact upload failed.\n\n"
-    printf '<!-- canary run none norun -->\n'
+    printf '%s\n' "$marker"
   } >"$body"
-  label
-  gh issue create --label canary --title "$title" --body-file "$body"
+  if [ -n "$tested" ]; then
+    gh issue comment "$tested" --body-file "$body" >/dev/null
+    echo "$tested_title: commented on #$tested"
+  else
+    label
+    gh issue create --label canary --title "$tested_title" --body-file "$body"
+  fi
   rm -f "$body"
   exit 1
+fi
+if [ -n "$tested" ] && [ "$tested_last" != "<!-- canary run none pass -->" ]; then
+  body="$(mktemp)"
+  printf 'The canary runs again.\n\n<!-- canary run none pass -->\n' >"$body"
+  gh issue comment "$tested" --body-file "$body" >/dev/null
+  echo "the canary runs again: commented on #$tested"
+  rm -f "$body"
 fi
 
 for f in "${files[@]}"; do
