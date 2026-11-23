@@ -520,8 +520,10 @@ paste it in a report. `matchblox agents --json` prints each row with
 
 `matchblox agents explain api` shows why a session reads as it does. It
 prints the note the session's row shows, the hook's wait, each screen rule
-with the line it matched or `no match`, the menu with the digit of each
-option, and the rules version. Then it prints the screen. The screen holds
+with the line it matched, `no match`, or `not tried` for the fallback when
+a rule above it read the screen, the menu with the digit of each option,
+and the rules version. `(decides)` marks the rules the verdict comes from:
+a rule can match a line and not decide. Then it prints the screen. The screen holds
 only the lines the rules read, with your home path, host name and user name
 removed. A secret on those lines is not removed: check the screen before
 you post it. When the row says `unknown screen`, the last line says where

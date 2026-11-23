@@ -28,3 +28,12 @@ func TestScrubKeepsWordsThatHoldTheName(t *testing.T) {
 		}
 	}
 }
+
+// TestScrubRemovesTheShortHost: a prompt prints the host name only up to
+// its first dot, so a dotted host name leaves that part on the screen.
+func TestScrubRemovesTheShortHost(t *testing.T) {
+	got := Scrub("al@box:~/dev$ ssh box.lan\n", nil, []string{"box.lan", "al"})
+	if want := "<user>@<host>:~/dev$ ssh <host>\n"; got != want {
+		t.Errorf("Scrub = %q, want %q", got, want)
+	}
+}

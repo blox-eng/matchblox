@@ -3,7 +3,6 @@ package said
 import (
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 )
@@ -77,20 +76,6 @@ func TestExplainReadsTheClaudeMenu(t *testing.T) {
 	if h := hits[RuleWorking]; h.Line != 0 {
 		t.Errorf("working line hit = %+v, want none", h)
 	}
-	want := []Row{
-		{1, "Yes"},
-		{2, "Yes, and always allow access to <work> from this project"},
-		{3, "Yes, and switch to auto mode · auto mode handles these prompts for you"},
-		{4, "No"},
-	}
-	if !reflect.DeepEqual(tr.Options, want) {
-		t.Errorf("Options = %v, want %v", tr.Options, want)
-	}
-	for _, l := range tr.Lines {
-		if n, ok := OptionNumber(l); ok && (n < 1 || n > len(want) || want[n-1].Label != OptionLabel(l)) {
-			t.Errorf("row %q reads as %d %q, not as Options say", l, n, OptionLabel(l))
-		}
-	}
 	if tr.Kind != Permits || !tr.MenuRead || tr.Line != "Do you want to proceed?" {
 		t.Errorf("verdict = (%q, %v, menu %v)", tr.Line, tr.Kind, tr.MenuRead)
 	}
@@ -110,14 +95,11 @@ func TestExplainNamesTheFallback(t *testing.T) {
 	}
 	for _, h := range tr.Hits {
 		switch {
-		case h.Rule == RuleFallback && (h.Line == 0 || tr.Lines[h.Line-1] != tr.Line):
-			t.Errorf("fallback hit = %+v, want the line %q", h, tr.Line)
-		case h.Rule != RuleFallback && h.Line != 0:
-			t.Errorf("%s hit %+v on a screen it did not decide", h.Rule, h)
+		case h.Rule == RuleFallback && (h.Line == 0 || tr.Lines[h.Line-1] != tr.Line || !h.Decides):
+			t.Errorf("fallback hit = %+v, want the line %q, deciding", h, tr.Line)
+		case h.Rule != RuleFallback && h.Decides:
+			t.Errorf("%s hit %+v decides a screen the fallback read", h.Rule, h)
 		}
-	}
-	if tr.Options != nil {
-		t.Errorf("Options = %v on a screen that permits nothing", tr.Options)
 	}
 }
 

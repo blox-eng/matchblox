@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/menu"
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/said"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -60,6 +61,20 @@ func TestExplainLeavesNoNameOrPath(t *testing.T) {
 	}
 }
 
+// TestExplainLeavesNoShortHost: a prompt or a statusline prints the host
+// name only up to its first dot, as on a Mac's buildbox.local.
+func TestExplainLeavesNoShortHost(t *testing.T) {
+	x := explainEnvOf(" tester@buildbox ~/dev/api main\n" + readMenu)
+	x.host = "buildbox.local"
+	var buf bytes.Buffer
+	if err := writeExplain(&buf, explainDoc(), "api", x, false); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(buf.String(), "buildbox") {
+		t.Errorf("the output holds the short host:\n%s", buf.String())
+	}
+}
+
 func TestExplainUnknownScreen(t *testing.T) {
 	var buf bytes.Buffer
 	if err := writeExplain(&buf, explainDoc(), "api", explainEnvOf(unknownScreen), false); err != nil {
@@ -74,9 +89,9 @@ func TestExplainUnknownScreen(t *testing.T) {
 		"Rules on the last 8 lines with words\n",
 		"working line        no match\n",
 		"approval prompt     no match\n",
-		"question            line 3  Do you want to make this edit?\n",
-		"menu key hint       no match\n",
-		"fallback            no match\n",
+		"question            line 3  Do you want to make this edit?  (decides)\n",
+		"menu key hint       line 7  Esc to cancel · Tab to amend\n",
+		"fallback            not tried\n",
 		"Menu     not read\n",
 		"Screen (home path, host and user removed; check it before you post it)\n",
 		"  │ 1. Accept\n",
@@ -85,6 +100,23 @@ func TestExplainUnknownScreen(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("the output misses %q:\n%s", want, out)
 		}
+	}
+}
+
+// TestExplainUnknownClaudeMenuShowsTheKeyHint: a rule's text on screen
+// shows as its match even when an earlier rule decided, and only the rule
+// that decided says so.
+func TestExplainUnknownClaudeMenuShowsTheKeyHint(t *testing.T) {
+	var buf bytes.Buffer
+	if err := writeExplain(&buf, explainDoc(), "api", explainEnvOf(unknownScreen), false); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	if want := "menu key hint       line 7  Esc to cancel · Tab to amend\n"; !strings.Contains(out, want) {
+		t.Errorf("the output misses %q:\n%s", want, out)
+	}
+	if n := strings.Count(out, "(decides)"); n != 1 {
+		t.Errorf("%d rules say they decide:\n%s", n, out)
 	}
 }
 
@@ -108,7 +140,7 @@ func TestExplainReadMenuHasNoFix(t *testing.T) {
 	for _, want := range []string{
 		"Verdict  waits for an approval: Do you want to proceed?\n",
 		"Menu     1 Yes · 2 Yes, and don't ask again for go test commands · 3 No\n",
-		"menu key hint       line 7  Esc to cancel · Tab to amend\n",
+		"menu key hint       line 7  Esc to cancel · Tab to amend  (decides)\n",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("the output misses %q:\n%s", want, out)
@@ -116,6 +148,32 @@ func TestExplainReadMenuHasNoFix(t *testing.T) {
 	}
 	if strings.Contains(out, "Fix:") {
 		t.Errorf("a read menu has a fix line:\n%s", out)
+	}
+}
+
+// TestExplainMenuIsWhatADigitPicks: the Menu line shows the rows a digit
+// picks, read as the console reads them, not a numbered list above.
+func TestExplainMenuIsWhatADigitPicks(t *testing.T) {
+	const screen = ` Bash command
+   git commit -m "fix: two things
+   1. update the docs
+   2. bump the version"
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. No
+ Esc to cancel
+`
+	if got := menu.Read(screen); len(got) != 2 || got[1] != "Yes" || got[2] != "No" {
+		t.Fatalf("menu.Read = %v, want 1 Yes and 2 No", got)
+	}
+	d := explainDoc()
+	d.Sessions[0].UnknownScreen, d.Sessions[0].Permits, d.Sessions[0].LastLine = false, true, "Do you want to proceed?"
+	var buf bytes.Buffer
+	if err := writeExplain(&buf, d, "api", explainEnvOf(screen), false); err != nil {
+		t.Fatal(err)
+	}
+	if want := "Menu     1 Yes · 2 No\n"; !strings.Contains(buf.String(), want) {
+		t.Errorf("the output misses %q:\n%s", want, buf.String())
 	}
 }
 
@@ -158,9 +216,10 @@ func TestExplainJSON(t *testing.T) {
 		Verdict string `json:"verdict"`
 		Hook    string `json:"hook"`
 		Hits    []struct {
-			Rule string `json:"rule"`
-			Line int    `json:"line"`
-			Text string `json:"text"`
+			Rule    string `json:"rule"`
+			Line    int    `json:"line"`
+			Text    string `json:"text"`
+			Decides bool   `json:"decides"`
 		} `json:"hits"`
 		Options []struct {
 			N     int    `json:"n"`
@@ -174,8 +233,11 @@ func TestExplainJSON(t *testing.T) {
 	if got.Verdict != "waits for an approval: Do you want to proceed?" || got.Hook != "waits for a permission, for 14s" {
 		t.Errorf("verdict %q, hook %q", got.Verdict, got.Hook)
 	}
-	if len(got.Hits) != 5 || got.Hits[1].Rule != said.RulePermits || got.Hits[1].Line != 4 || got.Hits[1].Text != "1. Yes" {
+	if len(got.Hits) != 5 || got.Hits[1].Rule != said.RulePermits || got.Hits[1].Line != 4 || got.Hits[1].Text != "1. Yes" || !got.Hits[1].Decides {
 		t.Errorf("hits %+v", got.Hits)
+	}
+	if q := got.Hits[2]; q.Rule != said.RuleQuestion || q.Line != 3 || q.Decides {
+		t.Errorf("the question matches line 3 and does not decide: %+v", q)
 	}
 	if len(got.Options) != 3 || got.Options[2].N != 3 || got.Options[2].Label != "No" {
 		t.Errorf("options %+v", got.Options)
@@ -207,6 +269,13 @@ func TestExplainSaysTheScreenChanged(t *testing.T) {
 	permits.Sessions[0].UnknownScreen, permits.Sessions[0].Permits, permits.Sessions[0].LastLine = false, true, "Do you want to proceed?"
 	unread := explainDoc()
 	unread.Sessions[0].UnknownScreen, unread.Sessions[0].MenuUnread = false, true
+	none := explainDoc()
+	none.Sessions[0].UnknownScreen, none.Sessions[0].LastLine, none.Queue = false, "All tests pass.", nil
+	asks := explainDoc()
+	asks.Sessions[0].Agent, asks.Sessions[0].UnknownScreen, asks.Queue = "codex", false, nil
+	asks.Sessions[0].Asks, asks.Sessions[0].LastLine = true, "Should I also update the docs?"
+	edit := explainDoc()
+	edit.Sessions[0].UnknownScreen, edit.Sessions[0].Permits, edit.Sessions[0].LastLine = false, true, "Do you want to make this edit?"
 	for _, c := range []struct {
 		name    string
 		doc     state.Doc
@@ -218,6 +287,10 @@ func TestExplainSaysTheScreenChanged(t *testing.T) {
 		{"an approval note, a screen no rule reads", permits, "  Done, the tests pass.\n", true},
 		{"an approval note, a read menu", permits, readMenu, false},
 		{"an unknown note, an unknown screen", explainDoc(), unknownScreen, false},
+		{"no note, a read menu", none, readMenu, true},
+		{"an approval note, another approval on screen", edit, readMenu, true},
+		{"no note, the same line", none, "  All tests pass.\n", false},
+		{"a question read from the pane, the same question", asks, "  Should I also update the docs?\n", false},
 	} {
 		var buf bytes.Buffer
 		if err := writeExplain(&buf, c.doc, "api", explainEnvOf(c.screen), false); err != nil {

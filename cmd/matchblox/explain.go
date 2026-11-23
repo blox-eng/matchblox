@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/menu"
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/said"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -26,9 +27,11 @@ type explainEnv struct {
 }
 
 type explainHit struct {
-	Rule string `json:"rule"`
-	Line int    `json:"line"`
-	Text string `json:"text"`
+	Rule    string `json:"rule"`
+	Line    int    `json:"line"`
+	Text    string `json:"text"`
+	Tried   bool   `json:"tried"`
+	Decides bool   `json:"decides"`
 }
 
 type explainRow struct {
@@ -104,16 +107,35 @@ func writeExplain(w io.Writer, doc state.Doc, who string, x explainEnv, asJSON b
 	scrub := func(text string) string {
 		return said.Scrub(text, []string{s.Cwd, x.home}, []string{x.host, x.user})
 	}
-	out := traceOut(t, scrub)
+	out := traceOut(t, screen, scrub)
 	out.Session = scrub(s.Name)
 	out.Agent = sample.AgentLabel(s.Agent)
 	out.Version = s.Version
 	out.Hook = hookOf(s, doc.Queue, x.now)
 	out.Verdict = scrub(verdictOf(s))
-	out.Changed = (s.UnknownScreen || s.MenuUnread) && t.MenuRead || s.Permits && t.Kind != said.Permits
+	out.Changed = screenChanged(s, t)
 	out.MenuOn = out.MenuOn || s.UnknownScreen || s.MenuUnread
 	out.Unknown = s.UnknownScreen
 	return printExplain(w, out, asJSON)
+}
+
+// screenChanged: the note and the screen read now disagree. An unknown or
+// unread note disagrees with a read menu; any other note disagrees with a
+// screen of another kind, or with another approval prompt.
+func screenChanged(s sample.Session, t said.Trace) bool {
+	if s.UnknownScreen || s.MenuUnread {
+		return t.MenuRead
+	}
+	note := said.None
+	switch {
+	case s.Ask != nil && len(s.Ask.Questions) > 0:
+		note = said.Asks
+	case s.Permits:
+		note = said.Permits
+	case s.Asks:
+		note = said.Asks
+	}
+	return note != t.Kind || note == said.Permits && s.LastLine != t.Line
 }
 
 // explainFile prints which rule reads a screen saved in the file at path.
@@ -126,7 +148,7 @@ func explainFile(w io.Writer, path string, x explainEnv, asJSON bool) error {
 		return errors.New(scrub(err.Error()))
 	}
 	t := said.Explain(screen)
-	out := traceOut(t, scrub)
+	out := traceOut(t, screen, scrub)
 	out.Verdict = scrub(traceVerdict(t))
 	out.File = true
 	return printExplain(w, out, asJSON)
@@ -157,8 +179,9 @@ func unreadable(path string, err error) error {
 	return fmt.Errorf("the file %s cannot be read: %w", path, err)
 }
 
-// traceOut is the part of the output the rules give, scrubbed.
-func traceOut(t said.Trace, scrub func(string) string) explainOut {
+// traceOut is the part of the output the rules give, scrubbed. Its menu
+// rows are what menu.Read reads, as the console does before a digit goes.
+func traceOut(t said.Trace, screen string, scrub func(string) string) explainOut {
 	out := explainOut{
 		Rules:   "built into matchblox " + version,
 		MenuOn:  t.Kind == said.Permits,
@@ -167,10 +190,13 @@ func traceOut(t said.Trace, scrub func(string) string) explainOut {
 		Screen:  []string{},
 	}
 	for _, h := range t.Hits {
-		out.Hits = append(out.Hits, explainHit{Rule: h.Rule, Line: h.Line, Text: scrub(h.Text)})
+		out.Hits = append(out.Hits, explainHit{Rule: h.Rule, Line: h.Line, Text: scrub(h.Text), Tried: h.Tried, Decides: h.Decides})
 	}
-	for _, r := range t.Options {
-		out.Options = append(out.Options, explainRow{N: r.N, Label: scrub(r.Label)})
+	if t.Kind == said.Permits {
+		rows := menu.Read(screen)
+		for n := 1; n <= len(rows); n++ {
+			out.Options = append(out.Options, explainRow{N: n, Label: scrub(rows[n])})
+		}
 	}
 	for _, l := range t.Lines {
 		out.Screen = append(out.Screen, scrub(l))
@@ -245,8 +271,14 @@ func explainText(o explainOut) string {
 	fmt.Fprintf(&b, "Rules on the last %d lines with words\n", said.ScreenWithin)
 	for _, h := range o.Hits {
 		hit := "no match"
-		if h.Line > 0 {
+		switch {
+		case !h.Tried:
+			hit = "not tried"
+		case h.Line > 0:
 			hit = fmt.Sprintf("line %d  %s", h.Line, h.Text)
+		}
+		if h.Decides {
+			hit += "  (decides)"
 		}
 		fmt.Fprintf(&b, "  %-19s %s\n", h.Rule, hit)
 	}
