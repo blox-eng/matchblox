@@ -922,6 +922,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	case noticeMsg:
 		return m, m.noticeEnded() // the frame drops it, or the next one shows
+	case agentFrameMsg:
+		return m, m.agentFrame(msg)
 	case screenMsg:
 		return m.screenFrom(m.opt.Host, msg), m.recv()
 	case peerMsg:

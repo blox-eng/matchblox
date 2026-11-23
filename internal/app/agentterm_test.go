@@ -9,11 +9,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"syscall"
 	"testing"
 	"time"
+	"unicode"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -348,4 +350,118 @@ func TestAnIdleAgentCostsNoRedraw(t *testing.T) {
 	}
 	d.tmux("send-keys", "-t", d.pane("flint-auth"), "-l", "x") // sleep echoes nothing, but the pane shows the x
 	x.until("the next frame", func() bool { return x.frames > before })
+}
+
+// hostile is what an agent, or a file it prints, sends to reach the
+// owner's terminal through matchblox's.
+const hostile = "\x1b]0;pwned\x07" + // the title
+	"\x1b]52;c;cHduZWQ=\x07" + // the clipboard: "pwned"
+	"\x1b[6n" + "\x1b[c" + // queries whose answers would type into the agent
+	"\x1bPtmux;\x1b\x1b]0;pwned\x07\x1b\\" + // tmux's passthrough
+	"\x1b]7;file://pwned/tmp\x07" + // the working directory
+	"\x1b]1337;SetUserVar=pwned=cHduZWQ=\x07" + // iTerm2's own
+	"\x07" + // the bell
+	"\u009b2J" + "\x9b2J" + // C1's CSI, as UTF-8 and as a raw byte
+	"\x0e" + "\u202e" + // shift out, and a right-to-left override
+	"\x1b[21t\x1b[14t\x1b[8;5;5t" + // the window's title and size, asked and set
+	"\x1b]10;?\x07\x1b]11;?\x07\x1b]4;1;?\x07" + // colour queries
+	"\x1bP$qm\x1b\\" + "\x1bP+q544e\x1b\\" + // DECRQSS and XTGETTCAP
+	"\x1b_Ga=T;AAAA\x1b\\" + // the kitty graphics protocol
+	"\x1b]52;c;?\x07" + // a clipboard read
+	"\x1b]8;;https://pwned.example/\x07a link\x1b]8;;\x07" // a hyperlink, after the clears
+
+// sgr is the only sequence matchblox draws the agent's screen with.
+var onlySGR = regexp.MustCompile(`\x1b\[[0-9;:]*m`)
+
+func TestAnAgentCannotTouchTheOwnersTerminal(t *testing.T) {
+	const w, h = 80, 20
+	fixture := filepath.Join(t.TempDir(), "hostile")
+	if err := os.WriteFile(fixture, []byte(hostile), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	clean := func(t *testing.T, x *regionRun) {
+		t.Helper()
+		drawn := strings.Join(x.r.lines(newStyles(true), w, h), "\n")
+		rest := onlySGR.ReplaceAllString(drawn, "")
+		if strings.Contains(rest, "pwned") || strings.ContainsFunc(rest, func(r rune) bool { return !unicode.IsPrint(r) && r != ' ' && r != '\n' }) {
+			t.Fatalf("matchblox writes the agent's sequences to its terminal: %q", rest)
+		}
+	}
+
+	// The client itself is hostile, as an agent's tmux that passes all through.
+	t.Run("from the client", func(t *testing.T) {
+		x := runRegion(t)
+		x.open("flint-auth", []string{"/bin/sh", "-c", `stty raw -echo; printf '\033[H'; cat "$1"; ` +
+			`stty min 0 time 5; printf '\r\nanswers: '; dd bs=1 count=4096 2>/dev/null | tr '\033' '~'; printf '\r\nend'; exec sleep 600`, "sh", fixture}, w, h)
+		x.until("the emulator's answers", x.shows("end"))
+		if !x.shows("~[1;1R~[?62;1;6;22c")() {
+			t.Fatalf("the queries' answers are not the emulator's:\n%s", strings.Join(plainLines(x.r.lines(newStyles(true), w, h)), "\n"))
+		}
+		clean(t, x)
+		if x.r.copy != "pwned" {
+			t.Fatalf("the agent asked to copy %q, the region keeps %q", "pwned", x.r.copy)
+		}
+	})
+
+	t.Run("through the agent's tmux", func(t *testing.T) {
+		d := newAgentDesk(t, w, h, map[string]string{"flint-auth": `cat "` + fixture + `"; printf '\nend\n'; exec sleep 600`})
+		x := runRegion(t)
+		x.open("flint-auth", d.view("flint-auth", d.pane("flint-auth")), w, h)
+		x.until("the agent's output", x.shows("end"))
+		x.step(300 * time.Millisecond) // the client's last bytes
+		clean(t, x)
+	})
+
+	t.Run("the list foot says the copy once", func(t *testing.T) {
+		const asked = "the agent asked to copy: c copies it"
+		m := boardModel(t, boardState())
+		term := &agentTerm{scr: newAgentScreen(w, h)}
+		m.agent.term = term
+		for i, want := range []string{asked, ""} {
+			_, _ = term.scr.Write([]byte("\x1b]52;c;cHduZWQ=\x07"))
+			m.noticeText, m.saying = "", nil
+			m = upd(t, m, agentFrameMsg{t: term})
+			if got := m.sideSays(); got != want {
+				t.Fatalf("copy request %d: the list foot says %q, want %q", i+1, got, want)
+			}
+		}
+		if m.agent.copy != "pwned" {
+			t.Fatalf("the region keeps %q to copy, want pwned", m.agent.copy)
+		}
+	})
+}
+
+// emulatorAnswers are the only bytes the screen may send the agent back: a
+// cursor's place, the device's attributes and status, and a colour.
+var emulatorAnswers = regexp.MustCompile(`^(\x1b\[[0-9;?]*[Rcny]|\x1b\]1[0-2];rgb:[0-9a-f/]+\x07)*$`)
+
+func TestTheAgentScreenAnswersOnlyWhatItMay(t *testing.T) {
+	scr := newAgentScreen(80, 20)
+	read := make(chan []byte)
+	go func() {
+		buf := make([]byte, 4<<10)
+		for {
+			n, err := scr.Read(buf)
+			if err != nil {
+				close(read)
+				return
+			}
+			read <- slices.Clone(buf[:n])
+		}
+	}()
+	go func() { _, _ = scr.Write([]byte(hostile)) }()
+	var got []byte
+	for quiet := time.After(500 * time.Millisecond); ; {
+		select {
+		case b := <-read:
+			got = append(got, b...)
+			continue
+		case <-quiet:
+		}
+		break
+	}
+	_ = scr.Close()
+	if len(got) == 0 || !emulatorAnswers.Match(got) {
+		t.Fatalf("the screen sends the agent %q", got)
+	}
 }

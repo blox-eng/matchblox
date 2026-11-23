@@ -1,7 +1,9 @@
 package app
 
 import (
+	"bytes"
 	"cmp"
+	"encoding/base64"
 	"image/color"
 	"io"
 	"os"
@@ -10,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -21,13 +24,17 @@ import (
 )
 
 // agentScreen is the terminal the agent's client draws on: it takes the
-// client's output and answers its queries itself. vt's emulator is the one.
+// client's output and answers its queries itself, so no sequence of the
+// agent's reaches the owner's terminal. vt's emulator is the one.
 type agentScreen interface {
 	io.ReadWriteCloser
 	CellAt(x, y int) uv.Cell
 	// cells is a copy of the screen's top left w by h cells.
 	cells(w, h int) []uv.Line
 	Resize(w, h int)
+	// copyAsked is the text the agent last asked to copy (OSC 52) since
+	// the last call, which drops it from the screen.
+	copyAsked() (string, bool)
 }
 
 // vtScreen is vt's emulator under a lock. CellAt copies the cell under
@@ -35,16 +42,37 @@ type agentScreen interface {
 // changes. Close ends Read by its pipe: vt's Close sets a flag that Read
 // reads without a lock.
 type vtScreen struct {
-	mu sync.Mutex
-	e  *vt.Emulator
+	mu    sync.Mutex
+	e     *vt.Emulator
+	asked *string // what the agent asked to copy, not yet taken
 }
 
 // newAgentScreen keeps no scrollback: matchblox never reads it, and the
 // agent's tmux keeps its own.
 func newAgentScreen(w, h int) agentScreen {
-	e := vt.NewEmulator(w, h)
-	e.SetScrollbackSize(1)
-	return &vtScreen{e: e}
+	s := &vtScreen{e: vt.NewEmulator(w, h)}
+	s.e.SetScrollbackSize(1)
+	s.e.RegisterOscHandler(52, func(data []byte) bool { // under s.mu: only Write parses
+		if _, b64, ok := bytes.Cut(bytes.TrimPrefix(data, []byte("52;")), []byte(";")); ok {
+			if text, err := base64.StdEncoding.DecodeString(string(b64)); err == nil {
+				asked := string(text)
+				s.asked = &asked
+			}
+		}
+		return true
+	})
+	return s
+}
+
+func (s *vtScreen) copyAsked() (string, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	asked := s.asked
+	s.asked = nil
+	if asked == nil {
+		return "", false
+	}
+	return *asked, true
 }
 
 // Write parses p a piece at a time, so a draw waits on one piece, never
@@ -220,8 +248,9 @@ func (t *agentTerm) close() {
 	_ = t.cmd.Wait()
 }
 
-// draw is the screen in w by h cells. A default colour draws as fg and bg,
-// nil leaving the terminal's own; every other colour passes as it is.
+// draw is the screen in w by h cells, in colours and attributes only. A
+// default colour draws as fg and bg, nil leaving the terminal's own; every
+// other colour passes as it is.
 func (t *agentTerm) draw(fg, bg color.Color, w, h int) []string {
 	out := make([]string, h)
 	for y, line := range t.scr.cells(w, h) {
@@ -229,11 +258,25 @@ func (t *agentTerm) draw(fg, bg color.Color, w, h int) []string {
 			if !c.IsZero() { // a wide glyph's second cell stays empty
 				c.Style.Fg, c.Style.Bg = cmp.Or[color.Color](c.Style.Fg, fg), cmp.Or[color.Color](c.Style.Bg, bg)
 			}
+			c.Link = uv.Link{} // an agent's hyperlink (OSC 8) stays inside its screen
+			if !c.IsZero() {
+				c.Content = cmp.Or(strings.Map(printable, c.Content), " ")
+			}
 			line[x] = c
 		}
 		out[y] = fit(line.Render(), w)
 	}
 	return out
+}
+
+// printable keeps a glyph's runes that only draw: a control or a
+// direction override (U+202E) the agent printed would act on the owner's
+// terminal. The joiner stays, so an emoji sequence draws whole.
+func printable(r rune) rune {
+	if unicode.IsPrint(r) || r == '\u200d' {
+		return r
+	}
+	return -1
 }
 
 // agentRegion is the desk's agent region: the screen of the session it
@@ -243,6 +286,7 @@ func (t *agentTerm) draw(fg, bg color.Color, w, h int) []string {
 type agentRegion struct {
 	term       *agentTerm
 	name, said string // said: why the screen did not start
+	copy       string // what the agent last asked to copy; c copies it
 	keys       bool
 	w, h       int
 }
@@ -250,7 +294,7 @@ type agentRegion struct {
 // open shows name's screen in place of the one shown, the keys to the list.
 func (r *agentRegion) open(name string, argv []string, w, h int) tea.Cmd {
 	r.shut()
-	r.name, r.keys, r.w, r.h = name, false, w, h
+	r.name, r.keys, r.w, r.h, r.copy = name, false, w, h, ""
 	t, err := startAgentTerm(argv, w, h)
 	if err != nil {
 		r.said = name + " cannot be shown: " + err.Error() + "."
@@ -268,13 +312,16 @@ func (r *agentRegion) shut() {
 	}
 }
 
-// frame marks the screen drawn and waits for its next change; a frame of
-// a screen no longer shown is dropped.
+// frame marks the screen drawn, keeps what the agent asked to copy, and
+// waits for its next change; a frame of a screen no longer shown is dropped.
 func (r *agentRegion) frame(msg agentFrameMsg) tea.Cmd {
 	if msg.t != r.term {
 		return nil
 	}
 	r.term.framed = true
+	if text, ok := r.term.scr.copyAsked(); ok {
+		r.copy = text
+	}
 	return r.term.next(msg.at)
 }
 
@@ -305,6 +352,18 @@ func (r *agentRegion) lines(st styles, w, h int) []string {
 		return regionSays(st.faint, "opening "+r.name+"…", w, h)
 	}
 	return regionSays(st.faint, "", w, h)
+}
+
+// agentFrame takes a frame of the agent's screen. The agent's write to the
+// clipboard is dropped, so the owner decides: the list foot says once that
+// it asked, until the copy key copies it.
+func (m *Model) agentFrame(msg agentFrameMsg) tea.Cmd {
+	had := m.agent.copy
+	next := m.agent.frame(msg)
+	if had == "" && m.agent.copy != "" {
+		return tea.Batch(next, m.notice("the agent asked to copy: "+m.keys.board.Copy.Help().Key+" copies it"))
+	}
+	return next
 }
 
 // agentLines is the agent region of the session chosen, or why it is
