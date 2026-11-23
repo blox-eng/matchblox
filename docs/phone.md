@@ -438,8 +438,10 @@ with your thumb to scroll, as a trackball:
 - With VoiceOver, the head is "Match head": swipe up or down on it to
   scroll a page, and double-tap it to send Enter.
 
-In a chat, press and hold on the text to copy it: the iPhone's own
-selection opens, with its handles and its Copy button.
+In a chat, press and hold on a word to select it, and drag with the
+same finger to select more. When you lift it, the menu offers Copy,
+`Open link` for a link in the selection, and Paste. The hold leaves the
+keyboard where it is; a tap ends the selection.
 
 A belt key after a scroll in a tmux pane first brings the pane back to its
 bottom, so the key reaches the agent, not tmux's copy mode. `Esc` there only

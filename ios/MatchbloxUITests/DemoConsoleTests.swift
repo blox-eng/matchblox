@@ -200,14 +200,54 @@ final class DemoConsoleTests: XCTestCase {
             return XCTFail("no row shows the question: \(terminal.label)")
         }
         terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: (Double(row) + 0.5) / Double(rows.count))).press(forDuration: 1.2)
-        let menu = app.menuItems["Paste"].firstMatch.waitForExistence(timeout: 5) || app.menuItems["Select"].firstMatch.exists
+        let menu = copyShows(in: app)
         keep(app, "10 hold in the chat")
-        // value: press= release= right= (clicks sent), hold= (SwiftTerm's long-press began), menu=
+        // value: press= release= right= (clicks sent), hold= (SwiftTerm's long-press began)
         let counts = terminal.value as? String ?? ""
         XCTAssertTrue(counts.contains("right=0"), "a hold in the chat sent a right click: \(counts)")
         XCTAssertFalse(counts.contains("hold=0"), "SwiftTerm's long-press did not begin: \(counts)")
-        XCTAssertTrue(menu, "a hold in the chat showed no Select / Paste menu: \(counts). " + app.debugDescription)
+        XCTAssertTrue(menu, "a hold in the chat showed no Copy: \(counts). " + app.debugDescription)
+        XCTAssertTrue(app.buttons["Show keyboard"].firstMatch.exists, "the hold raised the keyboard: \(counts)")
         XCTAssertFalse(terminal.label.contains("go in"), "a hold in the chat opened the row's menu: \(terminal.label)")
+    }
+
+    /// A hold selects the word under the finger, and the same press drags the selection on, as
+    /// in any iOS text: no drag reaches tmux, and Copy shows when the finger lifts.
+    @MainActor
+    func testAHoldAndDragInTheChatSelects() {
+        let app = launched()
+        expect(in: app, "label CONTAINS %@", "NEEDS YOU")
+        let terminal = app.descendants(matching: .any)["demo-terminal"]
+        waitUntilSteady(terminal)
+        openTheChat(app, row: "flint-auth")
+        expect(in: app, step: "the chat's question after the tap", "label CONTAINS %@ AND label CONTAINS %@", "send to flint-auth", "2. Rotate, keep")
+        waitUntilSteady(terminal)
+        let rows = terminal.label.components(separatedBy: "\n")
+        guard let row = rows.firstIndex(where: { $0.contains("Should a refresh also rotate") }) else {
+            return XCTFail("no row shows the question: \(terminal.label)")
+        }
+        let before = presses(on: terminal)
+        let y = (Double(row) + 0.5) / Double(rows.count)
+        let start = terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: y))
+        start.press(forDuration: 1.2, thenDragTo: terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: y)))
+        let copy = copyShows(in: app)
+        keep(app, "11 hold and drag in the chat")
+        let counts = terminal.value as? String ?? ""
+        XCTAssertEqual(presses(on: terminal), before, "the drag reached tmux as a mouse drag: \(counts)")
+        XCTAssertTrue(counts.contains("right=0"), "the hold sent a right click: \(counts)")
+        XCTAssertTrue(copy, "no Copy after a hold and drag: \(counts). " + app.debugDescription)
+    }
+
+    /// The edit menu's Copy within 5 seconds, as a menu item or a button: the item's type in the
+    /// accessibility tree differs between iOS versions.
+    @MainActor
+    private func copyShows(in app: XCUIApplication) -> Bool {
+        let deadline = Date().addingTimeInterval(5)
+        repeat {
+            if app.menuItems["Copy"].firstMatch.exists || app.buttons["Copy"].firstMatch.exists { return true }
+            Thread.sleep(forTimeInterval: 0.25)
+        } while Date() < deadline
+        return false
     }
 
     /// The presses of the left button the terminal has sent, as its accessibility value counts them.

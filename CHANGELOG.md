@@ -6,6 +6,13 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **A hold and drag selects text.** In a Pocket chat a hold now
+  selects the word under the finger, and the same press drags the
+  selection on, as in any iOS text. A drag went to tmux before. Copy
+  shows when the finger lifts.
+
 ## [0.58.0] - 2026-11-23
 
 ### Changed
