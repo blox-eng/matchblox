@@ -175,6 +175,8 @@ Next: builder:build
 - 2026-11-23: Task 3's `agent` has `env(home, url, binDir)`, `version` runs with that env (never the real home), and `stand` makes a fresh stand-in per attempt that counts tool requests.
 - 2026-11-23: a `could not run` result carries its reason in `screen`; a run whose stand-in got no tool request is `could not run`, not a screen break (spec: a canary that tests nothing must not be green).
 - 2026-11-23: the could-not-run issue title has no version (`the canary could not run Codex: <reason>`); the version is in the body and the marker. The spec's example `Codex 0.99:` is only an example.
+- 2026-11-23: Task 7's run step makes the `MATCHBLOX_CANARY_OUT` folder first (`mkdir -p`); `TestCanary` writes into it and does not create it. The results folder is `$RUNNER_TEMP/canary` in both jobs.
+- 2026-11-23: Task 7 imports `go.yaml.in/yaml/v3`, already in `go.sum` through gopsutil and testify; `go.mod` gains one direct `require` line and nothing new is downloaded.
 
 ## Calls
 

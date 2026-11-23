@@ -623,4 +623,14 @@ runs.
 An approval menu (Codex, OpenCode, Cursor) shows as `asks`. Answer it in its pane,
 where `Enter` takes the selected choice.
 
+Each day, CI runs the latest release of Claude Code, Codex and OpenCode
+against a stand-in model. The stand-in asks for one shell command, so each
+agent draws its own approval menu, and CI reads that menu with matchblox's
+own rules. A menu that does not read opens an issue labelled `canary`, with
+the agent's version and its screen. Such an issue means that matchblox
+cannot read that version's menu yet: a builder on that version sees
+`unknown screen` on a waiting session until the release with the fix, and
+answers it in its pane. Cursor is not in the canary, because its agent
+needs a signed-in account.
+
 See [Limits](limits.md) for what is not measured yet.
