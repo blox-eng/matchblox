@@ -397,16 +397,6 @@ func (r canaryRun) writes() []ghCall {
 	return w
 }
 
-func (r canaryRun) count(verb ...string) int {
-	n := 0
-	for _, c := range r.calls {
-		if c.is(verb...) {
-			n++
-		}
-	}
-	return n
-}
-
 const fakeGH = `#!/bin/sh
 n=$(tr -cd '\036' <"$GH_LOG" | wc -c | tr -d ' ')
 { for a in "$@"; do printf '%s\037' "$a"; done; printf '\036'; } >>"$GH_LOG"

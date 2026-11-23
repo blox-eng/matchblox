@@ -178,7 +178,7 @@ func drawMenu(t *testing.T, sock, work string, env, argv []string, verdict func(
 	start := append([]string{"start-server", ";", "set-option", "-g", "remain-on-exit", "on", ";",
 		"new-session", "-d", "-s", "canary", "-x", "120", "-y", "40", "-c", work, "env", "-i"}, env...)
 	if b, err := tmux(append(start, argv...)...).CombinedOutput(); err != nil {
-		return "", "", fmt.Errorf("tmux new-session: %v: %s", err, b)
+		return "", "", fmt.Errorf("tmux new-session: %w: %s", err, b)
 	}
 	path, _ := tmux("display-message", "-p", "#{socket_path}").Output()
 	kill := func() {
