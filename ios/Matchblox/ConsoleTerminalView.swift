@@ -226,6 +226,17 @@ final class ConsoleTerminalView: TerminalView {
         super.touchesBegan(touches, with: event)
     }
 
+    /// A lift ends any hold: the terminal may take the keys again.
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+        selecting = false
+        super.touchesEnded(touches, with: event)
+    }
+
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+        selecting = false
+        super.touchesCancelled(touches, with: event)
+    }
+
     override func becomeFirstResponder() -> Bool {
         if selecting, !isFirstResponder { return false }
         let became = super.becomeFirstResponder()
@@ -319,13 +330,15 @@ final class ConsoleTerminalView: TerminalView {
         send(BoardTouch.rightClick(col: spot.col, row: spot.row))
     }
 
-    /// SwiftTerm's long-press began (its handler ran first and kept the spot): its Select picks
-    /// the word under the finger. A drag of the same press moves the far end, the word's other
+    /// SwiftTerm's long-press began: the word under the finger is selected. A drag of the same press moves the far end, the word's other
     /// end staying put, and the menu, Copy with it, shows when the finger lifts.
     @objc private func selectHeld(_ press: UILongPressGestureRecognizer) {
         switch press.state {
         case .began:
-            select(nil)
+            if let spot = cell(at: press.location(in: self)) {
+                let buffer = getTerminal().buffer
+                selection.selectWordOrExpression(at: Position(col: spot.col, row: spot.row + buffer.yDisp), in: buffer)
+            }
             heldWord = selection.active ? (selection.start, selection.end) : nil
             #if DEBUG
             liftNote = "began=\(selection.active)@\(sizeNote)"
