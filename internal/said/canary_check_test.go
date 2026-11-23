@@ -3,6 +3,7 @@ package said
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -142,6 +143,25 @@ func TestScrubKeepsShortNames(t *testing.T) {
 	for _, name := range []string{"", "o", "ye"} {
 		if got := scrub(screen, "", "", name, name); got != screen {
 			t.Errorf("scrub with host and user %q changed the screen:\n%s", name, got)
+		}
+	}
+}
+
+// On CI the agents run as the workflow's own user, so its name is scrubbed:
+// it must not be a word of the prompt, the command or a config name, or the
+// screen an issue asks to paste would not be the one the agent drew.
+func TestScrubKeepsThePrompt(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "..", ".github", "workflows", "canary.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := regexp.MustCompile(`useradd [^\n]* (\w+)\n`).FindSubmatch(b)
+	if m == nil {
+		t.Fatal("canary.yml makes no user with useradd")
+	}
+	for _, s := range []string{"make the canary file", standInCommand, "canary/stand-in", "Making the canary file"} {
+		if got := scrub(s, "", "", "", string(m[1])); got != s {
+			t.Errorf("scrub with the CI user %q turns %q into %q", m[1], s, got)
 		}
 	}
 }

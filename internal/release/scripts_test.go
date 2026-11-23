@@ -991,11 +991,13 @@ type workflowStep struct {
 }
 
 type workflowJob struct {
-	Needs       any               `yaml:"needs"`
-	If          string            `yaml:"if"`
-	Permissions map[string]string `yaml:"permissions"`
-	Env         map[string]string `yaml:"env"`
-	Steps       []workflowStep    `yaml:"steps"`
+	Needs          any               `yaml:"needs"`
+	If             string            `yaml:"if"`
+	TimeoutMinutes int               `yaml:"timeout-minutes"`
+	Concurrency    map[string]any    `yaml:"concurrency"`
+	Permissions    map[string]string `yaml:"permissions"`
+	Env            map[string]string `yaml:"env"`
+	Steps          []workflowStep    `yaml:"steps"`
 }
 
 // The canary job installs and runs each agent's latest release, code nobody
@@ -1004,6 +1006,11 @@ type workflowJob struct {
 func TestCanaryWorkflowKeepsTheTokenFromAgents(t *testing.T) {
 	raw := read(t, filepath.Join("..", "..", ".github", "workflows", "canary.yml"))
 	var wf struct {
+		On struct {
+			PullRequest struct {
+				Paths []string `yaml:"paths"`
+			} `yaml:"pull_request"`
+		} `yaml:"on"`
 		Permissions map[string]string `yaml:"permissions"`
 		Concurrency struct {
 			CancelInProgress string `yaml:"cancel-in-progress"`
@@ -1017,6 +1024,13 @@ func TestCanaryWorkflowKeepsTheTokenFromAgents(t *testing.T) {
 	// runs after a cancel and would file false issues.
 	if want := "${{ github.event_name == 'pull_request' }}"; wf.Concurrency.CancelInProgress != want {
 		t.Errorf("concurrency cancel-in-progress %q, want %q", wf.Concurrency.CancelInProgress, want)
+	}
+	// A pull request that changes what the canary builds runs it.
+	for _, p := range []string{"internal/said/**", "testdata/menus/**", "internal/testhome/**", "go.mod", "go.sum",
+		".github/workflows/canary.yml", ".github/scripts/canary-report.sh"} {
+		if !slices.Contains(wf.On.PullRequest.Paths, p) {
+			t.Errorf("pull_request paths %v lack %s", wf.On.PullRequest.Paths, p)
+		}
 	}
 	contentsRead := map[string]string{"contents": "read"}
 	if !maps.Equal(wf.Permissions, contentsRead) {
@@ -1070,13 +1084,44 @@ func TestCanaryWorkflowKeepsTheTokenFromAgents(t *testing.T) {
 			t.Errorf("job canary names %s", word)
 		}
 	}
-	if n := len(canary.Steps); n == 0 || !strings.Contains(canary.Steps[n-1].If, "steps.run.outcome == 'failure'") ||
-		!strings.Contains(canary.Steps[n-1].If, "github.event_name == 'pull_request'") {
-		t.Error("job canary does not end with a step that fails a pull request when the canary fails")
+	// The canary's own tests fail the job on every event. On a pull request an
+	// agent's result only warns: a pull request cannot fix an agent's release.
+	if n := len(canary.Steps); n == 0 || !strings.Contains(canary.Steps[n-1].If, "steps.unit.outcome == 'failure'") ||
+		strings.Contains(canary.Steps[n-1].If, "event_name") || !strings.Contains(canary.Steps[n-1].Run, "exit 1") {
+		t.Error("job canary does not end with a step that fails the job when the canary's own tests fail")
+	}
+	if !slices.ContainsFunc(canary.Steps, func(s workflowStep) bool {
+		return strings.Contains(s.If, "always()") && strings.Contains(s.If, "github.event_name == 'pull_request'") &&
+			strings.Contains(s.Run, "::warning::") && !strings.Contains(s.Run, "exit 1")
+	}) {
+		t.Error("job canary has no always() step that turns each agent's result into a warning on a pull request")
+	}
+	if slices.ContainsFunc(canary.Steps, func(s workflowStep) bool { return strings.Contains(s.If, "steps.run.outcome") }) {
+		t.Error("job canary fails on an agent's result")
+	}
+	if canary.TimeoutMinutes != 30 {
+		t.Errorf("job canary timeout-minutes %d, want 30", canary.TimeoutMinutes)
 	}
 	run := slices.IndexFunc(canary.Steps, func(s workflowStep) bool { return s.ID == "run" })
 	if run < 0 || !canary.Steps[run].ContinueOnError {
 		t.Fatal("job canary has no step run with continue-on-error, so a break never reaches report")
+	}
+	unit := slices.IndexFunc(canary.Steps, func(s workflowStep) bool { return s.ID == "unit" })
+	install := slices.IndexFunc(canary.Steps, func(s workflowStep) bool { return strings.Contains(s.Run, "npm install") })
+	if unit < 0 || !canary.Steps[unit].ContinueOnError || install < 0 || unit > install {
+		t.Error("job canary has no step unit, with continue-on-error, that tests the canary before any agent installs")
+	}
+	// What an agent prints is no workflow command: each step that installs or
+	// runs one stops them with a token of its own.
+	for i, s := range canary.Steps {
+		if !strings.Contains(s.Run, "npm install") && i != run {
+			continue
+		}
+		for _, want := range []string{`stop="$(openssl rand -hex 16)"`, `trap 'echo "::$stop::"' EXIT`, `echo "::stop-commands::$stop"`} {
+			if !strings.Contains(s.Run, want) {
+				t.Errorf("job canary: step %q lacks %s", s.Name, want)
+			}
+		}
 	}
 	// One failed install must not stop the others or the run: the agent it
 	// missed writes "<bin> is not installed", and report files that.
@@ -1121,8 +1166,13 @@ func TestCanaryWorkflowKeepsTheTokenFromAgents(t *testing.T) {
 	if report.Needs != "canary" {
 		t.Errorf("job report needs %v, want canary", report.Needs)
 	}
-	if !strings.Contains(report.If, "always()") || !strings.Contains(report.If, "github.event_name != 'pull_request'") {
-		t.Errorf("job report runs if %q, want always() and never on a pull request", report.If)
+	// Never on a cancelled run, a pull request or another branch's dispatch.
+	if want := "${{ !cancelled() && github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}"; report.If != want {
+		t.Errorf("job report runs if %q, want %q", report.If, want)
+	}
+	// Two reports never overlap, so two runs cannot both open an issue.
+	if g, _ := report.Concurrency["group"].(string); g == "" || strings.Contains(g, "${{") || report.Concurrency["cancel-in-progress"] == true {
+		t.Errorf("job report concurrency %v, want one fixed group that cancels nothing", report.Concurrency)
 	}
 	// No artifact is news too: the script opens "the canary tested nothing".
 	if i := slices.IndexFunc(report.Steps, func(s workflowStep) bool { return strings.HasPrefix(s.Uses, "actions/download-artifact@") }); i < 0 || !report.Steps[i].ContinueOnError {
@@ -1148,8 +1198,8 @@ func TestCanaryWorkflowKeepsTheTokenFromAgents(t *testing.T) {
 }
 
 // Only a run on GitHub shows the image's permissions, so before any agent
-// installs, each run proves that canary cannot read the runner's folders and
-// cannot reach the cloud metadata services.
+// installs, each run proves that mbagent cannot read or enter the runner's
+// folders and cannot reach the cloud metadata services.
 func TestCanaryWorkflowProvesTheUserIsBoxedIn(t *testing.T) {
 	var wf struct {
 		Jobs map[string]workflowJob `yaml:"jobs"`
@@ -1164,7 +1214,7 @@ func TestCanaryWorkflowProvesTheUserIsBoxedIn(t *testing.T) {
 	}
 	for i, s := range steps {
 		if strings.Contains(s.Run, "npm install") && i < user {
-			t.Errorf("job canary: step %q installs an agent before the user step proves canary is boxed in", s.Name)
+			t.Errorf("job canary: step %q installs an agent before the user step proves mbagent is boxed in", s.Name)
 		}
 	}
 	lines := map[string]bool{}
@@ -1172,41 +1222,100 @@ func TestCanaryWorkflowProvesTheUserIsBoxedIn(t *testing.T) {
 		lines[strings.TrimSpace(line)] = true
 	}
 	for _, want := range []string{
-		`if sudo -u canary -H test -r /home/runner; then echo "::error::canary can read /home/runner"; exit 1; fi`,
-		`for d in "$RUNNER_TEMP" "$GITHUB_WORKSPACE"; do`,
-		`if sudo -u canary -H test -r "$d"; then echo "::error::canary can read $d"; exit 1; fi`,
+		`for d in /home/runner "$RUNNER_TEMP" "$GITHUB_WORKSPACE"; do`,
+		`if sudo -u mbagent -H test -r "$d" || sudo -u mbagent -H test -x "$d"; then echo "::error::mbagent can read or enter $d"; exit 1; fi`,
 		`worker="$(pgrep -o -f Runner.Worker || true)"`,
 		`if [ -n "$worker" ] && bin="$(readlink -f "/proc/$worker/exe")"; then`,
-		`if sudo -u canary -H test -r "$(dirname "$bin")"; then echo "::error::canary can read the runner's folder"; exit 1; fi`,
-		`sudo iptables -I OUTPUT -m owner --uid-owner canary -d 168.63.129.16 -j REJECT`,
-		`sudo iptables -I OUTPUT -m owner --uid-owner canary -d 169.254.169.254 -j REJECT`,
-		`if sudo -u canary -H curl -sS -m 3 http://169.254.169.254/; then echo "::error::canary reaches 169.254.169.254"; exit 1; fi`,
-		`if sudo -u canary -H curl -sS -m 3 http://168.63.129.16/; then echo "::error::canary reaches 168.63.129.16"; exit 1; fi`,
+		`for d in "$(dirname "$bin")" "$(dirname "$(dirname "$bin")")"; do`,
+		`echo "::warning::no Runner.Worker process found: mbagent's reach into the runner's folder is not checked"`,
+		`sudo iptables -I OUTPUT -m owner --uid-owner mbagent -d 168.63.129.16 -j REJECT`,
+		`sudo iptables -I OUTPUT -m owner --uid-owner mbagent -d 169.254.169.254 -j REJECT`,
+		`if sudo -u mbagent -H curl -sS -m 3 http://169.254.169.254/; then echo "::error::mbagent reaches 169.254.169.254"; exit 1; fi`,
+		`if sudo -u mbagent -H curl -sS -m 3 http://168.63.129.16/; then echo "::error::mbagent reaches 168.63.129.16"; exit 1; fi`,
+		`echo mbagent | sudo tee -a /etc/cron.deny >/dev/null`,
+		`sudo loginctl disable-linger mbagent || true`,
 	} {
 		if !lines[want] {
 			t.Errorf("job canary: the user step lacks %q:\n%s", want, steps[user].Run)
 		}
 	}
-	// Every read check runs as canary: root can read anything.
+	// Every read or traverse check runs as mbagent: root can read anything.
+	check := regexp.MustCompile(`test -[rx] `)
 	for line := range lines {
-		if strings.Contains(line, "test -r") && !strings.Contains(line, "sudo -u canary -H test -r") {
-			t.Errorf("job canary: %q checks a read as the runner or root, not as canary", line)
+		for _, m := range check.FindAllStringIndex(line, -1) {
+			if !strings.HasSuffix(line[:m[0]], "sudo -u mbagent -H ") {
+				t.Errorf("job canary: %q checks a folder as the runner or root, not as mbagent", line)
+			}
 		}
-	}
-	if !strings.Contains(steps[user].Run, "Runner.Worker") || !strings.Contains(steps[user].Run, "not checked") {
-		t.Error("job canary: the user step does not say when it cannot find the runner's folder")
 	}
 }
 
-// The agents install and run as the user canary, which has no sudo: the
+// The canary's own tests are canary-tagged and run only in job canary, so
+// each one must be run there: a new one left out would never run.
+func TestCanaryWorkflowRunsEveryTaggedTest(t *testing.T) {
+	var wf struct {
+		Jobs map[string]workflowJob `yaml:"jobs"`
+	}
+	if err := yaml.Unmarshal([]byte(read(t, filepath.Join("..", "..", ".github", "workflows", "canary.yml"))), &wf); err != nil {
+		t.Fatal(err)
+	}
+	type goTest struct{ run, skip *regexp.Regexp }
+	var runs []goTest
+	flag := regexp.MustCompile(`-(run|skip)[ =]'?([^' ]+)'?`)
+	for _, s := range wf.Jobs["canary"].Steps {
+		for _, line := range strings.Split(strings.ReplaceAll(s.Run, "\\\n", " "), "\n") {
+			if !strings.Contains(line, "go test ") || !strings.Contains(line, "-tags canary") || !strings.Contains(line, "./internal/said") {
+				continue
+			}
+			var g goTest
+			for _, m := range flag.FindAllStringSubmatch(line, -1) {
+				re, err := regexp.Compile(m[2])
+				if err != nil {
+					t.Fatalf("job canary: %q: %v", line, err)
+				}
+				if m[1] == "run" {
+					g.run = re
+				} else {
+					g.skip = re
+				}
+			}
+			runs = append(runs, g)
+		}
+	}
+	files, err := filepath.Glob(filepath.Join("..", "said", "*_test.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	test := regexp.MustCompile(`(?m)^func (Test\w+)\(t \*testing\.T\)`)
+	var names []string
+	for _, f := range files {
+		if src := read(t, f); strings.HasPrefix(src, "//go:build canary\n") {
+			for _, m := range test.FindAllStringSubmatch(src, -1) {
+				names = append(names, m[1])
+			}
+		}
+	}
+	if len(names) < 2 {
+		t.Fatalf("found %v in the canary-tagged files, want TestCanary and its own tests", names)
+	}
+	for _, name := range names {
+		if !slices.ContainsFunc(runs, func(g goTest) bool {
+			return (g.run == nil || g.run.MatchString(name)) && (g.skip == nil || !g.skip.MatchString(name))
+		}) {
+			t.Errorf("job canary runs no go test -tags canary that runs %s", name)
+		}
+	}
+}
+
+// The agents install and run as the user mbagent, which has no sudo: the
 // runner's memory, its Actions token and the caches main restores stay out
 // of their reach. sudo and env -i hand them no runner variable.
 func unprivileged(t *testing.T, canary workflowJob) {
 	t.Helper()
-	const as = "sudo -u canary -H env -i "
+	const as = "sudo -u mbagent -H env -i "
 	var made, checked bool
 	tool := regexp.MustCompile(`\b(npm|npx|node|go|claude|codex|opencode)\b`)
-	// A lookup, canary's prefix or the result names: none runs a tool.
+	// A lookup, mbagent's prefix or the result names: none runs a tool.
 	lookup := regexp.MustCompile(`command -v (node|go)\b|\.npm-global|^for k in claude codex opencode; do$`)
 	tokenish := regexp.MustCompile(`(?i)token|secret|key|password|credential|ACTIONS_|GITHUB_|RUNNER_`)
 	assigned := regexp.MustCompile(`(?:^|\s)(\w+)=`)
@@ -1219,10 +1328,10 @@ func unprivileged(t *testing.T, canary workflowJob) {
 		}
 		for _, line := range strings.Split(strings.ReplaceAll(s.Run, "\\\n", " "), "\n") {
 			line = strings.TrimSpace(line)
-			if line == "sudo useradd --create-home --shell /bin/bash canary" {
+			if line == "sudo useradd --create-home --shell /bin/bash mbagent" {
 				made = true
 			}
-			if strings.Contains(line, "id -nG canary") && strings.Contains(line, "sudo") && strings.Contains(line, "admin") {
+			if strings.Contains(line, "id -nG mbagent") && strings.Contains(line, "sudo") && strings.Contains(line, "admin") {
 				checked = true
 			}
 			if !tool.MatchString(lookup.ReplaceAllString(line, "")) {
@@ -1240,59 +1349,59 @@ func unprivileged(t *testing.T, canary workflowJob) {
 		}
 	}
 	if !made {
-		t.Error("job canary makes no user canary with its own home")
+		t.Error("job canary makes no user mbagent with its own home")
 	}
 	// The run goes on after a failed install, but never after a user that may have sudo.
 	if i := slices.IndexFunc(canary.Steps, func(s workflowStep) bool { return s.ID == "user" }); i < 0 || canary.Steps[i].ContinueOnError ||
 		!strings.Contains(canary.Steps[i].Run, "useradd") {
-		t.Error("job canary: the step that makes canary has no id user, or may fail and go on")
+		t.Error("job canary: the step that makes mbagent has no id user, or may fail and go on")
 	}
 	if i := slices.IndexFunc(canary.Steps, func(s workflowStep) bool { return s.ID == "run" }); i < 0 ||
 		!strings.Contains(canary.Steps[i].If, "steps.user.outcome == 'success'") {
-		t.Error("job canary: the run step does not wait for the user canary to be made and checked")
+		t.Error("job canary: the run step does not wait for the user mbagent to be made and checked")
 	}
 	if !checked {
-		t.Error("job canary does not check that canary is in neither sudo nor admin")
+		t.Error("job canary does not check that mbagent is in neither sudo nor admin")
 	}
 	for _, pkg := range []string{"@anthropic-ai/claude-code@latest", "@openai/codex@latest", "opencode-ai@latest"} {
 		if !slices.ContainsFunc(canary.Steps, func(s workflowStep) bool {
-			return strings.Contains(s.Run, "npm install -g --prefix /home/canary/.npm-global "+pkg)
+			return strings.Contains(s.Run, "npm install -g --prefix /home/mbagent/.npm-global "+pkg)
 		}) {
-			t.Errorf("job canary does not install %s into canary's own prefix", pkg)
+			t.Errorf("job canary does not install %s into mbagent's own prefix", pkg)
 		}
 	}
-	// The results are canary's files. Root never reads them: a canary
+	// The results are mbagent's files. Root never reads them: an mbagent
 	// process could swap one for a link to a file only root may read. Every
-	// canary process is killed first, then canary reads each known result
+	// mbagent process is killed first, then mbagent reads each known result
 	// and the runner writes it, cut to a size.
-	asRoot := regexp.MustCompile(`\bsudo\s+(-\S+\s+)*(cp|find|tar|rsync|chmod\s+-R)\b.*/home/canary`)
+	asRoot := regexp.MustCompile(`\bsudo\s+(-\S+\s+)*(cp|find|tar|rsync|chmod\s+-R)\b.*/home/mbagent`)
 	for _, s := range canary.Steps {
 		for _, line := range strings.Split(s.Run, "\n") {
-			if asRoot.MatchString(line) && !strings.Contains(line, "sudo -u canary") {
-				t.Errorf("job canary: step %q reads or changes canary's files as root: %q", s.Name, strings.TrimSpace(line))
+			if asRoot.MatchString(line) && !strings.Contains(line, "sudo -u mbagent") {
+				t.Errorf("job canary: step %q reads or changes mbagent's files as root: %q", s.Name, strings.TrimSpace(line))
 			}
 		}
 	}
-	hand := slices.IndexFunc(canary.Steps, func(s workflowStep) bool { return strings.Contains(s.Run, "/home/canary/out/") })
+	hand := slices.IndexFunc(canary.Steps, func(s workflowStep) bool { return strings.Contains(s.Run, "/home/mbagent/out/") })
 	if hand < 0 || !strings.Contains(canary.Steps[hand].If, "always()") {
-		t.Fatal("job canary has no hand-off step that runs always() and reads /home/canary/out/")
+		t.Fatal("job canary has no hand-off step that runs always() and reads /home/mbagent/out/")
 	}
 	h := canary.Steps[hand].Run
 	for _, want := range []string{
 		"for k in claude codex opencode; do",
-		`sudo -u canary cat -- "/home/canary/out/$k.json" | head -c 1048576 >"$RUNNER_TEMP/canary/$k.json"`,
+		`sudo -u mbagent cat -- "/home/mbagent/out/$k.json" | head -c 1048576 >"$RUNNER_TEMP/canary/$k.json"`,
 	} {
 		if !strings.Contains(h, want) {
 			t.Errorf("job canary: the hand-off lacks %q:\n%s", want, h)
 		}
 	}
 	if strings.Contains(h, "*") {
-		t.Errorf("job canary: the hand-off globs canary's folder:\n%s", h)
+		t.Errorf("job canary: the hand-off globs mbagent's folder:\n%s", h)
 	}
 	kill := slices.IndexFunc(canary.Steps, func(s workflowStep) bool {
-		return strings.Contains(s.Run, "sudo pkill -KILL -u canary") && strings.Contains(s.Run, "pgrep -u canary")
+		return strings.Contains(s.Run, "sudo pkill -KILL -u mbagent") && strings.Contains(s.Run, "pgrep -u mbagent")
 	})
 	if kill < 0 || kill > hand || !strings.Contains(canary.Steps[kill].If, "always()") {
-		t.Error("job canary: no always() step kills every canary process, and checks none is left, before the hand-off")
+		t.Error("job canary: no always() step kills every mbagent process, and checks none is left, before the hand-off")
 	}
 }

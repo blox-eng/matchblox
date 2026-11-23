@@ -634,7 +634,8 @@ issue means that matchblox cannot read that version yet: until the release
 with the fix, a builder on that Claude Code version sees `unknown screen` on
 a waiting session, and one on that Codex or OpenCode version sees the
 session not as `asks`; either answers it in its pane. The issue closes
-when a later run reads that screen again. Cursor is not in the canary,
-because its agent needs a signed-in account.
+when a later run reads that screen again. GitHub stops a scheduled run
+after 60 days with no activity in the repository. Cursor is not in the
+canary, because its agent needs a signed-in account.
 
 See [Limits](limits.md) for what is not measured yet.
