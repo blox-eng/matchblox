@@ -59,7 +59,7 @@ Surface: secrets
   - `TestExplainNamesTheFallback`: a screen with no prompt and no question gives `Kind` none, and the `fallback` hit names the last line with words.
 - **Run:** `go test ./internal/said -run Explain`. Before: `undefined: Explain`. After: passes, and the whole package passes.
 - **Do:**
-  1. `type Hit struct{ Rule string; Line int; Text string }` (Line is 1-based in `Lines`, 0 for no match). `type Option struct{ N int; Label string }`. `type Trace struct{ Kind Kind; Line string; Hits []Hit; MenuRead bool; Options []Option; Lines []string }`.
+  1. `type Hit struct{ Rule string; Line int; Text string }` (Line is 1-based in `Lines`, 0 for no match). `type Row struct{ N int; Label string }`. `type Trace struct{ Kind Kind; Line string; Hits []Hit; MenuRead bool; Options []Row; Lines []string }`.
   2. Rules, in this order and with these names: `working line`, `approval prompt`, `question`, `menu key hint`, `fallback`.
   3. Move the body of `Screen` into `Explain`, recording each rule's hit. `Screen` returns `t.Line, t.Kind`. `Menu` returns `t.Line, t.MenuRead`. No regex is evaluated in two places.
   4. `Options`: the rows of `Lines` that `option` reads, only when `Kind` is `Permits`.
@@ -150,3 +150,8 @@ Surface: personal data
 | Anti-goal: the screen shows more than the lines the rules read | Task 2 (`TestExplainShowsOnlyTheLinesTheRulesRead`) |
 
 ## Changes during build
+- 2026-11-24, Task 2: `Option` already names the question tool's option in `said/ask.go`. The menu row type is `Row{N, Label}`; the field stays `Trace.Options []Row`.
+- 2026-11-24, Task 2: the Claude Code fixture has 4 rows (`1 Yes`, two `Yes, and …` rows, `4 No`), not 3. `TestExplainReadsTheClaudeMenu` expects all four.
+- 2026-11-24, Task 2: `Screen`'s fallback reads above the window when the window holds only hints or the input box (`TestThePaneRuleReadsOnlyTheLiveLines`, "codex works under an old question"). When the fallback decides, `Lines` starts at the fallback line, so `Lines` stays what the rules read and every hit indexes into it. `Screen`'s behaviour does not change.
+- 2026-11-24, Task 2: `lines()` drops a one-word row such as `2. No`, so the rule window alone misses menu rows a digit can pick. `Trace.Lines` is every non-empty screen row, frame trimmed, from the first row the rules read down to the bottom. `Options` are the rows of `Lines` that `option()` reads, below the working line, when `Kind` is `Permits`. The rules and `Screen`'s window do not change.
+- 2026-11-24, Task 2: when the working line matches, `Lines` starts at it, so its hit indexes into `Lines`.

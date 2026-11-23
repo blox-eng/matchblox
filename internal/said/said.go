@@ -61,6 +61,7 @@ type line struct {
 	boxed   bool // inside a box: an input field, a prompt, a quote
 	person  bool // the person's own turn or draft: › or > or ❯ or Cursor's → in front
 	heading bool // a Markdown heading
+	row     int  // the screen row it was drawn on
 }
 
 // Screen reads an agent's pane. When it asks or wants an approval, the line
@@ -68,49 +69,19 @@ type line struct {
 // box and the key hints. Only the live lines at the bottom ask: those under
 // the line that says the agent works, when it draws one.
 func Screen(screen string) (string, Kind) {
-	ls := lines(screen)
-	from := max(len(ls)-screenWithin, 0)
-	for i := len(ls) - 1; i >= from; i-- {
-		if workingRe.MatchString(ls[i].text) {
-			from = i + 1
-			break
-		}
-	}
-	win := ls[from:]
-	for _, l := range win {
-		if permitsRe.MatchString(l.text) {
-			for i := len(win) - 1; i >= 0; i-- {
-				if strings.HasSuffix(win[i].text, "?") && !strings.HasPrefix(win[i].text, "?") {
-					return win[i].text, Permits
-				}
-			}
-			return l.text, Permits
-		}
-	}
-	if q, ok := question(win); ok {
-		return q, Asks
-	}
-	for i := len(ls) - 1; i >= 0; i-- {
-		if !ls[i].boxed && !ls[i].person && !hintRe.MatchString(ls[i].text) {
-			return ls[i].text, None
-		}
-	}
-	return "", None
+	t := Explain(screen)
+	return t.Line, t.Kind
 }
 
 // Menu reads a pane for a Claude Code approval menu drawn now: an
 // approval prompt that its own key hint closes. A reply that only lists
 // a "1. Yes" choice is no menu.
 func Menu(screen string) (string, bool) {
-	q, kind := Screen(screen)
-	if kind != Permits {
+	t := Explain(screen)
+	if !t.MenuRead {
 		return "", false
 	}
-	ls := lines(screen)
-	if len(ls) == 0 || !cancelRe.MatchString(ls[len(ls)-1].text) {
-		return "", false
-	}
-	return q, true
+	return t.Line, true
 }
 
 // Draft is what the person typed into an agent's input field and did not
@@ -261,7 +232,7 @@ func lines(s string) []line {
 	s = Clean(s)
 	var out []line
 	footer := false
-	for _, raw := range strings.Split(s, "\n") {
+	for row, raw := range strings.Split(s, "\n") {
 		// Cursor draws its input box between rows of half blocks; what is
 		// under the box is its status: the model, context use, the path.
 		if b := strings.TrimSpace(raw); len([]rune(b)) >= 20 && strings.Trim(b, "▀") == "" {
@@ -274,6 +245,7 @@ func lines(s string) []line {
 		}
 		in := strings.TrimLeft(raw, " ")
 		out = append(out, line{
+			row:     row,
 			text:    t,
 			boxed:   footer || strings.HasPrefix(in, "│") || strings.HasPrefix(in, "┃"),
 			person:  strings.HasPrefix(in, "›") || strings.HasPrefix(in, ">") || strings.HasPrefix(in, "❯") || strings.HasPrefix(in, "→"),
@@ -286,16 +258,24 @@ func lines(s string) []line {
 // question is the last line, of the person's own lines and the input box
 // left out, that asks.
 func question(ls []line) (string, bool) {
+	i, ok := questionAt(ls)
+	if !ok {
+		return "", false
+	}
+	return ls[i].text, true
+}
+
+func questionAt(ls []line) (int, bool) {
 	for i := len(ls) - 1; i >= 0; i-- {
 		l := ls[i]
 		if l.boxed || l.person {
 			continue
 		}
 		if (strings.HasSuffix(l.text, "?") && !strings.HasPrefix(l.text, "?")) || midRe.MatchString(l.text) {
-			return l.text, true
+			return i, true
 		}
 	}
-	return "", false
+	return 0, false
 }
 
 // frame is what a TUI or Markdown draws around words: space, box and block
