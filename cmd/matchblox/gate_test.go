@@ -131,7 +131,7 @@ func gateWith(t *testing.T, tty string, args ...string) (home string, ran []stri
 	t.Setenv("HOME", home)
 	t.Setenv("SSH_TTY", tty)
 	t.Setenv("SSH_ORIGINAL_COMMAND", remote.ConsoleCommand)
-	t.Setenv(panes.SessionEnv, "") // the gate sets it: it goes back after the test
+	t.Setenv(panes.ConsoleEnv, "") // the gate sets it: it goes back after the test
 	oldArgs, oldRun := os.Args, gateRun
 	t.Cleanup(func() { os.Args, gateRun = oldArgs, oldRun })
 	gateRun = func(argv []string) error { ran = argv; return nil }
@@ -163,8 +163,13 @@ func TestAPhoneOpensAConsoleOfItsOwn(t *testing.T) {
 	if _, ran := gateWith(t, "/dev/ttys004", "phone"); ran == nil {
 		t.Fatal("the console did not run")
 	}
-	if got := os.Getenv(panes.SessionEnv); got != "matchblox-2" {
-		t.Errorf("%s = %q, want matchblox-2", panes.SessionEnv, got)
+	if got := os.Getenv(panes.ConsoleEnv); got != "matchblox-2" {
+		t.Errorf("%s = %q, want matchblox-2", panes.ConsoleEnv, got)
+	}
+	// A name the gate's own environment brings is not the phone's pick.
+	t.Setenv(panes.ConsoleEnv, "matchblox")
+	if got := nextConsole(); got != "matchblox-2" {
+		t.Errorf("nextConsole with %s=matchblox = %q, want matchblox-2", panes.ConsoleEnv, got)
 	}
 }
 
@@ -307,7 +312,7 @@ func TestGateOpenFocusesThenRunsTheConsole(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("SSH_TTY", "/dev/ttys004")
 	t.Setenv("SSH_ORIGINAL_COMMAND", "matchblox console --open 12")
-	t.Setenv(panes.SessionEnv, "")
+	t.Setenv(panes.ConsoleEnv, "")
 	oldArgs, oldRun, oldFocus := os.Args, gateRun, gateFocus
 	t.Cleanup(func() { os.Args, gateRun, gateFocus = oldArgs, oldRun, oldFocus })
 	var steps []string

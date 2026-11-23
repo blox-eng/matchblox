@@ -59,8 +59,8 @@ func gateMain(args []string) error {
 	// so the open below names the console the phone runs (#486).
 	console := ""
 	if mode == phoneMode {
-		console = homeName()
-		_ = os.Setenv(panes.SessionEnv, console)
+		console = nextConsole()
+		_ = os.Setenv(panes.ConsoleEnv, console)
 	}
 	os.Args = os.Args[:1]
 	if open {
@@ -70,6 +70,11 @@ func gateMain(args []string) error {
 	}
 	return gateRun(argv)
 }
+
+// nextConsole is the next free console session (panes.HomeSession), the
+// phone's as any terminal's. The gate picks it fresh, never a name its own
+// environment brings.
+func nextConsole() string { return panes.HomeSession(panes.ParseHomeList(homeListing())) }
 
 // gateRun runs the console or the service; tests replace it.
 var gateRun func([]string) error

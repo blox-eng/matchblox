@@ -520,12 +520,12 @@ func goHome() error {
 }
 
 // homeName is the console session a new console runs in: the one the gate
-// picked (panes.SessionEnv), else the next free one (panes.HomeSession).
+// picked (panes.ConsoleEnv), else the next free one (panes.HomeSession).
 func homeName() string {
-	if name := os.Getenv(panes.SessionEnv); remote.ConsoleSession(name) {
+	if name := os.Getenv(panes.ConsoleEnv); remote.ConsoleSession(name) {
 		return name
 	}
-	return panes.HomeSession(panes.ParseHomeList(homeListing()))
+	return nextConsole()
 }
 
 // homeListing is tmux's listing of sessions for homeName: "" with no tmux

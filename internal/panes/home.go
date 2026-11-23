@@ -39,9 +39,9 @@ func HomeArgv(inTmux, haveTmux bool, name string, self []string) []string {
 	return append([]string{"tmux", "-u", "new-session", "-A", "-s", name, "-e", HomeEnv + "=1"}, self...)
 }
 
-// SessionEnv names the console session a new console runs in, when the
+// ConsoleEnv names the console session a new console runs in, when the
 // gate picked it already: the phone's open names the same one (#486).
-const SessionEnv = "MATCHBLOX_SESSION"
+const ConsoleEnv = "MATCHBLOX_CONSOLE"
 
 // HomeSession is the session a new console runs in, from the terminals each
 // session has: the first console's while no terminal shows it; else
