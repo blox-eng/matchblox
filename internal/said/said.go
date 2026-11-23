@@ -24,10 +24,10 @@ const (
 func (k Kind) String() string { return [...]string{"none", "asks", "permits"}[k] }
 
 const (
-	// screenWithin is how many lines with words, from the bottom of a pane,
+	// ScreenWithin is how many lines with words, from the bottom of a pane,
 	// a prompt may sit above: an approval prompt lists its choices and a key
 	// hint under the question. A question further up was answered.
-	screenWithin = 8
+	ScreenWithin = 8
 	// replyWithin is the end of a reply: a question further up in a reply
 	// is one the agent answered itself.
 	replyWithin = 3
@@ -91,7 +91,7 @@ func Menu(screen string) (string, bool) {
 // Claude Code's suggestion, not typed: the draft ends where it starts.
 func Draft(screen string) string {
 	raw := strings.Split(strings.TrimRight(screen, "\n"), "\n")
-	for i := len(raw) - 1; i >= max(len(raw)-2*screenWithin, 0); i-- {
+	for i := len(raw) - 1; i >= max(len(raw)-2*ScreenWithin, 0); i-- {
 		text, faint := styled(raw[i])
 		in := strings.TrimLeft(text, " │┃")
 		for _, mark := range []string{">", "›", "❯"} {

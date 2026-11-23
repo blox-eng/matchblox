@@ -200,6 +200,13 @@ func run(args []string) error {
 	case "update":
 		return updateCmd(os.Stdout)
 	case "sessions", "ships", "usage", "agents":
+		words, err := positionals(fl, args)
+		if err != nil {
+			return err
+		}
+		if cmd == "agents" && len(words) > 0 && words[0] == "explain" {
+			return cliExplain(words[1:], os.Stdout, transport.SocketPath(), *o.json)
+		}
 		return cliRead(cmd, os.Stdout, transport.SocketPath(), *o.json)
 	case "peek":
 		words, err := positionals(fl, args)
@@ -404,6 +411,7 @@ Commands:
   matchblox ships                  the pull requests the sessions drive (--json)
   matchblox usage                  each account's plan windows (--json)
   matchblox agents                 each agent, its version and its unknown screens (--json)
+  matchblox agents explain <who>   which screen rule read a session, to report it (--json)
   matchblox peek <who>             what a session said last and what it asks (--lines, --json)
   matchblox send <who> "<text>"    type a line and Enter into a session (--pick n answers its question)
   matchblox compact <who>          compact a Claude Code session at rest

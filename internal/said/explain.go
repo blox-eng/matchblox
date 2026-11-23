@@ -41,7 +41,7 @@ type Trace struct {
 func Explain(screen string) Trace {
 	ls := lines(screen)
 	hit := map[string]int{} // the index in ls each rule matched
-	from := max(len(ls)-screenWithin, 0)
+	from := max(len(ls)-ScreenWithin, 0)
 	for i := len(ls) - 1; i >= from; i-- {
 		if workingRe.MatchString(ls[i].text) {
 			hit[RuleWorking] = i
