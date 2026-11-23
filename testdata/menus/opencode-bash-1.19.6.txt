@@ -1,0 +1,41 @@
+
+  ┃
+  ┃  make the canary file
+  ┃
+
+     $ touch canary-ran
+
+     ▣  Build · stand-in
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  ┃
+  ┃  △ Permission required
+  ┃    # Shell command
+  ┃
+  ┃  $ touch canary-ran
+  ┃
+  ┃
+  ┃   Allow once   Allow always   Reject                                 ctrl+f fullscreen  ⇆ select  enter confirm
+  ┃
+

@@ -1,0 +1,228 @@
+name: Canary
+
+# Each day, run the latest Claude Code, Codex and OpenCode against a stand-in
+# model and check that matchblox still reads each one's approval menu. A
+# break opens one issue labelled canary.
+#
+# Two jobs, because the canary job installs and runs agent code nobody here
+# reviewed: it holds no write token and no secret, and hands its results on
+# as an artifact. Only report, which runs matchblox's own script on them,
+# may write issues, and it never runs on a pull request. On a pull request
+# the canary's own tests fail the job and each agent's result only warns: a
+# pull request cannot fix an agent's release.
+on:
+  schedule:
+    - cron: "17 5 * * *"
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - internal/said/**
+      - internal/testhome/**
+      - testdata/menus/**
+      - go.mod
+      - go.sum
+      - .github/workflows/canary.yml
+      - .github/scripts/canary-report.sh
+
+# Only a pull request's newer push cancels: a manual run must never cancel
+# the daily one, whose report then never runs.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  canary:
+    name: Canary
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # No cache: CI's other jobs on main would restore what agent code wrote.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+      - name: Install tmux
+        run: sudo apt-get update && sudo apt-get install -y tmux
+      # The agents install and run as mbagent, a user with no sudo: the
+      # runner's memory, its token and the caches main restores are out of
+      # their reach. sudo and env -i hand them no runner variable. Only a run
+      # shows the image's permissions, so each run proves that mbagent cannot
+      # read or enter the runner's folders or reach the metadata services.
+      # The name is no word of the canary's prompt, which the scrub would
+      # rewrite.
+      - name: Make the user mbagent
+        id: user
+        run: |
+          sudo useradd --create-home --shell /bin/bash mbagent
+          if id -nG mbagent | grep -qwE 'sudo|admin'; then echo "::error::mbagent is in sudo or admin"; exit 1; fi
+          if sudo -u mbagent -H sudo -n true 2>/dev/null; then echo "::error::mbagent can sudo"; exit 1; fi
+          echo mbagent | sudo tee -a /etc/cron.deny >/dev/null
+          sudo loginctl disable-linger mbagent || true
+          for d in /home/runner "$RUNNER_TEMP" "$GITHUB_WORKSPACE"; do
+            if sudo -u mbagent -H test -r "$d" || sudo -u mbagent -H test -x "$d"; then echo "::error::mbagent can read or enter $d"; exit 1; fi
+          done
+          worker="$(pgrep -o -f Runner.Worker || true)"
+          if [ -n "$worker" ] && bin="$(readlink -f "/proc/$worker/exe")"; then
+            for d in "$(dirname "$bin")" "$(dirname "$(dirname "$bin")")"; do
+              if sudo -u mbagent -H test -r "$d" || sudo -u mbagent -H test -x "$d"; then echo "::error::mbagent can read or enter $d"; exit 1; fi
+            done
+          else
+            echo "::warning::no Runner.Worker process found: mbagent's reach into the runner's folder is not checked"
+          fi
+          sudo iptables -I OUTPUT -m owner --uid-owner mbagent -d 168.63.129.16 -j REJECT
+          sudo iptables -I OUTPUT -m owner --uid-owner mbagent -d 169.254.169.254 -j REJECT
+          if sudo -u mbagent -H curl -sS -m 3 http://169.254.169.254/; then echo "::error::mbagent reaches 169.254.169.254"; exit 1; fi
+          if sudo -u mbagent -H curl -sS -m 3 http://168.63.129.16/; then echo "::error::mbagent reaches 168.63.129.16"; exit 1; fi
+          sudo -u mbagent -H env -i "$(command -v node)" --version
+          sudo -u mbagent -H env -i "$(command -v go)" version
+          echo "CANARY_PATH=$(dirname "$(command -v go)"):$(dirname "$(command -v node)"):/home/mbagent/.npm-global/bin:/usr/bin:/bin" >>"$GITHUB_ENV"
+      # The canary's own tests, before any agent code is on the host. They
+      # run on a copy mbagent owns, which the runner reads and mbagent
+      # writes: the runner's workspace need not be readable to mbagent.
+      # continue-on-error: the agents still run; the last step fails the job.
+      - name: Test the canary
+        id: unit
+        continue-on-error: true
+        run: |
+          sudo -u mbagent -H mkdir /home/mbagent/src /home/mbagent/out
+          tar -C "$GITHUB_WORKSPACE" -cf - . | sudo -u mbagent -H tar -C /home/mbagent/src -xf -
+          sudo -u mbagent -H env -i -C /home/mbagent/src HOME=/home/mbagent PATH="$CANARY_PATH" \
+            GOCACHE=/home/mbagent/.cache/go-build GOMODCACHE=/home/mbagent/go/pkg/mod \
+            go test -tags canary -skip '^TestCanary$' -count=1 -timeout 5m ./internal/said
+      # One step per agent, each continue-on-error and five minutes long: an
+      # agent that fails or hangs on install is not installed, and the run
+      # says so for it alone. What agent code prints is no workflow command:
+      # each step stops them with a token of its own.
+      - name: Install Claude Code
+        continue-on-error: true
+        timeout-minutes: 5
+        run: |
+          stop="$(openssl rand -hex 16)"
+          trap 'echo "::$stop::"' EXIT
+          echo "::stop-commands::$stop"
+          sudo -u mbagent -H env -i HOME=/home/mbagent PATH="$CANARY_PATH" npm install -g --prefix /home/mbagent/.npm-global @anthropic-ai/claude-code@latest
+      - name: Install Codex
+        continue-on-error: true
+        timeout-minutes: 5
+        run: |
+          stop="$(openssl rand -hex 16)"
+          trap 'echo "::$stop::"' EXIT
+          echo "::stop-commands::$stop"
+          sudo -u mbagent -H env -i HOME=/home/mbagent PATH="$CANARY_PATH" npm install -g --prefix /home/mbagent/.npm-global @openai/codex@latest
+      - name: Install OpenCode
+        continue-on-error: true
+        timeout-minutes: 5
+        run: |
+          stop="$(openssl rand -hex 16)"
+          trap 'echo "::$stop::"' EXIT
+          echo "::stop-commands::$stop"
+          sudo -u mbagent -H env -i HOME=/home/mbagent PATH="$CANARY_PATH" npm install -g --prefix /home/mbagent/.npm-global opencode-ai@latest
+      # After a failed install, never after a user that may have sudo.
+      # continue-on-error: a break must still reach report.
+      - name: Run the canary
+        id: run
+        if: always() && steps.user.outcome == 'success'
+        continue-on-error: true
+        run: |
+          stop="$(openssl rand -hex 16)"
+          trap 'echo "::$stop::"' EXIT
+          echo "::stop-commands::$stop"
+          sudo -u mbagent -H env -i -C /home/mbagent/src HOME=/home/mbagent PATH="$CANARY_PATH" \
+            GOCACHE=/home/mbagent/.cache/go-build GOMODCACHE=/home/mbagent/go/pkg/mod \
+            MATCHBLOX_CANARY_OUT=/home/mbagent/out \
+            go test -tags canary -run '^TestCanary$' -v -timeout 10m ./internal/said
+      # Root never reads mbagent's files: an mbagent process could swap one
+      # for a link to a file only root may read. So every mbagent process
+      # goes first, then mbagent reads each result and the runner writes it.
+      - name: Stop every mbagent process
+        if: always()
+        run: |
+          for _ in 1 2 3 4 5; do
+            sudo pkill -KILL -u mbagent || true
+            pgrep -u mbagent >/dev/null || break
+            sleep 1
+          done
+          if pgrep -u mbagent; then echo "::error::an mbagent process is still running"; exit 1; fi
+      - name: Hand the results to the upload
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/canary"
+          for k in claude codex opencode; do
+            if sudo -u mbagent test -f "/home/mbagent/out/$k.json"; then
+              sudo -u mbagent cat -- "/home/mbagent/out/$k.json" | head -c 1048576 >"$RUNNER_TEMP/canary/$k.json" || true
+            fi
+          done
+      # warn, not error: a broken install still writes its could-not-run file.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: canary
+          path: ${{ runner.temp }}/canary
+          retention-days: 7
+          if-no-files-found: warn
+      # Each field is agent text: only plain characters reach the log.
+      - name: On a pull request, each agent's result is a warning
+        if: always() && github.event_name == 'pull_request'
+        run: |
+          for k in claude codex opencode; do
+            said="$(jq -r 'if .ok == true then "reads well" else "\(.agent) \(.version) - \(.check)" end' "$RUNNER_TEMP/canary/$k.json" 2>/dev/null |
+              head -n 1 | tr -cd 'A-Za-z0-9 ._-' | head -c 200)" || said=''
+            if [ "$said" = "reads well" ]; then
+              echo "$k reads well"
+            else
+              echo "::warning::the canary on $k: ${said:-no result} (the artifact canary holds its screen)"
+            fi
+          done
+      - name: The canary's own tests are red
+        if: always() && steps.unit.outcome == 'failure'
+        run: |
+          echo "::error::the canary's own tests failed: see the step Test the canary"
+          exit 1
+
+  report:
+    name: Report
+    needs: canary
+    # Not on a cancelled run, whose results are cut short, nor on another
+    # branch's dispatch.
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+    # Two reports never overlap, so two runs cannot both open an issue.
+    concurrency:
+      group: canary-report
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      # Only to read canary-report.sh: matchblox's own commit, no token kept.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # continue-on-error: with no artifact, the script opens "the canary tested nothing".
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        continue-on-error: true
+        with:
+          name: canary
+          path: ${{ runner.temp }}/canary
+      - name: Open or update the canary issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: .github/scripts/canary-report.sh "$RUNNER_TEMP/canary"
