@@ -5,6 +5,7 @@ package said
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -66,7 +67,7 @@ var agents = []agent{
 		env: func(home, url, binDir string) []string {
 			return []string{
 				"HOME=" + home,
-				"PATH=/usr/bin:/bin:" + binDir,
+				agentPath(binDir),
 				"TERM=xterm-256color",
 				"ANTHROPIC_BASE_URL=" + url,
 				"ANTHROPIC_API_KEY=" + fakeAnthropicKey,
@@ -114,7 +115,7 @@ trust_level = "trusted"
 			return []string{
 				"HOME=" + home,
 				"CODEX_HOME=" + filepath.Join(home, ".codex"),
-				"PATH=/usr/bin:/bin:" + binDir,
+				agentPath(binDir),
 				"TERM=xterm-256color",
 				"CANARY_KEY=canary-not-a-key",
 			}
@@ -161,7 +162,7 @@ trust_level = "trusted"
 				"XDG_DATA_HOME=" + filepath.Join(home, ".local", "share"),
 				"XDG_STATE_HOME=" + filepath.Join(home, ".local", "state"),
 				"XDG_CACHE_HOME=" + filepath.Join(home, ".cache"),
-				"PATH=/usr/bin:/bin:" + binDir,
+				agentPath(binDir),
 				"TERM=xterm-256color",
 			}
 		},
@@ -175,6 +176,16 @@ trust_level = "trusted"
 }
 
 var commandTimeout = 20 * time.Second
+
+// agentPath is an agent's PATH: the system's, the agent's own folder, and
+// node's, because an npm agent's launcher is a `#!/usr/bin/env node` script.
+func agentPath(binDir string) string {
+	path := "PATH=/usr/bin:/bin:" + binDir
+	if node, err := exec.LookPath("node"); err == nil {
+		path += ":" + filepath.Dir(node)
+	}
+	return path
+}
 
 func firstField(env []string, argv ...string) (string, error) {
 	return versionField(env, argv, func(f []string) string { return f[0] })
@@ -198,7 +209,14 @@ func versionField(env, argv []string, pick func([]string) string) (string, error
 		return "", fmt.Errorf("%s did not answer in %d s", strings.Join(argv, " "), int(commandTimeout.Seconds()))
 	}
 	if err != nil {
-		return "", fmt.Errorf("%s: %v", strings.Join(argv, " "), err)
+		reason := fmt.Sprintf("%s: %v", strings.Join(argv, " "), err)
+		var ee *exec.ExitError
+		if errors.As(err, &ee) {
+			if lines := strings.Split(strings.TrimSpace(string(ee.Stderr)), "\n"); lines[0] != "" {
+				reason += ": " + strings.Join(lines[:min(len(lines), 3)], " / ")
+			}
+		}
+		return "", errors.New(reason)
 	}
 	f := strings.Fields(string(b))
 	if len(f) == 0 || !versionRe.MatchString(pick(f)) {

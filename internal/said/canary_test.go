@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
@@ -79,8 +80,14 @@ func TestCanary(t *testing.T) {
 
 func runCanary(t *testing.T, a agent) canaryResult {
 	res := canaryResult{Agent: a.name}
+	host, _ := os.Hostname()
+	var name string
+	if u, err := user.Current(); err == nil {
+		name = u.Username
+	}
+	var home, work string
 	fail := func(reason string) canaryResult {
-		res.Check, res.Screen = couldNotRun, reason
+		res.Check, res.Screen = couldNotRun, scrub(reason, work, home, host, name)
 		return res
 	}
 	if _, err := exec.LookPath("tmux"); err != nil {
@@ -91,15 +98,11 @@ func runCanary(t *testing.T, a agent) canaryResult {
 		return fail(a.bin + " is not installed")
 	}
 
-	host, _ := os.Hostname()
-	var name string
-	if u, err := user.Current(); err == nil {
-		name = u.Username
-	}
-
+	// A real break an attempt saw stays the verdict when a retry errors.
+	var broke *canaryResult
 	for attempt := 1; attempt <= 2; attempt++ {
 		base := t.TempDir()
-		home, work := filepath.Join(base, "home"), filepath.Join(base, "work")
+		home, work = filepath.Join(base, "home"), filepath.Join(base, "work")
 		for _, d := range []string{home, work} {
 			if err := os.Mkdir(d, 0o700); err != nil {
 				t.Fatal(err)
@@ -122,36 +125,47 @@ func runCanary(t *testing.T, a agent) canaryResult {
 		}
 
 		screen, check, err := drawMenu(t, fmt.Sprintf("mbc-%d-%s-%d", os.Getpid(), a.key, attempt), work, env, a.argv(), a.check)
-		res.Screen = scrub(screen, work, home, host, name)
-		if err != nil {
-			res.Check = couldNotRun
-			if strings.TrimSpace(res.Screen) == "" {
-				res.Screen = err.Error()
-			} else {
-				res.Screen = err.Error() + "\n\n" + res.Screen
+		shown := scrub(screen, work, home, host, name)
+		switch {
+		case err != nil:
+			res.Check, res.Screen = couldNotRun, because(err.Error(), shown)
+		case stand.toolRequests() == 0:
+			res.Check, res.Screen = couldNotRun, because(a.name+" sent the stand-in model no request with a "+stand.toolName()+" tool", shown)
+		case check != "" && !strings.Contains(screen, standInCommand):
+			res.Check, res.Screen = couldNotRun, because(a.name+" never showed the command "+standInCommand+": the stand-in's reply was not taken", shown)
+		default:
+			res.Check, res.OK, res.Screen = check, check == "", shown
+			if res.OK {
+				if n := stand.toolRequests(); n != 1 {
+					t.Errorf("the stand-in got %d requests with a %s tool before the menu, want 1", n, stand.toolName())
+				}
+				return res
 			}
-			continue
+			b := res
+			broke = &b
 		}
-		if stand.toolRequests() == 0 {
-			res.Check = couldNotRun
-			res.Screen = a.name + " sent the stand-in model no request with a " + stand.toolName() + " tool"
-			continue
-		}
-		res.Check, res.OK = check, check == ""
-		if res.OK {
-			if n := stand.toolRequests(); n != 1 {
-				t.Errorf("the stand-in got %d requests with a %s tool before the menu, want 1", n, stand.toolName())
-			}
-			return res
-		}
+	}
+	if broke != nil && res.Check == couldNotRun {
+		return *broke
 	}
 	return res
 }
 
+// because is a could-not-run reason, then the screen the agent drew, if any.
+func because(reason, screen string) string {
+	if strings.TrimSpace(screen) == "" {
+		return reason
+	}
+	return reason + "\n\n" + screen
+}
+
+// menuTimeout is how long drawMenu waits for a screen that reads well.
+var menuTimeout = 30 * time.Second
+
 var errSessionEnded = errors.New("the agent's terminal closed before it drew a menu")
 
 // drawMenu starts argv in a tmux server of its own and returns the last
-// screen it drew, with verdict's, once the screen reads well or 30 s have
+// screen it drew, with verdict's, once the screen reads well or menuTimeout has
 // passed.
 func drawMenu(t *testing.T, sock, work string, env, argv []string, verdict func(string) (string, bool)) (screen, check string, err error) {
 	tmux := func(args ...string) *exec.Cmd {
@@ -173,7 +187,7 @@ func drawMenu(t *testing.T, sock, work string, env, argv []string, verdict func(
 	defer kill()
 	t.Cleanup(kill)
 	check = "no waiting state"
-	for deadline := time.Now().Add(30 * time.Second); time.Now().Before(deadline); time.Sleep(500 * time.Millisecond) {
+	for deadline := time.Now().Add(menuTimeout); time.Now().Before(deadline); time.Sleep(500 * time.Millisecond) {
 		dead, _ := tmux("display-message", "-p", "-t", "canary", "#{pane_dead}").Output()
 		b, err := tmux("capture-pane", "-p", "-t", "canary").Output()
 		if err != nil {
@@ -247,5 +261,123 @@ func TestQuitKeepsTheLastScreen(t *testing.T) {
 	if res.Check != couldNotRun || !strings.HasPrefix(res.Screen, errSessionEnded.Error()) ||
 		!strings.Contains(res.Screen, "boom: a config this release does not know") {
 		t.Errorf("check %q, screen:\n%s", res.Check, res.Screen)
+	}
+}
+
+// fixedStandIn reports a fixed count of tool requests and answers nothing,
+// for agents that are shell scripts.
+type fixedStandIn struct{ n int }
+
+func (s fixedStandIn) ServeHTTP(http.ResponseWriter, *http.Request) {}
+func (s fixedStandIn) toolName() string                             { return "Bash" }
+func (s fixedStandIn) toolRequests() int                            { return s.n }
+
+// scriptAgent is an agent that runs script under sh against stand.
+func scriptAgent(t *testing.T, key, script string, stand standIn) agent {
+	t.Helper()
+	bin := filepath.Join(t.TempDir(), key)
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\n"+script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	return agent{
+		key: key, name: key, bin: bin,
+		version: func([]string) (string, error) { return "1.0.0", nil },
+		setup:   func(_, _, _ string) error { return nil },
+		env:     func(home, _, _ string) []string { return []string{"HOME=" + home, "PATH=/usr/bin:/bin"} },
+		argv:    func() []string { return []string{bin} },
+		stand:   func() standIn { return stand },
+		check:   canaryCheck,
+	}
+}
+
+func shortMenuWait(t *testing.T) {
+	t.Helper()
+	d := menuTimeout
+	t.Cleanup(func() { menuTimeout = d })
+	menuTimeout = 2 * time.Second
+}
+
+// Every npm agent's launcher is a `#!/usr/bin/env node` script, so node's
+// folder must be on the agent's PATH, not only on the test's.
+func TestNodeLauncherFindsNode(t *testing.T) {
+	nodeDir, binDir := t.TempDir(), t.TempDir()
+	if err := os.WriteFile(filepath.Join(nodeDir, "node"), []byte("#!/bin/sh\necho 9.8.7\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range agents {
+		if err := os.WriteFile(filepath.Join(binDir, a.bin), []byte("#!/usr/bin/env node\n"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+nodeDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	for _, a := range agents {
+		v, err := a.version(a.env(t.TempDir(), "http://127.0.0.1:1", binDir))
+		if err != nil || v != "9.8.7" {
+			t.Errorf("%s: version %q, %v; want 9.8.7", a.name, v, err)
+		}
+	}
+}
+
+// A version command that fails says why, so its issue names the cause.
+func TestVersionKeepsStderr(t *testing.T) {
+	bin := filepath.Join(t.TempDir(), "broken")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\necho \"env: 'node': No such file or directory\" >&2\nexit 127\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	_, err := firstField([]string{"PATH=/usr/bin:/bin"}, bin, "--version")
+	if err == nil || !strings.Contains(err.Error(), "exit status 127") || !strings.Contains(err.Error(), "env: 'node': No such file or directory") {
+		t.Errorf("error %v, want the exit status and what the command printed", err)
+	}
+}
+
+// A version or setup error names the run's own folders; the issue must not.
+func TestFailReasonsAreScrubbed(t *testing.T) {
+	a := scriptAgent(t, "failv", "exit 0\n", fixedStandIn{})
+	a.version = func(env []string) (string, error) {
+		return "", fmt.Errorf("no config in %s/.codex", strings.TrimPrefix(env[0], "HOME="))
+	}
+	res := runCanary(t, a)
+	if res.Check != couldNotRun || !strings.Contains(res.Screen, "<home>/.codex") || strings.Contains(res.Screen, os.TempDir()) {
+		t.Errorf("version error: check %q, screen %q", res.Check, res.Screen)
+	}
+
+	a = scriptAgent(t, "fails", "exit 0\n", fixedStandIn{})
+	a.setup = func(_, work, _ string) error { return fmt.Errorf("cannot write %s/opencode.json", work) }
+	res = runCanary(t, a)
+	if res.Check != couldNotRun || !strings.Contains(res.Screen, "<work>/opencode.json") || strings.Contains(res.Screen, os.TempDir()) {
+		t.Errorf("setup error: check %q, screen %q", res.Check, res.Screen)
+	}
+}
+
+// An agent that never asked the stand-in for a tool could not run, and its
+// issue shows what it drew instead.
+func TestNoToolRequestKeepsTheScreen(t *testing.T) {
+	shortMenuWait(t)
+	res := runCanary(t, scriptAgent(t, "notool", "echo 'Sign in to go on'\nsleep 600\n", fixedStandIn{}))
+	if res.Check != couldNotRun || !strings.Contains(res.Screen, "sent the stand-in model no request") ||
+		!strings.Contains(res.Screen, "Sign in to go on") {
+		t.Errorf("check %q, screen:\n%s", res.Check, res.Screen)
+	}
+}
+
+// An agent that got the tool call but never shows its command did not take
+// the stand-in's reply: the canary could not run it, matchblox did not break.
+func TestUntakenReplyCouldNotRun(t *testing.T) {
+	shortMenuWait(t)
+	res := runCanary(t, scriptAgent(t, "untaken", "echo 'Working'\nsleep 600\n", fixedStandIn{n: 1}))
+	if res.Check != couldNotRun || !strings.Contains(res.Screen, "the stand-in's reply was not taken") ||
+		!strings.Contains(res.Screen, "Working") {
+		t.Errorf("check %q, screen:\n%s", res.Check, res.Screen)
+	}
+}
+
+// A real break on the first attempt stays the verdict when the retry errors.
+func TestRetryKeepsARealBreak(t *testing.T) {
+	shortMenuWait(t)
+	ran := filepath.Join(t.TempDir(), "ran")
+	script := fmt.Sprintf("if [ -e %q ]; then exit 1; fi\n: >%q\necho '$ %s'\necho 'Thinking'\nsleep 600\n", ran, ran, standInCommand)
+	res := runCanary(t, scriptAgent(t, "retry", script, fixedStandIn{n: 1}))
+	if res.Check != "no waiting state" || res.OK || !strings.Contains(res.Screen, standInCommand) {
+		t.Errorf("check %q, ok %v, screen:\n%s", res.Check, res.OK, res.Screen)
 	}
 }
