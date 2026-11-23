@@ -14,6 +14,13 @@ All notable changes to matchblox are in this file. The format follows
   session you open in Pocket opens there. Two screens inside the same
   agent's pane still share its size.
 
+### Fixed
+
+- **A hold in a Pocket chat selects.** In a chat that fills the phone,
+  a press and hold showed nothing: Pocket took it for the list's row
+  menu. Now it shows the terminal's Select / Paste menu. On the list a
+  hold still opens the row's menu.
+
 ## [0.57.0] - 2026-11-22
 
 ### Added

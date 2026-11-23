@@ -57,6 +57,7 @@ final class ConsoleTerminalView: TerminalView {
     private var wheel = WheelScroll(cellHeight: 0)
     private var coast: Coast?
     private var hold: UILongPressGestureRecognizer?
+    private let holdGate = HoldGate()
     /// The size the text has now; a pinch changes it, in whole points.
     private(set) var textSize: TextSize
     private var pinchStart: TextSize?
@@ -119,11 +120,20 @@ final class ConsoleTerminalView: TerminalView {
         let hold = UILongPressGestureRecognizer(target: self, action: #selector(held))
         hold.minimumPressDuration = BoardTouch.longPress
         hold.cancelsTouchesInView = false
+        // The view's gestureRecognizerShouldBegin did not stop this hold in a chat (the demo's UI
+        // test, #485): its delegate asks instead, and a hold it refuses fails at once.
+        hold.delegate = holdGate
+        holdGate.view = self
         for other in gestureRecognizers ?? [] where other is UILongPressGestureRecognizer {
             other.require(toFail: hold)
         }
         addGestureRecognizer(hold)
         self.hold = hold
+        #if DEBUG
+        for other in gestureRecognizers ?? [] where other is UILongPressGestureRecognizer && other !== hold {
+            other.addTarget(self, action: #selector(terminalHeld))
+        }
+        #endif
 
         // Two fingers: the one-finger pans, the taps and the long-presses fail at once.
         addGestureRecognizer(UIPinchGestureRecognizer(target: self, action: #selector(pinched)))
@@ -135,6 +145,35 @@ final class ConsoleTerminalView: TerminalView {
     }
 
     required init?(coder: NSCoder) { nil }
+
+    /// The hold opens the row's menu only on the list of Sessions or Machine, with clicks on and
+    /// off the label; elsewhere SwiftTerm's own long-press, which waits for it, selects.
+    fileprivate func holdOpensMenu(at point: CGPoint) -> Bool {
+        showsConsole && sendsClicks && !inTmuxPane && !tapsLabel(at: point)
+    }
+
+    #if DEBUG
+    /// The demo's UI test reads the clicks the terminal sent (`countClicks`), then how often
+    /// SwiftTerm's own long-press began and how often its edit menu showed after it.
+    var clickNote = "press=0 release=0 right=0" { didSet { showNote() } }
+    private var terminalHolds = 0
+    private var menusShown = 0
+
+    @objc private func terminalHeld(_ press: UILongPressGestureRecognizer) {
+        guard press.state == .began else { return }
+        terminalHolds += 1
+        showNote()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            guard let self else { return }
+            if UIMenuController.shared.isMenuVisible { menusShown += 1 }
+            showNote()
+        }
+    }
+
+    private func showNote() {
+        accessibilityValue = "\(clickNote) hold=\(terminalHolds) menu=\(menusShown)"
+    }
+    #endif
 
     deinit {
         if let sizeObserver { NotificationCenter.default.removeObserver(sizeObserver) }
@@ -211,9 +250,6 @@ final class ConsoleTerminalView: TerminalView {
         if gesture === wheelPan, let pan = gesture as? UIPanGestureRecognizer {
             let velocity = pan.velocity(in: self)
             return readsMouse && !selection.active && abs(velocity.y) > abs(velocity.x)
-        }
-        if gesture === hold {
-            return showsConsole && sendsClicks && !inTmuxPane && !tapsLabel(at: gesture.location(in: self))
         }
         return super.gestureRecognizerShouldBegin(gesture)
     }
@@ -521,4 +557,14 @@ final class ConsoleTerminalView: TerminalView {
         }.joined(separator: "\n")
     }
     #endif
+}
+
+/// The delegate of the row menu's hold: it begins only where `holdOpensMenu` says.
+private final class HoldGate: NSObject, UIGestureRecognizerDelegate {
+    weak var view: ConsoleTerminalView?
+
+    func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
+        guard let view else { return false }
+        return view.holdOpensMenu(at: gesture.location(in: view))
+    }
 }

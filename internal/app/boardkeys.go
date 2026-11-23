@@ -514,7 +514,9 @@ func (m Model) cardBelt(s sample.Session, typed bool) []beltKey {
 const beltMax = 48
 
 // beltValue is what the console tells the app's belt (beltWord): "" off
-// the board, "box" under the consent box, "menu" under the menu.
+// the board, "box" under the consent box, "menu" under the menu. While the
+// chat takes the whole screen it ends in ";chat": Pocket's hold then
+// selects text, as the list's row menu is not on the screen (#485).
 func (m Model) beltValue() string {
 	switch {
 	case m.standIn || m.viewFull() || m.tab != tabSessions && m.tab != tabMachine:
@@ -532,13 +534,13 @@ func (m Model) beltValue() string {
 			armed = m.keys.main.Grant.Keys()[0]
 		}
 	}
-	return beltWord(m.beltKeys(), armed)
+	return beltWord(m.beltKeys(), armed, m.tab == tabSessions && !m.listShown())
 }
 
 // beltWord is the board= value of the keys ks, armed the card key that a
 // first press marked ("" for none). The grammar, in printable ASCII:
 //
-//	value = card ";" dim
+//	value = card ";" dim [ ";chat" ]   ";chat" while the chat takes the screen
 //	card  = "" | key *( "," key )   the card's keys (Act), in order; "*" after the armed one
 //	dim   = "" | tok *( "," tok )   the keys that are off, in the belt's order
 //	key   = tok [ "*" ]
@@ -548,7 +550,7 @@ func (m Model) beltValue() string {
 // line types) is a dim tok. ◂ has none and is never sent. At most beltMax bytes:
 // dim toks leave whole from the right, then card keys from the right.
 // The other values ("" off the board, "box", "menu") come from beltValue.
-func beltWord(ks []beltKey, armed string) string {
+func beltWord(ks []beltKey, armed string, chat bool) string {
 	var card, dim []string
 	for _, k := range ks {
 		switch {
@@ -561,7 +563,11 @@ func beltWord(ks []beltKey, armed string) string {
 			dim = append(dim, k.Key)
 		}
 	}
-	word := func() string { return strings.Join(card, ",") + ";" + strings.Join(dim, ",") }
+	flag := ""
+	if chat {
+		flag = ";chat"
+	}
+	word := func() string { return strings.Join(card, ",") + ";" + strings.Join(dim, ",") + flag }
 	for len(word()) > beltMax && len(dim) > 0 {
 		dim = dim[:len(dim)-1]
 	}
