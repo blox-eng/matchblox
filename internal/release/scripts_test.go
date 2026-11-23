@@ -837,8 +837,32 @@ func TestCanaryWorkflowKeepsTheTokenFromAgents(t *testing.T) {
 		!strings.Contains(canary.Steps[n-1].If, "github.event_name == 'pull_request'") {
 		t.Error("job canary does not end with a step that fails a pull request when the canary fails")
 	}
-	if i := slices.IndexFunc(canary.Steps, func(s workflowStep) bool { return s.ID == "run" }); i < 0 || !canary.Steps[i].ContinueOnError {
-		t.Error("job canary has no step run with continue-on-error, so a break never reaches report")
+	run := slices.IndexFunc(canary.Steps, func(s workflowStep) bool { return s.ID == "run" })
+	if run < 0 || !canary.Steps[run].ContinueOnError {
+		t.Fatal("job canary has no step run with continue-on-error, so a break never reaches report")
+	}
+	// One failed install must not stop the others or the run: the agent it
+	// missed writes "<bin> is not installed", and report files that.
+	pkgs := []string{"@anthropic-ai/claude-code@latest", "@openai/codex@latest", "opencode-ai@latest"}
+	for _, pkg := range pkgs {
+		steps := slices.DeleteFunc(slices.Clone(canary.Steps), func(s workflowStep) bool { return !strings.Contains(s.Run, pkg) })
+		if len(steps) != 1 {
+			t.Errorf("job canary: %d steps install %s, want one", len(steps), pkg)
+			continue
+		}
+		s := steps[0]
+		alone := !slices.ContainsFunc(pkgs, func(p string) bool { return p != pkg && strings.Contains(s.Run, p) })
+		if !s.ContinueOnError || !alone || slices.IndexFunc(canary.Steps, func(o workflowStep) bool { return o.Name == s.Name }) > run {
+			t.Errorf("job canary: step %q installs %s, want it alone, before the run, with continue-on-error", s.Name, pkg)
+		}
+	}
+	if !strings.Contains(canary.Steps[run].If, "always()") {
+		t.Errorf("job canary: the run step runs if %q, want always(), so a failed install still runs it", canary.Steps[run].If)
+	}
+	for _, s := range canary.Steps {
+		if strings.HasPrefix(s.Uses, "actions/upload-artifact@") && !strings.Contains(s.If, "always()") {
+			t.Errorf("job canary: the upload runs if %q, want always()", s.If)
+		}
 	}
 
 	report, ok := wf.Jobs["report"]
@@ -853,6 +877,10 @@ func TestCanaryWorkflowKeepsTheTokenFromAgents(t *testing.T) {
 	}
 	if !strings.Contains(report.If, "always()") || !strings.Contains(report.If, "github.event_name != 'pull_request'") {
 		t.Errorf("job report runs if %q, want always() and never on a pull request", report.If)
+	}
+	// No artifact is news too: the script opens "the canary tested nothing".
+	if i := slices.IndexFunc(report.Steps, func(s workflowStep) bool { return strings.HasPrefix(s.Uses, "actions/download-artifact@") }); i < 0 || !report.Steps[i].ContinueOnError {
+		t.Error("job report: the download has no continue-on-error, so a missing artifact stops the report before it files an issue")
 	}
 	agent := regexp.MustCompile(`\b(npm|npx|node|go|claude|codex|opencode)\b`)
 	runs := 0

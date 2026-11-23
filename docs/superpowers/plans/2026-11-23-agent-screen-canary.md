@@ -178,6 +178,7 @@ Next: builder:build
 - 2026-11-23: Task 7's run step makes the `MATCHBLOX_CANARY_OUT` folder first (`mkdir -p`); `TestCanary` writes into it and does not create it. The results folder is `$RUNNER_TEMP/canary` in both jobs.
 - 2026-11-23: Task 7 imports `go.yaml.in/yaml/v3`, already in `go.sum` through gopsutil and testify; `go.mod` gains one direct `require` line and nothing new is downloaded.
 - 2026-11-23: closes review finding 1 (a hung or missing agent left the run green). `canary-report.sh` knows the three agents: one with no result file could not run (`the canary wrote no result for <Name>`), and an empty or missing folder opens one `the canary tested nothing` issue (marker key `run`). Each agent's version command gets 20 s (`commandTimeout`) and its process group is killed after; `setup` runs no command, so it needs none.
+- 2026-11-23: closes review finding 2 (a failed agent install opened no issue). Each agent installs in its own `continue-on-error` step, the run step runs `if: always()`, and report's download is `continue-on-error`, so a missing artifact reaches the script, which opens `the canary tested nothing`.
 
 ## Calls
 
