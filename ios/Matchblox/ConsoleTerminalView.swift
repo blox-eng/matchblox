@@ -147,6 +147,9 @@ final class ConsoleTerminalView: TerminalView {
     var clickNote = "press=0 release=0 right=0" { didSet { showNote() } }
     private var terminalHolds = 0
     private var menusShown = 0
+    /// The last board value the app heard, and whether the row menu was on when a hold began.
+    var boardNote = "" { didSet { showNote() } }
+    private var menuHolds = 0
 
     @objc private func terminalHeld(_ press: UILongPressGestureRecognizer) {
         guard press.state == .began else { return }
@@ -160,7 +163,7 @@ final class ConsoleTerminalView: TerminalView {
     }
 
     private func showNote() {
-        accessibilityValue = "\(clickNote) hold=\(terminalHolds) menu=\(menusShown)"
+        accessibilityValue = "\(clickNote) hold=\(terminalHolds) menu=\(menusShown) rowmenu=\(menuHolds) board=\(boardNote)"
     }
     #endif
 
@@ -280,6 +283,10 @@ final class ConsoleTerminalView: TerminalView {
 
     @objc private func held(_ hold: UILongPressGestureRecognizer) {
         guard hold.state == .began, let spot = cell(at: hold.location(in: self)) else { return }
+        #if DEBUG
+        menuHolds += 1
+        showNote()
+        #endif
         haptic.impactOccurred()
         send(BoardTouch.rightClick(col: spot.col, row: spot.row))
     }
