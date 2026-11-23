@@ -511,12 +511,27 @@ Codex        0.9.0     1         no hooks: screen only
   `unknown screen`, so the last column says `no hooks: screen only`.
 - An installed agent with no session shows a dash as its version, and 0.
 - When a count is above zero, the last line says what to do:
-  `a screen matchblox cannot read: update matchblox, or report it with this table`.
+  `a screen matchblox cannot read: run matchblox agents explain <session>, and report its output`.
 
 The output has no session names, folders, host names or user names. You can
 paste it in a report. `matchblox agents --json` prints each row with
 `agent`, `version`, `why`, `sessions` and `unknown`. It needs
 `matchblox serve` running (or a console).
+
+`matchblox agents explain api` shows why a session reads as it does. It
+prints the note the session's row shows, the hook's wait, each screen rule
+with the line it matched or `no match`, the menu with the digit of each
+option, and the rules version. Then it prints the screen. The screen holds
+only the lines the rules read, with your home path, host name and user name
+removed. A secret on those lines is not removed: check the screen before
+you post it. When the row says `unknown screen`, the last line says where
+to report it. explain only reads the pane: it never types into it.
+
+- `the screen changed since the note: run it again` means the pane
+  changed between the service's last read and this one.
+- `matchblox agents explain --file screen.txt` explains a saved screen. It
+  shows no hook line, because a file has no hook.
+- `--json` prints the same facts.
 
 ## Chain matches
 

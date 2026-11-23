@@ -130,8 +130,8 @@ func TestAgentsListsEachAgent(t *testing.T) {
 			t.Errorf("no row %q:\n%s", want, out)
 		}
 	}
-	if !strings.Contains(out, "\n"+agentsFix+"\n") {
-		t.Errorf("no fix line under the table:\n%s", out)
+	if !strings.Contains(out, "\na screen matchblox cannot read: run matchblox agents explain <session>, and report its output\n") {
+		t.Errorf("no fix line naming explain under the table:\n%s", out)
 	}
 	doc.Sessions[0].UnknownScreen = false
 	if out := agentsOut(t, doc, false); strings.Contains(out, agentsFix) {
