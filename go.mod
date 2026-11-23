@@ -12,6 +12,7 @@ require (
 	github.com/charmbracelet/x/ansi v0.11.9
 	github.com/charmbracelet/x/term v0.2.2
 	github.com/shirou/gopsutil/v4 v4.26.10
+	go.yaml.in/yaml/v3 v3.0.5
 	golang.org/x/sys v0.50.0
 	rsc.io/qr v0.2.0
 )
