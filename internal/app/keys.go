@@ -357,6 +357,10 @@ var keyNames = func() map[string]string {
 // character or a word (Space, F12).
 var tmuxKeyRE = regexp.MustCompile(`^((?:[CMS]-)*)([!-~]|[A-Za-z][A-Za-z0-9]+)$`)
 
+// flipKey gives the keys back to the list from the agent or the shell:
+// tmux's binding of the beside split (panes.BesideKey) for now.
+const flipKey = "ctrl+q"
+
 // prefixName is a tmux prefix as the key line writes keys: C-a is ctrl+a. A
 // prefix of None, or none that tmux would print, has no name.
 func prefixName(prefix string) (string, bool) {
