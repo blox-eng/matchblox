@@ -902,6 +902,57 @@ func TestCanaryWorkflowKeepsTheTokenFromAgents(t *testing.T) {
 	}
 }
 
+// Only a run on GitHub shows the image's permissions, so before any agent
+// installs, each run proves that canary cannot read the runner's folders and
+// cannot reach the cloud metadata services.
+func TestCanaryWorkflowProvesTheUserIsBoxedIn(t *testing.T) {
+	var wf struct {
+		Jobs map[string]workflowJob `yaml:"jobs"`
+	}
+	if err := yaml.Unmarshal([]byte(read(t, filepath.Join("..", "..", ".github", "workflows", "canary.yml"))), &wf); err != nil {
+		t.Fatal(err)
+	}
+	steps := wf.Jobs["canary"].Steps
+	user := slices.IndexFunc(steps, func(s workflowStep) bool { return s.ID == "user" })
+	if user < 0 {
+		t.Fatal("job canary has no step user")
+	}
+	for i, s := range steps {
+		if strings.Contains(s.Run, "npm install") && i < user {
+			t.Errorf("job canary: step %q installs an agent before the user step proves canary is boxed in", s.Name)
+		}
+	}
+	lines := map[string]bool{}
+	for _, line := range strings.Split(steps[user].Run, "\n") {
+		lines[strings.TrimSpace(line)] = true
+	}
+	for _, want := range []string{
+		`if sudo -u canary -H test -r /home/runner; then echo "::error::canary can read /home/runner"; exit 1; fi`,
+		`for d in "$RUNNER_TEMP" "$GITHUB_WORKSPACE"; do`,
+		`if sudo -u canary -H test -r "$d"; then echo "::error::canary can read $d"; exit 1; fi`,
+		`worker="$(pgrep -o -f Runner.Worker || true)"`,
+		`if [ -n "$worker" ] && bin="$(readlink -f "/proc/$worker/exe")"; then`,
+		`if sudo -u canary -H test -r "$(dirname "$bin")"; then echo "::error::canary can read the runner's folder"; exit 1; fi`,
+		`sudo iptables -I OUTPUT -m owner --uid-owner canary -d 168.63.129.16 -j REJECT`,
+		`sudo iptables -I OUTPUT -m owner --uid-owner canary -d 169.254.169.254 -j REJECT`,
+		`if sudo -u canary -H curl -sS -m 3 http://169.254.169.254/; then echo "::error::canary reaches 169.254.169.254"; exit 1; fi`,
+		`if sudo -u canary -H curl -sS -m 3 http://168.63.129.16/; then echo "::error::canary reaches 168.63.129.16"; exit 1; fi`,
+	} {
+		if !lines[want] {
+			t.Errorf("job canary: the user step lacks %q:\n%s", want, steps[user].Run)
+		}
+	}
+	// Every read check runs as canary: root can read anything.
+	for line := range lines {
+		if strings.Contains(line, "test -r") && !strings.Contains(line, "sudo -u canary -H test -r") {
+			t.Errorf("job canary: %q checks a read as the runner or root, not as canary", line)
+		}
+	}
+	if !strings.Contains(steps[user].Run, "Runner.Worker") || !strings.Contains(steps[user].Run, "not checked") {
+		t.Error("job canary: the user step does not say when it cannot find the runner's folder")
+	}
+}
+
 // The agents install and run as the user canary, which has no sudo: the
 // runner's memory, its Actions token and the caches main restores stay out
 // of their reach. sudo and env -i hand them no runner variable.

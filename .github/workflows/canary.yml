@@ -54,13 +54,29 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y tmux
       # The agents install and run as canary, a user with no sudo: the
       # runner's memory, its token and the caches main restores are out of
-      # their reach. sudo and env -i hand them no runner variable.
+      # their reach. sudo and env -i hand them no runner variable. Only a run
+      # shows the image's permissions, so each run proves that canary cannot
+      # read the runner's folders or reach the metadata services.
       - name: Make the user canary
         id: user
         run: |
           sudo useradd --create-home --shell /bin/bash canary
           if id -nG canary | grep -qwE 'sudo|admin'; then echo "::error::canary is in sudo or admin"; exit 1; fi
           if sudo -u canary -H sudo -n true 2>/dev/null; then echo "::error::canary can sudo"; exit 1; fi
+          if sudo -u canary -H test -r /home/runner; then echo "::error::canary can read /home/runner"; exit 1; fi
+          for d in "$RUNNER_TEMP" "$GITHUB_WORKSPACE"; do
+            if sudo -u canary -H test -r "$d"; then echo "::error::canary can read $d"; exit 1; fi
+          done
+          worker="$(pgrep -o -f Runner.Worker || true)"
+          if [ -n "$worker" ] && bin="$(readlink -f "/proc/$worker/exe")"; then
+            if sudo -u canary -H test -r "$(dirname "$bin")"; then echo "::error::canary can read the runner's folder"; exit 1; fi
+          else
+            echo "no Runner.Worker process found: canary's reach into the runner's folder is not checked"
+          fi
+          sudo iptables -I OUTPUT -m owner --uid-owner canary -d 168.63.129.16 -j REJECT
+          sudo iptables -I OUTPUT -m owner --uid-owner canary -d 169.254.169.254 -j REJECT
+          if sudo -u canary -H curl -sS -m 3 http://169.254.169.254/; then echo "::error::canary reaches 169.254.169.254"; exit 1; fi
+          if sudo -u canary -H curl -sS -m 3 http://168.63.129.16/; then echo "::error::canary reaches 168.63.129.16"; exit 1; fi
           sudo -u canary -H env -i "$(command -v node)" --version
           sudo -u canary -H env -i "$(command -v go)" version
           echo "CANARY_PATH=$(dirname "$(command -v go)"):$(dirname "$(command -v node)"):/home/canary/.npm-global/bin:/usr/bin:/bin" >>"$GITHUB_ENV"
