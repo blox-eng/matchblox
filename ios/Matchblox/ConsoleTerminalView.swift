@@ -59,9 +59,10 @@ final class ConsoleTerminalView: TerminalView {
     private var hold: UILongPressGestureRecognizer?
     /// The word a hold selected, while its press drags the selection on.
     private var heldWord: (start: Position, end: Position)?
-    /// A hold's selection at the lift, the terminal's size then, and when: the keys the hold
-    /// took move the belt or raise the keyboard, and SwiftTerm drops a selection on a resize.
-    private var lifted: (start: Position, end: Position, size: CGSize, at: CFTimeInterval)?
+    /// SwiftTerm's long-press is selecting: the terminal takes no keys meanwhile.
+    fileprivate var selecting = false
+    private let selectGate = SelectGate()
+    private lazy var editMenu = UIEditMenuInteraction(delegate: selectGate)
     private let holdGate = HoldGate()
     /// The size the text has now; a pinch changes it, in whole points.
     private(set) var textSize: TextSize
@@ -136,9 +137,15 @@ final class ConsoleTerminalView: TerminalView {
         self.hold = hold
         // SwiftTerm's long-press only shows its menu, and the drag after it went to tmux as a
         // mouse drag (#492): the same press selects the word and drags the selection on.
+        // Its start gave the terminal the keys, which moved the belt or raised the keyboard: each
+        // resize made SwiftTerm drop the selection (processSizeChange). The hold takes no keys,
+        // and the menu is the app's own, which needs none.
+        selectGate.view = self
         for other in gestureRecognizers ?? [] where other is UILongPressGestureRecognizer && other !== hold {
+            other.delegate = selectGate
             other.addTarget(self, action: #selector(selectHeld))
         }
+        addInteraction(editMenu)
         #if DEBUG
         for other in gestureRecognizers ?? [] where other is UILongPressGestureRecognizer && other !== hold {
             other.addTarget(self, action: #selector(terminalHeld))
@@ -220,6 +227,7 @@ final class ConsoleTerminalView: TerminalView {
     }
 
     override func becomeFirstResponder() -> Bool {
+        if selecting, !isFirstResponder { return false }
         let became = super.becomeFirstResponder()
         if became { onFocus(true) }
         return became
@@ -250,6 +258,8 @@ final class ConsoleTerminalView: TerminalView {
             return tapsLabel(at: gesture.location(in: self))
         }
         if gesture === clickTap {
+            // A tap ends a selection: SwiftTerm's own tap clears it, with no click.
+            if selection.active { return false }
             // A tap on a link asks what to do with it, focused or not.
             if linkUnder(gesture.location(in: self)) != nil, !tapsLabel(at: gesture.location(in: self)) {
                 return true
@@ -337,29 +347,14 @@ final class ConsoleTerminalView: TerminalView {
                 showNote()
             }
             #endif
+            selecting = false
             guard selection.active else { return }
-            let point = press.location(in: self)
-            lifted = (selection.start, selection.end, bounds.size, CACurrentMediaTime())
-            UIMenuController.shared.showMenu(from: self, rect: CGRect(origin: point, size: cellSize))
+            UIMenuController.shared.hideMenu()
+            editMenu.presentEditMenu(with: UIEditMenuConfiguration(identifier: nil, sourcePoint: press.location(in: self)))
         default:
             heldWord = nil
+            selecting = false
         }
-    }
-
-    /// The resize right after a hold (the belt or the keyboard moving) dropped its selection in
-    /// SwiftTerm (`processSizeChange`, #492): it comes back, buffer rows stay where they were, and
-    /// so does the menu. A person's own clear has no resize, and the window is two seconds.
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        guard let held = lifted else { return }
-        guard CACurrentMediaTime() - held.at < 2 else {
-            lifted = nil
-            return
-        }
-        guard bounds.size != held.size, !selection.active else { return }
-        lifted = nil
-        selection.setSelection(start: held.start, end: held.end)
-        UIMenuController.shared.showMenu(from: self, rect: CGRect(origin: .zero, size: bounds.size))
     }
 
     /// Each whole point of a pinch ticks once. The phone keeps the size when the fingers lift.
@@ -641,6 +636,39 @@ final class ConsoleTerminalView: TerminalView {
         }.joined(separator: "\n")
     }
     #endif
+}
+
+/// The selecting hold's gate and menu: the hold marks that it selects before SwiftTerm's own
+/// handler asks for the keys, and the menu offers Copy, Open link (a URL in the selection, whole)
+/// and Paste.
+@MainActor
+private final class SelectGate: NSObject, UIGestureRecognizerDelegate, UIEditMenuInteractionDelegate {
+    weak var view: ConsoleTerminalView?
+
+    func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
+        view?.selecting = true
+        return true
+    }
+
+    func editMenuInteraction(_ interaction: UIEditMenuInteraction, menuFor configuration: UIEditMenuConfiguration,
+                             suggestedActions: [UIMenuElement]) -> UIMenu? {
+        guard let view, view.selection.active else { return nil }
+        let text = view.selection.getSelectedText()
+        var items: [UIMenuElement] = [UIAction(title: "Copy") { [weak view] _ in
+            UIPasteboard.general.string = text
+            view?.selection.selectNone()
+        }]
+        if let link = TerminalLink.url(inSelection: text) {
+            items.append(UIAction(title: "Open link") { [weak view] _ in
+                guard let view else { return }
+                view.onLink(link, CGRect(origin: configuration.sourcePoint, size: .zero))
+            })
+        }
+        if UIPasteboard.general.hasStrings {
+            items.append(UIAction(title: "Paste") { [weak view] _ in view?.paste(nil) })
+        }
+        return UIMenu(children: items)
+    }
 }
 
 /// The delegate of the row menu's hold: it begins only where `holdOpensMenu` says.
