@@ -14,6 +14,13 @@ All notable changes to matchblox are in this file. The format follows
   session you open in Pocket opens there. Two screens inside the same
   agent's pane still share its size.
 
+### Fixed
+
+- **A hold and drag selects text.** In a Pocket chat a hold now
+  selects the word under the finger, and the same press drags the
+  selection on, as in any iOS text. A drag went to tmux before. Copy
+  shows when the finger lifts.
+
 ## [0.57.1] - 2026-11-23
 
 ### Fixed

@@ -57,6 +57,8 @@ final class ConsoleTerminalView: TerminalView {
     private var wheel = WheelScroll(cellHeight: 0)
     private var coast: Coast?
     private var hold: UILongPressGestureRecognizer?
+    /// The word a hold selected, while its press drags the selection on.
+    private var heldWord: (start: Position, end: Position)?
     private let holdGate = HoldGate()
     /// The size the text has now; a pinch changes it, in whole points.
     private(set) var textSize: TextSize
@@ -129,6 +131,11 @@ final class ConsoleTerminalView: TerminalView {
         }
         addGestureRecognizer(hold)
         self.hold = hold
+        // SwiftTerm's long-press only shows its menu, and the drag after it went to tmux as a
+        // mouse drag (#492): the same press selects the word and drags the selection on.
+        for other in gestureRecognizers ?? [] where other is UILongPressGestureRecognizer && other !== hold {
+            other.addTarget(self, action: #selector(selectHeld))
+        }
         #if DEBUG
         for other in gestureRecognizers ?? [] where other is UILongPressGestureRecognizer && other !== hold {
             other.addTarget(self, action: #selector(terminalHeld))
@@ -290,6 +297,29 @@ final class ConsoleTerminalView: TerminalView {
         guard hold.state == .began, let spot = cell(at: hold.location(in: self)) else { return }
         haptic.impactOccurred()
         send(BoardTouch.rightClick(col: spot.col, row: spot.row))
+    }
+
+    /// SwiftTerm's long-press began (its handler ran first and kept the spot): its Select picks
+    /// the word under the finger. A drag of the same press moves the far end, the word's other
+    /// end staying put, and the menu, Copy with it, shows when the finger lifts.
+    @objc private func selectHeld(_ press: UILongPressGestureRecognizer) {
+        switch press.state {
+        case .began:
+            select(nil)
+            heldWord = selection.active ? (selection.start, selection.end) : nil
+        case .changed:
+            guard let word = heldWord, let spot = cell(at: press.location(in: self)) else { return }
+            let at = Position(col: spot.col, row: spot.row + getTerminal().buffer.yDisp)
+            selection.pivot = Position.compare(at, word.start) == .before ? word.end : word.start
+            selection.pivotExtend(row: spot.row, col: spot.col)
+        case .ended:
+            heldWord = nil
+            guard selection.active else { return }
+            let point = press.location(in: self)
+            UIMenuController.shared.showMenu(from: self, rect: CGRect(origin: point, size: cellSize))
+        default:
+            heldWord = nil
+        }
     }
 
     /// Each whole point of a pinch ticks once. The phone keeps the size when the fingers lift.
