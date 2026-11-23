@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/user"
 	"slices"
@@ -35,30 +36,38 @@ type explainRow struct {
 	Label string `json:"label"`
 }
 
-// explainOut is what explain prints, scrubbed, as text or JSON.
+// explainOut is what explain prints, scrubbed, as text or JSON. A saved
+// screen fills no Session, Agent, Version or Hook.
 type explainOut struct {
 	Session string       `json:"session"`
 	Agent   string       `json:"agent"`
 	Version string       `json:"version"`
 	Hook    string       `json:"hook"`
 	Verdict string       `json:"verdict"`
+	Changed bool         `json:"screen_changed"`
 	Rules   string       `json:"rules"`
 	Hits    []explainHit `json:"hits"`
 	MenuOn  bool         `json:"-"`
 	Options []explainRow `json:"options"`
 	Screen  []string     `json:"screen"`
 	Unknown bool         `json:"unknown_screen"`
+	File    bool         `json:"-"`
 }
 
-const explainFix = "Fix: report it at github.com/blox-eng/matchblox/issues with this output"
+const (
+	explainFix     = "Fix: report it at github.com/blox-eng/matchblox/issues with this output"
+	explainChanged = "the screen changed since the note: run it again"
+	maxScreenFile  = 1 << 20
+)
 
-func cliExplain(words []string, w io.Writer, path string, asJSON bool) error {
-	if len(words) != 1 {
+func cliExplain(words []string, w io.Writer, path, file string, asJSON bool) error {
+	switch {
+	case file != "" && len(words) > 0:
+		return errors.New("explain takes a session or --file, not both")
+	case file == "" && len(words) == 0:
+		return errors.New("explain needs a session: matchblox agents explain <who>")
+	case len(words) > 1:
 		return errors.New("explain needs one session: matchblox agents explain <who>")
-	}
-	doc, err := readDoc(path, staleAfter)
-	if err != nil {
-		return err
 	}
 	home, _ := os.UserHomeDir()
 	host, _ := os.Hostname()
@@ -67,6 +76,13 @@ func cliExplain(words []string, w io.Writer, path string, asJSON bool) error {
 		name = u.Username
 	}
 	x := explainEnv{screenOf: sample.CaptureScreen, now: time.Now(), home: home, host: host, user: name}
+	if file != "" {
+		return explainFile(w, file, x, asJSON)
+	}
+	doc, err := readDoc(path, staleAfter)
+	if err != nil {
+		return err
+	}
 	return writeExplain(w, doc, words[0], x, asJSON)
 }
 
@@ -88,15 +104,64 @@ func writeExplain(w io.Writer, doc state.Doc, who string, x explainEnv, asJSON b
 	scrub := func(text string) string {
 		return said.Scrub(text, []string{s.Cwd, x.home}, []string{x.host, x.user})
 	}
+	out := traceOut(t, scrub)
+	out.Session = scrub(s.Name)
+	out.Agent = sample.AgentLabel(s.Agent)
+	out.Version = s.Version
+	out.Hook = hookOf(s, doc.Queue, x.now)
+	out.Verdict = scrub(verdictOf(s))
+	out.Changed = (s.UnknownScreen || s.MenuUnread) && t.MenuRead || s.Permits && t.Kind != said.Permits
+	out.MenuOn = out.MenuOn || s.UnknownScreen || s.MenuUnread
+	out.Unknown = s.UnknownScreen
+	return printExplain(w, out, asJSON)
+}
+
+// explainFile prints which rule reads a screen saved in the file at path.
+func explainFile(w io.Writer, path string, x explainEnv, asJSON bool) error {
+	scrub := func(text string) string {
+		return said.Scrub(text, []string{x.home}, []string{x.host, x.user})
+	}
+	screen, err := readScreenFile(path)
+	if err != nil {
+		return errors.New(scrub(err.Error()))
+	}
+	t := said.Explain(screen)
+	out := traceOut(t, scrub)
+	out.Verdict = scrub(traceVerdict(t))
+	out.File = true
+	return printExplain(w, out, asJSON)
+}
+
+func readScreenFile(path string) (string, error) {
+	f, err := os.Open(path) //nolint:gosec // the person names the file to read
+	if err != nil {
+		return "", unreadable(path, err)
+	}
+	defer func() { _ = f.Close() }()
+	data, err := io.ReadAll(io.LimitReader(f, maxScreenFile+1))
+	if err != nil {
+		return "", unreadable(path, err)
+	}
+	if len(data) > maxScreenFile {
+		return "", fmt.Errorf("the file %s is over 1 MiB: save only the screen", path)
+	}
+	return string(data), nil
+}
+
+// unreadable names the path once: an *fs.PathError would name it again.
+func unreadable(path string, err error) error {
+	var pe *fs.PathError
+	if errors.As(err, &pe) {
+		err = pe.Err
+	}
+	return fmt.Errorf("the file %s cannot be read: %w", path, err)
+}
+
+// traceOut is the part of the output the rules give, scrubbed.
+func traceOut(t said.Trace, scrub func(string) string) explainOut {
 	out := explainOut{
-		Session: scrub(s.Name),
-		Agent:   sample.AgentLabel(s.Agent),
-		Version: s.Version,
-		Hook:    hookOf(s, doc.Queue, x.now),
-		Verdict: scrub(verdictOf(s)),
 		Rules:   "built into matchblox " + version,
-		MenuOn:  t.Kind == said.Permits || s.UnknownScreen || s.MenuUnread,
-		Unknown: s.UnknownScreen,
+		MenuOn:  t.Kind == said.Permits,
 		Hits:    []explainHit{},
 		Options: []explainRow{},
 		Screen:  []string{},
@@ -110,11 +175,26 @@ func writeExplain(w io.Writer, doc state.Doc, who string, x explainEnv, asJSON b
 	for _, l := range t.Lines {
 		out.Screen = append(out.Screen, scrub(l))
 	}
+	return out
+}
+
+func printExplain(w io.Writer, out explainOut, asJSON bool) error {
 	if asJSON {
 		return writeJSON(w, out)
 	}
-	_, err = io.WriteString(w, explainText(out))
+	_, err := io.WriteString(w, explainText(out))
 	return err
+}
+
+// traceVerdict is the verdict the rules alone give, for a saved screen.
+func traceVerdict(t said.Trace) string {
+	switch t.Kind {
+	case said.Permits:
+		return "waits for an approval: " + t.Line
+	case said.Asks:
+		return "asks: " + t.Line
+	}
+	return "none: " + t.Line
 }
 
 func verdictOf(s sample.Session) string {
@@ -150,11 +230,18 @@ func hookOf(s sample.Session, items []queue.Item, now time.Time) string {
 
 func explainText(o explainOut) string {
 	var b strings.Builder
-	session := o.Session + " · " + o.Agent
-	if o.Version != "" {
-		session += " " + o.Version
+	if !o.File {
+		session := o.Session + " · " + o.Agent
+		if o.Version != "" {
+			session += " " + o.Version
+		}
+		fmt.Fprintf(&b, "Session  %s\nHook     %s\n", session, o.Hook)
 	}
-	fmt.Fprintf(&b, "Session  %s\nHook     %s\nVerdict  %s\nRules    %s\n\n", session, o.Hook, o.Verdict, o.Rules)
+	fmt.Fprintf(&b, "Verdict  %s\n", o.Verdict)
+	if o.Changed {
+		b.WriteString("         " + explainChanged + "\n")
+	}
+	fmt.Fprintf(&b, "Rules    %s\n\n", o.Rules)
 	fmt.Fprintf(&b, "Rules on the last %d lines with words\n", said.ScreenWithin)
 	for _, h := range o.Hits {
 		hit := "no match"

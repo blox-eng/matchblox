@@ -184,3 +184,86 @@ func TestExplainJSON(t *testing.T) {
 		t.Errorf("screen %q", got.Screen)
 	}
 }
+
+// TestExplainFileUnreadable: the error names the path, with the home path
+// scrubbed, since it may be pasted into the report too.
+func TestExplainFileUnreadable(t *testing.T) {
+	x := explainEnvOf("")
+	x.home = t.TempDir()
+	var buf bytes.Buffer
+	err := explainFile(&buf, x.home+"/screens/api.txt", x, false)
+	if err == nil || !strings.Contains(err.Error(), "<dir>/screens/api.txt") || strings.Contains(err.Error(), x.home) {
+		t.Fatalf("a missing file: %v", err)
+	}
+	if buf.Len() > 0 {
+		t.Errorf("a missing file printed %q", buf.String())
+	}
+}
+
+// TestExplainSaysTheScreenChanged: the note comes from the service, the
+// rules run on a new capture; when the two disagree, a line says so.
+func TestExplainSaysTheScreenChanged(t *testing.T) {
+	permits := explainDoc()
+	permits.Sessions[0].UnknownScreen, permits.Sessions[0].Permits, permits.Sessions[0].LastLine = false, true, "Do you want to proceed?"
+	unread := explainDoc()
+	unread.Sessions[0].UnknownScreen, unread.Sessions[0].MenuUnread = false, true
+	for _, c := range []struct {
+		name    string
+		doc     state.Doc
+		screen  string
+		changed bool
+	}{
+		{"an unknown note, a read menu", explainDoc(), readMenu, true},
+		{"an unread note, a read menu", unread, readMenu, true},
+		{"an approval note, a screen no rule reads", permits, "  Done, the tests pass.\n", true},
+		{"an approval note, a read menu", permits, readMenu, false},
+		{"an unknown note, an unknown screen", explainDoc(), unknownScreen, false},
+	} {
+		var buf bytes.Buffer
+		if err := writeExplain(&buf, c.doc, "api", explainEnvOf(c.screen), false); err != nil {
+			t.Fatal(err)
+		}
+		if got := strings.Contains(buf.String(), explainChanged); got != c.changed {
+			t.Errorf("%s: the changed line shows %v, want %v:\n%s", c.name, got, c.changed, buf.String())
+		}
+	}
+}
+
+// TestExplainFile: a saved screen has no session and no hook, so neither
+// line shows; the rules and the menu do.
+func TestExplainFile(t *testing.T) {
+	var buf bytes.Buffer
+	if err := explainFile(&buf, "../../testdata/menus/claude-bash-2.1.330.txt", explainEnvOf(""), false); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	want := "Menu     1 Yes · 2 Yes, and always allow access to <work> from this project · 3 Yes, and switch to auto mode · auto mode handles these prompts for you · 4 No\n"
+	if !strings.Contains(out, want) {
+		t.Errorf("the output misses %q:\n%s", want, out)
+	}
+	for _, l := range strings.Split(out, "\n") {
+		if strings.HasPrefix(l, "Session") || strings.HasPrefix(l, "Hook") {
+			t.Errorf("a saved screen shows %q:\n%s", l, out)
+		}
+	}
+	if strings.Contains(out, explainChanged) {
+		t.Errorf("a saved screen has no note to disagree with:\n%s", out)
+	}
+}
+
+func TestExplainNeedsOneOf(t *testing.T) {
+	for _, c := range []struct {
+		words []string
+		file  string
+		want  string
+	}{
+		{[]string{"api"}, "screen.txt", "explain takes a session or --file, not both"},
+		{nil, "", "explain needs a session: matchblox agents explain <who>"},
+	} {
+		var buf bytes.Buffer
+		err := cliExplain(c.words, &buf, "", c.file, false)
+		if err == nil || err.Error() != c.want {
+			t.Errorf("words %q, file %q: %v, want %q", c.words, c.file, err, c.want)
+		}
+	}
+}
