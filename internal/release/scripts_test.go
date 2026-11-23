@@ -740,6 +740,20 @@ func TestCanaryWorkflowKeepsTheTokenFromAgents(t *testing.T) {
 			}
 		}
 	}
+	// A cache the canary saves holds what agent code wrote, and CI's other
+	// jobs on main restore it. setup-go caches unless told not to; setup-node
+	// only when told to.
+	for _, s := range wf.Jobs["canary"].Steps {
+		if strings.HasPrefix(s.Uses, "actions/setup-go@") && s.With["cache"] != false {
+			t.Errorf("job canary: setup-go saves a cache that agent code can poison: cache %v", s.With["cache"])
+		}
+		if strings.HasPrefix(s.Uses, "actions/setup-node@") && s.With["cache"] != nil {
+			t.Errorf("job canary: setup-node saves a cache that agent code can poison: cache %v", s.With["cache"])
+		}
+		if strings.HasPrefix(s.Uses, "actions/cache") {
+			t.Errorf("job canary: %s saves a cache that agent code can poison", s.Uses)
+		}
+	}
 	for _, line := range strings.Split(raw, "\n") {
 		if strings.Contains(line, "uses:") && !regexp.MustCompile(`@[0-9a-f]{40} # v\d`).MatchString(line) {
 			t.Errorf("%q names no version after its pin", strings.TrimSpace(line))
