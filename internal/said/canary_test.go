@@ -180,3 +180,33 @@ func drawMenu(t *testing.T, sock, work string, env, argv []string) (screen, chec
 	}
 	return screen, check, nil
 }
+
+// An agent whose version command never answers could not run; the canary
+// does not wait for go test's own timeout to panic.
+func TestHungVersionCouldNotRun(t *testing.T) {
+	defer func(d time.Duration) { commandTimeout = d }(commandTimeout)
+	commandTimeout = time.Second
+
+	// The sleep is a child, not exec'd: it holds the output open after the
+	// script is killed.
+	bin := filepath.Join(t.TempDir(), "hang")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\nsleep 600\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	a := agent{
+		key: "hang", name: "Hang", bin: bin,
+		version: func(env []string) (string, error) { return firstField(env, bin, "--version") },
+		setup:   func(_, _, _ string) error { return nil },
+		env:     func(home, _, _ string) []string { return []string{"HOME=" + home, "PATH=/usr/bin:/bin"} },
+		argv:    func() []string { return []string{bin} },
+		stand:   func() standIn { return &anthropicStandIn{} },
+	}
+	start := time.Now()
+	res := runCanary(t, a)
+	if took := time.Since(start); took > 10*time.Second {
+		t.Errorf("runCanary took %v, want about 1 s", took)
+	}
+	if want := bin + " --version did not answer in 1 s"; res.Check != couldNotRun || res.Screen != want {
+		t.Errorf("check %q, screen %q, want %q, %q", res.Check, res.Screen, couldNotRun, want)
+	}
+}

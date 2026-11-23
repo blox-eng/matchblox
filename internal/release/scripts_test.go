@@ -416,7 +416,20 @@ if [ "$1 $2" = "issue list" ]; then cat "$GH_LIST"; fi
 if [ "$1 $2" = "issue create" ]; then echo https://github.com/blox-eng/matchblox/issues/900; fi
 `
 
+// canaryResults is a results folder holding files, where every agent the
+// files do not name reads well, so a test sees only the agents it names.
 func canaryResults(t *testing.T, files map[string]string) string {
+	t.Helper()
+	all := map[string]string{
+		"claude.json":   result("Claude Code", "2.1.330", true, "", "fine"),
+		"codex.json":    result("Codex", "0.98.0", true, "", "fine"),
+		"opencode.json": result("OpenCode", "1.2.2", true, "", "fine"),
+	}
+	maps.Copy(all, files)
+	return resultsDir(t, all)
+}
+
+func resultsDir(t *testing.T, files map[string]string) string {
 	t.Helper()
 	dir := t.TempDir()
 	for name, s := range files {
@@ -681,11 +694,55 @@ func TestCanaryReportCouldNotRun(t *testing.T) {
 	}
 }
 
+// An agent that hung or never ran writes no file: that is a could-not-run,
+// never a green run.
+func TestCanaryReportMissingAgentIsNotGreen(t *testing.T) {
+	dir := resultsDir(t, map[string]string{
+		"claude.json": result("Claude Code", "2.1.330", true, "", "fine"),
+	})
+	r := canaryReport(t, "", dir)
+	if r.code != 1 {
+		t.Fatalf("exit %d, want 1:\n%s", r.code, r.out)
+	}
+	w := r.writes()
+	if len(w) != 3 || !w[0].is("label", "create", "canary") || !w[1].is("issue", "create") || !w[2].is("issue", "create") {
+		t.Fatalf("want the label, then an issue for Codex and one for OpenCode: %v\n%s", r.calls, r.out)
+	}
+	for i, a := range []struct{ key, name string }{{"codex", "Codex"}, {"opencode", "OpenCode"}} {
+		c := w[i+1]
+		if got, want := c.flag("--title"), "the canary could not run "+a.name+": the canary wrote no result for "+a.name; got != want {
+			t.Errorf("title %q, want %q", got, want)
+		}
+		if c.flag("--label") != "canary" || !strings.Contains(c.body, "<!-- canary "+a.key+" none norun -->") {
+			t.Errorf("issue for %s: %q\n%s", a.name, c.args, c.body)
+		}
+	}
+
+	// The same rules as any could-not-run: an open issue with the same marker hears nothing.
+	r = canaryReport(t, openIssue(14, "the canary could not run Codex: the canary wrote no result for Codex", "<!-- canary codex none norun -->"), dir)
+	if r.code != 1 || slices.ContainsFunc(r.writes(), func(c ghCall) bool { return c.is("issue", "comment", "14") }) ||
+		!strings.Contains(r.out, "Codex none: still #14, nothing new") {
+		t.Errorf("exit %d, writes %v:\n%s", r.code, r.writes(), r.out)
+	}
+}
+
 func TestCanaryReportNeedsResults(t *testing.T) {
+	const title = "the canary tested nothing"
 	for _, dir := range []string{t.TempDir(), filepath.Join(t.TempDir(), "missing")} {
 		r := canaryReport(t, "", dir)
-		if r.code != 1 || !strings.Contains(r.out, "no canary results: the canary tested nothing") || len(r.calls) != 0 {
-			t.Errorf("%s: exit %d, calls %v:\n%s", dir, r.code, r.calls, r.out)
+		w := r.writes()
+		if r.code != 1 || !strings.Contains(r.out, "no canary results: the canary tested nothing") ||
+			len(w) != 2 || !w[0].is("label", "create", "canary") || !w[1].is("issue", "create") {
+			t.Fatalf("%s: exit %d, want 1, the label and one issue: %v:\n%s", dir, r.code, r.calls, r.out)
+		}
+		if w[1].flag("--title") != title || w[1].flag("--label") != "canary" || !strings.Contains(w[1].body, "<!-- canary run none norun -->") {
+			t.Errorf("%s: issue %q\n%s", dir, w[1].args, w[1].body)
+		}
+
+		// No second issue while one is open.
+		r = canaryReport(t, openIssue(15, title, "<!-- canary run none norun -->"), dir)
+		if r.code != 1 || len(r.writes()) != 0 || !strings.Contains(r.out, "still #15, nothing new") {
+			t.Errorf("%s: with #15 open: exit %d, writes %v:\n%s", dir, r.code, r.writes(), r.out)
 		}
 	}
 	if r := canaryReport(t, ""); r.code != 2 {

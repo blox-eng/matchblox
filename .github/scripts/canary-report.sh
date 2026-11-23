@@ -2,14 +2,16 @@
 # Reads the canary's result files (one <agent>.json each) and keeps one open
 # issue labelled canary per agent: it opens one for a break, comments on it
 # when the version or the kind of break changes, and comments once when the
-# screen reads again. The same break on the next day writes nothing.
+# screen reads again. The same break on the next day writes nothing. An agent
+# with no result file could not run, and a folder with no results at all
+# opens one issue: the canary tested nothing.
 #
 # The files come from a job that ran agent code nobody reviewed, so every
 # field is data: checked against an allow-list, never run.
 #
 # Usage: canary-report.sh RESULTS-DIR
-#   Exits 1 when an agent's screen does not read, a file is refused, or the
-#   folder holds no results.
+#   Exits 1 when an agent's screen does not read or has no result, a file is
+#   refused, or the folder holds no results.
 set -euo pipefail
 
 if [ $# -ne 1 ]; then
@@ -17,13 +19,6 @@ if [ $# -ne 1 ]; then
   exit 2
 fi
 dir="$1"
-
-shopt -s nullglob
-files=("$dir"/*.json)
-if [ ${#files[@]} -eq 0 ]; then
-  echo "no canary results: the canary tested nothing" >&2
-  exit 1
-fi
 
 status=0
 labelled=
@@ -56,18 +51,59 @@ titled() {
   printf '%s' "${s:-no reason given}"
 }
 
+label() {
+  if [ -z "$labelled" ]; then
+    gh label create canary --color FBCA04 --description "an agent release matchblox cannot read" --force >/dev/null
+    labelled=1
+  fi
+}
+
+shopt -s nullglob
+files=("$dir"/*.json)
+if [ ${#files[@]} -eq 0 ]; then
+  echo "no canary results: the canary tested nothing" >&2
+  title="the canary tested nothing"
+  issues="$(gh issue list --label canary --state open --search "$title in:title" --json number,title)"
+  number="$(jq -r --arg title "$title" '[.[] | select(.title | contains($title))] | first | .number // empty' <<<"$issues")"
+  if [ -n "$number" ]; then
+    echo "$title: still #$number, nothing new"
+    exit 1
+  fi
+  body="$(mktemp)"
+  {
+    printf 'The canary wrote no result for any agent, so it tested nothing. The run is not green.\n\n'
+    printf "The canary job's log says why: an install, the run, or the artifact upload failed.\n\n"
+    printf '<!-- canary run none norun -->\n'
+  } >"$body"
+  label
+  gh issue create --label canary --title "$title" --body-file "$body"
+  rm -f "$body"
+  exit 1
+fi
+
 for f in "${files[@]}"; do
   file="$(basename "$f")"
-  key="${file%.json}"
+  case "$file" in
+    claude.json | codex.json | opencode.json) ;;
+    *) refuse "$(shown "$file") is not claude.json, codex.json or opencode.json" ;;
+  esac
+done
+
+missing="$(mktemp)"
+trap 'rm -f "$missing"' EXIT
+for key in claude codex opencode; do
   case "$key" in
     claude) name="Claude Code" ;;
     codex) name="Codex" ;;
     opencode) name="OpenCode" ;;
-    *)
-      refuse "$(shown "$file") is not claude.json, codex.json or opencode.json"
-      continue
-      ;;
   esac
+  file="$key.json"
+  f="$dir/$file"
+  if [ ! -e "$f" ]; then
+    f="$missing"
+    jq -n --arg agent "$name" \
+      '{agent: $agent, version: "", ok: false, check: "could not run", screen: "the canary wrote no result for \($agent)"}' >"$f"
+  fi
   if ! jq -e 'type == "object" and (.agent | type) == "string" and (.version | type) == "string"
       and (.ok | type) == "boolean" and (.check | type) == "string" and (.screen | type) == "string"' \
       "$f" >/dev/null 2>&1; then
@@ -154,10 +190,7 @@ for f in "${files[@]}"; do
     gh issue comment "$number" --body-file "$body" >/dev/null
     echo "$name $mark: commented on #$number"
   else
-    if [ -z "$labelled" ]; then
-      gh label create canary --color FBCA04 --description "an agent release matchblox cannot read" --force >/dev/null
-      labelled=1
-    fi
+    label
     gh issue create --label canary --title "$title" --body-file "$body"
   fi
   rm -f "$body"

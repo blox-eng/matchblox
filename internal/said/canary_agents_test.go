@@ -3,6 +3,7 @@
 package said
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,6 +13,8 @@ import (
 	"path/filepath"
 	"strings"
 	"sync/atomic"
+	"syscall"
+	"time"
 )
 
 type standIn interface {
@@ -161,22 +164,29 @@ trust_level = "trusted"
 	},
 }
 
-// firstField runs an agent's version command and returns the first word it
-// prints.
+var commandTimeout = 20 * time.Second
+
 func firstField(env []string, argv ...string) (string, error) {
 	return versionField(env, argv, func(f []string) string { return f[0] })
 }
 
-// lastField runs an agent's version command and returns the last word it
-// prints.
 func lastField(env []string, argv ...string) (string, error) {
 	return versionField(env, argv, func(f []string) string { return f[len(f)-1] })
 }
 
 func versionField(env, argv []string, pick func([]string) string) (string, error) {
-	cmd := exec.Command(argv[0], argv[1:]...) //nolint:gosec // the agent's own version command
+	ctx, cancel := context.WithTimeout(context.Background(), commandTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...) //nolint:gosec // the agent's own version command
 	cmd.Env = env
+	// The whole group goes, so a child the agent started cannot hold its output open.
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+	cmd.WaitDelay = time.Second
 	b, err := cmd.Output()
+	if ctx.Err() != nil {
+		return "", fmt.Errorf("%s did not answer in %d s", strings.Join(argv, " "), int(commandTimeout.Seconds()))
+	}
 	if err != nil {
 		return "", fmt.Errorf("%s: %v", strings.Join(argv, " "), err)
 	}
