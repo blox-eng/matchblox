@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,6 +12,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"go.yaml.in/yaml/v3"
 )
 
 func script(t *testing.T, name string, args ...string) (string, error) {
@@ -687,5 +690,114 @@ func TestCanaryReportNeedsResults(t *testing.T) {
 	}
 	if r := canaryReport(t, ""); r.code != 2 {
 		t.Errorf("no folder: exit %d, want 2:\n%s", r.code, r.out)
+	}
+}
+
+type workflowStep struct {
+	Name            string            `yaml:"name"`
+	ID              string            `yaml:"id"`
+	If              string            `yaml:"if"`
+	Uses            string            `yaml:"uses"`
+	Run             string            `yaml:"run"`
+	With            map[string]any    `yaml:"with"`
+	Env             map[string]string `yaml:"env"`
+	ContinueOnError bool              `yaml:"continue-on-error"`
+}
+
+type workflowJob struct {
+	Needs       any               `yaml:"needs"`
+	If          string            `yaml:"if"`
+	Permissions map[string]string `yaml:"permissions"`
+	Env         map[string]string `yaml:"env"`
+	Steps       []workflowStep    `yaml:"steps"`
+}
+
+// The canary job installs and runs each agent's latest release, code nobody
+// reviewed, so it holds no write token and no secret. Only the report job,
+// which runs matchblox's own script, may write issues.
+func TestCanaryWorkflowKeepsTheTokenFromAgents(t *testing.T) {
+	raw := read(t, filepath.Join("..", "..", ".github", "workflows", "canary.yml"))
+	var wf struct {
+		Permissions map[string]string      `yaml:"permissions"`
+		Jobs        map[string]workflowJob `yaml:"jobs"`
+	}
+	if err := yaml.Unmarshal([]byte(raw), &wf); err != nil {
+		t.Fatal(err)
+	}
+	contentsRead := map[string]string{"contents": "read"}
+	if !maps.Equal(wf.Permissions, contentsRead) {
+		t.Errorf("top-level permissions %v, want %v", wf.Permissions, contentsRead)
+	}
+
+	pinned := regexp.MustCompile(`^[\w.-]+/[\w./-]+@[0-9a-f]{40}$`)
+	for name, job := range wf.Jobs {
+		for _, s := range job.Steps {
+			if s.Uses != "" && !pinned.MatchString(s.Uses) {
+				t.Errorf("job %s: %q is not pinned to a commit", name, s.Uses)
+			}
+			if strings.HasPrefix(s.Uses, "actions/checkout@") && s.With["persist-credentials"] != false {
+				t.Errorf("job %s: checkout keeps the token: persist-credentials %v", name, s.With["persist-credentials"])
+			}
+		}
+	}
+	for _, line := range strings.Split(raw, "\n") {
+		if strings.Contains(line, "uses:") && !regexp.MustCompile(`@[0-9a-f]{40} # v\d`).MatchString(line) {
+			t.Errorf("%q names no version after its pin", strings.TrimSpace(line))
+		}
+	}
+
+	canary, ok := wf.Jobs["canary"]
+	if !ok {
+		t.Fatal("no job canary")
+	}
+	if !maps.Equal(canary.Permissions, contentsRead) {
+		t.Errorf("job canary permissions %v, want only %v", canary.Permissions, contentsRead)
+	}
+	b, err := yaml.Marshal(canary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, word := range []string{"secrets.", "github.token", "GH_TOKEN", "GITHUB_TOKEN"} {
+		if strings.Contains(string(b), word) {
+			t.Errorf("job canary names %s", word)
+		}
+	}
+	if n := len(canary.Steps); n == 0 || !strings.Contains(canary.Steps[n-1].If, "steps.run.outcome == 'failure'") ||
+		!strings.Contains(canary.Steps[n-1].If, "github.event_name == 'pull_request'") {
+		t.Error("job canary does not end with a step that fails a pull request when the canary fails")
+	}
+	if i := slices.IndexFunc(canary.Steps, func(s workflowStep) bool { return s.ID == "run" }); i < 0 || !canary.Steps[i].ContinueOnError {
+		t.Error("job canary has no step run with continue-on-error, so a break never reaches report")
+	}
+
+	report, ok := wf.Jobs["report"]
+	if !ok {
+		t.Fatal("no job report")
+	}
+	if want := map[string]string{"contents": "read", "issues": "write"}; !maps.Equal(report.Permissions, want) {
+		t.Errorf("job report permissions %v, want %v", report.Permissions, want)
+	}
+	if report.Needs != "canary" {
+		t.Errorf("job report needs %v, want canary", report.Needs)
+	}
+	if !strings.Contains(report.If, "always()") || !strings.Contains(report.If, "github.event_name != 'pull_request'") {
+		t.Errorf("job report runs if %q, want always() and never on a pull request", report.If)
+	}
+	agent := regexp.MustCompile(`\b(npm|npx|node|go|claude|codex|opencode)\b`)
+	runs := 0
+	for _, s := range report.Steps {
+		if s.Run == "" {
+			continue
+		}
+		runs++
+		if run := strings.TrimSpace(s.Run); strings.Contains(run, "\n") || !strings.HasPrefix(run, ".github/scripts/canary-report.sh ") {
+			t.Errorf("job report runs %q, want only canary-report.sh", run)
+		}
+		if agent.MatchString(s.Run) {
+			t.Errorf("job report runs an agent or a toolchain: %q", s.Run)
+		}
+	}
+	if runs != 1 {
+		t.Errorf("job report has %d run steps, want one: canary-report.sh", runs)
 	}
 }

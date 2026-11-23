@@ -94,7 +94,7 @@ Next: builder:build
   - `TestCanaryReportOpensOneIssue`: one failed result, no open issue → one `issue create --label canary --title "Claude Code 2.1.331 draws a screen matchblox cannot read" --body-file …`. The body holds the version, the check, the screen in a code block, the fixture name `testdata/menus/claude-bash-2.1.331.txt`, and the marker `<!-- canary claude 2.1.331 fail -->`.
   - `TestCanaryReportCommentsOnANewerVersion`: the open issue's last marker is `claude 2.1.331 fail`; the result is 2.1.332 failed → one `issue comment`, no `issue create`.
   - `TestCanaryReportStaysQuietOnTheSameVersion`: the last marker is `claude 2.1.331 fail`; the result is 2.1.331 failed → no `gh` write.
-  - `TestCanaryReportSaysItReadsAgain`: an open issue, the result ok → one comment `reads again in 2.1.332`, with marker `pass`; a second run with that marker writes nothing.
+  - `TestCanaryReportSaysItReadsAgain`: an open issue, the result ok → one comment `matchblox reads Claude Code 2.1.332 again.`, with marker `pass`; a second run with that marker writes nothing.
   - `TestCanaryReportCouldNotRun`: a result with check `could not run` → an issue titled `the canary could not run Codex: codex is not installed`, and exit 1.
   - `TestCanaryReportNeedsResults`: an empty folder → exit 1, `no canary results: the canary tested nothing`.
 - **Run:** `go test ./internal/release -run TestCanaryReport`. Before: fails, the script does not exist. After: passes.
@@ -174,6 +174,7 @@ Next: builder:build
 - 2026-11-23: Task 3 adds `internal/said/main_test.go` (`//go:build canary`): the repo guard `TestEveryTestTmuxNamesItsServer` needs a TestMain that calls `testhome.Run` in any package whose tests start tmux.
 - 2026-11-23: Task 3's `agent` has `env(home, url, binDir)`, `version` runs with that env (never the real home), and `stand` makes a fresh stand-in per attempt that counts tool requests.
 - 2026-11-23: a `could not run` result carries its reason in `screen`; a run whose stand-in got no tool request is `could not run`, not a screen break (spec: a canary that tests nothing must not be green).
+- 2026-11-23: the could-not-run issue title has no version (`the canary could not run Codex: <reason>`); the version is in the body and the marker. The spec's example `Codex 0.99:` is only an example.
 
 ## Calls
 
