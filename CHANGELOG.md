@@ -6,6 +6,14 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **The phone holds its own console.** With the desk and Pocket on at
+  once, each resized the other: the phone joined the desk's console.
+  Now the phone gets a console of its own, sized to the phone, and a
+  session you open in Pocket opens there. Two screens inside the same
+  agent's pane still share its size.
+
 ## [0.57.1] - 2026-11-23
 
 ### Fixed

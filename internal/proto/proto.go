@@ -138,6 +138,9 @@ type Act struct {
 	Confirm string `json:"confirm,omitempty"` // "y" for a destructive action
 	// Text is what the person typed for an "answer:<pane>" act.
 	Text string `json:"text,omitempty"`
+	// Session is the console session a "focus:<n>" act opens on: the
+	// phone's own, which the gate picked.
+	Session string `json:"session,omitempty"`
 	// From is the tmux pane the act was typed in ($TMUX_PANE of the CLI).
 	// Where the service knows the caller's pid, it finds the pane itself
 	// and this is ignored.

@@ -38,25 +38,23 @@ func TestHomeArgvInsideTmuxRunsInPlace(t *testing.T) {
 }
 
 // TestHomeSessionName: a terminal joins the first console while no other
-// terminal shows it, or when it asks to join (the phone); else it opens the
-// first console name that no session has.
+// terminal shows it; else it opens the first console name that no session
+// has. The phone is one more terminal (#486).
 func TestHomeSessionName(t *testing.T) {
 	for _, c := range []struct {
 		why      string
 		attached map[string]int
-		join     bool
 		want     string
 	}{
-		{"no tmux server", nil, false, "matchblox"},
-		{"no console yet", map[string]int{"work": 1}, false, "matchblox"},
-		{"the first console with no terminal", map[string]int{"matchblox": 0}, false, "matchblox"},
-		{"the first console shown", map[string]int{"matchblox": 1}, false, "matchblox-2"},
-		{"two consoles shown", map[string]int{"matchblox": 1, "matchblox-2": 1}, false, "matchblox-3"},
-		{"a gap", map[string]int{"matchblox": 2, "matchblox-3": 1}, false, "matchblox-2"},
-		{"the phone joins", map[string]int{"matchblox": 1}, true, "matchblox"},
+		{"no tmux server", nil, "matchblox"},
+		{"no console yet", map[string]int{"work": 1}, "matchblox"},
+		{"the first console with no terminal", map[string]int{"matchblox": 0}, "matchblox"},
+		{"the first console shown", map[string]int{"matchblox": 1}, "matchblox-2"},
+		{"two consoles shown", map[string]int{"matchblox": 1, "matchblox-2": 1}, "matchblox-3"},
+		{"a gap", map[string]int{"matchblox": 2, "matchblox-3": 1}, "matchblox-2"},
 	} {
-		if got := HomeSession(c.attached, c.join); got != c.want {
-			t.Errorf("%s: HomeSession(%v, %v) = %q, want %q", c.why, c.attached, c.join, got, c.want)
+		if got := HomeSession(c.attached); got != c.want {
+			t.Errorf("%s: HomeSession(%v) = %q, want %q", c.why, c.attached, got, c.want)
 		}
 	}
 }
@@ -66,10 +64,10 @@ func TestHomeSessionName(t *testing.T) {
 // now, but that terminal comes back to it: a new terminal opens its own.
 func TestAConsoleWhoseTerminalIsInAnAgentIsTaken(t *testing.T) {
 	listing := "matchblox\t0\t\nmatchblox-in-1\t1\tmatchblox\nwork\t0\t\n"
-	if got := HomeSession(ParseHomeList(listing), false); got != "matchblox-2" {
+	if got := HomeSession(ParseHomeList(listing)); got != "matchblox-2" {
 		t.Errorf("HomeSession = %q, want matchblox-2", got)
 	}
-	if got := HomeSession(ParseHomeList("matchblox\t0\t\nwork\t1\t\n"), false); got != Home {
+	if got := HomeSession(ParseHomeList("matchblox\t0\t\nwork\t1\t\n")); got != Home {
 		t.Errorf("HomeSession with no terminal for the console = %q, want %s", got, Home)
 	}
 }

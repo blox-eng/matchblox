@@ -1413,10 +1413,10 @@ const focusGone = "That session ended."
 // for each focus the service sends, on Sessions: its pane on the phone's own
 // tmux client. A form, sheet, pair page or take-over keeps the keys: what the
 // person types there is not thrown away, nor sent to another agent. Only
-// the first console takes it: the phone joins that one, and a second
-// terminal's console is not the phone's.
+// the console the focus names takes it, the phone's own (#486); a focus
+// that names none (an older gate's) is the first console's.
 func (m Model) takeFocus(f *proto.Focus) (Model, tea.Cmd) {
-	if f == nil || f.At.Equal(m.focusAt) || m.consoleSession() != "matchblox" {
+	if f == nil || f.At.Equal(m.focusAt) || m.consoleSession() != cmp.Or(f.Console, "matchblox") {
 		return m, nil
 	}
 	m.focusAt = f.At

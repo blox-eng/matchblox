@@ -131,6 +131,7 @@ func gateWith(t *testing.T, tty string, args ...string) (home string, ran []stri
 	t.Setenv("HOME", home)
 	t.Setenv("SSH_TTY", tty)
 	t.Setenv("SSH_ORIGINAL_COMMAND", remote.ConsoleCommand)
+	t.Setenv(panes.ConsoleEnv, "") // the gate sets it: it goes back after the test
 	oldArgs, oldRun := os.Args, gateRun
 	t.Cleanup(func() { os.Args, gateRun = oldArgs, oldRun })
 	gateRun = func(argv []string) error { ran = argv; return nil }
@@ -152,15 +153,23 @@ func TestGatePhoneWithIDMarksTheDevice(t *testing.T) {
 	}
 }
 
-// TestAPhoneJoinsTheFirstConsole: a phone shows the desk's first console,
-// not a console of its own.
-func TestAPhoneJoinsTheFirstConsole(t *testing.T) {
-	t.Setenv(panes.JoinEnv, "")
+// TestAPhoneOpensAConsoleOfItsOwn: the desk shows the first console, so
+// the phone gets the next one, sized to the phone; the desk's keeps its
+// size (#486). The gate picks the name once and the console runs in it.
+func TestAPhoneOpensAConsoleOfItsOwn(t *testing.T) {
+	old := homeListing
+	t.Cleanup(func() { homeListing = old })
+	homeListing = func() string { return "matchblox\t1\t\n" }
 	if _, ran := gateWith(t, "/dev/ttys004", "phone"); ran == nil {
 		t.Fatal("the console did not run")
 	}
-	if got := os.Getenv(panes.JoinEnv); got != "1" {
-		t.Errorf("%s = %q, want 1", panes.JoinEnv, got)
+	if got := os.Getenv(panes.ConsoleEnv); got != "matchblox-2" {
+		t.Errorf("%s = %q, want matchblox-2", panes.ConsoleEnv, got)
+	}
+	// A name the gate's own environment brings is not the phone's pick.
+	t.Setenv(panes.ConsoleEnv, "matchblox")
+	if got := nextConsole(); got != "matchblox-2" {
+		t.Errorf("nextConsole with %s=matchblox = %q, want matchblox-2", panes.ConsoleEnv, got)
 	}
 }
 
@@ -303,18 +312,22 @@ func TestGateOpenFocusesThenRunsTheConsole(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("SSH_TTY", "/dev/ttys004")
 	t.Setenv("SSH_ORIGINAL_COMMAND", "matchblox console --open 12")
+	t.Setenv(panes.ConsoleEnv, "")
 	oldArgs, oldRun, oldFocus := os.Args, gateRun, gateFocus
 	t.Cleanup(func() { os.Args, gateRun, gateFocus = oldArgs, oldRun, oldFocus })
 	var steps []string
-	gateFocus = func(n int, tty string) error {
-		steps = append(steps, fmt.Sprint("focus ", n, " ", tty))
+	oldListing := homeListing
+	t.Cleanup(func() { homeListing = oldListing })
+	homeListing = func() string { return "matchblox\t1\t\n" }
+	gateFocus = func(n int, tty, console string) error {
+		steps = append(steps, fmt.Sprint("focus ", n, " ", tty, " ", console))
 		return errors.New("no service")
 	}
 	gateRun = func(argv []string) error { steps = append(steps, fmt.Sprintf("run %q", argv)); return nil }
 	if err := gateMain([]string{"phone", "0123456789ab"}); err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(steps, []string{"focus 12 /dev/ttys004", `run []`}) {
+	if !slices.Equal(steps, []string{"focus 12 /dev/ttys004 matchblox-2", `run []`}) {
 		t.Fatalf("steps %q", steps)
 	}
 	if _, tty, ok := setup.DeviceIn(home, "0123456789ab"); !ok || tty != "/dev/ttys004" {
@@ -338,13 +351,13 @@ func TestGateFocusIsBounded(t *testing.T) {
 	err := sendFocus(func(proto.Act) (proto.Result, error) {
 		time.Sleep(5 * time.Second)
 		return proto.Result{}, nil
-	}, 12, "/dev/ttys004")
+	}, 12, "/dev/ttys004", "")
 	if err == nil || time.Since(start) > 2*time.Second {
 		t.Fatalf("sendFocus = %v after %v", err, time.Since(start))
 	}
 	var got proto.Act
-	if err := sendFocus(func(a proto.Act) (proto.Result, error) { got = a; return proto.Result{}, nil }, 12, "/dev/ttys004"); err != nil ||
-		got.RecID != "focus:12" || got.Text != "/dev/ttys004" {
+	if err := sendFocus(func(a proto.Act) (proto.Result, error) { got = a; return proto.Result{}, nil }, 12, "/dev/ttys004", "matchblox-2"); err != nil ||
+		got.RecID != "focus:12" || got.Text != "/dev/ttys004" || got.Session != "matchblox-2" {
 		t.Fatalf("sendFocus = %v, act %+v", err, got)
 	}
 }

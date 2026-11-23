@@ -512,16 +512,31 @@ func goHome() error {
 	if self == "" {
 		return nil
 	}
-	var listing []byte
-	if err == nil {
-		listing, _ = exec.Command(tmux, panes.HomeListArgv()[1:]...).Output() // no server: no session
-	}
-	name := panes.HomeSession(panes.ParseHomeList(string(listing)), os.Getenv(panes.JoinEnv) == "1")
-	argv := panes.HomeArgv(os.Getenv("TMUX") != "", err == nil, name, append([]string{self}, os.Args[1:]...))
+	argv := panes.HomeArgv(os.Getenv("TMUX") != "", err == nil, homeName(), append([]string{self}, os.Args[1:]...))
 	if argv == nil {
 		return nil
 	}
 	return execve(tmux, argv, os.Environ())
+}
+
+// homeName is the console session a new console runs in: the one the gate
+// picked (panes.ConsoleEnv), else the next free one (panes.HomeSession).
+func homeName() string {
+	if name := os.Getenv(panes.ConsoleEnv); remote.ConsoleSession(name) {
+		return name
+	}
+	return nextConsole()
+}
+
+// homeListing is tmux's listing of sessions for homeName: "" with no tmux
+// or no server. Tests replace it.
+var homeListing = func() string {
+	tmux, err := exec.LookPath("tmux")
+	if err != nil {
+		return ""
+	}
+	out, _ := exec.Command(tmux, panes.HomeListArgv()[1:]...).Output()
+	return string(out)
 }
 
 // hookTimeout bounds the whole delivery, the event and the ask for news
