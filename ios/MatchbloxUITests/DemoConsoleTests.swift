@@ -202,7 +202,7 @@ final class DemoConsoleTests: XCTestCase {
         terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: (Double(row) + 0.5) / Double(rows.count))).press(forDuration: 1.2)
         let menu = copyShows(in: app)
         keep(app, "10 hold in the chat")
-        // value: press= release= right= (clicks sent), hold= (SwiftTerm's long-press began), menu=
+        // value: press= release= right= (clicks sent), hold= (SwiftTerm's long-press began)
         let counts = terminal.value as? String ?? ""
         XCTAssertTrue(counts.contains("right=0"), "a hold in the chat sent a right click: \(counts)")
         XCTAssertFalse(counts.contains("hold=0"), "SwiftTerm's long-press did not begin: \(counts)")

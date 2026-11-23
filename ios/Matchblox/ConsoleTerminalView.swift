@@ -171,31 +171,18 @@ final class ConsoleTerminalView: TerminalView {
 
     #if DEBUG
     /// The demo's UI test reads the clicks the terminal sent (`countClicks`), then how often
-    /// SwiftTerm's own long-press began and how often its edit menu showed after it.
+    /// SwiftTerm's own long-press began.
     var clickNote = "press=0 release=0 right=0" { didSet { showNote() } }
     private var terminalHolds = 0
-    /// What the hold's selection was at its start and at the lift (#492).
-    private var liftNote = ""
-    private var menusShown = 0
 
     @objc private func terminalHeld(_ press: UILongPressGestureRecognizer) {
         guard press.state == .began else { return }
         terminalHolds += 1
         showNote()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-            guard let self else { return }
-            if UIMenuController.shared.isMenuVisible { menusShown += 1 }
-            showNote()
-        }
-    }
-
-    /// The terminal's size in cells and points, and whether it has the keys.
-    private var sizeNote: String {
-        "\(getTerminal().cols)x\(getTerminal().rows)/\(Int(bounds.width))x\(Int(bounds.height))/fr=\(isFirstResponder)"
     }
 
     private func showNote() {
-        accessibilityValue = "\(clickNote) hold=\(terminalHolds) menu=\(menusShown) \(liftNote)"
+        accessibilityValue = "\(clickNote) hold=\(terminalHolds)"
     }
     #endif
 
@@ -330,8 +317,9 @@ final class ConsoleTerminalView: TerminalView {
         send(BoardTouch.rightClick(col: spot.col, row: spot.row))
     }
 
-    /// SwiftTerm's long-press began: the word under the finger is selected. A drag of the same press moves the far end, the word's other
-    /// end staying put, and the menu, Copy with it, shows when the finger lifts.
+    /// SwiftTerm's long-press began: the word under the finger is selected. A drag of the same
+    /// press moves the far end, the word's other end staying put, and the menu, Copy with it,
+    /// shows when the finger lifts.
     @objc private func selectHeld(_ press: UILongPressGestureRecognizer) {
         switch press.state {
         case .began:
@@ -340,10 +328,6 @@ final class ConsoleTerminalView: TerminalView {
                 selection.selectWordOrExpression(at: Position(col: spot.col, row: spot.row + buffer.yDisp), in: buffer)
             }
             heldWord = selection.active ? (selection.start, selection.end) : nil
-            #if DEBUG
-            liftNote = "began=\(selection.active)@\(sizeNote)"
-            showNote()
-            #endif
         case .changed:
             guard let word = heldWord, let spot = cell(at: press.location(in: self)) else { return }
             let at = Position(col: spot.col, row: spot.row + getTerminal().buffer.yDisp)
@@ -351,15 +335,6 @@ final class ConsoleTerminalView: TerminalView {
             selection.pivotExtend(row: spot.row, col: spot.col)
         case .ended:
             heldWord = nil
-            #if DEBUG
-            liftNote += " lift=\(selection.active)/\(selection.getSelectedText().count)@\(sizeNote) mouse=\(allowMouseReporting)"
-            showNote()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-                guard let self else { return }
-                liftNote += " shown=\(UIMenuController.shared.isMenuVisible)/\(selection.active)@\(sizeNote)"
-                showNote()
-            }
-            #endif
             selecting = false
             guard selection.active else { return }
             UIMenuController.shared.hideMenu()
@@ -489,16 +464,6 @@ final class ConsoleTerminalView: TerminalView {
     /// turns it back on.
     override func selectionChanged(source: Terminal) {
         allowMouseReporting = !selection.active
-        #if DEBUG
-        if !selection.active, heldWord == nil, liftNote.contains("lift=") {
-            // Who ends a hold's selection (#492): the frames that called this, short names.
-            let frames = Thread.callStackSymbols.dropFirst(1).prefix(10).map { line in
-                line.split(separator: " ", omittingEmptySubsequences: true).dropFirst(3).first.map(String.init) ?? "?"
-            }
-            liftNote += " cleared@\(sizeNote)=" + frames.prefix(4).joined(separator: ">")
-            showNote()
-        }
-        #endif
         super.selectionChanged(source: source)
         onSelectedLink(selection.active ? TerminalLink.url(inSelection: selection.getSelectedText()) : nil)
     }
