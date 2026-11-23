@@ -258,12 +258,12 @@ func (m Model) onChoice() Model {
 }
 
 // clearBoardFilters is a tap on the count: NEEDS YOU shows, every chain,
-// host and search goes, and the first wait is chosen.
+// space, host and search goes, and the first wait is chosen.
 func (m *Model) clearBoardFilters() {
 	if m.room != nil { // the room is the narrowing: both go
 		*m = m.closeRoom()
 	}
-	m.boardChain, m.boardHost, m.filter, m.searching = "", "", "", false
+	m.boardChain, m.boardHost, m.space, m.filter, m.searching = "", "", "", "", false
 	m.refresh()
 	m.peekAt = m.now()
 }

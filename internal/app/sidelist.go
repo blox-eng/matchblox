@@ -163,6 +163,18 @@ func (m Model) buildSideGroups() []sideGroup {
 		})
 	}
 	listed := slices.DeleteFunc(m.sideSessions(), func(s sample.Session) bool { return !m.inView(s.Host) })
+	if m.space != "" { // a chain with a member in the space shows whole: the owner's ruling, don't break the chains
+		open := map[chainKey]bool{}
+		for _, s := range listed {
+			if k, ok := m.chainKeyOf(s); ok && m.inSpace(s) {
+				open[k] = true
+			}
+		}
+		listed = slices.DeleteFunc(listed, func(s sample.Session) bool {
+			k, ok := m.chainKeyOf(s)
+			return !m.inSpace(s) && !(ok && open[k])
+		})
+	}
 	isListed := map[paneKey]bool{}
 	inChain := map[chainKey][]sample.Session{} // the listed matches of each chain, in list order
 	for _, s := range listed {
@@ -208,7 +220,7 @@ func (m Model) buildSideGroups() []sideGroup {
 	}
 	for _, host := range m.hosts() { // a chain with no listed match still shows the members that wait
 		cv := m.chainsOf(host)
-		if cv == nil || !m.inView(host) {
+		if cv == nil || !m.inView(host) || m.space != "" { // a member that waits works in no repo the list knows
 			continue
 		}
 		for _, c := range cv.Chains {

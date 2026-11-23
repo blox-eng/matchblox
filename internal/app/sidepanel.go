@@ -358,7 +358,8 @@ func btoi(b bool) int {
 }
 
 // sideWords is what the list says in place of rows: before the first
-// state, and for a search that matches nothing.
+// state, for a search that matches nothing, and for a space with no
+// session on the hosts in view.
 func (m Model) sideWords(w int) []string {
 	st := m.st
 	switch {
@@ -367,6 +368,12 @@ func (m Model) sideWords(w int) []string {
 	case m.filter != "":
 		text := `Nothing matches "` + m.filter + `". ` + m.keys.main.Back.Help().Key + " clears the search."
 		return []string{fit(" "+st.muted.Render(ansi.Truncate(text, max(w-1, 1), "…")), w)}
+	case m.space != "":
+		var out []string
+		for _, l := range wrapPlain(m.spaceEmpty(), max(w-2, 1)) { // the way out must show whole
+			out = append(out, fit(" "+st.muted.Render(l), w))
+		}
+		return out
 	}
 	return nil
 }

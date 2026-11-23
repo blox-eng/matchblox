@@ -768,9 +768,11 @@ func (m *Model) flipExited() tea.Cmd {
 	return nil
 }
 
-// sideWaits are the sessions that need you, as the list draws them: what
-// the header names while the list is hidden.
+// sideWaits are the sessions that need you, as the list draws them with no
+// space and no host shown: what the header names while the list is
+// hidden, as its count counts them.
 func (m Model) sideWaits() []sample.Session {
+	m = m.everyWait()
 	var out []sample.Session
 	for _, g := range m.sideGroups() {
 		if g.state != sideNeed {
@@ -800,12 +802,20 @@ func (m Model) sideTitle(s sample.Session) string {
 	return title
 }
 
+// everyWait is m with no space and no host shown: no filter hides a wait
+// from the header.
+func (m Model) everyWait() Model {
+	m.space, m.boardHost, m.side = "", "", nil
+	return m
+}
+
 // headNames is what the header says while the list is hidden: the name of
 // each session that needs you. "" while the list shows.
 func (m Model) headNames() []string {
 	if !m.sideActive() || m.listShown() || !m.have {
 		return nil
 	}
+	m = m.everyWait() // a name taken from another host says its host
 	var names []string
 	for _, s := range m.sideWaits() {
 		names = append(names, m.sideTitle(s))

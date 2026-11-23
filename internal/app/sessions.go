@@ -85,7 +85,7 @@ func (m Model) groupLabel(s sample.Session) string { return groupNames[m.needGro
 // repoOf is the repository a session works in: the checkout its directory
 // is in, else the directory's own name.
 func (m Model) repoOf(s sample.Session) string {
-	if repo, _, ok := proto.RepoOf(m.git, s.Cwd); ok {
+	if repo, _, ok := proto.RepoOf(m.gitOf(s.Host), s.Cwd); ok {
 		return filepath.Base(repo)
 	}
 	if s.Cwd == "" {

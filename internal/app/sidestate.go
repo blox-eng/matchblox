@@ -86,9 +86,14 @@ func (m Model) needCount() int { return m.countIn(sideNeed) }
 func (m Model) countIn(h sideState) int {
 	n := 0
 	for _, s := range m.sideSessions() {
-		if m.sideStateOf(s) == h && !m.stale(s.Host) && (!m.hostHidden(s.Host) || m.inView(s.Host)) {
+		if m.sideStateOf(s) == h && m.counts(s) {
 			n++
 		}
 	}
 	return n
+}
+
+// counts: s is on a host reached, and not hidden from the view.
+func (m Model) counts(s sample.Session) bool {
+	return !m.stale(s.Host) && (!m.hostHidden(s.Host) || m.inView(s.Host))
 }

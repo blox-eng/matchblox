@@ -42,6 +42,7 @@ func (m Model) chatPanel(w, h int) []string {
 		for _, l := range wrapPlain(listed[i].Name+" runs outside tmux, and its process is not known: nothing to write to", max(w-2, 1)) {
 			lines = append(lines, fit(" "+m.st.muted.Render(l), w))
 		}
+	case m.space != "" && (k.pane == "" || i < 0): // the list says why the space shows none
 	case k.pane == "" || i < 0:
 		text := "No sessions yet. + new session starts one here (" + m.keys.main.New.Help().Key + "). matchblox setup finds the agents you already run."
 		lines = append(lines, blank)

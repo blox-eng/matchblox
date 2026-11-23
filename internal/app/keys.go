@@ -161,12 +161,14 @@ func defaultKeys() keymaps {
 			Copy:   bind(ks("c"), "c", "copy the link"),
 		},
 		board: boardKeys{
-			Copy:  bind(ks("c"), "c", "copy"),
-			Chain: bind(ks("g"), "g", "chain"),
-			Room:  bind(ks("G", "shift+g"), "G", "room"), // beside the list only: g shows the chain there
-			Host:  bind(ks("s"), "s", "hosts"),
-			Menu:  bind(ks("m"), "m", "menu"),
-			Merge: bind(ks("p"), "p", "merge"),
+			Copy:        bind(ks("c"), "c", "copy"),
+			Chain:       bind(ks("g"), "g", "chain"),
+			Room:        bind(ks("G", "shift+g"), "G", "room"), // beside the list only: g shows the chain there
+			Host:        bind(ks("s"), "s", "hosts"),
+			Menu:        bind(ks("m"), "m", "menu"),
+			Merge:       bind(ks("p"), "p", "merge"),
+			SpaceBefore: bind(ks("["), "[ ]", "space"),
+			SpaceAfter:  bind(ks("]"), "[ ]", "space"),
 		},
 		side: sideKeys{
 			Enter:    bind(ks("enter"), "⏎", "send"),
@@ -296,10 +298,11 @@ func (k askKeys) bindings() []bkey.Binding { return []bkey.Binding{k.Send, k.Can
 // shows: ↑ ↓ ⏎ x y esc and the rest keep their mainKeys bindings.
 type boardKeys struct {
 	Copy, Chain, Room, Host, Menu, Merge bkey.Binding
+	SpaceBefore, SpaceAfter              bkey.Binding
 }
 
 func (k boardKeys) bindings() []bkey.Binding {
-	return []bkey.Binding{k.Copy, k.Chain, k.Room, k.Host, k.Menu, k.Merge}
+	return []bkey.Binding{k.Copy, k.Chain, k.Room, k.Host, k.Menu, k.Merge, k.SpaceBefore, k.SpaceAfter}
 }
 
 // sideKeys are the chat's line and the list beside it. In the line every

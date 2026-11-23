@@ -262,6 +262,10 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 			m = m.closeRoom()
 		case m.boardChain != "":
 			m.boardChain, m.peekAt = "", m.now()
+		case m.space != "":
+			m.space, m.peekAt = "", m.now()
+		case m.boardHost != "":
+			m.boardHost, m.peekAt = "", m.now()
 		default:
 			cmd = m.listTakes()
 		}
@@ -271,6 +275,14 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 		cmd = m.notice(m.noRowWhy())
 	case bkey.Matches(k, bk.Host):
 		if said := m.turnHost(); said != "" {
+			cmd = m.notice(said)
+		}
+	case bkey.Matches(k, bk.SpaceBefore, bk.SpaceAfter):
+		by := 1
+		if bkey.Matches(k, bk.SpaceBefore) {
+			by = -1
+		}
+		if said := m.turnSpace(by); said != "" {
 			cmd = m.notice(said)
 		}
 	case bkey.Matches(k, sk.Unhide):
@@ -331,6 +343,8 @@ func (m Model) noRowWhy() string {
 		return v.Wait.Name + " waits for recover · matchblox recover reopens it"
 	case m.filter != "":
 		return `nothing matches "` + m.filter + `" · ` + m.keys.main.Back.Help().Key + " clears"
+	case m.space != "":
+		return m.spaceEmpty()
 	case m.boardHost != "":
 		return "no match on " + m.boardHost + " · " + m.keys.board.Host.Help().Key + " turns the host"
 	}
