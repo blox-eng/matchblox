@@ -20,9 +20,11 @@ on:
       - .github/workflows/canary.yml
       - .github/scripts/canary-report.sh
 
+# Only a pull request's newer push cancels: report still runs after a cancel,
+# so a manual run that cancelled the daily one would file false issues.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read

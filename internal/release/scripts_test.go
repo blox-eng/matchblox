@@ -776,11 +776,19 @@ type workflowJob struct {
 func TestCanaryWorkflowKeepsTheTokenFromAgents(t *testing.T) {
 	raw := read(t, filepath.Join("..", "..", ".github", "workflows", "canary.yml"))
 	var wf struct {
-		Permissions map[string]string      `yaml:"permissions"`
-		Jobs        map[string]workflowJob `yaml:"jobs"`
+		Permissions map[string]string `yaml:"permissions"`
+		Concurrency struct {
+			CancelInProgress string `yaml:"cancel-in-progress"`
+		} `yaml:"concurrency"`
+		Jobs map[string]workflowJob `yaml:"jobs"`
 	}
 	if err := yaml.Unmarshal([]byte(raw), &wf); err != nil {
 		t.Fatal(err)
+	}
+	// A manual run on main must never cancel the daily one: report still
+	// runs after a cancel and would file false issues.
+	if want := "${{ github.event_name == 'pull_request' }}"; wf.Concurrency.CancelInProgress != want {
+		t.Errorf("concurrency cancel-in-progress %q, want %q", wf.Concurrency.CancelInProgress, want)
 	}
 	contentsRead := map[string]string{"contents": "read"}
 	if !maps.Equal(wf.Permissions, contentsRead) {
