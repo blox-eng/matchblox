@@ -242,7 +242,7 @@ function list(){
   for(const st of ORDER){
     const G=us.filter(u=>u.r===ORDER.indexOf(st));if(!G.length)continue;
     if(!first)out.push([g("─".repeat(LW),"hr")]);first=false;
-    out.push(cut([g(" "+HEAD[st]+" · "+V.filter(x=>x.st===st).length+"  −","fa")],LW));
+    out.push(cut([g(" "+HEAD[st]+" · "+G.reduce((n,u)=>n+(u.solo?(u.solo.st===st?1:0):u.ms.filter(m=>m.st===st).length),0)+"  −","fa")],LW));
     if(st==="ask"||st==="done")G.sort((a,b)=>(b.solo?b.solo.t:Math.max(...b.ms.map(m=>m.t)))-(a.solo?a.solo.t:Math.max(...a.ms.map(m=>m.t))));
     for(const u of G){
       if(u.solo){out.push(...rowLines(u.solo));continue;}
