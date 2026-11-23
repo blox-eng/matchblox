@@ -3,7 +3,7 @@ import Foundation
 /// The Board layout's keys, as the console's board signal says them (`keycmd.BoardSignal`,
 /// `beltWord` in Go). The value is `box` under the consent box, `menu` under the row's menu,
 /// or `card;dim`: the chosen session's keys that are on (`*` after the armed one), then the
-/// keys that are off. Home is `◂` (back to the list), the session's keys (at most three), then
+/// keys that are off, and `;chat` after them while the chat takes the whole screen. Home is `◂` (back to the list), the session's keys (at most three), then
 /// `↑ ↓ ⏎`; the tail has the list's keys. A key that is off is dim and sends nothing. A token
 /// the app does not know is not drawn.
 public struct BoardBelt: Equatable, Sendable {
@@ -16,6 +16,8 @@ public struct BoardBelt: Equatable, Sendable {
     public let armed: String?
     /// The tokens of the keys that are off.
     public let dim: Set<String>
+    /// The chat takes the whole screen: the list and its row menu are not on it.
+    public let chat: Bool
 
     /// The app's answer to each value it takes while its belt shows Board (`keycmd.BeltKey`).
     public static let answer = Array("\u{1b}_matchblox;belt\u{1b}\\".utf8)
@@ -31,11 +33,12 @@ public struct BoardBelt: Equatable, Sendable {
     /// `c copy reply` comes first, so with a short card it shows at rest: no drag to copy.
     private static let tail = ["c", "ctrl+o", "s", "g", "/", "m", "z", "N", "tab", "x"]
 
-    private init(shape: Shape, card: [String], armed: String?, dim: Set<String>) {
+    private init(shape: Shape, card: [String], armed: String?, dim: Set<String>, chat: Bool = false) {
         self.shape = shape
         self.card = card
         self.armed = armed
         self.dim = dim
+        self.chat = chat
     }
 
     /// The board a value says, or nil for the empty value: the console left the board. A value
@@ -46,6 +49,8 @@ public struct BoardBelt: Equatable, Sendable {
         case "box": self.init(shape: .box, card: [], armed: nil, dim: [])
         case "menu": self.init(shape: .menu, card: [], armed: nil, dim: [])
         default:
+            let chat = value.hasSuffix(";chat")
+            let value = chat ? String(value.dropLast(";chat".count)) : value
             guard let split = value.firstIndex(of: ";") else {
                 self.init(shape: .board, card: [], armed: nil, dim: [])
                 return
@@ -62,7 +67,7 @@ public struct BoardBelt: Equatable, Sendable {
             let dim = list(value[value.index(after: split)...])
             let off = dim.filter { Self.cardTokens.contains($0) && !card.contains($0) }
             card += off
-            self.init(shape: .board, card: Array(card.prefix(Self.maxCard)), armed: armed, dim: Set(dim))
+            self.init(shape: .board, card: Array(card.prefix(Self.maxCard)), armed: armed, dim: Set(dim), chat: chat)
         }
     }
 
@@ -211,9 +216,10 @@ public struct BoardFollow: Sendable {
         return said
     }
 
-    /// The terminal's long-press is the row's menu only while the console shows Sessions or
-    /// Machine. The list and the chat have no pages, so no sideways swipe turns one.
-    public var opensMenu: Bool { shows }
+    /// The terminal's long-press is the row's menu only while the console shows the list of
+    /// Sessions or Machine; while the chat takes the screen it selects text. The list and the
+    /// chat have no pages, so no sideways swipe turns one.
+    public var opensMenu: Bool { shows && said?.chat != true }
 
     /// The console sent `value`. Returns the layout to turn to, or nil to stay.
     public mutating func heard(_ value: String, on layout: BeltLayout) -> BeltLayout? {

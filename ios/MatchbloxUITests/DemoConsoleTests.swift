@@ -184,6 +184,28 @@ final class DemoConsoleTests: XCTestCase {
         XCTAssertFalse(app.keyboards.firstMatch.exists, "the second tap raised the keyboard")
     }
 
+    /// In the chat a hold is the terminal's own: its Select / Paste menu shows. On the list the
+    /// hold opens the row's menu (`goInto`) (#485).
+    @MainActor
+    func testAHoldInTheChatOffersToSelect() {
+        let app = launched()
+        expect(in: app, "label CONTAINS %@", "NEEDS YOU")
+        let terminal = app.descendants(matching: .any)["demo-terminal"]
+        waitUntilSteady(terminal)
+        openTheChat(app, row: "flint-auth")
+        expect(in: app, step: "the chat's question after the tap", "label CONTAINS %@ AND label CONTAINS %@", "send to flint-auth", "2. Rotate, keep")
+        waitUntilSteady(terminal)
+        let rows = terminal.label.components(separatedBy: "\n")
+        guard let row = rows.firstIndex(where: { $0.contains("2. Rotate, keep") }) else {
+            return XCTFail("no row shows the question: \(terminal.label)")
+        }
+        terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: (Double(row) + 0.5) / Double(rows.count))).press(forDuration: 1.2)
+        let menu = app.menuItems["Paste"].firstMatch.waitForExistence(timeout: 5) || app.menuItems["Select"].firstMatch.exists
+        keep(app, "10 hold in the chat")
+        XCTAssertTrue(menu, "a hold in the chat showed no Select / Paste menu. " + app.debugDescription)
+        XCTAssertFalse(terminal.label.contains("go in"), "a hold in the chat opened the row's menu: \(terminal.label)")
+    }
+
     /// The presses of the left button the terminal has sent, as its accessibility value counts them.
     @MainActor
     private func presses(on terminal: XCUIElement) -> Int {

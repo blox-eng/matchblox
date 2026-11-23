@@ -195,6 +195,19 @@ final class BoardBeltTests: XCTestCase {
         XCTAssertFalse(follow.opensMenu)
     }
 
+    /// While the chat takes the screen the hold selects text: the row's menu is not there (#485).
+    func testTheLongPressSelectsWhileTheChatTakesTheScreen() throws {
+        var follow = BoardFollow()
+        _ = follow.heard("1,2;;chat", on: .board)
+        XCTAssertTrue(follow.shows)
+        XCTAssertFalse(follow.opensMenu)
+        _ = follow.heard("1,2;", on: .board)
+        XCTAssertTrue(follow.opensMenu)
+        XCTAssertEqual(try labels("1,2;c;chat"), try labels("1,2;c"))
+        XCTAssertTrue(board("1,2;c;chat").chat)
+        XCTAssertFalse(board("1,2;c").chat)
+    }
+
     // MARK: What each key sends
 
     /// An act key sends its tap, which its tmux binding hands the console (`beltTap` in Go); the
