@@ -99,8 +99,9 @@ Text typed in the list does not go to the agent. The key line says
 
 On a narrow window, and on Matchblox Pocket held upright, one pane shows
 at a time. A tap on a row shows the agent full screen, and `◂` goes back
-to the list. The phone shares the first console: a choice on the phone
-changes the right side of that console.
+to the list. The phone has a console of its own, sized to the phone: a
+choice on the phone moves no other screen, and no screen changes the
+phone's size.
 
 ### Each terminal, its own console
 
@@ -112,7 +113,10 @@ keys in the terminal's own console. `ctrl+a m` and a tap on `◂ matchblox`
 go back to the console of the terminal that pressed them, also from an
 agent opened with `Ctrl+O`. When a terminal closes, its console ends and
 the agents run on; a look at another tmux session keeps it. The first console stays for the next
-terminal, and the phone always joins it.
+terminal. The phone is one more terminal: it gets the first console only
+while no other terminal shows it, and a session you open in Pocket opens
+in the phone's own console. Two screens inside the same agent's pane
+(`Ctrl+O`) share that window, and its size follows the last one used.
 
 The drawn chat and its line stay in the demo (and the iOS demo), in a
 console with no tmux, and in a console outside its home session or started

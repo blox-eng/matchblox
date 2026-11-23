@@ -22,8 +22,9 @@ const focusPrefix = "focus:"
 // FocusAct is the act that focuses the session of island number n.
 func FocusAct(n int) string { return focusPrefix + strconv.Itoa(n) }
 
-// focus puts the session of the act's number in the doc, with its pane and
-// the tmux client to move there (Act.Text, the phone's tty), or
+// focus puts the session of the act's number in the doc, with its pane, the
+// tmux client to move there (Act.Text, the phone's tty) and the console
+// that moves it (Act.Session, the phone's own), or
 // Gone when the number's session ended or the number was never given. It
 // changes nothing else, and the stoker goes on resting.
 func (s *Service) focus(a proto.Act) proto.Result {
@@ -44,6 +45,9 @@ func (s *Service) focus(a proto.Act) proto.Result {
 	f := &state.Focus{At: s.now()}
 	if remote.ClientTTY(a.Text) {
 		f.Client = a.Text // the phone's tty, which the gate read from SSH_TTY
+	}
+	if remote.ConsoleSession(a.Session) {
+		f.Console = a.Session
 	}
 	id, known := s.PushNumbers.SessionOf(n)
 	s.mu.Lock()

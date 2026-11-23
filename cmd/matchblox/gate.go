@@ -54,16 +54,19 @@ func gateMain(args []string) error {
 	_ = os.Setenv("PATH", os.ExpandEnv(remote.HostPath)+string(os.PathListSeparator)+os.Getenv("PATH"))
 	_ = os.Unsetenv("SSH_ORIGINAL_COMMAND")
 	// The console re-runs itself in the home session with these arguments:
-	// without "gate" it is the builder's own `matchblox`. A phone shows the
-	// desk's first console, not one of its own.
+	// without "gate" it is the builder's own `matchblox`. A phone gets a
+	// console of its own, sized to the phone: the gate picks its name once,
+	// so the open below names the console the phone runs (#486).
+	console := ""
 	if mode == phoneMode {
-		_ = os.Setenv(panes.JoinEnv, "1")
+		console = homeName()
+		_ = os.Setenv(panes.SessionEnv, console)
 	}
 	os.Args = os.Args[:1]
 	if open {
 		// The console's home session ignores arguments: the service tells
 		// it which session to open. No service: the console just opens.
-		_ = gateFocus(n, os.Getenv("SSH_TTY"))
+		_ = gateFocus(n, os.Getenv("SSH_TTY"), console)
 	}
 	return gateRun(argv)
 }
@@ -149,21 +152,22 @@ func openTarget(orig string) (n int, ok bool) {
 func isOpen(orig string) bool { _, ok := openTarget(orig); return ok }
 
 // gateFocus asks the running service to focus the session of island number
-// n and move the phone's tmux client (tty) to it; tests replace it.
-var gateFocus = func(n int, tty string) error {
-	return sendFocus(func(a proto.Act) (proto.Result, error) { return doAct(transport.SocketPath(), a) }, n, tty)
+// n, and the phone's console to move the phone's tmux client (tty) to it;
+// tests replace it.
+var gateFocus = func(n int, tty, console string) error {
+	return sendFocus(func(a proto.Act) (proto.Result, error) { return doAct(transport.SocketPath(), a) }, n, tty, console)
 }
 
 // focusTimeout bounds the focus act: the phone waits on it in the
 // foreground, and the console opens without it.
 var focusTimeout = 2 * time.Second
 
-// sendFocus sends the focus act of number n for the client on tty through
-// do, and gives up after focusTimeout.
-func sendFocus(do func(proto.Act) (proto.Result, error), n int, tty string) error {
+// sendFocus sends the focus act of number n for the client on tty and its
+// console through do, and gives up after focusTimeout.
+func sendFocus(do func(proto.Act) (proto.Result, error), n int, tty, console string) error {
 	done := make(chan error, 1)
 	go func() {
-		res, err := do(proto.Act{RecID: service.FocusAct(n), Text: tty})
+		res, err := do(proto.Act{RecID: service.FocusAct(n), Text: tty, Session: console})
 		if err == nil && res.Err != "" {
 			err = errors.New(res.Err)
 		}

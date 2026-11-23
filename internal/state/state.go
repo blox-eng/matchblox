@@ -151,11 +151,14 @@ type WaitView struct {
 // Focus is the session to open: its pane, or Gone when its number's
 // session ended.
 type Focus struct {
-	SessionID string    `json:"session_id,omitempty"`
-	Pane      string    `json:"pane,omitempty"`
-	Client    string    `json:"client,omitempty"`
-	Gone      bool      `json:"gone,omitempty"`
-	At        time.Time `json:"at"`
+	SessionID string `json:"session_id,omitempty"`
+	Pane      string `json:"pane,omitempty"`
+	Client    string `json:"client,omitempty"`
+	// Console is the console session that takes the focus, the phone's
+	// own; "" (an older gate) is the first console's.
+	Console string    `json:"console,omitempty"`
+	Gone    bool      `json:"gone,omitempty"`
+	At      time.Time `json:"at"`
 }
 
 // Path is $XDG_STATE_HOME/matchblox/state.json, defaulting to ~/.local/state.

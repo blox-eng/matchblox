@@ -128,9 +128,9 @@ func TestFocusMovesOnlyThePhonesClient(t *testing.T) {
 	}
 }
 
-// TestASecondConsoleLeavesThePhonesFocusAlone: the phone joins the first
-// console; a second terminal's console neither moves the phone's client
-// nor changes its own choice for the phone's tap.
+// TestASecondConsoleLeavesThePhonesFocusAlone: a focus that names no
+// console (an older gate's) is the first console's; a second terminal's
+// console neither moves the phone's client nor changes its own choice.
 func TestASecondConsoleLeavesThePhonesFocusAlone(t *testing.T) {
 	old := focusWait
 	focusWait = 300 * time.Millisecond
@@ -147,6 +147,38 @@ func TestASecondConsoleLeavesThePhonesFocusAlone(t *testing.T) {
 	runFocus(t, cmd)
 	if s, _ := next.(Model).selectedSession(); s.Pane != before.Pane || len(ran) != 0 {
 		t.Errorf("selected %q (was %q), ran %q", s.Pane, before.Pane, ran)
+	}
+}
+
+// TestTheFocusGoesToThePhonesOwnConsole: the phone has a console of its
+// own (#486), and the focus names it. That console takes it; the first
+// console, the desk's, keeps its choice and moves no terminal.
+func TestTheFocusGoesToThePhonesOwnConsole(t *testing.T) {
+	old := focusWait
+	focusWait = 300 * time.Millisecond
+	t.Cleanup(func() { focusWait = old })
+	at := time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC)
+	for _, c := range []struct {
+		home  string
+		takes bool
+	}{{"matchblox-2", true}, {"matchblox", false}} {
+		m, _ := loadedWith(t, 100, fixtureState())
+		m.opt.HomeSession = c.home
+		var ran []string
+		m.opt.Run = func(argv []string) error { ran = append(ran, strings.Join(argv, " ")); return nil }
+		m.opt.Clients = func() ([]string, error) { return []string{"/dev/ttys001", "/dev/ttys004"}, nil }
+		before, _ := m.selectedSession()
+		st := focused("%2", at)
+		st.Focus.Client, st.Focus.Console = "/dev/ttys004", "matchblox-2"
+		next, cmd := m.Update(stateMsg(st))
+		runFocus(t, cmd)
+		s, _ := next.(Model).selectedSession()
+		switch {
+		case c.takes && (s.Pane != "%2" || len(ran) != 2 || !isFocus(strings.Fields(ran[1]), "/dev/ttys004", "%2")):
+			t.Errorf("%s: selected %q, ran %q: want %%2 and the phone's focus", c.home, s.Pane, ran)
+		case !c.takes && (s.Pane != before.Pane || len(ran) != 0):
+			t.Errorf("%s: selected %q (was %q), ran %q: want no change", c.home, s.Pane, before.Pane, ran)
+		}
 	}
 }
 

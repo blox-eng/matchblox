@@ -39,16 +39,16 @@ func HomeArgv(inTmux, haveTmux bool, name string, self []string) []string {
 	return append([]string{"tmux", "-u", "new-session", "-A", "-s", name, "-e", HomeEnv + "=1"}, self...)
 }
 
-// JoinEnv, set to 1, makes a console join the first console, shown or not:
-// the phone shows the desk's console, not one of its own.
-const JoinEnv = "MATCHBLOX_JOIN"
+// SessionEnv names the console session a new console runs in, when the
+// gate picked it already: the phone's open names the same one (#486).
+const SessionEnv = "MATCHBLOX_SESSION"
 
 // HomeSession is the session a new console runs in, from the terminals each
-// session has: the first console's while no terminal shows it, or to join
-// it; else matchblox-<n>, the first that no session has, so each terminal
-// has a console of its own.
-func HomeSession(attached map[string]int, join bool) string {
-	if join || attached[Home] == 0 {
+// session has: the first console's while no terminal shows it; else
+// matchblox-<n>, the first that no session has, so each terminal, the
+// phone's too, has a console of its own.
+func HomeSession(attached map[string]int) string {
+	if attached[Home] == 0 {
 		return Home
 	}
 	for n := 2; ; n++ {
