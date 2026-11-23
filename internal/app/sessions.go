@@ -174,25 +174,6 @@ func (m Model) wordOf(s sample.Session) string {
 	return m.stateWord(s)
 }
 
-// waitCell is how long a session waits, or sat idle, or when the plan's
-// limit lets it work again; a session at work has none. A stale host of
-// two or more: how long since it last spoke.
-func (m Model) waitCell(s sample.Session) string {
-	if m.hostCount() > 1 && m.stale(s.Host) {
-		return brief(m.now().Sub(m.stateAt(s.Host)))
-	}
-	if it, ok := m.waitOf(s); ok && m.groupOf(s) == groupWaits {
-		return brief(m.now().Sub(it.Since))
-	}
-	if m.groupOf(s) == groupWorking {
-		return ""
-	}
-	if s.Stopped() {
-		return m.idleCell(s)
-	}
-	return brief(s.Idle)
-}
-
 // brief is the first unit of a duration: 4m, 2h, 20d.
 func brief(d time.Duration) string {
 	h := sample.Human(d)

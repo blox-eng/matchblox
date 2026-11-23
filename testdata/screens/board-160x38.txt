@@ -2,32 +2,32 @@
  SESSIONS 15    machine
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  NEEDS YOU · 4  −                       │ spark-search ✻ idle · #4548 ci                                                        ctx 77%  ctrl+o expand · m menu
-▌╿ spark-search               #4548 ci ✻│
+▌╿ spark-search          #4548 ci  10m ✻│
    CI failed · lint, twice              │
- ╿ kindle-web              #4556 green ✻│
+ ╿ kindle-web          #4556 green  1m ✻│
    #4556 waits for your merge           │
- ╿ hearth-api                       4m ✻│
+ ╿ hearth-api                       3h ✻│
    The plan changes 2 records and remov…│
  ≋ login                step 1 of 3 · 3 │
  ├ ╿ flint-auth                     2m ✻│
  │   Which way do we fix the login?     │
- ├ ✦ flint-ui                          ✻│
- └ ╵ flint-api                #4560 ci ✻│
+ ├ ✦ flint-ui                      10m ✻│
+ └ ╵ flint-api           #4560 ci  10m ✻│
 ────────────────────────────────────────│
  WORKING · 2  −                         │
- ✦ ember-billing@gpu-1                 ✻│
- ✦ spark-docs                          ✻│
+ ✦ ember-billing@gpu-1              4m ✻│
+ ✦ spark-docs                       9m ✻│
 ────────────────────────────────────────│
  IDLE · 6  −                            │
- ╵ hearth-limits              #4551 ci ✻│
+ ╵ hearth-limits         #4551 ci  10m ✻│
  ╵ wick-mobile                   23:50 ▣│
- ╵ hearth-notes@gpu-1               1h ✻│
- ╵ cinder-ci@gpu-1        #4549 merged ❋│
- ╵ ember-reports                    3h ⬢│
- ╵ tinder-scratch@gpu-1             2d ·│
+ ╵ hearth-notes@gpu-1              10m ✻│
+ ╵ cinder-ci@gpu-1   #4549 merged  now ❋│
+ ╵ ember-reports                   10m ⬢│
+ ╵ tinder-scratch@gpu-1            10m ·│
 ────────────────────────────────────────│
  HELD · 1  −                            │
- ╽ kindle-legacy                    5h ✻│
+ ╽ kindle-legacy                   10m ✻│
                                         │
                                         │
                                         │

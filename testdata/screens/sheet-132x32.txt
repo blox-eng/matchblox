@@ -16,7 +16,7 @@
    ⠙ Working                       │                                                            │
 ───────────────────────────────────│ gos ✓ merges  ○ releases  ○ deploys  ○ kills  off asks you │
  WORKING · 1  −                    │ ways merge-order  priority  release-train  triage          │
- ✦ hearth-api                 #4551╰─ ⏎ send ─ tab chips ─ esc ─────────────────────────────────╯
+ ✦ hearth-api             #4551 ci ╰─ ⏎ send ─ tab chips ─ esc ─────────────────────────────────╯
                                         │
                                         │
                                         │

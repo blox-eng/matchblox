@@ -714,13 +714,10 @@ func hintsWidth(hs []hint) int {
 	return n
 }
 
-// idleCell is how long a session sat idle, or, while the plan's limit stops
-// it, when it can work again: 19:50 within a day, else the weekday.
-func (m Model) idleCell(s sample.Session) string {
-	switch {
-	case !s.Stopped():
-		return sample.Human(s.Idle)
-	case s.Out.Sub(m.now()) < 24*time.Hour:
+// backAt is when the plan's limit lets a session work again: 19:50 within
+// a day, else the weekday.
+func (m Model) backAt(s sample.Session) string {
+	if s.Out.Sub(m.now()) < 24*time.Hour {
 		return s.Out.Local().Format("15:04")
 	}
 	return s.Out.Local().Format("Mon")

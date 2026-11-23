@@ -10,13 +10,13 @@
    #4552 waits for your merge           │
  ╿ kindle-web                       1m ✻│
    Do you want to proceed?              │
- ╿ cinder-ci                        0s ❋│   ╭─ Kill flint-auth ────────────────────────╮
+ ╿ cinder-ci                       now ❋│   ╭─ Kill flint-auth ────────────────────────╮
    I am moving the cache key to the go.…│   │                                          │
- ╿ wick-mobile                      0s ▣│   │   tmux kill-pane -t %2                   │
+ ╿ wick-mobile                     now ▣│   │   tmux kill-pane -t %2                   │
    ⠙ Working                            │   │   then kill -TERM 1310                   │
 ────────────────────────────────────────│   │                                          │
  WORKING · 1  −                         │   ╰─ y run ─ any other key cancels ──────────╯
- ✦ hearth-api                 #4551 ci ✻│
+ ✦ hearth-api             #4551 ci  3h ✻│
                                         │
                                         │
                                         │

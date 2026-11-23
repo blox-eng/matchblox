@@ -5,13 +5,13 @@
 ▌╿ kindle-web                       1m ✻│
    Do you want to proceed?              │
  ≋ hearth               step 3 of 3 · 3 │
- ├ ✦ hearth-api                        ✻│
- ├ ╵ ember-billing                  3m ✻│
- └ ╿ hearth's stoker                0s ·│
+ ├ ✦ hearth-api                     3h ✻│
+ ├ ╵ ember-billing                  4m ✻│
+ └ ╿ hearth's stoker                   ·│
      merge #812 now?                    │
 ────────────────────────────────────────│
  WORKING · 1  −                         │
- ✦ flint-auth                          ✻│
+ ✦ flint-auth                       2m ✻│
 ────────────────────────────────────────│
  IDLE · 1  −                            │
  ╵ spark-docs                       9m ✻│

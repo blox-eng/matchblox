@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"io"
@@ -43,7 +44,25 @@ func fixtureState() proto.State {
 	snap.Limits = nil
 	q := queue.New()
 	q.Merge(snap.Sessions, snap.At)
+	stampStateAt(&snap, q.Items())
 	return proto.State{Doc: state.Doc{Snapshot: snap, Recommendations: advice.Build(snap, nil), Queue: q.Items()}}
+}
+
+// stampStateAt dates each session's state as the service does on first
+// sight: an ask from its wait, a rest from its idle time, else its start.
+func stampStateAt(snap *sample.Snapshot, waits []queue.Item) {
+	for i, s := range snap.Sessions {
+		at := cmp.Or(s.Started, snap.At)
+		if !s.Works() && s.Idle > 0 {
+			at = snap.At.Add(-s.Idle)
+		}
+		for _, it := range waits {
+			if it.Pane == s.Pane && (it.State == queue.StatePermission || it.State == queue.StateQuestion && !it.Reminder) {
+				at = it.Since
+			}
+		}
+		snap.Sessions[i].StateAt = at
+	}
 }
 
 // fakeConn is a service that answers with what the test puts in.

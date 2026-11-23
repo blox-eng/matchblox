@@ -186,7 +186,8 @@ func TestRowFitsItsWidth(t *testing.T) {
 	a.Agent = "cursor"
 	rows := []Model{m}
 	subjects := []sample.Session{a}
-	ship := boardMatch("hearth-api", time.Hour)
+	ship := boardMatch("hearth-api-checkout-and-the-cart", time.Hour)
+	ship.StateAt = boardAt.Add(-11 * time.Minute)
 	sst := boardState(ship)
 	sst.Ships.Ships = append(sst.Ships.Ships, shipFor(ship, 4551, shipRunning, "CI runs", 1, time.Hour))
 	sm := boardModel(t, sst)
@@ -218,5 +219,76 @@ func TestRowFitsItsWidth(t *testing.T) {
 		if lw := ansi.StringWidth(m.chainHead(u, w, true)); lw > w {
 			t.Fatalf("width %d: head is %d wide", w, lw)
 		}
+	}
+}
+
+func rowEnd(t *testing.T, m Model, s sample.Session) string {
+	t.Helper()
+	return strings.TrimRight(plainLines(m.sideRow(s, 40, false, sideLink{}))[0], " ")
+}
+
+func TestARowSaysItsStateAndItsAge(t *testing.T) {
+	for ago, want := range map[time.Duration]string{0: "now ✻", 30 * time.Second: "now ✻", 4 * time.Minute: "4m ✻", time.Hour: "1h ✻", 5 * time.Hour: "5h ✻"} {
+		s := boardMatch("hearth-api", 6*time.Hour)
+		s.StateAt = boardAt.Add(-ago)
+		m := boardModel(t, boardState(s))
+		l := rowEnd(t, m, m.all.sessions[0])
+		if !strings.HasSuffix(l, " "+want) {
+			t.Errorf("%v in its state: row %q, want it to end in %q", ago, l, want)
+		}
+		if strings.Contains(l, "idle") || strings.Contains(l, "0m") {
+			t.Errorf("%v in its state: row %q has a state word or 0m", ago, l)
+		}
+	}
+	s := boardMatch("hearth-api", time.Hour)
+	s.StateAt = boardAt.Add(-11 * time.Minute)
+	st := boardState(s)
+	st.Ships.Ships = append(st.Ships.Ships, shipFor(s, 4551, shipRunning, "CI runs", 1, time.Hour))
+	m := boardModel(t, st)
+	if l := rowEnd(t, m, m.all.sessions[0]); !strings.HasSuffix(l, " #4551 ci  11m ✻") {
+		t.Errorf("row %q, want it to end in #4551 ci  11m ✻", l)
+	}
+}
+
+func TestARowWithNoStateAtSaysNoAge(t *testing.T) {
+	idle := boardMatch("hearth-api", time.Hour)
+	work := boardMatch("cinder-ci", time.Hour)
+	work.Busy, work.Status, work.Idle = true, "busy", 0
+	idle.StateAt, work.StateAt = time.Time{}, time.Time{}
+	m := boardModel(t, boardState(idle, work))
+	for _, s := range m.all.sessions {
+		l := rowEnd(t, m, s)
+		if f := strings.Fields(l); len(f) < 2 || f[len(f)-2] != s.Name || f[len(f)-1] != "✻" {
+			t.Errorf("%s with no StateAt: row %q, want its name, then ✻, with no age", s.Name, l)
+		}
+	}
+}
+
+func TestADoneRowSaysWhatItSaidLast(t *testing.T) {
+	said := "Footer chips are in, 14 tests pass."
+	s := doneMatch("ux-pass", 2*time.Minute)
+	s.LastLine = said
+	m := boardModel(t, boardState(s))
+	s = m.all.sessions[0]
+	if m.sideStateOf(s) != sideDone {
+		t.Fatalf("fixture is in %s, not DONE", m.sideStateOf(s).head())
+	}
+	rows := m.sideRow(s, 40, false, sideLink{})
+	got := plainLines(rows)
+	if len(got) != 2 || strings.TrimRight(got[1], " ") != "   "+said {
+		t.Fatalf("done row %q, want a second line %q, indented 3", got, said)
+	}
+	if faint := m.st.faint.Render(said); faint == said || !strings.Contains(rows[1], faint) {
+		t.Errorf("done row's second line %q is not in faint", rows[1])
+	}
+	st := boardState(s)
+	st.Ships.Ships = append(st.Ships.Ships, shipFor(s, 4561, shipRunning, "CI runs", 1, time.Hour))
+	pr := boardModel(t, st)
+	if got := plainLines(pr.sideRow(pr.all.sessions[0], 40, false, sideLink{})); len(got) != 2 || strings.TrimSpace(got[1]) != said {
+		t.Errorf("done row with a PR %q, want its second line %q", got, said)
+	}
+	s.LastLine = strings.Repeat("The rate table imports, ", 3)
+	if l := plainLines(m.sideRow(s, 40, false, sideLink{}))[1]; ansi.StringWidth(l) != 40 || !strings.HasSuffix(l, "…") {
+		t.Errorf("a long second line %q, want it cut with … at 40", l)
 	}
 }

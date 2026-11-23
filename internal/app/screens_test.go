@@ -74,6 +74,7 @@ func screensState(t testing.TB) proto.State {
 	q.Apply(hooks.Event{Name: "Notification", Kind: hooks.KindPermission, SessionID: "5ea1c0de-0000-4000-8000-000000000004",
 		Pane: "%5", Message: "Claude needs your permission to use Bash", At: demoAt.Add(-90 * time.Second)})
 	q.Merge(snap.Sessions, snap.At)
+	stampStateAt(&snap, q.Items())
 	ship := func(n int, name, title, kind, note string, stage int, age time.Duration) proto.Ship {
 		sh := proto.Ship{Repo: "hearth/" + name, Number: n, Title: title, URL: "https://github.com/hearth/" + name + "/pull/" + strconv.Itoa(n),
 			Session: proto.ShipSession{Pane: ref[name], Name: name}, Stage: stage, Kind: kind, Note: note, Since: demoAt.Add(-age)}

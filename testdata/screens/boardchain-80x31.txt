@@ -5,8 +5,8 @@
  ≋ login        step 1 of 3 · 3 │
 ▌├ ╿ flint-auth             2m ✻│ › what should login's stoker do?
  │   Which way do we fix the lo…│
- ├ ✦ flint-ui                  ✻│
- └ ╵ flint-api        #4560 ci ✻│
+ ├ ✦ flint-ui              10m ✻│
+ └ ╵ flint-api   #4560 ci  10m ✻│
                                 │
                                 │
                                 │

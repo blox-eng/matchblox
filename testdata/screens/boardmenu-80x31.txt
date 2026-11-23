@@ -2,11 +2,11 @@
  SESSIONS 15    machine
 ────────────────────────────────────────────────────────────────────────────────
  NEEDS YOU · 4  −               │ flint-auth ✻ asks                    ctx 62%
- ╿ spark-search       #4548 ci ✻│ chain login · step 1 of 3   flint-auth needs …
+ ╿ spark-search  #4548 ci  10m ✻│ chain login · step 1 of 3   flint-auth needs …
    CI failed · lint, twice      │
- ╿ kindle-web      #4556 green ✻│
+ ╿ kindle-web  #4556 green  1m ✻│
    #4556 waits for your merge   │
- ╿ hearth-api               4m ✻│
+ ╿ hearth-api               3h ✻│
    The plan changes 2 records a…│
  ≋ login        step 1 of 3 · 3 │
 ▌├ ╿ flint-auth             2m ✻│
@@ -19,12 +19,12 @@
  ✦│   stoke the chain login            F │
 ──│   go in                       ctrl+o │
  I╰─ ⏎ do ─ esc close ───────────────────╯
- ╵ hearth-limits      #4551 ci ✻│
+ ╵ hearth-limits #4551 ci  10m ✻│
  ╵ wick-mobile           23:50 ▣│
- ╵ hearth-notes@gpu-1       1h ✻│
- ╵ cinder-ci@gpu… #4549 merged ❋│
- ╵ ember-reports            3h ⬢│ Which way do we fix the login?
- ╵ tinder-scratch@gpu-1     2d ·│  1. Patch the token check
+ ╵ hearth-notes@gpu-1      10m ✻│
+ ╵ cinder-c… #4549 merged  now ❋│
+ ╵ ember-reports           10m ⬢│ Which way do we fix the login?
+ ╵ tinder-scratch@gpu-1    10m ·│  1. Patch the token check
  ↓ 1 more                       │  2. Move to the new session store
  + new · ✧ 7 tips               │ ›                        ⏎ send to flint-auth
 ────────────────────────────────────────────────────────────────────────────────
