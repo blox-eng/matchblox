@@ -76,28 +76,41 @@ jobs:
         continue-on-error: true
         run: sudo -u canary -H env -i HOME=/home/canary PATH="$CANARY_PATH" npm install -g --prefix /home/canary/.npm-global opencode-ai@latest
       # After a failed install, never after a user that may have sudo. It
-      # runs on a copy canary owns: the runner's workspace need not be
-      # readable to it. continue-on-error: a break must still reach report.
+      # runs on a copy canary owns, which the runner reads and canary writes:
+      # the runner's workspace need not be readable to canary.
+      # continue-on-error: a break must still reach report.
       - name: Run the canary
         id: run
         if: always() && steps.user.outcome == 'success'
         continue-on-error: true
         run: |
-          sudo mkdir /home/canary/src
-          sudo cp -a "$GITHUB_WORKSPACE/." /home/canary/src
-          sudo chown -R canary:canary /home/canary/src
-          sudo -u canary -H mkdir -p /home/canary/out
+          sudo -u canary -H mkdir /home/canary/src /home/canary/out
+          tar -C "$GITHUB_WORKSPACE" -cf - . | sudo -u canary -H tar -C /home/canary/src -xf -
           sudo -u canary -H env -i -C /home/canary/src HOME=/home/canary PATH="$CANARY_PATH" \
             GOCACHE=/home/canary/.cache/go-build GOMODCACHE=/home/canary/go/pkg/mod GOFLAGS=-mod=mod \
             MATCHBLOX_CANARY_OUT=/home/canary/out \
             go test -tags canary -run TestCanary -v -timeout 10m ./internal/said
-      # Only canary's regular files: a link it planted hands on nothing of the runner's.
+      # Root never reads canary's files: a canary process could swap one for
+      # a link to a file only root may read. So every canary process goes
+      # first, then canary reads each result and the runner writes it.
+      - name: Stop every canary process
+        if: always()
+        run: |
+          for _ in 1 2 3 4 5; do
+            sudo pkill -KILL -u canary || true
+            pgrep -u canary >/dev/null || break
+            sleep 1
+          done
+          if pgrep -u canary; then echo "::error::a canary process is still running"; exit 1; fi
       - name: Hand the results to the upload
         if: always()
         run: |
           mkdir -p "$RUNNER_TEMP/canary"
-          sudo find /home/canary/out -maxdepth 1 -type f -name '*.json' -exec cp -t "$RUNNER_TEMP/canary" {} +
-          sudo chown -R "$(id -u):$(id -g)" "$RUNNER_TEMP/canary"
+          for k in claude codex opencode; do
+            if sudo -u canary test -f "/home/canary/out/$k.json"; then
+              sudo -u canary cat -- "/home/canary/out/$k.json" | head -c 1048576 >"$RUNNER_TEMP/canary/$k.json" || true
+            fi
+          done
       # warn, not error: a broken install still writes its could-not-run file.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()

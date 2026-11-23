@@ -910,7 +910,8 @@ func unprivileged(t *testing.T, canary workflowJob) {
 	const as = "sudo -u canary -H env -i "
 	var made, checked bool
 	tool := regexp.MustCompile(`\b(npm|npx|node|go|claude|codex|opencode)\b`)
-	lookup := regexp.MustCompile(`command -v (node|go)\b|\.npm-global`) // a lookup or canary's prefix, not a run
+	// A lookup, canary's prefix or the result names: none runs a tool.
+	lookup := regexp.MustCompile(`command -v (node|go)\b|\.npm-global|^for k in claude codex opencode; do$`)
 	tokenish := regexp.MustCompile(`(?i)token|secret|key|password|credential|ACTIONS_|GITHUB_|RUNNER_`)
 	assigned := regexp.MustCompile(`(?:^|\s)(\w+)=`)
 	used := regexp.MustCompile(`\$\{?(\w+)`)
@@ -964,11 +965,38 @@ func unprivileged(t *testing.T, canary workflowJob) {
 			t.Errorf("job canary does not install %s into canary's own prefix", pkg)
 		}
 	}
-	// The results are canary's files: only regular ones reach the upload, so
-	// a link it planted cannot hand on a file of the runner's.
-	if !slices.ContainsFunc(canary.Steps, func(s workflowStep) bool {
-		return strings.Contains(s.If, "always()") && strings.Contains(s.Run, "find /home/canary/out -maxdepth 1 -type f -name '*.json'")
-	}) {
-		t.Error("job canary does not hand only canary's regular result files to the upload")
+	// The results are canary's files. Root never reads them: a canary
+	// process could swap one for a link to a file only root may read. Every
+	// canary process is killed first, then canary reads each known result
+	// and the runner writes it, cut to a size.
+	asRoot := regexp.MustCompile(`\bsudo\s+(-\S+\s+)*(cp|find|tar|rsync|chmod\s+-R)\b.*/home/canary`)
+	for _, s := range canary.Steps {
+		for _, line := range strings.Split(s.Run, "\n") {
+			if asRoot.MatchString(line) && !strings.Contains(line, "sudo -u canary") {
+				t.Errorf("job canary: step %q reads or changes canary's files as root: %q", s.Name, strings.TrimSpace(line))
+			}
+		}
+	}
+	hand := slices.IndexFunc(canary.Steps, func(s workflowStep) bool { return strings.Contains(s.Run, "/home/canary/out/") })
+	if hand < 0 || !strings.Contains(canary.Steps[hand].If, "always()") {
+		t.Fatal("job canary has no hand-off step that runs always() and reads /home/canary/out/")
+	}
+	h := canary.Steps[hand].Run
+	for _, want := range []string{
+		"for k in claude codex opencode; do",
+		`sudo -u canary cat -- "/home/canary/out/$k.json" | head -c 1048576 >"$RUNNER_TEMP/canary/$k.json"`,
+	} {
+		if !strings.Contains(h, want) {
+			t.Errorf("job canary: the hand-off lacks %q:\n%s", want, h)
+		}
+	}
+	if strings.Contains(h, "*") {
+		t.Errorf("job canary: the hand-off globs canary's folder:\n%s", h)
+	}
+	kill := slices.IndexFunc(canary.Steps, func(s workflowStep) bool {
+		return strings.Contains(s.Run, "sudo pkill -KILL -u canary") && strings.Contains(s.Run, "pgrep -u canary")
+	})
+	if kill < 0 || kill > hand || !strings.Contains(canary.Steps[kill].If, "always()") {
+		t.Error("job canary: no always() step kills every canary process, and checks none is left, before the hand-off")
 	}
 }
