@@ -80,16 +80,20 @@ jobs:
           sudo -u canary -H env -i "$(command -v node)" --version
           sudo -u canary -H env -i "$(command -v go)" version
           echo "CANARY_PATH=$(dirname "$(command -v go)"):$(dirname "$(command -v node)"):/home/canary/.npm-global/bin:/usr/bin:/bin" >>"$GITHUB_ENV"
-      # One step per agent, each continue-on-error: an agent that fails to
-      # install is not installed, and the run says so for it alone.
+      # One step per agent, each continue-on-error and five minutes long: an
+      # agent that fails or hangs on install is not installed, and the run
+      # says so for it alone.
       - name: Install Claude Code
         continue-on-error: true
+        timeout-minutes: 5
         run: sudo -u canary -H env -i HOME=/home/canary PATH="$CANARY_PATH" npm install -g --prefix /home/canary/.npm-global @anthropic-ai/claude-code@latest
       - name: Install Codex
         continue-on-error: true
+        timeout-minutes: 5
         run: sudo -u canary -H env -i HOME=/home/canary PATH="$CANARY_PATH" npm install -g --prefix /home/canary/.npm-global @openai/codex@latest
       - name: Install OpenCode
         continue-on-error: true
+        timeout-minutes: 5
         run: sudo -u canary -H env -i HOME=/home/canary PATH="$CANARY_PATH" npm install -g --prefix /home/canary/.npm-global opencode-ai@latest
       # After a failed install, never after a user that may have sudo. It
       # runs on a copy canary owns, which the runner reads and canary writes:
@@ -103,7 +107,7 @@ jobs:
           sudo -u canary -H mkdir /home/canary/src /home/canary/out
           tar -C "$GITHUB_WORKSPACE" -cf - . | sudo -u canary -H tar -C /home/canary/src -xf -
           sudo -u canary -H env -i -C /home/canary/src HOME=/home/canary PATH="$CANARY_PATH" \
-            GOCACHE=/home/canary/.cache/go-build GOMODCACHE=/home/canary/go/pkg/mod GOFLAGS=-mod=mod \
+            GOCACHE=/home/canary/.cache/go-build GOMODCACHE=/home/canary/go/pkg/mod \
             MATCHBLOX_CANARY_OUT=/home/canary/out \
             go test -tags canary -run TestCanary -v -timeout 10m ./internal/said
       # Root never reads canary's files: a canary process could swap one for

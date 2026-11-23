@@ -759,6 +759,7 @@ type workflowStep struct {
 	With            map[string]any    `yaml:"with"`
 	Env             map[string]string `yaml:"env"`
 	ContinueOnError bool              `yaml:"continue-on-error"`
+	TimeoutMinutes  int               `yaml:"timeout-minutes"`
 }
 
 type workflowJob struct {
@@ -855,6 +856,14 @@ func TestCanaryWorkflowKeepsTheTokenFromAgents(t *testing.T) {
 		if !s.ContinueOnError || !alone || slices.IndexFunc(canary.Steps, func(o workflowStep) bool { return o.Name == s.Name }) > run {
 			t.Errorf("job canary: step %q installs %s, want it alone, before the run, with continue-on-error", s.Name, pkg)
 		}
+		// continue-on-error covers a failed install, not a hung one.
+		if s.TimeoutMinutes < 1 || s.TimeoutMinutes > 5 {
+			t.Errorf("job canary: step %q installs %s with timeout-minutes %d, want 1 to 5, so a hang costs the run nothing", s.Name, pkg, s.TimeoutMinutes)
+		}
+	}
+	// Go may rewrite go.mod and go.sum under -mod=mod where it should fail.
+	if strings.Contains(canary.Steps[run].Run, "-mod=mod") {
+		t.Errorf("job canary: the run step sets -mod=mod:\n%s", canary.Steps[run].Run)
 	}
 	if !strings.Contains(canary.Steps[run].If, "always()") {
 		t.Errorf("job canary: the run step runs if %q, want always(), so a failed install still runs it", canary.Steps[run].If)
