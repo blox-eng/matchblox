@@ -210,6 +210,33 @@ final class DemoConsoleTests: XCTestCase {
         XCTAssertFalse(terminal.label.contains("go in"), "a hold in the chat opened the row's menu: \(terminal.label)")
     }
 
+    /// A hold selects the word under the finger, and the same press drags the selection on, as
+    /// in any iOS text: no drag reaches tmux, and Copy shows when the finger lifts.
+    @MainActor
+    func testAHoldAndDragInTheChatSelects() {
+        let app = launched()
+        expect(in: app, "label CONTAINS %@", "NEEDS YOU")
+        let terminal = app.descendants(matching: .any)["demo-terminal"]
+        waitUntilSteady(terminal)
+        openTheChat(app, row: "flint-auth")
+        expect(in: app, step: "the chat's question after the tap", "label CONTAINS %@ AND label CONTAINS %@", "send to flint-auth", "2. Rotate, keep")
+        waitUntilSteady(terminal)
+        let rows = terminal.label.components(separatedBy: "\n")
+        guard let row = rows.firstIndex(where: { $0.contains("Should a refresh also rotate") }) else {
+            return XCTFail("no row shows the question: \(terminal.label)")
+        }
+        let before = presses(on: terminal)
+        let y = (Double(row) + 0.5) / Double(rows.count)
+        let start = terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: y))
+        start.press(forDuration: 1.2, thenDragTo: terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: y)))
+        let copy = app.menuItems["Copy"].firstMatch.waitForExistence(timeout: 5)
+        keep(app, "11 hold and drag in the chat")
+        let counts = terminal.value as? String ?? ""
+        XCTAssertEqual(presses(on: terminal), before, "the drag reached tmux as a mouse drag: \(counts)")
+        XCTAssertTrue(counts.contains("right=0"), "the hold sent a right click: \(counts)")
+        XCTAssertTrue(copy, "no Copy after a hold and drag: \(counts). " + app.debugDescription)
+    }
+
     /// The presses of the left button the terminal has sent, as its accessibility value counts them.
     @MainActor
     private func presses(on terminal: XCUIElement) -> Int {
