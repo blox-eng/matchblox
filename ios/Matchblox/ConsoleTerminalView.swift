@@ -321,7 +321,7 @@ final class ConsoleTerminalView: TerminalView {
         case .ended:
             heldWord = nil
             #if DEBUG
-            liftNote += " lift=\(selection.active)/\(selection.getSelectedText().count)"
+            liftNote += " lift=\(selection.active)/\(selection.getSelectedText().count) mouse=\(allowMouseReporting)"
             showNote()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
                 guard let self else { return }
@@ -456,6 +456,16 @@ final class ConsoleTerminalView: TerminalView {
     /// turns it back on.
     override func selectionChanged(source: Terminal) {
         allowMouseReporting = !selection.active
+        #if DEBUG
+        if !selection.active, heldWord == nil, liftNote.contains("lift=") {
+            // Who ends a hold's selection (#492): the frames that called this, short names.
+            let frames = Thread.callStackSymbols.dropFirst(1).prefix(10).map { line in
+                line.split(separator: " ", omittingEmptySubsequences: true).dropFirst(3).first.map(String.init) ?? "?"
+            }
+            liftNote += " cleared=" + frames.joined(separator: ">")
+            showNote()
+        }
+        #endif
         super.selectionChanged(source: source)
         onSelectedLink(selection.active ? TerminalLink.url(inSelection: selection.getSelectedText()) : nil)
     }
