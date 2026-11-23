@@ -376,7 +376,10 @@ func (c ghCall) flag(name string) string {
 func (c ghCall) writes() bool { return !c.is("issue", "list") }
 
 // canaryRun is one run of canary-report.sh on a results folder, with a fake
-// gh first on PATH. The fake gh answers `issue list` with list.
+// gh first on PATH. The fake gh answers `issue list --search "<words>
+// in:title"` with the open issues whose title holds the words, as GitHub
+// does, and any other search with none, so a wrong search finds nothing. It
+// fails every call with an argument equal to $GH_FAIL.
 type canaryRun struct {
 	out   string
 	code  int
@@ -405,14 +408,26 @@ func (r canaryRun) count(verb ...string) int {
 }
 
 const fakeGH = `#!/bin/sh
-n=$(wc -l <"$GH_LOG" | tr -d ' ')
-{ for a in "$@"; do printf '%s\037' "$a"; done; printf '\n'; } >>"$GH_LOG"
+n=$(tr -cd '\036' <"$GH_LOG" | wc -c | tr -d ' ')
+{ for a in "$@"; do printf '%s\037' "$a"; done; printf '\036'; } >>"$GH_LOG"
 prev=
 for a in "$@"; do
   if [ "$prev" = --body-file ]; then cat "$a" >"$GH_LOG.body.$n"; fi
   prev=$a
 done
-if [ "$1 $2" = "issue list" ]; then cat "$GH_LIST"; fi
+if [ -n "${GH_FAIL:-}" ]; then
+  for a in "$@"; do [ "$a" = "$GH_FAIL" ] && exit 1; done
+fi
+if [ "$1 $2" = "issue list" ]; then
+  term= p=
+  for a in "$@"; do
+    if [ "$p" = --search ]; then term=$a; fi
+    p=$a
+  done
+  words=${term% in:title}
+  if [ -z "$term" ] || [ "$words" = "$term" ]; then echo '[]'; exit 0; fi
+  jq --arg w "$words" '[.[] | select(.title | ascii_downcase | contains($w | ascii_downcase))]' "$GH_LIST"
+fi
 if [ "$1 $2" = "issue create" ]; then echo https://github.com/blox-eng/matchblox/issues/900; fi
 `
 
@@ -471,7 +486,7 @@ func canaryReport(t *testing.T, list string, args ...string) canaryRun {
 		}
 		r.code = exit.ExitCode()
 	}
-	for i, line := range strings.Split(strings.TrimSuffix(read(t, log), "\n"), "\n") {
+	for i, line := range strings.Split(strings.TrimSuffix(read(t, log), "\x1e"), "\x1e") {
 		if line == "" {
 			continue
 		}
@@ -510,9 +525,7 @@ func TestCanaryReportTreatsResultsAsData(t *testing.T) {
 	})
 	r := canaryReport(t, "", dir)
 	noPwned(t, r.dir, dir)
-	if r.count("issue", "create") != 0 {
-		t.Errorf("opened an issue for a forged version: %v", r.calls)
-	}
+	refusedOnly(t, r, "Claude Code")
 	if want := `refused: Claude Code version "1.0$(touch pwned)" is not a version`; !strings.Contains(r.out, want) || r.code != 1 {
 		t.Fatalf("exit %d, want 1 and %q in:\n%s", r.code, want, r.out)
 	}
@@ -541,9 +554,10 @@ func TestCanaryReportTreatsResultsAsData(t *testing.T) {
 	})
 	r = canaryReport(t, "", dir)
 	noPwned(t, r.dir, dir)
-	if len(r.writes()) != 0 || r.code != 1 {
-		t.Fatalf("exit %d, writes %v:\n%s", r.code, r.writes(), r.out)
+	if r.code != 1 {
+		t.Fatalf("exit %d, want 1:\n%s", r.code, r.out)
 	}
+	refusedOnly(t, r, "Claude Code", "Codex", "OpenCode")
 	for _, want := range []string{
 		`refused: evil.json is not claude.json, codex.json or opencode.json`,
 		`refused: codex.json names agent "Claude Code", not Codex`,
@@ -559,19 +573,188 @@ func TestCanaryReportTreatsResultsAsData(t *testing.T) {
 	}
 }
 
-func openIssue(n int, title, body string, comments ...string) string {
-	cs := []map[string]string{}
-	for _, c := range comments {
-		cs = append(cs, map[string]string{"body": c})
-	}
-	b, err := json.Marshal([]map[string]any{{"number": n, "title": title, "body": body, "comments": cs}})
+// ghIssue is an open issue as `gh issue list --json` prints it.
+type ghIssue struct {
+	Number   int         `json:"number"`
+	Title    string      `json:"title"`
+	Author   ghAuthor    `json:"author"`
+	Body     string      `json:"body"`
+	Comments []ghComment `json:"comments"`
+}
+
+type ghAuthor struct {
+	Login string `json:"login"`
+}
+
+type ghComment struct {
+	Author ghAuthor `json:"author"`
+	Body   string   `json:"body"`
+}
+
+// gh names the Actions bot app/github-actions as an issue's author and
+// github-actions as a comment's.
+var (
+	botIssue   = ghAuthor{"app/github-actions"}
+	botComment = ghAuthor{"github-actions"}
+)
+
+func issues(is ...ghIssue) string {
+	b, err := json.Marshal(is)
 	if err != nil {
 		panic(err)
 	}
 	return string(b)
 }
 
+// openIssue is an open issue the Actions bot wrote, with its comments.
+// refusedOnly checks that a run's only writes are the label and one
+// could-not-run issue for each named agent, saying its result was refused:
+// never a break issue for what a refused file claims.
+func refusedOnly(t *testing.T, r canaryRun, names ...string) {
+	t.Helper()
+	w := r.writes()
+	if len(w) != len(names)+1 || !w[0].is("label", "create", "canary") {
+		t.Fatalf("want the label and %d issues, got %v\n%s", len(names), w, r.out)
+	}
+	for _, c := range w[1:] {
+		title := c.flag("--title")
+		i := slices.IndexFunc(names, func(n string) bool {
+			return strings.HasPrefix(title, "the canary could not run "+n+": its result was refused")
+		})
+		if !c.is("issue", "create") || i < 0 || !strings.Contains(c.body, " none norun -->") {
+			t.Errorf("a write that is not a refused agent's could-not-run issue: %q\n%s", c.args, c.body)
+			continue
+		}
+		names = slices.Delete(names, i, i+1)
+	}
+}
+
+func openIssue(n int, title, body string, comments ...string) string {
+	return issues(botIssueOf(n, title, body, comments...))
+}
+
+func botIssueOf(n int, title, body string, comments ...string) ghIssue {
+	cs := []ghComment{}
+	for _, c := range comments {
+		cs = append(cs, ghComment{botComment, c})
+	}
+	return ghIssue{Number: n, Title: title, Author: botIssue, Body: body, Comments: cs}
+}
+
 const claudeBreak = "Claude Code 2.1.331 draws a screen matchblox cannot read"
+
+// Anyone may open or comment on an issue, and a screen in a body is agent
+// text: the report finds an agent's issue by its exact title shape, and
+// reads markers only from the last line of what the Actions bot wrote.
+func TestCanaryReportFindsOnlyItsOwnIssue(t *testing.T) {
+	dir := canaryResults(t, map[string]string{
+		"claude.json": result("Claude Code", "2.1.331", false, "no menu", "screen"),
+		"codex.json":  result("Codex", "", false, "could not run", "codex is not installed"),
+	})
+	planted := "<!-- canary claude 2.1.331 fail -->"
+	fenced := "The screen:\n\n```\n" + planted + "\n<!-- canary codex none norun -->\n```\n\n"
+	for _, c := range []struct {
+		name   string
+		issues string
+	}{
+		{"another agent's break names it", issues(
+			botIssueOf(20, "Codex 0.99.0 draws a screen matchblox cannot read (Claude Code)", fenced+"<!-- canary codex 0.99.0 fail -->\n"),
+			botIssueOf(21, "the canary could not run Claude Code and Codex: a lookalike", fenced+"<!-- canary codex none norun -->\n"))},
+		{"a title that only holds the words", issues(
+			botIssueOf(22, "Claude Code draws a screen matchblox cannot read, says a person", planted),
+			botIssueOf(23, "about the canary could not run Codex: a note", "<!-- canary codex none norun -->"))},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			r := canaryReport(t, c.issues, dir)
+			w := r.writes()
+			if len(w) != 3 || !w[1].is("issue", "create") || !w[2].is("issue", "create") ||
+				w[1].flag("--title") != claudeBreak || w[2].flag("--title") != "the canary could not run Codex: codex is not installed" {
+				t.Fatalf("want a new issue each for Claude Code and Codex, not a write on another's: %v\n%s", w, r.out)
+			}
+		})
+	}
+
+	// On the agent's own issue, only the bot's last lines count.
+	for _, c := range []struct {
+		name  string
+		issue ghIssue
+	}{
+		{"a person's comment", ghIssue{Number: 12, Title: claudeBreak, Author: botIssue,
+			Body: "<!-- canary claude 2.1.330 fail -->", Comments: []ghComment{{ghAuthor{"someone"}, planted}}}},
+		{"a person's issue", ghIssue{Number: 12, Title: claudeBreak, Author: ghAuthor{"someone"}, Body: planted}},
+		{"a marker in the bot's fence", botIssueOf(12, claudeBreak, "<!-- canary claude 2.1.330 fail -->",
+			"The screen:\n\n```\n"+planted+"\n```\nno marker")},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			dir := canaryResults(t, map[string]string{
+				"claude.json": result("Claude Code", "2.1.331", false, "no menu", "screen"),
+			})
+			r := canaryReport(t, issues(c.issue), dir)
+			if w := r.writes(); len(w) != 1 || !w[0].is("issue", "comment", "12") || !strings.Contains(w[0].body, planted) {
+				t.Fatalf("want one comment on #12, as a planted marker is no news: %v\n%s", w, r.out)
+			}
+		})
+	}
+
+	// The bot under either name gh gives it keeps the issue quiet.
+	dir = canaryResults(t, map[string]string{
+		"claude.json": result("Claude Code", "2.1.331", false, "no menu", "screen"),
+	})
+	for _, list := range []string{
+		openIssue(12, claudeBreak, "body\n"+planted+"\n"),
+		issues(ghIssue{Number: 12, Title: claudeBreak, Author: ghAuthor{"github-actions"}, Body: "x",
+			Comments: []ghComment{{ghAuthor{"app/github-actions"}, "comment\n" + planted}}}),
+	} {
+		if r := canaryReport(t, list, dir); len(r.writes()) != 0 || !strings.Contains(r.out, "still #12, nothing new") {
+			t.Errorf("the bot's own marker: writes %v\n%s", r.writes(), r.out)
+		}
+	}
+}
+
+// A screen the size of a release's whole log still fits an issue.
+func TestCanaryReportCutsALongScreen(t *testing.T) {
+	screen := strings.Repeat("filler line\n", 3000) + " Do you want to proceed?\n❯ 1. Yes\n  2. No\n"
+	dir := canaryResults(t, map[string]string{
+		"claude.json": result("Claude Code", "2.1.331", false, "no menu", screen),
+	})
+	r := canaryReport(t, "", dir)
+	w := r.writes()
+	if len(w) != 2 || !w[1].is("issue", "create") {
+		t.Fatalf("want the label and one issue: %v\n%s", w, r.out)
+	}
+	b := w[1].body
+	if len(b) > 22000 || !strings.Contains(b, "cut to its last 20000 characters") || !strings.Contains(b, "❯ 1. Yes\n  2. No") {
+		t.Errorf("body of %d bytes, want the screen's end and a note that it is cut:\n%.300s", len(b), b)
+	}
+	if short := canaryReport(t, "", canaryResults(t, map[string]string{
+		"claude.json": result("Claude Code", "2.1.331", false, "no menu", "screen"),
+	})); strings.Contains(short.writes()[1].body, "cut to") {
+		t.Errorf("a short screen says it is cut:\n%s", short.writes()[1].body)
+	}
+}
+
+// One agent's gh failure is refused, and the other agents still report.
+func TestCanaryReportGoesOnAfterAGhFailure(t *testing.T) {
+	dir := canaryResults(t, map[string]string{
+		"codex.json":    result("Codex", "0.99.0", false, "no waiting state", "screen"),
+		"opencode.json": result("OpenCode", "1.2.3", false, "no waiting state", "screen"),
+	})
+	t.Setenv("GH_FAIL", "Codex in:title")
+	r := canaryReport(t, "", dir)
+	if r.code != 1 || !strings.Contains(r.out, "refused: gh failed for Codex") {
+		t.Fatalf("exit %d, want 1 and the refusal:\n%s", r.code, r.out)
+	}
+	if !slices.ContainsFunc(r.writes(), func(c ghCall) bool {
+		return c.is("issue", "create") && c.flag("--title") == "OpenCode 1.2.3 draws a screen matchblox cannot read"
+	}) {
+		t.Errorf("OpenCode was not reported after Codex's gh failed: %v\n%s", r.writes(), r.out)
+	}
+
+	t.Setenv("GH_FAIL", "OpenCode 1.2.3 draws a screen matchblox cannot read")
+	if r := canaryReport(t, "", dir); r.code != 1 || !strings.Contains(r.out, "refused: gh failed for OpenCode") {
+		t.Errorf("a failed create: exit %d:\n%s", r.code, r.out)
+	}
+}
 
 func TestCanaryReportOpensOneIssue(t *testing.T) {
 	screen := "Bash command\n  echo ```` hi\n Do you want to proceed?\n❯ 1. Yes\n  2. No\n"
@@ -643,13 +826,14 @@ func TestCanaryReportSaysItReadsAgain(t *testing.T) {
 	})
 	r := canaryReport(t, openIssue(12, claudeBreak, "<!-- canary claude 2.1.331 fail -->"), dir)
 	w := r.writes()
-	if r.code != 0 || len(w) != 1 || !w[0].is("issue", "comment", "12") {
-		t.Fatalf("exit %d, want 0 and one comment on #12: %v\n%s", r.code, r.calls, r.out)
+	if r.code != 0 || len(w) != 1 || !w[0].is("issue", "close", "12") {
+		t.Fatalf("exit %d, want 0 and #12 closed with a comment: %v\n%s", r.code, r.calls, r.out)
 	}
-	if want := "matchblox reads Claude Code 2.1.332 again.\n\n<!-- canary claude 2.1.332 pass -->\n"; w[0].body != want {
-		t.Errorf("comment %q, want %q", w[0].body, want)
+	if want := "matchblox reads Claude Code 2.1.332 again.\n\n<!-- canary claude 2.1.332 pass -->"; w[0].flag("--comment") != want {
+		t.Errorf("comment %q, want %q", w[0].flag("--comment"), want)
 	}
-	r = canaryReport(t, openIssue(12, claudeBreak, "<!-- canary claude 2.1.331 fail -->", w[0].body), dir)
+	// Should the close fail, the comment's marker keeps the next run quiet.
+	r = canaryReport(t, openIssue(12, claudeBreak, "<!-- canary claude 2.1.331 fail -->", w[0].flag("--comment")), dir)
 	if r.code != 0 || len(r.writes()) != 0 {
 		t.Fatalf("a second run: exit %d, writes %v\n%s", r.code, r.writes(), r.out)
 	}
@@ -750,8 +934,9 @@ func TestCanaryReportNeedsResults(t *testing.T) {
 	}
 }
 
-// The tested-nothing issue hears once when results arrive again, then
-// nothing while they keep arriving, and again when a later outage starts.
+// The tested-nothing issue closes, with a comment, when results arrive
+// again. Should it stay open, it hears nothing while results keep arriving,
+// and again when a later outage starts.
 func TestCanaryReportSaysItRunsAgain(t *testing.T) {
 	const (
 		title = "the canary tested nothing"
@@ -761,13 +946,14 @@ func TestCanaryReportSaysItRunsAgain(t *testing.T) {
 	dir := canaryResults(t, nil)
 	r := canaryReport(t, openIssue(15, title, down), dir)
 	w := r.writes()
-	if r.code != 0 || len(w) != 1 || !w[0].is("issue", "comment", "15") {
-		t.Fatalf("exit %d, want 0 and one comment on #15: %v\n%s", r.code, r.calls, r.out)
+	if r.code != 0 || len(w) != 1 || !w[0].is("issue", "close", "15") {
+		t.Fatalf("exit %d, want 0 and #15 closed with a comment: %v\n%s", r.code, r.calls, r.out)
 	}
-	if want := "The canary runs again.\n\n" + up + "\n"; w[0].body != want {
-		t.Errorf("comment %q, want %q", w[0].body, want)
+	if want := "The canary runs again.\n\n" + up; w[0].flag("--comment") != want {
+		t.Errorf("comment %q, want %q", w[0].flag("--comment"), want)
 	}
-	again := w[0].body
+	// Should the close fail, the issue stays open with the comment.
+	again := w[0].flag("--comment")
 
 	r = canaryReport(t, openIssue(15, title, down, again), dir)
 	if r.code != 0 || len(r.writes()) != 0 {
