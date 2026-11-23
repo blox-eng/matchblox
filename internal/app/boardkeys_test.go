@@ -639,6 +639,32 @@ func TestBeltFollowsTheFocus(t *testing.T) {
 	}
 }
 
+// TestTheBeltSaysWhenTheChatTakesTheScreen: where one pane shows, the
+// value ends in ;chat while the chat takes the screen, so Pocket's hold
+// selects text there and opens the row's menu only on the list (#485).
+// Side by side the list always shows: no flag.
+func TestTheBeltSaysWhenTheChatTakesTheScreen(t *testing.T) {
+	phone, _ := flintBoard(t, 40, 34)
+	phone.toLine()
+	if got := phone.beltValue(); got != "1,2;;chat" {
+		t.Errorf("one pane, the chat: %q, want 1,2;;chat", got)
+	}
+	machine := phone
+	machine.setTab(tabMachine)
+	if got := machine.beltValue(); strings.HasSuffix(got, ";chat") {
+		t.Errorf("Machine after the chat: %q, want no ;chat: Machine shows its rows", got)
+	}
+	phone.toList()
+	if got := phone.beltValue(); got != "1,2;" {
+		t.Errorf("one pane, the list: %q, want 1,2;", got)
+	}
+	desk, _ := flintBoard(t, 80, 34)
+	desk.toLine()
+	if got := desk.beltValue(); got != "1,2;" {
+		t.Errorf("side by side, the line: %q, want 1,2;", got)
+	}
+}
+
 // TestTheBeltSignalSaysTheBoardsKeys: the console tells the app the
 // chosen card's keys, an armed one with *, and the dim keys after ;; box
 // and menu while they show; "" when it leaves the board. It says a value
@@ -760,7 +786,7 @@ func TestTheBeltValueKeepsItsLimit(t *testing.T) {
 	for i := range 20 {
 		ks = append(ks, beltKey{Key: fmt.Sprintf("long%02d", i)})
 	}
-	got := beltWord(ks, "3")
+	got := beltWord(ks, "3", false)
 	if len(got) > beltMax {
 		t.Fatalf("%q has %d bytes, more than %d", got, len(got), beltMax)
 	}
@@ -773,7 +799,10 @@ func TestTheBeltValueKeepsItsLimit(t *testing.T) {
 			t.Fatalf("dim key %d is %q in %q: want whole keys, in order", i, d, got)
 		}
 	}
-	if beltWord(ks, "") == beltWord(ks, "3") {
+	if chat := beltWord(ks, "3", true); len(chat) > beltMax || !strings.HasSuffix(chat, ";chat") {
+		t.Errorf("%q: want at most %d bytes, ending in ;chat", chat, beltMax)
+	}
+	if beltWord(ks, "", false) == beltWord(ks, "3", false) {
 		t.Error("the armed key does not show")
 	}
 }

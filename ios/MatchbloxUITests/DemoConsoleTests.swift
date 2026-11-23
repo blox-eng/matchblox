@@ -184,6 +184,32 @@ final class DemoConsoleTests: XCTestCase {
         XCTAssertFalse(app.keyboards.firstMatch.exists, "the second tap raised the keyboard")
     }
 
+    /// In the chat a hold is the terminal's own: its Select / Paste menu shows. On the list the
+    /// hold opens the row's menu (`goInto`) (#485).
+    @MainActor
+    func testAHoldInTheChatOffersToSelect() {
+        let app = launched()
+        expect(in: app, "label CONTAINS %@", "NEEDS YOU")
+        let terminal = app.descendants(matching: .any)["demo-terminal"]
+        waitUntilSteady(terminal)
+        openTheChat(app, row: "flint-auth")
+        expect(in: app, step: "the chat's question after the tap", "label CONTAINS %@ AND label CONTAINS %@", "send to flint-auth", "2. Rotate, keep")
+        waitUntilSteady(terminal)
+        let rows = terminal.label.components(separatedBy: "\n")
+        guard let row = rows.firstIndex(where: { $0.contains("2. Rotate, keep") }) else {
+            return XCTFail("no row shows the question: \(terminal.label)")
+        }
+        terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: (Double(row) + 0.5) / Double(rows.count))).press(forDuration: 1.2)
+        let menu = app.menuItems["Paste"].firstMatch.waitForExistence(timeout: 5) || app.menuItems["Select"].firstMatch.exists
+        keep(app, "10 hold in the chat")
+        // value: press= release= right= (clicks sent), hold= (SwiftTerm's long-press began), menu=
+        let counts = terminal.value as? String ?? ""
+        XCTAssertTrue(counts.contains("right=0"), "a hold in the chat sent a right click: \(counts)")
+        XCTAssertFalse(counts.contains("hold=0"), "SwiftTerm's long-press did not begin: \(counts)")
+        XCTAssertTrue(menu, "a hold in the chat showed no Select / Paste menu: \(counts). " + app.debugDescription)
+        XCTAssertFalse(terminal.label.contains("go in"), "a hold in the chat opened the row's menu: \(terminal.label)")
+    }
+
     /// The presses of the left button the terminal has sent, as its accessibility value counts them.
     @MainActor
     private func presses(on terminal: XCUIElement) -> Int {
@@ -205,7 +231,7 @@ final class DemoConsoleTests: XCTestCase {
         dismissKeyboardTip(in: app)
         XCTAssertTrue(app.buttons["Hide keyboard"].firstMatch.waitForExistence(timeout: 10), "the tap did not raise the keyboard. " + app.debugDescription)
         Thread.sleep(forTimeInterval: 1)
-        XCTAssertEqual(terminal.value as? String, "press=\(before + 1) release=\(before + 1)", "the tap on the row did not click exactly once")
+        XCTAssertTrue((terminal.value as? String ?? "").hasPrefix("press=\(before + 1) release=\(before + 1) "), "the tap on the row did not click exactly once: \(terminal.value ?? "")")
         waitUntilSteady(terminal)
         XCTAssertFalse(terminal.label.contains("I rotate the token on each refresh"), "the tap clicked through to the answer: \(terminal.label)")
         keep(app, "9 real host tap")

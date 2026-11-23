@@ -641,6 +641,7 @@ final class ConsoleConnection {
     #if DEBUG
     @ObservationIgnored var presses = 0
     @ObservationIgnored var releases = 0
+    @ObservationIgnored var rights = 0
     #endif
 
     var isDemo: Bool { host.isDemo }
@@ -998,8 +999,8 @@ extension ConsoleConnection: @preconcurrency TerminalViewDelegate {
 
 #if DEBUG
 extension ConsoleConnection {
-    /// The UI test reads the presses and releases of the left button the terminal sent, as the
-    /// terminal's accessibility value. Reports are SGR (`ESC [ < b ; x ; y M|m`) or classic
+    /// The UI test reads the presses and releases of the left button the terminal sent, and the
+    /// right presses, as the terminal's accessibility value (`ConsoleTerminalView.clickNote`). Reports are SGR (`ESC [ < b ; x ; y M|m`) or classic
     /// (`ESC [ M cb x y`).
     func countClicks(in data: ArraySlice<UInt8>) {
         let bytes = Array(data)
@@ -1013,17 +1014,19 @@ extension ConsoleConnection {
                 let button = String(decoding: bytes[(at + 3)..<end].prefix { $0 != 0x3b }, as: UTF8.self)
                 if button == "0" {
                     if bytes[end] == 0x4d { presses += 1 } else { releases += 1 }
+                } else if button == "2", bytes[end] == 0x4d {
+                    rights += 1
                 }
                 at = end + 1
             } else if bytes[at + 2] == 0x4d, at + 5 < bytes.count {
                 let button = Int(bytes[at + 3]) - 32
-                if button == 0 { presses += 1 } else if button == 3 { releases += 1 }
+                if button == 0 { presses += 1 } else if button == 3 { releases += 1 } else if button == 2 { rights += 1 }
                 at += 6
             } else {
                 at += 1
             }
         }
-        terminal?.accessibilityValue = "press=\(presses) release=\(releases)"
+        terminal?.clickNote = "press=\(presses) release=\(releases) right=\(rights)"
     }
 }
 #endif
