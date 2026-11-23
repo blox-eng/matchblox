@@ -59,6 +59,9 @@ final class ConsoleTerminalView: TerminalView {
     private var hold: UILongPressGestureRecognizer?
     /// The word a hold selected, while its press drags the selection on.
     private var heldWord: (start: Position, end: Position)?
+    /// A hold's selection at the lift, the terminal's size then, and when: the keys the hold
+    /// took move the belt or raise the keyboard, and SwiftTerm drops a selection on a resize.
+    private var lifted: (start: Position, end: Position, size: CGSize, at: CFTimeInterval)?
     private let holdGate = HoldGate()
     /// The size the text has now; a pinch changes it, in whole points.
     private(set) var textSize: TextSize
@@ -336,10 +339,27 @@ final class ConsoleTerminalView: TerminalView {
             #endif
             guard selection.active else { return }
             let point = press.location(in: self)
+            lifted = (selection.start, selection.end, bounds.size, CACurrentMediaTime())
             UIMenuController.shared.showMenu(from: self, rect: CGRect(origin: point, size: cellSize))
         default:
             heldWord = nil
         }
+    }
+
+    /// The resize right after a hold (the belt or the keyboard moving) dropped its selection in
+    /// SwiftTerm (`processSizeChange`, #492): it comes back, buffer rows stay where they were, and
+    /// so does the menu. A person's own clear has no resize, and the window is two seconds.
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        guard let held = lifted else { return }
+        guard CACurrentMediaTime() - held.at < 2 else {
+            lifted = nil
+            return
+        }
+        guard bounds.size != held.size, !selection.active else { return }
+        lifted = nil
+        selection.setSelection(start: held.start, end: held.end)
+        UIMenuController.shared.showMenu(from: self, rect: CGRect(origin: .zero, size: bounds.size))
     }
 
     /// Each whole point of a pinch ticks once. The phone keeps the size when the fingers lift.
