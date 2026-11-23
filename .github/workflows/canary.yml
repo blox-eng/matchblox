@@ -52,27 +52,52 @@ jobs:
           node-version: "22"
       - name: Install tmux
         run: sudo apt-get update && sudo apt-get install -y tmux
+      # The agents install and run as canary, a user with no sudo: the
+      # runner's memory, its token and the caches main restores are out of
+      # their reach. sudo and env -i hand them no runner variable.
+      - name: Make the user canary
+        id: user
+        run: |
+          sudo useradd --create-home --shell /bin/bash canary
+          if id -nG canary | grep -qwE 'sudo|admin'; then echo "::error::canary is in sudo or admin"; exit 1; fi
+          if sudo -u canary -H sudo -n true 2>/dev/null; then echo "::error::canary can sudo"; exit 1; fi
+          sudo -u canary -H env -i "$(command -v node)" --version
+          sudo -u canary -H env -i "$(command -v go)" version
+          echo "CANARY_PATH=$(dirname "$(command -v go)"):$(dirname "$(command -v node)"):/home/canary/.npm-global/bin:/usr/bin:/bin" >>"$GITHUB_ENV"
       # One step per agent, each continue-on-error: an agent that fails to
       # install is not installed, and the run says so for it alone.
       - name: Install Claude Code
         continue-on-error: true
-        run: npm install -g @anthropic-ai/claude-code@latest
+        run: sudo -u canary -H env -i HOME=/home/canary PATH="$CANARY_PATH" npm install -g --prefix /home/canary/.npm-global @anthropic-ai/claude-code@latest
       - name: Install Codex
         continue-on-error: true
-        run: npm install -g @openai/codex@latest
+        run: sudo -u canary -H env -i HOME=/home/canary PATH="$CANARY_PATH" npm install -g --prefix /home/canary/.npm-global @openai/codex@latest
       - name: Install OpenCode
         continue-on-error: true
-        run: npm install -g opencode-ai@latest
-      # continue-on-error: a break must still reach report, which files it.
+        run: sudo -u canary -H env -i HOME=/home/canary PATH="$CANARY_PATH" npm install -g --prefix /home/canary/.npm-global opencode-ai@latest
+      # After a failed install, never after a user that may have sudo. It
+      # runs on a copy canary owns: the runner's workspace need not be
+      # readable to it. continue-on-error: a break must still reach report.
       - name: Run the canary
         id: run
-        if: always()
+        if: always() && steps.user.outcome == 'success'
         continue-on-error: true
-        env:
-          MATCHBLOX_CANARY_OUT: ${{ runner.temp }}/canary
         run: |
-          mkdir -p "$MATCHBLOX_CANARY_OUT"
-          go test -tags canary -run TestCanary -v -timeout 10m ./internal/said
+          sudo mkdir /home/canary/src
+          sudo cp -a "$GITHUB_WORKSPACE/." /home/canary/src
+          sudo chown -R canary:canary /home/canary/src
+          sudo -u canary -H mkdir -p /home/canary/out
+          sudo -u canary -H env -i -C /home/canary/src HOME=/home/canary PATH="$CANARY_PATH" \
+            GOCACHE=/home/canary/.cache/go-build GOMODCACHE=/home/canary/go/pkg/mod GOFLAGS=-mod=mod \
+            MATCHBLOX_CANARY_OUT=/home/canary/out \
+            go test -tags canary -run TestCanary -v -timeout 10m ./internal/said
+      # Only canary's regular files: a link it planted hands on nothing of the runner's.
+      - name: Hand the results to the upload
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/canary"
+          sudo find /home/canary/out -maxdepth 1 -type f -name '*.json' -exec cp -t "$RUNNER_TEMP/canary" {} +
+          sudo chown -R "$(id -u):$(id -g)" "$RUNNER_TEMP/canary"
       # warn, not error: a broken install still writes its could-not-run file.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()

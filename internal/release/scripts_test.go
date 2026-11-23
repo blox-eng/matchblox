@@ -864,6 +864,7 @@ func TestCanaryWorkflowKeepsTheTokenFromAgents(t *testing.T) {
 			t.Errorf("job canary: the upload runs if %q, want always()", s.If)
 		}
 	}
+	unprivileged(t, canary)
 
 	report, ok := wf.Jobs["report"]
 	if !ok {
@@ -898,5 +899,76 @@ func TestCanaryWorkflowKeepsTheTokenFromAgents(t *testing.T) {
 	}
 	if runs != 1 {
 		t.Errorf("job report has %d run steps, want one: canary-report.sh", runs)
+	}
+}
+
+// The agents install and run as the user canary, which has no sudo: the
+// runner's memory, its Actions token and the caches main restores stay out
+// of their reach. sudo and env -i hand them no runner variable.
+func unprivileged(t *testing.T, canary workflowJob) {
+	t.Helper()
+	const as = "sudo -u canary -H env -i "
+	var made, checked bool
+	tool := regexp.MustCompile(`\b(npm|npx|node|go|claude|codex|opencode)\b`)
+	lookup := regexp.MustCompile(`command -v (node|go)\b|\.npm-global`) // a lookup or canary's prefix, not a run
+	tokenish := regexp.MustCompile(`(?i)token|secret|key|password|credential|ACTIONS_|GITHUB_|RUNNER_`)
+	assigned := regexp.MustCompile(`(?:^|\s)(\w+)=`)
+	used := regexp.MustCompile(`\$\{?(\w+)`)
+	for _, s := range canary.Steps {
+		for name := range s.Env {
+			if tokenish.MatchString(name) {
+				t.Errorf("job canary: step %q passes %s", s.Name, name)
+			}
+		}
+		for _, line := range strings.Split(strings.ReplaceAll(s.Run, "\\\n", " "), "\n") {
+			line = strings.TrimSpace(line)
+			if line == "sudo useradd --create-home --shell /bin/bash canary" {
+				made = true
+			}
+			if strings.Contains(line, "id -nG canary") && strings.Contains(line, "sudo") && strings.Contains(line, "admin") {
+				checked = true
+			}
+			if !tool.MatchString(lookup.ReplaceAllString(line, "")) {
+				continue
+			}
+			if !strings.HasPrefix(line, as) {
+				t.Errorf("job canary: step %q runs %q as the runner, want it through %q", s.Name, line, as)
+				continue
+			}
+			for _, m := range append(assigned.FindAllStringSubmatch(line, -1), used.FindAllStringSubmatch(line, -1)...) {
+				if tokenish.MatchString(m[1]) {
+					t.Errorf("job canary: step %q hands %s to canary: %q", s.Name, m[1], line)
+				}
+			}
+		}
+	}
+	if !made {
+		t.Error("job canary makes no user canary with its own home")
+	}
+	// The run goes on after a failed install, but never after a user that may have sudo.
+	if i := slices.IndexFunc(canary.Steps, func(s workflowStep) bool { return s.ID == "user" }); i < 0 || canary.Steps[i].ContinueOnError ||
+		!strings.Contains(canary.Steps[i].Run, "useradd") {
+		t.Error("job canary: the step that makes canary has no id user, or may fail and go on")
+	}
+	if i := slices.IndexFunc(canary.Steps, func(s workflowStep) bool { return s.ID == "run" }); i < 0 ||
+		!strings.Contains(canary.Steps[i].If, "steps.user.outcome == 'success'") {
+		t.Error("job canary: the run step does not wait for the user canary to be made and checked")
+	}
+	if !checked {
+		t.Error("job canary does not check that canary is in neither sudo nor admin")
+	}
+	for _, pkg := range []string{"@anthropic-ai/claude-code@latest", "@openai/codex@latest", "opencode-ai@latest"} {
+		if !slices.ContainsFunc(canary.Steps, func(s workflowStep) bool {
+			return strings.Contains(s.Run, "npm install -g --prefix /home/canary/.npm-global "+pkg)
+		}) {
+			t.Errorf("job canary does not install %s into canary's own prefix", pkg)
+		}
+	}
+	// The results are canary's files: only regular ones reach the upload, so
+	// a link it planted cannot hand on a file of the runner's.
+	if !slices.ContainsFunc(canary.Steps, func(s workflowStep) bool {
+		return strings.Contains(s.If, "always()") && strings.Contains(s.Run, "find /home/canary/out -maxdepth 1 -type f -name '*.json'")
+	}) {
+		t.Error("job canary does not hand only canary's regular result files to the upload")
 	}
 }

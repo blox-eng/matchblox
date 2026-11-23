@@ -179,6 +179,7 @@ Next: builder:build
 - 2026-11-23: Task 7 imports `go.yaml.in/yaml/v3`, already in `go.sum` through gopsutil and testify; `go.mod` gains one direct `require` line and nothing new is downloaded.
 - 2026-11-23: closes review finding 1 (a hung or missing agent left the run green). `canary-report.sh` knows the three agents: one with no result file could not run (`the canary wrote no result for <Name>`), and an empty or missing folder opens one `the canary tested nothing` issue (marker key `run`). Each agent's version command gets 20 s (`commandTimeout`) and its process group is killed after; `setup` runs no command, so it needs none.
 - 2026-11-23: closes review finding 2 (a failed agent install opened no issue). Each agent installs in its own `continue-on-error` step, the run step runs `if: always()`, and report's download is `continue-on-error`, so a missing artifact reaches the script, which opens `the canary tested nothing`.
+- 2026-11-23: closes the review's open check (`supply-chain/CWE-829/.github/workflows/canary.yml/canary`), as the owner ruled in the spec: the canary job makes a user `canary` with no sudo (checked: in neither sudo nor admin, `sudo -n` fails). Each agent installs as `canary` into `/home/canary/.npm-global`, and `go test` runs as `canary` on a copy of the source it owns, all through `sudo -u canary -H env -i`, so no runner variable reaches an agent. The run waits for that user step; only canary's regular `*.json` files reach the upload. `cache: false` stays.
 
 ## Calls
 
