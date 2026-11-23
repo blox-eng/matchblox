@@ -135,3 +135,105 @@ func TestResponsesStandInAnswersAShellResult(t *testing.T) {
 		t.Fatalf("toolRequests %d, want 0", n)
 	}
 }
+
+// chatChunks decodes the chunks of a chat completions stream, which ends with
+// data: [DONE].
+func chatChunks(t *testing.T, events []sseEvent) []map[string]any {
+	t.Helper()
+	if len(events) == 0 || events[len(events)-1].data != "[DONE]" {
+		t.Fatalf("the stream %v does not end with [DONE]", events)
+	}
+	var out []map[string]any
+	for _, e := range events[:len(events)-1] {
+		var m map[string]any
+		if err := json.Unmarshal([]byte(e.data), &m); err != nil {
+			t.Fatalf("chunk %s: %v", e.data, err)
+		}
+		if m["object"] != "chat.completion.chunk" {
+			t.Fatalf("chunk %v is not a chat.completion.chunk", m)
+		}
+		out = append(out, m)
+	}
+	return out
+}
+
+func choice(chunk map[string]any) map[string]any {
+	choices, _ := chunk["choices"].([]any)
+	if len(choices) == 0 {
+		return map[string]any{}
+	}
+	return choices[0].(map[string]any)
+}
+
+const opencodeRequest = `{"model":"stand-in","stream":true,
+	"tools":[{"type":"function","function":{"name":"bash","parameters":{"type":"object"}}}],
+	"messages":[{"role":"system","content":"x"},{"role":"user","content":"make the canary file"}%s]}`
+
+func TestChatStandInCallsBash(t *testing.T) {
+	s := &chatStandIn{}
+	chunks := chatChunks(t, postSSE(t, s, "/v1/chat/completions", strings.Replace(opencodeRequest, "%s", "", 1)))
+
+	var calls []map[string]any
+	args := ""
+	finish := ""
+	for _, c := range chunks {
+		ch := choice(c)
+		if delta, ok := ch["delta"].(map[string]any); ok {
+			tcs, _ := delta["tool_calls"].([]any)
+			for _, tc := range tcs {
+				tc := tc.(map[string]any)
+				if tc["index"] != 0.0 {
+					t.Fatalf("tool call %v, want index 0", tc)
+				}
+				if tc["id"] != nil {
+					calls = append(calls, tc)
+				}
+				args += tc["function"].(map[string]any)["arguments"].(string)
+			}
+		}
+		if r, ok := ch["finish_reason"].(string); ok {
+			finish = r
+		}
+	}
+	if len(calls) != 1 || calls[0]["type"] != "function" || calls[0]["function"].(map[string]any)["name"] != "bash" {
+		t.Fatalf("tool calls %v, want one bash call", calls)
+	}
+	var cmd struct{ Command string }
+	if err := json.Unmarshal([]byte(args), &cmd); err != nil || cmd.Command != "touch canary-ran" {
+		t.Fatalf("arguments %q, want command touch canary-ran (%v)", args, err)
+	}
+	if finish != "tool_calls" {
+		t.Fatalf("finish_reason %q, want tool_calls", finish)
+	}
+	if n := s.toolRequests(); n != 1 {
+		t.Fatalf("toolRequests %d, want 1", n)
+	}
+}
+
+func TestChatStandInAnswersABashResult(t *testing.T) {
+	s := &chatStandIn{}
+	result := `,{"role":"assistant","content":null,"tool_calls":[{"id":"call_canary","type":"function","function":{"name":"bash","arguments":"{}"}}]},
+		{"role":"tool","tool_call_id":"call_canary","content":"ok"}`
+	chunks := chatChunks(t, postSSE(t, s, "/v1/chat/completions", strings.Replace(opencodeRequest, "%s", result, 1)))
+
+	text, finish := "", ""
+	for _, c := range chunks {
+		ch := choice(c)
+		if delta, ok := ch["delta"].(map[string]any); ok {
+			if delta["tool_calls"] != nil {
+				t.Fatalf("chunk %v calls a tool again", c)
+			}
+			part, _ := delta["content"].(string)
+			text += part
+		}
+		if r, ok := ch["finish_reason"].(string); ok {
+			finish = r
+		}
+	}
+	if text != "Done." || finish != "stop" {
+		t.Fatalf("answer %q with finish_reason %q, want Done. and stop", text, finish)
+	}
+	if n := s.toolRequests(); n != 0 {
+		t.Fatalf("toolRequests %d, want 0", n)
+	}
+}

@@ -115,6 +115,50 @@ trust_level = "trusted"
 		},
 		stand: func() standIn { return &responsesStandIn{} },
 	},
+	{
+		key:  "opencode",
+		name: "OpenCode",
+		bin:  "opencode",
+		version: func(env []string) (string, error) {
+			return lastField(env, "opencode", "--version")
+		},
+		setup: func(_, work, url string) error {
+			b, err := json.Marshal(map[string]any{
+				"$schema":    "https://opencode.ai/config.json",
+				"autoupdate": false,
+				"provider": map[string]any{
+					"canary": map[string]any{
+						"npm":     "@ai-sdk/openai-compatible",
+						"name":    "canary",
+						"options": map[string]any{"baseURL": url + "/v1", "apiKey": "canary-not-a-key"},
+						"models":  map[string]any{"stand-in": map[string]any{}},
+					},
+				},
+				"model":       "canary/stand-in",
+				"small_model": "canary/stand-in",
+				"permission":  map[string]any{"bash": "ask"},
+			})
+			if err != nil {
+				return err
+			}
+			return os.WriteFile(filepath.Join(work, "opencode.json"), b, 0o600)
+		},
+		env: func(home, _, binDir string) []string {
+			return []string{
+				"HOME=" + home,
+				"XDG_CONFIG_HOME=" + filepath.Join(home, ".config"),
+				"XDG_DATA_HOME=" + filepath.Join(home, ".local", "share"),
+				"XDG_STATE_HOME=" + filepath.Join(home, ".local", "state"),
+				"XDG_CACHE_HOME=" + filepath.Join(home, ".cache"),
+				"PATH=/usr/bin:/bin:" + binDir,
+				"TERM=xterm-256color",
+			}
+		},
+		argv: func() []string {
+			return []string{"opencode", "--prompt", "make the canary file"}
+		},
+		stand: func() standIn { return &chatStandIn{} },
+	},
 }
 
 // firstField runs an agent's version command and returns the first word it
@@ -334,4 +378,95 @@ func (s *responsesStandIn) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			f.Flush()
 		}
 	}
+}
+
+// chatStandIn answers as the OpenAI chat completions API: a request that
+// offers a bash tool gets one bash call, and a request that carries its result
+// gets "Done.".
+type chatStandIn struct{ tools atomic.Int64 }
+
+func (s *chatStandIn) toolName() string  { return "bash" }
+func (s *chatStandIn) toolRequests() int { return int(s.tools.Load()) }
+
+func (s *chatStandIn) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	switch {
+	case r.Method == http.MethodGet && r.URL.Path == "/v1/models":
+		_, _ = io.WriteString(w, `{"object":"list","data":[{"id":"stand-in","object":"model","owned_by":"canary"}]}`)
+		return
+	case r.Method != http.MethodPost || r.URL.Path != "/v1/chat/completions":
+		_, _ = io.WriteString(w, "{}")
+		return
+	}
+
+	var req struct {
+		Model string `json:"model"`
+		Tools []struct {
+			Function struct {
+				Name string `json:"name"`
+			} `json:"function"`
+		} `json:"tools"`
+		Messages []struct {
+			Role string `json:"role"`
+		} `json:"messages"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	bash := false
+	for _, tool := range req.Tools {
+		bash = bash || tool.Function.Name == "bash"
+	}
+	result := false
+	for _, m := range req.Messages {
+		result = result || m.Role == "tool"
+	}
+
+	deltas := []map[string]any{{"role": "assistant", "content": "Done."}}
+	finish := "stop"
+	if bash && !result {
+		s.tools.Add(1)
+		deltas = []map[string]any{
+			{"role": "assistant", "content": nil, "tool_calls": []any{map[string]any{
+				"index": 0, "id": "call_canary", "type": "function",
+				"function": map[string]any{"name": "bash", "arguments": ""},
+			}}},
+			{"tool_calls": []any{map[string]any{
+				"index":    0,
+				"function": map[string]any{"arguments": `{"command":"touch canary-ran","description":"Make the canary file"}`},
+			}}},
+		}
+		finish = "tool_calls"
+	}
+
+	chunk := func(delta map[string]any, finish any) map[string]any {
+		return map[string]any{
+			"id": "chatcmpl-canary", "object": "chat.completion.chunk", "created": 0, "model": req.Model,
+			"choices": []any{map[string]any{"index": 0, "delta": delta, "finish_reason": finish}},
+		}
+	}
+	var chunks []map[string]any
+	for _, d := range deltas {
+		chunks = append(chunks, chunk(d, nil))
+	}
+	last := chunk(map[string]any{}, finish)
+	last["usage"] = map[string]int{"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
+	chunks = append(chunks, last)
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	f, _ := w.(http.Flusher)
+	for _, c := range chunks {
+		b, err := json.Marshal(c)
+		if err != nil {
+			return
+		}
+		if _, err := fmt.Fprintf(w, "data: %s\n\n", b); err != nil {
+			return
+		}
+		if f != nil {
+			f.Flush()
+		}
+	}
+	_, _ = io.WriteString(w, "data: [DONE]\n\n")
 }
