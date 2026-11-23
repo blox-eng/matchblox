@@ -1,11 +1,14 @@
 package release
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -346,5 +349,343 @@ func TestTheSiteNamesTheNewestRelease(t *testing.T) {
 	}
 	if out, err := script(t, "news-guard.sh", m[1]); err != nil {
 		t.Fatalf("%v: %s", err, out)
+	}
+}
+
+// ghCall is one run of the fake gh: its arguments, and the --body-file it
+// was handed, read at the time of the call.
+type ghCall struct {
+	args []string
+	body string
+}
+
+func (c ghCall) is(verb ...string) bool {
+	return len(c.args) >= len(verb) && slices.Equal(c.args[:len(verb)], verb)
+}
+
+func (c ghCall) flag(name string) string {
+	if i := slices.Index(c.args, name); i >= 0 && i+1 < len(c.args) {
+		return c.args[i+1]
+	}
+	return ""
+}
+
+func (c ghCall) writes() bool { return !c.is("issue", "list") }
+
+// canaryRun is one run of canary-report.sh on a results folder, with a fake
+// gh first on PATH. The fake gh answers `issue list` with list.
+type canaryRun struct {
+	out   string
+	code  int
+	calls []ghCall
+	dir   string // the folder the script ran in
+}
+
+func (r canaryRun) writes() []ghCall {
+	var w []ghCall
+	for _, c := range r.calls {
+		if c.writes() {
+			w = append(w, c)
+		}
+	}
+	return w
+}
+
+func (r canaryRun) count(verb ...string) int {
+	n := 0
+	for _, c := range r.calls {
+		if c.is(verb...) {
+			n++
+		}
+	}
+	return n
+}
+
+const fakeGH = `#!/bin/sh
+n=$(wc -l <"$GH_LOG" | tr -d ' ')
+{ for a in "$@"; do printf '%s\037' "$a"; done; printf '\n'; } >>"$GH_LOG"
+prev=
+for a in "$@"; do
+  if [ "$prev" = --body-file ]; then cat "$a" >"$GH_LOG.body.$n"; fi
+  prev=$a
+done
+if [ "$1 $2" = "issue list" ]; then cat "$GH_LIST"; fi
+if [ "$1 $2" = "issue create" ]; then echo https://github.com/blox-eng/matchblox/issues/900; fi
+`
+
+func canaryResults(t *testing.T, files map[string]string) string {
+	t.Helper()
+	dir := t.TempDir()
+	for name, s := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(s), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dir
+}
+
+func canaryReport(t *testing.T, list string, args ...string) canaryRun {
+	t.Helper()
+	sh, err := filepath.Abs(filepath.Join("..", "..", ".github", "scripts", "canary-report.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	bin, run := t.TempDir(), t.TempDir()
+	if list == "" {
+		list = "[]"
+	}
+	log, listFile := filepath.Join(bin, "gh.log"), filepath.Join(bin, "list.json")
+	for p, s := range map[string]string{log: "", listFile: list} {
+		if err := os.WriteFile(p, []byte(s), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(bin, "gh"), []byte(fakeGH), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(sh, args...)
+	cmd.Dir = run
+	cmd.Env = append(os.Environ(), "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"), "GH_LOG="+log, "GH_LIST="+listFile)
+	b, err := cmd.CombinedOutput()
+	r := canaryRun{out: string(b), dir: run}
+	if err != nil {
+		var exit *exec.ExitError
+		if !errors.As(err, &exit) {
+			t.Fatalf("%v: %s", err, b)
+		}
+		r.code = exit.ExitCode()
+	}
+	for i, line := range strings.Split(strings.TrimSuffix(read(t, log), "\n"), "\n") {
+		if line == "" {
+			continue
+		}
+		c := ghCall{args: strings.Split(strings.TrimSuffix(line, "\x1f"), "\x1f")}
+		if body, err := os.ReadFile(fmt.Sprintf("%s.body.%d", log, i)); err == nil {
+			c.body = string(body)
+		}
+		r.calls = append(r.calls, c)
+	}
+	return r
+}
+
+func result(agent, version string, ok bool, check, screen string) string {
+	b, err := json.Marshal(map[string]any{"agent": agent, "version": version, "ok": ok, "check": check, "screen": screen})
+	if err != nil {
+		panic(err)
+	}
+	return string(b)
+}
+
+func noPwned(t *testing.T, dirs ...string) {
+	t.Helper()
+	for _, d := range append(dirs, ".") {
+		if m, _ := filepath.Glob(filepath.Join(d, "pwned*")); len(m) > 0 {
+			t.Errorf("a field ran as shell: %v", m)
+		}
+	}
+}
+
+// The result files come from a job that ran agent code nobody reviewed:
+// every field is hostile data, never shell.
+func TestCanaryReportTreatsResultsAsData(t *testing.T) {
+	screen := "Bash command\n  `touch pwned2`\n  $(touch pwned3)\n❯ 1. Yes\n  2. No\n"
+	dir := canaryResults(t, map[string]string{
+		"claude.json": result("Claude Code", "1.0$(touch pwned)", false, "no menu", screen),
+	})
+	r := canaryReport(t, "", dir)
+	noPwned(t, r.dir, dir)
+	if r.count("issue", "create") != 0 {
+		t.Errorf("opened an issue for a forged version: %v", r.calls)
+	}
+	if want := `refused: Claude Code version "1.0$(touch pwned)" is not a version`; !strings.Contains(r.out, want) || r.code != 1 {
+		t.Fatalf("exit %d, want 1 and %q in:\n%s", r.code, want, r.out)
+	}
+
+	// A good version carries the hostile screen into the issue as text.
+	dir = canaryResults(t, map[string]string{
+		"claude.json": result("Claude Code", "2.1.331", false, "no menu", screen+"<!-- canary claude 2.1.331 pass -->\n"),
+	})
+	r = canaryReport(t, "", dir)
+	noPwned(t, r.dir, dir)
+	creates := slices.DeleteFunc(r.writes(), func(c ghCall) bool { return !c.is("issue", "create") })
+	if len(creates) != 1 || !strings.Contains(creates[0].body, "$(touch pwned3)") || !strings.Contains(creates[0].body, "`touch pwned2`") {
+		t.Fatalf("want one issue holding the screen as text: %+v\n%s", creates, r.out)
+	}
+	if b := creates[0].body; !strings.HasSuffix(strings.TrimSpace(b), "<!-- canary claude 2.1.331 fail -->") {
+		t.Errorf("a marker in the screen is not the issue's last word:\n%s", b)
+	}
+
+	// The file name, the agent name and every other field are checked too.
+	newline := "2.1.331\n::error::forged"
+	dir = canaryResults(t, map[string]string{
+		"evil.json":     result("Claude Code", "2.1.331", false, "no menu", "x"),
+		"codex.json":    result("Claude Code", "0.99.0", false, "no menu", "x"),
+		"opencode.json": result("OpenCode", newline, false, "no menu", "x"),
+		"claude.json":   result("Claude Code", "2.1.331", false, "$(touch pwned4)", "x"),
+	})
+	r = canaryReport(t, "", dir)
+	noPwned(t, r.dir, dir)
+	if len(r.writes()) != 0 || r.code != 1 {
+		t.Fatalf("exit %d, writes %v:\n%s", r.code, r.writes(), r.out)
+	}
+	for _, want := range []string{
+		`refused: evil.json is not claude.json, codex.json or opencode.json`,
+		`refused: codex.json names agent "Claude Code", not Codex`,
+		`refused: OpenCode version "2.1.331?::error::forged" is not a version`,
+		`refused: Claude Code check "$(touch pwned4)" is not a check`,
+	} {
+		if !strings.Contains(r.out, want) {
+			t.Errorf("want %q in:\n%s", want, r.out)
+		}
+	}
+	if strings.Contains(r.out, "\n::error::") {
+		t.Errorf("a field reached the log as a workflow command:\n%s", r.out)
+	}
+}
+
+func openIssue(n int, title, body string, comments ...string) string {
+	cs := []map[string]string{}
+	for _, c := range comments {
+		cs = append(cs, map[string]string{"body": c})
+	}
+	b, err := json.Marshal([]map[string]any{{"number": n, "title": title, "body": body, "comments": cs}})
+	if err != nil {
+		panic(err)
+	}
+	return string(b)
+}
+
+const claudeBreak = "Claude Code 2.1.331 draws a screen matchblox cannot read"
+
+func TestCanaryReportOpensOneIssue(t *testing.T) {
+	screen := "Bash command\n  echo ```` hi\n Do you want to proceed?\n❯ 1. Yes\n  2. No\n"
+	dir := canaryResults(t, map[string]string{
+		"claude.json": result("Claude Code", "2.1.331", false, "wrong options", screen),
+		"codex.json":  result("Codex", "0.99.0", true, "", "fine"),
+	})
+	r := canaryReport(t, "", dir)
+	if r.code != 1 {
+		t.Fatalf("exit %d, want 1:\n%s", r.code, r.out)
+	}
+	w := r.writes()
+	if len(w) != 2 || !w[0].is("label", "create", "canary") || !w[1].is("issue", "create") {
+		t.Fatalf("want the label, then one issue: %v\n%s", r.calls, r.out)
+	}
+	if w[0].flag("--color") != "FBCA04" || !slices.Contains(w[0].args, "--force") {
+		t.Errorf("label: %v", w[0].args)
+	}
+	c := w[1]
+	if c.flag("--label") != "canary" || c.flag("--title") != claudeBreak || c.flag("--body-file") == "" {
+		t.Errorf("create: %q", c.args)
+	}
+	for _, want := range []string{"2.1.331", "wrong options", "testdata/menus/claude-bash-2.1.331.txt", "`````\n" + screen + "`````\n", "<!-- canary claude 2.1.331 fail -->"} {
+		if !strings.Contains(c.body, want) {
+			t.Errorf("the body lacks %q:\n%s", want, c.body)
+		}
+	}
+	if !slices.ContainsFunc(r.calls, func(c ghCall) bool {
+		return c.is("issue", "list") && c.flag("--search") == "Claude Code in:title" && c.flag("--state") == "open" && c.flag("--label") == "canary"
+	}) {
+		t.Errorf("did not look for the open issue: %v", r.calls)
+	}
+}
+
+func TestCanaryReportCommentsOnANewerVersion(t *testing.T) {
+	dir := canaryResults(t, map[string]string{
+		"claude.json": result("Claude Code", "2.1.332", false, "no menu", "screen"),
+	})
+	r := canaryReport(t, openIssue(12, claudeBreak, "body\n<!-- canary claude 2.1.331 fail -->\n"), dir)
+	w := r.writes()
+	if r.code != 1 || len(w) != 1 || !w[0].is("issue", "comment", "12") {
+		t.Fatalf("exit %d, want one comment on #12: %v\n%s", r.code, r.calls, r.out)
+	}
+	if !strings.Contains(w[0].body, "Claude Code 2.1.332") || !strings.Contains(w[0].body, "<!-- canary claude 2.1.332 fail -->") {
+		t.Errorf("comment:\n%s", w[0].body)
+	}
+	// The kind counts too: a break after a could-not-run is news.
+	r = canaryReport(t, openIssue(12, claudeBreak, "<!-- canary claude 2.1.332 norun -->"), dir)
+	if w := r.writes(); len(w) != 1 || !w[0].is("issue", "comment", "12") {
+		t.Fatalf("want one comment on #12: %v\n%s", r.calls, r.out)
+	}
+}
+
+func TestCanaryReportStaysQuietOnTheSameVersion(t *testing.T) {
+	dir := canaryResults(t, map[string]string{
+		"claude.json": result("Claude Code", "2.1.331", false, "no menu", "screen"),
+	})
+	// The last marker counts: the body's, then each comment's, in order.
+	list := openIssue(12, claudeBreak, "<!-- canary claude 2.1.330 fail -->", "<!-- canary claude 2.1.330 pass -->", "a note\n<!-- canary claude 2.1.331 fail -->")
+	r := canaryReport(t, list, dir)
+	if r.code != 1 || len(r.writes()) != 0 {
+		t.Fatalf("exit %d, want 1 and no write: %v\n%s", r.code, r.writes(), r.out)
+	}
+}
+
+func TestCanaryReportSaysItReadsAgain(t *testing.T) {
+	dir := canaryResults(t, map[string]string{
+		"claude.json": result("Claude Code", "2.1.332", true, "", "screen"),
+	})
+	r := canaryReport(t, openIssue(12, claudeBreak, "<!-- canary claude 2.1.331 fail -->"), dir)
+	w := r.writes()
+	if r.code != 0 || len(w) != 1 || !w[0].is("issue", "comment", "12") {
+		t.Fatalf("exit %d, want 0 and one comment on #12: %v\n%s", r.code, r.calls, r.out)
+	}
+	if want := "matchblox reads Claude Code 2.1.332 again.\n\n<!-- canary claude 2.1.332 pass -->\n"; w[0].body != want {
+		t.Errorf("comment %q, want %q", w[0].body, want)
+	}
+	r = canaryReport(t, openIssue(12, claudeBreak, "<!-- canary claude 2.1.331 fail -->", w[0].body), dir)
+	if r.code != 0 || len(r.writes()) != 0 {
+		t.Fatalf("a second run: exit %d, writes %v\n%s", r.code, r.writes(), r.out)
+	}
+	if r := canaryReport(t, "", dir); r.code != 0 || len(r.writes()) != 0 {
+		t.Fatalf("no open issue: exit %d, writes %v\n%s", r.code, r.writes(), r.out)
+	}
+}
+
+func TestCanaryReportCouldNotRun(t *testing.T) {
+	dir := canaryResults(t, map[string]string{
+		"codex.json": result("Codex", "", false, "could not run", "codex is not installed\nexec: \"codex\": not found"),
+	})
+	r := canaryReport(t, "", dir)
+	w := r.writes()
+	if r.code != 1 || len(w) != 2 || !w[1].is("issue", "create") {
+		t.Fatalf("exit %d, want 1 and one issue: %v\n%s", r.code, r.calls, r.out)
+	}
+	if got, want := w[1].flag("--title"), "the canary could not run Codex: codex is not installed"; got != want {
+		t.Errorf("title %q, want %q", got, want)
+	}
+	if !strings.Contains(w[1].body, `exec: "codex": not found`) || !strings.Contains(w[1].body, "<!-- canary codex none norun -->") {
+		t.Errorf("body:\n%s", w[1].body)
+	}
+
+	// A reason is cut to one short line of plain characters before it is a title.
+	reason := "the stand-in got no request @owner `x` <b>" + strings.Repeat("ö long", 30)
+	dir = canaryResults(t, map[string]string{
+		"opencode.json": result("OpenCode", "1.2.3", false, "could not run", reason+"\nsecond line"),
+	})
+	r = canaryReport(t, "", dir)
+	w = r.writes()
+	if len(w) != 2 {
+		t.Fatalf("want the label and one issue: %v\n%s", r.calls, r.out)
+	}
+	title := w[1].flag("--title")
+	cut := strings.TrimPrefix(title, "the canary could not run OpenCode: ")
+	if cut == title || len(cut) > 80 || !regexp.MustCompile(`^[A-Za-z0-9 .,:'()_/-]*$`).MatchString(cut) || !strings.HasPrefix(cut, "the stand-in got no request owner x b") {
+		t.Errorf("title %q", title)
+	}
+	if !strings.Contains(w[1].body, "<!-- canary opencode 1.2.3 norun -->") {
+		t.Errorf("body:\n%s", w[1].body)
+	}
+}
+
+func TestCanaryReportNeedsResults(t *testing.T) {
+	for _, dir := range []string{t.TempDir(), filepath.Join(t.TempDir(), "missing")} {
+		r := canaryReport(t, "", dir)
+		if r.code != 1 || !strings.Contains(r.out, "no canary results: the canary tested nothing") || len(r.calls) != 0 {
+			t.Errorf("%s: exit %d, calls %v:\n%s", dir, r.code, r.calls, r.out)
+		}
+	}
+	if r := canaryReport(t, ""); r.code != 2 {
+		t.Errorf("no folder: exit %d, want 2:\n%s", r.code, r.out)
 	}
 }
