@@ -121,6 +121,9 @@ func runCanary(t *testing.T, a agent) canaryResult {
 			res.Version = v
 		}
 		if err := a.setup(home, work, srv.URL); err != nil {
+			if broke != nil {
+				return *broke
+			}
 			return fail(err.Error())
 		}
 
@@ -378,5 +381,22 @@ func TestRetryKeepsARealBreak(t *testing.T) {
 	res := runCanary(t, scriptAgent(t, "retry", script, fixedStandIn{n: 1}))
 	if res.Check != "no waiting state" || res.OK || !strings.Contains(res.Screen, standInCommand) {
 		t.Errorf("check %q, ok %v, screen:\n%s", res.Check, res.OK, res.Screen)
+	}
+}
+
+// A setup that fails on the retry must not hide the break the first attempt saw.
+func TestRetrySetupFailureKeepsARealBreak(t *testing.T) {
+	shortMenuWait(t)
+	a := scriptAgent(t, "setup", fmt.Sprintf("echo '$ %s'\necho 'Thinking'\nsleep 600\n", standInCommand), fixedStandIn{n: 1})
+	setups := 0
+	a.setup = func(_, _, _ string) error {
+		if setups++; setups > 1 {
+			return errors.New("setup failed on retry")
+		}
+		return nil
+	}
+	res := runCanary(t, a)
+	if res.Check != "no waiting state" || !strings.Contains(res.Screen, standInCommand) {
+		t.Errorf("check %q, screen:\n%s", res.Check, res.Screen)
 	}
 }

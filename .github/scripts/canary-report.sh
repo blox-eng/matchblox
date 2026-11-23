@@ -96,9 +96,15 @@ post() {
   fi
 }
 
-# close NUMBER TEXT WHAT: closes issue NUMBER with the comment TEXT.
+# close NUMBER TEXT WHAT LAST: closes issue NUMBER with the comment TEXT. When
+# LAST, the issue's last marker, already says pass, an earlier close failed
+# after its comment: close it with no second comment.
 close() {
-  gh issue close "$1" --comment "$2" >/dev/null || return 1
+  if [[ "$4" == *" pass -->" ]]; then
+    gh issue close "$1" >/dev/null || return 1
+  else
+    gh issue close "$1" --comment "$2" >/dev/null || return 1
+  fi
   echo "$3: closed #$1"
 }
 
@@ -139,8 +145,8 @@ if [ ${#files[@]} -eq 0 ]; then
   rm -f "$body"
   exit 1
 fi
-if [ -n "$tested" ] && [ "$tested_last" != "<!-- canary run none pass -->" ]; then
-  close "$tested" "$(printf 'The canary runs again.\n\n<!-- canary run none pass -->')" "the canary runs again" ||
+if [ -n "$tested" ]; then
+  close "$tested" "$(printf 'The canary runs again.\n\n<!-- canary run none pass -->')" "the canary runs again" "$tested_last" ||
     refuse "gh failed for $tested_title"
 fi
 
@@ -211,10 +217,10 @@ for key in claude codex opencode; do
   fi
 
   if [ "$kind" = pass ]; then
-    if [ -z "$number" ] || [[ "$last" == *" pass -->" ]]; then
+    if [ -z "$number" ]; then
       echo "$name $version: reads well"
     else
-      close "$number" "$(printf 'matchblox reads %s %s again.\n\n%s' "$name" "$version" "$marker")" "$name $version" ||
+      close "$number" "$(printf 'matchblox reads %s %s again.\n\n%s' "$name" "$version" "$marker")" "$name $version" "$last" ||
         refuse "gh failed for $name"
     fi
     continue

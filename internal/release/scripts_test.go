@@ -832,10 +832,11 @@ func TestCanaryReportSaysItReadsAgain(t *testing.T) {
 	if want := "matchblox reads Claude Code 2.1.332 again.\n\n<!-- canary claude 2.1.332 pass -->"; w[0].flag("--comment") != want {
 		t.Errorf("comment %q, want %q", w[0].flag("--comment"), want)
 	}
-	// Should the close fail, the comment's marker keeps the next run quiet.
+	// Should the close fail after its comment, the next run closes the issue
+	// with no second comment, so a later break opens a new one.
 	r = canaryReport(t, openIssue(12, claudeBreak, "<!-- canary claude 2.1.331 fail -->", w[0].flag("--comment")), dir)
-	if r.code != 0 || len(r.writes()) != 0 {
-		t.Fatalf("a second run: exit %d, writes %v\n%s", r.code, r.writes(), r.out)
+	if w := r.writes(); r.code != 0 || len(w) != 1 || !w[0].is("issue", "close", "12") || w[0].flag("--comment") != "" {
+		t.Fatalf("a second run: exit %d, want #12 closed with no comment: %v\n%s", r.code, r.writes(), r.out)
 	}
 	if r := canaryReport(t, "", dir); r.code != 0 || len(r.writes()) != 0 {
 		t.Fatalf("no open issue: exit %d, writes %v\n%s", r.code, r.writes(), r.out)
@@ -952,12 +953,13 @@ func TestCanaryReportSaysItRunsAgain(t *testing.T) {
 	if want := "The canary runs again.\n\n" + up; w[0].flag("--comment") != want {
 		t.Errorf("comment %q, want %q", w[0].flag("--comment"), want)
 	}
-	// Should the close fail, the issue stays open with the comment.
+	// Should the close fail after its comment, the next run with results closes
+	// the issue with no second comment.
 	again := w[0].flag("--comment")
 
 	r = canaryReport(t, openIssue(15, title, down, again), dir)
-	if r.code != 0 || len(r.writes()) != 0 {
-		t.Fatalf("a second run with results: exit %d, writes %v\n%s", r.code, r.writes(), r.out)
+	if w := r.writes(); r.code != 0 || len(w) != 1 || !w[0].is("issue", "close", "15") || w[0].flag("--comment") != "" {
+		t.Fatalf("a second run with results: exit %d, want #15 closed with no comment: %v\n%s", r.code, r.writes(), r.out)
 	}
 
 	// While the outage goes on, nothing new.
