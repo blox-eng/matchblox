@@ -171,6 +171,9 @@ Next: builder:build
 
 - 2026-11-23: the spec line on the `report` job now reads "checks out only matchblox's own script" (plan Call 1, approved with the plan by the owner).
 - 2026-11-23: Task 2's `scrub` takes `host` and `user` as arguments. As planned it read this machine's names, so a runner's `runner@fv-az123` in the hostile input could never be removed, and no test could feed it a short name. The caller (Task 3) passes the real names. The hostile input is unchanged. Proposed by the Task 2 builder, taken by this session.
+- 2026-11-23: Task 3 adds `internal/said/main_test.go` (`//go:build canary`): the repo guard `TestEveryTestTmuxNamesItsServer` needs a TestMain that calls `testhome.Run` in any package whose tests start tmux.
+- 2026-11-23: Task 3's `agent` has `env(home, url, binDir)`, `version` runs with that env (never the real home), and `stand` makes a fresh stand-in per attempt that counts tool requests.
+- 2026-11-23: a `could not run` result carries its reason in `screen`; a run whose stand-in got no tool request is `could not run`, not a screen break (spec: a canary that tests nothing must not be green).
 
 ## Calls
 

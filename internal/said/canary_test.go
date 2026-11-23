@@ -130,13 +130,13 @@ func runCanary(t *testing.T, a agent) canaryResult {
 		}
 		if stand.toolRequests() == 0 {
 			res.Check = couldNotRun
-			res.Screen = a.name + " sent the stand-in model no request with a Bash tool"
+			res.Screen = a.name + " sent the stand-in model no request with a " + stand.toolName() + " tool"
 			continue
 		}
 		res.Check, res.OK = check, check == ""
 		if res.OK {
 			if n := stand.toolRequests(); n != 1 {
-				t.Errorf("the stand-in got %d requests with a Bash tool before the menu, want 1", n)
+				t.Errorf("the stand-in got %d requests with a %s tool before the menu, want 1", n, stand.toolName())
 			}
 			return res
 		}

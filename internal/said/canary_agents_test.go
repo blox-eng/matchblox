@@ -16,6 +16,7 @@ import (
 
 type standIn interface {
 	http.Handler
+	toolName() string
 	toolRequests() int
 }
 
@@ -71,11 +72,64 @@ var agents = []agent{
 		},
 		stand: func() standIn { return &anthropicStandIn{} },
 	},
+	{
+		key:  "codex",
+		name: "Codex",
+		bin:  "codex",
+		version: func(env []string) (string, error) {
+			return lastField(env, "codex", "--version")
+		},
+		setup: func(home, work, url string) error {
+			dir := filepath.Join(home, ".codex")
+			if err := os.Mkdir(dir, 0o700); err != nil {
+				return err
+			}
+			config := fmt.Sprintf(`model = "stand-in"
+model_provider = "canary"
+approval_policy = "untrusted"
+sandbox_mode = "read-only"
+check_for_update_on_startup = false
+
+[model_providers.canary]
+name = "canary"
+base_url = %q
+wire_api = "responses"
+env_key = "CANARY_KEY"
+
+[projects.%q]
+trust_level = "trusted"
+`, url+"/v1", work)
+			return os.WriteFile(filepath.Join(dir, "config.toml"), []byte(config), 0o600)
+		},
+		env: func(home, _, binDir string) []string {
+			return []string{
+				"HOME=" + home,
+				"CODEX_HOME=" + filepath.Join(home, ".codex"),
+				"PATH=/usr/bin:/bin:" + binDir,
+				"TERM=xterm-256color",
+				"CANARY_KEY=canary-not-a-key",
+			}
+		},
+		argv: func() []string {
+			return []string{"codex", "make the canary file"}
+		},
+		stand: func() standIn { return &responsesStandIn{} },
+	},
 }
 
 // firstField runs an agent's version command and returns the first word it
 // prints.
 func firstField(env []string, argv ...string) (string, error) {
+	return versionField(env, argv, func(f []string) string { return f[0] })
+}
+
+// lastField runs an agent's version command and returns the last word it
+// prints.
+func lastField(env []string, argv ...string) (string, error) {
+	return versionField(env, argv, func(f []string) string { return f[len(f)-1] })
+}
+
+func versionField(env, argv []string, pick func([]string) string) (string, error) {
 	cmd := exec.Command(argv[0], argv[1:]...) //nolint:gosec // the agent's own version command
 	cmd.Env = env
 	b, err := cmd.Output()
@@ -83,10 +137,10 @@ func firstField(env []string, argv ...string) (string, error) {
 		return "", fmt.Errorf("%s: %v", strings.Join(argv, " "), err)
 	}
 	f := strings.Fields(string(b))
-	if len(f) == 0 || !versionRe.MatchString(f[0]) {
+	if len(f) == 0 || !versionRe.MatchString(pick(f)) {
 		return "", fmt.Errorf("%s printed no version: %q", strings.Join(argv, " "), b)
 	}
-	return f[0], nil
+	return pick(f), nil
 }
 
 // anthropicStandIn answers as the Anthropic Messages API: a request that
@@ -94,6 +148,7 @@ func firstField(env []string, argv ...string) (string, error) {
 // result gets "Done.".
 type anthropicStandIn struct{ tools atomic.Int64 }
 
+func (s *anthropicStandIn) toolName() string  { return "Bash" }
 func (s *anthropicStandIn) toolRequests() int { return int(s.tools.Load()) }
 
 func (s *anthropicStandIn) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -174,6 +229,105 @@ func (s *anthropicStandIn) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if _, err := fmt.Fprintf(w, "event: %s\ndata: %s\n\n", e.name, b); err != nil {
+			return
+		}
+		if f != nil {
+			f.Flush()
+		}
+	}
+}
+
+// responsesStandIn answers as the OpenAI Responses API: a request that offers
+// a shell tool gets one shell call, and a request that carries its output gets
+// "Done.".
+type responsesStandIn struct{ tools atomic.Int64 }
+
+func (s *responsesStandIn) toolName() string  { return "shell" }
+func (s *responsesStandIn) toolRequests() int { return int(s.tools.Load()) }
+
+func (s *responsesStandIn) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	switch {
+	case r.Method == http.MethodGet && r.URL.Path == "/v1/models":
+		_, _ = io.WriteString(w, `{"object":"list","data":[]}`)
+		return
+	case r.Method != http.MethodPost || r.URL.Path != "/v1/responses":
+		_, _ = io.WriteString(w, "{}")
+		return
+	}
+
+	var req struct {
+		Model string `json:"model"`
+		Tools []struct {
+			Name string `json:"name"`
+		} `json:"tools"`
+		Input []struct {
+			Type string `json:"type"`
+		} `json:"input"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	shell := false
+	for _, tool := range req.Tools {
+		shell = shell || tool.Name == "shell"
+	}
+	output := false
+	for _, item := range req.Input {
+		output = output || item.Type == "function_call_output"
+	}
+
+	var deltas []map[string]any
+	item := map[string]any{"type": "message", "id": "msg_canary", "role": "assistant", "status": "in_progress", "content": []any{}}
+	done := map[string]any{"type": "message", "id": "msg_canary", "role": "assistant", "status": "completed",
+		"content": []any{map[string]any{"type": "output_text", "text": "Done.", "annotations": []any{}}}}
+	if shell && !output {
+		s.tools.Add(1)
+		args := `{"command":["bash","-lc","touch canary-ran"]}`
+		item = map[string]any{"type": "function_call", "id": "fc_canary", "call_id": "call_canary", "name": "shell", "arguments": "", "status": "in_progress"}
+		done = map[string]any{"type": "function_call", "id": "fc_canary", "call_id": "call_canary", "name": "shell", "arguments": args, "status": "completed"}
+		deltas = []map[string]any{
+			{"type": "response.function_call_arguments.delta", "item_id": "fc_canary", "output_index": 0, "delta": args},
+			{"type": "response.function_call_arguments.done", "item_id": "fc_canary", "output_index": 0, "arguments": args},
+		}
+	} else {
+		deltas = []map[string]any{
+			{"type": "response.content_part.added", "item_id": "msg_canary", "output_index": 0, "content_index": 0,
+				"part": map[string]any{"type": "output_text", "text": "", "annotations": []any{}}},
+			{"type": "response.output_text.delta", "item_id": "msg_canary", "output_index": 0, "content_index": 0, "delta": "Done."},
+			{"type": "response.output_text.done", "item_id": "msg_canary", "output_index": 0, "content_index": 0, "text": "Done."},
+			{"type": "response.content_part.done", "item_id": "msg_canary", "output_index": 0, "content_index": 0,
+				"part": map[string]any{"type": "output_text", "text": "Done.", "annotations": []any{}}},
+		}
+	}
+	response := func(status string, output []any) map[string]any {
+		return map[string]any{"id": "resp_canary", "object": "response", "model": req.Model, "status": status, "output": output,
+			"usage": map[string]any{
+				"input_tokens": 10, "input_tokens_details": map[string]int{"cached_tokens": 0},
+				"output_tokens": 5, "output_tokens_details": map[string]int{"reasoning_tokens": 0},
+				"total_tokens": 15,
+			}}
+	}
+
+	events := []map[string]any{
+		{"type": "response.created", "response": response("in_progress", []any{})},
+		{"type": "response.output_item.added", "output_index": 0, "item": item},
+	}
+	events = append(events, deltas...)
+	events = append(events,
+		map[string]any{"type": "response.output_item.done", "output_index": 0, "item": done},
+		map[string]any{"type": "response.completed", "response": response("completed", []any{done})},
+	)
+	w.Header().Set("Content-Type", "text/event-stream")
+	f, _ := w.(http.Flusher)
+	for i, e := range events {
+		e["sequence_number"] = i
+		b, err := json.Marshal(e)
+		if err != nil {
+			return
+		}
+		if _, err := fmt.Fprintf(w, "event: %s\ndata: %s\n\n", e["type"], b); err != nil {
 			return
 		}
 		if f != nil {
