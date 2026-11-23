@@ -97,12 +97,20 @@ func TestResponsesStandInCallsShell(t *testing.T) {
 	if done["type"] != "function_call" || done["name"] != "shell" || done["call_id"] == "" {
 		t.Fatalf("output item %v is not a shell function_call", done)
 	}
-	var args struct{ Command []string }
+	var args struct {
+		Command            []string
+		SandboxPermissions string `json:"sandbox_permissions"`
+	}
 	if err := json.Unmarshal([]byte(done["arguments"].(string)), &args); err != nil {
 		t.Fatal(err)
 	}
 	if cmd := args.Command; len(cmd) == 0 || cmd[len(cmd)-1] != "touch canary-ran" {
 		t.Fatalf("shell command %q, want it to run touch canary-ran", cmd)
+	}
+	// Under approval_policy "on-request" Codex asks only for a command that
+	// wants to leave its sandbox.
+	if args.SandboxPermissions != "require_escalated" {
+		t.Fatalf("sandbox_permissions %q, want require_escalated so Codex asks", args.SandboxPermissions)
 	}
 	if events[3]["arguments"] != done["arguments"] {
 		t.Fatalf("arguments.done %v differs from the item's %v", events[3]["arguments"], done["arguments"])
@@ -110,6 +118,34 @@ func TestResponsesStandInCallsShell(t *testing.T) {
 	resp := events[5]["response"].(map[string]any)
 	if resp["status"] != "completed" || resp["id"] == "" {
 		t.Fatalf("response.completed carries %v", resp)
+	}
+	if n := s.toolRequests(); n != 1 {
+		t.Fatalf("toolRequests %d, want 1", n)
+	}
+}
+
+// Codex 0.171 offers exec_command, whose command is one string in cmd.
+func TestResponsesStandInCallsExecCommand(t *testing.T) {
+	s := &responsesStandIn{}
+	req := strings.Replace(strings.Replace(codexRequest, `"name":"shell"`, `"name":"exec_command"`, 1), "%s", "", 1)
+	events := responsesEvents(t, postSSE(t, s, "/v1/responses", req))
+	if len(events) < 5 {
+		t.Fatalf("events %v, want a function_call", eventTypes(events))
+	}
+	done, _ := events[4]["item"].(map[string]any)
+	if done["type"] != "function_call" || done["name"] != "exec_command" {
+		t.Fatalf("output item %v is not an exec_command function_call", done)
+	}
+	var args struct {
+		Cmd                string
+		SandboxPermissions string `json:"sandbox_permissions"`
+		Justification      string
+	}
+	if err := json.Unmarshal([]byte(done["arguments"].(string)), &args); err != nil {
+		t.Fatal(err)
+	}
+	if args.Cmd != "touch canary-ran" || args.SandboxPermissions != "require_escalated" || args.Justification == "" {
+		t.Fatalf("exec_command arguments %+v, want cmd touch canary-ran, require_escalated and a justification", args)
 	}
 	if n := s.toolRequests(); n != 1 {
 		t.Fatalf("toolRequests %d, want 1", n)

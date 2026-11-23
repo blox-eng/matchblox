@@ -94,7 +94,7 @@ var agents = []agent{
 			}
 			config := fmt.Sprintf(`model = "stand-in"
 model_provider = "canary"
-approval_policy = "untrusted"
+approval_policy = "on-request"
 sandbox_mode = "read-only"
 check_for_update_on_startup = false
 
@@ -314,11 +314,19 @@ func (s *anthropicStandIn) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // responsesStandIn answers as the OpenAI Responses API: a request that offers
-// a shell tool gets one shell call, and a request that carries its output gets
-// "Done.".
+// one of Codex's command tools gets one call to it, and a request that carries
+// its output gets "Done.".
 type responsesStandIn struct{ tools atomic.Int64 }
 
-func (s *responsesStandIn) toolName() string  { return "shell" }
+// codexTools are the command tools Codex offers, newest first, each with the
+// arguments that ask to run outside the sandbox: under approval_policy
+// "on-request" only such a command makes Codex ask.
+var codexTools = []struct{ name, args string }{
+	{"exec_command", `{"cmd":"` + standInCommand + `","sandbox_permissions":"require_escalated","justification":"Make the canary file"}`},
+	{"shell", `{"command":["bash","-lc","` + standInCommand + `"],"sandbox_permissions":"require_escalated","justification":"Make the canary file"}`},
+}
+
+func (s *responsesStandIn) toolName() string  { return "exec_command or shell" }
 func (s *responsesStandIn) toolRequests() int { return int(s.tools.Load()) }
 
 func (s *responsesStandIn) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -345,9 +353,13 @@ func (s *responsesStandIn) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	shell := false
-	for _, tool := range req.Tools {
-		shell = shell || tool.Name == s.toolName()
+	name, args := "", ""
+	for _, c := range codexTools {
+		for _, tool := range req.Tools {
+			if name == "" && tool.Name == c.name {
+				name, args = c.name, c.args
+			}
+		}
 	}
 	output := false
 	for _, item := range req.Input {
@@ -358,11 +370,10 @@ func (s *responsesStandIn) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	item := map[string]any{"type": "message", "id": "msg_canary", "role": "assistant", "status": "in_progress", "content": []any{}}
 	done := map[string]any{"type": "message", "id": "msg_canary", "role": "assistant", "status": "completed",
 		"content": []any{map[string]any{"type": "output_text", "text": "Done.", "annotations": []any{}}}}
-	if shell && !output {
+	if name != "" && !output {
 		s.tools.Add(1)
-		args := `{"command":["bash","-lc","` + standInCommand + `"]}`
-		item = map[string]any{"type": "function_call", "id": "fc_canary", "call_id": "call_canary", "name": s.toolName(), "arguments": "", "status": "in_progress"}
-		done = map[string]any{"type": "function_call", "id": "fc_canary", "call_id": "call_canary", "name": s.toolName(), "arguments": args, "status": "completed"}
+		item = map[string]any{"type": "function_call", "id": "fc_canary", "call_id": "call_canary", "name": name, "arguments": "", "status": "in_progress"}
+		done = map[string]any{"type": "function_call", "id": "fc_canary", "call_id": "call_canary", "name": name, "arguments": args, "status": "completed"}
 		deltas = []map[string]any{
 			{"type": "response.function_call_arguments.delta", "item_id": "fc_canary", "output_index": 0, "delta": args},
 			{"type": "response.function_call_arguments.done", "item_id": "fc_canary", "output_index": 0, "arguments": args},
