@@ -237,3 +237,18 @@ func TestChainKeepsAMemberTheTeamDoesNotList(t *testing.T) {
 		t.Fatalf("members %v, want %v", got, want)
 	}
 }
+
+func TestAChainSitsWholeInDone(t *testing.T) {
+	m := loginChain(t, func(st *proto.State, ss map[string]*sample.Session) {
+		st.Queue = nil
+		ss["flint-auth"].TurnEndedAt, ss["flint-auth"].SeenAt = boardAt.Add(-time.Minute), boardAt.Add(-time.Hour)
+	})
+	gs := m.sideGroups()
+	done, ok := groupOfState(gs, sideDone)
+	if !ok || len(done.units) != 1 || done.count != 1 || !slices.Contains(unitNames(done.units[0]), "wick-mobile") {
+		t.Fatalf("DONE %+v, want the whole chain as one unit and a count of 1", done)
+	}
+	if len(gs) != 1 {
+		t.Fatalf("groups %+v, want the chain in DONE only", gs)
+	}
+}

@@ -248,6 +248,7 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 		return m.showChosen()
 	case bkey.Matches(k, sk.Enter):
 		m.toLine()
+		cmd = m.grantKeys()
 	case bkey.Matches(k, mk.Exited):
 		cmd = m.flipExited()
 	case bkey.Matches(k, sk.Leave):
@@ -447,7 +448,7 @@ func (m *Model) sideMove(d int) {
 		}
 		d = 0
 	}
-	m.sideAt = walk[clampMove(at, d, len(walk))]
+	m.sideAt, m.doneKept = walk[clampMove(at, d, len(walk))], paneKey{}
 	if s, ok := m.sideChosen(); ok {
 		m.startChatMark(s)
 		m.sideName = m.cardName(s)

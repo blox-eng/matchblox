@@ -611,6 +611,8 @@ type Model struct {
 	sideTip                   int
 	sideHost                  string // the host whose trouble the host place shows
 	sideIn                    paneKey
+	seenActs                  map[string]bool // the ids of the seen: acts sent, until their answer
+	doneKept                  paneKey         // the done row the owner opened: it stays in DONE while it is the choice
 	beside                    string          // the agent pane's id; "" before the split, and where it failed
 	winW, winH                int             // the window's size in beside mode; 0: not read yet
 	boxZoom                   bool            // a box or an animation has the window: the list's pane is zoomed for it
@@ -1303,6 +1305,12 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // result ends the act r answers. The caller reads the next message of the
 // conn r came on.
 func (m Model) result(r proto.Result) (Model, tea.Cmd) {
+	if m.seenActs[r.ActID] {
+		delete(m.seenActs, r.ActID)
+		if r.Err == "unknown action" { // a service older than seen: the open simply is not kept
+			return m, nil
+		}
+	}
 	m.endRec(r.ActID, r)
 	if m.settleResult(r) {
 		return m, nil

@@ -252,8 +252,15 @@ type shownMsg struct {
 	ended      bool       // focused, but the view had ended: it shows again
 }
 
-// showChosen shows the session the list chooses in the agent pane.
+// showChosen shows the session the list chooses in the agent pane, and
+// gives it the keys.
 func (m Model) showChosen() (tea.Model, tea.Cmd) {
+	seen := m.grantKeys()
+	next, cmd := m.showChosenPane()
+	return next, tea.Batch(seen, cmd)
+}
+
+func (m Model) showChosenPane() (tea.Model, tea.Cmd) {
 	s, ok := m.sideChosen()
 	switch {
 	case ok && m.chainPlace(s) >= 0:

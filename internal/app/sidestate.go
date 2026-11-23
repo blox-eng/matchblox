@@ -8,19 +8,21 @@ type sideState int
 
 const (
 	sideNeed sideState = iota
+	sideDone           // a turn ended that the owner has not opened
 	sideWork
 	sideIdle
 	sideHeld // last: the builder put it away (#211)
 )
 
 func (h sideState) head() string {
-	return [...]string{"NEEDS YOU", "WORKING", "IDLE", "HELD"}[h]
+	return [...]string{"NEEDS YOU", "DONE", "WORKING", "IDLE", "HELD"}[h]
 }
 
 // sideStateOf is the state of a session: the first rule that holds. A park
 // by the owner holds whatever else is true. A question, a permission or a
 // go needs the owner even while the session works or the stoker holds it.
-// A session that waits on a ship runs on the agent's own state.
+// A session that waits on a ship runs on the agent's own state. A rest
+// whose turn ended after the owner last opened it is done.
 func (m Model) sideStateOf(s sample.Session) sideState {
 	h, held := m.holdOf(s)
 	if p, ok := m.pendingOf(s); ok && p.kind == actPark { // a park sent shows at once
@@ -32,7 +34,11 @@ func (m Model) sideStateOf(s sample.Session) sideState {
 	if held && h.By == holdByYou {
 		return sideHeld
 	}
+	done := s.TurnEndedAt.After(s.SeenAt) || m.doneKept != (paneKey{}) && paneOf(s) == m.doneKept && m.doneKept == m.sideAt
 	if age := s.Age(); age == "cold" || age == "stale" || s.Stopped() {
+		if done { // only an open takes a turn out of DONE
+			return sideDone
+		}
 		return sideIdle
 	}
 	if m.asksNow(s) || m.goWaitsOn(s) {
@@ -49,6 +55,9 @@ func (m Model) sideStateOf(s sample.Session) sideState {
 	}
 	if _, ok := m.shipOf(s, shipWaits, shipStuck); ok {
 		return sideNeed
+	}
+	if done {
+		return sideDone
 	}
 	return sideIdle
 }

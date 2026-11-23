@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"encoding/json"
 	"maps"
 	"slices"
@@ -435,9 +436,34 @@ func (m Model) expand(s sample.Session, ok bool) (tea.Model, tea.Cmd) {
 	next, cmd := m.onCard(s).intoSelected()
 	if nm, ok := next.(Model); ok && cmd != nil && nm.flash == "" && nm.pending == nil && nm.held == nil {
 		nm.sideIn = paneOf(s) // the jump runs: the key line says the way back
-		return nm, cmd
+		seen := nm.grantKeys()
+		return nm, tea.Batch(cmd, seen)
 	}
 	return next, cmd
+}
+
+// grantKeys is the chosen session's agent taking the keys: the owner
+// opened it, and every screen hears so. A done row stays where it is
+// until the choice moves, so the list does not jump under the cursor.
+func (m *Model) grantKeys() tea.Cmd {
+	s, ok := m.sideChosen()
+	if !ok || s.Pane == "" {
+		return nil
+	}
+	if m.sideStateOf(s) == sideDone {
+		m.doneKept = paneOf(s)
+	}
+	if m.side != nil {
+		m.side = &sideMemo{}
+	}
+	id, cmd := m.sendToID(cmp.Or(s.Host, m.opt.Host), proto.Act{RecID: proto.SeenPrefix + s.Pane})
+	if id != "" {
+		if m.seenActs == nil {
+			m.seenActs = map[string]bool{}
+		}
+		m.seenActs[id] = true
+	}
+	return cmd
 }
 
 // sideSays is what the Sessions tab says now: the newest toast, else

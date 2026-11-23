@@ -83,11 +83,14 @@ func (m Model) aheadOf(k chainKey, ms []sample.Session, waiting []state.MateView
 }
 
 // sideTime is what a group orders its sessions by, as the board did: the
-// wait, else the start, and the quiet ones by the last activity.
+// wait, the turn's end, else the start, and the quiet ones by the last
+// activity.
 func (m Model) sideTime(h sideState, s sample.Session) time.Time {
 	switch h {
 	case sideNeed:
 		return m.needSince(s)
+	case sideDone:
+		return s.TurnEndedAt
 	case sideIdle:
 		return m.lastActive(s)
 	}
