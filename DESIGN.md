@@ -187,6 +187,9 @@ Rules:
 | Open | about 1 s | a device claimed the code: the drawer slides out (260 ms), the match comes out (280 ms), strikes (150 ms, ease-in) and stands (320 ms) while the drawer shuts (260 ms) |
 | Lock | 180 ms | the app found a pair code: its outline moves to the corners of the code |
 
+The agent region follows the agent's own output at up to 60 Hz. Everything
+matchblox draws itself stays at 10 Hz (§4 rule 3).
+
 There are no spinners. `--no-motion` and `NO_MOTION=1` make every motion an
 instant change; on the site, `prefers-reduced-motion` does the same. In the
 app, iOS Reduce Motion does the same. The app holds the stood frame for

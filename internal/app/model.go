@@ -617,6 +617,7 @@ type Model struct {
 	winW, winH                int             // the window's size in beside mode; 0: not read yet
 	boxZoom                   bool            // a box or an animation has the window: the list's pane is zoomed for it
 	boxBack                   []string        // the agent pane's screen, drawn dim behind the box
+	agent                     agentRegion     // the desk's agent region: the chosen agent's real screen
 	showing                   bool            // a choice runs in the agent pane
 	showNext                  *action         // the choice made while one ran: it runs next
 	besideShows               paneKey         // the session the agent pane shows; zero when none or a chain view

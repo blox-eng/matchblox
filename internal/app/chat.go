@@ -44,9 +44,8 @@ func (m Model) chatPanel(w, h int) []string {
 		}
 	case m.space != "" && (k.pane == "" || i < 0): // the list says why the space shows none
 	case k.pane == "" || i < 0:
-		text := "No sessions yet. + new session starts one here (" + m.keys.main.New.Help().Key + "). matchblox setup finds the agents you already run."
 		lines = append(lines, blank)
-		for _, l := range wrapPlain(text, max(w-2, 1)) {
+		for _, l := range wrapPlain(m.noSessionsWords(), max(w-2, 1)) {
 			lines = append(lines, fit(" "+m.st.muted.Render(l), w))
 		}
 	default:
@@ -178,6 +177,11 @@ func (m Model) chainWord(u sideUnit, j int) string {
 		return "done"
 	}
 	return m.stateWord(u.members[j])
+}
+
+// noSessionsWords say how to start a session when there is none.
+func (m Model) noSessionsWords() string {
+	return "No sessions yet. + new session starts one here (" + m.keys.main.New.Help().Key + "). matchblox setup finds the agents you already run."
 }
 
 // chatConversation is the session's pane cut to its conversation: the
