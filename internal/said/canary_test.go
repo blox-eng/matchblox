@@ -87,7 +87,7 @@ func runCanary(t *testing.T, a agent) canaryResult {
 	}
 	var home, work string
 	fail := func(reason string) canaryResult {
-		res.Check, res.Screen = couldNotRun, scrub(reason, work, home, host, name)
+		res.Check, res.Screen = couldNotRun, Scrub(reason, []string{work, home}, []string{host, name})
 		return res
 	}
 	if _, err := exec.LookPath("tmux"); err != nil {
@@ -128,7 +128,7 @@ func runCanary(t *testing.T, a agent) canaryResult {
 		}
 
 		screen, check, err := drawMenu(t, fmt.Sprintf("mbc-%d-%s-%d", os.Getpid(), a.key, attempt), work, env, a.argv, a.check)
-		shown := scrub(screen, work, home, host, name)
+		shown := Scrub(screen, []string{work, home}, []string{host, name})
 		switch {
 		case err != nil:
 			res.Check, res.Screen = couldNotRun, because(err.Error(), shown)
@@ -339,14 +339,14 @@ func TestFailReasonsAreScrubbed(t *testing.T) {
 		return "", fmt.Errorf("no config in %s/.codex", strings.TrimPrefix(env[0], "HOME="))
 	}
 	res := runCanary(t, a)
-	if res.Check != couldNotRun || !strings.Contains(res.Screen, "<home>/.codex") || strings.Contains(res.Screen, os.TempDir()) {
+	if res.Check != couldNotRun || !strings.Contains(res.Screen, "<dir>/.codex") || strings.Contains(res.Screen, os.TempDir()) {
 		t.Errorf("version error: check %q, screen %q", res.Check, res.Screen)
 	}
 
 	a = scriptAgent(t, "fails", "exit 0\n", fixedStandIn{})
 	a.setup = func(_, work, _ string) error { return fmt.Errorf("cannot write %s/opencode.json", work) }
 	res = runCanary(t, a)
-	if res.Check != couldNotRun || !strings.Contains(res.Screen, "<work>/opencode.json") || strings.Contains(res.Screen, os.TempDir()) {
+	if res.Check != couldNotRun || !strings.Contains(res.Screen, "<dir>/opencode.json") || strings.Contains(res.Screen, os.TempDir()) {
 		t.Errorf("setup error: check %q, screen %q", res.Check, res.Screen)
 	}
 }
