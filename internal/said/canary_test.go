@@ -125,7 +125,11 @@ func runCanary(t *testing.T, a agent) canaryResult {
 		res.Screen = scrub(screen, work, home, host, name)
 		if err != nil {
 			res.Check = couldNotRun
-			res.Screen = err.Error()
+			if strings.TrimSpace(res.Screen) == "" {
+				res.Screen = err.Error()
+			} else {
+				res.Screen = err.Error() + "\n\n" + res.Screen
+			}
 			continue
 		}
 		if stand.toolRequests() == 0 {
@@ -153,7 +157,9 @@ func drawMenu(t *testing.T, sock, work string, env, argv []string) (screen, chec
 	tmux := func(args ...string) *exec.Cmd {
 		return exec.Command("tmux", append([]string{"-L", sock}, args...)...) //nolint:gosec // the test's own socket and argv
 	}
-	start := append([]string{"new-session", "-d", "-s", "canary", "-x", "120", "-y", "40", "-c", work, "env", "-i"}, env...)
+	// remain-on-exit keeps the last screen of an agent that quits.
+	start := append([]string{"start-server", ";", "set-option", "-g", "remain-on-exit", "on", ";",
+		"new-session", "-d", "-s", "canary", "-x", "120", "-y", "40", "-c", work, "env", "-i"}, env...)
 	if b, err := tmux(append(start, argv...)...).CombinedOutput(); err != nil {
 		return "", "", fmt.Errorf("tmux new-session: %v: %s", err, b)
 	}
@@ -168,11 +174,20 @@ func drawMenu(t *testing.T, sock, work string, env, argv []string) (screen, chec
 	t.Cleanup(kill)
 	check = "no waiting state"
 	for deadline := time.Now().Add(30 * time.Second); time.Now().Before(deadline); time.Sleep(500 * time.Millisecond) {
+		dead, _ := tmux("display-message", "-p", "-t", "canary", "#{pane_dead}").Output()
 		b, err := tmux("capture-pane", "-p", "-t", "canary").Output()
 		if err != nil {
 			return screen, check, errSessionEnded
 		}
 		screen = string(b)
+		if strings.TrimSpace(string(dead)) == "1" {
+			// A dead pane moves what it drew into its history; 40 lines of it
+			// keep the issue short.
+			if b, err := tmux("capture-pane", "-p", "-S", "-40", "-t", "canary").Output(); err == nil {
+				screen = strings.TrimLeft(string(b), "\n")
+			}
+			return screen, check, errSessionEnded
+		}
 		var ok bool
 		if check, ok = canaryCheck(screen); ok {
 			return screen, "", nil
@@ -208,5 +223,27 @@ func TestHungVersionCouldNotRun(t *testing.T) {
 	}
 	if want := bin + " --version did not answer in 1 s"; res.Check != couldNotRun || res.Screen != want {
 		t.Errorf("check %q, screen %q, want %q, %q", res.Check, res.Screen, couldNotRun, want)
+	}
+}
+
+// An agent that dies on start leaves what it printed in the result, so its
+// issue says why.
+func TestQuitKeepsTheLastScreen(t *testing.T) {
+	bin := filepath.Join(t.TempDir(), "quit")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\necho boom: a config this release does not know\nexit 1\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	a := agent{
+		key: "quit", name: "Quit", bin: bin,
+		version: func([]string) (string, error) { return "1.0.0", nil },
+		setup:   func(_, _, _ string) error { return nil },
+		env:     func(home, _, _ string) []string { return []string{"HOME=" + home, "PATH=/usr/bin:/bin"} },
+		argv:    func() []string { return []string{bin} },
+		stand:   func() standIn { return &anthropicStandIn{} },
+	}
+	res := runCanary(t, a)
+	if res.Check != couldNotRun || !strings.HasPrefix(res.Screen, errSessionEnded.Error()) ||
+		!strings.Contains(res.Screen, "boom: a config this release does not know") {
+		t.Errorf("check %q, screen:\n%s", res.Check, res.Screen)
 	}
 }
