@@ -806,6 +806,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.away = false
 		}
 	}
+	if next, cmd, ok := m.agentKeys(msg); ok {
+		return next, cmd
+	}
 	m = m.scanShows()
 	switch msg.(type) {
 	case tea.KeyPressMsg, tea.MouseClickMsg, tea.MouseWheelMsg, tea.PasteMsg:
@@ -2148,6 +2151,7 @@ func (m Model) View() tea.View {
 	v := tea.NewView(m.render())
 	v.AltScreen = true
 	v.MouseMode = tea.MouseModeCellMotion // a tap on a phone selects and acts
+	v.Cursor = m.agent.cursor()
 	return v
 }
 

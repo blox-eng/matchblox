@@ -3,15 +3,20 @@
 package app
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"image/color"
+	"io"
+	"math/rand/v2"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -19,9 +24,11 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/vt"
 
+	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/tmuxtest"
 )
@@ -38,10 +45,15 @@ func newAgentDesk(t *testing.T, w, h int, agents map[string]string) agentDesk {
 	d := agentDesk{t: t, sock: tmuxtest.Server(t)}
 	d.tmux("-f", "/dev/null", "new-session", "-d", "-s", "console", "-x", "120", "-y", "30", "sleep", "600")
 	for name, script := range agents {
-		d.tmux("new-session", "-d", "-s", name, "-x", fmt.Sprint(w), "-y", fmt.Sprint(h), "/bin/sh", "-c", script)
+		d.agent(name, script, w, h)
 	}
 	d.path = d.tmux("display", "-p", "#{socket_path}")
 	return d
+}
+
+// agent starts a session that runs script at w by h.
+func (d agentDesk) agent(name, script string, w, h int) {
+	d.tmux("new-session", "-d", "-s", name, "-x", fmt.Sprint(w), "-y", fmt.Sprint(h), "/bin/sh", "-c", script)
 }
 
 func (d agentDesk) tmux(args ...string) string {
@@ -73,6 +85,7 @@ func (d agentDesk) view(name, pane string) []string {
 type regionRun struct {
 	t      *testing.T
 	r      *agentRegion
+	m      *Model // the console the region is in, if any: it takes the input and the frames
 	msgs   chan tea.Msg
 	frames int
 }
@@ -83,11 +96,38 @@ func runRegion(t *testing.T) *regionRun {
 	return x
 }
 
+// runDesk is a region inside a console of st.
+func runDesk(t *testing.T, st proto.State) *regionRun {
+	m := boardModel(t, st)
+	m.opt.Run = func([]string) error { return nil }
+	x := &regionRun{t: t, m: &m, r: &m.agent, msgs: make(chan tea.Msg, 64)}
+	t.Cleanup(x.r.shut)
+	return x
+}
+
 func (x *regionRun) pump(cmd tea.Cmd) {
 	if cmd != nil {
-		go func() { x.msgs <- cmd() }()
+		go func() {
+			msg := cmd()
+			if v := reflect.ValueOf(msg); v.Kind() == reflect.Slice && v.Type().Elem() == reflect.TypeFor[tea.Cmd]() { // a batch or a sequence
+				for i := range v.Len() {
+					x.pump(v.Index(i).Interface().(tea.Cmd))
+				}
+				return
+			}
+			x.msgs <- msg
+		}()
 	}
 }
+
+// update is msg through the console.
+func (x *regionRun) update(msg tea.Msg) {
+	next, cmd := x.m.Update(msg)
+	*x.m = next.(Model)
+	x.pump(cmd)
+}
+
+func (x *regionRun) press(k string) { x.update(keyPress(k)) }
 
 func (x *regionRun) open(name string, argv []string, w, h int) {
 	x.pump(x.r.open(name, argv, w, h))
@@ -112,7 +152,11 @@ func (x *regionRun) step(d time.Duration) {
 		case msg := <-x.msgs:
 			if f, ok := msg.(agentFrameMsg); ok {
 				x.frames++
-				x.pump(x.r.frame(f))
+				if x.m != nil {
+					x.update(f)
+				} else {
+					x.pump(x.r.frame(f))
+				}
 			}
 		case <-timeout:
 			return
@@ -463,5 +507,480 @@ func TestTheAgentScreenAnswersOnlyWhatItMay(t *testing.T) {
 	_ = scr.Close()
 	if len(got) == 0 || !emulatorAnswers.Match(got) {
 		t.Fatalf("the screen sends the agent %q", got)
+	}
+}
+
+// rawAgent keeps every byte it reads in file, after it prints say and asks
+// its terminal for the modes in asks.
+func rawAgent(file, say, asks string) string {
+	return `printf '` + say + `'; stty raw -echo; printf '` + asks + `'; exec cat > ` + file
+}
+
+func readsOf(t *testing.T, file string) string {
+	t.Helper()
+	b, err := os.ReadFile(file)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
+// reading waits until pane's agent reads its terminal.
+func (d agentDesk) reading(pane string) {
+	d.t.Helper()
+	for end := time.Now().Add(5 * time.Second); d.tmux("display", "-p", "-t", pane, "#{pane_current_command}") != "cat"; time.Sleep(20 * time.Millisecond) {
+		if time.Now().After(end) {
+			d.t.Fatalf("the agent in %s does not read", pane)
+		}
+	}
+}
+
+// agentKeys opens name's screen in a console and gives it the keys.
+func agentKeys(t *testing.T, d agentDesk, st proto.State, name string, w, h int) *regionRun {
+	t.Helper()
+	x := runDesk(t, st)
+	x.pump(x.r.open(name, d.view(name, d.pane(name)), w, h))
+	x.until(name+"'s first frame", func() bool { return x.r.term != nil && x.r.term.framed })
+	x.press(flipKey)
+	if mode := x.r.mode(); mode != "AGENT" {
+		t.Fatalf("ctrl+q gave the keys to %s, want AGENT", mode)
+	}
+	return x
+}
+
+// TestASwitchLeavesAStalledAgent: an agent that reads nothing, with a
+// paste queued for it, never holds up a switch, and ctrl+q still flips
+// the keys after it.
+func TestASwitchLeavesAStalledAgent(t *testing.T) {
+	const w, h = 80, 20
+	x := runDesk(t, boardState())
+	x.pump(x.r.open("stalled", []string{"/bin/sh", "-c", `stty raw -echo; printf 'ready\n'; exec sleep 600`}, w, h))
+	x.until("the stalled agent", x.shows("ready"))
+	if x.press(flipKey); x.r.mode() != "AGENT" {
+		t.Fatalf("ctrl+q gave the keys to %s, want AGENT", x.r.mode())
+	}
+	x.update(tea.PasteMsg{Content: strings.Repeat("p", 64<<10)})
+	x.step(200 * time.Millisecond) // the writer fills the pty and waits
+
+	opened := make(chan tea.Cmd, 1)
+	go func() {
+		opened <- x.r.open("ready", []string{"/bin/sh", "-c", `printf 'other ready\n'; exec sleep 600`}, w, h)
+	}()
+	select {
+	case cmd := <-opened:
+		x.pump(cmd)
+	case <-time.After(2 * time.Second):
+		t.Fatal("a switch away from a stalled agent waits for it")
+	}
+	x.until("the other agent", x.shows("other ready"))
+	if x.press(flipKey); x.r.mode() != "AGENT" {
+		t.Fatalf("after the switch ctrl+q gave the keys to %s, want AGENT", x.r.mode())
+	}
+	if x.press(flipKey); x.r.mode() != "LIST" {
+		t.Fatalf("after the switch ctrl+q left the keys with %s, want LIST", x.r.mode())
+	}
+}
+
+func TestKeysReachTheAgent(t *testing.T) {
+	const w, h = 80, 20
+	dir := t.TempDir()
+	d := newAgentDesk(t, w, h, nil)
+	d.tmux("set-option", "-s", "extended-keys", "on")
+	for _, name := range []string{"desk", "own"} { // each asks for the keys a plain terminal cannot tell apart, as Claude Code does
+		d.agent(name, rawAgent(filepath.Join(dir, name), "", `\033[>4;1m`), w, h)
+	}
+	desk, own := d.pane("desk"), d.pane("own")
+	d.reading(desk)
+	d.reading(own)
+	x := agentKeys(t, d, boardState(), "desk", w, h)
+	keys := []struct {
+		k    tea.KeyPressMsg
+		tmux string
+	}{
+		{tea.KeyPressMsg{Code: 'l', Text: "l"}, "l"},
+		{tea.KeyPressMsg{Code: 's', Text: "s"}, "s"},
+		{tea.KeyPressMsg{Code: tea.KeyEnter}, "Enter"},
+		{tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}, "C-c"},
+		{tea.KeyPressMsg{Code: tea.KeyEscape}, "Escape"},
+		{tea.KeyPressMsg{Code: tea.KeyUp}, "Up"},
+		{tea.KeyPressMsg{Code: tea.KeyDown}, "Down"},
+		{tea.KeyPressMsg{Code: tea.KeyRight}, "Right"},
+		{tea.KeyPressMsg{Code: tea.KeyLeft}, "Left"},
+		{tea.KeyPressMsg{Code: 'b', Mod: tea.ModAlt}, "M-b"},
+		// What the kitty protocol tells apart, as bubbletea decodes it.
+		{tea.KeyPressMsg{Code: tea.KeyEnter, Mod: tea.ModShift}, "S-Enter"},
+		{tea.KeyPressMsg{Code: tea.KeyLeft, Mod: tea.ModCtrl}, "C-Left"},
+	}
+	// One at a time, as a person types: tmux reads ESC and a key after it
+	// at once as alt and the key.
+	grew := func(file string, n int) bool { return len(readsOf(t, filepath.Join(dir, file))) > n }
+	for _, k := range keys {
+		n := len(readsOf(t, filepath.Join(dir, "desk")))
+		x.update(k.k)
+		x.until(k.tmux+" in the agent", func() bool { return grew("desk", n) })
+		n = len(readsOf(t, filepath.Join(dir, "own")))
+		d.tmux("send-keys", "-t", own, k.tmux)
+		x.until(k.tmux+" in its own pane", func() bool { return grew("own", n) })
+	}
+	x.step(100 * time.Millisecond)
+	if got, want := readsOf(t, filepath.Join(dir, "desk")), readsOf(t, filepath.Join(dir, "own")); got != want {
+		t.Fatalf("the agent read %q through matchblox, its own pane %q", got, want)
+	}
+}
+
+func TestAPasteReachesTheAgentWhole(t *testing.T) {
+	const w, h = 80, 20
+	file := filepath.Join(t.TempDir(), "read")
+	d := newAgentDesk(t, w, h, map[string]string{"flint-auth": rawAgent(file, "", `\033[?2004h`)})
+	d.reading(d.pane("flint-auth"))
+	x := agentKeys(t, d, boardState(), "flint-auth", w, h)
+	var b strings.Builder
+	for i := 0; b.Len() < 20<<10; i++ {
+		fmt.Fprintf(&b, "line %d of a paste: func main() { fmt.Println(\"%d\") }\n", i, i)
+	}
+	pasted := b.String()
+	x.update(tea.PasteMsg{Content: pasted})
+	want := "\x1b[200~" + pasted + "\x1b[201~"
+	x.until("the whole paste", func() bool { return len(readsOf(t, file)) >= len(want) })
+	x.step(100 * time.Millisecond)
+	if got := readsOf(t, file); got != want {
+		t.Fatalf("the agent read %d bytes, %d starts and %d ends of a paste; want %d bytes in one bracketed paste:\n%q…",
+			len(got), strings.Count(got, "\x1b[200~"), strings.Count(got, "\x1b[201~"), len(want), got[:min(len(got), 200)])
+	}
+}
+
+func TestCtrlQFlips(t *testing.T) {
+	const w, h = 80, 20
+	file := filepath.Join(t.TempDir(), "read")
+	d := newAgentDesk(t, w, h, map[string]string{"flint-auth": rawAgent(file, `FLINT SCREEN\n`, "")})
+	x := runDesk(t, boardState(doneMatch("flint-auth", 10*time.Minute)))
+	x.pump(x.r.open("flint-auth", d.view("flint-auth", d.pane("flint-auth")), w, h))
+	x.until("flint-auth's screen", x.shows("FLINT SCREEN"))
+	d.reading(d.pane("flint-auth"))
+	bar := func(want string, away bool) {
+		t.Helper()
+		line, _ := x.m.frameBar(x.r.mode(), 160)
+		plain := ansi.Strip(line)
+		if !strings.HasPrefix(strings.TrimSpace(plain), want) || strings.Contains(plain, "ctrl+q list") != away {
+			t.Fatalf("the bar reads %q, want %s first and ctrl+q list %v", plain, want, away)
+		}
+	}
+	bar("LIST", false)
+	x.press(flipKey)
+	bar("AGENT", true)
+	x.until("the session seen", func() bool {
+		return slices.Equal(seenActs(boardFake(*x.m)), []string{proto.SeenPrefix + "%flint-auth"})
+	})
+	x.press(flipKey)
+	bar("LIST", false)
+	x.step(200 * time.Millisecond)
+	if got := readsOf(t, file); got != "" {
+		t.Fatalf("ctrl+q reached the agent: %q", got)
+	}
+}
+
+// TestCtrlOStillGoesIn: with the agent's screen on the desk, ⌃o from the
+// list still runs the jump into its own pane, and ctrl+a m (the home key)
+// gives the keys back to the list; neither types into the agent.
+func TestCtrlOStillGoesIn(t *testing.T) {
+	const w, h = 80, 20
+	file := filepath.Join(t.TempDir(), "read")
+	d := newAgentDesk(t, w, h, map[string]string{"flint-auth": rawAgent(file, `FLINT SCREEN\n`, "")})
+	x := runDesk(t, boardState(doneMatch("flint-auth", 10*time.Minute)))
+	x.pump(x.r.open("flint-auth", d.view("flint-auth", d.pane("flint-auth")), w, h))
+	x.until("flint-auth's screen", x.shows("FLINT SCREEN"))
+	d.reading(d.pane("flint-auth"))
+
+	next, cmd := x.m.Update(keyPress("ctrl+o"))
+	*x.m = next.(Model)
+	msgs := cmdMsgs(cmd)
+	if !slices.ContainsFunc(msgs, func(msg tea.Msg) bool {
+		r, ok := msg.(ranMsg)
+		return ok && r.cmd == "tmux switch-client -t %flint-auth"
+	}) {
+		t.Fatalf("ctrl+o sent %#v, want the jump into %%flint-auth", msgs)
+	}
+
+	if x.press(flipKey); x.r.mode() != "AGENT" {
+		t.Fatalf("ctrl+q gave the keys to %s, want AGENT", x.r.mode())
+	}
+	x.update(uv.UnknownApcEvent(homeKey))
+	if mode := x.r.mode(); mode != "LIST" {
+		t.Fatalf("after ctrl+a m the keys are %s, want LIST", mode)
+	}
+	x.step(200 * time.Millisecond)
+	if got := readsOf(t, file); got != "" {
+		t.Fatalf("ctrl+o or ctrl+a m reached the agent: %q", got)
+	}
+}
+
+func TestAClickGivesTheKeys(t *testing.T) {
+	const w, h = 80, 20
+	file := filepath.Join(t.TempDir(), "read")
+	d := newAgentDesk(t, w, h, map[string]string{"flint-auth": rawAgent(file, `CLICK ME\n`, `\033[?1000h\033[?1006h`)})
+	x := runDesk(t, boardState(doneMatch("flint-auth", 10*time.Minute)))
+	x.pump(x.r.open("flint-auth", d.view("flint-auth", d.pane("flint-auth")), w, h))
+	x.r.x, x.r.y = 41, 1 // the region beside the list, under the head row
+	x.until("flint-auth's screen", x.shows("CLICK ME"))
+	d.reading(d.pane("flint-auth"))
+
+	x.update(tea.MouseClickMsg{X: 40, Y: 4, Button: tea.MouseLeft})
+	if mode := x.r.mode(); mode != "LIST" {
+		t.Fatalf("a click left of the region gave the keys to %s", mode)
+	}
+	x.update(tea.MouseClickMsg{X: 41 + 10, Y: 1 + 3, Button: tea.MouseLeft})
+	x.update(tea.MouseReleaseMsg{X: 41 + 10, Y: 1 + 3, Button: tea.MouseLeft})
+	if mode := x.r.mode(); mode != "AGENT" {
+		t.Fatalf("a click in the region gave the keys to %s, want AGENT", mode)
+	}
+	const want = "\x1b[<0;11;4M\x1b[<0;11;4m" // column 11, row 4 of the agent's screen
+	x.until("the click in the agent", func() bool { return len(readsOf(t, file)) >= len(want) })
+	if got := readsOf(t, file); got != want {
+		t.Fatalf("the agent read %q, want the click %q", got, want)
+	}
+	x.until("the session seen", func() bool {
+		return slices.Equal(seenActs(boardFake(*x.m)), []string{proto.SeenPrefix + "%flint-auth"})
+	})
+}
+
+// TestTypingIsFast types 1000 keys into an agent that echoes them, one
+// every 25 ms (twice a fast typist's pace), and times each from the
+// console's input to the frame that draws its echo (the spec's bar).
+func TestTypingIsFast(t *testing.T) {
+	if raceBuild {
+		t.Skip("latency is measured without -race: the race detector's instrumentation dominates the time")
+	}
+	const w, h, keys = 100, 20, 1000
+	const typed = "abcdefghijklmnopqrstuvwxyz" // no space: a blank cell shows no echo
+	d := newAgentDesk(t, w, h, map[string]string{"flint-auth": `printf '\033[H\033[2J'; exec cat`})
+	d.reading(d.pane("flint-auth"))
+	x := agentKeys(t, d, boardState(), "flint-auth", w, h)
+	x.step(300 * time.Millisecond) // the client's last bytes
+
+	sent := make([]time.Time, 0, keys)
+	took := make([]time.Duration, 0, keys)
+	tick := time.NewTicker(25 * time.Millisecond)
+	defer tick.Stop()
+	deadline := time.After(2 * time.Minute)
+	for len(took) < keys {
+		select {
+		case <-tick.C:
+			if len(sent) < keys {
+				r := rune(typed[len(sent)%len(typed)])
+				sent = append(sent, time.Now())
+				x.update(tea.KeyPressMsg{Code: r, Text: string(r)})
+			}
+		case msg := <-x.msgs:
+			f, ok := msg.(agentFrameMsg)
+			if !ok {
+				continue
+			}
+			x.update(f)
+			lines := plainLines(x.r.lines(x.m.st, w, h))
+			for i := len(took); i < len(sent); i++ {
+				if row := lines[i/w]; len(row) <= i%w || row[i%w] != typed[i%len(typed)] {
+					break
+				}
+				took = append(took, time.Since(sent[i]))
+			}
+		case <-deadline:
+			t.Fatalf("%d of %d keys echoed in 2 minutes", len(took), keys)
+		}
+	}
+	slices.Sort(took)
+	p50, p95 := took[len(took)/2], took[len(took)*95/100]
+	t.Logf("%d keys: echo drawn p50 %v, p95 %v, max %v", keys, p50, p95, took[len(took)-1])
+	if p95 > 16*time.Millisecond {
+		t.Fatalf("a key's echo takes %v at the 95th percentile, want 16ms or less", p95)
+	}
+}
+
+func TestTheAgentsCursorShows(t *testing.T) {
+	const w, h = 80, 20
+	d := newAgentDesk(t, w, h, map[string]string{"flint-auth": `printf 'prompt> \033[6;13H'; exec cat`})
+	pane := d.pane("flint-auth")
+	d.reading(pane)
+	x := runDesk(t, boardState())
+	x.pump(x.r.open("flint-auth", d.view("flint-auth", pane), w, h))
+	x.r.x, x.r.y = 41, 1
+	x.until("flint-auth's screen", x.shows("prompt>"))
+	x.step(300 * time.Millisecond) // the client's last bytes
+	if c := x.m.View().Cursor; c != nil {
+		t.Fatalf("with the list's keys the agent's cursor shows at %v", c.Position)
+	}
+	x.press(flipKey)
+	var cx, cy int
+	if _, err := fmt.Sscanf(d.tmux("display", "-p", "-t", pane, "#{cursor_x} #{cursor_y}"), "%d %d", &cx, &cy); err != nil {
+		t.Fatal(err)
+	}
+	c := x.m.View().Cursor
+	if c == nil || c.X != 41+cx || c.Y != 1+cy {
+		t.Fatalf("with the agent's keys the cursor is %v, want the pane's %d,%d at the region's 41,1", c, cx, cy)
+	}
+}
+
+// TestAPasteReachesAStalledAgentInOrder: a client that reads nothing for
+// a while never holds up the console, and what is typed after a paste
+// reaches the agent after it.
+func TestAPasteReachesAStalledAgentInOrder(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "read")
+	x := runDesk(t, boardState())
+	x.pump(x.r.open("stalled", []string{"/bin/sh", "-c", `stty raw -echo; printf 'ready\n'; sleep 2; exec cat > "$1"`, "sh", file}, 80, 20))
+	x.until("the agent", x.shows("ready"))
+	if x.press(flipKey); x.r.mode() != "AGENT" {
+		t.Fatalf("ctrl+q gave the keys to %s, want AGENT", x.r.mode())
+	}
+	pasted := strings.Repeat("0123456789abcdef", 1<<16) // 1 MB
+	for _, msg := range []tea.Msg{tea.PasteMsg{Content: pasted}, keyPress("x"), keyPress("y"), keyPress("z")} {
+		start := time.Now()
+		x.update(msg)
+		if took := time.Since(start); took > 50*time.Millisecond {
+			t.Fatalf("%T took %v in the console while the agent reads nothing, want under 50ms", msg, took)
+		}
+	}
+	want := pasted + "xyz"
+	x.until("the paste and the keys", func() bool { return len(readsOf(t, file)) >= len(want) })
+	if got := readsOf(t, file); got != want {
+		t.Fatalf("the agent read %d bytes ending %q, want %d ending %q", len(got), got[max(len(got)-8, 0):], len(want), want[len(want)-8:])
+	}
+}
+
+// TestKeysReachTheAgentButNotAQuestion: the scan question's y and a
+// blocked host's ⏎ stay with the box that asks, though the agent has the keys.
+func TestKeysReachTheAgentButNotAQuestion(t *testing.T) {
+	const w, h = 80, 20
+	file := filepath.Join(t.TempDir(), "read")
+	d := newAgentDesk(t, w, h, map[string]string{"flint-auth": rawAgent(file, "", "")})
+	d.reading(d.pane("flint-auth"))
+	for _, c := range []struct {
+		layer layerID
+		key   string
+		ask   func(*Model)
+	}{
+		{layerScan, "y", func(m *Model) { m.scanAsk = &scanAsk{} }},
+		{layerBlocked, "enter", func(m *Model) { m.blocked = errors.New("unreachable") }},
+	} {
+		x := agentKeys(t, d, boardState(), "flint-auth", w, h)
+		c.ask(x.m)
+		if f := x.m.focus(keyPress(c.key)); f != c.layer {
+			t.Fatalf("the question is not up: %s goes to layer %d, want %d", c.key, f, c.layer)
+		}
+		x.press(c.key)
+		x.r.shut()
+	}
+	time.Sleep(200 * time.Millisecond)
+	if got := readsOf(t, file); got != "" {
+		t.Fatalf("a question's answer reached the agent: %q", got)
+	}
+}
+
+// regionProbe is the console with its agent region alone on the screen,
+// at the screen's top left: the desk's frame is not drawn yet. The
+// screen is wider than the region, as on the desk.
+type regionProbe struct {
+	Model
+	first tea.Cmd
+}
+
+func (p regionProbe) Init() tea.Cmd { return p.first }
+
+func (p regionProbe) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	next, cmd := p.Model.Update(msg)
+	return regionProbe{Model: next.(Model)}, cmd
+}
+
+func (p regionProbe) View() tea.View {
+	v := tea.NewView(strings.Join(p.agent.lines(p.st, p.agent.w, p.agent.h), "\n"))
+	v.AltScreen = true
+	v.Cursor = p.agent.cursor()
+	return v
+}
+
+// screenWatch is the terminal the console's program writes to: a screen
+// that calls drawn after each write. Its tty maps a newline to a return
+// and a newline, as the program expects of output that is not a terminal.
+type screenWatch struct {
+	mu    sync.Mutex
+	e     *vt.Emulator
+	drawn func(*vt.Emulator)
+}
+
+func (s *screenWatch) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, _ = s.e.Write(bytes.ReplaceAll(p, []byte("\n"), []byte("\r\n")))
+	s.drawn(s.e)
+	return len(p), nil
+}
+
+// TestTypingIsFastThroughTheRenderer is TestTypingIsFast through the
+// console's own program and renderer, at its frame rate: each key from
+// the program's input to its echo in the bytes it writes to the terminal.
+// The keys come 20 to 30 ms apart, as a person's do, never in step with
+// the renderer's frames.
+func TestTypingIsFastThroughTheRenderer(t *testing.T) {
+	if raceBuild {
+		t.Skip("latency is measured without -race: the race detector's instrumentation dominates the time")
+	}
+	const w, h, keys = 100, 20, 1000
+	const typed = "abcdefghijklmnopqrstuvwxyz"
+	d := newAgentDesk(t, w, h, map[string]string{"flint-auth": `printf '\033[H\033[2J'; exec cat`})
+	d.reading(d.pane("flint-auth"))
+	m := boardModel(t, boardState())
+	first := m.agent.open("flint-auth", d.view("flint-auth", d.pane("flint-auth")), w, h)
+	t.Cleanup(m.agent.shut)
+
+	var mu sync.Mutex
+	sent := make([]time.Time, 0, keys)
+	took := make([]time.Duration, 0, keys)
+	screen := &screenWatch{e: vt.NewEmulator(w+20, h), drawn: func(e *vt.Emulator) {
+		mu.Lock()
+		defer mu.Unlock()
+		for i := len(took); i < len(sent); i++ {
+			if c := e.CellAt(i%w, i/w); c == nil || c.Content != typed[i%len(typed):i%len(typed)+1] {
+				break
+			}
+			took = append(took, time.Since(sent[i]))
+		}
+	}}
+	go func() { _, _ = io.Copy(io.Discard, screen.e) }() // the screen's answers to the program
+	p := tea.NewProgram(regionProbe{Model: m, first: first}, tea.WithFPS(ConsoleFPS), tea.WithInput(nil),
+		tea.WithOutput(screen), tea.WithWindowSize(w+20, h), tea.WithoutSignalHandler())
+	ran := make(chan error, 1)
+	go func() { _, err := p.Run(); ran <- err }()
+	t.Cleanup(func() { p.Kill(); <-ran })
+	time.Sleep(time.Second) // the agent's first frame
+	p.Send(keyPress(flipKey))
+	time.Sleep(100 * time.Millisecond)
+
+	deadline := time.After(2 * time.Minute)
+	for n := 0; ; {
+		select {
+		case <-time.After(20*time.Millisecond + rand.N(10*time.Millisecond)):
+		case <-deadline:
+			screen.mu.Lock()
+			shown := screen.e.String()
+			screen.mu.Unlock()
+			t.Fatalf("%d of %d keys echoed on the screen in 2 minutes; the screen shows:\n%s", n, keys, shown)
+		}
+		mu.Lock()
+		n = len(took)
+		if len(sent) < keys {
+			sent = append(sent, time.Now())
+			r := rune(typed[(len(sent)-1)%len(typed)])
+			mu.Unlock()
+			p.Send(tea.KeyPressMsg{Code: r, Text: string(r)})
+			continue
+		}
+		mu.Unlock()
+		if n == keys {
+			break
+		}
+	}
+	slices.Sort(took)
+	p50, p95 := took[len(took)/2], took[len(took)*95/100]
+	t.Logf("%d keys: echo on the screen p50 %v, p95 %v, max %v", keys, p50, p95, took[len(took)-1])
+	if p95 > 16*time.Millisecond {
+		t.Fatalf("a key's echo reaches the screen in %v at the 95th percentile, want 16ms or less", p95)
 	}
 }

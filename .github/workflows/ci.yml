@@ -140,6 +140,14 @@ jobs:
         run: |
           # shellcheck disable=SC2046 # one word per package
           go test ${{ runner.os == 'Linux' && '-race' || '' }} -cover -timeout ${{ matrix.os == 'macos-latest' && '18m' || '10m' }} $(go list ./... | grep -v '/internal/demo$')
+      # The race detector's instrumentation dominates a key's echo time, so
+      # the typing latency tests skip under -race and run here without it.
+      - name: Typing latency
+        if: runner.os == 'Linux'
+        env:
+          TMUX: ${{ format('{0}/sentinel,1,0', runner.temp) }}
+          TMUX_PANE: '%0'
+        run: go test -count=1 -run 'TypingIsFast' ./internal/app/
       # The demo's walks press every key of the console through a real service.
       # Under -race they took 8 minutes on Linux, against a 10 minute job, so
       # the race run is its own job (demo-race) and this run is without it.

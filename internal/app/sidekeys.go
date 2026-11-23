@@ -12,6 +12,7 @@ import (
 
 	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
+	uv "github.com/charmbracelet/ultraviolet"
 
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/queue"
@@ -25,6 +26,68 @@ const (
 	focusLine sideFocus = iota // the chat's line: the default
 	focusList
 )
+
+// agentKeys routes the console's input while the agent's screen shows on
+// the desk. With the agent's keys, every key, a paste and a click in its
+// region go to its screen; ctrl+q and the home key (ctrl+a m) give them
+// back to the list. From the list, ctrl+q and a click in the region give
+// the agent the keys, and its session counts as seen (design review D5).
+// A question or a sheet open over the desk takes the keys first. ok is
+// false for what the list handles.
+func (m Model) agentKeys(msg tea.Msg) (Model, tea.Cmd, bool) {
+	r := &m.agent
+	k, _ := msg.(tea.KeyPressMsg)
+	if f := m.focus(k); !r.shown() || f < layerTakeOver || f == layerScan || f == layerBlocked || f == layerPending {
+		return m, nil, false
+	}
+	agent := r.mode() == "AGENT"
+	switch msg := msg.(type) {
+	case tea.KeyPressMsg:
+		switch {
+		case msg.String() == flipKey && agent:
+			r.keys = false
+		case msg.String() == flipKey:
+			r.keys = true
+			return m, m.grantKeys(), true
+		case agent:
+			r.term.scr.sendKey(uv.KeyPressEvent(msg))
+		default:
+			return m, nil, false
+		}
+		return m, nil, true
+	case uv.UnknownApcEvent:
+		if !agent || string(msg) != homeKey {
+			return m, nil, false
+		}
+		r.keys = false
+		return m, nil, true
+	case tea.PasteMsg:
+		if !agent {
+			return m, nil, false
+		}
+		r.term.scr.paste(msg.Content)
+		return m, nil, true
+	case tea.MouseClickMsg:
+		at, in := r.at(msg.Mouse())
+		if !in {
+			return m, nil, false
+		}
+		r.term.scr.sendMouse(uv.MouseClickEvent(at))
+		if agent {
+			return m, nil, true
+		}
+		r.keys = true
+		return m, m.grantKeys(), true
+	case tea.MouseReleaseMsg:
+		at, in := r.at(msg.Mouse())
+		if !agent || !in {
+			return m, nil, false
+		}
+		r.term.scr.sendMouse(uv.MouseReleaseEvent(at))
+		return m, nil, true
+	}
+	return m, nil, false
+}
 
 // lineNote is what the line of the session k says in place of its ⏎:
 // why its text did not go, or that the session it was typed for ended.

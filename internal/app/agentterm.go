@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"cmp"
 	"encoding/base64"
+	"fmt"
 	"image/color"
 	"io"
 	"os"
@@ -35,6 +36,15 @@ type agentScreen interface {
 	// copyAsked is the text the agent last asked to copy (OSC 52) since
 	// the last call, which drops it from the screen.
 	copyAsked() (string, bool)
+	// sendKey, paste and sendMouse type into the client as a terminal
+	// does, in the modes the client asked for. They hand the bytes on to
+	// Read, which startAgentTerm queues, so a client that reads nothing
+	// never holds them up.
+	sendKey(k uv.KeyPressEvent)
+	paste(text string)
+	sendMouse(m uv.MouseEvent)
+	// cursor is where the client's cursor is, and whether it shows.
+	cursor() (uv.Position, bool)
 }
 
 // vtScreen is vt's emulator under a lock. CellAt copies the cell under
@@ -102,6 +112,79 @@ func (s *vtScreen) Resize(w, h int) {
 	s.e.Resize(w, h)
 }
 
+func (s *vtScreen) sendKey(k uv.KeyPressEvent) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	k.Mod &= uv.ModShift | uv.ModAlt | uv.ModCtrl // vt matches a key whole: a lock key's bit would drop it
+	k.IsRepeat = false
+	if seq, ok := modifiedKey(k); ok {
+		s.e.SendText(seq)
+		return
+	}
+	s.e.SendKey(k)
+}
+
+func (s *vtScreen) paste(text string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.e.Paste(text)
+}
+
+func (s *vtScreen) sendMouse(m uv.MouseEvent) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.e.SendMouse(m)
+}
+
+func (s *vtScreen) cursor() (uv.Position, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.e.CursorPosition(), !s.e.CursorHidden()
+}
+
+// xtermKeys are the keys whose modified form is CSI n;m and a final.
+var xtermKeys = map[rune]struct {
+	n     int
+	final byte
+}{
+	uv.KeyUp: {1, 'A'}, uv.KeyDown: {1, 'B'}, uv.KeyRight: {1, 'C'}, uv.KeyLeft: {1, 'D'},
+	uv.KeyHome: {1, 'H'}, uv.KeyEnd: {1, 'F'}, uv.KeyF1: {1, 'P'}, uv.KeyF2: {1, 'Q'}, uv.KeyF3: {1, 'R'}, uv.KeyF4: {1, 'S'},
+	uv.KeyInsert: {2, '~'}, uv.KeyDelete: {3, '~'}, uv.KeyPgUp: {5, '~'}, uv.KeyPgDown: {6, '~'},
+	uv.KeyF5: {15, '~'}, uv.KeyF6: {17, '~'}, uv.KeyF7: {18, '~'}, uv.KeyF8: {19, '~'},
+	uv.KeyF9: {20, '~'}, uv.KeyF10: {21, '~'}, uv.KeyF11: {23, '~'}, uv.KeyF12: {24, '~'},
+}
+
+// modifiedKey is k as xterm and the kitty protocol send it, for a modified
+// key a plain terminal has no sequence for (shift+enter, ctrl+left), which
+// vt would drop. The client's tmux reads both forms.
+func modifiedKey(k uv.KeyPressEvent) (string, bool) {
+	if plainKey(k, k.Mod&^uv.ModAlt) {
+		return "", false
+	}
+	m := 1 + int(k.Mod) // xterm's and kitty's: shift 1, alt 2, ctrl 4, as uv's bits
+	if x, ok := xtermKeys[k.Code]; ok {
+		return fmt.Sprintf("\x1b[%d;%d%c", x.n, m, x.final), true
+	}
+	if k.Code > unicode.MaxRune {
+		return "", false
+	}
+	return fmt.Sprintf("\x1b[%d;%du", k.Code, m), true
+}
+
+// plainKey tells if vt sends k, mod being its modifiers but alt, which
+// vt sends as an ESC before it.
+func plainKey(k uv.KeyPressEvent, mod uv.KeyMod) bool {
+	switch mod {
+	case 0:
+		return true
+	case uv.ModCtrl:
+		return k.Code == uv.KeySpace || k.Code >= 'a' && k.Code <= 'z' || strings.ContainsRune(`[\]^_`, k.Code)
+	case uv.ModShift:
+		return k.Text != "" || k.Code == uv.KeyTab
+	}
+	return false
+}
+
 func (s *vtScreen) CellAt(x, y int) uv.Cell {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -127,6 +210,13 @@ func (s *vtScreen) cells(w, h int) []uv.Line {
 	}
 	return out
 }
+
+// ConsoleFPS is the console's frame rate, bubbletea's highest. A key
+// waits for the next frame: 15 frames showed a key 37 ms late on average
+// and 60 shows it 11 ms late, for 0.3% more of one core when idle (#285).
+// The agent's echo needs 120: at 60 it took 17 ms at the 95th percentile,
+// past the 16 ms bar; 120 costs 0.6% more of a core when idle.
+const ConsoleFPS = 120
 
 // agentFrame is the agent region's fastest pace (DESIGN.md §5).
 const agentFrame = time.Second / 60
@@ -179,8 +269,13 @@ func startAgentTerm(argv []string, w, h int) (*agentTerm, error) {
 	if err != nil {
 		return nil, err
 	}
+	if f, err = pollable(f); err != nil {
+		killGroup(cmd)
+		_ = cmd.Wait()
+		return nil, err
+	}
 	t := &agentTerm{scr: newAgentScreen(w, h), pty: f, cmd: cmd, changed: make(chan struct{}, 1), ended: make(chan struct{})}
-	t.wg.Add(2)
+	t.wg.Add(3)
 	go func() { // the client's output onto the screen
 		defer t.wg.Done()
 		defer close(t.ended)
@@ -199,18 +294,76 @@ func startAgentTerm(argv []string, w, h int) (*agentTerm, error) {
 			}
 		}
 	}()
-	go func() { // the screen's answers to the client; a failed write must not stop them, or the screen blocks
+	in := &inbox{ready: make(chan struct{}, 1)}
+	go func() { // the screen's answers and the owner's input, queued: a client that reads nothing never holds up the console
 		defer t.wg.Done()
-		buf := make([]byte, 4<<10)
+		defer in.close()
+		buf := make([]byte, 32<<10)
 		for {
 			n, err := t.scr.Read(buf)
 			if err != nil {
 				return
 			}
-			_, _ = f.Write(buf[:n])
+			in.put(buf[:n])
+		}
+	}()
+	go func() { // to the client in order; a failed write drops its bytes, never the rest
+		defer t.wg.Done()
+		for {
+			p, ok := in.take()
+			if !ok {
+				return
+			}
+			_, _ = f.Write(p)
 		}
 	}()
 	return t, nil
+}
+
+// inbox is the bytes on their way to the client, in order, unbounded.
+type inbox struct {
+	mu     sync.Mutex
+	buf    []byte
+	closed bool
+	ready  chan struct{} // one wake for take, after a put or the close
+}
+
+func (b *inbox) put(p []byte) {
+	b.mu.Lock()
+	b.buf = append(b.buf, p...)
+	b.mu.Unlock()
+	b.wake()
+}
+
+func (b *inbox) close() {
+	b.mu.Lock()
+	b.closed = true
+	b.mu.Unlock()
+	b.wake()
+}
+
+func (b *inbox) wake() {
+	select {
+	case b.ready <- struct{}{}:
+	default:
+	}
+}
+
+// take waits for bytes and takes them all; false once closed and empty.
+func (b *inbox) take() ([]byte, bool) {
+	for {
+		b.mu.Lock()
+		p, closed := b.buf, b.closed
+		b.buf = nil
+		b.mu.Unlock()
+		if len(p) > 0 {
+			return p, true
+		}
+		if closed {
+			return nil, false
+		}
+		<-b.ready
+	}
 }
 
 // next waits for the screen to change, then sends a frame no sooner than
@@ -232,20 +385,28 @@ func (t *agentTerm) next(prev time.Time) tea.Cmd {
 	}
 }
 
-// close hangs up the client, kills it when it stays a second, and waits
-// for its goroutines and process.
+// close hangs up the client, kills it when it stays a second, and waits a
+// second more for its goroutines and process: one stuck past that is left
+// behind, its pty closed, so the console never waits on a client.
 func (t *agentTerm) close() {
 	hangUp(t.cmd)
-	_ = t.pty.Close()
 	select {
 	case <-t.ended:
 	case <-time.After(time.Second): // a client that ignores the hang-up
 		killGroup(t.cmd)
-		<-t.ended
 	}
+	_ = t.pty.Close() // ends a read, and a write the client never takes
 	_ = t.scr.Close()
-	t.wg.Wait()
-	_ = t.cmd.Wait()
+	done := make(chan struct{})
+	go func() {
+		t.wg.Wait()
+		_ = t.cmd.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+	}
 }
 
 // draw is the screen in w by h cells, in colours and attributes only. A
@@ -288,6 +449,7 @@ type agentRegion struct {
 	name, said string // said: why the screen did not start
 	copy       string // what the agent last asked to copy; c copies it
 	keys       bool
+	x, y       int // its top left on the console's screen
 	w, h       int
 }
 
@@ -328,17 +490,39 @@ func (r *agentRegion) frame(msg agentFrameMsg) tea.Cmd {
 func (r *agentRegion) resize(w, h int) {
 	r.w, r.h = w, h
 	if r.term != nil {
-		_ = pty.Setsize(r.term.pty, &pty.Winsize{Cols: uint16(w), Rows: uint16(h)}) //nolint:gosec // a region's size
+		_ = ptySize(r.term.pty, w, h)
 		r.term.scr.Resize(w, h)
 	}
 }
 
+// shown tells if the agent's screen shows: its first frame came.
+func (r *agentRegion) shown() bool { return r.term != nil && r.term.framed }
+
 // mode is who has the keys: the agent once its screen shows, else the list.
 func (r *agentRegion) mode() string {
-	if r.keys && r.term != nil && r.term.framed {
+	if r.keys && r.shown() {
 		return "AGENT"
 	}
 	return "LIST"
+}
+
+// at is m in the agent's screen, if m is in the region.
+func (r *agentRegion) at(m tea.Mouse) (uv.Mouse, bool) {
+	m.X, m.Y = m.X-r.x, m.Y-r.y
+	return uv.Mouse(m), m.X >= 0 && m.Y >= 0 && m.X < r.w && m.Y < r.h
+}
+
+// cursor is the agent's cursor on the console's screen, while the agent
+// has the keys and shows it.
+func (r *agentRegion) cursor() *tea.Cursor {
+	if r.mode() != "AGENT" {
+		return nil
+	}
+	at, shows := r.term.scr.cursor()
+	if !shows {
+		return nil
+	}
+	return tea.NewCursor(r.x+at.X, r.y+at.Y)
 }
 
 // lines is the region in w by h cells, in st's theme.

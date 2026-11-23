@@ -143,6 +143,7 @@ Machine is no longer a tab. `⚙` in the header, `,`, or a tap on a bar chip ope
 - 2026-11-23: on the desk Machine simply moves to `,`; `⇥` there is unbound and shows no hint. This is the one exception to the anti-goal "a key does nothing with no word why". The ways: a hint on every press; a hint 3 times; `⇥` as an alias. Decided by: the owner (design review D10, "just move it").
 - 2026-11-23: the wrapper frame draws at every width wider than the phone's layout. The list is 40 columns from 140 up, 32 from 100 to 139, 28 below; the agent takes the rest. The ways: from 100 columns; from 120; at any desk width. Decided by: the owner (design review D16). The builder notes the risk: below about 90 columns the agent region is under 60 columns, narrow for Claude Code's menus.
 - 2026-11-23: a mockup of the whole desk first, then one PR. Ways: mockup then four PRs; four PRs with no mockup; one PR. Picked: mockup, then one PR. Decided by: the owner.
+- 2026-11-24: the console draws at 120 FPS, so a typed key echoes in 16 ms or less at p95 through the renderer (measured 9.5 ms). The latency check runs in normal builds; the race build skips it. The ways: 120 FPS; stay at 60 and loosen the bar; the hybrid. Decided by: the owner.
 
 ## Left to the builder
 

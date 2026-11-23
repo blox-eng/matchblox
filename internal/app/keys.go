@@ -357,8 +357,8 @@ var keyNames = func() map[string]string {
 // character or a word (Space, F12).
 var tmuxKeyRE = regexp.MustCompile(`^((?:[CMS]-)*)([!-~]|[A-Za-z][A-Za-z0-9]+)$`)
 
-// flipKey gives the keys back to the list from the agent or the shell:
-// tmux's binding of the beside split (panes.BesideKey) for now.
+// flipKey moves the keys between the list and the agent (agentKeys), as
+// tmux's binding of the beside split does there (panes.BesideKey).
 const flipKey = "ctrl+q"
 
 // prefixName is a tmux prefix as the key line writes keys: C-a is ctrl+a. A
