@@ -1,7 +1,7 @@
 Spec: docs/superpowers/specs/2026-11-23-agents-explain-design.md
 Spec approved: 2026-11-23
 Test command: go test -race ./... (and `go vet ./...`, `golangci-lint run`)
-Plan approved: no
+Plan approved: 2026-11-23 by the owner
 Next: builder:build
 
 # Plan: a builder sees which screen rule read a waiting session
