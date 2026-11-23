@@ -29,7 +29,7 @@ type agent struct {
 	version        func(env []string) (string, error)
 	setup          func(home, work, url string) error
 	env            func(home, url, binDir string) []string
-	argv           func() []string
+	argv           []string
 	stand          func() standIn
 	// check is what matchblox must read on the agent's screen, and reads
 	// names it for the log.
@@ -75,9 +75,7 @@ var agents = []agent{
 				"DISABLE_AUTOUPDATER=1",
 			}
 		},
-		argv: func() []string {
-			return []string{"claude", "--permission-mode", "default", "make the canary file"}
-		},
+		argv:  []string{"claude", "--permission-mode", "default", "make the canary file"},
 		stand: func() standIn { return &anthropicStandIn{} },
 		check: canaryCheck,
 		reads: "waiting state, menu and options",
@@ -120,9 +118,7 @@ trust_level = "trusted"
 				"CANARY_KEY=canary-not-a-key",
 			}
 		},
-		argv: func() []string {
-			return []string{"codex", "make the canary file"}
-		},
+		argv:  []string{"codex", "make the canary file"},
 		stand: func() standIn { return &responsesStandIn{} },
 		check: waitingCheck,
 		reads: "waiting state",
@@ -166,9 +162,7 @@ trust_level = "trusted"
 				"TERM=xterm-256color",
 			}
 		},
-		argv: func() []string {
-			return []string{"opencode", "--prompt", "make the canary file"}
-		},
+		argv:  []string{"opencode", "--prompt", "make the canary file"},
 		stand: func() standIn { return &chatStandIn{} },
 		check: waitingCheck,
 		reads: "waiting state",
@@ -262,7 +256,7 @@ func (s *anthropicStandIn) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	bash := false
 	for _, tool := range req.Tools {
-		bash = bash || tool.Name == "Bash"
+		bash = bash || tool.Name == s.toolName()
 	}
 	result := false
 	for _, m := range req.Messages {
@@ -281,8 +275,8 @@ func (s *anthropicStandIn) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	stop := "end_turn"
 	if bash && !result {
 		s.tools.Add(1)
-		block = map[string]any{"type": "tool_use", "id": "toolu_1", "name": "Bash", "input": map[string]any{}}
-		delta = map[string]any{"type": "input_json_delta", "partial_json": `{"command":"touch canary-ran","description":"Make the canary file"}`}
+		block = map[string]any{"type": "tool_use", "id": "toolu_1", "name": s.toolName(), "input": map[string]any{}}
+		delta = map[string]any{"type": "input_json_delta", "partial_json": `{"command":"` + standInCommand + `","description":"Make the canary file"}`}
 		stop = "tool_use"
 	}
 
@@ -353,7 +347,7 @@ func (s *responsesStandIn) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	shell := false
 	for _, tool := range req.Tools {
-		shell = shell || tool.Name == "shell"
+		shell = shell || tool.Name == s.toolName()
 	}
 	output := false
 	for _, item := range req.Input {
@@ -366,9 +360,9 @@ func (s *responsesStandIn) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		"content": []any{map[string]any{"type": "output_text", "text": "Done.", "annotations": []any{}}}}
 	if shell && !output {
 		s.tools.Add(1)
-		args := `{"command":["bash","-lc","touch canary-ran"]}`
-		item = map[string]any{"type": "function_call", "id": "fc_canary", "call_id": "call_canary", "name": "shell", "arguments": "", "status": "in_progress"}
-		done = map[string]any{"type": "function_call", "id": "fc_canary", "call_id": "call_canary", "name": "shell", "arguments": args, "status": "completed"}
+		args := `{"command":["bash","-lc","` + standInCommand + `"]}`
+		item = map[string]any{"type": "function_call", "id": "fc_canary", "call_id": "call_canary", "name": s.toolName(), "arguments": "", "status": "in_progress"}
+		done = map[string]any{"type": "function_call", "id": "fc_canary", "call_id": "call_canary", "name": s.toolName(), "arguments": args, "status": "completed"}
 		deltas = []map[string]any{
 			{"type": "response.function_call_arguments.delta", "item_id": "fc_canary", "output_index": 0, "delta": args},
 			{"type": "response.function_call_arguments.done", "item_id": "fc_canary", "output_index": 0, "arguments": args},
@@ -454,7 +448,7 @@ func (s *chatStandIn) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	bash := false
 	for _, tool := range req.Tools {
-		bash = bash || tool.Function.Name == "bash"
+		bash = bash || tool.Function.Name == s.toolName()
 	}
 	result := false
 	for _, m := range req.Messages {
@@ -468,11 +462,11 @@ func (s *chatStandIn) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		deltas = []map[string]any{
 			{"role": "assistant", "content": nil, "tool_calls": []any{map[string]any{
 				"index": 0, "id": "call_canary", "type": "function",
-				"function": map[string]any{"name": "bash", "arguments": ""},
+				"function": map[string]any{"name": s.toolName(), "arguments": ""},
 			}}},
 			{"tool_calls": []any{map[string]any{
 				"index":    0,
-				"function": map[string]any{"arguments": `{"command":"touch canary-ran","description":"Make the canary file"}`},
+				"function": map[string]any{"arguments": `{"command":"` + standInCommand + `","description":"Make the canary file"}`},
 			}}},
 		}
 		finish = "tool_calls"

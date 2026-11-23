@@ -996,7 +996,6 @@ type workflowJob struct {
 	TimeoutMinutes int               `yaml:"timeout-minutes"`
 	Concurrency    map[string]any    `yaml:"concurrency"`
 	Permissions    map[string]string `yaml:"permissions"`
-	Env            map[string]string `yaml:"env"`
 	Steps          []workflowStep    `yaml:"steps"`
 }
 

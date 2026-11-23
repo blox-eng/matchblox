@@ -124,7 +124,7 @@ func runCanary(t *testing.T, a agent) canaryResult {
 			return fail(err.Error())
 		}
 
-		screen, check, err := drawMenu(t, fmt.Sprintf("mbc-%d-%s-%d", os.Getpid(), a.key, attempt), work, env, a.argv(), a.check)
+		screen, check, err := drawMenu(t, fmt.Sprintf("mbc-%d-%s-%d", os.Getpid(), a.key, attempt), work, env, a.argv, a.check)
 		shown := scrub(screen, work, home, host, name)
 		switch {
 		case err != nil:
@@ -185,7 +185,6 @@ func drawMenu(t *testing.T, sock, work string, env, argv []string, verdict func(
 		}
 	}
 	defer kill()
-	t.Cleanup(kill)
 	check = "no waiting state"
 	for deadline := time.Now().Add(menuTimeout); time.Now().Before(deadline); time.Sleep(500 * time.Millisecond) {
 		dead, _ := tmux("display-message", "-p", "-t", "canary", "#{pane_dead}").Output()
@@ -227,7 +226,7 @@ func TestHungVersionCouldNotRun(t *testing.T) {
 		version: func(env []string) (string, error) { return firstField(env, bin, "--version") },
 		setup:   func(_, _, _ string) error { return nil },
 		env:     func(home, _, _ string) []string { return []string{"HOME=" + home, "PATH=/usr/bin:/bin"} },
-		argv:    func() []string { return []string{bin} },
+		argv:    []string{bin},
 		stand:   func() standIn { return &anthropicStandIn{} },
 		check:   canaryCheck,
 	}
@@ -253,7 +252,7 @@ func TestQuitKeepsTheLastScreen(t *testing.T) {
 		version: func([]string) (string, error) { return "1.0.0", nil },
 		setup:   func(_, _, _ string) error { return nil },
 		env:     func(home, _, _ string) []string { return []string{"HOME=" + home, "PATH=/usr/bin:/bin"} },
-		argv:    func() []string { return []string{bin} },
+		argv:    []string{bin},
 		stand:   func() standIn { return &anthropicStandIn{} },
 		check:   canaryCheck,
 	}
@@ -284,7 +283,7 @@ func scriptAgent(t *testing.T, key, script string, stand standIn) agent {
 		version: func([]string) (string, error) { return "1.0.0", nil },
 		setup:   func(_, _, _ string) error { return nil },
 		env:     func(home, _, _ string) []string { return []string{"HOME=" + home, "PATH=/usr/bin:/bin"} },
-		argv:    func() []string { return []string{bin} },
+		argv:    []string{bin},
 		stand:   func() standIn { return stand },
 		check:   canaryCheck,
 	}
