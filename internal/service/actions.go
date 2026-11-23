@@ -159,6 +159,9 @@ func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 	if pane, ok := strings.CutPrefix(a.RecID, proto.IntoPrefix); ok {
 		return s.into(a, pane)
 	}
+	if pane, ok := strings.CutPrefix(a.RecID, proto.SeenPrefix); ok {
+		return s.markSeen(a, pane) // an open later is a new one: no dedupe
+	}
 	if strings.HasPrefix(a.RecID, proto.ChainPrefix) {
 		return s.chainAct(ctx, a) // an agent's own act: before the agents-pane gate
 	}

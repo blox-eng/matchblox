@@ -76,6 +76,9 @@ type Session struct {
 	// TurnEndedAt is TurnEnded for the console. The service sets both.
 	StateAt     time.Time `json:"state_at,omitzero"`
 	TurnEndedAt time.Time `json:"turn_ended_at,omitzero"`
+	// SeenAt is when the person last opened the session, at any console.
+	// The service sets it.
+	SeenAt time.Time `json:"seen_at,omitzero"`
 	// Retry is the attempt of a call OpenCode retries, and RetryAt when its
 	// next try starts.
 	Retry      int           `json:"retry,omitempty"`

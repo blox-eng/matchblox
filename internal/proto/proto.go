@@ -239,6 +239,10 @@ const (
 	MaxPaste    = 16384
 )
 
+// SeenPrefix starts the act a console sends when the person opened the
+// session in the pane after it: the service keeps the time for every screen.
+const SeenPrefix = "seen:"
+
 // SwitchNowPrefix starts an act that switches the pane after it at once,
 // with no record refresh first.
 const SwitchNowPrefix = "switchnow:"
