@@ -164,6 +164,8 @@ final class ConsoleTerminalView: TerminalView {
     /// SwiftTerm's own long-press began and how often its edit menu showed after it.
     var clickNote = "press=0 release=0 right=0" { didSet { showNote() } }
     private var terminalHolds = 0
+    /// What the hold's selection was at its start and at the lift (#492).
+    private var liftNote = ""
     private var menusShown = 0
 
     @objc private func terminalHeld(_ press: UILongPressGestureRecognizer) {
@@ -178,7 +180,7 @@ final class ConsoleTerminalView: TerminalView {
     }
 
     private func showNote() {
-        accessibilityValue = "\(clickNote) hold=\(terminalHolds) menu=\(menusShown)"
+        accessibilityValue = "\(clickNote) hold=\(terminalHolds) menu=\(menusShown) \(liftNote)"
     }
     #endif
 
@@ -307,6 +309,10 @@ final class ConsoleTerminalView: TerminalView {
         case .began:
             select(nil)
             heldWord = selection.active ? (selection.start, selection.end) : nil
+            #if DEBUG
+            liftNote = "began=\(selection.active)"
+            showNote()
+            #endif
         case .changed:
             guard let word = heldWord, let spot = cell(at: press.location(in: self)) else { return }
             let at = Position(col: spot.col, row: spot.row + getTerminal().buffer.yDisp)
@@ -314,6 +320,15 @@ final class ConsoleTerminalView: TerminalView {
             selection.pivotExtend(row: spot.row, col: spot.col)
         case .ended:
             heldWord = nil
+            #if DEBUG
+            liftNote += " lift=\(selection.active)/\(selection.getSelectedText().count)"
+            showNote()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                guard let self else { return }
+                liftNote += " shown=\(UIMenuController.shared.isMenuVisible)/\(selection.active)"
+                showNote()
+            }
+            #endif
             guard selection.active else { return }
             let point = press.location(in: self)
             UIMenuController.shared.showMenu(from: self, rect: CGRect(origin: point, size: cellSize))
