@@ -179,6 +179,11 @@ final class ConsoleTerminalView: TerminalView {
         }
     }
 
+    /// The terminal's size in cells and points, and whether it has the keys.
+    private var sizeNote: String {
+        "\(getTerminal().cols)x\(getTerminal().rows)/\(Int(bounds.width))x\(Int(bounds.height))/fr=\(isFirstResponder)"
+    }
+
     private func showNote() {
         accessibilityValue = "\(clickNote) hold=\(terminalHolds) menu=\(menusShown) \(liftNote)"
     }
@@ -310,7 +315,7 @@ final class ConsoleTerminalView: TerminalView {
             select(nil)
             heldWord = selection.active ? (selection.start, selection.end) : nil
             #if DEBUG
-            liftNote = "began=\(selection.active)"
+            liftNote = "began=\(selection.active)@\(sizeNote)"
             showNote()
             #endif
         case .changed:
@@ -321,11 +326,11 @@ final class ConsoleTerminalView: TerminalView {
         case .ended:
             heldWord = nil
             #if DEBUG
-            liftNote += " lift=\(selection.active)/\(selection.getSelectedText().count) mouse=\(allowMouseReporting)"
+            liftNote += " lift=\(selection.active)/\(selection.getSelectedText().count)@\(sizeNote) mouse=\(allowMouseReporting)"
             showNote()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
                 guard let self else { return }
-                liftNote += " shown=\(UIMenuController.shared.isMenuVisible)/\(selection.active)"
+                liftNote += " shown=\(UIMenuController.shared.isMenuVisible)/\(selection.active)@\(sizeNote)"
                 showNote()
             }
             #endif
@@ -462,7 +467,7 @@ final class ConsoleTerminalView: TerminalView {
             let frames = Thread.callStackSymbols.dropFirst(1).prefix(10).map { line in
                 line.split(separator: " ", omittingEmptySubsequences: true).dropFirst(3).first.map(String.init) ?? "?"
             }
-            liftNote += " cleared=" + frames.joined(separator: ">")
+            liftNote += " cleared@\(sizeNote)=" + frames.prefix(4).joined(separator: ">")
             showNote()
         }
         #endif
