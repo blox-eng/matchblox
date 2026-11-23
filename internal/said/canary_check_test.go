@@ -66,3 +66,51 @@ func TestCanaryCheck(t *testing.T) {
 		})
 	}
 }
+
+// scrub hides the run's folders, host and user, which an issue body must not
+// carry. A host or user under 3 characters stays, so it cannot mangle words.
+func scrub(screen, work, home, host, user string) string {
+	dirs := []struct{ old, new string }{{work, "<work>"}, {home, "<home>"}}
+	if len(home) > len(work) {
+		dirs[0], dirs[1] = dirs[1], dirs[0]
+	}
+	for _, r := range dirs {
+		if r.old != "" {
+			screen = strings.ReplaceAll(screen, r.old, r.new)
+		}
+	}
+	for _, r := range []struct{ old, new string }{{host, "<host>"}, {user, "<user>"}} {
+		if len(r.old) >= 3 {
+			screen = strings.ReplaceAll(screen, r.old, r.new)
+		}
+	}
+	return screen
+}
+
+func TestScrubRemovesTheRunsFolders(t *testing.T) {
+	const work, home = "/home/runner/work/_temp/canary/work", "/home/runner"
+	screen := " Read " + work + "/main.go\n" +
+		" Config at " + home + "/.claude\n" +
+		" runner@fv-az123:~$\n"
+
+	got := scrub(screen, work, home, "fv-az123", "runner")
+	for _, s := range []string{work, home, "runner", "fv-az123"} {
+		if strings.Contains(got, s) {
+			t.Errorf("scrub left %q in:\n%s", s, got)
+		}
+	}
+	for _, s := range []string{"<work>/main.go", "<home>/.claude", "<user>@<host>"} {
+		if !strings.Contains(got, s) {
+			t.Errorf("scrub wrote no %q in:\n%s", s, got)
+		}
+	}
+}
+
+func TestScrubKeepsShortNames(t *testing.T) {
+	const screen = " Do you want to proceed?\n ❯ 1. Yes\n"
+	for _, name := range []string{"", "o", "ye"} {
+		if got := scrub(screen, "", "", name, name); got != screen {
+			t.Errorf("scrub with host and user %q changed the screen:\n%s", name, got)
+		}
+	}
+}

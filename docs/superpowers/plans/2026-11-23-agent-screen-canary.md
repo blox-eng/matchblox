@@ -50,10 +50,10 @@ Next: builder:build
 
 - **Surface:** personal data (spec anti-goal: an issue body carries a home path, a host name or a user name).
 - **Files:** `internal/said/canary_check_test.go`.
-- **Test first (hostile input first):** `TestScrubRemovesTheRunsFolders`. Input: a screen holding `/home/runner/work/_temp/canary/work`, `/home/runner/.claude`, `runner@fv-az123`, and the host name from `os.Hostname()`. Assert that none of the four strings is in `scrub(screen, work, home)`, and that `<work>` and `<home>` are.
+- **Test first (hostile input first):** `TestScrubRemovesTheRunsFolders`. Input: a screen holding `/home/runner/work/_temp/canary/work`, `/home/runner/.claude`, `runner@fv-az123`, Assert that none of `work`, `home`, `runner`, `fv-az123` is in `scrub(screen, work, home, "fv-az123", "runner")`, and that `<work>`, `<home>` and `<user>@<host>` are. `TestScrubKeepsShortNames`: an empty, 1- or 2-character host and user leave the screen unchanged.
 - **Run:** `go test ./internal/said -run TestScrub`. Before: `undefined: scrub`. After: passes.
-- **Do:** `scrub(screen string, work, home string) string` replaces `work` with `<work>`, `home` with `<home>` (longest first), the host name with `<host>`, and the user name from `os/user` with `<user>`.
-- **Done when:** `TestScrubRemovesTheRunsFolders` passes.
+- **Do:** `scrub(screen, work, home, host, user string) string` replaces `work` with `<work>` and `home` with `<home>` (longest first), then `host` with `<host>` and `user` with `<user>` when each is 3 characters or more. Task 3 passes `os.Hostname()` and the `os/user` name.
+- **Done when:** `TestScrubRemovesTheRunsFolders` and `TestScrubKeepsShortNames` pass.
 - **Commit:** `test(said): the canary's screens carry no path, host or user (#199)`
 
 ### Task 3: Claude Code's canary run
@@ -170,6 +170,7 @@ Next: builder:build
 ## Changes during build
 
 - 2026-11-23: the spec line on the `report` job now reads "checks out only matchblox's own script" (plan Call 1, approved with the plan by the owner).
+- 2026-11-23: Task 2's `scrub` takes `host` and `user` as arguments. As planned it read this machine's names, so a runner's `runner@fv-az123` in the hostile input could never be removed, and no test could feed it a short name. The caller (Task 3) passes the real names. The hostile input is unchanged. Proposed by the Task 2 builder, taken by this session.
 
 ## Calls
 
