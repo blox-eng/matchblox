@@ -72,6 +72,10 @@ type Session struct {
 	// StatusAt is when the agent's report last changed its status: a
 	// reported wait began then, the same at every sample.
 	StatusAt time.Time `json:"status_at,omitzero"`
+	// StateAt is when the session last moved between works, asks and rests;
+	// TurnEndedAt is TurnEnded for the console. The service sets both.
+	StateAt     time.Time `json:"state_at,omitzero"`
+	TurnEndedAt time.Time `json:"turn_ended_at,omitzero"`
 	// Retry is the attempt of a call OpenCode retries, and RetryAt when its
 	// next try starts.
 	Retry      int           `json:"retry,omitempty"`
