@@ -80,10 +80,13 @@ func (m Model) heldWhy(s sample.Session) string {
 // and in every chain, whatever the filters hide: one the owner parked is
 // not counted, nor one on a host that is not reached, nor one on a hidden
 // host that s does not show.
-func (m Model) needCount() int {
+func (m Model) needCount() int { return m.countIn(sideNeed) }
+
+// countIn is every session in state h, counted as needCount counts.
+func (m Model) countIn(h sideState) int {
 	n := 0
 	for _, s := range m.sideSessions() {
-		if m.sideStateOf(s) == sideNeed && !m.stale(s.Host) && (!m.hostHidden(s.Host) || m.inView(s.Host)) {
+		if m.sideStateOf(s) == h && !m.stale(s.Host) && (!m.hostHidden(s.Host) || m.inView(s.Host)) {
 			n++
 		}
 	}

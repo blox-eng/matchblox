@@ -125,10 +125,16 @@ state. The code is `internal/app/match.go`.
 |---|---|---|---|---|
 | burning | `✦` | `flame`, `flame-amber`, `flame-core` | flickers: a new colour each 200 ms; `✧` for one step in six | the agent works |
 | at rest, asks | `╿` | `match-head` → `match-breath-1..3` | breathes: one slow breath each 2.4 s | the agent waits for an answer or a permission |
-| at rest | `╿` | `match-head` | still | the agent finished its turn and waits |
+| at rest | `╿` | `match-head` | still | the agent finished its turn and waits (the board, the stoker's steps) |
+| at rest, done | `✓` | `match-ember` | still | the agent finished a turn the owner has not opened |
+| idle | `╵` | `faint` | still | the agent rests, and the owner has opened its last turn |
+| held | `╽` | `muted` | still | the owner parked it, or the stoker holds it |
 | spent | `│` | `faint` | still | the context is at or above the compact limit (`sessions.compact_tokens`, default 350k, or `sessions.compact_at`, default 85 %, whichever comes first) |
 
 Order: spent comes first. A session that works with a full context is spent.
+In the list the state wins (owner, 2026-11-23): a session that works, asks,
+is done or is held keeps its glyph at the limit, standing still; only an
+idle session at the limit draws spent.
 A session the plan's limit stops (`out`) keeps the at-rest glyph, or spent
 when full; its word is `out` and the idle column holds its reset.
 
@@ -142,8 +148,8 @@ A change of state plays once:
 
 Rules:
 
-1. The glyph never stands alone: the state word stays next to it
-   (`✦ busy`, `╿ asks`, `│ burnt`).
+1. The group head carries the state word. The glyph alone tells each
+   state apart, with no colour and no motion.
 2. A match means one agent session. Do not use it for anything else.
 3. The console wakes only while something moves: a burning match, a match
    that asks, or a change that still plays. Then it draws 10 times a second;
@@ -151,7 +157,8 @@ Rules:
 4. Motion comes from the clock, not from a frame count, so the same moment
    always draws the same frame (the replay depends on it).
 5. With `--no-motion` or `NO_MOTION=1`: `✦` in `flame`, `╿` in
-   `match-head`, `│` in `faint`, no change plays.
+   `match-head`, `✓` in `match-ember`, `╵` in `faint`, `╽` in `muted`,
+   `│` in `faint`, no change plays.
 6. `≋` means "has a stoker": a chain's room card and the header's count
    use it, in `muted`, and in the night's ink while that chain's stoker
    runs its order. It is never a match.

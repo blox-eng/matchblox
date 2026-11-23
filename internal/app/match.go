@@ -228,21 +228,28 @@ func (m *Model) animate() tea.Cmd {
 	return tea.Tick(animTick, func(time.Time) tea.Msg { return animMsg{} })
 }
 
-// sideMatch is the match of s in a list row: struck and red when it needs
-// the owner, burning while it works, unlit when held, burnt out when idle.
-// A lit match flickers and the head of one that asks breathes, as on every
-// match (DESIGN.md §4).
+// sideMatch is the match of s in a list row, one glyph for each state
+// (DESIGN.md §4): struck and red when it needs the owner, burning while it
+// works, warm and still when done, unlit when held, burnt out when idle,
+// spent when idle at the compact limit. The state wins over spent. A lit
+// match flickers and the head of one that asks breathes, as on every
+// match; at the limit they stand still.
 func (m Model) sideMatch(s sample.Session, h sideState) string {
 	mk, ch, c := m.marks(), "╿", m.marks().Head
+	k := m.matchOf(s)
 	switch {
-	case h == sideWork && m.matchOf(s) == matchLit, h == sideNeed && m.asks(s):
+	case h == sideIdle && k == matchBurnt:
+		ch, c = "│", m.st.theme.Faint
+	case h == sideWork && k == matchLit, h == sideNeed && k != matchBurnt && m.asks(s):
 		ch, c = m.matchFor(s)
 	case h == sideWork:
 		ch, c = "✦", mk.Flame
+	case h == sideDone:
+		ch, c = "✓", mk.Ember
 	case h == sideHeld:
 		ch, c = "╽", m.st.theme.Muted
 	case h == sideIdle:
 		ch, c = "╵", m.st.theme.Faint
 	}
-	return lipgloss.NewStyle().Foreground(c).Bold(h == sideNeed).Render(ch)
+	return lipgloss.NewStyle().Foreground(c).Bold(h == sideNeed || h == sideDone).Render(ch)
 }

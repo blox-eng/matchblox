@@ -1,6 +1,7 @@
 package app
 
 import (
+	"maps"
 	"strings"
 	"testing"
 	"time"
@@ -8,9 +9,11 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/blox-eng/matchblox/internal/chains"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
+	"github.com/blox-eng/matchblox/internal/state"
 )
 
 // inked is one cell of a frame, its colours named by their tokens.
@@ -169,6 +172,119 @@ func TestNoMotionShowsTheEndState(t *testing.T) {
 		now = boardAt.Add(e * time.Millisecond)
 		if got := m.render(); got != first {
 			t.Fatalf("no motion, yet the frame at +%dms differs:\n%s\nwas\n%s", e, ansi.Strip(got), ansi.Strip(first))
+		}
+	}
+}
+
+// sixStates is a session in each state a list row draws (DESIGN.md §4):
+// works, asks, done, idle, held and spent.
+func sixStates() proto.State {
+	work, ask, idle := boardMatch("hearth-api", time.Hour), boardMatch("flint-auth", time.Hour), boardMatch("cinder-ci", time.Hour)
+	held, spent := boardMatch("ember-billing", time.Hour), boardMatch("wick-vat", time.Hour)
+	work.Busy, work.Status, work.Idle = true, "busy", 0
+	st := boardState(work, ask, doneMatch("kindle-web", time.Minute), idle, held, spent)
+	for i := range st.Sessions[:5] {
+		st.Sessions[i] = unspent(st.Sessions[i])
+	}
+	st.Queue = []queue.Item{waitFor(ask, queue.StatePermission, time.Minute)}
+	st.Holds = []proto.Hold{{SessionID: held.SessionID, Pane: held.Pane, Name: held.Name, By: holdByYou}}
+	return st
+}
+
+// unspent is s with room left in its context: the fixture's sessions are
+// at the compact limit.
+func unspent(s sample.Session) sample.Session {
+	s.ContextPct = 30
+	return s
+}
+
+// rowMatch is the match before name's row in a frame: at the list's
+// left edge, not in the agent's title.
+func rowMatch(cells [][]inked, name string) (inked, bool) {
+	for _, row := range cells {
+		for x := 2; x <= 6 && x+len(name) <= len(row); x++ {
+			if textOf(row, x, x+len(name)) == name && row[x-1].ch == " " {
+				return row[x-2], true
+			}
+		}
+	}
+	return inked{}, false
+}
+
+func TestDoneIsAWarmMatch(t *testing.T) {
+	if w := ansi.StringWidth("✓"); w != 1 {
+		t.Fatalf("✓ takes %d cells, want 1", w)
+	}
+	for _, noMotion := range []bool{false, true} {
+		now := boardAt
+		m := boardModel(t, boardState(unspent(doneMatch("kindle-web", time.Minute))))
+		m.opt.NoMotion, m.opt.Now, m.splashDone = noMotion, func() time.Time { return now }, true
+		for step := range 13 {
+			now = boardAt.Add(time.Duration(step) * 200 * time.Millisecond)
+			if c, ok := rowMatch(inkedCells(t, m.render()), "kindle-web"); !ok || c.ch != "✓" || c.fg != "match-ember" {
+				t.Fatalf("no motion %v, +%dms: the done match is %+v (found %v), want ✓ in match-ember:\n%s", noMotion, step*200, c, ok, plainFrame(m))
+			}
+		}
+	}
+}
+
+func TestEachStateHasItsOwnGlyph(t *testing.T) {
+	want := map[string]string{"hearth-api": "✦", "flint-auth": "╿", "kindle-web": "✓", "cinder-ci": "╵", "ember-billing": "╽", "wick-vat": "│"}
+	chained := sixStates()
+	chained.Chains = &state.ChainsView{Chains: []chains.Chain{{ID: "c1", Name: "login", Repo: "/home/user/src/hearth"}}}
+	for _, s := range chained.Sessions {
+		chained.Chains.Chains[0].Members = append(chained.Chains.Chains[0].Members, memberOf(s))
+	}
+	for what, st := range map[string]proto.State{"a row": sixStates(), "a chain member": chained} {
+		lines, _, _ := boardModel(t, st).sideList(80, 40)
+		got := map[string]string{}
+		for _, l := range plainLines(lines) {
+			r := []rune(l)
+			for name := range want {
+				if strings.Contains(l, " "+name) && len(r) > 3 {
+					at := 1
+					if strings.ContainsRune("├└", r[1]) {
+						at = 3
+					}
+					got[name] = string(r[at])
+				}
+			}
+		}
+		if !maps.Equal(got, want) {
+			t.Errorf("%s: glyphs %q, want %q:\n%s", what, got, want, strings.Join(plainLines(lines), "\n"))
+		}
+	}
+}
+
+// TestTheStateWinsOverSpent: at the compact limit a session keeps its
+// state's glyph; only one at rest draws spent (owner, 2026-11-23).
+func TestTheStateWinsOverSpent(t *testing.T) {
+	st := sixStates()
+	for i := range st.Sessions {
+		st.Sessions[i].ContextPct = 90
+	}
+	want := map[string]string{"hearth-api": "✦", "flint-auth": "╿", "kindle-web": "✓", "cinder-ci": "│", "ember-billing": "╽", "wick-vat": "│"}
+	for _, noMotion := range []bool{true, false} {
+		m := boardModel(t, st)
+		m.opt.NoMotion, m.splashDone = noMotion, true
+		cells := inkedCells(t, m.render())
+		for name, g := range want {
+			if c, ok := rowMatch(cells, name); !ok || c.ch != g {
+				t.Errorf("no motion %v: %s at the limit draws %+v (found %v), want %s", noMotion, name, c, ok, g)
+			}
+		}
+	}
+	now := boardAt
+	m := boardModel(t, st)
+	m.opt.NoMotion, m.opt.Now, m.splashDone = false, func() time.Time { return now }, true
+	first := inkedCells(t, m.render())
+	now = boardAt.Add(1200 * time.Millisecond)
+	later := inkedCells(t, m.render())
+	for _, name := range []string{"flint-auth", "hearth-api"} {
+		a, _ := rowMatch(first, name)
+		b, _ := rowMatch(later, name)
+		if a != b {
+			t.Errorf("%s at the limit moves: %+v at +0ms, %+v at +1200ms; want it still", name, a, b)
 		}
 	}
 }

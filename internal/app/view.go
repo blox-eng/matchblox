@@ -367,14 +367,25 @@ func (m Model) headerOf(w int) (string, span, span, headNamed) {
 		}
 		stoker = warn + stoker
 	}
-	// Short of room the host goes first (a phone), then the words of who
-	// waits; the count stays.
-	waits := []string{""}
+	// Short of room the host goes first (a phone), then the done count,
+	// then the words of who waits; the count stays.
+	done := ""
+	if d := m.countIn(sideDone); d > 0 {
+		done = lipgloss.NewStyle().Foreground(m.marks().Ember).Render(fmt.Sprintf("✓ %d done", d))
+	}
+	type headWaits struct{ word, done string }
+	var waits []headWaits
 	switch {
+	case n > 0 && done != "":
+		waits = []headWaits{{fmt.Sprintf(count, n), done}, {word: fmt.Sprintf(count, n)}, {word: fmt.Sprintf("● %d", n)}}
 	case n > 0:
-		waits = []string{fmt.Sprintf(count, n), fmt.Sprintf("● %d", n)}
+		waits = []headWaits{{word: fmt.Sprintf(count, n)}, {word: fmt.Sprintf("● %d", n)}}
+	case done != "":
+		waits = []headWaits{{done: done}}
 	case m.have:
-		waits = []string{"✓ nothing needs you", "✓"}
+		waits = []headWaits{{word: "✓ nothing needs you"}, {word: "✓"}}
+	default:
+		waits = []headWaits{{}}
 	}
 	lefts := []string{left}
 	if host != "" {
@@ -395,23 +406,30 @@ func (m Model) headerOf(w int) (string, span, span, headNamed) {
 	}
 	named = append(named, "")
 	for j, pre := range named {
-		for _, word := range waits {
+		for _, hw := range waits {
 			right = stoker + " "
 			ink := st.accent
 			if n == 0 {
 				ink = st.muted
 			}
+			said := hw.done
+			if hw.word != "" {
+				said = ink.Render(hw.word)
+				if hw.done != "" {
+					said += st.faint.Render(" · ") + hw.done
+				}
+			}
 			switch {
-			case word != "" && stoker != "":
-				right = ink.Render(word) + "  " + right
-			case word != "":
-				right = ink.Render(word) + " "
+			case said != "" && stoker != "":
+				right = said + "  " + right
+			case said != "":
+				right = said + " "
 			}
 			right = pre + right
 			hit := span{}
-			if word != "" && n > 0 {
+			if hw.word != "" && n > 0 {
 				x := w - lipgloss.Width(right) + lipgloss.Width(pre)
-				hit = span{x, x + lipgloss.Width(word), "waits"}
+				hit = span{x, x + lipgloss.Width(hw.word), "waits"}
 			}
 			for _, l := range lefts {
 				if lipgloss.Width(l+lost)+lipgloss.Width(right)+1 <= w {

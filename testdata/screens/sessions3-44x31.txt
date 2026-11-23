@@ -8,11 +8,11 @@
    I rewrote the quick start and the instal…
  ╿ ember-billing                        4m ✻
    #4552 waits for your merge
- │ train-loop@gpu-1                     9m ✻
+ ╿ train-loop@gpu-1                     9m ✻
    I rewrote the quick start and the instal…
  ╿ kindle-web                           1m ✻
    Do you want to proceed?
- │ api-auth@ws-1                        9m ✻
+ ╿ api-auth@ws-1                        9m ✻
    I rewrote the quick start and the instal…
  ╿ cinder-ci                           now ❋
    I am moving the cache key to the go.sum …
