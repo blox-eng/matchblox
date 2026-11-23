@@ -649,6 +649,11 @@ func TestTheBeltSaysWhenTheChatTakesTheScreen(t *testing.T) {
 	if got := phone.beltValue(); got != "1,2;;chat" {
 		t.Errorf("one pane, the chat: %q, want 1,2;;chat", got)
 	}
+	machine := phone
+	machine.setTab(tabMachine)
+	if got := machine.beltValue(); strings.HasSuffix(got, ";chat") {
+		t.Errorf("Machine after the chat: %q, want no ;chat: Machine shows its rows", got)
+	}
 	phone.toList()
 	if got := phone.beltValue(); got != "1,2;" {
 		t.Errorf("one pane, the list: %q, want 1,2;", got)

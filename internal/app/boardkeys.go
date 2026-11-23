@@ -534,7 +534,7 @@ func (m Model) beltValue() string {
 			armed = m.keys.main.Grant.Keys()[0]
 		}
 	}
-	return beltWord(m.beltKeys(), armed, !m.listShown())
+	return beltWord(m.beltKeys(), armed, m.tab == tabSessions && !m.listShown())
 }
 
 // beltWord is the board= value of the keys ks, armed the card key that a

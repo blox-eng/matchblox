@@ -3,8 +3,9 @@ import Foundation
 /// The Board layout's keys, as the console's board signal says them (`keycmd.BoardSignal`,
 /// `beltWord` in Go). The value is `box` under the consent box, `menu` under the row's menu,
 /// or `card;dim`: the chosen session's keys that are on (`*` after the armed one), then the
-/// keys that are off, and `;chat` after them while the chat takes the whole screen. Home is `◂` (back to the list), the session's keys (at most three), then
-/// `↑ ↓ ⏎`; the tail has the list's keys. A key that is off is dim and sends nothing. A token
+/// keys that are off, and `;chat` after them while the chat takes the whole screen. Home is
+/// `◂` (back to the list), the session's keys (at most three), then `↑ ↓ ⏎`; the tail has the
+/// list's keys. A key that is off is dim and sends nothing. A token
 /// the app does not know is not drawn.
 public struct BoardBelt: Equatable, Sendable {
     public enum Shape: Equatable, Sendable { case board, box, menu }
