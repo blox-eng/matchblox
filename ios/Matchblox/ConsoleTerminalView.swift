@@ -124,6 +124,11 @@ final class ConsoleTerminalView: TerminalView {
         }
         addGestureRecognizer(hold)
         self.hold = hold
+        #if DEBUG
+        for other in gestureRecognizers ?? [] where other is UILongPressGestureRecognizer && other !== hold {
+            other.addTarget(self, action: #selector(terminalHeld))
+        }
+        #endif
 
         // Two fingers: the one-finger pans, the taps and the long-presses fail at once.
         addGestureRecognizer(UIPinchGestureRecognizer(target: self, action: #selector(pinched)))
@@ -135,6 +140,29 @@ final class ConsoleTerminalView: TerminalView {
     }
 
     required init?(coder: NSCoder) { nil }
+
+    #if DEBUG
+    /// The demo's UI test reads the clicks the terminal sent (`countClicks`), then how often
+    /// SwiftTerm's own long-press began and how often its edit menu showed after it.
+    var clickNote = "press=0 release=0 right=0" { didSet { showNote() } }
+    private var terminalHolds = 0
+    private var menusShown = 0
+
+    @objc private func terminalHeld(_ press: UILongPressGestureRecognizer) {
+        guard press.state == .began else { return }
+        terminalHolds += 1
+        showNote()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            guard let self else { return }
+            if UIMenuController.shared.isMenuVisible { menusShown += 1 }
+            showNote()
+        }
+    }
+
+    private func showNote() {
+        accessibilityValue = "\(clickNote) hold=\(terminalHolds) menu=\(menusShown)"
+    }
+    #endif
 
     deinit {
         if let sizeObserver { NotificationCenter.default.removeObserver(sizeObserver) }
