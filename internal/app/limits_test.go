@@ -41,7 +41,7 @@ func TestTheHeaderHasNoLimits(t *testing.T) {
 		if !strings.Contains(lines[1], under) || strings.Contains(strings.Join(lines[:3], "\n"), "62%") {
 			t.Fatalf("width %d: the header is not one line:\n%s", w, strings.Join(lines[:4], "\n"))
 		}
-		if !strings.Contains(lines[0], "● 2 need you") { // the console's words
+		if !strings.Contains(lines[0], "● 1 need you") { // permission waits; finished queue is not need
 			t.Fatalf("width %d: the header does not say who waits: %q", w, lines[0])
 		}
 	}

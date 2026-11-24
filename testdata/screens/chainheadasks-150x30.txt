@@ -25,6 +25,6 @@
                                         │
                                         │
                                         │
- + new · ✧ 7 tips                       │ ›                                                                               answer in its pane · ctrl+o
+ + new · ✧ 8 tips                       │ ›                                                                               answer in its pane · ctrl+o
 ────────────────────────────────────────┴─────────────────────────────────────────────────────────────────────────────────────────────────────────────
  AGENT  kindle-web   this machine cpu 0% mem 40%   ✻ Max 5h 84% · wk 82%   · login usage not measured   ❋ Plus 5h 40% · wk 12%   ctrl+q list   ? keys

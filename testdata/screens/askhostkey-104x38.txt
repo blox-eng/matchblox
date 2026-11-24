@@ -1,21 +1,21 @@
- ▰ matchblox    ALL    spark-docs ●1    hearth-api    kindle-web ●1    +4 ▾           ● 6 need you    ⚙
+ ▰ matchblox    ALL    spark-docs    hearth-api    ux-pass    +5 ▾                    ● 3 need you    ⚙
 ────────────────────────────────┬───────────────────────────────────────────────────────────────────────
- NEEDS YOU · 6  −               │ flint-auth ✻ asks · #4545 ci          ctx 41%  ctrl+o expand · m menu
+ NEEDS YOU · 3  −               │ flint-auth ✻ asks · #4545 ci          ctx 41%  ctrl+o expand · m menu
 ▌╿ flint-auth               2m ✻│
    conflicts with main          │
- ╿ spark-docs               9m ✻│
-   I rewrote the quick start an…│
  ╿ ember-billing            4m ✻│
    #4552 waits for your merge   │
- ╿ kindle-web   ╭─ ssh ws-1 asks ──────────────────────────────────────────────────────╮
-   Do you want t│                                                                      │
- ╿ cinder-ci    │   The authenticity of host 'ws-1' can't be established.              │
-   I am moving t│   ED25519 key fingerprint is                                         │
- ╿ wick-mobile  │   SHA256:Hx1T4cGQ0bZp6Yd3lq9m0f8aJk2sWvR7uNcE5yXoLtI.                │
-   ⠙ Working    │   +--[ED25519 256]--+                                                │
-────────────────│   |    .o+=*o.      |                                                │
- WORKING · 1  − │   |     o=B.+ .     |                                                │
- ✦ hearth-api   │   |      +.X o      |                                                │
+ ╿ kindle-web               1m ✻│
+   Do you want to proceed?      │
+────────────────╭─ ssh ws-1 asks ──────────────────────────────────────────────────────╮
+ WORKING · 1  − │                                                                      │
+ ✦ hearth-api   │   The authenticity of host 'ws-1' can't be established.              │
+────────────────│   ED25519 key fingerprint is                                         │
+ IDLE · 4  −    │   SHA256:Hx1T4cGQ0bZp6Yd3lq9m0f8aJk2sWvR7uNcE5yXoLtI.                │
+ ╵ cinder-ci    │   +--[ED25519 256]--+                                                │
+ ╵ wick-mobile  │   |    .o+=*o.      |                                                │
+ │ spark-docs   │   |     o=B.+ .     |                                                │
+ ╵ ux-pass      │   |      +.X o      |                                                │
                 │   +----[SHA256]-----+                                                │
                 │   This key is not known by any other names.                          │
                 │   Are you sure you want to continue connecting                       │
@@ -33,6 +33,6 @@
                                 │
                                 │
                                 │
- + new · ✧ 7 tips               │ ›                                                ⏎ send to flint-auth
+ + new · ✧ 8 tips               │ ›                                                ⏎ send to flint-auth
 ────────────────────────────────┴───────────────────────────────────────────────────────────────────────
  AGENT  flint-auth   this machine cpu 0% mem 40%                                   ctrl+q list   ? keys

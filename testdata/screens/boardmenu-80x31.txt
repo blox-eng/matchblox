@@ -26,6 +26,6 @@
  ╵ tinder-scratch@gpu… 10m ·│ Which way do we fix the login?
 ────────────────────────────┤  1. Patch the token check
  ↓ 1 more                   │  2. Move to the new session store
- + new · ✧ 7 tips           │ ›                            ⏎ send to flint-auth
+ + new · ✧ 8 tips           │ ›                            ⏎ send to flint-auth
 ────────────────────────────┴───────────────────────────────────────────────────
  LIST  in the menu · ↑↓ move · ⏎ do · esc close

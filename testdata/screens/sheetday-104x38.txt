@@ -1,21 +1,21 @@
- ▰ matchblox    ALL    spark-docs ●1    hearth-api    kindle-web ●1    +4 ▾           ● 6 need you    ⚙
+ ▰ matchblox    ALL    spark-docs    hearth-api    ux-pass    +5 ▾                    ● 3 need you    ⚙
 ────────────────────────────────┬───────────────────────────────────────────────────────────────────────
- NEEDS YOU · 6  −               │ flint-auth ✻ asks · #4545 ci          ctx 41%  ctrl+o expand · m menu
+ NEEDS YOU · 3  −               │ flint-auth ✻ asks · #4545 ci          ctx 41%  ctrl+o expand · m menu
 ▌╿ flint-auth               2m ✻│
    conflicts with main          │
- ╿ spark-docs               9m ✻│
-   I rewrote the quick start an…│
  ╿ ember-billing            4m ✻│
    #4552 waits for your merge   │
  ╿ kindle-web               1m ✻│
    Do you want to proceed?      │
- ╿ cinder-ci               now ❋│
-   I am moving the cache key to…│
- ╿ wick-mobile             now ▣│
-   ⠙ Working         ╭─ New order ────────────────────────────────────────────────╮
-─────────────────────│ How should I run?                                          │
- WORKING · 1  −      │                                                            │
- ✦ hearth-api     #45│ › ▏                                                        │
+────────────────────────────────┤
+ WORKING · 1  −                 │
+ ✦ hearth-api     #4551 ci  3h ✻│
+────────────────────────────────┤
+ IDLE · 4  −                    │
+ ╵ cinder-ci         ╭─ New order ────────────────────────────────────────────────╮
+ ╵ wick-mobile       │ How should I run?                                          │
+ │ spark-docs        │                                                            │
+ ╵ ux-pass           │ › ▏                                                        │
                      │                                                            │
                      │ gos ✓ merges  ○ releases  ○ deploys  ○ kills  off asks you │
                      │ ways merge-order  priority  release-train  triage          │
@@ -33,6 +33,6 @@
                                 │
                                 │
                                 │
- + new · ✧ 7 tips               │ ›                                                ⏎ send to flint-auth
+ + new · ✧ 8 tips               │ ›                                                ⏎ send to flint-auth
 ────────────────────────────────┴───────────────────────────────────────────────────────────────────────
  LIST   this machine cpu 0% mem 40%   stoker                                                     ? keys

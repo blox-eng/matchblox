@@ -1,10 +1,10 @@
- ▰ matchblox    ALL    spark-docs ●1    hearth-api    kindle-web ●1    +4 ▾             ● 6 need you    ⚙
+ ▰ matchblox    ALL    spark-docs    hearth-api    ux-pass    kindle-web ●1    +4 ▾     ● 3 need you    ⚙
 ────────────────────────────────┬─────────────────────────────────────────────────────────────────────────
- NEEDS YOU · 6  −               │ flint-auth ✻ asks · #4545 ci            ctx 41%  ctrl+o expand · m menu
+ NEEDS YOU · 3  −               │ flint-auth ✻ asks · #4545 ci            ctx 41%  ctrl+o expand · m menu
 ▌╿ flint-auth               2m ✻│   2. Rotate, keep the old one a minute
    conflicts with main          │   3. Type something.
- ╿ spark-docs               9m ✻│
- ↓ 6 more · 5 need you          │ Enter to select · ↑/↓ to navigate · Esc to cancel
+ ╿ ember-billing            4m ✻│
+ ↓ 7 more · 2 need you          │ Enter to select · ↑/↓ to navigate · Esc to cancel
  the line is empty              │ ›                                                  ⏎ send to flint-auth
 ────────────────────────────────┴─────────────────────────────────────────────────────────────────────────
  AGENT  flint-auth   this machine cpu 0% mem 40%                                     ctrl+q list   ? keys

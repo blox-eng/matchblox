@@ -26,6 +26,6 @@
  ╵ tinder-scratch@gpu… 10m ·│
 ────────────────────────────┤
  ↓ 1 more                   │
- + new · ✧ 7 tips           │ ›                          ⏎ send to spark-search
+ + new · ✧ 8 tips           │ ›                          ⏎ send to spark-search
 ────────────────────────────┴───────────────────────────────────────────────────
  LIST   2 hosts s▸                                                       ? keys

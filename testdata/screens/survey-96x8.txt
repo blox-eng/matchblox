@@ -1,8 +1,8 @@
- ▰ matchblox    ALL    spark-docs ●1    hearth-api    +5 ▾                    ● 6 need you    ⚙
+ ▰ matchblox    ALL    spark-docs    hearth-api    ux-pass    +5 ▾            ● 3 need you    ⚙
 ────────────────────────────┬───────────────────────────────────────────────────────────────────
  ↑ 1 more · 1 needs you     │ flint-auth ✻ asks · #4545 ci      ctx 41%  ctrl+o expand · m menu
    conflicts with main      │
- ↓ 6 more · 5 need you      │ Enter to select · ↑/↓ to navigate · Esc to cancel
- + new · ✧ 7 tips           │ ›                                            ⏎ send to flint-auth
+ ↓ 7 more · 2 need you      │ Enter to select · ↑/↓ to navigate · Esc to cancel
+ + new · ✧ 8 tips           │ ›                                            ⏎ send to flint-auth
 ────────────────────────────┴───────────────────────────────────────────────────────────────────
  AGENT  flint-auth   this machine cpu 0% mem 40%                           ctrl+q list   ? keys

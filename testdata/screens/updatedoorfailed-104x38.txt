@@ -1,22 +1,22 @@
- ▰ matchblox    ALL    spark-docs ●1    hearth-api    kindle-web ●1    +4 ▾           ● 6 need you    ⚙
+ ▰ matchblox    ALL    spark-docs    hearth-api    ux-pass    +5 ▾                    ● 3 need you    ⚙
 ────────────────────────────────┬───────────────────────────────────────────────────────────────────────
- NEEDS YOU · 6  −               │ SET UP
+ NEEDS YOU · 3  −               │ SET UP
  ╿ flint-auth               2m ✻│
    conflicts with main          │ Update to v0.43.0
- ╿ spark-docs               9m ✻│  matchblox v0.43.0 is out. This machine runs v0.42.0. The install
-   I rewrote the quick start an…│  failed, nothing was changed. Enter tries again, or run: matchblox
- ╿ ember-billing            4m ✻│  update. checksum mismatch for matchblox_linux_amd64 · published
-   #4552 waits for your merge   │  3f9a3f9a3f9a… · download c2e1c2e1c2e1…
- ╿ kindle-web               1m ✻│
-   Do you want to proceed?      │
- ╿ cinder-ci               now ❋│
-   I am moving the cache key to…│
- ╿ wick-mobile             now ▣│
-   ⠙ Working                    │
+ ╿ ember-billing            4m ✻│  matchblox v0.43.0 is out. This machine runs v0.42.0. The install
+   #4552 waits for your merge   │  failed, nothing was changed. Enter tries again, or run: matchblox
+ ╿ kindle-web               1m ✻│  update. checksum mismatch for matchblox_linux_amd64 · published
+   Do you want to proceed?      │  3f9a3f9a3f9a… · download c2e1c2e1c2e1…
 ────────────────────────────────┤
  WORKING · 1  −                 │
-▌✦ hearth-api     #4551 ci  3h ✻│
-   busy                         │
+ ✦ hearth-api     #4551 ci  3h ✻│
+────────────────────────────────┤
+ IDLE · 4  −                    │
+ ╵ cinder-ci               now ❋│
+ ╵ wick-mobile             now ▣│
+ │ spark-docs               9m ✻│
+▌╵ ux-pass                 10m ✻│
+   The pass screen folds at eve…│
                                 │
                                 │
                                 │
@@ -33,6 +33,6 @@
                                 │
                                 │
                                 │
- + new · ✧ 7 tips · ! 1 setup   │
+ + new · ✧ 8 tips · ! 1 setup   │
 ────────────────────────────────┴───────────────────────────────────────────────────────────────────────
  AGENT  in the setup steps · ⏎ set up · x close · esc chat

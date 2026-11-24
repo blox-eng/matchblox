@@ -33,6 +33,6 @@
                                         │
                                         │
                                         │
- + new · ✧ 7 tips                       │ ›                                                                                              ⏎ send to spark-search
+ + new · ✧ 8 tips                       │ ›                                                                                              ⏎ send to spark-search
 ────────────────────────────────────────┴───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  LIST   2 hosts s▸   ✻ Max 5h 84% ↻2h30m · wk 82% ↻3d10h   · login usage not measured   ❋ Plus 5h 40% ↻1h9m · wk 12% ↻4d10h                              ? keys

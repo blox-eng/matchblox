@@ -33,6 +33,6 @@
                                 │
                                 │
                                 │
- + new · ✧ 7 tips               │ › Fmerge on green                                ⏎ send to kindle-web
+ + new · ✧ 8 tips               │ › Fmerge on green                                ⏎ send to kindle-web
 ────────────────────────────────┴───────────────────────────────────────────────────────────────────────
  AGENT  kindle-web   this machine cpu 0% mem 40%                                   ctrl+q list   ? keys

@@ -16,8 +16,8 @@ import (
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
-// queueState is the fixture machine with two sessions that wait: app-feature
-// at a permission prompt, app-review done with its turn.
+// queueState is the fixture machine with one session that needs you
+// (app-feature at a permission prompt) and one finished turn (app-review).
 func queueState() proto.State {
 	st := fixtureState()
 	for i, s := range st.Sessions {
