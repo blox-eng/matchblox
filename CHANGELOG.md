@@ -15,6 +15,8 @@ All notable changes to matchblox are in this file. The format follows
   host name or user name, ready to paste into an issue. `--file` explains
   a saved screen.
 
+## [0.58.1] - 2026-11-23
+
 ### Fixed
 
 - **A hold and drag selects text.** In a Pocket chat a hold now
@@ -2062,7 +2064,8 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.58.0...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.58.1...HEAD
+[0.58.1]: https://github.com/blox-eng/matchblox/compare/v0.58.0...v0.58.1
 [0.58.0]: https://github.com/blox-eng/matchblox/compare/v0.57.1...v0.58.0
 [0.57.1]: https://github.com/blox-eng/matchblox/compare/v0.57.0...v0.57.1
 [0.57.0]: https://github.com/blox-eng/matchblox/compare/v0.56.1...v0.57.0
