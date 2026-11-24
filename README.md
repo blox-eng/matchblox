@@ -30,9 +30,9 @@ matchblox is the tmux control plane for agents — not another IDE.
 Works with Claude Code, Codex, OpenCode, Cursor, and any agent in tmux.
 
 Measured on Linux (ws-1, 6.17.0-29-generic x86_64, 2026-11-24): idle
-`matchblox serve` about 8 MiB RSS, local console about 21 MiB RSS
-(`scripts/measure-footprint.sh`). Machine in the console names the same
-footprint.
+`matchblox serve` about 31 MiB RSS, local console about 25 MiB RSS
+(`scripts/measure-footprint.sh`, socket owner). Machine in the console
+names the same footprint.
 
 **Docs: [docs.matchblox.com](https://docs.matchblox.com)**
 
