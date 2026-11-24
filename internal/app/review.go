@@ -222,7 +222,7 @@ func (m Model) reviewPasteResult(r proto.Result) (Model, tea.Cmd, bool) {
 	}
 	if why != "" {
 		m.setReviewComments(sent.key, sent.comments)
-		return m, m.notice("not sent: "+why), true
+		return m, m.notice("not sent: " + why), true
 	}
 	m.setReviewComments(sent.key, nil)
 	return m, m.notice(fmt.Sprintf("sent a review of %d comments to %s · now in WORKING", sent.n, sent.name)), true

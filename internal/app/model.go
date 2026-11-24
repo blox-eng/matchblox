@@ -614,10 +614,10 @@ type Model struct {
 	keyQ                      string                 // the ? sheet's filter
 	keyAt                     int                    // the ? sheet's chosen hit among the filter's rows
 	cogAt                     string                 // the part the ⚙ sheet opened on ("cog:usage", "cog:loops:gpu-1"), until a key moves it
-	review                    *reviewSheet             // the D review sheet, while it is open
-	reviews                   reviewsState             // unsent comments per session, in reviews.json
-	reviewHeld                map[paneKey]heldReview   // a review waiting for a busy agent's turn to end
-	reviewPastes              map[string]reviewPaste   // paste: of a review the service has not answered yet
+	review                    *reviewSheet           // the D review sheet, while it is open
+	reviews                   reviewsState           // unsent comments per session, in reviews.json
+	reviewHeld                map[paneKey]heldReview // a review waiting for a busy agent's turn to end
+	reviewPastes              map[string]reviewPaste // paste: of a review the service has not answered yet
 	showing                   bool                   // a choice is checked for the agent region
 	showNext                  *action                // the choice made while one ran: it runs next
 	besideShows               paneKey                // the session the agent region shows; zero when none
