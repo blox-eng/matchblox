@@ -200,6 +200,13 @@ func run(args []string) error {
 	case "update":
 		return updateCmd(os.Stdout)
 	case "sessions", "ships", "usage", "agents":
+		words, err := positionals(fl, args)
+		if err != nil {
+			return err
+		}
+		if cmd == "agents" && len(words) > 0 && words[0] == "explain" {
+			return cliExplain(words[1:], os.Stdout, transport.SocketPath(), *o.file, *o.json)
+		}
 		return cliRead(cmd, os.Stdout, transport.SocketPath(), *o.json)
 	case "peek":
 		words, err := positionals(fl, args)
@@ -234,6 +241,12 @@ func run(args []string) error {
 			return err
 		}
 		return cliLife(cmd, words, *o.anyway, os.Stdout, transport.SocketPath())
+	case "merge":
+		words, err := positionals(fl, args)
+		if err != nil {
+			return err
+		}
+		return cliMerge(words, os.Stdout, transport.SocketPath())
 	case "switch":
 		words, err := positionals(fl, args)
 		if err != nil {
@@ -360,7 +373,7 @@ func askpassMain(prompt string) error {
 
 // commands are the commands a builder types. hook, authorize and gate run
 // from a hook, an ssh forced command and a connect.
-var commands = []string{"connect", "serve", "sessions", "ships", "agents", "status", "setup", "pair", "devices", "usage", "update", "version", "send", "compact", "hold", "release", "stoker", "peek", "new", "rename", "kill", "switch", "scan", "recover", "chain", "unchain"}
+var commands = []string{"connect", "serve", "sessions", "ships", "agents", "status", "setup", "pair", "devices", "usage", "update", "version", "send", "compact", "hold", "release", "stoker", "peek", "new", "rename", "kill", "merge", "switch", "scan", "recover", "chain", "unchain"}
 
 type flags struct {
 	cfgPath, root         *string
@@ -384,6 +397,7 @@ type flags struct {
 	dir                   *string
 	off, on               *bool
 	chain, goes           *string
+	file                  *string
 }
 
 // usageText heads --help: every command, one line each, then the flags.
@@ -404,6 +418,7 @@ Commands:
   matchblox ships                  the pull requests the sessions drive (--json)
   matchblox usage                  each account's plan windows (--json)
   matchblox agents                 each agent, its version and its unknown screens (--json)
+  matchblox agents explain <who>   which screen rule read a session, to report it (--file, --json)
   matchblox peek <who>             what a session said last and what it asks (--lines, --json)
   matchblox send <who> "<text>"    type a line and Enter into a session (--pick n answers its question)
   matchblox compact <who>          compact a Claude Code session at rest
@@ -412,6 +427,7 @@ Commands:
   matchblox new ["<first message>"]  start an agent in a tmux session of its own (--where, --agent, --branch, --name, --account)
   matchblox rename <who> <name>    name a session, its tmux session and its agent alike
   matchblox kill <who>             end a session: its agent and its pane (--anyway while it works)
+  matchblox merge <who>            merge the pull request of a session that waits for your merge
   matchblox chain <who>|<chain>    join the chain of a match, or a chain by its name
   matchblox chain                  list your chains (--json)
   matchblox unchain [<chain>]      leave your chain, or the one named (--all: every chain)
@@ -472,6 +488,7 @@ func newFlags() (*flag.FlagSet, flags) {
 		on:         fl.Bool("on", false, "chain: take chains and notices again"),
 		chain:      fl.String("chain", "", "stoker new and quit: the chain, by any member's name, a pane or the chain's id"),
 		goes:       fl.String("go", "", "stoker new and order: the gos the chain stoker has: merges, releases, deploys, kills (default: none, or the host stoker's own)"),
+		file:       fl.String("file", "", "agents explain: read a saved screen instead of a session's pane"),
 		noMotion:   fl.Bool("no-motion", os.Getenv("NO_MOTION") == "1", "every motion is an instant change (also NO_MOTION=1)"),
 	}
 }

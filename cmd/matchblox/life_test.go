@@ -17,6 +17,8 @@ import (
 	"github.com/blox-eng/matchblox/internal/accounts"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
+	"github.com/blox-eng/matchblox/internal/ships"
+	"github.com/blox-eng/matchblox/internal/state"
 	"github.com/blox-eng/matchblox/internal/transport"
 )
 
@@ -49,6 +51,77 @@ func TestKillAndRenameRefusals(t *testing.T) {
 		if _, err := lifeAct(cliDoc(), c.cmd, c.words, false, ""); err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Errorf("%s: %v, want %q", name, err, c.want)
 		}
+	}
+}
+
+// mergeDoc is cliDoc with api's ship of the given kind and merge argv.
+func mergeDoc(kind string, merge []string) state.Doc {
+	d := cliDoc()
+	d.Ships = &ships.Report{Ships: []ships.Ship{{Repo: "o/r", Number: 4556, Stage: ships.StageGreen, Kind: kind, Merge: merge, Session: ships.SessionRef{Pane: "%3"}}}}
+	return d
+}
+
+var prMerge = []string{"gh", "pr", "merge", "4556", "--squash", "-R", "o/r"}
+
+// TestMergeActRefusals: the CLI merge is a tool an agent calls. Only a ship
+// that waits for you and holds the merge argv Ships read becomes an act.
+func TestMergeActRefusals(t *testing.T) {
+	const none = "no ship of api waits for a merge"
+	for name, c := range map[string]struct {
+		doc   state.Doc
+		words []string
+		want  string
+	}{
+		"no who":                {cliDoc(), nil, "merge needs a session: matchblox merge <who>"},
+		"two words":             {mergeDoc(ships.WaitsForYou, prMerge), []string{"api", "web"}, "merge takes one session"},
+		"unknown who":           {mergeDoc(ships.WaitsForYou, prMerge), []string{"nope"}, "no session named nope"},
+		"session with no ship":  {mergeDoc(ships.WaitsForYou, prMerge), []string{"%4"}, "no ship of web waits for a merge"},
+		"no ships report":       {state.Doc{Sessions: cliDoc().Sessions}, []string{"api"}, none},
+		"stuck, empty merge":    {mergeDoc(ships.Stuck, nil), []string{"api"}, none},
+		"stuck, with merge":     {mergeDoc(ships.Stuck, prMerge), []string{"api"}, none},
+		"waits, empty merge":    {mergeDoc(ships.WaitsForYou, nil), []string{"api"}, none},
+		"waits, empty argv":     {mergeDoc(ships.WaitsForYou, []string{}), []string{"api"}, none},
+		"running, with merge":   {mergeDoc(ships.Running, prMerge), []string{"api"}, none},
+		"done, with merge":      {mergeDoc(ships.Done, prMerge), []string{"api"}, none},
+		"unknown, with merge":   {mergeDoc(ships.Unknown, prMerge), []string{"api"}, none},
+		"cliDoc ship, no merge": {cliDoc(), []string{"api"}, none},
+	} {
+		a, err := mergeAct(c.doc, c.words, "%9")
+		if err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s: %v, want %q", name, err, c.want)
+		}
+		if a.RecID != "" || a.Confirm != "" {
+			t.Errorf("%s: a refusal still built an act: %+v", name, a)
+		}
+	}
+}
+
+// TestMergeActDoesNotInventArgv: a ship that waits but holds no merge argv
+// is refused. The CLI never makes up a gh pr merge line.
+func TestMergeActDoesNotInventArgv(t *testing.T) {
+	a, err := mergeAct(mergeDoc(ships.WaitsForYou, nil), []string{"api"}, "")
+	if err == nil {
+		t.Fatalf("built %+v from a ship with no merge argv", a)
+	}
+	if a.RecID != "" || a.Text != "" {
+		t.Fatalf("act on error: %+v", a)
+	}
+}
+
+func TestMergeActNamesTheShip(t *testing.T) {
+	a, err := mergeAct(mergeDoc(ships.WaitsForYou, prMerge), []string{"api"}, "%9")
+	if err != nil || a.RecID != "ship:o/r#4556" || a.Which != "secondary" || a.Confirm != "y" || a.From != "%9" {
+		t.Fatalf("%+v %v", a, err)
+	}
+}
+
+// TestCLIMergeRefusesBeforeTheService: cliDoc's ship holds no merge argv, so
+// the CLI refuses on its own words and sends no act.
+func TestCLIMergeRefusesBeforeTheService(t *testing.T) {
+	var buf bytes.Buffer
+	err := cliMerge([]string{"api"}, &buf, switchService(t, proto.Result{Ran: [][]string{{"gh", "pr", "merge"}}}))
+	if err == nil || err.Error() != "no ship of api waits for a merge" || buf.Len() != 0 {
+		t.Fatalf("%v %q", err, buf.String())
 	}
 }
 

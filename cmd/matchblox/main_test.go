@@ -950,6 +950,14 @@ func TestHelpListsTheCommands(t *testing.T) {
 	}
 }
 
+// TestMergeIsACommand: the CLI twin of `p` on the board is a command, so
+// help lists it and the docs must show it.
+func TestMergeIsACommand(t *testing.T) {
+	if !slices.Contains(commands, "merge") {
+		t.Fatalf("merge is not in commands: %v", commands)
+	}
+}
+
 // The pair door is a page in the console, not a file: setup points to it
 // and asks nothing.
 func TestSetupSaysHowToPair(t *testing.T) {

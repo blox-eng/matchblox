@@ -511,12 +511,29 @@ Codex        0.9.0     1         no hooks: screen only
   `unknown screen`, so the last column says `no hooks: screen only`.
 - An installed agent with no session shows a dash as its version, and 0.
 - When a count is above zero, the last line says what to do:
-  `a screen matchblox cannot read: update matchblox, or report it with this table`.
+  `a screen matchblox cannot read: run matchblox agents explain <session>, and report its output`.
 
 The output has no session names, folders, host names or user names. You can
 paste it in a report. `matchblox agents --json` prints each row with
 `agent`, `version`, `why`, `sessions` and `unknown`. It needs
 `matchblox serve` running (or a console).
+
+`matchblox agents explain api` shows why a session reads as it does. It
+prints the note the session's row shows, the hook's wait, each screen rule
+with the line it matched, `no match`, or `not tried` for the fallback when
+a rule above it read the screen, the menu with the digit of each option,
+and the rules version. `(decides)` marks the rules the verdict comes from:
+a rule can match a line and not decide. Then it prints the screen. The screen holds
+only the lines the rules read, with your home path, host name and user name
+removed. A secret on those lines is not removed: check the screen before
+you post it. When the row says `unknown screen`, the last line says where
+to report it. explain only reads the pane: it never types into it.
+
+- `the screen changed since the note: run it again` means the pane
+  changed between the service's last read and this one.
+- `matchblox agents explain --file screen.txt` explains a saved screen. It
+  shows no hook line, because a file has no hook.
+- `--json` prints the same facts.
 
 ## Chain matches
 
@@ -602,6 +619,7 @@ took it and the answer never came.
 | `matchblox new "fix the flaky test"` | Starts Claude Code here, in a tmux session of its own named after the directory, with the words as its first message. `--where <path>` starts it elsewhere (`--where <url>` clones a git URL, `https://…`, `git@host:o/r` or `gh:o/r`, into `[git] clone_root`, or uses the clone you have, then starts; it waits up to 30 minutes. A bare `o/r` is a folder here, as any path), `--agent codex` (or `opencode`, `cursor-agent`) starts another agent, `--branch <b>` first adds a worktree for a new branch beside the repository (`<repo>-<b>`, from origin's default branch, tracking nothing), `--name <name>` names it. `--account <name>` starts it on an account of that agent. `--new-account` makes that account first. `--setup like-default`, `copy` or `empty` picks its setup, and the default is `like-default`. A new account starts without a first message, and the command prints `sign in in <session>`. It waits as long as a copy of the default can take, and says "refused" when matchblox refused the start, "failed" when it ran and failed, and "stopped after" the step that ran when a guard stopped the rest. A start on an account that another start or switch is busy with is refused at once. The tmux session, its window and Claude Code's own name are that one name. A first message that starts with a dash is refused: the agent would read it as a flag. |
 | `matchblox rename api ships-flake` | Names the session, its tmux window, its tmux session when it is that session's one window, and Claude Code (`/rename`), all alike. A Claude Code session that works takes its name when it rests (`api renames when it rests`). A name is one word of letters, digits, dashes and underscores, and no other tmux session may have it. |
 | `matchblox kill api` | Ends the session: `tmux kill-pane`, then a `TERM` to its agent if it still runs. It is refused while the session works or needs you: `--anyway` kills it all the same. Its worktree and its transcript stay. |
+| `matchblox merge api` | Merges the pull request of the session's leading ship, the same as `p` and a typed `y` on the board. It runs only while that ship waits for your merge and the last read gave its merge words (`gh pr merge <n> --squash --match-head-commit <sha>`); the service checks both again when it runs. Otherwise it is refused: `no ship of api waits for a merge`. The stoker cannot run it: `the stoker does not merge: p is yours`. |
 | `matchblox switch api --agent codex` | Saves handover evidence, then replaces the agent in the same pane: same name, directory, park, ship and chain. The new agent starts on its last account, else `default`, with match awareness and a prompt to continue from the saved evidence. Codex starts with workspace trust and workspace-write network access. `--extra "<words>"` adds your instructions for this switch after that prompt, and they win over the handover; `--extra` with `--handoff` or `--preview` is refused before the service is asked. `--handoff "<line>"` replaces the prompt with your exact task; `--handoff ''` starts no task and captures no handover. While the match works or waits, `--anyway` switches it mid-turn. Inside tmux, your client jumps after the switch runs. An idle Claude Code or Codex agent is first asked to write its task record, and the switch waits up to 3 minutes for it, with a line on stderr; `Ctrl-C` switches now from the evidence, and `--no-refresh` skips the wait. |
 | `matchblox switch api --agent codex --preview` | Reads the current handover evidence. It sends no agent input, writes no context files, and replaces no process. |
 | `matchblox recover` | Lists the agents your tmux server ran, from the recovery record: each with its tmux session, agent, folder and state. **live**: an agent runs that conversation now. **can reopen**: its folder is there, on the branch it had, and its saved history is on disk. **cannot reopen**: the line says why and the fix (a folder that is gone, another branch or another repository, no saved history, an agent that is not installed, a conversation that another Claude Code process has open, or a session that ran on Bedrock, Vertex or an API key set in your shell: that sign-in came from your shell, so the line gives the command to run there instead of reopening it on your default sign-in). It changes nothing. The service keeps the record in `recover.json` in its state folder while your agents run: the agent, its conversation (it follows `/clear` and `/resume`), its tmux session, folder, checkout and tmux server. An agent you quit leaves the record. The agents of a server that died stay in it for 14 days. The record holds no transcript, prompt or environment value. Claude Code, Codex and Cursor are recorded; a Cursor line says its history is not checked, as matchblox does not read Cursor's history. `--json` prints the lines as JSON. |
@@ -666,7 +684,9 @@ The second tab. `↑` `↓` choose a row, `Enter` opens it over the body, and
 Under the rows: usage (see [Usage](#usage)), then the machine: CPU per
 core, load, pressure, memory and swap, temperature, CPU power limits,
 GPUs, and the CPU share of the container groups you name in the
-[config](config.md).
+[config](config.md). A quiet `matchblox` line names this host's serve
+RSS; when the console runs on the same host, it names the console RSS
+beside it. The line stays off when the sample has no figure.
 
 Then the detached busy loops: shells that keep burning CPU after their pane
 is gone, named to the pane that started them. `x` and a typed `y` kill

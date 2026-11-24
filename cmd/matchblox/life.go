@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/service"
+	"github.com/blox-eng/matchblox/internal/ships"
 	"github.com/blox-eng/matchblox/internal/state"
 )
 
@@ -55,6 +57,28 @@ func lifeAct(doc state.Doc, cmd string, words []string, anyway bool, from string
 	}
 	a.RecID += sess.Pane
 	return a, nil
+}
+
+// mergeAct is the act of matchblox merge <who>: the twin of p on the
+// board. It names the leading ship of the session, only when that ship
+// waits for you and holds the merge argv Ships read. It never makes up an
+// argv; the service re-checks both at act time.
+func mergeAct(doc state.Doc, words []string, from string) (proto.Act, error) {
+	switch {
+	case len(words) == 0:
+		return proto.Act{}, errors.New("merge needs a session: matchblox merge <who>")
+	case len(words) > 1:
+		return proto.Act{}, errors.New("merge takes one session: matchblox merge <who>")
+	}
+	sess, err := resolve(doc, words[0])
+	if err != nil {
+		return proto.Act{}, err
+	}
+	sh := shipOf(doc, sess)
+	if sh == nil || sh.Kind != ships.WaitsForYou || len(sh.Merge) == 0 {
+		return proto.Act{}, fmt.Errorf("no ship of %s waits for a merge", sess.Name)
+	}
+	return proto.Act{RecID: "ship:" + sh.Repo + "#" + strconv.Itoa(sh.Number), Which: "secondary", Confirm: "y", From: from}, nil
 }
 
 // switchOpts are matchblox switch's flags: agent is "" and handoff nil
@@ -209,6 +233,19 @@ func cliLife(cmd string, words []string, anyway bool, w io.Writer, path string) 
 		return err
 	}
 	return handOutcome(w, cmd, words[0], res, err)
+}
+
+func cliMerge(words []string, w io.Writer, path string) error {
+	doc, err := readDoc(path, staleAfter)
+	if err != nil {
+		return err
+	}
+	a, err := mergeAct(doc, words, os.Getenv("TMUX_PANE"))
+	if err != nil {
+		return err
+	}
+	res, err := doAct(path, a)
+	return handOutcome(w, "merge", words[0], res, err)
 }
 
 func cliNew(words []string, o newOpts, w io.Writer, path string) error {

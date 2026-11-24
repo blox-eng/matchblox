@@ -438,7 +438,7 @@ func TestBriefNamesEveryCommand(t *testing.T) {
 		}
 	}
 	for _, c := range commands {
-		if !slices.ContainsFunc(hands, func(h string) bool { return strings.Fields(h)[0] == c }) && !slices.Contains([]string{"connect", "serve", "status", "setup", "pair", "devices", "update", "version", "agents", "switch", "scan", "recover", "chain", "unchain"}, c) {
+		if !slices.ContainsFunc(hands, func(h string) bool { return strings.Fields(h)[0] == c }) && !slices.Contains([]string{"connect", "serve", "status", "setup", "pair", "devices", "update", "version", "agents", "switch", "scan", "recover", "chain", "unchain", "merge"}, c) {
 			t.Errorf("%s is a new command the stoker's hands do not list", c)
 		}
 	}
@@ -539,6 +539,10 @@ func TestSendSaysWhatHappened(t *testing.T) {
 	var buf bytes.Buffer
 	if err := handOutcome(&buf, "hold", "api", proto.Result{}, errNoResult); err == nil || err.Error() != "hold api: not known whether it ran: peek api before you try again" {
 		t.Fatalf("hold: %v", err)
+	}
+	// A peek shows a pane, not a pull request: a merge that timed out points to ships.
+	if err := handOutcome(&buf, "merge", "api", proto.Result{}, errNoResult); err == nil || err.Error() != "merge api: not known whether it merged: matchblox ships shows it" {
+		t.Fatalf("merge: %v", err)
 	}
 }
 

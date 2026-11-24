@@ -132,6 +132,9 @@ func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 		if typedPane(a.RecID) != "" {
 			return proto.Result{Err: unplacedAnswerer}
 		}
+		if a.FromKnown && strings.HasPrefix(a.RecID, "ship:") {
+			return proto.Result{Err: unplacedMerger} // no pane: orderable would not see a stoker
+		}
 	}
 	if pane, ok := strings.CutPrefix(a.RecID, "switch-preview:"); ok {
 		// Like sessions and peek, this reads without the action gate and
