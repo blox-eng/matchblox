@@ -98,14 +98,21 @@ type Pane struct {
 	// ServerStart is when the tmux server started (unix seconds): with
 	// Server, it tells a new server that took a lost one's pid apart.
 	ServerStart string `json:"server_start,omitempty"`
+	// Shell is the session name a desk shell belongs to (@matchblox-shell);
+	// empty when the pane is not one.
+	Shell string `json:"-"`
 }
 
 // PaneFormat is the -F format ParsePanes expects; fields are tab separated.
-const PaneFormat = "#{pane_id}\t#{session_name}:#{window_index}.#{pane_index}\t#{window_name}\t#{pane_pid}\t#{pane_current_command}\t#{pane_current_path}\t#{socket_path}\t#{pid}\t#{" + JumpMark + "}\t#{start_time}"
+const PaneFormat = "#{pane_id}\t#{session_name}:#{window_index}.#{pane_index}\t#{window_name}\t#{pane_pid}\t#{pane_current_command}\t#{pane_current_path}\t#{socket_path}\t#{pid}\t#{" + JumpMark + "}\t#{start_time}\t#{" + ShellOption + "}"
 
 // JumpMark is the session option that marks a jump's session on either
 // side (package remote sets it to 1): the sampler skips its panes.
 const JumpMark = "@matchblox-jump"
+
+// ShellOption is the pane option of a desk shell under an agent: its
+// value is the session's name, so the sampler counts it (▣).
+const ShellOption = "@matchblox-shell"
 
 // TmuxPanes lists every pane on the default tmux server. No server is not an
 // error: the console still shows the machine.
@@ -162,6 +169,9 @@ func ParsePanes(b []byte) []Pane {
 		}
 		if len(f) > 9 {
 			p.ServerStart = f[9]
+		}
+		if len(f) > 10 {
+			p.Shell = f[10]
 		}
 		if k := [2]string{p.Server, p.ID}; !seen[k] {
 			seen[k] = true

@@ -123,7 +123,8 @@ func (m Model) edgeAt(line string, i, h int) string {
 		return m.st.hair.Render("│")
 	}
 	ink := m.st.rule
-	if (i < h/2) == (m.deskMode() != "AGENT") {
+	mode := m.deskMode()
+	if (i < h/2) == (mode != "AGENT" && mode != "SHELL") {
 		ink = m.st.accent
 	}
 	if strings.HasSuffix(ansi.Strip(line), "─") {

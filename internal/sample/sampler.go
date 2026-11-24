@@ -129,6 +129,9 @@ type Session struct {
 	Parent *ProcRef  `json:"parent,omitempty"` // the process that started this one: set on children only
 	Via    string    `json:"via,omitempty"`    // process | env: how the link was proven
 	Shells []Shell   `json:"shells,omitempty"`
+	// OpenShell: a desk shell pane (@matchblox-shell) is open under this
+	// session; the row shows ▣.
+	OpenShell bool `json:"open_shell,omitempty"`
 	turnAt time.Time // the newest real turn of the transcript
 	// TurnEnded is when the transcript's newest turn ended; zero while it
 	// runs. The service reads it, it never leaves the host.
@@ -945,6 +948,7 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 	}
 	s.readPanes(snap.Sessions, fromPane, now)
 	s.readMenus(snap.Sessions, atMenu)
+	markOpenShells(snap.Sessions, panes)
 	snap.Children = linkChildren(snap.Sessions, snap.Children)
 	snap.Limits = lims.build(now, s.Cfg.Limits.Quiet)
 	for key := range s.envs {
@@ -998,6 +1002,20 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 		}
 		return a.Pane < b.Pane
 	})
+}
+
+// markOpenShells sets OpenShell on each session that has a desk shell
+// pane whose @matchblox-shell names it.
+func markOpenShells(sessions []Session, panes []Pane) {
+	open := map[string]bool{}
+	for _, p := range panes {
+		if p.Shell != "" {
+			open[p.Shell] = true
+		}
+	}
+	for i := range sessions {
+		sessions[i].OpenShell = open[sessions[i].Name]
+	}
 }
 
 // cursorNotAnswered is the fix of Cursor's limits while its token is read,

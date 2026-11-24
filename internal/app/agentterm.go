@@ -532,14 +532,15 @@ type agentRegion struct {
 	sel        *[2]point // the owner's drag over the screen: its two ends
 	selText    string    // the text sel covered when it was made
 	keys       bool
-	x, y       int // its top left on the console's screen
+	shell      bool // the desk shell under the agent has the keys (mode SHELL)
+	x, y       int  // its top left on the console's screen
 	w, h       int
 }
 
 // open shows name's screen in place of the one shown, the keys to the list.
 func (r *agentRegion) open(name string, argv []string, w, h int) tea.Cmd {
 	r.shut()
-	r.name, r.keys, r.w, r.h, r.copy, r.press, r.sel = name, false, w, h, "", nil, nil
+	r.name, r.keys, r.shell, r.w, r.h, r.copy, r.press, r.sel = name, false, false, w, h, "", nil, nil
 	t, err := startAgent(argv, w, h)
 	if err != nil {
 		r.said = name + " cannot be shown: " + err.Error() + "."
@@ -603,9 +604,13 @@ func (r *agentRegion) live() bool {
 	}
 }
 
-// mode is who has the keys: the agent once its screen shows, else the list.
+// mode is who has the keys: the agent or its shell once its screen shows,
+// else the list.
 func (r *agentRegion) mode() string {
 	if r.keys && r.shown() {
+		if r.shell {
+			return "SHELL"
+		}
 		return "AGENT"
 	}
 	return "LIST"
@@ -627,7 +632,7 @@ func (r *agentRegion) clamped(m tea.Mouse) point {
 // cursor is the agent's cursor on the console's screen, while the agent
 // has the keys and shows it.
 func (r *agentRegion) cursor() *tea.Cursor {
-	if r.mode() != "AGENT" {
+	if r.mode() != "AGENT" && r.mode() != "SHELL" {
 		return nil
 	}
 	at, shows := r.term.scr.cursor()

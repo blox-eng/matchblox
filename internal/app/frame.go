@@ -424,7 +424,7 @@ func (m Model) drawDesk(w int) drawn {
 		}
 		return m.st.rule.Render(strings.Repeat("─", box.listW)) + ink.Render(join) + m.st.rule.Render(strings.Repeat("─", box.chatW))
 	}
-	sc := drawn{lines: []string{head, rule("┬", mode != "AGENT")}, head: headSpans, bodyTop: 2, noteAt: -1}
+	sc := drawn{lines: []string{head, rule("┬", mode != "AGENT" && mode != "SHELL")}, head: headSpans, bodyTop: 2, noteAt: -1}
 	waits := m.sideWaits()
 	for _, s := range headSpans {
 		switch i, err := strconv.Atoi(strings.TrimPrefix(s.press, "name:")); {
@@ -437,7 +437,7 @@ func (m Model) drawDesk(w int) drawn {
 	b := m.sideBody(w, room)
 	sc.lines, sc.rows = append(sc.lines, b.lines...), b.rows
 	sc.keysAt, sc.keys = len(sc.lines)+1, barSpans
-	sc.lines = append(sc.lines, rule("┴", mode == "AGENT"), bar)
+	sc.lines = append(sc.lines, rule("┴", mode == "AGENT" || mode == "SHELL"), bar)
 	switch {
 	case m.consenting():
 		m.overlayConsent(&sc, w)

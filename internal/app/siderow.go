@@ -110,7 +110,11 @@ func (m Model) sideRight(s sample.Session) string {
 			at = strings.TrimSuffix("#"+strconv.Itoa(ships[0].Number)+" "+stageNames[ships[0].Stage]+"  "+at, "  ")
 		}
 	}
-	return strings.TrimPrefix(at+" "+harnessMark(s), " ")
+	mark := harnessMark(s)
+	if m.hasShell(s) {
+		mark = m.st.muted.Render("▣") + " " + mark
+	}
+	return strings.TrimPrefix(at+" "+mark, " ")
 }
 
 // ageOf is a time in state: "now" under a minute, else its first unit.

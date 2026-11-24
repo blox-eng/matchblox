@@ -619,6 +619,7 @@ type Model struct {
 	besideShows               paneKey         // the session the agent region shows; zero when none
 	previewSeq                int             // the list's latest move: only its preview runs
 	viewed                    map[string]bool // the peers whose view the builder let run in this run: their rows preview
+	shells                    map[string]string // session name → desk shell pane id (@matchblox-shell)
 }
 
 func New(opt Options) Model {
@@ -1051,6 +1052,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.merge()
 		m.settle(m.opt.Host)
+		shellCmd := m.syncShells()
 		if m.lost {
 			m.lost, m.backoff, m.flash = false, 0, ""
 		}
@@ -1071,7 +1073,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var talk tea.Cmd
 		m, talk = m.roomQueued(m.opt.Host)
 		tick := m.waitTick()
-		return m, tea.Batch(m.recv(), m.animate(), news, order, talk, feel, focus, again, started, tick)
+		return m, tea.Batch(m.recv(), m.animate(), news, order, talk, feel, focus, again, started, tick, shellCmd)
 	case graphicsMsg:
 		return m.graphics(msg)
 	case graphicsTickMsg:

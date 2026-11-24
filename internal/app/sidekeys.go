@@ -44,7 +44,7 @@ func (m Model) agentKeys(msg tea.Msg) (Model, tea.Cmd, bool) {
 	if f := m.focus(k); !r.shown() || m.tapping || f < layerTakeOver || f == layerScan || f == layerBlocked || f == layerPending {
 		return m, nil, false
 	}
-	agent := r.mode() == "AGENT"
+	region := r.mode() == "AGENT" || r.mode() == "SHELL"
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		copyKey := bkey.Matches(msg, m.keys.board.Copy)
@@ -56,30 +56,30 @@ func (m Model) agentKeys(msg tea.Msg) (Model, tea.Cmd, bool) {
 			}
 		}
 		switch {
-		case copyKey && !agent && r.copy != "":
+		case copyKey && !region && r.copy != "":
 			text := copyable(r.copy)
 			r.copy = ""
 			cmd := m.copyAgentText(text)
 			return m, cmd, true
-		case msg.String() == flipKey && agent:
-			r.keys = false
+		case msg.String() == flipKey && region:
+			r.keys, r.shell = false, false
 		case msg.String() == flipKey:
-			r.keys = true
+			r.keys, r.shell = true, false
 			return m, m.grantKeys(), true
-		case agent:
+		case region:
 			r.term.scr.sendKey(uv.KeyPressEvent(msg))
 		default:
 			return m, nil, false
 		}
 		return m, nil, true
 	case uv.UnknownApcEvent:
-		if !agent || string(msg) != homeKey {
+		if !region || string(msg) != homeKey {
 			return m, nil, false
 		}
-		r.keys = false
+		r.keys, r.shell = false, false
 		return m, nil, true
 	case tea.PasteMsg:
-		if !agent {
+		if !region {
 			return m, nil, false
 		}
 		r.term.scr.paste(msg.Content)
@@ -87,17 +87,17 @@ func (m Model) agentKeys(msg tea.Msg) (Model, tea.Cmd, bool) {
 	case tea.MouseClickMsg:
 		at, in := r.at(msg.Mouse())
 		if !in {
-			if agent && msg.X < r.x { // a click on the list gives it the keys
-				r.keys = false
+			if region && msg.X < r.x { // a click on the list gives it the keys
+				r.keys, r.shell = false, false
 			}
 			return m, nil, false
 		}
 		r.sel, r.press = nil, &point{at.X, at.Y}
 		r.term.scr.sendMouse(uv.MouseClickEvent(at))
-		if agent {
+		if region {
 			return m, nil, true
 		}
-		r.keys = true
+		r.keys, r.shell = true, false
 		return m, m.grantKeys(), true
 	case tea.MouseMotionMsg:
 		ms := msg.Mouse()
@@ -116,7 +116,7 @@ func (m Model) agentKeys(msg tea.Msg) (Model, tea.Cmd, bool) {
 		switch {
 		case dragged: // the drag is matchblox's: the agent's tmux gets no release
 			return m, nil, true
-		case !agent || !in:
+		case !region || !in:
 			return m, nil, false
 		}
 		r.term.scr.sendMouse(uv.MouseReleaseEvent(at))
@@ -404,6 +404,8 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 		m = m.openKeys()
 	case bkey.Matches(k, bk.Machine) && m.desk():
 		m = m.openCog("cog:usage")
+	case bkey.Matches(k, bk.Shell) && m.desk():
+		return m.openShell(s, ok)
 	case bkey.Matches(k, bk.Chain):
 		cmd = m.boardChainOf(s, ok)
 	case bkey.Matches(k, bk.Copy):
