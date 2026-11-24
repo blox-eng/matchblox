@@ -4,6 +4,7 @@ package app
 
 import (
 	"bytes"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"image/color"
@@ -155,7 +156,8 @@ func (x *regionRun) step(d time.Duration) {
 				if x.m != nil {
 					x.update(f)
 				} else {
-					x.pump(x.r.frame(f))
+					next, _ := x.r.frame(f)
+					x.pump(next)
 				}
 			}
 		case <-timeout:
@@ -233,7 +235,7 @@ func TestTheAgentScreenMatchesItsPane(t *testing.T) {
 	// capture-pane's lines end in "\n"; a screen moves down a line with "\r\n".
 	captured := strings.ReplaceAll(strings.TrimSuffix(d.tmux("capture-pane", "-e", "-p", "-t", pane), "\n"), "\n", "\r\n")
 	want := screenCells(captured, w, h)
-	got := screenCells(strings.Join(x.r.term.draw(nil, nil, w, h), "\r\n"), w, h)
+	got := screenCells(strings.Join(x.r.term.draw(nil, nil, w, h, nil), "\r\n"), w, h)
 	diffs := 0
 	for y := range h {
 		for c := range w {
@@ -983,4 +985,331 @@ func TestTypingIsFastThroughTheRenderer(t *testing.T) {
 	if p95 > 16*time.Millisecond {
 		t.Fatalf("a key's echo reaches the screen in %v at the 95th percentile, want 16ms or less", p95)
 	}
+}
+
+// screenDesk is a console whose agent region shows, at 41,1, a screen of
+// w by h after text, and what the screen sends its agent.
+type screenDesk struct {
+	t    *testing.T
+	m    Model
+	mu   sync.Mutex
+	sent []byte
+}
+
+func newScreenDesk(t *testing.T, text string, w, h int) *screenDesk {
+	t.Helper()
+	d := &screenDesk{t: t, m: boardModel(t, boardState(doneMatch("flint-auth", 10*time.Minute), doneMatch("ux-pass", time.Minute)))}
+	d.m.opt.OutsideTmux = true // the console's clip writes OSC 52, as over ssh
+	scr := newAgentScreen(w, h)
+	_, _ = scr.Write([]byte(text))
+	d.m.agent = agentRegion{term: &agentTerm{scr: scr, framed: true}, name: "flint-auth", x: 41, y: 1, w: w, h: h}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		buf := make([]byte, 1<<10)
+		for {
+			n, err := scr.Read(buf)
+			d.mu.Lock()
+			d.sent = append(d.sent, buf[:n]...)
+			d.mu.Unlock()
+			if err != nil {
+				return
+			}
+		}
+	}()
+	t.Cleanup(func() { _ = scr.Close(); <-done })
+	return d
+}
+
+// do is msg through the console; it gives what msg put on the clipboard.
+func (d *screenDesk) do(msg tea.Msg) []string {
+	d.t.Helper()
+	next, cmd := d.m.Update(msg)
+	d.m = next.(Model)
+	var clipped []string
+	for _, msg := range cmdMsgs(cmd) {
+		if v := reflect.ValueOf(msg); v.IsValid() && v.Type() == reflect.TypeOf(tea.SetClipboard("")()) {
+			clipped = append(clipped, v.String())
+		}
+	}
+	return clipped
+}
+
+// drag presses at from, moves through to and releases there, each a cell
+// of the agent's screen; to may be outside it.
+func (d *screenDesk) drag(from, to point) {
+	at := func(p point) tea.Mouse { return tea.Mouse{X: 41 + p.x, Y: 1 + p.y, Button: tea.MouseLeft} }
+	d.do(tea.MouseClickMsg(at(from)))
+	d.do(tea.MouseMotionMsg(at(point{from.x + 1, from.y})))
+	d.do(tea.MouseMotionMsg(at(to)))
+	d.do(tea.MouseReleaseMsg(at(to)))
+}
+
+// agentRead is what the agent read: the screen's bytes, after a moment.
+func (d *screenDesk) agentRead() string {
+	time.Sleep(50 * time.Millisecond)
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return string(d.sent)
+}
+
+// reversed is, for each cell of the region as drawn, whether it draws in
+// reverse video.
+func (d *screenDesk) reversed() [][]bool {
+	r := d.m.agent
+	e := vt.NewEmulator(r.w, r.h)
+	_, _ = e.WriteString(strings.Join(r.lines(newStyles(true), r.w, r.h), "\r\n"))
+	out := make([][]bool, r.h)
+	for y := range out {
+		for x := range r.w {
+			out[y] = append(out[y], e.CellAt(x, y).Style.Attrs&uv.AttrReverse != 0)
+		}
+	}
+	return out
+}
+
+const dragScreen = "zero\r\nalpha beta\r\n\x1b[38;2;215;119;87mgamma\x1b[0m \x1b[7mdelta\x1b[0m\r\nepsilon zeta\r\neta"
+
+func TestADragSelectsTheAgentsText(t *testing.T) {
+	const w, h = 40, 8
+	d := newScreenDesk(t, dragScreen, w, h)
+	before := d.reversed()
+	d.drag(point{6, 1}, point{6, 3})
+	after := d.reversed()
+	for y := range h {
+		for x := range w {
+			in := y == 1 && x >= 6 || y == 2 || y == 3 && x <= 6
+			if flipped := before[y][x] != after[y][x]; flipped != in {
+				t.Fatalf("cell %d,%d: reverse video flipped %v, want %v (in the selection: %v)", x, y, flipped, in, in)
+			}
+		}
+	}
+	if !before[2][6] || after[2][6] {
+		t.Fatalf("the agent's own reverse text does not show selected: reverse %v, then %v", before[2][6], after[2][6])
+	}
+	if got, want := d.do(keyPress("c")), []string{"beta\ngamma delta\nepsilon"}; !slices.Equal(got, want) {
+		t.Fatalf("c put %q on the clipboard, want %q", got, want)
+	}
+	if got := d.m.noticeText; !strings.HasPrefix(got, "copied: 24 characters") {
+		t.Fatalf("c said %q", got)
+	}
+
+	// A drag that leaves the region stops at its edge: it never takes the list.
+	d.drag(point{6, 1}, point{-30, 3})
+	if got, want := d.do(keyPress("c")), []string{"beta\ngamma delta\ne"}; !slices.Equal(got, want) {
+		t.Fatalf("a drag into the list copied %q, want %q", got, want)
+	}
+	d.drag(point{2, 3}, point{90, 40})
+	if got, want := d.do(keyPress("c")), []string{"silon zeta\neta"}; !slices.Equal(got, want) {
+		t.Fatalf("a drag past the region's end copied %q, want %q", got, want)
+	}
+
+	t.Run("a resize ends the selection", func(t *testing.T) {
+		d := newScreenDesk(t, dragScreen, w, h)
+		d.drag(point{0, 1}, point{4, 1})
+		d.m.agent.resize(w-4, h)
+		if d.m.agent.sel != nil || d.m.agent.press != nil {
+			t.Fatalf("after a resize the selection is %v, its press %v", d.m.agent.sel, d.m.agent.press)
+		}
+	})
+	t.Run("output that scrolls the selected text ends the selection", func(t *testing.T) {
+		d := newScreenDesk(t, dragScreen, w, h)
+		d.drag(point{0, 1}, point{4, 1})
+		d.do(agentFrameMsg{t: d.m.agent.term})
+		if d.m.agent.sel == nil {
+			t.Fatal("a frame that changed nothing ended the selection")
+		}
+		_, _ = d.m.agent.term.scr.Write([]byte("\x1b[8;1H\r\nnew\r\nlines"))
+		d.do(agentFrameMsg{t: d.m.agent.term})
+		if d.m.agent.sel != nil {
+			t.Fatalf("the screen scrolled under the selection, which stays at %v", *d.m.agent.sel)
+		}
+	})
+	t.Run("a wide glyph at an end is selected whole", func(t *testing.T) {
+		d := newScreenDesk(t, "ab日本cd", w, h)
+		before := d.reversed()
+		d.drag(point{3, 0}, point{4, 0}) // the second cell of 日 to the first of 本
+		after := d.reversed()
+		for _, x := range []int{0, 1, 2, 4, 6, 7} { // a wide glyph's second cell draws with its first
+			if flipped, in := before[0][x] != after[0][x], x >= 2 && x <= 5; flipped != in {
+				t.Fatalf("cell %d: reverse video flipped %v, want %v", x, flipped, in)
+			}
+		}
+		if got := d.do(keyPress("c")); !slices.Equal(got, []string{"日本"}) {
+			t.Fatalf("c copied %q, want both glyphs whole", got)
+		}
+	})
+}
+
+func TestAWrappedLineCopiesWhole(t *testing.T) {
+	const w, h = 64, 6
+	d := newScreenDesk(t, "  Open this link to sign in:\r\n"+
+		"   https://accounts.example.com/auth?redirect_uri=https%3A%2F\r\n"+
+		"     %2Fsdk.example.com%2Fcode&scope=openid\r\n"+
+		"     &state=Bkxx\r\n"+
+		"  \x1b]8;;https://x\x07then\x1b]8;;\x07 press \x1b[1menter\x1b[0m", w, h)
+	d.drag(point{0, 1}, point{w - 1, 3})
+	const url = "https://accounts.example.com/auth?redirect_uri=https%3A%2F%2Fsdk.example.com%2Fcode&scope=openid&state=Bkxx"
+	if got := d.do(keyPress("c")); !slices.Equal(got, []string{url}) {
+		t.Fatalf("c copied %q, want the URL on one line", got)
+	}
+	d.drag(point{0, 0}, point{w - 1, 4})
+	if got, want := d.do(keyPress("c")), []string{"  Open this link to sign in:\n" +
+		"   https://accounts.example.com/auth?redirect_uri=https%3A%2F\n" +
+		"     %2Fsdk.example.com%2Fcode&scope=openid\n" +
+		"     &state=Bkxx\n" +
+		"  then press enter"}; !slices.Equal(got, want) {
+		t.Fatalf("a copy of more than the URL is %q, want it as it shows %q", got, want)
+	}
+}
+
+func TestTheMouseTable(t *testing.T) {
+	const w, h = 40, 8
+	mouseOn := "\x1b[?1002h\x1b[?1006h" // the agent's tmux asks for the mouse
+	t.Run("a click in the region gives the agent the keys, then passes", func(t *testing.T) {
+		d := newScreenDesk(t, mouseOn+dragScreen, w, h)
+		d.do(tea.MouseClickMsg{X: 41 + 3, Y: 1 + 2, Button: tea.MouseLeft})
+		d.do(tea.MouseReleaseMsg{X: 41 + 3, Y: 1 + 2, Button: tea.MouseLeft})
+		if mode := d.m.agent.mode(); mode != "AGENT" {
+			t.Fatalf("the keys are %s", mode)
+		}
+		if got := d.agentRead(); got != "\x1b[<0;4;3M\x1b[<0;4;3m" {
+			t.Fatalf("the agent read %q, want the click", got)
+		}
+	})
+	t.Run("a drag in the region is matchblox's selection", func(t *testing.T) {
+		d := newScreenDesk(t, mouseOn+dragScreen, w, h)
+		d.drag(point{6, 1}, point{6, 3})
+		if d.m.agent.sel == nil {
+			t.Fatal("a drag selected nothing")
+		}
+		if got := d.agentRead(); got != "\x1b[<0;7;2M" {
+			t.Fatalf("the agent read %q, want only the press", got)
+		}
+	})
+	t.Run("shift and a drag are the terminal's own selection", func(t *testing.T) {
+		d := newScreenDesk(t, mouseOn+dragScreen, w, h)
+		if mode := d.m.View().MouseMode; mode != tea.MouseModeCellMotion {
+			t.Fatalf("the console's mouse mode is %v: a drag never reaches it", mode)
+		}
+		d.do(tea.MouseClickMsg{X: 41 + 6, Y: 1 + 1, Button: tea.MouseLeft})
+		d.do(tea.MouseMotionMsg{X: 41 + 6, Y: 1 + 3, Button: tea.MouseLeft, Mod: tea.ModShift})
+		if d.m.agent.sel != nil {
+			t.Fatalf("a shift drag selected %v", *d.m.agent.sel)
+		}
+	})
+	t.Run("the wheel in the region goes to the agent's tmux", func(t *testing.T) {
+		d := newAgentDesk(t, w, h, map[string]string{"flint-auth": `seq 1 100; printf 'END\n'; exec sleep 600`})
+		pane := d.pane("flint-auth")
+		x := runDesk(t, boardState(doneMatch("flint-auth", 10*time.Minute), doneMatch("ux-pass", time.Minute)))
+		x.pump(x.r.open("flint-auth", d.view("flint-auth", pane), w, h))
+		x.r.x, x.r.y = 41, 1
+		x.until("flint-auth's screen", x.shows("END"))
+		x.step(300 * time.Millisecond) // the client asks for the mouse
+		chosen := x.m.chosenSide()
+		x.update(tea.MouseWheelMsg{X: 41 + 5, Y: 1 + 3, Button: tea.MouseWheelUp})
+		x.until("the agent's pane in copy mode", func() bool { return d.tmux("display", "-p", "-t", pane, "#{pane_in_mode}") == "1" })
+		if got := x.m.chosenSide(); got != chosen {
+			t.Fatalf("the wheel over the agent moved the list's choice to %v", got)
+		}
+	})
+	t.Run("the wheel over the list scrolls the list", func(t *testing.T) {
+		d := newScreenDesk(t, mouseOn+dragScreen, w, h)
+		chosen := d.m.chosenSide()
+		d.do(tea.MouseWheelMsg{X: 5, Y: 4, Button: tea.MouseWheelDown})
+		if got := d.m.chosenSide(); got == chosen {
+			t.Fatalf("the wheel over the list left the choice on %v", got)
+		}
+		if got := d.agentRead(); got != "" {
+			t.Fatalf("the wheel over the list reached the agent: %q", got)
+		}
+	})
+	t.Run("with a selection, c copies it and any other key clears it and goes on", func(t *testing.T) {
+		d := newScreenDesk(t, dragScreen, w, h)
+		d.drag(point{0, 1}, point{4, 1})
+		if got := d.do(keyPress("c")); !slices.Equal(got, []string{"alpha"}) {
+			t.Fatalf("c copied %q, want alpha", got)
+		}
+		if d.m.agent.sel != nil {
+			t.Fatal("the selection stays after c")
+		}
+		d.drag(point{0, 1}, point{4, 1})
+		if got := d.do(keyPress("x")); len(got) > 0 || d.m.agent.sel != nil {
+			t.Fatalf("x copied %q, and the selection is %v", got, d.m.agent.sel)
+		}
+		if got := d.agentRead(); got != "x" {
+			t.Fatalf("the agent read %q, want x", got)
+		}
+	})
+}
+
+func TestCCopiesOnlyWithASelection(t *testing.T) {
+	const w, h = 40, 8
+	d := newScreenDesk(t, dragScreen, w, h)
+	d.do(keyPress(flipKey))
+	if got := d.do(keyPress("c")); len(got) > 0 {
+		t.Fatalf("with no selection c copied %q", got)
+	}
+	if got := d.agentRead(); got != "c" {
+		t.Fatalf("with no selection the agent read %q, want c", got)
+	}
+	d.drag(point{0, 3}, point{6, 3})
+	if got := d.do(keyPress("c")); !slices.Equal(got, []string{"epsilon"}) {
+		t.Fatalf("after a drag c copied %q, want epsilon", got)
+	}
+	if got := d.agentRead(); got != "c" {
+		t.Fatalf("after a drag c typed into the agent: it read %q", got)
+	}
+
+	t.Run("with no selection, c in the list copies what the agent asked", func(t *testing.T) {
+		d := newScreenDesk(t, dragScreen, w, h)
+		d.m.agent.copy = "go test ./...\r\n\x1b[31mred\x1b[0m\x07 ‮evil"
+		const want = "go test ./...\n[31mred[0m evil"
+		d.do(keyPress(flipKey))
+		if got := d.do(keyPress("c")); len(got) > 0 || d.m.agent.copy == "" {
+			t.Fatalf("with the agent's keys c copied %q and the request is %q", got, d.m.agent.copy)
+		}
+		d.do(keyPress(flipKey))
+		if got := d.do(keyPress("c")); !slices.Equal(got, []string{want}) {
+			t.Fatalf("c in the list copied %q, want %q", got, want)
+		}
+		if d.m.agent.copy != "" {
+			t.Fatalf("the request stays after c: %q", d.m.agent.copy)
+		}
+		if got := d.do(keyPress("c")); slices.Contains(got, want) {
+			t.Fatal("c copied the agent's request twice")
+		}
+	})
+
+	t.Run("a request over 64 KB is not kept", func(t *testing.T) {
+		d := newScreenDesk(t, dragScreen, w, h)
+		ask := func(n int) {
+			_, _ = d.m.agent.term.scr.Write([]byte("\x1b]52;c;" + base64.StdEncoding.EncodeToString(bytes.Repeat([]byte("a"), n)) + "\x07"))
+			d.m.noticeText, d.m.saying = "", nil
+			d.do(agentFrameMsg{t: d.m.agent.term})
+		}
+		ask(64 << 10)
+		if len(d.m.agent.copy) != 64<<10 {
+			t.Fatalf("a request of 64 KB keeps %d bytes", len(d.m.agent.copy))
+		}
+		ask(3_000_000)
+		if d.m.agent.copy != "" {
+			t.Fatalf("a request of 3 MB keeps %d bytes", len(d.m.agent.copy))
+		}
+		if got, want := d.m.sideSays(), "not kept: the agent asked to copy 3 MB, 64 KB at most"; got != want {
+			t.Fatalf("the list foot says %q, want %q", got, want)
+		}
+	})
+	t.Run("tabs and lines stay", func(t *testing.T) {
+		d := newScreenDesk(t, "x\ty", w, h)
+		d.m.agent.copy = "a\tb\nc"
+		if got := d.do(keyPress("c")); !slices.Equal(got, []string{"a\tb\nc"}) {
+			t.Fatalf("c in the list copied %q, want the tab and the line kept", got)
+		}
+		// The screen keeps no tab: it moves the cursor to column 8 over blank cells.
+		d.drag(point{0, 0}, point{8, 0})
+		if got := d.do(keyPress("c")); !slices.Equal(got, []string{"x       y"}) {
+			t.Fatalf("a selection over a tab copied %q, want the blank cells as spaces", got)
+		}
+	})
 }

@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -34,8 +35,9 @@ type agentScreen interface {
 	cells(w, h int) []uv.Line
 	Resize(w, h int)
 	// copyAsked is the text the agent last asked to copy (OSC 52) since
-	// the last call, which drops it from the screen.
-	copyAsked() (string, bool)
+	// the last call, which drops it from the screen, and its size in
+	// bytes. A request over agentCopyMax keeps no text.
+	copyAsked() (text string, size int, ok bool)
 	// sendKey, paste and sendMouse type into the client as a terminal
 	// does, in the modes the client asked for. They hand the bytes on to
 	// Read, which startAgentTerm queues, so a client that reads nothing
@@ -55,7 +57,12 @@ type vtScreen struct {
 	mu    sync.Mutex
 	e     *vt.Emulator
 	asked *string // what the agent asked to copy, not yet taken
+	size  int     // its size in bytes
 }
+
+// agentCopyMax is the most the agent may ask to copy; matchblox keeps no
+// larger request.
+const agentCopyMax = 64 << 10
 
 // newAgentScreen keeps no scrollback: matchblox never reads it, and the
 // agent's tmux keeps its own.
@@ -63,26 +70,34 @@ func newAgentScreen(w, h int) agentScreen {
 	s := &vtScreen{e: vt.NewEmulator(w, h)}
 	s.e.SetScrollbackSize(1)
 	s.e.RegisterOscHandler(52, func(data []byte) bool { // under s.mu: only Write parses
-		if _, b64, ok := bytes.Cut(bytes.TrimPrefix(data, []byte("52;")), []byte(";")); ok {
-			if text, err := base64.StdEncoding.DecodeString(string(b64)); err == nil {
-				asked := string(text)
-				s.asked = &asked
-			}
+		_, b64, ok := bytes.Cut(bytes.TrimPrefix(data, []byte("52;")), []byte(";"))
+		if !ok {
+			return true
+		}
+		size := len(b64)*3/4 - bytes.Count(b64[max(len(b64)-2, 0):], []byte("="))
+		var text []byte
+		var err error
+		if size <= agentCopyMax {
+			text, err = base64.StdEncoding.DecodeString(string(b64))
+		}
+		if err == nil {
+			asked := string(text)
+			s.asked, s.size = &asked, size
 		}
 		return true
 	})
 	return s
 }
 
-func (s *vtScreen) copyAsked() (string, bool) {
+func (s *vtScreen) copyAsked() (string, int, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	asked := s.asked
 	s.asked = nil
 	if asked == nil {
-		return "", false
+		return "", 0, false
 	}
-	return *asked, true
+	return *asked, s.size, true
 }
 
 // Write parses p a piece at a time, so a draw waits on one piece, never
@@ -411,10 +426,16 @@ func (t *agentTerm) close() {
 
 // draw is the screen in w by h cells, in colours and attributes only. A
 // default colour draws as fg and bg, nil leaving the terminal's own; every
-// other colour passes as it is.
-func (t *agentTerm) draw(fg, bg color.Color, w, h int) []string {
+// other colour passes as it is. The cells of sel flip their reverse video,
+// so a selection shows on any colour (design review D13).
+func (t *agentTerm) draw(fg, bg color.Color, w, h int, sel *[2]point) []string {
+	if sel != nil {
+		whole := t.whole(*sel)
+		sel = &whole
+	}
 	out := make([]string, h)
 	for y, line := range t.scr.cells(w, h) {
+		x0, x1 := selCols(sel, y, w)
 		for x, c := range line {
 			if !c.IsZero() { // a wide glyph's second cell stays empty
 				c.Style.Fg, c.Style.Bg = cmp.Or[color.Color](c.Style.Fg, fg), cmp.Or[color.Color](c.Style.Bg, bg)
@@ -423,11 +444,67 @@ func (t *agentTerm) draw(fg, bg color.Color, w, h int) []string {
 			if !c.IsZero() {
 				c.Content = cmp.Or(strings.Map(printable, c.Content), " ")
 			}
+			if x >= x0 && x < x1 {
+				c.Style.Attrs ^= uv.AttrReverse
+			}
 			line[x] = c
 		}
 		out[y] = fit(line.Render(), w)
 	}
 	return out
+}
+
+// selCols are the cells of line y that sel covers, as a terminal selects:
+// the first line from the press, the last to the pointer, those between
+// whole.
+func selCols(sel *[2]point, y, w int) (x0, x1 int) {
+	if sel == nil {
+		return 0, 0
+	}
+	a, b := readingOrder(sel[0], sel[1])
+	if y < a.y || y > b.y {
+		return 0, 0
+	}
+	return dragCols(a, b, y, w, [2]int{})
+}
+
+// whole is sel in reading order with each end on a whole glyph: a wide
+// glyph under either end is selected whole.
+func (t *agentTerm) whole(sel [2]point) [2]point {
+	a, b := readingOrder(sel[0], sel[1])
+	if a.x > 0 && t.scr.CellAt(a.x, a.y).Width == 0 && t.scr.CellAt(a.x-1, a.y).Width > 1 {
+		a.x--
+	}
+	b.x += max(t.scr.CellAt(b.x, b.y).Width-1, 0)
+	return [2]point{a, b}
+}
+
+// text is the plain text sel covers in a screen w wide, each line
+// right-trimmed; a URL the agent drew over several lines is one (#474).
+func (t *agentTerm) text(sel [2]point, w int) string {
+	sel = t.whole(sel)
+	a, b := sel[0], sel[1]
+	var rows []string
+	for y := a.y; y <= b.y; y++ {
+		var row strings.Builder
+		x0, x1 := selCols(&sel, y, w)
+		for x := x0; x < x1; x++ {
+			row.WriteString(t.scr.CellAt(x, y).Content)
+		}
+		rows = append(rows, strings.TrimRight(row.String(), " "))
+	}
+	return wholeURL(copyable(strings.TrimRight(strings.Join(rows, "\n"), "\n")))
+}
+
+// copyable is text as it may reach the clipboard: printable runes, tabs
+// and line breaks; every other control rune is dropped.
+func copyable(text string) string {
+	return strings.Map(func(r rune) rune {
+		if r == '\t' || r == '\n' {
+			return r
+		}
+		return printable(r)
+	}, text)
 }
 
 // printable keeps a glyph's runes that only draw: a control or a
@@ -446,8 +523,11 @@ func printable(r rune) rune {
 // frame, so no key reaches the wrong agent (design review D6).
 type agentRegion struct {
 	term       *agentTerm
-	name, said string // said: why the screen did not start
-	copy       string // what the agent last asked to copy; c copies it
+	name, said string    // said: why the screen did not start
+	copy       string    // what the agent last asked to copy; c copies it
+	press      *point    // a press in the region while its button is down
+	sel        *[2]point // the owner's drag over the screen: its two ends
+	selText    string    // the text sel covered when it was made
 	keys       bool
 	x, y       int // its top left on the console's screen
 	w, h       int
@@ -456,7 +536,7 @@ type agentRegion struct {
 // open shows name's screen in place of the one shown, the keys to the list.
 func (r *agentRegion) open(name string, argv []string, w, h int) tea.Cmd {
 	r.shut()
-	r.name, r.keys, r.w, r.h, r.copy = name, false, w, h, ""
+	r.name, r.keys, r.w, r.h, r.copy, r.press, r.sel = name, false, w, h, "", nil, nil
 	t, err := startAgentTerm(argv, w, h)
 	if err != nil {
 		r.said = name + " cannot be shown: " + err.Error() + "."
@@ -476,19 +556,28 @@ func (r *agentRegion) shut() {
 
 // frame marks the screen drawn, keeps what the agent asked to copy, and
 // waits for its next change; a frame of a screen no longer shown is dropped.
-func (r *agentRegion) frame(msg agentFrameMsg) tea.Cmd {
+// refused is the size of a request over agentCopyMax, which keeps none. A
+// frame that changes the selected text (the agent's output scrolled it)
+// ends the selection.
+func (r *agentRegion) frame(msg agentFrameMsg) (next tea.Cmd, refused int) {
 	if msg.t != r.term {
-		return nil
+		return nil, 0
 	}
 	r.term.framed = true
-	if text, ok := r.term.scr.copyAsked(); ok {
+	if text, size, ok := r.term.scr.copyAsked(); ok {
 		r.copy = text
+		if size > agentCopyMax {
+			refused = size
+		}
 	}
-	return r.term.next(msg.at)
+	if r.sel != nil && r.term.text(*r.sel, r.w) != r.selText {
+		r.sel, r.press = nil, nil
+	}
+	return r.term.next(msg.at), refused
 }
 
 func (r *agentRegion) resize(w, h int) {
-	r.w, r.h = w, h
+	r.w, r.h, r.sel, r.press = w, h, nil, nil
 	if r.term != nil {
 		_ = ptySize(r.term.pty, w, h)
 		r.term.scr.Resize(w, h)
@@ -512,6 +601,13 @@ func (r *agentRegion) at(m tea.Mouse) (uv.Mouse, bool) {
 	return uv.Mouse(m), m.X >= 0 && m.Y >= 0 && m.X < r.w && m.Y < r.h
 }
 
+// clamped is m in the agent's screen, held to its edges: a drag that
+// leaves the region selects only the region's cells.
+func (r *agentRegion) clamped(m tea.Mouse) point {
+	at, _ := r.at(m)
+	return point{min(max(at.X, 0), r.w-1), min(max(at.Y, 0), r.h-1)}
+}
+
 // cursor is the agent's cursor on the console's screen, while the agent
 // has the keys and shows it.
 func (r *agentRegion) cursor() *tea.Cursor {
@@ -529,7 +625,7 @@ func (r *agentRegion) cursor() *tea.Cursor {
 func (r *agentRegion) lines(st styles, w, h int) []string {
 	switch {
 	case r.term != nil && r.term.framed:
-		return r.term.draw(st.theme.Text, st.ground, w, h)
+		return r.term.draw(st.theme.Text, st.ground, w, h, r.sel)
 	case r.said != "":
 		return regionSays(st.muted, r.said, w, h)
 	case r.name != "":
@@ -543,11 +639,22 @@ func (r *agentRegion) lines(st styles, w, h int) []string {
 // it asked, until the copy key copies it.
 func (m *Model) agentFrame(msg agentFrameMsg) tea.Cmd {
 	had := m.agent.copy
-	next := m.agent.frame(msg)
+	next, refused := m.agent.frame(msg)
+	if refused > 0 {
+		return tea.Batch(next, m.notice("not kept: the agent asked to copy "+sizeWords(refused)+", "+sizeWords(agentCopyMax)+" at most"))
+	}
 	if had == "" && m.agent.copy != "" {
 		return tea.Batch(next, m.notice("the agent asked to copy: "+m.keys.board.Copy.Help().Key+" copies it"))
 	}
 	return next
+}
+
+// sizeWords is n bytes in KB or MB, rounded.
+func sizeWords(n int) string {
+	if n >= 1<<20 {
+		return strconv.Itoa((n+1<<19)>>20) + " MB"
+	}
+	return strconv.Itoa((n+1<<9)>>10) + " KB"
 }
 
 // agentLines is the agent region of the session chosen, or why it is

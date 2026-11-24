@@ -32,8 +32,11 @@ const (
 // region go to its screen; ctrl+q and the home key (ctrl+a m) give them
 // back to the list. From the list, ctrl+q and a click in the region give
 // the agent the keys, and its session counts as seen (design review D5).
-// A question or a sheet open over the desk takes the keys first. ok is
-// false for what the list handles.
+// A drag in the region selects its text, which c copies; any other key
+// ends the selection and goes on. From the list, c copies what the agent
+// asked to copy. The wheel in the region goes to the agent's tmux (design
+// review D17). A question or a sheet open over the desk takes the keys
+// first. ok is false for what the list handles.
 func (m Model) agentKeys(msg tea.Msg) (Model, tea.Cmd, bool) {
 	r := &m.agent
 	k, _ := msg.(tea.KeyPressMsg)
@@ -43,7 +46,20 @@ func (m Model) agentKeys(msg tea.Msg) (Model, tea.Cmd, bool) {
 	agent := r.mode() == "AGENT"
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
+		copyKey := bkey.Matches(msg, m.keys.board.Copy)
+		if sel := r.sel; sel != nil {
+			r.sel = nil
+			if copyKey {
+				cmd := m.copyAgentText(r.term.text(*sel, r.w))
+				return m, cmd, true
+			}
+		}
 		switch {
+		case copyKey && !agent && r.copy != "":
+			text := copyable(r.copy)
+			r.copy = ""
+			cmd := m.copyAgentText(text)
+			return m, cmd, true
 		case msg.String() == flipKey && agent:
 			r.keys = false
 		case msg.String() == flipKey:
@@ -72,21 +88,53 @@ func (m Model) agentKeys(msg tea.Msg) (Model, tea.Cmd, bool) {
 		if !in {
 			return m, nil, false
 		}
+		r.sel, r.press = nil, &point{at.X, at.Y}
 		r.term.scr.sendMouse(uv.MouseClickEvent(at))
 		if agent {
 			return m, nil, true
 		}
 		r.keys = true
 		return m, m.grantKeys(), true
+	case tea.MouseMotionMsg:
+		ms := msg.Mouse()
+		if r.press == nil || ms.Button != tea.MouseLeft || ms.Mod.Contains(tea.ModShift) {
+			return m, nil, false
+		}
+		if to := r.clamped(ms); r.sel != nil || to != *r.press {
+			r.sel = &[2]point{*r.press, to}
+			r.selText = r.term.text(*r.sel, r.w)
+		}
+		return m, nil, true
 	case tea.MouseReleaseMsg:
+		dragged := r.press != nil && r.sel != nil
+		r.press = nil
 		at, in := r.at(msg.Mouse())
-		if !agent || !in {
+		switch {
+		case dragged: // the drag is matchblox's: the agent's tmux gets no release
+			return m, nil, true
+		case !agent || !in:
 			return m, nil, false
 		}
 		r.term.scr.sendMouse(uv.MouseReleaseEvent(at))
 		return m, nil, true
+	case tea.MouseWheelMsg:
+		at, in := r.at(msg.Mouse())
+		if !in {
+			return m, nil, false
+		}
+		r.term.scr.sendMouse(uv.MouseWheelEvent(at))
+		return m, nil, true
 	}
 	return m, nil, false
+}
+
+// copyAgentText puts text from the agent's screen on the clipboard by the
+// console's clip.
+func (m *Model) copyAgentText(text string) tea.Cmd {
+	if text == "" {
+		return nil
+	}
+	return m.copyText(text, characters(utf8.RuneCountInString(text)))
 }
 
 // lineNote is what the line of the session k says in place of its ⏎:

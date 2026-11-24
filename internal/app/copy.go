@@ -282,11 +282,16 @@ func (m Model) dragSpan() (a, b point, ok bool) {
 	if m.dragFrom == nil || m.dragTo == nil {
 		return point{}, point{}, false
 	}
-	a, b = *m.dragFrom, *m.dragTo
-	if b.y < a.y || b.y == a.y && b.x < a.x {
-		a, b = b, a
-	}
+	a, b = readingOrder(*m.dragFrom, *m.dragTo)
 	return a, b, true
+}
+
+// readingOrder is a and b, the one read first first.
+func readingOrder(a, b point) (point, point) {
+	if b.y < a.y || b.y == a.y && b.x < a.x {
+		return b, a
+	}
+	return a, b
 }
 
 // dragCols are the cells the drag covers on line y of a line w wide, in
