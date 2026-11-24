@@ -172,3 +172,14 @@ A builder with only this plan and the repo can implement Part 1 without chat his
 ## Approaches (from spec)
 
 A messaging-only — rejected. **B wedge then selective inventory** — this plan. C ADE chase — rejected.
+
+## Changes during build
+
+- **2026-11-24 — Multi-host `machineAbout` passes host `h`.** Was `""` under
+  `hostHead`. Needed so console RSS is omitted on remote sections. When
+  `hostCount > 1`, the MACHINE about line no longer repeats the host name.
+- **2026-11-24 — Console RSS does not import `procfs`.** `TestArchBoundaries`
+  forbids `internal/app` → `procfs`. `consoleRSSFromProc` reads
+  `/proc/self/status` VmRSS instead.
+- **2026-11-24 — README host label `ws-1`.** Measured on this machine; private
+  hostname blocked by private-terms hook.
