@@ -540,6 +540,10 @@ func TestSendSaysWhatHappened(t *testing.T) {
 	if err := handOutcome(&buf, "hold", "api", proto.Result{}, errNoResult); err == nil || err.Error() != "hold api: not known whether it ran: peek api before you try again" {
 		t.Fatalf("hold: %v", err)
 	}
+	// A peek shows a pane, not a pull request: a merge that timed out points to ships.
+	if err := handOutcome(&buf, "merge", "api", proto.Result{}, errNoResult); err == nil || err.Error() != "merge api: not known whether it merged: matchblox ships shows it" {
+		t.Fatalf("merge: %v", err)
+	}
 }
 
 // TestTheWordOfAShellIsNotNoAgent: F8, Claude Code's registry says

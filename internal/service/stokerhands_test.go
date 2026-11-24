@@ -268,6 +268,31 @@ func TestStokerCannotMerge(t *testing.T) {
 	}
 }
 
+// TestUnplacedCallerCannotMerge: a caller the service knows but cannot place
+// (setsid -f matchblox merge: no pane, no tty) skips the stoker check in
+// orderable, so the ship act refuses it before dispatch. A placed caller and
+// the console still merge.
+func TestUnplacedCallerCannotMerge(t *testing.T) {
+	s, ran := handsTest(t)
+	s.cur.Ships = &ships.Report{Ships: []ships.Ship{{Repo: "o/r", Number: 7, Kind: ships.WaitsForYou,
+		Merge: []string{"gh", "pr", "merge", "7", "--squash", "-R", "o/r"}}}}
+	unplaced := proto.Act{RecID: "ship:o/r#7", Which: "secondary", Confirm: "y", FromKnown: true}
+	if res := s.act(t.Context(), unplaced); res.Err != unplacedMerger {
+		t.Fatalf("unplaced merge: %q", res.Err)
+	}
+	if len(*ran) != 0 {
+		t.Fatalf("ran %q", *ran)
+	}
+	placed := unplaced
+	placed.FromPlaced = true
+	if res := s.act(t.Context(), placed); res.Err != "" {
+		t.Fatalf("placed merge: %q", res.Err)
+	}
+	if fmt.Sprint(*ran) != "[[gh pr merge 7 --squash -R o/r]]" {
+		t.Fatalf("ran %q", *ran)
+	}
+}
+
 func TestAnotherAgentDoesNotActAsTheBuilder(t *testing.T) {
 	s, ran := handsTest(t)
 	s.publish(sample.Snapshot{At: night0, Sessions: []sample.Session{
