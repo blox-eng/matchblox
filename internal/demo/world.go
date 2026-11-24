@@ -565,32 +565,46 @@ func (w *World) Ran() [][]string {
 	return append([][]string(nil), w.ran...)
 }
 
-// Git is the demo's git scan: one repository with a worktree for each
-// session and one merged worktree that is safe to remove.
+// Git is the demo's git scan: three repositories (hearth, ledge, base) with
+// a worktree for each session, and one merged worktree that is safe to remove.
 func (w *World) Git([]string) gitscan.Report {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	const repo = "/work/hearth"
 	pr := func(n int, title string) *gitscan.PR {
 		return &gitscan.PR{Number: n, Title: title, URL: fmt.Sprintf("https://example.com/hearth/hearth/pull/%d", n)}
 	}
-	all := []gitscan.Worktree{
-		{Path: repo, Branch: "main", InUse: true},
+	keep := func(all []gitscan.Worktree) []gitscan.Worktree {
+		var wts []gitscan.Worktree
+		for _, wt := range all {
+			if !w.removed[wt.Path] {
+				wts = append(wts, wt)
+			}
+		}
+		return wts
+	}
+	hearth := keep([]gitscan.Worktree{
+		{Path: "/work/hearth", Branch: "main", InUse: true},
 		{Path: "/work/hearth-api", Branch: "api/rate-limits", Dirty: 3, Sessions: 1, InUse: true},
 		{Path: "/work/flint-auth", Branch: "auth/refresh-rotation", Dirty: 1, Sessions: 1, InUse: true},
-		{Path: "/work/spark-docs", Branch: "docs/1.0", Dirty: 2, Sessions: 1, InUse: true},
 		{Path: "/work/kindle-web", Branch: "web/one-tap-checkout", Sessions: 1, InUse: true, PR: pr(212, "One-tap checkout")},
-		{Path: "/work/ember-billing", Branch: "billing/invoice-export", Sessions: 1, InUse: true, PR: pr(214, "Invoice export")},
-		{Path: "/work/cinder-ci", Branch: "ci/go-build-cache", Dirty: 1, Sessions: 1, InUse: true},
-		{Path: "/work/wick-mobile", Branch: "mobile/settings-layout", Dirty: 4, Sessions: 1, InUse: true},
+		{Path: "/work/ux-pass", Branch: "ux/pass", Dirty: 1, Sessions: 1, InUse: true},
 		{Path: "/work/kindle-cart-v1", Branch: "web/cart-v1", Merged: true, Safe: true,
-			Remove: []string{"git", "-C", repo, "worktree", "remove", "/work/kindle-cart-v1"}},
+			Remove: []string{"git", "-C", "/work/hearth", "worktree", "remove", "/work/kindle-cart-v1"}},
+	})
+	ledge := keep([]gitscan.Worktree{
+		{Path: "/work/ledge", Branch: "main", InUse: true},
+		{Path: "/work/ember-billing", Branch: "billing/invoice-export", Sessions: 1, InUse: true, PR: pr(214, "Invoice export")},
+		{Path: "/work/wick-mobile", Branch: "mobile/settings-layout", Dirty: 4, Sessions: 1, InUse: true},
+	})
+	base := keep([]gitscan.Worktree{
+		{Path: "/work/base", Branch: "main", InUse: true},
+		{Path: "/work/spark-docs", Branch: "docs/1.0", Dirty: 2, Sessions: 1, InUse: true},
+		{Path: "/work/cinder-ci", Branch: "ci/go-build-cache", Dirty: 1, Sessions: 1, InUse: true},
+	})
+	repos := []gitscan.Repo{
+		{Path: "/work/hearth", Main: "main", Worktrees: hearth},
+		{Path: "/work/ledge", Main: "main", Worktrees: ledge},
+		{Path: "/work/base", Main: "main", Worktrees: base},
 	}
-	var wts []gitscan.Worktree
-	for _, wt := range all {
-		if !w.removed[wt.Path] {
-			wts = append(wts, wt)
-		}
-	}
-	return gitscan.Report{At: w.clock(), Repos: []gitscan.Repo{{Path: repo, Main: "main", Worktrees: wts}}, Watching: []string{repo}}
+	return gitscan.Report{At: w.clock(), Repos: repos, Watching: []string{"/work/hearth", "/work/ledge", "/work/base"}}
 }

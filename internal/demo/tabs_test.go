@@ -22,7 +22,7 @@ const fillBound = 2 * time.Second
 // stoker, Git, History and Panes are Machine's rows, in that order.
 var tabs = []struct{ key, name, seeded string }{
 	{"\t", "Machine", "load 6.2"},
-	{"j\r", "Git", "9 WORKTREES"},             // Machine's second row
+	{"j\r", "Git", "6 WORKTREES"},             // hearth's count (Task 17: three repos)
 	{"\t\tj\r", "History", "LAST 2H"},         // Sessions, Machine on Git's row, the next
 	{"\t\tj\r", "Panes", "hearth:2.1"},        // Sessions, Machine on History's row, the next
 	{"\t", "Sessions", "flint-auth"},          // Tab from a view of Machine
@@ -34,7 +34,7 @@ var tabs = []struct{ key, name, seeded string }{
 // the list (design review D10, D14).
 var deskTabs = []struct{ key, name, seeded string }{
 	{"\x1b[27u,", "Machine", "load 6.2"},     // the list's keys, then ,
-	{"j\r", "Git", "9 WORKTREES"},            // Machine's second row
+	{"j\r", "Git", "6 WORKTREES"},            // hearth's count (Task 17: three repos)
 	{"\x1b[27uj\r", "History", "LAST 2H"},    // esc: the sheet on Git's row, the next
 	{"\x1b[27uj\r", "Panes", "hearth:2.1"},   // esc: the sheet on History's row, the next
 	{"\x11", "Sessions", "LIST"},             // ctrl+q from a view of Machine: the list under the sheet stays drawn, the bar says LIST

@@ -1,6 +1,9 @@
 package app
 
-import "github.com/blox-eng/matchblox/internal/sample"
+import (
+	"github.com/blox-eng/matchblox/internal/queue"
+	"github.com/blox-eng/matchblox/internal/sample"
+)
 
 // sideState is the state of a session in the list. The order is the rank:
 // the list draws its groups in it.
@@ -50,14 +53,16 @@ func (m Model) sideStateOf(s sample.Session) sideState {
 	if s.Works() || len(s.Shells) > 0 {
 		return sideWork
 	}
-	if _, waits := m.waitOf(s); waits {
-		return sideNeed
-	}
 	if _, ok := m.shipOf(s, shipWaits, shipStuck); ok {
 		return sideNeed
 	}
 	if done {
 		return sideDone
+	}
+	// A finished queue row is the turn's end, not a wait: DONE already
+	// covered it. Any other queue row still needs the owner.
+	if it, waits := m.waitOf(s); waits && it.State != queue.StateFinished {
+		return sideNeed
 	}
 	return sideIdle
 }

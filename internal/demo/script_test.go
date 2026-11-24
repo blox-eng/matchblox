@@ -64,7 +64,7 @@ var oldAge = regexp.MustCompile(`stale|\b31d\b`)
 func TestAgesAreRecent(t *testing.T) {
 	t.Setenv("TMPDIR", t.TempDir())
 	_, term := start(t)
-	term.waitFor(t, "SESSIONS 7", "flint-auth")
+	term.waitFor(t, "SESSIONS 8", "flint-auth")
 	time.Sleep(500 * time.Millisecond) // more samples
 	if m := oldAge.FindString(term.text()); m != "" {
 		t.Errorf("an age reads %q:\n%s", m, term.text())
