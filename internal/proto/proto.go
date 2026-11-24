@@ -243,6 +243,10 @@ const (
 // session in the pane after it: the service keeps the time for every screen.
 const SeenPrefix = "seen:"
 
+// DiffPrefix starts the act a console sends for a session's worktree diff
+// against the branch it started from: diff:<pane> or diff:<pane>:<file>.
+const DiffPrefix = "diff:"
+
 // SwitchNowPrefix starts an act that switches the pane after it at once,
 // with no record refresh first.
 const SwitchNowPrefix = "switchnow:"
@@ -285,6 +289,8 @@ type Result struct {
 	// Names answers the names act: what each number of the island is
 	// called now.
 	Names *Names `json:"names,omitempty"`
+	// Diff answers a diff: act: the session's worktree against its base.
+	Diff *Diff `json:"diff,omitempty"`
 	// Refused: the service refused the act before it ran anything (a
 	// check, a busy or gone account). An Err without it is a failure of
 	// something that ran, or of a file that did not read. Only a
@@ -293,6 +299,39 @@ type Result struct {
 	// Recover is a recover act's answer: each entry of the recovery record,
 	// and what recover found or did with it.
 	Recover []Recovered `json:"recover,omitempty"`
+}
+
+// Diff is a session's worktree against the branch it started from.
+type Diff struct {
+	Against string     `json:"against"`
+	Note    string     `json:"note,omitempty"`
+	Files   []DiffFile `json:"files"`
+}
+
+// DiffFile is one path in a Diff, with its counts and hunks.
+type DiffFile struct {
+	Path    string     `json:"path"`
+	Added   int        `json:"added"`
+	Removed int        `json:"removed"`
+	Hunks   []DiffHunk `json:"hunks,omitempty"`
+}
+
+// DiffHunk is one unified-diff hunk of a DiffFile.
+type DiffHunk struct {
+	OldStart int        `json:"old_start"`
+	OldCount int        `json:"old_count"`
+	NewStart int        `json:"new_start"`
+	NewCount int        `json:"new_count"`
+	Lines    []DiffLine `json:"lines"`
+}
+
+// DiffLine is one line of a DiffHunk. Kind is " ", "+", or "-". Text is the
+// line body without that mark; control bytes stay as data.
+type DiffLine struct {
+	Kind string `json:"kind"`
+	Text string `json:"text"`
+	Old  int    `json:"old,omitempty"`
+	New  int    `json:"new,omitempty"`
 }
 
 // Recover is the Text of a "recover" act: reopen the conversations of the
