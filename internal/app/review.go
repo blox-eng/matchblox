@@ -134,6 +134,15 @@ func (m Model) reviewKey(k tea.KeyPressMsg) (Model, tea.Cmd) {
 type heldReview struct {
 	text, name, key string
 	n               int
+	comments        []reviewComment // restore if the later paste fails
+}
+
+// reviewPaste is a paste: of a review waiting for the service's answer.
+// Comments stay in reviews.json until the paste succeeds.
+type reviewPaste struct {
+	key, name string
+	n         int
+	comments  []reviewComment
 }
 
 // sendReview pastes every unsent comment to the sheet's session as one
@@ -154,35 +163,69 @@ func (m Model) sendReview() (Model, tea.Cmd) {
 			"not sent: the review is too long (%d KB, %d KB at most). Send fewer comments at once.",
 			kb, proto.MaxPaste/1024))
 	}
-	s, ok := m.sessionAt(r.host, r.pane)
+	s, have := m.sessionAt(r.host, r.pane)
 	name, key, n, pane, host := r.name, r.key, len(cs), r.pane, r.host
-	if ok {
+	if have {
 		name = m.cardName(s)
 	}
 	m = m.closeReview()
-	if ok && m.lineWaits(s) {
+	if have && m.lineWaits(s) {
 		m.reviewHeld = maps.Clone(m.reviewHeld)
 		if m.reviewHeld == nil {
 			m.reviewHeld = map[paneKey]heldReview{}
 		}
-		m.reviewHeld[paneOf(s)] = heldReview{text: text, name: name, key: key, n: n}
+		m.reviewHeld[paneOf(s)] = heldReview{text: text, name: name, key: key, n: n, comments: slices.Clone(cs)}
 		return m, m.notice("queued for " + name + " · sends at the end of its turn")
 	}
-	cmd := m.sendReviewPaste(host, pane, text)
-	m.setReviewComments(key, nil)
-	busy := ok && m.sideStateOf(s) == sideWork
-	if busy {
+	if why := m.cannotReach(host); why != "" {
+		return m, m.notice(why)
+	}
+	cmd, went := m.trackReviewPaste(host, pane, text, reviewPaste{key: key, name: name, n: n, comments: slices.Clone(cs)})
+	if !went {
+		return m, m.notice("not sent: " + name + " is not reached")
+	}
+	if have && m.sideStateOf(s) == sideWork {
 		return m, tea.Batch(cmd, m.notice("queued for "+name+" · sends at the end of its turn"))
 	}
-	return m, tea.Batch(cmd, m.notice(fmt.Sprintf("sent a review of %d comments to %s · now in WORKING", n, name)))
+	return m, cmd
 }
 
-// sendReviewPaste is one paste: of the review to pane on host.
-func (m *Model) sendReviewPaste(host, pane, text string) tea.Cmd {
-	_, cmd := m.sendToID(host, proto.Act{
+// trackReviewPaste sends one paste: and remembers the comments until the
+// service answers. ok is false when no act went (no conn).
+func (m *Model) trackReviewPaste(host, pane, text string, sent reviewPaste) (tea.Cmd, bool) {
+	id, cmd := m.sendToID(host, proto.Act{
 		RecID: proto.PastePrefix + pane, Text: text, Confirm: "y", Console: true,
 	})
-	return cmd
+	if id == "" {
+		return nil, false
+	}
+	m.reviewPastes = maps.Clone(m.reviewPastes)
+	if m.reviewPastes == nil {
+		m.reviewPastes = map[string]reviewPaste{}
+	}
+	m.reviewPastes[id] = sent
+	return cmd, true
+}
+
+// reviewPasteResult is the service's answer to a review paste: success
+// clears the comments and says they went; a refusal puts them back.
+func (m Model) reviewPasteResult(r proto.Result) (Model, tea.Cmd, bool) {
+	sent, ok := m.reviewPastes[r.ActID]
+	if !ok {
+		return m, nil, false
+	}
+	m.reviewPastes = maps.Clone(m.reviewPastes)
+	delete(m.reviewPastes, r.ActID)
+	why := r.Err
+	if why == "" && len(r.Skipped) > 0 {
+		why = r.Skipped[len(r.Skipped)-1]
+	}
+	if why != "" {
+		m.setReviewComments(sent.key, sent.comments)
+		return m, m.notice("not sent: "+why), true
+	}
+	m.setReviewComments(sent.key, nil)
+	return m, m.notice(fmt.Sprintf("sent a review of %d comments to %s · now in WORKING", sent.n, sent.name)), true
 }
 
 // releaseHeldReviews sends each held review whose session no longer waits,
@@ -204,9 +247,18 @@ func (m Model) releaseHeldReviews() (Model, tea.Cmd) {
 			continue // comments stay; the agent is gone
 		}
 		s := m.all.sessions[i]
-		cmds = append(cmds, m.sendReviewPaste(s.Host, s.Pane, h.text))
-		m.setReviewComments(h.key, nil)
-		cmds = append(cmds, m.notice(fmt.Sprintf("sent a review of %d comments to %s · now in WORKING", h.n, h.name)))
+		if why := m.cannotReach(s.Host); why != "" {
+			cmds = append(cmds, m.notice(why))
+			continue
+		}
+		cmd, ok := m.trackReviewPaste(s.Host, s.Pane, h.text, reviewPaste{
+			key: h.key, name: h.name, n: h.n, comments: slices.Clone(h.comments),
+		})
+		if !ok {
+			cmds = append(cmds, m.notice("not sent: "+h.name+" is not reached"))
+			continue
+		}
+		cmds = append(cmds, cmd)
 	}
 	return m, tea.Batch(cmds...)
 }

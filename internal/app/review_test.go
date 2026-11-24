@@ -371,8 +371,8 @@ func TestAHostileReviewIsStripped(t *testing.T) {
 	}
 }
 
-// TestSendGivesOneMessage: two comments become one paste:; the notice names
-// both, and the unsent store is empty.
+// TestSendGivesOneMessage: two comments become one paste:; after the
+// service answers, the notice names both and the unsent store is empty.
 func TestSendGivesOneMessage(t *testing.T) {
 	m := reviewDesk(t)
 	diff := &proto.Diff{
@@ -393,6 +393,7 @@ func TestSendGivesOneMessage(t *testing.T) {
 		{File: "internal/app/footer.go", Line: 41, Text: "fold at width"},
 		{File: "internal/app/view.go", Line: 12, Text: "keep the package line"},
 	})
+	key := m.review.key
 	m = pressOn(m, "enter")
 	acts := messageActs(boardFake(m))
 	if len(acts) != 1 || acts[0].RecID != proto.PastePrefix+"%ux-pass" || acts[0].Confirm != "y" {
@@ -411,12 +412,19 @@ func TestSendGivesOneMessage(t *testing.T) {
 			t.Fatalf("paste missing %q:\n%s", want, text)
 		}
 	}
+	if m.over == "review" || m.review != nil {
+		t.Fatalf("the review stayed open")
+	}
+	if n := len(m.reviews.Comments[key]); n != 2 {
+		t.Fatalf("comments cleared before the paste answered: %d", n)
+	}
+	if strings.Contains(m.noticeText, "sent a review") {
+		t.Fatalf("said sent before the paste answered: %q", m.noticeText)
+	}
+	m = upd(t, m, resultMsg(proto.Result{ActID: "a" + strconv.Itoa(m.acts)}))
 	wantNotice := "sent a review of 2 comments to ux-pass · now in WORKING"
 	if m.noticeText != wantNotice {
 		t.Fatalf("notice %q, want %q", m.noticeText, wantNotice)
-	}
-	if m.over == "review" || m.review != nil {
-		t.Fatalf("the review stayed open")
 	}
 	s, _ := m.sideChosen()
 	if n := len(m.reviewsOf(s)); n != 0 {
@@ -467,8 +475,80 @@ func TestABusyAgentGetsItAtTheEndOfItsTurn(t *testing.T) {
 	if len(acts) != 1 || acts[0].RecID != proto.PastePrefix+"%ux-pass" || !strings.Contains(acts[0].Text, "fold at width") {
 		t.Fatalf("after the turn: %+v", acts)
 	}
+	if n := len(m.reviewsOf(idle)); n != 1 {
+		t.Fatalf("comments cleared before the paste answered: %d", n)
+	}
+	m = upd(t, m, resultMsg(proto.Result{ActID: "a" + strconv.Itoa(m.acts)}))
 	if n := len(m.reviewsOf(idle)); n != 0 {
 		t.Fatalf("comments left after send: %d", n)
+	}
+	wantSent := "sent a review of 1 comments to ux-pass · now in WORKING"
+	if m.noticeText != wantSent {
+		t.Fatalf("notice %q, want %q", m.noticeText, wantSent)
+	}
+}
+
+// TestReviewSendRestoresOnPasteFailure: a refused paste puts the comments
+// back and says why; ✎ stays.
+func TestReviewSendRestoresOnPasteFailure(t *testing.T) {
+	m := reviewDesk(t)
+	m = openReviewWith(t, m, reviewCommentDiff(), "")
+	m.setReviewComments(m.review.key, []reviewComment{{File: "frame.go", Line: 41, Text: "fold at width"}})
+	key := m.review.key
+	m = pressOn(m, "enter")
+	if len(messageActs(boardFake(m))) != 1 {
+		t.Fatalf("want one paste before the refusal")
+	}
+	m = upd(t, m, resultMsg(proto.Result{ActID: "a" + strconv.Itoa(m.acts), Err: "the pane moved"}))
+	if got := m.noticeText; got != "not sent: the pane moved" {
+		t.Fatalf("notice %q", got)
+	}
+	if n := len(m.reviews.Comments[key]); n != 1 {
+		t.Fatalf("comments lost after refusal: %d", n)
+	}
+	if row := reviewRowOf(m, "ux-pass"); !strings.Contains(ansi.Strip(row), "✎") {
+		t.Fatalf("the row lost ✎:\n%s", row)
+	}
+}
+
+// TestReviewSendRefusesWithoutAConn: a peer with no conn keeps the
+// comments and says it is not reached.
+func TestReviewSendRefusesWithoutAConn(t *testing.T) {
+	dir := t.TempDir()
+	ux := doneMatch("ux-pass", 2*time.Minute)
+	ux.Cwd, ux.Host = "/dev/matchblox", "gpu-1"
+	m := withAgent(t, deskWith(t, 160, 40, true, boardState(), boardState(ux)), agentRows(36), false)
+	m.opt.StateDir = dir
+	m.reviews = loadReviews(dir)
+	m = chooseNamed(t, m, "ux-pass")
+	m = openReviewWith(t, m, reviewCommentDiff(), "")
+	m.setReviewComments(m.review.key, []reviewComment{{File: "frame.go", Line: 41, Text: "fold at width"}})
+	key := m.review.key
+	if i := m.peerAt("gpu-1"); i < 0 {
+		t.Fatal("no peer gpu-1")
+	} else {
+		m.peers[i].conn = nil
+	}
+	peerActs := func() int {
+		i := m.peerAt("gpu-1")
+		if i < 0 || m.peers[i].conn == nil {
+			return 0
+		}
+		return len(m.peers[i].conn.(*fakeConn).acts())
+	}
+	beforeHome, beforePeer := len(messageActs(boardFake(m))), peerActs()
+	m = pressOn(m, "enter")
+	if got := messageActs(boardFake(m)); len(got) != beforeHome {
+		t.Fatalf("a paste went on home: %+v", got[beforeHome:])
+	}
+	if peerActs() != beforePeer {
+		t.Fatalf("a paste went on the peer with no conn")
+	}
+	if !strings.Contains(m.noticeText, "not sent:") || !strings.Contains(m.noticeText, "not reached") {
+		t.Fatalf("notice %q, want not reached", m.noticeText)
+	}
+	if n := len(m.reviews.Comments[key]); n != 1 {
+		t.Fatalf("comments cleared with no conn: %d", n)
 	}
 }
 
