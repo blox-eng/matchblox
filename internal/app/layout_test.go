@@ -139,8 +139,17 @@ func TestNoCtrlKeysNeeded(t *testing.T) {
 		}
 		for tab := range tabNames { // Tab, not a digit: a digit answers a card
 			m.tab = tab
+			if m.deskShape() { // on the desk , opens Machine and ⇥ is unbound (design review D10)
+				continue
+			}
 			if next, _ := key(m, "tab"); next.(Model).tab != (tab+1)%len(tabNames) {
 				t.Fatalf("tab on tab %d does not open the next one", tab)
+			}
+		}
+		if on := m; on.deskShape() {
+			on.tab, on.keysIn = tabSessions, focusList
+			if next, _ := key(on, ","); next.(Model).tab != tabMachine {
+				t.Fatalf("width %d: , does not open Machine", w)
 			}
 		}
 		m.tab = tabMachine // on Sessions the list and the line take q as text

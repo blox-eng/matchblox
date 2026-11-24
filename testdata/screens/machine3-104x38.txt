@@ -1,38 +1,38 @@
- ▰ matchblox · 3 hosts · gpu-1 stale                                                       ● 7 need you
- sessions 10    MACHINE
-────────────────────────────────────────────────────────────────────────────────────────────────────────
- stoker    off
- git
- history
- panes
-
- USAGE
- ✻ Claude Max    5h   this machine 84% · gpu-1 stale · ws-1 84%
-                 wk   this machine 82% · gpu-1 stale · ws-1 82%
- · Google login  not measured · OpenCode keeps no limits
- ❋ OpenAI Plus   5h   this machine 40% · gpu-1 stale · ws-1 40%
-                 wk   this machine 12% · gpu-1 stale · ws-1 12%
-
- this machine
- MACHINE                                                                                       16 cores
- cpu  ▁ 0%   load 6.2
- mem  ▰▰▰▱▱▱▱▱ 26 of 64 GB
- disk ▰▰▰▰▰▰▱▱ 71% of 1 TB
- runs 5 claude · 1 codex · 1 opencode
-
- CPU
-   0%   load 6.2 / 5.1 / 4.3   pressure cpu 3%  io 3%  memory 3%
- cores ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁
-
-
-
-
- NETWORK AND DISK
- ↓ 0B/s  ↑ 0B/s   disk read 0B/s  write 0B/s
-
- MEMORY
- 26G used of 64G   38G available   swap 0G
-
- THERMAL AND POWER
-────────────────────────────────────────────────────────────────────────────────────────────────────────
- gpu-1: connection lost. Tries again in 8s.
+ ▰ matchblox    ALL    spark-docs ●2    hearth-api    kindle-web ●1    +4 ▾           ● 7 need you    ⚙
+────────────────────────────────┬───────────────────────────────────────────────────────────────────────
+ NEEDS YOU · 8  −               │ flint-auth ✻ asks · #4545 ci          ctx 41%  ctrl+o expand · m menu
+▌╿ flint-auth               2m ✻│    ╭─ ⚙ machine · this machine · gpu-1 · ws-1 ───────────────────╮
+   conflicts with main          │    │  stoker    off                                              │
+ ╿ spark-docs               9m ✻│    │  git                                                        │
+   I rewrote the quick start an…│    │  history                                                    │
+ ╿ ember-billing            4m ✻│    │  panes                                                      │
+   #4552 waits for your merge   │    │                                                             │
+ ╿ train-loop@gpu-1         9m ✻│    │  USAGE                                                      │
+   I rewrote the quick start an…│    │  ✻ Claude Max    5h   this machine 84% · gpu-1 stale        │
+ ╿ kindle-web               1m ✻│    │    ws-1 84%                                                 │
+   Do you want to proceed?      │    │                  wk   this machine 82% · gpu-1 stale        │
+ ╿ api-auth@ws-1            9m ✻│    │    ws-1 82%                                                 │
+   I rewrote the quick start an…│    │  · Google login  not measured · OpenCode keeps no limits    │
+ ╿ cinder-ci               now ❋│    │  ❋ OpenAI Plus   5h   this machine 40% · gpu-1 stale        │
+   I am moving the cache key to…│    │    ws-1 40%                                                 │
+ ╿ wick-mobile             now ▣│    │                  wk   this machine 12% · gpu-1 stale        │
+   ⠙ Working                    │    │    ws-1 12%                                                 │
+────────────────────────────────┤    │                                                             │
+ WORKING · 2  −                 │    │  this machine                                               │
+ ✦ hearth-api     #4551 ci  3h ✻│    │  MACHINE                                          16 cores  │
+ ✦ docs-sweep@ws-1          9m ✻│    │  cpu  ▁ 0%   load 6.2                                       │
+                                │    │  mem  ▰▰▰▱▱▱▱▱ 26 of 64 GB                                  │
+                                │    │  disk ▰▰▰▰▰▰▱▱ 71% of 1 TB                                  │
+                                │    │  runs 5 claude · 1 codex · 1 opencode                       │
+                                │    │                                                             │
+                                │    │  CPU                                                        │
+                                │    │    0%   load 6.2 / 5.1 / 4.3   pressure cpu 3%  io 3%  mem… │
+                                │    │  cores ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁                                     │
+                                │    │                                                             │
+                                │    │                                                             │
+                                │    │                                                             │
+                                │    │ ↑↓ move · ⏎ open · f stoker · esc back to flint-auth        │
+                                │    ╰─────────────────────────────────────────────────────────────╯
+ + new · ✧ 7 tips · ! gpu-1 not…│ ›                                                ⏎ send to flint-auth
+────────────────────────────────┴───────────────────────────────────────────────────────────────────────
+ MACHINE  gpu-1: connection lost. Tries again in 8s.

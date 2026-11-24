@@ -419,7 +419,7 @@ func TestTapsOnTheFrame(t *testing.T) {
 		{head, hs, "space:all", "ALL"},
 		{head, hs, "waits", "● 2 need you"},
 		{head, hs, "cog:usage", "⚙"},
-		{bar, bs, "cog:loops", "gpu-1 cpu 41% ⚠ busy loop"},
+		{bar, bs, "cog:loops:gpu-1", "gpu-1 cpu 41% ⚠ busy loop"},
 		{bar, bs, "cog:health", "ws-1"},
 		{bar, bs, "cog:stoker", "stoker off"},
 		{bar, bs, "keys", "? keys"},

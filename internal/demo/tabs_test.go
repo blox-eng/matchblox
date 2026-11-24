@@ -29,6 +29,18 @@ var tabs = []struct{ key, name, seeded string }{
 	{"\tkkk\r", "Stoker", "n starts a night"}, // Machine on Panes' row, up to the first
 }
 
+// deskTabs are tabs on the desk, where , opens Machine as the ⚙ sheet from
+// the list, esc goes back from a view to the sheet, and ctrl+q leaves for
+// the list (design review D10, D14).
+var deskTabs = []struct{ key, name, seeded string }{
+	{"\x1b[27u,", "Machine", "load 6.2"},     // the list's keys, then ,
+	{"j\r", "Git", "9 WORKTREES"},            // Machine's second row
+	{"\x1b[27uj\r", "History", "LAST 2H"},    // esc: the sheet on Git's row, the next
+	{"\x1b[27uj\r", "Panes", "hearth:2.1"},   // esc: the sheet on History's row, the next
+	{"\x11", "Sessions", "LIST"},             // ctrl+q from a view of Machine: the list under the sheet stays drawn, the bar says LIST
+	{",kkk\r", "Stoker", "n starts a night"}, // the sheet on Panes' row, up to the first
+}
+
 func TestEveryTabHasData(t *testing.T) {
 	for _, size := range [][2]int{{44, 31}, {132, 32}} {
 		t.Run(fmt.Sprintf("%dx%d", size[0], size[1]), func(t *testing.T) {
@@ -37,7 +49,11 @@ func TestEveryTabHasData(t *testing.T) {
 			_, term := startAt(t, size[0], size[1])
 			term.waitFor(t, "flint-auth")
 			t.Logf("Sessions drew the machine %v after Start", time.Since(started).Round(10*time.Millisecond))
-			for _, tab := range tabs {
+			turns := tabs
+			if size[0] > 44 {
+				turns = deskTabs
+			}
+			for _, tab := range turns {
 				from := len(term.text())
 				if _, err := term.in.Write([]byte(tab.key)); err != nil {
 					t.Fatal(err)

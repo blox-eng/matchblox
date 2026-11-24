@@ -26,10 +26,16 @@ func TestTabsAndTheirDigits(t *testing.T) {
 			t.Errorf("%s on Machine opens tab %d", k, next.tab)
 		}
 	}
-	if pressOn(m, "tab").tab != tabMachine || pressOn(machine, "tab").tab != tabSessions || pressOn(machine, "shift+tab").tab != tabSessions {
-		t.Fatal("Tab and Shift+Tab do not turn between the two tabs")
-	}
 	phone, _ := loadedWith(t, 44, queueState())
+	phoneMachine := phone
+	phoneMachine.setTab(tabMachine)
+	if pressOn(phone, "tab").tab != tabMachine || pressOn(phoneMachine, "tab").tab != tabSessions || pressOn(phoneMachine, "shift+tab").tab != tabSessions {
+		t.Fatal("Tab and Shift+Tab do not turn between the two tabs on the phone")
+	}
+	m.toList()
+	if pressOn(m, ",").tab != tabMachine || pressOn(machine, "esc").tab != tabSessions { // the desk: , and esc, as ⇥ on the phone
+		t.Fatal(", and esc do not turn between the list and Machine on the desk")
+	}
 	phone.setTab(tabMachine)
 	if line, _ := phone.tabsLine(44); !slices.Equal(strings.Fields(ansi.Strip(line)), []string{"sessions", "3", "MACHINE"}) {
 		t.Errorf("Machine on a phone: %q", ansi.Strip(line))

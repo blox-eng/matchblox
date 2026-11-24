@@ -87,7 +87,8 @@ func TestSplashEndsOnKey(t *testing.T) {
 	t0 := time.Now()
 	now := t0.Add(100 * time.Millisecond)
 	m := splashModel(t0, &now)
-	next, _ := m.Update(stateMsg(fixtureState()))
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 44, Height: 31}) // the phone, where ⇥ opens Machine
+	next, _ = next.Update(stateMsg(fixtureState()))
 	next, _ = key(next, "1")
 	if got := next.(Model); got.tab != 0 || got.splashing() {
 		t.Fatalf("a key during the start screen ends it and does nothing else (tab %d, splashing %v)", got.tab, got.splashing())

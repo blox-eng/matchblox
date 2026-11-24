@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/history"
@@ -18,6 +19,7 @@ func TestHistoryWithAFlatSeries(t *testing.T) {
 	for i := range 10 {
 		m.hist.Points = append(m.hist.Points, history.Point{At: at.Add(time.Duration(i) * 30 * time.Second), CPU: float64(i)})
 	}
+	m = upd(t, m, tea.WindowSizeMsg{Width: 100, Height: 60}) // the ⚙ sheet holds the swap chart
 	m.tab = tabHistory
 	if out := ansi.Strip(m.render()); !strings.Contains(out, "SWAP") {
 		t.Fatalf("no swap chart:\n%s", out)

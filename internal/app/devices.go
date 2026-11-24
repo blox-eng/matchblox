@@ -255,7 +255,9 @@ func (m Model) devicesBody(w int) body {
 	}
 	b := plain(m.region(fmt.Sprintf("devices · %d", len(m.devices)), w))
 	if m.devErr != nil {
-		b.add(-1, fit(" "+st.warn.Render("cannot read ~/.ssh/authorized_keys: "+m.devErr.Error()+". Check its owner and mode (600)."), w))
+		for _, l := range wrapPlain("cannot read ~/.ssh/authorized_keys: "+m.devErr.Error()+". Check its owner and mode (600).", w-2) { // the fix is never cut
+			b.add(-1, " "+st.warn.Render(l))
+		}
 	}
 	_, picked := m.selectedDevice()
 	base := len(machineViews) + len(m.snap.Orphans)

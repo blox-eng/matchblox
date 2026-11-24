@@ -146,14 +146,21 @@ func TestScreens(t *testing.T) {
 	for _, size := range [][2]int{{44, 31}, {104, 38}, {132, 32}} {
 		check(t, sheetScreen(st, false), "sheet", size[0], size[1], append(night, "tab", "space", "tab"))
 	}
-	toStokerTab := []string{"tab", "enter"} // Machine, then its first row: stoker (c copies on the board)
+	// Machine, then its first row: stoker (c copies on the board). On the
+	// phone ⇥ opens Machine; on the desk , does, from the list.
+	toStokerTab := func(w int) []string {
+		if w == 44 {
+			return []string{"tab", "enter"}
+		}
+		return []string{keysInList, ",", "enter"}
+	}
 	for _, size := range [][2]int{{44, 31}, {104, 38}, {132, 32}} {
-		check(t, tabNight(st), "stoker", size[0], size[1], toStokerTab)
-		check(t, tabMorning(st), "stokermorning", size[0], size[1], toStokerTab)
+		check(t, tabNight(st), "stoker", size[0], size[1], toStokerTab(size[0]))
+		check(t, tabMorning(st), "stokermorning", size[0], size[1], toStokerTab(size[0]))
 	}
 	check(t, sheetScreen(st, true), "sheetday", 104, 38, []string{keysInList, "o"})
 	for _, size := range [][2]int{{44, 31}, {104, 38}} {
-		check(t, tabFamily(st, false), "stokerfamily", size[0], size[1], append(slices.Clone(toStokerTab), "down", "down"))
+		check(t, tabFamily(st, false), "stokerfamily", size[0], size[1], append(toStokerTab(size[0]), "down", "down"))
 	}
 	offer := st
 	offer.Doors = []doors.Door{{ID: doors.Update, Title: "Update to v0.43.0", Why: "matchblox v0.43.0 is out. This machine runs v0.42.0.", Sum: "v0.43.0",

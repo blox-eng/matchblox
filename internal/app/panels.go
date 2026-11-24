@@ -72,7 +72,9 @@ func (m Model) machine(w int) []string {
 	mc, st, h := m.snap.Machine, m.st, m.history
 	out := m.alertLines(w)
 	if m.push != "" {
-		out = append(out, fit(" "+st.warn.Render(m.push), w))
+		for _, l := range wrapPlain(m.push, w-2) { // its fix is never cut
+			out = append(out, " "+st.warn.Render(l))
+		}
 	}
 
 	out = append(out, m.region("cpu", w)...)
@@ -143,19 +145,7 @@ func (m Model) procs(w int) body {
 	}
 	nv, sel := len(machineViews), m.machineIndex() // off the orphans while another row is selected
 	for i, o := range m.snap.Orphans {
-		var pane string
-		switch {
-		case o.Pane == "":
-			pane = "no pane"
-		case o.PaneAlive:
-			pane = o.Pane + " " + o.Target
-		default:
-			pane = o.Pane + " (gone)"
-		}
-		line := " " + st.neg.Render("! ") + st.text.Render(pad(fmt.Sprintf("%d %s", o.PID, o.Comm), 16)) +
-			st.text.Render(pad(fmt.Sprintf("%3.0f%%", o.CPU), 7)) + st.muted.Render(pad("for "+sample.Human(o.HotFor), 12)) +
-			st.muted.Render(pad(pane, 22)) + st.faint.Render(o.Cmdline)
-		b.addRow(nv+i, nv+i == sel, w, st, line)
+		b.addRow(nv+i, nv+i == sel, w, st, m.orphanLine(o))
 	}
 	if o, ok := m.selectedOrphan(); ok {
 		b.add(-1, "", fit(" "+st.muted.Render(fmt.Sprintf("parent %s · age %s · cwd %s", o.Parent, sample.Human(o.Age), o.Cwd)), w))
@@ -168,6 +158,24 @@ func (m Model) procs(w int) body {
 	b.add(-1, m.region("top processes", w)...)
 	b.add(-1, m.topRows(w)...)
 	return b
+}
+
+// orphanLine is a detached busy loop's line: its pid, command, cpu, how
+// long it burns, its pane and its command line.
+func (m Model) orphanLine(o sample.Orphan) string {
+	st := m.st
+	var pane string
+	switch {
+	case o.Pane == "":
+		pane = "no pane"
+	case o.PaneAlive:
+		pane = o.Pane + " " + o.Target
+	default:
+		pane = o.Pane + " (gone)"
+	}
+	return " " + st.neg.Render("! ") + st.text.Render(pad(fmt.Sprintf("%d %s", o.PID, o.Comm), 16)) +
+		st.text.Render(pad(fmt.Sprintf("%3.0f%%", o.CPU), 7)) + st.muted.Render(pad("for "+sample.Human(o.HotFor), 12)) +
+		st.muted.Render(pad(pane, 22)) + st.faint.Render(o.Cmdline)
 }
 
 // selectedOrphan is the detached busy loop under the cursor.

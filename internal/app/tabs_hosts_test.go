@@ -402,7 +402,7 @@ func TestAHostRowOnMachineOpensHosts(t *testing.T) {
 	if alone.rowCount() != m.rowCount()-2 {
 		t.Fatalf("rows: %d alone, %d under Hosts; want one more for each host", alone.rowCount(), m.rowCount())
 	}
-	if next, cmd := key(m, "esc"); toHosts(cmd) || next.(Model).tab != tabMachine {
+	if next, cmd := key(m, "esc"); toHosts(cmd) || next.(Model).tab != tabSessions { // on the desk esc closes the ⚙ sheet
 		t.Fatal("esc on Machine left the console")
 	}
 	m.selectRow(m.rowCount() - 1)
@@ -412,22 +412,25 @@ func TestAHostRowOnMachineOpensHosts(t *testing.T) {
 	out := screen(m)
 	lines := strings.Split(out, "\n")
 	hosts := slices.IndexFunc(lines, func(l string) bool { return strings.Contains(l, "HOSTS") })
-	ws := slices.IndexFunc(lines, func(l string) bool { return strings.Contains(l, "ws-1") })
+	ws := hosts + 1 + slices.IndexFunc(lines[hosts+1:], func(l string) bool { return strings.Contains(l, "ws-1") }) // the sheet's title names ws-1 too
 	if hosts < 0 || ws <= hosts || slices.ContainsFunc(lines[hosts:ws], func(l string) bool { return strings.TrimSpace(l) == "" }) {
 		t.Fatalf("ws-1 is not a host row under HOSTS:\n%s", out)
 	}
 	if _, cmd := key(m, "enter"); !toHosts(cmd) {
 		t.Fatal("⏎ on a host row does not open Hosts")
 	}
-	y := lineOf(t, m, "HOSTS") + 1 // the home's row: a tap chooses it, a second opens Hosts
-	if row := strings.Split(out, "\n")[y]; !strings.Contains(row, "this machine") {
-		t.Fatalf("the first host row is %q", row)
+	x, y := sheetCell(t, m, "this machine") // the home's row: a tap chooses it, a second opens Hosts
+	if y != lineOf(t, m, "HOSTS")+1 {
+		t.Fatalf("the first host row is on line %d, not under HOSTS:\n%s", y, out)
 	}
-	once, cmd := tap(m, 3, y)
+	if _, cmd := tap(m, 1, y); toHosts(cmd) { // beside the sheet a tap picks no row
+		t.Fatal("a tap beside the sheet opened Hosts")
+	}
+	once, cmd := tap(m, x, y)
 	if toHosts(cmd) {
 		t.Fatal("the first tap on a host row opened Hosts")
 	}
-	if _, cmd := tap(once, 3, y); !toHosts(cmd) {
+	if _, cmd := tap(once, x, y); !toHosts(cmd) {
 		t.Fatal("a second tap on a host row does not open Hosts")
 	}
 }

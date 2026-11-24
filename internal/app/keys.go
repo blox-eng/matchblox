@@ -169,6 +169,7 @@ func defaultKeys() keymaps {
 			SpaceBefore: bind(ks("["), "[ ]", "space"),
 			SpaceAfter:  bind(ks("]"), "[ ]", "space"),
 			Keys:        bind(ks("?"), "?", "keys"),
+			Machine:     bind(ks(","), ",", "machine"),
 		},
 		side: sideKeys{
 			Enter:    bind(ks("enter"), "⏎", "send"),
@@ -299,10 +300,11 @@ func (k askKeys) bindings() []bkey.Binding { return []bkey.Binding{k.Send, k.Can
 type boardKeys struct {
 	Copy, Chain, Host, Menu, Merge bkey.Binding
 	SpaceBefore, SpaceAfter, Keys  bkey.Binding
+	Machine                        bkey.Binding
 }
 
 func (k boardKeys) bindings() []bkey.Binding {
-	return []bkey.Binding{k.Copy, k.Chain, k.Host, k.Menu, k.Merge, k.SpaceBefore, k.SpaceAfter, k.Keys}
+	return []bkey.Binding{k.Copy, k.Chain, k.Host, k.Menu, k.Merge, k.SpaceBefore, k.SpaceAfter, k.Keys, k.Machine}
 }
 
 // sideKeys are the chat's line and the list beside it. In the line every

@@ -265,7 +265,7 @@ func (m Model) hostChip(host string) ([]piece, bool) {
 	case m.stale(host):
 		return []piece{{st.warn.Render(m.unreachedWord(host)), "cog:health"}}, true
 	case len(m.orphansOn(host)) > 0:
-		return []piece{{st.neg.Render(fmt.Sprintf("%s cpu %.0f%% ⚠ busy loop", name, mc.CPU)), "cog:loops"}}, true
+		return []piece{{st.neg.Render(fmt.Sprintf("%s cpu %.0f%% ⚠ busy loop", name, mc.CPU)), "cog:loops:" + host}}, true
 	}
 	cpu, mem := m.pulse(), m.pulse()
 	if slices.Contains(m.statedHosts(), host) {
@@ -365,7 +365,7 @@ func (m Model) pulse() string {
 
 // pressFrame runs a tap on the desk's head row or its bar: a space opens
 // it, who needs the owner clears the filters, ? keys opens the keys, and
-// a part of the machine opens the Machine tab.
+// a part of the machine opens the ⚙ sheet on it.
 func (m Model) pressFrame(press string) (tea.Model, tea.Cmd) {
 	switch {
 	case press == tapAgain: // a prompt's own taps, as on the key line
@@ -397,8 +397,7 @@ func (m Model) pressFrame(press string) (tea.Model, tea.Cmd) {
 	case press == "cog:stoker" && m.hasAgent(): // the stoker agent, as the header's word opened it
 		return m.openAgent()
 	case strings.HasPrefix(press, "cog:"):
-		m.setTab(tabMachine)
-		return m, nil
+		return m.openCog(press), nil
 	}
 	return m.keyed(keyPress(press))
 }
@@ -449,7 +448,7 @@ func (m Model) drawDesk(w int) drawn {
 		m.overlayForm(&sc, w)
 	case m.menu != nil:
 		m.overlayMenu(&sc, w)
-	case m.over != "" && box.chatW > 0:
+	case (m.over != "" || m.cogShown()) && box.chatW > 0:
 		m.overlayOver(&sc, box, room)
 	}
 	if prompting { // a box dims the screen, never the prompt that answers it
@@ -525,15 +524,27 @@ func (m Model) promptBar(mode, line string, spans []span, w int) (string, []span
 
 // overlayOver floats the open sheet over the agent region: the region less
 // 4 columns and a line on each side, so the agent's screen shows around
-// it. A narrow region gets a sheet that fills it.
+// it, and at least 60 columns: a narrower region gets a sheet that fills
+// it.
 func (m Model) overlayOver(sc *drawn, box sideBox, room int) {
 	dx, dy := 4, 1
-	if box.chatW-2*dx < 24 || room-2*dy < 4 {
+	if box.chatW-2*dx < 60 || room-2*dy < 4 {
 		dx, dy = 0, 0
 	}
 	sw, sh := box.chatW-2*dx, room-2*dy
-	esc := m.st.text.Render(m.keys.side.Leave.Help().Key) + m.st.muted.Render(" closes")
-	for i, l := range m.floatBox(m.st.text.Render("? keys"), nil, esc, sw, sh) {
+	title, lines := "? keys", []string(nil)
+	foot := m.st.text.Render(m.keys.side.Leave.Help().Key) + m.st.muted.Render(" closes")
+	if m.cogShown() {
+		var rows []int
+		title, foot = m.cogTitle(), m.cogFoot(sw-4)
+		lines, rows = m.cogWindow(sw-4, sh-3)
+		sc.rows = slices.Repeat([]int{-1}, len(sc.rows))
+		for i, r := range rows {
+			sc.rows[dy+1+i] = r
+		}
+		sc.overX0, sc.overX1 = box.chatX+dx, box.chatX+dx+sw
+	}
+	for i, l := range m.floatBox(m.st.text.Bold(true).Render(title), lines, foot, sw, sh) {
 		y := sc.bodyTop + dy + i
 		sc.lines[y] = overlayAt(sc.lines[y], box.chatX+dx, l)
 	}

@@ -38,6 +38,7 @@ the line empty and a question on the screen; else it types.
 | `s` | In the list, shows the next host, then all hosts. It goes to each host, a hidden host too. With one host shown, all hosts is that host, so `s` goes from host to host. With one host only, a notice says so. |
 | `[`, `]` | In the list, shows only the repo before or after, then every repo. A space is a repo with a live session. The header's count of who needs you still counts every repo. With one repo only, a notice says so. |
 | `?` | On the desk, in the list, opens the keys sheet over the agent. `Esc` closes it. With the agent's keys, `?` types into the agent. |
+| `,` | On the desk, in the list, opens Machine as the ⚙ sheet over the agent, as `⌘,` opens settings in a desktop app. A tap on `⚙` or on a chip of the bar opens it on that part. With the agent's keys, `,` types into the agent. |
 | `h` | In the list, on a hidden host, shows that host in all hosts again. Machine › Hosts then ticks the host. On another host, a notice says what `h` does. |
 | `g` | In the list, shows only the chain of the chosen session: its room. `Esc` shows all. |
 | `⌥s` | Opens the room of the chosen session's chain, as `g` does. A session in no chain opens its chain of one, which the host's stoker drives. In the matchblox app, `⌥s` types `s` in the line, and the belt's `g` opens the room. |
@@ -56,7 +57,7 @@ the line empty and a question on the screen; else it types.
 | `o` | In the list, on the host of the chosen session, gives a new order while a day run is on: the launch sheet opens with the run's gos, and the order goes to the stoker as one line. The run goes on, and done steps stay done. A night is sealed: `n` stops it first. |
 | `F` | In the list, stokes the chain of the chosen session: the start sheet, `Stoke the chain <name> (<n> matches)?`, takes the order and the gos of a stoker for that chain. See [A family of stokers](stoker.md#a-family-of-stokers). |
 | `d` | In the tips, dismisses the chosen tip until its evidence changes. |
-| `Tab` or `Shift+Tab` | Goes to Machine, or back to the list and the chat. |
+| `Tab` or `Shift+Tab` | On the phone, goes to Machine, or back to the list and the chat. On the desk it does nothing: Machine is `,`. |
 | `Ctrl+O` | Goes into the chosen agent's pane, from the line or the list. The key line then says the way back, `ctrl+a m`. |
 | `Ctrl+L` | Hides the list, or shows it again. With the list hidden, the chat takes the width, and the header names each session that needs you. A tap on a name opens its chat. On a phone, the list and the chat take turns. |
 | `◂` or `←` | On a phone, goes from the chat back to the list. A tap on `◂` at the left of the chat's head does it too. On a desk, `←` in the line moves the keys to the list, as `◂` does on a phone. |
@@ -159,14 +160,16 @@ next session in the list is chosen, and its line says
 
 ## Machine
 
-`Tab` opens it. The rows are the stoker, git, history and panes, then the
-detached busy loops, the devices and, over several hosts, the hosts.
+On the desk `,` opens it as a sheet over the agent; on the phone `Tab`
+opens its tab. The rows are the stoker, git, history and panes, then the
+detached busy loops, the devices and, over several hosts, the hosts. A
+busy loop on another host shows in that host's section.
 
 | Key | What it does |
 |---|---|
 | `↑` or `k`, `↓` or `j` | Chooses the row above or below. |
 | `Enter` | Opens the view of the row: the stoker, git, history or panes. On a busy loop, goes to the pane that started it. On `+ pair a device`, opens the pair page. On a host, opens Hosts. On Git, opens a shell in the worktree. On Panes, goes to the pane. |
-| `Esc` | Goes back from a view to Machine, on its row. |
+| `Esc` | Goes back from a view, or from Hosts opened on the desk, to Machine, on its row. On the desk, `Esc` on Machine closes the sheet, and `ctrl+q` closes Machine and every view or sheet it opened, whatever they show, and gives the keys to the list. |
 | `x` | Kills a detached busy loop, removes a device, or removes the marked worktrees (Git), after a typed `y`. |
 | `Space` | Marks a worktree that is safe to remove (Git). |
 | `X` | Marks every worktree that is safe to remove (Git). |

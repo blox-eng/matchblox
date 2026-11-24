@@ -245,11 +245,11 @@ func TestOpeningTheTabSendsOneAck(t *testing.T) {
 	clock := m.now()
 	m.opt.Now = func() time.Time { clock = clock.Add(time.Minute); return clock }
 	m.setTab(tabMachine)
-	m.selectRow(0) // the row is chosen already: the first tap opens STOKER, the second lands on it
-	y := lineOf(t, m, "stoker")
-	once, cmd := tap(m, 3, y)
+	m.selectRow(0)                    // the row is chosen already: the first tap opens STOKER, the second lands on it
+	x, y := sheetCell(t, m, "stoker") // on the desk Machine is the ⚙ sheet over the agent
+	once, cmd := tap(m, x, y)
 	drain(cmd)
-	opened, cmd := tap(once, 3, y)
+	opened, cmd := tap(once, x, y)
 	drain(cmd)
 	if opened.(Model).tab != tabStoker {
 		t.Fatalf("a tap on the row stoker opens tab %d", opened.(Model).tab)
@@ -612,10 +612,10 @@ func TestMachineOpensGitHistoryAndPanes(t *testing.T) {
 	m, _ := loadedWith(t, 100, fixtureState())
 	machine := m
 	machine.setTab(tabMachine)
-	rows := strings.Split(screen(machine), "\n")[3:7]
+	_, top := sheetCell(t, machine, "stoker") // on the desk Machine is the ⚙ sheet
 	for i, name := range []string{"stoker", "git", "history", "panes"} {
-		if !strings.HasPrefix(strings.TrimLeft(rows[i], " ▌"), name) {
-			t.Fatalf("Machine's row %d is %q, want %s", i, rows[i], name)
+		if _, y := sheetCell(t, machine, name); y != top+i {
+			t.Fatalf("Machine's row %s is on line %d, want %d", name, y, top+i)
 		}
 	}
 	for _, c := range []struct {
@@ -637,8 +637,8 @@ func TestMachineOpensGitHistoryAndPanes(t *testing.T) {
 		if got, want := body(open), body(direct); !slices.Equal(got, want) {
 			t.Fatalf("%s from Machine is not today's screen:\n%s\nwant\n%s", c.name, strings.Join(got, "\n"), strings.Join(want, "\n"))
 		}
-		if !strings.Contains(actionLine(open), "esc machine") {
-			t.Fatalf("%s's key line has no way back: %q", c.name, actionLine(open))
+		if !strings.Contains(keyLineOf(open), "esc machine") { // the ⚙ sheet's keys
+			t.Fatalf("%s's key line has no way back: %q", c.name, keyLineOf(open))
 		}
 		back := pressOn(open, "esc")
 		if v, ok := back.selectedMachineView(); back.tab != tabMachine || !ok || v.name != c.name {
@@ -653,9 +653,10 @@ func TestMachineOpensGitHistoryAndPanes(t *testing.T) {
 // The tab row has no stoker of its own.
 func TestMachineOpensTheStoker(t *testing.T) {
 	m, _ := loadedWith(t, 100, stokerState(stokedRun(fixtureState().At)))
-	m = pressOn(m, "tab")
+	m.toList()
+	m = pressOn(m, ",") // the desk's Machine, as ⇥ on the phone
 	if m.tab != tabMachine {
-		t.Fatalf("tab from the board opens tab %d", m.tab)
+		t.Fatalf(", from the board opens tab %d", m.tab)
 	}
 	if line, _ := m.tabsLine(100); strings.Contains(strings.ToLower(ansi.Strip(line)), "stoker") {
 		t.Fatalf("the tab row names the stoker: %q", ansi.Strip(line))
@@ -663,8 +664,9 @@ func TestMachineOpensTheStoker(t *testing.T) {
 	if v, ok := m.selectedMachineView(); !ok || v.name != "stoker" {
 		t.Fatalf("Machine opens on %+v, want its row stoker", v)
 	}
-	if row := strings.Split(screen(m), "\n")[3]; !strings.HasPrefix(strings.TrimLeft(row, " ▌"), "stoker") {
-		t.Fatalf("Machine's first row is %q", row)
+	m = pressOn(m, "up") // , opens on the usage; a key brings the chosen row in view
+	if _, y := sheetCell(t, m, "stoker"); !strings.Contains(strings.Split(screen(m), "\n")[y-1], "╭─ ⚙ machine") {
+		t.Fatalf("Machine's first row is not stoker:\n%s", screen(m))
 	}
 	m = pressOn(m, "enter")
 	lines := strings.Split(screen(m), "\n")

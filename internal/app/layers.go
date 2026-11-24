@@ -448,6 +448,10 @@ func (s Shell) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if bkey.Matches(k, sk.Interrupt) {
 		return s, tea.Quit
 	}
+	if k.String() == flipKey && s.cur.cogShown() { // Hosts opened from the ⚙ sheet: ctrl+q leaves for the list
+		s.cur, s.layer, s.input, s.pending, s.adding = s.cur.leaveSheets(), layerConsole, nil, nil, false
+		return s, nil
+	}
 	if s.input != nil {
 		return s.typing(k)
 	}
@@ -470,8 +474,11 @@ func (s Shell) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case bkey.Matches(k, sk.Down):
 		s.sel = min(s.sel+1, len(rs)-1)
 	case bkey.Matches(k, sk.Back):
-		if s.adding {
+		switch {
+		case s.adding:
 			s.adding, s.sel = false, len(s.hosts)+1
+		case s.cur.cogShown(): // Hosts opened from the ⚙ sheet: esc steps back to it
+			s.layer = layerConsole
 		}
 	case bkey.Matches(k, sk.Remove):
 		if r := rs[min(s.sel, len(rs)-1)]; r.removable {

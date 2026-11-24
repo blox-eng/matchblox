@@ -301,7 +301,7 @@ func TestListKeys(t *testing.T) {
 		{"c", func(m Model) bool { return strings.Contains(m.noticeText, "nothing to copy") }},
 		{"z", func(m Model) bool { return hasAct(boardFake(m), "park:%flint-auth") }},
 		{"N", func(m Model) bool { return m.form != nil || strings.HasPrefix(m.flash, "no agent to start here") }},
-		{"tab", func(m Model) bool { return m.tab != tabSessions }},
+		{",", func(m Model) bool { return m.tab == tabMachine }}, // the desk's Machine; ⇥ on the phone (TestTabStillOpensMachineOnThePhone)
 	} {
 		t.Run(c.key, func(t *testing.T) {
 			m := loginChain(t, nil)

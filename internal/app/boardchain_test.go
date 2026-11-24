@@ -432,7 +432,7 @@ func TestTheMenuTakesAMatchOutOfItsChain(t *testing.T) {
 func TestATabLeavesTheRoom(t *testing.T) {
 	st := headState(t, runningPlan(), true)
 	st.Queue = nil
-	m, _ := hearthOpen(t, 160, st)
+	m, _ := hearthOpen(t, 44, st) // the phone: on the desk ⇥ is unbound
 	if roomRowNow(m) != "talk › tell hearth's stoker…" {
 		t.Fatalf("the room's talk line is not chosen: %q", roomRowNow(m))
 	}

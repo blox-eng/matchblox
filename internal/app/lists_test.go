@@ -54,8 +54,8 @@ func TestSearchEndsWithTheTab(t *testing.T) {
 	next, _ = key(next, "/")
 	next = typeText(next, "review")
 	next, _ = key(next, "enter")
-	next, _ = key(next, "tab") // a digit on the board answers its card
-	next, _ = key(next, "shift+tab")
+	next, _ = key(next, ",") // the desk's Machine, as ⇥ is on the phone
+	next, _ = key(next, "esc")
 	if out := screen(next); !strings.Contains(out, "app-feature") {
 		t.Fatalf("the search stayed after a tab change:\n%s", out)
 	}
@@ -101,7 +101,8 @@ func TestTapOnAHeaderSorts(t *testing.T) {
 	var next tea.Model = m
 	next = toTab(next, tabPanes)
 	y := lineOf(t, next, "PATH")
-	x := strings.Index(strings.Split(screen(next), "\n")[y], "RUNS")
+	line := strings.Split(screen(next), "\n")[y]
+	x := ansi.StringWidth(line[:strings.Index(line, "RUNS")]) // in cells: the ⚙ sheet's edges are wider in bytes
 	next, _ = tap(next, x+1, y)
 	if s := next.(Model).paneSort; s.col != paneByRuns || s.rev {
 		t.Fatalf("a tap on RUNS: %+v", s)

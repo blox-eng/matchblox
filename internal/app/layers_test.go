@@ -148,8 +148,8 @@ func TestEnterOpensAHostAndEscStaysInTheConsole(t *testing.T) {
 	}
 	next, _ := r.sh.Update(stateMsg(fixtureState()))
 	r.sh = next.(Shell)
-	if first := strings.Split(r.view(), "\n")[0]; !strings.Contains(first, "matchblox · ws-1 · 1 hidden") {
-		t.Fatalf("header %q", first)
+	if lines := strings.Split(r.view(), "\n"); !strings.Contains(lines[len(lines)-1], "ws-1 cpu 0% mem 50% · 1 hidden") { // the desk's bar names the host
+		t.Fatalf("bar %q", lines[len(lines)-1])
 	}
 	r.key(t, "esc") // esc stays in the console: Hosts opens from Machine
 	if r.sh.layer != layerConsole {
@@ -434,9 +434,14 @@ func (r *shellRig) rowOf(host string) string {
 }
 
 // toHosts goes from the console back to Hosts: esc stays in the console,
-// and Hosts opens from Machine's host rows, the last of its rows.
+// and Hosts opens from Machine's host rows, the last of its rows. On the
+// desk , opens Machine as the ⚙ sheet; on the phone ⇥ opens its tab.
 func (r *shellRig) toHosts(t *testing.T) {
 	t.Helper()
+	if r.sh.cur.desk() {
+		r.sh.cur.keysIn = focusList // , is the list's key
+		r.key(t, ",")
+	}
 	for i := 0; r.sh.cur.tab != tabMachine && i < len(tabNames); i++ {
 		r.key(t, "tab")
 	}

@@ -402,6 +402,8 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 		cmd = m.unhide()
 	case bkey.Matches(k, bk.Keys) && m.desk():
 		m.over = "keys"
+	case bkey.Matches(k, bk.Machine) && m.desk():
+		m = m.openCog("cog:usage")
 	case bkey.Matches(k, bk.Chain):
 		cmd = m.boardChainOf(s, ok)
 	case bkey.Matches(k, bk.Copy):

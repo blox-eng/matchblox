@@ -30,7 +30,7 @@ func toastLines(m Model, w int, text string) (drawn, []int) {
 
 func TestATellShowsAToastAndTheKeysStay(t *testing.T) {
 	m := listShot(t, boardFixture(t), 160, 38, "kindle-web")
-	m.setTab(tabMachine)                   // the stack's place: off the desk, whose notices sit at the list's foot (TestANoticeSitsAtTheListFoot)
+	m.setTab(tabStoker)                    // the stack's place: off the desk (the stoker's view), whose notices sit at the list's foot (TestANoticeSitsAtTheListFoot)
 	m = pressOn(m, "down", "down", "down") // the chosen row off the top, where the stack goes
 	keysBefore := ansi.Strip(m.draw(160).lines[m.draw(160).keysAt])
 	m.say("sent: kill api")
@@ -235,7 +235,7 @@ func TestAKeyEndsWhatWasSaidBeforeIt(t *testing.T) {
 
 func TestAShortToastIsOneLine(t *testing.T) {
 	m := listShot(t, boardFixture(t), 132, 32, "kindle-web")
-	m.setTab(tabMachine) // the stack's place: off the desk, whose notices wrap in the list's foot
+	m.setTab(tabStoker) // the stack's place: off the desk (the stoker's view), whose notices wrap in the list's foot
 	m.sayError("This is a demo. Install matchblox to do that.")
 	if _, at := toastLines(m, 132, "This is a demo. Install matchblox to do that."); len(at) != 1 {
 		t.Fatalf("a short toast is cut: on lines %v", at)

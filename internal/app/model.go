@@ -611,6 +611,7 @@ type Model struct {
 	doneKept                  paneKey         // the done row the owner opened: it stays in DONE while it is the choice
 	agent                     agentRegion     // the desk's agent region: the chosen agent's real screen
 	over                      string          // the sheet open over the agent region: "keys"; "" none
+	cogAt                     string          // the part the ⚙ sheet opened on ("cog:usage", "cog:loops:gpu-1"), until a key moves it
 	showing                   bool            // a choice is checked for the agent region
 	showNext                  *action         // the choice made while one ran: it runs next
 	besideShows               paneKey         // the session the agent region shows; zero when none
@@ -798,8 +799,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.away = false
 		}
 	}
+	if k, ok := msg.(tea.KeyPressMsg); ok && k.String() == flipKey && m.inSheets() { // whatever the sheet shows
+		return m.leaveSheets(), nil
+	}
 	if m.over != "" && !m.desk() { // the sheet draws on the desk only: off it, it would take keys unseen
 		m.over = ""
+	}
+	if m.cogShown() {
+		switch msg.(type) {
+		case tea.KeyPressMsg, tea.MouseClickMsg:
+			m.cogAt = "" // the sheet follows the chosen row from now
+		}
 	}
 	if k, ok := msg.(tea.KeyPressMsg); ok && m.over != "" { // the sheet over the agent takes the keys
 		if bkey.Matches(k, m.keys.side.Leave) {
@@ -1738,6 +1748,9 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	switch {
+	case bkey.Matches(k, mk.NextTab, mk.PrevTab) && m.desk(): // on the desk Machine moved to , with no hint (design review D10)
+	case bkey.Matches(k, mk.Back) && m.cogShown() && m.tab == tabMachine && m.filter == "":
+		m.setTab(tabSessions) // the ⚙ sheet closes on the row it opened over
 	case bkey.Matches(k, mk.StartAgain) && m.newer != "" && m.startsAgain:
 		return m.startAgain()
 	case bkey.Matches(k, mk.Stoker):

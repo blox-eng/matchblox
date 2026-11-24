@@ -80,18 +80,34 @@ func deskListW(w int) int {
 }
 
 // desk: matchblox draws the whole screen, the head row and the bar around
-// the list and the agent: the Sessions tab wider than the phone's layout
-// (design review D16). Pocket held upright keeps the phone's screen.
+// the list and the agent: the Sessions tab, or Machine as the ⚙ sheet over
+// it, wider than the phone's layout (design review D16).
 func (m Model) desk() bool {
-	return m.sideActive() && layout(max(m.width, minWidth), m.shapeRows()) != Narrow && (!m.onPocket() || !m.upright())
+	return (m.sideActive() || m.cogShown()) && m.deskShape()
+}
+
+// deskShape: the screen is wider than the phone's layout. Pocket held
+// upright keeps the phone's screen.
+func (m Model) deskShape() bool {
+	return layout(max(m.width, minWidth), m.shapeRows()) != Narrow && (!m.onPocket() || !m.upright())
+}
+
+// cogShown: Machine, or a view that opens from its rows (git, history,
+// panes), draws as the ⚙ sheet over the desk (design review D14). The
+// stoker's view keeps the screen.
+func (m Model) cogShown() bool {
+	return (m.tab == tabMachine || m.tab == tabGit || m.tab == tabHistory || m.tab == tabPanes) && !m.standIn && m.deskShape()
 }
 
 // deskMode names who has the desk's keys, as the bar's mode word does:
 // the keys sheet, the agent, its chat's line where matchblox draws the
 // chat, or the list.
 func (m Model) deskMode() string {
-	if m.over == "keys" {
+	switch {
+	case m.over == "keys":
 		return "KEYS"
+	case m.cogShown():
+		return "MACHINE"
 	}
 	if !m.opt.Beside && !m.inList() {
 		return "AGENT"

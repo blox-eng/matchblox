@@ -169,6 +169,8 @@ type drawn struct {
 	// the screen's width; viewW 0: no chat.
 	viewAt, viewW int
 	viewRows      int
+	// overX0, overX1: the ⚙ sheet's columns; a tap beside it picks no row.
+	overX0, overX1 int
 }
 
 // draw is the screen, with an ssh prompt over everything.

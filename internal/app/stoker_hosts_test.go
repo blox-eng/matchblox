@@ -167,9 +167,13 @@ func onPanes(t *testing.T, m Model) Model {
 func tapSelected(t *testing.T, m Model) Model {
 	t.Helper()
 	sc := m.draw(max(m.width, minWidth))
+	x := 2
+	if m.cogShown() { // inside the ⚙ sheet
+		x = sc.overX0 + 2
+	}
 	for i, r := range sc.rows {
 		if r == m.rowIndex() {
-			next, _ := tap(m, 2, sc.bodyTop+i)
+			next, _ := tap(m, x, sc.bodyTop+i)
 			return next.(Model)
 		}
 	}

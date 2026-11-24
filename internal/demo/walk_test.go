@@ -156,6 +156,10 @@ type walker struct {
 // walkNotice is how long a notice shows in a walk.
 const walkNotice = 400 * time.Millisecond
 
+// desk: the walk's screen is wider than the phone's layout, where ,
+// opens Machine as the ⚙ sheet and ⇥ is unbound.
+func (w *walker) desk() bool { return w.cols >= 60 && w.rows*2 < w.cols }
+
 func startWalk(t *testing.T, cols, rows int) *walker {
 	t.Helper()
 	inR, inW := io.Pipe()
@@ -191,7 +195,7 @@ func startWalk(t *testing.T, cols, rows int) *walker {
 var keyBytes = map[string]string{
 	"enter": "\r", "tab": "\t", "shift+tab": "\x1b[Z", "esc": "\x1b[27u", "space": " ", "backspace": "\x7f",
 	"up": "\x1b[A", "down": "\x1b[B", "right": "\x1b[C", "left": "\x1b[D", "pgup": "\x1b[5~", "pgdown": "\x1b[6~",
-	"ctrl+a": "\x01", "ctrl+c": "\x03", "ctrl+o": "\x0f", "alt+s": "\x1bs", "alt+n": "\x1bn",
+	"ctrl+a": "\x01", "ctrl+c": "\x03", "ctrl+o": "\x0f", "ctrl+q": "\x11", "alt+s": "\x1bs", "alt+n": "\x1bn",
 }
 
 func bytesOf(t *testing.T, key string) string {
@@ -258,7 +262,10 @@ func (w *walker) toView(name string) {
 		return
 	}
 	w.toTab("MACHINE")
-	w.press("esc") // from another view, back to Machine; on Machine it stays
+	onView := slices.ContainsFunc(viewWords, func(v struct{ name, word string }) bool { return w.onView(v.name) })
+	if !w.desk() || onView {
+		w.press("esc") // from another view, back to Machine; on Machine it stays, and on the desk's ⚙ sheet it would close it
+	}
 	w.press(slices.Repeat([]string{"k"}, 12)...)
 	w.press(slices.Repeat([]string{"j"}, at)...)
 	w.press("enter")
@@ -321,6 +328,16 @@ func (w *walker) tabIs(want string, d time.Duration) bool {
 // doors walk by it, so the Tab key stays covered end to end.
 func (w *walker) tabByKey(want string) {
 	w.t.Helper()
+	if open := tabOf(0, w.term.screen()); w.desk() && open != want { // the desk: , opens Machine, ctrl+q leaves it
+		if want == "MACHINE" {
+			w.toList()
+			w.press(",")
+		} else {
+			w.press("ctrl+q")
+		}
+		w.tabAfter(open)
+		return
+	}
 	to, n := slices.Index(tabWords, want), len(tabWords)
 	for i, open := 0, tabOf(0, w.term.screen()); open != want; i++ { // a fresh frame: a tap before may have turned it
 		if i == n {
@@ -352,7 +369,12 @@ func tabOf(_ int, frame string) string {
 			}
 		}
 		if strings.HasPrefix(strings.TrimLeft(lines[0], " "), "▰ matchblox") && strings.Contains(lines[1], "┬") {
-			return "SESSIONS" // the desk: no tab row, the head row's rule meets the edge
+			// The desk: no tab row, the head row's rule meets the edge, and
+			// the bar names Machine while its ⚙ sheet is open.
+			if bar := strings.Fields(lines[len(lines)-1]); len(bar) > 0 && bar[0] == "MACHINE" {
+				return "MACHINE"
+			}
+			return "SESSIONS"
 		}
 	}
 	return ""
