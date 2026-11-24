@@ -413,8 +413,8 @@ func (m Model) reviewDiffLine(file string, l proto.DiffLine) []string {
 		mark, numInk = st.accent.Render("▌"), st.accent
 	}
 	num := numInk.Render(fmt.Sprintf("%4d ", no))
+	var glyph string
 	var markInk, bodyInk lipgloss.Style
-	glyph := " "
 	switch l.Kind {
 	case "+":
 		glyph, markInk, bodyInk = "+", st.accent, st.text

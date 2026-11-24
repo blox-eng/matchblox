@@ -306,7 +306,6 @@ func diffPath(diffGitLine []byte) string {
 
 func parseHunkHeader(line []byte) (oldStart, oldCount, newStart, newCount int) {
 	// @@ -l,s +l,s @@
-	oldCount, newCount = 1, 1
 	s := string(line)
 	i := strings.Index(s, "-")
 	j := strings.Index(s, "+")

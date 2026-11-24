@@ -1056,7 +1056,7 @@ func seedUxPassGit(dir string) error {
 		cmd.Env = append(os.Environ(), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null")
 		out, err := cmd.CombinedOutput()
 		if err != nil {
-			return fmt.Errorf("git %s: %v\n%s", args[0], err, out)
+			return fmt.Errorf("git %s: %w\n%s", args[0], err, out)
 		}
 		return nil
 	}

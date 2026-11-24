@@ -125,14 +125,14 @@ type Session struct {
 	// Agents and Shells are the background work a session left running
 	// when its turn ended: the subagents Claude Code counted then, and the
 	// shells its Bash tool still runs.
-	Agents int       `json:"agents,omitempty"`
-	Parent *ProcRef  `json:"parent,omitempty"` // the process that started this one: set on children only
-	Via    string    `json:"via,omitempty"`    // process | env: how the link was proven
-	Shells []Shell   `json:"shells,omitempty"`
+	Agents int      `json:"agents,omitempty"`
+	Parent *ProcRef `json:"parent,omitempty"` // the process that started this one: set on children only
+	Via    string   `json:"via,omitempty"`    // process | env: how the link was proven
+	Shells []Shell  `json:"shells,omitempty"`
 	// OpenShell: a desk shell pane (@matchblox-shell) is open under this
 	// session; the row shows ▣.
-	OpenShell bool `json:"open_shell,omitempty"`
-	turnAt time.Time // the newest real turn of the transcript
+	OpenShell bool      `json:"open_shell,omitempty"`
+	turnAt    time.Time // the newest real turn of the transcript
 	// TurnEnded is when the transcript's newest turn ended; zero while it
 	// runs. The service reads it, it never leaves the host.
 	TurnEnded time.Time `json:"-"`

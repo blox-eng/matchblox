@@ -607,22 +607,22 @@ type Model struct {
 	sideTip                   int
 	sideHost                  string // the host whose trouble the host place shows
 	sideIn                    paneKey
-	seenActs                  map[string]bool // the ids of the seen: acts sent, until their answer
-	doneKept                  paneKey         // the done row the owner opened: it stays in DONE while it is the choice
-	agent                     agentRegion     // the desk's agent region: the chosen agent's real screen
-	over                      string          // the sheet open over the agent region: "keys", "review"; "" none
-	keyQ                      string          // the ? sheet's filter
-	keyAt                     int             // the ? sheet's chosen hit among the filter's rows
-	cogAt                     string          // the part the ⚙ sheet opened on ("cog:usage", "cog:loops:gpu-1"), until a key moves it
-	review                    *reviewSheet    // the D review sheet, while it is open
-	reviews                   reviewsState    // unsent comments per session, in reviews.json
+	seenActs                  map[string]bool        // the ids of the seen: acts sent, until their answer
+	doneKept                  paneKey                // the done row the owner opened: it stays in DONE while it is the choice
+	agent                     agentRegion            // the desk's agent region: the chosen agent's real screen
+	over                      string                 // the sheet open over the agent region: "keys", "review"; "" none
+	keyQ                      string                 // the ? sheet's filter
+	keyAt                     int                    // the ? sheet's chosen hit among the filter's rows
+	cogAt                     string                 // the part the ⚙ sheet opened on ("cog:usage", "cog:loops:gpu-1"), until a key moves it
+	review                    *reviewSheet           // the D review sheet, while it is open
+	reviews                   reviewsState           // unsent comments per session, in reviews.json
 	reviewHeld                map[paneKey]heldReview // a review waiting for a busy agent's turn to end
-	showing                   bool            // a choice is checked for the agent region
-	showNext                  *action         // the choice made while one ran: it runs next
-	besideShows               paneKey         // the session the agent region shows; zero when none
-	previewSeq                int             // the list's latest move: only its preview runs
-	viewed                    map[string]bool // the peers whose view the builder let run in this run: their rows preview
-	shells                    map[string]string // session name → desk shell pane id (@matchblox-shell)
+	showing                   bool                   // a choice is checked for the agent region
+	showNext                  *action                // the choice made while one ran: it runs next
+	besideShows               paneKey                // the session the agent region shows; zero when none
+	previewSeq                int                    // the list's latest move: only its preview runs
+	viewed                    map[string]bool        // the peers whose view the builder let run in this run: their rows preview
+	shells                    map[string]string      // session name → desk shell pane id (@matchblox-shell)
 }
 
 func New(opt Options) Model {
