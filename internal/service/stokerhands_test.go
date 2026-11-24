@@ -10,6 +10,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/holds"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
+	"github.com/blox-eng/matchblox/internal/ships"
 	"github.com/blox-eng/matchblox/internal/state"
 	"github.com/blox-eng/matchblox/internal/stoker"
 )
@@ -240,6 +241,29 @@ func TestStokerCannotLiftYourPark(t *testing.T) {
 		t.Fatalf("message to a park: %q", res.Err)
 	}
 	if len(*ran) != 0 {
+		t.Fatalf("ran %q", *ran)
+	}
+}
+
+// TestStokerCannotMerge: matchblox merge sends the ship act, which runs gh
+// in the service and not in a pane, so the pane guard never sees it. The
+// stoker is refused and runs no merge; the person's console still merges.
+func TestStokerCannotMerge(t *testing.T) {
+	s, ran := handsTest(t)
+	s.cur.Ships = &ships.Report{Ships: []ships.Ship{{Repo: "o/r", Number: 7, Kind: ships.WaitsForYou,
+		Merge: []string{"gh", "pr", "merge", "7", "--squash", "-R", "o/r"}}}}
+	a := fromStokerAct("ship:o/r#7", "")
+	a.Which = "secondary"
+	if res := s.act(t.Context(), a); res.Err != "the stoker does not merge: p is yours" {
+		t.Fatalf("stoker merge: %q", res.Err)
+	}
+	if len(*ran) != 0 {
+		t.Fatalf("ran %q", *ran)
+	}
+	if res := s.act(t.Context(), proto.Act{Console: true, RecID: "ship:o/r#7", Which: "secondary", Confirm: "y"}); res.Err != "" {
+		t.Fatalf("console merge: %q", res.Err)
+	}
+	if fmt.Sprint(*ran) != "[[gh pr merge 7 --squash -R o/r]]" {
 		t.Fatalf("ran %q", *ran)
 	}
 }

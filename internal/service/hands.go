@@ -106,6 +106,10 @@ func (s *Service) orderable(u *stokerUnit, a proto.Act) error {
 		// A rec, a ship or a worktree may reach past the chain.
 		return errors.New(chainOnly)
 	}
+	if strings.HasPrefix(a.RecID, "ship:") {
+		// The merge runs gh in the service, past the guard of the stoker's panes.
+		return errors.New("the stoker does not merge: p is yours")
+	}
 	m := u.store.Mode()
 	if counts && !m.On {
 		return errors.New("the stoker is off: no run")
