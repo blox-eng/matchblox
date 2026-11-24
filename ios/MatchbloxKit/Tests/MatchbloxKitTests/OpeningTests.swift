@@ -17,6 +17,10 @@ final class OpeningTests: XCTestCase {
         XCTAssertEqual(Opening.first(hosts: []), .hosts)
     }
 
+    func testBackToConsole() {
+        XCTAssertEqual(Opening.backToConsole(host: host("ws-1")), .console(host("ws-1"), open: nil))
+    }
+
     func testConsoleOffersHostsForASingleHostToo() {
         // A single host used to have no way to be removed: the console offered
         // the Hosts screen (where a swipe removes one) only with two or more.

@@ -144,7 +144,6 @@ struct MatchbloxApp: App {
                                 go(.hosts)
                             }
                             : nil,
-                        onIsland: { go(.island) },
                         onScanAgain: { go(.scan) }
                     )
                     .id("\(host.fingerprint)#\(linkOpens)")
@@ -161,7 +160,7 @@ struct MatchbloxApp: App {
                         onBack: {
                             if let host = homeBack {
                                 homeBack = nil
-                                go(.console(host, open: nil))
+                                go(Opening.backToConsole(host: host))
                             }
                         },
                         onPair: { go(.scan) },
@@ -179,7 +178,7 @@ struct MatchbloxApp: App {
                     )
                 case .island:
                     IslandView(store: store, onBack: {
-                        go(homeBack.map { .console($0, open: nil) } ?? Opening.first(hosts: store.all()))
+                        go(homeBack.map { Opening.backToConsole(host: $0) } ?? Opening.first(hosts: store.all()))
                     })
                 }
             }

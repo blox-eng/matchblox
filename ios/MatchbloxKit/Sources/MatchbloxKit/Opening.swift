@@ -25,6 +25,11 @@ public enum Opening {
     /// unpaired from the app: it opened straight into its console with no list to swipe.
     public static func consoleOffersHosts(hostCount: Int) -> Bool { hostCount >= 1 }
 
+    /// From home, `‹ host` returns to that host's live console (no reopen session).
+    public static func backToConsole(host: Host) -> Route {
+        .console(host, open: nil)
+    }
+
     /// The texts for a host that was paired before. Pairing.message keeps the texts for the pairing itself.
     public static func message(for failure: ConnectFailure, host: String) -> String {
         switch failure {

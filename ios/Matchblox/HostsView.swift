@@ -20,6 +20,10 @@ struct HostsView: View {
     @State private var pendingRemove: Host?
     @State private var textSize = TextSize.load(from: .standard)
     @State private var prefs = IslandSettings.prefs
+    /// First-run mark play start; nil after it finishes or when skipped.
+    @State private var firstRunPlayStart: Date?
+    @State private var flags = HomeFlags()
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let sight = HostSight()
 
     private var realHosts: [Host] { hosts.filter { !$0.isDemo } }
@@ -35,6 +39,13 @@ struct HostsView: View {
                     }
                     .foregroundStyle(Theme.accent)
                     .accessibilityLabel(HomeCopy.voiceOverBack(label: backHost.label))
+                }
+
+                if let start = firstRunPlayStart {
+                    MatchBox(pose: .open(start))
+                        .frame(maxWidth: 160)
+                        .accessibilityHidden(true)
+                        .task(id: start) { await finishFirstRunPlay(from: start) }
                 }
 
                 Text("▰ matchblox")
@@ -111,8 +122,33 @@ struct HostsView: View {
             hosts = store.all()
             prefs = IslandSettings.prefs
             textSize = TextSize.load(from: .standard)
+            maybeStartFirstRunPlay()
         }
         .onChange(of: textSize) { _, size in size.save(to: .standard) }
+    }
+
+    /// Spec 3.1 / 6.2: play MatchBox open once on empty home; skip under Reduce Motion; always mark.
+    private func maybeStartFirstRunPlay() {
+        guard hosts.isEmpty, flags.shouldPlayFirstRun else { return }
+        if reduceMotion {
+            flags.markFirstRunPlayPlayed()
+            return
+        }
+        firstRunPlayStart = Date()
+    }
+
+    private func finishFirstRunPlay(from start: Date) async {
+        let clock = ContinuousClock()
+        let origin = clock.now
+        let hold: Duration = .seconds(0.4)
+        do {
+            try await clock.sleep(until: origin + .seconds(MatchBox.stoodAt) + hold)
+        } catch {
+            return
+        }
+        guard firstRunPlayStart == start else { return }
+        firstRunPlayStart = nil
+        flags.markFirstRunPlayPlayed()
     }
 
     @ViewBuilder

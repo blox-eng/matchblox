@@ -22,7 +22,6 @@ extension SSHSession: ConsoleSource {}
 struct ConsoleView: View {
     let host: Host
     let onHosts: (() -> Void)?
-    let onIsland: () -> Void
     let onScanAgain: () -> Void
 
     @State private var connection: ConsoleConnection
@@ -33,12 +32,10 @@ struct ConsoleView: View {
         open: Int? = nil,
         onFailure: @escaping (ConnectFailure) -> Void,
         onHosts: (() -> Void)?,
-        onIsland: @escaping () -> Void,
         onScanAgain: @escaping () -> Void
     ) {
         self.host = host
         self.onHosts = onHosts
-        self.onIsland = onIsland
         self.onScanAgain = onScanAgain
         _connection = State(initialValue: ConsoleConnection(host: host, open: open, onFailure: onFailure))
     }
@@ -138,16 +135,13 @@ struct ConsoleView: View {
         hostsButton
     }
 
-    /// Hosts (whenever a host is paired, so the only one can be removed too) and Island
-    /// (for a real host), beside the console's actions.
+    /// Hosts (whenever a host is paired, so the only one can be removed too).
+    /// Live Activity entry is on home only (design review 1.2).
+    @ViewBuilder
     private var hostsButton: some View {
-        HStack(spacing: 24) {
-            if let onHosts {
-                Button("Hosts", action: onHosts)
-                    .foregroundStyle(Theme.muted)
-            }
-            // Live Activity entry is on home only (design review 1.2 / Task 6).
-            _ = onIsland
+        if let onHosts {
+            Button("Hosts", action: onHosts)
+                .foregroundStyle(Theme.muted)
         }
     }
 }
