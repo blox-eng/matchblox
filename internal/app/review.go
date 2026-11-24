@@ -2,6 +2,8 @@ package app
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -15,7 +17,7 @@ import (
 )
 
 // The D review sheet: the session's diff floats over the agent; comments
-// collect in reviews.json until Task 15 sends them.
+// collect in reviews.json until one send pastes them to the agent.
 
 // reviewSheet is the open review: the session it opened on, the diff, and
 // the line the owner is on.
@@ -122,9 +124,141 @@ func (m Model) reviewKey(k tea.KeyPressMsg) (Model, tea.Cmd) {
 		r.typing = true
 		r.draft = m.reviewDraftOf(r.key, file, r.at)
 	case bkey.Matches(k, m.keys.main.Open):
-		// Task 15 sends; Task 14 only shows the foot.
+		return m.sendReview()
 	}
 	return m, nil
+}
+
+// heldReview is a review that waits for a busy agent that takes no typed
+// input while it works: the paste text, and enough to clear ✎ when it goes.
+type heldReview struct {
+	text, name, key string
+	n               int
+}
+
+// sendReview pastes every unsent comment to the sheet's session as one
+// message. The pane is the one the sheet opened on, not the list's choice.
+func (m Model) sendReview() (Model, tea.Cmd) {
+	r := m.review
+	if r == nil {
+		return m, nil
+	}
+	cs := m.reviews.Comments[r.key]
+	if len(cs) == 0 {
+		return m, nil
+	}
+	text := reviewPasteText(m.reviewMessage(cs))
+	if len(text) > proto.MaxPaste {
+		kb := (len(text) + 1023) / 1024
+		return m, m.notice(fmt.Sprintf(
+			"not sent: the review is too long (%d KB, %d KB at most). Send fewer comments at once.",
+			kb, proto.MaxPaste/1024))
+	}
+	s, ok := m.sessionAt(r.host, r.pane)
+	name, key, n, pane, host := r.name, r.key, len(cs), r.pane, r.host
+	if ok {
+		name = m.cardName(s)
+	}
+	m = m.closeReview()
+	if ok && m.lineWaits(s) {
+		m.reviewHeld = maps.Clone(m.reviewHeld)
+		if m.reviewHeld == nil {
+			m.reviewHeld = map[paneKey]heldReview{}
+		}
+		m.reviewHeld[paneOf(s)] = heldReview{text: text, name: name, key: key, n: n}
+		return m, m.notice("queued for " + name + " · sends at the end of its turn")
+	}
+	cmd := m.sendReviewPaste(host, pane, text)
+	m.setReviewComments(key, nil)
+	busy := ok && m.sideStateOf(s) == sideWork
+	if busy {
+		return m, tea.Batch(cmd, m.notice("queued for "+name+" · sends at the end of its turn"))
+	}
+	return m, tea.Batch(cmd, m.notice(fmt.Sprintf("sent a review of %d comments to %s · now in WORKING", n, name)))
+}
+
+// sendReviewPaste is one paste: of the review to pane on host.
+func (m *Model) sendReviewPaste(host, pane, text string) tea.Cmd {
+	_, cmd := m.sendToID(host, proto.Act{
+		RecID: proto.PastePrefix + pane, Text: text, Confirm: "y", Console: true,
+	})
+	return cmd
+}
+
+// releaseHeldReviews sends each held review whose session no longer waits,
+// as heldRelease does for a typed line. A session that is gone drops the
+// hold and keeps the comments unsent.
+func (m Model) releaseHeldReviews() (Model, tea.Cmd) {
+	if len(m.reviewHeld) == 0 {
+		return m, nil
+	}
+	var cmds []tea.Cmd
+	for k, h := range m.reviewHeld {
+		i := slices.IndexFunc(m.all.sessions, func(s sample.Session) bool { return paneOf(s) == k })
+		if i >= 0 && m.lineWaits(m.all.sessions[i]) {
+			continue
+		}
+		m.reviewHeld = maps.Clone(m.reviewHeld)
+		delete(m.reviewHeld, k)
+		if i < 0 {
+			continue // comments stay; the agent is gone
+		}
+		s := m.all.sessions[i]
+		cmds = append(cmds, m.sendReviewPaste(s.Host, s.Pane, h.text))
+		m.setReviewComments(h.key, nil)
+		cmds = append(cmds, m.notice(fmt.Sprintf("sent a review of %d comments to %s · now in WORKING", h.n, h.name)))
+	}
+	return m, tea.Batch(cmds...)
+}
+
+// reviewMessage is the paste body: each comment with its file:line, the
+// diff line it sits on, and the note.
+func (m Model) reviewMessage(cs []reviewComment) string {
+	var b strings.Builder
+	for i, c := range cs {
+		if i > 0 {
+			b.WriteByte('\n')
+		}
+		fmt.Fprintf(&b, "%s:%d\n", c.File, c.Line)
+		if line := m.reviewLineText(c.File, c.Line); line != "" {
+			b.WriteString(line)
+			b.WriteByte('\n')
+		}
+		b.WriteString(c.Text)
+		b.WriteByte('\n')
+	}
+	return b.String()
+}
+
+func (m Model) reviewLineText(file string, line int) string {
+	r := m.review
+	if r == nil {
+		return ""
+	}
+	for _, f := range r.files {
+		if f.Path != file {
+			continue
+		}
+		for _, h := range f.Hunks {
+			for _, l := range h.Lines {
+				if reviewLineNo(l) == line {
+					return l.Text
+				}
+			}
+		}
+	}
+	return ""
+}
+
+// reviewPasteText is pasteText's rule: drop every control but \n and \t so
+// a hostile comment or diff line never reaches the agent's tools.
+func reviewPasteText(text string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) && r != '\n' && r != '\t' {
+			return -1
+		}
+		return r
+	}, strings.ToValidUTF8(text, ""))
 }
 
 func firstFileLine(f proto.DiffFile) int {

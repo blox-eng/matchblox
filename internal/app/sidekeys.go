@@ -902,7 +902,8 @@ func (m Model) heldRelease() (Model, tea.Cmd) {
 			m.lineNote = lineNote{}
 		}
 	}
-	return m, tea.Batch(cmds...)
+	m, heldReviews := m.releaseHeldReviews()
+	return m, tea.Batch(append(cmds, heldReviews)...)
 }
 
 // lineResult is the service's answer to a message of the line: a refusal

@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/x/ansi"
 	vt "github.com/charmbracelet/x/vt"
@@ -311,4 +312,189 @@ func reviewRowOf(m Model, name string) string {
 		}
 	}
 	return ""
+}
+
+// TestAHostileReviewIsStripped: control bytes in a comment and a diff line
+// leave the paste with those bytes gone (pasteText's rule). A review over
+// MaxPaste is refused; the comments stay.
+func TestAHostileReviewIsStripped(t *testing.T) {
+	m := reviewDesk(t)
+	diff := &proto.Diff{
+		Against: "main",
+		Files: []proto.DiffFile{{
+			Path: "hostile.go", Added: 1,
+			Hunks: []proto.DiffHunk{{
+				NewStart: 1, NewCount: 1,
+				Lines: []proto.DiffLine{{Kind: "+", Text: "\x1b]52;c;cHduZWQ=\x07 ok", New: 1}},
+			}},
+		}},
+	}
+	m = openReviewWith(t, m, diff, "")
+	m.setReviewComments(m.review.key, []reviewComment{{
+		File: "hostile.go", Line: 1, Text: "clear\x1b[2J\x00\x9bit",
+	}})
+	m = pressOn(m, "enter")
+	acts := messageActs(boardFake(m))
+	if len(acts) != 1 || !strings.HasPrefix(acts[0].RecID, proto.PastePrefix) {
+		t.Fatalf("sent %+v, want one paste:", acts)
+	}
+	text := acts[0].Text
+	for _, bad := range []string{"\x1b", "\x00", "\x9b"} {
+		if strings.Contains(text, bad) {
+			t.Fatalf("paste still holds %q: %q", bad, text)
+		}
+	}
+	if !strings.Contains(text, "ok") || !strings.Contains(text, "clear") || !strings.Contains(text, "it") {
+		t.Fatalf("paste lost the safe text: %q", text)
+	}
+
+	m = reviewDesk(t)
+	m = openReviewWith(t, m, reviewCommentDiff(), "")
+	// Pad so the paste body is just over 17 KB and rounds to 18 KB.
+	overhead := len(reviewPasteText(m.reviewMessage([]reviewComment{{File: "frame.go", Line: 41, Text: ""}})))
+	long := strings.Repeat("x", 18*1024-overhead)
+	m.setReviewComments(m.review.key, []reviewComment{{File: "frame.go", Line: 41, Text: long}})
+	before := len(messageActs(boardFake(m)))
+	m = pressOn(m, "enter")
+	if got := messageActs(boardFake(m)); len(got) != before {
+		t.Fatalf("an over-long review sent %+v", got[before:])
+	}
+	want := "not sent: the review is too long (18 KB, 16 KB at most). Send fewer comments at once."
+	if m.noticeText != want {
+		t.Fatalf("notice %q, want %q", m.noticeText, want)
+	}
+	if n := len(m.reviews.Comments[m.review.key]); n != 1 {
+		t.Fatalf("comments cleared (%d); want them kept", n)
+	}
+	if m.over != "review" {
+		t.Fatalf("over %q, want the review still open", m.over)
+	}
+}
+
+// TestSendGivesOneMessage: two comments become one paste:; the notice names
+// both, and the unsent store is empty.
+func TestSendGivesOneMessage(t *testing.T) {
+	m := reviewDesk(t)
+	diff := &proto.Diff{
+		Against: "main",
+		Files: []proto.DiffFile{
+			{Path: "internal/app/footer.go", Added: 1, Hunks: []proto.DiffHunk{{
+				NewStart: 41, NewCount: 1,
+				Lines: []proto.DiffLine{{Kind: "+", Text: "    return foot", New: 41}},
+			}}},
+			{Path: "internal/app/view.go", Added: 1, Hunks: []proto.DiffHunk{{
+				NewStart: 12, NewCount: 1,
+				Lines: []proto.DiffLine{{Kind: "+", Text: "package app", New: 12}},
+			}}},
+		},
+	}
+	m = openReviewWith(t, m, diff, "")
+	m.setReviewComments(m.review.key, []reviewComment{
+		{File: "internal/app/footer.go", Line: 41, Text: "fold at width"},
+		{File: "internal/app/view.go", Line: 12, Text: "keep the package line"},
+	})
+	m = pressOn(m, "enter")
+	acts := messageActs(boardFake(m))
+	if len(acts) != 1 || acts[0].RecID != proto.PastePrefix+"%ux-pass" || acts[0].Confirm != "y" {
+		t.Fatalf("sent %+v", acts)
+	}
+	text := acts[0].Text
+	for _, want := range []string{
+		"internal/app/footer.go:41",
+		"    return foot",
+		"fold at width",
+		"internal/app/view.go:12",
+		"package app",
+		"keep the package line",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("paste missing %q:\n%s", want, text)
+		}
+	}
+	wantNotice := "sent a review of 2 comments to ux-pass · now in WORKING"
+	if m.noticeText != wantNotice {
+		t.Fatalf("notice %q, want %q", m.noticeText, wantNotice)
+	}
+	if m.over == "review" || m.review != nil {
+		t.Fatalf("the review stayed open")
+	}
+	s, _ := m.sideChosen()
+	if n := len(m.reviewsOf(s)); n != 0 {
+		t.Fatalf("unsent store has %d comments", n)
+	}
+}
+
+// TestABusyAgentGetsItAtTheEndOfItsTurn: OpenCode that works holds the
+// review; the notice queues it; ✎ stays until the turn ends and the paste goes.
+func TestABusyAgentGetsItAtTheEndOfItsTurn(t *testing.T) {
+	dir := t.TempDir()
+	ux := workingAs("ux-pass", "opencode")
+	ux.Cwd = "/dev/matchblox"
+	m := withAgent(t, deskWith(t, 160, 40, true, boardState(ux), boardState()), agentRows(36), false)
+	m.opt.StateDir = dir
+	m.reviews = loadReviews(dir)
+	m = chooseNamed(t, m, "ux-pass")
+	if m.sideStateOf(m.all.sessions[0]) != sideWork {
+		t.Fatalf("ux-pass does not work: %v", m.sideStateOf(m.all.sessions[0]))
+	}
+	m = openReviewWith(t, m, reviewCommentDiff(), "")
+	m.setReviewComments(m.review.key, []reviewComment{{File: "frame.go", Line: 41, Text: "fold at width"}})
+	m = pressOn(m, "enter")
+	if got := messageActs(boardFake(m)); len(got) != 0 {
+		t.Fatalf("sent to a busy agent: %+v", got)
+	}
+	want := "queued for ux-pass · sends at the end of its turn"
+	if m.noticeText != want {
+		t.Fatalf("notice %q, want %q", m.noticeText, want)
+	}
+	if strings.Contains(m.noticeText, "now in WORKING") {
+		t.Fatalf("busy notice said now in WORKING: %q", m.noticeText)
+	}
+	s, _ := m.sideChosen()
+	if n := len(m.reviewsOf(s)); n != 1 {
+		t.Fatalf("✎ cleared early: %d comments", n)
+	}
+	if row := reviewRowOf(m, "ux-pass"); !strings.Contains(ansi.Strip(row), "✎") {
+		t.Fatalf("the row lost ✎:\n%s", row)
+	}
+
+	idle := boardMatch("ux-pass", time.Hour)
+	idle.Cwd = "/dev/matchblox"
+	next, cmd := m.Update(stateMsg(boardState(idle)))
+	drain(cmd)
+	m = next.(Model)
+	acts := messageActs(boardFake(m))
+	if len(acts) != 1 || acts[0].RecID != proto.PastePrefix+"%ux-pass" || !strings.Contains(acts[0].Text, "fold at width") {
+		t.Fatalf("after the turn: %+v", acts)
+	}
+	if n := len(m.reviewsOf(idle)); n != 0 {
+		t.Fatalf("comments left after send: %d", n)
+	}
+}
+
+// TestTheReviewGoesToItsSession: the sheet of ux-pass sends to ux-pass
+// even when the list's choice has moved to scout.
+func TestTheReviewGoesToItsSession(t *testing.T) {
+	dir := t.TempDir()
+	ux := doneMatch("ux-pass", 2*time.Minute)
+	ux.Cwd = "/dev/matchblox"
+	scout := boardMatch("scout", time.Hour)
+	scout.Cwd = "/dev/matchblox"
+	m := withAgent(t, deskWith(t, 160, 40, true, boardState(ux, scout), boardState()), agentRows(36), false)
+	m.opt.StateDir = dir
+	m.reviews = loadReviews(dir)
+	m = chooseNamed(t, m, "ux-pass")
+	m = openReviewWith(t, m, reviewCommentDiff(), "")
+	m.setReviewComments(m.review.key, []reviewComment{{File: "frame.go", Line: 41, Text: "fold at width"}})
+	m = chooseNamed(t, m, "scout")
+	m = pressOn(m, "enter")
+	acts := messageActs(boardFake(m))
+	if len(acts) != 1 || acts[0].RecID != proto.PastePrefix+"%ux-pass" {
+		t.Fatalf("sent %+v, want paste:%%ux-pass only", acts)
+	}
+	for _, a := range boardFake(m).acts() {
+		if strings.HasPrefix(a.RecID, proto.PastePrefix) && strings.Contains(a.RecID, "scout") {
+			t.Fatalf("a paste reached scout: %+v", a)
+		}
+	}
 }
