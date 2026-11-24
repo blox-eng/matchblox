@@ -45,7 +45,7 @@ struct ConsoleView: View {
 
     var body: some View {
         ZStack {
-            TerminalRepresentable(connection: connection)
+            TerminalRepresentable(connection: connection, onHosts: onHosts)
             if connection.phase != .live {
                 cover
             }
@@ -158,6 +158,7 @@ struct ConsoleView: View {
 /// view has the keyboard, so a second belt stays under the terminal while the keyboard is down.
 private struct TerminalRepresentable: UIViewRepresentable {
     let connection: ConsoleConnection
+    var onHosts: (() -> Void)?
 
     func makeUIView(context: Context) -> UIStackView {
         let terminal = ConsoleTerminalView(textSize: TextSize.load(from: .standard))
@@ -182,6 +183,7 @@ private struct TerminalRepresentable: UIViewRepresentable {
         let screen = HeldScreen(terminal: terminal)
         screen.backgroundColor = bg
         let belts = Belts(terminal: terminal, screen: screen, isDemo: connection.isDemo)
+        belts.onHosts = onHosts
         terminal.inputAccessoryView = belts.lifted
         terminal.tapRaisesKeyboard = !connection.isDemo
         terminal.onFocus = { [weak belts] focused in belts?.focusChanged(focused) }
@@ -395,6 +397,8 @@ private final class Belts {
     private var board = BoardFollow()
     /// Sends the app's answer to the console's board (`BoardBelt.answer`).
     var onAnswer: @MainActor () -> Void = {}
+    /// Opens Pocket home from the `BOX` stamp.
+    var onHosts: (() -> Void)?
 
     init(terminal: ConsoleTerminalView, screen: HeldScreen, isDemo: Bool) {
         self.terminal = terminal
@@ -415,6 +419,7 @@ private final class Belts {
             }
             belt.onLayout = { [weak self] layout in self?.layoutPicked(layout) }
             belt.onEditMine = { [weak self] in self?.editMine() }
+            belt.onBox = { [weak self] in self?.onHosts?() }
         }
         terminal.onTyped = { [weak self] in
             self?.lifted.stopHead()
@@ -851,6 +856,13 @@ final class ConsoleConnection {
         terminal?.getTerminal().resetToInitialState()
         terminal?.forgetScrollBack()
         phase = .live
+        var sight = HostSight()
+        sight.markSeen(host.fingerprint)
+        // Teach BOX once after the first console land (pair or demo).
+        // Belts are on the terminal accessory; fire both so the visible one teaches.
+        if let accessory = terminal?.inputAccessoryView as? BeltView {
+            accessory.teachBoxIfNeeded()
+        }
         let opened = openSession != nil
         openSession = nil
         let now = terminalSize

@@ -131,6 +131,8 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
     /// The builder picked a layout in the tray.
     var onLayout: (BeltLayout) -> Void = { _ in }
     var onEditMine: () -> Void = {}
+    /// The `BOX` stamp: open Pocket home.
+    var onBox: () -> Void = {}
     /// The demo leaves the person's belt as it was: no Mine editor, and a pick is not saved.
     var isDemo = false {
         didSet { trayModel.mineEditable = !isDemo }
@@ -219,6 +221,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
         backgroundColor = BeltLook.sleeve
         model.onPick = { [weak self] picked in self?.picked(picked) }
         model.onEdit = { [weak self] in self?.editMine() }
+        model.onBox = { [weak self] in self?.boxTapped() }
         buildHandle()
         buildDrawer()
         buildBelt()
@@ -988,6 +991,28 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
     private func editMine() {
         setTray(open: false)
         onEditMine()
+    }
+
+    private func boxTapped() {
+        setTray(open: false)
+        onBox()
+    }
+
+    /// One-time teach: open the tray, accent `BOX`, settle. Skips motion when Reduce Motion is on
+    /// (flag still set). Drawer open uses the existing animators (~380 ms grow path).
+    func teachBoxIfNeeded() {
+        var flags = HomeFlags()
+        guard flags.shouldTeachBox else { return }
+        flags.markBoxTaught()
+        if UIAccessibility.isReduceMotionEnabled { return }
+        setTray(open: true)
+        trayModel.boxAccent = true
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(0.9))
+            guard let self else { return }
+            self.trayModel.boxAccent = false
+            self.setTray(open: false)
+        }
     }
 
     /// The editor closed. Done shows Mine; a Mine on the belt runs to its new keys.
