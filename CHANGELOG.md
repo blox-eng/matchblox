@@ -6,6 +6,14 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Machine names matchblox’s own footprint.** The Machine block shows the
+  serve process RSS, and on this host the local console RSS beside it.
+- **README defends the light wedge.** One category line (tmux control plane,
+  not another IDE) and a measured footprint footnote from
+  `scripts/measure-footprint.sh`.
+
 ## [0.58.1] - 2026-11-23
 
 ### Fixed
