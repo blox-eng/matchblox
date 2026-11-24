@@ -882,6 +882,8 @@ func handOutcome(w io.Writer, cmd, who string, res proto.Result, err error) erro
 	switch {
 	case errors.Is(err, errNoResult) && cmd == "send":
 		return fmt.Errorf("%s: not known whether %s: peek %s before you send again", name, done, who)
+	case errors.Is(err, errNoResult) && cmd == "merge":
+		return fmt.Errorf("%s: not known whether it merged: matchblox ships shows it", name)
 	case errors.Is(err, errNoResult):
 		return fmt.Errorf("%s: not known whether %s: peek %s before you try again", name, done, who)
 	case err != nil && cmd == "send":

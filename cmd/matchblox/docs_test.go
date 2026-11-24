@@ -42,6 +42,7 @@ var commandFlags = map[string][]string{
 	"new":      {"where", "agent", "branch", "name", "account", "new-account", "setup"},
 	"rename":   {},
 	"kill":     {"anyway"},
+	"merge":    {},
 	"switch":   {"agent", "extra", "handoff", "anyway", "preview"},
 	"recover":  {"all", "dir", "json"},
 	"chain":    {"json", "off", "on"},
