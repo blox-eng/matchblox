@@ -94,6 +94,7 @@ td:first-child{white-space:nowrap;color:var(--muted)}
     <button id="st-review" data-st="review">8 · Review ux-pass</button>
     <button id="st-sent" data-st="sent">9 · Review sent</button>
     <button id="st-agent" data-st="agent">10 · Keys in the agent</button>
+    <button id="st-confirm" data-st="confirm">11 · A prompt waits</button>
   </div>
   <div class="frame"><div class="term" id="term" tabindex="0" aria-label="The desk, a mockup of the console at 160 by 40 cells"></div></div>
   <div class="notes" id="notes"></div>
@@ -201,6 +202,7 @@ function head(){
 
 /* the bar pane */
 function bar(){
+  if(M.confirm){const L=[g(" "),g("CONFIRM","ac b"),g("   "),g("kill "+M.confirm+"?","fg"),g("   "),g("y","fg"),g(" kill","mu"),g(" · ","fa"),g("esc","fg"),g(" keep","mu")];return lr(L,[T(g("?","fg"),"keys"),T(g(" keys","mu"),"keys"),g(" ")],W);}
   const md=mode();
   const L=[g(" "),g(md,md==="LIST"?"mu":"ac b"),g("   ")];
   L.push(T(g("ws-1","mu"),"cog:health"),g(" cpu ","fa"),g("34%","mu"),g(" mem ","fa"),g("61%","mu"),g("   "));
@@ -396,6 +398,7 @@ const NOTES={
   keys:[["? keys","One popup is the help and the command palette. Type <code>shell</code>, then <code>⏎</code>. Groups are faint like the list's heads; keys are <code>fg</code> and labels <code>muted</code>, like today's key line."]],
   shell:[["A shell under the agent","A tmux pane in the agent's own window, in its worktree. Its top edge carries its title. <code>t</code> gives it the keys: its edge and the divider turn accent, and the bar says <code>SHELL</code> and <code>ctrl+q list</code>."]],
   review:[["Review ux-pass","<code>D</code> opens the diff in a popup. <code>c</code> on a line writes a comment. Comments collect. Try it: click the screen, <code>↓</code>, <code>c</code>, type, <code>⏎</code>, <code>⏎</code>."]],
+  confirm:[["A prompt waits","While a prompt waits for a key, the bar gives way: the mode word stays first, then the prompt and its keys. The chips come back once it is answered (owner, 2026-11-24)."]],
   agent:[["Keys in the agent","Click either pane to give it the keys, as tmux's mouse does. The half of the edge on the active side takes the accent, as today: the top half for the list, the bottom half for the agent. The bar's mode flips between <code>LIST</code> and <code>AGENT</code>."],["The half edge","matchblox draws it now, the way tmux draws it today: the top half of the edge for the list, the bottom half for the agent. It no longer depends on how many panes tmux has."]],
   sent:[["Review sent","One message reaches the agent, each comment with its <code>file:line</code>. The list's foot says so for 2.5 s, and ux-pass moves to WORKING."]],
 };
@@ -410,6 +413,7 @@ function setState(st){
   if(st==="shell"){M.sel="ux-pass";ux().st="idle";ux().t=0;M.shell["ux-pass"]="focus";}
   if(st==="review"){M.sel="ux-pass";ux().st="idle";ux().t=0;M.review={at:41,comments:[{line:41,text:"fold at width, not at a count: 3 hosts fit at 200 columns"}],typing:false,draft:""};}
   if(st==="agent"){M.agentKeys=true;seen();}
+  if(st==="confirm"){M.confirm="flint-auth";}
   if(st==="sent"){M.sel="ux-pass";ux().st="work";ux().t=0;M.notice="sent a review of 2 comments to ux-pass";}
   render();
 }

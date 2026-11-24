@@ -1,7 +1,7 @@
 # A builder at a desk sees which repo needs them, what finished, and what the machine does, and reviews an agent's change without leaving the console
 
 Builds on the sidebar console (#411, spec `2026-11-14-sidebar-console-design.md`). Where the two differ on a desk, this spec wins. The phone keeps the sidebar console as it is.
-Mockup: the owner's artifact "The desk" (https://claude.ai/artifact/HyUo7zCYT3wFpaXXgtteBu, version 10 (v9 approved 2026-11-23; v10 adds design review D3–D5), drawn cell by cell from the replay's glyphs and inks; approved by the owner on 2026-11-23). A copy goes to `design/0022-the-desk.html` when the spec is approved. Where this spec and the mockup differ, this spec wins.
+Mockup: the owner's artifact "The desk" (https://claude.ai/artifact/2DonTkiHhk5uPQMVYyssu5, version 10 (v9 approved 2026-11-23; v10 adds design review D3–D5), drawn cell by cell from the replay's glyphs and inks; approved by the owner on 2026-11-23). A copy goes to `design/0022-the-desk.html` when the spec is approved. Where this spec and the mockup differ, this spec wins.
 
 ## Who, and the moment
 
