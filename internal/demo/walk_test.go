@@ -266,13 +266,24 @@ func (w *walker) toView(name string) {
 	if !w.desk() || onView {
 		w.press("esc") // from another view, back to Machine; on Machine it stays, and on the desk's ⚙ sheet it would close it
 	}
-	w.press(slices.Repeat([]string{"k"}, 12)...)
-	w.press(slices.Repeat([]string{"j"}, at)...)
+	// Wait for Machine's own rows before moving: under -race a burst of
+	// k/j/⏎ can hit the list and never open the view (CI, 2026-11-24).
+	eventually(w.t, 10*time.Second, "Machine's rows", func() bool {
+		s := w.term.screen()
+		return tabOf(0, s) == "MACHINE" && (strings.Contains(strings.ToLower(s), "stoker") || strings.Contains(s, "USAGE") || strings.Contains(s, "⚙"))
+	})
+	for range 12 {
+		w.press("k")
+		time.Sleep(5 * time.Millisecond)
+	}
+	for range at {
+		w.press("j")
+		time.Sleep(5 * time.Millisecond)
+	}
 	w.press("enter")
 	// One repaint at a time, each waited for: a repaint every poll starts a
-	// new whole frame before the last one is read. Under -race the sheet's
-	// view can take tens of seconds to land (CI Demo race, 2026-11-24).
-	eventually(w.t, 45*time.Second, "the "+name+" view to open", func() bool { return viewIn(name, w.term.screen()) })
+	// new whole frame before the last one is read.
+	eventually(w.t, 30*time.Second, "the "+name+" view to open", func() bool { return viewIn(name, w.term.screen()) })
 }
 
 // toTab opens the tab want names: a tap on its name on the tab row, as a
@@ -1057,7 +1068,29 @@ func (w *walker) opens(what, want, key string) {
 // the list's keys type.
 func (w *walker) toList() {
 	w.t.Helper()
-	if s := w.term.screen(); strings.Contains(s, "writing to ") || strings.Contains(s, "\n AGENT ") { // the phone's key line; the desk's bar
+	s := w.term.screen()
+	if !w.desk() {
+		if strings.Contains(s, "writing to ") || strings.Contains(s, "\n AGENT ") { // the phone's key line
+			w.press("esc")
+			time.Sleep(100 * time.Millisecond)
+		}
+		return
+	}
+	// Desk: `,` opens Machine only while the list has the keys. The bar's
+	// mode word is LIST then; AGENT/SHELL/REVIEW need ctrl+q (or esc) first,
+	// or `,` types into the agent and Tab-from-SESSIONS hangs (CI -race).
+	lines := strings.Split(s, "\n")
+	if len(lines) == 0 {
+		return
+	}
+	bar := strings.Fields(lines[len(lines)-1])
+	if len(bar) == 0 || bar[0] == "LIST" || bar[0] == "MACHINE" {
+		return
+	}
+	w.press("ctrl+q")
+	time.Sleep(100 * time.Millisecond)
+	lines = strings.Split(w.term.screen(), "\n")
+	if bar = strings.Fields(lines[len(lines)-1]); len(bar) > 0 && bar[0] != "LIST" && bar[0] != "MACHINE" {
 		w.press("esc")
 		time.Sleep(100 * time.Millisecond)
 	}
