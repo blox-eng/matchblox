@@ -12,7 +12,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-black.svg)](LICENSE)
 
 <p>
-<img src="www/demo/replay-desk.svg" width="74%" alt="The matchblox console on a desk, on a demo machine: the list of every match beside the chat of the chosen one. A tap opens the chat of flint-auth, a digit marks an answer from the agent's own options, the same digit sends it, and flint-auth moves into WORKING. g opens the room of the chain login">
+<img src="www/demo/replay-desk.svg" width="74%" alt="The matchblox desk on a demo machine: spaces in the head, NEEDS YOU and DONE in the list beside the agent's screen, and the bar with ? keys, t shell and D review. A digit marks an answer, the same digit sends it, and flint-auth moves into WORKING. g opens the room of the chain login">
 <img src="www/demo/replay-phone.svg" width="24%" alt="The same console on a phone: the list first, a tap opens a chat, and the back mark goes back to the list. An answer marked and sent from the chat, and the room of one chain">
 </p>
 
@@ -74,10 +74,11 @@ session needs you, and answer from anywhere. In beta on TestFlight.
 
 3. In another terminal, start your agents in tmux, for example
    `tmux new -s app claude`. When an
-   agent needs you, it goes into `NEEDS YOU`, and its chat shows what it
-   asks. In tmux, the agent's own pane shows beside the list: type in it,
-   and `ctrl+q` flips the keys between the list and the agent. `Ctrl+O`
-   jumps fully into the pane, and `prefix m` comes back.
+   agent needs you, it goes into `NEEDS YOU`, and its screen sits beside
+   the list on the desk. Type into it; `ctrl+q` flips the keys between the
+   list and the agent. `?` lists every key, `,` opens Machine, `t` a shell,
+   `D` a review. `Ctrl+O` jumps fully into the pane, and `prefix m` comes
+   back.
 
 The full walk is [Get started](https://docs.matchblox.com/start/).
 
@@ -150,7 +151,7 @@ The full walk is [Get started](https://docs.matchblox.com/start/).
   turns; on a desk the agent sits beside the list, under the head and
   above the bar.
 - **Machine**: `,` or `⚙` opens it as a sheet on the desk; on a phone,
-  `Tab` still opens the Machine tab. It shows usage, **machine health**,
+  `Tab` still opens Machine. It shows usage, **machine health**,
   **detached busy loops**, the stoker, **git** worktrees that are safe to
   remove, 24 hours of **history** and the tmux panes. The list's foot
   keeps the **tips** with their exact command.

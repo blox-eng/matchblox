@@ -144,7 +144,7 @@ func TestOpenTheBoxShowsItsHeading(t *testing.T) {
 	page := landingPage(t)
 	if !bytes.Contains(page, []byte(`href="#console"`)) ||
 		!bytes.Contains(page, []byte(`<section class="agents box" id="console" aria-labelledby="box-h">`)) {
-		t.Error(`"Open the box" must point at the section that holds "Every agent, one box"`)
+		t.Error(`"Open the box" must point at the section that holds "Every repo. Every agent. One desk."`)
 	}
 }
 
