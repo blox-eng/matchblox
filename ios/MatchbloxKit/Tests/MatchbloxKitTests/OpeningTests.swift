@@ -8,9 +8,13 @@ final class OpeningTests: XCTestCase {
     }
 
     func testFirstRoute() {
-        XCTAssertEqual(Opening.first(hosts: []), .scan)
+        XCTAssertEqual(Opening.first(hosts: []), .hosts)
         XCTAssertEqual(Opening.first(hosts: [host("ws-1")]), .console(host("ws-1"), open: nil))
         XCTAssertEqual(Opening.first(hosts: [host("ws-1"), host("ws-2")]), .hosts)
+    }
+
+    func testFirstWithNoHostIsHosts() {
+        XCTAssertEqual(Opening.first(hosts: []), .hosts)
     }
 
     func testConsoleOffersHostsForASingleHostToo() {
