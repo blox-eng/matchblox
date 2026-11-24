@@ -717,12 +717,38 @@ the head's speckles stand still; its heat colour still shows.
   `connect-src 'self'`, no inline script or style, no third-party resource.
   No horizontal scroll at 390 px. Check light and dark at 390 and 1280 px.
 
-## 9. The island
+## 9. Pocket
+
+The iOS app's home and the way back from a live console (design
+2026-11-24 pocket home).
+
+- **Home:** hosts lead (full rows; tap opens; swipe left asks to remove),
+  then one `Live Activity` row (real hosts only), then a quiet
+  `text − N pt +` line, then the footer (`demo · privacy ↗ · ♥ sponsor ↗`
+  and the app version). No key belt on home.
+- **`‹ host`:** when a live console sits behind home, the top line returns
+  to that console as it was.
+- **`BOX` stamp:** on the matchbox drawer's tray floor, bottom left, same
+  ink and edge as `EDIT MINE` (`BeltLook.stampInk` / `stampEdge`). The agent
+  tag sits one place to its right. Hit area at least 44×44 pt. VoiceOver:
+  `Home, the box`. Two taps from a live console: open the drawer, then
+  `BOX`.
+- **First run:** with no host, home opens (not the scanner). The canon mark
+  plays once (§3 / §5 open), then the quiet first-run home. Reduce Motion
+  skips the play; the “once” flag still sets.
+- **BOX teach:** after the first pair (or demo) from empty, the drawer opens
+  once to show `BOX`, then closes. Reduce Motion skips the open; the flag
+  still sets.
+- **Text size:** on home as a convenience; pinch on the terminal stays
+  primary. The size is not on the Live Activity screen.
+
+## 10. The island
 
 The Live Activity and the buzz of the phone, with the app closed (design
 0010). The match glyphs stay §4; the colours are §2; `Tokens.swift` mirrors
 `internal/app/theme.go`. Two faces share one activity, and each update
-carries both, so the choice lives on the phone.
+carries both, so the choice lives on the phone. In the app's words the
+setting is `Live Activity`; code names stay (`Island*`).
 
 - **Sessions:** the horizontal match of the console. The lock screen has
   `▰ work-1  ✦ 5 ╿ 2` over the name of the session and its state word.
@@ -751,10 +777,10 @@ carries both, so the choice lives on the phone.
 - **Copy:** `push: <why>` on the Machine tab when a send fails;
   `island: open matchblox on the phone to renew` when the activity needs the
   app; `That session ended.` when a tap finds the session gone.
-- **The setting** (`Island` in the app): `Follow` (one host or none, the
-  host opened last by default), `Show` (`Sessions`, `Usage`, `Auto (Usage
-  while the stoker runs)`; `Sessions` by default) and `Buzz` for each host
-  (on). A host out of reach says `work-1 is not reachable: it changes at the
-  next connect`.
+- **The setting** (`Live Activity` in the app, on home): `Follow` (one host
+  or none, the host opened last by default), `Show` (`Sessions`, `Usage`,
+  `Auto (Usage while the stoker runs)`; `Sessions` by default) and `Buzz`
+  for each host (on). A host out of reach says `work-1 is not reachable: it
+  changes at the next connect`.
 - **One island at a time:** the widget draws nothing for a state whose
   `host` is not the followed host.
