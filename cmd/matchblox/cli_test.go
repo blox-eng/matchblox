@@ -438,7 +438,7 @@ func TestBriefNamesEveryCommand(t *testing.T) {
 		}
 	}
 	for _, c := range commands {
-		if !slices.ContainsFunc(hands, func(h string) bool { return strings.Fields(h)[0] == c }) && !slices.Contains([]string{"connect", "serve", "status", "setup", "pair", "devices", "update", "version", "agents", "switch", "scan", "recover", "chain", "unchain"}, c) {
+		if !slices.ContainsFunc(hands, func(h string) bool { return strings.Fields(h)[0] == c }) && !slices.Contains([]string{"connect", "serve", "status", "setup", "pair", "devices", "update", "version", "agents", "switch", "scan", "recover", "chain", "unchain", "merge"}, c) {
 			t.Errorf("%s is a new command the stoker's hands do not list", c)
 		}
 	}

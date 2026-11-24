@@ -6,6 +6,14 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Merge a waiting ship from the CLI.** `matchblox merge <session>` merges
+  the pull request of the session's leading ship, the same as `p` and a typed
+  `y` on the board. It runs only while the ship waits for your merge, with the
+  merge words the last read pinned to its commit. For any other session it
+  says `no ship of <name> waits for a merge`.
+
 ## [0.60.0] - 2026-11-24
 
 ### Added

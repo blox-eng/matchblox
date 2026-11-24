@@ -241,6 +241,12 @@ func run(args []string) error {
 			return err
 		}
 		return cliLife(cmd, words, *o.anyway, os.Stdout, transport.SocketPath())
+	case "merge":
+		words, err := positionals(fl, args)
+		if err != nil {
+			return err
+		}
+		return cliMerge(words, os.Stdout, transport.SocketPath())
 	case "switch":
 		words, err := positionals(fl, args)
 		if err != nil {
@@ -367,7 +373,7 @@ func askpassMain(prompt string) error {
 
 // commands are the commands a builder types. hook, authorize and gate run
 // from a hook, an ssh forced command and a connect.
-var commands = []string{"connect", "serve", "sessions", "ships", "agents", "status", "setup", "pair", "devices", "usage", "update", "version", "send", "compact", "hold", "release", "stoker", "peek", "new", "rename", "kill", "switch", "scan", "recover", "chain", "unchain"}
+var commands = []string{"connect", "serve", "sessions", "ships", "agents", "status", "setup", "pair", "devices", "usage", "update", "version", "send", "compact", "hold", "release", "stoker", "peek", "new", "rename", "kill", "merge", "switch", "scan", "recover", "chain", "unchain"}
 
 type flags struct {
 	cfgPath, root         *string
@@ -421,6 +427,7 @@ Commands:
   matchblox new ["<first message>"]  start an agent in a tmux session of its own (--where, --agent, --branch, --name, --account)
   matchblox rename <who> <name>    name a session, its tmux session and its agent alike
   matchblox kill <who>             end a session: its agent and its pane (--anyway while it works)
+  matchblox merge <who>            merge the pull request of a session that waits for your merge
   matchblox chain <who>|<chain>    join the chain of a match, or a chain by its name
   matchblox chain                  list your chains (--json)
   matchblox unchain [<chain>]      leave your chain, or the one named (--all: every chain)

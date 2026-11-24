@@ -54,5 +54,9 @@ Do not implement these in the wedge plan. Owner picks which (if any) become tick
 
 ## Gate
 
-- [ ] Owner picks zero or more candidates.
-- [ ] Each pick gets its own failing check or issue before build.
+- [x] Owner picks zero or more candidates. 2026-11-24: candidate 3 (ship act
+  CLI twin: `matchblox merge <who>`). Candidates 1 and 2 are deferred: they
+  need a spike first.
+- [ ] Each pick gets its own failing check or issue before build. Candidate 3:
+  `TestMergeIsACommand` and `mergeAct` tests, see
+  `docs/superpowers/specs/2026-11-24-merge-cli-design.md`.

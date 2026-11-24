@@ -103,6 +103,10 @@ twice`. See [The list](console.md#the-list).
 | `p` | In the list, merges the chosen session's leading ship when it waits for your merge: a box shows `gh pr merge <n> --squash --match-head-commit <sha>` (the repository's merge method, pinned to the commit that was read green), and a typed `y` runs it. It is offered only on a read from the last two minutes. On any other session it says `no ship of <name> waits for a merge`. |
 | `Ctrl+O` | Goes into the pane of the session that drives the ship, to tell it what to do. |
 
+`matchblox merge <who>` is the CLI twin of `p`: it merges the same leading
+ship of the session, with the same merge words, and it refuses with the same
+words (`no ship of <name> waits for a merge`).
+
 `x` kills the match. It never merges. The session's menu (`m`) copies the
 link of the pull request.
 
