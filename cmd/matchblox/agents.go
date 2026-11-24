@@ -25,7 +25,7 @@ type agentRow struct {
 // `unknown screen`.
 var hookless = []string{"codex", "opencode"}
 
-const agentsFix = "a screen matchblox cannot read: update matchblox, or report it with this table"
+const agentsFix = "a screen matchblox cannot read: run matchblox agents explain <session>, and report its output"
 
 // agentRows groups the sessions by agent and version; an installed agent
 // with no session is a row of 0.

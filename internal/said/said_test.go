@@ -7,12 +7,11 @@ import (
 
 // The screens are the agents' own words, read from their binaries and live
 // panes: Codex and OpenCode ask for approval in these words.
-func TestScreen(t *testing.T) {
-	for _, c := range []struct {
-		name, screen, line string
-		kind               Kind
-	}{
-		{"codex approval", `
+var screenCases = []struct {
+	name, screen, line string
+	kind               Kind
+}{
+	{"codex approval", `
 › Run the tests
 • I'll run the test suite.
 
@@ -26,8 +25,8 @@ func TestScreen(t *testing.T) {
 
   Press enter to confirm or esc to cancel
 `, "Would you like to run the following command?", Permits},
-		// Cursor's CLI, captured on a live machine.
-		{"cursor approval", `
+	// Cursor's CLI, captured on a live machine.
+	{"cursor approval", `
   Run the shell command: touch second.txt && date
   Running that command now.
   $ touch second.txt && date Waiting for approval...
@@ -40,7 +39,7 @@ func TestScreen(t *testing.T) {
     Run Everything (shift+tab)
     Skip & tell the agent what to do instead (esc or n)
 `, "Run this command?", Permits},
-		{"cursor trust prompt", `
+	{"cursor trust prompt", `
   ╭──────────────────────────────────────────────────────────────────────────╮
   │                                                                          │
   │  Do you trust the contents of this directory?                            │
@@ -54,7 +53,7 @@ func TestScreen(t *testing.T) {
   │                                                                          │
   ╰──────────────────────────────────────────────────────────────────────────╯
 `, "Do you trust the contents of this directory?", Permits},
-		{"cursor at rest", `
+	{"cursor at rest", `
   Done. second.txt was created.
  ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
   → Add a follow-up
@@ -62,7 +61,7 @@ func TestScreen(t *testing.T) {
   Auto · 5.7%
   /work/app · main
 `, "Done. second.txt was created.", None},
-		{"cursor before its first turn", `
+	{"cursor before its first turn", `
   Cursor Agent
   v2026.10.19-6bbf2c4
   Tip: Use /plan to plan execution and reach the right outcome faster.
@@ -72,24 +71,24 @@ func TestScreen(t *testing.T) {
   Auto
   /work/app · main
 `, "Tip: Use /plan to plan execution and reach the right outcome faster.", None},
-		{"opencode permission", `
+	{"opencode permission", `
 ┃  Permission required
 ┃  $ rm -rf build
 ┃
 ┃  Allow once   Allow always   Reject
    ctrl+f fullscreen  ⇆ select  enter confirm
 `, "Permission required", Permits},
-		{"claude permission", `
+	{"claude permission", `
  Bash command
    rm -rf build
  Do you want to proceed?
  ❯ 1. Yes
    2. No, and tell Claude what to do differently (esc)
 `, "Do you want to proceed?", Permits},
-		{"aider confirm", `
+	{"aider confirm", `
 Add main.go to the chat? (Y)es/(N)o/(D)on't ask again [Yes]:
 `, "Add main.go to the chat? (Y)es/(N)o/(D)on't ask again [Yes]:", Permits},
-		{"the agent asks in its reply", `
+	{"the agent asks in its reply", `
 ⏺ I changed the parser and the tests pass.
   Should I also update the docs?
 
@@ -98,7 +97,7 @@ Add main.go to the chat? (Y)es/(N)o/(D)on't ask again [Yes]:
 ╰──────────────────────────────────────────╯
   ? for shortcuts
 `, "Should I also update the docs?", Asks},
-		{"finished, nothing asked", `
+	{"finished, nothing asked", `
   Done. All 42 tests pass.
                                            ┃
                                            ┃  Ask anything... "Fix broken tests"
@@ -106,7 +105,7 @@ Add main.go to the chat? (Y)es/(N)o/(D)on't ask again [Yes]:
                                      ctrl+t variants  tab agents  ctrl+p commands
   /home/u/app:main                                                          1.1.48
 `, "Done. All 42 tests pass.", None},
-		{"an old question further up", `
+	{"an old question further up", `
   Want me to continue?
   Step one: read the parser.
   Step two: split the tokens.
@@ -118,24 +117,27 @@ Add main.go to the chat? (Y)es/(N)o/(D)on't ask again [Yes]:
   Step eight: write the notes.
   Finished the refactor.
 `, "Finished the refactor.", None},
-		{"only key hints", "\n  ? for shortcuts\n", "", None},
-		{"the person's own question, echoed by Codex", `
+	{"only key hints", "\n  ? for shortcuts\n", "", None},
+	{"the person's own question, echoed by Codex", `
 › Why does the search test fail?
 
 • The fixture uses the old index path. I fixed it.
 `, "The fixture uses the old index path. I fixed it.", None},
-		{"the person's question in OpenCode", `
+	{"the person's question in OpenCode", `
 ┃  Why is the build slow?
 
   The cache was cold. It is warm now.
 `, "The cache was cold. It is warm now.", None},
-		{"a draft in the input box", `
+	{"a draft in the input box", `
   Done. The tests pass.
 ╭──────────────────────────────────────────╮
 │ > why is it slow?                        │
 ╰──────────────────────────────────────────╯
 `, "Done. The tests pass.", None},
-	} {
+}
+
+func TestScreen(t *testing.T) {
+	for _, c := range screenCases {
 		line, kind := Screen(c.screen)
 		if line != c.line || kind != c.kind {
 			t.Errorf("%s: got (%q, %v), want (%q, %v)", c.name, line, kind, c.line, c.kind)
@@ -281,20 +283,19 @@ func TestThePaneRuleReadsOnlyTheLiveLines(t *testing.T) {
 // TestMenu: a drawn Claude Code menu ends with its own key hint. A reply
 // that only lists a "1. Yes" choice is no menu: the person answers it
 // with a typed line.
-func TestMenu(t *testing.T) {
-	for screen, want := range map[string]string{
-		` │ Hook PreToolUse:Bash requires confirmation for this command:
+var menuCases = map[string]string{
+	` │ Hook PreToolUse:Bash requires confirmation for this command:
  │ Working-state guard: this branch adds 2 line(s)
  Do you want to proceed?
  ❯ 1. Yes
    2. No
  Esc to cancel · Tab to amend
 `: "Do you want to proceed?",
-		` Yes, I trust this folder
+	` Yes, I trust this folder
  ❯ No, exit
  Enter to confirm · Esc to cancel
 `: "Yes, I trust this folder",
-		`● Ready to ship. Pick one:
+	`● Ready to ship. Pick one:
 
   1. Yes, ship it
   2. No, keep it local
@@ -304,7 +305,10 @@ func TestMenu(t *testing.T) {
 ────────────────────────────────────────
   ⏵⏵ auto mode on (shift+tab to cycle)
 `: "",
-	} {
+}
+
+func TestMenu(t *testing.T) {
+	for screen, want := range menuCases {
 		if got, ok := Menu(screen); got != want || ok != (want != "") {
 			t.Errorf("Menu(%q) = %q, %v; want %q", screen, got, ok, want)
 		}
