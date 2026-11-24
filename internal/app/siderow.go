@@ -114,6 +114,9 @@ func (m Model) sideRight(s sample.Session) string {
 	if m.hasShell(s) {
 		mark = m.st.muted.Render("▣") + " " + mark
 	}
+	if m.hasUnsentReview(s) && (m.review == nil || m.review.key != reviewKey(s)) {
+		mark = m.st.accent.Render("✎") + " " + mark
+	}
 	return strings.TrimPrefix(at+" "+mark, " ")
 }
 

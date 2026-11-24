@@ -610,10 +610,12 @@ type Model struct {
 	seenActs                  map[string]bool // the ids of the seen: acts sent, until their answer
 	doneKept                  paneKey         // the done row the owner opened: it stays in DONE while it is the choice
 	agent                     agentRegion     // the desk's agent region: the chosen agent's real screen
-	over                      string          // the sheet open over the agent region: "keys"; "" none
+	over                      string          // the sheet open over the agent region: "keys", "review"; "" none
 	keyQ                      string          // the ? sheet's filter
 	keyAt                     int             // the ? sheet's chosen hit among the filter's rows
 	cogAt                     string          // the part the ⚙ sheet opened on ("cog:usage", "cog:loops:gpu-1"), until a key moves it
+	review                    *reviewSheet    // the D review sheet, while it is open
+	reviews                   reviewsState    // unsent comments per session, in reviews.json
 	showing                   bool            // a choice is checked for the agent region
 	showNext                  *action         // the choice made while one ran: it runs next
 	besideShows               paneKey         // the session the agent region shows; zero when none
@@ -636,7 +638,8 @@ func New(opt Options) Model {
 		opt.Binary = "dev"
 	}
 	m := Model{opt: opt, conn: opt.Conn, st: newStyles(true), dark: true, width: 100, height: 30, history: newSeries(60),
-		recPrefs: loadRecPrefs(opt.StateDir), viewPrefs: loadViewPrefs(opt.StateDir), keys: defaultKeys(), peers: links(opt.Peers), shown: &shownFrame{}}
+		recPrefs: loadRecPrefs(opt.StateDir), viewPrefs: loadViewPrefs(opt.StateDir), reviews: loadReviews(opt.StateDir),
+		keys: defaultKeys(), peers: links(opt.Peers), shown: &shownFrame{}}
 	m.splashAt = m.now()
 	if opt.Ask != nil {
 		m.askCtx, m.askStop = context.WithCancel(context.Background())
@@ -806,7 +809,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.leaveSheets(), nil
 	}
 	if m.over != "" && !m.desk() { // the sheet draws on the desk only: off it, it would take keys unseen
-		m.over = ""
+		m.over, m.review = "", nil
 	}
 	if m.cogShown() {
 		switch msg.(type) {
@@ -816,6 +819,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	if k, ok := msg.(tea.KeyPressMsg); ok && m.over == "keys" {
 		return m.keysKey(k)
+	}
+	if k, ok := msg.(tea.KeyPressMsg); ok && m.over == "review" {
+		return m.reviewKey(k)
 	}
 	region, cmd, ok := m.agentKeys(msg)
 	if ok {
@@ -1326,6 +1332,9 @@ func (m Model) result(r proto.Result) (Model, tea.Cmd) {
 		}
 	}
 	m.endRec(r.ActID, r)
+	if mm, ok := m.reviewResult(r); ok {
+		return mm, nil
+	}
 	if m.settleResult(r) {
 		return m, nil
 	}

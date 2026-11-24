@@ -43,6 +43,7 @@ func (m Model) leaveSheets() Model {
 		m = m.leaveStandIn()
 	}
 	m.over, m.keyQ, m.keyAt, m.cogAt = "", "", 0, ""
+	m.review = nil
 	m.pending, m.sheet, m.form, m.menu = nil, nil, nil, nil
 	if m.tab != tabSessions {
 		m.setTab(tabSessions)

@@ -103,7 +103,8 @@ func (m Model) waitChat(v state.MateView, c chainKey, w int) []string {
 
 // chatHead is the head line: the name, the host when it is not this one,
 // the agent's mark, its state and its pull request's badge; at the right
-// the context and the keys to expand and for the menu.
+// the context and the keys to expand and for the menu. Unsent review
+// comments take the right: ✎ N unsent · D reviews.
 func (m Model) chatHead(s sample.Session, w int) string {
 	st := m.st
 	about := ""
@@ -119,6 +120,9 @@ func (m Model) chatHead(s sample.Session, w int) string {
 	ctx := ""
 	if s.Context == "known" {
 		ctx = m.contextStyle(s).Render("ctx "+strconv.Itoa(int(s.ContextPct+0.5))+"%") + "  "
+	}
+	if n := len(m.reviewsOf(s)); n > 0 && (m.review == nil || m.review.key != reviewKey(s)) {
+		keys = st.accent.Render("✎ "+strconv.Itoa(n)+" unsent") + st.muted.Render(" · D reviews") + " "
 	}
 	// Short of room the keys go first (the key line has them), then the
 	// context, then the words after the name: the name stays whole.

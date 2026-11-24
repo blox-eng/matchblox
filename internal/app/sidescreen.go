@@ -106,6 +106,10 @@ func (m Model) deskMode() string {
 	switch {
 	case m.over == "keys":
 		return "KEYS"
+	case m.over == "review" && m.review != nil && m.review.typing:
+		return "COMMENT"
+	case m.over == "review":
+		return "REVIEW"
 	case m.cogShown():
 		return "MACHINE"
 	}

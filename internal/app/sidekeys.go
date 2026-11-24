@@ -406,6 +406,12 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 		m = m.openCog("cog:usage")
 	case bkey.Matches(k, bk.Shell) && m.desk():
 		return m.openShell(s, ok)
+	case bkey.Matches(k, bk.Review) && m.desk():
+		if !ok {
+			cmd = m.notice(m.noRowWhy())
+			return m, cmd
+		}
+		return m.openReview(s)
 	case bkey.Matches(k, bk.Chain):
 		cmd = m.boardChainOf(s, ok)
 	case bkey.Matches(k, bk.Copy):

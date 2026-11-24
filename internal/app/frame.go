@@ -532,7 +532,10 @@ func (m Model) overlayOver(sc *drawn, box sideBox, room int) {
 	}
 	sw, sh := box.chatW-2*dx, room-2*dy
 	title, lines, foot := "? keys", m.keysLines(), m.keysFoot(sw-4)
-	if m.cogShown() {
+	switch {
+	case m.over == "review":
+		title, lines, foot = m.reviewTitle(), m.reviewLines(), m.reviewFoot(sw-4)
+	case m.cogShown():
 		var rows []int
 		title, foot = m.cogTitle(), m.cogFoot(sw-4)
 		lines, rows = m.cogWindow(sw-4, sh-3)
