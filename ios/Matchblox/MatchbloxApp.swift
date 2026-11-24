@@ -178,7 +178,8 @@ struct MatchbloxApp: App {
                     )
                 case .island:
                     IslandView(store: store, onBack: {
-                        go(homeBack.map { Opening.backToConsole(host: $0) } ?? Opening.first(hosts: store.all()))
+                        // Live Activity opens from home; Back returns there (`‹ host` still set).
+                        go(.hosts)
                     })
                 }
             }

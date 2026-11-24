@@ -36,18 +36,18 @@ final class DemoConsoleTests: XCTestCase {
         XCTAssertFalse(app.buttons["Try again"].exists, app.debugDescription)
     }
 
-    /// The real way in: an empty store, the scan view, `Try a demo`, and no camera prompt.
+    /// The real way in: an empty store, home, `Try the demo`, and no camera prompt.
     @MainActor
     func testTryADemoOpensTheConsole() {
         let app = XCUIApplication()
         app.launchArguments = ["-resetHosts"]
         app.launch()
 
-        let tryADemo = app.buttons["Try a demo"]
+        let tryADemo = app.buttons["Try the demo"]
         XCTAssertTrue(tryADemo.waitForExistence(timeout: 30), app.debugDescription)
         XCTAssertGreaterThanOrEqual(tryADemo.frame.height, 44)
-        XCTAssertTrue(app.frame.contains(tryADemo.frame), "Try a demo is off the screen")
-        keep(app, "1 scan view")
+        XCTAssertTrue(app.frame.contains(tryADemo.frame), "Try the demo is off the screen")
+        keep(app, "1 home")
 
         tryADemo.tap()
         keep(app, "2 demo scan")
