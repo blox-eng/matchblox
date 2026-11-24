@@ -324,6 +324,7 @@ func waitFor(capture func() string, ok func(string) bool, step string, timeout t
 
 var (
 	figure  = regexp.MustCompile(`\d+(\.\d+)?[A-Za-z%]*`)
+	ageNow  = regexp.MustCompile(`\bnow\b`)
 	sparks  = regexp.MustCompile(`[▁▂▃▄▅▆▇█]+`)
 	spaces  = regexp.MustCompile(`\s+`)
 	cutWord = regexp.MustCompile(`\S*…`)
@@ -367,6 +368,7 @@ func skeleton(lines []string) string {
 		// it squeezes the tab to its digit.
 		l = strings.Replace(strings.Replace(l, "machine !", "machine", 1), " 3 !", " machine", 1)
 		l = sparks.ReplaceAllString(figure.ReplaceAllString(cutWord.ReplaceAllString(l, "…"), "0"), "")
+		l = ageNow.ReplaceAllString(l, "0")  // an age under a minute reads "now"; a minute later it is "1m" → 0
 		l = strings.ReplaceAll(l, "✧", "✦")  // a burning match flickers between the two
 		l = spinner.ReplaceAllString(l, "⠿") // a working session's spinner turns with the clock
 		b.WriteString(strings.TrimSpace(spaces.ReplaceAllString(l, " ")))
@@ -805,7 +807,9 @@ func replayAt(t *testing.T, z replaySize) {
 				time.Sleep(50 * time.Millisecond)
 				walk("ux-pass")()
 			}, ok: func(s string) bool {
-				return chosen("ux-pass")(s) && has("DONE", "✓")(s)
+				// Wait for the agent's pane too: a slow runner can choose
+				// the row before its screen lands, and the golden has it.
+				return chosen("ux-pass")(s) && has("DONE", "✓", "folds")(s)
 			}},
 			step{name: "a shell", at: 20 * time.Second, key: "t", ok: func(s string) bool {
 				return chosen("ux-pass")(s) && uxRowHas("▣")(s)
@@ -1014,6 +1018,12 @@ func TestSkeletonCatchesAChangedScreen(t *testing.T) {
 	b := []string{" ▰ matchblox · ws-1  │  cpu  52% ▄▅  │  mem 27G/64G ▄▄▄▄▄", " SESSIONS 7    machine", " web-checkout  idle  5m   88%"}
 	if skeleton(a) != skeleton(b) {
 		t.Fatalf("figures and sparklines change between runs; the skeletons must match:\n%q\n%q", skeleton(a), skeleton(b))
+	}
+	// An age under a minute reads "now"; a minute later it is "1m".
+	nowAge := []string{" ├ ✦ flint-auth #4545 ci now ✻│"}
+	minAge := []string{" ├ ✦ flint-auth #4545 ci 1m ✻│"}
+	if skeleton(nowAge) != skeleton(minAge) {
+		t.Fatalf("now and 1m must share a skeleton:\n%q\n%q", skeleton(nowAge), skeleton(minAge))
 	}
 	// A figure one digit wider cuts the line one cell earlier.
 	cut := []string{" ╿ done, needs you · 9m · hearth:1.…", " ╿ done, needs you · 10m · hearth:1…"}

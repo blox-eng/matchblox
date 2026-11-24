@@ -270,8 +270,9 @@ func (w *walker) toView(name string) {
 	w.press(slices.Repeat([]string{"j"}, at)...)
 	w.press("enter")
 	// One repaint at a time, each waited for: a repaint every poll starts a
-	// new whole frame before the last one is read.
-	eventually(w.t, 10*time.Second, "the "+name+" view to open", func() bool { return viewIn(name, w.term.screen()) })
+	// new whole frame before the last one is read. Under -race the sheet's
+	// view can take tens of seconds to land (CI Demo race, 2026-11-24).
+	eventually(w.t, 45*time.Second, "the "+name+" view to open", func() bool { return viewIn(name, w.term.screen()) })
 }
 
 // toTab opens the tab want names: a tap on its name on the tab row, as a
