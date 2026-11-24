@@ -72,7 +72,7 @@ public enum HomeCopy {
         return "\(days)d ago"
     }
 
-    private static func clock(_ date: Date) -> String {
+    public static func clock(_ date: Date) -> String {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_GB")
         f.dateFormat = "HH:mm"

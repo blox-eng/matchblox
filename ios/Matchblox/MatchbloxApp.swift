@@ -72,6 +72,8 @@ struct MatchbloxApp: App {
     @State private var route: Route
     @State private var scanProblem: String?
     @State private var scanNotice: String?
+    /// Host whose console sits behind home (`‹ host`).
+    @State private var homeBack: Host?
 
     init() {
         #if DEBUG
@@ -131,8 +133,17 @@ struct MatchbloxApp: App {
                     ConsoleView(
                         host: host,
                         open: session,
-                        onFailure: { go(.reach(host, $0)) },
-                        onHosts: Opening.consoleOffersHosts(hostCount: store.all().count) ? { go(.hosts) } : nil,
+                        onFailure: { failure in
+                            var sight = HostSight()
+                            sight.markFailed(host.fingerprint)
+                            go(.reach(host, failure))
+                        },
+                        onHosts: Opening.consoleOffersHosts(hostCount: store.all().count)
+                            ? {
+                                homeBack = host
+                                go(.hosts)
+                            }
+                            : nil,
                         onIsland: { go(.island) },
                         onScanAgain: { go(.scan) }
                     )
@@ -142,14 +153,21 @@ struct MatchbloxApp: App {
                 case .hosts:
                     HostsView(
                         store: store,
-                        onOpen: { go(.console($0, open: nil)) },
+                        backHost: homeBack,
+                        onOpen: { host in
+                            homeBack = nil
+                            go(.console(host, open: nil))
+                        },
+                        onBack: {
+                            if let host = homeBack {
+                                homeBack = nil
+                                go(.console(host, open: nil))
+                            }
+                        },
                         onPair: { go(.scan) },
                         onIsland: { go(.island) },
                         onDemo: { go(.demoScan) },
-                        onNoHosts: { notice in
-                            go(.scan)
-                            scanNotice = notice
-                        }
+                        onLastRemoved: { _ in homeBack = nil }
                     )
                 case .reach(let host, let failure):
                     ReachView(
@@ -160,7 +178,9 @@ struct MatchbloxApp: App {
                         onScanAgain: { go(.scan) }
                     )
                 case .island:
-                    IslandView(store: store, onBack: { go(Opening.first(hosts: store.all())) })
+                    IslandView(store: store, onBack: {
+                        go(homeBack.map { .console($0, open: nil) } ?? Opening.first(hosts: store.all()))
+                    })
                 }
             }
             .foregroundStyle(Theme.fg)

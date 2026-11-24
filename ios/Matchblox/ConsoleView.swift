@@ -146,10 +146,8 @@ struct ConsoleView: View {
                 Button("Hosts", action: onHosts)
                     .foregroundStyle(Theme.muted)
             }
-            if !host.isDemo {
-                Button("Island", action: onIsland)
-                    .foregroundStyle(Theme.muted)
-            }
+            // Live Activity entry is on home only (design review 1.2 / Task 6).
+            _ = onIsland
         }
     }
 }
