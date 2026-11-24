@@ -89,7 +89,8 @@ serve_mib=$(rss_mib "$serve_pid") || {
 sock=$(socket_path)
 echo "host=$host kernel=$kernel date=$day"
 echo "socket=$sock"
-echo "serve_pid=$serve_pid serve_rss_mib=$serve_mib"
+echo "serve_pid=$serve_pid"
+echo "serve_rss_mib=$serve_mib"
 
 if [[ "${1:-}" != "" ]]; then
   cons=$1
@@ -97,5 +98,6 @@ if [[ "${1:-}" != "" ]]; then
     echo "measure-footprint: cannot read RSS for console pid $cons" >&2
     exit 1
   }
-  echo "console_pid=$cons console_rss_mib=$cons_mib"
+  echo "console_pid=$cons"
+  echo "console_rss_mib=$cons_mib"
 fi

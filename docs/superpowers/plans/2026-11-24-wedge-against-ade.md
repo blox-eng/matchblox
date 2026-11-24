@@ -183,3 +183,5 @@ A messaging-only — rejected. **B wedge then selective inventory** — this pla
   `/proc/self/status` VmRSS instead.
 - **2026-11-24 — README host label `ws-1`.** Measured on this machine; private
   hostname blocked by private-terms hook.
+- **2026-11-24 — Footprint script uses socket `.lock` owner.** Review found
+  standby serve (~8 MiB) claimed; real socket holder ~31 MiB. README updated.
