@@ -683,7 +683,9 @@ The second tab. `↑` `↓` choose a row, `Enter` opens it over the body, and
 Under the rows: usage (see [Usage](#usage)), then the machine: CPU per
 core, load, pressure, memory and swap, temperature, CPU power limits,
 GPUs, and the CPU share of the container groups you name in the
-[config](config.md).
+[config](config.md). A quiet `matchblox` line names this host's serve
+RSS; when the console runs on the same host, it names the console RSS
+beside it. The line stays off when the sample has no figure.
 
 Then the detached busy loops: shells that keep burning CPU after their pane
 is gone, named to the pane that started them. `x` and a typed `y` kill

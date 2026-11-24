@@ -5,6 +5,7 @@ package sample
 
 import (
 	"net"
+	"os"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -170,6 +171,9 @@ type Machine struct {
 	Power      []procfs.PowerLimit `json:"power_limits"`
 	GPUs       []GPU               `json:"gpus"`
 	Disks      []Disk              `json:"disks,omitempty"`
+	// SelfRSS is this process's resident set (serve), in bytes. Zero when
+	// /proc/<pid>/stat is missing: older consoles and fixtures omit it.
+	SelfRSS uint64 `json:"self_rss_bytes,omitempty"`
 }
 
 type Snapshot struct {
@@ -581,6 +585,9 @@ func (s *Sampler) sampleMachine(snap *Snapshot, dt float64) {
 	m.Power = s.power
 	if s.Disks != nil {
 		m.Disks = s.Disks()
+	}
+	if p, ok := s.FS.Proc(os.Getpid()); ok {
+		m.SelfRSS = p.RSS
 	}
 }
 

@@ -11,5 +11,6 @@ characters or more.
   until one of the two is true.
 - Check it before you ask for a merge:
   `.github/scripts/landing-guard.sh "<title>" <body-file> origin/main`.
-- matchbloxrelease owns `www/`. Send it the words and the visual. Do not edit
-  the page yourself.
+- Edit `www/` in the same PR when the feat changes what a builder can do.
+  Keep the page calm and user-first (`DESIGN.md`); do not leave the landing
+  for someone else.

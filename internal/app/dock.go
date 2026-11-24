@@ -351,7 +351,8 @@ func (m Model) machineLines(w int, full bool) []string {
 func (m Model) machineAbout(w int, full bool, host string) []string {
 	st, mc := m.st, m.snap.Machine
 	about := ""
-	if host != "" {
+	// Multi-host Machine sections already name the host in hostHead.
+	if host != "" && m.hostCount() <= 1 {
 		about = host + " · "
 	}
 	about += plural(len(mc.Cores), "core")
@@ -366,13 +367,35 @@ func (m Model) machineAbout(w int, full bool, host string) []string {
 		" " + st.label.Render("cpu  ") + st.accent.Render(spark(m.history.cpu, sp, 100)) +
 			st.text.Render(pad(fmt.Sprintf(" %.0f%%", mc.CPU), 6)) + st.label.Render("load ") + st.text.Render(fmt.Sprintf("%.1f", mc.Load[0])),
 		" " + st.label.Render("mem  ") + m.meter(memPct, 8, st.muted) + st.text.Render(fmt.Sprintf(" %.0f of %.0f GB", gb(used), gb(mc.MemTotal))),
-		" " + st.label.Render("disk ") + m.diskCell(),
-		" " + st.label.Render("runs ") + st.text.Render(m.runs()),
 	}
+	if line := m.matchbloxRSS(host, mc.SelfRSS); line != "" {
+		out = append(out, line)
+	}
+	out = append(out,
+		" "+st.label.Render("disk ")+m.diskCell(),
+		" "+st.label.Render("runs ")+st.text.Render(m.runs()),
+	)
 	for i := range out {
 		out[i] = fit(out[i], w)
 	}
 	return out
+}
+
+// matchbloxRSS is one quiet line for serve RSS, and this console's RSS when
+// Machine names the host this process runs on. Empty when SelfRSS is 0.
+func (m Model) matchbloxRSS(host string, serve uint64) string {
+	if serve == 0 {
+		return ""
+	}
+	st := m.st
+	text := "serve " + rssMiB(serve)
+	mine := thisMachineName()
+	if mine != "" && (host == mine || host == "" && m.opt.Host == "") {
+		if c := readConsoleRSS(); c > 0 {
+			text += " · console " + rssMiB(c)
+		}
+	}
+	return " " + st.label.Render("matchblox ") + st.text.Render(text)
 }
 
 func gb(b uint64) float64 { return float64(b) / (1 << 30) }
@@ -458,7 +481,7 @@ func (m Model) machinePanel(w int) body {
 	for _, h := range m.statedHosts() {
 		on := m.viewOf(h)
 		b.add(-1, "", m.hostHead(h, w))
-		b.add(-1, on.machineAbout(w, true, "")...)
+		b.add(-1, on.machineAbout(w, true, h)...)
 		b.add(-1, on.machine(w)...)
 		if h == m.opt.Host {
 			p := on.procs(w)

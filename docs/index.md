@@ -5,6 +5,8 @@ which agent needs you, what loads the machine, the state of every git
 checkout, and the one safe action that resolves each thing. It works on the
 host, over SSH, and from a phone.
 
+matchblox is the tmux control plane for agents — not another IDE.
+
 ![The matchblox console on a demo machine: the list of every match beside the chat of the chosen one. A tap opens the chat of flint-auth, a digit marks an answer from the agent's own options, the same digit sends it, and flint-auth moves into WORKING. g opens the room of the chain login](assets/replay.svg)
 
 ## Learn it in five minutes
