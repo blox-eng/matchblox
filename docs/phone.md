@@ -316,8 +316,7 @@ starts it. A second phone or laptop attaches to the same session.
 With the agent beside the list, a tap on a row already shows its pane,
 full screen on a phone. `◂` on the belt goes back to the list. `ctrl+q`
 flips the keys on a hardware keyboard, and the belt has no key for it.
-`g` on a chain's row shows up to 4 members' panes in one view, and `G`
-opens the chain's room.
+`g` on a chain's row shows the chain only.
 
 The demo has no tmux. There `Ctrl+O` opens a full-screen stand-in for the
 pane, and the belt answers it: at a question the key line says `type 2 to

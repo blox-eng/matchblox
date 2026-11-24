@@ -39,8 +39,9 @@ const defaultHome = "matchblox"
 // tmux CHANGES); on 3.2 and 3.3 the home key still works.
 const MinLocalTmux = "3.2"
 
-// MinHostTmux is the oldest tmux on a host. run-shell -C is the newest
-// feature a jump uses: tmux CHANGES lists it for 3.2. Deduced from CHANGES;
+// MinHostTmux is the oldest tmux on a host. run-shell -C and a view's
+// -T RGB are the newest features a jump uses: tmux CHANGES lists both for
+// 3.2. Deduced from CHANGES;
 // no tmux older than 3.4 was run.
 const MinHostTmux = "3.2"
 
@@ -261,10 +262,15 @@ func JumpSSH(host string, j Jump, master []string) []string {
 }
 
 // hostCommand is j.Remote() that ends the jump's session when the list
-// fails.
+// fails. A view's tmux draws in matchblox's screen, which draws true
+// colour and no terminfo says so: it is told (-T RGB, tmux 3.2).
 func (j Jump) hostCommand() []string {
 	const cleanup = `g=$1; shift; "$@" || { s=$?; tmux kill-session -t "=$g" 2>/dev/null; exit $s; }`
-	return append([]string{"/bin/sh", "-c", cleanup, "sh", JumpSessionName(j.ID)}, j.Remote()...)
+	run := j.Remote()
+	if j.View {
+		run = slices.Concat(run[:1], []string{"-T", "RGB"}, run[1:])
+	}
+	return append([]string{"/bin/sh", "-c", cleanup, "sh", JumpSessionName(j.ID)}, run...)
 }
 
 func (j Jump) switchClient(session string) []string {

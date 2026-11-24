@@ -67,8 +67,8 @@ func TestACardNamesAnotherHost(t *testing.T) {
 
 	m = upd(t, m, helloMsg(proto.Hello{Version: proto.Version, Host: "hearth"}))
 	m.toList()
-	if m = pressOn(m, "s"); m.boardHost != "hearth" || !strings.Contains(frameOf(m)[0], "hearth ▾") {
-		t.Errorf("s turned to %q, header %q: want the home host by its hello's name", m.boardHost, frameOf(m)[0])
+	if m = pressOn(m, "s"); m.boardHost != "hearth" || firstChip(m) != "hearth" || strings.Contains(barLine(m), "ws-1") { // the bar's chips are the hosts shown
+		t.Errorf("s turned to %q, bar %q: want the home host by its hello's name", m.boardHost, barLine(m))
 	}
 	if s := m.all.sessions[0]; s.Host != "" {
 		t.Errorf("the home card's routing key changed to %q", s.Host)
@@ -116,7 +116,7 @@ func TestABlockedHostSaysWhyAndItsFix(t *testing.T) {
 	blocked := func(t *testing.T, msg func(*fakeConn) any) Model {
 		t.Helper()
 		now := lostAt
-		m, _, conns := hostsAt(t, &now, "", 120, 30, "ws-1")
+		m, _, conns := hostsAt(t, &now, "", 140, 30, "ws-1") // 140: the desk's list is 40 wide (design review D16)
 		m = upd(t, m, stateMsg(hostState(sess(1, "hearth-api", "%1", nil))))
 		m = upd(t, m, peerMsg{host: "ws-1", conn: conns["ws-1"], msg: msg(conns["ws-1"])})
 		m = consoleOn(m)

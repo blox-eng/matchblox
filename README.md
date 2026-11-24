@@ -173,7 +173,7 @@ to the agent's own pane, and `ctrl+q` flips them.
 | `y` | In the list, gives the go a stoker step waits for. |
 | `c` | In the list, copies what the agent said last. |
 | `m` | In the list, opens the session's menu. |
-| `g` | In the list, shows only the chain of the chosen session. `Esc` shows all. With the agent beside the list, it shows the chain's agents side by side, and `G` opens the chain's room. |
+| `g` | In the list, shows only the chain of the chosen session. `Esc` shows all. |
 | `s` | In the list, shows the next host, then all hosts. |
 | `N` | In the list, starts a new session: where, the agent, its account and a first message (none on a new account). |
 | `A` | In the list, switches the chosen session to another agent in the same pane. |

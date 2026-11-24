@@ -256,6 +256,17 @@ func keyLineOf(m tea.Model) string {
 		return p.lines()
 	}
 	line := sampledAge.ReplaceAllString(strings.TrimSpace(actionLine(m)), "")
+	if mm, ok := m.(Model); ok && mm.desk() && !mm.consenting() {
+		// The desk's bar: a prompt after its mode word, else the mode word
+		// and the session the keys go to, without the chips the key line
+		// never had (owner, 2026-11-24).
+		if _, _, _, prompt := mm.deskPrompt(max(mm.width, minWidth)); prompt {
+			_, rest, _ := strings.Cut(line, " ")
+			line = strings.TrimSpace(rest)
+		} else {
+			line, _, _ = strings.Cut(line, "   ")
+		}
+	}
 	if feet := boxFeet(m); feet != "" {
 		line += " || " + feet
 	}
@@ -356,7 +367,9 @@ func keyLineStates(t *testing.T) []keyLineAt {
 		add(fmt.Sprintf("form new/%d", w), sendKey(q, "N"))
 		add(fmt.Sprintf("form rename/%d", w), sendKey(on("%2"), "r"))
 		add(fmt.Sprintf("form switch/%d", w), sendKey(on("%2"), "A"))
-		add(fmt.Sprintf("pending jump/%d", w), sendKey(on("%3"), "ctrl+o"))
+		if w < 100 { // the desk's ctrl+o waits for nothing; CtrlOExpands reads its bar
+			add(fmt.Sprintf("pending jump/%d", w), sendKey(on("%3"), "ctrl+o"))
+		}
 		add(fmt.Sprintf("pending kill/%d", w), sendKey(on("%3"), "x"))
 		add(fmt.Sprintf("pending cancelled/%d", w), sendKey(sendKey(on("%3"), "x"), "esc"))
 		add(fmt.Sprintf("held/%d", w), sendKey(inList(at(w, nightState())), "ctrl+o"))
@@ -443,13 +456,13 @@ var keyLineSays = map[string]string{
 
 // keyLines are the key lines and box feet of main, read from its output.
 var keyLines = map[string]string{
-	"empty/100/sessions/row 0":           "writing to no session · ⏎ send · ↑↓ choose · esc list · ctrl+o expand · tab Machine",
+	"empty/100/sessions/row 0":           "AGENT",
 	"empty/100/machine/row 0":            "↑↓ move  ⏎ open  f stoker  / find  q quit",
 	"empty/100/git/row 0":                "esc machine  ⏎ shell  ␣ mark  X all safe  x remove  r rescan  / find  q quit",
 	"empty/100/history/row 0":            "↑↓ move  esc machine  f stoker  / find  q quit",
 	"empty/100/panes/row 0":              "↑↓ move  esc machine  ⏎ go  s sort  / find  q quit",
 	"empty/100/stoker/row 0":             "↑↓ move  esc machine  f stoker  / find  q quit",
-	"fixture/100/sessions/row 0":         "writing to app-feature · ⏎ send · ↑↓ choose · esc list · ctrl+o expand · tab Machine",
+	"fixture/100/sessions/row 0":         "AGENT  app-feature",
 	"fixture/100/machine/row 0":          "↑↓ move  ⏎ open  f stoker  / find  q quit",
 	"fixture/100/git/row 0":              "esc machine  ⏎ shell  ␣ mark  X all safe  x remove  r rescan  / find  q quit",
 	"fixture/100/history/row 0":          "↑↓ move  esc machine  f stoker  / find  q quit",
@@ -458,7 +471,7 @@ var keyLines = map[string]string{
 	"fixture/100/panes/row 2":            "↑↓ move  esc machine  ⏎ go  s sort  / find  q quit",
 	"fixture/100/panes/row 3":            "↑↓ move  esc machine  ⏎ go  s sort  / find  q quit",
 	"fixture/100/stoker/row 0":           "↑↓ move  esc machine  f stoker  / find  q quit",
-	"queue/100/sessions/row 0":           "writing to app-feature · ⏎ send · ↑↓ choose · esc list · ctrl+o expand · tab Machine",
+	"queue/100/sessions/row 0":           "AGENT  app-feature",
 	"queue/100/machine/row 0":            "↑↓ move  ⏎ open  f stoker  / find  q quit",
 	"queue/100/git/row 0":                "esc machine  ⏎ shell  ␣ mark  X all safe  x remove  r rescan  / find  q quit",
 	"queue/100/history/row 0":            "↑↓ move  esc machine  f stoker  / find  q quit",
@@ -476,7 +489,7 @@ var keyLines = map[string]string{
 	"queue/50/panes/row 2":               "esc machine  ⏎ go  s sort",
 	"queue/50/panes/row 3":               "esc machine  ⏎ go  s sort",
 	"queue/50/stoker/row 0":              "esc machine  f stoker",
-	"doors/100/sessions/row 0":           "writing to app-feature · ⏎ send · ↑↓ choose · esc list · ctrl+o expand · tab Machine",
+	"doors/100/sessions/row 0":           "AGENT  app-feature",
 	"doors/100/machine/row 0":            "↑↓ move  ⏎ open  f stoker  / find  q quit",
 	"doors/100/git/row 0":                "esc machine  ⏎ shell  ␣ mark  X all safe  x remove  r rescan  / find  q quit",
 	"doors/100/history/row 0":            "↑↓ move  esc machine  f stoker  / find  q quit",
@@ -485,7 +498,7 @@ var keyLines = map[string]string{
 	"doors/100/panes/row 2":              "↑↓ move  esc machine  ⏎ go  s sort  / find  q quit",
 	"doors/100/panes/row 3":              "↑↓ move  esc machine  ⏎ go  s sort  / find  q quit",
 	"doors/100/stoker/row 0":             "↑↓ move  esc machine  f stoker  / find  q quit",
-	"night/100/sessions/row 0":           "writing to app-feature · ⏎ send · ↑↓ choose · esc list · ctrl+o expand · tab Machine",
+	"night/100/sessions/row 0":           "AGENT  app-feature",
 	"night/100/machine/row 0":            "↑↓ move  ⏎ open  f stoker  / find  q quit",
 	"night/100/git/row 0":                "esc machine  ⏎ shell  ␣ mark  X all safe  x remove  r rescan  / find  q quit",
 	"night/100/history/row 0":            "↑↓ move  esc machine  f stoker  / find  q quit",
@@ -517,7 +530,7 @@ var keyLines = map[string]string{
 	"night/50/stoker/row 5":              "y give the go  ⏎ command  n stop night",
 	"night/50/stoker/row 6":              "⏎ command  n stop night",
 	"night/50/stoker/row 7":              "⏎ command  n stop night",
-	"morning/100/sessions/row 0":         "writing to app-feature · ⏎ send · ↑↓ choose · esc list · ctrl+o expand · tab Machine",
+	"morning/100/sessions/row 0":         "AGENT  app-feature",
 	"morning/100/machine/row 0":          "↑↓ move  ⏎ open  f stoker  / find  q quit",
 	"morning/100/git/row 0":              "esc machine  ⏎ shell  ␣ mark  X all safe  x remove  r rescan  / find  q quit",
 	"morning/100/history/row 0":          "↑↓ move  esc machine  f stoker  / find  q quit",
@@ -533,7 +546,7 @@ var keyLines = map[string]string{
 	"morning/100/stoker/row 5":           "↑↓ move  esc machine  ⏎ command  f stoker  / find  q quit",
 	"morning/100/stoker/row 6":           "↑↓ move  esc machine  ⏎ command  f stoker  / find  q quit",
 	"morning/100/stoker/row 7":           "↑↓ move  esc machine  ⏎ command  f stoker  / find  q quit",
-	"stoker up/100/sessions/row 0":       "writing to app-feature · ⏎ send · ↑↓ choose · esc list · ctrl+o expand · tab Machine",
+	"stoker up/100/sessions/row 0":       "AGENT  app-feature",
 	"stoker up/100/machine/row 0":        "↑↓ move  ⏎ open  f stoker  / find  q quit",
 	"stoker up/100/git/row 0":            "esc machine  ⏎ shell  ␣ mark  X all safe  x remove  r rescan  / find  q quit",
 	"stoker up/100/history/row 0":        "↑↓ move  esc machine  f stoker  / find  q quit",
@@ -542,7 +555,7 @@ var keyLines = map[string]string{
 	"stoker up/100/panes/row 2":          "↑↓ move  esc machine  ⏎ go  s sort  / find  q quit",
 	"stoker up/100/panes/row 3":          "↑↓ move  esc machine  ⏎ go  s sort  / find  q quit",
 	"stoker up/100/stoker/row 0":         "↑↓ move  esc machine  ⏎ open the stoker  Q quit it  f stoker  / find  q quit",
-	"stoker starting/100/sessions/row 0": "writing to app-feature · ⏎ send · ↑↓ choose · esc list · ctrl+o expand · tab Machine",
+	"stoker starting/100/sessions/row 0": "AGENT  app-feature",
 	"stoker starting/100/machine/row 0":  "↑↓ move  ⏎ open  f stoker  / find  q quit",
 	"stoker starting/100/git/row 0":      "esc machine  ⏎ shell  ␣ mark  X all safe  x remove  r rescan  / find  q quit",
 	"stoker starting/100/history/row 0":  "↑↓ move  esc machine  f stoker  / find  q quit",
@@ -551,7 +564,7 @@ var keyLines = map[string]string{
 	"stoker starting/100/panes/row 2":    "↑↓ move  esc machine  ⏎ go  s sort  / find  q quit",
 	"stoker starting/100/panes/row 3":    "↑↓ move  esc machine  ⏎ go  s sort  / find  q quit",
 	"stoker starting/100/stoker/row 0":   "↑↓ move  esc machine  ⏎ open the stoker  Q quit it  f stoker  / find  q quit",
-	"stoker run/100/sessions/row 0":      "writing to app-feature · ⏎ send · ↑↓ choose · esc list · ctrl+o expand · tab Machine",
+	"stoker run/100/sessions/row 0":      "AGENT  app-feature",
 	"stoker run/100/machine/row 0":       "↑↓ move  ⏎ open  f stoker  / find  q quit",
 	"stoker run/100/git/row 0":           "esc machine  ⏎ shell  ␣ mark  X all safe  x remove  r rescan  / find  q quit",
 	"stoker run/100/history/row 0":       "↑↓ move  esc machine  f stoker  / find  q quit",
@@ -561,7 +574,7 @@ var keyLines = map[string]string{
 	"stoker run/100/panes/row 3":         "↑↓ move  esc machine  ⏎ go  s sort  / find  q quit",
 	"stoker run/100/stoker/row 0":        "↑↓ move  esc machine  ⏎ command  f stoker  / find  q quit",
 	"stoker run/100/stoker/row 1":        "↑↓ move  esc machine  ⏎ command  f stoker  / find  q quit",
-	"demo/100/sessions/row 0":            "writing to flint-auth · ⏎ send · ↑↓ choose · esc list · ctrl+o expand · tab Machine",
+	"demo/100/sessions/row 0":            "AGENT  flint-auth",
 	"demo/100/machine/row 0":             "↑↓ move  ⏎ open  f stoker  / find  q quit",
 	"demo/100/git/row 0":                 "esc machine  ⏎ shell  ␣ mark  X all safe  x remove  r rescan  / find  q quit",
 	"demo/100/history/row 0":             "↑↓ move  esc machine  f stoker  / find  q quit",
@@ -587,7 +600,7 @@ var keyLines = map[string]string{
 	"demo/50/panes/row 6":                "esc machine  ⏎ go  s sort",
 	"demo/50/panes/row 7":                "esc machine  ⏎ go  s sort",
 	"demo/50/stoker/row 0":               "esc machine  f stoker",
-	"orphans/100/sessions/row 0":         "writing to app-feature · ⏎ send · ↑↓ choose · esc list · ctrl+o expand · tab Machine",
+	"orphans/100/sessions/row 0":         "AGENT  app-feature",
 	"orphans/100/machine/row 0":          "↑↓ move  ⏎ open  f stoker  / find  q quit",
 	"orphans/100/machine/row 1":          "↑↓ move  ⏎ open  f stoker  / find  q quit",
 	"orphans/100/git/row 0":              "esc machine  ⏎ shell  ␣ mark  X all safe  x remove  r rescan  / find  q quit",
@@ -598,22 +611,21 @@ var keyLines = map[string]string{
 	"orphans/100/panes/row 3":            "↑↓ move  esc machine  ⏎ go  s sort  / find  q quit",
 	"orphans/100/stoker/row 0":           "↑↓ move  esc machine  f stoker  / find  q quit",
 	"search/100":                         "/ app▏  ⏎ keep  esc clear",
-	"chat/100":                           "writing to app-review · ⏎ send · ↑↓ choose · esc list · ctrl+o expand · tab Machine",
-	"search kept/100":                    "in the list · ↑↓ choose · ⏎ write · s hosts · g chain · m menu",
-	"form new/100":                       "in the list · ↑↓ choose · ⏎ write · s hosts · g chain · m menu || ╰─ ⏎ pick · ↑↓ move · tab next · esc keep the path ───────╯",
-	"form rename/100":                    "in the list · ↑↓ choose · ⏎ write · s hosts · g chain · m menu || ╰─ ⏎ rename ─ esc ────────────────────────────────────────╯",
-	"form switch/100":                    "in the list · ↑↓ choose · ⏎ write · s hosts · g chain · m menu || ╰─ ⏎ plan ─ tab next ─ esc ───────────────────────────────╯",
-	"pending jump/100":                   "in the list · ↑↓ choose · ⏎ write · s hosts · g chain · m menu",
+	"chat/100":                           "AGENT  app-review",
+	"search kept/100":                    "LIST",
+	"form new/100":                       "LIST || ╰─ ⏎ pick · ↑↓ move · ←→ repo · tab next · esc keep the path ─────╯",
+	"form rename/100":                    "LIST || ╰─ ⏎ rename ─ esc ────────────────────────────────────────────────╯",
+	"form switch/100":                    "LIST || ╰─ ⏎ plan ─ tab next ─ esc ───────────────────────────────────────╯",
 	"pending kill/100":                   "Kill tools: tmux kill-pane -t %3 then kill -TERM 400 · y run ─ any other key cancels || ╰─ y run ─ any other key cancels ──────────╯",
-	"pending cancelled/100":              "in the list · ↑↓ choose · ⏎ write · s hosts · g chain · m menu",
+	"pending cancelled/100":              "LIST",
 	"held/100":                           "The stoker is on. Take over?: y  rests it while you work n  keeps it on · y take over ─ n keep it on || ╰─ y take over ─ n keep it on ─────────────────────╯",
 	"held x/100":                         "The stoker is on. Take over?: y  rests it while you work n  keeps it on · y take over ─ n keep it on || ╰─ y take over ─ n keep it on ─────────────────────╯",
-	"pending door/100":                   "RUN Add the queue hooks: write ~/.claude/settings.json   y run  any other key cancels",
-	"pending door long/100":              "RUN Add the queue hooks: write ~/.claude/settings.json   ↓ the rest, then y",
-	"pending door also/100":              "RUN Add the way back: write ~/.tmux.conf   y run  any other key cancels",
-	"sheet f/100":                        "in the list · ↑↓ choose · ⏎ write · s hosts · g chain · m menu || ╰─ ⏎ start ─ tab chips ─ esc ────────────────────────────────╯",
-	"sheet n/100":                        "in the list · ↑↓ choose · ⏎ write · s hosts · g chain · m menu || ╰─ ⏎ send ─ tab chips ─ esc ─────────────────────────────────╯",
-	"sheet chips/100":                    "in the list · ↑↓ choose · ⏎ write · s hosts · g chain · m menu || ╰─ ⏎ send ─ space toggle ─ tab back ─────────────────────────╯",
+	"pending door/100":                   "Add the queue hooks: write ~/.claude/settings.json   y run · any other key cancels",
+	"pending door long/100":              "Add the queue hooks: write ~/.claude/settings.json   ↓ the rest, then y",
+	"pending door also/100":              "Add the way back: write ~/.tmux.conf   y run · any other key cancels",
+	"sheet f/100":                        "LIST || ╰─ ⏎ start ─ tab chips ─ esc ────────────────────────────────╯",
+	"sheet n/100":                        "LIST || ╰─ ⏎ send ─ tab chips ─ esc ─────────────────────────────────╯",
+	"sheet chips/100":                    "LIST || ╰─ ⏎ send ─ space toggle ─ tab back ─────────────────────────╯",
 	"stoker step ask/100":                "↑↓ move  esc machine  y give the go  ⏎ command  n stop night  / find  q quit",
 	"stoker step look/100":               "↑↓ move  esc machine  ⏎ command  f stoker  / find  q quit",
 	"stoker command/100":                 "↑↓ move  esc machine  y give the go  ⏎ command  n stop night  / find  q quit",

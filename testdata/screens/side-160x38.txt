@@ -1,6 +1,5 @@
- ▰ matchblox                                                                                                                                       ● 6 need you
- SESSIONS 7    machine
-────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ▰ matchblox    ALL    spark-docs ●1    hearth-api    kindle-web ●1    no directory ●1    flint-auth ●1    ember-billing ●1    +1 ▾           ● 6 need you    ⚙
+────────────────────────────────────────┬───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  NEEDS YOU · 6  −                       │ flint-auth ✻ asks · #4545 ci                                                          ctx 41%  ctrl+o expand · m menu
 ▌╿ flint-auth                       2m ✻│
    conflicts with main                  │
@@ -14,7 +13,7 @@
    I am moving the cache key to the go.…│
  ╿ wick-mobile                     now ▣│
    ⠙ Working                            │
-────────────────────────────────────────│
+────────────────────────────────────────┤
  WORKING · 1  −                         │
  ✦ hearth-api             #4551 ci  3h ✻│
                                         │
@@ -33,6 +32,7 @@
                                         │
                                         │
                                         │
+                                        │
  + new · ✧ 7 tips                       │ ›                                                                                                ⏎ send to flint-auth
-────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- writing to flint-auth · ⏎ send · ↑↓ choose · esc list · ctrl+o expand · tab Machine
+────────────────────────────────────────┴───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ AGENT  flint-auth   this machine cpu 0% mem 40%   ✻ Max 5h 84% · wk 82%   · login usage not measured   ❋ Plus 5h 40% · wk 12%             ctrl+q list   ? keys

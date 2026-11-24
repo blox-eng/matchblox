@@ -516,7 +516,7 @@ func homeBinds(pane string) [][]string {
 	if remote.PaneID(pane) {
 		binds = append(binds, panes.HomeMarkArgv(pane), panes.SizeArgv(pane))
 	}
-	return append(binds, panes.CommandKeysArgv(), panes.MarkKeyArgv(), panes.BeltKeyArgv(), panes.TapKeysArgv(), panes.ViewerHookArgv(), panes.BesideKeysArgv(), panes.BesideHookArgv(), remote.ViewHookArgv())
+	return append(binds, panes.CommandKeysArgv(), panes.MarkKeyArgv(), panes.BeltKeyArgv(), panes.TapKeysArgv(), panes.ViewerHookArgv(), remote.ViewHookArgv())
 }
 
 // goHome replaces this process with `tmux new-session -A -s matchblox

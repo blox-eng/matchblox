@@ -190,6 +190,7 @@ func TestHiddenLostHostIsNamedNowhereInAllHosts(t *testing.T) {
 func TestHiddenHostShowsItsTroubleWhenShown(t *testing.T) {
 	m := lostHidden(t)
 	m = pressOn(m, "s")
+	m.saying = nil // the old data's toast ended: on the desk it sat on the list's foot
 	if f := strings.Join(frameOf(m), "\n"); m.boardHost != "ws-2" || !strings.Contains(f, "! ws-2 not reached") {
 		t.Fatalf("the list on ws-2 hides its trouble:\n%s", f)
 	}
@@ -228,6 +229,7 @@ func TestOneHostShownStillNamesAnotherLostHost(t *testing.T) {
 	if m.boardHost != "ws-1" {
 		t.Fatalf("s turned to %q", m.boardHost)
 	}
+	m.saying = nil // the old data's toast ended: on the desk it sat on the list's foot
 	if f := strings.Join(frameOf(m), "\n"); !strings.Contains(f, "! ws-2 not reached") {
 		t.Errorf("s on ws-1 hides the lost ws-2:\n%s", f)
 	}

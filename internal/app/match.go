@@ -206,6 +206,9 @@ func (m Model) moving() bool {
 	if m.opt.NoMotion {
 		return false
 	}
+	if m.desk() && m.pulses() {
+		return true
+	}
 	for _, s := range m.snap.Sessions {
 		if k := m.matchOf(s); k == matchLit || (k == matchUnlit && m.asks(s)) {
 			return true

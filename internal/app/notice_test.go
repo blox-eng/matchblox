@@ -11,15 +11,19 @@ import (
 // boardNoticeRow is what the Sessions tab says over the list's foot and
 // the chat's line, "" for nothing.
 func boardNoticeRow(m Model) string {
-	return strings.Join(saidRows(m, max(m.width, minWidth)), "\n")
+	sep := "\n"
+	if m.desk() { // the list's foot wraps a notice to the list's width
+		sep = " "
+	}
+	return strings.Join(saidRows(m, max(m.width, minWidth)), sep)
 }
 
 func TestANoticeNeverHidesTheCount(t *testing.T) {
 	now := demoAt
 	m := boardShot(t, boardFixture(t), 80, 31, func(m *Model) { m.opt.Now = func() time.Time { return now } })
 	head := strings.Split(plainFrame(m), "\n")[0]
-	if !strings.Contains(head, "● 4 need you") || !strings.Contains(head, "all hosts ▾") {
-		t.Fatalf("the header before the notice: %q", head)
+	if !strings.Contains(head, "● 4 need you") || !strings.Contains(barLine(m), "2 hosts s▸") { // all hosts: the bar's chips
+		t.Fatalf("the header before the notice: %q, the bar %q", head, barLine(m))
 	}
 	m.notice("copied hearth-api's last answer")
 	if h := strings.Split(plainFrame(m), "\n")[0]; h != head {

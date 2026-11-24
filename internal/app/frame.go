@@ -7,8 +7,11 @@ import (
 	"strconv"
 	"strings"
 
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
+	"github.com/blox-eng/matchblox/internal/hosts"
 	"github.com/blox-eng/matchblox/internal/limits"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
@@ -71,6 +74,18 @@ func (m Model) frameHead(w int) (string, []span) {
 		}
 		right = append(right, piece{s: lipgloss.NewStyle().Foreground(m.marks().Ember).Render(fmt.Sprintf("✓ %d done", d))})
 	}
+	// The marks that last (owner, 2026-11-24): the standing errors, which
+	// a tap says again, and data no longer fresh.
+	if n := len(m.standing()); n > 0 && m.have {
+		right = append(right, gap(4), piece{st.warn.Render(fmt.Sprintf("⚠ %d", n)), "warn"})
+	}
+	if m.hostCount() <= 1 && m.stale(m.opt.Host) {
+		stale := "stale"
+		if name := m.nameOf(m.opt.Host); name != hosts.ThisMachine { // a host's console names it
+			stale = name + " · stale"
+		}
+		right = append(right, gap(4), piece{s: st.warn.Render(stale)})
+	}
 	if len(right) > 0 {
 		right = append(right, gap(4))
 	}
@@ -79,6 +94,10 @@ func (m Model) frameHead(w int) (string, []span) {
 		right = append(right, gap(1), piece{st.neg.Render("!"), "cog:loops"})
 	}
 	right = append(right, gap(1))
+	if m.needCount() > 0 { // the names follow the count, in the room the spaces leave when folded
+		names := m.headNamePieces(w - cells(left) - cells(right) - 12)
+		right = slices.Concat(right[:1], names, right[1:])
+	}
 
 	sps := m.spaces()
 	if len(sps) == 0 {
@@ -100,6 +119,29 @@ func (m Model) frameHead(w int) (string, []span) {
 	}
 }
 
+// headNamePieces are the names of the sessions that need the owner, in at
+// most room cells, while the list is hidden: a tap on one opens it. The
+// names that do not fit are counted.
+func (m Model) headNamePieces(room int) []piece {
+	names := m.headNames()
+	for k := len(names); k > 0; k-- {
+		ps := []piece{gap(2)}
+		for i, name := range names[:k] {
+			if i > 0 {
+				ps = append(ps, piece{s: m.st.faint.Render(" · ")})
+			}
+			ps = append(ps, piece{m.st.text.Render(name), "name:" + strconv.Itoa(i)})
+		}
+		if k < len(names) {
+			ps = append(ps, piece{s: m.st.muted.Render(" · +" + strconv.Itoa(len(names)-k))})
+		}
+		if cells(ps) <= room || k == 1 {
+			return ps
+		}
+	}
+	return nil
+}
+
 // spacePiece is a space's name and its waits: the open one uppercase in
 // the accent, bold, the others faint; the count muted, accent when open.
 func (m Model) spacePiece(sp space) piece {
@@ -115,11 +157,12 @@ func (m Model) spacePiece(sp space) piece {
 	return piece{ink.Render(name) + count, "space:" + sp.name}
 }
 
-// frameBar is the desk's bar row: the mode word, each host's chip, the
-// usage of each plan with its resets, and the stoker, 3 cells apart; at
-// the right the way out of the agent or the shell, and ? keys. Only
-// trouble takes colour, on its own chip. Short of room the hosts fold
-// into N hosts s▸, but a host with trouble keeps its chip.
+// frameBar is the desk's bar row: the mode word (and in AGENT the session
+// the keys go to), each host's chip, the usage of each plan with its
+// resets, and the stoker, 3 cells apart; at the right the way out of the
+// agent or the shell, and ? keys. Only trouble takes colour, on its own
+// chip. Short of room the hosts fold into N hosts s▸, but a host with
+// trouble keeps its chip.
 func (m Model) frameBar(mode string, w int) (string, []span) {
 	st := m.st
 	modeInk := st.accent.Bold(true)
@@ -127,6 +170,9 @@ func (m Model) frameBar(mode string, w int) (string, []span) {
 		modeInk = st.muted
 	}
 	left := []piece{{s: " " + modeInk.Render(mode)}}
+	if name := m.keysGoTo(); mode == "AGENT" && name != "" {
+		left = append(left, gap(2), piece{s: st.text.Render(name)})
+	}
 	var right []piece
 	if mode == "AGENT" || mode == "SHELL" {
 		right = append(right, piece{s: st.text.Render(flipKey) + st.muted.Render(" list")}, gap(3))
@@ -160,10 +206,19 @@ func (m Model) frameBar(mode string, w int) (string, []span) {
 			kept = append(kept, c)
 		}
 	}
+	var hidden []piece // all hosts leaves a hidden host out: each fold still says so
+	if n := len(m.hiddenHosts); n > 0 && len(chips) > 0 {
+		hidden = []piece{{s: m.st.faint.Render(" · ") + st.muted.Render(fmt.Sprintf("%d hidden", n))}}
+		chips[len(chips)-1] = append(chips[len(chips)-1], hidden...)
+	}
 	folded := chips
-	if len(hosts) > 1 {
+	switch {
+	case len(hosts) > 1:
 		chips[len(chips)-1] = append(chips[len(chips)-1], gap(2), turn)
-		folded = append(slices.Clone(kept), []piece{{st.muted.Render(strconv.Itoa(len(hosts)) + " hosts"), "cog:health"}, gap(1), turn})
+		count := append([]piece{{st.muted.Render(strconv.Itoa(len(hosts)) + " hosts"), "cog:health"}}, hidden...)
+		folded = append(slices.Clone(kept), append(count, gap(1), turn))
+	case m.hostCount() > 1 && len(chips) > 0: // one host shown of several: s▸ turns on
+		chips[0] = append(chips[0], gap(2), turn)
 	}
 	var stoker [][]piece
 	if word := m.stokerBadge(false); word != "" {
@@ -186,6 +241,19 @@ func (m Model) frameBar(mode string, w int) (string, []span) {
 		}
 	}
 	return lay(tries[len(tries)-1], right, w)
+}
+
+// keysGoTo names the session the agent's keys go to: the one whose
+// screen the region shows, or the chosen one where matchblox draws its
+// chat.
+func (m Model) keysGoTo() string {
+	if m.opt.Beside {
+		return m.agent.name
+	}
+	if s, ok := m.sideChosen(); ok {
+		return m.cardName(s)
+	}
+	return ""
 }
 
 // hostChip is host's chip and whether it shows trouble: its cpu and
@@ -271,6 +339,20 @@ func (m Model) busyLoop() bool {
 	return slices.ContainsFunc(m.hosts(), func(h string) bool { return m.inView(h) && len(m.orphansOn(h)) > 0 })
 }
 
+// pulses: the bar shows the Pulse, for a host or a plan not read yet.
+func (m Model) pulses() bool {
+	if m.lost {
+		return false
+	}
+	for _, h := range m.hosts() {
+		if m.inView(h) && !m.stale(h) && len(m.orphansOn(h)) == 0 && !slices.Contains(m.statedHosts(), h) {
+			return true
+		}
+	}
+	rows, _ := m.usageRows(false)
+	return slices.ContainsFunc(rows, func(r usageRow) bool { return r.a.State != limits.Unmeasured && len(r.a.Uses(m.now())) == 0 })
+}
+
 // pulse stands where a value goes before it is read (DESIGN.md §5,
 // Pulse): … steps between faint and muted each 0.8 s, still in faint
 // without motion. Never a zero.
@@ -279,4 +361,233 @@ func (m Model) pulse() string {
 		return m.st.muted.Render("…")
 	}
 	return m.st.faint.Render("…")
+}
+
+// pressFrame runs a tap on the desk's head row or its bar: a space opens
+// it, who needs the owner clears the filters, ? keys opens the keys, and
+// a part of the machine opens the Machine tab.
+func (m Model) pressFrame(press string) (tea.Model, tea.Cmd) {
+	switch {
+	case press == tapAgain: // a prompt's own taps, as on the key line
+		return m.startAgain()
+	case press == tapBack:
+		return m.leaveStandIn(), nil
+	case press == "waits":
+		m.clearBoardFilters()
+		m.flash = ""
+		return m, nil
+	case press == "keys":
+		m.over = "keys"
+		return m, nil
+	case press == "warn":
+		said := m.sayStanding()
+		return m, said
+	case strings.HasPrefix(press, "name:"):
+		i, _ := strconv.Atoi(strings.TrimPrefix(press, "name:"))
+		if waits := m.sideWaits(); i < len(waits) {
+			return m.chooseSide(paneOf(waits[i])), nil // the list stays hidden
+		}
+		return m, nil
+	case strings.HasPrefix(press, "space:"):
+		m.space, m.peekAt = strings.TrimPrefix(press, "space:"), m.now()
+		if m.space == "all" {
+			m.space = ""
+		}
+		return m, nil
+	case press == "cog:stoker" && m.hasAgent(): // the stoker agent, as the header's word opened it
+		return m.openAgent()
+	case strings.HasPrefix(press, "cog:"):
+		m.setTab(tabMachine)
+		return m, nil
+	}
+	return m.keyed(keyPress(press))
+}
+
+// drawDesk lays out the desk, top to bottom: the head row, a rule, the
+// list and the agent with the edge between them, a rule and the bar. The
+// rules meet the edge with ┬ and ┴, each in accent on the side that has
+// the keys. A box asks over it all; the ? sheet floats over the agent.
+func (m Model) drawDesk(w int) drawn {
+	head, headSpans := m.frameHead(w)
+	mode := m.deskMode()
+	bar, barSpans := m.frameBar(mode, w)
+	prompt, said, spans, prompting := m.deskPrompt(w)
+	if prompting {
+		bar, barSpans = m.promptBar(prompt, said, spans, w)
+	}
+	box, room := m.sideBoxAt(w), m.bodyRows()
+	rule := func(join string, lit bool) string {
+		if box.listW == 0 || box.chatW == 0 {
+			return m.st.rule.Render(strings.Repeat("─", w))
+		}
+		ink := m.st.rule
+		if lit {
+			ink = m.st.accent
+		}
+		return m.st.rule.Render(strings.Repeat("─", box.listW)) + ink.Render(join) + m.st.rule.Render(strings.Repeat("─", box.chatW))
+	}
+	sc := drawn{lines: []string{head, rule("┬", mode != "AGENT")}, head: headSpans, bodyTop: 2, noteAt: -1}
+	waits := m.sideWaits()
+	for _, s := range headSpans {
+		switch i, err := strconv.Atoi(strings.TrimPrefix(s.press, "name:")); {
+		case s.press == "waits":
+			sc.waits = s
+		case err == nil && i < len(waits):
+			sc.names, sc.namePanes = append(sc.names, s), append(sc.namePanes, paneOf(waits[i]))
+		}
+	}
+	b := m.sideBody(w, room)
+	sc.lines, sc.rows = append(sc.lines, b.lines...), b.rows
+	sc.keysAt, sc.keys = len(sc.lines)+1, barSpans
+	sc.lines = append(sc.lines, rule("┴", mode == "AGENT"), bar)
+	switch {
+	case m.consenting():
+		m.overlayConsent(&sc, w)
+	case m.sheet != nil:
+		m.overlaySheet(&sc, w)
+	case m.form != nil:
+		m.overlayForm(&sc, w)
+	case m.menu != nil:
+		m.overlayMenu(&sc, w)
+	case m.over != "" && box.chatW > 0:
+		m.overlayOver(&sc, box, room)
+	}
+	if prompting { // a box dims the screen, never the prompt that answers it
+		sc.lines[sc.keysAt] = bar
+	}
+	m.deskNotice(&sc, w)
+	return sc
+}
+
+// deskPrompt is what waits for a key on the desk, as the key line says it
+// off the desk, and the mode word the bar wears for it: a confirm, a
+// question, the room's typing line, a menu's or a place's keys, the way
+// back from ⌃o, a newer release, the copy check, the record's wait. ok is
+// false while nothing waits.
+func (m Model) deskPrompt(w int) (mode, line string, spans []span, ok bool) {
+	s, chosen := m.sideChosen()
+	waits := !m.have && m.opt.Layered || m.searching || m.held != nil || m.pending != nil || m.pair.strips() || m.askingAgain() || m.lostLine() != "" ||
+		m.room != nil && m.room.typing || m.menu != nil || m.newer != "" || m.copyCode != "" || m.sidePlace != placeChat ||
+		m.footAt > 0 && m.inList() || chosen && m.sideIn == paneOf(s)
+	wait, keys, keySpans, rec := m.waitRows(w)
+	if !waits && !rec {
+		return "", "", nil, false
+	}
+	mode = m.deskMode()
+	if m.held != nil || m.pending != nil {
+		mode = "CONFIRM"
+	}
+	if rec {
+		lead := strings.TrimSpace(ansi.Strip(wait)) + "  "
+		for i := range keySpans {
+			keySpans[i].x0, keySpans[i].x1 = keySpans[i].x0+lipgloss.Width(lead), keySpans[i].x1+lipgloss.Width(lead)
+		}
+		return mode, " " + m.st.text.Render(lead) + strings.TrimPrefix(keys, " "), keySpans, true
+	}
+	if m.pending != nil { // over a box too: the bar says what waits for its yes
+		return mode, " " + m.confirmSays(), nil, true
+	}
+	line, spans = m.keyLine(w)
+	return mode, line, spans, true
+}
+
+// confirmSays is the bar's confirm: the step, then its keys, each key in
+// fg and its word muted, a faint · between (owner, 2026-11-24).
+func (m Model) confirmSays() string {
+	st, ck := m.st, m.keys.confirm
+	step := st.text.Render(m.pending.String()) + "   "
+	if !m.previewSeen() {
+		return step + st.text.Render(ck.ScrollDown.Help().Key) + st.muted.Render(" the rest, then ") + st.text.Render(ck.Yes.Help().Key)
+	}
+	keys := []string{st.text.Render(ck.Enter.Help().Key) + st.muted.Render(" "+ck.Enter.Help().Desc),
+		st.text.Render(m.keys.main.Back.Help().Key) + st.muted.Render(" cancel")}
+	if m.pending.destructive {
+		keys = []string{st.text.Render(ck.Yes.Help().Key) + st.muted.Render(" run"), st.muted.Render("any other key cancels")}
+	}
+	return step + strings.Join(keys, st.faint.Render(" · "))
+}
+
+// promptBar is the bar while a prompt waits: the mode word first, then the
+// prompt and its keys in place of the chips (owner, 2026-11-24).
+func (m Model) promptBar(mode, line string, spans []span, w int) (string, []span) {
+	ink := m.st.accent.Bold(true)
+	if mode == "LIST" {
+		ink = m.st.muted
+	}
+	lead := " " + ink.Render(mode) + "  "
+	shift := lipgloss.Width(lead) - 1
+	moved := make([]span, len(spans))
+	for i, s := range spans {
+		moved[i] = span{s.x0 + shift, s.x1 + shift, s.press}
+	}
+	return fit(lead+strings.TrimRight(strings.TrimPrefix(line, " "), " "), w), moved
+}
+
+// overlayOver floats the open sheet over the agent region: the region less
+// 4 columns and a line on each side, so the agent's screen shows around
+// it. A narrow region gets a sheet that fills it.
+func (m Model) overlayOver(sc *drawn, box sideBox, room int) {
+	dx, dy := 4, 1
+	if box.chatW-2*dx < 24 || room-2*dy < 4 {
+		dx, dy = 0, 0
+	}
+	sw, sh := box.chatW-2*dx, room-2*dy
+	esc := m.st.text.Render(m.keys.side.Leave.Help().Key) + m.st.muted.Render(" closes")
+	for i, l := range m.floatBox(m.st.text.Render("? keys"), nil, esc, sw, sh) {
+		y := sc.bodyTop + dy + i
+		sc.lines[y] = overlayAt(sc.lines[y], box.chatX+dx, l)
+	}
+}
+
+// floatBox is a sheet that floats over the agent, w by h: a rounded edge
+// in faint, title in its top edge, 1 cell of padding inside, lines from
+// the top and foot on its last line.
+func (m Model) floatBox(title string, lines []string, foot string, w, h int) []string {
+	f := m.st.faint
+	top := f.Render("╭─ ") + title + " "
+	out := []string{top + f.Render(strings.Repeat("─", max(w-lipgloss.Width(top)-1, 0))+"╮")}
+	for i := range h - 2 {
+		l := ""
+		switch {
+		case i == h-3:
+			l = foot
+		case i < len(lines):
+			l = lines[i]
+		}
+		out = append(out, f.Render("│")+" "+fit(l, w-4)+" "+f.Render("│"))
+	}
+	return append(out, f.Render("╰"+strings.Repeat("─", max(w-2, 0))+"╯"))
+}
+
+// overlayAt is line with s drawn over it from column x.
+func overlayAt(line string, x int, s string) string {
+	return fit(ansi.Truncate(line, x, ""), x) + s + ansi.TruncateLeft(line, x+lipgloss.Width(s), "")
+}
+
+// deskNoticeAt is what the desk says, in the list's columns and muted,
+// and the body lines it takes: the list's last ones, over its foot (spec,
+// notices), never over the agent.
+func (m Model) deskNoticeAt(w int) (rows []string, y0, y1 int) {
+	text, lw, room := m.sideSays(), m.sideBoxAt(w).listW, m.bodyRows()
+	if text == "" || lw < 2 {
+		return nil, 0, 0
+	}
+	lines := []string{text}
+	if ansi.StringWidth(text) > lw-1 { // the list is narrow: its fix takes the lines it needs, never cut
+		lines = upTo(cutNotice(text, lw-1), max(noticeLines, room/3), lw-1)
+	}
+	lines = lines[max(len(lines)-room, 0):]
+	for _, l := range lines {
+		rows = append(rows, fit(" "+m.st.muted.Render(l), lw))
+	}
+	return rows, room - len(rows), room
+}
+
+// deskNotice draws deskNoticeAt over the body.
+func (m Model) deskNotice(sc *drawn, w int) {
+	rows, y0, _ := m.deskNoticeAt(w)
+	for i, r := range rows {
+		y := sc.bodyTop + y0 + i
+		sc.lines[y] = overlayAt(sc.lines[y], 0, r)
+	}
 }

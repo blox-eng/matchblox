@@ -74,3 +74,18 @@ func TestAViewNameEndingInASemicolonIsRefused(t *testing.T) {
 		}
 	}
 }
+
+// TestAPeerViewIsToldItDrawsTrueColour: matchblox's screen draws true
+// colour, which no terminfo tells a view's tmux on the peer, so its ssh
+// line runs tmux -T RGB; a ctrl+o jump draws in the owner's own terminal
+// and is told nothing.
+func TestAPeerViewIsToldItDrawsTrueColour(t *testing.T) {
+	j := Jump{Host: "ws-1", Pane: "%3", Prefix: "C-b", ID: "0123abcd", View: true}
+	if got := JumpSSH("ws-1", j, nil); !strings.Contains(got[len(got)-1], " tmux -T RGB bind-key ") {
+		t.Errorf("the view's ssh line runs %q, want tmux -T RGB", got[len(got)-1])
+	}
+	j.View = false
+	if got := JumpSSH("ws-1", j, nil); strings.Contains(got[len(got)-1], "RGB") {
+		t.Errorf("a jump's ssh line runs %q: it is told RGB", got[len(got)-1])
+	}
+}

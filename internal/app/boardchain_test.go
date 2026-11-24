@@ -86,7 +86,7 @@ func TestTheTabRowIsSessionsAndMachine(t *testing.T) {
 	if !slices.Equal(tabNames, []string{"sessions", "machine"}) {
 		t.Fatalf("tabs %q, want sessions and machine", tabNames)
 	}
-	m, _ := loadedWith(t, 100, queueState())
+	m, _ := loadedWith(t, 44, queueState()) // the phone: the desk has no tab row
 	for tab, want := range map[int][]string{tabSessions: {"SESSIONS", "3", "machine"}, tabMachine: {"sessions", "3", "MACHINE"}} {
 		on := m
 		on.setTab(tab)
@@ -103,7 +103,7 @@ func TestTheTabRowIsSessionsAndMachine(t *testing.T) {
 	}
 	// A detached busy loop burns: the tab row says so, Machine's !, on the
 	// Sessions and on a view of Machine.
-	burns, _ := loadedWith(t, 100, orphanState())
+	burns, _ := loadedWith(t, 44, orphanState())
 	stoker := burns
 	stoker.setTab(tabStoker)
 	for _, on := range []Model{burns, stoker} {
@@ -445,10 +445,10 @@ func TestATabLeavesTheRoom(t *testing.T) {
 	}
 
 	m, f := hearthOpen(t, 160, st)
-	heads := strings.Split(plainFrame(m), "\n")[1]
-	x := strings.Index(heads, "machine")
-	m = mouse(t, m, tea.MouseClickMsg{X: x + 1, Y: 1, Button: tea.MouseLeft})
-	m = mouse(t, m, tea.MouseReleaseMsg{X: x + 1, Y: 1, Button: tea.MouseLeft})
+	head := strings.Split(plainFrame(m), "\n")[0] // the desk's ⚙ opens Machine
+	x := ansi.StringWidth(head[:strings.Index(head, "⚙")])
+	m = mouse(t, m, tea.MouseClickMsg{X: x, Y: 0, Button: tea.MouseLeft})
+	m = mouse(t, m, tea.MouseReleaseMsg{X: x, Y: 0, Button: tea.MouseLeft})
 	if m.tab != tabMachine {
 		t.Fatalf("a tap on machine: tab %d", m.tab)
 	}
@@ -595,7 +595,7 @@ func TestLeavingTheRoomSaysGReopensIt(t *testing.T) {
 	if m.sidePlace != placeChat || !m.inList() {
 		t.Fatalf("◂ in the room: place %d, in the list %v", m.sidePlace, m.inList())
 	}
-	if keys := keyLineOf(m); !strings.Contains(keys, "g room") {
+	if keys := m.sideKeyWords(); !strings.Contains(keys, "g room") { // the keys the ? sheet and the phone's key line name
 		t.Errorf("the key line %q does not say g opens the room again", keys)
 	}
 	if m = pressOn(m, "g"); m.sidePlace != placeRoom {
@@ -639,7 +639,7 @@ func TestEnterReopensAWaitingMatch(t *testing.T) {
 			}
 		}
 		if c.desk {
-			m.beside = "%agent"
+			m.opt.Beside = true
 		}
 		if c.line {
 			m.toLine()

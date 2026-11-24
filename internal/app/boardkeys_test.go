@@ -968,8 +968,8 @@ func TestATapOnPocketChoosesTheCard(t *testing.T) {
 // span says so without a key: digits answer a card's question on the
 // board (ruling 37), so no tab span may press one.
 func TestATabsSpanPressesNoKey(t *testing.T) {
-	m := boardShot(t, boardFixture(t), 132, 34, nil)
-	sc := m.draw(132)
+	m := boardShot(t, boardFixture(t), 44, 34, nil) // the phone: the desk has no tab row
+	sc := m.draw(44)
 	machine := -1
 	for i, s := range sc.tabs {
 		if len(s.press) == 1 && s.press >= "0" && s.press <= "9" {

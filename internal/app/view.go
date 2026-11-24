@@ -151,8 +151,9 @@ type drawn struct {
 	// on each picks.
 	formAgentsAt int
 	formAgents   []span
-	stokerAt     span // the header's stoker word
-	warnAt       span // the header's ⚠ mark: a tap says the standing errors again
+	head         []span // the desk's head row: what a tap on each part presses
+	stokerAt     span   // the header's stoker word
+	warnAt       span   // the header's ⚠ mark: a tap says the standing errors again
 	// sayY0, sayY1, sayX0: the toast stack's lines and its first column; a
 	// tap there ends the toasts and reaches nothing under them.
 	sayY0, sayY1, sayX0 int
@@ -218,6 +219,9 @@ func (m Model) drawScreen(w int) drawn {
 		m.overlaySaying(&sc, w, [2]int{sc.boxAt, sc.boxAt + len(sc.boxRows)})
 		return sc
 	}
+	if m.desk() {
+		return m.drawDesk(w)
+	}
 	room := m.bodyRows()
 	var b body
 	switch {
@@ -261,6 +265,9 @@ func (m Model) drawScreen(w int) drawn {
 // bodyRows is how many rows the body has under the header and over the key
 // line; on Pocket's belt, to the bottom.
 func (m Model) bodyRows() int {
+	if m.desk() { // under the head row and its rule, over the rule and the bar
+		return max(m.height-4, 1)
+	}
 	if m.beltOnly() {
 		return max(m.height-3, 1)
 	}
@@ -592,6 +599,19 @@ func (m Model) alert() string {
 	return alert
 }
 
+// pendingSays is the step that waits for its yes, and the keys that answer.
+func (m Model) pendingSays() string {
+	st, ck := m.st, m.keys.confirm
+	confirm := plainHints(hintFor(ck.Enter, ""), hintFor(m.keys.main.Back, "cancel"))
+	if m.pending.destructive {
+		confirm = keyWord(ck.Yes, st.neg, st.muted, " run  any other key cancels")
+	}
+	if !m.previewSeen() {
+		confirm = st.muted.Render(plainHints(hintFor(ck.ScrollDown, ""))+", then ") + st.neg.Render(ck.Yes.Help().Key)
+	}
+	return st.text.Render(m.pending.String()) + "   " + st.muted.Render(confirm)
+}
+
 // keyLine is the bottom line: the keys of the open tab, each a tap target,
 // or what the person acts on now: an answer, a search, the take-over
 // question, a pending step and its confirm, or the tap again. What the
@@ -616,15 +636,7 @@ func (m Model) keyLine(w int) (string, []span) {
 			keyWord(m.keys.takeOver.Keep, st.accent, st.muted, " keeps it on"), w), nil
 	}
 	if m.pending != nil {
-		ck := m.keys.confirm
-		confirm := plainHints(hintFor(ck.Enter, ""), hintFor(m.keys.main.Back, "cancel"))
-		if m.pending.destructive {
-			confirm = keyWord(ck.Yes, st.neg, st.muted, " run  any other key cancels")
-		}
-		if !m.previewSeen() {
-			confirm = st.muted.Render(plainHints(hintFor(ck.ScrollDown, ""))+", then ") + st.neg.Render(ck.Yes.Help().Key)
-		}
-		return fit(" "+st.label.Render("RUN ")+st.text.Render(m.pending.String())+"   "+st.muted.Render(confirm), w), nil
+		return fit(" "+st.label.Render("RUN ")+m.pendingSays(), w), nil
 	}
 	if m.pair.strips() && (m.pair.beat == 4 || !m.askingAgain()) {
 		return fit(" "+st.text.Render(m.pair.line), w), nil

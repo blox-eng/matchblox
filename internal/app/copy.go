@@ -198,7 +198,7 @@ func (m Model) copyPasted(text string) (Model, tea.Cmd) {
 func (m Model) dragStart(x, y int) Model {
 	m.dragFrom, m.dragTo, m.dragLines, m.tapLater = nil, nil, nil, nil // a release that never came leaves no tap
 	w := max(m.width, minWidth)
-	if m.boardShown() && m.menu == nil && !m.boxZoom && m.layoutAt(w) != Narrow { // behind a box the agent is a picture: it copies nothing
+	if m.boardShown() && m.menu == nil && m.layoutAt(w) != Narrow {
 		sc := m.drawScreen(w)
 		m.dragFrom, m.dragLines, m.dragWithin = &point{x, y}, sc.lines, m.dragColumn(x, y-sc.bodyTop, w)
 	}
@@ -433,20 +433,9 @@ func wholeURL(text string) string {
 
 func isURL(s string) bool { return strings.HasPrefix(s, "https://") || strings.HasPrefix(s, "http://") }
 
-// besideShowsHost: the agent pane beside the list shows a session of host,
-// alone or in a chain view.
+// besideShowsHost: the agent region shows a session of host.
 func (m Model) besideShowsHost(host string) bool {
-	if m.besideShows.host == host && m.besideShows.pane != "" {
-		return true
-	}
-	if m.chain != nil {
-		for _, k := range m.chain.on {
-			if k.host == host {
-				return true
-			}
-		}
-	}
-	return false
+	return m.besideShows.host == host && m.besideShows.pane != ""
 }
 
 // jumpOf: session is this machine's session of a jump to host.

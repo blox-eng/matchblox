@@ -11,7 +11,6 @@ import (
 
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/limits"
-	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -380,14 +379,11 @@ func TestBarFoldsHosts(t *testing.T) {
 }
 
 func TestBarSaysTheWayOut(t *testing.T) {
-	if name, _ := prefixName(panes.BesideKey); name != flipKey {
-		t.Fatalf("the bar says %s, but %s flips the keys", flipKey, name)
-	}
 	m := mockupFrame(t, 160)
-	for _, mode := range []string{"SHELL", "AGENT"} {
+	for mode, lead := range map[string]string{"SHELL": " SHELL   ws-1", "AGENT": " AGENT  flint-auth   ws-1"} {
 		line, _ := m.frameBar(mode, 160)
 		plain := ansi.Strip(line)
-		if !strings.HasPrefix(plain, " "+mode+"   ws-1") || !strings.HasSuffix(plain, "   ctrl+q list   ? keys ") {
+		if !strings.HasPrefix(plain, lead) || !strings.HasSuffix(plain, "   ctrl+q list   ? keys ") {
 			t.Fatalf("in %s the bar is %q: want ctrl+q list before ? keys", mode, plain)
 		}
 		wantInks(t, line, [][2]string{{mode, "accent bold"}, {"ctrl+q", "fg"}, {" list", "muted"}})

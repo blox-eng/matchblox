@@ -172,7 +172,7 @@ func TestDoneLeavesWhenTheAgentGetsTheKeys(t *testing.T) {
 	if got := seenActs(boardFake(pressOn(m, "ctrl+o"))); !slices.Equal(got, []string{proto.SeenPrefix + "%flint-auth"}) {
 		t.Errorf("⌃o sent %q, want one seen of flint-auth", got)
 	}
-	b, _ := besideConsole(t, st, 80, 30, "160")
+	b, _ := besideConsoleWith(t, st, 160, 30, &besideTmux{})
 	if got := seenActs(boardFake(pressOn(b, "enter"))); !slices.Equal(got, []string{proto.SeenPrefix + "%flint-auth"}) {
 		t.Errorf("⏎ beside sent %q, want one seen of flint-auth", got)
 	}

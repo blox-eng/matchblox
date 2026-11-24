@@ -1,7 +1,6 @@
- ▰ matchblox                                                                                                                                                                        ● 6 need you
- SESSIONS 7    machine
-─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- NEEDS YOU · 6  −                       │ flint-auth ✻ asks · #4545 ci                                                                                           ctx 41%  ct   the line is empty
+ ▰ matchblox    ALL    spark-docs ●1    hearth-api    kindle-web ●1    no directory ●1    flint-auth ●1    ember-billing ●1    wick-mobile ●1                                  ● 6 need you    ⚙
+────────────────────────────────────────┬────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ NEEDS YOU · 6  −                       │ flint-auth ✻ asks · #4545 ci                                                                                           ctx 41%  ctrl+o expand · m menu
 ▌╿ flint-auth                       2m ✻│
    conflicts with main                  │
  ╿ spark-docs                       9m ✻│
@@ -14,9 +13,10 @@
    I am moving the cache key to the go.…│
  ╿ wick-mobile                     now ▣│
    ⠙ Working                            │
-────────────────────────────────────────│
+────────────────────────────────────────┤
  WORKING · 1  −                         │
  ✦ hearth-api             #4551 ci  3h ✻│
+                                        │
                                         │
                                         │
                                         │
@@ -52,6 +52,6 @@
                                         │   3. Type something.
                                         │
                                         │ Enter to select · ↑/↓ to navigate · Esc to cancel
- + new · ✧ 7 tips                       │ ›                                                                                                                                 ⏎ send to flint-auth
-─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- writing to flint-auth · ⏎ send · ↑↓ choose · esc list · ctrl+o expand · tab Machine
+ the line is empty                      │ ›                                                                                                                                 ⏎ send to flint-auth
+────────────────────────────────────────┴────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ AGENT  flint-auth   this machine cpu 0% mem 40%   ✻ Max 5h 84% ↻2h30m · wk 82% ↻3d10h   · login usage not measured   ❋ Plus 5h 40% ↻1h9m · wk 12% ↻4d10h                   ctrl+q list   ? keys

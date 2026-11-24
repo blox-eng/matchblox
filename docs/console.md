@@ -584,10 +584,7 @@ its head:
   go to the chain's stoker; to a chain with no stoker they start one
   (`› what should hearth's stoker do?`).
 
-With the agent beside the list, `g` does not open the room. It shows the
-chain's agents side by side: up to 4 members' own panes on the right, most
-urgent first, and `▸` in the list for each one on screen. `G` opens the
-room. See [Keys](keys.md#the-chain-view-beside-the-list).
+On the desk, `g` opens the room too: the list shows the chain only.
 
 On a phone the room takes the screen, and `◂` goes back to the list.
 `Esc` closes the room and shows every chain. In the room, the menu of a session adds

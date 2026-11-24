@@ -673,7 +673,9 @@ func replayAt(t *testing.T, z replaySize) {
 		}},
 		// esc gives the keys to the list; ↑ and ↓ choose kindle-web, which
 		// asks for permission.
-		{name: "the list", at: 9 * time.Second, key: "esc", pane: flint, ok: has("in the list")},
+		{name: "the list", at: 9 * time.Second, key: "esc", pane: flint, ok: func(s string) bool {
+			return has("in the list")(s) || has("\n LIST   ")(s) // the phone's key line; the desk's bar names the keys' place
+		}},
 		{name: "kindle-web asks", at: 10500 * time.Millisecond, do: walk("kindle-web"), pane: kindle, ok: func(s string) bool {
 			// Beside the list, the preview of kindle-web's pane comes a
 			// moment after the last arrow; a slow run reads the screen

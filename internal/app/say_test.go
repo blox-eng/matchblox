@@ -30,6 +30,8 @@ func toastLines(m Model, w int, text string) (drawn, []int) {
 
 func TestATellShowsAToastAndTheKeysStay(t *testing.T) {
 	m := listShot(t, boardFixture(t), 160, 38, "kindle-web")
+	m.setTab(tabMachine)                   // the stack's place: off the desk, whose notices sit at the list's foot (TestANoticeSitsAtTheListFoot)
+	m = pressOn(m, "down", "down", "down") // the chosen row off the top, where the stack goes
 	keysBefore := ansi.Strip(m.draw(160).lines[m.draw(160).keysAt])
 	m.say("sent: kill api")
 	sc, at := toastLines(m, 160, "sent: kill api")
@@ -83,6 +85,13 @@ func TestAToldTextIsNotSaidTwice(t *testing.T) {
 // frame draws every one of them; "" when a line is not drawn.
 func shownSaid(m Model) string {
 	said := saidRows(m, max(m.width, minWidth))
+	if m.desk() { // the desk says it at the list's foot (owner, 2026-11-24)
+		rows, _, _ := m.deskNoticeAt(max(m.width, minWidth))
+		said = nil
+		for _, r := range rows {
+			said = append(said, strings.TrimSpace(ansi.Strip(r)))
+		}
+	}
 	frame := ansi.Strip(m.render())
 	for _, l := range said {
 		if !strings.Contains(frame, l) {
@@ -113,7 +122,10 @@ func toastNow(m Model) string {
 // toast's, else the list foot's.
 func saidRows(m Model, w int) []string {
 	var rows []string
-	if now := m.sayingNow(); len(now) > 0 {
+	if now := m.sayingNow(); m.desk() { // the desk says the newest at the list's foot
+		m.saying = now[:min(len(now), 1)]
+		rows, _, _ = m.deskNoticeAt(w)
+	} else if len(now) > 0 {
 		m.saying = now[:1]
 		rows = m.sayRows(w)
 	} else {
@@ -223,6 +235,7 @@ func TestAKeyEndsWhatWasSaidBeforeIt(t *testing.T) {
 
 func TestAShortToastIsOneLine(t *testing.T) {
 	m := listShot(t, boardFixture(t), 132, 32, "kindle-web")
+	m.setTab(tabMachine) // the stack's place: off the desk, whose notices wrap in the list's foot
 	m.sayError("This is a demo. Install matchblox to do that.")
 	if _, at := toastLines(m, 132, "This is a demo. Install matchblox to do that."); len(at) != 1 {
 		t.Fatalf("a short toast is cut: on lines %v", at)

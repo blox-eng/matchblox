@@ -72,7 +72,7 @@ func headOf(cells [][]inked, name string) (y, x int, ok bool) {
 func motionBoard(t *testing.T, st proto.State, now *time.Time, noMotion bool) Model {
 	t.Helper()
 	m := (New(Options{Conn: newFake(), NoMotion: noMotion, Now: func() time.Time { return *now }}))
-	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 34})
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 140, Height: 34}) // the desk's list 40 wide: a card's name whole (design review D16)
 	next, _ = next.Update(stateMsg(st))
 	m = next.(Model)
 	m.splashDone = true

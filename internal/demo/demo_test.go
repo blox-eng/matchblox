@@ -157,6 +157,20 @@ const repaintAfter = 150 * time.Millisecond
 // whole frame. The console writes only the cells that change, so a count it
 // drew while it waited for the service turns from "SESSIONS 0" to "SESSIONS 7"
 // by one cell, and what it wrote never holds "SESSIONS 7" whole (#321).
+// inTheList is the list's columns of frame, the text before the edge of
+// each line, joined by single spaces: the desk wraps a notice at the
+// list's foot, and it reads whole here.
+func inTheList(frame string) string {
+	var parts []string
+	for _, l := range strings.Split(frame, "\n") {
+		if i := strings.IndexAny(l, "│┤┴"); i >= 0 {
+			l = l[:i]
+		}
+		parts = append(parts, l)
+	}
+	return strings.Join(strings.Fields(strings.Join(parts, " ")), " ")
+}
+
 func (term *terminal) waitFor(t *testing.T, want ...string) {
 	t.Helper()
 	deadline := time.Now().Add(30 * time.Second)
@@ -166,7 +180,7 @@ func (term *terminal) waitFor(t *testing.T, want ...string) {
 		_, frame := term.wholeFrame()
 		missing := ""
 		for _, w := range want {
-			if !strings.Contains(text, w) && !strings.Contains(frame, w) {
+			if !strings.Contains(text, w) && !strings.Contains(frame, w) && !strings.Contains(inTheList(frame), w) {
 				missing = w
 				break
 			}

@@ -46,7 +46,11 @@ func TestTheHostIsDemo(t *testing.T) {
 		t.Run(fmt.Sprintf("%dx%d", size[0], size[1]), func(t *testing.T) {
 			t.Setenv("TMPDIR", t.TempDir())
 			_, term := startAt(t, size[0], size[1])
-			term.waitFor(t, "matchblox · demo")
+			host := "matchblox · demo" // the phone's header
+			if size[0] > 44 {
+				host = "   demo cpu " // the desk's bar names the host on its chip (owner, 2026-11-24)
+			}
+			term.waitFor(t, host)
 		})
 	}
 

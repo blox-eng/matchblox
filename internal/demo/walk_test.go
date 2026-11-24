@@ -351,6 +351,9 @@ func tabOf(_ int, frame string) string {
 				return word
 			}
 		}
+		if strings.HasPrefix(strings.TrimLeft(lines[0], " "), "▰ matchblox") && strings.Contains(lines[1], "┬") {
+			return "SESSIONS" // the desk: no tab row, the head row's rule meets the edge
+		}
 	}
 	return ""
 }
@@ -1014,7 +1017,7 @@ func (w *walker) opens(what, want, key string) {
 		from := len(w.term.text())
 		w.press(key)
 		for wait := time.Now().Add(2 * time.Second); time.Now().Before(wait); time.Sleep(5 * time.Millisecond) {
-			if strings.Contains(w.term.text()[from:], want) {
+			if strings.Contains(w.term.text()[from:], want) || strings.Contains(inTheList(w.term.screen()), want) {
 				return
 			}
 		}
@@ -1031,7 +1034,7 @@ func (w *walker) opens(what, want, key string) {
 // the list's keys type.
 func (w *walker) toList() {
 	w.t.Helper()
-	if strings.Contains(w.term.screen(), "writing to ") {
+	if s := w.term.screen(); strings.Contains(s, "writing to ") || strings.Contains(s, "\n AGENT ") { // the phone's key line; the desk's bar
 		w.press("esc")
 		time.Sleep(100 * time.Millisecond)
 	}
@@ -1070,7 +1073,7 @@ func (w *walker) saysAfter(what, want string, keys ...string) {
 	from := len(w.term.text())
 	w.press(keys...)
 	deadline := time.Now().Add(30 * time.Second)
-	for !strings.Contains(w.term.text()[from:], want) {
+	for !strings.Contains(w.term.text()[from:], want) && !strings.Contains(inTheList(w.term.screen()), want) {
 		if time.Now().After(deadline) {
 			w.t.Fatalf("%s: never drew %q after %q; the screen:\n%s", what, want, w.steps[max(len(w.steps)-12, 0):], w.term.screen())
 		}
@@ -1173,8 +1176,8 @@ func TestSessionsCanBeStartedAndKilled(t *testing.T) {
 	w.press("/")
 	w.send("a search", "fresh-one")
 	w.press("enter", "enter")
-	w.term.waitFor(t, "writing to fresh-one")
-	time.Sleep(500 * time.Millisecond) // its screen comes: a key answers only what the console showed
+	w.term.waitFor(t, "⏎ send to fresh-one") // the chat's line, on the phone and the desk
+	time.Sleep(500 * time.Millisecond)       // its screen comes: a key answers only what the console showed
 	w.send("a message", "hello")
 	from := len(w.term.text())
 	w.press("enter")

@@ -208,6 +208,15 @@ the head's speckles stand still; its heat colour still shows.
 
 ## 6. Console layout
 
+> **2026-11-24, the desk (#494):** wider than the phone's layout, matchblox
+> draws the whole screen: the head row, a rule, the list and the agent with
+> the edge between them, a rule, the bar. The edge's half on the side with
+> the keys is `accent`, the other `hair`; the bar's mode word always names who
+> has the keys, so the edge is never the only signal (in light the lit half
+> is 2.72:1 against the unlit one, design review D19). A prompt that waits
+> for a key takes the bar after its mode word; standing marks sit in the
+> head row before `⚙`; notices sit on the list's last line in `muted`.
+
 > **2026-11-10, the chain room (#326):** a chain opens into a room, as
 > [docs/superpowers/specs/2026-11-07-chain-room-design.md](docs/superpowers/specs/2026-11-07-chain-room-design.md)
 > says, with the changes of the board (#372, below): the room is the board
@@ -314,12 +323,9 @@ the head's speckles stand still; its heat colour still shows.
   the chain; `esc` shows all. On Narrow the stoker is a page of its own,
   first in the marks (`stoker NEEDS YOU 2 −  work 1 …`). The card's menu
   has `out of <chain>` only in its room. A match is never drawn twice.
-  With the agent beside the list (see Chat), `g` on a chain's row, or a
-  member's, tiles up to 4 members' own panes on the right instead, most
-  urgent first (2: one above the other; 3 or 4: a 2×2 grid). A member on
-  screen has `▸` in the list. A click gives a pane the keys, and tmux's
-  prefix `z` zooms one. `g` again, or `esc` (after a search clears), closes
-  the view. `G` opens the chain's room.
+  On the desk, `g` on a chain's row, or a member's, opens the room too.
+  The list shows the chain only. The agent region keeps the chosen
+  member's screen. `esc` shows all.
 - **Hosts:** a host is a filter: `s`, or a tap on `all hosts ▾`, turns to
   the next host, then all. A host that is not reached keeps one line at
   the top of the board, `macbook: not reached since 14:02 · ⏎ try again`,

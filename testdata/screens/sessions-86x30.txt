@@ -1,30 +1,30 @@
- ▰ matchblox                                                             ● 6 need you
- SESSIONS 7    machine
-──────────────────────────────────────────────────────────────────────────────────────
- NEEDS YOU · 6  −               │ flint-auth ✻ asks · #4545 ci               ctx 41%
-▌╿ flint-auth               2m ✻│
-   conflicts with main          │
- ╿ spark-docs               9m ✻│
-   I rewrote the quick start an…│
- ╿ ember-billing            4m ✻│
-   #4552 waits for your merge   │
- ╿ kindle-web               1m ✻│
-   Do you want to proceed?      │
- ╿ cinder-ci               now ❋│
-   I am moving the cache key to…│
- ╿ wick-mobile             now ▣│
-   ⠙ Working                    │
-────────────────────────────────│
- WORKING · 1  −                 │
- ✦ hearth-api     #4551 ci  3h ✻│
-                                │
-                                │
-                                │
-                                │
-                                │
-                                │
-                                │
-                                │
- + new · ✧ 7 tips               │ ›                              ⏎ send to flint-auth
-──────────────────────────────────────────────────────────────────────────────────────
- writing to flint-auth · ⏎ send · ↑↓ choose · esc list · ctrl+o expand · tab Machine
+ ▰ matchblox    ALL    spark-docs ●1    hearth-api    +5 ▾          ● 6 need you    ⚙
+────────────────────────────┬─────────────────────────────────────────────────────────
+ NEEDS YOU · 6  −           │ flint-auth ✻ asks · #4545 ci                   ctx 41%
+▌╿ flint-auth           2m ✻│
+   conflicts with main      │
+ ╿ spark-docs           9m ✻│
+   I rewrote the quick star…│
+ ╿ ember-billing        4m ✻│
+   #4552 waits for your mer…│
+ ╿ kindle-web           1m ✻│
+   Do you want to proceed?  │
+ ╿ cinder-ci           now ❋│
+   I am moving the cache ke…│
+ ╿ wick-mobile         now ▣│
+   ⠙ Working                │
+────────────────────────────┤
+ WORKING · 1  −             │
+ ✦ hearth-api #4551 ci  3h ✻│
+                            │
+                            │
+                            │
+                            │
+                            │
+                            │
+                            │
+                            │
+                            │
+ + new · ✧ 7 tips           │ ›                                  ⏎ send to flint-auth
+────────────────────────────┴─────────────────────────────────────────────────────────
+ AGENT  flint-auth   this machine cpu 0% mem 40%                 ctrl+q list   ? keys

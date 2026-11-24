@@ -23,6 +23,7 @@ import (
 const (
 	listWide   = 40 // the list's width on a desk (Wide)
 	listMedium = 32 // the list's width on a mid screen (Medium)
+	listNarrow = 28 // the list's width on a desk under 100 columns
 	// chatMin is the narrowest chat beside the list: the head line and the
 	// line, with "⏎ send to <name>", still fit. A screen that leaves the chat
 	// less shows one pane at a time.
@@ -41,8 +42,8 @@ type sideBox struct {
 // chat beside the list. A desk pane of the same shape, such as half a
 // laptop screen at 107x60, shows both: only Pocket tells a phone.
 func (m Model) onePane(w int) bool {
-	if m.beside != "" {
-		return m.onePaneAt(max(m.winW, w), m.winH)
+	if m.desk() {
+		return false
 	}
 	return w-listMedium-1 < chatMin || m.onPocket() && (m.upright() || m.layoutAt(w) == Narrow)
 }
@@ -52,13 +53,11 @@ func (m Model) onePane(w int) bool {
 // the chat the whole width.
 func (m Model) sideBoxAt(w int) sideBox {
 	switch {
-	case m.beside != "" && m.boxZoom: // the list at its width, the agent's screen beside it
-		lw := m.listWidth(w, m.height)
-		return sideBox{listW: lw, chatX: lw + 1, chatW: max(w-lw-1, 0)}
-	case m.beside != "":
-		return sideBox{listW: w} // the agent has its own pane
 	case m.listHidden():
 		return sideBox{chatW: w}
+	case m.desk():
+		lw := deskListW(w)
+		return sideBox{listW: lw, chatX: lw + 1, chatW: w - lw - 1}
 	case m.onePane(w):
 		return sideBox{listW: w}
 	}
@@ -67,6 +66,54 @@ func (m Model) sideBoxAt(w int) sideBox {
 		lw = listWide
 	}
 	return sideBox{listW: lw, chatX: lw + 1, chatW: w - lw - 1}
+}
+
+// deskListW is the list's width on a desk of w columns (design review D16).
+func deskListW(w int) int {
+	switch {
+	case w >= 140:
+		return listWide
+	case w >= 100:
+		return listMedium
+	}
+	return listNarrow
+}
+
+// desk: matchblox draws the whole screen, the head row and the bar around
+// the list and the agent: the Sessions tab wider than the phone's layout
+// (design review D16). Pocket held upright keeps the phone's screen.
+func (m Model) desk() bool {
+	return m.sideActive() && layout(max(m.width, minWidth), m.shapeRows()) != Narrow && (!m.onPocket() || !m.upright())
+}
+
+// deskMode names who has the desk's keys, as the bar's mode word does:
+// the keys sheet, the agent, its chat's line where matchblox draws the
+// chat, or the list.
+func (m Model) deskMode() string {
+	if m.over == "keys" {
+		return "KEYS"
+	}
+	if !m.opt.Beside && !m.inList() {
+		return "AGENT"
+	}
+	return m.agent.mode()
+}
+
+// edgeAt is the edge beside line i of the list's h: on the desk the half
+// on the side that has the keys is in accent (DESIGN.md §6), and a group
+// line meets it with ┤.
+func (m Model) edgeAt(line string, i, h int) string {
+	if !m.desk() {
+		return m.st.hair.Render("│")
+	}
+	ink := m.st.rule
+	if (i < h/2) == (m.deskMode() != "AGENT") {
+		ink = m.st.accent
+	}
+	if strings.HasSuffix(ansi.Strip(line), "─") {
+		return ink.Render("┤")
+	}
+	return ink.Render("│")
 }
 
 // listStartsHidden: the screen starts on the chat, and the header names
@@ -79,9 +126,6 @@ func (m Model) listStartsHidden() bool {
 
 // listHidden: the chat takes the body, and the list does not draw.
 func (m Model) listHidden() bool {
-	if m.beside != "" {
-		return false
-	}
 	if m.listSet && m.listOne == m.onePane(max(m.width, minWidth)) {
 		return m.listOff
 	}
@@ -132,17 +176,16 @@ func (m Model) sideBody(w, h int) body {
 		list = m.sidePanel(box.listW, h)
 	}
 	switch {
-	case box.chatW > 0 && m.beside != "":
-		chat = m.agentBack(box.chatW, h)
+	case box.chatW > 0 && m.opt.Beside:
+		chat = m.agentLines(box.chatW, h)
 	case box.chatW > 0:
 		chat = m.chatPlace(box.chatW, h)
 	}
 	var b body
-	rule := m.st.hair.Render("│")
 	for i := range h {
 		switch {
 		case list != nil && chat != nil:
-			b.add(-1, list[i]+rule+chat[i])
+			b.add(-1, list[i]+m.edgeAt(list[i], i, h)+chat[i])
 		case list != nil:
 			b.add(-1, list[i])
 		default:
@@ -497,6 +540,9 @@ func (m Model) footSays() string {
 // lines just over its last one, which holds the chat's line and the
 // list's foot. y0 == y1: nothing is said.
 func (m Model) noticeAt(w int) (rows []string, y0, y1 int) {
+	if m.desk() {
+		return m.deskNoticeAt(w)
+	}
 	text := m.footSays()
 	if text == "" {
 		return nil, 0, 0
@@ -574,7 +620,7 @@ func (m Model) sideHints() (string, []hint) {
 	sk, mk, bk := m.keys.side, m.keys.main, m.keys.board
 	one := m.onePane(max(m.width, minWidth))
 	if !m.have && m.opt.Layered { // a host that never answered: the way back
-		return "reading the host", []hint{hintFor(mk.Back, "hosts"), hintFor(mk.Quit, "")}
+		return "reading " + m.nameOf(m.opt.Host), []hint{hintFor(mk.Back, "hosts"), hintFor(mk.Quit, "")}
 	}
 	if m.menu != nil {
 		return "in the menu", []hint{hintFor(mk.Up, "move"), hintFor(mk.Open, "do"), hintFor(mk.Back, "close")}
@@ -649,12 +695,10 @@ func (m Model) sideTap(x, y int) (tea.Model, tea.Cmd) {
 			fold[hit.state] = !fold[hit.state]
 			m.sideFold = fold
 			return m, nil
-		case hit.k != (paneKey{}) && m.besideMode() && !m.onePaneAt(m.winW, m.winH):
+		case hit.k != (paneKey{}) && m.besideMode():
 			m = m.chooseSide(hit.k)
 			m.previewSeq++
 			return m.look(previewMsg{m.previewSeq})
-		case hit.k != (paneKey{}) && m.besideMode():
-			return m.chooseSide(hit.k).showChosen()
 		case hit.k != (paneKey{}):
 			return m.chooseSide(hit.k), nil
 		}

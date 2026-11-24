@@ -609,8 +609,8 @@ func TestHeaderShowsHost(t *testing.T) {
 	m := loaded(t, 100)
 	next, _ := m.Update(helloMsg{Version: proto.Version, Host: "ws-1"})
 	first := strings.Split(ansi.Strip(next.(Model).render()), "\n")[0]
-	if !strings.HasPrefix(first, " ▰ matchblox · ws-1") {
-		t.Fatalf("header %q, want it to start with the mark, the name and the host", first)
+	if !strings.HasPrefix(first, " ▰ matchblox") || firstChip(next.(Model)) != "ws-1" { // the bar's host chip names the host (owner, 2026-11-24)
+		t.Fatalf("header %q, bar %q: want the mark and the name, and the host's chip first", first, barLine(next.(Model)))
 	}
 }
 

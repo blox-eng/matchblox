@@ -36,11 +36,12 @@ const (
 // ends the selection and goes on. From the list, c copies what the agent
 // asked to copy. The wheel in the region goes to the agent's tmux (design
 // review D17). A question or a sheet open over the desk takes the keys
-// first. ok is false for what the list handles.
+// first. A tap on Pocket's belt is the list's, whoever has the keyboard's.
+// ok is false for what the list handles.
 func (m Model) agentKeys(msg tea.Msg) (Model, tea.Cmd, bool) {
 	r := &m.agent
 	k, _ := msg.(tea.KeyPressMsg)
-	if f := m.focus(k); !r.shown() || f < layerTakeOver || f == layerScan || f == layerBlocked || f == layerPending {
+	if f := m.focus(k); !r.shown() || m.tapping || f < layerTakeOver || f == layerScan || f == layerBlocked || f == layerPending {
 		return m, nil, false
 	}
 	agent := r.mode() == "AGENT"
@@ -86,6 +87,9 @@ func (m Model) agentKeys(msg tea.Msg) (Model, tea.Cmd, bool) {
 	case tea.MouseClickMsg:
 		at, in := r.at(msg.Mouse())
 		if !in {
+			if agent && msg.X < r.x { // a click on the list gives it the keys
+				r.keys = false
+			}
 			return m, nil, false
 		}
 		r.sel, r.press = nil, &point{at.X, at.Y}
@@ -367,8 +371,6 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 		case m.filter != "":
 			m.filter, m.peekAt = "", m.now()
 			m.refresh()
-		case m.chain != nil && m.besideMode():
-			return m.closeChainBeside()
 		case m.room != nil:
 			m = m.closeRoom()
 		case m.boardChain != "":
@@ -398,10 +400,8 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 		}
 	case bkey.Matches(k, sk.Unhide):
 		cmd = m.unhide()
-	case bkey.Matches(k, bk.Room) && m.besideMode():
-		cmd = m.boardChainOf(s, ok)
-	case bkey.Matches(k, bk.Chain) && m.besideMode():
-		return m.chainToggle(s, ok)
+	case bkey.Matches(k, bk.Keys) && m.desk():
+		m.over = "keys"
 	case bkey.Matches(k, bk.Chain):
 		cmd = m.boardChainOf(s, ok)
 	case bkey.Matches(k, bk.Copy):
@@ -413,7 +413,7 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 	case bkey.Matches(k, mk.New, mk.Search, mk.NextTab, mk.PrevTab):
 		return m.key(k)
 	case printsText(k) && m.besideMode():
-		said := "the agent pane takes text"
+		said := "the agent takes text"
 		if ok {
 			said += " · " + sk.Enter.Help().Key + " goes into " + m.cardName(s)
 		}

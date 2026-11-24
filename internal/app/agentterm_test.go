@@ -876,9 +876,8 @@ func TestKeysReachTheAgentButNotAQuestion(t *testing.T) {
 	}
 }
 
-// regionProbe is the console with its agent region alone on the screen,
-// at the screen's top left: the desk's frame is not drawn yet. The
-// screen is wider than the region, as on the desk.
+// regionProbe is the console, the whole desk drawn, whose program starts
+// with first: the agent region's first frame.
 type regionProbe struct {
 	Model
 	first tea.Cmd
@@ -891,12 +890,7 @@ func (p regionProbe) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return regionProbe{Model: next.(Model)}, cmd
 }
 
-func (p regionProbe) View() tea.View {
-	v := tea.NewView(strings.Join(p.agent.lines(p.st, p.agent.w, p.agent.h), "\n"))
-	v.AltScreen = true
-	v.Cursor = p.agent.cursor()
-	return v
-}
+func (p regionProbe) View() tea.View { return p.Model.View() }
 
 // screenWatch is the terminal the console's program writes to: a screen
 // that calls drawn after each write. Its tty maps a newline to a return
@@ -924,22 +918,23 @@ func TestTypingIsFastThroughTheRenderer(t *testing.T) {
 	if raceBuild {
 		t.Skip("latency is measured without -race: the race detector's instrumentation dominates the time")
 	}
-	const w, h, keys = 100, 20, 1000
+	const sw, sh, w, h, x0, y0, keys = 160, 40, 119, 36, 41, 2, 1000 // the whole desk; its agent region
 	const typed = "abcdefghijklmnopqrstuvwxyz"
 	d := newAgentDesk(t, w, h, map[string]string{"flint-auth": `printf '\033[H\033[2J'; exec cat`})
 	d.reading(d.pane("flint-auth"))
-	m := boardModel(t, boardState())
+	m := boardModel(t, boardState(doneMatch("flint-auth", 10*time.Minute)))
+	m.opt.Beside = true // the region shows the agent's own screen
 	first := m.agent.open("flint-auth", d.view("flint-auth", d.pane("flint-auth")), w, h)
 	t.Cleanup(m.agent.shut)
 
 	var mu sync.Mutex
 	sent := make([]time.Time, 0, keys)
 	took := make([]time.Duration, 0, keys)
-	screen := &screenWatch{e: vt.NewEmulator(w+20, h), drawn: func(e *vt.Emulator) {
+	screen := &screenWatch{e: vt.NewEmulator(sw, sh), drawn: func(e *vt.Emulator) {
 		mu.Lock()
 		defer mu.Unlock()
 		for i := len(took); i < len(sent); i++ {
-			if c := e.CellAt(i%w, i/w); c == nil || c.Content != typed[i%len(typed):i%len(typed)+1] {
+			if c := e.CellAt(x0+i%w, y0+i/w); c == nil || c.Content != typed[i%len(typed):i%len(typed)+1] {
 				break
 			}
 			took = append(took, time.Since(sent[i]))
@@ -947,7 +942,7 @@ func TestTypingIsFastThroughTheRenderer(t *testing.T) {
 	}}
 	go func() { _, _ = io.Copy(io.Discard, screen.e) }() // the screen's answers to the program
 	p := tea.NewProgram(regionProbe{Model: m, first: first}, tea.WithFPS(ConsoleFPS), tea.WithInput(nil),
-		tea.WithOutput(screen), tea.WithWindowSize(w+20, h), tea.WithoutSignalHandler())
+		tea.WithOutput(screen), tea.WithWindowSize(sw, sh), tea.WithoutSignalHandler())
 	ran := make(chan error, 1)
 	go func() { _, err := p.Run(); ran <- err }()
 	t.Cleanup(func() { p.Kill(); <-ran })
@@ -1263,7 +1258,7 @@ func TestCCopiesOnlyWithASelection(t *testing.T) {
 
 	t.Run("with no selection, c in the list copies what the agent asked", func(t *testing.T) {
 		d := newScreenDesk(t, dragScreen, w, h)
-		d.m.agent.copy = "go test ./...\r\n\x1b[31mred\x1b[0m\x07 ‮evil"
+		d.m.agent.copy = "go test ./...\r\n\x1b[31mred\x1b[0m\x07 \u202eevil"
 		const want = "go test ./...\n[31mred[0m evil"
 		d.do(keyPress(flipKey))
 		if got := d.do(keyPress("c")); len(got) > 0 || d.m.agent.copy == "" {

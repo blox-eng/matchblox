@@ -275,6 +275,9 @@ func clientArgv(argv []string) []string {
 	return run
 }
 
+// startAgent starts the agent's screen; a test may run none.
+var startAgent = startAgentTerm
+
 // startAgentTerm runs a view's argv (clientArgv) in a pty of w by h.
 func startAgentTerm(argv []string, w, h int) (*agentTerm, error) {
 	run := clientArgv(argv)
@@ -537,7 +540,7 @@ type agentRegion struct {
 func (r *agentRegion) open(name string, argv []string, w, h int) tea.Cmd {
 	r.shut()
 	r.name, r.keys, r.w, r.h, r.copy, r.press, r.sel = name, false, w, h, "", nil, nil
-	t, err := startAgentTerm(argv, w, h)
+	t, err := startAgent(argv, w, h)
 	if err != nil {
 		r.said = name + " cannot be shown: " + err.Error() + "."
 		return nil
@@ -586,6 +589,19 @@ func (r *agentRegion) resize(w, h int) {
 
 // shown tells if the agent's screen shows: its first frame came.
 func (r *agentRegion) shown() bool { return r.term != nil && r.term.framed }
+
+// live: the agent's screen shows, and its view still runs.
+func (r *agentRegion) live() bool {
+	if !r.shown() {
+		return false
+	}
+	select {
+	case <-r.term.ended:
+		return false
+	default:
+		return true
+	}
+}
 
 // mode is who has the keys: the agent once its screen shows, else the list.
 func (r *agentRegion) mode() string {

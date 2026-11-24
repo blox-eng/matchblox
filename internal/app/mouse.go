@@ -69,6 +69,15 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		return m.intoSelected()
 	}
 	switch {
+	case m.desk() && (ms.Y == 0 || ms.Y == sc.keysAt):
+		spans := sc.keys // the bar's
+		if ms.Y == 0 {
+			spans = sc.head
+		}
+		if s, ok := spanAt(spans, ms.X); ok {
+			return m.pressFrame(s.press)
+		}
+		return m, nil
 	case ms.Y == 0:
 		if s, ok := spanAt([]span{sc.stokerAt}, ms.X); ok && s.press != "" {
 			return m.openAgent()

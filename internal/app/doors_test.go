@@ -94,7 +94,7 @@ func TestEnterOnADoorShowsTheDiff(t *testing.T) {
 	m, f := doorsBoard(t, 100, doorState(wayBack))
 	next, _ := key(m, "enter")
 	out := ansi.Strip(next.(Model).render())
-	for _, want := range []string{"+bind m switch-client -t =matchblox", "RUN Add the way back: write ~/.tmux.conf", "y run"} {
+	for _, want := range []string{"+bind m switch-client -t =matchblox", "CONFIRM  Add the way back: write ~/.tmux.conf", "y run"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("no %q:\n%s", want, out)
 		}
@@ -142,7 +142,7 @@ func TestTheUpdateDoorInstallsTheTagItShowed(t *testing.T) {
 	m, f := doorsBoard(t, 100, st)
 	next, _ := key(m, "enter")
 	out := ansi.Strip(next.(Model).render())
-	for _, want := range []string{"RUN install v0.43.0 over v0.42.0", "matchblox v0.42.0 → v0.43.0", "    ~/.local/bin/matchblox"} {
+	for _, want := range []string{"CONFIRM  install v0.43.0 over v0.42.0", "matchblox v0.42.0 → v0.43.0", "    ~/.local/bin/matchblox"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("no %q:\n%s", want, out)
 		}
@@ -204,7 +204,8 @@ func TestConsoleStartsAgainAfterItsUpdate(t *testing.T) {
 	if m.updateAct != "" || m.updateTag != "" || m.selfAt != nil {
 		t.Fatalf("a failed install left its act: %q %q %v", m.updateAct, m.updateTag, m.selfAt)
 	}
-	if out := ansi.Strip(m.render()); !strings.Contains(out, "the checksum does not match") {
+	// On the desk the list's foot says it, wrapped to the list (owner, 2026-11-24).
+	if out := ansi.Strip(m.render()); !strings.Contains(m.sideSays(), "the checksum does not match") || !strings.Contains(out, "the checksum does") {
 		t.Fatalf("the failure is not shown:\n%s", out)
 	}
 }
@@ -243,7 +244,7 @@ func TestGuideNeedsConfirm(t *testing.T) {
 		t.Fatal("Enter started the guide")
 	}
 	out := ansi.Strip(next.(Model).render())
-	for _, want := range []string{"RUN Open a guide session: in a new tmux window", "y run", "uses your tokens",
+	for _, want := range []string{"CONFIRM  Open a guide session: in a new tmux window", "y run", "uses your tokens",
 		"tmux new-window -n guide claude 'Help me set up matchblox."} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("no %q:\n%s", want, out)

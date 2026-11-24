@@ -1,31 +1,31 @@
- ▰ matchblox · all hosts ▾                                         ● 4 need you
- SESSIONS 15    machine
-────────────────────────────────────────────────────────────────────────────────
- NEEDS YOU · 4  −               │ CHAIN login
- ≋ login        step 1 of 3 · 3 │
-▌├ ╿ flint-auth             2m ✻│ › what should login's stoker do?
- │   Which way do we fix the lo…│
- ├ ✦ flint-ui              10m ✻│
- └ ╵ flint-api   #4560 ci  10m ✻│
-                                │
-                                │
-                                │
-                                │
-                                │
-                                │
-                                │
-                                │
-                                │
-                                │
-                                │
-                                │
-                                │
-                                │
-                                │
-                                │
-                                │
-                                │
-                                │
- + new · ✧ 7 tips               │
-────────────────────────────────────────────────────────────────────────────────
- in the room · esc all · ↑↓ choose
+ ▰ matchblox    ALL    flint-auth ●1    +7 ▾                  ● 4 need you    ⚙
+────────────────────────────┬───────────────────────────────────────────────────
+ NEEDS YOU · 4  −           │ CHAIN login
+ ≋ login    step 1 of 3 · 3 │
+▌├ ╿ flint-auth         2m ✻│ › what should login's stoker do?
+ │   Which way do we fix th…│
+ ├ ✦ flint-ui          10m ✻│
+ └ ╵ flint-… #4560 ci  10m ✻│
+                            │
+                            │
+                            │
+                            │
+                            │
+                            │
+                            │
+                            │
+                            │
+                            │
+                            │
+                            │
+                            │
+                            │
+                            │
+                            │
+                            │
+                            │
+                            │
+                            │
+ + new · ✧ 7 tips           │
+────────────────────────────┴───────────────────────────────────────────────────
+ AGENT  in the room · esc all · ↑↓ choose

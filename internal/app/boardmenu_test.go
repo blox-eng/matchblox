@@ -30,10 +30,14 @@ func menuBoard(t *testing.T, w, h int, edit func(*Model)) (Model, *[]string, *ti
 	return upd(t, m, noticeMsg{}), &clipped, &clock
 }
 
-// cardOn is the cell of name's card on the frame: the first cell of its name.
+// cardOn is the cell of name's card on the frame: the first cell of its
+// name under the head row, whose spaces may bear a repo's name.
 func cardOn(t *testing.T, m Model, name string) (int, int) {
 	t.Helper()
 	for y, l := range strings.Split(plainFrame(m), "\n") {
+		if y == 0 {
+			continue
+		}
 		if i := strings.Index(l, name); i >= 0 {
 			return lipgloss.Width(l[:i]), y
 		}
@@ -71,7 +75,7 @@ func pressAt(t *testing.T, m Model, x, y int) Model {
 }
 
 func TestRightClickOpensTheMenuOnThatCard(t *testing.T) {
-	m, _, _ := menuBoard(t, 80, 31, nil)
+	m, _, _ := menuBoard(t, 100, 31, nil)
 	x, y := cardOn(t, m, "kindle-web")
 	m = rightClick(t, m, x, y)
 	if m.menu == nil || chosenName(t, m) != "kindle-web" {
@@ -100,7 +104,7 @@ func TestALongPressOpensTheMenu(t *testing.T) {
 		t.Errorf("a long press is %v, want 480ms", longPressFor)
 	}
 	open := func() (Model, int, int) {
-		m, _, _ := menuBoard(t, 80, 31, nil)
+		m, _, _ := menuBoard(t, 100, 31, nil)
 		m = mouse(t, m, tea.MouseReleaseMsg{X: 1, Y: 1, Button: tea.MouseLeft}) // the terminal reports releases
 		x, y := cardOn(t, m, "kindle-web")
 		m = pressAt(t, m, x, y)
@@ -140,7 +144,7 @@ func TestALongPressOpensTheMenu(t *testing.T) {
 }
 
 func TestNoReleaseEverMeansNoLongPress(t *testing.T) {
-	m, _, _ := menuBoard(t, 80, 31, nil)
+	m, _, _ := menuBoard(t, 100, 31, nil)
 	x, y := cardOn(t, m, "kindle-web")
 	m = pressAt(t, m, x, y)
 	if chosenName(t, m) != "kindle-web" {

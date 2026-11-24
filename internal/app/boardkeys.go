@@ -277,11 +277,7 @@ func (m *Model) boardChainOf(s sample.Session, ok bool) tea.Cmd {
 			said = s.Name + " is in no chain"
 		}
 	}
-	key := m.keys.board.Chain
-	if m.besideMode() {
-		key = m.keys.board.Room
-	}
-	cmd := m.once("chain", key.Help().Key+" shows one chain now. "+m.keys.main.Back.Help().Key+" shows all.", said)
+	cmd := m.once("chain", m.keys.board.Chain.Help().Key+" shows one chain now. "+m.keys.main.Back.Help().Key+" shows all.", said)
 	if k, in := m.chainKeyOf(s); ok && in {
 		*m = m.openRoom(k)
 	}

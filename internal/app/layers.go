@@ -851,8 +851,4 @@ func (s Shell) Close() {
 		s.connecting.stopAsk()
 	}
 	s.cur.closeStreams() // under Hosts too: they stay open there
-	// A console that starts again in place adopts the agent pane.
-	if !s.cur.restarting {
-		endBeside(s.opt.Base)
-	}
 }

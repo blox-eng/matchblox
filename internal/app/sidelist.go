@@ -172,7 +172,7 @@ func (m Model) buildSideGroups() []sideGroup {
 		}
 		listed = slices.DeleteFunc(listed, func(s sample.Session) bool {
 			k, ok := m.chainKeyOf(s)
-			return !m.inSpace(s) && !(ok && open[k])
+			return !m.inSpace(s) && (!ok || !open[k])
 		})
 	}
 	isListed := map[paneKey]bool{}

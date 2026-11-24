@@ -34,12 +34,12 @@ the line empty and a question on the screen; else it types.
 | `Backspace` | In the drawn chat, erases the last character of the line. |
 | A digit, 1 to 9 | With the line empty, marks that option of the question on the screen. The same digit again sends it. A question that opened less than half a second ago takes no digit: the digit types. On a session the stoker holds, 1 marks "Let it go", and 1 again lets it go. |
 | `↑`, `↓` | With the line empty, or in the list, chooses the session above or below, as the list draws them. In the list, `↓` past the last row chooses the parts of the foot one by one, and `↑` goes back up. `Enter` opens the chosen part. |
-| `Esc` | Closes the menu. In the line, clears a marked answer, then moves the keys to the list. In the list, clears the search, then closes the chain view beside the list, then closes the chain's room, then shows all chains, then all repos, then all hosts. It never leaves the console, except on a host that has not answered yet: then it goes back to Hosts. `Ctrl+M`, prefix `m` and the phone's back button do the same in the console. On a phone, `Esc` then a quick letter types the letter in the line. |
+| `Esc` | Closes the menu. In the line, clears a marked answer, then moves the keys to the list. In the list, clears the search, then closes the chain's room, then shows all chains, then all repos, then all hosts. It never leaves the console, except on a host that has not answered yet: then it goes back to Hosts. `Ctrl+M`, prefix `m` and the phone's back button do the same in the console. On a phone, `Esc` then a quick letter types the letter in the line. |
 | `s` | In the list, shows the next host, then all hosts. It goes to each host, a hidden host too. With one host shown, all hosts is that host, so `s` goes from host to host. With one host only, a notice says so. |
 | `[`, `]` | In the list, shows only the repo before or after, then every repo. A space is a repo with a live session. The header's count of who needs you still counts every repo. With one repo only, a notice says so. |
+| `?` | On the desk, in the list, opens the keys sheet over the agent. `Esc` closes it. With the agent's keys, `?` types into the agent. |
 | `h` | In the list, on a hidden host, shows that host in all hosts again. Machine › Hosts then ticks the host. On another host, a notice says what `h` does. |
-| `g` | In the list, shows only the chain of the chosen session: its room. `Esc` shows all. With the agent beside the list, `g` instead shows up to 4 of the chain's agents side by side, each in its own pane, and the list marks them `▸`. `g` again, or `Esc`, shows one agent again: the chosen row's. |
-| `G` | With the agent beside the list, opens the room of the chosen session's chain, as `g` does without it. |
+| `g` | In the list, shows only the chain of the chosen session: its room. `Esc` shows all. |
 | `⌥s` | Opens the room of the chosen session's chain, as `g` does. A session in no chain opens its chain of one, which the host's stoker drives. In the matchblox app, `⌥s` types `s` in the line, and the belt's `g` opens the room. |
 | `/` | In the list, searches the list. |
 | `m` | In the list, opens the menu of the chosen session. It names the acts that destroy nothing, with their keys: rename, stoke the chain, a new order. A kill, a merge, a go, a switch and the stoker's stop are keys of the list only. On a match that waits for recover, it opens that match's menu: reopen it, copy its name or its conversation id, or take it out of its team. |
@@ -199,27 +199,6 @@ The menu has it only while the list shows that chain.
 While the talk line types, every key is text until `Enter` sends it to the
 chain's stoker or `Esc` stops. The first words to a chain with no stoker
 start one, with no launch sheet; a refusal keeps the words in the line.
-
-### The chain view beside the list
-
-With the agent beside the list, `g` on a chain's row, or on a member's row,
-shows up to 4 of the chain's agents on the right, each in its own pane,
-most urgent first. With 2 members, one pane is above the other. With 3 or
-4, the panes make a 2×2 grid. The list marks each member on screen with
-`▸`.
-
-| Key | What it does |
-|---|---|
-| `g` | In the list, opens the chain view. `g` again closes it. |
-| `G` | Opens the chain's room, the stoker's talk. This is what `g` did before in this mode. |
-| `Esc` | Closes the chain view. With a search on, it clears the search first. |
-
-A click on a pane gives it the keys. The chords are tmux's:
-
-| Chord | What it does |
-|---|---|
-| `prefix z` | Zooms the pane the keys are in, and again unzooms. |
-| `ctrl+q` | From a pane back to the list, and from the list to the member used last. |
 
 ### The flip from a pane
 

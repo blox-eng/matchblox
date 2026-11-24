@@ -379,11 +379,12 @@ func TestATapOnTheHeadersStokerOpensIt(t *testing.T) {
 	st := agentState(proto.StokerView{Mode: proto.StokerMode{On: true}, PaneUp: true})
 	st.Sessions = append(st.Sessions, sample.Session{Agent: "claude", Pane: "%0@matchblox", Target: "stoker:0.0", Name: "stoker", Permits: true})
 	m, _ := loadedWith(t, 100, st)
-	sc := m.draw(100)
-	if !strings.Contains(sc.lines[0], "stoker needs you") || sc.stokerAt.press == "" {
-		t.Fatalf("header %q, span %+v", sc.lines[0], sc.stokerAt)
+	sc := m.draw(100) // the stoker's word is the bar's chip on the desk (owner, 2026-11-24)
+	i := slices.IndexFunc(sc.keys, func(s span) bool { return s.press == "cog:stoker" })
+	if i < 0 || !strings.Contains(ansi.Strip(ansi.Cut(sc.lines[sc.keysAt], sc.keys[i].x0, sc.keys[i].x1)), "stoker needs you") {
+		t.Fatalf("bar %q, spans %+v", ansi.Strip(sc.lines[sc.keysAt]), sc.keys)
 	}
-	next, _ := tap(m, sc.stokerAt.x0+1, 0)
+	next, _ := tap(m, sc.keys[i].x0+1, sc.keysAt)
 	if p := next.(Model).pending; p == nil || !slices.Equal(p.steps[0], []string{"tmux", "display-popup", "-E", "-w", "90%", "-h", "90%", "tmux -L matchblox attach -t stoker"}) {
 		t.Fatalf("pending %+v", p)
 	}
@@ -513,8 +514,8 @@ func TestDockCountsChains(t *testing.T) {
 	} {
 		m, _ := loadedWith(t, 104, c.st)
 		lines := strings.Split(screen(m), "\n")
-		if !strings.Contains(lines[0], "≋ ") {
-			t.Errorf("header %q has no stoker count", lines[0])
+		if !strings.Contains(lines[len(lines)-1], "≋ ") { // the bar's stoker chip (owner, 2026-11-24)
+			t.Errorf("bar %q has no stoker count", lines[len(lines)-1])
 		}
 		dock := ansi.Strip(strings.Join(m.stokerLines(40, false), "\n"))
 		if !strings.Contains(dock, "STOKER "+c.dock) {
@@ -580,14 +581,14 @@ func TestHeaderCountsRunningStokers(t *testing.T) {
 	two.Stokers[1].View.PaneUp = true
 	two.Stoker = &proto.StokerView{}
 	m, _ := loadedWith(t, 104, two)
-	if head := strings.Split(screen(m), "\n")[0]; !strings.HasSuffix(strings.TrimRight(head, " "), "≋ 2") {
-		t.Fatalf("header %q, want ≋ 2", head)
+	if bar := barLine(m); !strings.HasSuffix(strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(bar), "? keys")), "≋ 2") {
+		t.Fatalf("bar %q, want ≋ 2", bar)
 	}
 	none := sheetScreen(screensState(t), true)
 	none.Stoker = &proto.StokerView{}
 	m, _ = loadedWith(t, 104, none)
-	if head := strings.Split(screen(m), "\n")[0]; !strings.HasSuffix(strings.TrimRight(head, " "), "stoker off") {
-		t.Fatalf("header %q, want stoker off", head)
+	if bar := barLine(m); !strings.HasSuffix(strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(bar), "? keys")), "stoker off") {
+		t.Fatalf("bar %q, want stoker off", bar)
 	}
 }
 

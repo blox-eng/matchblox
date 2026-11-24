@@ -124,8 +124,8 @@ func TestStokerTouchGoesToTheHostActedOn(t *testing.T) {
 // runs.
 func TestStokerBadgeCounts(t *testing.T) {
 	m, _, _ := stokedHosts(t, nightView(), &proto.StokerView{}, nightView())
-	if head := frameOf(m)[0]; !strings.Contains(head, "stoker 2/3") {
-		t.Fatalf("header %q", head)
+	if bar := barLine(m); !strings.Contains(bar, "stoker 2/3") { // the bar's stoker chip (owner, 2026-11-24)
+		t.Fatalf("bar %q", bar)
 	}
 }
 

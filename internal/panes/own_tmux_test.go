@@ -16,6 +16,8 @@ import (
 	"github.com/blox-eng/matchblox/internal/tmuxtest"
 )
 
+const rawCat = "stty raw -echo; exec cat -v > " // exec: the pane runs cat once raw
+
 // ownServer is one tmux server with a console session per terminal.
 type ownServer struct {
 	sock string
@@ -85,29 +87,6 @@ func read(path string) string {
 	return string(b)
 }
 
-// TestTwoConsolesKeepTheirKeysApart: the second terminal flips to its own
-// agent and types; the text reaches that agent alone, and the first
-// terminal's keys stay where they were.
-func TestTwoConsolesKeepTheirKeysApart(t *testing.T) {
-	s := newOwnServer(t)
-	one, two := s.console(t, Home), s.console(t, Home+"-2")
-	s.tmux(BesideKeysArgv()[1:]...)
-	s.attach(t, &one)
-	s.attach(t, &two)
-
-	press(t, two, "\x11") // ctrl+q
-	waitFor(t, func() bool { return s.active(two) == two.a })
-	press(t, two, "rm -rf x")
-	waitFor(t, func() bool { return strings.Contains(read(two.aOut), "rm -rf x") })
-	time.Sleep(100 * time.Millisecond)
-	if got := read(one.aOut) + read(one.cOut); strings.Contains(got, "rm") {
-		t.Errorf("the first console's panes read %q", got)
-	}
-	if got := s.active(one); got != one.c {
-		t.Errorf("the first console's active pane is %s, want its list %s", got, one.c)
-	}
-}
-
 // TestAConsoleMarksItsOwnSession: the console's mark lands on the session
 // of its pane, and on no other.
 func TestAConsoleMarksItsOwnSession(t *testing.T) {
@@ -120,25 +99,6 @@ func TestAConsoleMarksItsOwnSession(t *testing.T) {
 	}
 	if got := s.tmux("display-message", "-p", "-t", "work:", "#{"+HomeOption+"}"); got != "" {
 		t.Errorf("work has %s = %q, want none", HomeOption, got)
-	}
-}
-
-// TestAConsoleEndsOnlyItsOwnAgentPane: the second console exits; its agent
-// pane goes with it, and the first console keeps both of its panes.
-func TestAConsoleEndsOnlyItsOwnAgentPane(t *testing.T) {
-	s := newOwnServer(t)
-	one, two := s.console(t, Home), s.console(t, Home+"-2")
-	s.tmux(BesideHookArgv()[1:]...)
-	flag := t.TempDir() + "/stop"
-	s.tmux("respawn-pane", "-k", "-t", two.c, "sh", "-c", "until [ -e "+flag+" ]; do sleep 0.05; done")
-	if err := os.WriteFile(flag, nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	panes := func() []string { return strings.Fields(s.tmux("list-panes", "-a", "-F", "#{pane_id}")) }
-	waitFor(t, func() bool { return !slices.Contains(panes(), two.c) })
-	waitFor(t, func() bool { return !slices.Contains(panes(), two.a) })
-	if p := panes(); !slices.Contains(p, one.c) || !slices.Contains(p, one.a) {
-		t.Errorf("panes left %q, want the first console's %s and %s", p, one.c, one.a)
 	}
 }
 
@@ -272,16 +232,4 @@ func TestATerminalThatWentInAtOnceStillEndsItsConsole(t *testing.T) {
 	}
 	_ = syscall.Kill(pid, syscall.SIGHUP)
 	waitFor(t, orphaned)
-}
-
-// TestAnUnmarkedFirstConsoleKeepsItsKeys: a first console that an older
-// matchblox started has no mark; a newer console's keys still flip in it.
-func TestAnUnmarkedFirstConsoleKeepsItsKeys(t *testing.T) {
-	s := newOwnServer(t)
-	one := s.console(t, Home)
-	s.tmux("set-option", "-u", "-t", one.c, HomeOption)
-	s.tmux(BesideKeysArgv()[1:]...)
-	s.attach(t, &one)
-	press(t, one, "\x11") // ctrl+q
-	waitFor(t, func() bool { return s.active(one) == one.a })
 }
