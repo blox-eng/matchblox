@@ -404,6 +404,8 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 		m = m.openKeys()
 	case bkey.Matches(k, bk.Machine) && m.desk():
 		m = m.openCog("cog:usage")
+	case bkey.Matches(k, bk.Machine):
+		m.setTab(tabMachine) // phone: no sheet, so the Machine tab
 	case bkey.Matches(k, bk.Shell) && m.desk():
 		return m.openShell(s, ok)
 	case bkey.Matches(k, bk.Review) && m.desk():
@@ -475,7 +477,8 @@ func (m Model) noRowWhy() string {
 // beltActs are the keys a tap on Pocket's belt acts with (keycmd.TapKeys).
 func (m Model) beltActs() []bkey.Binding {
 	bk, mk := m.keys.board, m.keys.main
-	return []bkey.Binding{bk.Copy, bk.Menu, bk.Chain, bk.Host, bk.Merge, mk.Second, mk.Search, mk.Park, mk.Grant, mk.New}
+	return []bkey.Binding{bk.Copy, bk.Menu, bk.Chain, bk.Host, bk.Merge, mk.Second, mk.Search, mk.Park, mk.Grant, mk.New,
+		bk.Keys, bk.Machine, bk.Shell, bk.Review}
 }
 
 // beltTap is a tap on an act key of Pocket's belt, from the client on tty

@@ -265,6 +265,10 @@ func TestTabStillOpensMachineOnThePhone(t *testing.T) {
 	if next := pressOn(phone, "tab"); next.tab != tabMachine {
 		t.Errorf("⇥ on the phone opens tab %d, want Machine", next.tab)
 	}
+	// The belt's `,` opens the Machine tab on the phone (no sheet; Task 16).
+	if next := pressOn(phone, ","); next.tab != tabMachine || next.cogShown() {
+		t.Errorf(", on the phone: tab %d, sheet %v; want Machine tab, no sheet", next.tab, next.cogShown())
+	}
 	t.Run("on the desk ⇥ is unbound and says nothing", func(t *testing.T) {
 		m := withAgent(t, mockDesk(t, 160, 40, true), agentRows(36), false)
 		next := pressOn(m, "tab")

@@ -32,7 +32,9 @@ public struct BoardBelt: Equatable, Sendable {
     private static let cardTokens: Set<String> = ["1", "2", "3", "p", "y"]
     private static let maxCard = 3
     /// `c copy reply` comes first, so with a short card it shows at rest: no drag to copy.
-    private static let tail = ["c", "ctrl+o", "s", "g", "/", "m", "z", "N", "tab", "x"]
+    /// The desk's keys `?`, `machine` (face `,`), `t`, `D` sit before kill; `tab` is gone.
+    /// The tok is `machine`, not `,`, because board= is comma-separated.
+    private static let tail = ["c", "ctrl+o", "s", "g", "/", "m", "z", "N", "?", "machine", "t", "D", "x"]
 
     private init(shape: Shape, card: [String], armed: String?, dim: Set<String>, chat: Bool = false) {
         self.shape = shape
@@ -135,7 +137,7 @@ public struct BoardBelt: Equatable, Sendable {
     ///
     /// An act key (`act`) is a tap on the belt, not a typed letter: it sends its own signal
     /// (`tap`), so it acts on the chosen session while the chat's line has the keys, and a letter
-    /// the soft keyboard types still types (`beltTap` in Go). The digits, `⌃o`, `⇥` and the
+    /// the soft keyboard types still types (`beltTap` in Go). The digits, `⌃o` and the
     /// consent box's keys send as a keyboard does.
     private static let faces: [String: Face] = {
         let esc: UInt8 = 0x1b
@@ -153,7 +155,11 @@ public struct BoardBelt: Equatable, Sendable {
             "ctrl+o": word("ctrl+o", "⌃o", "expand", [0x0f]),
             "s": act("s", "s hosts", "hosts"), "g": act("g", "g chain", "chain"), "/": act("/", "/", "find"),
             "m": act("m", "m menu", "menu"), "c": act("c", "c copy reply", "copy the last reply"), "z": act("z", "z park", "park"),
-            "N": act("N", "N new", "new session"), "tab": word("tab", "⇥ machine", "machine", [0x09]),
+            "N": act("N", "N new", "new session"),
+            "?": act("?", "? keys", "keys"),
+            // Face `,`; tok `machine` so board= can name it; tap still sends `,`.
+            "machine": word("machine", ", machine", "machine", BoardBelt.tap(",")),
+            "t": act("t", "t shell", "shell"), "D": act("D", "D review", "review"),
             "x": act("x", "x kill", "kill"),
             "runs": word("runs", "y runs", "y, run", Array("y".utf8)),
             "cancels": word("cancels", "esc cancels", "escape, cancel", [esc]),

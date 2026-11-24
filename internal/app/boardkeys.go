@@ -473,9 +473,18 @@ func (m Model) beltKeys() []beltKey {
 		beltOf(bk.Copy, "", "copy", card),
 		beltOf(mk.Park, "", "park", card),
 		beltOf(mk.New, "", "new", board),
-		beltOf(mk.NextTab, "⇥", "machine", !m.consenting()),
+		beltOf(bk.Keys, "", "keys", board && m.desk()),
+		beltMachine(!m.consenting()),
+		beltOf(bk.Shell, "", "shell", card && m.desk()),
+		beltOf(bk.Review, "", "review", card && m.desk()),
 		beltOf(mk.Second, "", "kill", card && !head && m.killAction(s) != nil),
 	)
+}
+
+// beltMachine is `,` on the belt: its tok is "machine", not ",", because
+// board= is comma-separated and cannot carry a comma tok (Task 16).
+func beltMachine(on bool) beltKey {
+	return beltKey{Key: "machine", Face: ",", Word: "machine", On: on}
 }
 
 // cardBelt are the chosen session's keys on the belt: the digits of the
@@ -542,7 +551,7 @@ func (m Model) beltValue() string {
 //	key   = tok [ "*" ]
 //
 // A tok is a beltKey's Key: 1 2 3 p y up down enter ctrl+o s g / m c z N
-// tab x. A card's key that is off (a digit on another host, or one the
+// ? machine t D x. A card's key that is off (a digit on another host, or one the
 // line types) is a dim tok. ◂ has none and is never sent. At most beltMax bytes:
 // dim toks leave whole from the right, then card keys from the right.
 // The other values ("" off the board, "box", "menu") come from beltValue.

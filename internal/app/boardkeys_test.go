@@ -561,10 +561,32 @@ func beltKeyOf(t *testing.T, ks []beltKey, face string) beltKey {
 	return beltKey{}
 }
 
+// TestBeltKeysOfTheDesk: the belt lists the desk's keys ?, machine (the
+// face `,`), t and D, and no tab (Task 16). The tok is "machine", not ",",
+// because board= is comma-separated.
+func TestBeltKeysOfTheDesk(t *testing.T) {
+	m, _ := flintBoard(t, 80, 34)
+	var keys []string
+	for _, k := range m.beltKeys() {
+		keys = append(keys, k.Key)
+	}
+	for _, want := range []string{"?", "machine", "t", "D"} {
+		if !slices.Contains(keys, want) {
+			t.Errorf("belt lacks %q: %v", want, keys)
+		}
+	}
+	if slices.Contains(keys, "tab") {
+		t.Errorf("belt still has tab: %v", keys)
+	}
+	if k := beltKeyOf(t, m.beltKeys(), ","); k.Key != "machine" || k.Word != "machine" {
+		t.Errorf(", on the belt is %+v, want tok machine", k)
+	}
+}
+
 // TestBeltKeysFollowTheChosenCard (design decision 10): home is ◂, the
 // chosen session's keys, ↑ ↓ ⏎; the tail has the keys of the list.
 func TestBeltKeysFollowTheChosenCard(t *testing.T) {
-	tail := []string{"⌃o", "s", "g", "/", "m", "c", "z", "N", "⇥", "x"}
+	tail := []string{"⌃o", "s", "g", "/", "m", "c", "z", "N", "?", ",", "t", "D", "x"}
 	st := boardFixture(t)
 
 	m, _ := flintBoard(t, 80, 34)
@@ -597,7 +619,8 @@ func TestBeltKeysFollowTheChosenCard(t *testing.T) {
 	if g := beltKeyOf(t, ks, "g"); g.On {
 		t.Errorf("kindle-web is in no chain, yet g is %+v", g)
 	}
-	words := map[string]string{"⌃o": "expand", "c": "copy", "m": "menu", "g": "chain", "s": "hosts", "⇥": "machine", "x": "kill", "z": "park", "N": "new"}
+	words := map[string]string{"⌃o": "expand", "c": "copy", "m": "menu", "g": "chain", "s": "hosts",
+		"?": "keys", ",": "machine", "t": "shell", "D": "review", "x": "kill", "z": "park", "N": "new"}
 	for face, word := range words {
 		if k := beltKeyOf(t, ks, face); k.Word != word {
 			t.Errorf("%s says %q, want %q", face, k.Word, word)
@@ -646,8 +669,9 @@ func TestBeltFollowsTheFocus(t *testing.T) {
 func TestTheBeltSaysWhenTheChatTakesTheScreen(t *testing.T) {
 	phone, _ := flintBoard(t, 40, 34)
 	phone.toLine()
-	if got := phone.beltValue(); got != "1,2;;chat" {
-		t.Errorf("one pane, the chat: %q, want 1,2;;chat", got)
+	// On the phone ?, t and D are off (desk-only), so they sit in dim.
+	if got := phone.beltValue(); got != "1,2;?,t,D;chat" {
+		t.Errorf("one pane, the chat: %q, want 1,2;?,t,D;chat", got)
 	}
 	machine := phone
 	machine.setTab(tabMachine)
@@ -655,8 +679,8 @@ func TestTheBeltSaysWhenTheChatTakesTheScreen(t *testing.T) {
 		t.Errorf("Machine after the chat: %q, want no ;chat: Machine shows its rows", got)
 	}
 	phone.toList()
-	if got := phone.beltValue(); got != "1,2;" {
-		t.Errorf("one pane, the list: %q, want 1,2;", got)
+	if got := phone.beltValue(); got != "1,2;?,t,D" {
+		t.Errorf("one pane, the list: %q, want 1,2;?,t,D", got)
 	}
 	desk, _ := flintBoard(t, 80, 34)
 	desk.toLine()
@@ -675,7 +699,7 @@ func TestTheBeltSignalSaysTheBoardsKeys(t *testing.T) {
 
 	empty := st
 	empty.Sessions, empty.Queue, empty.Ships, empty.Chains = nil, nil, &proto.Ships{At: demoAt}, nil
-	if got := value(boardShot(t, empty, 80, 34, nil)); got != ";ctrl+o,s,g,m,c,z,x" {
+	if got := value(boardShot(t, empty, 80, 34, nil)); got != ";ctrl+o,s,g,m,c,z,t,D,x" {
 		t.Errorf("no card chosen: %q", got)
 	}
 
@@ -710,7 +734,7 @@ func TestTheBeltSignalSaysTheBoardsKeys(t *testing.T) {
 		if !c.consenting() {
 			t.Fatalf("%s does not show", name)
 		}
-		if got := value(c); got != ";ctrl+o,s,g,/,m,c,z,N,tab,x" {
+		if got := value(c); got != ";ctrl+o,s,g,/,m,c,z,N,?,machine,t,D,x" {
 			t.Errorf("%s: %q, want the home with no card keys", name, got)
 		}
 		if ks := c.beltKeys(); slices.ContainsFunc(ks, func(k beltKey) bool { return k.Act }) {
