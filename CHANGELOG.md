@@ -6,6 +6,8 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+## [0.60.0] - 2026-11-24
+
 ### Added
 
 - **Machine names matchblox’s own footprint.** The Machine block shows the
@@ -2074,7 +2076,8 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.59.0...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.60.0...HEAD
+[0.60.0]: https://github.com/blox-eng/matchblox/compare/v0.59.0...v0.60.0
 [0.59.0]: https://github.com/blox-eng/matchblox/compare/v0.58.1...v0.59.0
 [0.58.1]: https://github.com/blox-eng/matchblox/compare/v0.58.0...v0.58.1
 [0.58.0]: https://github.com/blox-eng/matchblox/compare/v0.57.1...v0.58.0
