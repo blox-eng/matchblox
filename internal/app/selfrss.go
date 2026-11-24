@@ -1,10 +1,11 @@
 package app
 
 import (
+	"bufio"
+	"bytes"
 	"os"
 	"strconv"
-
-	"github.com/blox-eng/matchblox/internal/procfs"
+	"strings"
 )
 
 // readConsoleRSS is this console process's RSS in bytes. Tests replace it.
@@ -21,12 +22,30 @@ func osHostname() string {
 	return h
 }
 
+// consoleRSSFromProc reads this process's VmRSS. The console must not import
+// procfs (arch_test); /proc/self/status is enough for one figure.
 func consoleRSSFromProc() uint64 {
-	p, ok := procfs.FS{Root: "/proc"}.Proc(os.Getpid())
-	if !ok {
+	b, err := os.ReadFile("/proc/self/status")
+	if err != nil {
 		return 0
 	}
-	return p.RSS
+	sc := bufio.NewScanner(bytes.NewReader(b))
+	for sc.Scan() {
+		line := sc.Text()
+		if !strings.HasPrefix(line, "VmRSS:") {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			return 0
+		}
+		kb, err := strconv.ParseUint(fields[1], 10, 64)
+		if err != nil {
+			return 0
+		}
+		return kb * 1024
+	}
+	return 0
 }
 
 func rssMiB(b uint64) string {
