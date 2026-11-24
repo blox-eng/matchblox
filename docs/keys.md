@@ -7,8 +7,10 @@ digits, arrows, `Enter` and `Esc`. No key of the console needs `Ctrl`.
 interrupts, a swipe or the match head scrolls, and a tap on the head is
 `Enter`. In the matchblox app,
 your own belt layout can hold the console's keys: see
-[Mine](phone.md#mine). The key line at
-the bottom shows the keys of the open tab. A tap on a key presses it.
+[Mine](phone.md#mine). On a phone, the key line at
+the bottom shows the keys of the open tab. A tap on a key presses it. On
+a desk there is no key line: the bar names the mode, and `?` opens the
+keys sheet.
 
 ## The list and the chat
 
@@ -18,9 +20,10 @@ the keys go to the list or to the agent's pane: see
 [The agent beside the list](#the-agent-beside-the-list). The rows below
 that name the line, or a typed digit, do not act there.
 
-The keys go to one of two places: the chat's line or the list. The key
-line names the place first, `writing to flint-auth` or `in the list`, then
-at most five keys for it.
+The keys go to one of two places: the chat's line or the list. On a
+phone, the key line names the place first, `writing to flint-auth` or
+`in the list`, then at most five keys for it. On a desk, the bar's mode
+word names the place.
 
 In the line, every letter types, `j`, `k`, `q` and `R` too. A paste goes
 in as one piece, in the line that shows: the chosen session's line, or
@@ -60,7 +63,7 @@ the line empty and a question on the screen; else it types.
 | `F` | In the list, stokes the chain of the chosen session: the start sheet, `Stoke the chain <name> (<n> matches)?`, takes the order and the gos of a stoker for that chain. See [A family of stokers](stoker.md#a-family-of-stokers). |
 | `d` | In the tips, dismisses the chosen tip until its evidence changes. |
 | `Tab` or `Shift+Tab` | On the phone, goes to Machine, or back to the list and the chat. On the desk it does nothing: Machine is `,`. |
-| `Ctrl+O` | Goes into the chosen agent's pane, from the line or the list. The key line then says the way back, `ctrl+a m`. |
+| `Ctrl+O` | Goes into the chosen agent's pane, from the line or the list. On a phone the key line then says the way back, `ctrl+a m`. On a desk the bar names the session. |
 | `Ctrl+L` | Hides the list, or shows it again. With the list hidden, the chat takes the width, and the header names each session that needs you. A tap on a name opens its chat. On a phone, the list and the chat take turns. |
 | `◂` or `←` | On a phone, goes from the chat back to the list. A tap on `◂` at the left of the chat's head does it too. On a desk, `←` in the line moves the keys to the list, as `◂` does on a phone. |
 | `e` | In the list, shows the agents that exited and wait for their parent, dim at the end of `IDLE`: for each parent, how many, the command that makes it reap them, and their pids. `e` again hides them. The `IDLE` count counts only the sessions that run. While they are hidden, the foot counts them: `· 1 exited`. |
@@ -70,11 +73,11 @@ the line empty and a question on the screen; else it types.
 ### The agent beside the list
 
 On a desk, the console runs inside tmux in its home session `matchblox`.
-There the console's window has two panes: the list, and the agent's own
-pane. The right pane is a live view of the agent's pane, so typing there is
-typing into the agent: its `/commands`, `@files`, `Esc`, menus, and the
-mouse wheel for scroll and copy. The list is 40 columns wide, or 32 on a
-mid, tall screen.
+matchblox draws the list and the agent's own screen in one window. The
+right side is a live view of the agent's pane, so typing there is typing
+into the agent: its `/commands`, `@files`, `Esc`, menus, and the mouse
+wheel for scroll and copy. The list is 40 columns from 140 up, 32 from
+100 to 139, and 28 below 100.
 
 | Key | What it does |
 |---|---|
@@ -83,29 +86,25 @@ mid, tall screen.
 | `↑`, `↓` | Choose the next row. When the choice rests, the right side shows that agent, and the keys stay in the list. A peer's rows show after you let one of its agents show in this run; on a host the stoker drives, and on one pane at a time, only `Enter` shows. |
 | `Ctrl+O` | Still goes fully into the agent, as before. |
 
-tmux takes these chords, not the console, so they are in a table of their
-own:
-
-| Chord | What it does |
-|---|---|
-| `ctrl+q` | Flips the keys between the list and the agent's pane. It acts only in the console's window. In any other pane or window, `ctrl+q` types as usual. |
-| `ctrl+a m` | Comes back to the list: prefix `m`, a tap on `◂ matchblox`, and the phone's back all go to the list. |
+`ctrl+q` flips the keys between the list and the agent. In any other pane
+or window it types as usual. `ctrl+a m` comes back to the list: prefix
+`m`, a tap on `◂ matchblox`, and the phone's back all go to the list.
 
 A host that the stoker drives asks its take-over question first, and a
 peer's consent box comes first, as with `Ctrl+O`. The agent of a peer
-opens on the right over ssh. When the agent ends, the right pane says
+opens on the right over ssh. When the agent ends, the region says
 `flint-auth ended. ctrl+q: back to the list`. If the agent cannot be
-shown, the pane says why. A pane of the console's own window never shows
-on the right: `Ctrl+O` opens it.
+shown, the region says why. A pane of the console's own window never
+shows on the right: `Ctrl+O` opens it.
 
-Text typed in the list does not go to the agent. The key line says
+Text typed in the list does not go to the agent. The bar says
 `the agent pane takes text · ⏎ goes into flint-auth`.
 
-On a narrow window, and on Matchblox Pocket held upright, one pane shows
-at a time. A tap on a row shows the agent full screen, and `◂` goes back
-to the list. The phone has a console of its own, sized to the phone: a
-choice on the phone moves no other screen, and no screen changes the
-phone's size.
+On a narrow window, and on Matchblox Pocket held upright, the phone
+layout shows: a tap on a row shows the agent full screen, and `◂` goes
+back to the list. The phone has a console of its own, sized to the
+phone: a choice on the phone moves no other screen, and no screen
+changes the phone's size.
 
 ### Each terminal, its own console
 

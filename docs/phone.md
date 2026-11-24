@@ -102,11 +102,11 @@ terminal.`
   come back. Tap an option of its question to mark it, and tap it again to
   send it. Long-press a row for its menu. See
   [The list](console.md#the-list).
-- Inside tmux, the console may have the agent's own pane beside the list.
-  On a phone one pane shows at a time: a tap on a row shows the agent
-  full screen, and `◂` goes back to the list. The phone and the desk share
-  one view, so a choice on the phone changes the right side of the desk.
-  See [Keys](keys.md#the-agent-beside-the-list).
+- On a phone one screen shows at a time: a tap on a row shows the agent
+  full screen, and `◂` goes back to the list. The phone holds a console
+  of its own, sized to the phone: a choice on the phone moves no other
+  screen. The desk draws the agent beside the list; the phone keeps its
+  tabs and its key line. See [Keys](keys.md#the-agent-beside-the-list).
 - While the console shows Sessions or Machine, the key belt is on its
   Board layout. Home is `◂`, then the keys of the chosen session
   (`1 answer`, `p merge`, `y go`), then `↑ ↓ ⏎`. The rest of the belt has

@@ -210,12 +210,26 @@ the head's speckles stand still; its heat colour still shows.
 
 > **2026-11-24, the desk (#494):** wider than the phone's layout, matchblox
 > draws the whole screen: the head row, a rule, the list and the agent with
-> the edge between them, a rule, the bar. The edge's half on the side with
-> the keys is `accent`, the other `hair`; the bar's mode word always names who
-> has the keys, so the edge is never the only signal (in light the lit half
-> is 2.72:1 against the unlit one, design review D19). A prompt that waits
-> for a key takes the bar after its mode word; standing marks sit in the
-> head row before `⚙`; notices sit on the list's last line in `muted`.
+> the edge between them, a rule, the bar. The key line goes. Spaces in the
+> head filter by repo; `DONE` sits between `NEEDS YOU` and `WORKING`; `HELD`
+> stays last. `?` opens the keys sheet; `,` or `⚙` opens Machine as a
+> sheet; `t` opens a shell under the agent; `D` opens a review of its
+> changes. The edge's half on the side with the keys is `accent`, the other
+> `hair`; the bar's mode word always names who has the keys, so the edge is
+> never the only signal (in light the lit half is 2.72:1 against the unlit
+> one, design review D19). A prompt that waits for a key takes the bar after
+> its mode word; standing marks sit in the head row before `⚙`; notices sit
+> on the list's last line in `muted`. The phone keeps the tabs and the key
+> line below. Mouse on the desk (design review D17):
+
+> | Where | Gesture | Goes to |
+> |---|---|---|
+> | agent region | click | gives the agent the keys, then the click passes through |
+> | agent region | drag | matchblox's selection, inside the region only |
+> | anywhere | `shift`+drag | the owner's terminal's own selection |
+> | agent region | wheel | the agent's tmux (its scrollback and copy mode) |
+> | list | wheel | scrolls the list |
+> | while a selection exists | `c` | copies it; any other key clears it and goes on |
 
 > **2026-11-10, the chain room (#326):** a chain opens into a room, as
 > [docs/superpowers/specs/2026-11-07-chain-room-design.md](docs/superpowers/specs/2026-11-07-chain-room-design.md)
@@ -408,23 +422,23 @@ the head's speckles stand still; its heat colour still shows.
   on any other card it says `no ship of <name> waits for a merge`. `x`
   never merges. Why the ships may be behind (`paused · GitHub's rate limit
   is low, ships read again at 14:33`) shows in the strip's row.
-- **Agent beside the list** (owner, 2026-11-16, replacing the drawn chat
-  on a desk in tmux): the console's window has two panes, the list (40
-  columns; 32 on a mid, tall screen) and the agent's own pane. The right
-  pane is a live tmux view of the agent's pane, so typing there is typing
+- **Agent beside the list** (owner, 2026-11-16; desk #494 draws the region
+  inside matchblox): on a desk the list (40 columns from 140 up, 32 from
+  100 to 139, 28 below 100) sits beside the agent's screen in one window.
+  The region is a live view of the agent's pane, so typing there is typing
   into the agent: `/commands`, `@files`, `esc`, menus, the mouse wheel.
   `⏎` or a click or tap on a row shows that agent and gives it the keys;
   `↑` `↓` only move the choice. `ctrl+q` flips the keys between the list
-  and the agent pane, in the console's window only; elsewhere it types.
-  `ctrl+o`, prefix `m`, the `◂` tap and the home APC work as before. A
-  take-over question and a peer's consent box come first; a peer's agent
-  opens over ssh. When the agent ends, the pane says `<name> ended. ctrl+q:
-  back to the list`; when it cannot be shown, it says why. On a narrow
-  window, or Pocket upright, one pane shows at a time. Text typed in the
-  list says `the agent pane takes text · ⏎ shows <name>`. A pane of the
-  console's own window is never shown there. The drawn chat below stays in
-  the demo, a console with no tmux, and a console outside its home session
-  or started for a host.
+  and the agent, in the console only; elsewhere it types. `ctrl+o`, prefix
+  `m`, the `◂` tap and the home APC work as before. A take-over question
+  and a peer's consent box come first; a peer's agent opens over ssh.
+  When the agent ends, the region says `<name> ended. ctrl+q: back to the
+  list`; when it cannot be shown, it says why. On a narrow window, or
+  Pocket upright, the phone layout shows one screen at a time. Text typed
+  in the list says `the agent pane takes text · ⏎ shows <name>`. A pane of
+  the console's own window is never shown there. The drawn chat below
+  stays in the demo, a console with no tmux, and a console outside its
+  home session or started for a host.
 - **Chat** (#261, owner 2026-10-29, replacing the peek of design/0006 §6):
   the chosen session's live screen, drawn inside the console. From 152
   columns it is the right side of the board; its frame title is

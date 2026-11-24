@@ -83,16 +83,18 @@ The full walk is [Get started](https://docs.matchblox.com/start/).
 
 ## What it shows
 
-- **Every agent, one chat**: the list at the left puts each match in a
-  group, `NEEDS YOU`, `WORKING`, `HELD` or `IDLE`, with what needs you on
-  top. The header counts what needs you: `● 3 need you`. A match for each:
-  `╿` struck when it needs you, `✦` burning while it works, `╵` burnt out
-  at rest. Its row says what it asks, its pull request and its chain.
-- **The agent beside the list**: in tmux, the right side is the agent's own
-  pane. Typing there is typing into the agent, with its `/commands`,
-  `@files` and menus. `↑↓` show each agent as you pass, `Enter` goes in, and `ctrl+q`
-  flips the keys between the list and the agent. `g` on a chain shows up to
-  4 of its agents side by side.
+- **Every agent, one desk**: the list at the left puts each match in a
+  group, `NEEDS YOU`, `DONE`, `WORKING`, `IDLE` or `HELD`, with what needs
+  you on top. Spaces in the head filter by repo. The head counts what
+  needs you and what finished: `● 3 need you · ✓ 1 done`. A match for
+  each: `╿` struck when it needs you, `✓` when a turn finished, `✦`
+  burning while it works, `╵` at rest, `╽` held. Its row says what it
+  asks, its age, its pull request and its chain.
+- **The agent beside the list**: on a desk, the right side is the agent's
+  own screen inside matchblox. Typing there is typing into the agent, with
+  its `/commands`, `@files` and menus. `↑↓` show each agent as you pass,
+  `Enter` goes in, and `ctrl+q` flips the keys between the list and the
+  agent. `g` shows only that chain.
 - **The chat**: where there is no tmux (the demo, or a console outside its
   home session), the chosen session's conversation and the options of its
   question, beside the list. Type in its line and `Enter` sends it. A
@@ -145,11 +147,16 @@ The full walk is [Get started](https://docs.matchblox.com/start/).
   A merge, release or deploy you did not give waits on the card for your
   `y`, and what the stoker would wait for, matchblox fires itself.
 - **Read from the screen's shape**: on a phone the list and the chat take
-  turns; on a wider screen the chat is beside the list.
-- **Machine**, the second tab: usage, **machine health**, **detached busy
-  loops**, the stoker, **git** worktrees that are safe to remove, 24 hours
-  of **history** and the tmux panes. The list's foot keeps the
-  **tips** with their exact command.
+  turns; on a desk the agent sits beside the list, under the head and
+  above the bar.
+- **Machine**: `,` or `⚙` opens it as a sheet on the desk; on a phone,
+  `Tab` still opens the Machine tab. It shows usage, **machine health**,
+  **detached busy loops**, the stoker, **git** worktrees that are safe to
+  remove, 24 hours of **history** and the tmux panes. The list's foot
+  keeps the **tips** with their exact command.
+- **A shell and a review**: `t` opens a shell under the agent in its
+  worktree. `D` shows the session's changes; comments wait, and `Enter`
+  sends them to the agent as one review.
 
 More in [The console](https://docs.matchblox.com/console/).
 
@@ -177,7 +184,11 @@ to the agent's own pane, and `ctrl+q` flips them.
 | `s` | In the list, shows the next host, then all hosts. |
 | `N` | In the list, starts a new session: where, the agent, its account and a first message (none on a new account). |
 | `A` | In the list, switches the chosen session to another agent in the same pane. |
-| `Tab` | Goes to Machine, or back. |
+| `?` | On the desk, opens the keys sheet. |
+| `,` | On the desk, opens Machine as a sheet. |
+| `t` | In the list, opens a shell under the agent. |
+| `D` | In the list, reviews the chosen session's changes. |
+| `Tab` | On a phone, goes to Machine, or back. |
 | `/` | In the list, searches it. |
 | `f`, `n` | In the list, the stoker on or off; a night that ends in the morning. |
 | `Ctrl+C` | Quits. The service keeps running. |
