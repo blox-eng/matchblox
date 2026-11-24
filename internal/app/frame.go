@@ -377,8 +377,7 @@ func (m Model) pressFrame(press string) (tea.Model, tea.Cmd) {
 		m.flash = ""
 		return m, nil
 	case press == "keys":
-		m.over = "keys"
-		return m, nil
+		return m.openKeys(), nil
 	case press == "warn":
 		said := m.sayStanding()
 		return m, said
@@ -532,8 +531,7 @@ func (m Model) overlayOver(sc *drawn, box sideBox, room int) {
 		dx, dy = 0, 0
 	}
 	sw, sh := box.chatW-2*dx, room-2*dy
-	title, lines := "? keys", []string(nil)
-	foot := m.st.text.Render(m.keys.side.Leave.Help().Key) + m.st.muted.Render(" closes")
+	title, lines, foot := "? keys", m.keysLines(), m.keysFoot(sw-4)
 	if m.cogShown() {
 		var rows []int
 		title, foot = m.cogTitle(), m.cogFoot(sw-4)

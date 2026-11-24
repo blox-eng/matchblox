@@ -39,6 +39,8 @@ the line empty and a question on the screen; else it types.
 | `[`, `]` | In the list, shows only the repo before or after, then every repo. A space is a repo with a live session. The header's count of who needs you still counts every repo. With one repo only, a notice says so. |
 | `?` | On the desk, in the list, opens the keys sheet over the agent. `Esc` closes it. With the agent's keys, `?` types into the agent. |
 | `,` | On the desk, in the list, opens Machine as the ⚙ sheet over the agent, as `⌘,` opens settings in a desktop app. A tap on `⚙` or on a chip of the bar opens it on that part. With the agent's keys, `,` types into the agent. |
+| `t` | In the list, opens a shell under the agent, in its worktree. |
+| `D` | In the list, opens a review of the chosen session's changes. |
 | `h` | In the list, on a hidden host, shows that host in all hosts again. Machine › Hosts then ticks the host. On another host, a notice says what `h` does. |
 | `g` | In the list, shows only the chain of the chosen session: its room. `Esc` shows all. |
 | `⌥s` | Opens the room of the chosen session's chain, as `g` does. A session in no chain opens its chain of one, which the host's stoker drives. In the matchblox app, `⌥s` types `s` in the line, and the belt's `g` opens the room. |

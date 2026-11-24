@@ -611,6 +611,8 @@ type Model struct {
 	doneKept                  paneKey         // the done row the owner opened: it stays in DONE while it is the choice
 	agent                     agentRegion     // the desk's agent region: the chosen agent's real screen
 	over                      string          // the sheet open over the agent region: "keys"; "" none
+	keyQ                      string          // the ? sheet's filter
+	keyAt                     int             // the ? sheet's chosen hit among the filter's rows
 	cogAt                     string          // the part the ⚙ sheet opened on ("cog:usage", "cog:loops:gpu-1"), until a key moves it
 	showing                   bool            // a choice is checked for the agent region
 	showNext                  *action         // the choice made while one ran: it runs next
@@ -811,11 +813,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.cogAt = "" // the sheet follows the chosen row from now
 		}
 	}
-	if k, ok := msg.(tea.KeyPressMsg); ok && m.over != "" { // the sheet over the agent takes the keys
-		if bkey.Matches(k, m.keys.side.Leave) {
-			m.over = ""
-		}
-		return m, nil
+	if k, ok := msg.(tea.KeyPressMsg); ok && m.over == "keys" {
+		return m.keysKey(k)
 	}
 	region, cmd, ok := m.agentKeys(msg)
 	if ok {

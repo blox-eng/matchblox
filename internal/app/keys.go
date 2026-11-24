@@ -93,7 +93,7 @@ func defaultKeys() keymaps {
 			Rename:     bind(ks("r"), "r", "rename"),
 			StartAgain: bind(ks("R", "shift+r"), "R", "start again"),
 			Jump:       bind(ks("ctrl+o"), "ctrl+o", "go in"),
-			WasInto:    bind(ks("a"), "a", ""), // ctrl+o goes in now: a says so once
+			WasInto:    bind(ks("a"), "a", "ctrl+o goes in"), // says so once on the stoker
 		},
 		form: formKeys{
 			Close: bind(ks("esc"), "esc", ""),
@@ -170,6 +170,8 @@ func defaultKeys() keymaps {
 			SpaceAfter:  bind(ks("]"), "[ ]", "space"),
 			Keys:        bind(ks("?"), "?", "keys"),
 			Machine:     bind(ks(","), ",", "machine"),
+			Shell:       bind(ks("t"), "t", "a shell under the agent"),
+			Review:      bind(ks("D", "shift+d"), "D", "review its changes"),
 		},
 		side: sideKeys{
 			Enter:    bind(ks("enter"), "⏎", "send"),
@@ -300,11 +302,11 @@ func (k askKeys) bindings() []bkey.Binding { return []bkey.Binding{k.Send, k.Can
 type boardKeys struct {
 	Copy, Chain, Host, Menu, Merge bkey.Binding
 	SpaceBefore, SpaceAfter, Keys  bkey.Binding
-	Machine                        bkey.Binding
+	Machine, Shell, Review         bkey.Binding
 }
 
 func (k boardKeys) bindings() []bkey.Binding {
-	return []bkey.Binding{k.Copy, k.Chain, k.Host, k.Menu, k.Merge, k.SpaceBefore, k.SpaceAfter, k.Keys, k.Machine}
+	return []bkey.Binding{k.Copy, k.Chain, k.Host, k.Menu, k.Merge, k.SpaceBefore, k.SpaceAfter, k.Keys, k.Machine, k.Shell, k.Review}
 }
 
 // sideKeys are the chat's line and the list beside it. In the line every
