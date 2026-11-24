@@ -6,6 +6,15 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **See which rule read an agent's screen.**
+  `matchblox agents explain <session>` shows the note the session's row
+  shows, each screen rule with the line it matched, and the menu with
+  the digit of each option. It prints the screen without your home path,
+  host name or user name, ready to paste into an issue. `--file` explains
+  a saved screen.
+
 ## [0.58.1] - 2026-11-23
 
 ### Fixed

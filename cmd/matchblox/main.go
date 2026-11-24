@@ -200,6 +200,13 @@ func run(args []string) error {
 	case "update":
 		return updateCmd(os.Stdout)
 	case "sessions", "ships", "usage", "agents":
+		words, err := positionals(fl, args)
+		if err != nil {
+			return err
+		}
+		if cmd == "agents" && len(words) > 0 && words[0] == "explain" {
+			return cliExplain(words[1:], os.Stdout, transport.SocketPath(), *o.file, *o.json)
+		}
 		return cliRead(cmd, os.Stdout, transport.SocketPath(), *o.json)
 	case "peek":
 		words, err := positionals(fl, args)
@@ -384,6 +391,7 @@ type flags struct {
 	dir                   *string
 	off, on               *bool
 	chain, goes           *string
+	file                  *string
 }
 
 // usageText heads --help: every command, one line each, then the flags.
@@ -404,6 +412,7 @@ Commands:
   matchblox ships                  the pull requests the sessions drive (--json)
   matchblox usage                  each account's plan windows (--json)
   matchblox agents                 each agent, its version and its unknown screens (--json)
+  matchblox agents explain <who>   which screen rule read a session, to report it (--file, --json)
   matchblox peek <who>             what a session said last and what it asks (--lines, --json)
   matchblox send <who> "<text>"    type a line and Enter into a session (--pick n answers its question)
   matchblox compact <who>          compact a Claude Code session at rest
@@ -472,6 +481,7 @@ func newFlags() (*flag.FlagSet, flags) {
 		on:         fl.Bool("on", false, "chain: take chains and notices again"),
 		chain:      fl.String("chain", "", "stoker new and quit: the chain, by any member's name, a pane or the chain's id"),
 		goes:       fl.String("go", "", "stoker new and order: the gos the chain stoker has: merges, releases, deploys, kills (default: none, or the host stoker's own)"),
+		file:       fl.String("file", "", "agents explain: read a saved screen instead of a session's pane"),
 		noMotion:   fl.Bool("no-motion", os.Getenv("NO_MOTION") == "1", "every motion is an instant change (also NO_MOTION=1)"),
 	}
 }
