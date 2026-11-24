@@ -123,7 +123,15 @@ func (w *World) Wire(s *service.Service) {
 	s.PaneHistory, s.CaptureBack = nil, nil // a wheel goes to the world, not to a tmux that holds no history
 	s.KeysToWorld = true
 	s.TmuxOut = func([]string) (string, error) { return "", errRefused }
-	s.TmuxIn = func([]string, string) error { return errRefused }
+	// load-buffer is the paste's text into a demo buffer; paste-buffer
+	// and delete-buffer are no-ops in Run. Other TmuxIn stays refused so
+	// the demo never touches this machine's tmux.
+	s.TmuxIn = func(argv []string, _ string) error {
+		if len(argv) >= 2 && argv[1] == "load-buffer" {
+			return nil
+		}
+		return errRefused
+	}
 	s.PeerPane = func(int) string { return "" }
 	s.WorktreeStep = func(context.Context, string, string) ([]string, string, error) { return nil, "", errRefused }
 	s.MatchGit = func(context.Context, string, ...string) (string, error) { return "", nil } // the fixture has no git to read
@@ -174,6 +182,13 @@ func (w *World) Run(argv []string) error {
 	case len(argv) == 5 && argv[1] == "send-keys" && argv[4] == "Enter":
 		text := w.typed[argv[3]]
 		delete(w.typed, argv[3])
+		// A review paste's Enter follows paste-buffer with no typed line;
+		// the desk's fixture panes may not be in w.sessions.
+		if text == "" {
+			if _, ok := w.sessions[argv[3]]; !ok {
+				return nil
+			}
+		}
 		if err := w.drawField(argv[3]); err != nil {
 			return err
 		}
@@ -194,6 +209,8 @@ func (w *World) Run(argv []string) error {
 		})
 	case len(argv) == 4 && argv[0] == "tmux" && argv[1] == "kill-pane":
 		return w.closePane(argv[3])
+	case len(argv) >= 2 && argv[0] == "tmux" && (argv[1] == "paste-buffer" || argv[1] == "delete-buffer"):
+		return nil // the desk's review paste: text was taken on load-buffer
 	case len(argv) == 3 && argv[0] == "kill" && argv[1] == "-TERM":
 		return nil // the agent went with its pane
 	case len(argv) > 0 && argv[0] == "env" && slices.Contains(argv, "new-session"):

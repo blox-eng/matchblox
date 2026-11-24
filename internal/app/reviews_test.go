@@ -31,3 +31,24 @@ func TestReviewsStayPerSessionKey(t *testing.T) {
 		t.Fatalf("restart kept %+v", again.Comments[key])
 	}
 }
+
+// TestACorruptReviewsFileIsSetAside: a reviews.json that does not read
+// is kept as reviews.json.bad and the store starts empty.
+func TestACorruptReviewsFileIsSetAside(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, reviewsFile)
+	if err := os.WriteFile(path, []byte("{not-json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got := loadReviews(dir)
+	if len(got.Comments) != 0 || len(got.Drafts) != 0 {
+		t.Fatalf("corrupt file loaded as %+v", got)
+	}
+	bad := path + ".bad"
+	if b, err := os.ReadFile(bad); err != nil || string(b) != "{not-json" {
+		t.Fatalf("set aside as %q (%v), want the bad bytes at %s", b, err, bad)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("corrupt file still at %s: %v", path, err)
+	}
+}

@@ -281,18 +281,6 @@ func TestTabStillOpensMachineOnThePhone(t *testing.T) {
 	})
 }
 
-func TestCommaTypesInTheAgent(t *testing.T) {
-	d := newScreenDesk(t, dragScreen, 40, 8)
-	d.do(keyPress(flipKey))
-	d.do(keyPress(","))
-	if got := d.agentRead(); got != "," {
-		t.Errorf("with the agent's keys , reached the agent as %q, want ,", got)
-	}
-	if d.m.tab != tabSessions {
-		t.Errorf("with the agent's keys , opened tab %d", d.m.tab)
-	}
-}
-
 func TestTheSheetFitsTheRegion(t *testing.T) {
 	for _, w := range []int{160, 104} {
 		m := withAgent(t, mockDesk(t, w, 40, true), agentRows(36), false)

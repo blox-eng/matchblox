@@ -2,8 +2,12 @@ package app
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/blox-eng/matchblox/internal/sample"
 )
@@ -40,12 +44,37 @@ func loadReviews(dir string) reviewsState {
 	if dir == "" {
 		return p
 	}
-	b, err := os.ReadFile(reviewsPath(dir))
+	path := reviewsPath(dir)
+	b, err := os.ReadFile(path)
 	if err != nil {
 		return p
 	}
-	_ = json.Unmarshal(b, &p)
+	if err = json.Unmarshal(b, &p); err == nil {
+		return p
+	}
+	p = reviewsState{}
+	bad, aerr := setAsideState(path, time.Now())
+	if aerr != nil {
+		fmt.Fprintf(os.Stderr, "matchblox: reviews.json did not read, so unsent comments start empty: %v; it stays at %s: %v\n", err, path, aerr)
+		return p
+	}
+	fmt.Fprintf(os.Stderr, "matchblox: reviews.json did not read, so unsent comments start empty; it is kept at %s: %v\n", bad, err)
 	return p
+}
+
+// setAsideState moves path to path.bad, or to path.bad-<time> when an
+// older one is there: no bad file is overwritten (as seen.json).
+func setAsideState(path string, now time.Time) (string, error) {
+	bad := path + ".bad"
+	err := os.Link(path, bad)
+	if errors.Is(err, fs.ErrExist) {
+		bad = path + ".bad-" + now.UTC().Format("20060102T150405")
+		err = os.Link(path, bad)
+	}
+	if err != nil {
+		return "", err
+	}
+	return bad, os.Remove(path)
 }
 
 func (p reviewsState) save(dir string) error {

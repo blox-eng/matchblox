@@ -926,8 +926,15 @@ func replayAt(t *testing.T, z replaySize) {
 	}
 	mu.Unlock()
 	// The pick: act types the option's number as a key, as tmux names a digit.
-	if ran, want := world.Ran(), [][]string{{"tmux", "send-keys", "-t", "%2", "2"}}; !reflect.DeepEqual(ran, want) {
-		t.Fatalf("the service ran %q, want %q", ran, want)
+	// A desk review paste may add paste-buffer + Enter for ux-pass after that.
+	ran := world.Ran()
+	if len(ran) == 0 || !reflect.DeepEqual(ran[0], []string{"tmux", "send-keys", "-t", "%2", "2"}) {
+		t.Fatalf("the service ran %q, want the pick first", ran)
+	}
+	for _, step := range ran[1:] {
+		if len(step) < 2 || step[0] != "tmux" || (step[1] != "paste-buffer" && step[1] != "send-keys" && step[1] != "delete-buffer") {
+			t.Fatalf("after the pick the service ran %q, want only paste steps", ran)
+		}
 	}
 
 	framesPath, svgPath := "../../www/demo/frames-"+z.name+".json", "../../www/demo/replay-"+z.name+".svg"
