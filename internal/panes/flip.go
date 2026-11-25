@@ -37,18 +37,30 @@ func handOff(kind string) string {
 // jumpOff is what ⌥ and digit n do in a marked pane: it hands the console
 // the digit, the tty and the pane as handOff does, but leaves the client
 // where it is. The console moves it, or types the key back for a phone, which
-// has no ⌥ and sent Esc then the digit. The console is the one goTo finds.
-// With no console at all the key goes on to the pane as typed.
+// has no ⌥ and sent Esc then the digit. The console is the one goTo finds
+// that has a console pane, in jumpOption. With no console pane to read it,
+// the key goes on to the pane as typed.
 func jumpOff(n int) string {
-	prefix := keycmd.JumpPrefix(n)
-	return noteFrom + ` ; run-shell -C "set-option -g ` + goToOption + ` ` + consoleOf + `" ; if-shell -F "` + toAlive + `" { ` +
-		handIn("#{==:#{session_name},#{"+goToOption+"}}", prefix) + ` } { if-shell -F "` + homeExists + `" { ` +
-		handIn("#{==:#{session_name},"+Home+"}", prefix) + ` } { if-shell -F "` + consolePaneExists + `" { ` +
-		handIn("1", prefix) + ` } { send-keys M-` + strconv.Itoa(n) + ` } } }`
+	toConsole := "#{&&:#{==:#{session_name},#{" + goToOption + "}}," + atHome + "}"
+	pick := "#{?" + aConsolePaneIn(toConsole) + ",#{" + goToOption + "},#{?" + aConsolePaneIn("#{==:#{session_name},"+Home+"}") +
+		"," + Home + ",#{?" + aConsolePaneIn("1") + "," + anyConsole + ",}}}"
+	in := "#{||:#{==:#{" + jumpOption + "}," + anyConsole + "},#{==:#{session_name},#{" + jumpOption + "}}}"
+	return noteFrom + ` ; run-shell -C "set-option -g ` + goToOption + ` ` + consoleOf + `" ; run-shell -C "set-option -g ` + jumpOption + ` '` + pick +
+		`'" ; if-shell -F "#{` + jumpOption + `}" { ` + handIn(in, keycmd.JumpPrefix(n)) + ` } { send-keys M-` + strconv.Itoa(n) + ` }`
 }
 
-// consolePaneExists is not empty while any pane is one handIn sends to.
-const consolePaneExists = "#{S:#{W:#{P:#{?" + isConsolePane + ",1,}}}}"
+// jumpOption is the session whose console a jump goes to, anyConsole for
+// every console's, or empty for none.
+const (
+	jumpOption = "@matchblox_jump"
+	anyConsole = "*"
+)
+
+// aConsolePaneIn is not empty while a session where the format in is true
+// has a pane handIn sends to.
+func aConsolePaneIn(in string) string {
+	return "#{S:#{?" + in + ",#{W:#{P:#{?" + isConsolePane + ",1,}}},}}"
+}
 
 // noteFrom keeps the client's tty and pane in flipFrom.
 const noteFrom = `run-shell -C "set-option -g ` + flipFrom + ` '#{client_tty} #{pane_id}'"`

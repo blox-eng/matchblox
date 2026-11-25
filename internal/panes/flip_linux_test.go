@@ -141,6 +141,34 @@ func TestJumpKeyPassesThroughWithNoConsole(t *testing.T) {
 	}
 }
 
+// TestJumpKeyPassesThroughWhenHomeHasNoConsole: the console quit, and its
+// session lives on in another window. ⌥4 in a marked pane still reaches the
+// agent as typed: no console there would read it.
+func TestJumpKeyPassesThroughWhenHomeHasNoConsole(t *testing.T) {
+	sock := tmuxtest.Server(t)
+	tmux := func(args ...string) string {
+		t.Helper()
+		out, err := exec.Command("tmux", append([]string{"-L", sock, "-f", os.DevNull}, args...)...).CombinedOutput() //nolint:gosec // test argv
+		if err != nil {
+			t.Fatalf("tmux %q: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	tmux("new-session", "-d", "-s", Home, "sleep", "100")
+	tmux("set-option", "-t", Home, HomeOption, "1")
+	typed := t.TempDir() + "/typed"
+	tmux("new-session", "-d", "-s", "work", "sh", "-c", "stty raw -echo; exec cat -v > "+typed)
+	pane := tmux("display-message", "-p", "-t", "work", "#{pane_id}")
+	tmux("set-option", "-p", "-t", pane, MatchOption, "1")
+	tmux(FlipKeysArgv()[1:]...)
+	tmux(JumpKeysArgv()[1:]...)
+	waitFor(t, func() bool { return tmux("display-message", "-p", "-t", pane, "#{pane_current_command}") == "cat" })
+	client := attach(t, sock, "work")
+	if got := typedThen(t, client, typed, "\x1b4"); got != "^[4x" {
+		t.Errorf("the pane read %q, want ^[4 then x", got)
+	}
+}
+
 // TestFlipAtTheConsoleIsItsKey: at the console ⌥s reaches it as the key.
 func TestFlipAtTheConsoleIsItsKey(t *testing.T) {
 	sock, tmux, got := consolePane(t)
