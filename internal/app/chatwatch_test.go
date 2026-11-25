@@ -343,23 +343,28 @@ func TestFitWrapTrimsBlanks(t *testing.T) {
 // cmdMsgs are the messages cmd gives, a batch's or a sequence's each in
 // turn. A command that blocks (a read) gives none.
 func cmdMsgs(cmd tea.Cmd) []tea.Msg {
+	return cmdMsgsWithin(cmd, 50*time.Millisecond)
+}
+
+// cmdMsgsWithin is cmdMsgs with a longer wait: migrateSplit runs tmux and
+// needs seconds under -race (CI #504). Keep the default short so a Batch
+// that includes recv() or a Tick does not burn a toast's life (doors test).
+func cmdMsgsWithin(cmd tea.Cmd, wait time.Duration) []tea.Msg {
 	if cmd == nil {
 		return nil
 	}
 	out := make(chan tea.Msg, 1)
 	go func() { out <- cmd() }()
 	var msg tea.Msg
-	// migrateSplit and other tmux cmds need seconds under -race on CI;
-	// 50ms dropped migratedMsg and left the desk toast empty (#504).
 	select {
 	case msg = <-out:
-	case <-time.After(5 * time.Second):
+	case <-time.After(wait):
 		return nil
 	}
 	if v := reflect.ValueOf(msg); v.Kind() == reflect.Slice && v.Type().Elem() == reflect.TypeFor[tea.Cmd]() { // a batch or a sequence
 		var got []tea.Msg
 		for i := range v.Len() {
-			got = append(got, cmdMsgs(v.Index(i).Interface().(tea.Cmd))...)
+			got = append(got, cmdMsgsWithin(v.Index(i).Interface().(tea.Cmd), wait)...)
 		}
 		return got
 	}

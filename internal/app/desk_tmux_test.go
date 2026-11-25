@@ -65,7 +65,7 @@ func TestTheOldSplitMigratesOnce(t *testing.T) {
 		t.Helper()
 		m := New(Options{NoMotion: true, Conn: newFake(), Pane: consoles[name], Tmux: run, Beside: true})
 		m = upd(t, m, tea.WindowSizeMsg{Width: 160, Height: 40})
-		for _, msg := range cmdMsgs(m.migrateSplit()) {
+		for _, msg := range cmdMsgsWithin(m.migrateSplit(), 5*time.Second) {
 			m = upd(t, m, msg)
 		}
 		return m.sideSays()
