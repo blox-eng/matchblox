@@ -39,22 +39,22 @@ const HomeEnv = "MATCHBLOX_HOME"
 
 // Type is the send-keys step that types text into pane, as literal text. A
 // final ";" goes as "\;" so tmux does not read it as a command end.
-func (Tmux) Type(pane, text string) []string {
+func (t Tmux) Type(pane, text string) []string {
 	if t, ok := strings.CutSuffix(text, ";"); ok {
 		text = t + `\;`
 	}
-	tmux, id := targetArgv(pane)
+	tmux, id := t.targetArgv(pane)
 	return slices.Concat(tmux, []string{"send-keys", "-t", id, "-l", "--", text})
 }
 
 // Keys is the send-keys step that presses keys (tmux key names) in pane.
-func (Tmux) Keys(pane string, keys ...string) []string {
-	tmux, id := targetArgv(pane)
+func (t Tmux) Keys(pane string, keys ...string) []string {
+	tmux, id := t.targetArgv(pane)
 	return slices.Concat(tmux, []string{"send-keys", "-t", id}, keys)
 }
 
 func (t Tmux) Load(pane, name, text string) error {
-	tmux, _ := targetArgv(pane)
+	tmux, _ := t.targetArgv(pane)
 	argv := slices.Concat(tmux, []string{"load-buffer", "-b", name, "-"})
 	if t.RunIn != nil {
 		return t.RunIn(argv, text)
@@ -67,18 +67,18 @@ func (t Tmux) Load(pane, name, text string) error {
 // NoBracketedPaste reads #{bracket_paste_flag}. The format exists from
 // tmux 3.7; an older tmux prints nothing, and then it cannot tell.
 func (t Tmux) NoBracketedPaste(pane string) bool {
-	tmux, id := targetArgv(pane)
+	tmux, id := t.targetArgv(pane)
 	out, err := t.run(slices.Concat(tmux, []string{"display-message", "-p", "-t", id, "#{bracket_paste_flag}"}))
 	return err == nil && strings.TrimSpace(out) == "0"
 }
 
-func (Tmux) Paste(pane, name string) []string {
-	tmux, id := targetArgv(pane)
+func (t Tmux) Paste(pane, name string) []string {
+	tmux, id := t.targetArgv(pane)
 	return slices.Concat(tmux, []string{"paste-buffer", "-p", "-d", "-b", name, "-t", id})
 }
 
 func (t Tmux) Drop(pane, name string) error {
-	tmux, _ := targetArgv(pane)
+	tmux, _ := t.targetArgv(pane)
 	_, err := t.run(slices.Concat(tmux, []string{"delete-buffer", "-b", name}))
 	return err
 }
@@ -91,7 +91,7 @@ func (t Tmux) Screens(ps []string) map[string]string {
 }
 
 func (t Tmux) InMode(pane string) (bool, error) {
-	tmux, id := targetArgv(pane)
+	tmux, id := t.targetArgv(pane)
 	out, err := t.run(slices.Concat(tmux, []string{"display-message", "-p", "-t", id, "#{pane_in_mode}"}))
 	if err != nil {
 		return false, err
@@ -100,7 +100,7 @@ func (t Tmux) InMode(pane string) (bool, error) {
 }
 
 func (t Tmux) TypedAt(pane string) time.Time {
-	tmux, id := targetArgv(pane)
+	tmux, id := t.targetArgv(pane)
 	out, err := t.run(slices.Concat(tmux, []string{"list-clients", "-F", "#{client_activity} #{pane_id}"}))
 	if err != nil {
 		return time.Time{}
@@ -124,7 +124,7 @@ func (t Tmux) TypedAt(pane string) time.Time {
 const MatchOption = "@matchblox_match"
 
 func (t Tmux) Mark(pane string, on bool) error {
-	tmux, id := targetArgv(pane)
+	tmux, id := t.targetArgv(pane)
 	argv := slices.Concat(tmux, []string{"set-option", "-p", "-t", id, MatchOption, "1"})
 	if !on {
 		argv = slices.Concat(tmux, []string{"set-option", "-p", "-u", "-t", id, MatchOption})
@@ -235,22 +235,22 @@ func (t Tmux) Start(s Start) [][]string {
 
 // Rename names the window in pane. It does not type into the agent, and it
 // does not rename the session: that step needs the one-window flag.
-func (Tmux) Rename(pane, name string) [][]string {
-	tmux, id := targetArgv(pane)
+func (t Tmux) Rename(pane, name string) [][]string {
+	tmux, id := t.targetArgv(pane)
 	return [][]string{slices.Concat(tmux, []string{"rename-window", "-t", id, name})}
 }
 
 // RenameSession names the session of pane. Rename leaves it out: the
 // caller asks for this step only when the session has one window.
-func (Tmux) RenameSession(pane, name string) []string {
-	tmux, id := targetArgv(pane)
+func (t Tmux) RenameSession(pane, name string) []string {
+	tmux, id := t.targetArgv(pane)
 	return slices.Concat(tmux, []string{"rename-session", "-t", id, name})
 }
 
 // Kill ends pane, then sends TERM to pid when pid is greater than zero.
 // The second step names that pid and no other pane.
-func (Tmux) Kill(pane string, pid int) [][]string {
-	tmux, id := targetArgv(pane)
+func (t Tmux) Kill(pane string, pid int) [][]string {
+	tmux, id := t.targetArgv(pane)
 	steps := [][]string{slices.Concat(tmux, []string{"kill-pane", "-t", id})}
 	if pid > 0 {
 		steps = append(steps, []string{"kill", "-TERM", strconv.Itoa(pid)})
@@ -271,8 +271,8 @@ func (t Tmux) HasSession(name string) []string {
 
 // Respawn starts argv again in pane. The pane id stays: the step is
 // respawn-pane -k, never a new session.
-func (Tmux) Respawn(pane, dir string, env []string, argv []string) [][]string {
-	tmux, bare := targetArgv(pane)
+func (t Tmux) Respawn(pane, dir string, env []string, argv []string) [][]string {
+	tmux, bare := t.targetArgv(pane)
 	step := slices.Concat(tmux, []string{"respawn-pane", "-k", "-t", bare})
 	if dir != "" {
 		step = append(step, "-c", dir)
@@ -330,8 +330,8 @@ func (t Tmux) split(target string, percent int, argv []string) (string, error) {
 
 // Focus brings pane to the front: select-window, then select-pane. It does
 // not attach and it does not switch a client.
-func (Tmux) Focus(pane string) [][]string {
-	tmux, id := targetArgv(pane)
+func (t Tmux) Focus(pane string) [][]string {
+	tmux, id := t.targetArgv(pane)
 	return [][]string{
 		slices.Concat(tmux, []string{"select-window", "-t", id}),
 		slices.Concat(tmux, []string{"select-pane", "-t", id}),
@@ -339,8 +339,8 @@ func (Tmux) Focus(pane string) [][]string {
 }
 
 // SwitchClient is the step that moves the client that asked to pane.
-func (Tmux) SwitchClient(pane string) []string {
-	tmux, id := targetArgv(pane)
+func (t Tmux) SwitchClient(pane string) []string {
+	tmux, id := t.targetArgv(pane)
 	return slices.Concat(tmux, []string{"switch-client", "-t", id})
 }
 
@@ -416,8 +416,14 @@ func (t Tmux) Attach(session string) []string {
 // Caller is the pane id tmux gave this process.
 func (Tmux) Caller() string { return os.Getenv("TMUX_PANE") }
 
-func targetArgv(target string) (argv []string, bare string) {
+// targetArgv is the tmux prefix that reaches pane, and the id that server knows
+// the pane by. A pane with an @server suffix names its own server; one with
+// none is on this socket.
+func (t Tmux) targetArgv(target string) (argv []string, bare string) {
 	server, bare := SplitPane(target)
+	if server == "" {
+		return t.commandArgv(), bare
+	}
 	return serverArgv(server), bare
 }
 

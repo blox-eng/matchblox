@@ -36,13 +36,19 @@ func (t Tmux) List() ([]Pane, error) { return t.list(false) }
 // person's terminal.
 func (t Tmux) ListStrict() ([]Pane, error) { return t.list(true) }
 
+// list looks for tmux on PATH only when it runs tmux itself. A Run is a
+// stand-in for tmux, and it may be a real exec that finds no tmux: that
+// error is an empty list too.
 func (t Tmux) list(strict bool) ([]Pane, error) {
-	if err := t.look(); err != nil {
+	if t.Run == nil && t.look() != nil {
 		return nil, nil
 	}
 	argv := append(t.listArgv(), "list-panes", "-a", "-F", PaneFormat)
 	out, err := t.output(argv)
 	if err != nil {
+		if errors.Is(err, exec.ErrNotFound) {
+			return nil, nil
+		}
 		var exit *exec.ExitError
 		if errors.As(err, &exit) && (!strict || noServer(exit)) {
 			return nil, nil

@@ -21,7 +21,7 @@ func (s *Service) stokerMux() mux.Tmux {
 }
 
 // tmuxOn is tmux on server ("": the builder's). A run that tests set goes
-// through TmuxOut; with none, mux runs tmux itself, and bounds each read.
+// through TmuxOut; with none, mux runs tmux itself.
 func (s *Service) tmuxOn(server string) mux.Tmux {
 	return mux.Tmux{Server: server, Run: s.TmuxOut, RunIn: s.TmuxIn, Capture: s.Capture}
 }

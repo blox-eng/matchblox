@@ -313,14 +313,17 @@ func TestKillSessionEndsThatName(t *testing.T) {
 }
 
 func TestListWithNoTmuxIsEmpty(t *testing.T) {
-	ran := false
-	missing := Tmux{
-		LookPath: func(string) (string, error) { return "", errors.New("tmux not found") },
-		Run:      func([]string) (string, error) { ran = true; return "pane", nil },
-	}
+	missing := Tmux{LookPath: func(string) (string, error) { return "", errors.New("tmux not found") }}
 	panes, err := missing.List()
-	if err != nil || len(panes) != 0 || ran {
-		t.Fatalf("no tmux: %d panes, err %v, ran %v", len(panes), err, ran)
+	if err != nil || len(panes) != 0 {
+		t.Fatalf("no tmux: %d panes, err %v", len(panes), err)
+	}
+	// A Run that execs tmux itself and finds none is the same empty list.
+	for name, list := range map[string]func(Tmux) ([]Pane, error){"List": Tmux.List, "ListStrict": Tmux.ListStrict} {
+		notFound := Tmux{Run: func([]string) (string, error) { return "", &exec.Error{Name: "tmux", Err: exec.ErrNotFound} }}
+		if panes, err := list(notFound); err != nil || len(panes) != 0 {
+			t.Fatalf("%s, Run finds no tmux: %d panes, err %v", name, len(panes), err)
+		}
 	}
 
 	exitErr := exec.Command("false").Run()
@@ -710,5 +713,47 @@ func TestSwitchClientNamesThePane(t *testing.T) {
 func TestViewCmdIsTheNestedClientsName(t *testing.T) {
 	if got := (Tmux{}).ViewCmd(); got != "tmux" {
 		t.Fatalf("got %q, want tmux", got)
+	}
+}
+
+// TestListWithRunNeedsNoTmuxOnPath: a replacement Run stands in for tmux, so
+// List, and ListStrict, must not look for tmux on PATH first. A machine with
+// no tmux still runs the service tests.
+func TestListWithRunNeedsNoTmuxOnPath(t *testing.T) {
+	for name, list := range map[string]func(Tmux) ([]Pane, error){
+		"List":       Tmux.List,
+		"ListStrict": Tmux.ListStrict,
+	} {
+		t.Run(name, func(t *testing.T) {
+			calls := 0
+			tm := Tmux{
+				LookPath: func(string) (string, error) { return "", errors.New("no tmux on PATH") },
+				Run: func([]string) (string, error) {
+					calls++
+					return "%1\ts:0.0\tw\t42\tbash\t/tmp\n", nil
+				},
+			}
+			panes, err := list(tm)
+			if err != nil || calls != 1 || len(panes) != 1 {
+				t.Fatalf("panes %v, err %v, Run calls %d: want one pane from one Run call", panes, err, calls)
+			}
+		})
+	}
+}
+
+// TestPaneActsOnAServerStayOnIt: one Tmux is one socket. A pane id with no
+// @server suffix acts on the socket of the Tmux that holds it.
+func TestPaneActsOnAServerStayOnIt(t *testing.T) {
+	named := Tmux{Server: "matchblox"}
+	if got := named.Kill("%3", 0)[0]; !slices.Equal(got, []string{"tmux", "-L", "matchblox", "kill-pane", "-t", "%3"}) {
+		t.Fatalf("Kill on a server: got %q", got)
+	}
+	sock := Tmux{Socket: "/tmp/s"}
+	if got := sock.Paste("%3", "b"); !slices.Equal(got[:3], []string{"tmux", "-S", "/tmp/s"}) || !slices.Contains(got, "paste-buffer") {
+		t.Fatalf("Paste on a socket: got %q", got)
+	}
+	// A suffix still names its own server.
+	if got := named.Kill("%3@other", 0)[0]; !slices.Equal(got, []string{"tmux", "-L", "other", "kill-pane", "-t", "%3"}) {
+		t.Fatalf("suffix: got %q", got)
 	}
 }
