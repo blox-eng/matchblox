@@ -4,7 +4,10 @@
 // a fake for tests.
 package mux
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 // Start is one session to open. Env values may sit on a tmux -e word.
 // This package never writes them into an error or a log.
@@ -89,4 +92,28 @@ type Mux interface {
 	// Caller is the pane that this process runs in, "" when it runs in
 	// none.
 	Caller() string
+	// ListBuffers is the paste buffers of this server, newest first. A
+	// server that is not there is an error. A read ends with ctx.
+	ListBuffers(ctx context.Context) ([]Buffer, error)
+	// ShowBuffer is the text of buffer name. A buffer that is gone is an
+	// error. A read ends with ctx.
+	ShowBuffer(ctx context.Context, name string) (string, error)
+	// Notice shows text for a few seconds to each client of a person on
+	// this server, not to a control client. It says nothing when the
+	// server has no clients or does not answer.
+	Notice(ctx context.Context, text string)
+	// SizedWindows is each window of this server that an older service
+	// sized: its id and its mark. A server that is not there is an error.
+	SizedWindows() ([]SizedWindow, error)
+	// RestoreWindow puts back the window-size of a window from its mark,
+	// then drops the mark.
+	RestoreWindow(window, mark string) error
 }
+
+// Buffer is one line of the paste buffer list. The three fields are as
+// the multiplexer prints them, so two reads of one buffer are equal.
+type Buffer struct{ Name, Created, Size string }
+
+// SizedWindow is a window an older service sized, with its mark: the
+// window-size it had before ("-": none) and its size then, "latest 120x40".
+type SizedWindow struct{ Window, Mark string }

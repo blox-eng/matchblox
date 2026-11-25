@@ -2,6 +2,8 @@
 package muxtest
 
 import (
+	"context"
+	"errors"
 	"maps"
 	"slices"
 	"strconv"
@@ -17,20 +19,25 @@ import (
 // Client and Created what LastClient returns, Self what Caller returns.
 // Its steps are argv words that name no program.
 type Fake struct {
-	mu        sync.Mutex
-	Screen    map[string]string
-	Mode      map[string]bool
-	NoBracket map[string]bool
-	Typed     map[string]time.Time
-	Panes     []mux.Pane
-	Client    string    // LastClient's tty
-	Created   time.Time // LastClient's creation time
-	Self      string    // Caller's pane
-	marked    map[string]bool
-	marks     int
-	splits    int
-	loads     []Load
-	drops     []string
+	mu         sync.Mutex
+	Screen     map[string]string
+	Mode       map[string]bool
+	NoBracket  map[string]bool
+	Typed      map[string]time.Time
+	Panes      []mux.Pane
+	Client     string            // LastClient's tty
+	Created    time.Time         // LastClient's creation time
+	Self       string            // Caller's pane
+	Buffers    []mux.Buffer      // ListBuffers' list; nil: no server
+	BufferText map[string]string // ShowBuffer's text of each buffer
+	Sized      []mux.SizedWindow // SizedWindows' list; nil: no server
+	marked     map[string]bool
+	marks      int
+	splits     int
+	loads      []Load
+	drops      []string
+	notices    []string
+	restores   []mux.SizedWindow
 }
 
 // Load is one text Load put into a buffer.
@@ -214,4 +221,64 @@ func (f *Fake) MarkCalls() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.marks
+}
+
+// ListBuffers is Buffers. With none it is an error, as a missing server is.
+func (f *Fake) ListBuffers(context.Context) ([]mux.Buffer, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.Buffers == nil {
+		return nil, errors.New("muxtest: no server")
+	}
+	return slices.Clone(f.Buffers), nil
+}
+
+// ShowBuffer is BufferText of name; a name with none is an error.
+func (f *Fake) ShowBuffer(_ context.Context, name string) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	text, ok := f.BufferText[name]
+	if !ok {
+		return "", errors.New("muxtest: no buffer " + name)
+	}
+	return text, nil
+}
+
+// Notice notes text.
+func (f *Fake) Notice(_ context.Context, text string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.notices = append(f.notices, text)
+}
+
+// Notices are the texts Notice showed, in order.
+func (f *Fake) Notices() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.notices)
+}
+
+// SizedWindows is Sized. With none it is an error, as a missing server is.
+func (f *Fake) SizedWindows() ([]mux.SizedWindow, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.Sized == nil {
+		return nil, errors.New("muxtest: no server")
+	}
+	return slices.Clone(f.Sized), nil
+}
+
+// RestoreWindow notes the window and its mark.
+func (f *Fake) RestoreWindow(window, mark string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.restores = append(f.restores, mux.SizedWindow{Window: window, Mark: mark})
+	return nil
+}
+
+// Restored are the windows RestoreWindow put back, in order.
+func (f *Fake) Restored() []mux.SizedWindow {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.restores)
 }

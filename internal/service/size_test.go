@@ -8,7 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/blox-eng/matchblox/internal/panes"
+	"github.com/blox-eng/matchblox/internal/mux"
+	"github.com/blox-eng/matchblox/internal/mux/muxtest"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/tmuxtest"
@@ -62,12 +63,45 @@ func TestStartPutsBackWindowsLeftSized(t *testing.T) {
 	f.listed = "@1\t- 120x40\n@2\t\n@3\tlatest 80x24\n"
 	s.TmuxOut = f.tmux
 	s.restoreSized()
+	list := func(tmux ...string) []string {
+		return append(tmux, "list-windows", "-a", "-F", "#{window_id}\t#{@matchblox-sized}")
+	}
+	restore := func(window, prev string, tmux ...string) []string {
+		return append(tmux, "set-option", "-w", "-t", window, "window-size", prev, ";", "set-option", "-w", "-u", "-t", window, "@matchblox-sized")
+	}
+	unset := func(window string, tmux ...string) []string {
+		return append(tmux, "set-option", "-w", "-u", "-t", window, "window-size", ";", "set-option", "-w", "-u", "-t", window, "@matchblox-sized")
+	}
+	on := []string{"tmux", "-L", "matchblox-test"}
 	want := [][]string{
-		panes.SizedWindows(""), panes.RestoreWindow("", "@1", "- 120x40"), panes.RestoreWindow("", "@3", "latest 80x24"),
-		panes.SizedWindows("matchblox-test"), panes.RestoreWindow("matchblox-test", "@1", "- 120x40"), panes.RestoreWindow("matchblox-test", "@3", "latest 80x24"),
+		list("tmux"), unset("@1", "tmux"), restore("@3", "latest", "tmux"),
+		list(on...), unset("@1", on...), restore("@3", "latest", on...),
 	}
 	if got := f.steps(); !slices.EqualFunc(got, want, slices.Equal) {
 		t.Fatalf("ran %q\nwant %q", got, want)
+	}
+}
+
+// With a multiplexer set, a start puts back the windows it lists.
+func TestStartPutsBackWindowsOfTheMux(t *testing.T) {
+	s := newTest(t, time.Hour)
+	f := &muxtest.Fake{Sized: []mux.SizedWindow{{Window: "@1", Mark: "- 120x40"}, {Window: "@3", Mark: "latest 80x24"}}}
+	s.Mux = f
+	s.restoreSized()
+	want := []mux.SizedWindow{{Window: "@1", Mark: "- 120x40"}, {Window: "@3", Mark: "latest 80x24"}}
+	if got := f.Restored(); !slices.Equal(got, want) {
+		t.Fatalf("restored %v, want %v", got, want)
+	}
+}
+
+// A server that is not there has nothing sized: a start restores nothing.
+func TestStartRestoresNothingWithNoServer(t *testing.T) {
+	s := newTest(t, time.Hour)
+	f := &muxtest.Fake{}
+	s.Mux = f
+	s.restoreSized()
+	if got := f.Restored(); len(got) != 0 {
+		t.Fatalf("restored %v with no server", got)
 	}
 }
 
@@ -111,14 +145,14 @@ func TestAWatchNeverSizesTheAgentsWindow(t *testing.T) {
 		}
 	}
 
-	tmux("set-option", "-w", "-t", "text", "window-size", "manual", ";", "set-option", "-w", "-t", "text", panes.SizedMark, "latest 120x40")
+	tmux("set-option", "-w", "-t", "text", "window-size", "manual", ";", "set-option", "-w", "-t", "text", mux.SizedMark, "latest 120x40")
 	again := newTest(t, time.Hour)
 	again.StokerServer = server
 	again.restoreSized()
 	if got := tmux("show-options", "-w", "-v", "-t", "text", "window-size"); got != "latest" {
 		t.Fatalf("window-size %q after a start, want latest", got)
 	}
-	if got := tmux("display-message", "-p", "-t", "text", "#{"+panes.SizedMark+"}"); got != "" {
+	if got := tmux("display-message", "-p", "-t", "text", "#{"+mux.SizedMark+"}"); got != "" {
 		t.Fatalf("mark %q left after a start", got)
 	}
 }
