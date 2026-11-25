@@ -2,6 +2,7 @@ package mux
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"slices"
@@ -234,6 +235,93 @@ func (Tmux) Respawn(pane, dir string, env []string, argv []string) [][]string {
 	step = append(step, argv...)
 	return [][]string{step}
 }
+
+// Split opens a pane beside target and returns its id, with the server
+// (OnServer) as List writes it. The command follows --, so no word of argv
+// is a flag. Extra flags (side, size) wait for the caller that needs them.
+func (t Tmux) Split(target string, argv []string) (string, error) {
+	prefix, server := t.commandArgv(), t.Server
+	if sv, bare := SplitPane(target); sv != "" {
+		prefix, server, target = serverArgv(sv), sv, bare
+	}
+	step := slices.Concat(prefix, []string{"split-window", "-t", target, "-P", "-F", "#{pane_id}"})
+	if len(argv) > 0 {
+		step = append(step, "--")
+		step = append(step, argv...)
+	}
+	out, err := t.run(step)
+	if err != nil {
+		return "", err
+	}
+	id := strings.TrimSpace(out)
+	if !strings.HasPrefix(id, "%") {
+		return "", errors.New("tmux split-window printed no pane id")
+	}
+	return OnServer(id, server), nil
+}
+
+// Focus brings pane to the front: select-window, then select-pane. It does
+// not attach and it does not switch a client.
+func (Tmux) Focus(pane string) [][]string {
+	tmux, id := targetArgv(pane)
+	return [][]string{
+		slices.Concat(tmux, []string{"select-window", "-t", id}),
+		slices.Concat(tmux, []string{"select-pane", "-t", id}),
+	}
+}
+
+// lastClientBound is how long LastClient waits for tmux: the guard asks
+// on a key press.
+const lastClientBound = 500 * time.Millisecond
+
+// LastClient asks tmux for the clients of session. "=" names that session.
+// A tmux error or no session gives "": the guard is not a wall.
+func (t Tmux) LastClient(session string) (string, time.Time, error) {
+	step := slices.Concat(t.commandArgv(), []string{"list-clients", "-t", "=" + session, "-F", "#{client_activity} #{client_created} #{client_tty}"})
+	var out string
+	var err error
+	if t.Run != nil {
+		out, err = t.Run(step)
+	} else {
+		ctx, cancel := context.WithTimeout(context.Background(), lastClientBound)
+		defer cancel()
+		var b []byte
+		b, err = exec.CommandContext(ctx, step[0], step[1:]...).Output() //nolint:gosec // argv built here, never a shell string
+		out = string(b)
+	}
+	if err != nil {
+		return "", time.Time{}, nil
+	}
+	tty, created := lastClientOf(out)
+	return tty, created, nil
+}
+
+// lastClientOf is the tty and the creation time of the client with the
+// latest activity in the output of list-clients. "" when no line parses.
+func lastClientOf(out string) (tty string, created time.Time) {
+	best := int64(-1)
+	for l := range strings.Lines(out) {
+		f := strings.Fields(l)
+		if len(f) != 3 {
+			continue
+		}
+		at, err := strconv.ParseInt(f[0], 10, 64)
+		made, err2 := strconv.ParseInt(f[1], 10, 64)
+		if err == nil && err2 == nil && at > best {
+			best, tty, created = at, f[2], time.Unix(made, 0)
+		}
+	}
+	return tty, created
+}
+
+// Attach gives the terminal to session. It is a step: the caller hands
+// over the terminal.
+func (t Tmux) Attach(session string) []string {
+	return slices.Concat(t.commandArgv(), []string{"attach-session", "-t", session})
+}
+
+// Caller is the pane id tmux gave this process.
+func (Tmux) Caller() string { return os.Getenv("TMUX_PANE") }
 
 func targetArgv(target string) (argv []string, bare string) {
 	server, bare := SplitPane(target)

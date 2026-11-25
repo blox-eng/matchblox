@@ -16,7 +16,7 @@ type Start struct {
 	EmptyExit bool // stoker: remain-on-exit / exit-empty as today
 }
 
-// Mux is one multiplexer. Type, Keys, Start, Rename, Kill and Respawn give
+// Mux is one multiplexer. Type, Keys, Start, Rename, Kill, Respawn, Focus and Attach give
 // steps, not runs: the service runs each step behind its guard.
 type Mux interface {
 	// Type is the step that types text into pane as it is.
@@ -67,4 +67,19 @@ type Mux interface {
 	// Respawn is the step that starts the command again in pane. The pane
 	// id stays: this does not open a session.
 	Respawn(pane, dir string, env []string, argv []string) [][]string
+	// Split opens a pane next to target running argv and returns its id.
+	// It runs: the id exists only after the multiplexer made the pane.
+	Split(target string, argv []string) (pane string, err error)
+	// Focus is the steps that bring pane to the front: its window, then
+	// the pane. Attach is a separate step.
+	Focus(pane string) [][]string
+	// LastClient is the tty and the creation time of the client of session
+	// that was active last. No session, or a multiplexer that errors, is
+	// "" and the zero time with no error: the guard is not a wall.
+	LastClient(session string) (tty string, created time.Time, err error)
+	// Attach is the step that gives the terminal to session.
+	Attach(session string) []string
+	// Caller is the pane that this process runs in, "" when it runs in
+	// none.
+	Caller() string
 }

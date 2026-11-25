@@ -13,7 +13,8 @@ import (
 
 // Fake is a multiplexer in memory: Screen is each pane's text, Mode the
 // panes in copy mode, NoBracket the panes that take no bracketed paste,
-// Typed the last key of a person in each pane, Panes what List returns.
+// Typed the last key of a person in each pane, Panes what List returns,
+// Client and Created what LastClient returns, Self what Caller returns.
 // Its steps are argv words that name no program.
 type Fake struct {
 	mu        sync.Mutex
@@ -22,8 +23,12 @@ type Fake struct {
 	NoBracket map[string]bool
 	Typed     map[string]time.Time
 	Panes     []mux.Pane
+	Client    string    // LastClient's tty
+	Created   time.Time // LastClient's creation time
+	Self      string    // Caller's pane
 	marked    map[string]bool
 	marks     int
+	splits    int
 	loads     []Load
 	drops     []string
 }
@@ -139,6 +144,35 @@ func (*Fake) KillSession(name string) []string {
 
 func (*Fake) Respawn(pane, dir string, env []string, argv []string) [][]string {
 	return [][]string{slices.Concat([]string{"fake", "respawn-pane", pane, dir}, env, argv)}
+}
+
+// Split opens no pane: it returns the next fake id, %f1, %f2, and so on.
+func (f *Fake) Split(_ string, _ []string) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.splits++
+	return "%f" + strconv.Itoa(f.splits), nil
+}
+
+func (*Fake) Focus(pane string) [][]string {
+	return [][]string{{"fake", "select-window", pane}, {"fake", "select-pane", pane}}
+}
+
+// LastClient is Client, with Created as its creation time. No Client is
+// "" and the zero time, as no session is.
+func (f *Fake) LastClient(string) (string, time.Time, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.Client, f.Created, nil
+}
+
+func (*Fake) Attach(session string) []string { return []string{"fake", "attach", session} }
+
+// Caller is Self.
+func (f *Fake) Caller() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.Self
 }
 
 func (f *Fake) List() ([]mux.Pane, error) {

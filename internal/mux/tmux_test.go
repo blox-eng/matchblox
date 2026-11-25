@@ -462,3 +462,128 @@ func tmuxCmd(t *testing.T, server string, args ...string) string {
 	}
 	return strings.TrimSpace(string(out))
 }
+
+func TestSplitReturnsNewPaneID(t *testing.T) {
+	ownTmux(t)
+	const server = "mb-split"
+	endServer(t, server)
+	tmuxCmd(t, server, "new-session", "-d", "-s", "splitme", "sleep", "60")
+
+	got, err := (Tmux{Server: server}).Split("splitme", []string{"sleep", "60"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, id := SplitPane(got)
+	if !strings.HasPrefix(id, "%") || strings.ContainsAny(got, " \n") {
+		t.Fatalf("got %q, want a %% pane id", got)
+	}
+	if n := len(strings.Fields(tmuxCmd(t, server, "list-panes", "-t", "splitme", "-F", "#{pane_id}"))); n != 2 {
+		t.Fatalf("session has %d panes, want 2", n)
+	}
+}
+
+func TestSplitBuildsTheSplitWindowArgv(t *testing.T) {
+	var got []string
+	tm := Tmux{Server: "matchblox", Run: func(argv []string) (string, error) {
+		got = argv
+		return "%7\n", nil
+	}}
+	id, err := tm.Split("work", []string{"claude", "--resume"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"tmux", "-L", "matchblox", "split-window", "-t", "work", "-P", "-F", "#{pane_id}", "--", "claude", "--resume"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+	if id != "%7@matchblox" {
+		t.Fatalf("got %q, want %q", id, "%7@matchblox")
+	}
+}
+
+func TestSplitErrorsWithoutAPaneID(t *testing.T) {
+	tm := Tmux{Run: func([]string) (string, error) { return "\n", nil }}
+	if id, err := tm.Split("work", nil); err == nil {
+		t.Fatalf("got id %q and no error", id)
+	}
+	tm = Tmux{Run: func([]string) (string, error) { return "", errors.New("no server") }}
+	if _, err := tm.Split("work", nil); err == nil {
+		t.Fatal("run error was swallowed")
+	}
+}
+
+func TestFocusArgvSelectsThePane(t *testing.T) {
+	got := (Tmux{}).Focus("%3")
+	want := [][]string{
+		{"tmux", "select-window", "-t", "%3"},
+		{"tmux", "select-pane", "-t", "%3"},
+	}
+	if !slices.EqualFunc(got, want, slices.Equal) {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+	on := (Tmux{}).Focus("%3@matchblox")
+	wantOn := [][]string{
+		{"tmux", "-L", "matchblox", "select-window", "-t", "%3"},
+		{"tmux", "-L", "matchblox", "select-pane", "-t", "%3"},
+	}
+	if !slices.EqualFunc(on, wantOn, slices.Equal) {
+		t.Fatalf("server: got %q, want %q", on, wantOn)
+	}
+	for _, step := range append(got, on...) {
+		if slices.Contains(step, "attach-session") {
+			t.Fatalf("focus attached: %q", step)
+		}
+	}
+}
+
+func TestAttachNamesTheSession(t *testing.T) {
+	if got, want := (Tmux{}).Attach("api"), []string{"tmux", "attach-session", "-t", "api"}; !slices.Equal(got, want) {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+	got := (Tmux{Server: "matchblox"}).Attach("stoker")
+	if want := []string{"tmux", "-L", "matchblox", "attach-session", "-t", "stoker"}; !slices.Equal(got, want) {
+		t.Fatalf("server: got %q, want %q", got, want)
+	}
+	got = (Tmux{Socket: "/tmp/s"}).Attach("api")
+	if want := []string{"tmux", "-S", "/tmp/s", "attach-session", "-t", "api"}; !slices.Equal(got, want) {
+		t.Fatalf("socket: got %q, want %q", got, want)
+	}
+}
+
+func TestCallerReadsTMUX_PANE(t *testing.T) {
+	t.Setenv("TMUX_PANE", "%9")
+	if got := (Tmux{}).Caller(); got != "%9" {
+		t.Fatalf("got %q, want %%9", got)
+	}
+	t.Setenv("TMUX_PANE", "")
+	if got := (Tmux{}).Caller(); got != "" {
+		t.Fatalf("got %q, want empty", got)
+	}
+}
+
+func TestLastClientPicksTheLatestActivity(t *testing.T) {
+	var got []string
+	tm := Tmux{Run: func(argv []string) (string, error) {
+		got = argv
+		return "100 50 /dev/pts/1\n300 200 /dev/pts/2\nbad line\n200 150 /dev/pts/3\n", nil
+	}}
+	tty, at, err := tm.LastClient("console")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"tmux", "list-clients", "-t", "=console", "-F", "#{client_activity} #{client_created} #{client_tty}"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("argv: got %q, want %q", got, want)
+	}
+	if tty != "/dev/pts/2" || !at.Equal(time.Unix(200, 0)) {
+		t.Fatalf("got %q %v, want /dev/pts/2 and the created time 200", tty, at)
+	}
+}
+
+func TestLastClientSwallowsATmuxError(t *testing.T) {
+	tm := Tmux{Run: func([]string) (string, error) { return "", errors.New("no server running") }}
+	tty, at, err := tm.LastClient("console")
+	if err != nil || tty != "" || !at.IsZero() {
+		t.Fatalf("got %q %v %v, want empty, zero and nil", tty, at, err)
+	}
+}
