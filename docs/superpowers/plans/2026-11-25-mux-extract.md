@@ -158,6 +158,8 @@ Before: still pass on old path. After: `TmuxPanesOn` calls mux; tests pass.
 
 **Commit:** `refactor(sample): list panes through mux`
 
+**Cycle:** mux still imported panes (Type/Keys/HomeEnv) so sample cannot import mux until that import is gone. Task 4 first copies Type/Keys/HomeEnv into mux (`targetArgv`, const `MATCHBLOX_HOME`) and drops the panes import. Two commits: `refactor(mux): type and keys without panes` then the sample subject. Task 9 still deletes leftover panes argv.
+
 ## Task 5: KillSteps through mux
 
 **Files:** `internal/proto/session.go`, proto tests if present, `internal/mux` already has Kill
@@ -319,6 +321,10 @@ After: PASS.
 - Extra beside/home tmux (bind, zoom, options) move with Task 8.
 - Recover does **not** use Respawn (spec table said “restart”; the code is new-session + kill-session). Owner freeze UX wins.
 - `cmd/matchblox` and `advice` pane argv move in Task 9 so the denylist can pass.
+
+## Changes during build
+
+- 2026-11-25 — Task 4 blocked: sample cannot import mux while mux imports panes (mux → panes → sample). Ruling: Task 4 first copies Type/Keys/HomeEnv into mux and drops the panes import, two commits, then TmuxPanesOn. Task 9 still deletes leftover panes argv. Cost if wrong: short duplicate of send-keys argv until Task 9.
 
 ## Cold read
 

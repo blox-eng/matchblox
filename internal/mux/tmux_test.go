@@ -11,22 +11,30 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/blox-eng/matchblox/internal/panes"
 )
 
 // listFormat is today's pane list plus the tty and the dead flag.
 const listFormat = "#{pane_id}\t#{session_name}:#{window_index}.#{pane_index}\t#{window_name}\t#{pane_pid}\t#{pane_current_command}\t#{pane_current_path}\t#{socket_path}\t#{pid}\t#{@matchblox-jump}\t#{start_time}\t#{pane_tty}\t#{pane_dead}"
 
 func TestTmuxTypeEscapesAFinalSemicolon(t *testing.T) {
-	if got, want := (Tmux{}).Type("%1", "a;"), panes.Literal("%1", "a;"); !slices.Equal(got, want) {
+	want := []string{"tmux", "send-keys", "-t", "%1", "-l", "--", `a\;`}
+	if got := (Tmux{}).Type("%1", "a;"); !slices.Equal(got, want) {
 		t.Fatalf("got %q, want %q", got, want)
+	}
+	want = []string{"tmux", "-L", "matchblox", "send-keys", "-t", "%1", "-l", "--", "a;b"}
+	if got := (Tmux{}).Type("%1@matchblox", "a;b"); !slices.Equal(got, want) {
+		t.Fatalf("on a server: got %q, want %q", got, want)
 	}
 }
 
 func TestTmuxKeysPressKeyNames(t *testing.T) {
-	if got, want := (Tmux{}).Keys("%1", "C-u", "Enter"), panes.Keys("%1", "C-u", "Enter"); !slices.Equal(got, want) {
+	want := []string{"tmux", "send-keys", "-t", "%1", "C-u", "Enter"}
+	if got := (Tmux{}).Keys("%1", "C-u", "Enter"); !slices.Equal(got, want) {
 		t.Fatalf("got %q, want %q", got, want)
+	}
+	want = []string{"tmux", "-L", "matchblox", "send-keys", "-t", "%2", "Enter"}
+	if got := (Tmux{}).Keys("%2@matchblox", "Enter"); !slices.Equal(got, want) {
+		t.Fatalf("on a server: got %q, want %q", got, want)
 	}
 }
 

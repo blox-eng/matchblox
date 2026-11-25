@@ -9,8 +9,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/blox-eng/matchblox/internal/panes"
 )
 
 // commandBound is how long one tmux read waits. A wedged tmux must not
@@ -34,9 +32,26 @@ type Tmux struct {
 
 var _ Mux = Tmux{}
 
-func (Tmux) Type(pane, text string) []string { return panes.Literal(pane, text) }
+// HomeEnv is the env var that marks the home console's own session. It is
+// the same name as panes.HomeEnv: mux must not import panes (panes imports
+// sample, and sample imports mux).
+const HomeEnv = "MATCHBLOX_HOME"
 
-func (Tmux) Keys(pane string, keys ...string) []string { return panes.Keys(pane, keys...) }
+// Type is the send-keys step that types text into pane, as literal text. A
+// final ";" goes as "\;" so tmux does not read it as a command end.
+func (Tmux) Type(pane, text string) []string {
+	if t, ok := strings.CutSuffix(text, ";"); ok {
+		text = t + `\;`
+	}
+	tmux, id := targetArgv(pane)
+	return slices.Concat(tmux, []string{"send-keys", "-t", id, "-l", "--", text})
+}
+
+// Keys is the send-keys step that presses keys (tmux key names) in pane.
+func (Tmux) Keys(pane string, keys ...string) []string {
+	tmux, id := targetArgv(pane)
+	return slices.Concat(tmux, []string{"send-keys", "-t", id}, keys)
+}
 
 func (t Tmux) Load(pane, name, text string) error {
 	tmux, _ := targetArgv(pane)
@@ -165,7 +180,7 @@ func (t Tmux) commandArgv() []string {
 // command a respawn runs: git never prompts, and the home console does not
 // mark this session as its own.
 func unsetEnv() []string {
-	return []string{"env", "-u", "GIT_TERMINAL_PROMPT", "-u", "GIT_SSH_COMMAND", "-u", panes.HomeEnv}
+	return []string{"env", "-u", "GIT_TERMINAL_PROMPT", "-u", "GIT_SSH_COMMAND", "-u", HomeEnv}
 }
 
 // Start is the one step that opens the session. It does not run. EmptyExit
