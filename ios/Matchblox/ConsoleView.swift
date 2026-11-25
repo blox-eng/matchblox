@@ -46,7 +46,7 @@ struct ConsoleView: View {
     var body: some View {
         ZStack {
             TerminalRepresentable(connection: connection)
-            if connection.phase != .live {
+            if connection.showsCover {
                 cover
             }
         }
@@ -63,8 +63,8 @@ struct ConsoleView: View {
         .onDisappear { connection.stop() }
         .onChange(of: scenePhase) { _, phase in
             switch phase {
-            case .background: connection.stop()
-            case .active: connection.start()
+            case .background: connection.paused()
+            case .active: connection.resumed()
             default: break
             }
         }
@@ -628,8 +628,11 @@ final class ConsoleConnection {
     @ObservationIgnored private var copyGate = CopyGate()
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private var outgoing: AsyncStream<Outgoing>.Continuation?
-    /// One unlock serves every reconnect until the app goes to the background.
+    /// One unlock serves every reconnect, and a return to the app inside `UnlockGrace.window`.
     @ObservationIgnored private var unlocked: LAContext?
+    @ObservationIgnored private var grace = UnlockGrace()
+    /// True once the console was live: a reconnect then keeps the last screen, with no cover.
+    private(set) var wasLive = false
     /// Registration runs once for each open, after the unlock.
     @ObservationIgnored private var registered = false
     /// Cancelled with the console: nothing registers from the background.
@@ -672,6 +675,32 @@ final class ConsoleConnection {
         registered = false
         registration?.cancel()
         registration = nil
+    }
+
+    /// Pocket left the screen: the connection goes (iOS would stop it), the unlock stays for the grace window.
+    func paused() {
+        cancel()
+        registered = false
+        registration?.cancel()
+        registration = nil
+        grace.backgrounded(at: .now)
+    }
+
+    /// Pocket is back: past the grace window Face ID asks again.
+    func resumed() {
+        if !grace.returned(at: .now) {
+            unlocked?.invalidate()
+            unlocked = nil
+        }
+        start()
+    }
+
+    var showsCover: Bool {
+        let failed = switch phase {
+        case .failed, .ended: true
+        case .connecting, .live: false
+        }
+        return Opening.coverShows(live: phase == .live, failed: failed, wasLive: wasLive)
     }
 
     func retry() {
@@ -848,9 +877,13 @@ final class ConsoleConnection {
             writer.cancel()
         }
 
-        terminal?.getTerminal().resetToInitialState()
-        terminal?.forgetScrollBack()
+        // A reconnect keeps the last screen: the tmux attach draws over it, with no blank between.
+        if !wasLive {
+            terminal?.getTerminal().resetToInitialState()
+            terminal?.forgetScrollBack()
+        }
         phase = .live
+        wasLive = true
         let opened = openSession != nil
         openSession = nil
         let now = terminalSize
@@ -918,7 +951,7 @@ final class ConsoleConnection {
             context = unlocked
         } else {
             context = LAContext()
-            context.touchIDAuthenticationAllowableReuseDuration = 10
+            context.touchIDAuthenticationAllowableReuseDuration = 300
             try await Self.evaluate(context, reason: "Open the console of \(host.label).")
             guard !Task.isCancelled else {
                 context.invalidate()

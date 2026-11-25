@@ -177,11 +177,13 @@ struct MatchbloxApp: App {
         route = next
     }
 
-    /// A tapped session (`matchblox://open`) opens that host's console after Face ID; an
-    /// open console gives way to it and to a new pairing code only.
+    /// A tapped session (`matchblox://open`) opens that host's console after Face ID; the open
+    /// console of that host stays as it is, and any other console gives way to it and to a new
+    /// pairing code only.
     private func open(_ url: URL) {
         if url.host == "open" {
             if let link = OpenLink(url: url) {
+                if Opening.keepsConsole(for: link, current: route) { return }
                 linkOpens += 1
                 go(Opening.route(for: link, hosts: store.all()))
             } else if case .console = route {
