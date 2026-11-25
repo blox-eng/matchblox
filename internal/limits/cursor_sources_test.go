@@ -19,9 +19,17 @@ func writeAuth(t *testing.T, path, token string) {
 	}
 }
 
+// clearXDG drops a host XDG_CONFIG_HOME so tests that write under home/.config
+// are not redirected to the runner's config dir.
+func clearXDG(t *testing.T) {
+	t.Helper()
+	t.Setenv("XDG_CONFIG_HOME", "")
+}
+
 // TestDefaultCursorSourcesLinuxFilesOnly: on linux the default list reads
 // ~/.config/cursor/auth.json and never calls Keychain.
 func TestDefaultCursorSourcesLinuxFilesOnly(t *testing.T) {
+	clearXDG(t)
 	home := t.TempDir()
 	writeAuth(t, filepath.Join(home, ".config", "cursor", "auth.json"), "acc")
 	kc := TokenSource(func(context.Context) (string, error) {
@@ -37,6 +45,7 @@ func TestDefaultCursorSourcesLinuxFilesOnly(t *testing.T) {
 // TestDefaultCursorSourcesPrefersConfigOverDotCursor: config path wins when
 // both auth files exist.
 func TestDefaultCursorSourcesPrefersConfigOverDotCursor(t *testing.T) {
+	clearXDG(t)
 	home := t.TempDir()
 	writeAuth(t, filepath.Join(home, ".config", "cursor", "auth.json"), "from-config")
 	writeAuth(t, filepath.Join(home, ".cursor", "auth.json"), "from-dot")
@@ -49,6 +58,7 @@ func TestDefaultCursorSourcesPrefersConfigOverDotCursor(t *testing.T) {
 // TestDefaultCursorSourcesDarwinFallsBackToKeychain: with no auth files,
 // darwin uses Keychain.
 func TestDefaultCursorSourcesDarwinFallsBackToKeychain(t *testing.T) {
+	clearXDG(t)
 	home := t.TempDir()
 	kc := TokenSource(func(context.Context) (string, error) { return "from-kc", nil })
 	got, err := TryTokenSources(context.Background(), DefaultCursorSources(home, "darwin", kc))
@@ -60,6 +70,7 @@ func TestDefaultCursorSourcesDarwinFallsBackToKeychain(t *testing.T) {
 // TestDefaultCursorSourcesFilesBeforeKeychain: a file wins over Keychain on
 // darwin; Keychain is not called.
 func TestDefaultCursorSourcesFilesBeforeKeychain(t *testing.T) {
+	clearXDG(t)
 	home := t.TempDir()
 	writeAuth(t, filepath.Join(home, ".cursor", "auth.json"), "from-file")
 	called := false
@@ -79,6 +90,7 @@ func TestDefaultCursorSourcesFilesBeforeKeychain(t *testing.T) {
 // TestDefaultCursorSourcesDarwinNilKeychain: nil Keychain is not appended;
 // missing files yield ErrNotExist.
 func TestDefaultCursorSourcesDarwinNilKeychain(t *testing.T) {
+	clearXDG(t)
 	home := t.TempDir()
 	_, err := TryTokenSources(context.Background(), DefaultCursorSources(home, "darwin", nil))
 	if !errors.Is(err, os.ErrNotExist) {
@@ -88,6 +100,7 @@ func TestDefaultCursorSourcesDarwinNilKeychain(t *testing.T) {
 
 // TestDefaultCursorSourcesEmptyAccessTokenIsMiss: empty accessToken is a miss.
 func TestDefaultCursorSourcesEmptyAccessTokenIsMiss(t *testing.T) {
+	clearXDG(t)
 	home := t.TempDir()
 	path := filepath.Join(home, ".config", "cursor", "auth.json")
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
@@ -182,6 +195,7 @@ func TestDefaultCursorSourcesRelativeXDGIgnored(t *testing.T) {
 // TestDefaultCursorSourcesEmptyAccessTokenContinues: empty accessToken in the
 // first file is a miss; the next source supplies the token.
 func TestDefaultCursorSourcesEmptyAccessTokenContinues(t *testing.T) {
+	clearXDG(t)
 	home := t.TempDir()
 	empty := filepath.Join(home, ".config", "cursor", "auth.json")
 	if err := os.MkdirAll(filepath.Dir(empty), 0o700); err != nil {

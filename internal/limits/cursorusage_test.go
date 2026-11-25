@@ -252,7 +252,7 @@ func TestCursorSignedOutIsAskedAgainEvery30Seconds(t *testing.T) {
 func TestCursorSignedOutIsReadOncePer30Seconds(t *testing.T) {
 	reads := 0
 	u := &CursorUsages{
-		Every:    5 * time.Minute,
+		Every:   5 * time.Minute,
 		Default: []TokenSource{func(context.Context) (string, error) { reads++; return "", os.ErrNotExist }},
 		Fetch: func(context.Context, string) ([]byte, error) {
 			t.Error("called the API with no token")
@@ -275,7 +275,7 @@ func TestCursorSignedOutIsReadOncePer30Seconds(t *testing.T) {
 func TestCursorTokenReadFailingIsNotSignedOut(t *testing.T) {
 	reads := 0
 	u := &CursorUsages{
-		Every:    5 * time.Minute,
+		Every:   5 * time.Minute,
 		Default: []TokenSource{func(context.Context) (string, error) { reads++; return "", errors.New("security: exit status 51") }},
 		Fetch: func(context.Context, string) ([]byte, error) {
 			t.Error("called the API with no token")
@@ -304,9 +304,9 @@ func TestCursorTokenReadThatWorksIsNotFailed(t *testing.T) {
 	var err error
 	token := ""
 	u := &CursorUsages{
-		Every:    time.Minute,
+		Every:   time.Minute,
 		Default: []TokenSource{func(context.Context) (string, error) { return token, err }},
-		Fetch:    func(context.Context, string) ([]byte, error) { return nil, context.DeadlineExceeded },
+		Fetch:   func(context.Context, string) ([]byte, error) { return nil, context.DeadlineExceeded },
 	}
 	t0 := time.UnixMilli(1791000000000)
 	steps := []struct {
