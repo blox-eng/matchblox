@@ -807,9 +807,9 @@ func replayAt(t *testing.T, z replaySize) {
 				time.Sleep(50 * time.Millisecond)
 				walk("ux-pass")()
 			}, ok: func(s string) bool {
-				// Wait for the agent's pane too: a slow runner can choose
-				// the row before its screen lands, and the golden has it.
-				return chosen("ux-pass")(s) && has("DONE", "✓", "folds")(s)
+				// Wait for the agent's pane: the DONE row's note also says
+				// "folds", so require text only the agent screen draws.
+				return chosen("ux-pass")(s) && has("DONE", "✓", "tests are green")(s)
 			}},
 			step{name: "a shell", at: 20 * time.Second, key: "t", ok: func(s string) bool {
 				return chosen("ux-pass")(s) && uxRowHas("▣")(s)

@@ -250,6 +250,55 @@ func viewIn(name, frame string) bool {
 	return at >= 0 && tabOf(0, frame) == "MACHINE" && strings.Contains(frame, viewWords[at].word)
 }
 
+// machineOpen: the desk's ⚙ sheet (or the phone's Machine tab) is on
+// screen with its rows, ready for ↑↓/⏎. The stoker's full-screen view also
+// names MACHINE in the tab row — require the sheet's own marks, not that.
+func (w *walker) machineOpen() bool {
+	s := w.term.screen()
+	if tabOf(0, s) != "MACHINE" {
+		return false
+	}
+	if strings.Contains(s, "⚙") || strings.Contains(s, "USAGE") {
+		return true // desk ⚙ sheet
+	}
+	if w.desk() {
+		return false
+	}
+	// Phone Machine tab: its rows, not an open view (STOKER/WORKTREES/…).
+	if slices.ContainsFunc(viewWords, func(v struct{ name, word string }) bool {
+		return strings.Contains(s, v.word)
+	}) {
+		return false
+	}
+	return strings.Contains(strings.ToLower(s), "stoker")
+}
+
+// openMachine brings Machine up and waits until its rows draw. Under -race
+// a lone `,` can land before the list has the keys; retry from LIST.
+func (w *walker) openMachine() {
+	w.t.Helper()
+	if w.machineOpen() {
+		return
+	}
+	deadline := time.Now().Add(20 * time.Second)
+	for time.Now().Before(deadline) {
+		w.toList()
+		time.Sleep(50 * time.Millisecond)
+		if w.desk() {
+			w.press(",")
+		} else {
+			w.tabByKey("MACHINE")
+			return
+		}
+		for wait := time.Now().Add(2 * time.Second); time.Now().Before(wait); time.Sleep(20 * time.Millisecond) {
+			if w.machineOpen() {
+				return
+			}
+		}
+	}
+	w.t.Fatalf("Machine's rows did not open:\n%s", w.term.screen())
+}
+
 // toView opens the view name from its row on Machine: up to the first
 // row, down to its own, ⏎.
 func (w *walker) toView(name string) {
@@ -261,17 +310,14 @@ func (w *walker) toView(name string) {
 	if w.onView(name) {
 		return
 	}
-	w.toTab("MACHINE")
+	w.openMachine()
 	onView := slices.ContainsFunc(viewWords, func(v struct{ name, word string }) bool { return w.onView(v.name) })
 	if !w.desk() || onView {
 		w.press("esc") // from another view, back to Machine; on Machine it stays, and on the desk's ⚙ sheet it would close it
+		if w.desk() {
+			w.openMachine() // esc closed the sheet; open it again
+		}
 	}
-	// Wait for Machine's own rows before moving: under -race a burst of
-	// k/j/⏎ can hit the list and never open the view (CI, 2026-11-24).
-	eventually(w.t, 10*time.Second, "Machine's rows", func() bool {
-		s := w.term.screen()
-		return tabOf(0, s) == "MACHINE" && (strings.Contains(strings.ToLower(s), "stoker") || strings.Contains(s, "USAGE") || strings.Contains(s, "⚙"))
-	})
 	for range 12 {
 		w.press("k")
 		time.Sleep(5 * time.Millisecond)
@@ -342,11 +388,10 @@ func (w *walker) tabByKey(want string) {
 	w.t.Helper()
 	if open := tabOf(0, w.term.screen()); w.desk() && open != want { // the desk: , opens Machine, ctrl+q leaves it
 		if want == "MACHINE" {
-			w.toList()
-			w.press(",")
-		} else {
-			w.press("ctrl+q")
+			w.openMachine()
+			return
 		}
+		w.press("ctrl+q")
 		w.tabAfter(open)
 		return
 	}

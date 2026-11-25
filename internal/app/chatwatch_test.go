@@ -349,9 +349,11 @@ func cmdMsgs(cmd tea.Cmd) []tea.Msg {
 	out := make(chan tea.Msg, 1)
 	go func() { out <- cmd() }()
 	var msg tea.Msg
+	// migrateSplit and other tmux cmds need seconds under -race on CI;
+	// 50ms dropped migratedMsg and left the desk toast empty (#504).
 	select {
 	case msg = <-out:
-	case <-time.After(50 * time.Millisecond):
+	case <-time.After(5 * time.Second):
 		return nil
 	}
 	if v := reflect.ValueOf(msg); v.Kind() == reflect.Slice && v.Type().Elem() == reflect.TypeFor[tea.Cmd]() { // a batch or a sequence
