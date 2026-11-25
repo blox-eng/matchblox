@@ -6,6 +6,12 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Adjust a phone text selection before copying.** Drag either selection
+  handle to choose the text you want; a magnifying lens helps you see
+  where it lands. Copy stays available when you lift your finger.
+
 ## [0.61.0] - 2026-11-24
 
 ### Added
