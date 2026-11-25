@@ -69,9 +69,11 @@ prompt shows.
 ## 7. Calls made by the agent
 
 - The window is 300 s: Apple's `LATouchIDAuthenticationMaximumAllowableReuseDuration`.
-  A new context also sets `touchIDAuthenticationAllowableReuseDuration = 300`,
-  so a Face ID unlock of the phone in the last 5 minutes (from the lock
-  screen) opens the key with no second prompt.
-- A link that names a session for the host already open keeps the console
-  as it is. The named session opens only when no console of that host is
-  open (cold start, or another host).
+- Owner ruling (2026-11-25): the 5 minutes count only for a return. A new
+  context keeps `touchIDAuthenticationAllowableReuseDuration = 10`, so a
+  first open asks Face ID even soon after the phone was unlocked.
+- Owner ruling (2026-11-25): a link that names a session for the host
+  already open keeps the console and jumps to that session. The island
+  shows the session that matters most (0006: a waiting one beats a burning
+  one), so the tap goes where the island pointed. The console connects
+  again with `--open <n>`; the screen and the unlock stay.

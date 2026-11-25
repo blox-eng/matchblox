@@ -63,6 +63,13 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     }
 }
 
+/// A tap on the island for a session of the open console's host. `tap` counts the taps, so the
+/// same session tapped again jumps again.
+struct SessionJump: Equatable {
+    let session: Int
+    let tap: Int
+}
+
 @main
 struct MatchbloxApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
@@ -70,6 +77,7 @@ struct MatchbloxApp: App {
     /// A tapped link opens a new console even when one is open.
     @State private var linkOpens = 0
     @State private var route: Route
+    @State private var jump: SessionJump?
     @State private var scanProblem: String?
     @State private var scanNotice: String?
 
@@ -131,6 +139,7 @@ struct MatchbloxApp: App {
                     ConsoleView(
                         host: host,
                         open: session,
+                        jump: jump,
                         onFailure: { go(.reach(host, $0)) },
                         onHosts: Opening.consoleOffersHosts(hostCount: store.all().count) ? { go(.hosts) } : nil,
                         onIsland: { go(.island) },
@@ -177,13 +186,18 @@ struct MatchbloxApp: App {
         route = next
     }
 
-    /// A tapped session (`matchblox://open`) opens that host's console after Face ID; the open
-    /// console of that host stays as it is, and any other console gives way to it and to a new
-    /// pairing code only.
+    /// A tapped session (`matchblox://open`) opens that host's console after Face ID. The open
+    /// console of that host stays, and jumps to the session the link names. Any other console
+    /// gives way to it and to a new pairing code only.
     private func open(_ url: URL) {
         if url.host == "open" {
             if let link = OpenLink(url: url) {
-                if Opening.keepsConsole(for: link, current: route) { return }
+                if Opening.keepsConsole(for: link, current: route) {
+                    if let session = Opening.jump(for: link, current: route) {
+                        jump = SessionJump(session: session, tap: (jump?.tap ?? 0) + 1)
+                    }
+                    return
+                }
                 linkOpens += 1
                 go(Opening.route(for: link, hosts: store.all()))
             } else if case .console = route {

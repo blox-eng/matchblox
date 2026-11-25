@@ -9,8 +9,8 @@ All notable changes to matchblox are in this file. The format follows
 ### Changed
 
 - **One tap on the island goes back.** A tap on the Live Activity brings
-  back the console you left, with its screen. The Face ID unlock holds for
-  5 minutes after Pocket leaves the screen.
+  back the console you left, on the session the island shows. The Face ID
+  unlock holds for 5 minutes after Pocket leaves the screen.
 
 ## [0.61.0] - 2026-11-24
 

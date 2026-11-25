@@ -21,6 +21,7 @@ extension SSHSession: ConsoleSource {}
 /// A failed connect goes to `onFailure`; the router shows the screen that fixes it.
 struct ConsoleView: View {
     let host: Host
+    let jump: SessionJump?
     let onHosts: (() -> Void)?
     let onIsland: () -> Void
     let onScanAgain: () -> Void
@@ -31,12 +32,14 @@ struct ConsoleView: View {
     init(
         host: Host,
         open: Int? = nil,
+        jump: SessionJump? = nil,
         onFailure: @escaping (ConnectFailure) -> Void,
         onHosts: (() -> Void)?,
         onIsland: @escaping () -> Void,
         onScanAgain: @escaping () -> Void
     ) {
         self.host = host
+        self.jump = jump
         self.onHosts = onHosts
         self.onIsland = onIsland
         self.onScanAgain = onScanAgain
@@ -61,6 +64,9 @@ struct ConsoleView: View {
         }
         .onAppear { connection.start() }
         .onDisappear { connection.stop() }
+        .onChange(of: jump) { _, jump in
+            if let jump { connection.jump(to: jump.session) }
+        }
         .onChange(of: scenePhase) { _, phase in
             switch phase {
             case .background: connection.paused()
@@ -701,6 +707,15 @@ final class ConsoleConnection {
         start()
     }
 
+    /// A tap on the island for a session of this host: the console connects again on it, with
+    /// its screen and its unlock. Away from the screen, `resumed()` connects on it.
+    func jump(to session: Int) {
+        openSession = session
+        guard !away else { return }
+        cancel()
+        start()
+    }
+
     var showsCover: Bool {
         let failed = switch phase {
         case .failed, .ended: true
@@ -958,7 +973,7 @@ final class ConsoleConnection {
             context = unlocked
         } else {
             context = LAContext()
-            context.touchIDAuthenticationAllowableReuseDuration = 300
+            context.touchIDAuthenticationAllowableReuseDuration = 10
             try await Self.evaluate(context, reason: "Open the console of \(host.label).")
             guard !Task.isCancelled else {
                 context.invalidate()

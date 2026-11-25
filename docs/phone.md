@@ -221,8 +221,9 @@ Nothing connects to a host from the background.
   the console on that session: on it. If the session has ended, the
   console says `That session ended.`
 - **A tap goes back:** when that host's console is open behind the island,
-  a tap brings it back as you left it. The screen stays while the app
-  connects again. Face ID asks again only after 5 minutes away.
+  a tap brings it back and jumps to the session the island shows. The screen
+  stays while the app connects again. Face ID asks again only after 5
+  minutes away.
 - **The setting:** the `Island` entry in the app's console, next to `Hosts`.
   `Follow` is the one host that has the island (the host opened last). `Show`
   is `Sessions`, `Usage` or `Auto (Usage while the stoker runs)`. `Buzz` is
