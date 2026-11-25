@@ -131,7 +131,7 @@ func TestCursorAccountIsNotGivenTheDefaultsMonth(t *testing.T) {
 	}
 	signedIn := false
 	smp.CursorUsage = &limits.CursorUsages{
-		Every:    time.Hour,
+		Every:   time.Hour,
 		Default: []limits.TokenSource{func(context.Context) (string, error) { return "tok-default", nil }},
 		File: func(path string) (string, error) {
 			if want := filepath.Join(folder, "home", ".cursor", "auth.json"); path != want {
