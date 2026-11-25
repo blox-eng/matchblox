@@ -185,6 +185,8 @@ func (f *Fake) List() ([]mux.Pane, error) {
 	return slices.Clone(f.Panes), nil
 }
 
+func (f *Fake) ListStrict() ([]mux.Pane, error) { return f.List() }
+
 func (f *Fake) Mark(pane string, on bool) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()

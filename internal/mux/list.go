@@ -1,6 +1,7 @@
 package mux
 
 import (
+	"bytes"
 	"errors"
 	"os/exec"
 	"strconv"
@@ -26,7 +27,16 @@ const PaneFormat = "#{pane_id}\t#{session_name}:#{window_index}.#{pane_index}\t#
 // empty list: the console still shows the machine. A pane tmux lists twice
 // (a grouped session) stays twice, so a jump listed first cannot hide the
 // pane's own session.
-func (t Tmux) List() ([]Pane, error) {
+func (t Tmux) List() ([]Pane, error) { return t.list(false) }
+
+// ListStrict is List for a caller that must tell "no pane" from "could not
+// look": a tmux with no server, or no tmux at all, is an empty list, and any
+// other failure (a timeout, a kill, a protocol mismatch, a permission
+// error) is an error. Placement uses it: a pane it could not list is not a
+// person's terminal.
+func (t Tmux) ListStrict() ([]Pane, error) { return t.list(true) }
+
+func (t Tmux) list(strict bool) ([]Pane, error) {
 	if err := t.look(); err != nil {
 		return nil, nil
 	}
@@ -34,12 +44,17 @@ func (t Tmux) List() ([]Pane, error) {
 	out, err := t.output(argv)
 	if err != nil {
 		var exit *exec.ExitError
-		if errors.As(err, &exit) {
+		if errors.As(err, &exit) && (!strict || noServer(exit)) {
 			return nil, nil
 		}
 		return nil, err
 	}
 	return parsePanes(out, t.Server), nil
+}
+
+// noServer tells if tmux exited because no server runs on the socket.
+func noServer(exit *exec.ExitError) bool {
+	return bytes.Contains(exit.Stderr, []byte("no server running")) || bytes.Contains(exit.Stderr, []byte("error connecting to"))
 }
 
 func (t Tmux) look() error {

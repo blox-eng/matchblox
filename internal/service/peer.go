@@ -71,7 +71,7 @@ func (s *Service) paneOfTerminal(pid int, tty func(int) (ttyDevice, bool), dev f
 		return "", false
 	}
 	for _, m := range s.paneMuxes() {
-		listed, err := m.List()
+		listed, err := m.ListStrict()
 		if err != nil {
 			if noTmuxServer(err) {
 				continue
@@ -108,7 +108,8 @@ func (s *Service) paneMuxes() []mux.Mux {
 }
 
 // noTmuxServer tells if tmux is not installed: then no pane holds any
-// terminal. A tmux with no server is an empty list, not an error.
+// terminal. A tmux with no server is an empty list, not an error; any other
+// failure is an error, and then nothing tells whose the terminal is.
 func noTmuxServer(err error) bool {
 	return errors.Is(err, exec.ErrNotFound)
 }

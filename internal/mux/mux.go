@@ -52,6 +52,10 @@ type Mux interface {
 	// List is every pane on this multiplexer. A machine with no tmux, or
 	// a tmux that exits, is an empty list.
 	List() ([]Pane, error)
+	// ListStrict is List, except that a multiplexer that fails for any
+	// reason but "no server" or "not installed" is an error, not an empty
+	// list. Placement of a caller uses it.
+	ListStrict() ([]Pane, error)
 	// Start is the steps that open a session. The service runs them.
 	Start(Start) [][]string
 	// Rename is the steps that name the window in pane. The agent is not

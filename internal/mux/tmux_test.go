@@ -605,3 +605,33 @@ func TestLastClientSwallowsATmuxError(t *testing.T) {
 		t.Fatalf("got %q %v %v, want empty, zero and nil", tty, at, err)
 	}
 }
+
+func TestListStrictTellsNoServerFromFailure(t *testing.T) {
+	line := "%1\tapp:0.0\twin\t7\tsleep\t/\t\t\t\t\t/dev/pts/1\t0\n"
+	for _, c := range []struct {
+		name   string
+		out    string
+		err    error
+		strict bool // ListStrict errors
+		loose  bool // List errors
+	}{
+		{"lists", line, nil, false, false},
+		{"no server", "", &exec.ExitError{Stderr: []byte("no server running on /tmp/tmux-1000/default\n")}, false, false},
+		{"no socket", "", &exec.ExitError{Stderr: []byte("error connecting to /tmp/tmux-1000/default (No such file or directory)\n")}, false, false},
+		{"killed", "", &exec.ExitError{}, true, false},
+		{"protocol", "", &exec.ExitError{Stderr: []byte("protocol version mismatch (client 8, server 7)\n")}, true, false},
+		{"not exit error", "", errors.New("signal: killed"), true, true},
+	} {
+		m := Tmux{Run: func([]string) (string, error) { return c.out, c.err }}
+		if _, err := m.ListStrict(); (err != nil) != c.strict {
+			t.Errorf("%s: ListStrict error %v, want error %v", c.name, err, c.strict)
+		}
+		if _, err := m.List(); (err != nil) != c.loose {
+			t.Errorf("%s: List error %v, want error %v", c.name, err, c.loose)
+		}
+	}
+	none := Tmux{LookPath: func(string) (string, error) { return "", exec.ErrNotFound }}
+	if p, err := none.ListStrict(); p != nil || err != nil {
+		t.Errorf("no tmux installed: %v, %v", p, err)
+	}
+}

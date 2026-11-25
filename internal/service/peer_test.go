@@ -451,9 +451,36 @@ func TestThePaneOfATerminal(t *testing.T) {
 	if pane, ok := s.paneOfTerminal(1, tty, dev); pane != "" || !ok {
 		t.Errorf("no tmux server: %q, %v", pane, ok)
 	}
-	s.TmuxOut = func([]string) (string, error) { return "", errors.New("signal: killed") }
+	for _, c := range []struct {
+		name string
+		err  error
+	}{
+		{"killed", errors.New("signal: killed")},
+		{"timed out", &exec.ExitError{}},
+		{"protocol mismatch", &exec.ExitError{Stderr: []byte("protocol version mismatch (client 8, server 7)\n")}},
+		{"exit with another message", &exec.ExitError{Stderr: []byte("server exited unexpectedly\n")}},
+	} {
+		s.TmuxOut = func([]string) (string, error) { return "", c.err }
+		if pane, ok := s.paneOfTerminal(1, tty, dev); ok || pane != "" {
+			t.Errorf("a tmux that failed (%s) placed the sender: %q, %v", c.name, pane, ok)
+		}
+	}
+	// "error connecting to" is no server too: the socket is not there.
+	s.TmuxOut = func([]string) (string, error) {
+		return "", &exec.ExitError{Stderr: []byte("error connecting to /tmp/tmux-1000/mbtest (No such file or directory)\n")}
+	}
+	if pane, ok := s.paneOfTerminal(1, tty, dev); pane != "" || !ok {
+		t.Errorf("no socket: %q, %v", pane, ok)
+	}
+	// The stoker's server failing refuses too, though the builder's lists.
+	s.TmuxOut = func(argv []string) (string, error) {
+		if slices.Contains(argv, "mbtest") {
+			return "", &exec.ExitError{Stderr: []byte("protocol version mismatch\n")}
+		}
+		return "", nil
+	}
 	if _, ok := s.paneOfTerminal(1, tty, dev); ok {
-		t.Error("a tmux that failed placed the sender")
+		t.Error("a stoker tmux that failed placed the sender")
 	}
 }
 
