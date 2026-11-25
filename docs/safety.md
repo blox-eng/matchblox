@@ -30,9 +30,11 @@ command.
   minutes while a Cursor session runs. Only a missing login is read again
   every 30 seconds: no Keychain item, no `auth.json` (or one half written), or no token in it. A
   read that is denied or fails otherwise waits the normal 5 minutes. For
-  the default login, that is the token Cursor's CLI keeps in the macOS
-  Keychain (`cursor-access-token`), on macOS only. For a Cursor account, that is `accessToken` in
-  `<folder>/home/.cursor/auth.json`: this is not tested yet with a second
+  the default login, that is the first usable `accessToken` from
+  `$XDG_CONFIG_HOME/cursor/auth.json` or `~/.config/cursor/auth.json`, then
+  `~/.cursor/auth.json`, then on macOS only the Keychain item
+  `cursor-access-token`. For a Cursor account, that is `accessToken` in
+  `<folder>/home/.cursor/auth.json` only: this is not tested yet with a second
   real sign-in. matchblox reads the token when a call is due and sends it
   to Cursor's API only, for the plan usage Cursor's own `/usage` shows. It
   drops the token after that call, and never writes or shows it.

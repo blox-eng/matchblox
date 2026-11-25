@@ -410,10 +410,12 @@ Cursor's is the email and team its CLI keeps in `~/.cursor/cli-config.json`
 account, and USAGE lists the account. Its plan usage,
 the share of the month's included usage as Cursor's `/usage` shows it,
 needs `cursor_usage = true` under `[limits]`: matchblox then asks Cursor's
-API with the login token Cursor's CLI keeps in the macOS Keychain (see
-[Safety](safety.md)). Each Cursor account's usage reads that account's
-`auth.json` instead (see [Limits](limits.md)). This is not tested yet with
-a second real sign-in.
+API with the default login's token from
+`$XDG_CONFIG_HOME/cursor/auth.json` or `~/.config/cursor/auth.json`, then
+`~/.cursor/auth.json`, then on macOS only the Keychain item
+`cursor-access-token` (see [Safety](safety.md)). Each Cursor account's
+usage reads that account's `<folder>/home/.cursor/auth.json` only (see
+[Limits](limits.md)). This is not tested yet with a second real sign-in.
 
 ## Accounts
 

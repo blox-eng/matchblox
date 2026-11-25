@@ -6,6 +6,14 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **See Cursor plan usage on any host.** With `[limits] cursor_usage = true`,
+  Machine → USAGE reads the default Cursor login from
+  `~/.config/cursor/auth.json` or `~/.cursor/auth.json` (and the Keychain
+  item on macOS only as a fallback), so Linux and other hosts show `mo`
+  the same way macOS already could.
+
 ## [0.62.0] - 2026-11-25
 
 ### Added
