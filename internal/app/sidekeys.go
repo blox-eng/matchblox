@@ -458,23 +458,33 @@ func (m *Model) sideMove(d int) {
 
 // jumpTo chooses the listed session numbered n on host, as ↓ chooses.
 func (m *Model) jumpTo(n int, host string) tea.Cmd {
+	s, no := m.numberedOn(n, host)
+	if no != "" {
+		return m.notice(no)
+	}
+	m.chooseRow(s)
+	m.sideName = m.cardName(s)
+	return m.previewSoon()
+}
+
+// numberedOn is the listed session numbered n on host, or with none, what
+// to say instead.
+func (m Model) numberedOn(n int, host string) (sample.Session, string) {
 	var have []int
 	for _, s := range m.sideSessions() {
 		if s.Host != host || s.Number == 0 {
 			continue
 		}
 		if s.Number == n {
-			m.chooseRow(s)
-			m.sideName = m.cardName(s)
-			return m.previewSoon()
+			return s, ""
 		}
 		have = append(have, s.Number)
 	}
 	no := "no session " + strconv.Itoa(n)
 	if len(have) == 0 {
-		return m.notice(no + ": the list has no numbers")
+		return sample.Session{}, no + ": the list has no numbers"
 	}
-	return m.notice(no + ": the list numbers " + strconv.Itoa(slices.Min(have)) + " to " + strconv.Itoa(slices.Max(have)))
+	return sample.Session{}, no + ": the list numbers " + strconv.Itoa(slices.Min(have)) + " to " + strconv.Itoa(slices.Max(have))
 }
 
 // setLine puts text in the line of k.

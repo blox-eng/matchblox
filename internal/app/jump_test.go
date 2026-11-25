@@ -2,13 +2,17 @@ package app
 
 import (
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/blox-eng/matchblox/internal/keycmd"
+	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
@@ -148,5 +152,77 @@ func TestAltDigitWithNoSuchSession(t *testing.T) {
 	}
 	if want := "no session 7: the list numbers 1 to 5"; !strings.Contains(nm.noticeText, want) {
 		t.Errorf("⌥7 said %q, want %q", nm.noticeText, want)
+	}
+}
+
+// jumpFrom is the jump APC ⌥ and digit n send from pane, for the client
+// on tty, with everything the console then runs.
+func jumpFrom(t *testing.T, m Model, n int, tty, pane string) (Model, [][]string) {
+	t.Helper()
+	var ran [][]string
+	m.opt.Run = func(argv []string) error { ran = append(ran, argv); return nil }
+	apc := keycmd.FlipPrefix("jump") + strconv.Itoa(n) + " " + tty + " " + pane + "\x1b\\"
+	next, cmd := m.Update(uv.UnknownApcEvent(apc))
+	return settled(next, cmd).(Model), ran
+}
+
+func ranText(ran [][]string) string {
+	var s []string
+	for _, argv := range ran {
+		s = append(s, strings.Join(argv, " "))
+	}
+	return strings.Join(s, "\n")
+}
+
+// TestJumpFromAPhoneTypesInThePane: the phone has no ⌥ key, and tmux joins
+// its Esc and a quick 4 into M-4. From the phone's client the console types
+// Esc and 4 back into the pane they came from; the client stays there.
+func TestJumpFromAPhoneTypesInThePane(t *testing.T) {
+	m := numbered(t)
+	pocketOnly(&m)
+	from := numberedAs(t, m, 1).Pane
+	_, ran := jumpFrom(t, m, 4, "/dev/pts/7", from)
+	want := []string{"tmux", "send-keys", "-t", from, "Escape", "4"}
+	if !slices.ContainsFunc(ran, func(argv []string) bool { return slices.Equal(argv, want) }) {
+		t.Errorf("ran %q, want %q", ranText(ran), want)
+	}
+	if got := ranText(ran); strings.Contains(got, "switch-client") {
+		t.Errorf("the phone's Esc 4 moved its client: %q", got)
+	}
+}
+
+// TestJumpFromAPaneGoesToThatSession: ⌥4 from a desk's pane switches that
+// client to session 4's pane. The client is in the agent's pane, not at
+// the console, and it still moves.
+func TestJumpFromAPaneGoesToThatSession(t *testing.T) {
+	var ss []sample.Session
+	for i, name := range []string{"hearth-api", "ember-billing", "spark-docs", "wren-cli", "moss-web"} {
+		s := boardMatch(name, time.Duration(i+1)*time.Hour)
+		s.Number, s.Pane = i+1, "%"+strconv.Itoa(i+1)
+		ss = append(ss, s)
+	}
+	m, _, _ := sideShotOf(t, boardState(ss...), 160, 38)
+	m.opt.Pane = "%99"
+	m.opt.ClientList = func() (string, error) { return "100 " + deskTTY + " %1", nil }
+	_, ran := jumpFrom(t, m, 4, deskTTY, "%1")
+	if !slices.ContainsFunc(ran, func(argv []string) bool {
+		tty, pane, ok := remote.FocusOf(argv)
+		return ok && tty == deskTTY && pane == "%4"
+	}) {
+		t.Errorf("ran %q, want switch-client -c %s -t %%4", ranText(ran), deskTTY)
+	}
+	if got := ranText(ran); strings.Contains(got, "send-keys") {
+		t.Errorf("a desk's ⌥4 typed in the pane: %q", got)
+	}
+}
+
+// TestJumpFromAPaneWithNoSuchSession: ⌥7 with five sessions says so on the
+// client that pressed it, in the console's words, and types nothing.
+func TestJumpFromAPaneWithNoSuchSession(t *testing.T) {
+	m := numbered(t)
+	_, ran := jumpFrom(t, m, 7, deskTTY, numberedAs(t, m, 1).Pane)
+	want := []string{"tmux", "display-message", "-c", deskTTY, "no session 7: the list numbers 1 to 5"}
+	if len(ran) != 1 || !slices.Equal(ran[0], want) {
+		t.Errorf("ran %q, want only %q", ranText(ran), want)
 	}
 }

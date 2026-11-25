@@ -327,7 +327,7 @@ func run(args []string) error {
 		}
 		var binds [][]string
 		if os.Getenv("TMUX") != "" { // a console in place too: its hint names prefix m
-			binds = append(binds, panes.HomeKeyArgv(), panes.FlipKeysArgv())
+			binds = append(binds, panes.HomeKeyArgv(), panes.FlipKeysArgv(), panes.JumpKeysArgv())
 		}
 		if os.Getenv(panes.HomeEnv) == "1" {
 			binds = append(binds, homeBinds(os.Getenv("TMUX_PANE"))...)

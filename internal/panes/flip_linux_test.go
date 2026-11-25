@@ -71,12 +71,45 @@ func TestNextFromAMarkedPaneSaysNext(t *testing.T) {
 	waitFor(t, func() bool { return strings.Contains(strings.Join(paneRead(t, got), "\n"), want) })
 }
 
+// TestJumpFromAMarkedPaneSaysJump: ⌥4 hands the console the digit, the
+// client's tty and the pane, and leaves the client where it is: the
+// console moves it, or types the key back for a phone.
+func TestJumpFromAMarkedPaneSaysJump(t *testing.T) {
+	sock, tmux, got := consolePane(t)
+	tmux("new-session", "-d", "-s", "work", "sleep", "100")
+	pane := tmux("display-message", "-p", "-t", "work", "#{pane_id}")
+	tmux("set-option", "-p", "-t", pane, "@matchblox_match", "1")
+	tmux(FlipKeysArgv()[1:]...)
+	tmux(JumpKeysArgv()[1:]...)
+	term := attach(t, sock, "work")
+	waitFor(t, func() bool { return tmux("list-clients", "-F", "#{client_session}") == "work" })
+	tty := tmux("list-clients", "-F", "#{client_tty}")
+	time.Sleep(100 * time.Millisecond)
+	if _, err := term.WriteString("\x1b4"); err != nil {
+		t.Fatal(err)
+	}
+	want := eventLine(uv.UnknownApcEvent(keycmd.JumpPrefix(4) + tty + " " + pane + "\x1b\\"))
+	waitFor(t, func() bool { return strings.Contains(strings.Join(paneRead(t, got), "\n"), want) })
+	if at := tmux("list-clients", "-F", "#{client_session}"); at != "work" {
+		t.Errorf("the client went to %q before the console answered", at)
+	}
+}
+
 // TestFlipKeyPassesThroughOnAnUnknownPane: a pane with no mark, a shell or
 // an editor, reads ⌥s as typed, and the client stays.
 func TestFlipKeyPassesThroughOnAnUnknownPane(t *testing.T) {
 	client, typed := plainPane(t)
 	if got := typedThen(t, client, typed, "\x1bs"); got != "^[sx" {
 		t.Errorf("the pane read %q, want ^[s then x", got)
+	}
+}
+
+// TestJumpKeyPassesThroughOnAnUnknownPane: ⌥4 in a pane with no mark
+// types as it did before the jump keys.
+func TestJumpKeyPassesThroughOnAnUnknownPane(t *testing.T) {
+	client, typed := plainPane(t)
+	if got := typedThen(t, client, typed, "\x1b4"); got != "^[4x" {
+		t.Errorf("the pane read %q, want ^[4 then x", got)
 	}
 }
 
@@ -95,7 +128,7 @@ func TestFlipAtTheConsoleIsItsKey(t *testing.T) {
 }
 
 // plainPane is a pane with no mark that writes what it reads, with the
-// flip keys bound.
+// flip and jump keys bound.
 func plainPane(t *testing.T) (*os.File, string) {
 	t.Helper()
 	sock, tmux, _ := consolePane(t)
@@ -103,6 +136,7 @@ func plainPane(t *testing.T) (*os.File, string) {
 	tmux("new-session", "-d", "-s", "work", "sh", "-c", "stty raw -echo; exec cat -v > "+typed)
 	pane := tmux("display-message", "-p", "-t", "work", "#{pane_id}")
 	tmux(FlipKeysArgv()[1:]...)
+	tmux(JumpKeysArgv()[1:]...)
 	waitFor(t, func() bool { return tmux("display-message", "-p", "-t", pane, "#{pane_current_command}") == "cat" })
 	return attach(t, sock, "work"), typed
 }

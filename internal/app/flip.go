@@ -3,6 +3,7 @@ package app
 import (
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -11,13 +12,20 @@ import (
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
-// flipAPC takes a flip or a walk the tmux binding hands the console from a
-// marked pane ("<tty> <pane>"), or the phone's button sends at the console
-// (""), which is ⌥s or ⌥n here. ok is false for any other APC.
+// flipAPC takes a flip, a walk or a jump the tmux binding hands the
+// console from a marked pane ("<tty> <pane>", a jump's after its digit), or
+// the phone's button sends at the console (""), which is ⌥s or ⌥n here. ok
+// is false for any other APC.
 func (m Model) flipAPC(apc string) (tea.Model, tea.Cmd, bool) {
 	kind, arg, ok := keycmd.ParseAPC(apc)
 	if !ok {
 		return m, nil, false
+	}
+	if kind == "jump" {
+		digit, from, _ := strings.Cut(arg, " ")
+		tty, pane, _ := strings.Cut(from, " ")
+		next, cmd := m.jumpFrom(int(digit[0]-'0'), tty, pane)
+		return next, cmd, true
 	}
 	tty, pane, _ := strings.Cut(arg, " ")
 	switch {
@@ -126,6 +134,27 @@ func (m Model) walkFrom(tty, pane string) (tea.Model, tea.Cmd) {
 		return m.goInto(m.opt.Host, seen[i+1].Pane)
 	}
 	return m.flipFrom(tty, pane), nil
+}
+
+// jumpFrom is ⌥ and digit n in the match in pane: the client on tty goes
+// to session n's pane on this host. The phone has no ⌥, and tmux joined its
+// Esc and digit: they go back to the pane as typed.
+func (m Model) jumpFrom(n int, tty, pane string) (tea.Model, tea.Cmd) {
+	run := m.opt.Run
+	tmux := func(argv ...string) tea.Cmd {
+		return func() tea.Msg { _ = run(append([]string{"tmux"}, argv...)); return nil }
+	}
+	if m.pocketClient(tty) {
+		return m, tmux("send-keys", "-t", pane, "Escape", strconv.Itoa(n))
+	}
+	s, no := m.numberedOn(n, m.opt.Host)
+	if no != "" {
+		return m, tmux("display-message", "-c", tty, no)
+	}
+	m.askedBy = tty
+	a := m.jumpOn(m.opt.Host, s.Pane)
+	a.inPane = true
+	return m.runInto(m.forHost(m.opt.Host, a))
 }
 
 // walkHere is ⌥n at the console: in a room, its first match.

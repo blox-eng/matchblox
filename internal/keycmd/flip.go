@@ -24,6 +24,10 @@ func NextAPC(from string) string { return apc("next", from) }
 // it, then the tty and pane, then ESC \.
 func FlipPrefix(kind string) string { return apcHead + kind + "=" }
 
+// JumpPrefix is the start of the APC ⌥ and digit n send from a pane:
+// then the tty and the pane, then ESC \.
+func JumpPrefix(n int) string { return FlipPrefix("jump") + strconv.Itoa(n) + " " }
+
 // FlipSlot and NextSlot are the user-keys slots of the phone's flip and
 // next buttons, below the home key's 900.
 const (
@@ -37,7 +41,8 @@ func OpenAPC(host string, n int) string { return apc("open", host+"/"+strconv.It
 
 func apc(kind, arg string) string { return apcHead + kind + "=" + arg + apcTail }
 
-// ParseAPC reads back a string FlipAPC, NextAPC or OpenAPC made.
+// ParseAPC reads back a string FlipAPC, NextAPC or OpenAPC made, or a jump:
+// "<n> <tty> <pane>", n 1 to 9.
 func ParseAPC(s string) (kind, arg string, ok bool) {
 	body, ok := strings.CutPrefix(s, apcHead)
 	if !ok {
@@ -52,8 +57,16 @@ func ParseAPC(s string) (kind, arg string, ok bool) {
 		return "", "", false
 	case kind == "flip", kind == "next", kind == "open":
 		return kind, arg, true
+	case kind == "jump" && isJump(arg):
+		return kind, arg, true
 	}
 	return "", "", false
+}
+
+func isJump(arg string) bool {
+	n, rest, _ := strings.Cut(arg, " ")
+	tty, pane, _ := strings.Cut(rest, " ")
+	return len(n) == 1 && n >= "1" && n <= "9" && tty != "" && pane != ""
 }
 
 // FeelNeeds and FeelDone tell the phone to play a haptic: a match on the

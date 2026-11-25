@@ -226,7 +226,7 @@ func TestHomeKeyMatchesTheApp(t *testing.T) {
 // takes another's binding.
 func TestHomeAndCommandKeysDoNotCollide(t *testing.T) {
 	slots := map[string]string{}
-	for _, argv := range [][]string{HomeKeyArgv(), CommandKeysArgv(), MarkKeyArgv(), BeltKeyArgv(), TapKeysArgv(), FlipKeysArgv()} {
+	for _, argv := range [][]string{HomeKeyArgv(), CommandKeysArgv(), MarkKeyArgv(), BeltKeyArgv(), TapKeysArgv(), FlipKeysArgv(), JumpKeysArgv()} {
 		for i, a := range argv {
 			if a != "set-option" {
 				continue

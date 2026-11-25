@@ -229,8 +229,13 @@ again. Each terminal comes back to its own session: a phone and a desk keep
 theirs apart. In a shell or an editor the keys type as always: matchblox
 binds them only in the panes of the agents it samples.
 
-A terminal that does not send Option as Meta types `ß` for `⌥s`. Use
-prefix `s`, or set Option as Meta: in Terminal.app, Settings
+`⌥1` … `⌥9` in an agent's pane go straight to the pane of the session with
+that number, the number its row shows in the list. With no such session,
+tmux shows the same notice as the list. On a phone, `Esc` then a quick
+digit reaches the agent as typed: it never jumps.
+
+A terminal that does not send Option as Meta types `ß` for `⌥s`, and `¡`
+for `⌥1`. Use prefix `s` for the flip, or set Option as Meta: in Terminal.app, Settings
 → Profiles → Keyboard → **Use Option as Meta key**; in iTerm2, Settings →
 Profiles → Keys → **Left Option key: Esc+**. Ghostty and kitty send it as
 Meta.
