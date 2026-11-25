@@ -31,6 +31,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/idle"
 	"github.com/blox-eng/matchblox/internal/limits"
 	"github.com/blox-eng/matchblox/internal/mux"
+	"github.com/blox-eng/matchblox/internal/numbers"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/push"
 	"github.com/blox-eng/matchblox/internal/queue"
@@ -106,6 +107,8 @@ type Service struct {
 	Stoker *stoker.Store
 	// Holds are the parked and stoker-held sessions. Nil: none kept.
 	Holds *holds.Store
+	// Numbers gives each session its number. Nil: no numbers.
+	Numbers *numbers.Store
 	// Recovery is the record of the agents on the builder's tmux server,
 	// for matchblox recover (#215). Nil: none kept.
 	Recovery *recovery.Store
@@ -705,6 +708,9 @@ func (s *Service) publish(snap sample.Snapshot, rec func(state.Doc)) {
 		}
 		s.cur.Holds = s.Holds.List()
 	}
+	if s.Numbers != nil && !s.sampleMissedLocked() {
+		s.numberLocked()
+	}
 	joined, err := s.joinNewLocked(s.now())
 	if err != nil {
 		s.cur.Errors = append(s.cur.Errors, "chains: "+err.Error())
@@ -781,6 +787,27 @@ func (s *Service) Hook(ev hooks.Event) {
 	s.mu.Unlock()
 	s.chainNews(ev)
 	s.broadcast()
+}
+
+// numberLocked sets each session's number, the stoker's own left out.
+// Hold s.mu.
+func (s *Service) numberLocked() {
+	var members []chains.Member
+	var at []int
+	for i, x := range s.cur.Sessions {
+		if s.onStokerServer(x.Pane) {
+			continue
+		}
+		members = append(members, memberOf(x))
+		at = append(at, i)
+	}
+	nums, err := s.Numbers.Assign(members)
+	if err != nil {
+		s.cur.Errors = append(s.cur.Errors, "numbers: "+err.Error())
+	}
+	for j, i := range at {
+		s.cur.Sessions[i].Number = nums[j]
+	}
 }
 
 // mergeQueue joins the queue with the current sessions. Hold s.mu.
