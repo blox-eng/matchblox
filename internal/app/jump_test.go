@@ -216,7 +216,12 @@ func TestJumpFromAPhoneInAnAgentsPaneTypesInThePane(t *testing.T) {
 	m.viewers = ""
 	m, _ = m.tellBelt(false)
 	m.opt.ClientList = func() (string, error) { return "100 /dev/pts/7 %1", nil }
-	m.opt.Pair = &PairHost{DeviceTTYs: func() map[string]string { return map[string]string{"/dev/pts/7": "phone-id"} }}
+	in := time.Date(2026, 11, 25, 9, 0, 0, 0, time.UTC)
+	m.opt.Tmux = clientsMadeAt("/dev/pts/7", in.Add(time.Second))
+	m.opt.Pair = &PairHost{
+		DeviceTTYs: func() map[string]string { return map[string]string{"/dev/pts/7": "phone-id"} },
+		DeviceIn:   func(id string) (time.Time, string, bool) { return in, "/dev/pts/7", id == "phone-id" },
+	}
 	_, ran := jumpFrom(t, m, 4, "/dev/pts/7", "%1")
 	want := []string{"tmux", "send-keys", "-t", "%1", "Escape", "4"}
 	if !slices.ContainsFunc(ran, func(argv []string) bool { return slices.Equal(argv, want) }) {
@@ -224,6 +229,54 @@ func TestJumpFromAPhoneInAnAgentsPaneTypesInThePane(t *testing.T) {
 	}
 	if got := ranText(ran); strings.Contains(got, "switch-client") {
 		t.Errorf("the phone's Esc 4 in an agent's pane moved its client: %q", got)
+	}
+}
+
+// clientsMadeAt answers tmux list-clients with tty's client made at created.
+func clientsMadeAt(tty string, created time.Time) func(args ...string) (string, error) {
+	return func(args ...string) (string, error) {
+		if len(args) > 0 && args[0] == "list-clients" {
+			return strconv.FormatInt(created.Unix(), 10) + " " + tty + "\n", nil
+		}
+		return "", nil
+	}
+}
+
+// TestJumpFromADeskOnAPhonesOldTTYJumps: a phone's note outlives the phone,
+// and the system gives its tty to a desk terminal made later. That desk's
+// ⌥4 in an agent's pane jumps; a client made just after the note is the
+// phone's, and its Esc and 4 still go back into the pane.
+func TestJumpFromADeskOnAPhonesOldTTYJumps(t *testing.T) {
+	created := time.Date(2026, 11, 25, 9, 0, 0, 0, time.UTC)
+	for _, c := range []struct {
+		name  string
+		note  time.Time
+		phone bool
+	}{
+		{"a note from yesterday", created.Add(-24 * time.Hour), false},
+		{"a note made with the client", created.Add(-time.Second), true},
+	} {
+		m := numberedInPanes(t)
+		m.opt.ClientList = func() (string, error) { return "100 " + deskTTY + " %1", nil }
+		m.opt.Tmux = clientsMadeAt(deskTTY, created)
+		note := c.note
+		m.opt.Pair = &PairHost{
+			DeviceTTYs: func() map[string]string { return map[string]string{deskTTY: "phone-id"} },
+			DeviceIn:   func(id string) (time.Time, string, bool) { return note, deskTTY, id == "phone-id" },
+		}
+		_, ran := jumpFrom(t, m, 4, deskTTY, "%1")
+		got := ranText(ran)
+		typed := strings.Contains(got, "send-keys -t %1 Escape 4")
+		moved := slices.ContainsFunc(ran, func(argv []string) bool {
+			tty, pane, ok := remote.FocusOf(argv)
+			return ok && tty == deskTTY && pane == "%4"
+		})
+		if c.phone && (!typed || moved) {
+			t.Errorf("%s: ran %q, want Esc 4 typed back and no jump", c.name, got)
+		}
+		if !c.phone && (typed || !moved) {
+			t.Errorf("%s: ran %q, want a switch-client to %%4 and nothing typed", c.name, got)
+		}
 	}
 }
 

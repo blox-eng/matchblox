@@ -140,20 +140,20 @@ func (m Model) walkFrom(tty, pane string) (tea.Model, tea.Cmd) {
 // to session n's pane on this host. The phone has no ⌥, and tmux joined its
 // Esc and digit: they go back to the pane as typed. A phone in an agent's
 // pane no longer views the console, so its pairing tells it, read off the
-// update loop; a pairing note that outlived its phone types a desk's ⌥n,
-// and never moves a phone.
+// update loop: a fresh note for that tty's client, as fromDevice reads it.
 func (m Model) jumpFrom(n int, tty, pane string) (tea.Model, tea.Cmd) {
 	run := m.opt.Run
 	typeBack := []string{"tmux", "send-keys", "-t", pane, "Escape", strconv.Itoa(n)}
 	if m.pocketClient(tty) {
 		return m, func() tea.Msg { _ = run(typeBack); return nil }
 	}
-	if m.opt.Pair == nil || m.opt.Pair.DeviceTTYs == nil {
+	pair, tmux := m.opt.Pair, m.tmuxRun()
+	if pair == nil || tmux == nil {
 		return m.jumpFromDesk(jumpMsg{n, tty, pane})
 	}
-	phones := m.opt.Pair.DeviceTTYs
 	return m, func() tea.Msg {
-		if _, phone := phones()[tty]; phone {
+		out, _ := tmux("list-clients", "-F", "#{client_created} #{client_tty}")
+		if pair.deviceOn(tty, clientMadeOf(out, tty)) {
 			_ = run(typeBack)
 			return nil
 		}
