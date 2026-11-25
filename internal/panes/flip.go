@@ -4,6 +4,7 @@ import (
 	"strconv"
 
 	"github.com/blox-eng/matchblox/internal/keycmd"
+	"github.com/blox-eng/matchblox/internal/mux"
 )
 
 // FlipKey goes between a session and its chain's room; NextKey walks the
@@ -79,7 +80,7 @@ func handIn(in, prefix string) string {
 // key goes on as typed, so a shell or an editor keeps it, and at the
 // console it is the console's own key.
 func FlipKeysArgv() []string {
-	argv := []string{"tmux"}
+	argv := mux.Command("")
 	for _, k := range []struct {
 		key, kind, apc, prefix, elsewhere string
 		slot                              int

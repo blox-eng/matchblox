@@ -28,6 +28,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/filestamp"
 	"github.com/blox-eng/matchblox/internal/history"
 	"github.com/blox-eng/matchblox/internal/keycmd"
+	"github.com/blox-eng/matchblox/internal/mux"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/release"
@@ -1481,11 +1482,11 @@ func (m Model) clients() func() ([]string, error) {
 func tmuxClients() ([]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, "tmux", "list-clients", "-F", "#{client_tty}").Output()
+	out, err := mux.Tmux{}.Output(ctx, "list-clients", "-F", "#{client_tty}")
 	if err != nil {
 		return nil, err
 	}
-	return strings.Fields(string(out)), nil
+	return strings.Fields(out), nil
 }
 
 // focusJump waits up to focusWait for the client on tty to attach to this

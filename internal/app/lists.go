@@ -141,7 +141,11 @@ const (
 	paneByPath
 )
 
-var paneCols = []string{"tmux", "runs", "path"}
+// headPane heads the column of a pane's address: it names the pane's id and
+// target, the way the person types it, and runs nothing.
+const headPane = "tmux"
+
+var paneCols = []string{headPane, "runs", "path"}
 
 // headerRow marks the column header line of a body: a tap there sorts.
 const headerRow = -2

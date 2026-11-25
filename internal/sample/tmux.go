@@ -41,30 +41,10 @@ func SplitPane(id string) (server, bare string) {
 	return "", id
 }
 
-// TmuxOn is the argv that reaches the tmux server server ("": the
-// builder's). Every call aimed at a pane of matchblox's own server starts
-// with it.
-func TmuxOn(server string) []string {
-	if server == "" {
-		return []string{"tmux"}
-	}
-	return []string{"tmux", "-L", server}
-}
-
-// tmuxUTF8 is TmuxOn with -u: format and capture output keep tabs and
-// glyphs when LANG is unset. Without it, tmux in the C locale prints
-// every non-printable as "_", and ParsePanes sees no panes.
-func tmuxUTF8(server string) []string {
-	a := TmuxOn(server)
-	return append([]string{a[0], "-u"}, a[1:]...)
-}
-
-// Tmux is the argv that reaches the server of the pane target, and the id
-// that server knows it by.
-func Tmux(target string) ([]string, string) {
-	server, bare := SplitPane(target)
-	return TmuxOn(server), bare
-}
+// tmuxUTF8 is the argv that reaches server with -u: format and capture
+// output keep tabs and glyphs when LANG is unset. Without it, tmux in the C
+// locale prints every non-printable as "_", and ParsePanes sees no panes.
+func tmuxUTF8(server string) []string { return mux.Command(server, "-u") }
 
 // Server is the tmux server of the session's pane: "" the builder's.
 func (s Session) Server() string {

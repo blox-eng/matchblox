@@ -141,6 +141,18 @@ func (t Tmux) run(argv []string) (string, error) {
 	return string(out), err
 }
 
+// Output runs args on this server and gives what tmux prints. ctx ends the
+// read. With Run set, Run reads it, as it does for every other call.
+func (t Tmux) Output(ctx context.Context, args ...string) (string, error) {
+	argv := append(t.commandArgv(), args...)
+	if t.Run != nil {
+		return t.Run(argv)
+	}
+	c := exec.CommandContext(ctx, argv[0], argv[1:]...) //nolint:gosec // argv built here, never a shell string
+	out, err := c.Output()
+	return string(out), err
+}
+
 // OnServer is the id of pane id on the tmux server (-L) server:
 // "%3@matchblox". Pane ids repeat across servers, so a pane of any server
 // but the builder's ("") carries its server.
@@ -160,12 +172,19 @@ func SplitPane(id string) (server, bare string) {
 	return "", id
 }
 
-func serverArgv(server string) []string {
+// Command is the argv prefix that reaches the server ("": the builder's):
+// the program, its flags (-u keeps tabs and glyphs in output when LANG is
+// unset), then -L server. Every call aimed at a pane starts with it. It
+// returns a new slice each time, so the caller may append.
+func Command(server string, flags ...string) []string {
+	argv := append([]string{"tmux"}, flags...)
 	if server == "" {
-		return []string{"tmux"}
+		return argv
 	}
-	return []string{"tmux", "-L", server}
+	return append(argv, "-L", server)
 }
+
+func serverArgv(server string) []string { return Command(server) }
 
 // commandArgv is the tmux prefix for a command on this socket. A socket
 // path wins, as it does for List: one Tmux is one server.
@@ -219,6 +238,13 @@ func (t Tmux) Start(s Start) [][]string {
 func (Tmux) Rename(pane, name string) [][]string {
 	tmux, id := targetArgv(pane)
 	return [][]string{slices.Concat(tmux, []string{"rename-window", "-t", id, name})}
+}
+
+// RenameSession names the session of pane. Rename leaves it out: the
+// caller asks for this step only when the session has one window.
+func (Tmux) RenameSession(pane, name string) []string {
+	tmux, id := targetArgv(pane)
+	return slices.Concat(tmux, []string{"rename-session", "-t", id, name})
 }
 
 // Kill ends pane, then sends TERM to pid when pid is greater than zero.
@@ -318,6 +344,21 @@ func (Tmux) SwitchClient(pane string) []string {
 	return slices.Concat(tmux, []string{"switch-client", "-t", id})
 }
 
+// NewWindow opens a window of the client's own server. A name or a dir that
+// is empty is left to tmux; argv follows the flags, and an empty argv is
+// the shell.
+func (Tmux) NewWindow(name, dir string, argv ...string) []string {
+	step := Command("")
+	step = append(step, "new-window")
+	if name != "" {
+		step = append(step, "-n", name)
+	}
+	if dir != "" {
+		step = append(step, "-c", dir)
+	}
+	return append(step, argv...)
+}
+
 // ViewCmd is "tmux": the name tmux shows for a pane that runs a nested tmux
 // client, such as the agent pane's view.
 func (Tmux) ViewCmd() string { return "tmux" }
@@ -393,10 +434,7 @@ func (t Tmux) listArgv() []string {
 	return argv
 }
 
-func utf8On(server string) []string {
-	a := serverArgv(server)
-	return append([]string{a[0], "-u"}, a[1:]...)
-}
+func utf8On(server string) []string { return Command(server, "-u") }
 
 func captureStyled(panes []string) map[string]string {
 	out := map[string]string{}

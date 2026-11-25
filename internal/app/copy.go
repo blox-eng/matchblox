@@ -67,7 +67,7 @@ func (m Model) tmuxRun() func(args ...string) (string, error) {
 	case m.opt.Tmux != nil:
 		return m.opt.Tmux
 	}
-	return tmuxOut
+	return ownMux
 }
 
 // multiplexer is the console's own tmux as a mux.Mux: the commands run

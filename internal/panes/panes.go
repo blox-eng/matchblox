@@ -5,14 +5,13 @@ package panes
 import (
 	"errors"
 	"fmt"
-	"slices"
 	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/blox-eng/matchblox/internal/mux"
 	"github.com/blox-eng/matchblox/internal/said"
-	"github.com/blox-eng/matchblox/internal/sample"
 )
 
 // MaxAnswer bounds an answer: a short reply, not a document.
@@ -28,20 +27,15 @@ func Send(target, text string) [][]string {
 	}
 }
 
-// Literal is the send-keys step that types text into the pane as it is.
-// tmux reads an argv word that ends in ";" as the end of its command and
-// a final "\;" as a ";", so a final ";" goes as "\;".
+// Literal is the step that types text into the pane as it is: mux.Type.
 func Literal(target, text string) []string {
-	if t, ok := strings.CutSuffix(text, ";"); ok {
-		text = t + `\;`
-	}
-	return keys(target, "-l", "--", text)
+	return mux.Tmux{}.Type(target, text)
 }
 
-// keys is the send-keys step to target, on the tmux server it is on.
-func keys(target string, args ...string) []string {
-	tmux, id := sample.Tmux(target)
-	return slices.Concat(tmux, []string{"send-keys", "-t", id}, args)
+// keys is the step that presses ks in target, on the server it is on:
+// mux.Keys.
+func keys(target string, ks ...string) []string {
+	return mux.Tmux{}.Keys(target, ks...)
 }
 
 // Keys is the send-keys step that presses keys (tmux key names) in the

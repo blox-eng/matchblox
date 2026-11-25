@@ -198,7 +198,7 @@ func (s *Service) settled(ctx context.Context, rows []proto.Recovered, started m
 		alive, there := s.sessionRuns(row.As)
 		if !alive {
 			if there {
-				_, _ = s.tmuxOut(s.mux().KillSession(row.As))
+				_, _ = s.runStep(s.mux().KillSession(row.As))
 			}
 			row.State, row.Why = proto.RecoverCannot, fmt.Sprintf("%s exited at once: run cd %s && %s to see why", row.Agent, row.Dir, cmd)
 			continue

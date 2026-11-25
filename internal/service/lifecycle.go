@@ -143,7 +143,7 @@ func (s *Service) guardLink() string {
 	return link
 }
 
-func (s *Service) tmuxOut(argv []string) (string, error) {
+func (s *Service) runStep(argv []string) (string, error) {
 	if s.TmuxOut != nil {
 		return s.TmuxOut(argv)
 	}

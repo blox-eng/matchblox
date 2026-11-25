@@ -3,11 +3,11 @@ package app
 import (
 	"context"
 	"errors"
-	"os/exec"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/mux"
 	"github.com/blox-eng/matchblox/internal/remote"
 )
 
@@ -121,14 +121,13 @@ func (m Model) clientList() func() (string, error) {
 }
 
 func tmuxClientList() (string, error) {
-	return tmuxOut("list-clients", "-F", "#{client_activity} #{client_tty} #{pane_id}")
+	return ownMux("list-clients", "-F", "#{client_activity} #{client_tty} #{pane_id}")
 }
 
-// tmuxOut runs a command of the console's own tmux, for 500 ms at most,
-// and gives its output.
-func tmuxOut(args ...string) (string, error) {
+// ownMux runs a command of the console's own multiplexer, for 500 ms at
+// most, and gives its output.
+func ownMux(args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, "tmux", args...).Output()
-	return string(out), err
+	return mux.Tmux{}.Output(ctx, args...)
 }

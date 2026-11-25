@@ -66,6 +66,9 @@ type Mux interface {
 	// does not rename the session: that waits until the caller knows the
 	// session has one window.
 	Rename(pane, name string) [][]string
+	// RenameSession is the step that names the session of pane. The caller
+	// asks for it only when the session has one window.
+	RenameSession(pane, name string) []string
 	// Kill is the steps that end pane, then TERM pid when pid is greater
 	// than zero. The TERM names that pid and no other.
 	Kill(pane string, pid int) [][]string
@@ -85,6 +88,9 @@ type Mux interface {
 	Beside(target string, percent int, argv []string) (pane string, err error)
 	// SwitchClient is the step that moves the client that asked to pane.
 	SwitchClient(pane string) []string
+	// NewWindow is the step that opens a window running argv (the shell
+	// when argv is empty), named name and in dir when they are set.
+	NewWindow(name, dir string, argv ...string) []string
 	// ViewCmd is the name a pane shows while it runs a nested client of this
 	// multiplexer (a view of an agent pane).
 	ViewCmd() string

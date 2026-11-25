@@ -56,6 +56,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/hosts"
 	"github.com/blox-eng/matchblox/internal/limits"
 	"github.com/blox-eng/matchblox/internal/login"
+	"github.com/blox-eng/matchblox/internal/mux"
 	"github.com/blox-eng/matchblox/internal/numbers"
 	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/procfs"
@@ -333,7 +334,7 @@ func run(args []string) error {
 			binds = append(binds, homeBinds(os.Getenv("TMUX_PANE"))...)
 		}
 		for _, argv := range binds {
-			_ = exec.Command("tmux", argv[1:]...).Run()
+			_ = exec.Command(argv[0], argv[1:]...).Run() //nolint:gosec // argv built by panes and remote, never a shell string
 		}
 	}
 
@@ -712,8 +713,8 @@ func console(path string, cfg config.Config, root string, noMotion bool, host st
 // consoleSession is the name of the console's own tmux session, the
 // session of its pane; "" when tmux does not say one.
 func consoleSession(pane string) string {
-	out, err := exec.Command("tmux", "display-message", "-p", "-t", pane, "#{session_name}").Output()
-	if name := strings.TrimSpace(string(out)); err == nil && remote.ConsoleSession(name) {
+	out, err := mux.Tmux{}.Output(context.Background(), "display-message", "-p", "-t", pane, "#{session_name}")
+	if name := strings.TrimSpace(out); err == nil && remote.ConsoleSession(name) {
 		return name
 	}
 	return ""
@@ -873,11 +874,11 @@ func localTmux() (prefix, home func() string, version string) {
 	read := func(args ...string) string {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
-		out, err := exec.CommandContext(ctx, "tmux", args...).Output() //nolint:gosec // fixed tmux reads; the one value is a pane id paneRE took
+		out, err := mux.Tmux{}.Output(ctx, args...)
 		if err != nil {
 			return ""
 		}
-		return strings.TrimSpace(string(out))
+		return strings.TrimSpace(out)
 	}
 	p := read("show-options", "-gv", "prefix")
 	// The home is the session of the console's own pane at the jump: it may

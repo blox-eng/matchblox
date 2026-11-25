@@ -90,3 +90,59 @@ func TestChainAndSendNameNoTmux(t *testing.T) {
 		}
 	}
 }
+
+// TestPaneActsNameNoTmux: no production file outside internal/mux builds a
+// tmux argv or reaches a pane by the tmux helpers. A pane act goes through
+// internal/mux, so another multiplexer can run it. English copy, JSON field
+// names and column headers say "tmux" without building argv: the denylist
+// is the argv forms below, not the word. internal/setup, internal/remote,
+// internal/demo and internal/tmuxtest name tmux on purpose and stay out.
+func TestPaneActsNameNoTmux(t *testing.T) {
+	bad := []string{"sample.Tmux", "TmuxOn", "tmuxOut", `[]string{"tmux"`}
+	var files int
+	for _, dir := range []string{"sample", "panes", "service", "app", "proto", "advice", filepath.Join("..", "cmd", "matchblox")} {
+		ents, err := os.ReadDir(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, e := range ents {
+			n := e.Name()
+			if e.IsDir() || !strings.HasSuffix(n, ".go") || strings.HasSuffix(n, "_test.go") {
+				continue
+			}
+			b, err := os.ReadFile(filepath.Join(dir, n))
+			if err != nil {
+				t.Fatal(err)
+			}
+			files++
+			for i, line := range strings.Split(string(b), "\n") {
+				if strings.HasPrefix(strings.TrimSpace(line), "//") {
+					continue
+				}
+				for _, w := range bad {
+					if strings.Contains(line, w) {
+						t.Errorf("%s/%s:%d names %s: go through internal/mux", dir, n, i+1, w)
+					}
+				}
+			}
+		}
+	}
+	if files == 0 {
+		t.Fatal("the denylist scanned no file")
+	}
+}
+
+// TestMuxImportsNeitherSampleNorPanes: sample and panes call mux, so mux
+// must not call them back.
+func TestMuxImportsNeitherSampleNorPanes(t *testing.T) {
+	m, ok := listPackages(t)["mux"]
+	if !ok {
+		t.Fatal("no internal/mux package")
+	}
+	for _, imp := range m.Imports {
+		switch strings.TrimPrefix(imp, mod) {
+		case "sample", "panes":
+			t.Errorf("internal/mux imports %s", imp)
+		}
+	}
+}

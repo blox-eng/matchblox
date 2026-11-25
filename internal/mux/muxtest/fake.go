@@ -137,6 +137,14 @@ func (*Fake) Rename(pane, name string) [][]string {
 	return [][]string{{"fake", "rename", pane, name}}
 }
 
+func (*Fake) RenameSession(pane, name string) []string {
+	return []string{"fake", "rename-session", pane, name}
+}
+
+func (*Fake) NewWindow(name, dir string, argv ...string) []string {
+	return slices.Concat([]string{"fake", "new-window", name, dir}, argv)
+}
+
 func (*Fake) Kill(pane string, pid int) [][]string {
 	steps := [][]string{{"fake", "kill-pane", pane}}
 	if pid > 0 {

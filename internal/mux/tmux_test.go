@@ -2,6 +2,7 @@ package mux
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"log"
 	"os"
@@ -255,6 +256,36 @@ func TestRenameNamesTheWindow(t *testing.T) {
 	}
 }
 
+func TestRenameSessionNamesTheSessionOfThePane(t *testing.T) {
+	if got, want := (Tmux{}).RenameSession("%1", "api"), []string{"tmux", "rename-session", "-t", "%1", "api"}; !slices.Equal(got, want) {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+	got := (Tmux{}).RenameSession("%4@matchblox", "api")
+	if want := []string{"tmux", "-L", "matchblox", "rename-session", "-t", "%4", "api"}; !slices.Equal(got, want) {
+		t.Fatalf("server: got %q, want %q", got, want)
+	}
+}
+
+func TestNewWindowOpensAWindowOfTheClientsServer(t *testing.T) {
+	if got, want := (Tmux{}).NewWindow("", "/work/api"), []string{"tmux", "new-window", "-c", "/work/api"}; !slices.Equal(got, want) {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+	got := (Tmux{}).NewWindow("swap", "", "sudo", "sh", "-c", "swapoff -a")
+	if want := []string{"tmux", "new-window", "-n", "swap", "sudo", "sh", "-c", "swapoff -a"}; !slices.Equal(got, want) {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func TestOutputRunsTheArgsOnThatServer(t *testing.T) {
+	var got []string
+	m := Tmux{Server: "matchblox", Run: func(argv []string) (string, error) { got = argv; return "ok", nil }}
+	out, err := m.Output(context.Background(), "list-clients", "-F", "#{client_tty}")
+	want := []string{"tmux", "-L", "matchblox", "list-clients", "-F", "#{client_tty}"}
+	if err != nil || out != "ok" || !slices.Equal(got, want) {
+		t.Fatalf("got %q %q %v, want %q", got, out, err, want)
+	}
+}
+
 func TestHasSessionAsksForThatName(t *testing.T) {
 	if got, want := (Tmux{}).HasSession("api"), []string{"tmux", "has-session", "-t", "=api"}; !slices.Equal(got, want) {
 		t.Fatalf("got %q, want %q", got, want)
@@ -463,7 +494,7 @@ func endServer(t *testing.T, server string) {
 		if server != "" {
 			argv = append([]string{"-L", server}, argv...)
 		}
-		_ = exec.Command("tmux", argv...).Run()
+		_ = exec.Command("tmux", argv...).Run() //nolint:gosec // no socket on purpose: the builder's own server, which TestMain moved into a scratch TMUX_TMPDIR
 	})
 }
 
@@ -474,7 +505,7 @@ func tmuxCmd(t *testing.T, server string, args ...string) string {
 		argv = append([]string{"-L", server}, argv...)
 	}
 	argv = append(argv, args...)
-	out, err := exec.Command("tmux", argv...).CombinedOutput()
+	out, err := exec.Command("tmux", argv...).CombinedOutput() //nolint:gosec // no socket on purpose: "" is the builder's own server, which TestMain moved into a scratch TMUX_TMPDIR
 	if err != nil {
 		t.Fatalf("tmux %q: %v\n%s", argv, err, out)
 	}
