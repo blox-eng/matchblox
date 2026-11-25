@@ -450,7 +450,7 @@ Where the figures come from:
 | Claude Code | Open the setup step "Show your limits" from the list's foot. It adds matchblox to your status line; a status line you have keeps showing what it showed. |
 | Codex | Nothing: Codex reports its limits after each turn, on Linux and macOS. A plan with a monthly limit shows `mo`. |
 | OpenCode | It shows "not measured": OpenCode keeps no limits. |
-| Cursor | Set `cursor_usage = true` under `[limits]` in the [config](config.md) (macOS). Cursor shows `mo`, the share of the month's included usage. See [Agents](agents.md#the-account). |
+| Cursor | Set `cursor_usage = true` under `[limits]` in the [config](config.md). The default login reads `$XDG_CONFIG_HOME/cursor/auth.json` or `~/.config/cursor/auth.json`, then `~/.cursor/auth.json`, then on macOS only the Keychain item `cursor-access-token`. Cursor shows `mo`, the share of the month's included usage. See [Agents](agents.md#the-account). |
 
 A line that says `as of 14:02` has not changed for an hour: the account's
 agents have not worked since. Each reading is kept for five weeks in
