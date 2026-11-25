@@ -28,18 +28,24 @@ final class ReturnTests: XCTestCase {
     }
 
     func testTheFirstConnectShowsTheCover() {
-        XCTAssertTrue(Opening.coverShows(live: false, failed: false, wasLive: false))
+        XCTAssertTrue(Opening.coverShows(live: false, failed: false, wasLive: false, away: false))
     }
 
     func testAResumeKeepsTheScreen() {
-        XCTAssertFalse(Opening.coverShows(live: false, failed: false, wasLive: true))
+        XCTAssertFalse(Opening.coverShows(live: false, failed: false, wasLive: true, away: false))
     }
 
     func testAFailureShowsTheCoverOnResume() {
-        XCTAssertTrue(Opening.coverShows(live: false, failed: true, wasLive: true))
+        XCTAssertTrue(Opening.coverShows(live: false, failed: true, wasLive: true, away: false))
     }
 
     func testLiveShowsNoCover() {
-        XCTAssertFalse(Opening.coverShows(live: true, failed: false, wasLive: true))
+        XCTAssertFalse(Opening.coverShows(live: true, failed: false, wasLive: true, away: false))
+    }
+
+    /// The app switcher keeps a snapshot of the screen: away from the screen, the cover hides the console.
+    func testAwayTheCoverHidesTheConsole() {
+        XCTAssertTrue(Opening.coverShows(live: true, failed: false, wasLive: true, away: true))
+        XCTAssertTrue(Opening.coverShows(live: false, failed: false, wasLive: true, away: true))
     }
 }
