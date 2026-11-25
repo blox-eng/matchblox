@@ -3,8 +3,11 @@ package proto
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/blox-eng/matchblox/internal/mux"
 )
 
 func TestCheckName(t *testing.T) {
@@ -95,6 +98,23 @@ func TestNameOf(t *testing.T) {
 		}
 		if got := NameOf(in); CheckName(got) != nil {
 			t.Errorf("NameOf(%q) = %q fails CheckName", in, got)
+		}
+	}
+}
+
+func TestKillStepsMatchMuxKill(t *testing.T) {
+	for _, c := range []struct {
+		pane string
+		pid  int
+	}{
+		{"%1", 99},
+		{"%1", 0},
+		{"%4@matchblox", 99},
+	} {
+		got := KillSteps(c.pane, c.pid)
+		want := mux.Tmux{}.Kill(c.pane, c.pid)
+		if !slices.EqualFunc(got, want, slices.Equal) {
+			t.Fatalf("KillSteps(%q, %d) = %q, mux.Kill = %q", c.pane, c.pid, got, want)
 		}
 	}
 }
