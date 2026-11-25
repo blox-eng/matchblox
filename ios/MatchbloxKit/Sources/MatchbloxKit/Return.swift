@@ -7,9 +7,11 @@ extension Opening {
         return host8(host.fingerprint) == link.host
     }
 
-    /// The cover shows on the first connect and on a failure. A console that was live keeps its
+    /// The cover shows on the first connect, on a failure, and while the app is away from the
+    /// screen, so the app switcher's snapshot holds no console. A console that was live keeps its
     /// last screen while it connects again; the tmux attach draws over it.
-    public static func coverShows(live: Bool, failed: Bool, wasLive: Bool) -> Bool {
+    public static func coverShows(live: Bool, failed: Bool, wasLive: Bool, away: Bool) -> Bool {
+        if away { return true }
         if live { return false }
         return failed || !wasLive
     }

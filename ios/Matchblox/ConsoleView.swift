@@ -633,6 +633,8 @@ final class ConsoleConnection {
     @ObservationIgnored private var grace = UnlockGrace()
     /// True once the console was live: a reconnect then keeps the last screen, with no cover.
     private(set) var wasLive = false
+    /// True while Pocket is in the background: the cover hides the console from the app switcher.
+    private(set) var away = false
     /// Registration runs once for each open, after the unlock.
     @ObservationIgnored private var registered = false
     /// Cancelled with the console: nothing registers from the background.
@@ -684,6 +686,7 @@ final class ConsoleConnection {
         registration?.cancel()
         registration = nil
         grace.backgrounded(at: .now)
+        away = true
     }
 
     /// Pocket is back: past the grace window Face ID asks again, and the cover hides the old
@@ -694,6 +697,7 @@ final class ConsoleConnection {
             unlocked = nil
             wasLive = false
         }
+        away = false
         start()
     }
 
@@ -702,7 +706,7 @@ final class ConsoleConnection {
         case .failed, .ended: true
         case .connecting, .live: false
         }
-        return Opening.coverShows(live: phase == .live, failed: failed, wasLive: wasLive)
+        return Opening.coverShows(live: phase == .live, failed: failed, wasLive: wasLive, away: away)
     }
 
     func retry() {
@@ -885,7 +889,8 @@ final class ConsoleConnection {
             terminal?.forgetScrollBack()
         }
         phase = .live
-        wasLive = true
+        // The demo starts over each time it opens: it keeps no screen.
+        wasLive = !host.isDemo
         let opened = openSession != nil
         openSession = nil
         let now = terminalSize
