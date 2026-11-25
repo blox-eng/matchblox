@@ -225,7 +225,7 @@ var tabWords = []string{"SESSIONS", "MACHINE"}
 
 // viewWords are the views that open from Machine's first rows, in their
 // order, each with a word only its screen draws.
-var viewWords = []struct{ name, word string }{{"stoker", "STOKER"}, {"git", "WORKTREES"}, {"history", "PEAK PER COLUMN"}, {"panes", "PANES"}}
+var viewWords = []struct{ name, word string }{{"stoker", "STOKER"}, {"git", "WORKTREES"}, {"history", "LAST 2H"}, {"panes", "PANES"}}
 
 // open opens a tab of the tab row, or a view of Machine's.
 func (w *walker) open(screen string) {
@@ -300,7 +300,8 @@ func (w *walker) openMachine() {
 }
 
 // toView opens the view name from its row on Machine: up to the first
-// row, down to its own, ⏎.
+// row, down to its own, ⏎. Under -race a lone pass can miss the row; retry
+// the walk until the view's word draws.
 func (w *walker) toView(name string) {
 	w.t.Helper()
 	at := slices.IndexFunc(viewWords, func(v struct{ name, word string }) bool { return v.name == name })
@@ -310,26 +311,32 @@ func (w *walker) toView(name string) {
 	if w.onView(name) {
 		return
 	}
-	w.openMachine()
-	onView := slices.ContainsFunc(viewWords, func(v struct{ name, word string }) bool { return w.onView(v.name) })
-	if !w.desk() || onView {
-		w.press("esc") // from another view, back to Machine; on Machine it stays, and on the desk's ⚙ sheet it would close it
-		if w.desk() {
-			w.openMachine() // esc closed the sheet; open it again
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) {
+		w.openMachine()
+		onView := slices.ContainsFunc(viewWords, func(v struct{ name, word string }) bool { return w.onView(v.name) })
+		if !w.desk() || onView {
+			w.press("esc") // from another view, back to Machine; on Machine it stays, and on the desk's ⚙ sheet it would close it
+			if w.desk() {
+				w.openMachine() // esc closed the sheet; open it again
+			}
+		}
+		for range 12 {
+			w.press("k")
+			time.Sleep(5 * time.Millisecond)
+		}
+		for range at {
+			w.press("j")
+			time.Sleep(5 * time.Millisecond)
+		}
+		w.press("enter")
+		for wait := time.Now().Add(2 * time.Second); time.Now().Before(wait); time.Sleep(20 * time.Millisecond) {
+			if viewIn(name, w.term.screen()) {
+				return
+			}
 		}
 	}
-	for range 12 {
-		w.press("k")
-		time.Sleep(5 * time.Millisecond)
-	}
-	for range at {
-		w.press("j")
-		time.Sleep(5 * time.Millisecond)
-	}
-	w.press("enter")
-	// One repaint at a time, each waited for: a repaint every poll starts a
-	// new whole frame before the last one is read.
-	eventually(w.t, 30*time.Second, "the "+name+" view to open", func() bool { return viewIn(name, w.term.screen()) })
+	w.t.Fatalf("the %s view to open did not happen within 30s:\n%s", name, w.term.screen())
 }
 
 // toTab opens the tab want names: a tap on its name on the tab row, as a

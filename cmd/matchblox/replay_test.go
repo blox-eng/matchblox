@@ -323,8 +323,11 @@ func waitFor(capture func() string, ok func(string) bool, step string, timeout t
 }
 
 var (
-	figure  = regexp.MustCompile(`\d+(\.\d+)?[A-Za-z%]*`)
-	ageNow  = regexp.MustCompile(`\bnow\b`)
+	figure = regexp.MustCompile(`\d+(\.\d+)?[A-Za-z%]*`)
+	// age is sample.Human's two-unit forms (2h28m, 6d2h, 41m, now): figure
+	// alone turns 2h28m into two zeros and 41m into one, so a bar age that
+	// crosses an hour boundary would fail the replay.
+	age     = regexp.MustCompile(`\b(?:\d+d(?:\d+h)?|\d+h(?:\d+m)?|\d+m|\d+s|now)\b`)
 	sparks  = regexp.MustCompile(`[▁▂▃▄▅▆▇█]+`)
 	spaces  = regexp.MustCompile(`\s+`)
 	cutWord = regexp.MustCompile(`\S*…`)
@@ -367,8 +370,9 @@ func skeleton(lines []string) string {
 		// The busy loop's alert comes and goes with the samples; on a phone
 		// it squeezes the tab to its digit.
 		l = strings.Replace(strings.Replace(l, "machine !", "machine", 1), " 3 !", " machine", 1)
-		l = sparks.ReplaceAllString(figure.ReplaceAllString(cutWord.ReplaceAllString(l, "…"), "0"), "")
-		l = ageNow.ReplaceAllString(l, "0")  // an age under a minute reads "now"; a minute later it is "1m" → 0
+		l = cutWord.ReplaceAllString(l, "…")
+		l = age.ReplaceAllString(l, "0") // before figure: 2h28m is one age, not two figures
+		l = sparks.ReplaceAllString(figure.ReplaceAllString(l, "0"), "")
 		l = strings.ReplaceAll(l, "✧", "✦")  // a burning match flickers between the two
 		l = spinner.ReplaceAllString(l, "⠿") // a working session's spinner turns with the clock
 		b.WriteString(strings.TrimSpace(spaces.ReplaceAllString(l, " ")))
@@ -1024,6 +1028,13 @@ func TestSkeletonCatchesAChangedScreen(t *testing.T) {
 	minAge := []string{" ├ ✦ flint-auth #4545 ci 1m ✻│"}
 	if skeleton(nowAge) != skeleton(minAge) {
 		t.Fatalf("now and 1m must share a skeleton:\n%q\n%q", skeleton(nowAge), skeleton(minAge))
+	}
+	// sample.Human's two-unit form (2h28m) must match a one-unit form (41m):
+	// figure alone would leave ↻00 vs ↻0 on the bar.
+	twoUnit := []string{" LIST ws-1 ✻ Max 40% ↻2h28m · wk 40% ↻1h7m stoker off"}
+	oneUnit := []string{" LIST ws-1 ✻ Max 40% ↻41m · wk 40% ↻55m stoker off"}
+	if skeleton(twoUnit) != skeleton(oneUnit) {
+		t.Fatalf("2h28m and 41m must share a skeleton:\n%q\n%q", skeleton(twoUnit), skeleton(oneUnit))
 	}
 	// A figure one digit wider cuts the line one cell earlier.
 	cut := []string{" ╿ done, needs you · 9m · hearth:1.…", " ╿ done, needs you · 10m · hearth:1…"}
