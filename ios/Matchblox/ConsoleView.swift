@@ -686,11 +686,13 @@ final class ConsoleConnection {
         grace.backgrounded(at: .now)
     }
 
-    /// Pocket is back: past the grace window Face ID asks again.
+    /// Pocket is back: past the grace window Face ID asks again, and the cover hides the old
+    /// screen until it does.
     func resumed() {
         if !grace.returned(at: .now) {
             unlocked?.invalidate()
             unlocked = nil
+            wasLive = false
         }
         start()
     }
