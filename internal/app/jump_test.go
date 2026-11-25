@@ -55,6 +55,21 @@ func numbered(t *testing.T) Model {
 	return m
 }
 
+// numberedInPanes is numbered with session n in pane %n, and the console
+// in %99.
+func numberedInPanes(t *testing.T) Model {
+	t.Helper()
+	var ss []sample.Session
+	for i, name := range []string{"hearth-api", "ember-billing", "spark-docs", "wren-cli", "moss-web"} {
+		s := boardMatch(name, time.Duration(i+1)*time.Hour)
+		s.Number, s.Pane = i+1, "%"+strconv.Itoa(i+1)
+		ss = append(ss, s)
+	}
+	m, _, _ := sideShotOf(t, boardState(ss...), 160, 38)
+	m.opt.Pane = "%99"
+	return m
+}
+
 func numberedAs(t *testing.T, m Model, n int) sample.Session {
 	t.Helper()
 	for _, s := range m.sideSessions() {
@@ -191,18 +206,32 @@ func TestJumpFromAPhoneTypesInThePane(t *testing.T) {
 	}
 }
 
+// TestJumpFromAPhoneInAnAgentsPaneTypesInThePane: a phone that tapped into
+// an agent's pane no longer views the console, so the console's own list of
+// its viewers misses it. Its pairing still names its tty: Esc and 4 go back
+// into the pane, and the phone stays there.
+func TestJumpFromAPhoneInAnAgentsPaneTypesInThePane(t *testing.T) {
+	m := numberedInPanes(t)
+	pocketOnly(&m)
+	m.viewers = ""
+	m, _ = m.tellBelt(false)
+	m.opt.ClientList = func() (string, error) { return "100 /dev/pts/7 %1", nil }
+	m.opt.Pair = &PairHost{DeviceTTYs: func() map[string]string { return map[string]string{"/dev/pts/7": "phone-id"} }}
+	_, ran := jumpFrom(t, m, 4, "/dev/pts/7", "%1")
+	want := []string{"tmux", "send-keys", "-t", "%1", "Escape", "4"}
+	if !slices.ContainsFunc(ran, func(argv []string) bool { return slices.Equal(argv, want) }) {
+		t.Errorf("ran %q, want %q", ranText(ran), want)
+	}
+	if got := ranText(ran); strings.Contains(got, "switch-client") {
+		t.Errorf("the phone's Esc 4 in an agent's pane moved its client: %q", got)
+	}
+}
+
 // TestJumpFromAPaneGoesToThatSession: ⌥4 from a desk's pane switches that
 // client to session 4's pane. The client is in the agent's pane, not at
 // the console, and it still moves.
 func TestJumpFromAPaneGoesToThatSession(t *testing.T) {
-	var ss []sample.Session
-	for i, name := range []string{"hearth-api", "ember-billing", "spark-docs", "wren-cli", "moss-web"} {
-		s := boardMatch(name, time.Duration(i+1)*time.Hour)
-		s.Number, s.Pane = i+1, "%"+strconv.Itoa(i+1)
-		ss = append(ss, s)
-	}
-	m, _, _ := sideShotOf(t, boardState(ss...), 160, 38)
-	m.opt.Pane = "%99"
+	m := numberedInPanes(t)
 	m.opt.ClientList = func() (string, error) { return "100 " + deskTTY + " %1", nil }
 	_, ran := jumpFrom(t, m, 4, deskTTY, "%1")
 	if !slices.ContainsFunc(ran, func(argv []string) bool {

@@ -900,6 +900,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.besideShown(msg)
 	case previewMsg:
 		return m.look(msg)
+	case jumpMsg:
+		return m.jumpFromDesk(msg)
 	case fromConn:
 		if msg.conn != m.conn {
 			return m, nil
