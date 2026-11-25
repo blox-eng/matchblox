@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -37,7 +38,6 @@ func recoverTest(t *testing.T, sessions ...sample.Session) (*Service, *[][]strin
 	rec.Git = mainBranch
 	s.Recovery = rec
 	s.settle = time.Millisecond
-	s.TmuxOut = func([]string) (string, error) { return "0\n", nil } // each started agent runs: its pane is not dead
 	s.LookPath = func(bin string) (string, error) {
 		switch bin {
 		case "claude", "codex", sample.CursorAgent:
@@ -47,6 +47,7 @@ func recoverTest(t *testing.T, sessions ...sample.Session) (*Service, *[][]strin
 	}
 	var ran [][]string
 	s.Actions.Run = func(argv []string) error { ran = append(ran, argv); return nil }
+	startedPanes(s) // each started agent runs: its pane is not dead
 	publishOn(s, "100", sessions...)
 	return s, &ran
 }
@@ -183,6 +184,9 @@ func TestRecoverReopensEachConversationOnce(t *testing.T) {
 	for i, argv := range *ran {
 		if got := strings.Join(argv, " "); got != want[i] {
 			t.Errorf("step %d:\n got %s\nwant %s", i, got, want[i])
+		}
+		if slices.Contains(argv, "respawn-pane") {
+			t.Errorf("step %d respawns a pane: recover opens a session", i)
 		}
 	}
 	for _, r := range res.Recover {
@@ -449,6 +453,47 @@ func TestRecoverSaysWhenTheAgentExitsAtOnce(t *testing.T) {
 	}
 	if live, _ := s.recoverLive(); live[conversation("codex", "x1")] {
 		t.Fatal("an agent that exited counts as live")
+	}
+}
+
+// TestRecoverEndsASessionWhoseAgentIsDead: tmux started the session, and
+// remain-on-exit kept it with a dead pane. recover ends that session by its
+// exact name, says the agent exited, and never respawns a pane. A session
+// that is gone is not ended again.
+func TestRecoverEndsASessionWhoseAgentIsDead(t *testing.T) {
+	for _, c := range []struct {
+		name, list string
+		killed     bool
+	}{
+		{"dead pane", paneLine("%7", "web:0.0", 1, "/dev/pts/7", true), true},
+		{"session gone", paneLine("%8", "other:0.0", 1, "/dev/pts/8", false), false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			s, ran := recoverTest(t)
+			web := agentIn(t, s, "codex", "x1", "web", "%4")
+			publishOn(s, "100", web)
+			loseServer(s)
+			var asked [][]string
+			s.TmuxOut = func(argv []string) (string, error) {
+				asked = append(asked, argv)
+				return c.list, nil
+			}
+			res := recoverAct(t, s, proto.Recover{All: true}, "")
+			if r := rows(res)["web"]; r.State != proto.RecoverCannot || !strings.Contains(r.Why, "codex exited at once") {
+				t.Fatalf("row %+v", r)
+			}
+			killed := slices.ContainsFunc(asked, func(argv []string) bool {
+				return slices.Equal(argv, []string{"tmux", "kill-session", "-t", "=web"})
+			})
+			if killed != c.killed {
+				t.Errorf("kill-session of web: %v, want %v; tmux asked %q", killed, c.killed, asked)
+			}
+			for _, argv := range slices.Concat(*ran, asked) {
+				if slices.Contains(argv, "respawn-pane") {
+					t.Fatalf("recover respawned a pane: %q", argv)
+				}
+			}
+		})
 	}
 }
 

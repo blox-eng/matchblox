@@ -64,6 +64,9 @@ type Mux interface {
 	Kill(pane string, pid int) [][]string
 	// KillSession is the step that ends the session name on this server.
 	KillSession(name string) []string
+	// HasSession is the step that asks if the session name is on this
+	// server: it fails when it is not.
+	HasSession(name string) []string
 	// Respawn is the step that starts the command again in pane. The pane
 	// id stays: this does not open a session.
 	Respawn(pane, dir string, env []string, argv []string) [][]string

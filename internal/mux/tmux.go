@@ -237,6 +237,12 @@ func (t Tmux) KillSession(name string) []string {
 	return slices.Concat(t.commandArgv(), []string{"kill-session", "-t", "=" + name})
 }
 
+// HasSession is the step that asks if the session name is on this server:
+// it fails when it is not. "=" names that session.
+func (t Tmux) HasSession(name string) []string {
+	return slices.Concat(t.commandArgv(), []string{"has-session", "-t", "=" + name})
+}
+
 // Respawn starts argv again in pane. The pane id stays: the step is
 // respawn-pane -k, never a new session.
 func (Tmux) Respawn(pane, dir string, env []string, argv []string) [][]string {

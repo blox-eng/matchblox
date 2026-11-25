@@ -12,7 +12,7 @@ import (
 
 	"github.com/blox-eng/matchblox/internal/accounts"
 	"github.com/blox-eng/matchblox/internal/advice"
-	"github.com/blox-eng/matchblox/internal/panes"
+	"github.com/blox-eng/matchblox/internal/mux"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/recovery"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -195,10 +195,10 @@ func (s *Service) settled(ctx context.Context, rows []proto.Recovered, started m
 		row := &rows[i]
 		// pane_dead, not has-session: under remain-on-exit the session of
 		// an agent that exited stays, with a dead pane.
-		out, err := s.tmuxOut(slices.Concat(sample.TmuxOn(""), []string{"list-panes", "-t", "=" + row.As, "-F", "#{pane_dead}"}))
-		if err != nil || !strings.Contains(out, "0") {
-			if err == nil {
-				_, _ = s.tmuxOut(slices.Concat(sample.TmuxOn(""), []string{"kill-session", "-t", "=" + row.As}))
+		alive, there := s.sessionRuns(row.As)
+		if !alive {
+			if there {
+				_, _ = s.tmuxOut(s.mux().KillSession(row.As))
 			}
 			row.State, row.Why = proto.RecoverCannot, fmt.Sprintf("%s exited at once: run cd %s && %s to see why", row.Agent, row.Dir, cmd)
 			continue
@@ -277,18 +277,35 @@ func (s *Service) recoverRow(e recovery.Entry, moved string, live, taken map[str
 		return cannot("conversation %s is open in another process (pid %d): quit it there, then run matchblox recover again", e.ConversationID, pid)
 	}
 	row.State, row.As = proto.RecoverReady, freeName(e.Session, taken)
-	argv := slices.Concat(
-		[]string{"env", "-u", "GIT_TERMINAL_PROMPT", "-u", "GIT_SSH_COMMAND", "-u", panes.HomeEnv},
-		sample.TmuxOn(""), []string{"new-session", "-d", "-s", row.As, "-n", row.As, "-c", row.Dir})
+	var launch []string
 	agent := []string{bin}
 	if e.AccountDir != "" {
-		argv = append(argv, accounts.EnvArgv(e.Agent, e.AccountDir, false)...)
+		launch = accounts.EnvArgv(e.Agent, e.AccountDir, false)
 		if strings.HasPrefix(e.AccountDir, accounts.Root(s.home())+string(filepath.Separator)) {
 			agent = append(agent, accounts.Args(e.Agent)...) // a hand-made folder may sign in by the keyring
 		}
 	}
 	agent = append(agent, resumeArgs(e.Agent, e.ConversationID)...)
-	return row, append(argv, guardArgv(s.guardLink(), s.goos(), e.Agent, row.As, agent)...), strings.Join(agent, " ")
+	launch = append(launch, guardArgv(s.guardLink(), s.goos(), e.Agent, row.As, agent)...)
+	start := s.mux().Start(mux.Start{Name: row.As, Dir: row.Dir, Detached: true, Argv: launch})
+	return row, start[0], strings.Join(agent, " ")
+}
+
+// sessionRuns tells if session name has a pane that is not dead, and if
+// the multiplexer lists the session at all: a multiplexer that errors is
+// neither.
+func (s *Service) sessionRuns(name string) (alive, there bool) {
+	listed, err := s.mux().List()
+	if err != nil {
+		return false, false
+	}
+	for _, p := range listed {
+		if session, _, _ := strings.Cut(p.Target, ":"); session == name {
+			there = true
+			alive = alive || !p.Dead
+		}
+	}
+	return alive, there
 }
 
 // freeName is name, or name-2, name-3, … when a tmux session has it.

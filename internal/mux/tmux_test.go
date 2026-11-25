@@ -255,6 +255,16 @@ func TestRenameNamesTheWindow(t *testing.T) {
 	}
 }
 
+func TestHasSessionAsksForThatName(t *testing.T) {
+	if got, want := (Tmux{}).HasSession("api"), []string{"tmux", "has-session", "-t", "=api"}; !slices.Equal(got, want) {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+	got := (Tmux{Server: "matchblox"}).HasSession("stoker")
+	if want := []string{"tmux", "-L", "matchblox", "has-session", "-t", "=stoker"}; !slices.Equal(got, want) {
+		t.Fatalf("server: got %q, want %q", got, want)
+	}
+}
+
 func TestKillSessionEndsThatName(t *testing.T) {
 	if got, want := (Tmux{}).KillSession("api"), []string{"tmux", "kill-session", "-t", "=api"}; !slices.Equal(got, want) {
 		t.Fatalf("got %q, want %q", got, want)

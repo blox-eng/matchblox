@@ -22,6 +22,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/gitremote"
 	"github.com/blox-eng/matchblox/internal/guard"
 	"github.com/blox-eng/matchblox/internal/holds"
+	"github.com/blox-eng/matchblox/internal/mux"
 	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -230,6 +231,18 @@ func (s *Service) tmuxSessions(server string) map[string]int {
 		out[name] = len(w)
 	}
 	return out
+}
+
+// paneOfSession is the first pane of the session name on the builder's
+// server, "" when the multiplexer lists none.
+func (s *Service) paneOfSession(name string) string {
+	listed, _ := s.mux().List()
+	for _, p := range listed {
+		if session, _, _ := strings.Cut(p.Target, ":"); session == name {
+			return p.ID
+		}
+	}
+	return ""
 }
 
 func taken(name string) error {
@@ -621,17 +634,14 @@ func windowOf(target string) string {
 // the window when window is set, each guarded by the old agent's pid and
 // start time.
 func SwitchAction(pane string, x sample.Session, window string, argv []string) advice.Action {
-	server, bare := sample.SplitPane(pane)
-	tmux := sample.TmuxOn(server)
+	m := mux.Tmux{}
 	guard := advice.Guard{PID: x.PID, StartTicks: x.Start}
 	a := advice.Action{Label: "switch", Destructive: true}
 	if window != "" {
-		a.Steps = append(a.Steps, slices.Concat(tmux, []string{"rename-window", "-t", bare, window}))
+		a.Steps = append(a.Steps, m.Rename(pane, window)...)
 		a.Guards = append(a.Guards, guard)
 	}
-	a.Steps = append(a.Steps, slices.Concat(tmux,
-		[]string{"respawn-pane", "-k", "-t", bare, "-c", x.Cwd, "env", "-u", "GIT_TERMINAL_PROMPT", "-u", "GIT_SSH_COMMAND", "-u", panes.HomeEnv},
-		argv))
+	a.Steps = append(a.Steps, m.Respawn(pane, x.Cwd, nil, argv)...)
 	a.Guards = append(a.Guards, guard)
 	return a
 }
@@ -841,10 +851,7 @@ func (s *Service) newSession(ctx context.Context, a proto.Act) proto.Result {
 	// not one the builder chose: Cursor asks whether to trust it. A
 	// checkout already there is trusted, as N's Have rows are.
 	launch = slices.Concat(launch, launchArgv(s.agentBin(n.Agent), n.Agent, name, first, !cloned, accountArgs(n.Agent, acct)))
-	steps = append(steps, slices.Concat(
-		[]string{"env", "-u", "GIT_TERMINAL_PROMPT", "-u", "GIT_SSH_COMMAND", "-u", panes.HomeEnv},
-		sample.TmuxOn(""), []string{"new-session", "-d", "-s", name, "-n", name, "-c", dir},
-		launch))
+	steps = append(steps, s.mux().Start(mux.Start{Name: name, Dir: dir, Detached: true, Argv: launch})...)
 	act.Steps = steps
 	// made: this call makes the folder, and takes it away when the start
 	// fails, so a retry finds no account.
@@ -884,9 +891,7 @@ func (s *Service) newSession(ctx context.Context, a proto.Act) proto.Result {
 		if acct != nil {
 			prepared = slices.Concat(accounts.EnvArgv(n.Agent, acct.folder, acct.fresh), prepared)
 		}
-		steps[len(steps)-1] = slices.Concat(
-			[]string{"env", "-u", "GIT_TERMINAL_PROMPT", "-u", "GIT_SSH_COMMAND", "-u", panes.HomeEnv},
-			sample.TmuxOn(""), []string{"new-session", "-d", "-s", name, "-n", name, "-c", dir}, prepared)
+		steps[len(steps)-1] = s.mux().Start(mux.Start{Name: name, Dir: dir, Detached: true, Argv: prepared})[0]
 		act.Steps = steps
 	}
 	res := s.Actions.Do(ctx, act, a.Confirm)
@@ -900,8 +905,7 @@ func (s *Service) newSession(ctx context.Context, a proto.Act) proto.Result {
 	res.Skipped = append(res.Skipped, notes...)
 	var pane string
 	if s.agentsPane(a) || (acct != nil && acct.fresh) {
-		out, _ := s.tmuxOut(slices.Concat(sample.TmuxOn(""), []string{"display-message", "-p", "-t", "=" + name + ":", "#{pane_id}"}))
-		pane = strings.TrimSpace(out)
+		pane = s.paneOfSession(name)
 	}
 	if u, agent := s.agentsUnit(a); agent {
 		s.recordNew(u, pane, name, res.Ran)

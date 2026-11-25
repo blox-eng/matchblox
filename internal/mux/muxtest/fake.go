@@ -142,6 +142,10 @@ func (*Fake) KillSession(name string) []string {
 	return []string{"fake", "kill-session", name}
 }
 
+func (*Fake) HasSession(name string) []string {
+	return []string{"fake", "has-session", name}
+}
+
 func (*Fake) Respawn(pane, dir string, env []string, argv []string) [][]string {
 	return [][]string{slices.Concat([]string{"fake", "respawn-pane", pane, dir}, env, argv)}
 }

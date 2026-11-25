@@ -67,7 +67,7 @@ func lifeTest(t *testing.T) (*Service, *[][]string) {
 		return nil
 	}
 	s.Capture = func([]string) map[string]string { return map[string]string{"%1": idleScreen, "%3": idleScreen} }
-	s.TmuxOut = func(argv []string) (string, error) { return "%42\n", nil }
+	startedPanes(s)
 	s.publish(lifeSnap(false), func(state.Doc) {})
 	return s, &ran
 }
@@ -298,7 +298,7 @@ func TestNewRefuses(t *testing.T) {
 func handsLife(t *testing.T) (*Service, *[][]string) {
 	t.Helper()
 	s, ran := handsTest(t)
-	s.TmuxOut = func([]string) (string, error) { return "%42\n", nil }
+	startedPanes(s)
 	hs, err := holds.Open(t.TempDir())
 	if err != nil {
 		t.Fatal(err)

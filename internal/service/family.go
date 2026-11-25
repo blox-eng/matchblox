@@ -756,7 +756,7 @@ func (s *Service) endUnit(ctx context.Context, u *stokerUnit) error {
 		return nil
 	}
 	var err error
-	if res := s.Actions.Do(ctx, advice.Action{Label: "quit the stoker", Steps: [][]string{s.stokerSessionArgv(u, "kill-session")}, Destructive: true}, "y"); res.Err != "" {
+	if res := s.Actions.Do(ctx, advice.Action{Label: "quit the stoker", Steps: [][]string{s.stokerMux().KillSession(unitSession(u))}, Destructive: true}, "y"); res.Err != "" {
 		err = errors.New("its stoker session did not end: " + res.Err)
 	}
 	return errors.Join(err, s.dropUnit(u))
