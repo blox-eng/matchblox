@@ -10,6 +10,11 @@ All notable changes to matchblox are in this file. The format follows
 
 ### Added
 
+- **See Cursor plan usage on any host.** With `[limits] cursor_usage = true`,
+  Machine → USAGE reads the default Cursor login from
+  `~/.config/cursor/auth.json` or `~/.cursor/auth.json` (and the Keychain
+  item on macOS only as a fallback), so Linux and other hosts show `mo`
+  the same way macOS already could.
 - **Adjust a phone text selection before copying.** Drag either selection
   handle to choose the text you want; a magnifying lens helps you see
   where it lands. Copy stays available when you lift your finger.
