@@ -973,13 +973,14 @@ func TestSetupSaysHowToPair(t *testing.T) {
 	}
 }
 
-// TestAccountUsageRunsOffMac: off macOS the default's login (in the
-// keychain) is not read, and the accounts' (in files) are.
-func TestAccountUsageRunsOffMac(t *testing.T) {
-	for goos, wantDefault := range map[string]bool{"linux": false, "darwin": true} {
+// TestCursorUsageReadsDefaultOnEveryGOOS: the default login is read on every
+// OS (auth files; Keychain only as a darwin fallback source). Accounts are
+// read from their folder auth.json on every OS too.
+func TestCursorUsageReadsDefaultOnEveryGOOS(t *testing.T) {
+	for _, goos := range []string{"linux", "darwin", "windows"} {
 		u := cursorUsage(goos)
-		if got := u.Reads(""); got != wantDefault {
-			t.Errorf("%s: default read %v, want %v", goos, got, wantDefault)
+		if !u.Reads("") {
+			t.Errorf("%s: default not read, want read", goos)
 		}
 		if !u.Reads("/home/u/.matchblox/accounts/cursor-agent/work") {
 			t.Errorf("%s: an account is not read", goos)
