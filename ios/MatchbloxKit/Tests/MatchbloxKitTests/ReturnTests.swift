@@ -27,6 +27,20 @@ final class ReturnTests: XCTestCase {
         XCTAssertFalse(Opening.keepsConsole(for: link(to: host(1), session: 1), current: .hosts))
     }
 
+    /// The island shows the session that waits: a tap on it jumps there, in the console already open.
+    func testALinkForASessionOfTheOpenHostJumpsToIt() {
+        let a = host(1)
+        XCTAssertEqual(Opening.jump(for: link(to: a, session: 3), current: .console(a, open: nil)), 3)
+    }
+
+    func testALinkForTheOpenHostWithNoSessionStaysWhereItIs() {
+        XCTAssertNil(Opening.jump(for: link(to: host(1), session: nil), current: .console(host(1), open: nil)))
+    }
+
+    func testALinkForAnotherHostDoesNotJump() {
+        XCTAssertNil(Opening.jump(for: link(to: host(2), session: 3), current: .console(host(1), open: nil)))
+    }
+
     func testTheFirstConnectShowsTheCover() {
         XCTAssertTrue(Opening.coverShows(live: false, failed: false, wasLive: false, away: false))
     }
