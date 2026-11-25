@@ -6,8 +6,6 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
-## [0.61.0] - 2026-11-24
-
 ### Added
 
 - **The desk: spaces, DONE, a shell, reviews.**
