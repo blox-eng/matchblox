@@ -327,10 +327,13 @@ var (
 	// age is sample.Human's two-unit forms (2h28m, 6d2h, 41m, now): figure
 	// alone turns 2h28m into two zeros and 41m into one, so a bar age that
 	// crosses an hour boundary would fail the replay.
-	age     = regexp.MustCompile(`\b(?:\d+d(?:\d+h)?|\d+h(?:\d+m)?|\d+m|\d+s|now)\b`)
-	sparks  = regexp.MustCompile(`[▁▂▃▄▅▆▇█]+`)
-	spaces  = regexp.MustCompile(`\s+`)
-	cutWord = regexp.MustCompile(`\S*…`)
+	age = regexp.MustCompile(`\b(?:\d+d(?:\d+h)?|\d+h(?:\d+m)?|\d+m|\d+s|now)\b`)
+	// resetAge is the bar's ↻ countdown. usageChips drops it when the bar is
+	// short of room, so a frame that has it and one that does not must match.
+	resetAge = regexp.MustCompile(`\s*↻(?:\d+d(?:\d+h)?|\d+h(?:\d+m)?|\d+m|\d+s|now)`)
+	sparks   = regexp.MustCompile(`[▁▂▃▄▅▆▇█]+`)
+	spaces   = regexp.MustCompile(`\s+`)
+	cutWord  = regexp.MustCompile(`\S*…`)
 )
 
 // skeleton is a screen without what changes from run to run: figures,
@@ -371,7 +374,8 @@ func skeleton(lines []string) string {
 		// it squeezes the tab to its digit.
 		l = strings.Replace(strings.Replace(l, "machine !", "machine", 1), " 3 !", " machine", 1)
 		l = cutWord.ReplaceAllString(l, "…")
-		l = age.ReplaceAllString(l, "0") // before figure: 2h28m is one age, not two figures
+		l = resetAge.ReplaceAllString(l, "") // bar may drop ↻ when short of room
+		l = age.ReplaceAllString(l, "0")     // before figure: 2h28m is one age, not two figures
 		l = sparks.ReplaceAllString(figure.ReplaceAllString(l, "0"), "")
 		l = strings.ReplaceAll(l, "✧", "✦")  // a burning match flickers between the two
 		l = spinner.ReplaceAllString(l, "⠿") // a working session's spinner turns with the clock
@@ -1029,12 +1033,16 @@ func TestSkeletonCatchesAChangedScreen(t *testing.T) {
 	if skeleton(nowAge) != skeleton(minAge) {
 		t.Fatalf("now and 1m must share a skeleton:\n%q\n%q", skeleton(nowAge), skeleton(minAge))
 	}
-	// sample.Human's two-unit form (2h28m) must match a one-unit form (41m):
-	// figure alone would leave ↻00 vs ↻0 on the bar.
-	twoUnit := []string{" LIST ws-1 ✻ Max 40% ↻2h28m · wk 40% ↻1h7m stoker off"}
+	// sample.Human's two-unit form (2h28m) must match a one-unit form (41m),
+	// and a bar that drops ↻ when short of room must match one that keeps it.
+	withReset := []string{" LIST ws-1 ✻ Max 40% ↻2h28m · wk 40% ↻1h7m stoker off"}
 	oneUnit := []string{" LIST ws-1 ✻ Max 40% ↻41m · wk 40% ↻55m stoker off"}
-	if skeleton(twoUnit) != skeleton(oneUnit) {
-		t.Fatalf("2h28m and 41m must share a skeleton:\n%q\n%q", skeleton(twoUnit), skeleton(oneUnit))
+	noReset := []string{" LIST ws-1 ✻ Max 40% · wk 40% stoker off"}
+	if skeleton(withReset) != skeleton(oneUnit) {
+		t.Fatalf("2h28m and 41m must share a skeleton:\n%q\n%q", skeleton(withReset), skeleton(oneUnit))
+	}
+	if skeleton(withReset) != skeleton(noReset) {
+		t.Fatalf("a bar with ↻ and one that dropped it must share a skeleton:\n%q\n%q", skeleton(withReset), skeleton(noReset))
 	}
 	// A figure one digit wider cuts the line one cell earlier.
 	cut := []string{" ╿ done, needs you · 9m · hearth:1.…", " ╿ done, needs you · 10m · hearth:1…"}
