@@ -1,6 +1,7 @@
 package mux
 
 import (
+	"context"
 	"os/exec"
 	"slices"
 	"strconv"
@@ -8,16 +9,25 @@ import (
 	"time"
 
 	"github.com/blox-eng/matchblox/internal/panes"
-	"github.com/blox-eng/matchblox/internal/sample"
 )
 
-// Tmux is the tmux backend. Run runs a tmux command and returns what it
-// prints (nil: exec); RunIn runs one with stdin (nil: exec); Capture reads
-// screens (nil: with their styles, as the stoker's guard reads them).
+// commandBound is how long one tmux read waits. A wedged tmux must not
+// freeze the read. The sampler uses the same bound.
+const commandBound = 10 * time.Second
+
+// Tmux is the tmux backend for one socket. Server is the -L label:
+// "" the builder's, "matchblox" the stoker's. Socket, when set, is a -S
+// path and List uses it instead of -L. Run runs a tmux command and returns
+// what it prints (nil: exec); RunIn runs one with stdin (nil: exec);
+// Capture reads screens (nil: with their styles, as the stoker's guard
+// reads them). LookPath finds tmux (nil: exec.LookPath).
 type Tmux struct {
-	Run     func(argv []string) (string, error)
-	RunIn   func(argv []string, stdin string) error
-	Capture func(panes []string) map[string]string
+	Server   string
+	Socket   string
+	LookPath func(string) (string, error)
+	Run      func(argv []string) (string, error)
+	RunIn    func(argv []string, stdin string) error
+	Capture  func(panes []string) map[string]string
 }
 
 var _ Mux = Tmux{}
@@ -27,7 +37,7 @@ func (Tmux) Type(pane, text string) []string { return panes.Literal(pane, text) 
 func (Tmux) Keys(pane string, keys ...string) []string { return panes.Keys(pane, keys...) }
 
 func (t Tmux) Load(pane, name, text string) error {
-	tmux, _ := sample.Tmux(pane)
+	tmux, _ := targetArgv(pane)
 	argv := slices.Concat(tmux, []string{"load-buffer", "-b", name, "-"})
 	if t.RunIn != nil {
 		return t.RunIn(argv, text)
@@ -40,31 +50,31 @@ func (t Tmux) Load(pane, name, text string) error {
 // NoBracketedPaste reads #{bracket_paste_flag}. The format exists from
 // tmux 3.7; an older tmux prints nothing, and then it cannot tell.
 func (t Tmux) NoBracketedPaste(pane string) bool {
-	tmux, id := sample.Tmux(pane)
+	tmux, id := targetArgv(pane)
 	out, err := t.run(slices.Concat(tmux, []string{"display-message", "-p", "-t", id, "#{bracket_paste_flag}"}))
 	return err == nil && strings.TrimSpace(out) == "0"
 }
 
 func (Tmux) Paste(pane, name string) []string {
-	tmux, id := sample.Tmux(pane)
+	tmux, id := targetArgv(pane)
 	return slices.Concat(tmux, []string{"paste-buffer", "-p", "-d", "-b", name, "-t", id})
 }
 
 func (t Tmux) Drop(pane, name string) error {
-	tmux, _ := sample.Tmux(pane)
+	tmux, _ := targetArgv(pane)
 	_, err := t.run(slices.Concat(tmux, []string{"delete-buffer", "-b", name}))
 	return err
 }
 
 func (t Tmux) Screens(ps []string) map[string]string {
-	if t.Capture == nil {
-		return sample.CapturePanesStyled(ps)
+	if t.Capture != nil {
+		return t.Capture(ps)
 	}
-	return t.Capture(ps)
+	return captureStyled(ps)
 }
 
 func (t Tmux) InMode(pane string) (bool, error) {
-	tmux, id := sample.Tmux(pane)
+	tmux, id := targetArgv(pane)
 	out, err := t.run(slices.Concat(tmux, []string{"display-message", "-p", "-t", id, "#{pane_in_mode}"}))
 	if err != nil {
 		return false, err
@@ -73,7 +83,7 @@ func (t Tmux) InMode(pane string) (bool, error) {
 }
 
 func (t Tmux) TypedAt(pane string) time.Time {
-	tmux, id := sample.Tmux(pane)
+	tmux, id := targetArgv(pane)
 	out, err := t.run(slices.Concat(tmux, []string{"list-clients", "-F", "#{client_activity} #{pane_id}"}))
 	if err != nil {
 		return time.Time{}
@@ -97,7 +107,7 @@ func (t Tmux) TypedAt(pane string) time.Time {
 const MatchOption = "@matchblox_match"
 
 func (t Tmux) Mark(pane string, on bool) error {
-	tmux, id := sample.Tmux(pane)
+	tmux, id := targetArgv(pane)
 	argv := slices.Concat(tmux, []string{"set-option", "-p", "-t", id, MatchOption, "1"})
 	if !on {
 		argv = slices.Concat(tmux, []string{"set-option", "-p", "-u", "-t", id, MatchOption})
@@ -112,4 +122,75 @@ func (t Tmux) run(argv []string) (string, error) {
 	}
 	out, err := exec.Command(argv[0], argv[1:]...).Output() //nolint:gosec // argv built here, never a shell string
 	return string(out), err
+}
+
+// OnServer is the id of pane id on the tmux server (-L) server:
+// "%3@matchblox". Pane ids repeat across servers, so a pane of any server
+// but the builder's ("") carries its server.
+func OnServer(id, server string) string {
+	if server == "" {
+		return id
+	}
+	return id + "@" + server
+}
+
+// SplitPane is the server of a pane id ("": the builder's) and the id that
+// server knows the pane by.
+func SplitPane(id string) (server, bare string) {
+	if b, sv, ok := strings.Cut(id, "@"); ok && strings.HasPrefix(b, "%") {
+		return sv, b
+	}
+	return "", id
+}
+
+func serverArgv(server string) []string {
+	if server == "" {
+		return []string{"tmux"}
+	}
+	return []string{"tmux", "-L", server}
+}
+
+func targetArgv(target string) (argv []string, bare string) {
+	server, bare := SplitPane(target)
+	return serverArgv(server), bare
+}
+
+// listArgv is the utf-8 argv for this socket. -u keeps tabs in -F output
+// when LANG is unset; without it tmux in the C locale prints them as "_".
+func (t Tmux) listArgv() []string {
+	argv := []string{"tmux", "-u"}
+	if t.Socket != "" {
+		return append(argv, "-S", t.Socket)
+	}
+	if t.Server != "" {
+		return append(argv, "-L", t.Server)
+	}
+	return argv
+}
+
+func utf8On(server string) []string {
+	a := serverArgv(server)
+	return append([]string{a[0], "-u"}, a[1:]...)
+}
+
+func captureStyled(panes []string) map[string]string {
+	out := map[string]string{}
+	for _, id := range panes {
+		server, bare := SplitPane(id)
+		argv := append(utf8On(server), "capture-pane", "-p", "-e", "-t", bare)
+		b, err := commandOutput(argv)
+		if err != nil {
+			continue
+		}
+		out[id] = string(b)
+	}
+	return out
+}
+
+func commandOutput(argv []string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), commandBound)
+	defer cancel()
+	c := exec.CommandContext(ctx, argv[0], argv[1:]...) //nolint:gosec // argv built here, never a shell string
+	c.WaitDelay = time.Second
+	return c.Output()
 }

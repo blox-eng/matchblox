@@ -38,4 +38,7 @@ type Mux interface {
 	// Mark sets, or with on false takes off, the mark of a pane whose
 	// agent the service samples: the flip key acts only on a marked pane.
 	Mark(pane string, on bool) error
+	// List is every pane on this multiplexer. A machine with no tmux, or
+	// a tmux that exits, is an empty list.
+	List() ([]Pane, error)
 }
