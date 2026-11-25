@@ -1,0 +1,130 @@
+// Package numbers gives each live session a number from 1 to 9 that stays
+// with it while it lives.
+package numbers
+
+import (
+	"encoding/json"
+	"errors"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"slices"
+	"sync"
+	"time"
+
+	"github.com/blox-eng/matchblox/internal/chains"
+)
+
+const most = 9
+
+type entry struct {
+	chains.Member
+	Number int `json:"number"`
+}
+
+// Store keeps numbers.json in a directory. An empty dir keeps them in memory.
+type Store struct {
+	dir string
+	mu  sync.Mutex
+	got []entry
+}
+
+func (s *Store) path() string { return filepath.Join(s.dir, "numbers.json") }
+
+// Open reads numbers.json. A missing file is no numbers; one that does not
+// parse is moved aside.
+func Open(dir string) (*Store, error) {
+	s := &Store{dir: dir}
+	if dir == "" {
+		return s, nil
+	}
+	b, err := os.ReadFile(s.path()) //nolint:gosec // our own state dir
+	if errors.Is(err, fs.ErrNotExist) {
+		return s, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(b, &s.got); err != nil {
+		s.got = nil
+		bad := s.path() + ".bad-" + time.Now().UTC().Format("20060102T150405")
+		if err := os.Rename(s.path(), bad); err != nil {
+			return nil, err
+		}
+	}
+	return s, nil
+}
+
+// sameMatch also finds a cleared chat: a new session id in the same pane,
+// pid and start.
+func sameMatch(a, b chains.Member) bool {
+	return a.Same(b) || a.Pane != "" && a.PID > 0 && a.Pane == b.Pane && a.PID == b.PID && a.Start == b.Start
+}
+
+// Assign returns one number per present member, in order: the one it kept,
+// else the lowest free one, else 0 past 9. A member not present loses its
+// number. A failed save still returns the numbers.
+func (s *Store) Assign(present []chains.Member) ([]int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	nums := make([]int, len(present))
+	var next []entry
+	used := map[int]bool{}
+	for i, m := range present {
+		j := slices.IndexFunc(s.got, func(e entry) bool { return sameMatch(e.Member, m) })
+		if j < 0 || used[s.got[j].Number] {
+			continue
+		}
+		nums[i] = s.got[j].Number
+		used[nums[i]] = true
+		next = append(next, entry{Member: m, Number: nums[i]})
+	}
+	free := 1
+	for i, m := range present {
+		if nums[i] != 0 {
+			continue
+		}
+		for used[free] {
+			free++
+		}
+		if free > most {
+			break
+		}
+		nums[i] = free
+		used[free] = true
+		next = append(next, entry{Member: m, Number: free})
+	}
+	slices.SortFunc(next, func(a, b entry) int { return a.Number - b.Number })
+	if slices.Equal(next, s.got) {
+		return nums, nil
+	}
+	s.got = next
+	return nums, s.save()
+}
+
+func (s *Store) save() error {
+	if s.dir == "" {
+		return nil
+	}
+	b, err := json.MarshalIndent(s.got, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(s.dir, 0o700); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(s.dir, ".numbers-*.json")
+	if err != nil {
+		return err
+	}
+	if _, err := tmp.Write(b); err != nil {
+		tmp.Close()
+		os.Remove(tmp.Name())
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmp.Name())
+		return err
+	}
+	return os.Rename(tmp.Name(), s.path())
+}
