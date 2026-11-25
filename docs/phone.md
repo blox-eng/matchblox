@@ -439,7 +439,8 @@ with your thumb to scroll, as a trackball:
   scroll a page, and double-tap it to send Enter.
 
 In a chat, press and hold on a word to select it, and drag with the
-same finger to select more. When you lift it, the menu offers Copy,
+same finger to select more. Drag either blue handle to adjust the selection;
+a magnifying lens shows the text under your finger. When you lift it, the menu offers Copy,
 `Open link` for a link in the selection, and Paste. The hold leaves the
 keyboard where it is; a tap ends the selection.
 
