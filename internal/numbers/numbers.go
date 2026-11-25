@@ -55,29 +55,36 @@ func Open(dir string) (*Store, error) {
 	return s, nil
 }
 
-// sameMatch also finds a cleared chat: a new session id in the same pane,
-// pid and start.
-func sameMatch(a, b chains.Member) bool {
-	return a.Same(b) || a.Pane != "" && a.PID > 0 && a.Pane == b.Pane && a.PID == b.PID && a.Start == b.Start
+// samePlace is the same process in the same pane: it also finds a cleared
+// chat, which has a new session id.
+func samePlace(a, b chains.Member) bool {
+	return a.Pane != "" && a.PID > 0 && a.Pane == b.Pane && a.PID == b.PID && a.Start == b.Start
 }
 
 // Assign returns one number per present member, in order: the one it kept,
 // else the lowest free one, else 0 past 9. A member not present loses its
-// number. A failed save still returns the numbers.
+// number. A failed save still returns the numbers. A member finds its kept
+// number by its pane, pid and start first, and by its session id only
+// after: two live sessions can report one id.
 func (s *Store) Assign(present []chains.Member) ([]int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	nums := make([]int, len(present))
 	var next []entry
 	used := map[int]bool{}
-	for i, m := range present {
-		j := slices.IndexFunc(s.got, func(e entry) bool { return sameMatch(e.Member, m) })
-		if j < 0 || used[s.got[j].Number] {
-			continue
+	for _, same := range []func(a, b chains.Member) bool{samePlace, chains.Member.Same} {
+		for i, m := range present {
+			if nums[i] != 0 {
+				continue
+			}
+			j := slices.IndexFunc(s.got, func(e entry) bool { return !used[e.Number] && same(e.Member, m) })
+			if j < 0 {
+				continue
+			}
+			nums[i] = s.got[j].Number
+			used[nums[i]] = true
+			next = append(next, entry{Member: m, Number: nums[i]})
 		}
-		nums[i] = s.got[j].Number
-		used[nums[i]] = true
-		next = append(next, entry{Member: m, Number: nums[i]})
 	}
 	free := 1
 	for i, m := range present {

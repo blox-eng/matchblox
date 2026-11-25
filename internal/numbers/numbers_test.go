@@ -103,3 +103,19 @@ func TestACorruptFileStartsEmpty(t *testing.T) {
 		t.Fatalf("moved aside = %v, %v", bad, err)
 	}
 }
+
+// TestTwoSessionsWithOneIDKeepTheirNumbers: a resumed chat in a second pane
+// reports the first one's session id. Each keeps its own number when the
+// list re-sorts.
+func TestTwoSessionsWithOneIDKeepTheirNumbers(t *testing.T) {
+	s := open(t, t.TempDir())
+	a := chains.Member{SessionID: "X", Pane: "%1", PID: 10, Start: 1}
+	b := chains.Member{SessionID: "X", Pane: "%2", PID: 20, Start: 2}
+	c := chains.Member{SessionID: "Y", Pane: "%3", PID: 30, Start: 3}
+	if got := assign(t, s, a, c, b); !slices.Equal(got, []int{1, 2, 3}) {
+		t.Fatalf("order a, c, b = %v, want [1 2 3]", got)
+	}
+	if got := assign(t, s, b, a, c); !slices.Equal(got, []int{3, 1, 2}) {
+		t.Fatalf("order b, a, c = %v, want [3 1 2]", got)
+	}
+}
