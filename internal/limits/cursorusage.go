@@ -9,7 +9,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
 	"sync"
 	"time"
@@ -181,15 +180,14 @@ func (u *CursorUsage) ReadFailed() bool {
 	return u.failed
 }
 
-// CursorUsages keeps one CursorUsage for each Cursor login: the default's,
-// whose token is in the keychain, and each account folder's, whose token is
-// in the auth.json of its file store. A reading is never handed to another
-// login.
+// CursorUsages keeps one CursorUsage for each Cursor login: the default's
+// (ordered Default sources) and each account folder's (auth.json under the
+// folder). A reading is never handed to another login.
 type CursorUsages struct {
 	Every time.Duration
-	// Keychain reads the default login's token; nil: the default is not read.
-	// A missing login is an error that is os.ErrNotExist.
-	Keychain func(context.Context) (string, error)
+	// Default is the ordered token sources for the default login (dir "").
+	// Empty: the default is not read.
+	Default []TokenSource
 	// File reads the token of the auth.json at path; nil: accounts are not
 	// read.
 	File  func(path string) (string, error)
@@ -200,13 +198,13 @@ type CursorUsages struct {
 }
 
 // cursorAuthFile is where Cursor's file store keeps the login of an account
-// folder.
+// folder (relative to the account dir). Kept for tests that write that path.
 const cursorAuthFile = "home/.cursor/auth.json"
 
 // Reads says whether the login of dir ("" is the default) is read at all.
 func (u *CursorUsages) Reads(dir string) bool {
 	if dir == "" {
-		return u.Keychain != nil
+		return len(u.Default) > 0
 	}
 	return u.File != nil
 }
@@ -223,10 +221,11 @@ func (u *CursorUsages) Reading(dir string, now time.Time) *Reading {
 	if !ok {
 		c = &CursorUsage{Every: u.Every, Fetch: u.Fetch}
 		if dir == "" {
-			c.Token = u.Keychain
+			sources := u.Default
+			c.Token = func(ctx context.Context) (string, error) { return TryTokenSources(ctx, sources) }
 		} else {
-			path := filepath.Join(dir, cursorAuthFile)
-			c.Token = func(context.Context) (string, error) { return u.File(path) }
+			sources := AccountCursorSources(dir, u.File)
+			c.Token = func(ctx context.Context) (string, error) { return TryTokenSources(ctx, sources) }
 		}
 		if u.byID == nil {
 			u.byID = map[string]*CursorUsage{}

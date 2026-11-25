@@ -105,8 +105,8 @@ func TestCursorUsageFillsItsLine(t *testing.T) {
 		t.Errorf("off: %+v, want not measured with how to turn it on", a)
 	}
 	smp.CursorUsage = &limits.CursorUsages{
-		Every:    time.Hour,
-		Keychain: func(context.Context) (string, error) { return "tok", nil },
+		Every:   time.Hour,
+		Default: []limits.TokenSource{func(context.Context) (string, error) { return "tok", nil }},
 		Fetch: func(context.Context, string) ([]byte, error) {
 			return []byte(`{"billingCycleStart":"1790000000000","billingCycleEnd":"1792678400000","planUsage":{"totalPercentUsed":25}}`), nil
 		},
@@ -149,12 +149,12 @@ func TestCursorNotAnsweredOnlyAfterACall(t *testing.T) {
 	token := ""
 	smp.CursorUsage = &limits.CursorUsages{
 		Every: time.Hour,
-		Keychain: func(context.Context) (string, error) {
+		Default: []limits.TokenSource{func(context.Context) (string, error) {
 			if token == "" {
 				return "", os.ErrNotExist
 			}
 			return token, nil
-		},
+		}},
 		Fetch: func(context.Context, string) ([]byte, error) { return nil, context.DeadlineExceeded },
 	}
 	smp.Sample()
@@ -181,10 +181,10 @@ func TestCursorTokenStillReadingIsNotSignedOut(t *testing.T) {
 	release := make(chan struct{})
 	smp.CursorUsage = &limits.CursorUsages{
 		Every: time.Hour,
-		Keychain: func(context.Context) (string, error) {
+		Default: []limits.TokenSource{func(context.Context) (string, error) {
 			<-release
 			return "tok", nil
-		},
+		}},
 		Fetch: func(context.Context, string) ([]byte, error) { return nil, context.DeadlineExceeded },
 	}
 	a := cursorLimits(smp.Sample())
@@ -204,8 +204,8 @@ func TestCursorTokenStillReadingIsNotSignedOut(t *testing.T) {
 func TestCursorTokenReadDeniedCouldNotBeRead(t *testing.T) {
 	smp, _ := cursorFixture(t, fixtureNow.Add(-time.Minute))
 	smp.CursorUsage = &limits.CursorUsages{
-		Every:    time.Hour,
-		Keychain: func(context.Context) (string, error) { return "", errors.New("security: exit status 51") },
+		Every:   time.Hour,
+		Default: []limits.TokenSource{func(context.Context) (string, error) { return "", errors.New("security: exit status 51") }},
 		Fetch: func(context.Context, string) ([]byte, error) {
 			t.Error("called the API with no token")
 			return nil, nil
