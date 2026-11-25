@@ -6,6 +6,13 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Jump to session N with ⌥N.** Each session in the list shows a number,
+  1 to 9, that stays with it while it lives. In the console, `⌥1` to `⌥9`
+  choose that session. Inside an agent's pane they go straight to its pane.
+  On the phone, `Esc` and then a digit still reaches the agent.
+
 ## [0.61.0] - 2026-11-24
 
 ### Added
