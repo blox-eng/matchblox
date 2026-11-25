@@ -38,12 +38,17 @@ func handOff(kind string) string {
 // the digit, the tty and the pane as handOff does, but leaves the client
 // where it is. The console moves it, or types the key back for a phone, which
 // has no ⌥ and sent Esc then the digit. The console is the one goTo finds.
+// With no console at all the key goes on to the pane as typed.
 func jumpOff(n int) string {
 	prefix := keycmd.JumpPrefix(n)
 	return noteFrom + ` ; run-shell -C "set-option -g ` + goToOption + ` ` + consoleOf + `" ; if-shell -F "` + toAlive + `" { ` +
 		handIn("#{==:#{session_name},#{"+goToOption+"}}", prefix) + ` } { if-shell -F "` + homeExists + `" { ` +
-		handIn("#{==:#{session_name},"+Home+"}", prefix) + ` } { ` + handIn("1", prefix) + ` } }`
+		handIn("#{==:#{session_name},"+Home+"}", prefix) + ` } { if-shell -F "` + consolePaneExists + `" { ` +
+		handIn("1", prefix) + ` } { send-keys M-` + strconv.Itoa(n) + ` } } }`
 }
+
+// consolePaneExists is not empty while any pane is one handIn sends to.
+const consolePaneExists = "#{S:#{W:#{P:#{?" + isConsolePane + ",1,}}}}"
 
 // noteFrom keeps the client's tty and pane in flipFrom.
 const noteFrom = `run-shell -C "set-option -g ` + flipFrom + ` '#{client_tty} #{pane_id}'"`

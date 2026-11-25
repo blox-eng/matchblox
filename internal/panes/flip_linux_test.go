@@ -2,6 +2,7 @@ package panes
 
 import (
 	"os"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -9,6 +10,7 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 
 	"github.com/blox-eng/matchblox/internal/keycmd"
+	"github.com/blox-eng/matchblox/internal/tmuxtest"
 )
 
 // TestFlipFromAMarkedPaneTakesTheClientToTheConsole: ⌥s in an agent pane
@@ -108,6 +110,32 @@ func TestFlipKeyPassesThroughOnAnUnknownPane(t *testing.T) {
 // types as it did before the jump keys.
 func TestJumpKeyPassesThroughOnAnUnknownPane(t *testing.T) {
 	client, typed := plainPane(t)
+	if got := typedThen(t, client, typed, "\x1b4"); got != "^[4x" {
+		t.Errorf("the pane read %q, want ^[4 then x", got)
+	}
+}
+
+// TestJumpKeyPassesThroughWithNoConsole: with no console running, a quit
+// or one starting again, ⌥4 in a marked pane reaches the agent as typed,
+// as the phone's Esc and 4 do: nothing else would read it.
+func TestJumpKeyPassesThroughWithNoConsole(t *testing.T) {
+	sock := tmuxtest.Server(t)
+	tmux := func(args ...string) string {
+		t.Helper()
+		out, err := exec.Command("tmux", append([]string{"-L", sock, "-f", os.DevNull}, args...)...).CombinedOutput() //nolint:gosec // test argv
+		if err != nil {
+			t.Fatalf("tmux %q: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	typed := t.TempDir() + "/typed"
+	tmux("new-session", "-d", "-s", "work", "sh", "-c", "stty raw -echo; exec cat -v > "+typed)
+	pane := tmux("display-message", "-p", "-t", "work", "#{pane_id}")
+	tmux("set-option", "-p", "-t", pane, MatchOption, "1")
+	tmux(FlipKeysArgv()[1:]...)
+	tmux(JumpKeysArgv()[1:]...)
+	waitFor(t, func() bool { return tmux("display-message", "-p", "-t", pane, "#{pane_current_command}") == "cat" })
+	client := attach(t, sock, "work")
 	if got := typedThen(t, client, typed, "\x1b4"); got != "^[4x" {
 		t.Errorf("the pane read %q, want ^[4 then x", got)
 	}
