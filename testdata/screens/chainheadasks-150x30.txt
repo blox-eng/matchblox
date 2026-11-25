@@ -2,19 +2,19 @@
  SESSIONS 6    machine
 ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  NEEDS YOU · 2  −                       │ kindle-web ✻ asks                                                           ctx 56%  ctrl+o expand · m menu
-▌╿ kindle-web                       1m ✻│
-   Do you want to proceed?              │
+▌  ╿ kindle-web                     1m ✻│
+     Do you want to proceed?            │
  ≋ hearth               step 3 of 3 · 3 │
- ├ ✦ hearth-api                        ✻│
- ├ ╵ ember-billing                  3m ✻│
- └ ╿ hearth's stoker                0s ·│
-     merge #812 now?                    │
+   ├ ✦ hearth-api                      ✻│
+   ├ ╵ ember-billing                3m ✻│
+   └ ╿ hearth's stoker              0s ·│
+       merge #812 now?                  │
 ────────────────────────────────────────│
  WORKING · 1  −                         │
- ✦ flint-auth                          ✻│
+   ✦ flint-auth                        ✻│
 ────────────────────────────────────────│
  IDLE · 1  −                            │
- ╵ spark-docs                       9m ✻│
+   ╵ spark-docs                     9m ✻│
                                         │
                                         │
                                         │

@@ -2,21 +2,21 @@
  SESSIONS 7    machine
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  NEEDS YOU · 6  −                       │╭─ New session ───────────────────────────────────────────────────────────────────────────╮
-▌╿ flint-auth                       2m ✻││ where    /work/flint-auth                                                               │
-   conflicts with main                  ││ branch   feat/88-rate-limits                                                            │
- ╿ spark-docs                       9m ✻││ name     flint-auth-feat-88-rate-limits                                                 │
-   I rewrote the quick start and the in…││ agent    ● claude  ○ codex  ○ opencode                                                  │
- ╿ ember-billing                    4m ✻││ first  › fix the flaky ships test▏                                                      │
-   #4552 waits for your merge           │╰─ ⏎ start ─ tab next ─ esc ──────────────────────────────────────────────────────────────╯
- ╿ kindle-web                       1m ✻│
-   Do you want to proceed?              │
- ╿ cinder-ci                        0s ❋│
-   I am moving the cache key to the go.…│
- ╿ wick-mobile                      0s ▣│
-   ⠙ Working                            │
+▌  ╿ flint-auth                     2m ✻││ where    /work/flint-auth                                                               │
+     conflicts with main                ││ branch   feat/88-rate-limits                                                            │
+   ╿ spark-docs                     9m ✻││ name     flint-auth-feat-88-rate-limits                                                 │
+     I rewrote the quick start and the …││ agent    ● claude  ○ codex  ○ opencode                                                  │
+   ╿ ember-billing                  4m ✻││ first  › fix the flaky ships test▏                                                      │
+     #4552 waits for your merge         │╰─ ⏎ start ─ tab next ─ esc ──────────────────────────────────────────────────────────────╯
+   ╿ kindle-web                     1m ✻│
+     Do you want to proceed?            │
+   ╿ cinder-ci                      0s ❋│
+     I am moving the cache key to the g…│
+   ╿ wick-mobile                    0s ▣│
+     ⠙ Working                          │
 ────────────────────────────────────────│
  WORKING · 1  −                         │
- ✦ hearth-api                 #4551 ci ✻│
+   ✦ hearth-api               #4551 ci ✻│
                                         │
                                         │
                                         │

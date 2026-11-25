@@ -2,21 +2,21 @@
  SESSIONS 7    machine
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  NEEDS YOU · 6  −                       │ flint-auth ✻ asks · #4545 ci                                       ctrl+o expand · m menu
-▌╿ flint-auth                       2m ✻│ 158k tokens · no window known: run matchblox setup, or add the model to [sessions.windows]
-   conflicts with main                  │ 2 subagents running
- ╿ spark-docs                       9m ✻│
-   I rewrote the quick start and the in…│
- ╿ ember-billing                    4m ✻│
-   #4552 waits for your merge           │
- ╿ kindle-web                       1m ✻│
-   Do you want to proceed?              │
- ╿ cinder-ci                        0s ❋│
-   I am moving the cache key to the go.…│
- ╿ wick-mobile                      0s ▣│
-   ⠙ Working                            │
+▌  ╿ flint-auth                     2m ✻│ 158k tokens · no window known: run matchblox setup, or add the model to [sessions.windows]
+     conflicts with main                │ 2 subagents running
+   ╿ spark-docs                     9m ✻│
+     I rewrote the quick start and the …│
+   ╿ ember-billing                  4m ✻│
+     #4552 waits for your merge         │
+   ╿ kindle-web                     1m ✻│
+     Do you want to proceed?            │
+   ╿ cinder-ci                      0s ❋│
+     I am moving the cache key to the g…│
+   ╿ wick-mobile                    0s ▣│
+     ⠙ Working                          │
 ────────────────────────────────────────│
  WORKING · 1  −                         │
- ✦ hearth-api                 #4551 ci ✻│
+   ✦ hearth-api               #4551 ci ✻│
                                         │
                                         │
                                         │

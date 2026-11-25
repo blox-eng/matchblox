@@ -614,9 +614,9 @@ func replayAt(t *testing.T, z replaySize) {
 	time.Sleep(600 * time.Millisecond) // a dozen samples reach the console: the sparklines fill
 
 	// chosen is a screen whose chosen row is name's: its line starts with
-	// the selection mark, a chain's link, then the match.
+	// the selection mark, its number, a chain's link, then the match.
 	chosen := func(name string) func(string) bool {
-		re := regexp.MustCompile(`▌(?:[├└] )?\S+ ` + regexp.QuoteMeta(name))
+		re := regexp.MustCompile(`▌[1-9 ] (?:[├└] )?\S+ ` + regexp.QuoteMeta(name))
 		return func(s string) bool { return re.MatchString(s) }
 	}
 	// tapOn clicks the first cell of text on the screen, as a thumb or a

@@ -3,10 +3,10 @@
 ────────────────────────────────────────────────────────────────────────────────
  NEEDS YOU · 4  −               │ CHAIN login
  ≋ login        step 1 of 3 · 3 │
-▌├ ╿ flint-auth             2m ✻│ › what should login's stoker do?
- │   Which way do we fix the lo…│
- ├ ✦ flint-ui                  ✻│
- └ ╵ flint-api        #4560 ci ✻│
+▌  ├ ╿ flint-auth           2m ✻│ › what should login's stoker do?
+   │   Which way do we fix the …│
+   ├ ✦ flint-ui                ✻│
+   └ ╵ flint-api      #4560 ci ✻│
                                 │
                                 │
                                 │

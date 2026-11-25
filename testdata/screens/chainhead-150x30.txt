@@ -3,16 +3,16 @@
 ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  NEEDS YOU · 1  −                       │ kindle-web ✻ asks                                                           ctx 56%  ctrl+o expand · m menu
  ≋ hearth               step 1 of 3 · 3 │ chain hearth · step 1 of 3   kindle-web needs you → hearth-api works → ember-billing idle
-▌├ ╿ kindle-web                     1m ✻│
- │   Do you want to proceed?            │
- ├ ✦ hearth-api                        ✻│
- └ ╵ ember-billing                  3m ✻│
+▌  ├ ╿ kindle-web                   1m ✻│
+   │   Do you want to proceed?          │
+   ├ ✦ hearth-api                      ✻│
+   └ ╵ ember-billing                3m ✻│
 ────────────────────────────────────────│
  WORKING · 1  −                         │
- ✦ flint-auth                          ✻│
+   ✦ flint-auth                        ✻│
 ────────────────────────────────────────│
  IDLE · 1  −                            │
- ╵ spark-docs                       9m ✻│
+   ╵ spark-docs                     9m ✻│
                                         │
                                         │
                                         │

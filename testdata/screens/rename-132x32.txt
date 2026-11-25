@@ -2,21 +2,21 @@
  SESSIONS 7    machine
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  NEEDS YOU · 6  −                       │╭─ Rename flint-auth ─────────────────────────────────────────────────────────────────────╮
-▌╿ flint-auth                       2m ✻││ name   › docs-1-0▏                                                                      │
-   conflicts with main                  ││                                                                                         │
- ╿ spark-docs                       9m ✻││ tmux and the agent take this name                                                       │
-   I rewrote the quick start and the in…│╰─ ⏎ rename ─ esc ────────────────────────────────────────────────────────────────────────╯
- ╿ ember-billing                    4m ✻│
-   #4552 waits for your merge           │
- ╿ kindle-web                       1m ✻│
-   Do you want to proceed?              │
- ╿ cinder-ci                        0s ❋│
-   I am moving the cache key to the go.…│
- ╿ wick-mobile                      0s ▣│
-   ⠙ Working                            │
+▌  ╿ flint-auth                     2m ✻││ name   › docs-1-0▏                                                                      │
+     conflicts with main                ││                                                                                         │
+   ╿ spark-docs                     9m ✻││ tmux and the agent take this name                                                       │
+     I rewrote the quick start and the …│╰─ ⏎ rename ─ esc ────────────────────────────────────────────────────────────────────────╯
+   ╿ ember-billing                  4m ✻│
+     #4552 waits for your merge         │
+   ╿ kindle-web                     1m ✻│
+     Do you want to proceed?            │
+   ╿ cinder-ci                      0s ❋│
+     I am moving the cache key to the g…│
+   ╿ wick-mobile                    0s ▣│
+     ⠙ Working                          │
 ────────────────────────────────────────│
  WORKING · 1  −                         │
- ✦ hearth-api                 #4551 ci ✻│
+   ✦ hearth-api               #4551 ci ✻│
                                         │
                                         │
                                         │

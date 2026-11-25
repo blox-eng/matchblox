@@ -2,8 +2,8 @@
  SESSIONS 7    machine
 ──────────────────────────────────────────────────────────────────────────────────────────────────────────
  NEEDS YOU · 6  −                       │ flint-auth ✻ asks · #4545 ci    ctx 41%  ctrl+o expand · m menu
-▌╿ flint-auth                       2m ✻│   3. Type something.
-   conflicts with main                  │
+▌  ╿ flint-auth                     2m ✻│   3. Type something.
+     conflicts with main                │
  ↓ 6 more · 5 need you                  │ Enter to select · ↑/↓ to navigate · Esc to cancel
  + new · ✧ 7 tips                       │ ›                                          ⏎ send to flint-auth
 ──────────────────────────────────────────────────────────────────────────────────────────────────────────
