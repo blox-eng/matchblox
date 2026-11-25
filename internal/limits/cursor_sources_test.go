@@ -128,3 +128,71 @@ func TestAccountCursorSourceOnlyUnderFolder(t *testing.T) {
 		t.Fatalf("token %q, %v, want acct-token", got, err)
 	}
 }
+
+// TestTryTokenSourcesHardErrorStopsList: a non-ErrNotExist from an earlier
+// source is returned at once; later sources are not tried.
+func TestTryTokenSourcesHardErrorStopsList(t *testing.T) {
+	called := false
+	_, err := TryTokenSources(context.Background(), []TokenSource{
+		func(context.Context) (string, error) { return "", errors.New("permission denied") },
+		func(context.Context) (string, error) {
+			called = true
+			return "from-next", nil
+		},
+	})
+	if err == nil || err.Error() != "permission denied" {
+		t.Fatalf("err %v, want permission denied", err)
+	}
+	if called {
+		t.Fatal("later source called after a hard error")
+	}
+}
+
+// TestDefaultCursorSourcesEmptyHomeNoRelativeFiles: with no home and no
+// absolute XDG_CONFIG_HOME, no file sources are added (CWD is never searched).
+func TestDefaultCursorSourcesEmptyHomeNoRelativeFiles(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", "")
+	srcs := DefaultCursorSources("", "linux", nil)
+	if len(srcs) != 0 {
+		t.Fatalf("sources %d, want 0", len(srcs))
+	}
+	kc := TokenSource(func(context.Context) (string, error) { return "from-kc", nil })
+	srcs = DefaultCursorSources("", "darwin", kc)
+	if len(srcs) != 1 {
+		t.Fatalf("darwin sources %d, want 1 (keychain only)", len(srcs))
+	}
+	got, err := TryTokenSources(context.Background(), srcs)
+	if err != nil || got != "from-kc" {
+		t.Fatalf("token %q, %v, want from-kc", got, err)
+	}
+}
+
+// TestDefaultCursorSourcesRelativeXDGIgnored: a relative XDG_CONFIG_HOME is
+// ignored so auth.json under CWD is never opened.
+func TestDefaultCursorSourcesRelativeXDGIgnored(t *testing.T) {
+	home := t.TempDir()
+	writeAuth(t, filepath.Join(home, ".config", "cursor", "auth.json"), "from-home")
+	t.Setenv("XDG_CONFIG_HOME", "relative-xdg")
+	got, err := TryTokenSources(context.Background(), DefaultCursorSources(home, "linux", nil))
+	if err != nil || got != "from-home" {
+		t.Fatalf("token %q, %v, want from-home", got, err)
+	}
+}
+
+// TestDefaultCursorSourcesEmptyAccessTokenContinues: empty accessToken in the
+// first file is a miss; the next source supplies the token.
+func TestDefaultCursorSourcesEmptyAccessTokenContinues(t *testing.T) {
+	home := t.TempDir()
+	empty := filepath.Join(home, ".config", "cursor", "auth.json")
+	if err := os.MkdirAll(filepath.Dir(empty), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(empty, []byte(`{"accessToken":""}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	writeAuth(t, filepath.Join(home, ".cursor", "auth.json"), "from-dot")
+	got, err := TryTokenSources(context.Background(), DefaultCursorSources(home, "linux", nil))
+	if err != nil || got != "from-dot" {
+		t.Fatalf("token %q, %v, want from-dot", got, err)
+	}
+}

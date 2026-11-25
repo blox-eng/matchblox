@@ -374,6 +374,14 @@ func TestReadsDefaultWithoutKeychain(t *testing.T) {
 	}
 }
 
+// TestReadsDefaultEmptyIsFalse: no Default sources means the default is not read.
+func TestReadsDefaultEmptyIsFalse(t *testing.T) {
+	u := &CursorUsages{}
+	if u.Reads("") {
+		t.Fatal("Reads(\"\") true with empty Default, want false")
+	}
+}
+
 // TestReadingDefaultUsesFileSource: a Default source token is fetched.
 func TestReadingDefaultUsesFileSource(t *testing.T) {
 	u := &CursorUsages{

@@ -97,7 +97,7 @@ type CursorUsage struct {
 	// cursorRetry.
 	signedOut bool
 	// failed: the last read ended in an error other than a missing login (a
-	// denied Keychain); no call was made.
+	// denied token source); no call was made.
 	failed bool
 	wg     sync.WaitGroup
 }
@@ -106,7 +106,7 @@ type CursorUsage struct {
 const cursorCallTimeout = 15 * time.Second
 
 // cursorRetry is how soon a login with no token is read again: a sign-in
-// shows within it, and the Keychain is not read at each sample.
+// shows within it, and the token sources are not read at each sample.
 const cursorRetry = 30 * time.Second
 
 func (u *CursorUsage) Reading(now time.Time) *Reading {
@@ -131,7 +131,7 @@ func (u *CursorUsage) ask(now time.Time) {
 	token, err := u.Token(ctx)
 	u.mu.Lock()
 	// Only a missing login is signed out; a read that failed otherwise (a
-	// denied Keychain) waits the interval.
+	// denied token source) waits the interval.
 	u.signedOut = token == "" && (err == nil || errors.Is(err, os.ErrNotExist))
 	u.failed = err != nil && !errors.Is(err, os.ErrNotExist)
 	if err == nil && token != "" {
@@ -173,7 +173,7 @@ func (u *CursorUsage) SignedOut() bool {
 }
 
 // ReadFailed says whether the last token read ended in an error other than a
-// missing login (a denied Keychain). Such a read made no call.
+// missing login (a denied token source). Such a read made no call.
 func (u *CursorUsage) ReadFailed() bool {
 	u.mu.Lock()
 	defer u.mu.Unlock()
@@ -198,7 +198,7 @@ type CursorUsages struct {
 }
 
 // cursorAuthFile is where Cursor's file store keeps the login of an account
-// folder (relative to the account dir). Kept for tests that write that path.
+// folder (relative to the account dir).
 const cursorAuthFile = "home/.cursor/auth.json"
 
 // Reads says whether the login of dir ("" is the default) is read at all.

@@ -13,15 +13,22 @@ type TokenSource func(context.Context) (string, error)
 
 // DefaultCursorSources is the ordered list for the default Cursor login
 // (dir ""). Files come first; on darwin, keychain is appended only when
-// non-nil. Never appends a nil source.
+// non-nil. Never appends a nil source. An empty home (and a relative or
+// empty XDG_CONFIG_HOME) adds no file sources, so the process CWD is never
+// searched for auth.json.
 func DefaultCursorSources(home, goos string, keychain TokenSource) []TokenSource {
-	configDir := filepath.Join(home, ".config")
-	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
+	var out []TokenSource
+	configDir := ""
+	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" && filepath.IsAbs(xdg) {
 		configDir = xdg
+	} else if home != "" {
+		configDir = filepath.Join(home, ".config")
 	}
-	out := []TokenSource{
-		fileSource(filepath.Join(configDir, "cursor", "auth.json")),
-		fileSource(filepath.Join(home, ".cursor", "auth.json")),
+	if configDir != "" {
+		out = append(out, fileSource(filepath.Join(configDir, "cursor", "auth.json")))
+	}
+	if home != "" {
+		out = append(out, fileSource(filepath.Join(home, ".cursor", "auth.json")))
 	}
 	if goos == "darwin" && keychain != nil {
 		out = append(out, keychain)
@@ -35,7 +42,7 @@ func AccountCursorSources(folder string, file func(path string) (string, error))
 	if file == nil {
 		return nil
 	}
-	path := filepath.Join(folder, "home", ".cursor", "auth.json")
+	path := filepath.Join(folder, cursorAuthFile)
 	return []TokenSource{func(context.Context) (string, error) { return file(path) }}
 }
 
