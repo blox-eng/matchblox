@@ -80,6 +80,14 @@ type Mux interface {
 	// Split opens a pane next to target running argv and returns its id.
 	// It runs: the id exists only after the multiplexer made the pane.
 	Split(target string, argv []string) (pane string, err error)
+	// Beside is Split with the new pane to the right of target, without the
+	// keys, and percent of the window's width.
+	Beside(target string, percent int, argv []string) (pane string, err error)
+	// SwitchClient is the step that moves the client that asked to pane.
+	SwitchClient(pane string) []string
+	// ViewCmd is the name a pane shows while it runs a nested client of this
+	// multiplexer (a view of an agent pane).
+	ViewCmd() string
 	// Focus is the steps that bring pane to the front: its window, then
 	// the pane. Attach is a separate step.
 	Focus(pane string) [][]string

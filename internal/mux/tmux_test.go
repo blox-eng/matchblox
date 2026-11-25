@@ -635,3 +635,49 @@ func TestListStrictTellsNoServerFromFailure(t *testing.T) {
 		t.Errorf("no tmux installed: %v, %v", p, err)
 	}
 }
+
+func TestBesideBuildsTheSideBySideSplitArgv(t *testing.T) {
+	var got []string
+	tm := Tmux{Run: func(argv []string) (string, error) {
+		got = argv
+		return "%7\n", nil
+	}}
+	id, err := tm.Beside("%1", 75, []string{"/bin/sh", "-c", "read _"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"tmux", "split-window", "-h", "-d", "-t", "%1", "-l", "75%", "-P", "-F", "#{pane_id}", "--", "/bin/sh", "-c", "read _"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+	if id != "%7" {
+		t.Fatalf("got %q, want %%7", id)
+	}
+}
+
+func TestBesideErrorsWithoutAPaneID(t *testing.T) {
+	tm := Tmux{Run: func([]string) (string, error) { return "\n", nil }}
+	if id, err := tm.Beside("%1", 60, nil); err == nil {
+		t.Fatalf("got id %q and no error", id)
+	}
+	tm = Tmux{Run: func([]string) (string, error) { return "", errors.New("no server") }}
+	if _, err := tm.Beside("%1", 60, nil); err == nil {
+		t.Fatal("run error was swallowed")
+	}
+}
+
+func TestSwitchClientNamesThePane(t *testing.T) {
+	if got, want := (Tmux{}).SwitchClient("%3"), []string{"tmux", "switch-client", "-t", "%3"}; !slices.Equal(got, want) {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+	got := (Tmux{}).SwitchClient("%3@matchblox")
+	if want := []string{"tmux", "-L", "matchblox", "switch-client", "-t", "%3"}; !slices.Equal(got, want) {
+		t.Fatalf("server: got %q, want %q", got, want)
+	}
+}
+
+func TestViewCmdIsTheNestedClientsName(t *testing.T) {
+	if got := (Tmux{}).ViewCmd(); got != "tmux" {
+		t.Fatalf("got %q, want tmux", got)
+	}
+}

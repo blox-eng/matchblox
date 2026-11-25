@@ -2066,14 +2066,12 @@ func runNav(a action, run func([]string) error) ranMsg {
 // jump goes to a pane: inside tmux the client switches to it; outside, the
 // console gives the terminal to `tmux attach` and comes back after it.
 func (m Model) jump(pane string) *action {
+	mx := m.multiplexer()
 	if m.opt.OutsideTmux {
-		return &action{label: "attach", nav: true, attach: true, pane: pane, steps: [][]string{
-			{"tmux", "select-window", "-t", pane},
-			{"tmux", "select-pane", "-t", pane},
-			{"tmux", "attach-session", "-t", pane},
-		}}
+		return &action{label: "attach", nav: true, attach: true, pane: pane,
+			steps: append(mx.Focus(pane), mx.Attach(pane))}
 	}
-	return &action{label: "jump", nav: true, pane: pane, tty: m.askedBy, asker: true, steps: [][]string{{"tmux", "switch-client", "-t", pane}}}
+	return &action{label: "jump", nav: true, pane: pane, tty: m.askedBy, asker: true, steps: [][]string{mx.SwitchClient(pane)}}
 }
 
 // jumpOn is jump to a pane of host.

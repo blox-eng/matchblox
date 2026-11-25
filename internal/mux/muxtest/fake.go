@@ -165,6 +165,15 @@ func (f *Fake) Split(_ string, _ []string) (string, error) {
 	return "%f" + strconv.Itoa(f.splits), nil
 }
 
+// Beside is Split.
+func (f *Fake) Beside(target string, _ int, argv []string) (string, error) {
+	return f.Split(target, argv)
+}
+
+func (*Fake) SwitchClient(pane string) []string { return []string{"fake", "switch-client", pane} }
+
+func (*Fake) ViewCmd() string { return "fake-view" }
+
 func (*Fake) Focus(pane string) [][]string {
 	return [][]string{{"fake", "select-window", pane}, {"fake", "select-pane", pane}}
 }

@@ -8,16 +8,18 @@ import (
 
 const besideHint = `printf "⏎ on a row shows its agent here.\n"; read _`
 
-// SplitArgv opens the agent's pane beside the console's, listW columns wide
-// in a window of windowW (0: unknown, the agent gets 60%). -d keeps the keys
-// in the list; -P prints the new pane's id.
-func SplitArgv(console string, listW, windowW int) []string {
-	rest := 60
+// BesideShell is the command the new agent pane runs until a view takes
+// its place.
+func BesideShell() []string { return []string{"/bin/sh", "-c", besideHint} }
+
+// BesidePercent is the agent pane's share of the window, in percent, with
+// listW columns left to the list in a window of windowW (0: unknown, the
+// agent gets 60%).
+func BesidePercent(listW, windowW int) int {
 	if windowW > listW {
-		rest = 100 - listW*100/windowW
+		return 100 - listW*100/windowW
 	}
-	return []string{"tmux", "split-window", "-h", "-d", "-t", console, "-l", strconv.Itoa(rest) + "%",
-		"-P", "-F", "#{pane_id}", "--", "/bin/sh", "-c", besideHint}
+	return 60
 }
 
 // BesideArgv names the two panes in the window, for the key that flips

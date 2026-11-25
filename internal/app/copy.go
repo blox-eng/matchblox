@@ -16,6 +16,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/doors"
+	"github.com/blox-eng/matchblox/internal/mux"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/remote"
 )
@@ -67,6 +68,16 @@ func (m Model) tmuxRun() func(args ...string) (string, error) {
 		return m.opt.Tmux
 	}
 	return tmuxOut
+}
+
+// multiplexer is the console's own tmux as a mux.Mux: the commands run
+// through tmuxRun, so Options.Tmux and its bound still apply. Outside tmux
+// it asks tmux itself.
+func (m Model) multiplexer() mux.Mux {
+	if run := m.tmuxRun(); run != nil {
+		return mux.Tmux{Run: func(argv []string) (string, error) { return run(argv[1:]...) }}
+	}
+	return mux.Tmux{}
 }
 
 // copyText puts text on the clipboard and says so, with what it was, or

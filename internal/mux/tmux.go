@@ -259,13 +259,34 @@ func (Tmux) Respawn(pane, dir string, env []string, argv []string) [][]string {
 
 // Split opens a pane beside target and returns its id, with the server
 // (OnServer) as List writes it. The command follows --, so no word of argv
-// is a flag. Extra flags (side, size) wait for the caller that needs them.
+// is a flag.
 func (t Tmux) Split(target string, argv []string) (string, error) {
+	return t.split(target, 0, argv)
+}
+
+// Beside opens a pane to the right of target without taking the keys, and
+// gives it percent of the window's width. argv follows --. The id is as
+// Split gives it.
+func (t Tmux) Beside(target string, percent int, argv []string) (string, error) {
+	return t.split(target, percent, argv)
+}
+
+// split is split-window. A percent above 0 is the side-by-side split: -h
+// -d -t target -l percent%.
+func (t Tmux) split(target string, percent int, argv []string) (string, error) {
 	prefix, server := t.commandArgv(), t.Server
 	if sv, bare := SplitPane(target); sv != "" {
 		prefix, server, target = serverArgv(sv), sv, bare
 	}
-	step := slices.Concat(prefix, []string{"split-window", "-t", target, "-P", "-F", "#{pane_id}"})
+	step := slices.Concat(prefix, []string{"split-window"})
+	if percent > 0 {
+		step = append(step, "-h", "-d")
+	}
+	step = append(step, "-t", target)
+	if percent > 0 {
+		step = append(step, "-l", strconv.Itoa(percent)+"%")
+	}
+	step = append(step, "-P", "-F", "#{pane_id}")
 	if len(argv) > 0 {
 		step = append(step, "--")
 		step = append(step, argv...)
@@ -290,6 +311,16 @@ func (Tmux) Focus(pane string) [][]string {
 		slices.Concat(tmux, []string{"select-pane", "-t", id}),
 	}
 }
+
+// SwitchClient is the step that moves the client that asked to pane.
+func (Tmux) SwitchClient(pane string) []string {
+	tmux, id := targetArgv(pane)
+	return slices.Concat(tmux, []string{"switch-client", "-t", id})
+}
+
+// ViewCmd is "tmux": the name tmux shows for a pane that runs a nested tmux
+// client, such as the agent pane's view.
+func (Tmux) ViewCmd() string { return "tmux" }
 
 // lastClientBound is how long LastClient waits for tmux: the guard asks
 // on a key press.
