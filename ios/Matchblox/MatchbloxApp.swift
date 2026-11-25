@@ -166,7 +166,14 @@ struct MatchbloxApp: App {
                         onPair: { go(.scan) },
                         onIsland: { go(.island) },
                         onDemo: { go(.demoScan) },
-                        onLastRemoved: { _ in homeBack = nil }
+                        onHostRemoved: { host in
+                            if HomeRemove.clearsBack(
+                                removedFingerprint: host.fingerprint,
+                                backFingerprint: homeBack?.fingerprint
+                            ) {
+                                homeBack = nil
+                            }
+                        }
                     )
                 case .reach(let host, let failure):
                     ReachView(
@@ -207,7 +214,7 @@ struct MatchbloxApp: App {
             } else if case .console = route {
                 return
             } else {
-                go(Opening.first(hosts: store.all()) == .scan ? .scan : .hosts)
+                go(Opening.first(hosts: store.all()))
             }
             return
         }

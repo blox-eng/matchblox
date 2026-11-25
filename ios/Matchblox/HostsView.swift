@@ -11,8 +11,8 @@ struct HostsView: View {
     let onPair: () -> Void
     let onIsland: () -> Void
     let onDemo: () -> Void
-    /// Called after the last host is removed; home stays (first-run). Notice is shown here.
-    let onLastRemoved: (String) -> Void
+    /// Called after each confirmed remove (clear `‹ host` when that host went; last host stays on home).
+    let onHostRemoved: (Host) -> Void
 
     @State private var hosts: [Host] = []
     @State private var removedNotice: String?
@@ -168,6 +168,7 @@ struct HostsView: View {
                 .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
             }
             .accessibilityLabel(spoken)
+            .accessibilityAction(named: Text("Remove")) { pendingRemove = host }
             Text(host.address)
                 .font(.footnote)
                 .foregroundStyle(Theme.faint)
@@ -252,7 +253,7 @@ struct HostsView: View {
             pendingRemove = nil
             return
         }
-        if !host.isDemo {
+        if HomeRemove.forgetsDeviceKey(host) {
             try? DeviceKey.remove(host: host.fingerprint)
             IslandSettings.forget(host: host)
             if let kept = IslandSettings.channel(host: host) {
@@ -261,13 +262,8 @@ struct HostsView: View {
         }
         problem = nil
         pendingRemove = nil
-        let notice = Opening.removedNotice([host])
+        removedNotice = Opening.removedNotice([host])
         hosts = store.all()
-        if hosts.isEmpty {
-            removedNotice = notice
-            onLastRemoved(notice)
-        } else {
-            removedNotice = notice
-        }
+        onHostRemoved(host)
     }
 }

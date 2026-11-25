@@ -192,6 +192,7 @@ private struct TerminalRepresentable: UIViewRepresentable {
         }
         connection.onAgent = { agent in belts.agentChanged(agent) }
         connection.onBoard = { value in belts.boardSaid(value) }
+        connection.onBecameLive = { [weak belts] in belts?.teachBoxIfNeeded() }
         belts.onAnswer = { [weak connection] in connection?.answerBoard() }
         belts.onPaneSeen = { [weak connection] inPane in connection?.paneSeen(inPane) }
         #if DEBUG
@@ -391,6 +392,12 @@ private final class Belts {
     var onAnswer: @MainActor () -> Void = {}
     /// Opens Pocket home from the `BOX` stamp.
     var onHosts: (() -> Void)?
+
+    /// Teach BOX on the belt that is visible (dock when the keyboard is down).
+    func teachBoxIfNeeded() {
+        let visible = dock.isHidden ? lifted : dock
+        visible.teachBoxIfNeeded()
+    }
 
     init(terminal: ConsoleTerminalView, screen: HeldScreen, isDemo: Bool) {
         self.terminal = terminal
@@ -622,6 +629,8 @@ final class ConsoleConnection {
     @ObservationIgnored var onOutput: @MainActor () -> Void = {}
     /// Called with what came of each copy the person asked for: `Copied`, or why it did not.
     @ObservationIgnored var onCopied: @MainActor (String, Bool) -> Void = { _, _ in }
+    /// BOX teach once the session is live (visible belt).
+    @ObservationIgnored var onBecameLive: @MainActor () -> Void = {}
     @ObservationIgnored private var copyGate = CopyGate()
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private var outgoing: AsyncStream<Outgoing>.Continuation?
@@ -754,6 +763,7 @@ final class ConsoleConnection {
                     phase = .connecting
                     try? await Task.sleep(for: wait)
                 case .ended:
+                    markSeenCleanEnd()
                     phase = .ended
                     return
                 case .stop:
@@ -784,8 +794,15 @@ final class ConsoleConnection {
         if let failure {
             phase = .failed(failure, scanAgain: false)
         } else {
+            markSeenCleanEnd()
             phase = .ended
         }
+    }
+
+    /// Plan Task 3: last-seen updates on connect and on a clean end.
+    private func markSeenCleanEnd() {
+        var sight = HostSight()
+        sight.markSeen(host.fingerprint)
     }
 
     /// The person's answer ended the agent's turn. The invite waits a moment so the closing text
@@ -850,11 +867,8 @@ final class ConsoleConnection {
         phase = .live
         var sight = HostSight()
         sight.markSeen(host.fingerprint)
-        // Teach BOX once after the first console land (pair or demo).
-        // Belts are on the terminal accessory; fire both so the visible one teaches.
-        if let accessory = terminal?.inputAccessoryView as? BeltView {
-            accessory.teachBoxIfNeeded()
-        }
+        // Teach BOX once after the first console land (pair or demo) on the visible belt.
+        onBecameLive()
         let opened = openSession != nil
         openSession = nil
         let now = terminalSize

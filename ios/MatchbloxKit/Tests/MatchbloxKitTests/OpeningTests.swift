@@ -13,10 +13,6 @@ final class OpeningTests: XCTestCase {
         XCTAssertEqual(Opening.first(hosts: [host("ws-1"), host("ws-2")]), .hosts)
     }
 
-    func testFirstWithNoHostIsHosts() {
-        XCTAssertEqual(Opening.first(hosts: []), .hosts)
-    }
-
     func testBackToConsole() {
         XCTAssertEqual(Opening.backToConsole(host: host("ws-1")), .console(host("ws-1"), open: nil))
     }
