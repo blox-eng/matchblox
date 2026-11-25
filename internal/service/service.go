@@ -708,8 +708,8 @@ func (s *Service) publish(snap sample.Snapshot, rec func(state.Doc)) {
 		}
 		s.cur.Holds = s.Holds.List()
 	}
-	if s.Numbers != nil && !s.sampleMissedLocked() {
-		s.numberLocked()
+	if s.Numbers != nil {
+		s.numberLocked(s.sampleMissedLocked())
 	}
 	joined, err := s.joinNewLocked(s.now())
 	if err != nil {
@@ -789,9 +789,9 @@ func (s *Service) Hook(ev hooks.Event) {
 	s.broadcast()
 }
 
-// numberLocked sets each session's number, the stoker's own left out.
-// Hold s.mu.
-func (s *Service) numberLocked() {
+// numberLocked sets each session's number, the stoker's own left out. A
+// sample that missed shows the kept numbers and changes none. Hold s.mu.
+func (s *Service) numberLocked(missed bool) {
 	var members []chains.Member
 	var at []int
 	for i, x := range s.cur.Sessions {
@@ -801,9 +801,14 @@ func (s *Service) numberLocked() {
 		members = append(members, memberOf(x))
 		at = append(at, i)
 	}
-	nums, err := s.Numbers.Assign(members)
-	if err != nil {
-		s.cur.Errors = append(s.cur.Errors, "numbers: "+err.Error())
+	var nums []int
+	if missed {
+		nums = s.Numbers.Peek(members)
+	} else {
+		var err error
+		if nums, err = s.Numbers.Assign(members); err != nil {
+			s.cur.Errors = append(s.cur.Errors, "numbers: "+err.Error())
+		}
 	}
 	for j, i := range at {
 		s.cur.Sessions[i].Number = nums[j]

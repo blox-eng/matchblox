@@ -72,3 +72,14 @@ func TestNoStoreNoNumbers(t *testing.T) {
 		t.Fatalf("numbers %v", got)
 	}
 }
+
+// TestAMissedSampleShowsTheKeptNumbers: a sample that missed keeps the
+// store as it was, and the doc it publishes still shows each number.
+func TestAMissedSampleShowsTheKeptNumbers(t *testing.T) {
+	s := numbersTest(t)
+	publishSessions(s, nil, numbered("1", 11), numbered("2", 12), numbered("3", 13))
+	publishSessions(s, []string{"tmux: no server"}, numbered("3", 13), numbered("1", 11), numbered("2", 12))
+	if got := numbersOf(s); got["1"] != 1 || got["2"] != 2 || got["3"] != 3 {
+		t.Fatalf("numbers after a missed sample %v, want 1, 2, 3", got)
+	}
+}
