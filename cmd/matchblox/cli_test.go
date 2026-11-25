@@ -69,6 +69,27 @@ func TestSessionsJSONCarriesReasonAndHold(t *testing.T) {
 	}
 }
 
+func TestSessionsJSONSaysWhenTheStateBegan(t *testing.T) {
+	at := time.Date(2026, 11, 23, 10, 7, 0, 0, time.UTC)
+	d := cliDoc()
+	for i := range d.Sessions {
+		d.Sessions[i].StateAt = at
+	}
+	var buf bytes.Buffer
+	if err := writeSessions(&buf, d, true); err != nil {
+		t.Fatal(err)
+	}
+	var rows []map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &rows); err != nil {
+		t.Fatalf("%v: %s", err, buf.String())
+	}
+	for _, r := range rows {
+		if r["state_at"] != "2026-11-23T10:07:00Z" {
+			t.Fatalf("row %v", r)
+		}
+	}
+}
+
 // TestSessionsJSONOpencodeStatus (owner, 2026-11-13: "Allow them"): an
 // OpenCode with the plugin says waiting or retry in status, as it reports
 // it; word says what it does.

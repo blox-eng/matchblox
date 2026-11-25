@@ -114,9 +114,9 @@ func TestAServiceOfTheDemoClonesNothing(t *testing.T) {
 	}
 }
 
-// TestDemoServiceRunsNoTmuxOnPaste: a paste from the console reaches the
-// world's refusal, never this machine's tmux server: the text goes to
-// tmux on stdin, and the demo refuses that seam as it refuses TmuxOut.
+// TestDemoServiceRunsNoTmuxOnPaste: a paste from the console loads and
+// pastes only through the demo world, never this machine's tmux. Other
+// TmuxIn stays refused.
 func TestDemoServiceRunsNoTmuxOnPaste(t *testing.T) {
 	t.Setenv("TMPDIR", t.TempDir())
 	root, err := copyTree("../../testdata/demo")
@@ -131,8 +131,11 @@ func TestDemoServiceRunsNoTmuxOnPaste(t *testing.T) {
 	if svc.TmuxIn == nil {
 		t.Fatal("the demo leaves TmuxIn to exec")
 	}
-	if err := svc.TmuxIn([]string{"tmux", "load-buffer", "-"}, "x"); err == nil || err.Error() != Refusal {
-		t.Fatalf("TmuxIn: %v, want the refusal line", err)
+	if err := svc.TmuxIn([]string{"tmux", "load-buffer", "-b", "p", "-"}, "x"); err != nil {
+		t.Fatalf("load-buffer: %v, want nil (demo buffer)", err)
+	}
+	if err := svc.TmuxIn([]string{"tmux", "send-keys", "-t", "%1", "a"}, "x"); err == nil || err.Error() != Refusal {
+		t.Fatalf("other TmuxIn: %v, want the refusal line", err)
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
@@ -178,8 +181,8 @@ func TestDemoServiceRunsNoTmuxOnPaste(t *testing.T) {
 		if err := json.Unmarshal(env.Body, &r); err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(r.Err, Refusal) || len(r.Ran) != 0 {
-			t.Fatalf("paste to %s: %+v, want the refusal line", pane, r)
+		if r.Err != "" || len(r.Ran) == 0 {
+			t.Fatalf("paste to %s: %+v, want a world paste with Ran", pane, r)
 		}
 		break
 	}

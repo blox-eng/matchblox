@@ -1,32 +1,32 @@
- ▰ matchblox · all hosts ▾                                                                                             ● 8 need you
- SESSIONS 10    machine
-────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- NEEDS YOU · 8  −                       │ flint-auth ✻ asks · #4545 ci                              ctx 41%  ctrl+o expand · m menu
-▌╿ flint-auth                       2m ✻│
-   conflicts with main                  │
- ╿ spark-docs                       9m ✻│
-   I rewrote the quick start and the in…│
- ╿ ember-billing                    4m ✻│
-   #4552 waits for your merge           │
- │ train-loop@gpu-1                 4m ✻│
-   I rewrote the quick start and the in…│
- ╿ kindle-web                       1m ✻│
-   Do you want to proceed?              │
- │ api-auth@ws-1                    1m ✻│
-   I rewrote the quick start and the in…│
- ╿ cinder-ci                        0s ❋│
-   I am moving the cache key to the go.…│
- ╿ wick-mobile                      0s ▣│
-   ⠙ Working                            │
-────────────────────────────────────────│
- WORKING · 2  −                         │
- ✦ hearth-api                 #4551 ci ✻│
- ✦ docs-sweep@ws-1                     ✻│
-                                        │
-                                        │
-                                        │
-                                        │
-                                        │
- + new · ✧ 7 tips                       │ ›                                                                    ⏎ send to flint-auth
-────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- writing to flint-auth · ⏎ send · ↑↓ choose · esc list · ctrl+o expand · tab Machine
+ ▰ matchblox    ALL    spark-docs ●2    hearth-api    ux-pass    kindle-web ●1    no directory    +3 ▾            ● 5 need you    ⚙
+────────────────────────────────┬───────────────────────────────────────────────────────────────────────────────────────────────────
+ NEEDS YOU · 5  −               │ flint-auth ✻ asks · #4545 ci                                      ctx 41%  ctrl+o expand · m menu
+▌╿ flint-auth               2m ✻│
+   conflicts with main          │
+ ╿ ember-billing            4m ✻│
+   #4552 waits for your merge   │
+ ╿ train-loop@gpu-1         9m ✻│
+   I rewrote the quick start an…│
+ ╿ kindle-web               1m ✻│
+   Do you want to proceed?      │
+ ╿ api-auth@ws-1            9m ✻│
+   I rewrote the quick start an…│
+────────────────────────────────┤
+ WORKING · 2  −                 │
+ ✦ hearth-api     #4551 ci  3h ✻│
+ ✦ docs-sweep@ws-1          9m ✻│
+────────────────────────────────┤
+ IDLE · 4  −                    │
+ ╵ cinder-ci               now ❋│
+ ╵ wick-mobile             now ▣│
+ │ spark-docs               9m ✻│
+ ╵ ux-pass                 10m ✻│
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+ + new · ✧ 8 tips               │ ›                                                                            ⏎ send to flint-auth
+────────────────────────────────┴───────────────────────────────────────────────────────────────────────────────────────────────────
+ AGENT  flint-auth   3 hosts s▸   ✻ Max 5h 84%   · login usage not measured   ❋ Plus 5h 40%                    ctrl+q list   ? keys

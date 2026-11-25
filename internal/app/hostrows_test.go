@@ -110,8 +110,7 @@ func TestTwoLostHostsLine(t *testing.T) {
 	if got := m.lostLine(); got != want {
 		t.Fatalf("two lost hosts: %q, want %q", got, want)
 	}
-	f := frameOf(m)
-	if got := strings.TrimSpace(f[len(f)-1]); got != want {
+	if got := keyLineOf(m); got != want { // the bar gives way to it (owner, 2026-11-24)
 		t.Fatalf("the key line is %q, want %q", got, want)
 	}
 }
@@ -121,7 +120,7 @@ func TestOneHostStaleIsToday(t *testing.T) {
 	m, home, _ := hostsAt(t, &now, "", 196, 30)
 	m = upd(t, m, stateMsg(hostState(sess(1, "api-auth", "%1", nil))))
 	m = upd(t, m, lostMsg{err: io.EOF, conn: home})
-	if h := frameOf(m)[0]; !strings.Contains(h, "matchblox · stale") {
+	if h := frameOf(m)[0]; !strings.Contains(h, "    stale    ⚙") { // the head row's mark of old data
 		t.Fatalf("the header is %q, want stale at once", h)
 	}
 }
@@ -136,10 +135,10 @@ func TestThreeHostFrames(t *testing.T) {
 		w, h int
 		want []string
 	}{
-		{"fine", 86, 30, []string{"all hosts ▾", "docs-sweep@ws-1"}},
+		{"fine", 86, 30, []string{"3 hosts s▸", "docs-sweep@ws-1"}}, // all hosts: the bar's chips (owner, 2026-11-24)
 		{"fine", 132, 32, []string{"docs-sweep@ws-1"}},
-		{"stale", 132, 32, []string{"! gpu-1 not reached"}},
-		{"blocked", 132, 32, []string{"! gpu-1 blocked"}},
+		{"stale", 140, 32, []string{"! gpu-1 not reached"}}, // 140: the desk's list is 40 wide (design review D16)
+		{"blocked", 140, 32, []string{"! gpu-1 blocked"}},
 	} {
 		all := strings.Join(frameOf(consoleOn(threeHosts(t, st, c.w, c.h, c.gpu))), "\n")
 		for _, w := range c.want {

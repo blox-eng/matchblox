@@ -1386,7 +1386,8 @@ func TestStopOfADoneCloneSaysWhereItIs(t *testing.T) {
 		t.Fatalf("sent %+v", acts)
 	}
 	next, _ = next.Update(resultMsg(proto.Result{ActID: "a3", Note: "the clone of o/r was done: it is in " + home + "/src/r"}))
-	if s := screen(next); !strings.Contains(s, "the clone of o/r was done: it is in ~/src/r") {
+	// On the desk the list's foot says it, wrapped to the list (owner, 2026-11-24).
+	if s := screen(next); !strings.Contains(next.(Model).sideSays(), "the clone of o/r was done: it is in ~/src/r") || !strings.Contains(s, "the clone of o/r was done") {
 		t.Fatalf("the note is not shown:\n%s", s)
 	}
 	// A refusal of the stop says nothing: the builder has moved on.

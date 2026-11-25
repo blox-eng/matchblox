@@ -1,7 +1,7 @@
  ▰ matchblox · hosts
 ──────────────────────────────────────────────────────────────────────────────────────
  HOSTS · 3 · 2 SHOWN
- ▌ ● this machine          7 sessions · 6 waits
+ ▌ ● this machine          8 sessions · 7 waits
    ● ws-1                  2 sessions · 1 waits
    ○ gpu-1                 hidden
      + add a host          from ~/.ssh/config, or type one

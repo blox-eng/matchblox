@@ -1,0 +1,38 @@
+ ▰ matchblox    ALL    matchblox ●1    base    ledge ●1                    ● 2 need you · ✓ 3 done    ⚙
+────────────────────────────────┬───────────────────────────────────────────────────────────────────────
+ NEEDS YOU · 2  −               │ flint-auth ✻ waits                    ctx 90%  ctrl+o expand · m menu
+▌╿ flint-auth              10m ✻│
+   waits                        │
+ ╿ ember-billing           10m ✻│
+   waits                        │
+────────────────────────────────┤
+ DONE · 3  −                    │
+ ✓ spark-rates@gpu-1       10m ✻│
+ ✓ kindle-web              10m ✻│
+ ✓ ux-pass                 10m ✻│
+────────────────────────────────┤
+ IDLE · 4  −                    │
+ │ base-docs               10m ✻│
+ │ wick-vat                10m ✻│
+ │ hearth-api@gpu-1        10m ✻│
+ │ cinder-ci@gpu-1         10m ✻│
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+ + new · ! 1 setup              │ ›                                         answer in its pane · ctrl+o
+────────────────────────────────┴───────────────────────────────────────────────────────────────────────
+ LIST   2 hosts s▸   ✻ work 5h 62% ↻2h48m · wk 40% ↻4d   stoker off                              ? keys

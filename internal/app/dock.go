@@ -466,7 +466,8 @@ func (m Model) runs() string {
 // then the machine, then the detached busy loops and the top processes,
 // then the hosts. Two or
 // more hosts: a section for each host, in Hosts order, headed by its name;
-// the busy loops and the devices are the home host's.
+// the devices are the home host's, and a busy loop on another host shows
+// in its section, which only that host can stop.
 func (m Model) machinePanel(w int) body {
 	b := m.viewsBody(w)
 	b.add(-1, m.usageLines(w, true)...)
@@ -487,6 +488,12 @@ func (m Model) machinePanel(w int) body {
 			p := on.procs(w)
 			b.lines, b.rows = append(b.lines, p.lines...), append(b.rows, p.rows...)
 			continue
+		}
+		if len(on.snap.Orphans) > 0 {
+			b.add(-1, on.region("detached busy loops", w)...)
+			for _, o := range on.snap.Orphans {
+				b.add(-1, fit(on.orphanLine(o), w))
+			}
 		}
 		b.add(-1, on.region("top processes", w)...)
 		b.add(-1, on.topRows(w)...)

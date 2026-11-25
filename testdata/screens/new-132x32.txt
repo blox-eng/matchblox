@@ -1,32 +1,32 @@
- ▰ matchblox                                                                                                           ● 6 need you
- SESSIONS 7    machine
-────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- NEEDS YOU · 6  −                       │╭─ New session ───────────────────────────────────────────────────────────────────────────╮
-▌╿ flint-auth                       2m ✻││ where    /work/flint-auth                                                               │
-   conflicts with main                  ││ branch   feat/88-rate-limits                                                            │
- ╿ spark-docs                       9m ✻││ name     flint-auth-feat-88-rate-limits                                                 │
-   I rewrote the quick start and the in…││ agent    ● claude  ○ codex  ○ opencode                                                  │
- ╿ ember-billing                    4m ✻││ first  › fix the flaky ships test▏                                                      │
-   #4552 waits for your merge           │╰─ ⏎ start ─ tab next ─ esc ──────────────────────────────────────────────────────────────╯
- ╿ kindle-web                       1m ✻│
-   Do you want to proceed?              │
- ╿ cinder-ci                        0s ❋│
-   I am moving the cache key to the go.…│
- ╿ wick-mobile                      0s ▣│
-   ⠙ Working                            │
-────────────────────────────────────────│
- WORKING · 1  −                         │
- ✦ hearth-api                 #4551 ci ✻│
-                                        │
-                                        │
-                                        │
-                                        │
-                                        │
-                                        │
-                                        │
-                                        │
-                                        │
-                                        │
- + new · ✧ 7 tips                       │
-────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- in the list · ↑↓ choose · ⏎ write · s hosts · g chain · m menu
+ ▰ matchblox    ALL    spark-docs    hearth-api    ux-pass    kindle-web ●1    no directory    +3 ▾               ● 3 need you    ⚙
+────────────────────────────────┬───────────────────────────────────────────────────────────────────────────────────────────────────
+ NEEDS YOU · 3  −               │╭─ New session ───────────────────────────────────────────────────────────────────────────────────╮
+▌╿ flint-auth               2m ✻││ where    /work/flint-auth                                                                       │
+   conflicts with main          ││ branch   feat/88-rate-limits                                                                    │
+ ╿ ember-billing            4m ✻││ name     flint-auth-feat-88-rate-limits                                                         │
+   #4552 waits for your merge   ││ agent    ● claude  ○ codex  ○ opencode                                                          │
+ ╿ kindle-web               1m ✻││ first  › fix the flaky ships test▏                                                              │
+   Do you want to proceed?      │╰─ ⏎ start ─ tab next ─ esc ──────────────────────────────────────────────────────────────────────╯
+────────────────────────────────┤
+ WORKING · 1  −                 │
+ ✦ hearth-api     #4551 ci  3h ✻│
+────────────────────────────────┤
+ IDLE · 4  −                    │
+ ╵ cinder-ci               now ❋│
+ ╵ wick-mobile             now ▣│
+ │ spark-docs               9m ✻│
+ ╵ ux-pass                 10m ✻│
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+ + new · ✧ 8 tips               │
+────────────────────────────────┴───────────────────────────────────────────────────────────────────────────────────────────────────
+ LIST   this machine cpu 0% mem 40%   ✻ Max 5h 84% · wk 82%   · login usage not measured   ❋ Plus 5h 40% · wk 12%            ? keys

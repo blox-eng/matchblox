@@ -179,7 +179,7 @@ func cellsIn(frame string, a, b point, x0, x1 int) string {
 }
 
 func TestADragCopiesWhatItCovers(t *testing.T) {
-	for _, size := range [][2]int{{80, 31}, {160, 38}} {
+	for _, size := range [][2]int{{100, 31}, {160, 38}} {
 		name := fmt.Sprintf("%dx%d", size[0], size[1])
 		for _, rows := range []int{0, 2} {
 			m, clipped, _ := menuBoard(t, size[0], size[1], nil)
@@ -252,7 +252,7 @@ func TestADragCopiesWhatItCovers(t *testing.T) {
 
 func TestADragIsNoLongPress(t *testing.T) {
 	press := func() (Model, *[]string, point) {
-		m, clipped, _ := menuBoard(t, 80, 31, nil)
+		m, clipped, _ := menuBoard(t, 100, 31, nil)
 		m = mouse(t, m, tea.MouseReleaseMsg{X: 1, Y: 1, Button: tea.MouseLeft}) // the terminal reports releases
 		x, y := cardOn(t, m, "kindle-web")
 		return m, clipped, point{x, y}
@@ -351,6 +351,7 @@ func TestCopySaysUncheckedUntilAPasteProvesIt(t *testing.T) {
 	if ids := boardDoorIDs(m); len(ids) == 0 || ids[0] != doors.CopyCheck {
 		t.Fatalf("the doors line is %q, want copy-check first", ids)
 	}
+	m.noticeText, m.saying = "", nil // on the desk the notice sits on the foot until it ends
 	if !strings.Contains(plainFrame(m), "! 1 setup") {
 		t.Errorf("the list's foot does not name the check:\n%s", plainFrame(m))
 	}
@@ -479,7 +480,12 @@ func TestTheMenuShowsItsOwnKeys(t *testing.T) {
 		m, _, _ := menuBoard(t, w, 31, chooseCard("flint-auth"))
 		m = pressOn(m, "m")
 		lines := strings.Split(plainFrame(m), "\n")
-		if got := strings.TrimSpace(lines[len(lines)-1]); !strings.HasPrefix("in the menu · ↑↓ move · ⏎ do · esc close", got) || !strings.HasPrefix(got, "in the menu · ↑↓ move · ⏎ do") {
+		got := strings.TrimSpace(lines[len(lines)-1])
+		if m.desk() { // the bar: the mode word, then the menu's keys
+			_, got, _ = strings.Cut(got, "  ")
+			got = strings.TrimSpace(got)
+		}
+		if !strings.HasPrefix("in the menu · ↑↓ move · ⏎ do · esc close", got) || !strings.HasPrefix(got, "in the menu · ↑↓ move · ⏎ do") {
 			t.Errorf("%d columns: the key line with the menu open is %q", w, got)
 		}
 	}
@@ -599,7 +605,7 @@ func rowOn(t *testing.T, m Model, name string) (int, int) {
 }
 
 func TestASwipeMovesTheCardAsTheArrowsDo(t *testing.T) {
-	for _, size := range [][2]int{{40, 34}, {80, 31}} {
+	for _, size := range [][2]int{{40, 34}, {100, 31}} {
 		name := fmt.Sprintf("%dx%d", size[0], size[1])
 		keys, _, _ := menuBoard(t, size[0], size[1], chooseCard("spark-search"))
 		swipe, _, _ := menuBoard(t, size[0], size[1], chooseCard("spark-search"))

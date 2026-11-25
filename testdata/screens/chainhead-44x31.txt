@@ -5,14 +5,14 @@
  ≋ hearth                   step 1 of 3 · 3
 ▌├ ╿ kindle-web                         1m ✻
  │   Do you want to proceed?
- ├ ✦ hearth-api                            ✻
- └ ╵ ember-billing                      3m ✻
+ ├ ✦ hearth-api                         3h ✻
+ └ ╵ ember-billing                      4m ✻
 ────────────────────────────────────────────
  WORKING · 1  −
- ✦ flint-auth                              ✻
+ ✦ flint-auth                           2m ✻
 ────────────────────────────────────────────
  IDLE · 1  −
- ╵ spark-docs                           9m ✻
+ │ spark-docs                           9m ✻
 
 
 
@@ -26,6 +26,6 @@
 
 
 
- + new · ✧ 7 tips
+ + new · ✧ 8 tips
 ────────────────────────────────────────────
  in the list · ↑↓ choose · ⏎ write · s hosts

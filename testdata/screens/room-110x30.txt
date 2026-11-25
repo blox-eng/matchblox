@@ -1,30 +1,30 @@
- ▰ matchblox                                                                                     ● 3 need you
- SESSIONS 6    machine
-──────────────────────────────────────────────────────────────────────────────────────────────────────────────
- NEEDS YOU · 3  −                       │ CHAIN hearth
- ≋ hearth               step 2 of 3 · 3 │
- ├ ╿ kindle-web                     2m ✻│ ≋ "ship the chain"
- │   Do you want to proceed?            │ ≋ hearth's stoker is quiet since 22:49 · ⏎ asks it
-▌├ ╿ hearth-api                     8h ✻│   ✓ step
- │   permission prompt                  │   ▸ step · waits for your go
- └ ╿ ember-billing                  8h ✻│     step
-     which branch?                      │   ↓ 2 more
-                                        │
-                                        │ › tell hearth's stoker…
-                                        │
-                                        │
-                                        │
-                                        │
-                                        │
-                                        │
-                                        │
-                                        │
-                                        │
-                                        │
-                                        │
-                                        │
-                                        │
-                                        │
- + new · ✧ 7 tips                       │
-──────────────────────────────────────────────────────────────────────────────────────────────────────────────
- in the room · esc all · ↑↓ choose
+ ▰ matchblox    ALL    spark-docs    hearth-api ●1    kindle-web ●1    +2 ▾                 ● 3 need you    ⚙
+────────────────────────────────┬─────────────────────────────────────────────────────────────────────────────
+ NEEDS YOU · 3  −               │ CHAIN hearth
+ ≋ hearth       step 2 of 3 · 3 │
+ ├ ╿ kindle-web             1m ✻│ ≋ "ship the chain"
+ │   Do you want to proceed?    │ ≋ hearth's stoker is quiet since 22:49 · ⏎ asks it
+▌├ ╿ hearth-api             3h ✻│   ✓ step
+ │   permission prompt          │   ▸ step · waits for your go
+ └ ╿ ember-billing          4m ✻│     step
+     which branch?              │   ↓ 2 more
+                                │
+                                │ › tell hearth's stoker…
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+ + new · ✧ 8 tips               │
+────────────────────────────────┴─────────────────────────────────────────────────────────────────────────────
+ AGENT  in the room · esc all · ↑↓ choose

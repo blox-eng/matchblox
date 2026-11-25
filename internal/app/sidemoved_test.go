@@ -93,7 +93,7 @@ func TestTheChatsDeadTimeStartsOnOpenAndOnAFilterChange(t *testing.T) {
 		t.Fatalf("sent %+v", sent(m))
 	}
 
-	for _, keys := range [][]string{{"tab", "shift+tab"}, {"s"}, {"g", "esc"}} {
+	for _, keys := range [][]string{{",", "esc"}, {"s"}, {"g", "esc"}} { // , and esc: the desk's Machine and back
 		clock = clock.Add(time.Second)
 		m.toList()
 		m = pressOn(m, keys...)

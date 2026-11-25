@@ -34,10 +34,14 @@ func TestTheHeaderHasNoLimits(t *testing.T) {
 	for _, w := range []int{44, 86, 132} {
 		m, _ := loadedWith(t, w, limitsState())
 		lines := strings.Split(screen(m), "\n")
-		if !strings.Contains(lines[1], "SESSIONS") || strings.Contains(strings.Join(lines[:3], "\n"), "62%") {
+		under := "SESSIONS" // the tab row; on the desk the head row's rule
+		if m.desk() {
+			under = "─"
+		}
+		if !strings.Contains(lines[1], under) || strings.Contains(strings.Join(lines[:3], "\n"), "62%") {
 			t.Fatalf("width %d: the header is not one line:\n%s", w, strings.Join(lines[:4], "\n"))
 		}
-		if !strings.Contains(lines[0], "● 2 need you") { // the console's words
+		if !strings.Contains(lines[0], "● 1 need you") { // permission waits; finished queue is not need
 			t.Fatalf("width %d: the header does not say who waits: %q", w, lines[0])
 		}
 	}

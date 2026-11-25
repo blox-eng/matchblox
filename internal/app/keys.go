@@ -93,7 +93,7 @@ func defaultKeys() keymaps {
 			Rename:     bind(ks("r"), "r", "rename"),
 			StartAgain: bind(ks("R", "shift+r"), "R", "start again"),
 			Jump:       bind(ks("ctrl+o"), "ctrl+o", "go in"),
-			WasInto:    bind(ks("a"), "a", ""), // ctrl+o goes in now: a says so once
+			WasInto:    bind(ks("a"), "a", "ctrl+o goes in"), // says so once on the stoker
 		},
 		form: formKeys{
 			Close: bind(ks("esc"), "esc", ""),
@@ -161,12 +161,17 @@ func defaultKeys() keymaps {
 			Copy:   bind(ks("c"), "c", "copy the link"),
 		},
 		board: boardKeys{
-			Copy:  bind(ks("c"), "c", "copy"),
-			Chain: bind(ks("g"), "g", "chain"),
-			Room:  bind(ks("G", "shift+g"), "G", "room"), // beside the list only: g shows the chain there
-			Host:  bind(ks("s"), "s", "hosts"),
-			Menu:  bind(ks("m"), "m", "menu"),
-			Merge: bind(ks("p"), "p", "merge"),
+			Copy:        bind(ks("c"), "c", "copy"),
+			Chain:       bind(ks("g"), "g", "chain"),
+			Host:        bind(ks("s"), "s", "hosts"),
+			Menu:        bind(ks("m"), "m", "menu"),
+			Merge:       bind(ks("p"), "p", "merge"),
+			SpaceBefore: bind(ks("["), "[ ]", "space"),
+			SpaceAfter:  bind(ks("]"), "[ ]", "space"),
+			Keys:        bind(ks("?"), "?", "keys"),
+			Machine:     bind(ks(","), ",", "machine"),
+			Shell:       bind(ks("t"), "t", "a shell under the agent"),
+			Review:      bind(ks("D", "shift+d"), "D", "review its changes"),
 		},
 		side: sideKeys{
 			Enter:    bind(ks("enter"), "⏎", "send"),
@@ -295,11 +300,13 @@ func (k askKeys) bindings() []bkey.Binding { return []bkey.Binding{k.Send, k.Can
 // boardKeys are the list's own keys, over mainKeys while the Sessions tab
 // shows: ↑ ↓ ⏎ x y esc and the rest keep their mainKeys bindings.
 type boardKeys struct {
-	Copy, Chain, Room, Host, Menu, Merge bkey.Binding
+	Copy, Chain, Host, Menu, Merge bkey.Binding
+	SpaceBefore, SpaceAfter, Keys  bkey.Binding
+	Machine, Shell, Review         bkey.Binding
 }
 
 func (k boardKeys) bindings() []bkey.Binding {
-	return []bkey.Binding{k.Copy, k.Chain, k.Room, k.Host, k.Menu, k.Merge}
+	return []bkey.Binding{k.Copy, k.Chain, k.Host, k.Menu, k.Merge, k.SpaceBefore, k.SpaceAfter, k.Keys, k.Machine, k.Shell, k.Review}
 }
 
 // sideKeys are the chat's line and the list beside it. In the line every
@@ -353,6 +360,9 @@ var keyNames = func() map[string]string {
 // tmuxKeyRE is a tmux key name as tmux prints one: modifiers, then one
 // character or a word (Space, F12).
 var tmuxKeyRE = regexp.MustCompile(`^((?:[CMS]-)*)([!-~]|[A-Za-z][A-Za-z0-9]+)$`)
+
+// flipKey moves the keys between the list and the agent (agentKeys).
+const flipKey = "ctrl+q"
 
 // prefixName is a tmux prefix as the key line writes keys: C-a is ctrl+a. A
 // prefix of None, or none that tmux would print, has no name.

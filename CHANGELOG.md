@@ -6,6 +6,15 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **The desk: spaces, DONE, a shell, reviews.**
+  On a desk, matchblox draws the head, the list beside the agent's
+  screen, and the bar. Spaces filter by repo. `DONE` holds a finished
+  turn until you open it. `?` opens the keys sheet, `,` opens Machine,
+  `t` opens a shell under the agent, and `D` reviews its changes. The
+  phone keeps its tabs and its key line.
+
 ## [0.61.0] - 2026-11-24
 
 ### Added

@@ -102,11 +102,11 @@ terminal.`
   come back. Tap an option of its question to mark it, and tap it again to
   send it. Long-press a row for its menu. See
   [The list](console.md#the-list).
-- Inside tmux, the console may have the agent's own pane beside the list.
-  On a phone one pane shows at a time: a tap on a row shows the agent
-  full screen, and `◂` goes back to the list. The phone and the desk share
-  one view, so a choice on the phone changes the right side of the desk.
-  See [Keys](keys.md#the-agent-beside-the-list).
+- On a phone one screen shows at a time: a tap on a row shows the agent
+  full screen, and `◂` goes back to the list. The phone holds a console
+  of its own, sized to the phone: a choice on the phone moves no other
+  screen. The desk draws the agent beside the list; the phone keeps its
+  tabs and its key line. See [Keys](keys.md#the-agent-beside-the-list).
 - While the console shows Sessions or Machine, the key belt is on its
   Board layout. Home is `◂`, then the keys of the chosen session
   (`1 answer`, `p merge`, `y go`), then `↑ ↓ ⏎`. The rest of the belt has
@@ -316,8 +316,7 @@ starts it. A second phone or laptop attaches to the same session.
 With the agent beside the list, a tap on a row already shows its pane,
 full screen on a phone. `◂` on the belt goes back to the list. `ctrl+q`
 flips the keys on a hardware keyboard, and the belt has no key for it.
-`g` on a chain's row shows up to 4 members' panes in one view, and `G`
-opens the chain's room.
+`g` on a chain's row shows the chain only.
 
 The demo has no tmux. There `Ctrl+O` opens a full-screen stand-in for the
 pane, and the belt answers it: at a question the key line says `type 2 to

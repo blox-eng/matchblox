@@ -87,7 +87,7 @@ const (
 // TapKeys are the act keys of the app's belt. A tap on one sends TapKey,
 // which no keyboard sends, so it never reads as a typed letter or as an
 // Esc then a letter.
-var TapKeys = []string{"p", "y", "s", "g", "/", "m", "c", "z", "N", "x"}
+var TapKeys = []string{"p", "y", "s", "g", "/", "m", "c", "z", "N", "?", "t", "D", "x"}
 
 // TapKey is what the app sends for a tap on the belt's act key key.
 func TapKey(key string) string { return "\x1b_matchblox;tap=" + key + "\x1b\\" }

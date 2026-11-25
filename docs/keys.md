@@ -7,8 +7,10 @@ digits, arrows, `Enter` and `Esc`. No key of the console needs `Ctrl`.
 interrupts, a swipe or the match head scrolls, and a tap on the head is
 `Enter`. In the matchblox app,
 your own belt layout can hold the console's keys: see
-[Mine](phone.md#mine). The key line at
-the bottom shows the keys of the open tab. A tap on a key presses it.
+[Mine](phone.md#mine). On a phone, the key line at
+the bottom shows the keys of the open tab. A tap on a key presses it. On
+a desk there is no key line: the bar names the mode, and `?` opens the
+keys sheet.
 
 ## The list and the chat
 
@@ -18,9 +20,10 @@ the keys go to the list or to the agent's pane: see
 [The agent beside the list](#the-agent-beside-the-list). The rows below
 that name the line, or a typed digit, do not act there.
 
-The keys go to one of two places: the chat's line or the list. The key
-line names the place first, `writing to flint-auth` or `in the list`, then
-at most five keys for it.
+The keys go to one of two places: the chat's line or the list. On a
+phone, the key line names the place first, `writing to flint-auth` or
+`in the list`, then at most five keys for it. On a desk, the bar's mode
+word names the place.
 
 In the line, every letter types, `j`, `k`, `q` and `R` too. A paste goes
 in as one piece, in the line that shows: the chosen session's line, or
@@ -34,11 +37,15 @@ the line empty and a question on the screen; else it types.
 | `Backspace` | In the drawn chat, erases the last character of the line. |
 | A digit, 1 to 9 | With the line empty, marks that option of the question on the screen. The same digit again sends it. A question that opened less than half a second ago takes no digit: the digit types. On a session the stoker holds, 1 marks "Let it go", and 1 again lets it go. |
 | `↑`, `↓` | With the line empty, or in the list, chooses the session above or below, as the list draws them. In the list, `↓` past the last row chooses the parts of the foot one by one, and `↑` goes back up. `Enter` opens the chosen part. |
-| `Esc` | Closes the menu. In the line, clears a marked answer, then moves the keys to the list. In the list, clears the search, then closes the chain view beside the list, then closes the chain's room, then shows all chains. It never leaves the console, except on a host that has not answered yet: then it goes back to Hosts. `Ctrl+M`, prefix `m` and the phone's back button do the same in the console. On a phone, `Esc` then a quick letter types the letter in the line. |
+| `Esc` | Closes the menu. In the line, clears a marked answer, then moves the keys to the list. In the list, clears the search, then closes the chain's room, then shows all chains, then all repos, then all hosts. It never leaves the console, except on a host that has not answered yet: then it goes back to Hosts. `Ctrl+M`, prefix `m` and the phone's back button do the same in the console. On a phone, `Esc` then a quick letter types the letter in the line. |
 | `s` | In the list, shows the next host, then all hosts. It goes to each host, a hidden host too. With one host shown, all hosts is that host, so `s` goes from host to host. With one host only, a notice says so. |
+| `[`, `]` | In the list, shows only the repo before or after, then every repo. A space is a repo with a live session. The header's count of who needs you still counts every repo. With one repo only, a notice says so. |
+| `?` | On the desk, in the list, opens the keys sheet over the agent. `Esc` closes it. With the agent's keys, `?` types into the agent. |
+| `,` | On the desk, in the list, opens Machine as the ⚙ sheet over the agent, as `⌘,` opens settings in a desktop app. A tap on `⚙` or on a chip of the bar opens it on that part. With the agent's keys, `,` types into the agent. |
+| `t` | In the list, opens a shell under the agent, in its worktree. |
+| `D` | In the list, opens a review of the chosen session's changes. |
 | `h` | In the list, on a hidden host, shows that host in all hosts again. Machine › Hosts then ticks the host. On another host, a notice says what `h` does. |
-| `g` | In the list, shows only the chain of the chosen session: its room. `Esc` shows all. With the agent beside the list, `g` instead shows up to 4 of the chain's agents side by side, each in its own pane, and the list marks them `▸`. `g` again, or `Esc`, shows one agent again: the chosen row's. |
-| `G` | With the agent beside the list, opens the room of the chosen session's chain, as `g` does without it. |
+| `g` | In the list, shows only the chain of the chosen session: its room. `Esc` shows all. |
 | `⌥s` | Opens the room of the chosen session's chain, as `g` does. A session in no chain opens its chain of one, which the host's stoker drives. In the matchblox app, `⌥s` types `s` in the line, and the belt's `g` opens the room. |
 | `/` | In the list, searches the list. |
 | `m` | In the list, opens the menu of the chosen session. It names the acts that destroy nothing, with their keys: rename, stoke the chain, a new order. A kill, a merge, a go, a switch and the stoker's stop are keys of the list only. On a match that waits for recover, it opens that match's menu: reopen it, copy its name or its conversation id, or take it out of its team. |
@@ -55,8 +62,8 @@ the line empty and a question on the screen; else it types.
 | `o` | In the list, on the host of the chosen session, gives a new order while a day run is on: the launch sheet opens with the run's gos, and the order goes to the stoker as one line. The run goes on, and done steps stay done. A night is sealed: `n` stops it first. |
 | `F` | In the list, stokes the chain of the chosen session: the start sheet, `Stoke the chain <name> (<n> matches)?`, takes the order and the gos of a stoker for that chain. See [A family of stokers](stoker.md#a-family-of-stokers). |
 | `d` | In the tips, dismisses the chosen tip until its evidence changes. |
-| `Tab` or `Shift+Tab` | Goes to Machine, or back to the list and the chat. |
-| `Ctrl+O` | Goes into the chosen agent's pane, from the line or the list. The key line then says the way back, `ctrl+a m`. |
+| `Tab` or `Shift+Tab` | On the phone, goes to Machine, or back to the list and the chat. On the desk it does nothing: Machine is `,`. |
+| `Ctrl+O` | Goes into the chosen agent's pane, from the line or the list. On a phone the key line then says the way back, `ctrl+a m`. On a desk the bar names the session. |
 | `Ctrl+L` | Hides the list, or shows it again. With the list hidden, the chat takes the width, and the header names each session that needs you. A tap on a name opens its chat. On a phone, the list and the chat take turns. |
 | `◂` or `←` | On a phone, goes from the chat back to the list. A tap on `◂` at the left of the chat's head does it too. On a desk, `←` in the line moves the keys to the list, as `◂` does on a phone. |
 | `e` | In the list, shows the agents that exited and wait for their parent, dim at the end of `IDLE`: for each parent, how many, the command that makes it reap them, and their pids. `e` again hides them. The `IDLE` count counts only the sessions that run. While they are hidden, the foot counts them: `· 1 exited`. |
@@ -66,11 +73,11 @@ the line empty and a question on the screen; else it types.
 ### The agent beside the list
 
 On a desk, the console runs inside tmux in its home session `matchblox`.
-There the console's window has two panes: the list, and the agent's own
-pane. The right pane is a live view of the agent's pane, so typing there is
-typing into the agent: its `/commands`, `@files`, `Esc`, menus, and the
-mouse wheel for scroll and copy. The list is 40 columns wide, or 32 on a
-mid, tall screen.
+matchblox draws the list and the agent's own screen in one window. The
+right side is a live view of the agent's pane, so typing there is typing
+into the agent: its `/commands`, `@files`, `Esc`, menus, and the mouse
+wheel for scroll and copy. The list is 40 columns from 140 up, 32 from
+100 to 139, and 28 below 100.
 
 | Key | What it does |
 |---|---|
@@ -79,29 +86,25 @@ mid, tall screen.
 | `↑`, `↓` | Choose the next row. When the choice rests, the right side shows that agent, and the keys stay in the list. A peer's rows show after you let one of its agents show in this run; on a host the stoker drives, and on one pane at a time, only `Enter` shows. |
 | `Ctrl+O` | Still goes fully into the agent, as before. |
 
-tmux takes these chords, not the console, so they are in a table of their
-own:
-
-| Chord | What it does |
-|---|---|
-| `ctrl+q` | Flips the keys between the list and the agent's pane. It acts only in the console's window. In any other pane or window, `ctrl+q` types as usual. |
-| `ctrl+a m` | Comes back to the list: prefix `m`, a tap on `◂ matchblox`, and the phone's back all go to the list. |
+`ctrl+q` flips the keys between the list and the agent. In any other pane
+or window it types as usual. `ctrl+a m` comes back to the list: prefix
+`m`, a tap on `◂ matchblox`, and the phone's back all go to the list.
 
 A host that the stoker drives asks its take-over question first, and a
 peer's consent box comes first, as with `Ctrl+O`. The agent of a peer
-opens on the right over ssh. When the agent ends, the right pane says
+opens on the right over ssh. When the agent ends, the region says
 `flint-auth ended. ctrl+q: back to the list`. If the agent cannot be
-shown, the pane says why. A pane of the console's own window never shows
-on the right: `Ctrl+O` opens it.
+shown, the region says why. A pane of the console's own window never
+shows on the right: `Ctrl+O` opens it.
 
-Text typed in the list does not go to the agent. The key line says
+Text typed in the list does not go to the agent. The bar says
 `the agent pane takes text · ⏎ goes into flint-auth`.
 
-On a narrow window, and on Matchblox Pocket held upright, one pane shows
-at a time. A tap on a row shows the agent full screen, and `◂` goes back
-to the list. The phone has a console of its own, sized to the phone: a
-choice on the phone moves no other screen, and no screen changes the
-phone's size.
+On a narrow window, and on Matchblox Pocket held upright, the phone
+layout shows: a tap on a row shows the agent full screen, and `◂` goes
+back to the list. The phone has a console of its own, sized to the
+phone: a choice on the phone moves no other screen, and no screen
+changes the phone's size.
 
 ### Each terminal, its own console
 
@@ -158,14 +161,16 @@ next session in the list is chosen, and its line says
 
 ## Machine
 
-`Tab` opens it. The rows are the stoker, git, history and panes, then the
-detached busy loops, the devices and, over several hosts, the hosts.
+On the desk `,` opens it as a sheet over the agent; on the phone `Tab`
+opens its tab. The rows are the stoker, git, history and panes, then the
+detached busy loops, the devices and, over several hosts, the hosts. A
+busy loop on another host shows in that host's section.
 
 | Key | What it does |
 |---|---|
 | `↑` or `k`, `↓` or `j` | Chooses the row above or below. |
 | `Enter` | Opens the view of the row: the stoker, git, history or panes. On a busy loop, goes to the pane that started it. On `+ pair a device`, opens the pair page. On a host, opens Hosts. On Git, opens a shell in the worktree. On Panes, goes to the pane. |
-| `Esc` | Goes back from a view to Machine, on its row. |
+| `Esc` | Goes back from a view, or from Hosts opened on the desk, to Machine, on its row. On the desk, `Esc` on Machine closes the sheet, and `ctrl+q` closes Machine and every view or sheet it opened, whatever they show, and gives the keys to the list. |
 | `x` | Kills a detached busy loop, removes a device, or removes the marked worktrees (Git), after a typed `y`. |
 | `Space` | Marks a worktree that is safe to remove (Git). |
 | `X` | Marks every worktree that is safe to remove (Git). |
@@ -198,27 +203,6 @@ The menu has it only while the list shows that chain.
 While the talk line types, every key is text until `Enter` sends it to the
 chain's stoker or `Esc` stops. The first words to a chain with no stoker
 start one, with no launch sheet; a refusal keeps the words in the line.
-
-### The chain view beside the list
-
-With the agent beside the list, `g` on a chain's row, or on a member's row,
-shows up to 4 of the chain's agents on the right, each in its own pane,
-most urgent first. With 2 members, one pane is above the other. With 3 or
-4, the panes make a 2×2 grid. The list marks each member on screen with
-`▸`.
-
-| Key | What it does |
-|---|---|
-| `g` | In the list, opens the chain view. `g` again closes it. |
-| `G` | Opens the chain's room, the stoker's talk. This is what `g` did before in this mode. |
-| `Esc` | Closes the chain view. With a search on, it clears the search first. |
-
-A click on a pane gives it the keys. The chords are tmux's:
-
-| Chord | What it does |
-|---|---|
-| `prefix z` | Zooms the pane the keys are in, and again unzooms. |
-| `ctrl+q` | From a pane back to the list, and from the list to the member used last. |
 
 ### The flip from a pane
 

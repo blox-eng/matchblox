@@ -45,8 +45,8 @@ func listRow(t *testing.T, m Model, name string) point {
 	lw := m.sideBoxAt(max(m.width, minWidth)).listW
 	frame := plainFrame(m)
 	for y, l := range strings.Split(frame, "\n") {
-		if y < 3 {
-			continue // the header and the tabs
+		if y < bodyTop(m) {
+			continue // the header and the tabs, or the desk's head row and its rule
 		}
 		if i := strings.Index(ansi.Truncate(l, lw, ""), name); i >= 0 {
 			return point{ansi.StringWidth(l[:i]), y}
@@ -78,8 +78,12 @@ func listOf(m Model) string {
 
 // bodyLine is line i of the body as the screen draws it.
 func bodyLine(m Model, i int) string {
-	return strings.Split(plainFrame(m), "\n")[3+i]
+	return strings.Split(plainFrame(m), "\n")[bodyTop(m)+i]
 }
+
+// bodyTop is the frame's first line of the body: under the header, the
+// tabs and a hairline; on the desk under the head row and its rule.
+func bodyTop(m Model) int { return m.draw(max(m.width, minWidth)).bodyTop }
 
 func TestTapOnARowOpensItsChat(t *testing.T) {
 	m, _, _ := sideShot(t, 160, 38)
@@ -162,7 +166,7 @@ func TestCtrlOExpandsAndTheKeyLineSaysTheWayBack(t *testing.T) {
 	if !strings.HasPrefix(keys, "went into spark-docs") || !strings.Contains(keys, m.keys.view.Back.Help().Key+" back") {
 		t.Fatalf("the key line %q does not say the way back", keys)
 	}
-	if keys = keyLineOf(pressOn(m, "a")); !strings.HasPrefix(keys, "writing to spark-docs") {
+	if keys = keyLineOf(pressOn(m, "a")); keys != "AGENT  spark-docs" { // the way back ends: the agent's line has the keys
 		t.Fatalf("after a key the key line %q", keys)
 	}
 }
@@ -204,10 +208,10 @@ func TestDragInTheChatSelectsChatTextOnly(t *testing.T) {
 func TestTapOnAGroupsFoldMarkFoldsIt(t *testing.T) {
 	m, _, _ := sideShot(t, 160, 38)
 	head := listRow(t, m, "WORKING")
-	before := ansi.Truncate(bodyLine(m, head.y-3), listWide, "")
+	before := ansi.Truncate(bodyLine(m, head.y-bodyTop(m)), listWide, "")
 	mark := point{ansi.StringWidth(before[:strings.Index(before, "−")]), head.y}
 	m = tapOn(t, m, mark)
-	folded := ansi.Truncate(bodyLine(m, head.y-3), listWide, "")
+	folded := ansi.Truncate(bodyLine(m, head.y-bodyTop(m)), listWide, "")
 	if folded != strings.Replace(before, "−", "+", 1) {
 		t.Fatalf("the folded head %q, was %q", folded, before)
 	}
@@ -227,7 +231,7 @@ func TestTapOnAGroupsFoldMarkFoldsIt(t *testing.T) {
 func TestFootItemOpensInTheChatsPlace(t *testing.T) {
 	m, _, _ := sideShot(t, 160, 38)
 	chat := ansi.Cut(bodyLine(m, 0), listWide+1, 160)
-	foot := 3 + m.bodyRows() - 1
+	foot := bodyTop(m) + m.bodyRows() - 1
 	footLine := strings.Split(plainFrame(m), "\n")[foot]
 	tips := strings.Index(footLine, "✧")
 	if tips < 0 {
@@ -294,7 +298,7 @@ func TestSmallScreensKeepTheChatLine(t *testing.T) {
 
 // footLine is the list's foot, and its line on the frame.
 func footLine(m Model) (string, int) {
-	y := 3 + m.bodyRows() - 1
+	y := bodyTop(m) + m.bodyRows() - 1
 	return strings.Split(plainFrame(m), "\n")[y], y
 }
 
@@ -303,7 +307,7 @@ func TestNewSessionOpensInTheChatsPlace(t *testing.T) {
 	st.Agents = []string{"claude", "codex", "opencode"}
 	m, _, _ := sideShotOf(t, st, 160, 38)
 	chat := ansi.Cut(bodyLine(m, 0), listWide+1, 160)
-	m = tapOn(t, m, point{2, 3 + m.bodyRows() - 1}) // + new
+	m = tapOn(t, m, point{2, bodyTop(m) + m.bodyRows() - 1}) // + new
 	if m.form == nil {
 		t.Fatalf("+ new opened no form: flash %q", m.flash)
 	}
@@ -361,7 +365,7 @@ func TestArrowsReachTheFootAndEnterOpensIt(t *testing.T) {
 		t.Fatalf("the last foot part: %q", keys)
 	}
 	m = pressOn(m, "enter")
-	chat := ansi.Strip(strings.Join(strings.Split(plainFrame(m), "\n")[3:6], "\n"))
+	chat := ansi.Strip(strings.Join(strings.Split(plainFrame(m), "\n")[bodyTop(m):bodyTop(m)+3], "\n"))
 	if !strings.Contains(chat, "SET UP") || !strings.Contains(chat, "Update to v0.43.0") {
 		t.Fatalf("⏎ on the setup step:\n%s", chat)
 	}
@@ -427,8 +431,10 @@ func TestANoticeLeavesTheChatLineAndTheFoot(t *testing.T) {
 		t.Fatal("no notice")
 	}
 	foot, y := footLine(m)
-	if !strings.Contains(foot, "+ new") || !strings.Contains(foot, "⏎ send to") {
-		t.Fatalf("the notice covers the foot or the chat line: %q", foot)
+	// On the desk the notice sits on the list's foot, as the mockup draws
+	// it, and the chat's line stays (owner, 2026-11-24).
+	if strings.Contains(foot, "+ new") || !strings.Contains(foot, "⏎ send to") {
+		t.Fatalf("the notice is not on the list's foot, or covers the chat line: %q", foot)
 	}
 	at, x := -1, -1
 	for i, l := range strings.Split(plainFrame(m), "\n") {
@@ -436,7 +442,7 @@ func TestANoticeLeavesTheChatLineAndTheFoot(t *testing.T) {
 			at, x = i, ansi.StringWidth(l[:c])
 		}
 	}
-	if at < 0 || at >= y {
+	if at < 0 || at > y {
 		t.Fatalf("the notice is at line %d, the foot at %d", at, y)
 	}
 	m = tapOn(t, m, point{x + 3, at})

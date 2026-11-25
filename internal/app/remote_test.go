@@ -304,7 +304,7 @@ func TestLostHostShowsStaleState(t *testing.T) {
 	next, _ = next.Update(lostMsg{err: io.EOF})
 	out := ansi.Strip(next.(Model).render())
 	first := strings.Split(out, "\n")[0]
-	if !strings.Contains(first, "ws-1 · stale") {
+	if !strings.Contains(first, "ws-1 · stale    ⚙") { // the head row's mark of old data (owner, 2026-11-24)
 		t.Fatalf("header %q: want the host marked stale", first)
 	}
 	if !strings.Contains(out, "connection lost") || !strings.Contains(out, "app-feature") { // the card the board chose
@@ -324,8 +324,8 @@ func TestSilentHostNamesTheHost(t *testing.T) {
 func TestHeaderNamesTheHostAsTyped(t *testing.T) {
 	m, _ := onHost(t, fixtureState())
 	next, _ := m.Update(helloMsg{Version: proto.Version, Host: "build-box-7"})
-	if first := strings.Split(ansi.Strip(next.(Model).render()), "\n")[0]; !strings.HasPrefix(first, " ▰ matchblox · ws-1 ") {
-		t.Fatalf("header %q, want the ssh name ws-1", first)
+	if chip := firstChip(next.(Model)); chip != "ws-1" {
+		t.Fatalf("bar %q, want the ssh name ws-1", barLine(next.(Model)))
 	}
 }
 
@@ -336,8 +336,8 @@ func TestBeforeTheFirstStateNoZeroMetrics(t *testing.T) {
 	m.splashDone = true
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	out := ansi.Strip(next.(Model).render())
-	if first := strings.Split(out, "\n")[0]; strings.Contains(first, "cpu") || !strings.Contains(first, "ws-3") {
-		t.Fatalf("header %q", first)
+	if bar := barLine(next.(Model)); strings.Contains(bar, "%") || !strings.Contains(bar, "reading ws-3") {
+		t.Fatalf("bar %q: want ws-3 and no metric", bar)
 	}
 	if !strings.Contains(out, "esc hosts") {
 		t.Fatalf("no way back:\n%s", out)

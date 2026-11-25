@@ -1,20 +1,19 @@
- ▰ matchblox                                                                                                                             ● 2 need you
- SESSIONS 6    machine
-──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ▰ matchblox    ALL    spark-docs    hearth-api    kindle-web ●1    flint-auth    ember-billing    user ●1                          ● 2 need you    ⚙
+────────────────────────────────────────┬─────────────────────────────────────────────────────────────────────────────────────────────────────────────
  NEEDS YOU · 2  −                       │ kindle-web ✻ asks                                                           ctx 56%  ctrl+o expand · m menu
 ▌╿ kindle-web                       1m ✻│
    Do you want to proceed?              │
  ≋ hearth               step 3 of 3 · 3 │
- ├ ✦ hearth-api                        ✻│
- ├ ╵ ember-billing                  3m ✻│
- └ ╿ hearth's stoker                0s ·│
+ ├ ✦ hearth-api                     3h ✻│
+ ├ ╵ ember-billing                  4m ✻│
+ └ ╿ hearth's stoker                   ·│
      merge #812 now?                    │
-────────────────────────────────────────│
+────────────────────────────────────────┤
  WORKING · 1  −                         │
- ✦ flint-auth                          ✻│
-────────────────────────────────────────│
+ ✦ flint-auth                       2m ✻│
+────────────────────────────────────────┤
  IDLE · 1  −                            │
- ╵ spark-docs                       9m ✻│
+ │ spark-docs                       9m ✻│
                                         │
                                         │
                                         │
@@ -25,6 +24,7 @@
                                         │
                                         │
                                         │
- + new · ✧ 7 tips                       │ ›                                                                               answer in its pane · ctrl+o
-──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- writing to kindle-web · ⏎ send · ↑↓ choose · esc list · ctrl+o expand · tab Machine
+                                        │
+ + new · ✧ 8 tips                       │ ›                                                                               answer in its pane · ctrl+o
+────────────────────────────────────────┴─────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ AGENT  kindle-web   this machine cpu 0% mem 40%   ✻ Max 5h 84% · wk 82%   · login usage not measured   ❋ Plus 5h 40% · wk 12%   ctrl+q list   ? keys

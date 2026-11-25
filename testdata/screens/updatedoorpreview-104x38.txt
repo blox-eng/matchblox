@@ -1,38 +1,38 @@
- ▰ matchblox                                                                               ● 6 need you
- SESSIONS 7    machine
-────────────────────────────────────────────────────────────────────────────────────────────────────────
- NEEDS YOU · 6  −                       │ SET UP
- ╿ flint-auth                       2m ✻│
-   conflicts with main                  │ Update to v0.43.0
- ╿ spark-docs                       9m ✻│  matchblox v0.43.0 is out. This machine runs v0.42.0.
-   I rewrote the quick start and the in…│
- ╿ ember-billing                    4m ✻│ matchblox v0.42.0 → v0.43.0 (linux/amd64)
-   #4552 waits for your merge           │   checksum    checked first
- ╿ kindle-web                       1m ✻│   provenance  checked if gh is installed
-   Do you want to proceed?              │               and logged in
- ╿ cinder-ci                        0s ❋│   replaces
-   I am moving the cache key to the go.…│     /home/user/.local/bin/matchblox
- ╿ wick-mobile                      0s ▣│
-   ⠙ Working                            │
-────────────────────────────────────────│
- WORKING · 1  −                         │
-▌✦ hearth-api                 #4551 ci ✻│
-   busy                                 │
-                                        │
-                                        │
-                                        │
-                                        │
-                                        │
-                                        │
-                                        │
-                                        │
-                                        │
-                                        │
-                                        │
-                                        │
-                                        │
-                                        │
-                                        │
- + new · ✧ 7 tips · ! 1 setup           │
-────────────────────────────────────────────────────────────────────────────────────────────────────────
- RUN install v0.43.0 over v0.42.0   y run  any other key cancels
+ ▰ matchblox    ALL    spark-docs    hearth-api    ux-pass    +5 ▾                    ● 3 need you    ⚙
+────────────────────────────────┬───────────────────────────────────────────────────────────────────────
+ NEEDS YOU · 3  −               │ SET UP
+ ╿ flint-auth               2m ✻│
+   conflicts with main          │ Update to v0.43.0
+ ╿ ember-billing            4m ✻│  matchblox v0.43.0 is out. This machine runs v0.42.0.
+   #4552 waits for your merge   │
+ ╿ kindle-web               1m ✻│ matchblox v0.42.0 → v0.43.0 (linux/amd64)
+   Do you want to proceed?      │   checksum    checked first
+────────────────────────────────┤   provenance  checked if gh is installed
+ WORKING · 1  −                 │               and logged in
+ ✦ hearth-api     #4551 ci  3h ✻│   replaces
+────────────────────────────────┤     /home/user/.local/bin/matchblox
+ IDLE · 4  −                    │
+ ╵ cinder-ci               now ❋│
+ ╵ wick-mobile             now ▣│
+ │ spark-docs               9m ✻│
+▌╵ ux-pass                 10m ✻│
+   The pass screen folds at eve…│
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+ + new · ✧ 8 tips · ! 1 setup   │
+────────────────────────────────┴───────────────────────────────────────────────────────────────────────
+ CONFIRM  install v0.43.0 over v0.42.0   y run · any other key cancels

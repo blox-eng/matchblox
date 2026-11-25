@@ -311,6 +311,12 @@ type Service struct {
 	// unread are the permission waits whose menu no rule reads, by pane.
 	// Under mu.
 	unread map[string]unreadWait
+	// states are each session's activity class and when it began, by pane
+	// ("sid:" and its id outside tmux). Under mu.
+	states map[string]paneState
+	// opened is seen.json: the person's last open of each session, by
+	// seenKey; nil until read. Under mu.
+	opened map[string]seenEntry
 	// headRun reads the HEADs of chained worktrees, restRun types the lines
 	// that wait for a rest: each one run at a time, out of the sample loop.
 	headRun, restRun lone
@@ -794,6 +800,8 @@ func (s *Service) mergeQueue() {
 	s.cur.Queue = s.queue.Items()
 	s.cur.StokerServer = s.StokerServer
 	s.markUnread(now)
+	s.stampStateAt(now)
+	s.stampSeen()
 	s.setReasons()
 }
 

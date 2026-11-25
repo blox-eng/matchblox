@@ -1,5 +1,4 @@
- ▰ matchblox                           flint-auth · spark-docs · ember-billing · kindle-web · cinder-ci · wick-mobile  ● 6 need you
- SESSIONS 7    machine
+ ▰ matchblox    ALL    spark-docs    hearth-api    ux-pass    +5 ▾       ● 3 need you  flint-auth · ember-billing · kindle-web    ⚙
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  flint-auth ✻ asks · #4545 ci                                                                       ctx 41%  ctrl+o expand · m menu
 
@@ -27,6 +26,7 @@
 
 
 
+
  ›                                                                                                             ⏎ send to flint-auth
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- writing to flint-auth · ⏎ send · ↑↓ choose · esc list · ctrl+o expand · tab Machine
+ AGENT  flint-auth   this machine cpu 0% mem 40%   ✻ Max 5h 84%   · login usage not measured   ❋ Plus 5h 40%   ctrl+q list   ? keys

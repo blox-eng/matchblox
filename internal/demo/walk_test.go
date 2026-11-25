@@ -156,6 +156,10 @@ type walker struct {
 // walkNotice is how long a notice shows in a walk.
 const walkNotice = 400 * time.Millisecond
 
+// desk: the walk's screen is wider than the phone's layout, where ,
+// opens Machine as the ⚙ sheet and ⇥ is unbound.
+func (w *walker) desk() bool { return w.cols >= 60 && w.rows*2 < w.cols }
+
 func startWalk(t *testing.T, cols, rows int) *walker {
 	t.Helper()
 	inR, inW := io.Pipe()
@@ -191,7 +195,7 @@ func startWalk(t *testing.T, cols, rows int) *walker {
 var keyBytes = map[string]string{
 	"enter": "\r", "tab": "\t", "shift+tab": "\x1b[Z", "esc": "\x1b[27u", "space": " ", "backspace": "\x7f",
 	"up": "\x1b[A", "down": "\x1b[B", "right": "\x1b[C", "left": "\x1b[D", "pgup": "\x1b[5~", "pgdown": "\x1b[6~",
-	"ctrl+a": "\x01", "ctrl+c": "\x03", "ctrl+o": "\x0f", "alt+s": "\x1bs", "alt+n": "\x1bn",
+	"ctrl+a": "\x01", "ctrl+c": "\x03", "ctrl+o": "\x0f", "ctrl+q": "\x11", "alt+s": "\x1bs", "alt+n": "\x1bn",
 }
 
 func bytesOf(t *testing.T, key string) string {
@@ -221,7 +225,7 @@ var tabWords = []string{"SESSIONS", "MACHINE"}
 
 // viewWords are the views that open from Machine's first rows, in their
 // order, each with a word only its screen draws.
-var viewWords = []struct{ name, word string }{{"stoker", "STOKER"}, {"git", "WORKTREES"}, {"history", "PEAK PER COLUMN"}, {"panes", "PANES"}}
+var viewWords = []struct{ name, word string }{{"stoker", "STOKER"}, {"git", "WORKTREES"}, {"history", "LAST 2H"}, {"panes", "PANES"}}
 
 // open opens a tab of the tab row, or a view of Machine's.
 func (w *walker) open(screen string) {
@@ -246,8 +250,58 @@ func viewIn(name, frame string) bool {
 	return at >= 0 && tabOf(0, frame) == "MACHINE" && strings.Contains(frame, viewWords[at].word)
 }
 
+// machineOpen: the desk's ⚙ sheet (or the phone's Machine tab) is on
+// screen with its rows, ready for ↑↓/⏎. The stoker's full-screen view also
+// names MACHINE in the tab row — require the sheet's own marks, not that.
+func (w *walker) machineOpen() bool {
+	s := w.term.screen()
+	if tabOf(0, s) != "MACHINE" {
+		return false
+	}
+	if strings.Contains(s, "⚙") || strings.Contains(s, "USAGE") {
+		return true // desk ⚙ sheet
+	}
+	if w.desk() {
+		return false
+	}
+	// Phone Machine tab: its rows, not an open view (STOKER/WORKTREES/…).
+	if slices.ContainsFunc(viewWords, func(v struct{ name, word string }) bool {
+		return strings.Contains(s, v.word)
+	}) {
+		return false
+	}
+	return strings.Contains(strings.ToLower(s), "stoker")
+}
+
+// openMachine brings Machine up and waits until its rows draw. Under -race
+// a lone `,` can land before the list has the keys; retry from LIST.
+func (w *walker) openMachine() {
+	w.t.Helper()
+	if w.machineOpen() {
+		return
+	}
+	deadline := time.Now().Add(20 * time.Second)
+	for time.Now().Before(deadline) {
+		w.toList()
+		time.Sleep(50 * time.Millisecond)
+		if w.desk() {
+			w.press(",")
+		} else {
+			w.tabByKey("MACHINE")
+			return
+		}
+		for wait := time.Now().Add(2 * time.Second); time.Now().Before(wait); time.Sleep(20 * time.Millisecond) {
+			if w.machineOpen() {
+				return
+			}
+		}
+	}
+	w.t.Fatalf("Machine's rows did not open:\n%s", w.term.screen())
+}
+
 // toView opens the view name from its row on Machine: up to the first
-// row, down to its own, ⏎.
+// row, down to its own, ⏎. Under -race a lone pass can miss the row; retry
+// the walk until the view's word draws.
 func (w *walker) toView(name string) {
 	w.t.Helper()
 	at := slices.IndexFunc(viewWords, func(v struct{ name, word string }) bool { return v.name == name })
@@ -257,14 +311,32 @@ func (w *walker) toView(name string) {
 	if w.onView(name) {
 		return
 	}
-	w.toTab("MACHINE")
-	w.press("esc") // from another view, back to Machine; on Machine it stays
-	w.press(slices.Repeat([]string{"k"}, 12)...)
-	w.press(slices.Repeat([]string{"j"}, at)...)
-	w.press("enter")
-	// One repaint at a time, each waited for: a repaint every poll starts a
-	// new whole frame before the last one is read.
-	eventually(w.t, 10*time.Second, "the "+name+" view to open", func() bool { return viewIn(name, w.term.screen()) })
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) {
+		w.openMachine()
+		onView := slices.ContainsFunc(viewWords, func(v struct{ name, word string }) bool { return w.onView(v.name) })
+		if !w.desk() || onView {
+			w.press("esc") // from another view, back to Machine; on Machine it stays, and on the desk's ⚙ sheet it would close it
+			if w.desk() {
+				w.openMachine() // esc closed the sheet; open it again
+			}
+		}
+		for range 12 {
+			w.press("k")
+			time.Sleep(5 * time.Millisecond)
+		}
+		for range at {
+			w.press("j")
+			time.Sleep(5 * time.Millisecond)
+		}
+		w.press("enter")
+		for wait := time.Now().Add(2 * time.Second); time.Now().Before(wait); time.Sleep(20 * time.Millisecond) {
+			if viewIn(name, w.term.screen()) {
+				return
+			}
+		}
+	}
+	w.t.Fatalf("the %s view to open did not happen within 30s:\n%s", name, w.term.screen())
 }
 
 // toTab opens the tab want names: a tap on its name on the tab row, as a
@@ -321,6 +393,15 @@ func (w *walker) tabIs(want string, d time.Duration) bool {
 // doors walk by it, so the Tab key stays covered end to end.
 func (w *walker) tabByKey(want string) {
 	w.t.Helper()
+	if open := tabOf(0, w.term.screen()); w.desk() && open != want { // the desk: , opens Machine, ctrl+q leaves it
+		if want == "MACHINE" {
+			w.openMachine()
+			return
+		}
+		w.press("ctrl+q")
+		w.tabAfter(open)
+		return
+	}
 	to, n := slices.Index(tabWords, want), len(tabWords)
 	for i, open := 0, tabOf(0, w.term.screen()); open != want; i++ { // a fresh frame: a tap before may have turned it
 		if i == n {
@@ -350,6 +431,14 @@ func tabOf(_ int, frame string) string {
 			if strings.Contains(lines[1], word) {
 				return word
 			}
+		}
+		if strings.HasPrefix(strings.TrimLeft(lines[0], " "), "▰ matchblox") && strings.Contains(lines[1], "┬") {
+			// The desk: no tab row, the head row's rule meets the edge, and
+			// the bar names Machine while its ⚙ sheet is open.
+			if bar := strings.Fields(lines[len(lines)-1]); len(bar) > 0 && bar[0] == "MACHINE" {
+				return "MACHINE"
+			}
+			return "SESSIONS"
 		}
 	}
 	return ""
@@ -1014,7 +1103,7 @@ func (w *walker) opens(what, want, key string) {
 		from := len(w.term.text())
 		w.press(key)
 		for wait := time.Now().Add(2 * time.Second); time.Now().Before(wait); time.Sleep(5 * time.Millisecond) {
-			if strings.Contains(w.term.text()[from:], want) {
+			if strings.Contains(w.term.text()[from:], want) || strings.Contains(inTheList(w.term.screen()), want) {
 				return
 			}
 		}
@@ -1031,7 +1120,29 @@ func (w *walker) opens(what, want, key string) {
 // the list's keys type.
 func (w *walker) toList() {
 	w.t.Helper()
-	if strings.Contains(w.term.screen(), "writing to ") {
+	s := w.term.screen()
+	if !w.desk() {
+		if strings.Contains(s, "writing to ") || strings.Contains(s, "\n AGENT ") { // the phone's key line
+			w.press("esc")
+			time.Sleep(100 * time.Millisecond)
+		}
+		return
+	}
+	// Desk: `,` opens Machine only while the list has the keys. The bar's
+	// mode word is LIST then; AGENT/SHELL/REVIEW need ctrl+q (or esc) first,
+	// or `,` types into the agent and Tab-from-SESSIONS hangs (CI -race).
+	lines := strings.Split(s, "\n")
+	if len(lines) == 0 {
+		return
+	}
+	bar := strings.Fields(lines[len(lines)-1])
+	if len(bar) == 0 || bar[0] == "LIST" || bar[0] == "MACHINE" {
+		return
+	}
+	w.press("ctrl+q")
+	time.Sleep(100 * time.Millisecond)
+	lines = strings.Split(w.term.screen(), "\n")
+	if bar = strings.Fields(lines[len(lines)-1]); len(bar) > 0 && bar[0] != "LIST" && bar[0] != "MACHINE" {
 		w.press("esc")
 		time.Sleep(100 * time.Millisecond)
 	}
@@ -1070,7 +1181,7 @@ func (w *walker) saysAfter(what, want string, keys ...string) {
 	from := len(w.term.text())
 	w.press(keys...)
 	deadline := time.Now().Add(30 * time.Second)
-	for !strings.Contains(w.term.text()[from:], want) {
+	for !strings.Contains(w.term.text()[from:], want) && !strings.Contains(inTheList(w.term.screen()), want) {
 		if time.Now().After(deadline) {
 			w.t.Fatalf("%s: never drew %q after %q; the screen:\n%s", what, want, w.steps[max(len(w.steps)-12, 0):], w.term.screen())
 		}
@@ -1173,8 +1284,8 @@ func TestSessionsCanBeStartedAndKilled(t *testing.T) {
 	w.press("/")
 	w.send("a search", "fresh-one")
 	w.press("enter", "enter")
-	w.term.waitFor(t, "writing to fresh-one")
-	time.Sleep(500 * time.Millisecond) // its screen comes: a key answers only what the console showed
+	w.term.waitFor(t, "⏎ send to fresh-one") // the chat's line, on the phone and the desk
+	time.Sleep(500 * time.Millisecond)       // its screen comes: a key answers only what the console showed
 	w.send("a message", "hello")
 	from := len(w.term.text())
 	w.press("enter")

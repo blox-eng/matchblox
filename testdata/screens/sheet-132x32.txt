@@ -1,32 +1,32 @@
- ▰ matchblox                                                                                               ● 6 need you  stoker off
- SESSIONS 7    machine
-────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- NEEDS YOU · 6  −                       │ flint-auth ✻ asks · #4545 ci                              ctx 41%  ctrl+o expand · m menu
-▌╿ flint-auth                       2m ✻│
-   conflicts with main                  │
- ╿ spark-docs                       9m ✻│
-   I rewrote the quick start and the in…│
- ╿ ember-billing                    4m ✻│
-   #4552 waits for your merge           │
- ╿ kindle-web                       1m ✻│
-   Do you want to proceed?         ╭─ ☾ Night ──────────────────────────────────────────────────╮
- ╿ cinder-ci                       │ How should I run tonight?                                  │
-   I am moving the cache key to the│                                                            │
- ╿ wick-mobile                     │ › merge them on green▏                                     │
-   ⠙ Working                       │                                                            │
-───────────────────────────────────│ gos ✓ merges  ○ releases  ○ deploys  ○ kills  off asks you │
- WORKING · 1  −                    │ ways merge-order  priority  release-train  triage          │
- ✦ hearth-api                 #4551╰─ ⏎ send ─ tab chips ─ esc ─────────────────────────────────╯
-                                        │
-                                        │
-                                        │
-                                        │
-                                        │
-                                        │
-                                        │
-                                        │
-                                        │
-                                        │
- + new · ✧ 7 tips                       │ ›                                                                    ⏎ send to flint-auth
-────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- in the list · ↑↓ choose · ⏎ write · s hosts · g chain · m menu
+ ▰ matchblox    ALL    spark-docs    hearth-api    ux-pass    kindle-web ●1    no directory    +3 ▾               ● 3 need you    ⚙
+────────────────────────────────┬───────────────────────────────────────────────────────────────────────────────────────────────────
+ NEEDS YOU · 3  −               │ flint-auth ✻ asks · #4545 ci                                      ctx 41%  ctrl+o expand · m menu
+▌╿ flint-auth               2m ✻│
+   conflicts with main          │
+ ╿ ember-billing            4m ✻│
+   #4552 waits for your merge   │
+ ╿ kindle-web               1m ✻│
+   Do you want to proceed?      │
+────────────────────────────────┤
+ WORKING · 1  −                 │
+ ✦ hearth-api     #4551 ci  3h ✻│  ╭─ ☾ Night ──────────────────────────────────────────────────╮
+────────────────────────────────┤  │ How should I run tonight?                                  │
+ IDLE · 4  −                    │  │                                                            │
+ ╵ cinder-ci               now ❋│  │ › merge them on green▏                                     │
+ ╵ wick-mobile             now ▣│  │                                                            │
+ │ spark-docs               9m ✻│  │ gos ✓ merges  ○ releases  ○ deploys  ○ kills  off asks you │
+ ╵ ux-pass                 10m ✻│  │ ways merge-order  priority  release-train  triage          │
+                                │  ╰─ ⏎ send ─ tab chips ─ esc ─────────────────────────────────╯
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+                                │
+ + new · ✧ 8 tips               │ ›                                                                            ⏎ send to flint-auth
+────────────────────────────────┴───────────────────────────────────────────────────────────────────────────────────────────────────
+ LIST   this machine cpu 0% mem 40%   ✻ Max 5h 84%   · login usage not measured   ❋ Plus 5h 40%   stoker off                 ? keys

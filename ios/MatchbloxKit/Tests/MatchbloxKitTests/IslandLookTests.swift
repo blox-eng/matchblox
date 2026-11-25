@@ -16,7 +16,7 @@ final class IslandLookTests: XCTestCase {
         let out = Date(timeIntervalSince1970: 1_792_600_800)  // 2026-10-21 16:40 UTC
         XCTAssertEqual(IslandLook.word(top("burns"), zone: utc), "✦ burns")
         XCTAssertEqual(IslandLook.word(top("waits"), zone: utc), "╿ waits")
-        XCTAssertEqual(IslandLook.word(top("done"), zone: utc), "╿ done")
+        XCTAssertEqual(IslandLook.word(top("done"), zone: utc), "✓ done")
         XCTAssertEqual(IslandLook.word(top("out", out: out), zone: utc), "out until 16:40")
         XCTAssertEqual(IslandLook.word(nil, zone: utc), "")
         XCTAssertEqual(IslandLook.compact(top("burns"), names: names), "api")

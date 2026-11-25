@@ -88,15 +88,15 @@ func TestNightWordAndRuleTakeTheNightToken(t *testing.T) {
 	m, _ := loadedWith(t, 120, nightState())
 	lines := parsed(t, m.render())
 	word := false
-	for _, s := range lines[0] {
+	for _, s := range lines[len(lines)-1] { // the bar's stoker chip (owner, 2026-11-24)
 		if strings.Contains(s.Text, "night → 07:00") && s.FG == "night" {
 			word = true
 		}
 	}
 	if !word {
-		t.Fatalf("header %+v: the word is not in the night token", lines[0])
+		t.Fatalf("bar %+v: the word is not in the night token", lines[len(lines)-1])
 	}
-	rule := lines[2] // the header, the tabs, then the rule
+	rule := lines[1] // the head row, then the rule
 	ruled := false
 	for _, s := range rule {
 		if strings.Contains(s.Text, "─") && s.FG == "night" {

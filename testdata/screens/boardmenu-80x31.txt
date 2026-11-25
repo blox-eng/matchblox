@@ -1,15 +1,14 @@
- ▰ matchblox · all hosts ▾                                         ● 4 need you
- SESSIONS 15    machine
-────────────────────────────────────────────────────────────────────────────────
- NEEDS YOU · 4  −               │ flint-auth ✻ asks                    ctx 62%
- ╿ spark-search       #4548 ci ✻│ chain login · step 1 of 3   flint-auth needs …
-   CI failed · lint, twice      │
- ╿ kindle-web      #4556 green ✻│
-   #4556 waits for your merge   │
- ╿ hearth-api               4m ✻│
-   The plan changes 2 records a…│
- ≋ login        step 1 of 3 · 3 │
-▌├ ╿ flint-auth             2m ✻│
+ ▰ matchblox    ALL    flint-auth ●1    +7 ▾                  ● 4 need you    ⚙
+────────────────────────────┬───────────────────────────────────────────────────
+ NEEDS YOU · 4  −           │ flint-auth ✻ asks ctx 62%  ctrl+o expand · m menu
+ ╿ spark-se… #4548 ci  10m ✻│ chain login · step 1 of 3   flint-auth needs you …
+   CI failed · lint, twice  │
+ ╿ kindle… #4556 green  1m ✻│
+   #4556 waits for your mer…│
+ ╿ hearth-api           3h ✻│
+   The plan changes 2 recor…│
+ ≋ login    step 1 of 3 · 3 │
+▌├ ╿ flint-auth         2m ✻│
  │╭─ flint-auth ─────────────────────────╮
  ├│ ▌ copy last message                c │
  └│   copy the question                  │
@@ -19,13 +18,14 @@
  ✦│   stoke the chain login            F │
 ──│   go in                       ctrl+o │
  I╰─ ⏎ do ─ esc close ───────────────────╯
- ╵ hearth-limits      #4551 ci ✻│
- ╵ wick-mobile           23:50 ▣│
- ╵ hearth-notes@gpu-1       1h ✻│
- ╵ cinder-ci@gpu… #4549 merged ❋│
- ╵ ember-reports            3h ⬢│ Which way do we fix the login?
- ╵ tinder-scratch@gpu-1     2d ·│  1. Patch the token check
- ↓ 1 more                       │  2. Move to the new session store
- + new · ✧ 7 tips               │ ›                        ⏎ send to flint-auth
-────────────────────────────────────────────────────────────────────────────────
- in the menu · ↑↓ move · ⏎ do · esc close
+ ╵ hearth-l… #4551 ci  10m ✻│
+ ╵ wick-mobile       23:50 ▣│
+ ╵ hearth-notes@gpu-1  10m ✻│
+ ╵ cind… #4549 merged  now ❋│
+ ╵ ember-reports       10m ⬢│
+ ╵ tinder-scratch@gpu… 10m ·│ Which way do we fix the login?
+────────────────────────────┤  1. Patch the token check
+ ↓ 1 more                   │  2. Move to the new session store
+ + new · ✧ 8 tips           │ ›                            ⏎ send to flint-auth
+────────────────────────────┴───────────────────────────────────────────────────
+ LIST  in the menu · ↑↓ move · ⏎ do · esc close

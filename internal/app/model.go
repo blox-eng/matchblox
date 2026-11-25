@@ -242,12 +242,8 @@ type action struct {
 	tty         string                      // a jump or a switch: the marked client that asked; "" unmarked
 	asker       bool                        // a jump of this machine's tmux: it moves only its tty's client, else the desk's
 	deskLocal   func(tty string) []string   // a host jump of an unmarked key: its local list for the desk's client
-	beside      bool                        // it shows the session in the agent pane: steps[0] is the pane's command
-	chain       []paneKey                   // a chain view: the member each of steps shows
-	closing     bool                        // it closes the chain view and runs no step
-	keep        string                      // a close: the member's pane that stays the agent pane; "" the agent pane
+	beside      bool                        // it shows the session in the agent region: steps[0] is the view's argv
 	preview     bool                        // a look as the list rests on a row: the keys stay with the list
-	focus       bool                        // ⏎ on the session the agent pane shows: a view that still runs only gets the keys
 }
 
 // recRun is an act on a recommendation: the row shows its outcome.
@@ -524,9 +520,9 @@ type Model struct {
 	// where each read builds them.
 	side *sideMemo
 
-	// boardChain and boardHost narrow the list to one chain and one host,
-	// each by its name; "" shows all.
-	boardChain, boardHost string
+	// boardChain, boardHost and space narrow the list to one chain, one
+	// host and one repo, each by its name; "" shows all.
+	boardChain, boardHost, space string
 	// menu is the session's menu while it is open. sawRelease: the terminal
 	// reported the release of a press, so a press held is a long press.
 	menu       *boardMenu
@@ -611,16 +607,23 @@ type Model struct {
 	sideTip                   int
 	sideHost                  string // the host whose trouble the host place shows
 	sideIn                    paneKey
-	beside                    string          // the agent pane's id; "" before the split, and where it failed
-	winW, winH                int             // the window's size in beside mode; 0: not read yet
-	boxZoom                   bool            // a box or an animation has the window: the list's pane is zoomed for it
-	boxBack                   []string        // the agent pane's screen, drawn dim behind the box
-	showing                   bool            // a choice runs in the agent pane
-	showNext                  *action         // the choice made while one ran: it runs next
-	besideShows               paneKey         // the session the agent pane shows; zero when none or a chain view
-	previewSeq                int             // the list's latest move: only its preview runs
-	viewed                    map[string]bool // the peers whose view the builder let run in this run: their rows preview
-	chain                     *chainView      // the chain view beside the list; nil while one agent shows
+	seenActs                  map[string]bool        // the ids of the seen: acts sent, until their answer
+	doneKept                  paneKey                // the done row the owner opened: it stays in DONE while it is the choice
+	agent                     agentRegion            // the desk's agent region: the chosen agent's real screen
+	over                      string                 // the sheet open over the agent region: "keys", "review"; "" none
+	keyQ                      string                 // the ? sheet's filter
+	keyAt                     int                    // the ? sheet's chosen hit among the filter's rows
+	cogAt                     string                 // the part the ⚙ sheet opened on ("cog:usage", "cog:loops:gpu-1"), until a key moves it
+	review                    *reviewSheet           // the D review sheet, while it is open
+	reviews                   reviewsState           // unsent comments per session, in reviews.json
+	reviewHeld                map[paneKey]heldReview // a review waiting for a busy agent's turn to end
+	reviewPastes              map[string]reviewPaste // paste: of a review the service has not answered yet
+	showing                   bool                   // a choice is checked for the agent region
+	showNext                  *action                // the choice made while one ran: it runs next
+	besideShows               paneKey                // the session the agent region shows; zero when none
+	previewSeq                int                    // the list's latest move: only its preview runs
+	viewed                    map[string]bool        // the peers whose view the builder let run in this run: their rows preview
+	shells                    map[string]string      // session name → desk shell pane id (@matchblox-shell)
 }
 
 func New(opt Options) Model {
@@ -637,7 +640,8 @@ func New(opt Options) Model {
 		opt.Binary = "dev"
 	}
 	m := Model{opt: opt, conn: opt.Conn, st: newStyles(true), dark: true, width: 100, height: 30, history: newSeries(60),
-		recPrefs: loadRecPrefs(opt.StateDir), viewPrefs: loadViewPrefs(opt.StateDir), keys: defaultKeys(), peers: links(opt.Peers), shown: &shownFrame{}}
+		recPrefs: loadRecPrefs(opt.StateDir), viewPrefs: loadViewPrefs(opt.StateDir), reviews: loadReviews(opt.StateDir),
+		keys: defaultKeys(), peers: links(opt.Peers), shown: &shownFrame{}}
 	m.splashAt = m.now()
 	if opt.Ask != nil {
 		m.askCtx, m.askStop = context.WithCancel(context.Background())
@@ -663,7 +667,7 @@ func (m Model) Init() tea.Cmd {
 		start = append(start, m.peerStart(i))
 	}
 	peers := tea.Batch(start...)
-	peers = tea.Batch(peers, m.besideCmd())
+	peers = tea.Batch(peers, m.migrateSplit())
 	if err := m.opt.DialErr; err != nil && m.conn == nil {
 		return tea.Batch(tea.RequestBackgroundColor, func() tea.Msg { return lostMsg{err: err} }, m.splashCmd(), m.waitAsk(), peers)
 	}
@@ -803,6 +807,37 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.away = false
 		}
 	}
+	if k, ok := msg.(tea.KeyPressMsg); ok && k.String() == flipKey && m.inSheets() { // whatever the sheet shows
+		return m.leaveSheets(), nil
+	}
+	if m.over != "" && !m.desk() { // the sheet draws on the desk only: off it, it would take keys unseen
+		m.over, m.review = "", nil
+	}
+	if m.cogShown() {
+		switch msg.(type) {
+		case tea.KeyPressMsg, tea.MouseClickMsg:
+			m.cogAt = "" // the sheet follows the chosen row from now
+		}
+	}
+	if k, ok := msg.(tea.KeyPressMsg); ok && m.over == "keys" {
+		return m.keysKey(k)
+	}
+	if k, ok := msg.(tea.KeyPressMsg); ok && m.over == "review" {
+		return m.reviewKey(k)
+	}
+	region, cmd, ok := m.agentKeys(msg)
+	if ok {
+		return region, cmd
+	}
+	m = region // what the region let go of, such as its keys after a click on the list
+	if k, ok := msg.(tea.KeyPressMsg); ok && k.String() == flipKey && m.desk() && !m.opt.Beside && !m.agent.shown() {
+		if m.inList() { // matchblox draws the chat: ctrl+q flips between the list and its line
+			m.toLine()
+			return m, m.grantKeys()
+		}
+		m.toList()
+		return m, nil
+	}
 	m = m.scanShows()
 	switch msg.(type) {
 	case tea.KeyPressMsg, tea.MouseClickMsg, tea.MouseWheelMsg, tea.PasteMsg:
@@ -839,9 +874,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		nm = nm.scanShows().keepView().inDemo().standingNews().sideKeep().chatMarkOn().onChoice() // what reads Sessions' selection reads the board's choice
 		again := nm.beltPoll(msg)
 		nm, belt := nm.tellBelt(again)
-		var zoom tea.Cmd
-		nm, zoom = nm.boxZoomed()
-		cmd = tea.Batch(cmd, belt, zoom)
+		cmd = tea.Batch(cmd, belt)
 		if watch := nm.watchCmd(); watch != nil {
 			cmd = tea.Batch(cmd, watch)
 		}
@@ -880,21 +913,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.tallW, m.tallH = msg.Width, 0
 		}
 		m.tallH = max(m.tallH, msg.Height)
-		return m, m.sizeCmd(msg.Width)
-	case besideMsg:
-		if msg.err != nil {
-			said := m.sayError("the agent pane did not open: " + msg.err.Error())
-			return m, said
-		}
-		m.beside = msg.pane
-		return m, m.sizeCmd(m.width)
-	case besideSizeMsg:
-		m.winW, m.winH = msg.w, msg.h
-	case boxBackMsg:
-		if !m.boxZoom { // the box closed before its zoom landed: give the window back after it
-			return m, m.sizeCmd(m.width)
-		}
-		m.boxBack = msg
+		m.placeAgent()
+	case migratedMsg:
+		return m, m.notice("the agent now shows inside matchblox · " + flipKey + " flips, as before")
 	case shownMsg:
 		return m.besideShown(msg)
 	case previewMsg:
@@ -919,6 +940,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	case noticeMsg:
 		return m, m.noticeEnded() // the frame drops it, or the next one shows
+	case agentFrameMsg:
+		return m, m.agentFrame(msg)
 	case screenMsg:
 		return m.screenFrom(m.opt.Host, msg), m.recv()
 	case peerMsg:
@@ -1037,6 +1060,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.merge()
 		m.settle(m.opt.Host)
+		shellCmd := m.syncShells()
 		if m.lost {
 			m.lost, m.backoff, m.flash = false, 0, ""
 		}
@@ -1057,7 +1081,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var talk tea.Cmd
 		m, talk = m.roomQueued(m.opt.Host)
 		tick := m.waitTick()
-		return m, tea.Batch(m.recv(), m.animate(), news, order, talk, feel, focus, again, started, tick)
+		return m, tea.Batch(m.recv(), m.animate(), news, order, talk, feel, focus, again, started, tick, shellCmd)
 	case graphicsMsg:
 		return m.graphics(msg)
 	case graphicsTickMsg:
@@ -1303,7 +1327,19 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // result ends the act r answers. The caller reads the next message of the
 // conn r came on.
 func (m Model) result(r proto.Result) (Model, tea.Cmd) {
+	if m.seenActs[r.ActID] {
+		delete(m.seenActs, r.ActID)
+		if r.Err == "unknown action" { // a service older than seen: the open simply is not kept
+			return m, nil
+		}
+	}
 	m.endRec(r.ActID, r)
+	if mm, ok := m.reviewResult(r); ok {
+		return mm, nil
+	}
+	if mm, cmd, ok := m.reviewPasteResult(r); ok {
+		return mm, cmd
+	}
 	if m.settleResult(r) {
 		return m, nil
 	}
@@ -1727,6 +1763,9 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	switch {
+	case bkey.Matches(k, mk.NextTab, mk.PrevTab) && m.desk(): // on the desk Machine moved to , with no hint (design review D10)
+	case bkey.Matches(k, mk.Back) && m.cogShown() && m.tab == tabMachine && m.filter == "":
+		m.setTab(tabSessions) // the ⚙ sheet closes on the row it opened over
 	case bkey.Matches(k, mk.StartAgain) && m.newer != "" && m.startsAgain:
 		return m.startAgain()
 	case bkey.Matches(k, mk.Stoker):
@@ -2137,6 +2176,7 @@ func (m Model) View() tea.View {
 	v := tea.NewView(m.render())
 	v.AltScreen = true
 	v.MouseMode = tea.MouseModeCellMotion // a tap on a phone selects and acts
+	v.Cursor = m.agent.cursor()
 	return v
 }
 

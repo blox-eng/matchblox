@@ -125,10 +125,16 @@ state. The code is `internal/app/match.go`.
 |---|---|---|---|---|
 | burning | `✦` | `flame`, `flame-amber`, `flame-core` | flickers: a new colour each 200 ms; `✧` for one step in six | the agent works |
 | at rest, asks | `╿` | `match-head` → `match-breath-1..3` | breathes: one slow breath each 2.4 s | the agent waits for an answer or a permission |
-| at rest | `╿` | `match-head` | still | the agent finished its turn and waits |
+| at rest | `╿` | `match-head` | still | the agent finished its turn and waits (the board, the stoker's steps) |
+| at rest, done | `✓` | `match-ember` | still | the agent finished a turn the owner has not opened |
+| idle | `╵` | `faint` | still | the agent rests, and the owner has opened its last turn |
+| held | `╽` | `muted` | still | the owner parked it, or the stoker holds it |
 | spent | `│` | `faint` | still | the context is at or above the compact limit (`sessions.compact_tokens`, default 350k, or `sessions.compact_at`, default 85 %, whichever comes first) |
 
 Order: spent comes first. A session that works with a full context is spent.
+In the list the state wins (owner, 2026-11-23): a session that works, asks,
+is done or is held keeps its glyph at the limit, standing still; only an
+idle session at the limit draws spent.
 A session the plan's limit stops (`out`) keeps the at-rest glyph, or spent
 when full; its word is `out` and the idle column holds its reset.
 
@@ -142,8 +148,8 @@ A change of state plays once:
 
 Rules:
 
-1. The glyph never stands alone: the state word stays next to it
-   (`✦ busy`, `╿ asks`, `│ burnt`).
+1. The group head carries the state word. The glyph alone tells each
+   state apart, with no colour and no motion.
 2. A match means one agent session. Do not use it for anything else.
 3. The console wakes only while something moves: a burning match, a match
    that asks, or a change that still plays. Then it draws 10 times a second;
@@ -151,7 +157,8 @@ Rules:
 4. Motion comes from the clock, not from a frame count, so the same moment
    always draws the same frame (the replay depends on it).
 5. With `--no-motion` or `NO_MOTION=1`: `✦` in `flame`, `╿` in
-   `match-head`, `│` in `faint`, no change plays.
+   `match-head`, `✓` in `match-ember`, `╵` in `faint`, `╽` in `muted`,
+   `│` in `faint`, no change plays.
 6. `≋` means "has a stoker": a chain's room card and the header's count
    use it, in `muted`, and in the night's ink while that chain's stoker
    runs its order. It is never a match.
@@ -180,6 +187,9 @@ Rules:
 | Open | about 1 s | a device claimed the code: the drawer slides out (260 ms), the match comes out (280 ms), strikes (150 ms, ease-in) and stands (320 ms) while the drawer shuts (260 ms) |
 | Lock | 180 ms | the app found a pair code: its outline moves to the corners of the code |
 
+The agent region follows the agent's own output at up to 60 Hz. Everything
+matchblox draws itself stays at 10 Hz (§4 rule 3).
+
 There are no spinners. `--no-motion` and `NO_MOTION=1` make every motion an
 instant change; on the site, `prefers-reduced-motion` does the same. In the
 app, iOS Reduce Motion does the same. The app holds the stood frame for
@@ -197,6 +207,29 @@ terminal ticks each wheel step, at the same cap. With Reduce Motion
 the head's speckles stand still; its heat colour still shows.
 
 ## 6. Console layout
+
+> **2026-11-24, the desk (#494):** wider than the phone's layout, matchblox
+> draws the whole screen: the head row, a rule, the list and the agent with
+> the edge between them, a rule, the bar. The key line goes. Spaces in the
+> head filter by repo; `DONE` sits between `NEEDS YOU` and `WORKING`; `HELD`
+> stays last. `?` opens the keys sheet; `,` or `⚙` opens Machine as a
+> sheet; `t` opens a shell under the agent; `D` opens a review of its
+> changes. The edge's half on the side with the keys is `accent`, the other
+> `hair`; the bar's mode word always names who has the keys, so the edge is
+> never the only signal (in light the lit half is 2.72:1 against the unlit
+> one, design review D19). A prompt that waits for a key takes the bar after
+> its mode word; standing marks sit in the head row before `⚙`; notices sit
+> on the list's last line in `muted`. The phone keeps the tabs and the key
+> line below. Mouse on the desk (design review D17):
+
+> | Where | Gesture | Goes to |
+> |---|---|---|
+> | agent region | click | gives the agent the keys, then the click passes through |
+> | agent region | drag | matchblox's selection, inside the region only |
+> | anywhere | `shift`+drag | the owner's terminal's own selection |
+> | agent region | wheel | the agent's tmux (its scrollback and copy mode) |
+> | list | wheel | scrolls the list |
+> | while a selection exists | `c` | copies it; any other key clears it and goes on |
 
 > **2026-11-10, the chain room (#326):** a chain opens into a room, as
 > [docs/superpowers/specs/2026-11-07-chain-room-design.md](docs/superpowers/specs/2026-11-07-chain-room-design.md)
@@ -304,12 +337,9 @@ the head's speckles stand still; its heat colour still shows.
   the chain; `esc` shows all. On Narrow the stoker is a page of its own,
   first in the marks (`stoker NEEDS YOU 2 −  work 1 …`). The card's menu
   has `out of <chain>` only in its room. A match is never drawn twice.
-  With the agent beside the list (see Chat), `g` on a chain's row, or a
-  member's, tiles up to 4 members' own panes on the right instead, most
-  urgent first (2: one above the other; 3 or 4: a 2×2 grid). A member on
-  screen has `▸` in the list. A click gives a pane the keys, and tmux's
-  prefix `z` zooms one. `g` again, or `esc` (after a search clears), closes
-  the view. `G` opens the chain's room.
+  On the desk, `g` on a chain's row, or a member's, opens the room too.
+  The list shows the chain only. The agent region keeps the chosen
+  member's screen. `esc` shows all.
 - **Hosts:** a host is a filter: `s`, or a tap on `all hosts ▾`, turns to
   the next host, then all. A host that is not reached keeps one line at
   the top of the board, `macbook: not reached since 14:02 · ⏎ try again`,
@@ -392,23 +422,23 @@ the head's speckles stand still; its heat colour still shows.
   on any other card it says `no ship of <name> waits for a merge`. `x`
   never merges. Why the ships may be behind (`paused · GitHub's rate limit
   is low, ships read again at 14:33`) shows in the strip's row.
-- **Agent beside the list** (owner, 2026-11-16, replacing the drawn chat
-  on a desk in tmux): the console's window has two panes, the list (40
-  columns; 32 on a mid, tall screen) and the agent's own pane. The right
-  pane is a live tmux view of the agent's pane, so typing there is typing
+- **Agent beside the list** (owner, 2026-11-16; desk #494 draws the region
+  inside matchblox): on a desk the list (40 columns from 140 up, 32 from
+  100 to 139, 28 below 100) sits beside the agent's screen in one window.
+  The region is a live view of the agent's pane, so typing there is typing
   into the agent: `/commands`, `@files`, `esc`, menus, the mouse wheel.
   `⏎` or a click or tap on a row shows that agent and gives it the keys;
   `↑` `↓` only move the choice. `ctrl+q` flips the keys between the list
-  and the agent pane, in the console's window only; elsewhere it types.
-  `ctrl+o`, prefix `m`, the `◂` tap and the home APC work as before. A
-  take-over question and a peer's consent box come first; a peer's agent
-  opens over ssh. When the agent ends, the pane says `<name> ended. ctrl+q:
-  back to the list`; when it cannot be shown, it says why. On a narrow
-  window, or Pocket upright, one pane shows at a time. Text typed in the
-  list says `the agent pane takes text · ⏎ shows <name>`. A pane of the
-  console's own window is never shown there. The drawn chat below stays in
-  the demo, a console with no tmux, and a console outside its home session
-  or started for a host.
+  and the agent, in the console only; elsewhere it types. `ctrl+o`, prefix
+  `m`, the `◂` tap and the home APC work as before. A take-over question
+  and a peer's consent box come first; a peer's agent opens over ssh.
+  When the agent ends, the region says `<name> ended. ctrl+q: back to the
+  list`; when it cannot be shown, it says why. On a narrow window, or
+  Pocket upright, the phone layout shows one screen at a time. Text typed
+  in the list says `the agent pane takes text · ⏎ shows <name>`. A pane of
+  the console's own window is never shown there. The drawn chat below
+  stays in the demo, a console with no tmux, and a console outside its
+  home session or started for a host.
 - **Chat** (#261, owner 2026-10-29, replacing the peek of design/0006 §6):
   the chosen session's live screen, drawn inside the console. From 152
   columns it is the right side of the board; its frame title is

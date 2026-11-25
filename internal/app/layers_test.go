@@ -148,8 +148,8 @@ func TestEnterOpensAHostAndEscStaysInTheConsole(t *testing.T) {
 	}
 	next, _ := r.sh.Update(stateMsg(fixtureState()))
 	r.sh = next.(Shell)
-	if first := strings.Split(r.view(), "\n")[0]; !strings.Contains(first, "matchblox · ws-1 · 1 hidden") {
-		t.Fatalf("header %q", first)
+	if lines := strings.Split(r.view(), "\n"); !strings.Contains(lines[len(lines)-1], "ws-1 cpu 0% mem 50% · 1 hidden") { // the desk's bar names the host
+		t.Fatalf("bar %q", lines[len(lines)-1])
 	}
 	r.key(t, "esc") // esc stays in the console: Hosts opens from Machine
 	if r.sh.layer != layerConsole {
@@ -434,9 +434,14 @@ func (r *shellRig) rowOf(host string) string {
 }
 
 // toHosts goes from the console back to Hosts: esc stays in the console,
-// and Hosts opens from Machine's host rows, the last of its rows.
+// and Hosts opens from Machine's host rows, the last of its rows. On the
+// desk , opens Machine as the ⚙ sheet; on the phone ⇥ opens its tab.
 func (r *shellRig) toHosts(t *testing.T) {
 	t.Helper()
+	if r.sh.cur.desk() {
+		r.sh.cur.keysIn = focusList // , is the list's key
+		r.key(t, ",")
+	}
 	for i := 0; r.sh.cur.tab != tabMachine && i < len(tabNames); i++ {
 		r.key(t, "tab")
 	}
@@ -610,14 +615,14 @@ func TestHeaderCountsHidden(t *testing.T) {
 	r := hidingShell(t, []string{"ws-1", "gpu-1"}, []string{"gpu-1"}, "")
 	r.update(stateMsg(fixtureState()))
 	r.sh.cur.splashDone = true
-	if head := strings.Split(r.view(), "\n")[0]; !strings.Contains(head, "all hosts ▾ · 1 hidden") { // the board's host filter
-		t.Fatalf("header %q", head)
+	if lines := strings.Split(r.view(), "\n"); !strings.Contains(lines[len(lines)-1], " · 1 hidden") { // the bar's host chips
+		t.Fatalf("bar %q", lines[len(lines)-1])
 	}
 	one := newShell(t, nil, nil, "", false)
 	one.update(stateMsg(fixtureState()))
 	one.sh.cur.splashDone = true
-	if head := strings.Split(one.view(), "\n")[0]; strings.Contains(head, "hidden") {
-		t.Fatalf("one host: header %q", head)
+	if view := one.view(); strings.Contains(view, "hidden") {
+		t.Fatalf("one host: the desk says hidden:\n%s", view)
 	}
 }
 
@@ -758,8 +763,8 @@ func TestEnterWithNoneTickedSaysSo(t *testing.T) {
 	r.update(stateMsg(fixtureState()))
 	r.sh.cur.splashDone = true
 	lines := strings.Split(r.view(), "\n")
-	if !strings.Contains(lines[0], "ws-1 · 1 hidden") {
-		t.Fatalf("header %q", lines[0])
+	if bar := lines[len(lines)-1]; !strings.Contains(bar, "   ws-1 ") || !strings.Contains(bar, " · 1 hidden") { // the bar's host chips (owner, 2026-11-24)
+		t.Fatalf("bar %q", bar)
 	}
 	if said := shownSaid(r.sh.cur); said != "No host is ticked: ws-1 opens alone." || !strings.Contains(r.view(), "No host is ticked") {
 		t.Fatalf("notice %q", said)

@@ -11,6 +11,7 @@ import (
 	"image/color"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -52,7 +53,14 @@ type replaySize struct {
 	cols, rows int
 }
 
-var replaySizes = []replaySize{{"desk", 132, 32}, {"duo", 104, 38}, {"phone", 44, 31}}
+// desk is the 16-inch desk (160×40). laptop keeps the older 132×32 desk
+// width; duo and phone stay. Every desk width shows the frame (D16).
+var replaySizes = []replaySize{
+	{"desk", 160, 40},
+	{"laptop", 132, 32},
+	{"duo", 104, 38},
+	{"phone", 44, 31},
+}
 
 // demoBase is the demo machine's clock at the start of the replay.
 var demoBase = time.Date(2026, 10, 1, 22, 50, 0, 0, time.UTC)
@@ -315,10 +323,17 @@ func waitFor(capture func() string, ok func(string) bool, step string, timeout t
 }
 
 var (
-	figure  = regexp.MustCompile(`\d+(\.\d+)?[A-Za-z%]*`)
-	sparks  = regexp.MustCompile(`[▁▂▃▄▅▆▇█]+`)
-	spaces  = regexp.MustCompile(`\s+`)
-	cutWord = regexp.MustCompile(`\S*…`)
+	figure = regexp.MustCompile(`\d+(\.\d+)?[A-Za-z%]*`)
+	// age is sample.Human's two-unit forms (2h28m, 6d2h, 41m, now): figure
+	// alone turns 2h28m into two zeros and 41m into one, so a bar age that
+	// crosses an hour boundary would fail the replay.
+	age = regexp.MustCompile(`\b(?:\d+d(?:\d+h)?|\d+h(?:\d+m)?|\d+m|\d+s|now)\b`)
+	// resetAge is the bar's ↻ countdown. usageChips drops it when the bar is
+	// short of room, so a frame that has it and one that does not must match.
+	resetAge = regexp.MustCompile(`\s*↻(?:\d+d(?:\d+h)?|\d+h(?:\d+m)?|\d+m|\d+s|now)`)
+	sparks   = regexp.MustCompile(`[▁▂▃▄▅▆▇█]+`)
+	spaces   = regexp.MustCompile(`\s+`)
+	cutWord  = regexp.MustCompile(`\S*…`)
 )
 
 // skeleton is a screen without what changes from run to run: figures,
@@ -358,7 +373,10 @@ func skeleton(lines []string) string {
 		// The busy loop's alert comes and goes with the samples; on a phone
 		// it squeezes the tab to its digit.
 		l = strings.Replace(strings.Replace(l, "machine !", "machine", 1), " 3 !", " machine", 1)
-		l = sparks.ReplaceAllString(figure.ReplaceAllString(cutWord.ReplaceAllString(l, "…"), "0"), "")
+		l = cutWord.ReplaceAllString(l, "…")
+		l = resetAge.ReplaceAllString(l, "") // bar may drop ↻ when short of room
+		l = age.ReplaceAllString(l, "0")     // before figure: 2h28m is one age, not two figures
+		l = sparks.ReplaceAllString(figure.ReplaceAllString(l, "0"), "")
 		l = strings.ReplaceAll(l, "✧", "✦")  // a burning match flickers between the two
 		l = spinner.ReplaceAllString(l, "⠿") // a working session's spinner turns with the clock
 		b.WriteString(strings.TrimSpace(spaces.ReplaceAllString(l, " ")))
@@ -475,6 +493,16 @@ func replayAt(t *testing.T, z replaySize) {
 	if err := os.CopyFS(root, os.DirFS(src)); err != nil {
 		t.Fatal(err)
 	}
+	// A real git folder for ux-pass, so D can review a diff. The pane, the
+	// session file and the transcript all use this path (Claude encodes it
+	// as the project folder name).
+	uxGit := filepath.Join(root, "repos", "ux-pass")
+	if err := seedUxPassGit(uxGit); err != nil {
+		t.Fatal(err)
+	}
+	if err := relocateUxPass(root, uxGit); err != nil {
+		t.Fatal(err)
+	}
 	world, err := demo.NewWorld(root, clk.Now, func(pid int) { host.kill(pid) })
 	if err != nil {
 		t.Fatal(err)
@@ -501,10 +529,24 @@ func replayAt(t *testing.T, z replaySize) {
 	smp.FS, smp.Now = host, host.now(clk)
 	world.Uptime = host.Uptime
 
-	s := service.New(cfg, smp, world.Git)
+	git := func(cwds []string) gitscan.Report {
+		r := world.Git(cwds)
+		for i := range r.Repos {
+			for j := range r.Repos[i].Worktrees {
+				if r.Repos[i].Worktrees[j].Path == "/work/ux-pass" {
+					r.Repos[i].Worktrees[j].Path = uxGit
+				}
+			}
+		}
+		return r
+	}
+	s := service.New(cfg, smp, git)
 	s.Binary, s.Host, s.Now = version, demo.Host(root), clk.Now
 	s.Capture, s.Activity = smp.Capture, nil // the demo's panes, never this machine's tmux
 	world.Wire(s)
+	s.IsDir = func(path string) bool {
+		return strings.HasPrefix(path, "/work/") || path == uxGit || strings.HasPrefix(path, uxGit+string(os.PathSeparator))
+	}
 	st, err := stoker.Open(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -552,8 +594,40 @@ func replayAt(t *testing.T, z replaySize) {
 	}
 	heard := &heardConn{Conn: transport.NewConn(a)}
 	view.upTo = heard.fresh(20 * time.Second) // under staleAfter (30 s)
+	// Fake tmux for t: a split returns %99, set-option names it, and
+	// list-panes keeps syncShells from wiping the mark. The demo's own
+	// tmux never runs.
+	shellPane, shellFor := "", ""
+	fakeTmux := func(args ...string) (string, error) {
+		if len(args) == 0 {
+			return "", nil
+		}
+		switch args[0] {
+		case "split-window":
+			shellPane = "%99"
+			return shellPane + "\n", nil
+		case "set-option":
+			if len(args) >= 6 && args[4] == sample.ShellOption {
+				shellFor = args[5]
+			}
+			return "", nil
+		case "list-panes":
+			if shellPane == "" || shellFor == "" {
+				return "", nil
+			}
+			return shellPane + "\t" + shellFor + "\n", nil
+		case "display":
+			if shellPane == "" {
+				return "", fmt.Errorf("no pane")
+			}
+			return shellPane + "\n", nil
+		default:
+			return "", nil
+		}
+	}
 	m := app.New(app.Options{
 		Conn: heard, Binary: version, CompactAt: cfg.Sessions.CompactAt, Now: view.Now, StateDir: views,
+		Pane: "%0", Tmux: fakeTmux, // t opens a shell under the agent
 		Run: func(argv []string) error { // a jump: the demo moves no terminal
 			mu.Lock()
 			jumps = append(jumps, argv)
@@ -651,11 +725,20 @@ func replayAt(t *testing.T, z replaySize) {
 	// settle lets the chat's dead time pass on the demo clock: a digit
 	// marks nothing for 400 ms after the chat opens on a question.
 	settle := func() { time.Sleep(300 * time.Millisecond) }
-	const flint, kindle = "%2", "%5" // the panes of flint-auth and kindle-web
+	const flint, kindle, ux = "%2", "%5", "%9" // flint-auth, kindle-web, ux-pass
 	steps := []step{
 		// The list: every session in its group, and the chat of the first,
 		// kindle-web, beside it.
-		{name: "the console", at: 1300 * time.Millisecond, pane: kindle, ok: has("need you", "NEEDS YOU", "flint-auth")},
+		{name: "the console", at: 1300 * time.Millisecond, pane: kindle, ok: func(s string) bool {
+			if !has("need you", "NEEDS YOU", "flint-auth")(s) {
+				return false
+			}
+			if phone {
+				return true
+			}
+			// Task 17 desk: three repos, DONE (ux-pass), ages, busy loop.
+			return has("hearth", "ledge", "base", "busy loop", "DONE", "ux-pass")(s)
+		}},
 		// flint-auth asks: its chat shows the question's options as the pane
 		// draws them, with the descriptions. The transcript's short form,
 		// which a slow run can draw first, has none.
@@ -666,14 +749,17 @@ func replayAt(t *testing.T, z replaySize) {
 		// left NEEDS YOU (4 need you before) and its chat no longer asks:
 		// the ones before it race the samples that carry the answer.
 		{name: "sent", at: 5800 * time.Millisecond, key: "2", hold: true, pane: flint, ok: func(s string) bool {
-			return has("sent 2 to flint-auth", "● 3 need you")(s) && !strings.Contains(s, "Should a refresh also rotate")
+			// After flint leaves NEED: login (kindle) and ember-billing remain.
+			return has("sent 2 to flint-auth", "● 2 need you")(s) && !strings.Contains(s, "Should a refresh also rotate")
 		}},
 		{name: "it works", at: 7400 * time.Millisecond, pane: flint, ok: func(s string) bool {
 			return has("✦ flint-auth")(s) && !strings.Contains(s, "sent 2 to flint-auth")
 		}},
 		// esc gives the keys to the list; ↑ and ↓ choose kindle-web, which
 		// asks for permission.
-		{name: "the list", at: 9 * time.Second, key: "esc", pane: flint, ok: has("in the list")},
+		{name: "the list", at: 9 * time.Second, key: "esc", pane: flint, ok: func(s string) bool {
+			return has("in the list")(s) || has("\n LIST   ")(s) // the phone's key line; the desk's bar names the keys' place
+		}},
 		{name: "kindle-web asks", at: 10500 * time.Millisecond, do: walk("kindle-web"), pane: kindle, ok: func(s string) bool {
 			// Beside the list, the preview of kindle-web's pane comes a
 			// moment after the last arrow; a slow run reads the screen
@@ -702,6 +788,61 @@ func replayAt(t *testing.T, z replaySize) {
 		steps[len(steps)-1].ok = func(s string) bool {
 			return has("◂ kindle-web", "Do you want to proceed?")(s) && !strings.Contains(s, "CHAIN login")
 		}
+	} else {
+		// The desk: DONE, a t shell under ux-pass, and a D review with one
+		// comment sent (Task 17).
+		typeText := func(text string) func() {
+			return func() {
+				for _, r := range text {
+					p.Send(tea.KeyPressMsg{Text: string(r), Code: r})
+					time.Sleep(5 * time.Millisecond)
+				}
+			}
+		}
+		uxRowHas := func(mark string) func(string) bool {
+			return func(s string) bool {
+				for _, line := range strings.Split(s, "\n") {
+					if strings.Contains(line, "ux-pass") && strings.Contains(line, mark) {
+						return true
+					}
+				}
+				return false
+			}
+		}
+		steps = append(steps,
+			step{name: "DONE", at: 18 * time.Second, do: func() {
+				p.Send(keyMsg("esc")) // list has the keys for t and D
+				time.Sleep(50 * time.Millisecond)
+				walk("ux-pass")()
+			}, ok: func(s string) bool {
+				// Wait for the agent's pane: the DONE row's note also says
+				// "folds", so require text only the agent screen draws.
+				return chosen("ux-pass")(s) && has("DONE", "✓", "tests are green")(s)
+			}},
+			step{name: "a shell", at: 20 * time.Second, key: "t", ok: func(s string) bool {
+				return chosen("ux-pass")(s) && uxRowHas("▣")(s)
+			}},
+			step{name: "the review", at: 22 * time.Second, do: func() {
+				p.Send(keyMsg("esc")) // leave the shell; list has the keys for D
+				time.Sleep(50 * time.Millisecond)
+			}, key: "D", ok: func(s string) bool {
+				// Wait past the list's key line: tips (+ new) are the
+				// stable footer under REVIEW, not "the list takes…".
+				return has("ux-pass · diff against", "REVIEW", "+ new")(s) &&
+					!strings.Contains(s, "the list takes")
+			}},
+			step{name: "a comment", at: 24 * time.Second, do: func() {
+				p.Send(keyMsg("down"))
+				time.Sleep(30 * time.Millisecond)
+				p.Send(tea.KeyPressMsg{Text: "c", Code: 'c'})
+				time.Sleep(30 * time.Millisecond)
+				typeText("fold at width")()
+				p.Send(keyMsg("enter"))
+			}, ok: has("✎", "fold at width", "send review")},
+			step{name: "review sent", at: 26 * time.Second, key: "enter", hold: true, ok: func(s string) bool {
+				return has("sent a review")(s) || has("queued for ux-pass")(s)
+			}},
+		)
 	}
 	var still replay.Frame
 	for _, st := range steps {
@@ -752,8 +893,9 @@ func replayAt(t *testing.T, z replaySize) {
 	if !lit {
 		t.Fatal("the replay never shows the struck, burning match")
 	}
-	// The replay shows the matches of its sessions: burning and at rest. No
-	// session of the demo is idle, so no spent match draws.
+	// The replay shows the matches of its sessions: burning, at rest, and
+	// (on the desk) done. No session of the demo is idle at the compact
+	// limit, so no spent match draws.
 	matches := map[string]bool{}
 	for _, f := range frames {
 		for _, l := range f.Lines {
@@ -763,14 +905,23 @@ func replayAt(t *testing.T, z replaySize) {
 					matches["burning"] = true
 				case text == "╿" && strings.HasPrefix(sp.FG, "match-"):
 					matches["rest"] = true
+				case text == "✓" && strings.HasPrefix(sp.FG, "match-"):
+					matches["done"] = true
 				}
 			}
 		}
 	}
-	for _, want := range []string{"burning", "rest"} {
+	wantMatches := []string{"burning", "rest"}
+	if !phone {
+		wantMatches = append(wantMatches, "done")
+	}
+	for _, want := range wantMatches {
 		if !matches[want] {
 			t.Fatalf("the replay lacks a %s match; has %v", want, matches)
 		}
+	}
+	if !phone {
+		assertDeskReplay(t, z, frames, names)
 	}
 	mine, err := machineNames()
 	if err != nil {
@@ -787,8 +938,15 @@ func replayAt(t *testing.T, z replaySize) {
 	}
 	mu.Unlock()
 	// The pick: act types the option's number as a key, as tmux names a digit.
-	if ran, want := world.Ran(), [][]string{{"tmux", "send-keys", "-t", "%2", "2"}}; !reflect.DeepEqual(ran, want) {
-		t.Fatalf("the service ran %q, want %q", ran, want)
+	// A desk review paste may add paste-buffer + Enter for ux-pass after that.
+	ran := world.Ran()
+	if len(ran) == 0 || !reflect.DeepEqual(ran[0], []string{"tmux", "send-keys", "-t", "%2", "2"}) {
+		t.Fatalf("the service ran %q, want the pick first", ran)
+	}
+	for _, step := range ran[1:] {
+		if len(step) < 2 || step[0] != "tmux" || (step[1] != "paste-buffer" && step[1] != "send-keys" && step[1] != "delete-buffer") {
+			t.Fatalf("after the pick the service ran %q, want only paste steps", ran)
+		}
 	}
 
 	framesPath, svgPath := "../../www/demo/frames-"+z.name+".json", "../../www/demo/replay-"+z.name+".svg"
@@ -869,6 +1027,23 @@ func TestSkeletonCatchesAChangedScreen(t *testing.T) {
 	if skeleton(a) != skeleton(b) {
 		t.Fatalf("figures and sparklines change between runs; the skeletons must match:\n%q\n%q", skeleton(a), skeleton(b))
 	}
+	// An age under a minute reads "now"; a minute later it is "1m".
+	nowAge := []string{" ├ ✦ flint-auth #4545 ci now ✻│"}
+	minAge := []string{" ├ ✦ flint-auth #4545 ci 1m ✻│"}
+	if skeleton(nowAge) != skeleton(minAge) {
+		t.Fatalf("now and 1m must share a skeleton:\n%q\n%q", skeleton(nowAge), skeleton(minAge))
+	}
+	// sample.Human's two-unit form (2h28m) must match a one-unit form (41m),
+	// and a bar that drops ↻ when short of room must match one that keeps it.
+	withReset := []string{" LIST ws-1 ✻ Max 40% ↻2h28m · wk 40% ↻1h7m stoker off"}
+	oneUnit := []string{" LIST ws-1 ✻ Max 40% ↻41m · wk 40% ↻55m stoker off"}
+	noReset := []string{" LIST ws-1 ✻ Max 40% · wk 40% stoker off"}
+	if skeleton(withReset) != skeleton(oneUnit) {
+		t.Fatalf("2h28m and 41m must share a skeleton:\n%q\n%q", skeleton(withReset), skeleton(oneUnit))
+	}
+	if skeleton(withReset) != skeleton(noReset) {
+		t.Fatalf("a bar with ↻ and one that dropped it must share a skeleton:\n%q\n%q", skeleton(withReset), skeleton(noReset))
+	}
 	// A figure one digit wider cuts the line one cell earlier.
 	cut := []string{" ╿ done, needs you · 9m · hearth:1.…", " ╿ done, needs you · 10m · hearth:1…"}
 	if skeleton(cut[:1]) != skeleton(cut[1:]) {
@@ -904,5 +1079,139 @@ func demoShips(clk *clock) service.ShipsSource {
 			ship(4545, "%2", "flint-auth", "Refresh tokens that rotate", ships.Stuck, "conflicts with main", ships.StageCI, 40*time.Minute),
 			ship(4540, "%3", "spark-docs", "The 1.0 docs", ships.Done, "live", ships.StageLive, 2*time.Hour),
 		}}
+	}
+}
+
+// seedUxPassGit makes a small dirty checkout so D can review a diff.
+func seedUxPassGit(dir string) error {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	run := func(args ...string) error {
+		cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+		cmd.Env = append(os.Environ(), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("git %s: %w\n%s", args[0], err, out)
+		}
+		return nil
+	}
+	for _, step := range [][]string{
+		{"init", "-b", "main"},
+		{"config", "user.email", "demo@example.com"},
+		{"config", "user.name", "demo"},
+	} {
+		if err := run(step...); err != nil {
+			return err
+		}
+	}
+	path := filepath.Join(dir, "pass.go")
+	if err := os.WriteFile(path, []byte("package pass\n\nfunc Fold() {}\n"), 0o644); err != nil {
+		return err
+	}
+	if err := run("add", "pass.go"); err != nil {
+		return err
+	}
+	if err := run("commit", "-m", "pass"); err != nil {
+		return err
+	}
+	return os.WriteFile(path, []byte("package pass\n\nfunc Fold(w int) {}\n"), 0o644)
+}
+
+// relocateUxPass points the demo's ux-pass pane, session file and transcript
+// at a real git folder so D can review and DONE still reads the turn end.
+func relocateUxPass(root, uxGit string) error {
+	if err := rewritePaneCwd(root, "%9", uxGit); err != nil {
+		return err
+	}
+	sid := "5ea1c0de-0000-4000-8000-000000000009"
+	reg, err := json.Marshal(map[string]any{
+		"pid": 2100, "sessionId": sid, "cwd": uxGit, "name": "ux-pass", "status": "idle",
+		"startedAt": 1790883000000, "statusUpdatedAt": 1790894400000,
+	})
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(root, "home", ".claude", "sessions", "2100.json"), append(reg, '\n'), 0o600); err != nil {
+		return err
+	}
+	oldProj := filepath.Join(root, "home", ".claude", "projects", "-work-ux-pass")
+	newProj := filepath.Join(root, "home", ".claude", "projects", strings.ReplaceAll(uxGit, "/", "-"))
+	if err := os.MkdirAll(newProj, 0o755); err != nil {
+		return err
+	}
+	src := filepath.Join(oldProj, sid+".jsonl")
+	dst := filepath.Join(newProj, sid+".jsonl")
+	b, err := os.ReadFile(src)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(dst, b, 0o644); err != nil {
+		return err
+	}
+	if err := os.RemoveAll(oldProj); err != nil {
+		return err
+	}
+	cwdLink := filepath.Join(root, "proc", "2100", "cwd")
+	_ = os.Remove(cwdLink)
+	return os.Symlink(uxGit, cwdLink)
+}
+
+// rewritePaneCwd sets pane's cwd in tmux-panes.txt under root.
+func rewritePaneCwd(root, pane, cwd string) error {
+	path := filepath.Join(root, "tmux-panes.txt")
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var lines []string
+	for _, l := range strings.Split(strings.TrimRight(string(b), "\n"), "\n") {
+		f := strings.Split(l, "\t")
+		if len(f) >= 6 && f[0] == pane {
+			f[5] = cwd
+			l = strings.Join(f, "\t")
+		}
+		lines = append(lines, l)
+	}
+	return os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o644)
+}
+
+// assertDeskReplay checks the desk story: the frame, DONE, ages, a shell
+// and a review sent (Task 17).
+func assertDeskReplay(t *testing.T, z replaySize, frames []replay.Frame, names []string) {
+	t.Helper()
+	byName := map[string][]string{}
+	for i, name := range names {
+		byName[name] = frameLines(frames[i])
+	}
+	console := strings.Join(byName["the console"], "\n")
+	if !strings.Contains(console, "┬") || !strings.Contains(console, "┴") {
+		t.Fatalf("%s: the console frame lacks the edge rules:\n%s", z.name, console)
+	}
+	if !strings.Contains(console, "DONE") && !strings.Contains(strings.Join(byName["DONE"], "\n"), "DONE") {
+		t.Fatalf("%s: no DONE group in the console or DONE step", z.name)
+	}
+	// An age on every session row of the console: a digit+m/h or "now".
+	age := regexp.MustCompile(`\b(\d+[mh]|now)\b`)
+	aged := 0
+	for _, line := range byName["the console"] {
+		plain := strings.TrimSpace(line)
+		if strings.Contains(plain, "NEEDS YOU") || strings.Contains(plain, "DONE") || strings.Contains(plain, "WORKING") || strings.Contains(plain, "IDLE") {
+			continue
+		}
+		if (strings.Contains(plain, "flint-auth") || strings.Contains(plain, "kindle-web") || strings.Contains(plain, "hearth-api") ||
+			strings.Contains(plain, "spark-docs") || strings.Contains(plain, "ember-billing") || strings.Contains(plain, "ux-pass") ||
+			strings.Contains(plain, "cinder-ci") || strings.Contains(plain, "wick-mobile")) && age.MatchString(plain) {
+			aged++
+		}
+	}
+	if aged < 4 {
+		t.Fatalf("%s: only %d session rows show an age; want ages on the list:\n%s", z.name, aged, console)
+	}
+	if shell := strings.Join(byName["a shell"], "\n"); !strings.Contains(shell, "▣") {
+		t.Fatalf("%s: the shell step has no ▣:\n%s", z.name, shell)
+	}
+	if sent := strings.Join(byName["review sent"], "\n"); !strings.Contains(sent, "sent a review") && !strings.Contains(sent, "queued for ux-pass") {
+		t.Fatalf("%s: the review was not sent:\n%s", z.name, sent)
 	}
 }

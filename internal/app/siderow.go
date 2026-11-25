@@ -3,6 +3,7 @@ package app
 import (
 	"cmp"
 	"strconv"
+	"strings"
 	"time"
 
 	"charm.land/lipgloss/v2"
@@ -32,9 +33,9 @@ func linkOf(i, n int, twoLines bool) (first, rest string) {
 }
 
 // sideRow is a session's row: line 1 holds the selection mark, the link,
-// the match, the name, the wait or the badge, and the agent's mark. A
-// second line shows what a session that needs you asks, or what the chosen
-// session does, or why a held one is held. The row of a host that does not
+// the match, the name, the badge, the time in state and the agent's mark. A
+// second line shows what a session that needs you asks, what a done one said
+// last, what the chosen session does, or why a held one is held. The row of a host that does not
 // answer is its last state, dimmed.
 func (m Model) sideRow(s sample.Session, w int, chosen bool, link sideLink) []string {
 	h := m.sideStateOf(s)
@@ -42,6 +43,8 @@ func (m Model) sideRow(s sample.Session, w int, chosen bool, link sideLink) []st
 	switch {
 	case h == sideHeld:
 		says = m.heldWhy(s)
+	case h == sideDone:
+		says = m.lastWords(s)
 	case says == "" && h == sideNeed:
 		says = cmp.Or(m.askedOf(s), word)
 	case says == "":
@@ -57,7 +60,7 @@ func (m Model) sideRow(s sample.Session, w int, chosen bool, link sideLink) []st
 	case pending.kind == actPark:
 		says = "letting go"
 	}
-	two := says != "" && (h == sideNeed || chosen || isPending)
+	two := says != "" && (h == sideNeed || h == sideDone || chosen || isPending)
 
 	mark, name, rest := " ", m.st.text, m.st.muted
 	if m.stale(s.Host) || isPending { // its host does not answer, or an act on it waits for the sample: dimmed
@@ -78,12 +81,9 @@ func (m Model) sideRow(s sample.Session, w int, chosen bool, link sideLink) []st
 		lead, cont = ink.Render(first)+" ", ink.Render(rest)+" "
 	}
 
-	right := rest.Render(m.sideRight(s)) + " " + rest.Render(harnessMark(s))
+	right := rest.Render(m.sideRight(s))
 	title := m.sideTitle(s)
 	left := mark + lead + m.sideMatch(s, h) + " "
-	if m.chainPlace(s) >= 0 {
-		left += m.st.accent.Render("▸") + " "
-	}
 	room := w - lipgloss.Width(left+right) - 1
 	line := spread(left+name.Render(ansi.Truncate(title, max(room, 1), "…")), right, w)
 	if !two {
@@ -94,15 +94,38 @@ func (m Model) sideRow(s sample.Session, w int, chosen bool, link sideLink) []st
 	return []string{line, fit(pad+m.st.faint.Render(text), w)}
 }
 
-// sideRight is the wait of a session, or its pull request's badge when it
-// waits for nothing: the number and the stage word.
+// sideRight is a row's right edge: its pull request's badge when it waits
+// for nothing, how long it has been in its state (or, while the plan's limit
+// stops it, when it can work again), and the agent's mark.
 func (m Model) sideRight(s sample.Session) string {
+	var at string
+	switch {
+	case s.Stopped():
+		at = m.backAt(s)
+	case !s.StateAt.IsZero():
+		at = ageOf(m.now().Sub(s.StateAt))
+	}
 	if _, waits := m.waitOf(s); !waits {
 		if ships := m.shipsOf(s); len(ships) > 0 {
-			return "#" + strconv.Itoa(ships[0].Number) + " " + stageNames[ships[0].Stage]
+			at = strings.TrimSuffix("#"+strconv.Itoa(ships[0].Number)+" "+stageNames[ships[0].Stage]+"  "+at, "  ")
 		}
 	}
-	return m.waitCell(s)
+	mark := harnessMark(s)
+	if m.hasShell(s) {
+		mark = m.st.muted.Render("▣") + " " + mark
+	}
+	if m.hasUnsentReview(s) && (m.review == nil || m.review.key != reviewKey(s)) {
+		mark = m.st.accent.Render("✎") + " " + mark
+	}
+	return strings.TrimPrefix(at+" "+mark, " ")
+}
+
+// ageOf is a time in state: "now" under a minute, else its first unit.
+func ageOf(d time.Duration) string {
+	if d < time.Minute {
+		return "now"
+	}
+	return brief(d)
 }
 
 // chainHead is the head row of a chain: "≋ login   step 2 of 3 · 3". With

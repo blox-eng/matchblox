@@ -124,8 +124,8 @@ func TestStokerTouchGoesToTheHostActedOn(t *testing.T) {
 // runs.
 func TestStokerBadgeCounts(t *testing.T) {
 	m, _, _ := stokedHosts(t, nightView(), &proto.StokerView{}, nightView())
-	if head := frameOf(m)[0]; !strings.Contains(head, "stoker 2/3") {
-		t.Fatalf("header %q", head)
+	if bar := barLine(m); !strings.Contains(bar, "stoker 2/3") { // the bar's stoker chip (owner, 2026-11-24)
+		t.Fatalf("bar %q", bar)
 	}
 }
 
@@ -167,9 +167,13 @@ func onPanes(t *testing.T, m Model) Model {
 func tapSelected(t *testing.T, m Model) Model {
 	t.Helper()
 	sc := m.draw(max(m.width, minWidth))
+	x := 2
+	if m.cogShown() { // inside the ⚙ sheet
+		x = sc.overX0 + 2
+	}
 	for i, r := range sc.rows {
 		if r == m.rowIndex() {
-			next, _ := tap(m, 2, sc.bodyTop+i)
+			next, _ := tap(m, x, sc.bodyTop+i)
 			return next.(Model)
 		}
 	}

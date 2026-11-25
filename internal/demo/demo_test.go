@@ -155,8 +155,22 @@ const repaintAfter = 150 * time.Millisecond
 
 // waitFor waits until the console drew every want, in what it wrote or in a
 // whole frame. The console writes only the cells that change, so a count it
-// drew while it waited for the service turns from "SESSIONS 0" to "SESSIONS 7"
-// by one cell, and what it wrote never holds "SESSIONS 7" whole (#321).
+// drew while it waited for the service turns from "SESSIONS 0" to "SESSIONS 8"
+// by one cell, and what it wrote never holds "SESSIONS 8" whole (#321).
+// inTheList is the list's columns of frame, the text before the edge of
+// each line, joined by single spaces: the desk wraps a notice at the
+// list's foot, and it reads whole here.
+func inTheList(frame string) string {
+	var parts []string
+	for _, l := range strings.Split(frame, "\n") {
+		if i := strings.IndexAny(l, "│┤┴"); i >= 0 {
+			l = l[:i]
+		}
+		parts = append(parts, l)
+	}
+	return strings.Join(strings.Fields(strings.Join(parts, " ")), " ")
+}
+
 func (term *terminal) waitFor(t *testing.T, want ...string) {
 	t.Helper()
 	deadline := time.Now().Add(30 * time.Second)
@@ -166,7 +180,7 @@ func (term *terminal) waitFor(t *testing.T, want ...string) {
 		_, frame := term.wholeFrame()
 		missing := ""
 		for _, w := range want {
-			if !strings.Contains(text, w) && !strings.Contains(frame, w) {
+			if !strings.Contains(text, w) && !strings.Contains(frame, w) && !strings.Contains(inTheList(frame), w) {
 				missing = w
 				break
 			}
@@ -214,7 +228,7 @@ func tempCopies(t *testing.T) []string {
 func TestTheConsoleDrawsTheMachine(t *testing.T) {
 	t.Setenv("TMPDIR", t.TempDir())
 	_, term := start(t)
-	term.waitFor(t, "SESSIONS 7", "flint-auth")
+	term.waitFor(t, "SESSIONS 8", "flint-auth")
 }
 
 // late holds back the console's first state until the start mark has played,
@@ -248,7 +262,7 @@ func TestAStateAfterTheStartMarkStillDrawsTheCount(t *testing.T) {
 	}
 	t.Cleanup(d.Stop)
 	term.d = d
-	term.waitFor(t, "SESSIONS 7", "flint-auth")
+	term.waitFor(t, "SESSIONS 8", "flint-auth")
 }
 
 func TestStopLeavesNothing(t *testing.T) {
@@ -316,7 +330,7 @@ func TestAStartSweepsWhatAKilledRunLeft(t *testing.T) {
 func TestAStartAfterAStopIsFresh(t *testing.T) {
 	t.Setenv("TMPDIR", t.TempDir())
 	d, first := start(t)
-	first.waitFor(t, "SESSIONS 7", "+ new")
+	first.waitFor(t, "SESSIONS 8", "+ new")
 	firstSeen := first.screen()
 
 	if _, _, err := tryStart(t); !errors.Is(err, demo.ErrRunning) {
@@ -332,7 +346,7 @@ func TestAStartAfterAStopIsFresh(t *testing.T) {
 	d.Stop()
 
 	_, second := start(t)
-	second.waitFor(t, "SESSIONS 7", "+ new")
+	second.waitFor(t, "SESSIONS 8", "+ new")
 	if a, b := firstScreen(firstSeen), firstScreen(second.screen()); a != b {
 		t.Errorf("the first screens differ:\n--- first\n%s\n--- after the restart\n%s", a, b)
 	}
@@ -342,7 +356,7 @@ func TestAStartAfterAStopIsFresh(t *testing.T) {
 // the spark of a working session turn with the clock, and differ from run to
 // run.
 func firstScreen(text string) string {
-	_, list, _ := strings.Cut(text, "SESSIONS 7")
+	_, list, _ := strings.Cut(text, "SESSIONS 8")
 	list, _, _ = strings.Cut(list, "+ new")
 	return strings.ReplaceAll(list, "✧", "✦")
 }

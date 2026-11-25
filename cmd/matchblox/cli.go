@@ -129,6 +129,7 @@ type sessionJSON struct {
 	Target     string      `json:"target"`
 	Repo       string      `json:"repo"`
 	Status     string      `json:"status"`
+	StateAt    time.Time   `json:"state_at,omitzero"`
 	Word       string      `json:"word"`
 	Reason     string      `json:"reason"`
 	Held       bool        `json:"held"`
@@ -247,7 +248,7 @@ func chainStokerOf(doc state.Doc, s sample.Session) (id, chain string) {
 func sessionRows(doc state.Doc) []sessionJSON {
 	rows := []sessionJSON{}
 	for _, s := range doc.Sessions {
-		r := sessionJSON{Name: s.Name, Pane: s.Pane, Target: s.Target, Repo: repoName(doc, s.Cwd), Status: s.Status, Word: stoker.Word(s),
+		r := sessionJSON{Name: s.Name, Pane: s.Pane, Target: s.Target, Repo: repoName(doc, s.Cwd), Status: s.Status, StateAt: s.StateAt, Word: stoker.Word(s),
 			Reason: doc.Reasons[s.Pane].Word, Held: heldBy(doc, s), Stoker: doc.StokerServer != "" && s.Server() == doc.StokerServer, ContextPct: s.ContextPct, Account: s.Account,
 			AccountDir: s.AccountDir, SigningIn: s.SigningIn, byHand: signsInByHand(doc, s)}
 		if r.Stoker {

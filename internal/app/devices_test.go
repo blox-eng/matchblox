@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/setup"
 )
@@ -141,6 +143,7 @@ func TestDevicesReadErrorTellsTheFix(t *testing.T) {
 	host := *m.opt.Pair
 	host.Devices = func() ([]PairDevice, error) { return nil, errors.New("permission denied") }
 	m.opt.Pair = &host
+	m = upd(t, m, tea.WindowSizeMsg{Width: 160, Height: 60}) // the ⚙ sheet is wide enough for the fix's words
 	m.setTab(tabMachine)
 	out := screen(m)
 	if !strings.Contains(out, "cannot read ~/.ssh/authorized_keys: permission denied. Check its owner and mode (600).") ||

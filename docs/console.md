@@ -1,38 +1,40 @@
 # The console
 
-From the top: the header, the tab row, the list beside the chat, and at
-the bottom the key line.
+On a desk, from the top: the head row, a rule, the list beside the
+agent's screen, a rule, and the bar. The head shows the spaces (each
+repo with a live session), how many matches need you (`● 3 need you`),
+how many finished (`✓ 1 done`), and `⚙`. A tap on `● 3 need you` shows
+`NEEDS YOU`, clears the space and host filters, and chooses the first
+session that needs you. The count holds every wait on every host and in
+every chain, whatever the list hides. The bar's mode word names who has
+the keys (`LIST`, `AGENT`, `SHELL`, `REVIEW`, …). Host chips, usage and
+[the stoker](stoker.md) sit on the bar. `? keys` opens the keys sheet.
+`,` or `⚙` opens Machine as a sheet over the agent.
 
-The header shows the host, the host filter (`all hosts ▾`) when you have
-more than one host, how many matches need you (`● 3 need you`) and
-[the stoker](stoker.md): `stoker off`, `stoker`, or `☾ night → 07:00`.
-A tap on `● 3 need you` shows `NEEDS YOU`, clears the chain and host
-filters, and chooses the first session that needs you. The count holds
-every wait on every host and in every chain, whatever the list hides.
+On a phone, from the top: the header, the tab row, the list or the chat,
+and at the bottom the key line. The tabs are `sessions` and `machine`,
+turned by `Tab` and `Shift+Tab`, or a tap on the name. The open one is
+uppercase. `machine !` has a problem: a detached busy loop burns, or a
+plan's window is at 90% or more. The key line names where the keys go
+first, `writing to flint-auth` or `in the list`, then at most five keys
+for that place. A tap on a key presses it. See [Keys](keys.md).
 
-The tabs are `sessions` and `machine`, turned by `Tab` and `Shift+Tab`,
-or a tap on the name. The open one is uppercase. `machine !` has a
-problem: a detached busy loop burns, or a plan's window is at 90% or
-more. The stoker, Git, History and Panes are Machine's first rows:
+On both, the stoker, Git, History and Panes are Machine's first rows:
 `Enter` opens one, `Esc` comes back to Machine.
-
-The key line at the bottom names where the keys go first, `writing to
-flint-auth` or `in the list`, then at most five keys for that place. A
-tap on a key presses it. It is also where you confirm a step or type a
-search. See [Keys](keys.md).
 
 ## The list
 
-The console opens on Sessions: the list of every match at the left, and
-the chat of the chosen match at the right. The list puts each match in
-one of four groups:
+The console opens on the list of every match at the left, and the
+agent's screen or the chat of the chosen match at the right. The list
+puts each match in one of five groups:
 
 | Group | A match is here when |
 |---|---|
-| `NEEDS YOU` | It asks a question or a permission, or a stoker step for it waits for your go. A pull request it drives waits for your merge, and it does not work. Its pull request is stuck (`CI failed`, `conflicts`, `changes requested`) and it does not work. Or its turn ended today and it waits for input (`waits`, `paused`, `done`). |
+| `NEEDS YOU` | It asks a question or a permission, or a stoker step for it waits for your go. A pull request it drives waits for your merge, and it does not work. Its pull request is stuck (`CI failed`, `conflicts`, `changes requested`) and it does not work. |
+| `DONE` | Its turn ended after you last opened its chat. Its second line is what the agent said last. When you open it, it moves to `IDLE`. |
 | `WORKING` | It is `busy`, `agents`, `tests` or `shell`. |
+| `IDLE` | Everything else that runs: `idle`, `cold`, `stale` and `out`. |
 | `HELD` | You parked it (`z`), or the stoker holds it and it asks nothing. |
-| `IDLE` | Everything else: `idle`, `cold`, `stale` and `out`. |
 
 A match you parked is in `HELD` whatever else is true, and the header
 does not count it. A wait from before today is cold, and cold is `IDLE`.
@@ -584,10 +586,7 @@ its head:
   go to the chain's stoker; to a chain with no stoker they start one
   (`› what should hearth's stoker do?`).
 
-With the agent beside the list, `g` does not open the room. It shows the
-chain's agents side by side: up to 4 members' own panes on the right, most
-urgent first, and `▸` in the list for each one on screen. `G` opens the
-room. See [Keys](keys.md#the-chain-view-beside-the-list).
+On the desk, `g` opens the room too: the list shows the chain only.
 
 On a phone the room takes the screen, and `◂` goes back to the list.
 `Esc` closes the room and shows every chain. In the room, the menu of a session adds
@@ -655,10 +654,11 @@ Each row starts with a match:
 
 | Mark | Word | It means |
 |---|---|---|
-| `╿` | asks, waits, done, paused | The agent needs you. The match is struck, and its head breathes while it asks. |
+| `╿` | asks, waits, paused | The agent needs you. The match is struck, and its head breathes while it asks. |
+| `✓` | done | The agent finished a turn you have not opened. The match sits in `DONE`. |
 | `✦` | busy, agents, tests, shell | The agent works. The match burns. `agents`: its turn ended and its subagents still work, and their results start its next turn. It does not need you. |
-| `╽` | held | The stoker holds it, or you parked it. |
 | `╵` | idle, cold, stale, out | The agent rests. `out`: the plan's limit stops it, and the row says when it can work again: `19:50`, or the weekday when that is more than a day away. A session left a day or more keeps its word: `cold`, `stale`. |
+| `╽` | held | The stoker holds it, or you parked it. |
 
 A full context (at `compact_tokens`, 350k by default, or `compact_at`,
 85% of its window) shows on the chat's head: `ctx N%` in `neg`.

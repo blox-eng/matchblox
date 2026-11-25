@@ -1,0 +1,501 @@
+<title>The desk</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Space+Grotesk:wght@500;600&family=Inter:wght@400;500;600&display=swap">
+<style>
+/* Layout: a band of states, one terminal drawn cell by cell at 160x40 in the console's tokens (DESIGN.md 2.1), then the notes and the canon. Page chrome: 4px spacing grid, radius 4 for controls and 8 for surfaces. */
+:root{
+  --bg:#F5F1E7; --fg:#1C1813; --muted:#5F5A4C; --faint:#8A8170; --hair:#DDD5C3;
+  --accent:#9A7B3F; --wash:#ECE3CF; --warn:#8A6420; --neg:#9E4A34;
+  --flame:#E8822E; --flame-amber:#DF8E2C; --flame-core:#D69A2A; --head:#B23A24; --breath:#CD8372; --ember:#9E5E4A;
+  --page:#EDE7DA; --surface:#F5F1E7;
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s6:24px; --s8:32px;
+  --r-ctl:4px; --r-surf:8px;
+  --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --display:"Space Grotesk","Inter",system-ui,sans-serif;
+  --body:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#0F0D0A; --fg:#EBE6DC; --muted:#A69D8D; --faint:#776F60; --hair:#2E2921;
+    --accent:#C3A56A; --wash:#221D14; --warn:#B98F44; --neg:#B0563F;
+    --flame-amber:#F5A54A; --flame-core:#FFD27A; --head:#C2452D; --breath:#7A2F1F; --ember:#9C5A46;
+    --page:#171410; --surface:#0F0D0A;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0F0D0A; --fg:#EBE6DC; --muted:#A69D8D; --faint:#776F60; --hair:#2E2921;
+  --accent:#C3A56A; --wash:#221D14; --warn:#B98F44; --neg:#B0563F;
+  --flame-amber:#F5A54A; --flame-core:#FFD27A; --head:#C2452D; --breath:#7A2F1F; --ember:#9C5A46;
+  --page:#171410; --surface:#0F0D0A;
+}
+body{background:var(--page);color:var(--fg);font:15px/1.55 var(--body);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:var(--s8) 48px}
+.wrap{max-width:1360px;margin:0 auto;display:flex;flex-direction:column;gap:var(--s6)}
+header{display:flex;flex-direction:column;gap:var(--s2)}
+h1{font:600 28px/1.15 var(--display);margin:0;letter-spacing:-.01em}
+.lede{margin:0;color:var(--muted);max-width:72ch}
+.lede code,.note code,td code{font:12.5px var(--mono);color:var(--accent)}
+.states{display:flex;flex-wrap:wrap;gap:var(--s2)}
+.states button{font:500 13px/1 var(--body);min-height:36px;padding:0 var(--s3);border-radius:var(--r-ctl);border:1px solid var(--hair);background:var(--surface);color:var(--fg);cursor:pointer}
+.states button[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
+.states button:focus-visible,.term:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.frame{width:fit-content;max-width:100%;box-sizing:border-box;overflow-x:auto;border-radius:var(--r-surf);border:1px solid var(--hair);background:var(--bg);padding:var(--s2)}
+.term{--lh:16px;font:12px/var(--lh) var(--mono);color:var(--fg);white-space:pre;outline:none;width:max-content;font-variant-numeric:tabular-nums;cursor:default}
+.term .l{height:var(--lh);white-space:pre;overflow:hidden}
+.c{display:inline-block;width:1ch;height:var(--lh);text-align:center;vertical-align:top;overflow:visible;font-variant-emoji:text}
+.bx{display:inline-block;width:1ch;height:var(--lh);vertical-align:top;position:relative;-webkit-text-fill-color:transparent}
+.bx::before,.bx::after{content:"";position:absolute;background:currentColor}
+.bx.vf::before{left:calc(50% - .5px);width:1px;top:0;bottom:0}
+.bx.vt::before{left:calc(50% - .5px);width:1px;top:0;height:50%}
+.bx.vb::before{left:calc(50% - .5px);width:1px;bottom:0;height:calc(50% + .5px)}
+.bx.hrr::after{top:calc(50% - .5px);height:1px;left:50%;right:0}
+.bx.hrl::after{top:calc(50% - .5px);height:1px;left:0;right:50%}
+.bx.hrb::after{top:calc(50% - .5px);height:1px;left:0;right:0}
+.term [data-tap]{cursor:pointer}
+.fg{color:var(--fg)} .mu{color:var(--muted)} .fa{color:var(--faint)} .ac{color:var(--accent)} .wa{color:var(--warn)} .ne{color:var(--neg)} .hr{color:var(--hair)}
+.b{font-weight:700}
+.fl{color:var(--flame);animation:flick .6s steps(3) infinite}
+.as{color:var(--head);font-weight:700;animation:breathe 2.4s ease-in-out infinite}
+.dn{color:var(--ember);font-weight:700}
+.am{color:var(--flame-amber)}
+@keyframes breathe{0%,100%{color:var(--head)}50%{color:var(--breath)}}
+@keyframes flick{0%{color:var(--flame)}33%{color:var(--flame-amber)}66%{color:var(--flame-core)}}
+@media (prefers-reduced-motion:reduce){.fl,.as{animation:none}}
+.notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:var(--s4)}
+.note{background:var(--surface);border:1px solid var(--hair);border-radius:var(--r-surf);padding:var(--s4);display:flex;flex-direction:column;gap:var(--s1)}
+.note h2{font:600 12px/1.3 var(--body);margin:0;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.note p{margin:0;font-size:14px}
+section{display:flex;flex-direction:column;gap:var(--s3)}
+section h2{font:600 18px/1.2 var(--display);margin:var(--s2) 0 0}
+.tbl{overflow-x:auto;border:1px solid var(--hair);border-radius:var(--r-surf);background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:14px;min-width:780px}
+th,td{text-align:left;vertical-align:top;padding:var(--s2) var(--s3);border-bottom:1px solid var(--hair)}
+th{font:600 12px/1.3 var(--body);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+tr:last-child td{border-bottom:0}
+td:first-child{white-space:nowrap;color:var(--muted)}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>The desk</h1>
+    <p class="lede">The matchblox console on a 16-inch desk, drawn cell by cell at 160×40 with the console's own glyphs and inks. matchblox draws the whole screen: the header on top, the bar at the bottom, the list, and the agent's real screen through a terminal built into matchblox. It draws today's half edge itself, and the sheets float over the agent. Demo names only. Click the screen, then <code>?</code> for every key, <code>,</code> for the machine, <code>t</code> shell, <code>D</code> review.</p>
+  </header>
+  <div class="states" role="group" aria-label="States">
+    <button id="st-return" data-st="return">1 · Back at the desk</button>
+    <button id="st-space" data-st="space">2 · Space: ledge</button>
+    <button id="st-done" data-st="done">3 · ⏎ on a DONE agent</button>
+    <button id="st-trouble" data-st="trouble">4 · Busy loop on gpu-1</button>
+    <button id="st-cog" data-st="cog">5 · , machine</button>
+    <button id="st-keys" data-st="keys">6 · ? keys</button>
+    <button id="st-shell" data-st="shell">7 · Shell under ux-pass</button>
+    <button id="st-review" data-st="review">8 · Review ux-pass</button>
+    <button id="st-sent" data-st="sent">9 · Review sent</button>
+    <button id="st-agent" data-st="agent">10 · Keys in the agent</button>
+    <button id="st-confirm" data-st="confirm">11 · A prompt waits</button>
+  </div>
+  <div class="frame"><div class="term" id="term" tabindex="0" aria-label="The desk, a mockup of the console at 160 by 40 cells"></div></div>
+  <div class="notes" id="notes"></div>
+
+  <section aria-labelledby="canon-h">
+    <h2 id="canon-h">The canon, in cells</h2>
+    <p class="lede">A terminal has cells, not pixels. These rules give the desk its rhythm without anything the console does not already draw.</p>
+    <div class="tbl"><table>
+      <thead><tr><th>Rule</th><th>On the desk</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>Gutter</td><td>1 cell at the left of every pane. Column 0 is the selection's <code>▌</code>; nothing else uses it.</td><td>The real list already works this way. The eye finds the choice in one column.</td></tr>
+        <tr><td>Spacing scale</td><td>0 cells between a glyph and its word's mark (<code>✻│</code>); 1 between a glyph and its word (<code>╿ name</code>); 2 inside a cluster (<code>−</code> after a count); 3 between clusters on the bar; 4 between spaces in the header (the tab row's rhythm).</td><td>Five steps, each with one job. Gaps grow with the distance in meaning.</td></tr>
+        <tr><td>Separators</td><td><code>·</code> in <code>faint</code>, one space each side, inside a cluster. Never between clusters.</td><td>As in the key line and the chain line today.</td></tr>
+        <tr><td>Lines</td><td>A line in <code>hair</code> is a pane edge, or the rule under the header and over the bar. The only other line is the hairline between groups. Lines join where they meet (<code>┬ ┴ ┤</code>), and a joint takes the ink of the half of the edge it touches. No boxes, no badges with borders.</td><td>One meaning per line. A box would read as a pane you can enter.</td></tr>
+        <tr><td>Corners</td><td>Only a sheet that floats has corners: a rounded border (<code>╭╮╰╯</code>) in <code>faint</code>, one step above a pane's <code>hair</code>, its title in the top edge, 1 cell of padding inside.</td><td>A rounded edge says "floats, esc closes it". Square pane edges say "stays".</td></tr>
+        <tr><td>Focus</td><td>Half of the shared edge in <code>accent</code>, on the side of the pane with the keys: the top half for the list, the bottom half for the agent, as tmux draws it today. matchblox draws it. The bar's first word names the mode: <code>LIST</code> in <code>muted</code>, any other in <code>accent</code>, uppercase like the open tab.</td><td>Nielsen 1, as today.</td></tr>
+        <tr><td>Inks</td><td>Labels <code>faint</code>, values <code>muted</code>, names <code>fg</code>, an asking name bold. The accent marks the choice, a need, the open space and the mode. Trouble alone takes <code>warn</code> or <code>neg</code>.</td><td>§1 rule 4 of DESIGN.md: the accent is rare, so it means something.</td></tr>
+        <tr><td>Right edge</td><td>A row ends in its time, then the agent's mark against the pane edge (<code>10m ✻│</code>). The state is the group's name, so the row says no state word.</td><td>One owner per fact. This is the real row today.</td></tr>
+        <tr><td>States</td><td>One glyph per state, so none rests on colour or motion alone: <code>✦ ╿ ✓ ╵ ╽ │</code>. The group head carries the word.</td><td>Design review D3 (2026-11-23).</td></tr>
+        <tr><td>Keys</td><td>No key line. <code>? keys</code> ends the bar. A mode's own keys sit in its own pane or popup: key in <code>fg</code>, label in <code>muted</code>, <code>·</code> in <code>faint</code>.</td><td>Nielsen 8 and 6. The inks are today's key line.</td></tr>
+        <tr><td>Motion</td><td>Only a match moves: asks breathes, works flickers. Done is still. Nothing in the frame animates.</td><td>§5 of DESIGN.md: the console wakes only for a match.</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+</div>
+
+<script>
+const W=160,H=40,LW=40,CW=W-LW-1,BODY=H-4;
+const REPOS=["matchblox","base","ledge"];
+const S0=()=>[
+  {id:"flint-auth",repo:"matchblox",host:"ws-1",ag:"✻",st:"ask",t:12,say:"Which way do we fix the login?",chain:"login",step:1,opts:["Patch the token check","Rotate the session key"]},
+  {id:"kindle-web",repo:"matchblox",host:"ws-1",ag:"❋",st:"done",t:6,say:"The login page reads the new token.",chain:"login",step:2},
+  {id:"hearth-api",repo:"matchblox",host:"gpu-1",ag:"✻",st:"work",t:11,pr:"#4551 ci",chain:"login",step:3},
+  {id:"ember-billing",repo:"ledge",host:"ws-1",ag:"✻",st:"ask",t:5,say:"#4552 waits for your merge",pr:"#4552 green"},
+  {id:"ux-pass",repo:"matchblox",host:"ws-1",ag:"✻",st:"done",t:2,say:"Footer chips are in, 14 tests pass.",pr:"#4561 ci"},
+  {id:"spark-rates",repo:"base",host:"gpu-1",ag:"❋",st:"done",t:9,say:"The rate table imports, 3 rows skipped."},
+  {id:"cinder-ci",repo:"base",host:"gpu-1",ag:"⬢",st:"work",t:0},
+  {id:"wick-vat",repo:"ledge",host:"ws-1",ag:"✻",st:"work",t:18},
+  {id:"spark-docs",repo:"matchblox",host:"ws-1",ag:"✻",st:"idle",t:180},
+  {id:"wick-mobile",repo:"ledge",host:"gpu-1",ag:"▣",st:"idle",t:300},
+  {id:"base-docs",repo:"base",host:"ws-1",ag:"✻",st:"held",t:60,say:"held by the stoker · not the priority"},
+];
+const ORDER=["ask","done","work","idle","held"];
+const HEAD={ask:"NEEDS YOU",done:"DONE",work:"WORKING",idle:"IDLE",held:"HELD"};
+const WORD={ask:"asks",done:"done",work:"works",idle:"idle",held:"held"};
+const GL={ask:["╿","as"],done:["✓","dn"],work:["✦","fl"],idle:["╵","fa"],held:["╽","mu"]};
+const AGN={"✻":"Claude Code","❋":"Codex","⬢":"Cursor","▣":"OpenCode"};
+const age=m=>m<1?"now":m<60?m+"m":Math.floor(m/60)+"h";
+
+let M;
+let EDGE="frame";
+function reset(){M={s:S0(),space:"all",sel:"flint-auth",pop:null,shell:{},review:null,reviews:{},trouble:false,notice:"",state:"return",agentKeys:false,edge:EDGE};}
+
+/* cells */
+const len=t=>[...t].length;
+const g=(t,c="")=>({t,c});
+function cut(segs,w){let n=0,o=[];for(const s of segs){const l=len(s.t);if(n+l<=w){o.push(s);n+=l;}else{const k=w-n;if(k>0)o.push(g([...s.t].slice(0,k-1).join("")+"…",s.c));n=w;break;}}if(n<w)o.push(g(" ".repeat(w-n)));return o;}
+function lr(L,R,w){const lr_=R.reduce((a,s)=>a+len(s.t),0);const left=cut(L,Math.max(0,w-lr_));return [...left,...R];}
+const blank=w=>[g(" ".repeat(w))];
+// take: the cells from a to b of a line, as they are (what shows beside a popup).
+function take(segs,a,b){let n=0;const o=[];for(const s of segs){const ch=[...s.t];const lo=Math.max(a,n),hi=Math.min(b,n+ch.length);if(hi>lo)o.push({...s,t:ch.slice(lo-n,hi-n).join("")});n+=ch.length;}const got=o.reduce((x,s)=>x+len(s.t),0);if(got<b-a)o.push(g(" ".repeat(b-a-got)));return o;}
+const esc=s=>s.replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const BOX={"─":"hrb","│":"vf","├":"vf hrr","┤":"vf hrl","┼":"vf hrb","└":"vt hrr","┘":"vt hrl","╰":"vt hrr","╯":"vt hrl","╭":"vb hrr","╮":"vb hrl","┬":"vb hrb","┴":"vt hrb"};
+// Every glyph takes exactly one cell, as in a terminal: a glyph the mono font lacks
+// comes from another font at another width, so it sits in a 1ch box.
+function boxed(t,c){let o="",run="";const flush=()=>{if(run){o+=c?`<span class="${c}">${esc(run)}</span>`:esc(run);run="";}};
+  for(const ch of t){
+    if(BOX[ch]){flush();o+=`<span class="bx ${BOX[ch]} ${c||"fg"}">${ch}</span>`;}
+    else if(ch.codePointAt(0)>0x7e){flush();o+=`<span class="c ${c}">${esc(ch)}${"⚙⚠✎".includes(ch)?"︎":""}</span>`;}
+    else run+=ch;
+  }flush();return o;}
+const toHtml=segs=>segs.map(s=>{const inner=boxed(s.t,s.c);return s.tap?`<span data-tap="${s.tap}">${inner}</span>`:inner;}).join("");
+const T=(seg,tap)=>(seg.tap=tap,seg);
+
+const vis=()=>M.s.filter(x=>M.space==="all"||x.repo===M.space);
+const cur=()=>M.s.find(x=>x.id===M.sel);
+const rank=x=>ORDER.indexOf(x.st);
+function units(list){const ch={},out=[];for(const x of list){if(x.chain)(ch[x.chain]=ch[x.chain]||[]).push(x);else out.push({solo:x,r:rank(x)});}
+  for(const [n,ms] of Object.entries(ch)){ms.sort((a,b)=>a.step-b.step);out.push({chain:n,ms,r:Math.min(...ms.map(rank))});}return out;}
+function mode(){
+  if(M.pop==="keys")return "KEYS";if(M.pop==="cog")return "MACHINE";
+  if(M.review)return M.review.typing?"COMMENT":"REVIEW";
+  if(M.shell[M.sel]==="focus")return "SHELL";if(M.agentKeys)return "AGENT";return "LIST";
+}
+const right_=()=>M.agentKeys||M.shell[M.sel]==="focus";
+
+/* the head pane */
+function head(){
+  const need=M.s.filter(x=>x.st==="ask").length,done=M.s.filter(x=>x.st==="done").length;
+  const L=[g(" "),g("▰","ac"),g(" "),g("matchblox","fg"),g("    ")];
+  const sps=["all",...REPOS];
+  sps.forEach((r,i)=>{
+    const open=M.space===r,n=r==="all"?0:M.s.filter(x=>x.repo===r&&x.st==="ask").length;
+    L.push(T(g(open?r.toUpperCase():r,open?"ac b":"fa"),"space:"+r));
+    if(n)L.push(g(" ●"+n,open?"ac":"mu"));
+    if(i<sps.length-1)L.push(g("    "));
+  });
+  const R=[];if(need)R.push(g("● "+need+" need you","ac"));
+  if(done){if(need)R.push(g(" · ","fa"));R.push(g("✓ "+done+" done","dn"));}
+  R.push(g("    "),T(g("⚙",M.pop==="cog"?"ac b":"mu"),"cog:usage"));
+  if(M.trouble)R.push(g(" !","ne"));
+  R.push(g(" "));
+  return lr(L,R,W);
+}
+
+/* the bar pane */
+function bar(){
+  if(M.confirm){const L=[g(" "),g("CONFIRM","ac b"),g("   "),g("kill "+M.confirm+"?","fg"),g("   "),g("y","fg"),g(" kill","mu"),g(" · ","fa"),g("esc","fg"),g(" keep","mu")];return lr(L,[T(g("?","fg"),"keys"),T(g(" keys","mu"),"keys"),g(" ")],W);}
+  const md=mode();
+  const L=[g(" "),g(md,md==="LIST"?"mu":"ac b"),g("   ")];
+  L.push(T(g("ws-1","mu"),"cog:health"),g(" cpu ","fa"),g("34%","mu"),g(" mem ","fa"),g("61%","mu"),g("   "));
+  if(M.trouble)L.push(T(g("gpu-1 cpu 88% ⚠ busy loop","ne"),"cog:loops"));
+  else L.push(T(g("gpu-1","mu"),"cog:health"),g(" cpu ","fa"),g("41%","mu"),g(" mem ","fa"),g("52%","mu"));
+  L.push(g("  "),g("s▸","fa"),g("   "));
+  L.push(T(g("✻ work","mu"),"cog:usage"),g(" 5h ","fa"),g("62%","mu"),g(" ↻2h48m","fa"),g(" · ","fa"),g("wk ","fa"),g("40%","mu"),g(" ↻4d","fa"),g("   "));
+  L.push(T(g("stoker off","fa"),"cog:stoker"));
+  const R=[];
+  if(md==="SHELL"||md==="AGENT")R.push(g("ctrl+q","fg"),g(" list","mu"),g("   "));
+  R.push(T(g("?","fg"),"keys"),T(g(" keys","mu"),"keys"),g(" "));
+  return lr(L,R,W);
+}
+
+/* the list pane */
+function rowLines(x,link,last,chosenChain){
+  const on=x.id===M.sel;
+  const [gl,gc]=GL[x.st];
+  const lk=chosenChain?"ac":"fa";
+  const L=[g(on?"▌":" ","ac")];
+  if(link)L.push(g(link,lk),g(" "));
+  L.push(g(gl,gc),g(" "),T(g(x.id,x.st==="ask"?"fg b":"fg"),"sel:"+x.id));
+  const R=[];
+  if(M.reviews[x.id]&&M.reviews[x.id].length&&!(M.review&&M.review.id===x.id))R.push(g("✎ ","ac"));
+  if(M.shell[x.id])R.push(g("▣ ","mu"));
+  if(x.pr&&x.st!=="ask")R.push(g(x.pr+"  ","mu"));
+  R.push(g(age(x.t),"mu"),g(" "),g(x.ag,"mu"));
+  const out=[lr(L,R,LW)];
+  if((x.st==="ask"||x.st==="done"||x.st==="held")&&x.say){
+    const pre=link?[g(" "),g(last?" ":"│",lk),g("   ")]:[g("   ")];
+    out.push(cut([...pre,g(x.say,"fa")],LW));
+  }
+  return out;
+}
+function list(){
+  const V=vis(),out=[];
+  if(!V.length){out.push(cut([g(" Nothing in "+M.space+". ","fa"),g("esc","fg"),g(" shows all.","fa")],LW));}
+  const us=units(V);let first=true;
+  for(const st of ORDER){
+    const G=us.filter(u=>u.r===ORDER.indexOf(st));if(!G.length)continue;
+    if(!first)out.push([g("─".repeat(LW),"hr")]);first=false;
+    out.push(cut([g(" "+HEAD[st]+" · "+G.reduce((n,u)=>n+(u.solo?(u.solo.st===st?1:0):u.ms.filter(m=>m.st===st).length),0)+"  −","fa")],LW));
+    if(st==="ask"||st==="done")G.sort((a,b)=>(b.solo?b.solo.t:Math.max(...b.ms.map(m=>m.t)))-(a.solo?a.solo.t:Math.max(...a.ms.map(m=>m.t))));
+    for(const u of G){
+      if(u.solo){out.push(...rowLines(u.solo));continue;}
+      const urg=u.ms.reduce((a,b)=>rank(b)<rank(a)?b:a);
+      const chosen=u.ms.some(m=>m.id===M.sel);
+      out.push(lr([g(" "),g("≋ "+u.chain,"ac b")],[g("step "+urg.step+" of "+u.ms.length+" · "+u.ms.length+" ","mu")],LW));
+      u.ms.forEach((m,i)=>out.push(...rowLines(m,i===u.ms.length-1?"└":"├",i===u.ms.length-1,chosen)));
+    }
+  }
+  while(out.length<BODY-1)out.push(blank(LW));
+  out.length=BODY-1;
+  out.push(M.notice?cut([g(" "+M.notice,"mu")],LW):cut([g(" "),g("+ new","ac"),g(" · ","fa"),g("✧ 2 tips","mu")],LW));
+  return out;
+}
+
+/* the agent's pane (drawn as the replay draws the chat) */
+const CONV={
+  "flint-auth":["The login drops users after 10 minutes. The session token is checked against the old key.","Two ways fix it."],
+  "ux-pass":["Read internal/app/sidepanel.go and view.go.","Wrote internal/app/frame.go: the host chips and the usage with its resets.","go test ./internal/app/...  ok  4.2s","Footer chips are in, 14 tests pass."],
+  "kindle-web":["The login page reads the new token."],
+  "spark-rates":["The rate table imports, 3 rows skipped (no unit)."],
+  "ember-billing":["#4552 is green. It waits for your merge."],
+};
+function chatLines(x,rows){
+  const out=[];
+  const R=[g("ctx 48%","mu"),g("  "),g("ctrl+o expand · m menu","fa"),g(" ")];
+  out.push(lr([g(" "),g(x.id,"fg b"),g(" "+x.ag+" "+WORD[x.st],"mu"),g("  "+age(x.t),"fa")],R,CW));
+  out.push(cut([g(" "),g(x.pr?x.pr:"@"+x.host,"mu")],CW));
+  if(x.chain){
+    const ms=M.s.filter(m=>m.chain===x.chain).sort((a,b)=>a.step-b.step);
+    const segs=[g(" "),g("chain ","mu"),g(x.chain,"fg b"),g(" · step "+x.step+" of "+ms.length+"   ","mu")];
+    ms.forEach((m,i)=>{if(i)segs.push(g(" → ","fa"));segs.push(g(m.id+" "+({ask:"needs you",done:"is done",work:"works",idle:"rests",held:"is held"}[m.st]),m.st==="ask"?"ac":"mu"));});
+    out.push(cut(segs,CW));
+  }
+  const conv=[];
+  for(const t of (CONV[x.id]||[x.st==="work"?"Working…":"Waiting for a message."]))conv.push(cut([g(" "),g("●","fg"),g(" "+t,"fg")],CW),blank(CW));
+  if(x.opts){conv.push(cut([g(" "+x.say,"fg")],CW));x.opts.forEach((o,i)=>conv.push(cut([g(i?"   ":" ❯ ",i?"":"ac"),g((i+1)+". "+o,i?"mu":"fg")],CW)));conv.push(blank(CW));}
+  while(out.length+conv.length<rows-1)out.push(blank(CW));
+  out.push(...conv.slice(-(rows-1-out.length)));
+  out.push(lr([g(" "),g("›","ac"),g(" ")],[g(x.st==="ask"?"answer in its pane · ctrl+o":"⏎ send to "+x.id,x.st==="ask"?"wa":"fa"),g(" ")],CW));
+  return out;
+}
+function right(){
+  const x=cur();
+  if(M.shell[x.id]){
+    const sh=13,top=BODY-sh-1;
+    const out=chatLines(x,top);
+    const foc=M.shell[x.id]==="focus";
+    const lit=foc;
+    out.push(cut([g("─ ",lit?"ac":"hr"),g("shell · ~/dev/matchblox/wt/"+x.id+" · t switches","fa"),g(" "+"─".repeat(CW),lit?"ac":"hr")],CW));
+    const sl=[["$ go test ./internal/app/...","mu"],["ok   github.com/blox-eng/matchblox/internal/app  4.2s","fg"],["$ "+(foc?"▏":""),"mu"]];
+    for(let i=0;i<sh;i++)out.push(i<sl.length?cut([g(" "+sl[i][0],sl[i][1])],CW):blank(CW));
+    return out;
+  }
+  return chatLines(x,BODY);
+}
+
+/* popups: tmux rounded border, title in the top edge, 1 cell padding */
+function popup(base,title,lines,foot){
+  const px=4,py=1,w=CW-2*px,h=BODY-2*py,iw=w-4;
+  const out=base.slice();
+  const top=[g("╭─ ","fa"),g(title,"fg b"),g(" "+"─".repeat(Math.max(0,w-5-len(title)))+"╮","fa")];
+  const rows=[top];
+  const body=lines.slice(0,h-3);
+  while(body.length<h-3)body.push(blank(iw));
+  for(const l of body)rows.push([g("│ ","fa"),...cut(l,iw),g(" │","fa")]);
+  rows.push([g("│ ","fa"),...cut(foot||blank(iw),iw),g(" │","fa")]);
+  rows.push([g("╰"+"─".repeat(w-2)+"╯","fa")]);
+  rows.forEach((r,i)=>{const b=base[py+i];out[py+i]=[...take(b,0,px),...r,...take(b,px+w,CW)];});
+  return out;
+}
+const KEYS=[
+  ["ANYWHERE",[["?","keys: find any action","keys"],[",","machine and settings (⚙)","cog"],["ctrl+l","hide or show the list"],["ctrl+q","keys to the list, or to the agent"],["ctrl+o","expand into the agent's own pane"],["esc","back one step"]]],
+  ["THE LIST",[["↑↓","choose a session"],["⏎","open its chat","open"],["[ ]","the space before or after","space"],["s","the next host"],["g","only this chain"],["/","find a session"],["t","a shell under the agent","shell"],["D","review its changes","review"],["m","the session's menu"],["c","copy what it said last"],["N","a new session"],["p","merge its pull request, after a typed y"]]],
+  ["A REVIEW",[["↑↓","choose a line"],["c","comment on the line"],["] [","the next or last file"],["⏎","send the review to the agent"]]],
+];
+function keysPopup(base){
+  const q=M.help.q.toLowerCase();const L=[];let n=0;
+  L.push([g("›","ac"),g(" "+M.help.q,"fg"),g("▏","fg")],blank(10));
+  for(const [grp,ks] of KEYS){
+    const hit=ks.filter(([k,d])=>!q||d.includes(q)||k===q);if(!hit.length)continue;
+    L.push([g(grp,"fa")]);
+    for(const [k,d,run] of hit){const on=n===M.help.at;L.push([g(on?"▌":" ","ac"),g(" "),g(k.padEnd(8),"fg"),g(d,on?"fg":"mu")]);M.help.runs[n]=run;n++;}
+    L.push(blank(10));
+  }
+  M.help.n=n;
+  if(!n)L.push([g("No key does \""+M.help.q+"\". ","fa"),g("esc","fg"),g(" clears it.","fa")]);
+  return popup(base,"? keys",L,[g("type","fg"),g(" to find","mu"),g(" · ","fa"),g("↑↓","fg"),g(" choose","mu"),g(" · ","fa"),g("⏎","fg"),g(" runs it","mu"),g(" · ","fa"),g("esc","fg"),g(" closes","mu")]);
+}
+function cogPopup(base){
+  const head=(k,t)=>[g(M.cogAt===k?"▌":" ","ac"),g(" "+t,M.cogAt===k?"ac":"fa")];
+  const L=[
+    head("usage","USAGE"),
+    [g("   ✻ work   ","fg"),g("5h ","fa"),g("62%","mu"),g(" ↻2h48m","fa"),g("   week ","fa"),g("40%","mu"),g(" ↻4d","fa")],
+    [g("   ❋ codex  ","fg"),g("5h ","fa"),g("18%","mu"),g(" ↻3h12m","fa"),g("   week ","fa"),g("22%","mu"),g(" ↻1d9h","fa")],
+    blank(4),head("health","HEALTH"),
+    [g("   ws-1     ","fg"),g("cpu ","fa"),g("34%","mu"),g("  mem ","fa"),g("61%","mu"),g("  load ","fa"),g("2.1","mu"),g("   ▁▂▃▅▃▂▂▃","mu")],
+    [g("   gpu-1    ","fg"),g("cpu ","fa"),g(M.trouble?"88%":"41%",M.trouble?"ne":"mu"),g("  mem ","fa"),g("52%","mu"),g("  load ","fa"),g(M.trouble?"7.9":"2.4","mu"),g(M.trouble?"   ▃▅▆▇▇█▇█":"   ▂▂▃▃▂▃▂▂",M.trouble?"ne":"mu")],
+    blank(4),head("loops","DETACHED BUSY LOOPS"),
+    M.trouble?[g("   ⚠ node vite --watch","ne"),g("   gpu-1 · pid 48211 · 97% cpu for 41m · no session","mu")]:[g("   none","fa")],
+    M.trouble?[g("     ","fa"),g("x","fg"),g(" stops it, after a typed ","mu"),g("y","fg")]:blank(4),
+    blank(4),head("stoker","THE STOKER"),[g("   off","mu"),g(" · ","fa"),g("f","fg"),g(" lights it","mu"),g(" · ","fa"),g("o","fg"),g(" gives an order","mu")],
+    blank(4),head("git","GIT"),[g("   3 worktrees are safe to remove","mu"),g(" · ","fa"),g("X","fg"),g(" marks them all","mu")],
+    blank(4),head("hosts","HOSTS"),[g("   ws-1","fg"),g("   this host","fa")],[g("   gpu-1","fg"),g("  reached · 4 ms","fa")],
+  ];
+  return popup(base,"⚙ machine · ws-1 · gpu-1",L,[g("↑↓","fg"),g(" part","mu"),g(" · ","fa"),g("esc","fg"),g(" back to "+M.sel,"mu")]);
+}
+const CODE=[[37,"+","func (m Model) barRow(st state, w int) (string, []span) {"],[38,"+","    chips := m.hostChips(st)"],[39,"−","    // the strip went with the board"],[40,"+","    usage := m.usageChips(st)"],[41,"+","    if width(chips)+width(usage) > w {"],[42,"+","        chips = foldHosts(chips)"],[43,"+","    }"],[44,"+","    return join(chips, usage, m.stokerWord())"],[45,"+","}"],[46," ",""],[47,"+","func foldHosts(c []chip) []chip {"],[48,"+","    if len(c) > 3 {"],[49,"+","        return []chip{{text: fmt.Sprint(len(c), \" hosts\")}}"]];
+function reviewPopup(base){
+  const R=M.review,x=cur(),n=R.comments.length;
+  const L=[
+    [g(x.id,"fg b"),g(" · diff against main · 4 files ","mu"),g("+212","mu"),g(" ","mu"),g("−38","ne")],
+    [g("▸ ","ac"),g("frame.go","ac"),g(" +120","fa"),g("   view.go","mu"),g(" +61 −22","fa"),g("   sidepanel.go","mu"),g(" +19 −16","fa"),g("   console.md","mu"),g(" +12","fa")],
+    blank(4),
+  ];
+  for(const [no,s,t] of CODE){
+    const on=no===R.at;
+    L.push([g(on?"▌":" ","ac"),g(String(no).padStart(4)+" ",on?"ac":"fa"),g(s,s==="−"?"ne":"fa"),g(" "+t,s==="−"?"fa":"fg")]);
+    for(const c of R.comments.filter(c=>c.line===no))L.push([g("        "),g("✎ ","ac"),g(c.text,"mu")]);
+    if(R.typing&&on)L.push([g("        "),g("✎ ","ac"),g(R.draft,"fg"),g("▏","fg")]);
+  }
+  const foot=R.typing?[g("comment on frame.go:"+R.at,"ac"),g("   "),g("⏎","fg"),g(" keeps it","mu"),g(" · ","fa"),g("esc","fg"),g(" drops it","mu")]
+    :[g(n+" comment"+(n===1?"":"s"),"mu"),g("   "),g("c","fg"),g(" comment","mu"),g(" · ","fa"),g("] [","fg"),g(" file","mu"),g(" · ","fa"),g("⏎","fg"),g(n?" send review to "+x.id:" send review",n?"ac":"mu"),g(" · ","fa"),g("esc","fg"),g(" chat","mu")];
+  return popup(base,"review · "+x.id,L,foot);
+}
+
+function render(){
+  // matchblox draws the whole screen: the header, a rule, the list and the agent's screen
+  // (a terminal emulator inside matchblox), a rule, the bar.
+  const R=right_();
+  const lines=[head(),[g("─".repeat(LW),"hr"),g("┬",R?"hr":"ac"),g("─".repeat(CW),"hr")]];
+  // The half edge, drawn by matchblox as tmux draws it today: the top half when the list has the keys,
+  // the bottom half when the agent has them.
+  const half=Math.floor(BODY/2),divLit=i=>R?i>=half:i<half;
+  const L=list();let Rt=right();
+  if(M.pop==="keys")Rt=keysPopup(Rt);else if(M.pop==="cog")Rt=cogPopup(Rt);else if(M.review)Rt=reviewPopup(Rt);
+  const isRule=l=>l.length===1&&l[0].t.startsWith("─");
+  for(let i=0;i<BODY;i++)lines.push([...L[i],g(isRule(L[i])?"┤":"│",divLit(i)?"ac":"hr"),...Rt[i]]);
+  lines.push([g("─".repeat(LW),"hr"),g("┴",R?"ac":"hr"),g("─".repeat(CW),"hr")],bar());
+  document.getElementById("term").innerHTML=lines.map(l=>`<div class="l">${toHtml(l)}</div>`).join("");
+  for(const b of document.querySelectorAll(".states button"))b.setAttribute("aria-pressed",String(b.dataset.edge?b.dataset.edge===M.edge:b.dataset.st===M.state));
+  document.getElementById("notes").innerHTML=(NOTES[M.state]||[]).map(([h,p])=>`<div class="note"><h2>${h}</h2><p>${p}</p></div>`).join("");
+}
+
+const NOTES={
+  return:[["Back at the desk","<code>● 2 need you · ✓ 3 done</code> says it in one look. The chain <code>login</code> sits whole in NEEDS YOU: flint-auth asks, kindle-web is done, hearth-api works."],["The rows","As today: the match, the name, then the time and the agent's mark against the edge. The group names the state. Each state has its own glyph: <code>✦</code> works, <code>╿</code> asks, <code>✓</code> done (still, in match-ember), <code>╵</code> idle, <code>╽</code> held."],["The frame","matchblox draws it all: the header on top (spaces in the tab row's rhythm), a rule, the list and the agent, a rule, and the bar at the bottom (the mode, the hosts, the usage with its resets, the stoker, <code>? keys</code>). The agent's screen is the real one, shown through a terminal inside matchblox."]],
+  space:[["Space: ledge","A tap on <code>ledge ●1</code>, or <code>]</code>, filters the list. <code>● 2 need you</code> still counts every wait. <code>all</code> carries no count."]],
+  done:[["Give a DONE agent the keys","⏎ on ux-pass gives it the keys. Only then it leaves DONE for IDLE (scrolling past it with ↑↓ does not), and <code>✓ 3 done</code> becomes <code>✓ 2 done</code>. Nothing else moves."]],
+  trouble:[["A busy loop","gpu-1's chip alone turns <code>neg</code>, and <code>⚙ !</code> shows it in the header. A tap on the chip opens the machine on that loop."]],
+  cog:[["The machine, behind ,","A tmux popup with a rounded edge over the agent's pane. Its parts are today's Machine tab. <code>esc</code> closes it, on the same row."]],
+  keys:[["? keys","One popup is the help and the command palette. Type <code>shell</code>, then <code>⏎</code>. Groups are faint like the list's heads; keys are <code>fg</code> and labels <code>muted</code>, like today's key line."]],
+  shell:[["A shell under the agent","A tmux pane in the agent's own window, in its worktree. Its top edge carries its title. <code>t</code> gives it the keys: its edge and the divider turn accent, and the bar says <code>SHELL</code> and <code>ctrl+q list</code>."]],
+  review:[["Review ux-pass","<code>D</code> opens the diff in a popup. <code>c</code> on a line writes a comment. Comments collect. Try it: click the screen, <code>↓</code>, <code>c</code>, type, <code>⏎</code>, <code>⏎</code>."]],
+  confirm:[["A prompt waits","While a prompt waits for a key, the bar gives way: the mode word stays first, then the prompt and its keys. The chips come back once it is answered (owner, 2026-11-24)."]],
+  agent:[["Keys in the agent","Click either pane to give it the keys, as tmux's mouse does. The half of the edge on the active side takes the accent, as today: the top half for the list, the bottom half for the agent. The bar's mode flips between <code>LIST</code> and <code>AGENT</code>."],["The half edge","matchblox draws it now, the way tmux draws it today: the top half of the edge for the list, the bottom half for the agent. It no longer depends on how many panes tmux has."]],
+  sent:[["Review sent","One message reaches the agent, each comment with its <code>file:line</code>. The list's foot says so for 2.5 s, and ux-pass moves to WORKING."]],
+};
+
+function setState(st){
+  reset();M.state=st;const ux=()=>M.s.find(x=>x.id==="ux-pass");
+  if(st==="space"){M.space="ledge";M.sel="ember-billing";}
+  if(st==="done"){M.sel="ux-pass";ux().st="idle";ux().t=0;}
+  if(st==="trouble"){M.trouble=true;}
+  if(st==="cog"){M.trouble=true;M.pop="cog";M.cogAt="loops";}
+  if(st==="keys"){M.pop="keys";M.help={q:"",at:0,runs:[]};}
+  if(st==="shell"){M.sel="ux-pass";ux().st="idle";ux().t=0;M.shell["ux-pass"]="focus";}
+  if(st==="review"){M.sel="ux-pass";ux().st="idle";ux().t=0;M.review={at:41,comments:[{line:41,text:"fold at width, not at a count: 3 hosts fit at 200 columns"}],typing:false,draft:""};}
+  if(st==="agent"){M.agentKeys=true;seen();}
+  if(st==="confirm"){M.confirm="flint-auth";}
+  if(st==="sent"){M.sel="ux-pass";ux().st="work";ux().t=0;M.notice="sent a review of 2 comments to ux-pass";}
+  render();
+}
+const sTopOf=()=>BODY-14;
+function seen(){const x=cur();if(x&&x.st==="done"){x.st="idle";x.t=0;}}
+function openRow(id){M.pop=null;M.review=null;M.sel=id;render();}
+function order(){const out=[];const us=units(vis());for(const st of ORDER)for(const u of us.filter(u=>u.r===ORDER.indexOf(st)))(u.solo?[u.solo]:u.ms).forEach(m=>out.push(m.id));return out;}
+function runKey(run){
+  M.pop=null;
+  if(run==="cog"){M.pop="cog";M.cogAt="usage";}
+  else if(run==="shell")M.shell[M.sel]="open";
+  else if(run==="review")M.review={at:37,comments:M.reviews[M.sel]||[],typing:false,draft:""};
+  else if(run==="space"){const s=["all",...REPOS];M.space=s[(s.indexOf(M.space)+1)%s.length];}
+  else if(run==="open"){openRow(M.sel);return;}
+  else if(run==="keys"){M.pop="keys";M.help={q:"",at:0,runs:[]};}
+  else M.notice="the mockup does not run this key";
+  render();
+}
+
+for(const grp of document.querySelectorAll(".states"))grp.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;if(b.dataset.edge){EDGE=b.dataset.edge;M.edge=EDGE;render();}else setState(b.dataset.st);});
+document.getElementById("term").addEventListener("click",e=>{
+  const t=e.target.closest("[data-tap]");
+  if(!t){ // tmux's mouse: a click gives that pane the keys
+    if(M.pop||M.review)return;
+    const term=e.currentTarget,rc=term.getBoundingClientRect(),col=Math.floor((e.clientX-rc.left)/(rc.width/W)),row=Math.floor((e.clientY-rc.top)/(rc.height/H));
+    if(row<2||row>=H-2)return;
+    const onRight=col>LW;
+    if(onRight&&M.shell[M.sel]&&row-2>sTopOf())M.shell[M.sel]="focus",M.agentKeys=false;
+    else if(onRight){M.agentKeys=true;seen();if(M.shell[M.sel])M.shell[M.sel]="open";}
+    else{M.agentKeys=false;if(M.shell[M.sel])M.shell[M.sel]="open";}
+    render();return;
+  }
+  const [k,v]=t.dataset.tap.split(":");
+  if(k==="space"){M.space=v;const V=vis();if(V.length&&!V.find(x=>x.id===M.sel))M.sel=V[0].id;render();}
+  else if(k==="cog"){M.pop="cog";M.cogAt=v;render();}
+  else if(k==="keys"){M.pop="keys";M.help={q:"",at:0,runs:[]};render();}
+  else if(k==="sel")openRow(v);
+});
+document.getElementById("term").addEventListener("keydown",e=>{
+  const k=e.key;const done=()=>{e.preventDefault();render();};
+  if(M.agentKeys){if(e.ctrlKey&&(k==="q"||k==="Q")){M.agentKeys=false;return done();}return;}
+  if(!M.pop&&!M.review&&!M.shell[M.sel]&&e.ctrlKey&&(k==="q"||k==="Q")){M.agentKeys=true;seen();return done();}
+  if(M.pop==="keys"){
+    if(k==="Escape"){if(M.help.q){M.help.q="";M.help.at=0;}else M.pop=null;}
+    else if(k==="ArrowDown")M.help.at=Math.min(M.help.n-1,M.help.at+1);
+    else if(k==="ArrowUp")M.help.at=Math.max(0,M.help.at-1);
+    else if(k==="Enter"){e.preventDefault();runKey(M.help.runs[M.help.at]);return;}
+    else if(k==="Backspace"){M.help.q=M.help.q.slice(0,-1);M.help.at=0;}
+    else if(k.length===1){M.help.q+=k;M.help.at=0;}
+    return done();
+  }
+  if(M.pop==="cog"){if(k==="Escape"){M.pop=null;return done();}const parts=["usage","health","loops","stoker","git","hosts"];const i=parts.indexOf(M.cogAt);if(k==="ArrowDown"){M.cogAt=parts[Math.min(5,i+1)];return done();}if(k==="ArrowUp"){M.cogAt=parts[Math.max(0,i-1)];return done();}return;}
+  if(M.shell[M.sel]==="focus"){if(k==="t"){M.shell[M.sel]="open";return done();}if(e.ctrlKey&&k==="q"){M.shell[M.sel]="open";return done();}return;}
+  if(M.review&&M.review.typing){
+    if(k==="Enter"){if(M.review.draft.trim())M.review.comments.push({line:M.review.at,text:M.review.draft.trim()});M.review.typing=false;M.review.draft="";M.reviews[M.sel]=M.review.comments;}
+    else if(k==="Escape"){M.review.typing=false;M.review.draft="";}
+    else if(k==="Backspace")M.review.draft=M.review.draft.slice(0,-1);
+    else if(k.length===1)M.review.draft+=k;
+    return done();
+  }
+  if(k==="?"){M.pop="keys";M.help={q:"",at:0,runs:[]};return done();}
+  if(k===","){M.review=null;M.pop="cog";M.cogAt="usage";return done();}
+  if(M.review){
+    const ls=CODE.map(c=>c[0]);const i=ls.indexOf(M.review.at);
+    if(k==="ArrowDown")M.review.at=ls[Math.min(ls.length-1,i+1)];
+    else if(k==="ArrowUp")M.review.at=ls[Math.max(0,i-1)];
+    else if(k==="c")M.review.typing=true;
+    else if(k==="Enter"&&M.review.comments.length){const n=M.review.comments.length;M.review=null;delete M.reviews[M.sel];const x=cur();x.st="work";x.t=0;M.notice="sent a review of "+n+" comment"+(n===1?"":"s")+" to "+x.id;M.state="sent";}
+    else if(k==="Escape"){M.reviews[M.sel]=M.review.comments;M.review=null;}
+    else return;
+    return done();
+  }
+  const o=order(),i=o.indexOf(M.sel);
+  if(k==="ArrowDown")M.sel=o[Math.min(o.length-1,i+1)];
+  else if(k==="ArrowUp")M.sel=o[Math.max(0,i-1)];
+  else if(k==="Enter"){M.agentKeys=true;seen();openRow(M.sel);return;}
+  else if(k==="]"||k==="["){const s=["all",...REPOS];const j=(s.indexOf(M.space)+(k==="]"?1:-1)+s.length)%s.length;M.space=s[j];const V=vis();if(V.length&&!V.find(x=>x.id===M.sel))M.sel=V[0].id;}
+  else if(k==="t"){const s=M.shell[M.sel];M.shell[M.sel]=s?"focus":"open";}
+  else if(k==="D"){M.review={at:37,comments:M.reviews[M.sel]||[],typing:false,draft:""};}
+  else if(k==="Escape"){M.space="all";M.notice="";}
+  else return;
+  done();
+});
+setState(location.hash.slice(1)||"return");
+</script>

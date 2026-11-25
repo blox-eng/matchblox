@@ -151,8 +151,9 @@ type drawn struct {
 	// on each picks.
 	formAgentsAt int
 	formAgents   []span
-	stokerAt     span // the header's stoker word
-	warnAt       span // the header's ⚠ mark: a tap says the standing errors again
+	head         []span // the desk's head row: what a tap on each part presses
+	stokerAt     span   // the header's stoker word
+	warnAt       span   // the header's ⚠ mark: a tap says the standing errors again
 	// sayY0, sayY1, sayX0: the toast stack's lines and its first column; a
 	// tap there ends the toasts and reaches nothing under them.
 	sayY0, sayY1, sayX0 int
@@ -168,6 +169,8 @@ type drawn struct {
 	// the screen's width; viewW 0: no chat.
 	viewAt, viewW int
 	viewRows      int
+	// overX0, overX1: the ⚙ sheet's columns; a tap beside it picks no row.
+	overX0, overX1 int
 }
 
 // draw is the screen, with an ssh prompt over everything.
@@ -218,6 +221,9 @@ func (m Model) drawScreen(w int) drawn {
 		m.overlaySaying(&sc, w, [2]int{sc.boxAt, sc.boxAt + len(sc.boxRows)})
 		return sc
 	}
+	if m.desk() {
+		return m.drawDesk(w)
+	}
 	room := m.bodyRows()
 	var b body
 	switch {
@@ -261,6 +267,9 @@ func (m Model) drawScreen(w int) drawn {
 // bodyRows is how many rows the body has under the header and over the key
 // line; on Pocket's belt, to the bottom.
 func (m Model) bodyRows() int {
+	if m.desk() { // under the head row and its rule, over the rule and the bar
+		return max(m.height-4, 1)
+	}
 	if m.beltOnly() {
 		return max(m.height-3, 1)
 	}
@@ -367,14 +376,25 @@ func (m Model) headerOf(w int) (string, span, span, headNamed) {
 		}
 		stoker = warn + stoker
 	}
-	// Short of room the host goes first (a phone), then the words of who
-	// waits; the count stays.
-	waits := []string{""}
+	// Short of room the host goes first (a phone), then the done count,
+	// then the words of who waits; the count stays.
+	done := ""
+	if d := m.countIn(sideDone); d > 0 {
+		done = lipgloss.NewStyle().Foreground(m.marks().Ember).Render(fmt.Sprintf("✓ %d done", d))
+	}
+	type headWaits struct{ word, done string }
+	var waits []headWaits
 	switch {
+	case n > 0 && done != "":
+		waits = []headWaits{{fmt.Sprintf(count, n), done}, {word: fmt.Sprintf(count, n)}, {word: fmt.Sprintf("● %d", n)}}
 	case n > 0:
-		waits = []string{fmt.Sprintf(count, n), fmt.Sprintf("● %d", n)}
+		waits = []headWaits{{word: fmt.Sprintf(count, n)}, {word: fmt.Sprintf("● %d", n)}}
+	case done != "":
+		waits = []headWaits{{done: done}}
 	case m.have:
-		waits = []string{"✓ nothing needs you", "✓"}
+		waits = []headWaits{{word: "✓ nothing needs you"}, {word: "✓"}}
+	default:
+		waits = []headWaits{{}}
 	}
 	lefts := []string{left}
 	if host != "" {
@@ -395,23 +415,30 @@ func (m Model) headerOf(w int) (string, span, span, headNamed) {
 	}
 	named = append(named, "")
 	for j, pre := range named {
-		for _, word := range waits {
+		for _, hw := range waits {
 			right = stoker + " "
 			ink := st.accent
 			if n == 0 {
 				ink = st.muted
 			}
+			said := hw.done
+			if hw.word != "" {
+				said = ink.Render(hw.word)
+				if hw.done != "" {
+					said += st.faint.Render(" · ") + hw.done
+				}
+			}
 			switch {
-			case word != "" && stoker != "":
-				right = ink.Render(word) + "  " + right
-			case word != "":
-				right = ink.Render(word) + " "
+			case said != "" && stoker != "":
+				right = said + "  " + right
+			case said != "":
+				right = said + " "
 			}
 			right = pre + right
 			hit := span{}
-			if word != "" && n > 0 {
+			if hw.word != "" && n > 0 {
 				x := w - lipgloss.Width(right) + lipgloss.Width(pre)
-				hit = span{x, x + lipgloss.Width(word), "waits"}
+				hit = span{x, x + lipgloss.Width(hw.word), "waits"}
 			}
 			for _, l := range lefts {
 				if lipgloss.Width(l+lost)+lipgloss.Width(right)+1 <= w {
@@ -574,6 +601,19 @@ func (m Model) alert() string {
 	return alert
 }
 
+// pendingSays is the step that waits for its yes, and the keys that answer.
+func (m Model) pendingSays() string {
+	st, ck := m.st, m.keys.confirm
+	confirm := plainHints(hintFor(ck.Enter, ""), hintFor(m.keys.main.Back, "cancel"))
+	if m.pending.destructive {
+		confirm = keyWord(ck.Yes, st.neg, st.muted, " run  any other key cancels")
+	}
+	if !m.previewSeen() {
+		confirm = st.muted.Render(plainHints(hintFor(ck.ScrollDown, ""))+", then ") + st.neg.Render(ck.Yes.Help().Key)
+	}
+	return st.text.Render(m.pending.String()) + "   " + st.muted.Render(confirm)
+}
+
 // keyLine is the bottom line: the keys of the open tab, each a tap target,
 // or what the person acts on now: an answer, a search, the take-over
 // question, a pending step and its confirm, or the tap again. What the
@@ -598,15 +638,7 @@ func (m Model) keyLine(w int) (string, []span) {
 			keyWord(m.keys.takeOver.Keep, st.accent, st.muted, " keeps it on"), w), nil
 	}
 	if m.pending != nil {
-		ck := m.keys.confirm
-		confirm := plainHints(hintFor(ck.Enter, ""), hintFor(m.keys.main.Back, "cancel"))
-		if m.pending.destructive {
-			confirm = keyWord(ck.Yes, st.neg, st.muted, " run  any other key cancels")
-		}
-		if !m.previewSeen() {
-			confirm = st.muted.Render(plainHints(hintFor(ck.ScrollDown, ""))+", then ") + st.neg.Render(ck.Yes.Help().Key)
-		}
-		return fit(" "+st.label.Render("RUN ")+st.text.Render(m.pending.String())+"   "+st.muted.Render(confirm), w), nil
+		return fit(" "+st.label.Render("RUN ")+m.pendingSays(), w), nil
 	}
 	if m.pair.strips() && (m.pair.beat == 4 || !m.askingAgain()) {
 		return fit(" "+st.text.Render(m.pair.line), w), nil
@@ -714,13 +746,10 @@ func hintsWidth(hs []hint) int {
 	return n
 }
 
-// idleCell is how long a session sat idle, or, while the plan's limit stops
-// it, when it can work again: 19:50 within a day, else the weekday.
-func (m Model) idleCell(s sample.Session) string {
-	switch {
-	case !s.Stopped():
-		return sample.Human(s.Idle)
-	case s.Out.Sub(m.now()) < 24*time.Hour:
+// backAt is when the plan's limit lets a session work again: 19:50 within
+// a day, else the weekday.
+func (m Model) backAt(s sample.Session) string {
+	if s.Out.Sub(m.now()) < 24*time.Hour {
 		return s.Out.Local().Format("15:04")
 	}
 	return s.Out.Local().Format("Mon")

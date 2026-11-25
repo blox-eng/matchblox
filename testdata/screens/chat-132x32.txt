@@ -1,32 +1,32 @@
- ▰ matchblox                                                                                                           ● 6 need you
- SESSIONS 7    machine
-────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- NEEDS YOU · 6  −                       │ flint-auth ✻ asks · #4545 ci                              ctx 41%  ct   the line is empty
-▌╿ flint-auth                       2m ✻│
-   conflicts with main                  │
- ╿ spark-docs                       9m ✻│
-   I rewrote the quick start and the in…│
- ╿ ember-billing                    4m ✻│
-   #4552 waits for your merge           │
- ╿ kindle-web                       1m ✻│
-   Do you want to proceed?              │
- ╿ cinder-ci                        0s ❋│
-   I am moving the cache key to the go.…│
- ╿ wick-mobile                      0s ▣│
-   ⠙ Working                            │
-────────────────────────────────────────│ ⏺ The refresh endpoint is in and its tests pass.
- WORKING · 1  −                         │
- ✦ hearth-api                 #4551 ci ✻│ ────────────────────────────────────────────────────────────────────────────────
-                                        │  ☐ Rotate
-                                        │
-                                        │ Should a refresh also rotate the token?
-                                        │
-                                        │ ❯ 1. Rotate it
-                                        │      The old one stops at once.
-                                        │   2. Rotate, keep the old one a minute
-                                        │   3. Type something.
-                                        │
-                                        │ Enter to select · ↑/↓ to navigate · Esc to cancel
- + new · ✧ 7 tips                       │ ›                                                                    ⏎ send to flint-auth
-────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- writing to flint-auth · ⏎ send · ↑↓ choose · esc list · ctrl+o expand · tab Machine
+ ▰ matchblox    ALL    spark-docs    hearth-api    ux-pass    kindle-web ●1    no directory    +3 ▾               ● 3 need you    ⚙
+────────────────────────────────┬───────────────────────────────────────────────────────────────────────────────────────────────────
+ NEEDS YOU · 3  −               │ flint-auth ✻ asks · #4545 ci                                      ctx 41%  ctrl+o expand · m menu
+▌╿ flint-auth               2m ✻│
+   conflicts with main          │
+ ╿ ember-billing            4m ✻│
+   #4552 waits for your merge   │
+ ╿ kindle-web               1m ✻│
+   Do you want to proceed?      │
+────────────────────────────────┤
+ WORKING · 1  −                 │
+ ✦ hearth-api     #4551 ci  3h ✻│
+────────────────────────────────┤
+ IDLE · 4  −                    │
+ ╵ cinder-ci               now ❋│
+ ╵ wick-mobile             now ▣│
+ │ spark-docs               9m ✻│ ⏺ The refresh endpoint is in and its tests pass.
+ ╵ ux-pass                 10m ✻│
+                                │ ────────────────────────────────────────────────────────────────────────────────
+                                │  ☐ Rotate
+                                │
+                                │ Should a refresh also rotate the token?
+                                │
+                                │ ❯ 1. Rotate it
+                                │      The old one stops at once.
+                                │   2. Rotate, keep the old one a minute
+                                │   3. Type something.
+                                │
+                                │ Enter to select · ↑/↓ to navigate · Esc to cancel
+ the line is empty              │ ›                                                                            ⏎ send to flint-auth
+────────────────────────────────┴───────────────────────────────────────────────────────────────────────────────────────────────────
+ AGENT  flint-auth   this machine cpu 0% mem 40%   ✻ Max 5h 84%   · login usage not measured   ❋ Plus 5h 40%   ctrl+q list   ? keys

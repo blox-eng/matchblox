@@ -42,10 +42,10 @@ func (m Model) chatPanel(w, h int) []string {
 		for _, l := range wrapPlain(listed[i].Name+" runs outside tmux, and its process is not known: nothing to write to", max(w-2, 1)) {
 			lines = append(lines, fit(" "+m.st.muted.Render(l), w))
 		}
+	case m.space != "" && (k.pane == "" || i < 0): // the list says why the space shows none
 	case k.pane == "" || i < 0:
-		text := "No sessions yet. + new session starts one here (" + m.keys.main.New.Help().Key + "). matchblox setup finds the agents you already run."
 		lines = append(lines, blank)
-		for _, l := range wrapPlain(text, max(w-2, 1)) {
+		for _, l := range wrapPlain(m.noSessionsWords(), max(w-2, 1)) {
 			lines = append(lines, fit(" "+m.st.muted.Render(l), w))
 		}
 	default:
@@ -103,7 +103,8 @@ func (m Model) waitChat(v state.MateView, c chainKey, w int) []string {
 
 // chatHead is the head line: the name, the host when it is not this one,
 // the agent's mark, its state and its pull request's badge; at the right
-// the context and the keys to expand and for the menu.
+// the context and the keys to expand and for the menu. Unsent review
+// comments take the right: ✎ N unsent · D reviews.
 func (m Model) chatHead(s sample.Session, w int) string {
 	st := m.st
 	about := ""
@@ -119,6 +120,9 @@ func (m Model) chatHead(s sample.Session, w int) string {
 	ctx := ""
 	if s.Context == "known" {
 		ctx = m.contextStyle(s).Render("ctx "+strconv.Itoa(int(s.ContextPct+0.5))+"%") + "  "
+	}
+	if n := len(m.reviewsOf(s)); n > 0 && (m.review == nil || m.review.key != reviewKey(s)) {
+		keys = st.accent.Render("✎ "+strconv.Itoa(n)+" unsent") + st.muted.Render(" · D reviews") + " "
 	}
 	// Short of room the keys go first (the key line has them), then the
 	// context, then the words after the name: the name stays whole.
@@ -177,6 +181,11 @@ func (m Model) chainWord(u sideUnit, j int) string {
 		return "done"
 	}
 	return m.stateWord(u.members[j])
+}
+
+// noSessionsWords say how to start a session when there is none.
+func (m Model) noSessionsWords() string {
+	return "No sessions yet. + new session starts one here (" + m.keys.main.New.Help().Key + "). matchblox setup finds the agents you already run."
 }
 
 // chatConversation is the session's pane cut to its conversation: the

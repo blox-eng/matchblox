@@ -30,7 +30,7 @@ func boardMatch(name string, started time.Duration) sample.Session {
 	s.Busy, s.Status, s.Idle, s.Out = false, "idle", 10*time.Minute, time.Time{}
 	s.Reported, s.WaitingFor = false, ""
 	s.Shells, s.Agents, s.Asks, s.Permits, s.Ask, s.Progress, s.Do = nil, 0, false, false, nil, nil, ""
-	s.Started = boardAt.Add(-started)
+	s.Started, s.StateAt = boardAt.Add(-started), boardAt.Add(-s.Idle)
 	return s
 }
 

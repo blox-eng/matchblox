@@ -248,17 +248,18 @@ func TestTheHomeKeyActsAsTheBoardsEsc(t *testing.T) {
 
 func TestATapOnTheHostWordTurnsTheHost(t *testing.T) {
 	m := boardShot(t, boardFixture(t), 80, 31, nil)
-	sc := m.draw(80)
-	if word := ansi.Strip(ansi.Cut(sc.lines[0], sc.hostAt.x0, sc.hostAt.x1)); sc.hostAt.press == "" || !strings.HasPrefix(word, "all hosts") {
-		t.Fatalf("the host word is at %+v: %q", sc.hostAt, word)
+	sc := m.draw(80) // on the desk the host word is the bar's s▸ (owner, 2026-11-24)
+	i := slices.IndexFunc(sc.keys, func(s span) bool { return s.press == "s" })
+	if i < 0 || !strings.HasPrefix(ansi.Strip(ansi.Cut(sc.lines[sc.keysAt], sc.keys[i].x0, sc.keys[i].x1)), "s▸") {
+		t.Fatalf("no s▸ on the bar: %q", ansi.Strip(sc.lines[sc.keysAt]))
 	}
-	next, cmd := tap(m, sc.hostAt.x0+1, 0)
+	next, cmd := tap(m, sc.keys[i].x0, sc.keysAt)
 	drain(cmd)
 	if m = next.(Model); m.boardHost != m.nameOf(m.opt.Host) {
 		t.Fatalf("a tap on the host word turns to %q", m.boardHost)
 	}
-	if head := ansi.Strip(m.draw(80).lines[0]); !strings.Contains(head, m.boardHost+" ▾") {
-		t.Errorf("the header does not say the host: %q", head)
+	if bar := barLine(m); !strings.HasPrefix(strings.TrimSpace(bar[strings.Index(bar, "   "):]), m.boardHost+" cpu") || strings.Contains(bar, "hosts s▸") || !strings.Contains(bar, "s▸") {
+		t.Errorf("the bar does not say the host: %q", barLine(m))
 	}
 }
 

@@ -74,7 +74,7 @@ func tap(m tea.Model, x, y int) (tea.Model, tea.Cmd) {
 }
 
 func TestTapOnATabOpensIt(t *testing.T) {
-	for _, w := range []int{58, 100} {
+	for _, w := range []int{44, 58} {
 		m, _ := loadedWith(t, w, queueState())
 		line := ansi.Strip(strings.Split(m.render(), "\n")[1])
 		x := strings.Index(line, "machine")
@@ -85,6 +85,13 @@ func TestTapOnATabOpensIt(t *testing.T) {
 		if got := next.(Model).tab; got != tabMachine {
 			t.Fatalf("width %d: tab %d, want the machine tab", w, got)
 		}
+	}
+	// The desk has no tab row: its ⚙ opens Machine (owner, 2026-11-24).
+	m, _ := loadedWith(t, 100, queueState())
+	head := ansi.Strip(strings.Split(m.render(), "\n")[0])
+	next, _ := tap(m, ansi.StringWidth(head[:strings.Index(head, "⚙")]), 0)
+	if got := next.(Model).tab; got != tabMachine {
+		t.Fatalf("width 100: a tap on ⚙ opens tab %d, want the machine tab", got)
 	}
 }
 
@@ -132,8 +139,17 @@ func TestNoCtrlKeysNeeded(t *testing.T) {
 		}
 		for tab := range tabNames { // Tab, not a digit: a digit answers a card
 			m.tab = tab
+			if m.deskShape() { // on the desk , opens Machine and ⇥ is unbound (design review D10)
+				continue
+			}
 			if next, _ := key(m, "tab"); next.(Model).tab != (tab+1)%len(tabNames) {
 				t.Fatalf("tab on tab %d does not open the next one", tab)
+			}
+		}
+		if on := m; on.deskShape() {
+			on.tab, on.keysIn = tabSessions, focusList
+			if next, _ := key(on, ","); next.(Model).tab != tabMachine {
+				t.Fatalf("width %d: , does not open Machine", w)
 			}
 		}
 		m.tab = tabMachine // on Sessions the list and the line take q as text

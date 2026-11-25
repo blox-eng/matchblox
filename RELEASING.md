@@ -200,9 +200,11 @@ the demo in the same message (guideline 2.1):
 > **Try a demo** on the first screen. The first screen may ask for the camera.
 > Tap Don't Allow if you like: the demo works either way. The app scans a
 > throwaway code by itself, with no camera, and opens a made-up machine with
-> seven sessions. Tap the first session in the list to open its chat. Tap an
-> option of its question to mark it, then tap it again to send it. When the
-> agent finishes, a sheet shows how to install matchblox.
+> the desk: spaces, NEEDS YOU, DONE, and the agent's screen. Tap the first
+> session in the list to open its chat. Tap an option of its question to mark
+> it, then tap it again to send it. On the belt, `?` opens keys, `,` opens
+> Machine, `t` a shell, and `D` a review. When the agent finishes, a sheet
+> shows how to install matchblox.
 > Please confirm the demo is enough to review the app.
 >
 > The usage panel shows the labels "Claude Max", "Google login" and "OpenAI
@@ -211,9 +213,9 @@ the demo in the same message (guideline 2.1):
 
 Beta app description:
 
-> Matchblox Pocket shows the AI coding agents on your own computer and lets you
-> answer them from your phone. Pair it with a computer that runs matchblox, or
-> tap Try a demo to see how it works first.
+> Matchblox Pocket puts the matchblox desk on your phone: every repo, every
+> agent, one list beside the chat. The belt has ? keys, , machine, t shell and
+> D review. Pair it with a computer that runs matchblox, or tap Try a demo.
 
 Feedback email: `<owner: the address testers write to>`
 

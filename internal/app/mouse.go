@@ -69,6 +69,15 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		return m.intoSelected()
 	}
 	switch {
+	case m.desk() && (ms.Y == 0 || ms.Y == sc.keysAt):
+		spans := sc.keys // the bar's
+		if ms.Y == 0 {
+			spans = sc.head
+		}
+		if s, ok := spanAt(spans, ms.X); ok {
+			return m.pressFrame(s.press)
+		}
+		return m, nil
 	case ms.Y == 0:
 		if s, ok := spanAt([]span{sc.stokerAt}, ms.X); ok && s.press != "" {
 			return m.openAgent()
@@ -130,11 +139,18 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		return m.holdPress(next, cmd, ms) // a long press opens the row's menu
 	}
 	i := ms.Y - sc.bodyTop
+	if m.cogShown() && (ms.X < sc.overX0 || ms.X >= sc.overX1) {
+		return m, nil
+	}
 	if m.boardShown() || i < 0 || i >= len(sc.rows) {
 		return m, nil // the list and the chat took every tap on their body above
 	}
 	if sc.rows[i] == headerRow {
-		return m.tapHeader(ms.X)
+		x := ms.X
+		if m.cogShown() { // the ⚙ sheet's columns start inside its edge and padding
+			x -= sc.overX0 + 2
+		}
+		return m.tapHeader(x)
 	}
 	if sc.rows[i] < 0 {
 		return m, nil

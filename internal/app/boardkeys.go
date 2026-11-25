@@ -258,12 +258,12 @@ func (m Model) onChoice() Model {
 }
 
 // clearBoardFilters is a tap on the count: NEEDS YOU shows, every chain,
-// host and search goes, and the first wait is chosen.
+// space, host and search goes, and the first wait is chosen.
 func (m *Model) clearBoardFilters() {
 	if m.room != nil { // the room is the narrowing: both go
 		*m = m.closeRoom()
 	}
-	m.boardChain, m.boardHost, m.filter, m.searching = "", "", "", false
+	m.boardChain, m.boardHost, m.space, m.filter, m.searching = "", "", "", "", false
 	m.refresh()
 	m.peekAt = m.now()
 }
@@ -277,11 +277,7 @@ func (m *Model) boardChainOf(s sample.Session, ok bool) tea.Cmd {
 			said = s.Name + " is in no chain"
 		}
 	}
-	key := m.keys.board.Chain
-	if m.besideMode() {
-		key = m.keys.board.Room
-	}
-	cmd := m.once("chain", key.Help().Key+" shows one chain now. "+m.keys.main.Back.Help().Key+" shows all.", said)
+	cmd := m.once("chain", m.keys.board.Chain.Help().Key+" shows one chain now. "+m.keys.main.Back.Help().Key+" shows all.", said)
 	if k, in := m.chainKeyOf(s); ok && in {
 		*m = m.openRoom(k)
 	}
@@ -477,9 +473,18 @@ func (m Model) beltKeys() []beltKey {
 		beltOf(bk.Copy, "", "copy", card),
 		beltOf(mk.Park, "", "park", card),
 		beltOf(mk.New, "", "new", board),
-		beltOf(mk.NextTab, "⇥", "machine", !m.consenting()),
+		beltOf(bk.Keys, "", "keys", board && m.desk()),
+		beltMachine(!m.consenting()),
+		beltOf(bk.Shell, "", "shell", card && m.desk()),
+		beltOf(bk.Review, "", "review", card && m.desk()),
 		beltOf(mk.Second, "", "kill", card && !head && m.killAction(s) != nil),
 	)
+}
+
+// beltMachine is `,` on the belt: its tok is "machine", not ",", because
+// board= is comma-separated and cannot carry a comma tok (Task 16).
+func beltMachine(on bool) beltKey {
+	return beltKey{Key: "machine", Face: ",", Word: "machine", On: on}
 }
 
 // cardBelt are the chosen session's keys on the belt: the digits of the
@@ -546,7 +551,7 @@ func (m Model) beltValue() string {
 //	key   = tok [ "*" ]
 //
 // A tok is a beltKey's Key: 1 2 3 p y up down enter ctrl+o s g / m c z N
-// tab x. A card's key that is off (a digit on another host, or one the
+// ? machine t D x. A card's key that is off (a digit on another host, or one the
 // line types) is a dim tok. ◂ has none and is never sent. At most beltMax bytes:
 // dim toks leave whole from the right, then card keys from the right.
 // The other values ("" off the board, "box", "menu") come from beltValue.

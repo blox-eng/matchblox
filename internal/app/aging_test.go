@@ -17,7 +17,7 @@ import (
 // TestExitedAgentsStayQuiet: exited agents are one faint part of the
 // list's foot; e lists them with the parent that keeps them and the fix.
 func TestExitedAgentsStayQuiet(t *testing.T) {
-	for _, w := range []int{50, 120} {
+	for _, w := range []int{50, 140} { // 140: the desk's list is 40 wide (design review D16)
 		st := fixtureState()
 		for pid := 7000; pid < 7137; pid++ {
 			st.Exited = append(st.Exited, sample.Exited{PID: pid, Parent: 3214249, ParentComm: "systemd"})

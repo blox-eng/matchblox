@@ -516,7 +516,7 @@ func homeBinds(pane string) [][]string {
 	if remote.PaneID(pane) {
 		binds = append(binds, panes.HomeMarkArgv(pane), panes.SizeArgv(pane))
 	}
-	return append(binds, panes.CommandKeysArgv(), panes.MarkKeyArgv(), panes.BeltKeyArgv(), panes.TapKeysArgv(), panes.ViewerHookArgv(), panes.BesideKeysArgv(), panes.BesideHookArgv(), remote.ViewHookArgv())
+	return append(binds, panes.CommandKeysArgv(), panes.MarkKeyArgv(), panes.BeltKeyArgv(), panes.TapKeysArgv(), panes.ViewerHookArgv(), remote.ViewHookArgv())
 }
 
 // goHome replaces this process with `tmux new-session -A -s matchblox
@@ -693,11 +693,6 @@ func progressPrompt(args []string) bool {
 
 func spoolPath() string { return filepath.Join(filepath.Dir(state.Path()), "spool.jsonl") }
 
-// consoleFPS is the console's frame rate. A key waits for the next frame:
-// 15 frames showed a key 37 ms late on average and 60 shows it 11 ms late,
-// for 0.3% more of one core when idle (#285).
-const consoleFPS = 60
-
 func console(path string, cfg config.Config, root string, noMotion bool, host string) error {
 	restart, err := runConsole(path, cfg, root, noMotion, host)
 	if err != nil || restart == nil {
@@ -754,7 +749,7 @@ func runConsole(path string, cfg config.Config, root string, noMotion bool, host
 		go s.Handle(ctx, transport.NewConn(b)) //nolint:errcheck // ends with the console
 		base.Conn = transport.NewConn(a)
 		defer base.Conn.Close()
-		final, err := tea.NewProgram(app.New(base), tea.WithFPS(consoleFPS)).Run()
+		final, err := tea.NewProgram(app.New(base), tea.WithFPS(app.ConsoleFPS)).Run()
 		if m, ok := final.(app.Model); ok {
 			m.ClosePair() // however the program ended, its pair code goes with it
 		}
@@ -781,7 +776,7 @@ func runConsole(path string, cfg config.Config, root string, noMotion bool, host
 		Answered:      func() { _ = os.MkdirAll(filepath.Dir(asked), 0o700); _ = os.WriteFile(asked, nil, 0o600) },
 		TailscaleGate: setup.TailscaleGateMessage,
 	})
-	p := tea.NewProgram(sh, tea.WithFPS(consoleFPS))
+	p := tea.NewProgram(sh, tea.WithFPS(app.ConsoleFPS))
 	if base.HomeSession != "" && base.HomeSession != panes.Home {
 		stop := make(chan struct{})
 		defer close(stop)

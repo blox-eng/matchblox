@@ -37,7 +37,7 @@ public enum IslandLook {
         switch state(top) {
         case .burns: "✦ burns"
         case .waits: "╿ waits"
-        case .done: "╿ done"
+        case .done: "✓ done"
         case .out: top?.out.map { "out until \(clock($0, zone: zone))" } ?? "out"
         case .quiet: ""
         }
@@ -48,7 +48,7 @@ public enum IslandLook {
         switch state(top) {
         case .burns: names.session(top!.n)
         case .waits: "╿ waits"
-        case .done: "╿ done"
+        case .done: "✓ done"
         case .out: top?.out.map { "out \(clock($0, zone: zone))" } ?? "out"
         case .quiet: "quiet"
         }

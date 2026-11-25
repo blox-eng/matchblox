@@ -3,6 +3,9 @@ package main
 import (
 	"flag"
 	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -108,6 +111,84 @@ func TestCheckCommandRefusesAFlagItsCommandIgnores(t *testing.T) {
 	} {
 		if _, p := checkCommand(line); (len(p) > 0) != bad {
 			t.Errorf("%q: problems %v, want bad=%v", line, p, bad)
+		}
+	}
+}
+
+// deskDocs are the product pages Task 18 holds to the desk: the key line
+// and ⇥ Machine stay on the phone; HELD stays after IDLE.
+var deskDocs = []string{
+	"README.md", "DESIGN.md", "CHANGELOG.md",
+	"docs/console.md", "docs/keys.md", "docs/start.md", "docs/phone.md",
+}
+
+// heldBeforeIdle finds a group order that puts HELD before IDLE.
+var heldBeforeIdle = regexp.MustCompile(
+	"`HELD`\\s*\\|[^\\n]*\\n\\|\\s*`IDLE`|`HELD`\\s+or\\s+`IDLE`|" +
+		"`WORKING`,\\s*`HELD`\\s+or\\s+`IDLE`|`WORKING`[^\\n`]{0,40}`HELD`[^\\n`]{0,40}`IDLE`")
+
+// tabOpensMachine finds a claim that Tab or ⇥ opens Machine.
+var tabOpensMachine = regexp.MustCompile(
+	"(?i)(`Tab`|`Shift\\+Tab`|`⇥`|⇥)\\s*(\\|[^\\n]*|.{0,40})[Mm]achine|" +
+		"(?i)[Tt]ab[s]? are `sessions` and `machine`|" +
+		"(?i)turned by `Tab`")
+
+// deskKeepsKeyLine finds a line that puts the key line on the desk.
+var deskKeepsKeyLine = regexp.MustCompile(
+	`(?i)(on the desk|the desk).{0,80}key line|key line.{0,80}(on the desk|the desk)|` +
+		`(?i)(at )?the bottom the key line`)
+
+// TestDocsNameEveryKey holds the desk's docs to the desk: keys.md names
+// `?`, `,`, `t` and `D`. No doc puts the key line or ⇥ Machine on the
+// desk, or HELD before IDLE.
+func TestDocsNameEveryKey(t *testing.T) {
+	root := "../.."
+	keysPath := filepath.Join(root, "docs", "keys.md")
+	keys, err := os.ReadFile(keysPath) //nolint:gosec // a fixed docs path
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, k := range []string{"`?`", "`,`", "`t`", "`D`"} {
+		if !strings.Contains(string(keys), k) {
+			t.Errorf("docs/keys.md does not name %s", k)
+		}
+	}
+	for _, rel := range deskDocs {
+		body, err := os.ReadFile(filepath.Join(root, rel)) //nolint:gosec // fixed list
+		if err != nil {
+			t.Fatal(err)
+		}
+		text := string(body)
+		if rel == "CHANGELOG.md" {
+			if i := strings.Index(text, "\n## ["); i >= 0 {
+				text = text[:i] // only [Unreleased]; older releases keep their words
+			}
+		}
+		if heldBeforeIdle.MatchString(text) {
+			t.Errorf("%s puts HELD before IDLE", rel)
+		}
+		phoneDoc := rel == "docs/phone.md"
+		lines := strings.Split(text, "\n")
+		for i, line := range lines {
+			ctx := strings.ToLower(line)
+			for j := 1; j <= 4 && i-j >= 0; j++ {
+				ctx = strings.ToLower(lines[i-j]) + "\n" + ctx
+			}
+			phoneCtx := phoneDoc || strings.Contains(ctx, "phone") || strings.Contains(ctx, "pocket")
+			if deskKeepsKeyLine.MatchString(line) &&
+				!phoneCtx &&
+				!strings.Contains(strings.ToLower(line), "no key line") &&
+				!strings.Contains(strings.ToLower(line), "key line goes") &&
+				!strings.Contains(strings.ToLower(line), "replaces the key line") {
+				t.Errorf("%s:%d: the key line on the desk: %s", rel, i+1, strings.TrimSpace(line))
+			}
+			if phoneDoc || !tabOpensMachine.MatchString(line) {
+				continue
+			}
+			if phoneCtx {
+				continue
+			}
+			t.Errorf("%s:%d: ⇥ Machine on the desk: %s", rel, i+1, strings.TrimSpace(line))
 		}
 	}
 }

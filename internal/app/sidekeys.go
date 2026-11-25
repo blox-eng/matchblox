@@ -12,6 +12,7 @@ import (
 
 	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
+	uv "github.com/charmbracelet/ultraviolet"
 
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/queue"
@@ -25,6 +26,120 @@ const (
 	focusLine sideFocus = iota // the chat's line: the default
 	focusList
 )
+
+// agentKeys routes the console's input while the agent's screen shows on
+// the desk. With the agent's keys, every key, a paste and a click in its
+// region go to its screen; ctrl+q and the home key (ctrl+a m) give them
+// back to the list. From the list, ctrl+q and a click in the region give
+// the agent the keys, and its session counts as seen (design review D5).
+// A drag in the region selects its text, which c copies; any other key
+// ends the selection and goes on. From the list, c copies what the agent
+// asked to copy. The wheel in the region goes to the agent's tmux (design
+// review D17). A question or a sheet open over the desk takes the keys
+// first. A tap on Pocket's belt is the list's, whoever has the keyboard's.
+// ok is false for what the list handles.
+func (m Model) agentKeys(msg tea.Msg) (Model, tea.Cmd, bool) {
+	r := &m.agent
+	k, _ := msg.(tea.KeyPressMsg)
+	if f := m.focus(k); !r.shown() || m.tapping || f < layerTakeOver || f == layerScan || f == layerBlocked || f == layerPending {
+		return m, nil, false
+	}
+	region := r.mode() == "AGENT" || r.mode() == "SHELL"
+	switch msg := msg.(type) {
+	case tea.KeyPressMsg:
+		copyKey := bkey.Matches(msg, m.keys.board.Copy)
+		if sel := r.sel; sel != nil {
+			r.sel = nil
+			if copyKey {
+				cmd := m.copyAgentText(r.term.text(*sel, r.w))
+				return m, cmd, true
+			}
+		}
+		switch {
+		case copyKey && !region && r.copy != "":
+			text := copyable(r.copy)
+			r.copy = ""
+			cmd := m.copyAgentText(text)
+			return m, cmd, true
+		case msg.String() == flipKey && region:
+			r.keys, r.shell = false, false
+		case msg.String() == flipKey:
+			r.keys, r.shell = true, false
+			return m, m.grantKeys(), true
+		case region:
+			r.term.scr.sendKey(uv.KeyPressEvent(msg))
+		default:
+			return m, nil, false
+		}
+		return m, nil, true
+	case uv.UnknownApcEvent:
+		if !region || string(msg) != homeKey {
+			return m, nil, false
+		}
+		r.keys, r.shell = false, false
+		return m, nil, true
+	case tea.PasteMsg:
+		if !region {
+			return m, nil, false
+		}
+		r.term.scr.paste(msg.Content)
+		return m, nil, true
+	case tea.MouseClickMsg:
+		at, in := r.at(msg.Mouse())
+		if !in {
+			if region && msg.X < r.x { // a click on the list gives it the keys
+				r.keys, r.shell = false, false
+			}
+			return m, nil, false
+		}
+		r.sel, r.press = nil, &point{at.X, at.Y}
+		r.term.scr.sendMouse(uv.MouseClickEvent(at))
+		if region {
+			return m, nil, true
+		}
+		r.keys, r.shell = true, false
+		return m, m.grantKeys(), true
+	case tea.MouseMotionMsg:
+		ms := msg.Mouse()
+		if r.press == nil || ms.Button != tea.MouseLeft || ms.Mod.Contains(tea.ModShift) {
+			return m, nil, false
+		}
+		if to := r.clamped(ms); r.sel != nil || to != *r.press {
+			r.sel = &[2]point{*r.press, to}
+			r.selText = r.term.text(*r.sel, r.w)
+		}
+		return m, nil, true
+	case tea.MouseReleaseMsg:
+		dragged := r.press != nil && r.sel != nil
+		r.press = nil
+		at, in := r.at(msg.Mouse())
+		switch {
+		case dragged: // the drag is matchblox's: the agent's tmux gets no release
+			return m, nil, true
+		case !region || !in:
+			return m, nil, false
+		}
+		r.term.scr.sendMouse(uv.MouseReleaseEvent(at))
+		return m, nil, true
+	case tea.MouseWheelMsg:
+		at, in := r.at(msg.Mouse())
+		if !in {
+			return m, nil, false
+		}
+		r.term.scr.sendMouse(uv.MouseWheelEvent(at))
+		return m, nil, true
+	}
+	return m, nil, false
+}
+
+// copyAgentText puts text from the agent's screen on the clipboard by the
+// console's clip.
+func (m *Model) copyAgentText(text string) tea.Cmd {
+	if text == "" {
+		return nil
+	}
+	return m.copyText(text, characters(utf8.RuneCountInString(text)))
+}
 
 // lineNote is what the line of the session k says in place of its ⏎:
 // why its text did not go, or that the session it was typed for ended.
@@ -248,6 +363,7 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 		return m.showChosen()
 	case bkey.Matches(k, sk.Enter):
 		m.toLine()
+		cmd = m.grantKeys()
 	case bkey.Matches(k, mk.Exited):
 		cmd = m.flipExited()
 	case bkey.Matches(k, sk.Leave):
@@ -255,12 +371,14 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 		case m.filter != "":
 			m.filter, m.peekAt = "", m.now()
 			m.refresh()
-		case m.chain != nil && m.besideMode():
-			return m.closeChainBeside()
 		case m.room != nil:
 			m = m.closeRoom()
 		case m.boardChain != "":
 			m.boardChain, m.peekAt = "", m.now()
+		case m.space != "":
+			m.space, m.peekAt = "", m.now()
+		case m.boardHost != "":
+			m.boardHost, m.peekAt = "", m.now()
 		default:
 			cmd = m.listTakes()
 		}
@@ -272,12 +390,30 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 		if said := m.turnHost(); said != "" {
 			cmd = m.notice(said)
 		}
+	case bkey.Matches(k, bk.SpaceBefore, bk.SpaceAfter):
+		by := 1
+		if bkey.Matches(k, bk.SpaceBefore) {
+			by = -1
+		}
+		if said := m.turnSpace(by); said != "" {
+			cmd = m.notice(said)
+		}
 	case bkey.Matches(k, sk.Unhide):
 		cmd = m.unhide()
-	case bkey.Matches(k, bk.Room) && m.besideMode():
-		cmd = m.boardChainOf(s, ok)
-	case bkey.Matches(k, bk.Chain) && m.besideMode():
-		return m.chainToggle(s, ok)
+	case bkey.Matches(k, bk.Keys) && m.desk():
+		m = m.openKeys()
+	case bkey.Matches(k, bk.Machine) && m.desk():
+		m = m.openCog("cog:usage")
+	case bkey.Matches(k, bk.Machine):
+		m.setTab(tabMachine) // phone: no sheet, so the Machine tab
+	case bkey.Matches(k, bk.Shell) && m.desk():
+		return m.openShell(s, ok)
+	case bkey.Matches(k, bk.Review) && m.desk():
+		if !ok {
+			cmd = m.notice(m.noRowWhy())
+			return m, cmd
+		}
+		return m.openReview(s)
 	case bkey.Matches(k, bk.Chain):
 		cmd = m.boardChainOf(s, ok)
 	case bkey.Matches(k, bk.Copy):
@@ -289,7 +425,7 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 	case bkey.Matches(k, mk.New, mk.Search, mk.NextTab, mk.PrevTab):
 		return m.key(k)
 	case printsText(k) && m.besideMode():
-		said := "the agent pane takes text"
+		said := "the agent takes text"
 		if ok {
 			said += " · " + sk.Enter.Help().Key + " goes into " + m.cardName(s)
 		}
@@ -330,6 +466,8 @@ func (m Model) noRowWhy() string {
 		return v.Wait.Name + " waits for recover · matchblox recover reopens it"
 	case m.filter != "":
 		return `nothing matches "` + m.filter + `" · ` + m.keys.main.Back.Help().Key + " clears"
+	case m.space != "":
+		return m.spaceEmpty()
 	case m.boardHost != "":
 		return "no match on " + m.boardHost + " · " + m.keys.board.Host.Help().Key + " turns the host"
 	}
@@ -339,7 +477,8 @@ func (m Model) noRowWhy() string {
 // beltActs are the keys a tap on Pocket's belt acts with (keycmd.TapKeys).
 func (m Model) beltActs() []bkey.Binding {
 	bk, mk := m.keys.board, m.keys.main
-	return []bkey.Binding{bk.Copy, bk.Menu, bk.Chain, bk.Host, bk.Merge, mk.Second, mk.Search, mk.Park, mk.Grant, mk.New}
+	return []bkey.Binding{bk.Copy, bk.Menu, bk.Chain, bk.Host, bk.Merge, mk.Second, mk.Search, mk.Park, mk.Grant, mk.New,
+		bk.Keys, bk.Machine, bk.Shell, bk.Review}
 }
 
 // beltTap is a tap on an act key of Pocket's belt, from the client on tty
@@ -447,7 +586,7 @@ func (m *Model) sideMove(d int) {
 		}
 		d = 0
 	}
-	m.sideAt = walk[clampMove(at, d, len(walk))]
+	m.sideAt, m.doneKept = walk[clampMove(at, d, len(walk))], paneKey{}
 	if s, ok := m.sideChosen(); ok {
 		m.startChatMark(s)
 		m.sideName = m.cardName(s)
@@ -766,7 +905,8 @@ func (m Model) heldRelease() (Model, tea.Cmd) {
 			m.lineNote = lineNote{}
 		}
 	}
-	return m, tea.Batch(cmds...)
+	m, heldReviews := m.releaseHeldReviews()
+	return m, tea.Batch(append(cmds, heldReviews)...)
 }
 
 // lineResult is the service's answer to a message of the line: a refusal

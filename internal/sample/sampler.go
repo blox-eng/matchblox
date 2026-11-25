@@ -72,6 +72,13 @@ type Session struct {
 	// StatusAt is when the agent's report last changed its status: a
 	// reported wait began then, the same at every sample.
 	StatusAt time.Time `json:"status_at,omitzero"`
+	// StateAt is when the session last moved between works, asks and rests;
+	// TurnEndedAt is TurnEnded for the console. The service sets both.
+	StateAt     time.Time `json:"state_at,omitzero"`
+	TurnEndedAt time.Time `json:"turn_ended_at,omitzero"`
+	// SeenAt is when the person last opened the session, at any console.
+	// The service sets it.
+	SeenAt time.Time `json:"seen_at,omitzero"`
 	// Retry is the attempt of a call OpenCode retries, and RetryAt when its
 	// next try starts.
 	Retry      int           `json:"retry,omitempty"`
@@ -118,11 +125,14 @@ type Session struct {
 	// Agents and Shells are the background work a session left running
 	// when its turn ended: the subagents Claude Code counted then, and the
 	// shells its Bash tool still runs.
-	Agents int       `json:"agents,omitempty"`
-	Parent *ProcRef  `json:"parent,omitempty"` // the process that started this one: set on children only
-	Via    string    `json:"via,omitempty"`    // process | env: how the link was proven
-	Shells []Shell   `json:"shells,omitempty"`
-	turnAt time.Time // the newest real turn of the transcript
+	Agents int      `json:"agents,omitempty"`
+	Parent *ProcRef `json:"parent,omitempty"` // the process that started this one: set on children only
+	Via    string   `json:"via,omitempty"`    // process | env: how the link was proven
+	Shells []Shell  `json:"shells,omitempty"`
+	// OpenShell: a desk shell pane (@matchblox-shell) is open under this
+	// session; the row shows ▣.
+	OpenShell bool      `json:"open_shell,omitempty"`
+	turnAt    time.Time // the newest real turn of the transcript
 	// TurnEnded is when the transcript's newest turn ended; zero while it
 	// runs. The service reads it, it never leaves the host.
 	TurnEnded time.Time `json:"-"`
@@ -938,6 +948,7 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 	}
 	s.readPanes(snap.Sessions, fromPane, now)
 	s.readMenus(snap.Sessions, atMenu)
+	markOpenShells(snap.Sessions, panes)
 	snap.Children = linkChildren(snap.Sessions, snap.Children)
 	snap.Limits = lims.build(now, s.Cfg.Limits.Quiet)
 	for key := range s.envs {
@@ -991,6 +1002,20 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 		}
 		return a.Pane < b.Pane
 	})
+}
+
+// markOpenShells sets OpenShell on each session that has a desk shell
+// pane whose @matchblox-shell names it.
+func markOpenShells(sessions []Session, panes []Pane) {
+	open := map[string]bool{}
+	for _, p := range panes {
+		if p.Shell != "" {
+			open[p.Shell] = true
+		}
+	}
+	for i := range sessions {
+		sessions[i].OpenShell = open[sessions[i].Name]
+	}
 }
 
 // cursorNotAnswered is the fix of Cursor's limits while its token is read,

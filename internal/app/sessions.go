@@ -85,7 +85,7 @@ func (m Model) groupLabel(s sample.Session) string { return groupNames[m.needGro
 // repoOf is the repository a session works in: the checkout its directory
 // is in, else the directory's own name.
 func (m Model) repoOf(s sample.Session) string {
-	if repo, _, ok := proto.RepoOf(m.git, s.Cwd); ok {
+	if repo, _, ok := proto.RepoOf(m.gitOf(s.Host), s.Cwd); ok {
 		return filepath.Base(repo)
 	}
 	if s.Cwd == "" {
@@ -172,25 +172,6 @@ func (m Model) wordOf(s sample.Session) string {
 		return "shell"
 	}
 	return m.stateWord(s)
-}
-
-// waitCell is how long a session waits, or sat idle, or when the plan's
-// limit lets it work again; a session at work has none. A stale host of
-// two or more: how long since it last spoke.
-func (m Model) waitCell(s sample.Session) string {
-	if m.hostCount() > 1 && m.stale(s.Host) {
-		return brief(m.now().Sub(m.stateAt(s.Host)))
-	}
-	if it, ok := m.waitOf(s); ok && m.groupOf(s) == groupWaits {
-		return brief(m.now().Sub(it.Since))
-	}
-	if m.groupOf(s) == groupWorking {
-		return ""
-	}
-	if s.Stopped() {
-		return m.idleCell(s)
-	}
-	return brief(s.Idle)
 }
 
 // brief is the first unit of a duration: 4m, 2h, 20d.
