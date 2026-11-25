@@ -1,12 +1,23 @@
-// Package mux is what chains and sending do to a pane, whatever runs the
-// panes: type a line, press keys, paste a text, read screens and tell copy mode. tmux
-// implements it; muxtest has a fake for tests.
+// Package mux is what matchblox does to a pane, whatever runs the panes:
+// list, start, rename, kill, respawn, type a line, press keys, paste a
+// text, read screens and tell copy mode. tmux implements it; muxtest has
+// a fake for tests.
 package mux
 
 import "time"
 
-// Mux is one multiplexer. Type and Keys give steps, not runs: the service
-// runs each step behind its guard, as it runs a stoker step.
+// Start is one session to open. Env values may sit on a tmux -e word.
+// This package never writes them into an error or a log.
+type Start struct {
+	Name, Dir string
+	Env       []string
+	Argv      []string
+	Detached  bool
+	EmptyExit bool // stoker: remain-on-exit / exit-empty as today
+}
+
+// Mux is one multiplexer. Type, Keys, Start, Rename, Kill and Respawn give
+// steps, not runs: the service runs each step behind its guard.
 type Mux interface {
 	// Type is the step that types text into pane as it is.
 	Type(pane, text string) []string
@@ -41,4 +52,19 @@ type Mux interface {
 	// List is every pane on this multiplexer. A machine with no tmux, or
 	// a tmux that exits, is an empty list.
 	List() ([]Pane, error)
+	// Start is the steps that open a session. The service runs them.
+	Start(Start) [][]string
+	// Rename is the steps that name the window in pane. The agent is not
+	// known here, so this does not type the agent's own rename, and it
+	// does not rename the session: that waits until the caller knows the
+	// session has one window.
+	Rename(pane, name string) [][]string
+	// Kill is the steps that end pane, then TERM pid when pid is greater
+	// than zero. The TERM names that pid and no other.
+	Kill(pane string, pid int) [][]string
+	// KillSession is the step that ends the session name on this server.
+	KillSession(name string) []string
+	// Respawn is the step that starts the command again in pane. The pane
+	// id stays: this does not open a session.
+	Respawn(pane, dir string, env []string, argv []string) [][]string
 }

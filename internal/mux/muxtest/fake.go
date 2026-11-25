@@ -4,6 +4,7 @@ package muxtest
 import (
 	"maps"
 	"slices"
+	"strconv"
 	"sync"
 	"time"
 
@@ -106,6 +107,38 @@ func (f *Fake) SetScreen(pane, text string) {
 		f.Screen = map[string]string{}
 	}
 	f.Screen[pane] = text
+}
+
+func (*Fake) Start(s mux.Start) [][]string {
+	step := []string{"fake", "start", s.Name, s.Dir}
+	if s.Detached {
+		step = append(step, "-d")
+	}
+	if s.EmptyExit {
+		step = append(step, "exit-empty")
+	}
+	step = append(step, s.Env...)
+	return [][]string{append(step, s.Argv...)}
+}
+
+func (*Fake) Rename(pane, name string) [][]string {
+	return [][]string{{"fake", "rename", pane, name}}
+}
+
+func (*Fake) Kill(pane string, pid int) [][]string {
+	steps := [][]string{{"fake", "kill-pane", pane}}
+	if pid > 0 {
+		steps = append(steps, []string{"fake", "kill", "-TERM", strconv.Itoa(pid)})
+	}
+	return steps
+}
+
+func (*Fake) KillSession(name string) []string {
+	return []string{"fake", "kill-session", name}
+}
+
+func (*Fake) Respawn(pane, dir string, env []string, argv []string) [][]string {
+	return [][]string{slices.Concat([]string{"fake", "respawn-pane", pane, dir}, env, argv)}
 }
 
 func (f *Fake) List() ([]mux.Pane, error) {

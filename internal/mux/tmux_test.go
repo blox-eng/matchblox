@@ -1,7 +1,9 @@
 package mux
 
 import (
+	"bytes"
 	"errors"
+	"log"
 	"os"
 	"os/exec"
 	"slices"
@@ -116,6 +118,148 @@ func TestTmuxTypedAtIsTheLatestKeyOfAClientOnThePane(t *testing.T) {
 	m.Run = func([]string) (string, error) { return "", errors.New("no server") }
 	if got := m.TypedAt("%1"); !got.IsZero() {
 		t.Fatalf("no server: %v", got)
+	}
+}
+
+func TestKillStepsTermOnlyThePanePid(t *testing.T) {
+	got := (Tmux{}).Kill("%1", 99)
+	want := [][]string{
+		{"tmux", "kill-pane", "-t", "%1"},
+		{"kill", "-TERM", "99"},
+	}
+	if !slices.EqualFunc(got, want, slices.Equal) {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+	only := (Tmux{}).Kill("%1", 0)
+	if !slices.EqualFunc(only, [][]string{want[0]}, slices.Equal) {
+		t.Fatalf("pid 0 is the pane only: %q", only)
+	}
+	if neg := (Tmux{}).Kill("%1", -1); !slices.EqualFunc(neg, [][]string{want[0]}, slices.Equal) {
+		t.Fatalf("negative pid is the pane only: %q", neg)
+	}
+	on := (Tmux{}).Kill("%4@matchblox", 99)
+	wantOn := [][]string{
+		{"tmux", "-L", "matchblox", "kill-pane", "-t", "%4"},
+		{"kill", "-TERM", "99"},
+	}
+	if !slices.EqualFunc(on, wantOn, slices.Equal) {
+		t.Fatalf("server: got %q, want %q", on, wantOn)
+	}
+}
+
+func TestStartErrorOmitsEnvValues(t *testing.T) {
+	const secret = "sk-test"
+	var logs bytes.Buffer
+	log.SetOutput(&logs)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+
+	ran := false
+	m := Tmux{Run: func([]string) (string, error) {
+		ran = true
+		return "", errors.New("start failed: " + secret)
+	}}
+	steps := m.Start(Start{
+		Name:     "api",
+		Dir:      "/work",
+		Env:      []string{"ANTHROPIC_API_KEY=" + secret},
+		Argv:     []string{"claude", "--name", "api"},
+		Detached: true,
+	})
+	if ran {
+		t.Fatal("Start returns steps for Actions.Do; it does not run")
+	}
+	if strings.Contains(logs.String(), secret) {
+		t.Fatalf("log holds the env value: %q", logs.String())
+	}
+	for _, step := range steps {
+		for _, word := range step {
+			if strings.Contains(word, secret) && word != "ANTHROPIC_API_KEY="+secret {
+				t.Fatalf("env value leaked into %q", word)
+			}
+		}
+	}
+	want := [][]string{{
+		"env", "-u", "GIT_TERMINAL_PROMPT", "-u", "GIT_SSH_COMMAND", "-u", "MATCHBLOX_HOME",
+		"tmux", "new-session", "-d", "-s", "api", "-n", "api", "-c", "/work",
+		"-e", "ANTHROPIC_API_KEY=" + secret,
+		"claude", "--name", "api",
+	}}
+	if !slices.EqualFunc(steps, want, slices.Equal) {
+		t.Fatalf("got %q, want %q", steps, want)
+	}
+
+	stoker := (Tmux{Server: "matchblox"}).Start(Start{
+		Name: "stoker", Dir: "/home/builder", Argv: []string{"claude"},
+		Detached: true, EmptyExit: true,
+	})
+	wantStoker := [][]string{{
+		"env", "-u", "GIT_TERMINAL_PROMPT", "-u", "GIT_SSH_COMMAND", "-u", "MATCHBLOX_HOME",
+		"tmux", "-L", "matchblox", "-f", os.DevNull,
+		"new-session", "-d", "-s", "stoker", "-c", "/home/builder",
+		"claude", ";", "set-option", "-s", "exit-empty", "on",
+	}}
+	if !slices.EqualFunc(stoker, wantStoker, slices.Equal) {
+		t.Fatalf("stoker: got %q, want %q", stoker, wantStoker)
+	}
+}
+
+func TestRespawnKeepsPaneID(t *testing.T) {
+	got := (Tmux{}).Respawn("%3", "/work", nil, []string{"codex"})
+	want := [][]string{{
+		"tmux", "respawn-pane", "-k", "-t", "%3", "-c", "/work",
+		"env", "-u", "GIT_TERMINAL_PROMPT", "-u", "GIT_SSH_COMMAND", "-u", "MATCHBLOX_HOME",
+		"codex",
+	}}
+	if !slices.EqualFunc(got, want, slices.Equal) {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+	for _, step := range got {
+		if slices.Contains(step, "new-session") {
+			t.Fatalf("respawn opened a session: %q", got)
+		}
+	}
+	on := (Tmux{}).Respawn("%3@matchblox", "/work", []string{"FOO=bar"}, []string{"claude"})
+	wantOn := [][]string{{
+		"tmux", "-L", "matchblox", "respawn-pane", "-k", "-t", "%3", "-c", "/work",
+		"env", "-u", "GIT_TERMINAL_PROMPT", "-u", "GIT_SSH_COMMAND", "-u", "MATCHBLOX_HOME",
+		"FOO=bar", "claude",
+	}}
+	if !slices.EqualFunc(on, wantOn, slices.Equal) {
+		t.Fatalf("server: got %q, want %q", on, wantOn)
+	}
+}
+
+func TestRenameNamesTheWindow(t *testing.T) {
+	got := (Tmux{}).Rename("%1", "api")
+	want := [][]string{{"tmux", "rename-window", "-t", "%1", "api"}}
+	if !slices.EqualFunc(got, want, slices.Equal) {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+	on := (Tmux{}).Rename("%4@matchblox", "api")
+	wantOn := [][]string{{"tmux", "-L", "matchblox", "rename-window", "-t", "%4", "api"}}
+	if !slices.EqualFunc(on, wantOn, slices.Equal) {
+		t.Fatalf("server: got %q, want %q", on, wantOn)
+	}
+	for _, step := range append(got, on...) {
+		if slices.Contains(step, "send-keys") || slices.Contains(step, "rename-session") {
+			t.Fatalf("rename did more than the window: %q", step)
+		}
+	}
+}
+
+func TestKillSessionEndsThatName(t *testing.T) {
+	if got, want := (Tmux{}).KillSession("api"), []string{"tmux", "kill-session", "-t", "=api"}; !slices.Equal(got, want) {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+	got := (Tmux{Server: "matchblox"}).KillSession("stoker")
+	want := []string{"tmux", "-L", "matchblox", "kill-session", "-t", "=stoker"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("server: got %q, want %q", got, want)
+	}
+	got = (Tmux{Server: "matchblox", Socket: "/tmp/mb.sock"}).KillSession("api")
+	want = []string{"tmux", "-S", "/tmp/mb.sock", "kill-session", "-t", "=api"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("socket: got %q, want %q", got, want)
 	}
 }
 

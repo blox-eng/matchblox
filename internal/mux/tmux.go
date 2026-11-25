@@ -2,6 +2,7 @@ package mux
 
 import (
 	"context"
+	"os"
 	"os/exec"
 	"slices"
 	"strconv"
@@ -148,6 +149,90 @@ func serverArgv(server string) []string {
 		return []string{"tmux"}
 	}
 	return []string{"tmux", "-L", server}
+}
+
+// commandArgv is the tmux prefix for a command on this socket. A socket
+// path wins, as it does for List: one Tmux is one server.
+func (t Tmux) commandArgv() []string {
+	if t.Socket != "" {
+		return []string{"tmux", "-S", t.Socket}
+	}
+	return serverArgv(t.Server)
+}
+
+// unsetEnv is the env command lifecycle puts in front of a start, and the
+// command a respawn runs: git never prompts, and the home console does not
+// mark this session as its own.
+func unsetEnv() []string {
+	return []string{"env", "-u", "GIT_TERMINAL_PROMPT", "-u", "GIT_SSH_COMMAND", "-u", panes.HomeEnv}
+}
+
+// Start is the one step that opens the session. It does not run. EmptyExit
+// is the stoker's start: the server reads no tmux.conf, the window keeps
+// the command's name, and the server ends with its last session.
+func (t Tmux) Start(s Start) [][]string {
+	step := append(unsetEnv(), t.commandArgv()...)
+	if s.EmptyExit {
+		step = append(step, "-f", os.DevNull)
+	}
+	step = append(step, "new-session")
+	if s.Detached {
+		step = append(step, "-d")
+	}
+	if s.Name != "" {
+		step = append(step, "-s", s.Name)
+		if !s.EmptyExit {
+			step = append(step, "-n", s.Name)
+		}
+	}
+	if s.Dir != "" {
+		step = append(step, "-c", s.Dir)
+	}
+	for _, e := range s.Env {
+		step = append(step, "-e", e)
+	}
+	step = append(step, s.Argv...)
+	if s.EmptyExit {
+		step = append(step, ";", "set-option", "-s", "exit-empty", "on")
+	}
+	return [][]string{step}
+}
+
+// Rename names the window in pane. It does not type into the agent, and it
+// does not rename the session: that step needs the one-window flag.
+func (Tmux) Rename(pane, name string) [][]string {
+	tmux, id := targetArgv(pane)
+	return [][]string{slices.Concat(tmux, []string{"rename-window", "-t", id, name})}
+}
+
+// Kill ends pane, then sends TERM to pid when pid is greater than zero.
+// The second step names that pid and no other pane.
+func (Tmux) Kill(pane string, pid int) [][]string {
+	tmux, id := targetArgv(pane)
+	steps := [][]string{slices.Concat(tmux, []string{"kill-pane", "-t", id})}
+	if pid > 0 {
+		steps = append(steps, []string{"kill", "-TERM", strconv.Itoa(pid)})
+	}
+	return steps
+}
+
+// KillSession ends the session name on this server. "=" names that session.
+func (t Tmux) KillSession(name string) []string {
+	return slices.Concat(t.commandArgv(), []string{"kill-session", "-t", "=" + name})
+}
+
+// Respawn starts argv again in pane. The pane id stays: the step is
+// respawn-pane -k, never a new session.
+func (Tmux) Respawn(pane, dir string, env []string, argv []string) [][]string {
+	tmux, bare := targetArgv(pane)
+	step := slices.Concat(tmux, []string{"respawn-pane", "-k", "-t", bare})
+	if dir != "" {
+		step = append(step, "-c", dir)
+	}
+	step = append(step, unsetEnv()...)
+	step = append(step, env...)
+	step = append(step, argv...)
+	return [][]string{step}
 }
 
 func targetArgv(target string) (argv []string, bare string) {
