@@ -22,20 +22,13 @@ var forbiddenMuxMods = []string{
 // module. Match whole module paths, not a substring (plan9stats has "vt").
 func TestNoVtDependency(t *testing.T) {
 	current := modulePaths(t, readFile(t, filepath.Join(modRoot(t), "go.mod")))
-	base := modulePaths(t, gitShow(t, "origin/main:go.mod"))
 	for _, path := range forbiddenMuxMods {
-		if _, onBase := base[path]; onBase {
-			continue
-		}
 		if _, ok := current[path]; ok {
-			t.Errorf("go.mod now requires %s: this extract must not add it", path)
+			t.Errorf("go.mod requires %s: this extract must not add it", path)
 		}
 	}
 	listed := goListModules(t)
 	for _, path := range forbiddenMuxMods {
-		if _, onBase := base[path]; onBase {
-			continue
-		}
 		if _, ok := listed[path]; ok {
 			t.Errorf("go list -m all has %s: this extract must not add it", path)
 		}
@@ -189,15 +182,6 @@ func modulePaths(t *testing.T, modText string) map[string]struct{} {
 		t.Fatal("parsed no module path from go.mod")
 	}
 	return out
-}
-
-func gitShow(t *testing.T, spec string) string {
-	t.Helper()
-	out, err := exec.Command("git", "show", spec).Output()
-	if err != nil {
-		t.Fatalf("git show %s: %v", spec, err)
-	}
-	return string(out)
 }
 
 func readFile(t *testing.T, path string) string {
