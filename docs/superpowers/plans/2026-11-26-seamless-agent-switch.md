@@ -319,3 +319,9 @@ Second-read findings with my recommendation. Each one waits for the owner's appr
 - M8 (Task 8): `capture.md` is the handover itself. It is exempt, because it lives in the user's 0700 bundle and the switch needs it. A spec ruling records this.
 - M9 (Task 12): the live run also quotes the confirm, `--preview`, the `/tmp` fallback, the record wait and the Cursor turns in the capture.
 - Nits N1–N17: the build fixes them where it touches the code (file names, line refs, accessors, sizes, mktemp, `--path-format` needs Git ≥ 2.31, and the confirm sends `ExpectedFolder = Cwd` when `Work` is not filled yet).
+
+## Changes during build
+
+- 2026-11-26 — Task 12's live run moves from an isolated dev build to the released build. A temp HOME needs copied agent sign-ins, and a copied Claude login that refreshes can sign the real one out. The installed hook binary there is also the old one, which drops Cursor text. After the release updates the real service, two throwaway matches run in a temp repository with a worktree: a Cursor match chained with a Claude match. They switch Cursor → Claude, Claude → Cursor and Claude → Codex, and the run quotes `/proc/<pid>/cwd`, the confirm, the capture and `matchblox chain`. — proposed; waits for the owner.
+- 2026-11-26 — Review fixes after round 1: cb9e63ce, 28053a49, 65dd61ae, 0117e10c, b625c009. After round 2: 683e5c3a. Round 2's verdict: ready to merge.
+- 2026-11-26 — `markTurn` keeps its own both-ends cut, and only shares `said.Omitted`, because moving it to `said.BothEnds` changes the output for texts of 4001–4029 bytes.
