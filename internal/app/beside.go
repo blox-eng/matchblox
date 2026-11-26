@@ -15,6 +15,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/blox-eng/matchblox/internal/mux"
 	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
@@ -41,7 +42,7 @@ func hexOf(c color.Color) string {
 
 // besideCmd splits the window once, at the start.
 func (m Model) besideCmd() tea.Cmd {
-	run := m.tmuxRun()
+	run, mx := m.tmuxRun(), m.multiplexer()
 	if !m.opt.Beside || run == nil {
 		return nil
 	}
@@ -54,21 +55,17 @@ func (m Model) besideCmd() tea.Cmd {
 			return besideMsg{pane: pane}
 		}
 		w, _ := windowSize(run, console)
-		pane, err := splitBeside(run, console, accent, listWide, w)
+		pane, err := splitBeside(mx, run, console, accent, listWide, w)
 		return besideMsg{pane: pane, err: err}
 	}
 }
 
 // splitBeside opens the agent pane beside the console's, listW columns
 // left to the list, and names it in the window.
-func splitBeside(run func(args ...string) (string, error), console, accent string, listW, windowW int) (string, error) {
-	out, err := run(remote.SplitArgv(console, listW, windowW)[1:]...)
+func splitBeside(mx mux.Mux, run func(args ...string) (string, error), console, accent string, listW, windowW int) (string, error) {
+	pane, err := mx.Beside(console, remote.BesidePercent(listW, windowW), remote.BesideShell())
 	if err != nil {
 		return "", err
-	}
-	pane := strings.TrimSpace(out)
-	if !paneID.MatchString(pane) {
-		return "", fmt.Errorf("tmux answered %q", pane)
 	}
 	if _, err := run(remote.BesideArgv(console, pane, accent)[1:]...); err != nil {
 		return "", err
@@ -312,10 +309,10 @@ func (m Model) look(msg previewMsg) (tea.Model, tea.Cmd) {
 
 // viewing: pane runs a view still, its tmux client or its ssh; an ended
 // view waits in its shell for a key.
-func viewing(run func(args ...string) (string, error), pane string) bool {
+func viewing(mx mux.Mux, run func(args ...string) (string, error), pane string) bool {
 	out, err := run("display", "-p", "-t", pane, "#{pane_current_command}")
 	cmd := strings.TrimSpace(out)
-	return err == nil && (cmd == "tmux" || cmd == "ssh")
+	return err == nil && (cmd == mx.ViewCmd() || cmd == "ssh")
 }
 
 // showBeside is goIntoAsking for the agent pane: on a host the stoker
@@ -419,12 +416,12 @@ func sameWindow(run func(args ...string) (string, error), console, pane string) 
 // Where one pane shows, the agent's is zoomed. A chain view it replaces
 // closes first; a chain's views split the agent pane.
 func (m Model) besideRun(a action) tea.Cmd {
-	run := m.tmuxRun()
+	run, mx := m.tmuxRun(), m.multiplexer()
 	if a.focus && run != nil {
 		agent := m.beside
 		return func() tea.Msg {
 			msg := shownMsg{agent: agent, host: a.host, pane: a.pane, name: m.besideName(a.host, a.pane), focused: true}
-			if !viewing(run, agent) {
+			if !viewing(mx, run, agent) {
 				msg.ended = true
 				return msg
 			}
@@ -479,7 +476,7 @@ func (m Model) besideRun(a action) tea.Cmd {
 			w, h = winW, winH
 		}
 		if !livePane(run, agent) {
-			pane, err := splitBeside(run, console, accent, m.listWidth(w, h), w)
+			pane, err := splitBeside(mx, run, console, accent, m.listWidth(w, h), w)
 			if err != nil {
 				msg.err = fmt.Errorf("the agent pane did not open: %w", err)
 				return msg

@@ -8,9 +8,22 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/blox-eng/matchblox/internal/mux"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/tmuxtest"
 )
+
+// besideOf opens the agent pane beside console, as the console does, and
+// gives its id.
+func besideOf(t *testing.T, sock, console string, listW, windowW int) string {
+	t.Helper()
+	id, err := mux.Tmux{Server: sock}.Beside(console, BesidePercent(listW, windowW), BesideShell())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, bare := mux.SplitPane(id)
+	return bare
+}
 
 type paneBox struct {
 	id          string
@@ -35,7 +48,7 @@ func TestAChainViewFillsTheRightColumnOnly(t *testing.T) {
 			sock := tmuxtest.Server(t)
 			mustTmux(t, sock, "-f", "/dev/null", "new-session", "-d", "-s", "console", "-x", "160", "-y", "50", "sleep", "600")
 			console := mustTmux(t, sock, "display", "-p", "-t", "=console:", "#{pane_id}")
-			beside := mustTmux(t, sock, SplitArgv(console, 40, 160)[1:]...)
+			beside := besideOf(t, sock, console, 40, 160)
 			listW := panesOf(t, sock, console)[0].width
 
 			views := make([][]string, n)
@@ -92,7 +105,7 @@ func TestTheZoomReadsTheConsolesWindow(t *testing.T) {
 	sock := tmuxtest.Server(t)
 	mustTmux(t, sock, "-f", "/dev/null", "new-session", "-d", "-s", "matchblox", "-x", "120", "-y", "30", "sleep", "600")
 	console := mustTmux(t, sock, "display", "-p", "-t", "=matchblox:", "#{pane_id}")
-	mustTmux(t, sock, SplitArgv(console, 40, 120)[1:]...)
+	besideOf(t, sock, console, 40, 120)
 	other := mustTmux(t, sock, "new-window", "-t", "=matchblox:", "-P", "-F", "#{pane_id}", "sleep", "600")
 	mustTmux(t, sock, "split-window", "-t", other, "sleep", "600")
 	mustTmux(t, sock, "resize-pane", "-Z", "-t", other)

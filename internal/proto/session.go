@@ -4,12 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-	"slices"
-	"strconv"
 	"strings"
 
+	"github.com/blox-eng/matchblox/internal/mux"
 	"github.com/blox-eng/matchblox/internal/panes"
-	"github.com/blox-eng/matchblox/internal/sample"
 )
 
 // The names and the steps of a session's life (#74): what the console
@@ -79,10 +77,5 @@ func NameOf(s string) string {
 // KillSteps end the agent pid in pane: kill-pane hangs the pane up, and a
 // TERM follows for an agent that outlived it. No pid: the pane alone.
 func KillSteps(pane string, pid int) [][]string {
-	tmux, id := sample.Tmux(pane)
-	steps := [][]string{slices.Concat(tmux, []string{"kill-pane", "-t", id})}
-	if pid > 0 {
-		steps = append(steps, []string{"kill", "-TERM", strconv.Itoa(pid)})
-	}
-	return steps
+	return mux.Tmux{}.Kill(pane, pid)
 }

@@ -1,10 +1,6 @@
 package panes
 
-import (
-	"slices"
-
-	"github.com/blox-eng/matchblox/internal/sample"
-)
+import "github.com/blox-eng/matchblox/internal/mux"
 
 // RenameSteps name the session in pane: a Claude Code agent's /rename
 // first (two steps, the text and Enter), then the window, then its tmux
@@ -14,10 +10,10 @@ func RenameSteps(pane, agent, name string, one bool) [][]string {
 	if agent == "claude" {
 		steps = Send(pane, "/rename "+name)
 	}
-	tmux, id := sample.Tmux(pane)
-	steps = append(steps, slices.Concat(tmux, []string{"rename-window", "-t", id, name}))
+	m := mux.Tmux{}
+	steps = append(steps, m.Rename(pane, name)...)
 	if one {
-		steps = append(steps, slices.Concat(tmux, []string{"rename-session", "-t", id, name}))
+		steps = append(steps, m.RenameSession(pane, name))
 	}
 	return steps
 }

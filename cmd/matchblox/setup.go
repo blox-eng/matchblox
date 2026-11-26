@@ -15,6 +15,7 @@ import (
 
 	"github.com/blox-eng/matchblox/internal/actions"
 	"github.com/blox-eng/matchblox/internal/doors"
+	"github.com/blox-eng/matchblox/internal/mux"
 	"github.com/blox-eng/matchblox/internal/setup"
 	"github.com/blox-eng/matchblox/internal/state"
 )
@@ -38,7 +39,8 @@ func liveSetup(compactAt float64) *setup.Env {
 // tmuxSource loads a config into the default tmux server, the one the
 // service watches.
 func tmuxSource(conf string) error {
-	c := exec.Command("tmux", "source-file", conf) //nolint:gosec // our own config path
+	argv := append(mux.Command(""), "source-file", conf)
+	c := exec.Command(argv[0], argv[1:]...) //nolint:gosec // our own config path
 	c.Env = slices.DeleteFunc(os.Environ(), func(kv string) bool { return strings.HasPrefix(kv, "TMUX=") })
 	var stderr bytes.Buffer
 	c.Stderr = &stderr
