@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -252,7 +253,7 @@ func TestARefusedWorkspaceShowsNoControlKeys(t *testing.T) {
 		if strings.ContainsAny(refused, "\x1b\x07\n\r") || len(refused) > 600 {
 			t.Errorf("%s: refused %q, want no control keys and at most 600 bytes", name, refused)
 		}
-		if !strings.Contains(refused, "is not a worktree of this repository: it starts in "+launch) {
+		if !strings.HasSuffix(refused, ": it starts in "+launch) {
 			t.Errorf("%s: refused %q lost its words", name, refused)
 		}
 	}
@@ -306,5 +307,22 @@ func TestWorkspaceLineOnOldGit(t *testing.T) {
 				t.Fatalf("got %q, %q; want %q, %q", work, refused, tc.work, tc.refused)
 			}
 		})
+	}
+}
+
+// TestAWorktreeWithControlKeysSaysWhy: a real worktree whose name holds a
+// tab or a byte that is not UTF-8 is refused for that, not as "not a
+// worktree", which would be false.
+func TestAWorktreeWithControlKeysSaysWhy(t *testing.T) {
+	for name, folder := range map[string]string{"a tab": "wt\tx", "a bad byte": "wt\xffx"} {
+		root := t.TempDir()
+		main, wt := filepath.Join(root, "main"), filepath.Join(root, folder)
+		repoWithWorktree(t, main, filepath.Join(root, "plain"))
+		gitIn(t, "-C", main, "worktree", "add", "-q", "-b", "x", wt)
+		work, refused := workFolder(t.Context(), nil, "Workspace: "+wt+"\n", main)
+		want := fmt.Sprintf("%q has a control key or a bad byte in its name: it starts in %s", wt, main)
+		if work != main || refused != want {
+			t.Errorf("%s: workFolder = %q, %q; want %q, %q", name, work, refused, main, want)
+		}
 	}
 }

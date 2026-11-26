@@ -55,6 +55,9 @@ func workFolder(ctx context.Context, git gitRunner, record, launch string) (work
 	if !ok {
 		return launch, ""
 	}
+	if said.Clean(path) != path {
+		return launch, shownPath(path) + " has a control key or a bad byte in its name: it starts in " + launch
+	}
 	if git == nil {
 		git = workGit
 	}
