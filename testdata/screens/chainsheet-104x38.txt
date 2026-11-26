@@ -35,4 +35,4 @@
                                         │
  + new · ✧ 7 tips                       │ › Fmerge on green                        ⏎ send to kindle-web
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
- writing to kindle-web · ⏎ send · ↑↓ choose · esc list · ctrl+o expand · tab Machine
+ writing to kindle-web · ⏎ send · ↑↓ ⌥1-9 choose · esc list · ctrl+o expand · tab Machine

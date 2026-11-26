@@ -81,6 +81,20 @@ func numberedAs(t *testing.T, m Model, n int) sample.Session {
 	return sample.Session{}
 }
 
+// TestTheKeyLineNamesTheJump: the list's key line names ⌥1-9 once, inside
+// the choose hint, and still holds five keys.
+func TestTheKeyLineNamesTheJump(t *testing.T) {
+	m := numbered(t)
+	m.toList()
+	got := m.sideKeyWords()
+	if !strings.HasPrefix(got, "in the list") || strings.Count(got, "⌥1-9") != 1 || !strings.Contains(got, "↑↓ ⌥1-9 choose") {
+		t.Errorf("key words %q, want ↑↓ ⌥1-9 choose once", got)
+	}
+	if n := strings.Count(got, " · "); n != 5 {
+		t.Errorf("key words %q: %d keys, want five", got, n)
+	}
+}
+
 // TestAPhonesEscDigitTypesInTheLine: the phone has no ⌥ key, and tmux joins
 // its Esc and a quick 1 into alt+1. On Pocket that types 1 in the line, or
 // answers as the digit does; it never chooses another session.

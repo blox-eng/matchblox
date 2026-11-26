@@ -31,4 +31,4 @@
 
  + new · ✧ 7 tips
 ────────────────────────────────────────
- in the list · ↑↓ choose · ⏎ write
+ in the list · ↑↓ ⌥1-9 choose · ⏎ write

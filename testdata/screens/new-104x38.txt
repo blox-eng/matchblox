@@ -35,4 +35,4 @@
                                         │
  + new · ✧ 7 tips                       │
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
- in the list · ↑↓ choose · ⏎ write · s hosts · g chain · m menu
+ in the list · ↑↓ ⌥1-9 choose · ⏎ write · s hosts · g chain · m menu

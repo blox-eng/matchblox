@@ -59,6 +59,7 @@ When it goes wrong:
 - 2026-11-24 — The issue's "plain 1 to 9 switch tabs" is out of date. Plain digits now answer the question on screen, so the jump keeps `⌥`. — the evidence in `docs/keys.md`.
 
 - 2026-11-25: spec approved, with the four calls to check as recommended. Decided by: the owner.
+- 2026-11-25 — The key line names the jump inside the choose hint, as "↑↓ ⌥1-9 choose", so the list keeps its five keys. — the owner.
 
 ## Left to the builder
 
