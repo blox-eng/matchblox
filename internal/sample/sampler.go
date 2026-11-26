@@ -4,6 +4,7 @@
 package sample
 
 import (
+	"errors"
 	"net"
 	"os"
 	"path/filepath"
@@ -609,7 +610,7 @@ func (s *Sampler) sampleMachine(snap *Snapshot, dt float64) {
 	}
 	if t, err := s.FS.Booted(); err == nil {
 		m.Booted = t
-	} else {
+	} else if !errors.Is(err, errors.ErrUnsupported) {
 		snap.Errors = append(snap.Errors, "boot time: "+err.Error())
 	}
 }

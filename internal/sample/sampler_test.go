@@ -2,6 +2,7 @@ package sample
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -585,5 +586,29 @@ func TestIOWaitIsNilWhenProcsFail(t *testing.T) {
 	snap := newFixtureSampler(t.TempDir()).Sample()
 	if snap.Machine.IOWait != nil {
 		t.Fatalf("IOWait = %d, want nil", *snap.Machine.IOWait)
+	}
+}
+
+// noBootFS is a host that does not read its boot time, as iOS does.
+type noBootFS struct{ procfs.FS }
+
+func (noBootFS) Booted() (time.Time, error) {
+	return time.Time{}, fmt.Errorf("boot time on iOS: %w", errors.ErrUnsupported)
+}
+
+// TestUnsupportedBootIsNoError: a host that cannot read its boot time at
+// all leaves Booted zero and says no error each sample; a read that fails
+// on a host that can read it is an error.
+func TestUnsupportedBootIsNoError(t *testing.T) {
+	s := newFixtureSampler("../../testdata/iowait")
+	s.FS = noBootFS{s.FS.(procfs.FS)}
+	snap := s.Sample()
+	if !snap.Machine.Booted.IsZero() {
+		t.Fatalf("Booted = %v, want zero", snap.Machine.Booted)
+	}
+	for _, e := range snap.Errors {
+		if strings.HasPrefix(e, "boot time") {
+			t.Fatalf("an unsupported boot time is an error: %q", e)
+		}
 	}
 }

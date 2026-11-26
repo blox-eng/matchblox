@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/blox-eng/matchblox/internal/history"
+	"github.com/blox-eng/matchblox/internal/procfs"
 )
 
 func scriptOn(t *testing.T, lasts time.Duration) (*script, *World) {
@@ -190,5 +191,16 @@ func TestTheSeededHistorySpansTwoHours(t *testing.T) {
 	}
 	if last := pts[len(pts)-1].At; !last.Before(fixtureNow) {
 		t.Errorf("the last seeded point is at %v, not before the demo's clock %v", last, fixtureNow)
+	}
+}
+
+// TestTheDemoBootedBeforeItsUptime: the demo host booted its fixture's
+// uptime before the demo started, so its machine says "up" with no error.
+func TestTheDemoBootedBeforeItsUptime(t *testing.T) {
+	start := time.Date(2026, 11, 27, 9, 0, 0, 0, time.UTC)
+	f := movingFS{procfs.FS{Root: "../../testdata/demo/proc"}, start}
+	got, err := f.Booted()
+	if want := start.Add(-50000 * time.Second); err != nil || !got.Equal(want) {
+		t.Fatalf("booted = %v, %v; want %v", got, err, want)
 	}
 }
