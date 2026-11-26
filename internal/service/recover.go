@@ -29,6 +29,14 @@ var recoverable = []string{"claude", "codex", sample.CursorAgent}
 // says it reopened: one that exits at once took its tmux session with it.
 const recoverSettle = 1500 * time.Millisecond
 
+// recoverListTries is how many ListStrict calls recover makes after Start
+// when the list errors. recoverListPause is the wait between those errors.
+const (
+	recoverListTries    = 3
+	recoverListPause    = 400 * time.Millisecond
+	recoverListRetryWhy = "Recover didn’t hear back · ⏎ retry"
+)
+
 // reopenedFor is how long a reopened conversation counts as live before a
 // sample shows its agent: a second recover in that time starts nothing.
 const reopenedFor = time.Minute
@@ -175,6 +183,32 @@ func (s *Service) recoverLive() (live, taken map[string]bool) {
 	return live, taken
 }
 
+// listPanes lists panes, retrying a ListStrict error up to recoverListTries
+// times. An empty list with no error is not retried.
+func (s *Service) listPanes(ctx context.Context) ([]mux.Pane, error) {
+	pause := s.listPause
+	if pause == 0 {
+		pause = recoverListPause
+	}
+	var last error
+	for i := 0; i < recoverListTries; i++ {
+		listed, err := s.mux().ListStrict()
+		if err == nil {
+			return listed, nil
+		}
+		last = err
+		if i == recoverListTries-1 {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return nil, last
+		case <-time.After(pause):
+		}
+	}
+	return nil, last
+}
+
 // settled waits recoverSettle, then says reopened for each started row
 // whose tmux session still runs, and cannot for one whose agent exited.
 func (s *Service) settled(ctx context.Context, rows []proto.Recovered, started map[int]string) {
@@ -191,14 +225,11 @@ func (s *Service) settled(ctx context.Context, rows []proto.Recovered, started m
 		s.reopened = map[string]reopenedAt{}
 	}
 	s.mu.Unlock()
-	listed, err := s.mux().ListStrict()
+	listed, err := s.listPanes(ctx)
 	if err != nil {
 		for i := range started {
 			row := &rows[i]
-			row.State, row.Why = proto.RecoverCannot, "tmux did not list panes: run matchblox recover again"
-			s.mu.Lock()
-			s.reopened[conversation(row.Agent, row.Conversation)] = reopenedAt{s.now(), row.As}
-			s.mu.Unlock()
+			row.State, row.Why = proto.RecoverCannot, recoverListRetryWhy
 		}
 		return
 	}

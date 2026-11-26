@@ -267,6 +267,9 @@ type Service struct {
 	// settle is how long recover waits before it checks that each agent it
 	// reopened still runs (0: recoverSettle).
 	settle time.Duration
+	// listPause is how long recover waits between ListStrict errors
+	// (0: recoverListPause).
+	listPause time.Duration
 
 	mu  sync.Mutex
 	cur state.Doc

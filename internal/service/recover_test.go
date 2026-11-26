@@ -38,6 +38,7 @@ func recoverTest(t *testing.T, sessions ...sample.Session) (*Service, *[][]strin
 	rec.Git = mainBranch
 	s.Recovery = rec
 	s.settle = time.Millisecond
+	s.listPause = time.Nanosecond
 	s.LookPath = func(bin string) (string, error) {
 		switch bin {
 		case "claude", "codex", sample.CursorAgent:
@@ -105,6 +106,26 @@ func rows(res proto.Result) map[string]proto.Recovered {
 		m[r.Name] = r
 	}
 	return m
+}
+
+func listPanesCalls(asked [][]string) int {
+	n := 0
+	for _, argv := range asked {
+		if slices.Contains(argv, "list-panes") {
+			n++
+		}
+	}
+	return n
+}
+
+func newSessionCalls(ran [][]string) int {
+	n := 0
+	for _, argv := range ran {
+		if slices.Contains(argv, "new-session") {
+			n++
+		}
+	}
+	return n
 }
 
 // TestTheServiceRecordsTheBuildersAgents: each sample writes the agents of
@@ -471,13 +492,148 @@ func TestRecoverDoesNotTreatAListFailureAsExited(t *testing.T) {
 	}
 	res := recoverAct(t, s, proto.Recover{All: true}, "")
 	r := rows(res)["web"]
-	if r.State != proto.RecoverCannot || !strings.Contains(r.Why, "tmux did not list panes") || strings.Contains(r.Why, "exited at once") {
+	if r.State != proto.RecoverCannot || r.Why != "Recover didn’t hear back · ⏎ retry" || strings.Contains(r.Why, "exited at once") {
 		t.Fatalf("row %+v", r)
+	}
+	if live, _ := s.recoverLive(); live[conversation("codex", "x1")] {
+		t.Fatal("a list failure counts as live")
 	}
 	for _, argv := range asked {
 		if slices.Contains(argv, "kill-session") {
 			t.Fatalf("killed after a list failure: %q", argv)
 		}
+	}
+}
+
+// TestRecoverListGlitchThenLiveReopens: the first two lists fail, the
+// third shows a live session. Recover reopened it and never showed the CTA.
+func TestRecoverListGlitchThenLiveReopens(t *testing.T) {
+	s, _ := recoverTest(t)
+	web := agentIn(t, s, "codex", "x1", "web", "%4")
+	publishOn(s, "100", web)
+	loseServer(s)
+	var n int
+	var asked [][]string
+	s.TmuxOut = func(argv []string) (string, error) {
+		asked = append(asked, argv)
+		if !slices.Contains(argv, "list-panes") {
+			return "", nil
+		}
+		n++
+		if n < 3 {
+			return "", &exec.ExitError{}
+		}
+		return paneLine("%42", "web:1.1", 1, "/dev/pts/9", false), nil
+	}
+	res := recoverAct(t, s, proto.Recover{All: true}, "")
+	r := rows(res)["web"]
+	if r.State != proto.RecoverReopened || r.Why != "" {
+		t.Fatalf("row %+v", r)
+	}
+	if listPanesCalls(asked) != 3 {
+		t.Fatalf("list-panes %d, want 3; asked %q", listPanesCalls(asked), asked)
+	}
+}
+
+// TestRecoverListGlitchGivesRetryCTA: three list errors. The row cannot
+// with the retry Why, Start ran once, the session was not killed, and
+// the conversation is not live.
+func TestRecoverListGlitchGivesRetryCTA(t *testing.T) {
+	s, ran := recoverTest(t)
+	web := agentIn(t, s, "codex", "x1", "web", "%4")
+	publishOn(s, "100", web)
+	loseServer(s)
+	var asked [][]string
+	s.TmuxOut = func(argv []string) (string, error) {
+		asked = append(asked, argv)
+		return "", &exec.ExitError{}
+	}
+	res := recoverAct(t, s, proto.Recover{All: true}, "")
+	r := rows(res)["web"]
+	if r.State != proto.RecoverCannot || r.Why != "Recover didn’t hear back · ⏎ retry" {
+		t.Fatalf("row %+v", r)
+	}
+	if newSessionCalls(*ran) != 1 {
+		t.Fatalf("new-session %d, ran %q", newSessionCalls(*ran), *ran)
+	}
+	if live, _ := s.recoverLive(); live[conversation("codex", "x1")] {
+		t.Fatal("a list failure counts as live")
+	}
+	for _, argv := range asked {
+		if slices.Contains(argv, "kill-session") {
+			t.Fatalf("killed after a list failure: %q", argv)
+		}
+	}
+}
+
+// TestRecoverListSucceedsOnFirstTryListsOnce: a live pane on the first
+// list is reopened, and recover does not list again.
+func TestRecoverListSucceedsOnFirstTryListsOnce(t *testing.T) {
+	s, _ := recoverTest(t)
+	web := agentIn(t, s, "codex", "x1", "web", "%4")
+	publishOn(s, "100", web)
+	loseServer(s)
+	var asked [][]string
+	s.TmuxOut = func(argv []string) (string, error) {
+		asked = append(asked, argv)
+		if slices.Contains(argv, "list-panes") {
+			return paneLine("%42", "web:1.1", 1, "/dev/pts/9", false), nil
+		}
+		return "", nil
+	}
+	res := recoverAct(t, s, proto.Recover{All: true}, "")
+	if r := rows(res)["web"]; r.State != proto.RecoverReopened {
+		t.Fatalf("row %+v", r)
+	}
+	if listPanesCalls(asked) != 1 {
+		t.Fatalf("list-panes %d, want 1; asked %q", listPanesCalls(asked), asked)
+	}
+}
+
+// TestRecoverNoServerIsExitedAtOnce: no server is an empty list, not a
+// ListStrict error. Recover takes today's exited-at-once path, one list.
+func TestRecoverNoServerIsExitedAtOnce(t *testing.T) {
+	s, _ := recoverTest(t)
+	web := agentIn(t, s, "codex", "x1", "web", "%4")
+	publishOn(s, "100", web)
+	loseServer(s)
+	var asked [][]string
+	s.TmuxOut = func(argv []string) (string, error) {
+		asked = append(asked, argv)
+		return "", &exec.ExitError{Stderr: []byte("no server running on /tmp/tmux-1000/default\n")}
+	}
+	res := recoverAct(t, s, proto.Recover{All: true}, "")
+	r := rows(res)["web"]
+	if r.State != proto.RecoverCannot || !strings.Contains(r.Why, "exited at once") {
+		t.Fatalf("row %+v", r)
+	}
+	if r.Why == "Recover didn’t hear back · ⏎ retry" {
+		t.Fatal("no-server used the list-retry CTA")
+	}
+	if listPanesCalls(asked) != 1 {
+		t.Fatalf("list-panes %d, want 1; asked %q", listPanesCalls(asked), asked)
+	}
+}
+
+// TestRecoverMissingAgentHasNoListRetry: a missing binary cannot reopen
+// before Start. Recover does not list panes.
+func TestRecoverMissingAgentHasNoListRetry(t *testing.T) {
+	s, _ := recoverTest(t)
+	web := agentIn(t, s, "codex", "x1", "web", "%4")
+	publishOn(s, "100", web)
+	loseServer(s)
+	s.LookPath = func(string) (string, error) { return "", os.ErrNotExist }
+	var asked [][]string
+	s.TmuxOut = func(argv []string) (string, error) {
+		asked = append(asked, argv)
+		return "", nil
+	}
+	res := recoverAct(t, s, proto.Recover{All: true}, "")
+	if r := rows(res)["web"]; r.State != proto.RecoverCannot || !strings.Contains(r.Why, "codex is not installed") {
+		t.Fatalf("row %+v", r)
+	}
+	if listPanesCalls(asked) != 0 {
+		t.Fatalf("list-panes %d, want 0; asked %q", listPanesCalls(asked), asked)
 	}
 }
 
