@@ -6,6 +6,13 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **Switch a Cursor session to another agent.** A switch away from
+  Cursor's CLI no longer stops at "no directory": the new agent starts in
+  Cursor's folder with the match's task record. A session whose folder
+  stays hidden gets a refusal that says what to do.
+
 ## [0.63.0] - 2026-11-25
 
 ### Added
