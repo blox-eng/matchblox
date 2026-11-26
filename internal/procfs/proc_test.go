@@ -197,4 +197,11 @@ func TestBootedReadsBtime(t *testing.T) {
 	if _, err := (FS{Root: fixture}).Booted(); err == nil {
 		t.Fatal("a stat with no btime gives no error")
 	}
+	bad := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bad, "stat"), []byte("cpu  1 2 3 4\nbtime soon\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := (FS{Root: bad}).Booted(); err == nil {
+		t.Fatalf("a btime that is not a number gives %v and no error", got)
+	}
 }
