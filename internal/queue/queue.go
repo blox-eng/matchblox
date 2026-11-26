@@ -227,6 +227,14 @@ func (q *Queue) Newest(pane string) (id string, ok bool) {
 	return id, ok
 }
 
+// StopAfter tells if the newest hooked session in pane last sent a Stop,
+// after t: its turn ended then, and no prompt came since.
+func (q *Queue) StopAfter(pane string, t time.Time) bool {
+	id, ok := q.Newest(pane)
+	ev := q.hooked[id]
+	return ok && ev.Name == "Stop" && ev.At.After(t)
+}
+
 // Forget drops the hooked sessions ids, and the events they send from now
 // on: a switch's old agent is gone from its pane, and its late hooks must
 // not speak for the new one. The ids are taken (HookedIn) before the
