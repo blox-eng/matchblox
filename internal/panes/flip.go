@@ -46,7 +46,7 @@ func jumpOff(n int) string {
 		"," + Home + ",#{?" + aConsolePaneIn("1") + "," + anyConsole + ",}}}"
 	in := "#{||:#{==:#{" + jumpOption + "}," + anyConsole + "},#{==:#{session_name},#{" + jumpOption + "}}}"
 	return noteFrom + ` ; run-shell -C "set-option -g ` + goToOption + ` ` + consoleOf + `" ; run-shell -C "set-option -g ` + jumpOption + ` '` + pick +
-		`'" ; if-shell -F "#{` + jumpOption + `}" { ` + handIn(in, keycmd.JumpPrefix(n)) + ` } { send-keys M-` + strconv.Itoa(n) + ` }`
+		`'" ; if-shell -F "#{!=:#{` + jumpOption + `},}" { ` + handIn(in, keycmd.JumpPrefix(n)) + ` } { send-keys M-` + strconv.Itoa(n) + ` }`
 }
 
 // jumpOption is the session whose console a jump goes to, anyConsole for

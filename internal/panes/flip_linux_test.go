@@ -97,6 +97,32 @@ func TestJumpFromAMarkedPaneSaysJump(t *testing.T) {
 	}
 }
 
+// TestJumpReachesAConsoleInSessionZero: a builder starts tmux, then the
+// console in place, so the console's session is tmux's first, "0". ⌥4 still
+// hands it the jump: a session named 0 is not tmux's false.
+func TestJumpReachesAConsoleInSessionZero(t *testing.T) {
+	for _, session := range []string{"0", "desk"} {
+		t.Run(session, func(t *testing.T) {
+			sock, tmux, got := consolePaneIn(t, session)
+			tmux(HomeMarkArgv(session + ":0")[1:]...)
+			tmux("new-window", "-d", "-t", session+":1", "sleep", "100")
+			pane := tmux("display-message", "-p", "-t", session+":1", "#{pane_id}")
+			tmux("set-option", "-p", "-t", pane, "@matchblox_match", "1")
+			tmux(FlipKeysArgv()[1:]...)
+			tmux(JumpKeysArgv()[1:]...)
+			term := attach(t, sock, session+":1")
+			waitFor(t, func() bool { return tmux("list-clients", "-F", "#{window_index}") == "1" })
+			tty := tmux("list-clients", "-F", "#{client_tty}")
+			time.Sleep(100 * time.Millisecond)
+			if _, err := term.WriteString("\x1b4"); err != nil {
+				t.Fatal(err)
+			}
+			want := eventLine(uv.UnknownApcEvent(keycmd.JumpPrefix(4) + tty + " " + pane + "\x1b\\"))
+			waitFor(t, func() bool { return strings.Contains(strings.Join(paneRead(t, got), "\n"), want) })
+		})
+	}
+}
+
 // TestFlipKeyPassesThroughOnAnUnknownPane: a pane with no mark, a shell or
 // an editor, reads ⌥s as typed, and the client stays.
 func TestFlipKeyPassesThroughOnAnUnknownPane(t *testing.T) {
