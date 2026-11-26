@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -26,7 +27,7 @@ func repoWithWorktree(t *testing.T, main, wt string) {
 }
 
 func TestWorkspaceLine(t *testing.T) {
-	root := t.TempDir()
+	root := realTemp(t)
 	main, wt := filepath.Join(root, "main"), filepath.Join(root, "wt")
 	other, otherWT := filepath.Join(root, "other"), filepath.Join(root, "otherwt")
 	repoWithWorktree(t, main, wt)
@@ -40,7 +41,7 @@ func TestWorkspaceLine(t *testing.T) {
 	}
 	notOurs := func(p string) string { return p + " is not a worktree of this repository: it starts in " + main }
 
-	fakes := t.TempDir()
+	fakes := realTemp(t)
 	gitFile, gitLink, fakeWT := filepath.Join(fakes, "gitfile"), filepath.Join(fakes, "gitlink"), filepath.Join(fakes, "fakewt")
 	for _, d := range []string{gitFile, gitLink, fakeWT} {
 		if err := os.Mkdir(d, 0o700); err != nil {
@@ -106,7 +107,7 @@ func TestWorkspaceLine(t *testing.T) {
 		}
 	})
 
-	plain := filepath.Join(t.TempDir(), "plain")
+	plain := filepath.Join(realTemp(t), "plain")
 	if err := os.Mkdir(plain, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +125,7 @@ func TestWorkspaceLine(t *testing.T) {
 }
 
 func TestSessionsCarryTheirWorkFolder(t *testing.T) {
-	root := t.TempDir()
+	root := realTemp(t)
 	main, wt := filepath.Join(root, "main"), filepath.Join(root, "wt")
 	repoWithWorktree(t, main, wt)
 	s := newTest(t, time.Hour)
@@ -192,7 +193,7 @@ func TestSessionsCarryTheirWorkFolder(t *testing.T) {
 // new write: an older answer is asked again, and it stays shown until the
 // new one lands.
 func TestAWorktreeAddedLaterShowsWithin30s(t *testing.T) {
-	root := t.TempDir()
+	root := realTemp(t)
 	main, wt := filepath.Join(root, "main"), filepath.Join(root, "wt")
 	gitIn(t, "init", "-q", main)
 	gitIn(t, "-C", main, "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit", "-q", "--allow-empty", "-m", "x")
@@ -243,7 +244,7 @@ func TestAWorktreeAddedLaterShowsWithin30s(t *testing.T) {
 // agent-written path that holds control keys or runs long, so no escape
 // reaches the builder's terminal or the confirm.
 func TestARefusedWorkspaceShowsNoControlKeys(t *testing.T) {
-	launch := t.TempDir()
+	launch := realTemp(t)
 	for name, path := range map[string]string{
 		"an escape":  "/x\x1b]52;c;cm0gLXJmIH4=\x07\x1b[2J",
 		"a new line": "/x\nswitched it anyway",
@@ -262,7 +263,7 @@ func TestARefusedWorkspaceShowsNoControlKeys(t *testing.T) {
 // TestAWorktreeWithControlKeysIsRefused: a real worktree whose name holds
 // an escape never reaches the confirm or the CLI as it is.
 func TestAWorktreeWithControlKeysIsRefused(t *testing.T) {
-	root := t.TempDir()
+	root := realTemp(t)
 	main, wt := filepath.Join(root, "main"), filepath.Join(root, "wt\x1b[2K")
 	repoWithWorktree(t, main, filepath.Join(root, "plain"))
 	gitIn(t, "-C", main, "worktree", "add", "-q", "-b", "x", wt)
@@ -275,7 +276,7 @@ func TestAWorktreeWithControlKeysIsRefused(t *testing.T) {
 // TestWorkspaceLineOnOldGit: Git before 2.31 has no --path-format, and it
 // answers --git-common-dir relative to the folder it ran in.
 func TestWorkspaceLineOnOldGit(t *testing.T) {
-	root := t.TempDir()
+	root := realTemp(t)
 	main, wt := filepath.Join(root, "main"), filepath.Join(root, "wt")
 	other, otherWT := filepath.Join(root, "other"), filepath.Join(root, "otherwt")
 	repoWithWorktree(t, main, wt)
@@ -314,8 +315,12 @@ func TestWorkspaceLineOnOldGit(t *testing.T) {
 // tab or a byte that is not UTF-8 is refused for that, not as "not a
 // worktree", which would be false.
 func TestAWorktreeWithControlKeysSaysWhy(t *testing.T) {
-	for name, folder := range map[string]string{"a tab": "wt\tx", "a bad byte": "wt\xffx"} {
-		root := t.TempDir()
+	folders := map[string]string{"a tab": "wt\tx"}
+	if runtime.GOOS != "darwin" { // APFS refuses a name that is not UTF-8
+		folders["a bad byte"] = "wt\xffx"
+	}
+	for name, folder := range folders {
+		root := realTemp(t)
 		main, wt := filepath.Join(root, "main"), filepath.Join(root, folder)
 		repoWithWorktree(t, main, filepath.Join(root, "plain"))
 		gitIn(t, "-C", main, "worktree", "add", "-q", "-b", "x", wt)
@@ -325,4 +330,16 @@ func TestAWorktreeWithControlKeysSaysWhy(t *testing.T) {
 			t.Errorf("%s: workFolder = %q, %q; want %q, %q", name, work, refused, main, want)
 		}
 	}
+}
+
+// realTemp is a temp dir with its links resolved: on macOS t.TempDir is
+// under /var, a link to /private/var, and the workspace check answers
+// resolved paths.
+func realTemp(t *testing.T) string {
+	t.Helper()
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return dir
 }
