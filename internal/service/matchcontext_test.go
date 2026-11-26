@@ -884,3 +884,60 @@ func TestARefreshRequestNeverPassesAsTheBuilders(t *testing.T) {
 		t.Fatalf("the excerpt shows the request:\n%s", text)
 	}
 }
+
+func TestTheRecordStartsWithItsWorkspace(t *testing.T) {
+	s, _ := switchTest(t)
+	s.Home = t.TempDir()
+	dir := t.TempDir()
+	_, bundle, err := s.matchLaunch(t.Context(), "claude", "work", dir, "", "fix the build", true, nil, nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(filepath.Join(bundle, "handover.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "# Task record\n\nWorkspace: " + dir + "\n"; !strings.HasPrefix(string(body), want) {
+		t.Fatalf("the record starts %q, want %q", body, want)
+	}
+}
+
+func TestABlankRecordWithAWorkspaceIsUnwritten(t *testing.T) {
+	for _, data := range []string{"# Task record\n\nWorkspace: /w/main\n" + strings.TrimPrefix(blankRecord, "# Task record\n\n"), blankRecord} {
+		if launch, ok := unwrittenRecord(data); !ok || launch != "" {
+			t.Errorf("%q: %q %v", data, launch, ok)
+		}
+		if launch, ok := unwrittenRecord(data + "\n" + launchHeading + "\nFix exports\n"); !ok || launch != "Fix exports" {
+			t.Errorf("%q with a launch: %q %v", data, launch, ok)
+		}
+	}
+}
+
+func TestTheBriefAsksForTheWorkspace(t *testing.T) {
+	s, _ := switchTest(t)
+	s.Home = t.TempDir()
+	_, bundle, err := s.matchLaunch(t.Context(), "claude", "work", t.TempDir(), "", "", true, nil, nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(filepath.Join(bundle, "awareness.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "Keep the Workspace: line on the absolute path of the worktree you work in, with no quotes."; !strings.Contains(string(body), want) {
+		t.Fatalf("the brief lacks %q:\n%s", want, body)
+	}
+}
+
+func TestTheRefreshAsksForTheWorkspace(t *testing.T) {
+	if p := refreshPrompt("/s/m-1/handover.md"); !strings.Contains(p, "Workspace:") {
+		t.Fatalf("the refresh request does not name the Workspace: line: %q", p)
+	}
+}
+
+func TestAnOldRefreshStaysOurs(t *testing.T) {
+	old := refreshLead + strconv.Quote("/s/m-1/handover.md") + releasedRefreshNext
+	if !earlierRefresh(old) {
+		t.Fatalf("the released request reads as the builder's: %q", old)
+	}
+}

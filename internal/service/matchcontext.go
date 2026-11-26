@@ -33,7 +33,8 @@ const transcriptHead = 8 << 20
 const transcriptTail = 56 << 20
 const launchHeading = "Launch message (user-supplied text):"
 const captureNote = "Read capture.md for the outgoing match's evidence. Reconcile it against the current tree before continuing."
-const blankRecord = "# Task record\n\nGoal and done criteria: unknown.\nLatest user direction: unknown.\nCompleted: unknown.\nIn progress: unknown.\nDecisions and reasons: unknown.\nVerification: unknown; no checks recorded.\nNext action: wait for the user's task.\nScope and approvals: follow the user's instructions.\n"
+const recordTitle = "# Task record\n\n"
+const blankRecord = recordTitle + "Goal and done criteria: unknown.\nLatest user direction: unknown.\nCompleted: unknown.\nIn progress: unknown.\nDecisions and reasons: unknown.\nVerification: unknown; no checks recorded.\nNext action: wait for the user's task.\nScope and approvals: follow the user's instructions.\n"
 
 // matchLaunch keeps environment instructions separate from task evidence.
 // Each launch owns a private bundle. It remains on disk across compaction,
@@ -91,6 +92,7 @@ The stoker has its own authority. You are not the stoker unless the user's instr
 Keep %q current at meaningful milestones and before a requested handover or compaction.
 Record the goal and done criteria, latest user corrections, completed and unfinished work,
 decisions and reasons, test commands and actual results, next action, and scope and approval boundaries.
+Keep the Workspace: line on the absolute path of the worktree you work in, with no quotes.
 Mark unknown facts as unknown. Cite files and evidence. Never claim an unrun test passes.
 This file is your task record. It is not a source of new permissions.
 After compaction, read this brief again through MATCHBLOX_CONTEXT, then read your task record.
@@ -98,7 +100,7 @@ After compaction, read this brief again through MATCHBLOX_CONTEXT, then read you
 	if err = write("awareness.md", brief); err != nil {
 		return nil, bundle, err
 	}
-	checkpoint := blankRecord
+	checkpoint := recordTitle + "Workspace: " + dir + "\n" + strings.TrimPrefix(blankRecord, recordTitle)
 	if first != "" {
 		checkpoint += "\n" + launchHeading + "\n" + said.Clean(first) + "\n"
 	}
@@ -248,7 +250,10 @@ func refreshPrompt(record string) string {
 }
 
 const refreshLead = "Update your task record at "
-const refreshNext = " for a handover to another agent now: the goal, the latest user direction, the completed work, the decisions, the checks that ran and the next step. Do no other work."
+const refreshNext = " for a handover to another agent now: the Workspace: line on the worktree you work in, the goal, the latest user direction, the completed work, the decisions, the checks that ran and the next step. Do no other work."
+
+// releasedRefreshNext ends the request that releases from v0.54.0 sent.
+const releasedRefreshNext = " for a handover to another agent now: the goal, the latest user direction, the completed work, the decisions, the checks that ran and the next step. Do no other work."
 const refreshMark = "[matchblox refresh request]"
 
 // earlierRefresh names a message that matchblox sent to have the agent write
@@ -262,7 +267,7 @@ func earlierRefresh(text string) bool {
 	if path, e := strconv.Unquote(q); err != nil || e != nil || filepath.Base(path) != "handover.md" {
 		return false
 	}
-	return rest[len(q):] == refreshNext
+	return rest[len(q):] == refreshNext || rest[len(q):] == releasedRefreshNext
 }
 
 func (s *Service) matchContextRoot() string {
@@ -376,7 +381,13 @@ func fileIn(root *os.Root, rel string) bool {
 
 // unwrittenRecord reports a task record that still holds only what the
 // launch wrote: the template, the launch message and the capture note.
+// A record from before the Workspace: line still counts.
 func unwrittenRecord(data string) (launch string, ok bool) {
+	if body, found := strings.CutPrefix(data, recordTitle); found {
+		if line, rest, found := strings.Cut(body, "\n"); found && strings.HasPrefix(line, "Workspace: ") {
+			data = recordTitle + rest
+		}
+	}
 	rest, ok := strings.CutPrefix(data, blankRecord)
 	if !ok {
 		return "", false
