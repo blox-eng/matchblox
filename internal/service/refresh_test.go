@@ -316,7 +316,7 @@ func TestNoRefreshWhen(t *testing.T) {
 		},
 		"cursor": {
 			change: func(x *sample.Session) { x.Agent = sample.CursorAgent },
-			note:   "not refreshed: cursor-agent gives no turn end: run matchblox setup",
+			note:   "not refreshed: cursor-agent sent no hook event since the service started: run matchblox setup if its hooks are not installed",
 		},
 		"no transcript": {
 			change: func(x *sample.Session) { x.Transcript = "" },
@@ -595,12 +595,26 @@ func TestCursorWithoutHooksSkipsTheRefresh(t *testing.T) {
 	f := cursorRefresh(t)
 	start := time.Now()
 	res := f.switchTo(t, t.Context(), proto.SwitchAgent{Handoff: proto.DefaultHandoff})
-	f.switched(t, res, "not refreshed: cursor-agent gives no turn end: run matchblox setup")
+	f.switched(t, res, "not refreshed: cursor-agent sent no hook event since the service started: run matchblox setup if its hooks are not installed")
 	if got := f.typed(); len(got) != 0 {
 		t.Errorf("typed %q", got)
 	}
 	if took := time.Since(start); took >= refreshLimit/2 {
 		t.Errorf("the switch waited %v", took)
+	}
+}
+
+// TestCursorIdleSinceRestartNamesTheRestart: the queue lives in memory, so
+// a Cursor match idle across a restart has sent no hook event. Its hooks
+// may well be installed: the note and the capture say what is known.
+func TestCursorIdleSinceRestartNamesTheRestart(t *testing.T) {
+	f := cursorRefresh(t)
+	res := f.switchTo(t, t.Context(), proto.SwitchAgent{Handoff: proto.DefaultHandoff})
+	if note := "not refreshed: cursor-agent sent no hook event since the service started: run matchblox setup if its hooks are not installed"; !slices.Contains(res.Skipped, note) {
+		t.Errorf("the switch notes %q; want %q", res.Skipped, note)
+	}
+	if line := "Conversation unavailable: no Cursor hook event from this session since the service started; run matchblox setup if its hooks are not installed.\n"; !strings.Contains(cursorCapture(t), line) {
+		t.Errorf("the capture lacks %q", line)
 	}
 }
 

@@ -688,7 +688,7 @@ func (s *Service) cursorConversation(pane string) string {
 	const head = "\n## Recent conversation\n\nSource: Cursor's hooks, since the service started. The first prompt, the latest prompts and the last three replies are included; older replies are left out. Messages from other matches are marked as theirs. Tool calls are excluded.\n\n"
 	switch {
 	case !hooked:
-		return head + "Conversation unavailable: no Cursor hook events from this session; run matchblox setup to install its hooks.\n"
+		return head + "Conversation unavailable: no Cursor hook event from this session since the service started; run matchblox setup if its hooks are not installed.\n"
 	case len(turns) == 0:
 		return head + "Conversation unavailable: no Cursor turns since the service started.\n"
 	}

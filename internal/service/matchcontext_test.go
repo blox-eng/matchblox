@@ -1024,7 +1024,7 @@ func TestACursorCaptureHoldsItsConversation(t *testing.T) {
 }
 
 func TestACursorCaptureWithoutTalkSaysWhy(t *testing.T) {
-	if capture := cursorCapture(t); !strings.Contains(capture, "Conversation unavailable: no Cursor hook events from this session; run matchblox setup to install its hooks.\n") {
+	if capture := cursorCapture(t); !strings.Contains(capture, "Conversation unavailable: no Cursor hook event from this session since the service started; run matchblox setup if its hooks are not installed.\n") {
 		t.Errorf("an unhooked Cursor match gives no reason:\n%s", capture)
 	}
 	// A restart, or turns that came through the spool, leave hooks but no words.

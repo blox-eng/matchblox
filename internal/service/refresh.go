@@ -149,7 +149,7 @@ func (s *Service) refreshRecord(ctx context.Context, x sample.Session, n proto.S
 	case x.Stopped():
 		why = "out of usage until " + x.Out.Local().Format("15:04")
 	case cursor && !hooked:
-		why = x.Agent + " gives no turn end: run matchblox setup"
+		why = x.Agent + " sent no hook event since the service started: run matchblox setup if its hooks are not installed"
 	case !cursor && (x.Agent != "claude" && x.Agent != "codex" || x.Transcript == ""):
 		why = x.Agent + " gives no turn end"
 	case record == "":
