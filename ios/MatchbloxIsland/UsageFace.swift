@@ -190,7 +190,7 @@ struct WindowLine: View {
     var reset = true
 
     var body: some View {
-        let level = barColorLevel(window.pct)
+        let level = MatchbloxKit.level(window)
         let cells = IslandLook.cells(window.pct)
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(window.name)

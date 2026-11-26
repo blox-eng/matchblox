@@ -14,8 +14,9 @@ All notable changes to matchblox are in this file. The format follows
   network gap on the way back no longer shows an error: the console keeps
   its screen and connects again.
 - **The island watches the accounts that work.** An idle account no longer
-  fills the glance: a Cursor month spent at 100 % stays in the list and
-  says when it resets.
+  fills the glance, and a window spent at 100 % while its sessions still
+  work (Cursor past its included month) stops nothing: it stays in the list,
+  unwarned, and says when it resets.
 - **Pocket comes back to its own console.** A return reattaches the console
   the phone left, on the screen it showed, and an island that was swiped
   away or ended by an update starts again at the next open.

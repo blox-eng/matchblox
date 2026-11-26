@@ -95,3 +95,8 @@ prompt shows.
   Cursor month) says `resets Dec 17`, not `lasts the week`. Cursor at 100 %
   of its included usage is information, not `out`: a team plan can go on
   past it. Calls of this session, open to change.
+- Owner report (2026-11-27): the glance still showed Cursor's month at
+  100 % in red while its session worked. A window at 100 % while a session
+  of its account works is spent: it stops nothing, never leads the glance
+  and draws without warning. A full window with no session working stays a
+  limit.

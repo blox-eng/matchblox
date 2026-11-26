@@ -173,18 +173,21 @@ public struct WindowUse: Codable, Hashable, Sendable {
     public var name: String  // 5h, wk or mo
     public var pct: Int
     public var resets: Date?
+    /// At 100 % while a session of the account still works: it stops nothing.
+    public var spent = false
 
     public init(name: String, pct: Int, resets: Date? = nil) {
         self.name = name; self.pct = pct; self.resets = resets
     }
 
-    enum CodingKeys: String, CodingKey { case name, pct, resets }
+    enum CodingKeys: String, CodingKey { case name, pct, resets, spent }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         name = try c.decode(String.self, forKey: .name)
         pct = try c.decode(Int.self, forKey: .pct)
         resets = try RFC3339.decode(c, .resets)
+        spent = try c.decodeIfPresent(Bool.self, forKey: .spent) ?? false
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -192,6 +195,7 @@ public struct WindowUse: Codable, Hashable, Sendable {
         try c.encode(name, forKey: .name)
         try c.encode(pct, forKey: .pct)
         try RFC3339.encode(resets, &c, .resets)
+        if spent { try c.encode(spent, forKey: .spent) }
     }
 }
 
