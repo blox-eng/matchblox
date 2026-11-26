@@ -2148,16 +2148,16 @@ func TestASwitchKeepsTheChain(t *testing.T) {
 }
 
 // TestASwitchWithNoNewAgentStaysWhileItsPaneLives: a pane with no agent
-// after a switch keeps its match, unseen; once the pane closes, the match
-// is gone.
+// after a switch keeps its match, unseen, for the 2 minutes its agent has
+// to show; once the pane closes, the match is gone.
 func TestASwitchWithNoNewAgentStaysWhileItsPaneLives(t *testing.T) {
 	s, clock := switchChainTest(t)
 	if res := s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: "codex"})); res.Err != "" {
 		t.Fatal(res.Err)
 	}
-	*clock = clock.Add(time.Hour)
+	*clock = clock.Add(time.Minute)
 	if doc := switchSample(s, nil); doc.Chains == nil || len(doc.Chains.Chains) != 1 {
-		t.Fatalf("an hour on, its pane alive: %+v", doc.Chains)
+		t.Fatalf("a minute on, its pane alive: %+v", doc.Chains)
 	}
 	snap := lifeSnap(false)
 	snap.Sessions = slices.Clone(snap.Sessions[1:])

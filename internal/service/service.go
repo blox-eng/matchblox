@@ -333,6 +333,9 @@ type Service struct {
 	// afresh: each hears once who it is chained with. heldCleared are the
 	// ones a delivery holds.
 	cleared, heldCleared map[string]bool
+	// unnamed are the agents a switch started that show no session id
+	// yet: each joins cleared once its id shows. Under mu.
+	unnamed map[chains.Member]bool
 	// mateNames is the last name of the chained match in each live pane,
 	// for the news that it left once its session is gone. Under mu.
 	mateNames map[string]string

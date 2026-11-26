@@ -535,6 +535,7 @@ func (s *Service) switchAgent(ctx context.Context, pane string, a proto.Act) pro
 	s.undrive(pane)
 	s.renames.drop(pane)
 	s.mu.Lock()
+	s.chainsLocked().Restamp(memberOf(x), s.now()) // the new agent has its 2 minutes from the respawn
 	s.queue.Forget(old, s.now())
 	s.cur.Queue = s.queue.Items()
 	s.mu.Unlock()
