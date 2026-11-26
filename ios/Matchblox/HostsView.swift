@@ -62,20 +62,17 @@ struct HostsView: View {
                     if firstRun {
                         Text("Pair a host to open its console on this phone.")
                             .foregroundStyle(Theme.muted)
-                        Button("pair a host", action: onPair)
-                            .frame(minHeight: 44)
+                        Button(action: onPair) { tall("pair a host") }
                             .foregroundStyle(Theme.accent)
                             .accessibilityLabel("Pair a host")
-                        Button("try the demo", action: onDemo)
-                            .frame(minHeight: 44)
+                        Button(action: onDemo) { tall("try the demo") }
                             .foregroundStyle(Theme.muted)
                             .accessibilityLabel("Try the demo")
                     } else {
                         ForEach(hosts) { host in
                             hostBlock(host)
                         }
-                        Button("+ pair a host", action: onPair)
-                            .frame(minHeight: 44)
+                        Button(action: onPair) { tall("+ pair a host") }
                             .foregroundStyle(Theme.accent)
                             .accessibilityLabel("Pair a host")
                     }
@@ -97,20 +94,19 @@ struct HostsView: View {
                 HStack(spacing: 16) {
                     Text("text")
                         .foregroundStyle(Theme.faint)
-                    Button("−") { textSize = textSize.smaller }
+                    Button { textSize = textSize.smaller } label: { tall("−", width: 44) }
                         .disabled(textSize.isSmallest)
                         .accessibilityLabel("Smaller text")
                     Text("\(textSize.points) pt")
                         .monospacedDigit()
                         .foregroundStyle(Theme.faint)
-                    Button("+") { textSize = textSize.bigger }
+                    Button { textSize = textSize.bigger } label: { tall("+", width: 44) }
                         .disabled(textSize.isBiggest)
                         .accessibilityLabel("Bigger text")
                     Text("▰ sample")
                         .font(.system(size: CGFloat(textSize.points), design: .monospaced))
                         .foregroundStyle(Theme.faint)
                 }
-                .frame(minHeight: 44)
                 .buttonStyle(.borderless)
 
                 footer
@@ -177,12 +173,11 @@ struct HostsView: View {
                     .foregroundStyle(Theme.muted)
                     .font(.footnote)
                 HStack(spacing: 24) {
-                    Button("remove") { confirmRemove(host) }
+                    Button { confirmRemove(host) } label: { tall("remove") }
                         .foregroundStyle(Theme.neg)
-                    Button("keep") { pendingRemove = nil }
+                    Button { pendingRemove = nil } label: { tall("keep") }
                         .foregroundStyle(Theme.muted)
                 }
-                .frame(minHeight: 44)
             }
         }
         .gesture(
@@ -214,14 +209,14 @@ struct HostsView: View {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
         return HStack(spacing: 8) {
             if HomeCopy.showDemoInFooter(hosts: hosts) {
-                Button("demo", action: onDemo)
+                Button(action: onDemo) { tall("demo") }
                     .accessibilityLabel("Try the demo")
                 Text("·").foregroundStyle(Theme.faint)
             }
-            Link("privacy ↗", destination: URL(string: "https://docs.matchblox.com/privacy")!)
+            Link(destination: URL(string: "https://docs.matchblox.com/privacy")!) { tall("privacy ↗") }
                 .accessibilityLabel("Privacy policy")
             Text("·").foregroundStyle(Theme.faint)
-            Link("♥ sponsor ↗", destination: URL(string: "https://github.com/sponsors/blox-eng")!)
+            Link(destination: URL(string: "https://github.com/sponsors/blox-eng")!) { tall("♥ sponsor ↗") }
                 .accessibilityLabel("Sponsor Matchblox")
             if !version.isEmpty {
                 Text("  \(version)").foregroundStyle(Theme.faint)
@@ -230,6 +225,14 @@ struct HostsView: View {
         .font(.footnote)
         .foregroundStyle(Theme.faint)
         .frame(minHeight: 44, alignment: .leading)
+    }
+
+    /// A label whose tap area is at least 44 pt tall (spec 6.4); the frame on the button alone
+    /// leaves the tap area at the text's height.
+    private func tall(_ text: String, width: CGFloat? = nil) -> some View {
+        Text(text)
+            .frame(minWidth: width, minHeight: 44, alignment: .leading)
+            .contentShape(Rectangle())
     }
 
     private func region<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {

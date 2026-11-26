@@ -909,6 +909,9 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
             return
         }
         trayOpen = open
+        // VoiceOver and UI tests reach the tray's stamps (BOX among them) only once the list is rebuilt.
+        spoken = nil
+        UIAccessibility.post(notification: .layoutChanged, argument: nil)
         trayMoves += 1
         drawerMoves += 1
         let moves = drawerMoves
