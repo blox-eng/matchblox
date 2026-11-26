@@ -30,6 +30,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/demo"
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/hooks"
+	"github.com/blox-eng/matchblox/internal/numbers"
 	"github.com/blox-eng/matchblox/internal/procfs"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/replay"
@@ -510,6 +511,9 @@ func replayAt(t *testing.T, z replaySize) {
 		t.Fatal(err)
 	}
 	s.Stoker = st
+	if s.Numbers, err = numbers.Open(""); err != nil { // the landing shows each session's number
+		t.Fatal(err)
+	}
 	s.Ships = demoShips(clk)
 	// The pull requests are read every 15 s of the wall's time, a long wait
 	// for a replay that moves 40 times faster. A read every 300 ms puts the
