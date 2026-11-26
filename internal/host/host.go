@@ -87,10 +87,25 @@ func read(p *process.Process) (procfs.Proc, bool) {
 	if m, err := p.MemoryInfo(); err == nil {
 		pr.RSS = m.RSS
 	}
-	if st, err := p.Status(); err == nil && len(st) > 0 && st[0] == process.Running {
-		pr.State = 'R'
+	if st, err := p.Status(); err == nil {
+		pr.State = stateOf(st)
 	}
 	return pr, true
+}
+
+// stateOf maps gopsutil's status to the /proc state letter: Blocked is a
+// process waiting on I/O, state D.
+func stateOf(st []string) byte {
+	if len(st) == 0 {
+		return 'S'
+	}
+	switch st[0] {
+	case process.Blocked:
+		return 'D'
+	case process.Running:
+		return 'R'
+	}
+	return 'S'
 }
 
 func (Host) Environ(pid int, key string) (string, bool) {
