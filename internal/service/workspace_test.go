@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -267,5 +268,43 @@ func TestAWorktreeWithControlKeysIsRefused(t *testing.T) {
 	work, refused := workFolder(t.Context(), nil, "Workspace: "+wt+"\n", main)
 	if work != main || refused == "" || strings.Contains(refused, "\x1b") {
 		t.Fatalf("workFolder = %q, %q; want %q and a refusal with no ESC", work, refused, main)
+	}
+}
+
+// TestWorkspaceLineOnOldGit: Git before 2.31 has no --path-format, and it
+// answers --git-common-dir relative to the folder it ran in.
+func TestWorkspaceLineOnOldGit(t *testing.T) {
+	root := t.TempDir()
+	main, wt := filepath.Join(root, "main"), filepath.Join(root, "wt")
+	other, otherWT := filepath.Join(root, "other"), filepath.Join(root, "otherwt")
+	repoWithWorktree(t, main, wt)
+	repoWithWorktree(t, other, otherWT)
+	if err := os.Mkdir(filepath.Join(wt, "sub"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	old := func(ctx context.Context, dir string, args ...string) (string, error) {
+		if slices.ContainsFunc(args, func(a string) bool { return strings.HasPrefix(a, "--path-format") }) {
+			t.Errorf("Git 2.30 knows no %q", args)
+			return "", errors.New("unknown option")
+		}
+		out, err := workGit(ctx, dir, args...)
+		if err != nil || !slices.Contains(args, "--git-common-dir") || !filepath.IsAbs(strings.TrimSpace(out)) {
+			return out, err
+		}
+		rel, err := filepath.Rel(dir, strings.TrimSpace(out))
+		return rel + "\n", err
+	}
+	for _, tc := range []struct{ name, path, launch, work, refused string }{
+		{"its worktree", wt, main, wt, ""},
+		{"a subfolder of it", filepath.Join(wt, "sub"), main, wt, ""},
+		{"the main folder from the worktree", main, wt, main, ""},
+		{"another repository's worktree", otherWT, main, main, otherWT + " is not a worktree of this repository: it starts in " + main},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			work, refused := workFolder(t.Context(), old, "Workspace: "+tc.path+"\n", tc.launch)
+			if work != tc.work || refused != tc.refused {
+				t.Fatalf("got %q, %q; want %q, %q", work, refused, tc.work, tc.refused)
+			}
+		})
 	}
 }

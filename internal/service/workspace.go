@@ -142,16 +142,20 @@ func worktreeOf(ctx context.Context, git gitRunner, path, launch string) string 
 	return ""
 }
 
-// gitPath asks git rev-parse for an absolute path, with its links resolved.
-// Empty output answers "".
+// gitPath asks git rev-parse for a path, as an absolute one with its links
+// resolved. Empty output answers "". It passes no --path-format, which
+// Git 2.31 added: a relative answer is read against dir.
 func gitPath(ctx context.Context, git gitRunner, dir, flag string) (string, error) {
-	out, err := git(ctx, dir, "rev-parse", "--path-format=absolute", flag)
+	out, err := git(ctx, dir, "rev-parse", flag)
 	if err != nil {
 		return "", err
 	}
 	out = strings.TrimSpace(out)
 	if out == "" {
 		return "", nil
+	}
+	if !filepath.IsAbs(out) {
+		out = filepath.Join(dir, out)
 	}
 	return filepath.EvalSymlinks(out)
 }
