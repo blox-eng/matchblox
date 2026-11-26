@@ -31,7 +31,10 @@ type Exited struct {
 type Session struct {
 	// Host is the host the console read the session from: set by the
 	// console, never sent.
-	Host   string `json:"-"`
+	Host string `json:"-"`
+	// Number is the session's 1 to 9 for a jump, kept while it lives; 0:
+	// none. The service sets it.
+	Number int    `json:"number,omitempty"`
 	PID    int    `json:"pid"`
 	Start  uint64 `json:"start_ticks"` // /proc/<pid>/stat field 22: tells a reused pid apart
 	Pane   string `json:"pane"`

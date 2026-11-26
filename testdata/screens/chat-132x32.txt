@@ -2,21 +2,21 @@
  SESSIONS 7    machine
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  NEEDS YOU · 6  −                       │ flint-auth ✻ asks · #4545 ci                              ctx 41%  ct   the line is empty
-▌╿ flint-auth                       2m ✻│
-   conflicts with main                  │
- ╿ spark-docs                       9m ✻│
-   I rewrote the quick start and the in…│
- ╿ ember-billing                    4m ✻│
-   #4552 waits for your merge           │
- ╿ kindle-web                       1m ✻│
-   Do you want to proceed?              │
- ╿ cinder-ci                        0s ❋│
-   I am moving the cache key to the go.…│
- ╿ wick-mobile                      0s ▣│
-   ⠙ Working                            │
+▌  ╿ flint-auth                     2m ✻│
+     conflicts with main                │
+   ╿ spark-docs                     9m ✻│
+     I rewrote the quick start and the …│
+   ╿ ember-billing                  4m ✻│
+     #4552 waits for your merge         │
+   ╿ kindle-web                     1m ✻│
+     Do you want to proceed?            │
+   ╿ cinder-ci                      0s ❋│
+     I am moving the cache key to the g…│
+   ╿ wick-mobile                    0s ▣│
+     ⠙ Working                          │
 ────────────────────────────────────────│ ⏺ The refresh endpoint is in and its tests pass.
  WORKING · 1  −                         │
- ✦ hearth-api                 #4551 ci ✻│ ────────────────────────────────────────────────────────────────────────────────
+   ✦ hearth-api               #4551 ci ✻│ ────────────────────────────────────────────────────────────────────────────────
                                         │  ☐ Rotate
                                         │
                                         │ Should a refresh also rotate the token?
@@ -29,4 +29,4 @@
                                         │ Enter to select · ↑/↓ to navigate · Esc to cancel
  + new · ✧ 7 tips                       │ ›                                                                    ⏎ send to flint-auth
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- writing to flint-auth · ⏎ send · ↑↓ choose · esc list · ctrl+o expand · tab Machine
+ writing to flint-auth · ⏎ send · ↑↓ ⌥1-9 choose · esc list · ctrl+o expand · tab Machine

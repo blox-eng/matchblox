@@ -220,6 +220,36 @@ func TestFlipHandsOffToItsOwnConsole(t *testing.T) {
 	}
 }
 
+// TestWayBackToSessionZero: a builder starts tmux, then a console in place,
+// in tmux's first session, "0". From an agent they opened there, the way
+// back goes to that console, not to the other one: 0 is not tmux's false.
+func TestWayBackToSessionZero(t *testing.T) {
+	s := newOwnServer(t)
+	s.console(t, Home)
+	zero := s.console(t, "0")
+	s.tmux(HomeKeyArgv()[1:]...)
+	f := s.focus(t, zero.name)
+	press(t, f, HomeKey)
+	waitFor(t, func() bool { return s.sessions() == zero.name })
+}
+
+// TestJumpFromSessionBackToZeroReachesItsConsole: ⌥4 in an agent opened
+// from the console in session "0" hands the jump to that console only.
+func TestJumpFromSessionBackToZeroReachesItsConsole(t *testing.T) {
+	s := newOwnServer(t)
+	one, zero := s.console(t, Home), s.console(t, "0")
+	s.tmux(FlipKeysArgv()[1:]...)
+	s.tmux(JumpKeysArgv()[1:]...)
+	f := s.focus(t, zero.name)
+	s.tmux("set-option", "-p", "-t", f.a, MatchOption, "1")
+	press(t, f, "\x1b4")
+	waitFor(t, func() bool { return read(zero.cOut) != "" })
+	time.Sleep(100 * time.Millisecond)
+	if got := read(one.cOut); got != "" {
+		t.Errorf("the other console read %q", got)
+	}
+}
+
 // TestAClosedTerminalOrphansItsConsole reads a real server: the second
 // console is not orphaned while its terminal shows it, nor while that
 // terminal is in an agent it opened, nor while it looks at another session;

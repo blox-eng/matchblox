@@ -31,11 +31,11 @@ func linkOf(i, n int, twoLines bool) (first, rest string) {
 	return "├", " "
 }
 
-// sideRow is a session's row: line 1 holds the selection mark, the link,
-// the match, the name, the wait or the badge, and the agent's mark. A
-// second line shows what a session that needs you asks, or what the chosen
-// session does, or why a held one is held. The row of a host that does not
-// answer is its last state, dimmed.
+// sideRow is a session's row: line 1 holds the selection mark, the number,
+// the link, the match, the name, the wait or the badge, and the agent's
+// mark. A second line shows what a session that needs you asks, or what
+// the chosen session does, or why a held one is held. The row of a host
+// that does not answer is its last state, dimmed.
 func (m Model) sideRow(s sample.Session, w int, chosen bool, link sideLink) []string {
 	h := m.sideStateOf(s)
 	word, says := m.cardSays(s)
@@ -80,7 +80,11 @@ func (m Model) sideRow(s sample.Session, w int, chosen bool, link sideLink) []st
 
 	right := rest.Render(m.sideRight(s)) + " " + rest.Render(harnessMark(s))
 	title := m.sideTitle(s)
-	left := mark + lead + m.sideMatch(s, h) + " "
+	num := "  "
+	if s.Number > 0 {
+		num = m.st.faint.Render(strconv.Itoa(s.Number)) + " "
+	}
+	left := mark + num + lead + m.sideMatch(s, h) + " "
 	if m.chainPlace(s) >= 0 {
 		left += m.st.accent.Render("▸") + " "
 	}
@@ -89,7 +93,7 @@ func (m Model) sideRow(s sample.Session, w int, chosen bool, link sideLink) []st
 	if !two {
 		return []string{line}
 	}
-	pad := " " + cont + "  "
+	pad := "   " + cont + "  "
 	text := ansi.Truncate(says, max(w-lipgloss.Width(pad), 0), "…")
 	return []string{line, fit(pad+m.st.faint.Render(text), w)}
 }
@@ -142,7 +146,7 @@ func (m Model) waitRow(v state.MateView, w int, link sideLink, chosen bool) []st
 	}
 	first, rest := linkOf(link.i, link.n, chosen)
 	right := m.st.wait.Render("waits for recover") + " "
-	left := mark + ink.Render(first) + " "
+	left := mark + "  " + ink.Render(first) + " "
 	room := w - lipgloss.Width(left+right) - 1
 	line := spread(left+m.st.wait.Render(ansi.Truncate("◌ "+v.Wait.Name, max(room, 1), "…")), right, w)
 	if !chosen {
@@ -150,7 +154,7 @@ func (m Model) waitRow(v state.MateView, w int, link sideLink, chosen bool) []st
 	}
 	at, _ := m.stoppedAt(v.Wait.Since)
 	says := "its server stopped " + at + " · " + m.keys.side.Enter.Help().Key + " reopen · " + m.keys.board.Menu.Help().Key + " menu"
-	pad := " " + ink.Render(rest) + "  "
+	pad := "   " + ink.Render(rest) + "  "
 	return []string{line, fit(pad+m.st.faint.Render(ansi.Truncate(says, max(w-lipgloss.Width(pad), 0), "…")), w)}
 }
 
