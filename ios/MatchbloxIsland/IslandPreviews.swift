@@ -49,6 +49,16 @@ enum IslandPreview {
     static var waits: IslandState { sessions("waits", pct: 45, wait: 1) }
     static var done: IslandState { sessions("done", pct: 100) }
     static var out: IslandState { sessions("out", pct: 40) }
+    static func needing(_ kinds: [String], of need: Int) -> IslandState {
+        var s = sessions("waits", pct: 45, wait: 1)
+        s.need = need
+        s.needs = kinds.enumerated().map { .init(n: 3 + $0.offset, kind: $0.element) }
+        return s
+    }
+
+    static var needsOne: IslandState { needing(["question"], of: 1) }
+    static var needsFour: IslandState { needing(["question", "command", "done"], of: 4) }
+
     static var quiet: IslandState {
         var s = sessions("quiet")
         s.top = nil
@@ -97,6 +107,8 @@ enum IslandPreview {
     IslandPreview.done
     IslandPreview.out
     IslandPreview.quiet
+    IslandPreview.needsOne
+    IslandPreview.needsFour
     IslandPreview.usage
     IslandPreview.usageBurns
     IslandPreview.breakThrough
