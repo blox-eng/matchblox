@@ -86,6 +86,9 @@ type RegisterRequest struct {
 type IslandReg struct {
 	StartToken string `json:"start_token"`
 	Channel    string `json:"channel"`
+	// Ended: at this open the phone had no island of this host (swiped
+	// away, or a new build installed). The host starts one at once.
+	Ended bool `json:"ended,omitempty"`
 }
 
 // Registration is a request the host keeps, with the id of the phone's

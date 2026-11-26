@@ -321,7 +321,8 @@ type startAlert struct {
 	Body  string `json:"body"`
 }
 
-// forgetEnded forgets the starts of a phone whose island came, went or
+// forgetEnded forgets the start of a phone that said its island ended after
+// it, and the starts of a phone whose island came, went or
 // changed its token since the last doc: the app ends this host's activity when
 // Follow moves to another host, so following back needs a new start.
 func (s *Sender) forgetEnded(regs []Registration, now time.Time) {
@@ -333,6 +334,13 @@ func (s *Sender) forgetEnded(regs []Registration, now time.Time) {
 			tok = r.Island.StartToken
 		}
 		follows[r.Device] = tok
+		// A start older than the phone's word that its island ended is gone.
+		if r.Island != nil && r.Island.Ended && tok != "" {
+			if at, ok := s.started[startKey(tok)]; ok && at.Before(r.At) {
+				delete(s.started, startKey(tok))
+				forgot = true
+			}
+		}
 		prev, seen := s.follows[r.Device]
 		if !seen || prev == tok {
 			continue
