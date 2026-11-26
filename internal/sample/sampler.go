@@ -749,8 +749,9 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 		hosting[paneID] = true
 
 		cpu, n := s.treeCPU(pid, procs, children, dt)
+		_, cwd := s.readableAs(pid)
 		sess := Session{
-			PID: pid, Start: p.StartTime, Pane: paneID, Target: pane.Target, Tab: pane.Window, Cwd: s.FS.Cwd(pid),
+			PID: pid, Start: p.StartTime, Pane: paneID, Target: pane.Target, Tab: pane.Window, Cwd: cwd,
 			Agent: agent, Version: ref.version, VersionWhy: ref.versionWhy, CPU: cpu, Procs: n, Context: "unknown",
 		}
 		env := s.envOf(pid, key)
@@ -1177,6 +1178,32 @@ func interpreter(cmd string) bool {
 		return true
 	}
 	return strings.HasPrefix(cmd, "python")
+}
+
+// readableAs is the process to read pid's folder and environment from,
+// and that folder. An agent that makes itself non-dumpable (Cursor's CLI)
+// hides both: its nearest ancestor that shows a folder started it there,
+// with the environment it inherited. The walk ends at the pane's own
+// process, the child of the tmux server. pid is kept, with "", when none
+// shows one.
+func (s *Sampler) readableAs(pid int) (int, string) {
+	if cwd := s.FS.Cwd(pid); cwd != "" {
+		return pid, cwd
+	}
+	for cur, hops := pid, 0; hops < maxHops; hops++ {
+		p, ok := s.FS.Proc(cur)
+		if !ok || p.PPID <= 1 {
+			break
+		}
+		if up, ok := s.FS.Proc(p.PPID); !ok || strings.HasPrefix(up.Comm, "tmux") {
+			break // cur is the pane's own process
+		}
+		cur = p.PPID
+		if cwd := s.FS.Cwd(cur); cwd != "" {
+			return cur, cwd
+		}
+	}
+	return pid, ""
 }
 
 // screen is what an agent's pane showed, and since when.

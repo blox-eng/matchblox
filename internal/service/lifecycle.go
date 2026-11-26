@@ -410,7 +410,10 @@ func (s *Service) switchAgent(ctx context.Context, pane string, a proto.Act) pro
 			return refuse(err)
 		}
 	}
-	if !s.isDir(x.Cwd) {
+	switch {
+	case x.Cwd == "":
+		return refuseText(hiddenFolder(x.Name))
+	case !s.isDir(x.Cwd):
 		return refuseText("no directory " + x.Cwd)
 	}
 	word := ""
@@ -528,6 +531,12 @@ func (s *Service) switchAgent(ctx context.Context, pane string, a proto.Act) pro
 	default: // a sample is asked for already
 	}
 	return res
+}
+
+// hiddenFolder is the refusal of a switch whose session shows matchblox
+// no folder to start the next agent in.
+func hiddenFolder(name string) string {
+	return "matchblox cannot read the folder " + name + " works in: kill it and start the agent with matchblox new --where <folder>"
 }
 
 // switchAccount is the account a switch starts agent on, and its label as

@@ -13,6 +13,33 @@ All notable changes to matchblox are in this file. The format follows
   choose that session. Inside an agent's pane they go straight to its pane.
   On the phone, `Esc` and then a digit still reaches the agent.
 
+## [0.63.1] - 2026-11-26
+
+### Fixed
+
+- **Switch a Cursor session to another agent.** A switch away from
+  Cursor's CLI no longer stops at "no directory": the new agent starts in
+  Cursor's folder with the match's task record. A session whose folder
+  stays hidden gets a refusal that says what to do.
+
+## [0.63.0] - 2026-11-25
+
+### Added
+
+- **See Cursor plan usage on any host.** With `[limits] cursor_usage = true`,
+  Machine → USAGE reads the default Cursor login from
+  `~/.config/cursor/auth.json` or `~/.cursor/auth.json` (and the Keychain
+  item on macOS only as a fallback), so Linux and other hosts show `mo`
+  the same way macOS already could.
+
+## [0.62.0] - 2026-11-25
+
+### Added
+
+- **Adjust a phone text selection before copying.** Drag either selection
+  handle to choose the text you want; a magnifying lens helps you see
+  where it lands. Copy stays available when you lift your finger.
+
 ## [0.61.0] - 2026-11-24
 
 ### Added
@@ -2093,7 +2120,10 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.61.0...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.63.1...HEAD
+[0.63.1]: https://github.com/blox-eng/matchblox/compare/v0.63.0...v0.63.1
+[0.63.0]: https://github.com/blox-eng/matchblox/compare/v0.62.0...v0.63.0
+[0.62.0]: https://github.com/blox-eng/matchblox/compare/v0.61.0...v0.62.0
 [0.61.0]: https://github.com/blox-eng/matchblox/compare/v0.60.0...v0.61.0
 [0.60.0]: https://github.com/blox-eng/matchblox/compare/v0.59.0...v0.60.0
 [0.59.0]: https://github.com/blox-eng/matchblox/compare/v0.58.1...v0.59.0

@@ -697,6 +697,15 @@ func TestSwitchRefuses(t *testing.T) {
 	if res := s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: "codex"})); res.Err != "no directory /work/app" {
 		t.Errorf("want no directory, got %q", res.Err)
 	}
+	// A process that hides its folder (Cursor's CLI) leaves none to name:
+	// the refusal says what to do (matchbloxenhanced, 2026-11-26).
+	s.IsDir = func(string) bool { return true }
+	hidden := lifeSnap(false)
+	hidden.Sessions = append(hidden.Sessions, sample.Session{Agent: "cursor-agent", PID: 110, Pane: "%10", Name: "hid", Status: "idle"})
+	s.publish(hidden, func(state.Doc) {})
+	if res := s.act(t.Context(), switchAct(t, "%10", proto.SwitchAgent{Agent: "codex"})); res.Err != hiddenFolder("hid") {
+		t.Errorf("want %q, got %q", hiddenFolder("hid"), res.Err)
+	}
 	if len(*ran) != 0 {
 		t.Fatalf("ran %q", *ran)
 	}

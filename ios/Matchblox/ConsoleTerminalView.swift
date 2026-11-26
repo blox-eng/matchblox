@@ -61,6 +61,9 @@ final class ConsoleTerminalView: TerminalView {
     private var heldWord: (start: Position, end: Position)?
     /// SwiftTerm's long-press is selecting: the terminal takes no keys meanwhile.
     fileprivate var selecting = false
+    private var selectionHandles: [SelectionHandle] = []
+    private var selectionLens: UIImageView?
+    private var selectionDragOrigin: CGPoint?
     private let selectGate = SelectGate()
     private lazy var editMenu = UIEditMenuInteraction(delegate: selectGate)
     private let holdGate = HoldGate()
@@ -146,6 +149,17 @@ final class ConsoleTerminalView: TerminalView {
             other.addTarget(self, action: #selector(selectHeld))
         }
         addInteraction(editMenu)
+        selectionHandleColor = .clear
+        for isStart in [true, false] {
+            let handle = SelectionHandle(isStart: isStart)
+            let pan = UIPanGestureRecognizer(target: self, action: #selector(resizeSelection))
+            handle.addGestureRecognizer(pan)
+            for other in gestureRecognizers ?? [] where other is UIPanGestureRecognizer || other is UILongPressGestureRecognizer {
+                other.require(toFail: pan)
+            }
+            addSubview(handle)
+            selectionHandles.append(handle)
+        }
         #if DEBUG
         for other in gestureRecognizers ?? [] where other is UILongPressGestureRecognizer && other !== hold {
             other.addTarget(self, action: #selector(terminalHeld))
@@ -194,6 +208,11 @@ final class ConsoleTerminalView: TerminalView {
     /// edge swipe and the wheel pan too, or a swipe with the tmux mouse on would drag in the pane.
     override func addGestureRecognizer(_ gesture: UIGestureRecognizer) {
         super.addGestureRecognizer(gesture)
+        if gesture is UIPanGestureRecognizer || gesture is UILongPressGestureRecognizer {
+            for handle in selectionHandles {
+                for pan in handle.gestureRecognizers ?? [] { gesture.require(toFail: pan) }
+            }
+        }
         guard let edge, gesture is UIPanGestureRecognizer, gesture !== edge else { return }
         gesture.require(toFail: edge)
         if let wheelPan, gesture !== wheelPan {
@@ -328,21 +347,100 @@ final class ConsoleTerminalView: TerminalView {
                 selection.selectWordOrExpression(at: Position(col: spot.col, row: spot.row + buffer.yDisp), in: buffer)
             }
             heldWord = selection.active ? (selection.start, selection.end) : nil
+            if selection.active { showSelectionLens(at: press.location(in: self)) }
         case .changed:
             guard let word = heldWord, let spot = cell(at: press.location(in: self)) else { return }
             let at = Position(col: spot.col, row: spot.row + getTerminal().buffer.yDisp)
             selection.pivot = Position.compare(at, word.start) == .before ? word.end : word.start
             selection.pivotExtend(row: spot.row, col: spot.col)
+            showSelectionLens(at: press.location(in: self))
         case .ended:
             heldWord = nil
             selecting = false
+            hideSelectionLens()
             guard selection.active else { return }
             UIMenuController.shared.hideMenu()
             editMenu.presentEditMenu(with: UIEditMenuConfiguration(identifier: nil, sourcePoint: press.location(in: self)))
         default:
             heldWord = nil
             selecting = false
+            hideSelectionLens()
         }
+    }
+
+    @objc private func resizeSelection(_ pan: UIPanGestureRecognizer) {
+        guard let handle = pan.view as? SelectionHandle else { return }
+        let point = pan.location(in: self)
+        switch pan.state {
+        case .began:
+            editMenu.dismissMenu()
+            selecting = true
+            let endpoint = handle.isStart ? selection.start : selection.end
+            selection.pivot = handle.isStart ? selection.end : selection.start
+            selection.selectionMode = .character
+            selectionDragOrigin = CGPoint(x: (CGFloat(endpoint.col) + 0.5) * cellSize.width,
+                                          y: (CGFloat(endpoint.row) + 0.5) * cellSize.height)
+            showSelectionLens(at: selectionDragOrigin ?? point)
+        case .changed:
+            guard let origin = selectionDragOrigin else { return }
+            let translation = pan.translation(in: self)
+            let target = CGPoint(x: origin.x + translation.x, y: origin.y + translation.y)
+            guard let spot = cell(at: target) else { return }
+            selection.pivotExtend(row: spot.row, col: spot.col)
+            showSelectionLens(at: target)
+        case .ended, .cancelled, .failed:
+            selecting = false
+            selectionDragOrigin = nil
+            hideSelectionLens()
+            if pan.state == .ended, selection.active {
+                editMenu.presentEditMenu(with: UIEditMenuConfiguration(identifier: nil, sourcePoint: point))
+            }
+        default: break
+        }
+    }
+
+    private func updateSelectionHandles() {
+        guard selectionHandles.count == 2 else { return }
+        for handle in selectionHandles {
+            handle.isHidden = !selection.active
+            guard selection.active else { continue }
+            let position = handle.isStart ? selection.start : selection.end
+            let x = CGFloat(position.col + (handle.isStart ? 0 : 1)) * cellSize.width
+            let y = CGFloat(position.row + (handle.isStart ? 0 : 1)) * cellSize.height
+            handle.center = CGPoint(x: x, y: y)
+            bringSubviewToFront(handle)
+        }
+    }
+
+    private func showSelectionLens(at point: CGPoint) {
+        let size = CGSize(width: 120, height: 54)
+        let lens = selectionLens ?? UIImageView(frame: CGRect(origin: .zero, size: size))
+        if selectionLens == nil {
+            lens.layer.cornerRadius = size.height / 2
+            lens.layer.borderWidth = 2
+            lens.layer.borderColor = UIColor.secondaryLabel.cgColor
+            lens.clipsToBounds = true
+            lens.isUserInteractionEnabled = false
+            addSubview(lens)
+            selectionLens = lens
+        }
+        lens.isHidden = true
+        let renderer = UIGraphicsImageRenderer(size: size)
+        lens.image = renderer.image { context in
+            context.cgContext.translateBy(x: size.width / 2 - point.x * 1.8, y: size.height / 2 - point.y * 1.8)
+            context.cgContext.scaleBy(x: 1.8, y: 1.8)
+            layer.render(in: context.cgContext)
+        }
+        let visible = CGRect(origin: contentOffset, size: bounds.size)
+        lens.center = CGPoint(x: min(max(point.x, visible.minX + size.width / 2), visible.maxX - size.width / 2),
+                              y: max(visible.minY + size.height / 2, point.y - 70))
+        lens.isHidden = false
+        bringSubviewToFront(lens)
+    }
+
+    private func hideSelectionLens() {
+        selectionLens?.removeFromSuperview()
+        selectionLens = nil
     }
 
     /// Each whole point of a pinch ticks once. The phone keeps the size when the fingers lift.
@@ -465,6 +563,7 @@ final class ConsoleTerminalView: TerminalView {
     override func selectionChanged(source: Terminal) {
         allowMouseReporting = !selection.active
         super.selectionChanged(source: source)
+        updateSelectionHandles()
         onSelectedLink(selection.active ? TerminalLink.url(inSelection: selection.getSelectedText()) : nil)
     }
 
@@ -656,5 +755,26 @@ private final class HoldGate: NSObject, UIGestureRecognizerDelegate {
     func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
         guard let view else { return false }
         return view.holdOpensMenu(at: gesture.location(in: view))
+    }
+}
+
+/// A generous touch target around each end of the highlighted text.
+private final class SelectionHandle: UIView {
+    let isStart: Bool
+
+    init(isStart: Bool) {
+        self.isStart = isStart
+        super.init(frame: CGRect(x: 0, y: 0, width: 44, height: 44))
+        backgroundColor = .clear
+        isHidden = true
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    override func draw(_ rect: CGRect) {
+        UIColor.systemBlue.setFill()
+        let y: CGFloat = isStart ? 12 : 24
+        UIBezierPath(roundedRect: CGRect(x: 21, y: y, width: 2, height: 8), cornerRadius: 1).fill()
+        UIBezierPath(ovalIn: CGRect(x: 17, y: isStart ? 4 : 32, width: 10, height: 10)).fill()
     }
 }
