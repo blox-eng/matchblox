@@ -72,10 +72,12 @@ final class DemoConsoleTests: XCTestCase {
 
         let box = app.buttons["Home, the box"]
         let layouts = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Layouts")).firstMatch
-        // The one-time BOX teach may hold the drawer open for a moment; a tap on Layouts toggles it.
+        // The one-time BOX teach may hold the drawer open for a moment; a tap on the grip toggles
+        // it. The Layouts element ends at the grip's right edge, and its middle takes no tap.
         let deadline = Date().addingTimeInterval(20)
         while !box.isHittable, Date() < deadline {
-            layouts.tap()
+            let width = layouts.frame.width
+            layouts.coordinate(withNormalizedOffset: CGVector(dx: (width - 18) / width, dy: 0.5)).tap()
             _ = box.waitForExistence(timeout: 2)
         }
         box.tap()
