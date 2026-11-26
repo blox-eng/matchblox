@@ -36,29 +36,24 @@ public enum HomeCopy {
         !hosts.isEmpty && !hosts.contains(where: \.isDemo)
     }
 
-    /// One line for the Live Activity row: host · show · buzz.
+    /// One line for the Live Activity row: host · buzz. The show choice has its own line.
     public static func liveActivityRow(prefs: IslandPrefs, hosts: [Host]) -> String {
         let byFP = Dictionary(uniqueKeysWithValues: hosts.map { ($0.fingerprint, $0) })
-        let hostWord: String
-        if let fp = prefs.follow, let host = byFP[fp] {
-            hostWord = host.label
-        } else if prefs.follow == nil, prefs.choice == nil, let fp = prefs.lastOpened, let host = byFP[fp] {
-            hostWord = host.label
-        } else {
-            hostWord = "none"
-        }
-        let showWord = prefs.show.rawValue
-        let buzzWord: String
-        if let fp = prefs.follow {
-            buzzWord = prefs.buzzOn(fp) ? "buzz on" : "buzz off"
-        } else {
-            let anyOn = hosts.contains { prefs.buzzOn($0.fingerprint) }
-            buzzWord = anyOn ? "buzz on" : "buzz off"
-        }
-        if hostWord == "none" {
-            return "\(showWord)  \(buzzWord)"
-        }
-        return "\(hostWord) · \(showWord)  \(buzzWord)"
+        let followed = prefs.follow.flatMap { byFP[$0] }
+        let buzzOn = prefs.follow.map(prefs.buzzOn) ?? hosts.contains { prefs.buzzOn($0.fingerprint) }
+        let buzzWord = buzzOn ? "buzz on" : "buzz off"
+        guard let followed else { return buzzWord }
+        return "\(followed.label) · \(buzzWord)"
+    }
+
+    /// The show line on home, in the Live Activity screen's order.
+    public static let showChoices: [Show] = [.sessions, .usage, .auto]
+
+    public static func showSpoken(_ show: Show, selected: Bool) -> String {
+        var line = "Show \(show.rawValue)"
+        if show == .auto { line += ", usage while the stoker runs" }
+        if selected { line += ", selected" }
+        return line
     }
 
     public static func relative(from then: Date, to now: Date) -> String {

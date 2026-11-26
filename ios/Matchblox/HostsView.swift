@@ -88,6 +88,7 @@ struct HostsView: View {
                         .accessibilityLabel(
                             "Live Activity, " + HomeCopy.liveActivityRow(prefs: prefs, hosts: realHosts)
                         )
+                        showLine
                     }
                 }
 
@@ -203,6 +204,28 @@ struct HostsView: View {
         case .unknown:
             EmptyView()
         }
+    }
+
+    /// One tap picks what the island and the lock screen show; the phone alone keeps it.
+    private var showLine: some View {
+        HStack(spacing: 12) {
+            Text("show").foregroundStyle(Theme.faint)
+            ForEach(HomeCopy.showChoices, id: \.self) { choice in
+                Button { pickShow(choice) } label: { tall(choice.rawValue) }
+                    .foregroundStyle(prefs.show == choice ? Theme.accent : Theme.faint)
+                    .accessibilityLabel(HomeCopy.showSpoken(choice, selected: prefs.show == choice))
+            }
+        }
+        .buttonStyle(.borderless)
+    }
+
+    private func pickShow(_ choice: Show) {
+        var saved = IslandSettings.prefs
+        guard saved.show != choice else { return }
+        saved.show = choice
+        IslandSettings.prefs = saved
+        prefs = saved
+        IslandSettings.refreshActivities()
     }
 
     private var footer: some View {

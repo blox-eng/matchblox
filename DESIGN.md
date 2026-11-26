@@ -723,7 +723,8 @@ The iOS app's home and the way back from a live console (design
 2026-11-24 pocket home).
 
 - **Home:** hosts lead (full rows; tap opens; swipe left asks to remove),
-  then one `Live Activity` row (real hosts only), then a quiet
+  then one `Live Activity` row (real hosts only) with its one-tap
+  `show  sessions · usage · auto` line under it, then a quiet
   `text − N pt +` line, then the footer (`demo · privacy ↗ · ♥ sponsor ↗`
   and the app version). No key belt on home.
 - **`‹ host`:** when a live console sits behind home, the top line returns

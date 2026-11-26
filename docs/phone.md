@@ -220,7 +220,8 @@ Nothing connects to a host from the background.
 - **A tap opens the session:** the app asks for Face ID, connects and opens
   the console on that session: on it. If the session has ended, the
   console says `That session ended.`
-- **The setting:** the `Live Activity` row on home (real hosts only).
+- **The setting:** the `Live Activity` row on home (real hosts only). The
+  `show` line under it picks `sessions`, `usage` or `auto` with one tap.
   `Follow` is the one host that has the island (the host opened last). `Show`
   is `Sessions`, `Usage` or `Auto (Usage while the stoker runs)`. `Buzz` is
   on or off for each host. A host out of reach keeps its old setting until

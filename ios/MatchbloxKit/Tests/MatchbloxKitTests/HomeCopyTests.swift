@@ -79,17 +79,14 @@ final class HomeCopyTests: XCTestCase {
         let work = host("work-1")
         let prefs = IslandPrefs(choice: .host(work.fingerprint), show: .sessions, buzz: [work.fingerprint: true])
         let line = HomeCopy.liveActivityRow(prefs: prefs, hosts: [work])
-        XCTAssertTrue(line.contains("work-1"), line)
-        XCTAssertTrue(line.contains("sessions"), line)
-        XCTAssertTrue(line.contains("buzz on"), line)
+        XCTAssertEqual(line, "work-1 · buzz on")
     }
 
     func testLiveActivityRowBuzzOffAndAuto() {
         let work = host("work-1")
         let prefs = IslandPrefs(choice: .host(work.fingerprint), show: .auto, buzz: [work.fingerprint: false])
         let line = HomeCopy.liveActivityRow(prefs: prefs, hosts: [work])
-        XCTAssertTrue(line.contains("auto"), line)
-        XCTAssertTrue(line.contains("buzz off"), line)
+        XCTAssertEqual(line, "work-1 · buzz off")
     }
 
     func testLiveActivityRowFollowNone() {
@@ -97,17 +94,24 @@ final class HomeCopyTests: XCTestCase {
         let prefs = IslandPrefs(choice: FollowChoice.none, lastOpened: work.fingerprint, show: .usage, buzz: [:])
         let line = HomeCopy.liveActivityRow(prefs: prefs, hosts: [work])
         // Follow is none: no host name; buzz on if any host buzzes (default true).
-        XCTAssertFalse(line.contains("work-1"), line)
-        XCTAssertTrue(line.contains("usage"), line)
-        XCTAssertTrue(line.contains("buzz on"), line)
+        XCTAssertEqual(line, "buzz on")
     }
 
     func testLiveActivityRowDefaultFollowUsesLastOpened() {
         let work = host("work-1")
         let prefs = IslandPrefs(choice: nil, lastOpened: work.fingerprint, show: .sessions, buzz: [work.fingerprint: true])
         let line = HomeCopy.liveActivityRow(prefs: prefs, hosts: [work])
-        XCTAssertTrue(line.contains("work-1"), line)
-        XCTAssertTrue(line.contains("sessions"), line)
-        XCTAssertTrue(line.contains("buzz on"), line)
+        XCTAssertEqual(line, "work-1 · buzz on")
+    }
+
+    /// The show line names each choice once, in the Live Activity screen's order.
+    func testShowLineOffersEachChoice() {
+        XCTAssertEqual(HomeCopy.showChoices, [.sessions, .usage, .auto])
+    }
+
+    func testShowSpoken() {
+        XCTAssertEqual(HomeCopy.showSpoken(.sessions, selected: true), "Show sessions, selected")
+        XCTAssertEqual(HomeCopy.showSpoken(.usage, selected: false), "Show usage")
+        XCTAssertEqual(HomeCopy.showSpoken(.auto, selected: false), "Show auto, usage while the stoker runs")
     }
 }

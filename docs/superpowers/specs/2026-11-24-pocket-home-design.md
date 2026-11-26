@@ -47,7 +47,7 @@ out of the way.
   agent tag moves one place to the right of it.
 - **The idea:** a session is a match; home is the box all the matches lie in.
 - **Home's order:** hosts first (`● live` on the connected one, `+ pair a
-  host`), then one `Live Activity` row, then one quiet line `text − 13 pt +`
+  host`), then one `Live Activity` row and its `show` line, then one quiet line `text − 13 pt +`
   with a short sample at that size, then the footer.
 - **Footer:** `demo · privacy ↗ · ♥ sponsor ↗`, in `faint`. Privacy opens
   docs.matchblox.com/privacy; sponsor opens github.com/sponsors/blox-eng
@@ -55,6 +55,18 @@ out of the way.
 - **First run** (no host): home opens instead of the scanner. The hosts
   region says one sentence, then `pair a host` and `try the demo`.
 - **Text size** leaves the Island screen. The pinch on the terminal stays.
+
+## Decided in build (owner, 2026-11-27)
+
+- **Show on home:** what the island and the lock screen show is one tap on
+  home. Under the `Live Activity` row, one quiet line:
+  `show  sessions · usage · auto`. The choice in force is in the accent;
+  the others are `faint`. A tap saves `IslandPrefs.show` and refreshes the
+  activities, as the Live Activity screen does. The row then reads
+  `work-1 · buzz on    ›`: the show word is on its own line, once. The
+  Live Activity screen keeps its `Show` picker for the long `auto` text.
+  Reason: the owner wants the choice one tap away (relayed by
+  matchbloxisland, confirmed by the owner in this session).
 
 ## Decided in design review (owner, 2026-11-24)
 
@@ -159,10 +171,11 @@ demo · privacy ↗ · ♥ sponsor ↗  0.58.0
   | Host row | `work-1, 10.0.0.4, live` (or `2 hours ago` / `not reachable since 14:02`) |
   | Host row actions | Open (default); Remove (custom / swipe) |
   | `+ pair a host` | `Pair a host` |
-  | Live Activity row | `Live Activity, work-1, sessions, buzz on` |
+  | Live Activity row | `Live Activity, work-1, buzz on` |
+  | Show line | `Show sessions, selected` · `Show usage` · `Show auto, usage while the stoker runs` |
   | Text `−` / `+` | `Smaller text` / `Bigger text` |
   | Footer | `Try the demo` · `Privacy policy` · `Sponsor Matchblox` |
-- **6.4 Tap height:** host rows, the Live Activity row, text `−` / `+`,
+- **6.4 Tap height:** host rows, the Live Activity row, each `show` word, text `−` / `+`,
   and each footer link have a hit area at least 44 pt tall (paint may stay
   tighter; the shape expands as with `BOX`).
 
@@ -184,8 +197,9 @@ demo · privacy ↗ · ♥ sponsor ↗  0.58.0
 
 - Sidebar briefly showing a match twice (standalone + in chain). Separate
   desk bug; not home. Filed as #506 from review 7.1.
-- Island / Live Activity behaviour beyond rename and moving its entry to
-  home (non-goal).
+- Island / Live Activity behaviour beyond rename, moving its entry to
+  home, and the one-tap `show` line (non-goal). What each choice draws
+  stays with the island work.
 - Theme, font family, key repeat (non-goal).
 - The console’s own home (`◂`).
 - Regenerating the Claude artifact mockup in this review (`$D` not used;
