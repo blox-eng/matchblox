@@ -790,3 +790,29 @@ func TestSwitchDisarmsWhenTheRecordWaitEnds(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// TestCLISwitchPrintsTheFolder: a switch that ran says where the new agent
+// started, and why not in the record's folder. The CLI shows no confirm and
+// its doc can be older than the record, so it binds no folder.
+func TestCLISwitchPrintsTheFolder(t *testing.T) {
+	var buf bytes.Buffer
+	refused := "/tmp is not a worktree of this repository: it starts in /r/main"
+	sock := switchService(t, proto.Result{Ran: [][]string{{"tmux", "respawn-pane"}}, StartedIn: "/r/wt", WorkRefused: refused})
+	if err := cliSwitch([]string{"api"}, switchOpts{agent: "codex"}, &buf, sock, nil); err != nil {
+		t.Fatal(err)
+	}
+	if want := "switched api to codex\nstarted in /r/wt\n" + refused + "\n"; buf.String() != want {
+		t.Errorf("printed %q; want %q", buf.String(), want)
+	}
+
+	doc := cliDoc()
+	doc.Sessions[0].Work = "/r/wt"
+	a, err := switchAct(doc, []string{"api"}, switchOpts{agent: "codex"}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sw proto.SwitchAgent
+	if err := json.Unmarshal([]byte(a.Text), &sw); err != nil || sw.ExpectedFolder != "" {
+		t.Errorf("ExpectedFolder %q (%v); want none", sw.ExpectedFolder, err)
+	}
+}

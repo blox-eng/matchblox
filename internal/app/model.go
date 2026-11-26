@@ -2021,6 +2021,9 @@ func (m Model) switched(r proto.Result) (Model, tea.Cmd) {
 		return m, said
 	}
 	m.flash = ""
+	if r.StartedIn != "" {
+		j.done += " in " + r.StartedIn
+	}
 	if m.opt.Demo != "" { // the switch ran: only the jump into its pane cannot
 		said := m.say(j.done)
 		return m, said

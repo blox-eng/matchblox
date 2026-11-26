@@ -2424,3 +2424,13 @@ func TestAnOldClientSwitchesAsBefore(t *testing.T) {
 		t.Fatalf("err %q ran %q; want a switch", res.Err, *ran)
 	}
 }
+
+// The console binds every switch to the folder its confirm shows: with no
+// record, that is the launch folder, and the switch goes on.
+func TestASwitchBoundToItsLaunchFolderRuns(t *testing.T) {
+	s, ran := switchTest(t)
+	res := s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: "codex", Handoff: proto.DefaultHandoff, ExpectedFolder: "/work/app"}))
+	if res.Err != "" || respawnDir(*ran) != "/work/app" || res.StartedIn != "/work/app" {
+		t.Fatalf("err %q StartedIn %q ran %q; want a respawn in /work/app", res.Err, res.StartedIn, *ran)
+	}
+}

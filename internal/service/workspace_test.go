@@ -78,6 +78,15 @@ func TestWorkspaceLine(t *testing.T) {
 		})
 	}
 
+	sub := filepath.Join(wt, "sub")
+	for name, record := range map[string]string{"its own subfolder": "Workspace: " + sub + "\n", "its worktree": "Workspace: " + wt + "\n"} {
+		t.Run("a subfolder launch naming "+name+" keeps the subfolder", func(t *testing.T) {
+			if work, refused := workFolder(t.Context(), nil, record, sub); work != sub || refused != "" {
+				t.Fatalf("got %q, %q; want %q", work, refused, sub)
+			}
+		})
+	}
+
 	t.Run("the caller's GIT_DIR is ignored", func(t *testing.T) {
 		t.Setenv("GIT_DIR", filepath.Join(main, ".git"))
 		if work, refused := workFolder(t.Context(), nil, "Workspace: /tmp\n", main); work != main || refused != notOurs("/tmp") {

@@ -47,7 +47,8 @@ func workspaceLine(record string) (string, bool) {
 // workFolder picks where a switch starts the next agent. A record with no
 // Workspace line keeps the launch folder. A line counts only when it names
 // a worktree of the launch folder's repository; work is then its top level.
-// Any other line is refused, and the match stays in the launch folder.
+// A worktree that holds the launch folder keeps the launch folder. Any
+// other line is refused, and the match stays in the launch folder.
 // A nil git runs the real Git.
 func workFolder(ctx context.Context, git gitRunner, record, launch string) (work, refused string) {
 	path, ok := workspaceLine(record)
@@ -64,7 +65,8 @@ func workFolder(ctx context.Context, git gitRunner, record, launch string) (work
 }
 
 // worktreeOf answers with the top level of path when path is a worktree of
-// launch's repository, else "". Outside Git only launch itself passes.
+// launch's repository, else "". When that worktree is launch's own, it
+// answers with launch as given. Outside Git only launch itself passes.
 func worktreeOf(ctx context.Context, git gitRunner, path, launch string) string {
 	if !filepath.IsAbs(path) {
 		return ""
@@ -110,6 +112,10 @@ func worktreeOf(ctx context.Context, git gitRunner, path, launch string) string 
 			continue
 		}
 		if p, err := filepath.EvalSymlinks(p); err == nil && p == top {
+			// A launch in this worktree keeps its own folder, a subfolder too.
+			if ours, err := gitPath(ctx, git, home, "--show-toplevel"); err == nil && ours == top {
+				return launch
+			}
 			return top
 		}
 	}

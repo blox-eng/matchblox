@@ -412,6 +412,16 @@ func cliSwitch(words []string, o switchOpts, w io.Writer, path string, jump func
 			return err
 		}
 	}
+	if res.StartedIn != "" {
+		if _, err := fmt.Fprintln(w, "started in "+res.StartedIn); err != nil {
+			return err
+		}
+	}
+	if res.WorkRefused != "" {
+		if _, err := fmt.Fprintln(w, res.WorkRefused); err != nil {
+			return err
+		}
+	}
 	if jump == nil {
 		return nil
 	}

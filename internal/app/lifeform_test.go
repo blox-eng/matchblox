@@ -188,7 +188,7 @@ func TestAOpensSwitchAgentAndJumpsAfter(t *testing.T) {
 		t.Fatalf("sent %+v", acts)
 	}
 	var sw proto.SwitchAgent
-	if err := json.Unmarshal([]byte(acts[0].Text), &sw); err != nil || sw != (proto.SwitchAgent{Agent: "codex", Handoff: proto.DefaultHandoff, ExpectedPID: 200, ExpectedStart: 1000}) {
+	if err := json.Unmarshal([]byte(acts[0].Text), &sw); err != nil || sw != (proto.SwitchAgent{Agent: "codex", Handoff: proto.DefaultHandoff, ExpectedPID: 200, ExpectedStart: 1000, ExpectedFolder: "/src/api"}) {
 		t.Fatalf("%+v %v", sw, err)
 	}
 	// A refusal jumps nowhere and says why.
@@ -1909,6 +1909,75 @@ func TestNOpensOnTheServicesLastAgent(t *testing.T) {
 	next, _ = key(m, "N")
 	if fm := next.(Model).form; fm.agent != m.agents[0] {
 		t.Fatalf("form %+v", fm)
+	}
+}
+
+// cursorSwitch is app-feature on cursor-agent, launched in /r/main, with
+// work and refused as the service checked its record. The switch confirm
+// waits for its y.
+func cursorSwitch(t *testing.T, work, refused string) (*action, proto.SwitchAgent) {
+	t.Helper()
+	st := lifeState()
+	st.Agents = []string{"claude", "cursor-agent"}
+	st.Sessions[0].Agent, st.Sessions[0].Cwd = "cursor-agent", "/r/main"
+	st.Sessions[0].Work, st.Sessions[0].WorkRefused = work, refused
+	next, _ := switchState(t, st)
+	next, _ = key(next, "A")
+	next, _ = key(next, "enter")
+	p := next.(Model).pending
+	var sw proto.SwitchAgent
+	if p == nil || json.Unmarshal([]byte(p.text), &sw) != nil {
+		t.Fatalf("pending %+v", p)
+	}
+	return p, sw
+}
+
+func TestSwitchConfirmNamesTheWorktree(t *testing.T) {
+	p, sw := cursorSwitch(t, "/r/wt", "")
+	if want := "switch app-feature: cursor-agent → claude in %1, /r/wt (its worktree), then jump there"; p.say != want {
+		t.Errorf("confirm %q; want %q", p.say, want)
+	}
+	if sw.ExpectedFolder != "/r/wt" {
+		t.Errorf("ExpectedFolder %q; want /r/wt", sw.ExpectedFolder)
+	}
+}
+
+func TestSwitchConfirmNamesARefusedWorkspace(t *testing.T) {
+	refused := "/tmp is not a worktree of this repository: it starts in /r/main"
+	p, sw := cursorSwitch(t, "/r/main", refused)
+	if want := "switch app-feature: cursor-agent → claude in %1, /r/main; " + refused + ", then jump there"; p.say != want {
+		t.Errorf("confirm %q; want %q", p.say, want)
+	}
+	if sw.ExpectedFolder != "/r/main" {
+		t.Errorf("ExpectedFolder %q; want /r/main", sw.ExpectedFolder)
+	}
+}
+
+// Before the service has checked the record, the confirm names the launch
+// folder and binds the switch to it.
+func TestSwitchConfirmWithoutAWorkFolder(t *testing.T) {
+	p, sw := cursorSwitch(t, "", "")
+	if want := "switch app-feature: cursor-agent → claude in %1, /r/main, then jump there"; p.say != want {
+		t.Errorf("confirm %q; want %q", p.say, want)
+	}
+	if sw.ExpectedFolder != "/r/main" {
+		t.Errorf("ExpectedFolder %q; want /r/main", sw.ExpectedFolder)
+	}
+}
+
+func TestSwitchDoneNamesTheFolder(t *testing.T) {
+	next, _ := switchState(t, lifeState())
+	m := next.(Model)
+	m.opt.Run = func([]string) error { return nil }
+	next, _ = key(m, "A")
+	next, _ = key(next, "enter")
+	next, cmd := key(next, "y")
+	drain(cmd)
+	act := next.(Model).jumpAfter.act
+	done, cmd := next.Update(resultMsg(proto.Result{ActID: act, Ran: [][]string{{"tmux"}}, StartedIn: "/r/wt"}))
+	drain(cmd)
+	if f := done.(Model).flash; f != "switched app-feature to codex in /r/wt" {
+		t.Fatalf("flash %q", f)
 	}
 }
 
