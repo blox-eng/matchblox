@@ -216,7 +216,8 @@ Nothing connects to a host from the background.
   A new wait, done or out goes at once. Progress moves in steps of 5 %, at
   most each 3 minutes. The Usage face moves when a window changes by 2 % or
   more, or resets, at most each 5 minutes. A wait breaks through the Usage
-  face for 60 s.
+  face for 60 s. The compact island shows the fullest window of the
+  accounts a session works for now; an idle account stays in the list.
 - **A tap opens the session:** the app asks for Face ID, connects and opens
   the console on that session: on it. If the session has ended, the
   console says `That session ended.`

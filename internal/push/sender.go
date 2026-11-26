@@ -521,7 +521,7 @@ func usageMoved(old, cur []AccountUse) bool {
 	}
 	for i := range cur {
 		o, c := old[i], cur[i]
-		if o.N != c.N || o.Lasts != c.Lasts || len(o.Windows) != len(c.Windows) {
+		if o.N != c.N || o.Lasts != c.Lasts || o.Idle != c.Idle || len(o.Windows) != len(c.Windows) {
 			return true
 		}
 		for j := range c.Windows {

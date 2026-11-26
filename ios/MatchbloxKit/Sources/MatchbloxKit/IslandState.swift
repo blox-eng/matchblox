@@ -138,13 +138,15 @@ public struct AccountUse: Codable, Hashable, Sendable {
     public var windows: [WindowUse]
     public var lasts: Bool
     public var runsOut: Date?
+    /// No session works for this account now: it does not lead the glance.
+    public var idle: Bool
 
-    public init(n: Int, windows: [WindowUse], lasts: Bool, runsOut: Date? = nil) {
-        self.n = n; self.windows = windows; self.lasts = lasts; self.runsOut = runsOut
+    public init(n: Int, windows: [WindowUse], lasts: Bool, runsOut: Date? = nil, idle: Bool = false) {
+        self.n = n; self.windows = windows; self.lasts = lasts; self.runsOut = runsOut; self.idle = idle
     }
 
     enum CodingKeys: String, CodingKey {
-        case n, windows, lasts
+        case n, windows, lasts, idle
         case runsOut = "runs_out"
     }
 
@@ -154,6 +156,7 @@ public struct AccountUse: Codable, Hashable, Sendable {
         windows = try c.decodeIfPresent([WindowUse].self, forKey: .windows) ?? []
         lasts = try c.decode(Bool.self, forKey: .lasts)
         runsOut = try RFC3339.decode(c, .runsOut)
+        idle = try c.decodeIfPresent(Bool.self, forKey: .idle) ?? false
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -162,6 +165,7 @@ public struct AccountUse: Codable, Hashable, Sendable {
         try c.encode(windows, forKey: .windows)
         try c.encode(lasts, forKey: .lasts)
         try RFC3339.encode(runsOut, &c, .runsOut)
+        if idle { try c.encode(idle, forKey: .idle) }
     }
 }
 

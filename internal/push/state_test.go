@@ -135,6 +135,31 @@ func TestUsageHasTheWindowsAndTheForecastOfEachAccount(t *testing.T) {
 	}
 }
 
+// An account no session works for now does not lead the glance: an idle
+// Cursor login at 100% of its month kept the watch red (2026-11-26).
+func TestAnAccountWithNoWorkingSessionIsIdle(t *testing.T) {
+	n := openNumbers(t, t.TempDir())
+	busy := sample.Session{SessionID: "s1", Busy: true, Provider: "anthropic", Account: "a"}
+	rests := sample.Session{SessionID: "s2", Provider: "anthropic", Account: "b"}
+	d := doc([]sample.Session{busy, rests}, nil,
+		acct("a", 10, 24, t0, &limits.Outlook{Lasts: true}),
+		acct("b", 0, 100, t0, nil))
+	got := Build(d, fp, n, t0)
+	if len(got.Accounts) != 2 {
+		t.Fatalf("accounts %+v", got.Accounts)
+	}
+	idle := map[int]bool{}
+	for _, a := range got.Accounts {
+		idle[a.N] = a.Idle
+	}
+	if idle[n.Account("anthropic", "a")] || !idle[n.Account("anthropic", "b")] {
+		t.Fatalf("idle %v", idle)
+	}
+	if !usageMoved([]AccountUse{{N: 1, Lasts: true}}, []AccountUse{{N: 1, Lasts: true, Idle: true}}) {
+		t.Fatal("an account that goes idle sends a new state")
+	}
+}
+
 func TestUsageSkipsWhatItCannotName(t *testing.T) {
 	n := openNumbers(t, t.TempDir())
 	a := limits.Account{Provider: "p", Account: "a", State: limits.Measured, Windows: []limits.Window{
@@ -206,7 +231,10 @@ func TestBuildMatchesTheFixture(t *testing.T) {
 		return limits.Account{Provider: "anthropic", Account: name, State: limits.Measured, Forecast: o,
 			Windows: []limits.Window{{UsedPct: f, Minutes: limits.BoxMinutes, ResetsAt: h5}, {UsedPct: w, Minutes: limits.WeekMinutes, ResetsAt: wk}}}
 	}
-	d := doc([]sample.Session{sess("s1", true, now), sess("s2", true, now), s3},
+	s1, s2 := sess("s1", true, now), sess("s2", true, now)
+	s1.Provider, s1.Account = "anthropic", "a"
+	s2.Provider, s2.Account = "anthropic", "b"
+	d := doc([]sample.Session{s1, s2, s3},
 		[]queue.Item{{SessionID: "s3", State: queue.StatePermission, Since: now}},
 		mk("a", 62, 31, &limits.Outlook{Lasts: true}),
 		mk("b", 93, 71, &limits.Outlook{Out: time.Date(2026, 10, 21, 16, 15, 0, 0, time.UTC)}))

@@ -104,6 +104,14 @@
 - [ ] **Step 4:** Collapse for 6 min, return. Expected: Face ID asks.
 - [ ] **Step 5:** Turn on airplane mode, return. Expected: the cover with the failure reason.
 
+### Task 5b: An idle account does not lead the glance (report, 2026-11-26)
+
+- [x] **Step 1: Failing tests.** Go `TestAnAccountWithNoWorkingSessionIsIdle` (`AccountUse.Idle`, and `usageMoved` sends a flip); Swift `testAnIdleAccountDoesNotLeadTheGlance` (`tightest` skips idle accounts, nil when all are idle, a payload with no `idle` decodes as false) and `testAMonthNamesItsResetNotTheWeek` (`resets Dec 17`).
+- [x] **Step 2:** Run them. Expected: FAIL (`Idle` undefined; CI `ios`).
+- [x] **Step 3:** `push.Build` sets `Idle` when no busy session has the account's provider, label and folder. `tightest` filters idle accounts. `IslandLook.forecast` names the latest reset for an account with no `wk` window.
+- [x] **Step 4:** `go test ./...` and CI `ios` green.
+- [x] **Step 5: Commit.** `fix: an idle account no longer fills the island's glance`
+
 ### Task 6: Docs, review, ship
 
 - [ ] **Step 1:** `docs/phone.md` "The buzz and the island": one line on the 5-minute unlock and the tap back. `CHANGELOG.md` Unreleased: one line, headline ≤7 words.

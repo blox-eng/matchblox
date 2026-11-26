@@ -18,9 +18,9 @@ public func face(for s: IslandState, show: Show, followed: String?, now: Date) -
     return wanted
 }
 
-/// The window with the highest percent over all accounts.
+/// The window with the highest percent over the accounts a session works for now.
 public func tightest(_ s: IslandState) -> WindowUse? {
-    s.accounts.flatMap(\.windows).max { $0.pct < $1.pct }
+    s.accounts.filter { !$0.idle }.flatMap(\.windows).max { $0.pct < $1.pct }
 }
 
 /// Bars warn from 60 %, neg from 90 % (DESIGN.md section 6 Dock).

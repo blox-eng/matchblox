@@ -52,6 +52,7 @@ type AccountUse struct {
 	Windows []WindowUse `json:"windows"`
 	Lasts   bool        `json:"lasts"`
 	RunsOut time.Time   `json:"runs_out,omitzero"`
+	Idle    bool        `json:"idle,omitempty"` // no session works for it now: it does not lead the glance
 }
 
 // WindowUse is one usage window: Name is 5h, wk or mo.

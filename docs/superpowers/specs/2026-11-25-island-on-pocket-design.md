@@ -86,3 +86,12 @@ prompt shows.
   `Can't reach <host>.` with `Try again`, with no new page. A changed host
   key or a refused key still opens the Reach screen. Keys typed meanwhile
   go once the console is back, up to 4 KB; a failure drops them.
+- Owner ruling (2026-11-26, after a report: the watch always showed 100 %
+  and a red bar while Claude had 76 % of its week left): an account that no
+  session works for now does not lead the glance. The compact island and
+  its minimal bar show the fullest window of the accounts with a busy
+  session; with none, the host mark `▰`. The lock screen and the expanded
+  island still list every account. An account with no week window (a
+  Cursor month) says `resets Dec 17`, not `lasts the week`. Cursor at 100 %
+  of its included usage is information, not `out`: a team plan can go on
+  past it. Calls of this session, open to change.

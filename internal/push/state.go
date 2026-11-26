@@ -139,6 +139,9 @@ func Build(doc state.Doc, hostFP string, n *Numbers, now time.Time) ContentState
 		if f := a.Forecast; f != nil && !f.Lasts {
 			au.Lasts, au.RunsOut = false, f.Out.UTC()
 		}
+		au.Idle = !slices.ContainsFunc(doc.Sessions, func(s sample.Session) bool {
+			return s.Busy && s.Provider == a.Provider && s.Account == a.Account && s.AccountDir == a.Dir
+		})
 		cs.Accounts = append(cs.Accounts, au)
 	}
 	slices.SortFunc(cs.Accounts, func(a, b AccountUse) int { return a.N - b.N })
