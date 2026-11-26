@@ -2,8 +2,8 @@ package service
 
 import (
 	"encoding/json"
-	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -445,7 +445,7 @@ func TestRecoverSaysWhenTheAgentExitsAtOnce(t *testing.T) {
 	web := agentIn(t, s, "codex", "x1", "web", "%4")
 	publishOn(s, "100", web)
 	loseServer(s)
-	s.TmuxOut = func([]string) (string, error) { return "", errors.New("can't find session: web") }
+	s.TmuxOut = func([]string) (string, error) { return "", nil }
 	res := recoverAct(t, s, proto.Recover{All: true}, "")
 	r := rows(res)["web"]
 	if r.State != proto.RecoverCannot || !strings.Contains(r.Why, "codex exited at once: run cd "+web.Cwd+" && codex resume x1") {
@@ -453,6 +453,31 @@ func TestRecoverSaysWhenTheAgentExitsAtOnce(t *testing.T) {
 	}
 	if live, _ := s.recoverLive(); live[conversation("codex", "x1")] {
 		t.Fatal("an agent that exited counts as live")
+	}
+}
+
+// TestRecoverDoesNotTreatAListFailureAsExited: list-panes failed after
+// new-session. That is not "the agent exited"; recover must not kill the
+// session and must not say to run the agent by hand as if it died.
+func TestRecoverDoesNotTreatAListFailureAsExited(t *testing.T) {
+	s, _ := recoverTest(t)
+	web := agentIn(t, s, "codex", "x1", "web", "%4")
+	publishOn(s, "100", web)
+	loseServer(s)
+	var asked [][]string
+	s.TmuxOut = func(argv []string) (string, error) {
+		asked = append(asked, argv)
+		return "", &exec.ExitError{}
+	}
+	res := recoverAct(t, s, proto.Recover{All: true}, "")
+	r := rows(res)["web"]
+	if r.State != proto.RecoverCannot || !strings.Contains(r.Why, "tmux did not list panes") || strings.Contains(r.Why, "exited at once") {
+		t.Fatalf("row %+v", r)
+	}
+	for _, argv := range asked {
+		if slices.Contains(argv, "kill-session") {
+			t.Fatalf("killed after a list failure: %q", argv)
+		}
 	}
 }
 

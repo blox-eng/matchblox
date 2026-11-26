@@ -91,7 +91,7 @@ func TestTmuxReadsEndWithTheirContext(t *testing.T) {
 	if err == nil {
 		t.Fatal("a read on a cancelled context must fail")
 	}
-	if time.Since(start) > 2*time.Second {
+	if time.Since(start) > 2*time.Second { // gstack-timing-ok: cancelled ListBuffers must not wait on tmux
 		t.Fatalf("took %v", time.Since(start))
 	}
 }

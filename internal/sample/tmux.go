@@ -85,7 +85,7 @@ const PaneFormat = "#{pane_id}\t#{session_name}:#{window_index}.#{pane_index}\t#
 
 // JumpMark is the session option that marks a jump's session on either
 // side (package remote sets it to 1): the sampler skips its panes.
-const JumpMark = "@matchblox-jump"
+const JumpMark = mux.JumpMark
 
 // TmuxPanes lists every pane on the default tmux server. No server is not an
 // error: the console still shows the machine.

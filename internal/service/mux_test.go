@@ -3,6 +3,7 @@ package service
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"slices"
 	"strings"
 	"sync"
@@ -96,10 +97,18 @@ func TestPaneOfSessionIsOfThatName(t *testing.T) {
 	s.TmuxOut = func([]string) (string, error) {
 		return paneLine("%1", "fresh-2:0.0", 1, "/dev/pts/1", false) + paneLine("%5", "fresh:0.0", 5, "/dev/pts/5", false), nil
 	}
-	if got := s.paneOfSession("fresh"); got != "%5" {
-		t.Errorf("got %q, want %%5", got)
+	if got, err := s.paneOfSession("fresh"); err != nil || got != "%5" {
+		t.Errorf("got %q, %v, want %%5", got, err)
 	}
-	if got := s.paneOfSession("gone"); got != "" {
-		t.Errorf("a session that is not there: %q", got)
+	if got, err := s.paneOfSession("gone"); err != nil || got != "" {
+		t.Errorf("a session that is not there: %q, %v", got, err)
+	}
+}
+
+func TestPaneOfSessionTellsAListFailure(t *testing.T) {
+	s := newTest(t, 0)
+	s.TmuxOut = func([]string) (string, error) { return "", &exec.ExitError{} }
+	if pane, err := s.paneOfSession("fresh"); err == nil || pane != "" {
+		t.Fatalf("got %q, %v; want an error, no pane", pane, err)
 	}
 }

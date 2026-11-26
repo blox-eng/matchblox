@@ -632,6 +632,16 @@ func TestLastClientPicksTheLatestActivity(t *testing.T) {
 	}
 }
 
+func TestLastClientSkipsUnparseableLines(t *testing.T) {
+	for _, none := range []string{"", "\n", "x y z\nnot-a-number 1 /dev/ttys1\n1 not-a-number /dev/ttys1\n1700000100 /dev/ttys003\n"} {
+		tm := Tmux{Run: func([]string) (string, error) { return none, nil }}
+		tty, at, err := tm.LastClient("console")
+		if err != nil || tty != "" || !at.IsZero() {
+			t.Errorf("%q gave %q %v %v", none, tty, at, err)
+		}
+	}
+}
+
 func TestLastClientSwallowsATmuxError(t *testing.T) {
 	tm := Tmux{Run: func([]string) (string, error) { return "", errors.New("no server running") }}
 	tty, at, err := tm.LastClient("console")
@@ -654,6 +664,7 @@ func TestListStrictTellsNoServerFromFailure(t *testing.T) {
 		{"no socket", "", &exec.ExitError{Stderr: []byte("error connecting to /tmp/tmux-1000/default (No such file or directory)\n")}, false, false},
 		{"killed", "", &exec.ExitError{}, true, false},
 		{"protocol", "", &exec.ExitError{Stderr: []byte("protocol version mismatch (client 8, server 7)\n")}, true, false},
+		{"permission", "", &exec.ExitError{Stderr: []byte("error connecting to /tmp/tmux-1000/default (Permission denied)\n")}, true, false},
 		{"not exit error", "", errors.New("signal: killed"), true, true},
 	} {
 		m := Tmux{Run: func([]string) (string, error) { return c.out, c.err }}
@@ -694,9 +705,38 @@ func TestBesideErrorsWithoutAPaneID(t *testing.T) {
 	if id, err := tm.Beside("%1", 60, nil); err == nil {
 		t.Fatalf("got id %q and no error", id)
 	}
+	tm = Tmux{Run: func([]string) (string, error) { return "%abc\n", nil }}
+	if id, err := tm.Beside("%1", 60, nil); err == nil {
+		t.Fatalf("non-numeric pane id %q", id)
+	}
 	tm = Tmux{Run: func([]string) (string, error) { return "", errors.New("no server") }}
 	if _, err := tm.Beside("%1", 60, nil); err == nil {
 		t.Fatal("run error was swallowed")
+	}
+}
+
+func TestAttachUsesThePaneServer(t *testing.T) {
+	got := (Tmux{}).Attach("%3@matchblox")
+	want := []string{"tmux", "-L", "matchblox", "attach-session", "-t", "%3"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+	if got := (Tmux{}).Attach("console"); !slices.Equal(got, []string{"tmux", "attach-session", "-t", "console"}) {
+		t.Fatalf("session name: got %q", (Tmux{}).Attach("console"))
+	}
+}
+
+func TestListSkipsALineWhoseWindowNameHasATab(t *testing.T) {
+	// A tab in window_name would shift tty/dead if parsePanes kept going
+	// after six fields.
+	line := "%1\tapp:0.0\twin\twith\ttab\t7\tsleep\t/\t\t\t\t\t/dev/pts/1\t0\n"
+	m := Tmux{Run: func([]string) (string, error) { return line, nil }}
+	got, err := m.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("got %+v; a shifted line must not become a pane", got)
 	}
 }
 
@@ -730,7 +770,7 @@ func TestListWithRunNeedsNoTmuxOnPath(t *testing.T) {
 				LookPath: func(string) (string, error) { return "", errors.New("no tmux on PATH") },
 				Run: func([]string) (string, error) {
 					calls++
-					return "%1\ts:0.0\tw\t42\tbash\t/tmp\n", nil
+					return "%1\ts:0.0\tw\t42\tbash\t/tmp\t\t\t\t\t/dev/pts/1\t0\n", nil
 				},
 			}
 			panes, err := list(tm)

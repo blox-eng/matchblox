@@ -234,15 +234,19 @@ func (s *Service) tmuxSessions(server string) map[string]int {
 }
 
 // paneOfSession is the first pane of the session name on the builder's
-// server, "" when the multiplexer lists none.
-func (s *Service) paneOfSession(name string) string {
-	listed, _ := s.mux().List()
+// server, "" when the multiplexer lists none. An error is not "none": the
+// caller must not treat a failed list as a missing session.
+func (s *Service) paneOfSession(name string) (string, error) {
+	listed, err := s.mux().ListStrict()
+	if err != nil {
+		return "", err
+	}
 	for _, p := range listed {
 		if session, _, _ := strings.Cut(p.Target, ":"); session == name {
-			return p.ID
+			return p.ID, nil
 		}
 	}
-	return ""
+	return "", nil
 }
 
 func taken(name string) error {
@@ -904,8 +908,9 @@ func (s *Service) newSession(ctx context.Context, a proto.Act) proto.Result {
 	}
 	res.Skipped = append(res.Skipped, notes...)
 	var pane string
+	var listErr error
 	if s.agentsPane(a) || (acct != nil && acct.fresh) {
-		pane = s.paneOfSession(name)
+		pane, listErr = s.paneOfSession(name)
 	}
 	if u, agent := s.agentsUnit(a); agent {
 		s.recordNew(u, pane, name, res.Ran)
@@ -917,6 +922,8 @@ func (s *Service) newSession(ctx context.Context, a proto.Act) proto.Result {
 	case acct == nil || !acct.fresh:
 	case pane != "":
 		go s.driveSignIn(ctx, pane, n.Agent, name)
+	case listErr != nil:
+		// The session may be up; a failed list is not "no pane".
 	default:
 		// No pane to drive: the builder signs in by hand, told by the
 		// session's name.

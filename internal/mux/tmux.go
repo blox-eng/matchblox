@@ -322,7 +322,7 @@ func (t Tmux) split(target string, percent int, argv []string) (string, error) {
 		return "", err
 	}
 	id := strings.TrimSpace(out)
-	if !strings.HasPrefix(id, "%") {
+	if !isPaneID(id) {
 		return "", errors.New("tmux split-window printed no pane id")
 	}
 	return OnServer(id, server), nil
@@ -407,10 +407,26 @@ func lastClientOf(out string) (tty string, created time.Time) {
 	return tty, created
 }
 
-// Attach gives the terminal to session. It is a step: the caller hands
-// over the terminal.
+// Attach gives the terminal to session or pane. It is a step: the caller
+// hands over the terminal. A pane with an @server suffix names its own
+// server, as Focus does.
 func (t Tmux) Attach(session string) []string {
-	return slices.Concat(t.commandArgv(), []string{"attach-session", "-t", session})
+	argv, bare := t.targetArgv(session)
+	return slices.Concat(argv, []string{"attach-session", "-t", bare})
+}
+
+// isPaneID is a tmux pane id ("%12"), not a session name and not junk
+// split-window printed.
+func isPaneID(id string) bool {
+	if len(id) < 2 || id[0] != '%' {
+		return false
+	}
+	for i := 1; i < len(id); i++ {
+		if id[i] < '0' || id[i] > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // Caller is the pane id tmux gave this process.

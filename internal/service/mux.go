@@ -1,6 +1,9 @@
 package service
 
-import "github.com/blox-eng/matchblox/internal/mux"
+import (
+	"github.com/blox-eng/matchblox/internal/mux"
+	"github.com/blox-eng/matchblox/internal/sample"
+)
 
 // mux is the multiplexer chains and sends reach panes through.
 func (s *Service) mux() mux.Mux {
@@ -15,7 +18,7 @@ func (s *Service) mux() mux.Mux {
 func (s *Service) stokerMux() mux.Tmux {
 	server := s.StokerServer
 	if server == "" {
-		server = "matchblox"
+		server = sample.StokerServer
 	}
 	return s.tmuxOn(server)
 }

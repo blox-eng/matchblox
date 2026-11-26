@@ -191,11 +191,22 @@ func (s *Service) settled(ctx context.Context, rows []proto.Recovered, started m
 		s.reopened = map[string]reopenedAt{}
 	}
 	s.mu.Unlock()
+	listed, err := s.mux().ListStrict()
+	if err != nil {
+		for i := range started {
+			row := &rows[i]
+			row.State, row.Why = proto.RecoverCannot, "tmux did not list panes: run matchblox recover again"
+			s.mu.Lock()
+			s.reopened[conversation(row.Agent, row.Conversation)] = reopenedAt{s.now(), row.As}
+			s.mu.Unlock()
+		}
+		return
+	}
 	for i, cmd := range started {
 		row := &rows[i]
 		// pane_dead, not has-session: under remain-on-exit the session of
 		// an agent that exited stays, with a dead pane.
-		alive, there := s.sessionRuns(row.As)
+		alive, there := sessionRunsOf(listed, row.As)
 		if !alive {
 			if there {
 				_, _ = s.runStep(s.mux().KillSession(row.As))
@@ -291,14 +302,9 @@ func (s *Service) recoverRow(e recovery.Entry, moved string, live, taken map[str
 	return row, start[0], strings.Join(agent, " ")
 }
 
-// sessionRuns tells if session name has a pane that is not dead, and if
-// the multiplexer lists the session at all: a multiplexer that errors is
-// neither.
-func (s *Service) sessionRuns(name string) (alive, there bool) {
-	listed, err := s.mux().List()
-	if err != nil {
-		return false, false
-	}
+// sessionRunsOf tells if session name has a pane that is not dead in listed,
+// and if listed names the session at all.
+func sessionRunsOf(listed []mux.Pane, name string) (alive, there bool) {
 	for _, p := range listed {
 		if session, _, _ := strings.Cut(p.Target, ":"); session == name {
 			there = true

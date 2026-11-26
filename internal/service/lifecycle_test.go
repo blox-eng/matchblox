@@ -1323,7 +1323,7 @@ func TestStartOnAHandMadeFolderByItsFullPath(t *testing.T) {
 
 func TestNewAccountWithNoPaneSaysByHand(t *testing.T) {
 	s, _, _ := accountTest(t)
-	s.TmuxOut = func([]string) (string, error) { return "", errors.New("no server") }
+	s.TmuxOut = func([]string) (string, error) { return "", nil }
 	res := s.act(t.Context(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: "claude", Name: "fresh", Account: "work", NewAccount: true}))
 	if res.Err != "" {
 		t.Fatal(res.Err)
