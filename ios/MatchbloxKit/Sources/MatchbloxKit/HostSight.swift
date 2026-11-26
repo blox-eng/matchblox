@@ -28,8 +28,7 @@ public struct HostSight {
         defaults.set(date.timeIntervalSince1970, forKey: Self.failPrefix + fingerprint)
     }
 
-    public func status(fingerprint: String, liveFingerprint: String?, now: Date = Date()) -> HostRowStatus {
-        _ = now
+    public func status(fingerprint: String, liveFingerprint: String?) -> HostRowStatus {
         if liveFingerprint == fingerprint { return .live }
         let fail = date(for: Self.failPrefix + fingerprint)
         let seen = date(for: Self.seenPrefix + fingerprint)

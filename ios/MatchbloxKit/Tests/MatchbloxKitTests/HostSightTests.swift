@@ -21,7 +21,7 @@ final class HostSightTests: XCTestCase {
     func testSightLiveBeatsLastSeen() {
         var sight = HostSight(defaults: defaults)
         sight.markSeen(fp, at: Date(timeIntervalSince1970: 1_000))
-        let status = sight.status(fingerprint: fp, liveFingerprint: fp, now: Date(timeIntervalSince1970: 10_000))
+        let status = sight.status(fingerprint: fp, liveFingerprint: fp)
         XCTAssertEqual(status, .live)
     }
 
@@ -29,7 +29,7 @@ final class HostSightTests: XCTestCase {
         var sight = HostSight(defaults: defaults)
         sight.markSeen(fp, at: Date(timeIntervalSince1970: 1_000))
         sight.markFailed(fp, at: Date(timeIntervalSince1970: 2_000))
-        let status = sight.status(fingerprint: fp, liveFingerprint: nil, now: Date(timeIntervalSince1970: 3_000))
+        let status = sight.status(fingerprint: fp, liveFingerprint: nil)
         if case .notReachable(let since) = status {
             XCTAssertEqual(since.timeIntervalSince1970, 2_000)
         } else {
@@ -41,7 +41,7 @@ final class HostSightTests: XCTestCase {
         var sight = HostSight(defaults: defaults)
         sight.markFailed(fp, at: Date(timeIntervalSince1970: 2_000))
         sight.markSeen(fp, at: Date(timeIntervalSince1970: 3_000))
-        let status = sight.status(fingerprint: fp, liveFingerprint: nil, now: Date(timeIntervalSince1970: 4_000))
+        let status = sight.status(fingerprint: fp, liveFingerprint: nil)
         if case .lastSeen(let at) = status {
             XCTAssertEqual(at.timeIntervalSince1970, 3_000)
         } else {

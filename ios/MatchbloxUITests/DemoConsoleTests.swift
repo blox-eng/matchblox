@@ -62,6 +62,32 @@ final class DemoConsoleTests: XCTestCase {
         expectTheConsole(in: app)
     }
 
+    /// BOX opens home over the live console, and `‹ demo` returns to it as it was: the chat the
+    /// person opened still shows. A console built again would start on the list.
+    @MainActor
+    func testHomeFromTheBoxKeepsTheConsole() {
+        let app = launched()
+        expectTheConsole(in: app)
+        openTheChat(app, row: "flint-auth")
+
+        let box = app.buttons["Home, the box"]
+        let layouts = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Layouts")).firstMatch
+        // The one-time BOX teach may hold the drawer open for a moment; a tap on Layouts toggles it.
+        let deadline = Date().addingTimeInterval(20)
+        while !box.isHittable, Date() < deadline {
+            layouts.tap()
+            _ = box.waitForExistence(timeout: 2)
+        }
+        box.tap()
+
+        let back = app.buttons["Back to demo"]
+        XCTAssertTrue(back.waitForExistence(timeout: 10), app.debugDescription)
+        keep(app, "5 home over the console")
+        back.tap()
+
+        expect(in: app, step: "the chat still open after ‹ demo", "label CONTAINS %@", "send to flint-auth")
+    }
+
     /// The belt's 2 marks the second option in flint-auth's chat, and 2 again sends it, and the
     /// agent finishes: the invite rises with the line to run, and Copy puts that line on the
     /// pasteboard.
