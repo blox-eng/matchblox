@@ -2399,6 +2399,41 @@ func TestSwitchRefusesAMovedWorkspace(t *testing.T) {
 	}
 }
 
+// The worktree is made after the record named it: the confirm bound the
+// switch to the launch folder the cache still held, and it was refused.
+// That refusal asks Git again, so the next confirm names the worktree and
+// its switch runs.
+func TestASwitchAgainAfterAMovedWorkspaceRuns(t *testing.T) {
+	s, ran, main, wt := worktreeSwitch(t, func(_, wt string) string { return wt })
+	gitIn(t, "-C", main, "worktree", "remove", wt)
+	go s.workLoop(t.Context())
+	work := func() string {
+		t.Helper()
+		s.mu.Lock()
+		s.mergeQueue()
+		s.mu.Unlock()
+		s.works.wait()
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		return s.cur.Sessions[0].Work
+	}
+	if got := work(); got != main {
+		t.Fatalf("Work %q before the worktree; want %q", got, main)
+	}
+	gitIn(t, "-C", main, "worktree", "add", "-q", wt)
+	res := s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: "codex", Handoff: proto.DefaultHandoff, ExpectedFolder: main, NoRefresh: true}))
+	if want := "the workspace changed to " + wt + ": switch again"; res.Err != want {
+		t.Fatalf("err %q; want %q", res.Err, want)
+	}
+	if got := work(); got != wt {
+		t.Fatalf("Work %q after the refusal; want %q", got, wt)
+	}
+	res = s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: "codex", Handoff: proto.DefaultHandoff, ExpectedFolder: wt, NoRefresh: true}))
+	if res.Err != "" || respawnDir(*ran) != wt {
+		t.Fatalf("err %q ran %q; want a respawn in %q", res.Err, *ran, wt)
+	}
+}
+
 func TestSwitchWithNoTaskStartsInTheWorktree(t *testing.T) {
 	s, ran, _, wt := worktreeSwitch(t, func(_, wt string) string { return wt })
 	res := s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: "codex"}))

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -182,6 +183,57 @@ func TestSessionsCarryTheirWorkFolder(t *testing.T) {
 	s.mu.Unlock()
 	if again[0].Work != wt || again[1].WorkRefused != refused {
 		t.Errorf("after a second merge: %q, %q", again[0].Work, again[1].WorkRefused)
+	}
+}
+
+// A worktree added after its record named it shows within 30 s with no
+// new write: an older answer is asked again, and it stays shown until the
+// new one lands.
+func TestAWorktreeAddedLaterShowsWithin30s(t *testing.T) {
+	root := t.TempDir()
+	main, wt := filepath.Join(root, "main"), filepath.Join(root, "wt")
+	gitIn(t, "init", "-q", main)
+	gitIn(t, "-C", main, "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit", "-q", "--allow-empty", "-m", "x")
+	s := newTest(t, time.Hour)
+	var mu sync.Mutex
+	clock := time.Now()
+	s.Now = func() time.Time { mu.Lock(); defer mu.Unlock(); return clock }
+	dir := filepath.Join(s.matchContextRoot(), "later")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "handover.md"), []byte("Workspace: "+wt+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sampled := []sample.Session{{Pane: "%1", Agent: "claude", Cwd: main, MatchContext: filepath.Join(dir, "awareness.md")}}
+	merge := func() string {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.sampled = sampled
+		s.mergeQueue()
+		return s.cur.Sessions[0].Work
+	}
+	work := func() string {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		return s.cur.Sessions[0].Work
+	}
+	go s.workLoop(t.Context())
+	merge()
+	s.works.wait()
+	if got := work(); got != main {
+		t.Fatalf("Work %q before the worktree; want %q", got, main)
+	}
+	gitIn(t, "-C", main, "worktree", "add", "-q", wt)
+	mu.Lock()
+	clock = clock.Add(31 * time.Second)
+	mu.Unlock()
+	if got := merge(); got != main {
+		t.Errorf("Work %q while Git is asked again; want the older %q", got, main)
+	}
+	s.works.wait()
+	if got := work(); got != wt {
+		t.Fatalf("Work %q 31 s on; want %q", got, wt)
 	}
 }
 

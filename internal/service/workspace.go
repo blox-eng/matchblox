@@ -176,18 +176,33 @@ type workCache struct {
 type workEntry struct {
 	key    workKey
 	answer workAnswer
+	at     time.Time
 }
 
+// workFresh is how long an answer stands without asking Git again: a
+// worktree made or removed with the record unchanged shows within it.
+const workFresh = 30 * time.Second
+
 // look answers for key, or sends key to workLoop once and answers false.
-// It never blocks: with workLoop behind, the key is asked again later.
-func (c *workCache) look(key workKey) (workAnswer, bool) {
+// An answer older than workFresh is still given, and asked again behind
+// it. It never blocks: with workLoop behind, the key is asked again later.
+func (c *workCache) look(key workKey, now time.Time) (workAnswer, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if e, ok := c.answers[key.record]; ok && e.key == key {
+		if now.Sub(e.at) > workFresh {
+			c.ask(key)
+		}
 		return e.answer, true
 	}
+	c.ask(key)
+	return workAnswer{}, false
+}
+
+// ask sends key to workLoop unless it is asked already. Hold c.mu.
+func (c *workCache) ask(key workKey) {
 	if c.pending[key] {
-		return workAnswer{}, false
+		return
 	}
 	c.filling.Add(1)
 	select {
@@ -199,19 +214,25 @@ func (c *workCache) look(key workKey) (workAnswer, bool) {
 	default:
 		c.filling.Done()
 	}
-	return workAnswer{}, false
 }
 
-func (c *workCache) keep(key workKey, a workAnswer, ok bool) {
+func (c *workCache) keep(key workKey, a workAnswer, ok bool, at time.Time) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if ok {
 		if c.answers == nil {
 			c.answers = map[string]workEntry{}
 		}
-		c.answers[key.record] = workEntry{key, a}
+		c.answers[key.record] = workEntry{key, a, at}
 	}
 	delete(c.pending, key)
+}
+
+// forget drops record's answer, so the next merge asks Git again.
+func (c *workCache) forget(record string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.answers, record)
 }
 
 // wait returns when every key asked so far is answered.
@@ -226,7 +247,7 @@ func (s *Service) workLoop(ctx context.Context) {
 			return
 		case key := <-s.works.asks:
 			a, ok := s.fillWork(ctx, key)
-			s.works.keep(key, a, ok)
+			s.works.keep(key, a, ok, s.now())
 			if ok {
 				s.mu.Lock()
 				s.setWorks()
@@ -283,7 +304,7 @@ func workKeyOf(record, launch string) (workKey, bool) {
 // answer for. The sessions may share their array with s.sampled, so a
 // change goes to a copy. Hold s.mu.
 func (s *Service) setWorks() {
-	sessions, copied := s.cur.Sessions, false
+	sessions, copied, now := s.cur.Sessions, false, s.now()
 	for i, x := range sessions {
 		record := s.managedRecord(x)
 		if record == "" || x.Cwd == "" {
@@ -293,7 +314,7 @@ func (s *Service) setWorks() {
 		if !ok {
 			continue
 		}
-		a, ok := s.works.look(key)
+		a, ok := s.works.look(key, now)
 		if !ok || x.Work == a.work && x.WorkRefused == a.refused {
 			continue
 		}

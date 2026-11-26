@@ -438,6 +438,8 @@ func (s *Service) switchAgent(ctx context.Context, pane string, a proto.Act) pro
 	work, workRefused := s.switchFolder(ctx, x)
 	switch {
 	case n.ExpectedFolder != "" && work != n.ExpectedFolder:
+		// The console showed a cached answer: the next merge asks Git again.
+		s.works.forget(s.managedRecord(x))
 		return refuseText("the workspace changed to " + work + ": switch again")
 	case !s.isDir(work):
 		return refuseText("no directory " + work)
