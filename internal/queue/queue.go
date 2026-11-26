@@ -77,13 +77,14 @@ type Queue struct {
 	replies map[string]hooks.Event
 	stopped map[string]string
 	forgot  map[string]time.Time // session id -> when its pane was forgotten
+	talks   map[string]*talk     // session id -> its recent turns
 	items   []Item
 }
 
 func New() *Queue {
 	return &Queue{hooked: map[string]hooks.Event{}, waiting: map[string]Item{}, seen: map[string]time.Time{}, asks: map[string]hookAsk{},
 		replies: map[string]hooks.Event{}, stopped: map[string]string{},
-		forgot: map[string]time.Time{}}
+		forgot: map[string]time.Time{}, talks: map[string]*talk{}}
 }
 
 // Apply takes one hook event. Call Merge after it to update Items.
@@ -94,6 +95,7 @@ func (q *Queue) Apply(ev hooks.Event) {
 	if _, gone := q.forgot[ev.SessionID]; gone {
 		return
 	}
+	q.hear(ev)
 	if ev.Name == hooks.Reply {
 		// Never stale: it is stamped by its own process, at the same time
 		// as its Stop.
@@ -225,6 +227,7 @@ func (q *Queue) Forget(ids []string, now time.Time) {
 		delete(q.asks, id)
 		delete(q.replies, id)
 		delete(q.stopped, id)
+		delete(q.talks, id)
 		q.forgot[id] = now
 	}
 }
@@ -330,6 +333,7 @@ func (q *Queue) Merge(sessions []sample.Session, now time.Time) {
 			delete(q.asks, id)
 			delete(q.replies, id)
 			delete(q.stopped, id)
+			delete(q.talks, id)
 		}
 	}
 	for id, at := range q.forgot {
@@ -340,6 +344,13 @@ func (q *Queue) Merge(sessions []sample.Session, now time.Time) {
 	for id, r := range q.replies {
 		if _, ok := q.hooked[id]; !ok && now.Sub(r.At) > UnseenGrace {
 			delete(q.replies, id)
+			delete(q.talks, id)
+		}
+	}
+	for id, t := range q.talks {
+		// A talk fed only by Reply events has no hooked session to go with.
+		if _, ok := q.hooked[id]; !ok && now.Sub(t.at) > UnseenGrace {
+			delete(q.talks, id)
 		}
 	}
 	for id, a := range q.asks {
