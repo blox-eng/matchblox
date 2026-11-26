@@ -42,29 +42,26 @@ final class ReturnTests: XCTestCase {
     }
 
     func testTheFirstConnectShowsTheCover() {
-        XCTAssertTrue(Opening.coverShows(live: false, failed: false, wasLive: false, away: false))
+        XCTAssertTrue(Opening.coverShows(live: false, page: false, wasLive: false, away: false))
     }
 
     func testAResumeKeepsTheScreen() {
-        XCTAssertFalse(Opening.coverShows(live: false, failed: false, wasLive: true, away: false))
+        XCTAssertFalse(Opening.coverShows(live: false, page: false, wasLive: true, away: false))
     }
 
-    /// On a return the last screen stays under the failure: the banner says it, not a page.
-    func testAFailureOnResumeKeepsTheScreen() {
-        XCTAssertFalse(Opening.coverShows(live: false, failed: true, wasLive: true, away: false))
-    }
-
-    func testAFailureOnTheFirstConnectShowsTheCover() {
-        XCTAssertTrue(Opening.coverShows(live: false, failed: true, wasLive: false, away: false))
+    /// A console that ended, or a key that needs a new scan, has its way on in the cover only:
+    /// on a return too, or the kept screen would sit there with no way forward.
+    func testAnEndOrALostKeyShowsTheCoverOnResume() {
+        XCTAssertTrue(Opening.coverShows(live: false, page: true, wasLive: true, away: false))
     }
 
     func testLiveShowsNoCover() {
-        XCTAssertFalse(Opening.coverShows(live: true, failed: false, wasLive: true, away: false))
+        XCTAssertFalse(Opening.coverShows(live: true, page: false, wasLive: true, away: false))
     }
 
     /// The app switcher keeps a snapshot of the screen: away from the screen, the cover hides the console.
     func testAwayTheCoverHidesTheConsole() {
-        XCTAssertTrue(Opening.coverShows(live: true, failed: false, wasLive: true, away: true))
-        XCTAssertTrue(Opening.coverShows(live: false, failed: false, wasLive: true, away: true))
+        XCTAssertTrue(Opening.coverShows(live: true, page: false, wasLive: true, away: true))
+        XCTAssertTrue(Opening.coverShows(live: false, page: false, wasLive: true, away: true))
     }
 }
