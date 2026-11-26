@@ -48,9 +48,14 @@ func (s *Sampler) procCPU(p procfs.Proc, dt float64) float64 {
 
 func (s *Sampler) sampleProcs(snap *Snapshot, procs map[int]procfs.Proc, panes []Pane, dt float64, now time.Time) {
 	cpu := make(map[int]float64, len(procs))
+	waiting := 0
 	for pid, p := range procs {
 		cpu[pid] = s.procCPU(p, dt)
+		if p.State == 'D' {
+			waiting++
+		}
 	}
+	s.ioWait = &waiting
 
 	pids := make([]int, 0, len(procs))
 	for pid := range procs {
