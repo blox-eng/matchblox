@@ -6,6 +6,8 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+## [0.65.0] - 2026-11-26
+
 ### Added
 
 - **Switch agents without losing the thread.** A switch now starts the new
@@ -2131,7 +2133,8 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.64.0...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.65.0...HEAD
+[0.65.0]: https://github.com/blox-eng/matchblox/compare/v0.64.0...v0.65.0
 [0.64.0]: https://github.com/blox-eng/matchblox/compare/v0.63.1...v0.64.0
 [0.63.1]: https://github.com/blox-eng/matchblox/compare/v0.63.0...v0.63.1
 [0.63.0]: https://github.com/blox-eng/matchblox/compare/v0.62.0...v0.63.0
