@@ -132,6 +132,10 @@ func (s *Service) recover(ctx context.Context, a proto.Act) proto.Result {
 		key := conversation(e.Agent, e.ConversationID)
 		s.mu.Lock()
 		u, confirming := s.unconfirmed[key]
+		if confirming && live[key] {
+			delete(s.unconfirmed, key)
+			confirming = false
+		}
 		s.mu.Unlock()
 		if confirming {
 			row := proto.Recovered{

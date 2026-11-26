@@ -766,6 +766,28 @@ func TestRecoverRetryAfterListCTAListsAs(t *testing.T) {
 	}
 }
 
+// TestRecoverPreviewAfterListCTAIsLiveWhenSampleShowsIt: the list glitch
+// passed and a sample now shows the agent. Preview says live, not the CTA.
+func TestRecoverPreviewAfterListCTAIsLiveWhenSampleShowsIt(t *testing.T) {
+	s, ran := recoverTest(t)
+	web := agentIn(t, s, "codex", "x1", "web", "%4")
+	publishOn(s, "100", web)
+	loseServer(s)
+	s.TmuxOut = func([]string) (string, error) { return "", &exec.ExitError{} }
+	if r := rows(recoverAct(t, s, proto.Recover{All: true}, ""))["web"]; r.Why != recoverListRetryWhy {
+		t.Fatalf("cta %+v", r)
+	}
+	web.Pane = "%0"
+	publishOn(s, "200", web)
+	res := recoverAct(t, s, proto.Recover{}, "")
+	if r := rows(res)["web"]; r.State != proto.RecoverLive {
+		t.Fatalf("row %+v", r)
+	}
+	if newSessionCalls(*ran) != 1 {
+		t.Fatalf("new-session %d, ran %q", newSessionCalls(*ran), *ran)
+	}
+}
+
 // TestRecoverPreviewAfterListCTAKeepsWhy: a preview after the CTA stays
 // cannot with that Why, not can reopen.
 func TestRecoverPreviewAfterListCTAKeepsWhy(t *testing.T) {
