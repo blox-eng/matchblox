@@ -16,6 +16,9 @@ All notable changes to matchblox are in this file. The format follows
 - **The island watches the accounts that work.** An idle account no longer
   fills the glance: a Cursor month spent at 100 % stays in the list and
   says when it resets.
+- **Pocket comes back to its own console.** A return reattaches the console
+  the phone left, on the screen it showed, and an island that was swiped
+  away or ended by an update starts again at the next open.
 
 ## [0.61.0] - 2026-11-24
 

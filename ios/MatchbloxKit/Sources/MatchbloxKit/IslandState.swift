@@ -209,6 +209,8 @@ public struct BuzzEvent: Codable, Hashable, Sendable {
 public struct IslandReg: Codable, Hashable, Sendable {
     public var startToken: String
     public var channel: String
+    /// At this open the phone has no island of this host: the host starts one at once.
+    public var ended = false
 
     public init(startToken: String, channel: String) {
         self.startToken = startToken; self.channel = channel
@@ -217,6 +219,21 @@ public struct IslandReg: Codable, Hashable, Sendable {
     enum CodingKeys: String, CodingKey {
         case startToken = "start_token"
         case channel
+        case ended
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        startToken = try c.decode(String.self, forKey: .startToken)
+        channel = try c.decode(String.self, forKey: .channel)
+        ended = try c.decodeIfPresent(Bool.self, forKey: .ended) ?? false
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(startToken, forKey: .startToken)
+        try c.encode(channel, forKey: .channel)
+        if ended { try c.encode(ended, forKey: .ended) }
     }
 }
 

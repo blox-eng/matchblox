@@ -112,6 +112,14 @@
 - [x] **Step 4:** `go test ./...` and CI `ios` green.
 - [x] **Step 5: Commit.** `fix: an idle account no longer fills the island's glance`
 
+### Task 5c: The return finds its console, and the island comes back (device report, 2026-11-26)
+
+- [x] **Step 1: Failing tests.** Go `TestAPhoneComesBackToItsOwnConsole` (the gate reuses the device's console while no terminal shows it; another device or a shown console gets the next free one) and `TestAnEndedIslandStartsAgainAtTheNextOpen` (a registration with `ended` forgets an older start, once); Swift `testAnEndedIslandIsSaidAndAnOldRecordIsNot`.
+- [x] **Step 2:** Run them. Expected: FAIL (`matchblox-3`, want `matchblox-2`; `Ended` undefined; CI `ios`: no member `ended`).
+- [x] **Step 3:** The device note keeps `console`; `phoneConsole` reuses it. `IslandReg.Ended` / `ended`; `Registration.run` sends it when no active activity of this host shows, and keeps the record without it.
+- [x] **Step 4:** `go test ./...` and CI `ios` green.
+- [x] **Step 5: Commits.** `fix(gate): …`, `fix(push): …`, `fix(ios): …`
+
 ### Task 6: Docs, review, ship
 
 - [ ] **Step 1:** `docs/phone.md` "The buzz and the island": one line on the 5-minute unlock and the tap back. `CHANGELOG.md` Unreleased: one line, headline ≤7 words.
