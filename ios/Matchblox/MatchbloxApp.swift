@@ -140,7 +140,7 @@ struct MatchbloxApp: App {
                             sight.markFailed(host.fingerprint)
                             go(.reach(host, failure))
                         },
-                        onHosts: Opening.consoleOffersHosts(hostCount: store.all().count) ? openHome : nil,
+                        onHosts: Opening.consoleOffersHosts(hostCount: store.all().count) ? { openHome() } : nil,
                         onScanAgain: { go(.scan) }
                     )
                     .id("\(host.fingerprint)#\(linkOpens)")
@@ -148,16 +148,8 @@ struct MatchbloxApp: App {
                     .zIndex(1)
                     .accessibilityHidden(over != nil)
                     if let over {
-                        Group {
-                            switch over {
-                            case .home: home(behind: host)
-                            case .island: IslandView(store: store, onBack: { self.over = .home })
-                            }
-                        }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background(Theme.bg.ignoresSafeArea())
-                        .contentShape(Rectangle())
-                        .zIndex(2)
+                        layer(over, behind: host)
+                            .zIndex(2)
                     }
                 case .hosts:
                     home(behind: nil)
@@ -179,6 +171,20 @@ struct MatchbloxApp: App {
             .preferredColorScheme(.dark)
             .onOpenURL(perform: open)
         }
+    }
+
+    /// Home or Live Activity over the console `live`, opaque so the console takes no tap.
+    @ViewBuilder
+    private func layer(_ shown: Over, behind live: Host) -> some View {
+        Group {
+            switch shown {
+            case .home: home(behind: live)
+            case .island: IslandView(store: store, onBack: { over = .home })
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Theme.bg.ignoresSafeArea())
+        .contentShape(Rectangle())
     }
 
     /// Home over the console `live`, or on its own when `live` is nil.
