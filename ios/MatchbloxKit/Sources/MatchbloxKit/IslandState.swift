@@ -92,6 +92,13 @@ public struct IslandState: Codable, Hashable, Sendable {
         }
     }
 
+    /// A session that waits for the person: `command`, `question` or `done`.
+    public struct Need: Codable, Hashable, Sendable {
+        public var n: Int
+        public var kind: String
+        public init(n: Int, kind: String) { self.n = n; self.kind = kind }
+    }
+
     public var host: String
     public var burn: Int
     public var wait: Int
@@ -99,9 +106,12 @@ public struct IslandState: Codable, Hashable, Sendable {
     public var top: Top?
     public var accounts: [AccountUse]
     public var stoker: Bool
+    /// The sessions that need the person, at most 3, and how many there are in all.
+    public var needs: [Need] = []
+    public var need = 0
 
     enum CodingKeys: String, CodingKey {
-        case host, burn, wait, top, accounts, stoker
+        case host, burn, wait, top, accounts, stoker, needs, need
         case waitAt = "wait_at"
     }
 
@@ -119,6 +129,8 @@ public struct IslandState: Codable, Hashable, Sendable {
         top = try c.decodeIfPresent(Top.self, forKey: .top)
         accounts = try c.decodeIfPresent([AccountUse].self, forKey: .accounts) ?? []
         stoker = try c.decode(Bool.self, forKey: .stoker)
+        needs = try c.decodeIfPresent([Need].self, forKey: .needs) ?? []
+        need = try c.decodeIfPresent(Int.self, forKey: .need) ?? 0
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -130,6 +142,8 @@ public struct IslandState: Codable, Hashable, Sendable {
         try c.encodeIfPresent(top, forKey: .top)
         try c.encode(accounts, forKey: .accounts)
         try c.encode(stoker, forKey: .stoker)
+        if !needs.isEmpty { try c.encode(needs, forKey: .needs) }
+        if need > 0 { try c.encode(need, forKey: .need) }
     }
 }
 

@@ -91,6 +91,43 @@ public enum IslandLook {
         face == .nothing ? nil : link(s)
     }
 
+    // MARK: what needs you
+
+    /// What a session that needs the person wants, for the lock screen.
+    public static func ask(_ kind: String) -> String {
+        switch kind {
+        case "command": "asks to run a command"
+        case "question": "asks you a question"
+        default: "finished its turn"
+        }
+    }
+
+    /// The right of the compact island while something needs the person: the name of the
+    /// one, `╿ N` for more; nil when nothing does.
+    public static func attention(_ s: IslandState, names: IslandNames) -> String? {
+        switch s.need {
+        case 0: nil
+        case 1: s.needs.first.map { names.session($0.n) } ?? "╿ 1"
+        default: "╿ \(s.need)"
+        }
+    }
+
+    /// The lock screen's rows: each session that needs the person and what it wants, then
+    /// `+ N more` past the rows the state carries.
+    public static func rows(_ s: IslandState, names: IslandNames) -> (rows: [(name: String, ask: String)], more: String?) {
+        let rows = s.needs.map { (name: names.session($0.n), ask: ask($0.kind)) }
+        let rest = s.need - rows.count
+        return (rows, rest > 0 ? "+ \(rest) more" : nil)
+    }
+
+    /// One line of limits: the fullest unspent window of each working account.
+    public static func limitsLine(_ s: IslandState) -> String? {
+        let parts = s.accounts.filter { !$0.idle }.compactMap { a in
+            a.windows.filter { !$0.spent }.max { $0.pct < $1.pct }.map { "\($0.name) \($0.pct)%" }
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
     // MARK: usage
 
     /// The bar of the console's dock: 8 cells, `▰` filled and `▱` empty.
