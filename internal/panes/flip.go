@@ -115,7 +115,7 @@ func FlipKeysArgv() []string {
 // too long for tmux. In a marked pane each goes straight to that session's
 // pane (jumpOff); in any other pane it goes on as typed.
 func JumpKeysArgv() []string {
-	argv := []string{"tmux"}
+	argv := mux.Command("")
 	for n := 1; n <= 9; n++ {
 		if n > 1 {
 			argv = append(argv, ";")
