@@ -169,7 +169,7 @@ var goTo = `run-shell -C "set-option -g ` + goToOption + ` ` + consoleOf + `" ; 
 const goToOption = "@matchblox_to"
 
 // consoleOf is the name of the client's own console's session.
-const consoleOf = "#{?" + atHome + ",#{session_name},#{?#{" + sample.BackOption + "},#{" + sample.BackOption + "}," + Home + "}}"
+const consoleOf = "#{?" + atHome + ",#{session_name},#{?#{!=:#{" + sample.BackOption + "},},#{" + sample.BackOption + "}," + Home + "}}"
 
 // toAlive is "1" while the console in goToOption has its session.
 const toAlive = "#{S:#{?#{&&:#{==:#{session_name},#{" + goToOption + "}}," + atHome + "},1,}}"

@@ -56,6 +56,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/hosts"
 	"github.com/blox-eng/matchblox/internal/limits"
 	"github.com/blox-eng/matchblox/internal/login"
+	"github.com/blox-eng/matchblox/internal/numbers"
 	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/procfs"
 	"github.com/blox-eng/matchblox/internal/proto"
@@ -326,7 +327,7 @@ func run(args []string) error {
 		}
 		var binds [][]string
 		if os.Getenv("TMUX") != "" { // a console in place too: its hint names prefix m
-			binds = append(binds, panes.HomeKeyArgv(), panes.FlipKeysArgv())
+			binds = append(binds, panes.HomeKeyArgv(), panes.FlipKeysArgv(), panes.JumpKeysArgv())
 		}
 		if os.Getenv(panes.HomeEnv) == "1" {
 			binds = append(binds, homeBinds(os.Getenv("TMUX_PANE"))...)
@@ -952,6 +953,11 @@ func newService(cfg config.Config, root string) *service.Service {
 		s.Holds = h
 	} else {
 		fmt.Fprintln(os.Stderr, "matchblox: parking is off:", err)
+	}
+	if n, err := numbers.Open(filepath.Dir(s.StatePath)); err == nil {
+		s.Numbers = n
+	} else {
+		fmt.Fprintln(os.Stderr, "matchblox: session numbers are off:", err)
 	}
 	if r, err := recovery.Open(filepath.Dir(s.StatePath)); err == nil {
 		s.Recovery = r

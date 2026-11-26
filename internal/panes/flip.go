@@ -31,11 +31,46 @@ const flipFrom = "@matchblox_flip"
 // the way back does (goHome), and hand the console of the session it is
 // in now the kind, the tty and the pane, as one APC.
 func handOff(kind string) string {
-	note := `run-shell -C "set-option -g ` + flipFrom + ` '#{client_tty} #{pane_id}'"`
-	hand := `run-shell -C "#{S:#{?#{==:#{session_name},#{client_session}},#{W:#{P:#{?` + isConsolePane +
-		`,send-keys -t #{pane_id} -H ` + hexKeys(keycmd.FlipPrefix(kind)) +
+	return noteFrom + " ; " + goHome[2] + " ; " + handIn("#{==:#{session_name},#{client_session}}", keycmd.FlipPrefix(kind))
+}
+
+// jumpOff is what ⌥ and digit n do in a marked pane: it hands the console
+// the digit, the tty and the pane as handOff does, but leaves the client
+// where it is. The console moves it, or types the key back for a phone, which
+// has no ⌥ and sent Esc then the digit. The console is the one goTo finds
+// that has a console pane, in jumpOption. With no console pane to read it,
+// the key goes on to the pane as typed.
+func jumpOff(n int) string {
+	toConsole := "#{&&:#{==:#{session_name},#{" + goToOption + "}}," + atHome + "}"
+	pick := "#{?" + aConsolePaneIn(toConsole) + ",#{" + goToOption + "},#{?" + aConsolePaneIn("#{==:#{session_name},"+Home+"}") +
+		"," + Home + ",#{?" + aConsolePaneIn("1") + "," + anyConsole + ",}}}"
+	in := "#{||:#{==:#{" + jumpOption + "}," + anyConsole + "},#{==:#{session_name},#{" + jumpOption + "}}}"
+	return noteFrom + ` ; run-shell -C "set-option -g ` + goToOption + ` ` + consoleOf + `" ; run-shell -C "set-option -g ` + jumpOption + ` '` + pick +
+		`'" ; if-shell -F "#{!=:#{` + jumpOption + `},}" { ` + handIn(in, keycmd.JumpPrefix(n)) + ` } { send-keys M-` + strconv.Itoa(n) + ` }`
+}
+
+// jumpOption is the session whose console a jump goes to, anyConsole for
+// every console's, or empty for none.
+const (
+	jumpOption = "@matchblox_jump"
+	anyConsole = "*"
+)
+
+// aConsolePaneIn is not empty while a session where the format in is true
+// has a pane handIn sends to.
+func aConsolePaneIn(in string) string {
+	return "#{S:#{?" + in + ",#{W:#{P:#{?" + isConsolePane + ",1,}}},}}"
+}
+
+// noteFrom keeps the client's tty and pane in flipFrom.
+const noteFrom = `run-shell -C "set-option -g ` + flipFrom + ` '#{client_tty} #{pane_id}'"`
+
+// handIn sends prefix, flipFrom and ESC \ to each console pane of the
+// sessions where the format in is true.
+func handIn(in, prefix string) string {
+	return `run-shell -C "#{S:#{?` + in + `,#{W:#{P:#{?` + isConsolePane +
+		`,send-keys -t #{pane_id} -H ` + hexKeys(prefix) +
 		` ; send-keys -t #{pane_id} -l '#{` + flipFrom + `}' ; send-keys -t #{pane_id} -H 1b 5c ; ,}}},}}"`
-	return note + " ; " + goHome[2] + " ; " + hand
 }
 
 // FlipKeysArgv binds ⌥s and ⌥n, and the phone's flip and next buttons
@@ -73,4 +108,19 @@ func FlipKeysArgv() []string {
 	}
 	// tmux's own prefix s, the session tree, moves to prefix S.
 	return append(argv, ";", "bind-key", "S", "choose-tree", "-Zs")
+}
+
+// JumpKeysArgv binds ⌥1 … ⌥9, beside FlipKeysArgv: one command would be
+// too long for tmux. In a marked pane each goes straight to that session's
+// pane (jumpOff); in any other pane it goes on as typed.
+func JumpKeysArgv() []string {
+	argv := []string{"tmux"}
+	for n := 1; n <= 9; n++ {
+		if n > 1 {
+			argv = append(argv, ";")
+		}
+		key := "M-" + strconv.Itoa(n)
+		argv = append(argv, "bind-key", "-n", key, "if-shell", "-F", "#{"+MatchOption+"}", jumpOff(n), "send-keys "+key)
+	}
+	return argv
 }

@@ -3,12 +3,12 @@
 ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
  NEEDS YOU · 3  −                       │ CHAIN hearth
  ≋ hearth               step 2 of 3 · 3 │
- ├ ╿ kindle-web                     2m ✻│ ≋ "ship the chain"
- │   Do you want to proceed?            │ ≋ hearth's stoker is quiet since 22:49 · ⏎ asks it
-▌├ ╿ hearth-api                     8h ✻│   ✓ step
- │   permission prompt                  │   ▸ step · waits for your go
- └ ╿ ember-billing                  8h ✻│     step
-     which branch?                      │   ↓ 2 more
+   ├ ╿ kindle-web                   2m ✻│ ≋ "ship the chain"
+   │   Do you want to proceed?          │ ≋ hearth's stoker is quiet since 22:49 · ⏎ asks it
+▌  ├ ╿ hearth-api                   8h ✻│   ✓ step
+   │   permission prompt                │   ▸ step · waits for your go
+   └ ╿ ember-billing                8h ✻│     step
+       which branch?                    │   ↓ 2 more
                                         │
                                         │ › tell hearth's stoker…
                                         │

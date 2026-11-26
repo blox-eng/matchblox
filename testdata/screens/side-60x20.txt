@@ -17,4 +17,4 @@
 
  ›                                     ⏎ send to flint-auth
 ────────────────────────────────────────────────────────────
- writing to flint-auth · ◂ list · ⏎ send · ↑↓ choose
+ writing to flint-auth · ◂ list · ⏎ send · ↑↓ ⌥1-9 choose

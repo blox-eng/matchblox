@@ -151,6 +151,8 @@ func (m Model) sideKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 		m.toLine()
 		next, cmd := m.lineKey(letterOf(k), s, ok)
 		return next, cmd, true
+	case m.sidePlace == placeChat && bkey.Matches(k, m.keys.side.Jump):
+		return m, m.jumpTo(int(k.Code-'0'), s.Host), true
 	case bkey.Matches(k, m.keys.room.Flip):
 		next, cmd := m.flipHere()
 		return next, cmd, true
@@ -452,6 +454,37 @@ func (m *Model) sideMove(d int) {
 		m.startChatMark(s)
 		m.sideName = m.cardName(s)
 	}
+}
+
+// jumpTo chooses the listed session numbered n on host, as ↓ chooses.
+func (m *Model) jumpTo(n int, host string) tea.Cmd {
+	s, no := m.numberedOn(n, host)
+	if no != "" {
+		return m.notice(no)
+	}
+	m.chooseRow(s)
+	m.sideName = m.cardName(s)
+	return m.previewSoon()
+}
+
+// numberedOn is the listed session numbered n on host, or with none, what
+// to say instead.
+func (m Model) numberedOn(n int, host string) (sample.Session, string) {
+	var have []int
+	for _, s := range m.sideSessions() {
+		if s.Host != host || s.Number == 0 {
+			continue
+		}
+		if s.Number == n {
+			return s, ""
+		}
+		have = append(have, s.Number)
+	}
+	no := "no session " + strconv.Itoa(n)
+	if len(have) == 0 {
+		return sample.Session{}, no + ": the list has no numbers"
+	}
+	return sample.Session{}, no + ": the list numbers " + strconv.Itoa(slices.Min(have)) + " to " + strconv.Itoa(slices.Max(have))
 }
 
 // setLine puts text in the line of k.

@@ -52,6 +52,7 @@ type shellKeymaps struct {
 var shadowsMain = map[string]map[string]bool{
 	"form":     {"esc": true, "enter": true, "tab": true, "shift+tab": true, "up": true, "down": true, "space": true},
 	"sheet":    {"esc": true, "enter": true, "tab": true, "space": true},
+	"room":     {"esc": true, "enter": true, "y": true},
 	"search":   {"esc": true, "enter": true},
 	"pair":     {"c": true, "esc": true, "enter": true},
 	"takeOver": {"y": true, "n": true},
@@ -177,6 +178,7 @@ func defaultKeys() keymaps {
 			Unhide:   bind(ks("h"), "h", "show the host"),
 			List:     bind(ks("left"), "◂", "list"),
 			HideList: bind(ks("ctrl+l"), "ctrl+l", "list"),
+			Jump:     bind(ks("alt+1", "alt+2", "alt+3", "alt+4", "alt+5", "alt+6", "alt+7", "alt+8", "alt+9"), "⌥1-9", "jump"),
 		},
 	}
 }
@@ -306,11 +308,12 @@ func (k boardKeys) bindings() []bkey.Binding {
 // printable key is text; only the arrows choose, and only with the line
 // empty. In the list ⏎ goes back to the line, and the board's keys act on
 // the chosen session. List comes back to the list from a chat that has the
-// screen; HideList hides or shows the list, from either place.
-type sideKeys struct{ Enter, Erase, Leave, Up, Down, Unhide, List, HideList bkey.Binding }
+// screen; HideList hides or shows the list, from either place. Jump
+// chooses the session with that number on the chosen session's host.
+type sideKeys struct{ Enter, Erase, Leave, Up, Down, Unhide, List, HideList, Jump bkey.Binding }
 
 func (k sideKeys) bindings() []bkey.Binding {
-	return []bkey.Binding{k.Enter, k.Erase, k.Leave, k.Up, k.Down, k.Unhide, k.List, k.HideList}
+	return []bkey.Binding{k.Enter, k.Erase, k.Leave, k.Up, k.Down, k.Unhide, k.List, k.HideList, k.Jump}
 }
 
 // shellKeys are the Hosts list. Update and Dismiss act on a host on

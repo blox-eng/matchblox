@@ -143,7 +143,7 @@ func TestLinksLightOnlyWhenTheChosenIsInTheChain(t *testing.T) {
 		}
 	}
 	got := plainLines(lit)
-	if !strings.Contains(got[0], "├") || !strings.HasPrefix(got[1], " │") {
+	if !strings.Contains(got[0], "├") || !strings.HasPrefix(got[1], "   │") {
 		t.Errorf("links %q, want ├ then │ under a two-line row", got)
 	}
 	last := plainLines(m.sideRow(s, 40, false, sideLink{i: 2, n: 3}))
