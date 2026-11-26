@@ -215,6 +215,18 @@ func (q *Queue) HookedIn(pane string) []string {
 	return ids
 }
 
+// Newest is the hooked session in pane whose last event is the newest:
+// a pane can keep the hooks of an agent that left it.
+func (q *Queue) Newest(pane string) (id string, ok bool) {
+	var at time.Time
+	for sid, ev := range q.hooked {
+		if ev.Pane == pane && (!ok || ev.At.After(at) || ev.At.Equal(at) && sid < id) {
+			id, at, ok = sid, ev.At, true
+		}
+	}
+	return id, ok
+}
+
 // Forget drops the hooked sessions ids, and the events they send from now
 // on: a switch's old agent is gone from its pane, and its late hooks must
 // not speak for the new one. The ids are taken (HookedIn) before the

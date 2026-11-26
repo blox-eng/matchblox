@@ -338,6 +338,8 @@ func (s *Service) captureMatch(ctx context.Context, old sample.Session, refresh 
 		} else {
 			b.WriteString(quoteEvidence(text))
 		}
+	} else if old.Agent == sample.CursorAgent {
+		b.WriteString(s.cursorConversation(old.Pane))
 	} else {
 		b.WriteString("\nConversation unavailable: this match has no verified transcript path.\n")
 	}
@@ -636,31 +638,61 @@ func transcriptTurn(line []byte) (turn, bool) {
 		}
 		b.WriteString(t + "\n")
 	}
-	text := strings.TrimSpace(b.String())
+	return markTurn(msg.Role, b.String())
+}
+
+// markTurn marks matchblox's own prompts and another match's messages, and
+// cuts the text to turnLimit: for a transcript row and for Cursor's hooks.
+func markTurn(role, text string) (turn, bool) {
+	text = strings.TrimSpace(text)
 	if text == "" {
 		return turn{}, false
 	}
-	if msg.Role == "user" {
+	if role == "user" {
 		if mark, ok := earlierSwitch(text); ok {
-			return turn{msg.Role, mark}, true
+			return turn{role, mark}, true
 		}
 		if earlierRefresh(text) {
-			return turn{msg.Role, refreshMark}, true
+			return turn{role, refreshMark}, true
 		}
 		if peerTagged.MatchString(text) {
-			msg.Role = peerRole // matchblox typed another match's message
+			role = peerRole // matchblox typed another match's message
 		}
 	}
-	if msg.Role == "assistant" {
+	if role == "assistant" {
 		// A reply ends with its conclusion.
-		return turn{msg.Role, tailText(text, turnLimit)}, true
+		return turn{role, tailText(text, turnLimit)}, true
 	}
 	// A pasted log usually comes first and the instruction last: keep both ends.
 	if len(text) > turnLimit {
 		half := turnLimit / 2
 		text = strings.ToValidUTF8(text[:half], "") + "\n[middle of message omitted]\n" + strings.ToValidUTF8(text[len(text)-half:], "")
 	}
-	return turn{msg.Role, text}, true
+	return turn{role, text}, true
+}
+
+// cursorConversation is the recent conversation section of a Cursor match
+// in pane, from the turns its hooks sent: Cursor keeps no transcript a
+// capture can read.
+func (s *Service) cursorConversation(pane string) string {
+	s.mu.Lock()
+	id, hooked := s.queue.Newest(pane)
+	talk := s.queue.Talk(id)
+	s.mu.Unlock()
+	var turns []turn
+	for _, t := range talk {
+		if t, ok := markTurn(t.Role, t.Text); ok {
+			turns = append(turns, t)
+		}
+	}
+	const head = "\n## Recent conversation\n\nSource: Cursor's hooks, since the service started. The first prompt, the latest prompts and the last three replies are included; older replies are left out. Messages from other matches are marked as theirs. Tool calls are excluded.\n\n"
+	switch {
+	case !hooked:
+		return head + "Conversation unavailable: no Cursor hook events from this session; run matchblox setup to install its hooks.\n"
+	case len(turns) == 0:
+		return head + "Conversation unavailable: no Cursor turns since the service started.\n"
+	}
+	return head + quoteEvidence(pickTurns(turns, conversationBudget))
 }
 
 // slashCommand renders a Claude command row as the builder typed it: its
