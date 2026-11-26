@@ -143,6 +143,10 @@ func TestShellWrapper(t *testing.T) {
 		{[]string{"zsh"}, false},
 		{[]string{"bash", "script.sh", "-c"}, false},
 		{[]string{"bash", "--rcfile", "x"}, false},
+		{[]string{"bash", "-o", "pipefail", "-c", "make"}, true},
+		{[]string{"bash", "+o", "posix", "-c", "make"}, true},
+		{[]string{"bash", "--rcfile", "f", "-c", "make"}, true},
+		{[]string{"bash", "-O", "extglob", "script.sh"}, false},
 	} {
 		if got := runsCommand(c.argv); got != c.want {
 			t.Errorf("runsCommand(%q) = %v, want %v", c.argv, got, c.want)
@@ -192,5 +196,41 @@ func TestSampleCarriesHeavy(t *testing.T) {
 	agent := byPane(snap)["%1"].PID
 	if h := snap.Heavy; h == nil || h.PID != 210 || h.Comm != "node" || h.Agent != agent || h.Agent == 0 {
 		t.Fatalf("heavy = %+v, want node 210 under agent %d", h, agent)
+	}
+}
+
+// TestHeaviestPassesLoginServers: a login over ssh is cut at its shell, so
+// each login is a tree of its own, not one sshd tree for every login.
+func TestHeaviestPassesLoginServers(t *testing.T) {
+	pt := newProcTable()
+	pt.add(1, 0, "systemd", 0)
+	pt.add(300, 1, "sshd", 0)
+	pt.add(301, 300, "sshd-session", 0)
+	pt.add(302, 301, "bash", 0, "-bash")
+	pt.busyTree(302)
+	pt.add(401, 300, "sshd-session", 0)
+	pt.add(402, 401, "bash", 0, "-bash")
+	pt.add(403, 402, "top", 50)
+	got := heaviest(pt.procs, pt.cpu, nil, nil, pt.argvOf)
+	if got == nil || got.PID != 302 || got.Comm != "bash" || got.Next != "xargs" || got.Procs != 258 {
+		t.Fatalf("heaviest = %+v, want the first login's bash (302) → xargs, 258 processes", got)
+	}
+}
+
+// TestSessionOfAChildAgent: a tree that a child agent started (a claude -p
+// in a session's shell) names the session at the top of its line.
+func TestSessionOfAChildAgent(t *testing.T) {
+	sessions := []Session{{PID: 11}}
+	children := []Session{
+		{PID: 20, Parent: &ProcRef{PID: 11}},
+		{PID: 30, Parent: &ProcRef{PID: 20}},
+		{PID: 40, Parent: &ProcRef{PID: 41}},
+		{PID: 41, Parent: &ProcRef{PID: 40}},
+		{PID: 50},
+	}
+	for _, c := range []struct{ agent, want int }{{11, 11}, {20, 11}, {30, 11}, {40, 0}, {50, 0}, {99, 0}, {0, 0}} {
+		if got := sessionAbove(c.agent, sessions, children); got != c.want {
+			t.Errorf("sessionAbove(%d) = %d, want %d", c.agent, got, c.want)
+		}
 	}
 }

@@ -1,6 +1,7 @@
 package sample
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/blox-eng/matchblox/internal/procfs"
@@ -14,7 +15,7 @@ type Tree struct {
 	Next  string  `json:"next,omitempty"` // the root's child with the most processes under it
 	Procs int     `json:"procs"`
 	CPU   float64 `json:"cpu_pct"`         // summed, 100 = one core
-	Agent int     `json:"agent,omitempty"` // the nearest agent above the root, 0: none
+	Agent int     `json:"agent,omitempty"` // the session above the root, 0: none
 }
 
 // cuts are where trees start: their roots are the first processes under them.
@@ -126,26 +127,54 @@ func heaviest(procs map[int]procfs.Proc, cpu map[int]float64, panes []Pane, agen
 	return tree
 }
 
-// wrapper is a shell that runs a command string: the command is the tree.
+// wrapper is a process that only carries the tree: a shell that runs a
+// command string, or the server of a login, whose login shell is the tree.
 func wrapper(p procfs.Proc, argv func(int) []string) bool {
 	switch p.Comm {
 	case "sh", "bash", "zsh", "dash":
 		return runsCommand(argv(p.PID))
+	case "sshd", "sshd-session", "login":
+		return true
 	}
 	return false
 }
 
+// takesArg are the shell options whose value is the next argument.
+var takesArg = map[string]bool{"-o": true, "+o": true, "-O": true, "+O": true, "--rcfile": true, "--init-file": true}
+
 // runsCommand reports whether a shell's argv holds -c, alone or among other
 // short flags, before its first operand.
 func runsCommand(argv []string) bool {
-	for _, a := range argv[min(1, len(argv)):] {
+	args := argv[min(1, len(argv)):]
+	for i := 0; i < len(args); i++ {
+		a := args[i]
 		switch {
+		case takesArg[a]:
+			i++
 		case strings.HasPrefix(a, "--"):
-		case !strings.HasPrefix(a, "-"):
+		case !strings.HasPrefix(a, "-") && !strings.HasPrefix(a, "+"):
 			return false
-		case strings.Contains(a, "c"):
+		case strings.HasPrefix(a, "-") && strings.Contains(a, "c"):
 			return true
 		}
 	}
 	return false
+}
+
+// sessionAbove is the session at the top of agent's line: agent itself when
+// it is a session, the session that a child agent descends from, or 0.
+func sessionAbove(agent int, sessions, children []Session) int {
+	parent := make(map[int]int, len(children))
+	for _, c := range children {
+		if c.Parent != nil {
+			parent[c.PID] = c.Parent.PID
+		}
+	}
+	for hops := 0; agent != 0 && hops < maxHops; hops++ {
+		if slices.ContainsFunc(sessions, func(s Session) bool { return s.PID == agent }) {
+			return agent
+		}
+		agent = parent[agent]
+	}
+	return 0
 }

@@ -84,6 +84,9 @@ func (s *Sampler) sampleProcs(snap *Snapshot, procs map[int]procfs.Proc, panes [
 	}
 	// snap.Panes is every pane, the stoker's too: panes is the main server's.
 	snap.Heavy = heaviest(procs, cpu, snap.Panes, agents, s.FS.Argv)
+	if snap.Heavy != nil {
+		snap.Heavy.Agent = sessionAbove(snap.Heavy.Agent, snap.Sessions, snap.Children)
+	}
 
 	paneByID := map[string]Pane{}
 	for _, p := range panes {
