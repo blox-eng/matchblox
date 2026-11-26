@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/blox-eng/matchblox/internal/said"
@@ -126,4 +127,140 @@ func gitPath(ctx context.Context, git gitRunner, dir, flag string) (string, erro
 		return "", nil
 	}
 	return filepath.EvalSymlinks(out)
+}
+
+// workKey is one task record as last written, for the folder its match was
+// launched in: a new write or another launch folder asks again.
+type workKey struct {
+	record string
+	mod    time.Time
+	size   int64
+	launch string
+}
+
+type workAnswer struct{ work, refused string }
+
+// workCache holds the last answer of workFolder for each record, so that
+// mergeQueue, under s.mu, never waits on Git. A miss goes to workLoop.
+type workCache struct {
+	mu      sync.Mutex
+	answers map[string]workEntry // by record path
+	pending map[workKey]bool
+	asks    chan workKey
+	filling sync.WaitGroup
+}
+
+type workEntry struct {
+	key    workKey
+	answer workAnswer
+}
+
+// look answers for key, or sends key to workLoop once and answers false.
+// It never blocks: with workLoop behind, the key is asked again later.
+func (c *workCache) look(key workKey) (workAnswer, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if e, ok := c.answers[key.record]; ok && e.key == key {
+		return e.answer, true
+	}
+	if c.pending[key] {
+		return workAnswer{}, false
+	}
+	c.filling.Add(1)
+	select {
+	case c.asks <- key:
+		if c.pending == nil {
+			c.pending = map[workKey]bool{}
+		}
+		c.pending[key] = true
+	default:
+		c.filling.Done()
+	}
+	return workAnswer{}, false
+}
+
+func (c *workCache) keep(key workKey, a workAnswer, ok bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if ok {
+		if c.answers == nil {
+			c.answers = map[string]workEntry{}
+		}
+		c.answers[key.record] = workEntry{key, a}
+	}
+	delete(c.pending, key)
+}
+
+// wait returns when every key asked so far is answered.
+func (c *workCache) wait() { c.filling.Wait() }
+
+// workLoop answers the work cache's misses one at a time until ctx ends,
+// and tells the consoles each answer.
+func (s *Service) workLoop(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case key := <-s.works.asks:
+			a, ok := s.fillWork(ctx, key)
+			s.works.keep(key, a, ok)
+			if ok {
+				s.mu.Lock()
+				s.setWorks()
+				s.mu.Unlock()
+				s.broadcast()
+			}
+			s.works.filling.Done()
+		}
+	}
+}
+
+// fillWork checks key's record. A record written again while it was read
+// gives no answer: the next merge asks for the new write.
+func (s *Service) fillWork(ctx context.Context, key workKey) (workAnswer, bool) {
+	b, err := os.ReadFile(key.record)
+	if err != nil {
+		return workAnswer{}, false
+	}
+	if k, ok := workKeyOf(key.record, key.launch); !ok || k != key {
+		return workAnswer{}, false
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	work, refused := workFolder(ctx, s.WorkGit, string(b), key.launch)
+	return workAnswer{work, refused}, true
+}
+
+func workKeyOf(record, launch string) (workKey, bool) {
+	fi, err := os.Stat(record)
+	if err != nil {
+		return workKey{}, false
+	}
+	return workKey{record, fi.ModTime(), fi.Size(), launch}, true
+}
+
+// setWorks sets Work and WorkRefused on each session the cache has an
+// answer for. The sessions may share their array with s.sampled, so a
+// change goes to a copy. Hold s.mu.
+func (s *Service) setWorks() {
+	sessions, copied := s.cur.Sessions, false
+	for i, x := range sessions {
+		record := s.managedRecord(x)
+		if record == "" || x.Cwd == "" {
+			continue
+		}
+		key, ok := workKeyOf(record, x.Cwd)
+		if !ok {
+			continue
+		}
+		a, ok := s.works.look(key)
+		if !ok || x.Work == a.work && x.WorkRefused == a.refused {
+			continue
+		}
+		if !copied {
+			sessions, copied = slices.Clone(sessions), true
+		}
+		sessions[i].Work, sessions[i].WorkRefused = a.work, a.refused
+	}
+	s.cur.Sessions = sessions
 }

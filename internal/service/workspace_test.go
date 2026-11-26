@@ -4,18 +4,29 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
+	"sync/atomic"
 	"testing"
+	"time"
+
+	"github.com/blox-eng/matchblox/internal/sample"
 )
+
+// repoWithWorktree makes a repository at main with one commit and a
+// worktree of it at wt.
+func repoWithWorktree(t *testing.T, main, wt string) {
+	t.Helper()
+	gitIn(t, "init", "-q", main)
+	gitIn(t, "-C", main, "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit", "-q", "--allow-empty", "-m", "x")
+	gitIn(t, "-C", main, "worktree", "add", "-q", wt)
+}
 
 func TestWorkspaceLine(t *testing.T) {
 	root := t.TempDir()
 	main, wt := filepath.Join(root, "main"), filepath.Join(root, "wt")
 	other, otherWT := filepath.Join(root, "other"), filepath.Join(root, "otherwt")
-	for _, r := range [][2]string{{main, wt}, {other, otherWT}} {
-		gitIn(t, "init", "-q", r[0])
-		gitIn(t, "-C", r[0], "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit", "-q", "--allow-empty", "-m", "x")
-		gitIn(t, "-C", r[0], "worktree", "add", "-q", r[1])
-	}
+	repoWithWorktree(t, main, wt)
+	repoWithWorktree(t, other, otherWT)
 	if err := os.Mkdir(filepath.Join(wt, "sub"), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -97,4 +108,69 @@ func TestWorkspaceLine(t *testing.T) {
 			t.Fatalf("got %q, %q", work, refused)
 		}
 	})
+}
+
+func TestSessionsCarryTheirWorkFolder(t *testing.T) {
+	root := t.TempDir()
+	main, wt := filepath.Join(root, "main"), filepath.Join(root, "wt")
+	repoWithWorktree(t, main, wt)
+	s := newTest(t, time.Hour)
+	var runs atomic.Int32
+	s.WorkGit = func(ctx context.Context, dir string, args ...string) (string, error) {
+		runs.Add(1)
+		return workGit(ctx, dir, args...)
+	}
+	session := func(pane, bundle, workspace string) sample.Session {
+		dir := filepath.Join(s.matchContextRoot(), bundle)
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "handover.md"), []byte("Workspace: "+workspace+"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return sample.Session{Pane: pane, Agent: "claude", Cwd: main, MatchContext: filepath.Join(dir, "awareness.md")}
+	}
+	sampled := []sample.Session{session("%1", "inwt", wt), session("%2", "intmp", "/tmp")}
+	merge := func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.sampled = sampled
+		s.mergeQueue()
+	}
+
+	merge()
+	if n := runs.Load(); n != 0 {
+		t.Fatalf("mergeQueue ran %d Git commands; want none", n)
+	}
+	go s.workLoop(t.Context())
+	s.works.wait()
+	filled := runs.Load()
+	if filled == 0 {
+		t.Fatal("the fill ran no Git command")
+	}
+	s.mu.Lock()
+	got := slices.Clone(s.cur.Sessions)
+	s.mu.Unlock()
+	refused := "/tmp is not a worktree of this repository: it starts in " + main
+	if got[0].Work != wt || got[0].WorkRefused != "" {
+		t.Errorf("worktree record: Work %q, WorkRefused %q; want %q, none", got[0].Work, got[0].WorkRefused, wt)
+	}
+	if got[1].Work != main || got[1].WorkRefused != refused {
+		t.Errorf("/tmp record: Work %q, WorkRefused %q; want %q, %q", got[1].Work, got[1].WorkRefused, main, refused)
+	}
+	if sampled[0].Work != "" || sampled[1].Work != "" {
+		t.Error("the fill wrote into the sampled sessions")
+	}
+
+	merge()
+	s.works.wait()
+	if n := runs.Load(); n != filled {
+		t.Errorf("an unchanged record ran %d more Git commands; want none", n-filled)
+	}
+	s.mu.Lock()
+	again := slices.Clone(s.cur.Sessions)
+	s.mu.Unlock()
+	if again[0].Work != wt || again[1].WorkRefused != refused {
+		t.Errorf("after a second merge: %q, %q", again[0].Work, again[1].WorkRefused)
+	}
 }
