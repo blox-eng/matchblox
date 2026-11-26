@@ -42,6 +42,20 @@ final class FaceTests: XCTestCase {
         XCTAssertNil(tightest(state()))
     }
 
+    /// An idle Cursor login at 100% of its month kept the watch red while Claude worked (2026-11-26).
+    func testAnIdleAccountDoesNotLeadTheGlance() throws {
+        var s = state()
+        s.accounts = [
+            AccountUse(n: 1, windows: [WindowUse(name: "wk", pct: 24, resets: nil)], lasts: true),
+            AccountUse(n: 2, windows: [WindowUse(name: "mo", pct: 100, resets: nil)], lasts: true, idle: true),
+        ]
+        XCTAssertEqual(tightest(s)?.pct, 24)
+        s.accounts[0].idle = true
+        XCTAssertNil(tightest(s))
+        let old = try JSONDecoder().decode(AccountUse.self, from: Data(#"{"n":1,"windows":[],"lasts":true}"#.utf8))
+        XCTAssertFalse(old.idle)
+    }
+
     func testBarsWarnAt60AndNegAt90() {
         XCTAssertEqual(barColorLevel(0), .normal)
         XCTAssertEqual(barColorLevel(59), .normal)
