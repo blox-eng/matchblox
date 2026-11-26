@@ -6,6 +6,8 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+## [0.63.1] - 2026-11-26
+
 ### Fixed
 
 - **Switch a Cursor session to another agent.** A switch away from
@@ -2111,7 +2113,8 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.63.0...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.63.1...HEAD
+[0.63.1]: https://github.com/blox-eng/matchblox/compare/v0.63.0...v0.63.1
 [0.63.0]: https://github.com/blox-eng/matchblox/compare/v0.62.0...v0.63.0
 [0.62.0]: https://github.com/blox-eng/matchblox/compare/v0.61.0...v0.62.0
 [0.61.0]: https://github.com/blox-eng/matchblox/compare/v0.60.0...v0.61.0
