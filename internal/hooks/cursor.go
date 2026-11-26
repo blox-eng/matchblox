@@ -34,6 +34,7 @@ type cursorInput struct {
 	GenerationID   string   `json:"generation_id"`
 	HookEventName  string   `json:"hook_event_name"`
 	Status         string   `json:"status"`
+	Prompt         string   `json:"prompt"`
 	Text           string   `json:"text"`
 	WorkspaceRoots []string `json:"workspace_roots"`
 	ToolUseID      string   `json:"tool_use_id"`
@@ -78,9 +79,24 @@ func ParseCursor(stdin io.Reader, env func(string) string) (Event, error) {
 		ev.ToolUseID = in.ToolUseID
 	case name == "Stop" && in.Status != "completed":
 		ev.Name = "UserPromptSubmit"
+	case name == "UserPromptSubmit":
+		ev.Text = bothEnds(said.Clean(in.Prompt))
 	case name == Reply:
 		line, asks := said.Reply(in.Text)
 		ev.Message, ev.Asks = cut(line), asks
+		ev.Text = bothEnds(said.Clean(in.Text))
 	}
 	return ev, nil
+}
+
+const omitted = "\n[middle of message omitted]\n"
+
+// bothEnds keeps a long text's start and its end within TextLimit: a pasted
+// log usually comes first and the instruction last.
+func bothEnds(text string) string {
+	if len(text) <= TextLimit {
+		return text
+	}
+	half := (TextLimit - len(omitted)) / 2
+	return strings.ToValidUTF8(text[:half], "") + omitted + strings.ToValidUTF8(text[len(text)-half:], "")
 }
