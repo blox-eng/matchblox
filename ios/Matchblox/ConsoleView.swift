@@ -126,14 +126,17 @@ struct ConsoleView: View {
 
     /// Past the quiet retries the kept screen says what happened, over its top: no new page.
     private func keptFailure(_ message: String) -> some View {
-        HStack(spacing: 16) {
+        VStack(alignment: .leading, spacing: 10) {
             Text(message)
                 .foregroundStyle(Theme.fg)
-            Spacer(minLength: 0)
-            Button("Try again") { connection.retry() }
-                .buttonStyle(.borderedProminent)
-                .foregroundStyle(Theme.bg)
+            HStack(spacing: 24) {
+                Button("Try again") { connection.retry() }
+                    .buttonStyle(.borderedProminent)
+                    .foregroundStyle(Theme.bg)
+                hostsButton
+            }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(Theme.wash)
@@ -706,7 +709,6 @@ final class ConsoleConnection {
         registered = false
         registration?.cancel()
         registration = nil
-        held.drop()
     }
 
     /// Pocket left the screen: the connection goes (iOS would stop it), the unlock stays for the grace window.
@@ -716,7 +718,6 @@ final class ConsoleConnection {
         registration?.cancel()
         registration = nil
         grace.backgrounded(at: .now)
-        held.drop()
         away = true
     }
 
@@ -746,16 +747,16 @@ final class ConsoleConnection {
 
     /// The failure that the kept screen says, past the quiet retries.
     var keptFailure: String? {
-        guard wasLive, !away, case .failed(let message, _) = phase else { return nil }
+        guard !showsCover, case .failed(let message, scanAgain: false) = phase else { return nil }
         return message
     }
 
     var showsCover: Bool {
-        let failed = switch phase {
-        case .failed, .ended: true
-        case .connecting, .live: false
+        let page = switch phase {
+        case .ended, .failed(_, scanAgain: true): true
+        case .connecting, .live, .failed(_, scanAgain: false): false
         }
-        return Opening.coverShows(live: phase == .live, failed: failed, wasLive: wasLive, away: away)
+        return Opening.coverShows(live: phase == .live, page: page, wasLive: wasLive, away: away)
     }
 
     func retry() {
@@ -782,6 +783,8 @@ final class ConsoleConnection {
         task = nil
         outgoing?.finish()
         outgoing = nil
+        // Keys held for the session that went are never sent to the next one.
+        held.drop()
         phase = .connecting
         invite = false
     }
@@ -840,11 +843,9 @@ final class ConsoleConnection {
                     phase = .connecting
                     try? await Task.sleep(for: wait)
                 case .say:
-                    held.drop()
                     phase = .failed(Opening.message(for: .unreachable, host: host.label), scanAgain: false)
                     return
                 case .leave:
-                    held.drop()
                     onFailure(failure)
                     return
                 }
