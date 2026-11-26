@@ -129,6 +129,26 @@ func (s *Service) recover(ctx context.Context, a proto.Act) proto.Result {
 			len(r.Conversations) > 0 && !slices.Contains(r.Conversations, e.ConversationID) {
 			continue
 		}
+		key := conversation(e.Agent, e.ConversationID)
+		s.mu.Lock()
+		u, confirming := s.unconfirmed[key]
+		s.mu.Unlock()
+		if confirming {
+			row := proto.Recovered{
+				Name: e.Session, Agent: e.Agent, Conversation: e.ConversationID,
+				Dir: u.dir, As: u.as, State: proto.RecoverCannot, Why: recoverListRetryWhy,
+			}
+			if reopen {
+				listed, err := s.listPanes(ctx)
+				if err != nil {
+					row.State, row.Why = proto.RecoverCannot, recoverListRetryWhy
+				} else {
+					s.finishListed(&row, listed, u.cmd)
+				}
+			}
+			rows = append(rows, row)
+			continue
+		}
 		row, argv, cmd := s.recoverRow(e, r.Dirs[e.Session], live, taken)
 		if argv != nil && reopen {
 			if res := s.Actions.Do(ctx, advice.Action{Label: "recover " + e.Session, Steps: [][]string{argv}}, "y"); res.Err != "" {
@@ -151,6 +171,12 @@ func (s *Service) recover(ctx context.Context, a proto.Act) proto.Result {
 type reopenedAt struct {
 	at time.Time
 	as string
+}
+
+// unconfirmedAt is a start whose pane list still errors. Confirm lists as
+// and dir; cmd is the agent command for the exited-at-once Why.
+type unconfirmedAt struct {
+	as, cmd, dir string
 }
 
 // recoverLive are the conversations that run now (or that recover reopened
@@ -227,29 +253,50 @@ func (s *Service) settled(ctx context.Context, rows []proto.Recovered, started m
 	s.mu.Unlock()
 	listed, err := s.listPanes(ctx)
 	if err != nil {
-		for i := range started {
+		s.mu.Lock()
+		if s.unconfirmed == nil {
+			s.unconfirmed = map[string]unconfirmedAt{}
+		}
+		for i, cmd := range started {
 			row := &rows[i]
 			row.State, row.Why = proto.RecoverCannot, recoverListRetryWhy
+			s.unconfirmed[conversation(row.Agent, row.Conversation)] = unconfirmedAt{as: row.As, cmd: cmd, dir: row.Dir}
 		}
+		s.mu.Unlock()
 		return
 	}
 	for i, cmd := range started {
-		row := &rows[i]
-		// pane_dead, not has-session: under remain-on-exit the session of
-		// an agent that exited stays, with a dead pane.
-		alive, there := sessionRunsOf(listed, row.As)
-		if !alive {
-			if there {
-				_, _ = s.runStep(s.mux().KillSession(row.As))
-			}
-			row.State, row.Why = proto.RecoverCannot, fmt.Sprintf("%s exited at once: run cd %s && %s to see why", row.Agent, row.Dir, cmd)
-			continue
-		}
-		row.State = proto.RecoverReopened
-		s.mu.Lock()
-		s.reopened[conversation(row.Agent, row.Conversation)] = reopenedAt{s.now(), row.As}
-		s.mu.Unlock()
+		s.finishListed(&rows[i], listed, cmd)
 	}
+}
+
+// finishListed sets reopened when session row.As still runs in listed, and
+// cannot when it does not. A dead session is killed. An unconfirmed start
+// of that conversation is cleared.
+func (s *Service) finishListed(row *proto.Recovered, listed []mux.Pane, cmd string) {
+	alive, there := sessionRunsOf(listed, row.As)
+	key := conversation(row.Agent, row.Conversation)
+	if !alive {
+		if there {
+			_, _ = s.runStep(s.mux().KillSession(row.As))
+		}
+		row.State, row.Why = proto.RecoverCannot, fmt.Sprintf("%s exited at once: run cd %s && %s to see why", row.Agent, row.Dir, cmd)
+		s.mu.Lock()
+		delete(s.unconfirmed, key)
+		s.mu.Unlock()
+		return
+	}
+	row.State = proto.RecoverReopened
+	if row.Why == recoverListRetryWhy {
+		row.Why = ""
+	}
+	s.mu.Lock()
+	if s.reopened == nil {
+		s.reopened = map[string]reopenedAt{}
+	}
+	s.reopened[key] = reopenedAt{s.now(), row.As}
+	delete(s.unconfirmed, key)
+	s.mu.Unlock()
 }
 
 // recoverRow is the state of entry e, the argv that reopens it when it can
