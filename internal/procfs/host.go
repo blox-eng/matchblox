@@ -1,5 +1,7 @@
 package procfs
 
+import "time"
+
 // Host is what the sampler reads about the machine and its processes. FS
 // implements it from /proc on Linux and over fixtures; other systems get an
 // implementation from their own APIs.
@@ -21,6 +23,7 @@ type Host interface {
 	// Uptime is in seconds on the same clock as Proc.StartTime, so
 	// Uptime() - StartTime/ClockTicks is a process's age.
 	Uptime() float64
+	Booted() (time.Time, error)
 	Stat() (all CPUTimes, cores []CPUTimes, err error)
 	Loadavg() ([3]float64, error)
 	Meminfo() (Mem, error)

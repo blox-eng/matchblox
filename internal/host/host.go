@@ -13,6 +13,7 @@ import (
 
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/disk"
+	gohost "github.com/shirou/gopsutil/v4/host"
 	"github.com/shirou/gopsutil/v4/load"
 	"github.com/shirou/gopsutil/v4/mem"
 	"github.com/shirou/gopsutil/v4/net"
@@ -187,6 +188,14 @@ func (Host) UID(pid int) (int, bool) {
 }
 
 func (Host) Uptime() float64 { return float64(time.Now().UnixMilli()) / 1000 }
+
+func (Host) Booted() (time.Time, error) {
+	sec, err := gohost.BootTime()
+	if err != nil {
+		return time.Time{}, err
+	}
+	return time.Unix(int64(sec), 0), nil
+}
 
 func (Host) Stat() (procfs.CPUTimes, []procfs.CPUTimes, error) {
 	all, err := cpu.Times(false)
