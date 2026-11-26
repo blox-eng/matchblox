@@ -33,7 +33,7 @@ public enum HomeCopy {
     }
 
     public static func showDemoInFooter(hosts: [Host]) -> Bool {
-        !hosts.contains(where: \.isDemo)
+        !hosts.isEmpty && !hosts.contains(where: \.isDemo)
     }
 
     /// One line for the Live Activity row: host · show · buzz.

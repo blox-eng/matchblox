@@ -98,6 +98,7 @@ demo · privacy ↗ · ♥ sponsor ↗  0.58.0
 | Text size | at 9 or 24 pt | `−` or `+` dims (`TextSize.isSmallest`/`isBiggest`) |
 | Live Activity row | demo host only | no row (today's rule: only a real host) |
 | Footer `demo` | demo host paired (2.4) | `demo` leaves the footer; the host row is the way in |
+| Footer `demo` | no host (first run) | `demo` leaves the footer; `try the demo` in the hosts region is the one way in (2026-11-26: two `Try the demo` controls on one screen broke VoiceOver and the UI test) |
 
 ### Journey (Pass 3)
 

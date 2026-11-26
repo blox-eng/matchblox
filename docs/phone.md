@@ -129,7 +129,7 @@ terminal.`
   again to give the go. Any other key or tap disarms it. While the
   consent box shows, the belt is `◂`, `y runs` and `esc cancels`: a tap
   on a row is never consent.
-- **Text size:** pinch the terminal, or tap `−` / `+` on the text line on
+- **Text size:** pinch the terminal, or tap − or + on the `text` line of
   home. The size goes from 9 to 24 pt, and the phone keeps it for every
   host. The host gets the new columns and rows.
 - **Back to the bottom:** after a swipe scrolls an agent's pane up, a `↓`
@@ -155,8 +155,8 @@ terminal.`
 
 ### Try a demo
 
-With no host, home shows `try the demo` under pair. When a demo is not yet
-paired, the home footer also offers `demo`. The demo's own scan turns on no
+With no host, home shows `try the demo` under pair. With a host but no demo,
+the home footer offers `demo`. The demo's own scan turns on no
 camera and asks for no permission. On a fresh install, home opens first;
 `try the demo` works with or without the camera. Then the app saves a host
 called `demo`.

@@ -55,6 +55,12 @@ final class HomeCopyTests: XCTestCase {
         XCTAssertFalse(q.contains("its console closes"), q)
     }
 
+    /// First-run home already offers `try the demo`: a second `Try the demo` in the footer
+    /// gave VoiceOver and the UI test two controls with one name.
+    func testFooterHidesDemoOnFirstRun() {
+        XCTAssertFalse(HomeCopy.showDemoInFooter(hosts: []))
+    }
+
     func testFooterHidesDemoWhenDemoPaired() {
         XCTAssertTrue(HomeCopy.showDemoInFooter(hosts: [host("work-1")]))
         XCTAssertFalse(HomeCopy.showDemoInFooter(hosts: [host("ws-1", demo: true)]))
