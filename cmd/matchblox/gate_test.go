@@ -173,6 +173,43 @@ func TestAPhoneOpensAConsoleOfItsOwn(t *testing.T) {
 	}
 }
 
+// A phone that comes back gets the console it left, which waits detached
+// with its screen: a new one each time opened Pocket from scratch and left
+// matchblox-2 … matchblox-8 behind (2026-11-26).
+func TestAPhoneComesBackToItsOwnConsole(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("SSH_TTY", "/dev/ttys004")
+	t.Setenv("SSH_ORIGINAL_COMMAND", remote.ConsoleCommand)
+	oldArgs, oldRun, oldList := os.Args, gateRun, homeListing
+	t.Cleanup(func() { os.Args, gateRun, homeListing = oldArgs, oldRun, oldList })
+	gateRun = func([]string) error { return nil }
+	open := func(listing, id string) string {
+		t.Helper()
+		t.Setenv(panes.ConsoleEnv, "")
+		t.Setenv("SSH_ORIGINAL_COMMAND", remote.ConsoleCommand) // the gate unsets it
+		homeListing = func() string { return listing }
+		if err := gateMain([]string{"phone", id}); err != nil {
+			t.Fatal(err)
+		}
+		return os.Getenv(panes.ConsoleEnv)
+	}
+	if got := open("matchblox\t1\t\n", "0123456789ab"); got != "matchblox-2" {
+		t.Fatalf("first open = %q, want matchblox-2", got)
+	}
+	left := "matchblox\t1\t\nmatchblox-2\t0\t\n"
+	if got := open(left, "0123456789ab"); got != "matchblox-2" {
+		t.Errorf("the phone came back to %q, want its own matchblox-2", got)
+	}
+	// Another device never takes it, and a console someone shows is not reused.
+	if got := open(left, "ba9876543210"); got != "matchblox-3" {
+		t.Errorf("another phone got %q, want matchblox-3", got)
+	}
+	if got := open("matchblox\t1\t\nmatchblox-2\t1\t\nmatchblox-3\t0\t\n", "0123456789ab"); got != "matchblox-4" {
+		t.Errorf("with its console shown elsewhere the phone got %q, want matchblox-4", got)
+	}
+}
+
 func TestGatePhoneWithoutIDStillOpens(t *testing.T) {
 	home, ran := gateWith(t, "/dev/ttys004", "phone")
 	if ran == nil {

@@ -469,8 +469,9 @@ func RemovePairSeen(home, id string) {
 }
 
 type deviceIn struct {
-	At  time.Time `json:"at"`
-	TTY string    `json:"tty"`
+	At      time.Time `json:"at"`
+	TTY     string    `json:"tty"`
+	Console string    `json:"console,omitempty"` // the console session it runs in, which it comes back to
 }
 
 // MarkDeviceIn notes that the device id is in, on the terminal tty.
@@ -481,7 +482,29 @@ func MarkDeviceIn(home, id, tty string, at time.Time) error {
 	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
 		return err
 	}
-	return writeNote(deviceNote(home, id), deviceIn{at, tty})
+	var n deviceIn
+	_ = readNote(deviceNote(home, id), &n)
+	return writeNote(deviceNote(home, id), deviceIn{At: at, TTY: tty, Console: n.Console})
+}
+
+// MarkDeviceConsole notes the console session the device id runs in, so it
+// comes back to it; the note of MarkDeviceIn keeps it.
+func MarkDeviceConsole(home, id, console string) error {
+	var n deviceIn
+	if !ValidPairID(id) || !readNote(deviceNote(home, id), &n) {
+		return errors.New("no note of the device " + id)
+	}
+	n.Console = console
+	return writeNote(deviceNote(home, id), n)
+}
+
+// DeviceConsole is the console session the device id ran in last, or "".
+func DeviceConsole(home, id string) string {
+	var n deviceIn
+	if !ValidPairID(id) || !readNote(deviceNote(home, id), &n) {
+		return ""
+	}
+	return n.Console
 }
 
 // DeviceIn is when and where the device id came in; ok is false if no note
