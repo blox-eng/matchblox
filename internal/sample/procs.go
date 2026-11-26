@@ -2,6 +2,7 @@ package sample
 
 import (
 	"os"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -76,6 +77,13 @@ func (s *Sampler) sampleProcs(snap *Snapshot, procs map[int]procfs.Proc, panes [
 			Owner: s.owner(p),
 		})
 	}
+
+	agents := make(map[int]bool, len(snap.Sessions)+len(snap.Children))
+	for _, ss := range slices.Concat(snap.Sessions, snap.Children) {
+		agents[ss.PID] = true
+	}
+	// snap.Panes is every pane, the stoker's too: panes is the main server's.
+	snap.Heavy = heaviest(procs, cpu, snap.Panes, agents, s.FS.Argv)
 
 	paneByID := map[string]Pane{}
 	for _, p := range panes {

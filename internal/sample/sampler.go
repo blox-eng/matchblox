@@ -200,6 +200,8 @@ type Snapshot struct {
 	IdlePanes []IdlePane `json:"idle_panes"`
 	Orphans   []Orphan   `json:"orphans"`
 	Top       []ProcRow  `json:"top"`
+	// Heavy is the process tree that adds the most load, nil when none does.
+	Heavy *Tree `json:"heavy,omitempty"`
 	// Exited are agents that exited and that their parent has not reaped
 	// (zombies): not sessions, listed so the person sees why they stay.
 	Exited     []Exited     `json:"exited,omitempty"`
@@ -483,6 +485,7 @@ func (s *Sampler) Sample() Snapshot {
 	}
 	l := s.last
 	snap.Sessions, snap.Children, snap.IdlePanes, snap.Orphans, snap.Top, snap.Exited = l.Sessions, l.Children, l.IdlePanes, l.Orphans, l.Top, l.Exited
+	snap.Heavy = l.Heavy
 	snap.Containers, snap.Groups, snap.GitPolling, snap.Limits, snap.Panes = l.Containers, l.Groups, l.GitPolling, l.Limits, l.Panes
 	snap.Errors = append(snap.Errors, l.Errors...)
 	snap.Machine.IOWait = s.ioWait
