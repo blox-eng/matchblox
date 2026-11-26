@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -610,5 +611,9 @@ func TestUnsupportedBootIsNoError(t *testing.T) {
 		if strings.HasPrefix(e, "boot time") {
 			t.Fatalf("an unsupported boot time is an error: %q", e)
 		}
+	}
+	failed := newFixtureSampler(t.TempDir()).Sample() // no stat to read
+	if !slices.ContainsFunc(failed.Errors, func(e string) bool { return strings.HasPrefix(e, "boot time: ") }) {
+		t.Fatalf("a failed boot read says no error: %q", failed.Errors)
 	}
 }
