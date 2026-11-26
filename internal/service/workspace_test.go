@@ -256,3 +256,16 @@ func TestARefusedWorkspaceShowsNoControlKeys(t *testing.T) {
 		}
 	}
 }
+
+// TestAWorktreeWithControlKeysIsRefused: a real worktree whose name holds
+// an escape never reaches the confirm or the CLI as it is.
+func TestAWorktreeWithControlKeysIsRefused(t *testing.T) {
+	root := t.TempDir()
+	main, wt := filepath.Join(root, "main"), filepath.Join(root, "wt\x1b[2K")
+	repoWithWorktree(t, main, filepath.Join(root, "plain"))
+	gitIn(t, "-C", main, "worktree", "add", "-q", "-b", "x", wt)
+	work, refused := workFolder(t.Context(), nil, "Workspace: "+wt+"\n", main)
+	if work != main || refused == "" || strings.Contains(refused, "\x1b") {
+		t.Fatalf("workFolder = %q, %q; want %q and a refusal with no ESC", work, refused, main)
+	}
+}

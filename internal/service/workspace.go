@@ -116,6 +116,10 @@ func worktreeOf(ctx context.Context, git gitRunner, path, launch string) string 
 	if err != nil || top == "" {
 		return ""
 	}
+	// A control key in its name would reach the builder's terminal as is.
+	if said.Clean(top) != top {
+		return ""
+	}
 	// A shared common dir only proves the folder points at the repository.
 	// The repository's own worktree list says which folders are its worktrees.
 	list, err := git(ctx, home, "worktree", "list", "--porcelain")
