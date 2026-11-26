@@ -217,3 +217,29 @@ func TestCursorTokenReadDeniedCouldNotBeRead(t *testing.T) {
 		t.Errorf("denied: %+v, want %q", a, cursorUnreadable)
 	}
 }
+
+// TestAHiddenCursorTakesItsFolderFromItsGuard: Cursor's CLI makes its
+// process non-dumpable, so its cwd and environ read as nothing. The pane's
+// guard above it started it there with that environment: the session takes
+// both from it, or a switch refuses "no directory" and the next agent loses
+// the match's task record (matchbloxenhanced, 2026-11-26).
+func TestAHiddenCursorTakesItsFolderFromItsGuard(t *testing.T) {
+	root := copyFixture(t)
+	const brief = "/state/matches/match-1/awareness.md"
+	addProcAt(t, root, 900, 1, "matchblox-guard", []string{"/state/matchblox-guard", "guard", "--", "cursor-agent"}, 1000, 0,
+		"TMUX=/tmp/tmux-1000/default,1,1", "TMUX_PANE=%20", "MATCHBLOX_CONTEXT="+brief)
+	if err := os.Symlink("/work/repo", filepath.Join(root, "proc", "900", "cwd")); err != nil {
+		t.Fatal(err)
+	}
+	addProc(t, root, 901, 900, "MainThread", []string{"/home/user/.local/bin/cursor-agent", "--use-system-ca", cursorJS}, "")
+	addPane(t, root, "%20\tcur:1.1\tw\t900\tmatchblox-guard\t/work/repo")
+	smp := newFixtureSampler(root)
+	smp.Agents = []string{"claude", CursorAgent}
+	s, ok := byPane(smp.Sample())["%20"]
+	if !ok {
+		t.Fatal("no Cursor session in %20")
+	}
+	if s.Cwd != "/work/repo" || s.MatchContext != brief {
+		t.Errorf("cwd %q match context %q, want the guard's /work/repo and %s", s.Cwd, s.MatchContext, brief)
+	}
+}
