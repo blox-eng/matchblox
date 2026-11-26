@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/blox-eng/matchblox/internal/said"
+	"github.com/blox-eng/matchblox/internal/sample"
 )
 
 // gitRunner runs a read-only Git command in dir and answers with its output.
@@ -229,6 +230,23 @@ func (s *Service) fillWork(ctx context.Context, key workKey) (workAnswer, bool) 
 	defer cancel()
 	work, refused := workFolder(ctx, s.WorkGit, string(b), key.launch)
 	return workAnswer{work, refused}, true
+}
+
+// switchFolder is where a switch of x starts the next agent, from its task
+// record as it is now. A session with no folder or no managed record keeps
+// its launch folder and runs no Git.
+func (s *Service) switchFolder(ctx context.Context, x sample.Session) (work, refused string) {
+	record := s.managedRecord(x)
+	if record == "" || x.Cwd == "" {
+		return x.Cwd, ""
+	}
+	b, err := os.ReadFile(record)
+	if err != nil {
+		return x.Cwd, ""
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	return workFolder(ctx, s.WorkGit, string(b), x.Cwd)
 }
 
 func workKeyOf(record, launch string) (workKey, bool) {
