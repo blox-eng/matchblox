@@ -557,9 +557,13 @@ func TestWayBackEndsOnlyItsJump(t *testing.T) {
 	if !hasSession(e.outer, sb) || b.session() != sb {
 		t.Fatalf("the way back of one jump ended the other: b on %q", b.session())
 	}
-	if out, err := tmuxOut(e.outer, "list-keys", "-T", KeyTable(ja.ID)); err == nil {
-		t.Errorf("the way back left its table:\n%s", out)
-	}
+	// The binding's unbind-key -a empties the table, and the wrapper's
+	// hangup trap drops it once the session ends: for a moment an empty
+	// table remains (#283).
+	waitFor(t, "the way back drops its table", func() bool {
+		_, err := tmuxOut(e.outer, "list-keys", "-T", KeyTable(ja.ID))
+		return err != nil
+	})
 }
 
 // TestJumpHostFailureLeavesNothing: a host command list that fails after
