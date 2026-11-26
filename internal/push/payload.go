@@ -60,6 +60,9 @@ type WindowUse struct {
 	Name   string    `json:"name"`
 	Pct    int       `json:"pct"`
 	Resets time.Time `json:"resets,omitzero"`
+	// Spent: at 100 % while a session of the account still works (extra or
+	// on-demand usage), so it stops nothing and does not lead the glance.
+	Spent bool `json:"spent,omitempty"`
 }
 
 // Buzz is the event that makes the phone buzz. Sealed is the HPKE enc followed

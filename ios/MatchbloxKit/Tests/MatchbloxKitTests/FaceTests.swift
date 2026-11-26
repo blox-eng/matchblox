@@ -56,6 +56,23 @@ final class FaceTests: XCTestCase {
         XCTAssertFalse(old.idle)
     }
 
+    /// Cursor went on past 100 % of its included month, and that bar led the glance in red
+    /// over Claude's 30 % week (2026-11-27). A spent window stops nothing.
+    func testASpentWindowNeitherLeadsNorWarns() throws {
+        var s = state()
+        var month = WindowUse(name: "mo", pct: 100, resets: nil)
+        month.spent = true
+        s.accounts = [
+            AccountUse(n: 1, windows: [WindowUse(name: "wk", pct: 30, resets: nil)], lasts: true),
+            AccountUse(n: 2, windows: [month], lasts: true),
+        ]
+        XCTAssertEqual(tightest(s)?.name, "wk")
+        XCTAssertEqual(level(month), .normal)
+        XCTAssertEqual(level(WindowUse(name: "wk", pct: 95, resets: nil)), .neg)
+        let old = try JSONDecoder().decode(WindowUse.self, from: Data(#"{"name":"mo","pct":100}"#.utf8))
+        XCTAssertFalse(old.spent)
+    }
+
     func testBarsWarnAt60AndNegAt90() {
         XCTAssertEqual(barColorLevel(0), .normal)
         XCTAssertEqual(barColorLevel(59), .normal)

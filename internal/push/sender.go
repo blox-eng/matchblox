@@ -534,7 +534,7 @@ func usageMoved(old, cur []AccountUse) bool {
 		}
 		for j := range c.Windows {
 			ow, cw := o.Windows[j], c.Windows[j]
-			if ow.Name != cw.Name || abs(ow.Pct-cw.Pct) >= usageStep {
+			if ow.Name != cw.Name || ow.Spent != cw.Spent || abs(ow.Pct-cw.Pct) >= usageStep {
 				return true
 			}
 			if !ow.Resets.IsZero() && (cw.Resets.IsZero() || cw.Resets.Sub(ow.Resets) > time.Minute) {

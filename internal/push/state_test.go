@@ -160,6 +160,30 @@ func TestAnAccountWithNoWorkingSessionIsIdle(t *testing.T) {
 	}
 }
 
+// A window at 100 % while a session of its account still works stops
+// nothing: Cursor goes on past its included month. It led the glance in red
+// over Claude's 30 % week (2026-11-27).
+func TestAFullWindowThatStillWorksIsSpentNotOut(t *testing.T) {
+	n := openNumbers(t, t.TempDir())
+	works := sample.Session{SessionID: "c", Busy: true, Provider: "cursor", Account: "w"}
+	month := limits.Account{Provider: "cursor", Account: "w", State: limits.Measured,
+		Windows: []limits.Window{{UsedPct: 100, Minutes: 30 * 24 * 60, ResetsAt: t0.Add(20 * 24 * time.Hour)}}}
+	full := acct("a", 100, 40, t0, nil) // a stopped Claude: no session works
+	got := Build(doc([]sample.Session{works}, nil, month, full), fp, n, t0)
+	byN := map[int]AccountUse{}
+	for _, a := range got.Accounts {
+		byN[a.N] = a
+	}
+	if w := byN[n.Account("cursor", "w")].Windows; len(w) != 1 || !w[0].Spent {
+		t.Fatalf("the month that still works is not spent: %+v", w)
+	}
+	for _, w := range byN[n.Account("anthropic", "a")].Windows {
+		if w.Spent {
+			t.Fatalf("a full window with no session working is spent: %+v", w)
+		}
+	}
+}
+
 func TestUsageSkipsWhatItCannotName(t *testing.T) {
 	n := openNumbers(t, t.TempDir())
 	a := limits.Account{Provider: "p", Account: "a", State: limits.Measured, Windows: []limits.Window{
