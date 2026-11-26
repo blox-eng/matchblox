@@ -206,3 +206,8 @@ What exists (read 2026-11-27):
 Cold read: 2026-11-27, 1 fresh reader. Blocker 3, major 10, nit 8. Fixed 20, contested 0, for the person 0, declined 1. Second read: 14 left (blocker 1, major 8, nit 5), each given to the owner with a recommendation.
 
 - Declined (nit): "gopsutil's `U`→`Blocked` mapping could not be verified". The reader could not open the module cache. The mapping is `convertStatusChar` in `github.com/shirou/gopsutil/v4/process/process.go`, read in this session: `case "D", "U": return Blocked`.
+
+## Changes during build
+
+- 2026-11-27, Task 1: `stateOf` also maps `process.Zombie` to `'Z'`, with a sixth test case. Because the Task 1 checker found that a macOS zombie read as `'S'`, so `sampler.go` and `lineage.go`, which skip only `Z` and `X`, counted an exited agent as alive. The bug was older than Task 1, but it sits in the function Task 1 wrote. — the builder.
+- 2026-11-27, Task 1: `TestStateOfStatus` sits in `host_test.go`, which has no `!ios` tag, while `stateOf` is in the `!ios` file. No change, because CI never runs Go tests for iOS (only `go build ./cmd/mbdemolib`). — the builder.

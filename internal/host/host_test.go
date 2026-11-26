@@ -78,6 +78,7 @@ func TestStateOfStatus(t *testing.T) {
 	}{
 		{[]string{process.Blocked}, 'D'},
 		{[]string{process.Running}, 'R'},
+		{[]string{process.Zombie}, 'Z'},
 		{[]string{process.Sleep}, 'S'},
 		{nil, 'S'},
 		{[]string{""}, 'S'},

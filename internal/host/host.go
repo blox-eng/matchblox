@@ -94,7 +94,8 @@ func read(p *process.Process) (procfs.Proc, bool) {
 }
 
 // stateOf maps gopsutil's status to the /proc state letter: Blocked is a
-// process waiting on I/O, state D.
+// process waiting on I/O, state D. A zombie is Z, so the sampler does not
+// count an exited agent as alive.
 func stateOf(st []string) byte {
 	if len(st) == 0 {
 		return 'S'
@@ -104,6 +105,8 @@ func stateOf(st []string) byte {
 		return 'D'
 	case process.Running:
 		return 'R'
+	case process.Zombie:
+		return 'Z'
 	}
 	return 'S'
 }
