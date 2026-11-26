@@ -1,6 +1,10 @@
 package app
 
-import "time"
+import (
+	"strconv"
+	"strings"
+	"time"
+)
 
 const (
 	pairFromDeviceLine   = "Pair from the host's own terminal."
