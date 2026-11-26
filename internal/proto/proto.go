@@ -289,6 +289,11 @@ type Result struct {
 	// Recover is a recover act's answer: each entry of the recovery record,
 	// and what recover found or did with it.
 	Recover []Recovered `json:"recover,omitempty"`
+	// StartedIn is the folder a switch started the new agent in.
+	StartedIn string `json:"started_in,omitempty"`
+	// WorkRefused is why a switch did not start in the folder its record
+	// named, and started in StartedIn instead.
+	WorkRefused string `json:"work_refused,omitempty"`
 }
 
 // Recover is the Text of a "recover" act: reopen the conversations of the
@@ -596,6 +601,10 @@ type SwitchAgent struct {
 	// NoRefresh skips the record refresh before the switch. Empty, from an
 	// older client, keeps the refresh.
 	NoRefresh bool `json:"no_refresh,omitempty"`
+	// ExpectedFolder is the folder the sender's confirm named. The service
+	// refuses the switch when it would start elsewhere now. Empty, from an
+	// older client, starts wherever the record says.
+	ExpectedFolder string `json:"expected_folder,omitempty"`
 }
 
 // DefaultHandoff selects an evidence capture and the service's fixed switch

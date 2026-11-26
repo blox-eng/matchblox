@@ -6,6 +6,15 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Switch agents without losing the thread.** A switch now starts the new
+  agent in the worktree the match works in, which its task record names on
+  a `Workspace:` line, and the confirm says which folder. An idle Cursor
+  match writes its task record first, and its handover holds the recent
+  conversation. The match keeps its place in its chain through a switch
+  to any agent.
+
 ## [0.64.0] - 2026-11-26
 
 ### Added

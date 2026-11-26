@@ -64,8 +64,13 @@ type Session struct {
 	Provider  string `json:"provider,omitempty"`
 	SessionID string `json:"session_id"`
 	Cwd       string `json:"cwd"`
-	Busy      bool   `json:"busy"`
-	Status    string `json:"status"` // as the agent reports it: busy, idle, ...
+	// Work is the folder a switch starts the next agent in, and WorkRefused
+	// why the record's Workspace line was not taken. The service sets them
+	// once it has checked the record; until then Work is "" and Cwd stands.
+	Work        string `json:"work,omitempty"`
+	WorkRefused string `json:"work_refused,omitempty"`
+	Busy        bool   `json:"busy"`
+	Status      string `json:"status"` // as the agent reports it: busy, idle, ...
 	// Reported: Status is the agent's own report (Claude Code's session
 	// file, the OpenCode plugin's), not a guess from its pane. WaitingFor is
 	// why a waiting agent waits, in its words: "permission prompt", "input

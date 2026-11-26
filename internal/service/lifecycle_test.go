@@ -2148,16 +2148,16 @@ func TestASwitchKeepsTheChain(t *testing.T) {
 }
 
 // TestASwitchWithNoNewAgentStaysWhileItsPaneLives: a pane with no agent
-// after a switch keeps its match, unseen; once the pane closes, the match
-// is gone.
+// after a switch keeps its match, unseen, for the 2 minutes its agent has
+// to show; once the pane closes, the match is gone.
 func TestASwitchWithNoNewAgentStaysWhileItsPaneLives(t *testing.T) {
 	s, clock := switchChainTest(t)
 	if res := s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: "codex"})); res.Err != "" {
 		t.Fatal(res.Err)
 	}
-	*clock = clock.Add(time.Hour)
+	*clock = clock.Add(time.Minute)
 	if doc := switchSample(s, nil); doc.Chains == nil || len(doc.Chains.Chains) != 1 {
-		t.Fatalf("an hour on, its pane alive: %+v", doc.Chains)
+		t.Fatalf("a minute on, its pane alive: %+v", doc.Chains)
 	}
 	snap := lifeSnap(false)
 	snap.Sessions = slices.Clone(snap.Sessions[1:])
@@ -2280,5 +2280,192 @@ func TestGuardLinkAtOnce(t *testing.T) {
 		if got[0] == "" || got[1] == "" {
 			t.Fatalf("round %d: two launches at once got the links %q", round, got)
 		}
+	}
+}
+
+// worktreeSwitch is switchTest with %1 launched in a repository's main
+// folder, its record's Workspace line set to workspace. It answers with
+// the main folder and its worktree, links resolved.
+func worktreeSwitch(t *testing.T, workspace func(main, wt string) string) (s *Service, ran *[][]string, main, wt string) {
+	t.Helper()
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	main, wt = filepath.Join(root, "main"), filepath.Join(root, "wt")
+	repoWithWorktree(t, main, wt)
+	s, ran = switchTest(t)
+	s.IsDir = nil
+	s.Home = t.TempDir()
+	bundle := filepath.Join(s.matchContextRoot(), "match-old")
+	if err := os.MkdirAll(bundle, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bundle, "handover.md"), []byte("Workspace: "+workspace(main, wt)+"\nGoal: CSV exports.\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	snap := lifeSnap(false)
+	snap.Sessions[0].Cwd = main
+	snap.Sessions[0].MatchContext = filepath.Join(bundle, "awareness.md")
+	s.publish(snap, func(state.Doc) {})
+	return s, ran, main, wt
+}
+
+// respawnDir is the -c folder of the respawn among steps, or "".
+func respawnDir(steps [][]string) string {
+	for _, step := range steps {
+		if i := slices.Index(step, "respawn-pane"); i >= 0 {
+			if j := slices.Index(step[i:], "-c"); j >= 0 && i+j+1 < len(step) {
+				return step[i+j+1]
+			}
+		}
+	}
+	return ""
+}
+
+// switchCapture is the capture.md a switch left, or "".
+func switchCapture(t *testing.T, s *Service) string {
+	t.Helper()
+	files, _ := filepath.Glob(filepath.Join(s.matchContextRoot(), "*", "capture.md"))
+	if len(files) != 1 {
+		t.Fatalf("captures %q", files)
+	}
+	b, err := os.ReadFile(files[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
+// A record names /tmp: the agent's own text, so the switch never starts
+// there. It starts in the launch folder and says why.
+func TestSwitchWithARefusedWorkspaceStartsAtLaunch(t *testing.T) {
+	s, ran, main, _ := worktreeSwitch(t, func(string, string) string { return "/tmp" })
+	res := s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: "codex", Handoff: proto.DefaultHandoff}))
+	if res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	if got := respawnDir(*ran); got != main {
+		t.Errorf("respawn in %q; want %q", got, main)
+	}
+	if res.StartedIn != main {
+		t.Errorf("StartedIn %q; want %q", res.StartedIn, main)
+	}
+	if want := "/tmp is not a worktree of this repository: it starts in " + main; res.WorkRefused != want {
+		t.Errorf("WorkRefused %q; want %q", res.WorkRefused, want)
+	}
+	if capture := switchCapture(t, s); !strings.Contains(capture, fmt.Sprintf("Workspace: %q\n", main)) {
+		t.Errorf("capture is not of %q: %s", main, capture)
+	}
+	if notes, ran := proto.StartNotes(res); !ran || slices.ContainsFunc(notes, func(n string) bool { return strings.Contains(n, "/tmp") }) {
+		t.Errorf("skips %q are not only start notes", res.Skipped)
+	}
+}
+
+func TestSwitchStartsInTheWorktree(t *testing.T) {
+	s, ran, _, wt := worktreeSwitch(t, func(_, wt string) string { return wt })
+	res := s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: "codex", Handoff: proto.DefaultHandoff}))
+	if res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	if got := respawnDir(*ran); got != wt {
+		t.Errorf("respawn in %q; want %q", got, wt)
+	}
+	if res.StartedIn != wt || res.WorkRefused != "" {
+		t.Errorf("StartedIn %q, WorkRefused %q; want %q, none", res.StartedIn, res.WorkRefused, wt)
+	}
+	if trust := "projects={" + tomlString(wt) + "="; !slices.ContainsFunc((*ran)[0], func(a string) bool { return strings.HasPrefix(a, trust) }) {
+		t.Errorf("Codex trusts no %q: %q", wt, (*ran)[0])
+	}
+	capture := switchCapture(t, s)
+	for _, want := range []string{fmt.Sprintf("Workspace: %q\n", wt), "Command: git rev-parse --show-toplevel\n> " + wt + "\n"} {
+		if !strings.Contains(capture, want) {
+			t.Errorf("capture lacks %q: %s", want, capture)
+		}
+	}
+	if _, ran := proto.StartNotes(res); !ran {
+		t.Errorf("skips %q are not only start notes", res.Skipped)
+	}
+}
+
+func TestSwitchRefusesAMovedWorkspace(t *testing.T) {
+	s, ran, main, wt := worktreeSwitch(t, func(main, _ string) string { return main })
+	res := s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: "codex", Handoff: proto.DefaultHandoff, ExpectedFolder: wt, NoRefresh: true}))
+	if want := "the workspace changed to " + main + ": switch again"; res.Err != want {
+		t.Errorf("err %q; want %q", res.Err, want)
+	}
+	if respawnDir(*ran) != "" {
+		t.Errorf("a respawn ran: %q", *ran)
+	}
+}
+
+// The worktree is made after the record named it: the confirm bound the
+// switch to the launch folder the cache still held, and it was refused.
+// That refusal asks Git again, so the next confirm names the worktree and
+// its switch runs.
+func TestASwitchAgainAfterAMovedWorkspaceRuns(t *testing.T) {
+	s, ran, main, wt := worktreeSwitch(t, func(_, wt string) string { return wt })
+	gitIn(t, "-C", main, "worktree", "remove", wt)
+	go s.workLoop(t.Context())
+	work := func() string {
+		t.Helper()
+		s.mu.Lock()
+		s.mergeQueue()
+		s.mu.Unlock()
+		s.works.wait()
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		return s.cur.Sessions[0].Work
+	}
+	if got := work(); got != main {
+		t.Fatalf("Work %q before the worktree; want %q", got, main)
+	}
+	gitIn(t, "-C", main, "worktree", "add", "-q", wt)
+	res := s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: "codex", Handoff: proto.DefaultHandoff, ExpectedFolder: main, NoRefresh: true}))
+	if want := "the workspace changed to " + wt + ": switch again"; res.Err != want {
+		t.Fatalf("err %q; want %q", res.Err, want)
+	}
+	if got := work(); got != wt {
+		t.Fatalf("Work %q after the refusal; want %q", got, wt)
+	}
+	res = s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: "codex", Handoff: proto.DefaultHandoff, ExpectedFolder: wt, NoRefresh: true}))
+	if res.Err != "" || respawnDir(*ran) != wt {
+		t.Fatalf("err %q ran %q; want a respawn in %q", res.Err, *ran, wt)
+	}
+}
+
+func TestSwitchWithNoTaskStartsInTheWorktree(t *testing.T) {
+	s, ran, _, wt := worktreeSwitch(t, func(_, wt string) string { return wt })
+	res := s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: "codex"}))
+	if res.Err != "" || respawnDir(*ran) != wt || res.StartedIn != wt {
+		t.Fatalf("err %q StartedIn %q ran %q; want a respawn in %q", res.Err, res.StartedIn, *ran, wt)
+	}
+}
+
+func TestSwitchPreviewNamesTheWorktree(t *testing.T) {
+	s, ran, _, wt := worktreeSwitch(t, func(_, wt string) string { return wt })
+	res := s.act(t.Context(), proto.Act{RecID: "switch-preview:%1", From: "%2"})
+	if res.Err != "" || !strings.Contains(res.Preview, fmt.Sprintf("Workspace: %q\n", wt)) || len(*ran) != 0 {
+		t.Fatalf("preview %+v ran %q; want it of %q", res, *ran, wt)
+	}
+}
+
+// An older console sends no ExpectedFolder: a record that moved since its
+// confirm switches all the same.
+func TestAnOldClientSwitchesAsBefore(t *testing.T) {
+	s, ran, _, _ := worktreeSwitch(t, func(_, wt string) string { return wt })
+	res := s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: "codex", Handoff: proto.DefaultHandoff, NoRefresh: true}))
+	if res.Err != "" || respawnDir(*ran) == "" {
+		t.Fatalf("err %q ran %q; want a switch", res.Err, *ran)
+	}
+}
+
+// The console binds every switch to the folder its confirm shows: with no
+// record, that is the launch folder, and the switch goes on.
+func TestASwitchBoundToItsLaunchFolderRuns(t *testing.T) {
+	s, ran := switchTest(t)
+	res := s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: "codex", Handoff: proto.DefaultHandoff, ExpectedFolder: "/work/app"}))
+	if res.Err != "" || respawnDir(*ran) != "/work/app" || res.StartedIn != "/work/app" {
+		t.Fatalf("err %q StartedIn %q ran %q; want a respawn in /work/app", res.Err, res.StartedIn, *ran)
 	}
 }

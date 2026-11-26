@@ -176,6 +176,8 @@ type Service struct {
 	WorktreeStep func(ctx context.Context, dir, branch string) ([]string, string, error)
 	// MatchGit answers a handover's read-only git commands. Nil: git.
 	MatchGit func(ctx context.Context, dir string, args ...string) (string, error)
+	// WorkGit answers the workspace check's read-only git commands. Nil: git.
+	WorkGit func(ctx context.Context, dir string, args ...string) (string, error)
 	// Activity is the builder's last key in any tmux client: it keeps a
 	// stoker that rests resting while they work in a pane.
 	Activity func() time.Time
@@ -286,6 +288,8 @@ type Service struct {
 
 	acts acts
 	ways waysCache
+	// works are the work folders of the task records, filled by workLoop.
+	works workCache
 	// fam are the stokers: the host, then one for each chain that has one.
 	fam stokerFamily
 	// sentAt is when a command or a compact last went to a pane, by pane:
@@ -332,6 +336,9 @@ type Service struct {
 	// afresh: each hears once who it is chained with. heldCleared are the
 	// ones a delivery holds.
 	cleared, heldCleared map[string]bool
+	// unnamed are the agents a switch started that show no session id
+	// yet: each joins cleared once its id shows. Under mu.
+	unnamed map[chains.Member]bool
 	// mateNames is the last name of the chained match in each live pane,
 	// for the news that it left once its session is gone. Under mu.
 	mateNames map[string]string
@@ -434,6 +441,7 @@ func New(cfg config.Config, smp *sample.Sampler, git GitSource) *Service {
 
 		sampleKick: make(chan struct{}, 1),
 		queue:      queue.New(),
+		works:      workCache{asks: make(chan workKey, 64)},
 
 		NightEnds:   cfg.Stoker.NightEnds,
 		StokerAgent: cfg.Stoker.Agent,
@@ -619,6 +627,7 @@ func (s *Service) Run(ctx context.Context) {
 	go s.shipsLoop(ctx)
 	go s.foundLoop(ctx)
 	go s.copyLoop(ctx)
+	go s.workLoop(ctx)
 	s.loadHistory()
 	t := time.NewTicker(s.interval)
 	defer t.Stop()
@@ -827,6 +836,7 @@ func (s *Service) mergeQueue() {
 	s.cur.StokerServer = s.StokerServer
 	s.markUnread(now)
 	s.setReasons()
+	s.setWorks()
 }
 
 // setReasons says why each session at rest is idle. The ship of a session is

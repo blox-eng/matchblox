@@ -34,6 +34,7 @@ type cursorInput struct {
 	GenerationID   string   `json:"generation_id"`
 	HookEventName  string   `json:"hook_event_name"`
 	Status         string   `json:"status"`
+	Prompt         string   `json:"prompt"`
 	Text           string   `json:"text"`
 	WorkspaceRoots []string `json:"workspace_roots"`
 	ToolUseID      string   `json:"tool_use_id"`
@@ -78,9 +79,12 @@ func ParseCursor(stdin io.Reader, env func(string) string) (Event, error) {
 		ev.ToolUseID = in.ToolUseID
 	case name == "Stop" && in.Status != "completed":
 		ev.Name = "UserPromptSubmit"
+	case name == "UserPromptSubmit":
+		ev.Text = said.BothEnds(said.Clean(in.Prompt), TextLimit)
 	case name == Reply:
 		line, asks := said.Reply(in.Text)
 		ev.Message, ev.Asks = cut(line), asks
+		ev.Text = said.BothEnds(said.Clean(in.Text), TextLimit)
 	}
 	return ev, nil
 }

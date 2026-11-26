@@ -135,13 +135,22 @@ func (s *Service) refreshRecord(ctx context.Context, x sample.Session, n proto.S
 		return "", refreshNotRun, release, nil
 	}
 	record := s.managedRecord(x)
+	cursor := x.Agent == sample.CursorAgent
+	hooked := false
+	if cursor {
+		s.mu.Lock()
+		hooked = len(s.queue.HookedIn(x.Pane)) > 0
+		s.mu.Unlock()
+	}
 	why := ""
 	switch {
 	case word != "":
 		why = x.Name + " " + word
 	case x.Stopped():
 		why = "out of usage until " + x.Out.Local().Format("15:04")
-	case x.Agent != "claude" && x.Agent != "codex" || x.Transcript == "":
+	case cursor && !hooked:
+		why = x.Agent + " sent no hook event since the service started: run matchblox setup if its hooks are not installed"
+	case !cursor && (x.Agent != "claude" && x.Agent != "codex" || x.Transcript == ""):
 		why = x.Agent + " gives no turn end"
 	case record == "":
 		why = "no managed task record"
@@ -194,7 +203,7 @@ func (s *Service) refreshRecord(ctx context.Context, x sample.Session, n proto.S
 		if !ok || cur.PID != x.PID || cur.Start != x.Start {
 			return "", refreshNotRun, release, errors.New("the session changed while this switch read it: switch again")
 		}
-		if cur.TurnEnded.After(sent) && cur.Resting() && !s.waitsOn(x.Pane, cur) {
+		if s.turnEnded(cur, sent) && !s.waitsOn(x.Pane, cur) {
 			break
 		}
 	}
@@ -202,6 +211,17 @@ func (s *Service) refreshRecord(ctx context.Context, x sample.Session, n proto.S
 		return proto.RecordWritten, refreshTurnEnded, done, nil
 	}
 	return proto.NotRefreshed + "it ended its turn without writing the record", refreshTurnEnded, done, nil
+}
+
+// turnEnded tells if x ended a turn after sent and rests. Cursor's turn
+// ends in its hooks: a Stop with no prompt after it. Hold no lock.
+func (s *Service) turnEnded(x sample.Session, sent time.Time) bool {
+	if x.Agent != sample.CursorAgent {
+		return x.TurnEnded.After(sent) && x.Resting()
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.queue.StopAfter(x.Pane, sent)
 }
 
 // managedRecord is the task record of x's match, in a bundle this service
