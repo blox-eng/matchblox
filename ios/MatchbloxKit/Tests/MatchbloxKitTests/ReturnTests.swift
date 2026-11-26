@@ -49,8 +49,13 @@ final class ReturnTests: XCTestCase {
         XCTAssertFalse(Opening.coverShows(live: false, failed: false, wasLive: true, away: false))
     }
 
-    func testAFailureShowsTheCoverOnResume() {
-        XCTAssertTrue(Opening.coverShows(live: false, failed: true, wasLive: true, away: false))
+    /// On a return the last screen stays under the failure: the banner says it, not a page.
+    func testAFailureOnResumeKeepsTheScreen() {
+        XCTAssertFalse(Opening.coverShows(live: false, failed: true, wasLive: true, away: false))
+    }
+
+    func testAFailureOnTheFirstConnectShowsTheCover() {
+        XCTAssertTrue(Opening.coverShows(live: false, failed: true, wasLive: false, away: false))
     }
 
     func testLiveShowsNoCover() {
