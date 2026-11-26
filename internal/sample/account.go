@@ -32,8 +32,9 @@ func (s *Sampler) envOf(pid int, key procKey) agentEnv {
 	if e, ok := s.envs[key]; ok {
 		return e
 	}
+	from, _ := s.readableAs(pid)
 	get := func(k string) string {
-		v, _ := s.FS.Environ(pid, k)
+		v, _ := s.FS.Environ(from, k)
 		return v
 	}
 	home, cursorHome := s.Home, s.Home

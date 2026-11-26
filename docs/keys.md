@@ -56,6 +56,7 @@ the line empty and a question on the screen; else it types.
 | `F` | In the list, stokes the chain of the chosen session: the start sheet, `Stoke the chain <name> (<n> matches)?`, takes the order and the gos of a stoker for that chain. See [A family of stokers](stoker.md#a-family-of-stokers). |
 | `d` | In the tips, dismisses the chosen tip until its evidence changes. |
 | `Tab` or `Shift+Tab` | Goes to Machine, or back to the list and the chat. |
+| `⌥1-9` | `⌥` and a digit choose the session with that number, from the line or the list. Each row shows its number left of its name, and a session keeps it while it lives. In all hosts, the number is of the chosen session's host. With no such session, a notice names the numbers there are: `no session 7: the list numbers 1 to 5`. On a phone, `Esc` then a quick digit types the digit, or answers with it. |
 | `Ctrl+O` | Goes into the chosen agent's pane, from the line or the list. The key line then says the way back, `ctrl+a m`. |
 | `Ctrl+L` | Hides the list, or shows it again. With the list hidden, the chat takes the width, and the header names each session that needs you. A tap on a name opens its chat. On a phone, the list and the chat take turns. |
 | `◂` or `←` | On a phone, goes from the chat back to the list. A tap on `◂` at the left of the chat's head does it too. On a desk, `←` in the line moves the keys to the list, as `◂` does on a phone. |
@@ -228,8 +229,14 @@ again. Each terminal comes back to its own session: a phone and a desk keep
 theirs apart. In a shell or an editor the keys type as always: matchblox
 binds them only in the panes of the agents it samples.
 
-A terminal that does not send Option as Meta types `ß` for `⌥s`. Use
-prefix `s`, or set Option as Meta: in Terminal.app, Settings
+`⌥1` … `⌥9` in an agent's pane go straight to the pane of the session with
+that number, the number its row shows in the list. With no such session,
+tmux shows the same notice as the list. With no console running, the key
+reaches the agent as typed. On a phone, `Esc` then a quick digit reaches
+the agent as typed: it never jumps.
+
+A terminal that does not send Option as Meta types `ß` for `⌥s`, and `¡`
+for `⌥1`. Use prefix `s` for the flip, or set Option as Meta: in Terminal.app, Settings
 → Profiles → Keyboard → **Use Option as Meta key**; in iTerm2, Settings →
 Profiles → Keys → **Left Option key: Esc+**. Ghostty and kitty send it as
 Meta.

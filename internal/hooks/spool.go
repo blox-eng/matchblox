@@ -11,8 +11,11 @@ import (
 )
 
 // Append adds one event to the spool. One write for each line, so hooks
-// that run at the same time do not mix their lines.
+// that run at the same time do not mix their lines. It keeps no Text: a
+// turn's text can hold a secret, and the spool outlives the turn, so a
+// spooled turn reaches the service without it.
 func Append(spool string, ev Event) error {
+	ev.Text = ""
 	if err := os.MkdirAll(filepath.Dir(spool), 0o700); err != nil {
 		return err
 	}

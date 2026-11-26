@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/hooks"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/state"
@@ -315,7 +316,7 @@ func TestNoRefreshWhen(t *testing.T) {
 		},
 		"cursor": {
 			change: func(x *sample.Session) { x.Agent = sample.CursorAgent },
-			note:   "not refreshed: cursor-agent gives no turn end",
+			note:   "not refreshed: cursor-agent sent no hook event since the service started: run matchblox setup if its hooks are not installed",
 		},
 		"no transcript": {
 			change: func(x *sample.Session) { x.Transcript = "" },
@@ -558,4 +559,74 @@ func TestSwitchNowRefusesTheStokerAndItsPanes(t *testing.T) {
 	if res := s.act(t.Context(), proto.Act{RecID: "switchnow:%1", From: "%7"}); res.Err != "" {
 		t.Errorf("the builder's shell: %+v", res)
 	}
+}
+
+// cursorRefresh is a refresh test of an idle Cursor session in %1, with no
+// transcript: its turns end in its hooks.
+func cursorRefresh(t *testing.T) *refreshFake {
+	t.Helper()
+	return refreshTest(t, func(x *sample.Session) { x.Agent, x.Transcript = sample.CursorAgent, "" })
+}
+
+func (f *refreshFake) cursorHook(name string, at time.Time) {
+	f.s.Hook(hooks.Event{Name: name, Agent: hooks.CursorAgent, SessionID: "s1", Pane: "%1", At: at})
+}
+
+func TestCursorWritesItsRecordBeforeASwitch(t *testing.T) {
+	f := cursorRefresh(t)
+	f.cursorHook("Stop", time.Now().Add(-time.Hour))
+	f.enter = func() {
+		f.cursorHook("UserPromptSubmit", time.Now())
+		f.write(t)
+		f.cursorHook("Stop", time.Now())
+	}
+	start := time.Now()
+	res := f.switchTo(t, t.Context(), proto.SwitchAgent{Handoff: proto.DefaultHandoff})
+	f.switched(t, res, "record written for this switch")
+	if got := f.typed(); !slices.Equal(got, []string{refreshPrompt(f.record) + "⏎"}) {
+		t.Errorf("typed %q", got)
+	}
+	if took := time.Since(start); took >= refreshLimit/2 {
+		t.Errorf("the switch waited %v", took)
+	}
+}
+
+func TestCursorWithoutHooksSkipsTheRefresh(t *testing.T) {
+	f := cursorRefresh(t)
+	start := time.Now()
+	res := f.switchTo(t, t.Context(), proto.SwitchAgent{Handoff: proto.DefaultHandoff})
+	f.switched(t, res, "not refreshed: cursor-agent sent no hook event since the service started: run matchblox setup if its hooks are not installed")
+	if got := f.typed(); len(got) != 0 {
+		t.Errorf("typed %q", got)
+	}
+	if took := time.Since(start); took >= refreshLimit/2 {
+		t.Errorf("the switch waited %v", took)
+	}
+}
+
+// TestCursorIdleSinceRestartNamesTheRestart: the queue lives in memory, so
+// a Cursor match idle across a restart has sent no hook event. Its hooks
+// may well be installed: the note and the capture say what is known.
+func TestCursorIdleSinceRestartNamesTheRestart(t *testing.T) {
+	f := cursorRefresh(t)
+	res := f.switchTo(t, t.Context(), proto.SwitchAgent{Handoff: proto.DefaultHandoff})
+	if note := "not refreshed: cursor-agent sent no hook event since the service started: run matchblox setup if its hooks are not installed"; !slices.Contains(res.Skipped, note) {
+		t.Errorf("the switch notes %q; want %q", res.Skipped, note)
+	}
+	if line := "Conversation unavailable: no Cursor hook event from this session since the service started; run matchblox setup if its hooks are not installed.\n"; !strings.Contains(cursorCapture(t), line) {
+		t.Errorf("the capture lacks %q", line)
+	}
+}
+
+func TestACursorPromptAfterTheStopIsNotRest(t *testing.T) {
+	f := cursorRefresh(t)
+	refreshLimit = time.Second
+	f.cursorHook("Stop", time.Now().Add(-time.Hour))
+	f.enter = func() {
+		at := time.Now()
+		f.cursorHook("Stop", at)
+		f.cursorHook("UserPromptSubmit", at.Add(time.Millisecond))
+	}
+	res := f.switchTo(t, t.Context(), proto.SwitchAgent{Handoff: proto.DefaultHandoff})
+	f.switched(t, res, "not refreshed: the refresh timed out after "+waitText(refreshLimit))
 }

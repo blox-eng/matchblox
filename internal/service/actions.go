@@ -143,6 +143,7 @@ func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 		if !found {
 			return refuseText("no agent session in " + pane + " any more")
 		}
+		x.Cwd, _ = s.switchFolder(ctx, x)
 		return proto.Result{Preview: s.captureMatch(ctx, x, "")}
 	}
 	if a.RecID == NamesAct {

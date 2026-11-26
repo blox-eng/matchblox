@@ -241,6 +241,7 @@ type action struct {
 	host        string                      // the host of the row it acts on; "": the home host, as a peer is never ""
 	tty         string                      // a jump or a switch: the marked client that asked; "" unmarked
 	asker       bool                        // a jump of this machine's tmux: it moves only its tty's client, else the desk's
+	inPane      bool                        // a jump its tty's client asked for in an agent's pane: it need not show the console
 	deskLocal   func(tty string) []string   // a host jump of an unmarked key: its local list for the desk's client
 	beside      bool                        // it shows the session in the agent pane: steps[0] is the pane's command
 	chain       []paneKey                   // a chain view: the member each of steps shows
@@ -899,6 +900,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.besideShown(msg)
 	case previewMsg:
 		return m.look(msg)
+	case jumpMsg:
+		return m.jumpFromDesk(msg)
 	case fromConn:
 		if msg.conn != m.conn {
 			return m, nil
@@ -2021,6 +2024,9 @@ func (m Model) switched(r proto.Result) (Model, tea.Cmd) {
 		return m, said
 	}
 	m.flash = ""
+	if r.StartedIn != "" {
+		j.done += " in " + r.StartedIn
+	}
 	if m.opt.Demo != "" { // the switch ran: only the jump into its pane cannot
 		said := m.say(j.done)
 		return m, said

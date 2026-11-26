@@ -6,6 +6,55 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+## [0.65.0] - 2026-11-26
+
+### Added
+
+- **Switch agents without losing the thread.** A switch now starts the new
+  agent in the worktree the match works in, which its task record names on
+  a `Workspace:` line, and the confirm says which folder. An idle Cursor
+  match writes its task record first, and its handover holds the recent
+  conversation. The match keeps its place in its chain through a switch
+  to any agent.
+
+## [0.64.0] - 2026-11-26
+
+### Added
+
+- **Jump to session N with ⌥N.** Each session in the list shows a number,
+  1 to 9, that stays with it while it lives. In the console, `⌥1` to `⌥9`
+  choose that session. Inside an agent's pane they go straight to its pane.
+  On the phone, `Esc` and then a digit still reaches the agent.
+
+## [0.63.1] - 2026-11-26
+
+### Fixed
+
+- **Switch a Cursor session to another agent.** A switch away from
+  Cursor's CLI no longer stops at "no directory": the new agent starts in
+  Cursor's folder with the match's task record. A session whose folder
+  stays hidden gets a refusal that says what to do.
+
+## [0.63.0] - 2026-11-25
+
+### Added
+
+- **See Cursor plan usage on any host.** With `[limits] cursor_usage = true`,
+  Machine → USAGE reads the default Cursor login from
+  `~/.config/cursor/auth.json` or `~/.cursor/auth.json` (and the Keychain
+  item on macOS only as a fallback), so Linux and other hosts show `mo`
+  the same way macOS already could.
+
+## [0.62.0] - 2026-11-25
+
+### Added
+
+- **Adjust a phone text selection before copying.** Drag either selection
+  handle to choose the text you want; a magnifying lens helps you see
+  where it lands. Copy stays available when you lift your finger.
+
+## [0.61.0] - 2026-11-24
+
 ### Added
 
 - **Pocket home from a live console.** Pull the matchbox drawer and tap
@@ -2089,7 +2138,13 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.60.0...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.65.0...HEAD
+[0.65.0]: https://github.com/blox-eng/matchblox/compare/v0.64.0...v0.65.0
+[0.64.0]: https://github.com/blox-eng/matchblox/compare/v0.63.1...v0.64.0
+[0.63.1]: https://github.com/blox-eng/matchblox/compare/v0.63.0...v0.63.1
+[0.63.0]: https://github.com/blox-eng/matchblox/compare/v0.62.0...v0.63.0
+[0.62.0]: https://github.com/blox-eng/matchblox/compare/v0.61.0...v0.62.0
+[0.61.0]: https://github.com/blox-eng/matchblox/compare/v0.60.0...v0.61.0
 [0.60.0]: https://github.com/blox-eng/matchblox/compare/v0.59.0...v0.60.0
 [0.59.0]: https://github.com/blox-eng/matchblox/compare/v0.58.1...v0.59.0
 [0.58.1]: https://github.com/blox-eng/matchblox/compare/v0.58.0...v0.58.1

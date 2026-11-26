@@ -90,10 +90,12 @@ type Lost struct {
 	Why  string
 }
 
-// Left is a member that dropped out of a chain.
+// Left is a member that dropped out of a chain. Moving: it left while a
+// switch waited for its new agent.
 type Left struct {
-	Who   Member
-	Chain string
+	Who    Member
+	Chain  string
+	Moving bool
 }
 
 // Move is a switch that starts another agent in From's pane: the new agent
@@ -288,6 +290,13 @@ func (s *Store) Stay(m Member) {
 	s.Moves = slices.DeleteFunc(s.Moves, func(mv Move) bool { return mv.From.Same(m) })
 }
 
+// Restamp starts the wait of m's move again at now: the switch's respawn ran.
+func (s *Store) Restamp(m Member, now time.Time) {
+	if i := slices.IndexFunc(s.Moves, func(mv Move) bool { return mv.From.Same(m) }); i >= 0 {
+		s.Moves[i].At = now
+	}
+}
+
 // Moving is the move of m that waits for its new agent.
 func (s *Store) Moving(m Member) (Move, bool) {
 	i := slices.IndexFunc(s.Moves, func(mv Move) bool { return mv.From.Same(m) })
@@ -346,8 +355,9 @@ func (s *Store) Prune(live func(Member) bool, now time.Time) (left []Left) {
 		}
 	}
 	for _, m := range gone {
+		_, moving := s.Moving(m)
 		for _, id := range s.leave(m) {
-			left = append(left, Left{Who: m, Chain: id})
+			left = append(left, Left{Who: m, Chain: id, Moving: moving})
 		}
 	}
 	for k := range s.inbox {

@@ -3,16 +3,16 @@
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
  NEEDS YOU · 1  −                       │ kindle-web ✻ asks             ctx 56%  ctrl+o expand · m menu
  ≋ hearth               step 1 of 3 · 3 │ chain hearth · step 1 of 3   kindle-web needs you → hearth-ap…
-▌├ ╿ kindle-web                     1m ✻│
- │   Do you want to proceed?            │
- ├ ✦ hearth-api                        ✻│
- └ ╵ ember-billing                  3m ✻│
+▌  ├ ╿ kindle-web                   1m ✻│
+   │   Do you want to proceed?          │
+   ├ ✦ hearth-api                      ✻│
+   └ ╵ ember-billing                3m ✻│
 ────────────────────────────────────────│
  WORKING · 1  −                         │
- ✦ flint-auth                          ✻│
+   ✦ flint-auth                        ✻│
 ────────────────────────────────────────│
  IDLE · 1  −                            │
- ╵ spark-docs                       9m ✻│
+   ╵ spark-docs                     9m ✻│
                                         │
                                         │
                                         │
@@ -35,4 +35,4 @@
                                         │
  + new · ✧ 7 tips                       │ › Fmerge on green                        ⏎ send to kindle-web
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
- writing to kindle-web · ⏎ send · ↑↓ choose · esc list · ctrl+o expand · tab Machine
+ writing to kindle-web · ⏎ send · ↑↓ ⌥1-9 choose · esc list · ctrl+o expand · tab Machine

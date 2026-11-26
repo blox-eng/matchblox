@@ -757,3 +757,22 @@ func TestAReportedWaitKeepsItsStart(t *testing.T) {
 		t.Errorf("the wait began at %v, want %v each time", since, began)
 	}
 }
+
+// TestNewestIsThePaneLatestHookedSession: a pane can hold the hooks of an
+// agent that left it; the capture wants the one that spoke last.
+func TestNewestIsThePaneLatestHookedSession(t *testing.T) {
+	q := New()
+	if _, ok := q.Newest("%1"); ok {
+		t.Fatal("an unhooked pane names a session")
+	}
+	q.Apply(hooks.Event{Name: "SessionStart", SessionID: "late", Pane: "%1", At: at(5)})
+	q.Apply(hooks.Event{Name: "Stop", SessionID: "early", Pane: "%1", At: at(3)})
+	q.Apply(hooks.Event{Name: "Stop", SessionID: "other", Pane: "%2", At: at(9)})
+	if id, ok := q.Newest("%1"); !ok || id != "late" {
+		t.Fatalf("Newest(%%1) = %q %v, want late", id, ok)
+	}
+	q.Apply(hooks.Event{Name: "UserPromptSubmit", SessionID: "early", Pane: "%1", At: at(7)})
+	if id, _ := q.Newest("%1"); id != "early" {
+		t.Fatalf("Newest(%%1) = %q, want early after its newer event", id)
+	}
+}

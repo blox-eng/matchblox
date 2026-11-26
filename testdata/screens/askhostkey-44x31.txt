@@ -2,10 +2,10 @@
  SESSIONS 7    machine
 ────────────────────────────────────────────
  NEEDS YOU · 6  −
-▌╿ flint-auth                           2m ✻
-   conflicts with main
- ╿ spark-docs                           9m ✻
-   I rewrote the quick start and the instal…
+▌  ╿ flint-auth                         2m ✻
+     conflicts with main
+   ╿ spark-docs                         9m ✻
+     I rewrote the quick start and the inst…
 ╭─ ssh ws-1 asks ──────────────────────────╮
 │                                          │
 │   The authenticity of host 'ws-1'        │
