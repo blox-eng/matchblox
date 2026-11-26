@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -181,5 +182,25 @@ func TestSessionsCarryTheirWorkFolder(t *testing.T) {
 	s.mu.Unlock()
 	if again[0].Work != wt || again[1].WorkRefused != refused {
 		t.Errorf("after a second merge: %q, %q", again[0].Work, again[1].WorkRefused)
+	}
+}
+
+// TestARefusedWorkspaceShowsNoControlKeys: the refusal quotes an
+// agent-written path that holds control keys or runs long, so no escape
+// reaches the builder's terminal or the confirm.
+func TestARefusedWorkspaceShowsNoControlKeys(t *testing.T) {
+	launch := t.TempDir()
+	for name, path := range map[string]string{
+		"an escape":  "/x\x1b]52;c;cm0gLXJmIH4=\x07\x1b[2J",
+		"a new line": "/x\nswitched it anyway",
+		"a long one": "/" + strings.Repeat("a", 2000),
+	} {
+		_, refused := workFolder(t.Context(), nil, "Workspace: "+path+"\n", launch)
+		if strings.ContainsAny(refused, "\x1b\x07\n\r") || len(refused) > 600 {
+			t.Errorf("%s: refused %q, want no control keys and at most 600 bytes", name, refused)
+		}
+		if !strings.Contains(refused, "is not a worktree of this repository: it starts in "+launch) {
+			t.Errorf("%s: refused %q lost its words", name, refused)
+		}
 	}
 }

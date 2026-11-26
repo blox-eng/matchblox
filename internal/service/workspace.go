@@ -61,7 +61,23 @@ func workFolder(ctx context.Context, git gitRunner, record, launch string) (work
 	if top := worktreeOf(ctx, git, path, launch); top != "" {
 		return top, ""
 	}
-	return launch, path + " is not a worktree of this repository: it starts in " + launch
+	return launch, shownPath(path) + " is not a worktree of this repository: it starts in " + launch
+}
+
+// shownPathLimit is the longest agent-written path a refusal shows as is.
+const shownPathLimit = 256
+
+// shownPath is an agent-written path as a refusal shows it: as written when
+// it is short and clean, else quoted and cut, so no control key reaches
+// the builder's terminal or the confirm.
+func shownPath(p string) string {
+	if len(p) <= shownPathLimit && said.Clean(p) == p {
+		return p
+	}
+	if len(p) > shownPathLimit {
+		p = strings.ToValidUTF8(p[:shownPathLimit], "") + "…"
+	}
+	return fmt.Sprintf("%q", p)
 }
 
 // worktreeOf answers with the top level of path when path is a worktree of
