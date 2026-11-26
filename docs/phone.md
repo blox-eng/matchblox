@@ -222,8 +222,10 @@ Nothing connects to a host from the background.
   console says `That session ended.`
 - **A tap goes back:** when that host's console is open behind the island,
   a tap brings it back and jumps to the session the island shows. The screen
-  stays while the app connects again. Face ID asks again only after 5
-  minutes away.
+  stays while the app connects again, with a thin line that breathes over
+  the top, and keys you type then go once it is back. If the host stays out
+  of reach for 20 s, the screen says `Can't reach <host>.` with `Try again`.
+  Face ID asks again only after 5 minutes away.
 - **The setting:** the `Island` entry in the app's console, next to `Hosts`.
   `Follow` is the one host that has the island (the host opened last). `Show`
   is `Sessions`, `Usage` or `Auto (Usage while the stoker runs)`. `Buzz` is

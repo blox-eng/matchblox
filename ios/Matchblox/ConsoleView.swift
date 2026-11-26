@@ -51,6 +51,10 @@ struct ConsoleView: View {
             TerminalRepresentable(connection: connection)
             if connection.showsCover {
                 cover
+            } else if let failure = connection.keptFailure {
+                keptFailure(failure)
+            } else if connection.reconnecting {
+                BreathingLine()
             }
         }
         .sheet(isPresented: Binding(get: { connection.invite }, set: { connection.invite = $0 })) {
@@ -118,6 +122,23 @@ struct ConsoleView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .padding(24)
         .background(Theme.bg)
+    }
+
+    /// Past the quiet retries the kept screen says what happened, over its top: no new page.
+    private func keptFailure(_ message: String) -> some View {
+        HStack(spacing: 16) {
+            Text(message)
+                .foregroundStyle(Theme.fg)
+            Spacer(minLength: 0)
+            Button("Try again") { connection.retry() }
+                .buttonStyle(.borderedProminent)
+                .foregroundStyle(Theme.bg)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(Theme.wash)
+        .overlay(alignment: .bottom) { Rectangle().fill(Theme.hair).frame(height: 1) }
+        .frame(maxHeight: .infinity, alignment: .top)
     }
 
     private var openAgainButton: some View {
@@ -637,6 +658,8 @@ final class ConsoleConnection {
     /// One unlock serves every reconnect, and a return to the app inside `UnlockGrace.window`.
     @ObservationIgnored private var unlocked: LAContext?
     @ObservationIgnored private var grace = UnlockGrace()
+    /// Keys typed on the kept screen while it connects again.
+    @ObservationIgnored private var held = HeldKeys()
     /// True once the console was live: a reconnect then keeps the last screen, with no cover.
     private(set) var wasLive = false
     /// True while Pocket is in the background: the cover hides the console from the app switcher.
@@ -683,6 +706,7 @@ final class ConsoleConnection {
         registered = false
         registration?.cancel()
         registration = nil
+        held.drop()
     }
 
     /// Pocket left the screen: the connection goes (iOS would stop it), the unlock stays for the grace window.
@@ -692,6 +716,7 @@ final class ConsoleConnection {
         registration?.cancel()
         registration = nil
         grace.backgrounded(at: .now)
+        held.drop()
         away = true
     }
 
@@ -714,6 +739,15 @@ final class ConsoleConnection {
         guard !away else { return }
         cancel()
         start()
+    }
+
+    /// The kept screen shows while the console connects again: a line breathes over it.
+    var reconnecting: Bool { phase == .connecting && wasLive && !away }
+
+    /// The failure that the kept screen says, past the quiet retries.
+    var keptFailure: String? {
+        guard wasLive, !away, case .failed(let message, _) = phase else { return nil }
+        return message
     }
 
     var showsCover: Bool {
@@ -758,6 +792,7 @@ final class ConsoleConnection {
             return
         }
         var delay = ReconnectDelay()
+        var quiet = QuietRetry(keptScreen: wasLive)
         while !Task.isCancelled {
             phase = .connecting
             let key: NIOSSHPrivateKey
@@ -799,9 +834,22 @@ final class ConsoleConnection {
             guard !Task.isCancelled else { return }
             switch ending {
             case .failed(let failure):
-                onFailure(failure)
-                return
+                consoleLog.error("connect failed: \(String(describing: failure), privacy: .public)")
+                switch quiet.next(after: failure, at: .now) {
+                case .retry(let wait):
+                    phase = .connecting
+                    try? await Task.sleep(for: wait)
+                case .say:
+                    held.drop()
+                    phase = .failed(Opening.message(for: .unreachable, host: host.label), scanAgain: false)
+                    return
+                case .leave:
+                    held.drop()
+                    onFailure(failure)
+                    return
+                }
             case .ended(let sawOutput):
+                quiet = QuietRetry(keptScreen: wasLive)
                 switch delay.next(after: ContinuousClock.now - opened, sawOutput: sawOutput) {
                 case .reconnect(let wait):
                     phase = .connecting
@@ -896,6 +944,8 @@ final class ConsoleConnection {
         defer {
             sink.finish()
             writer.cancel()
+            // Keys typed until the next session opens are held, not sent to an ended one.
+            outgoing = nil
         }
 
         // A reconnect keeps the last screen: the tmux attach draws over it, with no blank between.
@@ -911,6 +961,9 @@ final class ConsoleConnection {
         let now = terminalSize
         if now != size {
             sink.yield(.resize(cols: now.cols, rows: now.rows))
+        }
+        if let keys = held.take() {
+            sink.yield(.input(keys))
         }
         var sawOutput = false
         // The agent signal comes out before SwiftTerm sees the bytes: the terminal never draws it.
@@ -1016,7 +1069,12 @@ extension ConsoleConnection: @preconcurrency TerminalViewDelegate {
         // Every key reaches this: the soft and the hardware keyboard's, the belt's, and taps.
         let marked = consoleMarks && terminal?.inTmuxPane == false
         if marked { paneAgent.marked(at: ContinuousClock.now) }
-        outgoing?.yield(.input(Data(InputMark.sent(data, marked: marked))))
+        let keys = Data(InputMark.sent(data, marked: marked))
+        if let outgoing {
+            outgoing.yield(.input(keys))
+        } else if reconnecting {
+            held.hold(keys)
+        }
     }
 
     func sizeChanged(source: TerminalView, newCols: Int, newRows: Int) {
@@ -1085,3 +1143,23 @@ extension ConsoleConnection {
     }
 }
 #endif
+
+/// The kept screen connects again: a thin brass line breathes over its top, and nothing else moves.
+private struct BreathingLine: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var lit = false
+
+    var body: some View {
+        Rectangle()
+            .fill(Theme.accent)
+            .frame(height: 2)
+            .opacity(reduceMotion ? 0.7 : (lit ? 1 : 0.25))
+            .frame(maxHeight: .infinity, alignment: .top)
+            .allowsHitTesting(false)
+            .accessibilityLabel("Connecting again")
+            .onAppear {
+                guard !reduceMotion else { return }
+                withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) { lit = true }
+            }
+    }
+}

@@ -77,3 +77,12 @@ prompt shows.
   shows the session that matters most (0006: a waiting one beats a burning
   one), so the tap goes where the island pointed. The console connects
   again with `--open <n>`; the screen and the unlock stay.
+- Owner ruling (2026-11-26, after a device report: a return often showed
+  "The connection to <host> closed"): a return never leaves the console for
+  a short failure. iOS brings the network back after Pocket is active, and
+  the 5-minute reuse took away the Face ID pause that hid it. On a kept
+  screen a failed connect tries again after 1, 2, then 4 s, behind a brass
+  line that breathes over the top. After 20 s the kept screen says
+  `Can't reach <host>.` with `Try again`, with no new page. A changed host
+  key or a refused key still opens the Reach screen. Keys typed meanwhile
+  go once the console is back, up to 4 KB; a failure drops them.

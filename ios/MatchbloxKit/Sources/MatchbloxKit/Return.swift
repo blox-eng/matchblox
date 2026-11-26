@@ -13,12 +13,13 @@ extension Opening {
         keepsConsole(for: link, current: current) ? link.session : nil
     }
 
-    /// The cover shows on the first connect, on a failure, and while the app is away from the
-    /// screen, so the app switcher's snapshot holds no console. A console that was live keeps its
-    /// last screen while it connects again; the tmux attach draws over it.
+    /// The cover shows on the first connect and while the app is away from the screen, so the
+    /// app switcher's snapshot holds no console. A console that was live keeps its last screen
+    /// while it connects again, and under a failure: the banner says it. The tmux attach draws
+    /// over the kept screen.
     public static func coverShows(live: Bool, failed: Bool, wasLive: Bool, away: Bool) -> Bool {
         if away { return true }
         if live { return false }
-        return failed || !wasLive
+        return !wasLive
     }
 }
