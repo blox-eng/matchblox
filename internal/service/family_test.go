@@ -524,7 +524,7 @@ func familySetup(t *testing.T) (*Service, *[][]string, *time.Time) {
 		t.Fatal(err)
 	}
 	s.IsDir = func(string) bool { return true }
-	s.TmuxOut = func([]string) (string, error) { return "%42\n", nil }
+	startedPanes(s)
 	s.mu.Lock()
 	s.Chains.Chains[0].Repo = repo
 	s.cur.Git = &gitscan.Report{Repos: []gitscan.Repo{{Path: repo}, {Path: "/w/app"}}}

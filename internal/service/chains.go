@@ -814,7 +814,7 @@ func (s *Service) quitAgent(ctx context.Context, u *stokerUnit) error {
 	if s.StokerServer == "" || !s.stokerThere(ctx, u) {
 		return nil
 	}
-	if res := s.Actions.Do(ctx, advice.Action{Label: "quit the stoker", Steps: [][]string{s.stokerSessionArgv(u, "kill-session")}, Destructive: true}, "y"); res.Err != "" {
+	if res := s.Actions.Do(ctx, advice.Action{Label: "quit the stoker", Steps: [][]string{s.stokerMux().KillSession(unitSession(u))}, Destructive: true}, "y"); res.Err != "" {
 		return errors.New(res.Err)
 	}
 	s.mu.Lock()

@@ -262,11 +262,17 @@ type Service struct {
 
 	// recovering runs one recover act at a time; reopened is when each
 	// conversation it reopened started, until a sample shows it.
-	recovering sync.Mutex
-	reopened   map[string]reopenedAt
+	// unconfirmed is a start whose pane list still errors: the next recover
+	// of that conversation lists As and does not Start again.
+	recovering  sync.Mutex
+	reopened    map[string]reopenedAt
+	unconfirmed map[string]unconfirmedAt
 	// settle is how long recover waits before it checks that each agent it
 	// reopened still runs (0: recoverSettle).
 	settle time.Duration
+	// listPause is how long recover waits between ListStrict errors
+	// (0: recoverListPause).
+	listPause time.Duration
 
 	mu  sync.Mutex
 	cur state.Doc

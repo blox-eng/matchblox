@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/blox-eng/matchblox/internal/mux"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -20,6 +21,10 @@ import (
 func (m Model) hasAgent() bool {
 	return m.stoker != nil && m.stokerServer != "" && m.stoker.Agent != ""
 }
+
+// stokerMux is the stoker's own tmux server (-L): its sessions are not the
+// console's.
+func (m Model) stokerMux() mux.Mux { return mux.Tmux{Server: m.stokerServer} }
 
 // stokerAttach is the command that attaches to the stoker agent's session
 // on its own server.
@@ -62,7 +67,7 @@ func (m Model) quitAgent() (tea.Model, tea.Cmd) {
 		m.sayError("the stoker is not running")
 	default:
 		m.pending = &action{label: "quit the stoker agent", destructive: true, rec: "stoker:quit", which: "primary",
-			steps: [][]string{{"tmux", "-L", m.stokerServer, "kill-session", "-t", "=stoker"}}}
+			steps: [][]string{m.stokerMux().KillSession(sample.StokerSession)}}
 	}
 	return m, nil
 }
@@ -93,7 +98,7 @@ func (m Model) quitUnit(u state.ChainStoker) (tea.Model, tea.Cmd) {
 		return m, said
 	}
 	m.pending = &action{label: "quit the stoker of chain " + u.Name, destructive: true, rec: "stoker:quit", which: "primary", text: u.ID,
-		steps: [][]string{{"tmux", "-L", m.stokerServer, "kill-session", "-t", "=" + unitSession(u.ID)}}}
+		steps: [][]string{m.stokerMux().KillSession(unitSession(u.ID))}}
 	return m, nil
 }
 

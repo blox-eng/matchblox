@@ -3,11 +3,11 @@ package main
 import (
 	"context"
 	"os"
-	"os/exec"
 	"strings"
 	"time"
 
 	"github.com/blox-eng/matchblox/internal/logos"
+	"github.com/blox-eng/matchblox/internal/mux"
 )
 
 // graphicsTimeout bounds each tmux call the console makes to learn who
@@ -21,7 +21,8 @@ func consoleGraphics() (ask func() (bool, string, bool), restore func()) {
 	return consoleGraphicsWith(os.Getenv, func(args ...string) ([]byte, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), graphicsTimeout)
 		defer cancel()
-		return exec.CommandContext(ctx, "tmux", args...).Output()
+		out, err := mux.Tmux{}.Output(ctx, args...)
+		return []byte(out), err
 	})
 }
 

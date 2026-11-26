@@ -2,9 +2,10 @@ package service
 
 import (
 	"encoding/json"
-	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -37,7 +38,7 @@ func recoverTest(t *testing.T, sessions ...sample.Session) (*Service, *[][]strin
 	rec.Git = mainBranch
 	s.Recovery = rec
 	s.settle = time.Millisecond
-	s.TmuxOut = func([]string) (string, error) { return "0\n", nil } // each started agent runs: its pane is not dead
+	s.listPause = time.Nanosecond
 	s.LookPath = func(bin string) (string, error) {
 		switch bin {
 		case "claude", "codex", sample.CursorAgent:
@@ -47,6 +48,7 @@ func recoverTest(t *testing.T, sessions ...sample.Session) (*Service, *[][]strin
 	}
 	var ran [][]string
 	s.Actions.Run = func(argv []string) error { ran = append(ran, argv); return nil }
+	startedPanes(s) // each started agent runs: its pane is not dead
 	publishOn(s, "100", sessions...)
 	return s, &ran
 }
@@ -104,6 +106,26 @@ func rows(res proto.Result) map[string]proto.Recovered {
 		m[r.Name] = r
 	}
 	return m
+}
+
+func listPanesCalls(asked [][]string) int {
+	n := 0
+	for _, argv := range asked {
+		if slices.Contains(argv, "list-panes") {
+			n++
+		}
+	}
+	return n
+}
+
+func newSessionCalls(ran [][]string) int {
+	n := 0
+	for _, argv := range ran {
+		if slices.Contains(argv, "new-session") {
+			n++
+		}
+	}
+	return n
 }
 
 // TestTheServiceRecordsTheBuildersAgents: each sample writes the agents of
@@ -183,6 +205,9 @@ func TestRecoverReopensEachConversationOnce(t *testing.T) {
 	for i, argv := range *ran {
 		if got := strings.Join(argv, " "); got != want[i] {
 			t.Errorf("step %d:\n got %s\nwant %s", i, got, want[i])
+		}
+		if slices.Contains(argv, "respawn-pane") {
+			t.Errorf("step %d respawns a pane: recover opens a session", i)
 		}
 	}
 	for _, r := range res.Recover {
@@ -441,7 +466,7 @@ func TestRecoverSaysWhenTheAgentExitsAtOnce(t *testing.T) {
 	web := agentIn(t, s, "codex", "x1", "web", "%4")
 	publishOn(s, "100", web)
 	loseServer(s)
-	s.TmuxOut = func([]string) (string, error) { return "", errors.New("can't find session: web") }
+	s.TmuxOut = func([]string) (string, error) { return "", nil }
 	res := recoverAct(t, s, proto.Recover{All: true}, "")
 	r := rows(res)["web"]
 	if r.State != proto.RecoverCannot || !strings.Contains(r.Why, "codex exited at once: run cd "+web.Cwd+" && codex resume x1") {
@@ -449,6 +474,371 @@ func TestRecoverSaysWhenTheAgentExitsAtOnce(t *testing.T) {
 	}
 	if live, _ := s.recoverLive(); live[conversation("codex", "x1")] {
 		t.Fatal("an agent that exited counts as live")
+	}
+}
+
+// TestRecoverDoesNotTreatAListFailureAsExited: list-panes failed after
+// new-session. That is not "the agent exited"; recover must not kill the
+// session and must not say to run the agent by hand as if it died.
+func TestRecoverDoesNotTreatAListFailureAsExited(t *testing.T) {
+	s, _ := recoverTest(t)
+	web := agentIn(t, s, "codex", "x1", "web", "%4")
+	publishOn(s, "100", web)
+	loseServer(s)
+	var asked [][]string
+	s.TmuxOut = func(argv []string) (string, error) {
+		asked = append(asked, argv)
+		return "", &exec.ExitError{}
+	}
+	res := recoverAct(t, s, proto.Recover{All: true}, "")
+	r := rows(res)["web"]
+	if r.State != proto.RecoverCannot || r.Why != "Recover didn’t hear back · ⏎ retry" || strings.Contains(r.Why, "exited at once") {
+		t.Fatalf("row %+v", r)
+	}
+	if live, _ := s.recoverLive(); live[conversation("codex", "x1")] {
+		t.Fatal("a list failure counts as live")
+	}
+	for _, argv := range asked {
+		if slices.Contains(argv, "kill-session") {
+			t.Fatalf("killed after a list failure: %q", argv)
+		}
+	}
+}
+
+// TestRecoverListGlitchThenLiveReopens: the first two lists fail, the
+// third shows a live session. Recover reopened it and never showed the CTA.
+func TestRecoverListGlitchThenLiveReopens(t *testing.T) {
+	s, _ := recoverTest(t)
+	web := agentIn(t, s, "codex", "x1", "web", "%4")
+	publishOn(s, "100", web)
+	loseServer(s)
+	var n int
+	var asked [][]string
+	s.TmuxOut = func(argv []string) (string, error) {
+		asked = append(asked, argv)
+		if !slices.Contains(argv, "list-panes") {
+			return "", nil
+		}
+		n++
+		if n < 3 {
+			return "", &exec.ExitError{}
+		}
+		return paneLine("%42", "web:1.1", 1, "/dev/pts/9", false), nil
+	}
+	res := recoverAct(t, s, proto.Recover{All: true}, "")
+	r := rows(res)["web"]
+	if r.State != proto.RecoverReopened || r.Why != "" {
+		t.Fatalf("row %+v", r)
+	}
+	if listPanesCalls(asked) != 3 {
+		t.Fatalf("list-panes %d, want 3; asked %q", listPanesCalls(asked), asked)
+	}
+}
+
+// TestRecoverListGlitchGivesRetryCTA: three list errors. The row cannot
+// with the retry Why, Start ran once, the session was not killed, and
+// the conversation is not live.
+func TestRecoverListGlitchGivesRetryCTA(t *testing.T) {
+	s, ran := recoverTest(t)
+	web := agentIn(t, s, "codex", "x1", "web", "%4")
+	publishOn(s, "100", web)
+	loseServer(s)
+	var asked [][]string
+	s.TmuxOut = func(argv []string) (string, error) {
+		asked = append(asked, argv)
+		return "", &exec.ExitError{}
+	}
+	res := recoverAct(t, s, proto.Recover{All: true}, "")
+	r := rows(res)["web"]
+	if r.State != proto.RecoverCannot || r.Why != "Recover didn’t hear back · ⏎ retry" {
+		t.Fatalf("row %+v", r)
+	}
+	if newSessionCalls(*ran) != 1 {
+		t.Fatalf("new-session %d, ran %q", newSessionCalls(*ran), *ran)
+	}
+	if live, _ := s.recoverLive(); live[conversation("codex", "x1")] {
+		t.Fatal("a list failure counts as live")
+	}
+	for _, argv := range asked {
+		if slices.Contains(argv, "kill-session") {
+			t.Fatalf("killed after a list failure: %q", argv)
+		}
+	}
+}
+
+// TestRecoverListSucceedsOnFirstTryListsOnce: a live pane on the first
+// list is reopened, and recover does not list again.
+func TestRecoverListSucceedsOnFirstTryListsOnce(t *testing.T) {
+	s, _ := recoverTest(t)
+	web := agentIn(t, s, "codex", "x1", "web", "%4")
+	publishOn(s, "100", web)
+	loseServer(s)
+	var asked [][]string
+	s.TmuxOut = func(argv []string) (string, error) {
+		asked = append(asked, argv)
+		if slices.Contains(argv, "list-panes") {
+			return paneLine("%42", "web:1.1", 1, "/dev/pts/9", false), nil
+		}
+		return "", nil
+	}
+	res := recoverAct(t, s, proto.Recover{All: true}, "")
+	if r := rows(res)["web"]; r.State != proto.RecoverReopened {
+		t.Fatalf("row %+v", r)
+	}
+	if listPanesCalls(asked) != 1 {
+		t.Fatalf("list-panes %d, want 1; asked %q", listPanesCalls(asked), asked)
+	}
+}
+
+// TestRecoverNoServerIsExitedAtOnce: no server is an empty list, not a
+// ListStrict error. Recover takes today's exited-at-once path, one list.
+func TestRecoverNoServerIsExitedAtOnce(t *testing.T) {
+	s, _ := recoverTest(t)
+	web := agentIn(t, s, "codex", "x1", "web", "%4")
+	publishOn(s, "100", web)
+	loseServer(s)
+	var asked [][]string
+	s.TmuxOut = func(argv []string) (string, error) {
+		asked = append(asked, argv)
+		return "", &exec.ExitError{Stderr: []byte("no server running on /tmp/tmux-1000/default\n")}
+	}
+	res := recoverAct(t, s, proto.Recover{All: true}, "")
+	r := rows(res)["web"]
+	if r.State != proto.RecoverCannot || !strings.Contains(r.Why, "exited at once") {
+		t.Fatalf("row %+v", r)
+	}
+	if r.Why == "Recover didn’t hear back · ⏎ retry" {
+		t.Fatal("no-server used the list-retry CTA")
+	}
+	if listPanesCalls(asked) != 1 {
+		t.Fatalf("list-panes %d, want 1; asked %q", listPanesCalls(asked), asked)
+	}
+}
+
+// TestRecoverMissingAgentHasNoListRetry: a missing binary cannot reopen
+// before Start. Recover does not list panes.
+func TestRecoverMissingAgentHasNoListRetry(t *testing.T) {
+	s, _ := recoverTest(t)
+	web := agentIn(t, s, "codex", "x1", "web", "%4")
+	publishOn(s, "100", web)
+	loseServer(s)
+	s.LookPath = func(string) (string, error) { return "", os.ErrNotExist }
+	var asked [][]string
+	s.TmuxOut = func(argv []string) (string, error) {
+		asked = append(asked, argv)
+		return "", nil
+	}
+	res := recoverAct(t, s, proto.Recover{All: true}, "")
+	if r := rows(res)["web"]; r.State != proto.RecoverCannot || !strings.Contains(r.Why, "codex is not installed") {
+		t.Fatalf("row %+v", r)
+	}
+	if listPanesCalls(asked) != 0 {
+		t.Fatalf("list-panes %d, want 0; asked %q", listPanesCalls(asked), asked)
+	}
+}
+
+func recoverUntilListCTA(t *testing.T) (*Service, *[][]string, *[][]string) {
+	t.Helper()
+	s, ran := recoverTest(t)
+	web := agentIn(t, s, "codex", "x1", "web", "%4")
+	publishOn(s, "100", web)
+	loseServer(s)
+	var asked [][]string
+	s.TmuxOut = func(argv []string) (string, error) {
+		asked = append(asked, argv)
+		return "", &exec.ExitError{}
+	}
+	res := recoverAct(t, s, proto.Recover{All: true}, "")
+	if r := rows(res)["web"]; r.State != proto.RecoverCannot || r.Why != recoverListRetryWhy {
+		t.Fatalf("cta %+v", r)
+	}
+	return s, ran, &asked
+}
+
+// TestRecoverRetryAfterListCTADoesNotStartAgain: ⏎ after the CTA lists
+// again and does not start a second session.
+func TestRecoverRetryAfterListCTADoesNotStartAgain(t *testing.T) {
+	s, ran, asked := recoverUntilListCTA(t)
+	res := recoverAct(t, s, proto.Recover{All: true}, "")
+	if r := rows(res)["web"]; r.State != proto.RecoverCannot || r.Why != recoverListRetryWhy {
+		t.Fatalf("row %+v", r)
+	}
+	if newSessionCalls(*ran) != 1 {
+		t.Fatalf("new-session %d, ran %q", newSessionCalls(*ran), *ran)
+	}
+	if listPanesCalls(*asked) != 6 {
+		t.Fatalf("list-panes %d, want 6; asked %q", listPanesCalls(*asked), *asked)
+	}
+}
+
+// TestRecoverRetryAfterListCTAReopensWhenListWorks: a later live list
+// after the CTA is reopened, with no second start.
+func TestRecoverRetryAfterListCTAReopensWhenListWorks(t *testing.T) {
+	s, ran, _ := recoverUntilListCTA(t)
+	s.TmuxOut = func(argv []string) (string, error) {
+		if slices.Contains(argv, "list-panes") {
+			return paneLine("%42", "web:1.1", 1, "/dev/pts/9", false), nil
+		}
+		return "", nil
+	}
+	res := recoverAct(t, s, proto.Recover{All: true}, "")
+	if r := rows(res)["web"]; r.State != proto.RecoverReopened || r.Why != "" {
+		t.Fatalf("row %+v", r)
+	}
+	if newSessionCalls(*ran) != 1 {
+		t.Fatalf("new-session %d, ran %q", newSessionCalls(*ran), *ran)
+	}
+}
+
+// TestRecoverRetryAfterListCTAExitedAtOnce: a later dead pane after the
+// CTA is today's exited-at-once path, and recover still kills that session.
+func TestRecoverRetryAfterListCTAExitedAtOnce(t *testing.T) {
+	s, ran, _ := recoverUntilListCTA(t)
+	var asked [][]string
+	s.TmuxOut = func(argv []string) (string, error) {
+		asked = append(asked, argv)
+		if slices.Contains(argv, "list-panes") {
+			return paneLine("%7", "web:0.0", 1, "/dev/pts/7", true), nil
+		}
+		return "", nil
+	}
+	res := recoverAct(t, s, proto.Recover{All: true}, "")
+	if r := rows(res)["web"]; r.State != proto.RecoverCannot || !strings.Contains(r.Why, "exited at once") {
+		t.Fatalf("row %+v", r)
+	}
+	if newSessionCalls(*ran) != 1 {
+		t.Fatalf("new-session %d, ran %q", newSessionCalls(*ran), *ran)
+	}
+	if !slices.ContainsFunc(asked, func(argv []string) bool {
+		return slices.Equal(argv, []string{"tmux", "kill-session", "-t", "=web"})
+	}) {
+		t.Fatalf("no kill-session of web: %q", asked)
+	}
+}
+
+// TestRecoverRetryAfterListCTADoesNotWaitSettle: confirm lists at once
+// and does not wait recoverSettle.
+func TestRecoverRetryAfterListCTADoesNotWaitSettle(t *testing.T) {
+	s, _, _ := recoverUntilListCTA(t)
+	s.settle = time.Hour
+	s.TmuxOut = func(argv []string) (string, error) {
+		if slices.Contains(argv, "list-panes") {
+			return paneLine("%42", "web:1.1", 1, "/dev/pts/9", false), nil
+		}
+		return "", nil
+	}
+	done := make(chan proto.Result, 1)
+	go func() { done <- recoverAct(t, s, proto.Recover{All: true}, "") }()
+	select {
+	case res := <-done:
+		if r := rows(res)["web"]; r.State != proto.RecoverReopened {
+			t.Fatalf("row %+v", r)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("confirm waited settle")
+	}
+}
+
+// TestRecoverRetryAfterListCTAListsAs: Start took web-2. Confirm lists
+// that session, not web.
+func TestRecoverRetryAfterListCTAListsAs(t *testing.T) {
+	s, ran := recoverTest(t)
+	web := agentIn(t, s, "codex", "x1", "web", "%4")
+	publishOn(s, "100", web)
+	s.publish(sample.Snapshot{At: time.Now(), Panes: []sample.Pane{{ID: "%0", Target: "web:1.0", Socket: recSock, Server: "200"}}}, func(state.Doc) {})
+	s.TmuxOut = func([]string) (string, error) { return "", &exec.ExitError{} }
+	res := recoverAct(t, s, proto.Recover{All: true}, "")
+	if r := rows(res)["web"]; r.State != proto.RecoverCannot || r.As != "web-2" || r.Why != recoverListRetryWhy {
+		t.Fatalf("cta %+v", r)
+	}
+	s.TmuxOut = func(argv []string) (string, error) {
+		if slices.Contains(argv, "list-panes") {
+			return paneLine("%42", "web-2:1.1", 1, "/dev/pts/9", false), nil
+		}
+		return "", nil
+	}
+	res = recoverAct(t, s, proto.Recover{All: true}, "")
+	if r := rows(res)["web"]; r.State != proto.RecoverReopened || r.As != "web-2" {
+		t.Fatalf("row %+v", r)
+	}
+	if newSessionCalls(*ran) != 1 {
+		t.Fatalf("new-session %d, ran %q", newSessionCalls(*ran), *ran)
+	}
+}
+
+// TestRecoverPreviewAfterListCTAIsLiveWhenSampleShowsIt: the list glitch
+// passed and a sample now shows the agent. Preview says live, not the CTA.
+func TestRecoverPreviewAfterListCTAIsLiveWhenSampleShowsIt(t *testing.T) {
+	s, ran := recoverTest(t)
+	web := agentIn(t, s, "codex", "x1", "web", "%4")
+	publishOn(s, "100", web)
+	loseServer(s)
+	s.TmuxOut = func([]string) (string, error) { return "", &exec.ExitError{} }
+	if r := rows(recoverAct(t, s, proto.Recover{All: true}, ""))["web"]; r.Why != recoverListRetryWhy {
+		t.Fatalf("cta %+v", r)
+	}
+	web.Pane = "%0"
+	publishOn(s, "200", web)
+	res := recoverAct(t, s, proto.Recover{}, "")
+	if r := rows(res)["web"]; r.State != proto.RecoverLive {
+		t.Fatalf("row %+v", r)
+	}
+	if newSessionCalls(*ran) != 1 {
+		t.Fatalf("new-session %d, ran %q", newSessionCalls(*ran), *ran)
+	}
+}
+
+// TestRecoverPreviewAfterListCTAKeepsWhy: a preview after the CTA stays
+// cannot with that Why, not can reopen.
+func TestRecoverPreviewAfterListCTAKeepsWhy(t *testing.T) {
+	s, ran, _ := recoverUntilListCTA(t)
+	res := recoverAct(t, s, proto.Recover{}, "")
+	if r := rows(res)["web"]; r.State != proto.RecoverCannot || r.Why != recoverListRetryWhy {
+		t.Fatalf("row %+v", r)
+	}
+	if newSessionCalls(*ran) != 1 {
+		t.Fatalf("new-session %d, ran %q", newSessionCalls(*ran), *ran)
+	}
+}
+
+// TestRecoverEndsASessionWhoseAgentIsDead: tmux started the session, and
+// remain-on-exit kept it with a dead pane. recover ends that session by its
+// exact name, says the agent exited, and never respawns a pane. A session
+// that is gone is not ended again.
+func TestRecoverEndsASessionWhoseAgentIsDead(t *testing.T) {
+	for _, c := range []struct {
+		name, list string
+		killed     bool
+	}{
+		{"dead pane", paneLine("%7", "web:0.0", 1, "/dev/pts/7", true), true},
+		{"session gone", paneLine("%8", "other:0.0", 1, "/dev/pts/8", false), false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			s, ran := recoverTest(t)
+			web := agentIn(t, s, "codex", "x1", "web", "%4")
+			publishOn(s, "100", web)
+			loseServer(s)
+			var asked [][]string
+			s.TmuxOut = func(argv []string) (string, error) {
+				asked = append(asked, argv)
+				return c.list, nil
+			}
+			res := recoverAct(t, s, proto.Recover{All: true}, "")
+			if r := rows(res)["web"]; r.State != proto.RecoverCannot || !strings.Contains(r.Why, "codex exited at once") {
+				t.Fatalf("row %+v", r)
+			}
+			killed := slices.ContainsFunc(asked, func(argv []string) bool {
+				return slices.Equal(argv, []string{"tmux", "kill-session", "-t", "=web"})
+			})
+			if killed != c.killed {
+				t.Errorf("kill-session of web: %v, want %v; tmux asked %q", killed, c.killed, asked)
+			}
+			for _, argv := range slices.Concat(*ran, asked) {
+				if slices.Contains(argv, "respawn-pane") {
+					t.Fatalf("recover respawned a pane: %q", argv)
+				}
+			}
+		})
 	}
 }
 

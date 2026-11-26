@@ -6,12 +6,11 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"slices"
 	"strings"
 	"time"
 
 	"github.com/blox-eng/matchblox/internal/advice"
-	"github.com/blox-eng/matchblox/internal/panes"
+	"github.com/blox-eng/matchblox/internal/mux"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/stoker"
@@ -61,17 +60,7 @@ func (s *Service) agentMissing() string {
 // that never prompts, and the home console marks its own session.
 func (s *Service) startArgv(u *stokerUnit) []string {
 	home, _ := os.UserHomeDir()
-	return slices.Concat(
-		[]string{"env", "-u", "GIT_TERMINAL_PROMPT", "-u", "GIT_SSH_COMMAND", "-u", panes.HomeEnv},
-		sample.TmuxOn(s.StokerServer), []string{"-f", os.DevNull, "new-session", "-d", "-s", unitSession(u), "-c", home},
-		s.agentArgv(),
-		[]string{";", "set-option", "-s", "exit-empty", "on"})
-}
-
-// stokerSessionArgv is a tmux command on unit u's session (has-session,
-// kill-session): "=" names that session exactly.
-func (s *Service) stokerSessionArgv(u *stokerUnit, verb string) []string {
-	return slices.Concat(sample.TmuxOn(s.StokerServer), []string{verb, "-t", "=" + unitSession(u)})
+	return s.stokerMux().Start(mux.Start{Name: unitSession(u), Dir: home, Detached: true, EmptyExit: true, Argv: s.agentArgv()})[0]
 }
 
 // unitSession is the tmux session of unit u; nil is the host's.
@@ -126,7 +115,7 @@ func (s *Service) startStoker(ctx context.Context, u *stokerUnit) error {
 
 // stokerThere: unit u's session is on its server.
 func (s *Service) stokerThere(ctx context.Context, u *stokerUnit) bool {
-	res := s.Actions.Do(ctx, advice.Action{Label: "is the stoker there", Steps: [][]string{s.stokerSessionArgv(u, "has-session")}}, "")
+	res := s.Actions.Do(ctx, advice.Action{Label: "is the stoker there", Steps: [][]string{s.stokerMux().HasSession(unitSession(u))}}, "")
 	return res.Err == ""
 }
 
@@ -162,7 +151,7 @@ func (s *Service) quitAct(ctx context.Context, u *stokerUnit, a proto.Act) proto
 		s.refreshStoker()
 		return proto.Result{}
 	}
-	res := s.Actions.Do(ctx, advice.Action{Label: "quit the stoker", Steps: [][]string{s.stokerSessionArgv(u, "kill-session")}, Destructive: true}, "y")
+	res := s.Actions.Do(ctx, advice.Action{Label: "quit the stoker", Steps: [][]string{s.stokerMux().KillSession(unitSession(u))}, Destructive: true}, "y")
 	if res.Err != "" {
 		return res
 	}

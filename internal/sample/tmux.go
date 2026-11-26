@@ -1,15 +1,15 @@
 package sample
 
 import (
-	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/blox-eng/matchblox/internal/mux"
 )
 
 // StokerServer is the tmux server matchblox keeps the stoker agent on
@@ -41,30 +41,10 @@ func SplitPane(id string) (server, bare string) {
 	return "", id
 }
 
-// TmuxOn is the argv that reaches the tmux server server ("": the
-// builder's). Every call aimed at a pane of matchblox's own server starts
-// with it.
-func TmuxOn(server string) []string {
-	if server == "" {
-		return []string{"tmux"}
-	}
-	return []string{"tmux", "-L", server}
-}
-
-// tmuxUTF8 is TmuxOn with -u: format and capture output keep tabs and
-// glyphs when LANG is unset. Without it, tmux in the C locale prints
-// every non-printable as "_", and ParsePanes sees no panes.
-func tmuxUTF8(server string) []string {
-	a := TmuxOn(server)
-	return append([]string{a[0], "-u"}, a[1:]...)
-}
-
-// Tmux is the argv that reaches the server of the pane target, and the id
-// that server knows it by.
-func Tmux(target string) ([]string, string) {
-	server, bare := SplitPane(target)
-	return TmuxOn(server), bare
-}
+// tmuxUTF8 is the argv that reaches server with -u: format and capture
+// output keep tabs and glyphs when LANG is unset. Without it, tmux in the C
+// locale prints every non-printable as "_", and ParsePanes sees no panes.
+func tmuxUTF8(server string) []string { return mux.Command(server, "-u") }
 
 // Server is the tmux server of the session's pane: "" the builder's.
 func (s Session) Server() string {
@@ -105,27 +85,36 @@ const PaneFormat = "#{pane_id}\t#{session_name}:#{window_index}.#{pane_index}\t#
 
 // JumpMark is the session option that marks a jump's session on either
 // side (package remote sets it to 1): the sampler skips its panes.
-const JumpMark = "@matchblox-jump"
+const JumpMark = mux.JumpMark
 
 // TmuxPanes lists every pane on the default tmux server. No server is not an
 // error: the console still shows the machine.
 func TmuxPanes() ([]byte, error) { return TmuxPanesOn("") }
 
 // TmuxPanesOn lists every pane on the tmux server server ("": the
-// builder's), as TmuxPanes does.
+// builder's), as TmuxPanes does. mux lists them; the result is the
+// PaneFormat text ParsePanes reads, with the bare pane id: the caller
+// puts the pane on its server (OnServer). No tmux, or a tmux that exits, is
+// no panes and no error.
 func TmuxPanesOn(server string) ([]byte, error) {
-	if _, err := exec.LookPath("tmux"); err != nil {
-		return nil, nil
-	}
-	tmux := tmuxUTF8(server)
-	out, err := output(tmux[0], append(tmux[1:], "list-panes", "-a", "-F", PaneFormat)...)
-	if err != nil {
-		if ee := (*exec.ExitError)(nil); errors.As(err, &ee) {
-			return nil, nil
-		}
+	listed, err := mux.Tmux{Server: server, Run: boundedRun}.List()
+	if err != nil || len(listed) == 0 {
 		return nil, err
 	}
-	return out, nil
+	var b strings.Builder
+	for _, p := range listed {
+		_, bare := mux.SplitPane(p.ID)
+		fmt.Fprintf(&b, "%s\t%s\t%s\t%d\t%s\t%s\t%s\t%s\t%s\t%s\n",
+			bare, p.Target, p.Window, p.PID, p.Command, p.Path, p.Socket, p.ServerPID, p.Jump, p.ServerStart)
+	}
+	return []byte(b.String()), nil
+}
+
+// boundedRun runs a tmux step with the sampler's bound (cmdTimeout), so a
+// wedged tmux does not freeze the sample loop.
+func boundedRun(argv []string) (string, error) {
+	b, err := output(argv[0], argv[1:]...)
+	return string(b), err
 }
 
 // jumpSessionRE is the host's session of a jump, as package remote names
