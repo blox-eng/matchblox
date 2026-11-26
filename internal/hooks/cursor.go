@@ -80,23 +80,11 @@ func ParseCursor(stdin io.Reader, env func(string) string) (Event, error) {
 	case name == "Stop" && in.Status != "completed":
 		ev.Name = "UserPromptSubmit"
 	case name == "UserPromptSubmit":
-		ev.Text = bothEnds(said.Clean(in.Prompt))
+		ev.Text = said.BothEnds(said.Clean(in.Prompt), TextLimit)
 	case name == Reply:
 		line, asks := said.Reply(in.Text)
 		ev.Message, ev.Asks = cut(line), asks
-		ev.Text = bothEnds(said.Clean(in.Text))
+		ev.Text = said.BothEnds(said.Clean(in.Text), TextLimit)
 	}
 	return ev, nil
-}
-
-const omitted = "\n[middle of message omitted]\n"
-
-// bothEnds keeps a long text's start and its end within TextLimit: a pasted
-// log usually comes first and the instruction last.
-func bothEnds(text string) string {
-	if len(text) <= TextLimit {
-		return text
-	}
-	half := (TextLimit - len(omitted)) / 2
-	return strings.ToValidUTF8(text[:half], "") + omitted + strings.ToValidUTF8(text[len(text)-half:], "")
 }

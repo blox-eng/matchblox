@@ -227,6 +227,19 @@ func Clean(s string) string {
 	return strings.Join(ls, "\n")
 }
 
+// Omitted stands where BothEnds cut a text's middle out.
+const Omitted = "\n[middle of message omitted]\n"
+
+// BothEnds keeps a long text's start and its end within limit bytes: a
+// pasted log usually comes first and the instruction last.
+func BothEnds(s string, limit int) string {
+	if len(s) <= limit {
+		return s
+	}
+	half := (limit - len(Omitted)) / 2
+	return strings.ToValidUTF8(s[:half], "") + Omitted + strings.ToValidUTF8(s[len(s)-half:], "")
+}
+
 // lines keeps the lines with words, without the frame around them.
 func lines(s string) []line {
 	s = Clean(s)

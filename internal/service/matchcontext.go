@@ -666,7 +666,7 @@ func markTurn(role, text string) (turn, bool) {
 	// A pasted log usually comes first and the instruction last: keep both ends.
 	if len(text) > turnLimit {
 		half := turnLimit / 2
-		text = strings.ToValidUTF8(text[:half], "") + "\n[middle of message omitted]\n" + strings.ToValidUTF8(text[len(text)-half:], "")
+		text = strings.ToValidUTF8(text[:half], "") + said.Omitted + strings.ToValidUTF8(text[len(text)-half:], "")
 	}
 	return turn{role, text}, true
 }
