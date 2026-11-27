@@ -32,6 +32,10 @@ final class HeadHintTests: XCTestCase {
         XCTAssertEqual(HeadHint.notSent.line, "no word from the host · look, then tap again")
     }
 
+    func testUnreadableLine() {
+        XCTAssertEqual(HeadHint.unreadable.line, "could not read the screen · tap again")
+    }
+
     func testBumpLines() {
         XCTAssertEqual(HeadHint.bump(.top).line, "top of the scrollback · roll the other way to come down")
         XCTAssertEqual(HeadHint.bump(.lastOption).line, "last option · roll back, or tap to answer")

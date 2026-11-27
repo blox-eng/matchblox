@@ -36,6 +36,25 @@ public struct MenuSight: Equatable, Sendable {
         let sign: String
     }
 
+    /// What a `menu --json` reply shows. `none` is only an ok reply with no options: a failed reply, or one
+    /// `decode` rejects, is a screen Pocket could not read.
+    public enum Reading: Equatable, Sendable {
+        case menu(MenuSight)
+        case none
+        case unreadable
+    }
+
+    private struct NoMenu: Decodable {
+        let options: [Wire.Option]
+    }
+
+    public static func reading(_ reply: HostReply) -> Reading {
+        guard reply.ok else { return .unreadable }
+        if let menu = decode(reply.output) { return .menu(menu) }
+        if let bare = try? JSONDecoder().decode(NoMenu.self, from: reply.output), bare.options.isEmpty { return .none }
+        return .unreadable
+    }
+
     /// The menu Pocket can pick from, or nil: no menu, options not 1…n in order, more than 9, a text empty or over
     /// 500 characters, a mark on no option, or a sign that is not a short hex.
     public static func decode(_ data: Data) -> MenuSight? {

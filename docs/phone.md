@@ -461,8 +461,10 @@ text. The handle row says what it does:
   option. Pocket sends its number, its text and the question's sign, and
   the host types the number only if its screen still shows that question.
   If the question changed, nothing is typed, and the handle row says
-  `the question changed · roll again`. With no question, the tap is Enter. Up in
-  the output, the tap brings you back to the bottom.
+  `the question changed · roll again`. With no question, the tap is Enter.
+  If Pocket could not read the screen, the tap sends nothing, and the handle
+  row says `could not read the screen · tap again`. Up in the output, the tap
+  brings you back to the bottom.
 - **Press the edge.** A short press beside a mark sends its key. A press
   that moves 10 pt or more sends no key. A press on `←` or `→` that you
   hold repeats, and after 9 repeats it moves a word at a time. `⌨` raises
@@ -480,7 +482,8 @@ text. The handle row says what it does:
   `nothing scrolls here · this program has no scrollback`.
 - **With VoiceOver**, the head is "Match head". At a question, swipe up or
   down to move through the options, and double-tap to answer. With no
-  question, a swipe scrolls a page, and a double-tap sends Enter. The
+  question, a swipe scrolls a page, and a double-tap sends Enter. On a
+  screen Pocket could not read, a double-tap sends nothing and says so. The
   rotor's actions hold the four marks and the sessions.
 
 Home sets the head. Open the drawer, tap `BOX`, and find `THE HEAD` under

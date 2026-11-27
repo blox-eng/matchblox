@@ -33,4 +33,18 @@ final class MenuSightTests: XCTestCase {
         XCTAssertNil(MenuSight.decode(Data("not json".utf8)))
         XCTAssertNotNil(MenuSight.decode(json(options: ["a", String(repeating: "x", count: 500)], chosen: 1)))
     }
+
+    /// Only an ok reply with no options is no menu; a failed or rejected reply is a screen Pocket could not read.
+    func testReading() {
+        let three = ["a", "b", "c"]
+        func reply(_ data: Data, ok: Bool = true) -> HostReply { HostReply(output: data, ok: ok, status: ok ? 0 : 1) }
+        XCTAssertEqual(MenuSight.reading(reply(Data(#"{"options":[],"chosen":0,"sign":""}"#.utf8))), .none)
+        XCTAssertEqual(MenuSight.reading(reply(json(options: three, chosen: 2))), .menu(MenuSight.decode(json(options: three, chosen: 2))!))
+        XCTAssertEqual(MenuSight.reading(reply(json(options: three, chosen: 0))), .unreadable, "options with no mark")
+        XCTAssertEqual(MenuSight.reading(reply(json(options: (1...12).map { "option \($0)" }, chosen: 1))), .unreadable)
+        XCTAssertEqual(MenuSight.reading(reply(Data("not json".utf8))), .unreadable)
+        XCTAssertEqual(MenuSight.reading(reply(Data(), ok: false)), .unreadable)
+        XCTAssertEqual(MenuSight.reading(HostReply(output: Data(), ok: false)), .unreadable, "no reply")
+        XCTAssertEqual(MenuSight.reading(reply(Data(#"{"options":[],"chosen":0,"sign":""}"#.utf8), ok: false)), .unreadable)
+    }
 }

@@ -29,11 +29,15 @@ public struct HeadWalk: Sendable {
         case pick(n: Int, text: String, sign: String)
         case enter
         case home
+        /// The screen was not read: nothing is sent.
+        case unreadable
     }
 
     private enum Sight: Sendable {
         case asking
         case none
+        /// The last read failed; `last` is the menu before it, whose highlight a good read of it keeps.
+        case unreadable(last: MenuSight?)
         case menu(MenuSight)
     }
 
@@ -51,8 +55,24 @@ public struct HeadWalk: Sendable {
     /// The menu the session shows now, nil when none. The same menu again keeps the highlight.
     public mutating func menu(_ menu: MenuSight?) {
         guard let menu else { sight = .none; return }
-        if case .menu(let seen) = sight, seen.sign == menu.sign {} else { highlight = menu.chosen }
+        if seen?.sign != menu.sign { highlight = menu.chosen }
         sight = .menu(menu)
+    }
+
+    /// What the last menu read showed.
+    public mutating func read(_ reading: MenuSight.Reading) {
+        switch reading {
+        case .menu(let shown): menu(shown)
+        case .none: menu(nil)
+        case .unreadable: sight = .unreadable(last: seen)
+        }
+    }
+
+    private var seen: MenuSight? {
+        switch sight {
+        case .menu(let menu), .unreadable(last: let menu?): menu
+        default: nil
+        }
     }
 
     /// `route` is where a notch of output would go: for `up`, asked for older lines.
@@ -105,17 +125,22 @@ public struct HeadWalk: Sendable {
         return .scroll(-lines)
     }
 
-    /// A tap on the middle: up in the output it comes home; at a menu it picks the highlight;
-    /// else it is Enter.
+    /// A tap on the middle: up in the output it comes home; at a menu it picks the highlight; on a
+    /// screen read with no menu it is Enter; on one not read it sends nothing.
     public mutating func tap() -> Tap {
         if linesUp > 0 {
             linesUp = 0
             return .home
         }
-        guard case .menu(let menu) = sight, let option = menu.options.first(where: { $0.n == highlight }) else {
+        switch sight {
+        case .none:
             return .enter
+        case .asking, .unreadable:
+            return .unreadable
+        case .menu(let menu):
+            guard let option = menu.options.first(where: { $0.n == highlight }) else { return .unreadable }
+            return .pick(n: option.n, text: option.text, sign: menu.sign)
         }
-        return .pick(n: option.n, text: option.text, sign: menu.sign)
     }
 
     /// The finger left the head: the next notch starts a new roll.

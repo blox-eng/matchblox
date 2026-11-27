@@ -389,8 +389,9 @@ final class DockHeadView: UIView {
     // MARK: The middle
 
     /// Up in the output a tap comes back down; at a menu it sends the highlighted option, which
-    /// the host types only while the menu reads as it did; with no menu it is Enter. A menu read
-    /// still on its way is waited for: a tap never answers a menu it has not seen.
+    /// the host types only while the menu reads as it did; on a screen read with no menu it is
+    /// Enter; on one not read it sends nothing and says so. A menu read still on its way is waited
+    /// for: a tap never answers a menu it has not seen.
     private func tapped() {
         let reading = menuRead
         Task { [weak self] in
@@ -407,6 +408,8 @@ final class DockHeadView: UIView {
                 self.onSend(Self.enter)
             case .pick(let n, let text, let sign):
                 await self.pick(n, text: text, sign: sign)
+            case .unreadable:
+                self.refused(.unreadable)
             }
         }
     }
@@ -416,13 +419,17 @@ final class DockHeadView: UIView {
         onHighlight(nil)
         let reply = await command(["choose", pane, String(n), "--text", text, "--sign", sign])
         if let hint = HeadHint.afterPick(reply) {
-            driver.feel.bump()
-            say(hint.line)
-            announce(hint.line)
+            refused(hint)
         } else {
             sent()
             say(nil)
         }
+    }
+
+    private func refused(_ hint: HeadHint) {
+        driver.feel.bump()
+        say(hint.line)
+        announce(hint.line)
     }
 
     private func sent() {
@@ -431,9 +438,15 @@ final class DockHeadView: UIView {
     }
 
     private func readMenu() {
-        guard let pane, let command else {
+        guard let pane else {
             sight = nil
             walk.menu(nil)
+            menuReady = true
+            return
+        }
+        guard let command else {
+            sight = nil
+            walk.read(.unreadable)
             menuReady = true
             return
         }
@@ -441,9 +454,9 @@ final class DockHeadView: UIView {
         menuRead = Task { [weak self] in
             let reply = await command(["menu", pane, "--json"])
             guard let self, self.pane == pane else { return }
-            let menu = reply.ok ? MenuSight.decode(reply.output) : nil
-            self.sight = menu
-            self.walk.menu(menu)
+            let reading = MenuSight.reading(reply)
+            if case .menu(let menu) = reading { self.sight = menu } else { self.sight = nil }
+            self.walk.read(reading)
             self.menuReady = true
         }
     }
@@ -674,7 +687,8 @@ final class DockHeadView: UIView {
     }
 
     /// The double-tap is the middle's tap: at a menu the swiped option, through the pick the host
-    /// checks; up in the output it comes back; else Enter.
+    /// checks; up in the output it comes back; on a screen read with no menu Enter; on one not read
+    /// nothing.
     private func voiceTap() -> Bool {
         if menuRead == nil { readMenu() }
         voiceLine = nil

@@ -13,6 +13,8 @@ public enum HeadHint: Equatable, Sendable {
     case questionChanged
     /// The pick failed for another reason, or the host never answered.
     case notSent
+    /// The menu read failed, so the tap sent nothing.
+    case unreadable
 
     /// `matchblox choose` exits with this when the menu no longer reads as it did.
     static let questionChangedStatus = 3
@@ -41,6 +43,8 @@ public enum HeadHint: Equatable, Sendable {
             "the question changed · roll again"
         case .notSent:
             "no word from the host · look, then tap again"
+        case .unreadable:
+            "could not read the screen · tap again"
         }
     }
 

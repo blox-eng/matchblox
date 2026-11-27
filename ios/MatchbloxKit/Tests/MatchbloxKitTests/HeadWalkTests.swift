@@ -115,4 +115,24 @@ final class HeadWalkTests: XCTestCase {
         XCTAssertEqual(plain.linesUp, 0)
         XCTAssertEqual(plain.tap(), .enter)
     }
+
+    func testFailedReadAfterARollIsNoEnter() {
+        var walk = ready(menu(chosen: 1))
+        XCTAssertEqual(roll(&walk, .down, 2), [.highlight(2), .highlight(3)])
+        walk.lift()
+        walk.read(.unreadable)
+        XCTAssertEqual(walk.tap(), .unreadable, "a screen Pocket could not read is never Enter")
+        walk.read(.menu(menu(chosen: 1)))
+        XCTAssertEqual(walk.tap(), .pick(n: 3, text: "No, and tell Claude what to do differently", sign: sign),
+                       "the tap again answers the option rolled to, not the agent's mark")
+    }
+
+    func testUnreadableScreenSendsNothing() {
+        var walk = HeadWalk()
+        walk.read(.unreadable)
+        XCTAssertEqual(walk.tap(), .unreadable)
+        XCTAssertEqual(HeadWalk().tap(), .unreadable, "a tap before any read is no Enter either")
+        walk.read(.none)
+        XCTAssertEqual(walk.tap(), .enter, "only a screen read with no question is Enter")
+    }
 }
