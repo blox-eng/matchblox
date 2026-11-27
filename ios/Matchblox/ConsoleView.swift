@@ -303,6 +303,9 @@ private final class HeldScreen: UIView {
     private let stepCard = UILabel()
     /// The sessions a hold on the head shows, the current one marked.
     private let sessionsCard = UILabel()
+    /// Each card's fade that runs now.
+    private var stepFade: UIViewPropertyAnimator?
+    private var sessionsFade: UIViewPropertyAnimator?
     private let copiedHaptic = UINotificationFeedbackGenerator()
 
     init(terminal: UIView) {
@@ -395,16 +398,36 @@ private final class HeldScreen: UIView {
 
     /// The step card's text, or nil: the card goes.
     func showStep(_ card: String?) {
-        stepCard.text = card.map { "  \($0)  " }
-        stepCard.isHidden = card == nil
-        setNeedsLayout()
+        fade(stepCard, to: card.map { "  \($0)  " }, with: &stepFade)
     }
 
     /// The sessions card's lines, or nil: the card goes.
     func showSessions(_ card: String?) {
-        sessionsCard.text = card.map { $0.split(separator: "\n", omittingEmptySubsequences: false).map { "  \($0)  " }.joined(separator: "\n") }
-        sessionsCard.isHidden = card == nil
+        let text = card.map { $0.split(separator: "\n", omittingEmptySubsequences: false).map { "  \($0)  " }.joined(separator: "\n") }
+        fade(sessionsCard, to: text, with: &sessionsFade)
+    }
+
+    /// A card fades in with its text, or out with the text it had (nil): never a cut.
+    private func fade(_ card: UILabel, to text: String?, with move: inout UIViewPropertyAnimator?) {
+        if let running = move, running.state == .active { running.stopAnimation(true) }
+        move = nil
+        let shows = text != nil
+        guard shows || !card.isHidden else { return }
+        if let text { card.text = text }
+        if shows, card.isHidden {
+            card.alpha = 0
+            card.isHidden = false
+        }
         setNeedsLayout()
+        let next = UIViewPropertyAnimator(duration: HeadMotion.marksFade, timingParameters: HeadMotion.marksCurve.cubic)
+        next.addAnimations { card.alpha = shows ? 1 : 0 }
+        if !shows {
+            next.addCompletion { position in
+                if position == .end { card.isHidden = true }
+            }
+        }
+        next.startAnimation()
+        move = next
     }
 
     func trayMoved(open: Bool) {

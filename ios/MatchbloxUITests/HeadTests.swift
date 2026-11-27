@@ -231,6 +231,26 @@ final class HeadTests: XCTestCase {
         }
     }
 
+    /// The marks fade in and out, never cut: just after the touch-down their opacity was between 0
+    /// and 1 (XCUITest reads no alpha, so the head's DEBUG value keeps it), and half a second
+    /// after the lift they still show, as they start to go 0.9 s after it.
+    @MainActor
+    func testMarksFadeNotCut() {
+        let app = launched()
+        expect(in: app, "label CONTAINS %@", "NEEDS YOU")
+        let head = theHead(in: app)
+        head.press(forDuration: 0.45)
+        Thread.sleep(forTimeInterval: 0.5)
+        XCTAssertTrue(app.staticTexts["❯ up"].firstMatch.exists, "the marks were gone 0.5 s after the lift")
+        let value = head.value as? String ?? ""
+        let line = value.components(separatedBy: "\n").first { $0.hasPrefix("marks=") }
+        guard let seen = line.flatMap({ Double($0.dropFirst("marks=".count)) }) else {
+            return XCTFail("the head kept no opacity of its marks: \(value)")
+        }
+        XCTAssertGreaterThan(seen, 0, "the marks were not there just after the touch-down")
+        XCTAssertLessThan(seen, 1, "the marks cut in, with no fade")
+    }
+
     /// Joystick's belt carries `⌨`: a tap on it raises the keyboard. The head's bottom mark is `↓`.
     @MainActor
     func testKeyboardKeyRaisesKeyboard() {

@@ -53,10 +53,6 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
     private static let gripReach: CGFloat = 30
     /// A pull up or down this far opens or closes the drawer.
     private static let pullDistance: CGFloat = 12
-    private static let drawerGrowTime: TimeInterval = 0.26
-    /// BOX teach open only (DESIGN §5 / plan Task 4); normal drawer stays at `drawerGrowTime`.
-    private static let teachGrowTime: TimeInterval = 0.38
-    private static let traySlideTime: TimeInterval = 0.3
 
     private static let glyphFont = UIFont.monospacedSystemFont(ofSize: 16, weight: .medium)
     private static let bigFont = UIFont.monospacedSystemFont(ofSize: 21, weight: .medium)
@@ -223,7 +219,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
     /// front of the head, and every key shows.
     private var beltInFront = false
     private var headBack: Task<Void, Never>?
-    private static let headBackAfter: Duration = .milliseconds(1400)
+    private static let headBackAfter: Duration = .seconds(HeadMotion.beltBackAfter)
 
     init() {
         let layout = BeltLayout.load(from: .standard)
@@ -676,7 +672,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
         head.isUserInteractionEnabled = false
         spoken = nil
         UIAccessibility.post(notification: .layoutChanged, argument: nil)
-        UIView.animate(withDuration: 0.15) { head.alpha = 0 }
+        UIView.animate(withDuration: HeadMotion.beltForward) { head.alpha = 0 }
     }
 
     /// The belt slips back behind the head `headBackAfter` after it stops, or at once.
@@ -697,7 +693,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
         head.isUserInteractionEnabled = true
         spoken = nil
         UIAccessibility.post(notification: .layoutChanged, argument: nil)
-        UIView.animate(withDuration: 0.2) { head.alpha = 1 }
+        UIView.animate(withDuration: HeadMotion.beltForward) { head.alpha = 1 }
     }
 
     /// What a roll and a hold do, and where to set them: the handle row of a belt with a head, at rest.
@@ -1018,7 +1014,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
 
     /// Opens or closes the drawer. A closed box comes back fresh: every match ready again but
     /// the one in use.
-    func setTray(open: Bool, animated: Bool = true, growDuration: TimeInterval? = nil) {
+    func setTray(open: Bool, animated: Bool = true) {
         guard open != trayOpen else {
             // A close with no time to animate ends a close that animates: its hold lets go now.
             if !open && !animated { endClose?() }
@@ -1068,12 +1064,9 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
             finish()
             return
         }
-        let grow = UIViewPropertyAnimator(
-            duration: growDuration ?? Self.drawerGrowTime,
-            timingParameters: Self.drawerCurve()
-        )
+        let grow = UIViewPropertyAnimator(duration: HeadMotion.drawer, timingParameters: HeadMotion.drawerCurve.cubic)
         grow.addAnimations { host.layoutIfNeeded() }
-        let slide = UIViewPropertyAnimator(duration: Self.traySlideTime, timingParameters: Self.drawerCurve())
+        let slide = UIViewPropertyAnimator(duration: HeadMotion.drawer, timingParameters: HeadMotion.drawerCurve.cubic)
         slide.addAnimations { tray.transform = slid }
         slide.addCompletion { _ in finish() }
         drawerAnimators = [grow, slide]
@@ -1091,11 +1084,6 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
         }
         grow.startAnimation()
         slide.startAnimation()
-    }
-
-    /// The mockup's drawer curve: quick out of the sleeve, soft at the end.
-    private static func drawerCurve() -> UICubicTimingParameters {
-        UICubicTimingParameters(controlPoint1: CGPoint(x: 0.3, y: 0.7), controlPoint2: CGPoint(x: 0.2, y: 1))
     }
 
     /// A picked match strikes, the belt runs to its layout, and the tray closes once the strike
@@ -1123,13 +1111,13 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
     }
 
     /// One-time teach: open the tray, accent `BOX`, settle. Skips motion when Reduce Motion is on
-    /// (flag still set). Teach open uses 380 ms grow; normal drawer stays at 0.26 s.
+    /// (flag still set).
     func teachBoxIfNeeded() {
         var flags = HomeFlags()
         guard flags.shouldTeachBox else { return }
         flags.markBoxTaught()
         if UIAccessibility.isReduceMotionEnabled { return }
-        setTray(open: true, growDuration: Self.teachGrowTime)
+        setTray(open: true)
         trayModel.boxAccent = true
         Task { [weak self] in
             try? await Task.sleep(for: .seconds(0.9))

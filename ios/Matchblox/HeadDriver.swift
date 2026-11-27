@@ -14,7 +14,7 @@ final class HeadDriver: NSObject {
     /// Nearer the centre than this share of the radius, the finger's angle is not steady.
     private static let steadyShare: CGFloat = 0.15
     /// The share of a coast's speed left after one 60 Hz frame.
-    private static let coastKeeps: CGFloat = 0.93
+    private static let coastKeeps = CGFloat(HeadMotion.coastKeeps)
     /// A lift turning slower than this (radians a second) does not coast, and a coast stops below it.
     private static let coastFrom: CGFloat = MatchHead.notch * 4
     /// A finger that rested this long before the lift flicked nothing.

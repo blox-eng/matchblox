@@ -16,20 +16,13 @@ final class DockHeadView: UIView {
 
     private static let markSize = CGSize(width: 52, height: 30)
     private static let ringGap: CGFloat = 4
-    private static let marksIn: TimeInterval = 0.12
-    /// The ring and the marks are gone 0.9 s after the lift.
-    private static let marksStay: TimeInterval = 0.75
-    private static let marksOut: TimeInterval = 0.15
-    /// The ball springs back on the lift with a small overshoot.
-    private static let springBack: TimeInterval = 0.24
-    private static let springBounce: CGFloat = 0.4
     /// How often a held push asks the stick for its repeat.
     private static let tickEvery: Duration = .milliseconds(15)
     /// The marks whose push repeats while held: the arrows and the cursor.
     private static let repeating: Set<String> = ["↑", "↓", "←", "→"]
     /// From this many lines a notch the card names the step at the top of the view.
     private static let cardPace = 3
-    private static let cardStays: Duration = .milliseconds(600)
+    private static let cardStays: Duration = .seconds(HeadMotion.cardStays)
     private static let enter = KeyBar.bytes(for: "⏎") ?? [0x0d]
     /// The hold's ring starts to fill this long into a still press, and is full at `HeadClick.hold`.
     private static let ringFrom: TimeInterval = 0.15
@@ -122,8 +115,8 @@ final class DockHeadView: UIView {
     private var sessions: SessionCard?
     /// The hold's list once it has answered (nil inside: it did not answer), kept until the ring fills.
     private var listed: HostReply??
-    /// Counts each fade, so a fade out that ends after a new touch leaves the marks shown.
-    private var fades = 0
+    /// The marks' fade in or out that runs now, stopped where it is when the next one starts.
+    private var marksMove: UIViewPropertyAnimator?
     /// Home sets the colour and the marks; the head only reads them, and never saves one.
     nonisolated(unsafe) private var settingsObserver: NSObjectProtocol?
     #if DEBUG
@@ -131,6 +124,8 @@ final class DockHeadView: UIView {
     private var lastCard: String?
     /// The last sessions card, which goes at the lift.
     private var lastSessions: String?
+    /// The marks' opacity just after the last touch-down: between 0 and 1 while they fade in.
+    private var marksSeen: Double?
     #endif
 
     override init(frame: CGRect) {
@@ -152,8 +147,9 @@ final class DockHeadView: UIView {
         holdRing.strokeColor = BeltLook.fg.cgColor
         holdRing.lineWidth = 3
         holdRing.lineCap = .round
-        holdRing.isHidden = true
-        layer.addSublayer(holdRing)
+        holdRing.opacity = 0
+        // In the rim, so the ring fades and scales with the marks.
+        rim.layer.addSublayer(holdRing)
         for mark in [HeadZone.Mark.top, .left, .right, .bottom] {
             let label = UILabel()
             label.numberOfLines = 2
@@ -194,7 +190,9 @@ final class DockHeadView: UIView {
         let ballFrame = bounds.insetBy(dx: -HeadLayer.margin, dy: -HeadLayer.margin)
         ball.bounds = CGRect(origin: .zero, size: ballFrame.size)
         ball.position = CGPoint(x: bounds.midX, y: bounds.midY)
-        rim.frame = bounds
+        // Bounds and centre, not the frame: the rim's transform scales it as it fades.
+        rim.bounds = CGRect(origin: .zero, size: bounds.size)
+        rim.center = CGPoint(x: bounds.midX, y: bounds.midY)
         let r = Self.side / 2 + Self.ringGap
         let c = CGPoint(x: bounds.midX, y: bounds.midY)
         ring.path = UIBezierPath(ovalIn: CGRect(x: c.x - r, y: c.y - r, width: 2 * r, height: 2 * r)).cgPath
@@ -227,6 +225,12 @@ final class DockHeadView: UIView {
         endHold()
         driver.leave()
         moveBall(to: .zero)
+        stopMarks()
+        rim.isHidden = true
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        holdRing.opacity = 0
+        CATransaction.commit()
     }
 
     // MARK: Touch
@@ -332,7 +336,8 @@ final class DockHeadView: UIView {
         }
     }
 
-    /// The ball sits where the thumb pushed it; at the lift it springs back to the middle.
+    /// The ball sits where the thumb pushed it, with no delay; at the lift it springs back to the
+    /// middle, past it and back (`HeadMotion.springCurve`).
     private func moveBall(to offset: CGPoint, spring: Bool = false) {
         let to = CATransform3DMakeTranslation(offset.x, offset.y, 0)
         let from = ball.presentation()?.transform ?? ball.transform
@@ -341,12 +346,13 @@ final class DockHeadView: UIView {
         ball.removeAnimation(forKey: "spring")
         ball.transform = to
         CATransaction.commit()
-        guard spring, !UIAccessibility.isReduceMotionEnabled, !CATransform3DEqualToTransform(from, to) else { return }
-        let back = CASpringAnimation(perceptualDuration: Self.springBack, bounce: Self.springBounce)
-        back.keyPath = "transform"
+        let rule = HeadMotion.rule(reduceMotion: UIAccessibility.isReduceMotionEnabled)
+        guard spring, rule.springs, !CATransform3DEqualToTransform(from, to) else { return }
+        let back = CABasicAnimation(keyPath: "transform")
         back.fromValue = NSValue(caTransform3D: from)
         back.toValue = NSValue(caTransform3D: to)
-        back.duration = back.settlingDuration
+        back.duration = HeadMotion.springBack
+        back.timingFunction = HeadMotion.springCurve.media
         ball.add(back, forKey: "spring")
     }
 
@@ -577,7 +583,8 @@ final class DockHeadView: UIView {
     private func fillRing() {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        holdRing.isHidden = false
+        holdRing.removeAllAnimations()
+        holdRing.opacity = 1
         holdRing.strokeEnd = 1
         CATransaction.commit()
         let fill = CABasicAnimation(keyPath: "strokeEnd")
@@ -587,11 +594,23 @@ final class DockHeadView: UIView {
         holdRing.add(fill, forKey: "fill")
     }
 
+    /// The ring stops where it is filled. After a lift it goes with the marks; during a touch (a
+    /// push ended the hold) it fades now.
     private func endHold() {
         holding?.cancel()
         holding = nil
-        holdRing.removeAllAnimations()
-        holdRing.isHidden = true
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        holdRing.strokeEnd = holdRing.presentation()?.strokeEnd ?? holdRing.strokeEnd
+        holdRing.removeAnimation(forKey: "fill")
+        CATransaction.commit()
+        if touch != nil {
+            CATransaction.begin()
+            CATransaction.setAnimationDuration(HeadMotion.marksFade)
+            CATransaction.setAnimationTimingFunction(HeadMotion.marksCurve.media)
+            holdRing.opacity = 0
+            CATransaction.commit()
+        }
         sessions = nil
         listed = nil
         onSessions(nil)
@@ -605,29 +624,70 @@ final class DockHeadView: UIView {
         onSend(bytes)
     }
 
+    /// The marks and the ring fade in and grow from `HeadMotion.marksFrom`, from wherever a fade
+    /// out had brought them.
     private func showMarks() {
-        fades += 1
         for (mark, label) in markLabels {
             let id = marks[place(of: mark)]
             let word = KeyFace.word(of: id) ?? ""
             label.text = "\(id)\n\(word)"
             label.accessibilityLabel = word
         }
-        rim.isHidden = false
-        UIView.animate(withDuration: Self.marksIn, delay: 0, options: [.beginFromCurrentState], animations: { [weak self] in
-            self?.rim.alpha = 1
-        })
+        stopMarks()
+        let rule = HeadMotion.rule(reduceMotion: UIAccessibility.isReduceMotionEnabled)
+        if rim.isHidden {
+            rim.alpha = 0
+            rim.transform = Self.scaled(rule.fromScale)
+            rim.isHidden = false
+        }
+        let move = UIViewPropertyAnimator(duration: rule.fade, timingParameters: HeadMotion.marksCurve.cubic)
+        move.addAnimations { [rim] in
+            rim.alpha = 1
+            rim.transform = .identity
+        }
+        move.startAnimation()
+        marksMove = move
+        #if DEBUG
+        marksSeen = nil
+        Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(30))
+            guard let self else { return }
+            self.marksSeen = Double(self.rim.layer.presentation()?.opacity ?? self.rim.layer.opacity)
+        }
+        #endif
     }
 
+    /// `HeadMotion.marksStay` after the lift the marks and the ring fade out and shrink. A touch
+    /// before then stops it, and they stay.
     private func hideMarks() {
-        fades += 1
-        let fade = fades
-        UIView.animate(withDuration: Self.marksOut, delay: Self.marksStay, options: [.beginFromCurrentState], animations: { [weak self] in
-            self?.rim.alpha = 0
-        }, completion: { [weak self] _ in
-            guard let self, self.fades == fade else { return }
+        stopMarks()
+        let rule = HeadMotion.rule(reduceMotion: UIAccessibility.isReduceMotionEnabled)
+        let shrunk = Self.scaled(rule.fromScale)
+        let move = UIViewPropertyAnimator(duration: rule.fade, timingParameters: HeadMotion.marksCurve.cubic)
+        move.addAnimations { [rim] in
+            rim.alpha = 0
+            rim.transform = shrunk
+        }
+        move.addCompletion { [weak self] position in
+            guard let self, position == .end else { return }
             self.rim.isHidden = true
-        })
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            self.holdRing.opacity = 0
+            CATransaction.commit()
+        }
+        move.startAnimation(afterDelay: HeadMotion.marksStay)
+        marksMove = move
+    }
+
+    /// Leaves the marks where the fade that runs has brought them.
+    private func stopMarks() {
+        if let marksMove, marksMove.state == .active { marksMove.stopAnimation(true) }
+        marksMove = nil
+    }
+
+    private static func scaled(_ scale: Double) -> CGAffineTransform {
+        CGAffineTransform(scaleX: CGFloat(scale), y: CGFloat(scale))
     }
 
     private func draw(turn: CGFloat, heat: CGFloat, struck: Bool) {
@@ -681,6 +741,7 @@ final class DockHeadView: UIView {
         var shown = [voiceLine ?? ball.pigment.name]
         #if DEBUG
         shown.append("actions=" + voiceMarks().map { $0.name }.joined(separator: "|"))
+        if let marksSeen { shown.append("marks=" + String(format: "%.2f", marksSeen)) }
         shown += [lastCard.map { "card=\($0)" }, lastSessions.map { "sessions=\($0)" }].compactMap { $0 }
         #endif
         return shown.joined(separator: "\n")
@@ -776,5 +837,18 @@ final class DockHeadView: UIView {
 
     private func announce(_ line: String) {
         UIAccessibility.post(notification: .announcement, argument: line)
+    }
+}
+
+@MainActor
+extension HeadMotion.Curve {
+    /// The curve for a view's animator.
+    var cubic: UICubicTimingParameters {
+        UICubicTimingParameters(controlPoint1: CGPoint(x: x1, y: y1), controlPoint2: CGPoint(x: x2, y: y2))
+    }
+
+    /// The curve for a layer's animation.
+    var media: CAMediaTimingFunction {
+        CAMediaTimingFunction(controlPoints: Float(x1), Float(y1), Float(x2), Float(y2))
     }
 }
