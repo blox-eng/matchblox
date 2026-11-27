@@ -185,13 +185,3 @@ func printed(v any) (string, int) {
 	}
 	return string(b) + "\n", exitOK
 }
-
-// MoveCursor moves the cursor of the asking session's menu down one
-// option, as the agent's own ↓ does. Its menu then reads anew: a pick made
-// from the menu before it is stale.
-func (d *Demo) MoveCursor() error {
-	w := d.script.world
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return w.move(askPane, false)
-}

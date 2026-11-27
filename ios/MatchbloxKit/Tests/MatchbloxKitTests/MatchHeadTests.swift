@@ -88,16 +88,6 @@ final class MatchHeadTests: XCTestCase {
         XCTAssertTrue(head.struck)
     }
 
-    func testPaceAndStrikeCountFromTheCross() {
-        var head = MatchHead()
-        _ = spin(&head, notches: -40)
-        head.cross()
-        let rolls = (41...89).map { i in head.turn(angle: angle(notches: -i), at: Double(i) * 0.01) }
-        XCTAssertEqual(rolls.map(\.lines), Array(repeating: 1, count: 10) + Array(repeating: 3, count: 14) + Array(repeating: 8, count: 24) + [20])
-        XCTAssertEqual(rolls.indices.filter { rolls[$0].strike }, [48], "the 49th notch past the cross strikes")
-        XCTAssertEqual(head.heat, 1, accuracy: 0.001)
-    }
-
     func testHeatFollowsPace() {
         let heat = [1, 11, 25, 49].map { n -> CGFloat in
             var head = MatchHead()

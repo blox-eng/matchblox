@@ -20,8 +20,8 @@ public struct BoardBelt: Equatable, Sendable {
     public let dim: Set<String>
     /// The chat takes the whole screen: the list and its row menu are not on it.
     public let chat: Bool
-    /// The pane of the session the chat shows (`%` and digits), where the head reads its menu;
-    /// nil when the value names none, or names something that is not a pane.
+    /// The pane of the session the chat shows (`%` and digits), which the head's sessions card
+    /// marks; nil when the value names none, or names something that is not a pane.
     public let chatPane: String?
 
     /// The app's answer to each value it takes while its belt shows Board (`keycmd.BeltKey`).

@@ -219,8 +219,8 @@ final class HeadLayer: CALayer {
 }
 
 /// What the thumb feels on the head: a short, sharp tap a notch, sharper as the head heats; one
-/// hard tap when it strikes; one firm tap at a crossing; one heavy bump at an end. A phone with
-/// no haptics plays nothing.
+/// hard tap when it strikes; one firm tap back at the bottom or as a hold begins; one heavy bump
+/// at an end. A phone with no haptics plays nothing.
 @MainActor
 final class HeadFeel {
     private let engine: CHHapticEngine?
@@ -247,12 +247,12 @@ final class HeadFeel {
         play(intensity: 1, sharpness: 0.3)
     }
 
-    /// The roll crossed from the options into the output, or came back to the bottom.
+    /// The view came back to the bottom, or the hold began.
     func cross() {
         play(intensity: 0.8, sharpness: 0.4)
     }
 
-    /// The last option, an end of the lines, or nothing to scroll.
+    /// An end of the lines, or nothing to scroll.
     func bump() {
         play(intensity: 1, sharpness: 0.1)
     }

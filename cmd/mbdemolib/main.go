@@ -59,16 +59,6 @@ func MBDemoRun(cmd *C.char, buf *C.char, n C.int, status *C.int) C.int {
 	return copyOut(buf, n, out)
 }
 
-// MBDemoMoveCursor moves the asking session's menu cursor, as its agent
-// does: the UI test's way to a question that changed before a pick.
-//
-//export MBDemoMoveCursor
-func MBDemoMoveCursor() {
-	if r := on(); r != nil {
-		_ = r.demo.MoveCursor()
-	}
-}
-
 // copyOut copies s into buf of n bytes, cut to fit, with a NUL at the end,
 // and returns its length.
 func copyOut(buf *C.char, n C.int, s string) C.int {

@@ -68,14 +68,11 @@ final class DemoSession: ConsoleSource, @unchecked Sendable {
         await onWrites { MBDemoResize(Int32(cols), Int32(rows)) }
     }
 
-    /// A pick waits on the agent, so the demo's commands keep off the cooperative threads.
+    /// A command waits on the demo's service, so the demo's commands keep off the cooperative threads.
     private static let commands = DispatchQueue(label: "com.blox.matchblox.demo.commands", qos: .userInitiated)
     private static let replySize = 256 * 1024
 
     #if DEBUG
-    /// The UI test's question that changes between the roll and the pick: the agent's cursor
-    /// moves just before each pick lands.
-    private static let questionChanges = ProcessInfo.processInfo.arguments.contains("-demoQuestionChanges")
     /// The UI test's host whose session list does not answer.
     private static let sessionsFail = ProcessInfo.processInfo.arguments.contains("-demoSessionsFail")
     #endif
@@ -88,9 +85,6 @@ final class DemoSession: ConsoleSource, @unchecked Sendable {
         #endif
         return await withCheckedContinuation { (done: CheckedContinuation<HostReply, Never>) in
             Self.commands.async {
-                #if DEBUG
-                if Self.questionChanges, line.hasPrefix("choose ") { MBDemoMoveCursor() }
-                #endif
                 var reply = [CChar](repeating: 0, count: Self.replySize)
                 var status: Int32 = 1
                 let length = line.withCString {

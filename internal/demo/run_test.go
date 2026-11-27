@@ -95,29 +95,6 @@ func TestDemoRunChooseAnswersTheMenu(t *testing.T) {
 	}
 }
 
-// TestDemoRunPickAfterTheAgentMovedIsStale (Surface: an agent's tools): the
-// agent's cursor moves between the menu read and the pick, as when its
-// question is drawn again; the pick types nothing and exits as a host's
-// does, so Pocket says the question changed.
-func TestDemoRunPickAfterTheAgentMovedIsStale(t *testing.T) {
-	d, _ := start(t)
-	waitForSessions(t, d.Run)
-	m := runMenu(t, d.Run, askPane)
-	if err := d.MoveCursor(); err != nil {
-		t.Fatal(err)
-	}
-	if again := runMenu(t, d.Run, askPane); again.Sign == m.Sign {
-		t.Fatalf("the moved cursor kept the sign %s", m.Sign)
-	}
-	pick := "choose " + askPane + " 2 --text " + quote(m.Options[1].Text) + " --sign " + m.Sign
-	if out, status := d.Run(pick); status != 3 || out != "the question changed" {
-		t.Fatalf("a pick after the cursor moved: %d %q", status, out)
-	}
-	if typed(d.Ran()) {
-		t.Fatal("a stale pick typed a key")
-	}
-}
-
 func typed(ran [][]string) bool {
 	return slices.ContainsFunc(ran, func(argv []string) bool {
 		return len(argv) > 4 && argv[1] == "send-keys" && argv[3] == askPane && argv[len(argv)-1] == "2"

@@ -1,7 +1,7 @@
 import Foundation
 
 /// The match head. On the dock the finger turns it round its edge: a turn moves in notches of
-/// `notch` radians; the more notches since the crossing into the output, the more lines a notch
+/// `notch` radians; the more notches the roll has turned, the more lines a notch
 /// moves (`pace`). Angles are `atan2(dy, dx)` in UIKit points, so a growing angle is clockwise.
 /// On the belt the thumb rolls it: a roll moves in notches of `rollNotch` points; a faster roll
 /// moves more lines a notch, and a roll down is positive and shows older lines.
@@ -97,11 +97,6 @@ public struct MatchHead: Sendable {
         return Roll(notches: count, lines: count * Self.lines(atSpeed: speed), strike: strike)
     }
 
-    /// The roll crossed out of the options into the output: its pace, heat and strike count from here.
-    public mutating func cross() {
-        notchesSinceCross = 0
-    }
-
     /// The finger left the head: the next turn starts a new roll.
     public mutating func lift() {
         angle = nil
@@ -120,7 +115,7 @@ public struct MatchHead: Sendable {
         if strike { struck = true } else if heat < Self.outHeat { struck = false }
     }
 
-    /// Lines a notch moves, by the notches since the crossing (the first is 1): 1 to 10, 3 to 24,
+    /// Lines a notch moves, by the roll's notches so far (the first is 1): 1 to 10, 3 to 24,
     /// 8 to 48, then `maxLines`.
     public static func pace(notchesSinceCross n: Int) -> Int {
         switch n {

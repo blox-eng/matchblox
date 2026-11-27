@@ -545,7 +545,6 @@ private final class Belts {
 
     private static let copyReply = KeyBar.bytes(for: "board.c")
     private static let esc = KeyBar.bytes(for: "Esc")
-    private static let enter = KeyBar.bytes(for: "⏎")
 
     /// SwiftTerm disarms ctrl after the next typed key and posts this; its name is not public.
     private static let ctrlReset = Notification.Name("SwiftTerm.TerminalView.controlModifierReset")
@@ -644,12 +643,11 @@ private final class Belts {
         if wasUp, bytes == Self.esc { return }
         if bytes == Self.copyReply { terminal.onAsksCopy() }
         terminal.send(bytes)
-        if bytes == Self.enter, terminal.isFirstResponder { foldKeyboard() }
     }
 
-    /// An Enter typed or sent from the lifted belt has gone: on Joystick the keyboard folds and
-    /// the head is back. It folds on the next turn of the run loop, never inside the keyboard's
-    /// own call. Every other layout has no head to go back to, and the keyboard stays.
+    /// An Enter typed on the keyboard has gone: on Joystick the keyboard folds and the head is
+    /// back. It folds on the next turn of the run loop, never inside the keyboard's own call.
+    /// Every other layout has no head to go back to, and the keyboard stays.
     private func foldKeyboard() {
         guard lifted.layout == .joystick else { return }
         Task { [weak self] in _ = self?.terminal?.resignFirstResponder() }
