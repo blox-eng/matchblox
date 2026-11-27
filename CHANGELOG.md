@@ -6,6 +6,13 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **This machine's fix line in `MACHINES · N` is a real command.** When
+  this machine's own serve is not reached, its row says
+  `run: matchblox status to see why`, not `matchblox connect this machine`,
+  which is no command.
+
 ## [0.67.0] - 2026-11-27
 
 ### Added
