@@ -721,3 +721,14 @@ func TestASecondTapOnAMachineRowJumps(t *testing.T) {
 		t.Fatal("after a tap the window still starts at ws-1's section")
 	}
 }
+
+// TestASecondTapWithNoSectionSaysWhy: a second tap on a machine row that
+// has nowhere to move says so and where the fix is, never nothing at all.
+func TestASecondTapWithNoSectionSaysWhy(t *testing.T) {
+	m := threeMachines(t, "", "gpu-1") // ws-1 never answered, and no hosts list
+	m = tapLine(t, m, "ws-1 ")
+	m = tapLine(t, m, "ws-1 ")
+	if !strings.Contains(m.flash, "ws-1 has no section yet") || !strings.Contains(m.flash, "under its row") {
+		t.Fatalf("a second tap on ws-1 says %q", m.flash)
+	}
+}

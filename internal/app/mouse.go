@@ -164,10 +164,14 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	if h, ok := m.selectedMachine(); ok && m.tab == tabMachine {
 		// A tap on the selected machine row moves to its section, as Enter does.
 		m.armed, m.flash = "", ""
-		if picked {
-			return m.enterMachine(h), nil
+		if !picked {
+			return m, nil
 		}
-		return m, nil
+		if m.machineEnterWord(h) == "" {
+			said := m.say(m.nameOf(h) + " has no section yet: the line under its row says the fix")
+			return m, said
+		}
+		return m.enterMachine(h), nil
 	}
 	if host, pane := m.tapTarget(); pane != "" {
 		// A tap selects the row, and a tap on it once it is selected goes
