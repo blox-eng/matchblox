@@ -15,16 +15,30 @@ import (
 // ContentState is what the Live Activity shows. Host is the Host8 tag of the
 // host, so the widget can show nothing for a host it does not follow.
 type ContentState struct {
-	Host     string       `json:"host"`
-	Burn     int          `json:"burn"`
-	Wait     int          `json:"wait"`
-	WaitAt   time.Time    `json:"wait_at,omitzero"` // when the newest wait began; zero if none
-	Top      *Top         `json:"top,omitempty"`
+	Host   string    `json:"host"`
+	Burn   int       `json:"burn"`
+	Wait   int       `json:"wait"`
+	WaitAt time.Time `json:"wait_at,omitzero"` // when the newest wait began; zero if none
+	Top    *Top      `json:"top,omitempty"`
+	// Needs are the sessions that wait for the person, at most MaxNeeds:
+	// asks before a finished turn, the oldest first. Need counts them all.
+	Needs    []Need       `json:"needs,omitempty"`
+	Need     int          `json:"need,omitempty"`
 	Accounts []AccountUse `json:"accounts"`
 	Stoker   bool         `json:"stoker"`
 	// Chain is the chain that needs the owner most, by number; nil when
 	// the neediest session is in no chain, and the island shows it alone.
 	Chain *TopChain `json:"chain,omitempty"`
+}
+
+// MaxNeeds is how many sessions that need the person the lock screen names.
+const MaxNeeds = 3
+
+// Need is a session that waits for the person, by number. Kind is command
+// (a permission), question or done (its turn finished).
+type Need struct {
+	N    int    `json:"n"`
+	Kind string `json:"kind"`
 }
 
 // Top is the session the island leads with, by number.

@@ -33,7 +33,7 @@
 
 **Files:**
 - Modify: `internal/push/payload.go` (ContentState), `internal/push/state.go` (Build), `internal/push/sender.go:505` (changed)
-- Modify: `testdata/push/content-state.json`
+- Ruling (2026-11-27): `testdata/push/content-state.json` stays as it is. It is also the state of an older host, which the phone's old-state test decodes. `TestBuildMatchesTheFixture` adds the expected `needs`/`need` on top of it in code, and fails if the fixture ever names needs.
 - Test: `internal/push/state_test.go`, `internal/push/sender_test.go`
 
 **Interfaces:**

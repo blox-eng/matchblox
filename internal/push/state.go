@@ -100,6 +100,16 @@ func Build(doc state.Doc, hostFP string, n *Numbers, now time.Time) ContentState
 		}
 		return b.s.Started.Compare(a.s.Started)
 	})
+	needKind := map[string]string{queue.StatePermission: "command", queue.StateQuestion: "question", queue.StateFinished: "done"}
+	for _, c := range cands {
+		if c.state != "waits" && c.state != "done" {
+			break // the sort puts them first
+		}
+		cs.Need++
+		if len(cs.Needs) < MaxNeeds {
+			cs.Needs = append(cs.Needs, Need{N: n.Session(c.s.SessionID), Kind: needKind[items[c.s.SessionID].State]})
+		}
+	}
 	if len(cands) > 0 {
 		c := cands[0]
 		top := &Top{N: n.Session(c.s.SessionID), State: c.state, Out: c.s.Out.UTC()}

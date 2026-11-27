@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"time"
 
@@ -212,7 +213,6 @@ func wants(regs []Registration) bool {
 	return false
 }
 
-// buzzBody is the APNs alert of a buzz. The alert names nothing; the Notification
 // BuzzSound is the sound of every buzz, in the app's bundle: a short pinch
 // hiss and one ember pop (owner, 2026-11-27). A phone without it plays the
 // default sound.
@@ -227,6 +227,7 @@ func buzzFirst(a, b queue.Item) bool {
 	return a.Since.After(b.Since)
 }
 
+// buzzBody is the APNs alert of a buzz. The alert names nothing; the Notification
 // Service Extension (mutable-content) opens buzz.sealed with the notify key and
 // shows the line. buzz.host and buzz.n are in clear so a tap opens the session.
 //
@@ -518,7 +519,8 @@ func (s *Sender) due(cs ContentState, now time.Time) (int, bool) {
 // or burn more or less, a wait that begins anew, or the stoker.
 func changed(l *ContentState, cs ContentState) bool {
 	return (l.Top == nil) != (cs.Top == nil) || cs.Top != nil && (l.Top.N != cs.Top.N || l.Top.State != cs.Top.State) ||
-		cs.Wait != l.Wait || cs.Burn != l.Burn || cs.WaitAt.After(l.WaitAt) || cs.Stoker != l.Stoker
+		cs.Wait != l.Wait || cs.Burn != l.Burn || cs.WaitAt.After(l.WaitAt) || cs.Stoker != l.Stoker ||
+		cs.Need != l.Need || !slices.Equal(cs.Needs, l.Needs)
 }
 
 // began says the only change from l to cs is more sessions that burn.

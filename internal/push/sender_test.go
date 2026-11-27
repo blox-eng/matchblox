@@ -135,6 +135,32 @@ func liveOf(t *testing.T, e Event) aps {
 	return a
 }
 
+// A need that ends while the top stays goes at once: two finished turns,
+// then one, kept the island at 2 for 3 minutes.
+func TestANeedThatEndsGoesAtOnce(t *testing.T) {
+	r := &fakeRelay{}
+	c := &clock{t: t0}
+	p, _ := phone(t, "a", false, true)
+	s := newSender(t, r, c, p)
+	finished := func(ids ...string) state.Doc {
+		var ss []sample.Session
+		var q []queue.Item
+		for i, id := range ids {
+			ss = append(ss, sess(id, false, t0))
+			q = append(q, queue.Item{SessionID: id, State: queue.StateFinished, Since: t0.Add(time.Duration(i) * time.Second)})
+		}
+		return doc(ss, q)
+	}
+	s.handle(finished("d1", "d2"))
+	r.take()
+	c.add(time.Minute)
+	s.handle(finished("d1"))
+	ev := ofKind(r.take(), "channel")
+	if len(ev) != 1 || ev[0].Priority != 10 {
+		t.Fatalf("the need that ended did not go at once: %+v", ev)
+	}
+}
+
 func TestABuzzGoesAtMostEach30s(t *testing.T) {
 	r := &fakeRelay{}
 	c := &clock{t: t0}

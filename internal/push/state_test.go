@@ -1,10 +1,10 @@
 package push
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 	"testing"
 	"time"
 
@@ -184,6 +184,31 @@ func TestAFullWindowThatStillWorksIsSpentNotOut(t *testing.T) {
 	}
 }
 
+// The island leads with what needs the person: asks before a finished turn,
+// the oldest first, at most 3, and the count of all (2026-11-27).
+func TestWhatNeedsYouLeadsInOrder(t *testing.T) {
+	n := openNumbers(t, t.TempDir())
+	ids := []string{"w1", "d1", "p1", "d2", "b"}
+	var ss []sample.Session
+	for _, id := range ids {
+		ss = append(ss, sess(id, id == "b", t0))
+	}
+	q := []queue.Item{
+		{SessionID: "w1", State: queue.StateQuestion, Since: t0.Add(-2 * time.Minute)},
+		{SessionID: "d1", State: queue.StateFinished, Since: t0.Add(-5 * time.Minute)},
+		{SessionID: "p1", State: queue.StatePermission, Since: t0.Add(-1 * time.Minute)},
+		{SessionID: "d2", State: queue.StateFinished, Since: t0.Add(-4 * time.Minute)},
+	}
+	got := Build(doc(ss, q), fp, n, t0)
+	want := []Need{{n.Session("w1"), "question"}, {n.Session("p1"), "command"}, {n.Session("d1"), "done"}}
+	if got.Need != 4 || !slices.Equal(got.Needs, want) {
+		t.Fatalf("need %d %+v, want 4 %+v", got.Need, got.Needs, want)
+	}
+	if got.Top == nil || got.Top.N != n.Session("w1") {
+		t.Fatalf("top %+v, want w1", got.Top)
+	}
+}
+
 func TestUsageSkipsWhatItCannotName(t *testing.T) {
 	n := openNumbers(t, t.TempDir())
 	a := limits.Account{Provider: "p", Account: "a", State: limits.Measured, Windows: []limits.Window{
@@ -264,13 +289,19 @@ func TestBuildMatchesTheFixture(t *testing.T) {
 		mk("b", 93, 71, &limits.Outlook{Out: time.Date(2026, 10, 21, 16, 15, 0, 0, time.UTC)}))
 	d.Stoker = &stoker.View{Mode: stoker.Mode{On: true}}
 	got, _ := json.Marshal(Build(d, "SHA256:"+"8Q94EmFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE", n, now))
-	var a, b bytes.Buffer
-	if err := json.Compact(&a, want); err != nil {
+	// The fixture is also the state of a host from before the needs list, which the
+	// phone's tests decode as such; this host adds what needs the person on top of it.
+	var cs ContentState
+	if err := json.Unmarshal(want, &cs); err != nil {
 		t.Fatal(err)
 	}
-	b.Write(got)
-	if a.String() != b.String() {
-		t.Fatalf("\n got %s\nwant %s", b.String(), a.String())
+	if cs.Need != 0 || cs.Needs != nil {
+		t.Fatal("the fixture names needs: it is no longer the state of an older host")
+	}
+	cs.Needs, cs.Need = []Need{{N: 3, Kind: "command"}}, 1
+	wantNow, _ := json.Marshal(cs)
+	if string(wantNow) != string(got) {
+		t.Fatalf("\n got %s\nwant %s", got, wantNow)
 	}
 }
 
