@@ -79,17 +79,20 @@ type Hello struct {
 	Host    string `json:"host"`
 	OS      string `json:"os"`
 	Arch    string `json:"arch"`
-	// Client is what says hello to the service: ClientConsole, or
-	// ClientCLI for a matchblox command. Empty: a command.
+	// Client is what says hello to the service: ClientConsole,
+	// ClientPocket for the phone's menu and choose commands, or ClientCLI
+	// for any other matchblox command. Empty: a command.
 	Client string `json:"client,omitempty"`
 	// Tmux is the service's tmux version, as tmux -V says it without
 	// "tmux ", or "none". "": an older service, which does not say.
 	Tmux string `json:"tmux,omitempty"`
 }
 
-// The kinds of client in a hello. Only a console is a person at the keys.
+// The kinds of client in a hello. Only a console is a person at the keys;
+// Pocket is one for a menu: and a choose: act only.
 const (
 	ClientConsole = "console"
+	ClientPocket  = "pocket"
 	ClientCLI     = "cli"
 )
 

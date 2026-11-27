@@ -958,6 +958,11 @@ type actWatch struct {
 // doActWatching is doActFor that also watches the snapshots for watch's
 // record refresh. A nil watch watches nothing.
 func doActWatching(path string, a proto.Act, wait time.Duration, watch *actWatch) (proto.Result, error) {
+	return doActAs(path, proto.ClientCLI, a, wait, watch)
+}
+
+// doActAs is doActWatching that says hello as client.
+func doActAs(path, client string, a proto.Act, wait time.Duration, watch *actWatch) (proto.Result, error) {
 	c, err := transport.Dial(path, time.Second)
 	if err != nil {
 		return proto.Result{}, errNotRunning
@@ -965,7 +970,7 @@ func doActWatching(path string, a proto.Act, wait time.Duration, watch *actWatch
 	defer c.Close()
 	timer := time.AfterFunc(wait, func() { c.Close() })
 	defer timer.Stop()
-	if err := c.Send(proto.KindHello, "", proto.Hello{Version: proto.Version, Binary: version, Client: proto.ClientCLI}); err != nil {
+	if err := c.Send(proto.KindHello, "", proto.Hello{Version: proto.Version, Binary: version, Client: client}); err != nil {
 		return proto.Result{}, errNotRunning
 	}
 	const id = "cli"

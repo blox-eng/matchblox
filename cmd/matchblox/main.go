@@ -158,6 +158,8 @@ func run(args []string) error {
 			return pushCmd(args[1:])
 		case "connect":
 			return liveConnect(args[1:])
+		case "menu", "choose":
+			return pocketCmd(args[0], args[1:], os.Stdout, transport.SocketPath())
 		}
 	}
 	if len(args) > 0 && args[0] == "guard" {

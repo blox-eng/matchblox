@@ -1,6 +1,8 @@
 package service
 
 import (
+	"strings"
+
 	"github.com/blox-eng/matchblox/internal/menu"
 	"github.com/blox-eng/matchblox/internal/proto"
 )
@@ -25,4 +27,9 @@ func (s *Service) readMenu(pane string, a proto.Act) proto.Result {
 		m.Options = append(m.Options, proto.Option{N: n, Text: options[n]})
 	}
 	return proto.Result{Menu: m}
+}
+
+// readsMenu tells if id reads or picks from a pane's menu.
+func readsMenu(id string) bool {
+	return strings.HasPrefix(id, proto.MenuPrefix) || strings.HasPrefix(id, proto.ChoosePrefix)
 }
