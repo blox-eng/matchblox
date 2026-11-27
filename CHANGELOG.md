@@ -6,6 +6,13 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **This machine's fix line in `MACHINES · N` is a real command.** When
+  this machine's own serve is not reached, its row says
+  `run: matchblox status to see why`, not `matchblox connect this machine`,
+  which is no command.
+
 ## [0.68.0] - 2026-11-27
 
 ### Changed
@@ -22,13 +29,6 @@ All notable changes to matchblox are in this file. The format follows
 - **Pocket comes back to its own console.** A return reattaches the console
   the phone left, on the screen it showed, and an island that was swiped
   away or ended by an update starts again at the next open.
-
-### Fixed
-
-- **This machine's fix line in `MACHINES · N` is a real command.** When
-  this machine's own serve is not reached, its row says
-  `run: matchblox status to see why`, not `matchblox connect this machine`,
-  which is no command.
 
 ## [0.67.0] - 2026-11-27
 
