@@ -1,7 +1,8 @@
 import XCTest
 
-/// The one match head over the dock's belt, on the demo console. A roll is a straight drag round
-/// the head's edge: one drag turns it at most about 11 notches.
+/// The one match head over the dock's belt, on the demo console, on Joystick. A roll is a straight
+/// drag round the head's edge: one drag turns it at most about 11 notches. A push is a drag from
+/// the middle; a push sends its key at 16 pt.
 final class HeadTests: XCTestCase {
     private let replyText = "I rotate the token on each refresh"
     /// What spark-docs says to any line sent in its chat.
@@ -13,8 +14,28 @@ final class HeadTests: XCTestCase {
         continueAfterFailure = false
     }
 
+    /// Surface: an agent's tools. At flint-auth's question a slow roll up the edge, then a flick
+    /// down that coasts on after the lift, send no key: no option is answered, the chat stays on
+    /// flint-auth (an arrow there would choose another session), nothing clicks, and no keyboard
+    /// rises.
+    @MainActor
+    func testRollSendsNoKey() {
+        let app = launched()
+        openTheQuestion(in: app)
+        let terminal = theTerminal(in: app)
+        let presses = terminal.value as? String
+        let head = theHead(in: app)
+        rollUp(head)
+        flickDown(head)
+        Thread.sleep(forTimeInterval: 3)
+        XCTAssertEqual(terminal.value as? String, presses, "a roll or a flick clicked")
+        XCTAssertTrue(terminal.label.contains("send to flint-auth"), "a roll or a flick left flint-auth's chat: \(terminal.label)")
+        XCTAssertFalse(terminal.label.contains(replyText), "a roll or a flick answered the agent")
+        XCTAssertFalse(app.keyboards.firstMatch.exists, "a roll or a flick raised the keyboard")
+    }
+
     /// Surface: an agent's tools. A drag along the edge from the right mark to the bottom one
-    /// lifts on `⌨`, and sends no key: the line stays as it was and no keyboard rises.
+    /// lifts on `↓`, and sends no key: the line stays as it was and no keyboard rises.
     @MainActor
     func testRollEndingOnEdgeSendsNothing() {
         let app = launched()
@@ -83,30 +104,68 @@ final class HeadTests: XCTestCase {
         XCTAssertTrue(heightBecomes(terminal, joystickHeight), "the terminal did not give the head its row back")
     }
 
-    /// A notch clockwise at flint-auth's question highlights its second option, and a tap on the
-    /// middle answers with it, through the pick the host checks.
+    /// Surface: an agent's tools. In flint-auth's pane one push `↓` moves the agent's own `❯` to
+    /// option 2, as its arrow key does, and a tap on the middle is Enter: the agent takes option 2.
     @MainActor
-    func testTapAnswers() {
+    func testPushDownMovesTheAgent() {
         let app = launched()
-        openTheQuestion(in: app)
-        rollOneNotchDown(app)
-        expectLine(in: app, "2 of ")
-        theHead(in: app).tap()
-        expect(in: app, step: "flint-auth's reply to the pick", "label CONTAINS %@", replyText)
+        openTheStandIn(in: app)
+        let terminal = theTerminal(in: app)
+        XCTAssertTrue(terminal.label.contains("❯ 1. Rotate it"), "the agent's mark is not on option 1: \(terminal.label)")
+        let head = theHead(in: app)
+        push(head, dy: 24)
+        expect(in: app, step: "the agent's mark on option 2", "label CONTAINS %@", "❯ 2. Rotate, keep")
+        XCTAssertFalse(terminal.label.contains(replyText), "a push answered the agent")
+        waitUntilSteady(terminal)
+        head.tap()
+        expect(in: app, step: "flint-auth's reply to option 2", "label CONTAINS %@", replyText)
     }
 
-    /// The agent's cursor moves between the roll and the tap: the host refuses the pick, nothing
-    /// is answered, and the handle row says why.
+    /// Surface: an agent's tools. A push `↓` held repeats: the agent's `❯` goes on down to the
+    /// last option. The lift after the pushes is no Enter.
     @MainActor
-    func testStalePickRefused() {
-        let app = launched(extra: ["-demoQuestionChanges"])
-        openTheQuestion(in: app)
-        rollOneNotchDown(app)
-        expectLine(in: app, "2 of ")
-        theHead(in: app).tap()
-        expectLine(in: app, "the question changed · roll again")
+    func testPushHeldRepeats() {
+        let app = launched()
+        openTheStandIn(in: app)
+        push(theHead(in: app), dy: 24, hold: 1.2)
+        expect(in: app, step: "the agent's mark on the last option", "label CONTAINS %@", "❯ 5. Chat about this")
+        Thread.sleep(forTimeInterval: 2)
+        let terminal = theTerminal(in: app)
+        XCTAssertFalse(terminal.label.contains(replyText), "the lift after a held push answered the agent")
+        XCTAssertTrue(terminal.label.contains("type 2 to answer"), "the question went: \(terminal.label)")
+    }
+
+    /// Surface: an agent's tools. At the first option a push `↑` sends no key: it reads up the
+    /// output, a line, and the handle row says how to come back. A tap then comes back down and
+    /// sends nothing: the question stays unanswered.
+    @MainActor
+    func testPushUpPastFirstReadsUp() {
+        let app = launched()
+        openTheStandIn(in: app)
+        let head = theHead(in: app)
+        push(head, dy: -24)
+        expectLine(in: app, "1 line up · push ↓ or tap to come back")
+        head.tap()
+        expectLine(in: app, "roll: the output")
         Thread.sleep(forTimeInterval: 3)
-        XCTAssertFalse(theTerminal(in: app).label.contains(replyText), "a stale pick answered the agent")
+        let terminal = theTerminal(in: app)
+        XCTAssertFalse(terminal.label.contains(replyText), "the tap up in the output answered the agent")
+        XCTAssertTrue(terminal.label.contains("type 2 to answer"), "the question went: \(terminal.label)")
+        XCTAssertTrue(terminal.label.contains("❯ 1. Rotate it"), "the agent's mark moved: \(terminal.label)")
+    }
+
+    /// A flick on the edge coasts on after the lift: from well up hearth-api's output, a flick of
+    /// a few notches down comes all the way to the bottom, and stops there with the bump line.
+    @MainActor
+    func testFlickCoasts() {
+        let app = launched()
+        openTheChat(app, row: "hearth-api")
+        waitUntilSteady(theTerminal(in: app))
+        let head = theHead(in: app)
+        rollUp(head)
+        expectLine(in: app, "lines up · push ↓ or tap to come back", anywhere: true)
+        flickDown(head)
+        expectLine(in: app, "bottom of the output")
     }
 
     /// A fast roll up hearth-api's output shows a card that names the step at the top of the
@@ -117,40 +176,38 @@ final class HeadTests: XCTestCase {
         openTheChat(app, row: "hearth-api")
         expect(in: app, step: "the step in hearth-api's chat", "label CONTAINS %@", "✦ Running go test")
         let head = theHead(in: app)
-        // The first touch on this pane reads its menu, and a notch before the reply is dropped:
-        // the press waits on the top mark, which does not repeat. Then anticlockwise, close left
-        // of the middle: 11 notches, the 11th at 3 lines a notch.
-        at(head, -8, -46).press(forDuration: 0.5, thenDragTo: at(head, -8, 190), withVelocity: .fast, thenHoldForDuration: 0)
+        // Anticlockwise, close left of the middle: 11 notches, the 11th at 3 lines a notch. The
+        // finger rests before the lift, so no coast reads on past the step.
+        at(head, -8, -46).press(forDuration: 0.5, thenDragTo: at(head, -8, 190), withVelocity: .fast, thenHoldForDuration: 0.15)
         XCTAssertTrue((head.value as? String ?? "").contains("card=✦ Running go test"),
                       "no card named the step: \(head.value ?? "")")
         let card = app.staticTexts["step-card"]
         XCTAssertTrue(card.waitForNonExistence(timeout: 3), "the card stayed after the roll")
     }
 
-    /// A touch shows the four marks round the head; they are gone 0.9 s after the lift.
+    /// A touch shows the four marks round the head, `↑ ❯ up`, `← cursor`, `→ cursor` and
+    /// `↓ ❯ down`; they are gone 0.9 s after the lift. A 0.45 s press sends nothing.
     @MainActor
     func testTouchShowsMarks() {
         let app = launched()
         expect(in: app, "label CONTAINS %@", "NEEDS YOU")
         let head = theHead(in: app)
-        head.press(forDuration: 0.2)
-        for word in ["back", "cursor", "type"] {
+        head.press(forDuration: 0.45)
+        for word in ["❯ up", "cursor", "❯ down"] {
             XCTAssertTrue(app.staticTexts[word].firstMatch.exists, "no \(word) mark on touch. " + app.debugDescription)
         }
         Thread.sleep(forTimeInterval: 1.2)
-        for word in ["back", "cursor", "type"] {
+        for word in ["❯ up", "cursor", "❯ down"] {
             XCTAssertFalse(app.staticTexts[word].firstMatch.exists, "the \(word) mark stayed after the lift")
         }
     }
 
-    /// A press on the bottom mark raises the keyboard.
+    /// Joystick's belt carries `⌨`: a tap on it raises the keyboard. The head's bottom mark is `↓`.
     @MainActor
-    func testPressTypeRaisesKeyboard() {
+    func testKeyboardKeyRaisesKeyboard() {
         let app = launched()
         openTheChat(app, row: "spark-docs")
-        at(theHead(in: app), 0, 40).tap()
-        dismissKeyboardTip(in: app)
-        XCTAssertTrue(app.buttons["Hide keyboard"].firstMatch.waitForExistence(timeout: 10), "⌨ raised no keyboard. " + app.debugDescription)
+        raiseTheKeyboard(app)
     }
 
     /// A still hold in flint-auth's chat fills the ring, then lists this host's sessions with
@@ -223,7 +280,8 @@ final class HeadTests: XCTestCase {
         XCTAssertTrue(becomesHittable(head, within: 3), "the head did not come back after the belt stopped")
     }
 
-    /// Return on the system keyboard sends the line, then the keyboard folds and the head is back.
+    /// On Joystick, Return on the system keyboard sends the line, then the keyboard folds and the
+    /// head is back. Under the keyboard the head is out of reach, so this is the Enter that folds.
     @MainActor
     func testKeyboardFoldsAfterSend() {
         let app = launched()
@@ -322,13 +380,13 @@ final class HeadTests: XCTestCase {
         expect(in: app, "label CONTAINS %@", "NEEDS YOU")
         let head = theHead(in: app)
         XCTAssertEqual(head.label, "Match head")
-        XCTAssertEqual(voiceActions(on: head), ["back, top mark", "cursor, left mark", "cursor, right mark", "type, bottom mark", "sessions"])
+        XCTAssertEqual(voiceActions(on: head), ["❯ up, top mark", "cursor, left mark", "cursor, right mark", "❯ down, bottom mark", "sessions"])
 
         openHome(app)
         app.buttons["home-head-left"].tap()
         app.buttons["Esc cancel"].tap()
         backToTheConsole(app)
-        XCTAssertEqual(voiceActions(on: theHead(in: app)), ["back, top mark", "cancel, left mark", "cursor, right mark", "type, bottom mark", "sessions"])
+        XCTAssertEqual(voiceActions(on: theHead(in: app)), ["❯ up, top mark", "cancel, left mark", "cursor, right mark", "❯ down, bottom mark", "sessions"])
     }
 
     // MARK: Helpers
@@ -378,10 +436,12 @@ final class HeadTests: XCTestCase {
         return mark.label
     }
 
-    /// The head's bottom mark, `⌨`, raises the keyboard.
+    /// Joystick's belt key `⌨` raises the keyboard.
     @MainActor
     private func raiseTheKeyboard(_ app: XCUIApplication) {
-        at(theHead(in: app), 0, 40).tap()
+        let key = app.buttons["Keyboard"].firstMatch
+        XCTAssertTrue(key.waitForExistence(timeout: 10), "no ⌨ on Joystick's belt. " + app.debugDescription)
+        key.tap()
         dismissKeyboardTip(in: app)
         XCTAssertTrue(app.buttons["Hide keyboard"].firstMatch.waitForExistence(timeout: 10), "⌨ raised no keyboard. " + app.debugDescription)
     }
@@ -430,12 +490,55 @@ final class HeadTests: XCTestCase {
         head.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).withOffset(CGVector(dx: x, dy: y))
     }
 
-    /// From the top mark about 24° clockwise: one notch. The press first waits for the menu read
-    /// the touch starts; the top mark does not repeat.
+    /// A push from the middle, `dy` points down (negative: up), held `hold` seconds before the lift.
     @MainActor
-    private func rollOneNotchDown(_ app: XCUIApplication) {
-        let head = theHead(in: app)
-        at(head, 0, -46).press(forDuration: 0.5, thenDragTo: at(head, 20, -44))
+    private func push(_ head: XCUIElement, dy: CGFloat, hold: TimeInterval = 0.05) {
+        at(head, 0, 0).press(forDuration: 0.05, thenDragTo: at(head, 0, dy), withVelocity: .default, thenHoldForDuration: hold)
+    }
+
+    /// Anticlockwise, close left of the middle, about 11 notches up the output; the finger rests
+    /// before the lift, so it does not coast.
+    @MainActor
+    private func rollUp(_ head: XCUIElement) {
+        at(head, -8, -46).press(forDuration: 0.05, thenDragTo: at(head, -8, 190), withVelocity: .slow, thenHoldForDuration: 0.3)
+    }
+
+    /// Clockwise down the right edge, about 4 notches, lifted while it moves: the head coasts on.
+    @MainActor
+    private func flickDown(_ head: XCUIElement) {
+        at(head, 40, -20).press(forDuration: 0.05, thenDragTo: at(head, 40, 30), withVelocity: .fast, thenHoldForDuration: 0)
+    }
+
+    /// flint-auth's own pane, the demo's stand-in for a jumped tmux pane, at its question: a long
+    /// press on its row in the list, then `go in`. The keys go to the agent, as in a pane.
+    @MainActor
+    private func openTheStandIn(in app: XCUIApplication) {
+        expect(in: app, "label CONTAINS %@", "NEEDS YOU")
+        let terminal = theTerminal(in: app)
+        waitUntilSteady(terminal)
+        tapRow(in: app, containing: "flint-auth", press: 0.8)
+        expect(in: app, step: "the menu of flint-auth after the long-press", "label CONTAINS %@", "go in")
+        waitUntilSteady(terminal)
+        tapRow(in: app, containing: "go in")
+        let shown = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "type 2 to answer"), object: terminal)
+        if XCTWaiter().wait(for: [shown], timeout: 6) != .completed, terminal.label.contains("go in") {
+            // The menu rises from the foot: a tap that landed on its box's line misses go in.
+            waitUntilSteady(terminal)
+            tapRow(in: app, containing: "go in")
+        }
+        expect(in: app, step: "flint-auth's pane at its question", "label CONTAINS %@", "type 2 to answer")
+        waitUntilSteady(terminal)
+    }
+
+    /// A tap, or a press of `press` seconds, on the terminal's row that shows `text`.
+    @MainActor
+    private func tapRow(in app: XCUIApplication, containing text: String, press: TimeInterval = 0) {
+        let terminal = theTerminal(in: app)
+        guard let row = terminal.label.components(separatedBy: "\n").firstIndex(where: { $0.contains(text) }) else {
+            return XCTFail("no row shows \(text): \(terminal.label)")
+        }
+        let spot = terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: terminal.middle(ofRow: row)))
+        if press > 0 { spot.press(forDuration: press) } else { spot.tap() }
     }
 
     /// flint-auth's chat, where its question shows.
@@ -447,16 +550,19 @@ final class HeadTests: XCTestCase {
         waitUntilSteady(theTerminal(in: app))
     }
 
-    /// The dock's handle row reads a line that starts with `prefix`.
+    /// The dock's handle row reads a line that starts with `text`, or holds it `anywhere`.
     @MainActor
-    private func expectLine(in app: XCUIApplication, _ prefix: String) {
-        let row = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@", "Layouts")).firstMatch
+    private func expectLine(in app: XCUIApplication, _ text: String, anywhere: Bool = false) {
+        let row = layoutsRow(in: app)
+        let reads = { () -> Bool in
+            guard let line = row.value as? String else { return false }
+            return anywhere ? line.contains(text) : line.hasPrefix(text)
+        }
         let deadline = Date().addingTimeInterval(10)
-        while !((row.value as? String)?.hasPrefix(prefix) ?? false), Date() < deadline {
+        while !reads(), Date() < deadline {
             Thread.sleep(forTimeInterval: 0.2)
         }
-        XCTAssertTrue((row.value as? String)?.hasPrefix(prefix) ?? false,
-                      "the handle row reads \(row.value ?? "nothing"), not \(prefix). " + app.debugDescription)
+        XCTAssertTrue(reads(), "the handle row reads \(row.value ?? "nothing"), not \(text). " + app.debugDescription)
     }
 
     /// The dock's handle row: the layout's name, or the head's line.

@@ -4,30 +4,12 @@ import XCTest
 /// The hold's sessions card: a lift goes only to the row the card shows chosen, and never to the
 /// session the console already shows.
 final class SessionCardTests: XCTestCase {
-    private let radius: CGFloat = 48
     private let rows = [
         SessionRow(n: 1, name: "spark-docs", word: "idle", pane: "%3"),
         SessionRow(n: 2, name: "hearth-api", word: "busy", pane: "%1"),
         SessionRow(n: 5, name: "flint-auth", word: "asks", pane: "%2"),
         SessionRow(n: 6, name: "ember-billing", word: "", pane: "%8"),
     ]
-
-    /// The finger round the head at `degrees` (0 is right of the centre, clockwise grows), `reach`
-    /// points out.
-    private func at(_ degrees: CGFloat, reach: CGFloat = 40) -> CGPoint {
-        let a = degrees * .pi / 180
-        return CGPoint(x: reach * cos(a), y: reach * sin(a))
-    }
-
-    /// Turns from `from` to `to` degrees in 5° moves, as a finger does.
-    private func turn(_ card: inout SessionCard, from: CGFloat, to: CGFloat) {
-        let by: CGFloat = to >= from ? 5 : -5
-        var d = from
-        while (by > 0 && d <= to) || (by < 0 && d >= to) {
-            _ = card.moved(to: at(d), radius: radius)
-            d += by
-        }
-    }
 
     func testTheCurrentSessionIsThePaneThenTheOpenedNumber() {
         XCTAssertEqual(SessionCard(rows: rows, pane: "%2", opened: 1).current, 2, "the pane comes first")
@@ -47,64 +29,56 @@ final class SessionCardTests: XCTestCase {
             """)
     }
 
-    /// Surface: the owner's sessions. A lift on the current session, still or after a turn of
-    /// less than a step, or a turn that came back, opens nothing.
+    /// A push `↓` chooses the next session and `↑` the one before; neither goes past an end, so
+    /// a push back leaves the end at once.
+    func testPushSteps() {
+        var card = SessionCard(rows: rows, pane: "%2", opened: nil)
+        XCTAssertTrue(card.step(by: 1))
+        XCTAssertEqual(card.chosen, 3)
+        XCTAssertFalse(card.step(by: 1), "past the last row")
+        XCTAssertEqual(card.chosen, 3)
+        XCTAssertTrue(card.step(by: -1))
+        XCTAssertEqual(card.chosen, 2)
+        for _ in 0..<5 { _ = card.step(by: -1) }
+        XCTAssertEqual(card.chosen, 0, "past the first row")
+        XCTAssertTrue(card.step(by: 1))
+        XCTAssertEqual(card.chosen, 1)
+    }
+
+    /// Surface: the owner's sessions. A lift on the current session, still or after pushes that
+    /// came back to it, opens nothing.
     func testLiftOnTheCurrentOpensNothing() {
         var card = SessionCard(rows: rows, pane: "%2", opened: nil)
         XCTAssertNil(card.lift)
-        _ = card.moved(to: at(0, reach: 8), radius: radius)
-        XCTAssertNil(card.lift, "inside a quarter of the radius the angle steps nothing")
-        turn(&card, from: 0, to: 25)
-        XCTAssertNil(card.lift, "25° is less than a step")
-        turn(&card, from: 25, to: 70)
+        _ = card.step(by: 1)
         XCTAssertEqual(card.lift, 6)
-        // Past the last row the turn is not counted, so 30° back is the way home.
-        turn(&card, from: 70, to: 40)
+        _ = card.step(by: -1)
         XCTAssertEqual(card.chosen, 2)
-        XCTAssertNil(card.lift, "a turn back onto the current session opens nothing")
+        XCTAssertNil(card.lift, "a push back onto the current session opens nothing")
     }
 
     /// Surface: the owner's sessions. The lift opens the number of the row the card shows chosen,
     /// never a neighbour's.
     func testLiftGoesToTheRowShownChosen() {
         var card = SessionCard(rows: rows, pane: "%2", opened: nil)
-        turn(&card, from: 0, to: -35)
+        _ = card.step(by: -1)
         XCTAssertEqual(card.chosen, 1)
         XCTAssertTrue(card.text.contains("▸ hearth-api"), card.text)
         XCTAssertEqual(card.lift, 2)
-        turn(&card, from: -35, to: -65)
+        _ = card.step(by: -1)
         XCTAssertTrue(card.text.contains("▸ spark-docs"), card.text)
         XCTAssertEqual(card.lift, 1)
     }
 
-    /// A turn past an end is not counted: a step back leaves the end at once.
-    func testATurnPastTheEndIsNotCounted() {
-        var card = SessionCard(rows: rows, pane: "%2", opened: nil)
-        turn(&card, from: 0, to: 300)
-        XCTAssertEqual(card.chosen, 3)
-        turn(&card, from: 300, to: 265)
-        XCTAssertEqual(card.chosen, 2)
-    }
-
-    /// The finger that comes back near the centre and out again elsewhere does not jump.
-    func testAFingerThroughTheCentreDoesNotJump() {
-        var card = SessionCard(rows: rows, pane: "%2", opened: nil)
-        _ = card.moved(to: at(0), radius: radius)
-        _ = card.moved(to: at(90, reach: 6), radius: radius)
-        _ = card.moved(to: at(180), radius: radius)
-        XCTAssertEqual(card.chosen, 2)
-        XCTAssertNil(card.lift)
-    }
-
-    /// With no session marked, nothing is chosen until the first step clockwise chooses the first row.
+    /// With no session marked, nothing is chosen until the first push `↓` chooses the first row.
     func testWithNoneMarkedTheFirstStepChoosesTheFirst() {
         var card = SessionCard(rows: rows, pane: nil, opened: nil)
         XCTAssertNil(card.chosen)
         XCTAssertNil(card.lift)
-        turn(&card, from: 0, to: -40)
-        XCTAssertNil(card.lift, "anticlockwise from none chooses none")
-        turn(&card, from: -40, to: -5)
-        XCTAssertEqual(card.lift, 1, "a turn back from none counts from none")
+        XCTAssertFalse(card.step(by: -1))
+        XCTAssertNil(card.lift, "a push ↑ from none chooses none")
+        XCTAssertTrue(card.step(by: 1))
+        XCTAssertEqual(card.lift, 1, "a push ↓ from none chooses the first")
     }
 
     /// Two rows with one number: a lift on either opens nothing, as the number names no one session.
@@ -112,7 +86,7 @@ final class SessionCardTests: XCTestCase {
         let twins = [SessionRow(n: 4, name: "a", word: "", pane: "%1"), SessionRow(n: 4, name: "b", word: "", pane: "%2"),
                      SessionRow(n: 7, name: "c", word: "", pane: "%3")]
         var card = SessionCard(rows: twins, pane: "%3", opened: nil)
-        turn(&card, from: 0, to: -35)
+        _ = card.step(by: -1)
         XCTAssertEqual(card.chosen, 1)
         XCTAssertNil(card.lift)
     }
@@ -122,7 +96,7 @@ final class SessionCardTests: XCTestCase {
             var card = SessionCard(rows: list, pane: "%2", opened: nil)
             XCTAssertTrue(card.isEmpty)
             XCTAssertEqual(card.text, "no other session on this host")
-            turn(&card, from: 0, to: 90)
+            XCTAssertFalse(card.step(by: 1))
             XCTAssertNil(card.lift)
         }
     }

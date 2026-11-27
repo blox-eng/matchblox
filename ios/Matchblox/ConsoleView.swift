@@ -509,7 +509,6 @@ private final class Belts {
         head.route = { [weak terminal] older in terminal?.headRoute(older: older) ?? .nothing }
         head.page = { [weak terminal] older in terminal?.headPage(older: older) ?? .nothing }
         head.onKeyboard = { [weak terminal] in _ = terminal?.becomeFirstResponder() }
-        head.onHighlight = { [weak terminal] text in terminal?.highlightRow(showing: text) }
         head.visibleLines = { [weak terminal] in terminal?.visibleLines ?? [] }
         terminal.onReturnSent = { [weak self] in self?.foldKeyboard() }
         terminal.onTyped = { [weak self] in
@@ -538,7 +537,7 @@ private final class Belts {
         dock.ctrlArmed = armed
     }
 
-    /// The agent of the pane the app jumped into, and that pane, where the head reads its menu.
+    /// The agent of the pane the app jumped into, and that pane, which the head's sessions card marks.
     func agentChanged(_ agent: String?, pane: String?) {
         self.agent = agent
         agentPane = agent == nil ? nil : pane
@@ -548,7 +547,7 @@ private final class Belts {
         outputArrived()
     }
 
-    /// The head reads the pane the app jumped into, else the pane of the chat the console shows.
+    /// The head's pane: the pane the app jumped into, else the pane of the chat the console shows.
     private func headFollows() {
         head.pane = agentPane ?? board.belt.chatPane
     }

@@ -728,29 +728,6 @@ final class ConsoleTerminalView: TerminalView {
         }
     }
 
-    /// Pocket's own highlight of a menu option, over the first row that shows its text; nil for none.
-    /// The agent's mark stays where it is: only a pick the host checks moves it.
-    func highlightRow(showing text: String?) {
-        let probe = text.map { String($0.prefix(Self.highlightProbe)) }
-        guard let probe, !probe.isEmpty, let row = visibleLines.firstIndex(where: { $0.contains(probe) }) else {
-            rowHighlight.isHidden = true
-            return
-        }
-        let cell = cellSize
-        if rowHighlight.superview == nil {
-            rowHighlight.backgroundColor = BeltLook.accent.withAlphaComponent(0.18)
-            rowHighlight.isUserInteractionEnabled = false
-            addSubview(rowHighlight)
-        }
-        rowHighlight.frame = CGRect(x: 0, y: CGFloat(row + getTerminal().buffer.yDisp) * cell.height,
-                                    width: bounds.width, height: cell.height)
-        rowHighlight.isHidden = false
-    }
-
-    /// A wrapped option shows its first words on its first row.
-    private static let highlightProbe = 24
-    private let rowHighlight = UIView()
-
     #if DEBUG
     var screenText: String { visibleLines.joined(separator: "\n") }
     #endif

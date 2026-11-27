@@ -29,9 +29,11 @@ public struct HeadStick: Sendable {
     /// Where the head sits, the thumb's travel clamped to 12 pt along it.
     public private(set) var offset: CGPoint = .zero
 
+    /// The thumb has not moved 10 pt from where it landed.
+    public private(set) var still = true
+    /// The thumb stayed still for 0.6 s: the ring filled, and the lift is the hold's.
+    public private(set) var held = false
     private var start: TimeInterval?
-    private var still = true
-    private var held = false
     private var pushed: HeadMarks.Place?
     private var nextRepeat: TimeInterval = 0
     private var repeats = 0
