@@ -699,7 +699,8 @@ A figure that the host did not send says `unknown`, never 0.
   is I/O wait` or `cause not sampled yet`.
 - Under a `✗` host, the reason and the fix use the words of its Sessions
   row; a host that reads `no state since` uses those of a host connected
-  with no state. The fix to connect reads `run: matchblox connect <host>`.
+  with no state. The fix to connect reads `run: matchblox connect <host>`;
+  for this machine, `run: matchblox status to see why`.
 - A host with an older matchblox says `<host> runs an older matchblox ·
   on <host>: matchblox update`. A host that did not read its processes
   says `<host> did not read its processes: <why>` instead.
