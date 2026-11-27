@@ -31,6 +31,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/idle"
 	"github.com/blox-eng/matchblox/internal/limits"
 	"github.com/blox-eng/matchblox/internal/mux"
+	"github.com/blox-eng/matchblox/internal/numbers"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/push"
 	"github.com/blox-eng/matchblox/internal/queue"
@@ -106,6 +107,8 @@ type Service struct {
 	Stoker *stoker.Store
 	// Holds are the parked and stoker-held sessions. Nil: none kept.
 	Holds *holds.Store
+	// Numbers gives each session its number. Nil: no numbers.
+	Numbers *numbers.Store
 	// Recovery is the record of the agents on the builder's tmux server,
 	// for matchblox recover (#215). Nil: none kept.
 	Recovery *recovery.Store
@@ -173,6 +176,8 @@ type Service struct {
 	WorktreeStep func(ctx context.Context, dir, branch string) ([]string, string, error)
 	// MatchGit answers a handover's read-only git commands. Nil: git.
 	MatchGit func(ctx context.Context, dir string, args ...string) (string, error)
+	// WorkGit answers the workspace check's read-only git commands. Nil: git.
+	WorkGit func(ctx context.Context, dir string, args ...string) (string, error)
 	// Activity is the builder's last key in any tmux client: it keeps a
 	// stoker that rests resting while they work in a pane.
 	Activity func() time.Time
@@ -257,11 +262,17 @@ type Service struct {
 
 	// recovering runs one recover act at a time; reopened is when each
 	// conversation it reopened started, until a sample shows it.
-	recovering sync.Mutex
-	reopened   map[string]reopenedAt
+	// unconfirmed is a start whose pane list still errors: the next recover
+	// of that conversation lists As and does not Start again.
+	recovering  sync.Mutex
+	reopened    map[string]reopenedAt
+	unconfirmed map[string]unconfirmedAt
 	// settle is how long recover waits before it checks that each agent it
 	// reopened still runs (0: recoverSettle).
 	settle time.Duration
+	// listPause is how long recover waits between ListStrict errors
+	// (0: recoverListPause).
+	listPause time.Duration
 
 	mu  sync.Mutex
 	cur state.Doc
@@ -283,6 +294,8 @@ type Service struct {
 
 	acts acts
 	ways waysCache
+	// works are the work folders of the task records, filled by workLoop.
+	works workCache
 	// fam are the stokers: the host, then one for each chain that has one.
 	fam stokerFamily
 	// sentAt is when a command or a compact last went to a pane, by pane:
@@ -329,6 +342,9 @@ type Service struct {
 	// afresh: each hears once who it is chained with. heldCleared are the
 	// ones a delivery holds.
 	cleared, heldCleared map[string]bool
+	// unnamed are the agents a switch started that show no session id
+	// yet: each joins cleared once its id shows. Under mu.
+	unnamed map[chains.Member]bool
 	// mateNames is the last name of the chained match in each live pane,
 	// for the news that it left once its session is gone. Under mu.
 	mateNames map[string]string
@@ -431,6 +447,7 @@ func New(cfg config.Config, smp *sample.Sampler, git GitSource) *Service {
 
 		sampleKick: make(chan struct{}, 1),
 		queue:      queue.New(),
+		works:      workCache{asks: make(chan workKey, 64)},
 
 		NightEnds:   cfg.Stoker.NightEnds,
 		StokerAgent: cfg.Stoker.Agent,
@@ -616,6 +633,7 @@ func (s *Service) Run(ctx context.Context) {
 	go s.shipsLoop(ctx)
 	go s.foundLoop(ctx)
 	go s.copyLoop(ctx)
+	go s.workLoop(ctx)
 	s.loadHistory()
 	t := time.NewTicker(s.interval)
 	defer t.Stop()
@@ -705,6 +723,9 @@ func (s *Service) publish(snap sample.Snapshot, rec func(state.Doc)) {
 		}
 		s.cur.Holds = s.Holds.List()
 	}
+	if s.Numbers != nil {
+		s.numberLocked(s.sampleMissedLocked())
+	}
 	joined, err := s.joinNewLocked(s.now())
 	if err != nil {
 		s.cur.Errors = append(s.cur.Errors, "chains: "+err.Error())
@@ -783,6 +804,32 @@ func (s *Service) Hook(ev hooks.Event) {
 	s.broadcast()
 }
 
+// numberLocked sets each session's number, the stoker's own left out. A
+// sample that missed shows the kept numbers and changes none. Hold s.mu.
+func (s *Service) numberLocked(missed bool) {
+	var members []chains.Member
+	var at []int
+	for i, x := range s.cur.Sessions {
+		if s.onStokerServer(x.Pane) {
+			continue
+		}
+		members = append(members, memberOf(x))
+		at = append(at, i)
+	}
+	var nums []int
+	if missed {
+		nums = s.Numbers.Peek(members)
+	} else {
+		var err error
+		if nums, err = s.Numbers.Assign(members); err != nil {
+			s.cur.Errors = append(s.cur.Errors, "numbers: "+err.Error())
+		}
+	}
+	for j, i := range at {
+		s.cur.Sessions[i].Number = nums[j]
+	}
+}
+
 // mergeQueue joins the queue with the current sessions. Hold s.mu.
 func (s *Service) mergeQueue() {
 	now := s.cur.At
@@ -795,6 +842,7 @@ func (s *Service) mergeQueue() {
 	s.cur.StokerServer = s.StokerServer
 	s.markUnread(now)
 	s.setReasons()
+	s.setWorks()
 }
 
 // setReasons says why each session at rest is idle. The ship of a session is

@@ -105,8 +105,8 @@ func TestCursorUsageFillsItsLine(t *testing.T) {
 		t.Errorf("off: %+v, want not measured with how to turn it on", a)
 	}
 	smp.CursorUsage = &limits.CursorUsages{
-		Every:    time.Hour,
-		Keychain: func(context.Context) (string, error) { return "tok", nil },
+		Every:   time.Hour,
+		Default: []limits.TokenSource{func(context.Context) (string, error) { return "tok", nil }},
 		Fetch: func(context.Context, string) ([]byte, error) {
 			return []byte(`{"billingCycleStart":"1790000000000","billingCycleEnd":"1792678400000","planUsage":{"totalPercentUsed":25}}`), nil
 		},
@@ -149,12 +149,12 @@ func TestCursorNotAnsweredOnlyAfterACall(t *testing.T) {
 	token := ""
 	smp.CursorUsage = &limits.CursorUsages{
 		Every: time.Hour,
-		Keychain: func(context.Context) (string, error) {
+		Default: []limits.TokenSource{func(context.Context) (string, error) {
 			if token == "" {
 				return "", os.ErrNotExist
 			}
 			return token, nil
-		},
+		}},
 		Fetch: func(context.Context, string) ([]byte, error) { return nil, context.DeadlineExceeded },
 	}
 	smp.Sample()
@@ -181,10 +181,10 @@ func TestCursorTokenStillReadingIsNotSignedOut(t *testing.T) {
 	release := make(chan struct{})
 	smp.CursorUsage = &limits.CursorUsages{
 		Every: time.Hour,
-		Keychain: func(context.Context) (string, error) {
+		Default: []limits.TokenSource{func(context.Context) (string, error) {
 			<-release
 			return "tok", nil
-		},
+		}},
 		Fetch: func(context.Context, string) ([]byte, error) { return nil, context.DeadlineExceeded },
 	}
 	a := cursorLimits(smp.Sample())
@@ -204,8 +204,8 @@ func TestCursorTokenStillReadingIsNotSignedOut(t *testing.T) {
 func TestCursorTokenReadDeniedCouldNotBeRead(t *testing.T) {
 	smp, _ := cursorFixture(t, fixtureNow.Add(-time.Minute))
 	smp.CursorUsage = &limits.CursorUsages{
-		Every:    time.Hour,
-		Keychain: func(context.Context) (string, error) { return "", errors.New("security: exit status 51") },
+		Every:   time.Hour,
+		Default: []limits.TokenSource{func(context.Context) (string, error) { return "", errors.New("security: exit status 51") }},
 		Fetch: func(context.Context, string) ([]byte, error) {
 			t.Error("called the API with no token")
 			return nil, nil
@@ -215,5 +215,31 @@ func TestCursorTokenReadDeniedCouldNotBeRead(t *testing.T) {
 	smp.CursorUsage.Wait()
 	if a := cursorLimits(smp.Sample()); a == nil || a.Fix != cursorUnreadable {
 		t.Errorf("denied: %+v, want %q", a, cursorUnreadable)
+	}
+}
+
+// TestAHiddenCursorTakesItsFolderFromItsGuard: Cursor's CLI makes its
+// process non-dumpable, so its cwd and environ read as nothing. The pane's
+// guard above it started it there with that environment: the session takes
+// both from it, or a switch refuses "no directory" and the next agent loses
+// the match's task record (matchbloxenhanced, 2026-11-26).
+func TestAHiddenCursorTakesItsFolderFromItsGuard(t *testing.T) {
+	root := copyFixture(t)
+	const brief = "/state/matches/match-1/awareness.md"
+	addProcAt(t, root, 900, 1, "matchblox-guard", []string{"/state/matchblox-guard", "guard", "--", "cursor-agent"}, 1000, 0,
+		"TMUX=/tmp/tmux-1000/default,1,1", "TMUX_PANE=%20", "MATCHBLOX_CONTEXT="+brief)
+	if err := os.Symlink("/work/repo", filepath.Join(root, "proc", "900", "cwd")); err != nil {
+		t.Fatal(err)
+	}
+	addProc(t, root, 901, 900, "MainThread", []string{"/home/user/.local/bin/cursor-agent", "--use-system-ca", cursorJS}, "")
+	addPane(t, root, "%20\tcur:1.1\tw\t900\tmatchblox-guard\t/work/repo")
+	smp := newFixtureSampler(root)
+	smp.Agents = []string{"claude", CursorAgent}
+	s, ok := byPane(smp.Sample())["%20"]
+	if !ok {
+		t.Fatal("no Cursor session in %20")
+	}
+	if s.Cwd != "/work/repo" || s.MatchContext != brief {
+		t.Errorf("cwd %q match context %q, want the guard's /work/repo and %s", s.Cwd, s.MatchContext, brief)
 	}
 }

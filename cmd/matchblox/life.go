@@ -15,6 +15,7 @@ import (
 
 	"github.com/blox-eng/matchblox/internal/accounts"
 	"github.com/blox-eng/matchblox/internal/gitremote"
+	"github.com/blox-eng/matchblox/internal/mux"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/service"
@@ -412,11 +413,20 @@ func cliSwitch(words []string, o switchOpts, w io.Writer, path string, jump func
 			return err
 		}
 	}
+	if res.StartedIn != "" {
+		if _, err := fmt.Fprintln(w, "started in "+res.StartedIn); err != nil {
+			return err
+		}
+	}
+	if res.WorkRefused != "" {
+		if _, err := fmt.Fprintln(w, res.WorkRefused); err != nil {
+			return err
+		}
+	}
 	if jump == nil {
 		return nil
 	}
-	server, bare := sample.SplitPane(strings.TrimPrefix(a.RecID, "switch:"))
-	if err := jump(slices.Concat(sample.TmuxOn(server), []string{"switch-client", "-t", bare})); err != nil {
+	if err := jump(mux.Tmux{}.SwitchClient(strings.TrimPrefix(a.RecID, "switch:"))); err != nil {
 		_, err = fmt.Fprintf(w, "switched, but not jumped: %v\n", err)
 		return err
 	}

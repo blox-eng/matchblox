@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -11,7 +12,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/chains"
 	"github.com/blox-eng/matchblox/internal/gitscan"
+	"github.com/blox-eng/matchblox/internal/holds"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/state"
@@ -635,5 +638,132 @@ func TestAnotherAgentInThePaneEndsTheMate(t *testing.T) {
 	}
 	if got := chainInbox(s, chainSessions[0]); !slices.Equal(got, []string{"two left the chain"}) {
 		t.Fatalf("one heard %q", got)
+	}
+}
+
+// switchSlowly switches work in %1 to agent, with a respawn that takes
+// took on clock.
+func switchSlowly(t *testing.T, s *Service, clock *time.Time, agent string, took time.Duration) {
+	t.Helper()
+	run := s.Actions.Run
+	s.Actions.Run = func(argv []string) error {
+		if slices.Contains(argv, "respawn-pane") {
+			*clock = clock.Add(took)
+		}
+		return run(argv)
+	}
+	if res := s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: agent})); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+}
+
+// TestAMoveLandsByPid: Cursor shows no session id in its pane, so the move
+// lands on its new pid and start.
+func TestAMoveLandsByPid(t *testing.T) {
+	s, clock := switchChainTest(t)
+	switchSlowly(t, s, clock, "cursor", 0)
+	*clock = clock.Add(time.Second)
+	cursor := sample.Session{Agent: sample.CursorAgent, PID: 201, Start: 9, Pane: "%1", Target: "app:1.1", Cwd: "/work/app", Name: "work", Status: "idle"}
+	doc := switchSample(s, &cursor)
+	if doc.Chains == nil || len(doc.Chains.Chains) != 1 {
+		t.Fatalf("after the switch: %+v", doc.Chains)
+	}
+	if c := doc.Chains.Chains[0]; len(c.Members) != 2 || !slices.ContainsFunc(c.Members, func(m chains.Member) bool { return m == memberOf(cursor) }) {
+		t.Fatalf("chain = %+v", c)
+	}
+	s.mu.Lock()
+	moves := len(s.Chains.Moves)
+	s.mu.Unlock()
+	if moves != 0 {
+		t.Fatalf("%d moves wait after the new agent showed", moves)
+	}
+	*clock = clock.Add(time.Hour)
+	switchSample(s, &cursor)
+	if got := chainInbox(s, lifeSnap(false).Sessions[2]); len(got) != 0 {
+		t.Fatalf("cx heard %q", got)
+	}
+}
+
+// TestAMoveWithNoAgentLeaves: no agent 2 minutes after the respawn is a
+// switch that started none. The seat keeps its hold.
+func TestAMoveWithNoAgentLeaves(t *testing.T) {
+	s, clock := switchChainTest(t)
+	if res := s.act(t.Context(), consoleAct("park:%1", "")); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	switchSlowly(t, s, clock, "codex", 30*time.Second)
+	*clock = clock.Add(2*time.Minute + time.Second)
+	if doc := switchSample(s, nil); doc.Chains != nil {
+		t.Fatalf("2:01 with no agent, it stayed: %+v", doc.Chains)
+	}
+	if got := chainInbox(s, lifeSnap(false).Sessions[2]); !slices.Equal(got, []string{"work left the chain: the switch started no agent"}) {
+		t.Fatalf("cx heard %q", got)
+	}
+	if h, ok := s.holdAt("%1"); !ok || h.By != holds.ByYou {
+		t.Fatalf("the hold left the seat: %+v %v", h, ok)
+	}
+}
+
+// TestAMoveWithNoAgentGivesTheLinesBackUnchained: a mate's line that the
+// leaver did not hear goes back to the mate.
+func TestAMoveWithNoAgentGivesTheLinesBackUnchained(t *testing.T) {
+	s, clock := switchChainTest(t)
+	work, cx := lifeSnap(false).Sessions[0], lifeSnap(false).Sessions[2]
+	s.mu.Lock()
+	s.Chains.PostLine(memberOf(work), memberOf(cx), "the tests pass", *clock)
+	s.mu.Unlock()
+	switchSlowly(t, s, clock, "codex", 0)
+	*clock = clock.Add(2*time.Minute + time.Second)
+	switchSample(s, nil)
+	switchSample(s, nil) // the next sample tells the sender
+	got := chainInbox(s, cx)
+	if !slices.ContainsFunc(got, func(text string) bool {
+		return strings.Contains(text, "did not get your line: you are no longer chained")
+	}) {
+		t.Fatalf("cx heard %q", got)
+	}
+}
+
+// TestASlowStartStaysInTheChain: the 2 minutes run from the respawn, not
+// from the switch's start, and an agent that shows at 2:00 lands.
+func TestASlowStartStaysInTheChain(t *testing.T) {
+	s, clock := switchChainTest(t)
+	switchSlowly(t, s, clock, "codex", 30*time.Second)
+	*clock = clock.Add(2 * time.Minute)
+	if doc := switchSample(s, nil); doc.Chains == nil || len(doc.Chains.Chains) != 1 {
+		t.Fatalf("2:00 after the respawn: %+v", doc.Chains)
+	}
+	codex := sample.Session{Agent: "codex", PID: 201, Start: 9, Pane: "%1", Target: "app:1.1", Cwd: "/work/app", Name: "work", Status: "idle"}
+	if doc := switchSample(s, &codex); doc.Chains == nil || !slices.ContainsFunc(doc.Chains.Chains[0].Members, func(m chains.Member) bool { return m == memberOf(codex) }) {
+		t.Fatalf("the slow agent: %+v", doc.Chains)
+	}
+	if got := chainInbox(s, lifeSnap(false).Sessions[2]); len(got) != 0 {
+		t.Fatalf("cx heard %q", got)
+	}
+}
+
+// TestASwitchedInAgentGetsItsChainIntroOnce: a new agent whose id shows a
+// sample after it does is told its chain once, by its id.
+func TestASwitchedInAgentGetsItsChainIntroOnce(t *testing.T) {
+	s, clock := switchChainTest(t)
+	switchSlowly(t, s, clock, "codex", 0)
+	codex := sample.Session{Agent: "codex", PID: 201, Start: 9, Pane: "%1", Target: "app:1.1", Cwd: "/work/app", Name: "work", Status: "idle"}
+	switchSample(s, &codex)
+	s.mu.Lock()
+	cleared := maps.Clone(s.cleared)
+	s.mu.Unlock()
+	if len(cleared) != 0 {
+		t.Fatalf("cleared before its id = %v", cleared)
+	}
+	codex.SessionID = "c1"
+	switchSample(s, &codex)
+	d := s.news(proto.News{Pane: "%1"})
+	if !strings.Contains(d.text, "you are chained with cx") {
+		t.Fatalf("the new agent heard %q", d.text)
+	}
+	s.heard(d)
+	switchSample(s, &codex)
+	if d := s.news(proto.News{Pane: "%1"}); strings.Contains(d.text, "you are chained with") {
+		t.Fatalf("told twice: %q", d.text)
 	}
 }

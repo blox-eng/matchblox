@@ -77,13 +77,14 @@ type Queue struct {
 	replies map[string]hooks.Event
 	stopped map[string]string
 	forgot  map[string]time.Time // session id -> when its pane was forgotten
+	talks   map[string]*talk     // session id -> its recent turns
 	items   []Item
 }
 
 func New() *Queue {
 	return &Queue{hooked: map[string]hooks.Event{}, waiting: map[string]Item{}, seen: map[string]time.Time{}, asks: map[string]hookAsk{},
 		replies: map[string]hooks.Event{}, stopped: map[string]string{},
-		forgot: map[string]time.Time{}}
+		forgot: map[string]time.Time{}, talks: map[string]*talk{}}
 }
 
 // Apply takes one hook event. Call Merge after it to update Items.
@@ -94,6 +95,7 @@ func (q *Queue) Apply(ev hooks.Event) {
 	if _, gone := q.forgot[ev.SessionID]; gone {
 		return
 	}
+	q.hear(ev)
 	if ev.Name == hooks.Reply {
 		// Never stale: it is stamped by its own process, at the same time
 		// as its Stop.
@@ -213,6 +215,26 @@ func (q *Queue) HookedIn(pane string) []string {
 	return ids
 }
 
+// Newest is the hooked session in pane whose last event is the newest:
+// a pane can keep the hooks of an agent that left it.
+func (q *Queue) Newest(pane string) (id string, ok bool) {
+	var at time.Time
+	for sid, ev := range q.hooked {
+		if ev.Pane == pane && (!ok || ev.At.After(at) || ev.At.Equal(at) && sid < id) {
+			id, at, ok = sid, ev.At, true
+		}
+	}
+	return id, ok
+}
+
+// StopAfter tells if the newest hooked session in pane last sent a Stop,
+// after t: its turn ended then, and no prompt came since.
+func (q *Queue) StopAfter(pane string, t time.Time) bool {
+	id, ok := q.Newest(pane)
+	ev := q.hooked[id]
+	return ok && ev.Name == "Stop" && ev.At.After(t)
+}
+
 // Forget drops the hooked sessions ids, and the events they send from now
 // on: a switch's old agent is gone from its pane, and its late hooks must
 // not speak for the new one. The ids are taken (HookedIn) before the
@@ -225,6 +247,7 @@ func (q *Queue) Forget(ids []string, now time.Time) {
 		delete(q.asks, id)
 		delete(q.replies, id)
 		delete(q.stopped, id)
+		delete(q.talks, id)
 		q.forgot[id] = now
 	}
 }
@@ -330,6 +353,7 @@ func (q *Queue) Merge(sessions []sample.Session, now time.Time) {
 			delete(q.asks, id)
 			delete(q.replies, id)
 			delete(q.stopped, id)
+			delete(q.talks, id)
 		}
 	}
 	for id, at := range q.forgot {
@@ -340,6 +364,13 @@ func (q *Queue) Merge(sessions []sample.Session, now time.Time) {
 	for id, r := range q.replies {
 		if _, ok := q.hooked[id]; !ok && now.Sub(r.At) > UnseenGrace {
 			delete(q.replies, id)
+			delete(q.talks, id)
+		}
+	}
+	for id, t := range q.talks {
+		// A talk fed only by Reply events has no hooked session to go with.
+		if _, ok := q.hooked[id]; !ok && now.Sub(t.at) > UnseenGrace {
+			delete(q.talks, id)
 		}
 	}
 	for id, a := range q.asks {

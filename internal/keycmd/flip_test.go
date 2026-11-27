@@ -37,3 +37,17 @@ func TestParseAPCRefusesOtherStrings(t *testing.T) {
 		}
 	}
 }
+
+// TestParseJumpAPC: the jump binding's APC carries a digit 1 to 9, the
+// client's tty and the pane; anything less is not a jump.
+func TestParseJumpAPC(t *testing.T) {
+	apc := JumpPrefix(4) + "/dev/pts/3 %171\x1b\\"
+	if kind, arg, ok := ParseAPC(apc); !ok || kind != "jump" || arg != "4 /dev/pts/3 %171" {
+		t.Errorf("ParseAPC(%q) = %q, %q, %v; want jump, 4 /dev/pts/3 %%171", apc, kind, arg, ok)
+	}
+	for _, arg := range []string{"0 /dev/pts/3 %1", "10 /dev/pts/3 %1", "x /dev/pts/3 %1", "4 /dev/pts/3", "4", "", "4 /dev/pts/3 "} {
+		if kind, got, ok := ParseAPC(FlipPrefix("jump") + arg + "\x1b\\"); ok {
+			t.Errorf("ParseAPC(jump=%q) = %q, %q, true; want false", arg, kind, got)
+		}
+	}
+}

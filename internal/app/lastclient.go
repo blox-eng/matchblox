@@ -1,8 +1,6 @@
 package app
 
 import (
-	"context"
-	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -18,51 +16,13 @@ const (
 // system gave the tty again.
 const deviceAttach = 30 * time.Second
 
-// lastClientOf is the tty and the creation time of the client with the
-// latest activity in the output of tmux list-clients -F '#{client_activity}
-// #{client_created} #{client_tty}'. "" when no line parses.
-func lastClientOf(out string) (tty string, created time.Time) {
-	best := int64(-1)
-	for _, l := range strings.Split(out, "\n") {
-		f := strings.Fields(l)
-		if len(f) != 3 {
-			continue
-		}
-		at, err := strconv.ParseInt(f[0], 10, 64)
-		made, err2 := strconv.ParseInt(f[1], 10, 64)
-		if err == nil && err2 == nil && at > best {
-			best, tty, created = at, f[2], time.Unix(made, 0)
-		}
-	}
-	return tty, created
-}
-
-// lastClientArgv lists the clients of this console's own session.
-func (m Model) lastClientArgv() []string {
-	return []string{"tmux", "list-clients", "-t", "=" + m.consoleSession(), "-F", "#{client_activity} #{client_created} #{client_tty}"}
-}
-
-// tmuxLastClient asks tmux which client of the console's session (argv,
-// lastClientArgv) was active last. A tmux error or no session gives "":
-// the guard is not a wall.
-func tmuxLastClient(argv []string) (string, time.Time, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
-	defer cancel()
-	out, err := exec.CommandContext(ctx, argv[0], argv[1:]...).Output() //nolint:gosec // lastClientArgv: tmux and the console's own session
-	if err != nil {
-		return "", time.Time{}, nil
-	}
-	tty, created := lastClientOf(string(out))
-	return tty, created, nil
-}
-
 // lastClient is the tty and the creation time of the client that was
 // active last, "" on any doubt.
 func (m Model) lastClient() (string, time.Time) {
 	last := m.opt.LastClient
 	if last == nil {
-		argv := m.lastClientArgv()
-		last = func() (string, time.Time, error) { return tmuxLastClient(argv) }
+		session := m.consoleSession()
+		last = func() (string, time.Time, error) { return m.multiplexer().LastClient(session) }
 	}
 	tty, created, err := last()
 	if err != nil {
@@ -82,7 +42,14 @@ func (m Model) fromDevice() bool {
 		return false
 	}
 	tty, created := m.lastClient()
-	if tty == "" || created.IsZero() {
+	return h.deviceOn(tty, created)
+}
+
+// deviceOn: the tmux client on tty, made at created, is a device's. Its
+// note names tty and came just before the client; a later client on that
+// tty is the builder's. On any doubt it is no device.
+func (h *PairHost) deviceOn(tty string, created time.Time) bool {
+	if h == nil || h.DeviceTTYs == nil || h.DeviceIn == nil || tty == "" || created.IsZero() {
 		return false
 	}
 	id, ok := h.DeviceTTYs()[tty]
@@ -92,4 +59,19 @@ func (m Model) fromDevice() bool {
 	at, _, ok := h.DeviceIn(id)
 	// tmux gives whole seconds: the note may be up to 1 s after it.
 	return ok && !at.After(created.Add(time.Second)) && created.Sub(at) <= deviceAttach
+}
+
+// clientMadeOf is when tty's client was made, in the output of tmux
+// list-clients -F '#{client_created} #{client_tty}'; zero when none is.
+func clientMadeOf(out, tty string) time.Time {
+	for _, l := range strings.Split(out, "\n") {
+		f := strings.Fields(l)
+		if len(f) != 2 || f[1] != tty {
+			continue
+		}
+		if made, err := strconv.ParseInt(f[0], 10, 64); err == nil {
+			return time.Unix(made, 0)
+		}
+	}
+	return time.Time{}
 }

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/blox-eng/matchblox/internal/keycmd"
+	"github.com/blox-eng/matchblox/internal/mux"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
@@ -22,9 +23,12 @@ const HomeOption = "@matchblox_home"
 // counts too: a console an older matchblox started has no mark.
 const atHome = "#{||:#{" + HomeOption + "},#{==:#{session_name}," + Home + "}}"
 
+// onHome is the argv that runs args on the console's tmux server.
+func onHome(args ...string) []string { return append(mux.Command(""), args...) }
+
 // HomeMarkArgv marks the session of the console's pane as a console's own.
 func HomeMarkArgv(pane string) []string {
-	return []string{"tmux", "set-option", "-t", pane, HomeOption, "1"}
+	return onHome("set-option", "-t", pane, HomeOption, "1")
 }
 
 // HomeArgv is the command that runs the console in its own tmux session,
@@ -36,7 +40,7 @@ func HomeArgv(inTmux, haveTmux bool, name string, self []string) []string {
 	if inTmux || !haveTmux || len(self) == 0 {
 		return nil
 	}
-	return append([]string{"tmux", "-u", "new-session", "-A", "-s", name, "-e", HomeEnv + "=1"}, self...)
+	return append(append(mux.Command("", "-u"), "new-session", "-A", "-s", name, "-e", HomeEnv+"=1"), self...)
 }
 
 // ConsoleEnv names the console session a new console runs in, when the
@@ -63,7 +67,7 @@ func HomeSession(attached map[string]int) string {
 // HomeListArgv lists each session with its terminals and the console it
 // went into an agent from, for HomeSession.
 func HomeListArgv() []string {
-	return []string{"tmux", "list-sessions", "-F", "#{session_name}\t#{session_attached}\t#{" + sample.BackOption + "}"}
+	return onHome("list-sessions", "-F", "#{session_name}\t#{session_attached}\t#{"+sample.BackOption+"}")
 }
 
 // ParseHomeList reads HomeListArgv's listing: the terminals of each
@@ -88,7 +92,7 @@ func ParseHomeList(listing string) map[string]int {
 // ClientsArgv lists each terminal of the server by its client's process,
 // with the session it shows and that session's way back, for Orphaned.
 func ClientsArgv() []string {
-	return []string{"tmux", "list-clients", "-F", "#{client_pid}\t#{client_session}\t#{" + sample.BackOption + "}"}
+	return onHome("list-clients", "-F", "#{client_pid}\t#{client_session}\t#{"+sample.BackOption+"}")
 }
 
 // Orphaned tells, from a ClientsArgv listing, if the console of the session
@@ -120,7 +124,7 @@ func Orphaned(name string, seen map[string]bool, listing string) bool {
 // device used last, so a phone that rotates, or a laptop that attaches,
 // resizes the shared console.
 func SizeArgv(pane string) []string {
-	return []string{"tmux", "set-option", "-w", "-t", pane, "window-size", "latest"}
+	return onHome("set-option", "-w", "-t", pane, "window-size", "latest")
 }
 
 // HomeKey is what the app sends to go back to the console: an APC string,
@@ -169,7 +173,7 @@ var goTo = `run-shell -C "set-option -g ` + goToOption + ` ` + consoleOf + `" ; 
 const goToOption = "@matchblox_to"
 
 // consoleOf is the name of the client's own console's session.
-const consoleOf = "#{?" + atHome + ",#{session_name},#{?#{" + sample.BackOption + "},#{" + sample.BackOption + "}," + Home + "}}"
+const consoleOf = "#{?" + atHome + ",#{session_name},#{?#{!=:#{" + sample.BackOption + "},},#{" + sample.BackOption + "}," + Home + "}}"
 
 // toAlive is "1" while the console in goToOption has its session.
 const toAlive = "#{S:#{?#{&&:#{==:#{session_name},#{" + goToOption + "}}," + atHome + "},1,}}"
@@ -198,8 +202,8 @@ func NamedConsole(arg0 string) bool { return filepath.Base(arg0) == Home }
 // config is sourced again. A client attached already gets it at once.
 func HomeKeyArgv() []string {
 	ifHome := []string{"if-shell", "-F", goHome[0], goHome[1], goHome[2]}
-	argv := []string{"tmux", "set-option", "-s", "user-keys[" + homeUserKey + "]", HomeKey,
-		";", "bind-key", "-n", "User" + homeUserKey}
+	argv := onHome("set-option", "-s", "user-keys["+homeUserKey+"]", HomeKey,
+		";", "bind-key", "-n", "User"+homeUserKey)
 	argv = append(append(argv, ifHome...), ";", "bind-key", "m")
 	argv = append(argv, ifHome...)
 	return append(argv, ";", "bind-key", "-n", "MouseDown1Status", "if-shell", "-F", statusTap, goTo, "select-window -t =")
@@ -212,7 +216,7 @@ func HomeKeyArgv() []string {
 // it. Anywhere else the key does nothing, so a shell or another agent never
 // reads it as typing.
 func CommandKeysArgv() []string {
-	argv := []string{"tmux"}
+	argv := mux.Command("")
 	for _, c := range keycmd.All() {
 		slot, seq := strconv.Itoa(c.Slot), keycmd.Sequence(c.ID)
 		if len(argv) > 1 {
@@ -241,8 +245,8 @@ func MarkKeyArgv() []string {
 	slot := strconv.Itoa(keycmd.MarkSlot)
 	hand := "run-shell -C 'send-keys -t " + handTarget + " -H " + hexKeys(keycmd.MarkedPrefix) +
 		" ; send-keys -t " + handTarget + " -l #{client_tty} ; send-keys -t " + handTarget + " -H 1b 5c'"
-	return []string{"tmux", "set-option", "-s", "user-keys[" + slot + "]", keycmd.MarkKey,
-		";", "bind-key", "-n", "User" + slot, "if-shell", "-F", atConsole, hand}
+	return onHome("set-option", "-s", "user-keys["+slot+"]", keycmd.MarkKey,
+		";", "bind-key", "-n", "User"+slot, "if-shell", "-F", atConsole, hand)
 }
 
 // BeltKeyArgv makes the app's answer to the board's keys a key of the tmux
@@ -252,8 +256,8 @@ func BeltKeyArgv() []string {
 	slot := strconv.Itoa(keycmd.BeltSlot)
 	hand := "run-shell -C 'send-keys -t " + handTarget + " -H " + hexKeys(keycmd.BeltFromPrefix) +
 		" ; send-keys -t " + handTarget + " -l #{client_tty} ; send-keys -t " + handTarget + " -H 1b 5c'"
-	return []string{"tmux", "set-option", "-s", "user-keys[" + slot + "]", keycmd.BeltKey,
-		";", "bind-key", "-n", "User" + slot, "if-shell", "-F", atConsole, hand}
+	return onHome("set-option", "-s", "user-keys["+slot+"]", keycmd.BeltKey,
+		";", "bind-key", "-n", "User"+slot, "if-shell", "-F", atConsole, hand)
 }
 
 // TapKeysArgv makes each act key of the app's belt a key of the tmux
@@ -261,7 +265,7 @@ func BeltKeyArgv() []string {
 // the console the key and the tty of the client that tapped, as
 // BeltKeyArgv does; elsewhere it does nothing.
 func TapKeysArgv() []string {
-	argv := []string{"tmux"}
+	argv := mux.Command("")
 	for i, k := range keycmd.TapKeys {
 		slot := strconv.Itoa(keycmd.TapSlot + i)
 		hand := "run-shell -C 'send-keys -t " + handTarget + " -H " + hexKeys(keycmd.TappedPrefix+k+";") +
@@ -283,8 +287,8 @@ func TapKeysArgv() []string {
 func ViewerHookArgv() []string {
 	slot := strconv.Itoa(keycmd.MarkSlot)
 	hook := `if-shell -F '` + atConsole + `' "run-shell -C 'send-keys -t ` + handTarget + ` -H ` + hexKeys(keycmd.ViewerKey) + `'"`
-	return []string{"tmux", "set-hook", "-g", "client-attached[" + slot + "]", hook,
-		";", "set-hook", "-g", "client-session-changed[" + slot + "]", hook}
+	return onHome("set-hook", "-g", "client-attached["+slot+"]", hook,
+		";", "set-hook", "-g", "client-session-changed["+slot+"]", hook)
 }
 
 // hexKeys is s as the hex bytes of tmux send-keys -H.
@@ -298,7 +302,7 @@ func hexKeys(s string) string {
 
 // HomeEnv is set in the home session: the console there is the session's
 // only command, so on an error it waits for the person to read it.
-const HomeEnv = "MATCHBLOX_HOME"
+const HomeEnv = mux.HomeEnv
 
 // WayBack is the tmux config of the way back to the console: prefix m (goHome,
 // as HomeKeyArgv binds it), and a tap on "◂ matchblox" in the status line.

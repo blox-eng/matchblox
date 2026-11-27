@@ -94,7 +94,9 @@ type form struct {
 	pick       bool   // the scan's folders, in roots
 	roots      string // space separated
 	pane, who  string // Rename, Switch agent: the session's pane and its name now
-	from       string // Switch agent: the session's agent now (where: its directory)
+	from       string // Switch agent: the session's agent now (where: the folder it starts in)
+	worktree   bool   // Switch agent: where is another worktree than the launch folder
+	refused    string // Switch agent: why it does not start in the record's folder
 	at         int    // the field the cursor is on
 	where      string
 	branch     string
@@ -262,7 +264,7 @@ func (m Model) openSwitch() (tea.Model, tea.Cmd) {
 		return m, said
 	}
 	st := m.stateOf(s.Host)
-	f := &form{host: s.Host, swap: true, pane: s.Pane, who: s.Name, from: s.Agent, where: s.Cwd, at: fieldAgent, accts: st.Accounts, skipped: st.AccountsSkipped, last: st.LastAccount}
+	f := &form{host: s.Host, swap: true, pane: s.Pane, who: s.Name, from: s.Agent, where: cmp.Or(s.Work, s.Cwd), worktree: s.Work != "" && s.Work != s.Cwd, refused: s.WorkRefused, at: fieldAgent, accts: st.Accounts, skipped: st.AccountsSkipped, last: st.LastAccount}
 	for _, a := range st.Agents {
 		if a != s.Agent {
 			f.agent = a
@@ -280,7 +282,9 @@ func (m Model) openSwitch() (tea.Model, tea.Cmd) {
 // switchAction is the plan of a Switch agent form: it waits for a typed y,
 // and a second one for a session that works or waits.
 func (m Model) switchAction(f form) *action {
-	sw := proto.SwitchAgent{Agent: f.agent}
+	// The folder the confirm names: the service refuses the switch when its
+	// record names another by then.
+	sw := proto.SwitchAgent{Agent: f.agent, ExpectedFolder: f.where}
 	if !f.noTask {
 		sw.Handoff = proto.Handoff(f.first)
 	}
@@ -304,7 +308,14 @@ func (m Model) switchAction(f form) *action {
 			on = ", on " + a
 		}
 	}
-	say := fmt.Sprintf("switch %s: %s → %s in %s, %s%s", f.who, f.from, f.agent, f.pane, f.where, on)
+	where := f.where
+	if f.worktree {
+		where += " (its worktree)"
+	}
+	if f.refused != "" {
+		where += "; " + f.refused
+	}
+	say := fmt.Sprintf("switch %s: %s → %s in %s, %s%s", f.who, f.from, f.agent, f.pane, where, on)
 	if f.agent == "codex" {
 		say += "; trust this workspace and enable workspace-write network access"
 	}

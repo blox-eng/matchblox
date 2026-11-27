@@ -2,25 +2,25 @@
  SESSIONS 15    machine
 ────────────────────────────────────────
  NEEDS YOU · 4  −
- ╿ spark-search               #4548 ci ✻
-   CI failed · lint, twice
- ╿ kindle-web              #4556 green ✻
-   #4556 waits for your merge
- ╿ hearth-api                       4m ✻
-   The plan changes 2 records and remov…
+   ╿ spark-search             #4548 ci ✻
+     CI failed · lint, twice
+   ╿ kindle-web            #4556 green ✻
+     #4556 waits for your merge
+   ╿ hearth-api                     4m ✻
+     The plan changes 2 records and rem…
  ≋ login                step 1 of 3 · 3
-▌├ ╿ flint-auth                     2m ✻
- │   Which way do we fix the login?
- ├ ✦ flint-ui                          ✻
- └ ╵ flint-api                #4560 ci ✻
+▌  ├ ╿ flint-auth                   2m ✻
+   │   Which way do we fix the login?
+   ├ ✦ flint-ui                        ✻
+   └ ╵ flint-api              #4560 ci ✻
 ────────────────────────────────────────
  WORKING · 2  −
- ✦ ember-billing@gpu-1                 ✻
- ✦ spark-docs                          ✻
+   ✦ ember-billing@gpu-1               ✻
+   ✦ spark-docs                        ✻
 ────────────────────────────────────────
  IDLE · 6  −
- ╵ hearth-limits              #4551 ci ✻
- ╵ wick-mobile                   23:50 ▣
+   ╵ hearth-limits            #4551 ci ✻
+   ╵ wick-mobile                 23:50 ▣
 ╭─ flint-auth ─────────────────────────╮
 │ ▌ copy last message                c │
 │   copy the question                  │

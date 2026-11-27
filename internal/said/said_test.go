@@ -3,6 +3,7 @@ package said
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 // The screens are the agents' own words, read from their binaries and live
@@ -311,6 +312,27 @@ func TestMenu(t *testing.T) {
 	for screen, want := range menuCases {
 		if got, ok := Menu(screen); got != want || ok != (want != "") {
 			t.Errorf("Menu(%q) = %q, %v; want %q", screen, got, ok, want)
+		}
+	}
+}
+
+// TestBothEnds: a pasted log usually comes first and the instruction last,
+// so a long text keeps both ends, valid UTF-8 and within its limit.
+func TestBothEnds(t *testing.T) {
+	if got := BothEnds("short", 100); got != "short" {
+		t.Errorf("a text within its limit became %q", got)
+	}
+	for name, text := range map[string]string{
+		"plain":     "LOG START " + strings.Repeat("log line\n", 500) + "NOW FIX THE NULL CHECK",
+		"multibyte": "НАЧАЛО " + strings.Repeat("я", 3000) + " КРАЙ",
+	} {
+		got := BothEnds(text, 1000)
+		if len(got) > 1000 || !utf8.ValidString(got) {
+			t.Errorf("%s: %d bytes, valid %v; want at most 1000 valid ones", name, len(got), utf8.ValidString(got))
+		}
+		head, tail, ok := strings.Cut(got, Omitted)
+		if !ok || !strings.HasPrefix(text, head) || !strings.HasSuffix(text, tail) || len(head) < 480 || len(tail) < 480 {
+			t.Errorf("%s: got %q; want its head, %q and its tail", name, got, Omitted)
 		}
 	}
 }

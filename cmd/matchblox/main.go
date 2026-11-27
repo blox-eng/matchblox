@@ -56,6 +56,8 @@ import (
 	"github.com/blox-eng/matchblox/internal/hosts"
 	"github.com/blox-eng/matchblox/internal/limits"
 	"github.com/blox-eng/matchblox/internal/login"
+	"github.com/blox-eng/matchblox/internal/mux"
+	"github.com/blox-eng/matchblox/internal/numbers"
 	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/procfs"
 	"github.com/blox-eng/matchblox/internal/proto"
@@ -326,13 +328,13 @@ func run(args []string) error {
 		}
 		var binds [][]string
 		if os.Getenv("TMUX") != "" { // a console in place too: its hint names prefix m
-			binds = append(binds, panes.HomeKeyArgv(), panes.FlipKeysArgv())
+			binds = append(binds, panes.HomeKeyArgv(), panes.FlipKeysArgv(), panes.JumpKeysArgv())
 		}
 		if os.Getenv(panes.HomeEnv) == "1" {
 			binds = append(binds, homeBinds(os.Getenv("TMUX_PANE"))...)
 		}
 		for _, argv := range binds {
-			_ = exec.Command("tmux", argv[1:]...).Run()
+			_ = exec.Command(argv[0], argv[1:]...).Run() //nolint:gosec // argv built by panes and remote, never a shell string
 		}
 	}
 
@@ -711,8 +713,8 @@ func console(path string, cfg config.Config, root string, noMotion bool, host st
 // consoleSession is the name of the console's own tmux session, the
 // session of its pane; "" when tmux does not say one.
 func consoleSession(pane string) string {
-	out, err := exec.Command("tmux", "display-message", "-p", "-t", pane, "#{session_name}").Output()
-	if name := strings.TrimSpace(string(out)); err == nil && remote.ConsoleSession(name) {
+	out, err := mux.Tmux{}.Output(context.Background(), "display-message", "-p", "-t", pane, "#{session_name}")
+	if name := strings.TrimSpace(out); err == nil && remote.ConsoleSession(name) {
 		return name
 	}
 	return ""
@@ -872,11 +874,11 @@ func localTmux() (prefix, home func() string, version string) {
 	read := func(args ...string) string {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
-		out, err := exec.CommandContext(ctx, "tmux", args...).Output() //nolint:gosec // fixed tmux reads; the one value is a pane id paneRE took
+		out, err := mux.Tmux{}.Output(ctx, args...)
 		if err != nil {
 			return ""
 		}
-		return strings.TrimSpace(string(out))
+		return strings.TrimSpace(out)
 	}
 	p := read("show-options", "-gv", "prefix")
 	// The home is the session of the console's own pane at the jump: it may
@@ -952,6 +954,11 @@ func newService(cfg config.Config, root string) *service.Service {
 		s.Holds = h
 	} else {
 		fmt.Fprintln(os.Stderr, "matchblox: parking is off:", err)
+	}
+	if n, err := numbers.Open(filepath.Dir(s.StatePath)); err == nil {
+		s.Numbers = n
+	} else {
+		fmt.Fprintln(os.Stderr, "matchblox: session numbers are off:", err)
 	}
 	if r, err := recovery.Open(filepath.Dir(s.StatePath)); err == nil {
 		s.Recovery = r
@@ -1273,27 +1280,29 @@ func newSampler(cfg config.Config, root string) *sample.Sampler {
 	return smp
 }
 
-// cursorUsage reads Cursor's plan usage every 5 minutes. The default login's
-// token is in the macOS Keychain, so the default is read on darwin only; an
-// account's is in the auth.json of its folder (Cursor accounts run on macOS
-// only for now). A token is
-// read for each call and sent to Cursor's API only.
+// cursorUsage reads Cursor's plan usage every 5 minutes. The default login
+// tries auth files on every OS (~/.config/cursor/auth.json, ~/.cursor/auth.json);
+// on darwin, the Keychain item cursor-access-token is a fallback. An account's
+// token is only in the auth.json of its folder. A token is read for each call
+// and sent to Cursor's API only.
 func cursorUsage(goos string) *limits.CursorUsages {
 	client := &http.Client{Timeout: 10 * time.Second}
-	u := &limits.CursorUsages{
-		Every: 5 * time.Minute,
-		File:  limits.FileToken,
-		Fetch: func(ctx context.Context, token string) ([]byte, error) {
-			return limits.FetchCursorUsage(ctx, client, limits.CursorAPI, token)
-		},
-	}
+	var keychain limits.TokenSource
 	if goos == "darwin" {
-		u.Keychain = func(ctx context.Context) (string, error) {
+		keychain = func(ctx context.Context) (string, error) {
 			out, err := exec.CommandContext(ctx, "security", "find-generic-password", "-s", "cursor-access-token", "-w").Output()
 			return strings.TrimSpace(string(out)), keychainErr(err)
 		}
 	}
-	return u
+	home, _ := os.UserHomeDir()
+	return &limits.CursorUsages{
+		Every:   5 * time.Minute,
+		Default: limits.DefaultCursorSources(home, goos, keychain),
+		File:    limits.FileToken,
+		Fetch: func(ctx context.Context, token string) ([]byte, error) {
+			return limits.FetchCursorUsage(ctx, client, limits.CursorAPI, token)
+		},
+	}
 }
 
 // keychainNotFound is the exit status of security find-generic-password

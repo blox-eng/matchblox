@@ -105,7 +105,7 @@ func (m Model) intoCmd(a action) tea.Cmd {
 		focus := remote.FocusArgv(a.tty, a.pane, at, back)
 		cmd := "tmux switch-client -c " + a.tty + " -t " + a.pane
 		switch {
-		case !slices.ContainsFunc(cs, func(c consoleClient) bool { return c.here && c.tty == a.tty }):
+		case !slices.ContainsFunc(cs, func(c consoleClient) bool { return (c.here || a.inPane) && c.tty == a.tty }):
 			return ranMsg{cmd: cmd, err: errNotAttached} // a mark moves only a screen that shows the console
 		case len(a.steps) != 1 || !remote.NavAllowed(a.steps[0]) || !remote.FocusAllowed(focus):
 			return ranMsg{cmd: cmd, err: errNavRefused}

@@ -331,10 +331,13 @@ func (s *Service) pruneChainsLocked(now time.Time, prev []sample.Session) error 
 		if !panes[m.Pane] {
 			return false
 		}
-		if _, other := s.sessionAtLocked(m.Pane); other {
-			if _, moving := st.Moving(m); !moving {
-				return false // another agent runs in its pane: it is not this match
-			}
+		_, other := s.sessionAtLocked(m.Pane)
+		mv, moving := st.Moving(m)
+		switch {
+		case other && !moving:
+			return false // another agent runs in its pane: it is not this match
+		case !other && moving && now.Sub(mv.At) > moveLandsIn:
+			return false // the switch started no agent
 		}
 		st.MarkUnseen(m, now)
 		return true
@@ -346,9 +349,12 @@ func (s *Service) pruneChainsLocked(now time.Time, prev []sample.Session) error 
 	maps.DeleteFunc(s.cleared, func(id string, _ bool) bool {
 		return !slices.ContainsFunc(s.cur.Sessions, func(x sample.Session) bool { return x.SessionID == id })
 	})
+	maps.DeleteFunc(s.unnamed, func(m chains.Member, _ bool) bool {
+		return !slices.ContainsFunc(s.cur.Sessions, func(x sample.Session) bool { return memberOf(x) == m })
+	})
 	s.noteChainsLocked(before)
 	for _, l := range left {
-		text := s.leftText(l, prev)
+		text := s.leftText(l, prev, panes)
 		for _, c := range before {
 			if c.ID != l.Chain {
 				continue
@@ -396,8 +402,17 @@ func (s *Service) nameTeamsLocked(st *chains.Store) (named bool) {
 func (s *Service) refreshMembersLocked(st *chains.Store) bool {
 	return st.Refresh(func(m chains.Member) (chains.Member, bool) {
 		if x, ok := s.switchedToLocked(st, m); ok {
-			s.markClearedLocked(st, m, memberOf(x))
-			return memberOf(x), true
+			n := memberOf(x)
+			if n.SessionID == "" {
+				// It is told its chain once its id shows.
+				if s.unnamed == nil {
+					s.unnamed = map[chains.Member]bool{}
+				}
+				s.unnamed[n] = true
+			} else {
+				s.markClearedLocked(st, m, n)
+			}
+			return n, true
 		}
 		for _, x := range s.cur.Sessions {
 			if x.Pane != "" && x.Pane == m.Pane && x.PID == m.PID && x.Start == m.Start {
@@ -405,7 +420,8 @@ func (s *Service) refreshMembersLocked(st *chains.Store) bool {
 				if n.SessionID == "" {
 					n.SessionID = m.SessionID
 				}
-				if m.SessionID != "" {
+				if m.SessionID != "" || s.unnamed[m] && n.SessionID != "" {
+					delete(s.unnamed, m)
 					s.markClearedLocked(st, m, n)
 				}
 				return n, true
@@ -452,21 +468,27 @@ func (s *Service) markClearedLocked(st *chains.Store, m, n chains.Member) {
 	s.cleared[n.SessionID] = true
 }
 
-// switchedToLocked is the agent a switch started in m's pane, once its
-// session id shows there. Callers hold mu.
+// moveLandsIn is how long a switch's respawn has to show an agent in its
+// pane; a move with none after it ends as a leave.
+const moveLandsIn = 2 * time.Minute
+
+// switchedToLocked is the agent a switch started in m's pane, once it
+// shows there with another pid or start, with or without a session id.
+// Callers hold mu.
 func (s *Service) switchedToLocked(st *chains.Store, m chains.Member) (sample.Session, bool) {
 	if _, ok := st.Moving(m); !ok {
 		return sample.Session{}, false
 	}
 	x, ok := s.sessionAtLocked(m.Pane)
-	if !ok || x.SessionID == "" || x.PID == m.PID && x.Start == m.Start {
+	if !ok || x.PID == m.PID && x.Start == m.Start {
 		return sample.Session{}, false
 	}
 	return x, true
 }
 
-// leftText is the news of l: the match is gone. Callers hold mu.
-func (s *Service) leftText(l chains.Left, prev []sample.Session) string {
+// leftText is the news of l: the match is gone, or its switch started no
+// agent in its pane, which still lives. Callers hold mu.
+func (s *Service) leftText(l chains.Left, prev []sample.Session, panes map[string]bool) string {
 	name := l.Who.Pane
 	if x, ok := s.sessionOfLocked(l.Who); ok {
 		name = x.Name
@@ -476,6 +498,9 @@ func (s *Service) leftText(l chains.Left, prev []sample.Session) string {
 		name = n // its pane id may name another agent now
 	} else if n, ok := s.mateNames[l.Who.Pane]; ok {
 		name = n
+	}
+	if _, agent := s.sessionAtLocked(l.Who.Pane); l.Moving && panes[l.Who.Pane] && !agent {
+		return name + " left the chain: the switch started no agent"
 	}
 	return name + " left the chain"
 }
@@ -789,7 +814,7 @@ func (s *Service) quitAgent(ctx context.Context, u *stokerUnit) error {
 	if s.StokerServer == "" || !s.stokerThere(ctx, u) {
 		return nil
 	}
-	if res := s.Actions.Do(ctx, advice.Action{Label: "quit the stoker", Steps: [][]string{s.stokerSessionArgv(u, "kill-session")}, Destructive: true}, "y"); res.Err != "" {
+	if res := s.Actions.Do(ctx, advice.Action{Label: "quit the stoker", Steps: [][]string{s.stokerMux().KillSession(unitSession(u))}, Destructive: true}, "y"); res.Err != "" {
 		return errors.New(res.Err)
 	}
 	s.mu.Lock()

@@ -33,7 +33,8 @@ const transcriptHead = 8 << 20
 const transcriptTail = 56 << 20
 const launchHeading = "Launch message (user-supplied text):"
 const captureNote = "Read capture.md for the outgoing match's evidence. Reconcile it against the current tree before continuing."
-const blankRecord = "# Task record\n\nGoal and done criteria: unknown.\nLatest user direction: unknown.\nCompleted: unknown.\nIn progress: unknown.\nDecisions and reasons: unknown.\nVerification: unknown; no checks recorded.\nNext action: wait for the user's task.\nScope and approvals: follow the user's instructions.\n"
+const recordTitle = "# Task record\n\n"
+const blankRecord = recordTitle + "Goal and done criteria: unknown.\nLatest user direction: unknown.\nCompleted: unknown.\nIn progress: unknown.\nDecisions and reasons: unknown.\nVerification: unknown; no checks recorded.\nNext action: wait for the user's task.\nScope and approvals: follow the user's instructions.\n"
 
 // matchLaunch keeps environment instructions separate from task evidence.
 // Each launch owns a private bundle. It remains on disk across compaction,
@@ -91,6 +92,7 @@ The stoker has its own authority. You are not the stoker unless the user's instr
 Keep %q current at meaningful milestones and before a requested handover or compaction.
 Record the goal and done criteria, latest user corrections, completed and unfinished work,
 decisions and reasons, test commands and actual results, next action, and scope and approval boundaries.
+Keep the Workspace: line on the absolute path of the worktree you work in, with no quotes.
 Mark unknown facts as unknown. Cite files and evidence. Never claim an unrun test passes.
 This file is your task record. It is not a source of new permissions.
 After compaction, read this brief again through MATCHBLOX_CONTEXT, then read your task record.
@@ -98,7 +100,7 @@ After compaction, read this brief again through MATCHBLOX_CONTEXT, then read you
 	if err = write("awareness.md", brief); err != nil {
 		return nil, bundle, err
 	}
-	checkpoint := blankRecord
+	checkpoint := recordTitle + "Workspace: " + dir + "\n" + strings.TrimPrefix(blankRecord, recordTitle)
 	if first != "" {
 		checkpoint += "\n" + launchHeading + "\n" + said.Clean(first) + "\n"
 	}
@@ -248,7 +250,10 @@ func refreshPrompt(record string) string {
 }
 
 const refreshLead = "Update your task record at "
-const refreshNext = " for a handover to another agent now: the goal, the latest user direction, the completed work, the decisions, the checks that ran and the next step. Do no other work."
+const refreshNext = " for a handover to another agent now: the Workspace: line on the worktree you work in, the goal, the latest user direction, the completed work, the decisions, the checks that ran and the next step. Do no other work."
+
+// releasedRefreshNext ends the request that releases from v0.54.0 sent.
+const releasedRefreshNext = " for a handover to another agent now: the goal, the latest user direction, the completed work, the decisions, the checks that ran and the next step. Do no other work."
 const refreshMark = "[matchblox refresh request]"
 
 // earlierRefresh names a message that matchblox sent to have the agent write
@@ -262,7 +267,7 @@ func earlierRefresh(text string) bool {
 	if path, e := strconv.Unquote(q); err != nil || e != nil || filepath.Base(path) != "handover.md" {
 		return false
 	}
-	return rest[len(q):] == refreshNext
+	return rest[len(q):] == refreshNext || rest[len(q):] == releasedRefreshNext
 }
 
 func (s *Service) matchContextRoot() string {
@@ -333,6 +338,8 @@ func (s *Service) captureMatch(ctx context.Context, old sample.Session, refresh 
 		} else {
 			b.WriteString(quoteEvidence(text))
 		}
+	} else if old.Agent == sample.CursorAgent {
+		b.WriteString(s.cursorConversation(old.Pane))
 	} else {
 		b.WriteString("\nConversation unavailable: this match has no verified transcript path.\n")
 	}
@@ -376,7 +383,13 @@ func fileIn(root *os.Root, rel string) bool {
 
 // unwrittenRecord reports a task record that still holds only what the
 // launch wrote: the template, the launch message and the capture note.
+// A record from before the Workspace: line still counts.
 func unwrittenRecord(data string) (launch string, ok bool) {
+	if body, found := strings.CutPrefix(data, recordTitle); found {
+		if line, rest, found := strings.Cut(body, "\n"); found && strings.HasPrefix(line, "Workspace: ") {
+			data = recordTitle + rest
+		}
+	}
 	rest, ok := strings.CutPrefix(data, blankRecord)
 	if !ok {
 		return "", false
@@ -625,31 +638,61 @@ func transcriptTurn(line []byte) (turn, bool) {
 		}
 		b.WriteString(t + "\n")
 	}
-	text := strings.TrimSpace(b.String())
+	return markTurn(msg.Role, b.String())
+}
+
+// markTurn marks matchblox's own prompts and another match's messages, and
+// cuts the text to turnLimit: for a transcript row and for Cursor's hooks.
+func markTurn(role, text string) (turn, bool) {
+	text = strings.TrimSpace(text)
 	if text == "" {
 		return turn{}, false
 	}
-	if msg.Role == "user" {
+	if role == "user" {
 		if mark, ok := earlierSwitch(text); ok {
-			return turn{msg.Role, mark}, true
+			return turn{role, mark}, true
 		}
 		if earlierRefresh(text) {
-			return turn{msg.Role, refreshMark}, true
+			return turn{role, refreshMark}, true
 		}
 		if peerTagged.MatchString(text) {
-			msg.Role = peerRole // matchblox typed another match's message
+			role = peerRole // matchblox typed another match's message
 		}
 	}
-	if msg.Role == "assistant" {
+	if role == "assistant" {
 		// A reply ends with its conclusion.
-		return turn{msg.Role, tailText(text, turnLimit)}, true
+		return turn{role, tailText(text, turnLimit)}, true
 	}
 	// A pasted log usually comes first and the instruction last: keep both ends.
 	if len(text) > turnLimit {
 		half := turnLimit / 2
-		text = strings.ToValidUTF8(text[:half], "") + "\n[middle of message omitted]\n" + strings.ToValidUTF8(text[len(text)-half:], "")
+		text = strings.ToValidUTF8(text[:half], "") + said.Omitted + strings.ToValidUTF8(text[len(text)-half:], "")
 	}
-	return turn{msg.Role, text}, true
+	return turn{role, text}, true
+}
+
+// cursorConversation is the recent conversation section of a Cursor match
+// in pane, from the turns its hooks sent: Cursor keeps no transcript a
+// capture can read.
+func (s *Service) cursorConversation(pane string) string {
+	s.mu.Lock()
+	id, hooked := s.queue.Newest(pane)
+	talk := s.queue.Talk(id)
+	s.mu.Unlock()
+	var turns []turn
+	for _, t := range talk {
+		if t, ok := markTurn(t.Role, t.Text); ok {
+			turns = append(turns, t)
+		}
+	}
+	const head = "\n## Recent conversation\n\nSource: Cursor's hooks, since the service started. The first prompt, the latest prompts and the last three replies are included; older replies are left out. Messages from other matches are marked as theirs. Tool calls are excluded.\n\n"
+	switch {
+	case !hooked:
+		return head + "Conversation unavailable: no Cursor hook event from this session since the service started; run matchblox setup if its hooks are not installed.\n"
+	case len(turns) == 0:
+		return head + "Conversation unavailable: no Cursor turns since the service started.\n"
+	}
+	return head + quoteEvidence(pickTurns(turns, conversationBudget))
 }
 
 // slashCommand renders a Claude command row as the builder typed it: its

@@ -80,6 +80,10 @@ struct MatchbloxApp: App {
     @State private var jump: SessionJump?
     @State private var scanProblem: String?
     @State private var scanNotice: String?
+    /// Home, or Live Activity from it, drawn over the live console: `‹ host` finds it as it was.
+    @State private var over: Over?
+
+    private enum Over { case home, island }
 
     init() {
         #if DEBUG
@@ -140,26 +144,24 @@ struct MatchbloxApp: App {
                         host: host,
                         open: session,
                         jump: jump,
-                        onFailure: { go(.reach(host, $0)) },
-                        onHosts: Opening.consoleOffersHosts(hostCount: store.all().count) ? { go(.hosts) } : nil,
-                        onIsland: { go(.island) },
+                        onFailure: { failure in
+                            var sight = HostSight()
+                            sight.markFailed(host.fingerprint)
+                            go(.reach(host, failure))
+                        },
+                        onHosts: Opening.consoleOffersHosts(hostCount: store.all().count) ? { openHome() } : nil,
                         onScanAgain: { go(.scan) }
                     )
                     .id("\(host.fingerprint)#\(linkOpens)")
                     .transition(.move(edge: .trailing))
                     .zIndex(1)
+                    .accessibilityHidden(over != nil)
+                    if let over {
+                        layer(over, behind: host)
+                            .zIndex(2)
+                    }
                 case .hosts:
-                    HostsView(
-                        store: store,
-                        onOpen: { go(.console($0, open: nil)) },
-                        onPair: { go(.scan) },
-                        onIsland: { go(.island) },
-                        onDemo: { go(.demoScan) },
-                        onNoHosts: { notice in
-                            go(.scan)
-                            scanNotice = notice
-                        }
-                    )
+                    home(behind: nil)
                 case .reach(let host, let failure):
                     ReachView(
                         host: host,
@@ -169,7 +171,7 @@ struct MatchbloxApp: App {
                         onScanAgain: { go(.scan) }
                     )
                 case .island:
-                    IslandView(store: store, onBack: { go(Opening.first(hosts: store.all())) })
+                    IslandView(store: store, onBack: { go(.hosts) })
                 }
             }
             .foregroundStyle(Theme.fg)
@@ -180,7 +182,53 @@ struct MatchbloxApp: App {
         }
     }
 
+    /// Home or Live Activity over the console `live`, opaque so the console takes no tap.
+    @ViewBuilder
+    private func layer(_ shown: Over, behind live: Host) -> some View {
+        Group {
+            switch shown {
+            case .home: home(behind: live)
+            case .island: IslandView(store: store, onBack: { over = .home })
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Theme.bg.ignoresSafeArea())
+        .contentShape(Rectangle())
+    }
+
+    /// Home over the console `live`, or on its own when `live` is nil.
+    private func home(behind live: Host?) -> some View {
+        HostsView(
+            store: store,
+            backHost: live,
+            onOpen: { host in
+                if host.fingerprint == live?.fingerprint {
+                    over = nil
+                } else {
+                    go(.console(host, open: nil))
+                }
+            },
+            onBack: { over = nil },
+            onPair: { go(.scan) },
+            onIsland: { if live == nil { go(.island) } else { over = .island } },
+            onDemo: { go(.demoScan) },
+            onHostRemoved: { host in
+                if HomeRemove.clearsBack(removedFingerprint: host.fingerprint, backFingerprint: live?.fingerprint) {
+                    go(.hosts)
+                }
+            }
+        )
+    }
+
+    /// The `BOX` stamp: home covers the console, which stays connected. The keyboard goes down
+    /// so it does not sit over home.
+    private func openHome() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        over = .home
+    }
+
     private func go(_ next: Route) {
+        over = nil
         scanProblem = nil
         scanNotice = nil
         route = next
@@ -203,7 +251,7 @@ struct MatchbloxApp: App {
             } else if case .console = route {
                 return
             } else {
-                go(Opening.first(hosts: store.all()) == .scan ? .scan : .hosts)
+                go(Opening.first(hosts: store.all()))
             }
             return
         }

@@ -22,6 +22,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/gitremote"
 	"github.com/blox-eng/matchblox/internal/guard"
 	"github.com/blox-eng/matchblox/internal/holds"
+	"github.com/blox-eng/matchblox/internal/mux"
 	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -142,7 +143,7 @@ func (s *Service) guardLink() string {
 	return link
 }
 
-func (s *Service) tmuxOut(argv []string) (string, error) {
+func (s *Service) runStep(argv []string) (string, error) {
 	if s.TmuxOut != nil {
 		return s.TmuxOut(argv)
 	}
@@ -230,6 +231,22 @@ func (s *Service) tmuxSessions(server string) map[string]int {
 		out[name] = len(w)
 	}
 	return out
+}
+
+// paneOfSession is the first pane of the session name on the builder's
+// server, "" when the multiplexer lists none. An error is not "none": the
+// caller must not treat a failed list as a missing session.
+func (s *Service) paneOfSession(name string) (string, error) {
+	listed, err := s.mux().ListStrict()
+	if err != nil {
+		return "", err
+	}
+	for _, p := range listed {
+		if session, _, _ := strings.Cut(p.Target, ":"); session == name {
+			return p.ID, nil
+		}
+	}
+	return "", nil
 }
 
 func taken(name string) error {
@@ -410,8 +427,11 @@ func (s *Service) switchAgent(ctx context.Context, pane string, a proto.Act) pro
 			return refuse(err)
 		}
 	}
-	if !s.isDir(x.Cwd) {
-		return refuseText("no directory " + x.Cwd)
+	if x.Cwd == "" {
+		return refuseText(hiddenFolder(x.Name))
+	}
+	if work, _ := s.switchFolder(ctx, x); !s.isDir(work) {
+		return refuseText("no directory " + work)
 	}
 	word := ""
 	switch {
@@ -430,6 +450,19 @@ func (s *Service) switchAgent(ctx context.Context, pane string, a proto.Act) pro
 		return refuse(err)
 	}
 	defer unmark()
+	// The refresh may have moved the record: the new agent starts where it
+	// says now, and only where the sender's confirm named.
+	work, workRefused := s.switchFolder(ctx, x)
+	switch {
+	case n.ExpectedFolder != "" && work != n.ExpectedFolder:
+		// The console showed a cached answer: the next merge asks Git again.
+		s.works.forget(s.managedRecord(x))
+		return refuseText("the workspace changed to " + work + ": switch again")
+	case !s.isDir(work):
+		return refuseText("no directory " + work)
+	}
+	start := x
+	start.Cwd = work
 	// The account is held before the hold moves: a switch it refuses
 	// leaves the seat as it was.
 	now, acct := s.switchAccount(n.Agent)
@@ -452,7 +485,7 @@ func (s *Service) switchAgent(ctx context.Context, pane string, a proto.Act) pro
 	if refresh != "" {
 		notes = append(notes, refresh)
 	}
-	argv, bundle, err := s.matchLaunch(ctx, n.Agent, x.Name, x.Cwd, "", n.Handoff, true, acct, &x, refresh)
+	argv, bundle, err := s.matchLaunch(ctx, n.Agent, x.Name, work, "", n.Handoff, true, acct, &start, refresh)
 	if err != nil {
 		return refuse(err)
 	}
@@ -482,7 +515,7 @@ func (s *Service) switchAgent(ctx context.Context, pane string, a proto.Act) pro
 		}
 	}
 	release := s.holdPane(pane)
-	act := SwitchAction(pane, x, s.seatWindow(pane, x), argv)
+	act := SwitchAction(pane, start, s.seatWindow(pane, x), argv)
 	s.mu.Lock()
 	old := s.queue.HookedIn(pane)
 	// Before the respawn: a sample of the pane with no agent in it must
@@ -517,9 +550,11 @@ func (s *Service) switchAgent(ctx context.Context, pane string, a proto.Act) pro
 		return res
 	}
 	res.Skipped = append(res.Skipped, notes...)
+	res.StartedIn, res.WorkRefused = work, workRefused
 	s.undrive(pane)
 	s.renames.drop(pane)
 	s.mu.Lock()
+	s.chainsLocked().Restamp(memberOf(x), s.now()) // the new agent has its 2 minutes from the respawn
 	s.queue.Forget(old, s.now())
 	s.cur.Queue = s.queue.Items()
 	s.mu.Unlock()
@@ -528,6 +563,12 @@ func (s *Service) switchAgent(ctx context.Context, pane string, a proto.Act) pro
 	default: // a sample is asked for already
 	}
 	return res
+}
+
+// hiddenFolder is the refusal of a switch whose session shows matchblox
+// no folder to start the next agent in.
+func hiddenFolder(name string) string {
+	return "matchblox cannot read the folder " + name + " works in: kill it and start the agent with matchblox new --where <folder>"
 }
 
 // switchAccount is the account a switch starts agent on, and its label as
@@ -597,17 +638,14 @@ func windowOf(target string) string {
 // the window when window is set, each guarded by the old agent's pid and
 // start time.
 func SwitchAction(pane string, x sample.Session, window string, argv []string) advice.Action {
-	server, bare := sample.SplitPane(pane)
-	tmux := sample.TmuxOn(server)
+	m := mux.Tmux{}
 	guard := advice.Guard{PID: x.PID, StartTicks: x.Start}
 	a := advice.Action{Label: "switch", Destructive: true}
 	if window != "" {
-		a.Steps = append(a.Steps, slices.Concat(tmux, []string{"rename-window", "-t", bare, window}))
+		a.Steps = append(a.Steps, m.Rename(pane, window)...)
 		a.Guards = append(a.Guards, guard)
 	}
-	a.Steps = append(a.Steps, slices.Concat(tmux,
-		[]string{"respawn-pane", "-k", "-t", bare, "-c", x.Cwd, "env", "-u", "GIT_TERMINAL_PROMPT", "-u", "GIT_SSH_COMMAND", "-u", panes.HomeEnv},
-		argv))
+	a.Steps = append(a.Steps, m.Respawn(pane, x.Cwd, nil, argv)...)
 	a.Guards = append(a.Guards, guard)
 	return a
 }
@@ -817,10 +855,7 @@ func (s *Service) newSession(ctx context.Context, a proto.Act) proto.Result {
 	// not one the builder chose: Cursor asks whether to trust it. A
 	// checkout already there is trusted, as N's Have rows are.
 	launch = slices.Concat(launch, launchArgv(s.agentBin(n.Agent), n.Agent, name, first, !cloned, accountArgs(n.Agent, acct)))
-	steps = append(steps, slices.Concat(
-		[]string{"env", "-u", "GIT_TERMINAL_PROMPT", "-u", "GIT_SSH_COMMAND", "-u", panes.HomeEnv},
-		sample.TmuxOn(""), []string{"new-session", "-d", "-s", name, "-n", name, "-c", dir},
-		launch))
+	steps = append(steps, s.mux().Start(mux.Start{Name: name, Dir: dir, Detached: true, Argv: launch})...)
 	act.Steps = steps
 	// made: this call makes the folder, and takes it away when the start
 	// fails, so a retry finds no account.
@@ -860,9 +895,7 @@ func (s *Service) newSession(ctx context.Context, a proto.Act) proto.Result {
 		if acct != nil {
 			prepared = slices.Concat(accounts.EnvArgv(n.Agent, acct.folder, acct.fresh), prepared)
 		}
-		steps[len(steps)-1] = slices.Concat(
-			[]string{"env", "-u", "GIT_TERMINAL_PROMPT", "-u", "GIT_SSH_COMMAND", "-u", panes.HomeEnv},
-			sample.TmuxOn(""), []string{"new-session", "-d", "-s", name, "-n", name, "-c", dir}, prepared)
+		steps[len(steps)-1] = s.mux().Start(mux.Start{Name: name, Dir: dir, Detached: true, Argv: prepared})[0]
 		act.Steps = steps
 	}
 	res := s.Actions.Do(ctx, act, a.Confirm)
@@ -875,9 +908,9 @@ func (s *Service) newSession(ctx context.Context, a proto.Act) proto.Result {
 	}
 	res.Skipped = append(res.Skipped, notes...)
 	var pane string
+	var listErr error
 	if s.agentsPane(a) || (acct != nil && acct.fresh) {
-		out, _ := s.tmuxOut(slices.Concat(sample.TmuxOn(""), []string{"display-message", "-p", "-t", "=" + name + ":", "#{pane_id}"}))
-		pane = strings.TrimSpace(out)
+		pane, listErr = s.paneOfSession(name)
 	}
 	if u, agent := s.agentsUnit(a); agent {
 		s.recordNew(u, pane, name, res.Ran)
@@ -889,6 +922,8 @@ func (s *Service) newSession(ctx context.Context, a proto.Act) proto.Result {
 	case acct == nil || !acct.fresh:
 	case pane != "":
 		go s.driveSignIn(ctx, pane, n.Agent, name)
+	case listErr != nil:
+		// The session may be up; a failed list is not "no pane".
 	default:
 		// No pane to drive: the builder signs in by hand, told by the
 		// session's name.

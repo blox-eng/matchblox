@@ -157,7 +157,7 @@ func TestTheStokersServerIsItsOwn(t *testing.T) {
 			t.Errorf("the agent's environment has %s", v)
 		}
 	}
-	if err := actions.Exec(t.Context(), s.stokerSessionArgv(s.hostUnit(), "kill-session")); err != nil {
+	if err := actions.Exec(t.Context(), s.stokerMux().KillSession(unitSession(s.hostUnit()))); err != nil {
 		t.Fatal(err)
 	}
 	if err := exec.Command("tmux", "-L", server, "list-sessions").Run(); err == nil { //nolint:gosec // a test's own socket

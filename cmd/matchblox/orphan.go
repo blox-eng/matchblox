@@ -13,7 +13,8 @@ const orphanEvery = 2 * time.Second
 
 // listSessions is tmux's listing for panes.Orphaned.
 func listSessions() (string, error) {
-	out, err := exec.Command("tmux", panes.ClientsArgv()[1:]...).Output()
+	argv := panes.ClientsArgv()
+	out, err := exec.Command(argv[0], argv[1:]...).Output() //nolint:gosec // argv built by panes, never a shell string
 	return string(out), err
 }
 
