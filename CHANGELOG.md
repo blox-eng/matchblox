@@ -19,6 +19,13 @@ All notable changes to matchblox are in this file. The format follows
 - **The buzz hisses.** Every buzz plays a short pinch hiss with one ember
   pop, and a finished turn buzzes too, not only a wait.
 
+### Fixed
+
+- **This machine's fix line in `MACHINES · N` is a real command.** When
+  this machine's own serve is not reached, its row says
+  `run: matchblox status to see why`, not `matchblox connect this machine`,
+  which is no command.
+
 ## [0.68.0] - 2026-11-27
 
 ### Changed

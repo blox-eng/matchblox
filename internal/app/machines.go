@@ -246,8 +246,11 @@ func (m Model) underLines(r machineRow, folded []string, w int) []string {
 	}
 	if r.block != nil {
 		why, fix := m.blockedWords(*r.block)
-		if fix == "connect" {
-			fix = "run: matchblox connect " + cmp.Or(r.host, m.nameOf(r.host))
+		switch {
+		case fix == "connect" && r.host == "":
+			fix = "run: matchblox status to see why" // connect is for a named host; this machine has none
+		case fix == "connect":
+			fix = "run: matchblox connect " + r.host
 		}
 		say(why + " · " + fix)
 		return out

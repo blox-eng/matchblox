@@ -860,3 +860,24 @@ func TestProcReadFailSaysWhyNotUpdate(t *testing.T) {
 		t.Fatalf("a serve that did not read its processes says to update:\n%s", block)
 	}
 }
+
+// TestUnreachedLocalHostGivesARealFix: this machine's own serve not reached
+// says to look with matchblox status, never "matchblox connect this
+// machine", which is no command: connect is for a named host (#536).
+func TestUnreachedLocalHostGivesARealFix(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		have bool
+	}{{"lost", true}, {"never reached", false}} {
+		m, _ := fourHosts(t, healthy(), healthy(), healthy(), healthy())
+		m.have, m.lost = c.have, true
+		text := strings.Join(machinesText(m), "\n")
+		if strings.Contains(text, "matchblox connect this machine") || !strings.Contains(text, "run: matchblox status to see why") {
+			t.Errorf("%s: the local host's fix line is not a real fix:\n%s", c.name, text)
+		}
+		m.peers[m.peerAt("gpu-1")].lost = true
+		if text := strings.Join(machinesText(m), "\n"); !strings.Contains(text, "run: matchblox connect gpu-1") {
+			t.Errorf("%s: a lost peer lost its connect fix:\n%s", c.name, text)
+		}
+	}
+}
