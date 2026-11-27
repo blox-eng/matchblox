@@ -18,8 +18,48 @@ final class HeadMarksTests: XCTestCase {
         HeadMarks.Place.allCases.map { "\(marks[$0]) \(KeyFace.word(of: marks[$0]) ?? "")" }
     }
 
-    func testFirstMarks() {
-        XCTAssertEqual(faces(HeadMarks()), ["◂ back", "← cursor", "→ cursor", "⌨ type", "⇄ sessions"])
+    func testFirstMarks() throws {
+        XCTAssertEqual(faces(HeadMarks()), ["↑ ❯ up", "← cursor", "→ cursor", "↓ ❯ down", "⇄ sessions"])
+        for place in [HeadMarks.Place.top, .left, .right, .bottom] {
+            XCTAssertEqual(HeadMarks.keys(for: place).prefix(2), ["↑", "↓"], "\(place)")
+        }
+        XCTAssertEqual(KeyFace.word(of: "↑"), "❯ up")
+        XCTAssertEqual(KeyFace.word(of: "↓"), "❯ down")
+        var marks = HeadMarks()
+        try marks.set("↓", at: .left)
+        XCTAssertEqual(marks[.left], "↓")
+        for id in ["↑", "↓"] {
+            XCTAssertFalse(HeadMarks.keys(for: .hold).contains(id))
+            XCTAssertThrowsError(try marks.set(id, at: .hold)) {
+                XCTAssertEqual($0 as? HeadMarks.Refusal, .notAMark)
+            }
+        }
+        XCTAssertEqual(marks[.hold], "⇄")
+    }
+
+    func testOldMarksMove() throws {
+        let store = defaults()
+        let buildNine = #"{"top":"◂","left":"Esc","right":"→","bottom":"⌨","hold":"⇄"}"#
+        store.set(Data(buildNine.utf8), forKey: "head.marks")
+        let marks = HeadMarks.load(from: store)
+        XCTAssertEqual(faces(marks), ["↑ ❯ up", "Esc cancel", "→ cursor", "↓ ❯ down", "⇄ sessions"])
+        XCTAssertEqual(HeadMarks.storeKey, "head.marks.2")
+        let saved = try XCTUnwrap(store.data(forKey: "head.marks.2"), "the moved marks were not saved")
+        XCTAssertEqual(faces(try JSONDecoder().decode(HeadMarks.self, from: saved)), faces(marks))
+        XCTAssertNil(store.data(forKey: "head.marks"), "the build-9 marks are read once")
+
+        let changed = defaults()
+        changed.set(Data(#"{"top":"⇞","bottom":"/c","hold":"·"}"#.utf8), forKey: "head.marks")
+        XCTAssertEqual(faces(HeadMarks.load(from: changed)), ["⇞ page up", "← cursor", "→ cursor", "/c compact", "· nothing"])
+
+        var undone = HeadMarks.load(from: changed)
+        undone.undo()
+        XCTAssertEqual(undone[.top], "⇞", "a move leaves nothing to undo")
+
+        let both = defaults()
+        both.set(Data(#"{"left":"Tab"}"#.utf8), forKey: HeadMarks.storeKey)
+        both.set(Data(buildNine.utf8), forKey: "head.marks")
+        XCTAssertEqual(HeadMarks.load(from: both)[.left], "Tab", "stored new marks win over build 9's")
     }
 
     func testSetAndUndo() throws {
@@ -29,7 +69,7 @@ final class HeadMarksTests: XCTestCase {
         XCTAssertEqual(marks[.left], "Esc")
         XCTAssertEqual(marks[.top], "⇞")
         marks.undo()
-        XCTAssertEqual(marks[.top], "◂")
+        XCTAssertEqual(marks[.top], "↑")
         XCTAssertEqual(marks[.left], "Esc")
         marks.undo()
         XCTAssertEqual(marks[.left], "←")
@@ -87,7 +127,7 @@ final class HeadMarksTests: XCTestCase {
     func testDecodesLeniently() throws {
         XCTAssertEqual(faces(try decoded(#"{"left":"ctrlc"}"#)), faces(HeadMarks()))
         XCTAssertEqual(try decoded(#"{"left":"^C","top":"⇄","hold":7}"#)[.left], "←")
-        XCTAssertEqual(try decoded(#"{"top":"⇄"}"#)[.top], "◂")
+        XCTAssertEqual(try decoded(#"{"top":"⇄"}"#)[.top], "↑")
         XCTAssertEqual(try decoded(#"{"hold":7}"#)[.hold], "⇄")
         XCTAssertEqual(try decoded(#"{"left":"Esc","hold":"·"}"#)[.left], "Esc")
         XCTAssertEqual(try decoded(#"{"left":"Esc","hold":"·"}"#)[.hold], "·")
@@ -101,7 +141,7 @@ final class HeadMarksTests: XCTestCase {
         var marks = HeadMarks()
         try marks.set("/c", at: .bottom)
         marks.save(to: store)
-        XCTAssertEqual(HeadMarks.storeKey, "head.marks")
+        XCTAssertEqual(HeadMarks.storeKey, "head.marks.2")
         XCTAssertEqual(HeadMarks.load(from: store)[.bottom], "/c")
     }
 

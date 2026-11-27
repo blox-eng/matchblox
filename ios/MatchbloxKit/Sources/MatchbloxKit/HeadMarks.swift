@@ -15,11 +15,17 @@ public struct HeadMarks: Codable, Sendable {
     }
 
     /// The UserDefaults key of the encoded marks.
-    public static let storeKey = "head.marks"
+    public static let storeKey = "head.marks.2"
+    /// The key TestFlight build 9 kept its marks under, read once by `load(from:)`.
+    public static let buildNineKey = "head.marks"
     private static let interrupt = "^C"
     private static let sessions = "⇄"
-    private static let edgeKeys = ["◂", "⌨", "←", "→", "Esc", "Tab", "⇧Tab", "⇞", "⇟", "/c", "·"]
+    private static let arrows = ["↑", "↓"]
+    private static let edgeKeys = arrows + ["◂", "⌨", "←", "→", "Esc", "Tab", "⇧Tab", "⇞", "⇟", "/c", "·"]
     private static let firstMarks: [Place: String] = [
+        .top: "↑", .left: "←", .right: "→", .bottom: "↓", .hold: sessions,
+    ]
+    private static let buildNineMarks: [Place: String] = [
         .top: "◂", .left: "←", .right: "→", .bottom: "⌨", .hold: sessions,
     ]
 
@@ -30,7 +36,7 @@ public struct HeadMarks: Codable, Sendable {
 
     /// The keys a place can take, in home's order.
     public static func keys(for place: Place) -> [String] {
-        place == .hold ? edgeKeys + [sessions] : edgeKeys
+        place == .hold ? edgeKeys.filter { !arrows.contains($0) } + [sessions] : edgeKeys
     }
 
     public subscript(place: Place) -> String {
@@ -79,9 +85,22 @@ public struct HeadMarks: Codable, Sendable {
         }
     }
 
+    /// Build 9's marks move here once: a place the owner changed keeps its key, and the rest
+    /// take today's first marks.
     public static func load(from store: UserDefaults) -> HeadMarks {
-        guard let data = store.data(forKey: storeKey),
-              let marks = try? JSONDecoder().decode(HeadMarks.self, from: data) else { return HeadMarks() }
+        if let data = store.data(forKey: storeKey) {
+            return (try? JSONDecoder().decode(HeadMarks.self, from: data)) ?? HeadMarks()
+        }
+        guard let data = store.data(forKey: buildNineKey) else { return HeadMarks() }
+        var marks = HeadMarks()
+        if let old = try? JSONDecoder().decode(HeadMarks.self, from: data) {
+            for place in Place.allCases where old[place] != buildNineMarks[place] {
+                try? marks.set(old[place], at: place)
+            }
+            marks.history = []
+        }
+        marks.save(to: store)
+        store.removeObject(forKey: buildNineKey)
         return marks
     }
 

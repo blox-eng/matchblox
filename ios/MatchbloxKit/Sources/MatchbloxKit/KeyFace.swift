@@ -27,9 +27,9 @@ public struct KeyFace: Equatable, Sendable {
     ]
 
     private static let words = [
-        "◂": "back", "⌨": "type", "←": "cursor", "→": "cursor", "Esc": "cancel", "Tab": "tab",
-        "⇧Tab": "mode", "⇞": "page up", "⇟": "page down", "/c": "compact", "·": "nothing",
-        "⇄": "sessions", "^C": "interrupt",
+        "↑": "❯ up", "↓": "❯ down", "◂": "back", "⌨": "type", "←": "cursor", "→": "cursor",
+        "Esc": "cancel", "Tab": "tab", "⇧Tab": "mode", "⇞": "page up", "⇟": "page down",
+        "/c": "compact", "·": "nothing", "⇄": "sessions", "^C": "interrupt",
     ]
 
     /// The word a head mark shows beside its glyph: `Esc cancel`, `⇄ sessions`.
