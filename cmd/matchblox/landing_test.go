@@ -81,7 +81,7 @@ func TestTheLandingNeedsNoInstructions(t *testing.T) {
 func TestTheLandingHasAPreviewCard(t *testing.T) {
 	page := landingPage(t)
 	for _, s := range []string{
-		"<title>matchblox · a terminal console for every coding agent</title>",
+		"<title>matchblox · Every repo. Every agent. One desk.</title>",
 		`<meta property="og:title" content="`,
 		`<meta property="og:description" content="`,
 		`<meta property="og:url" content="https://matchblox.com/">`,
@@ -144,7 +144,7 @@ func TestOpenTheBoxShowsItsHeading(t *testing.T) {
 	page := landingPage(t)
 	if !bytes.Contains(page, []byte(`href="#console"`)) ||
 		!bytes.Contains(page, []byte(`<section class="agents box" id="console" aria-labelledby="box-h">`)) {
-		t.Error(`"Open the box" must point at the section that holds "Every agent, one box"`)
+		t.Error(`"Open the box" must point at the section that holds the desk`)
 	}
 }
 
@@ -208,6 +208,33 @@ func TestTheChainSectionShowsTheRoom(t *testing.T) {
 	for _, gone := range []string{"SHIPS</span>", "GIT</span>"} {
 		if strings.Contains(page, gone) {
 			t.Errorf("the room drawing shows %q, which the board moves onto the cards", gone)
+		}
+	}
+}
+
+// TestTheLandingNamesTheDesk: the box heading, lede and caption name the
+// four-pane desk, not the old one-box sidebar.
+func TestTheLandingNamesTheDesk(t *testing.T) {
+	page := string(landingPage(t))
+	for _, want := range []string{
+		`<h2 id="box-h">The desk</h2>`,
+		"four panes",
+		"the agent's own pane",
+		`<p class="say">Open: four panes around the agent's own.</p>`,
+		`content="One desk for every repo and every agent you run in tmux`,
+	} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the landing lacks %q", want)
+		}
+	}
+	for _, gone := range []string{
+		"Every agent, one box",
+		"All your agents in one list, with the chat beside it",
+		"Open: the list beside the chat.",
+		"a terminal console for every coding agent",
+	} {
+		if strings.Contains(page, gone) {
+			t.Errorf("the landing still says %q", gone)
 		}
 	}
 }
