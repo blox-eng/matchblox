@@ -1,8 +1,6 @@
 package app
 
 import (
-	"context"
-	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -18,51 +16,13 @@ const (
 // system gave the tty again.
 const deviceAttach = 30 * time.Second
 
-// lastClientOf is the tty and the creation time of the client with the
-// latest activity in the output of tmux list-clients -F '#{client_activity}
-// #{client_created} #{client_tty}'. "" when no line parses.
-func lastClientOf(out string) (tty string, created time.Time) {
-	best := int64(-1)
-	for _, l := range strings.Split(out, "\n") {
-		f := strings.Fields(l)
-		if len(f) != 3 {
-			continue
-		}
-		at, err := strconv.ParseInt(f[0], 10, 64)
-		made, err2 := strconv.ParseInt(f[1], 10, 64)
-		if err == nil && err2 == nil && at > best {
-			best, tty, created = at, f[2], time.Unix(made, 0)
-		}
-	}
-	return tty, created
-}
-
-// lastClientArgv lists the clients of this console's own session.
-func (m Model) lastClientArgv() []string {
-	return []string{"tmux", "list-clients", "-t", "=" + m.consoleSession(), "-F", "#{client_activity} #{client_created} #{client_tty}"}
-}
-
-// tmuxLastClient asks tmux which client of the console's session (argv,
-// lastClientArgv) was active last. A tmux error or no session gives "":
-// the guard is not a wall.
-func tmuxLastClient(argv []string) (string, time.Time, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
-	defer cancel()
-	out, err := exec.CommandContext(ctx, argv[0], argv[1:]...).Output() //nolint:gosec // lastClientArgv: tmux and the console's own session
-	if err != nil {
-		return "", time.Time{}, nil
-	}
-	tty, created := lastClientOf(string(out))
-	return tty, created, nil
-}
-
 // lastClient is the tty and the creation time of the client that was
 // active last, "" on any doubt.
 func (m Model) lastClient() (string, time.Time) {
 	last := m.opt.LastClient
 	if last == nil {
-		argv := m.lastClientArgv()
-		last = func() (string, time.Time, error) { return tmuxLastClient(argv) }
+		session := m.consoleSession()
+		last = func() (string, time.Time, error) { return m.multiplexer().LastClient(session) }
 	}
 	tty, created, err := last()
 	if err != nil {

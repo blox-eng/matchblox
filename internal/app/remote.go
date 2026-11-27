@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/blox-eng/matchblox/internal/doors"
+	"github.com/blox-eng/matchblox/internal/mux"
 	"github.com/blox-eng/matchblox/internal/remote"
 )
 
@@ -69,7 +70,7 @@ func (m Model) jumpOnHost(host string, a *action) *action {
 		if j.ClientTTY == "" {
 			b.deskLocal = func(tty string) []string { k := j; k.ClientTTY = tty; return k.Local(ssh) }
 		}
-		b.undo = []string{"tmux", "kill-session", "-t", "=" + remote.HostSessionName(j.Host, j.ID)}
+		b.undo = mux.Tmux{}.KillSession(remote.HostSessionName(j.Host, j.ID))
 	}
 	return b
 }

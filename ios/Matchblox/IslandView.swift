@@ -3,9 +3,9 @@ import MatchbloxKit
 import SwiftUI
 import UserNotifications
 
-/// The Island setting (design 0010 §4.3). Show changes only the phone; Follow and Buzz
-/// register again with the hosts concerned, with one Face ID. It also holds the console's text
-/// size, the app's only other setting.
+/// Live Activity settings (design 0010 §4.3; app words say Live Activity, code keeps Island*).
+/// Show changes only the phone; Follow and Buzz register again with the hosts concerned, with one Face ID.
+/// Console text size lives on home (and pinch on the terminal).
 struct IslandView: View {
     let store: HostStore
     let onBack: () -> Void
@@ -16,15 +16,13 @@ struct IslandView: View {
     @State private var blocked: [String] = []
     @State private var pending: Set<String> = []
     @State private var task: Task<Void, Never>?
-    /// The console's text size: here, or a pinch on the terminal.
-    @State private var textSize = TextSize.load(from: .standard)
     /// Why the last registration with each host failed; a host with none has no line.
     @State private var failures: [String: RegistrationFailure] = [:]
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Island")
+            Text("Live Activity")
                 .font(.title3)
             ForEach(blocked, id: \.self) { line in
                 Text(line)
@@ -67,21 +65,6 @@ struct IslandView: View {
                     }
                 }
                 .listRowBackground(Theme.bg)
-                Section("Console text") {
-                    HStack(spacing: 24) {
-                        Button("A−") { textSize = textSize.smaller }
-                            .disabled(textSize.isSmallest)
-                            .accessibilityLabel("Smaller text")
-                        Text("\(textSize.points) pt")
-                            .monospacedDigit()
-                        Button("A+") { textSize = textSize.bigger }
-                            .disabled(textSize.isBiggest)
-                            .accessibilityLabel("Bigger text")
-                    }
-                    // Each button takes its own taps, not the whole row's.
-                    .buttonStyle(.borderless)
-                }
-                .listRowBackground(Theme.bg)
             }
             .scrollContentBackground(.hidden)
             Button("Back", action: onBack)
@@ -92,10 +75,8 @@ struct IslandView: View {
         .onAppear {
             hosts = store.real()
             prefs = IslandSettings.prefs
-            textSize = TextSize.load(from: .standard)
             readFailures()
         }
-        .onChange(of: textSize) { _, size in size.save(to: .standard) }
         .task { await checkBlocked() }
         .onChange(of: scenePhase) { _, phase in
             switch phase {

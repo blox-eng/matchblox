@@ -54,6 +54,8 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
     /// A pull up or down this far opens or closes the drawer.
     private static let pullDistance: CGFloat = 12
     private static let drawerGrowTime: TimeInterval = 0.26
+    /// BOX teach open only (DESIGN §5 / plan Task 4); normal drawer stays at `drawerGrowTime`.
+    private static let teachGrowTime: TimeInterval = 0.38
     private static let traySlideTime: TimeInterval = 0.3
 
     private static let glyphFont = UIFont.monospacedSystemFont(ofSize: 16, weight: .medium)
@@ -131,6 +133,8 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
     /// The builder picked a layout in the tray.
     var onLayout: (BeltLayout) -> Void = { _ in }
     var onEditMine: () -> Void = {}
+    /// The `BOX` stamp: open Pocket home.
+    var onBox: () -> Void = {}
     /// The demo leaves the person's belt as it was: no Mine editor, and a pick is not saved.
     var isDemo = false {
         didSet { trayModel.mineEditable = !isDemo }
@@ -219,6 +223,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
         backgroundColor = BeltLook.sleeve
         model.onPick = { [weak self] picked in self?.picked(picked) }
         model.onEdit = { [weak self] in self?.editMine() }
+        model.onBox = { [weak self] in self?.boxTapped() }
         buildHandle()
         buildDrawer()
         buildBelt()
@@ -897,13 +902,16 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
 
     /// Opens or closes the drawer. A closed box comes back fresh: every match ready again but
     /// the one in use.
-    func setTray(open: Bool, animated: Bool = true) {
+    func setTray(open: Bool, animated: Bool = true, growDuration: TimeInterval? = nil) {
         guard open != trayOpen else {
             // A close with no time to animate ends a close that animates: its hold lets go now.
             if !open && !animated { endClose?() }
             return
         }
         trayOpen = open
+        // VoiceOver and UI tests reach the tray's stamps (BOX among them) only once the list is rebuilt.
+        spoken = nil
+        UIAccessibility.post(notification: .layoutChanged, argument: nil)
         trayMoves += 1
         drawerMoves += 1
         let moves = drawerMoves
@@ -944,7 +952,10 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
             finish()
             return
         }
-        let grow = UIViewPropertyAnimator(duration: Self.drawerGrowTime, timingParameters: Self.drawerCurve())
+        let grow = UIViewPropertyAnimator(
+            duration: growDuration ?? Self.drawerGrowTime,
+            timingParameters: Self.drawerCurve()
+        )
         grow.addAnimations { host.layoutIfNeeded() }
         let slide = UIViewPropertyAnimator(duration: Self.traySlideTime, timingParameters: Self.drawerCurve())
         slide.addAnimations { tray.transform = slid }
@@ -988,6 +999,28 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
     private func editMine() {
         setTray(open: false)
         onEditMine()
+    }
+
+    private func boxTapped() {
+        setTray(open: false)
+        onBox()
+    }
+
+    /// One-time teach: open the tray, accent `BOX`, settle. Skips motion when Reduce Motion is on
+    /// (flag still set). Teach open uses 380 ms grow; normal drawer stays at 0.26 s.
+    func teachBoxIfNeeded() {
+        var flags = HomeFlags()
+        guard flags.shouldTeachBox else { return }
+        flags.markBoxTaught()
+        if UIAccessibility.isReduceMotionEnabled { return }
+        setTray(open: true, growDuration: Self.teachGrowTime)
+        trayModel.boxAccent = true
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(0.9))
+            guard let self else { return }
+            self.trayModel.boxAccent = false
+            self.setTray(open: false)
+        }
     }
 
     /// The editor closed. Done shows Mine; a Mine on the belt runs to its new keys.

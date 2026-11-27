@@ -510,6 +510,7 @@ func TestNewAccountDrivesItsSignIn(t *testing.T) {
 		ran = append(ran, argv)
 		return nil
 	}
+	startedPanes(s) // the new session's pane is %42
 	s.Capture = func([]string) map[string]string { return map[string]string{"%42": claudeTheme} }
 	snap := lifeSnap(false)
 	snap.Sessions = append(snap.Sessions, sample.Session{Agent: "claude", PID: 142, Start: 9, Pane: "%42"})

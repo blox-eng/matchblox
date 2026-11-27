@@ -11,18 +11,6 @@ import (
 	"github.com/blox-eng/matchblox/internal/setup"
 )
 
-func TestLastClientPicksTheLatest(t *testing.T) {
-	out := "1700000100 1699990000 /dev/ttys003\n1700000900 1699990007 /dev/ttys007\n1700000500 1699990001 /dev/ttys001\n"
-	if tty, created := lastClientOf(out); tty != "/dev/ttys007" || !created.Equal(time.Unix(1699990007, 0)) {
-		t.Fatalf("got %q, %v", tty, created)
-	}
-	for _, none := range []string{"", "\n", "x y z\nnot-a-number 1 /dev/ttys1\n1 not-a-number /dev/ttys1\n1700000100 /dev/ttys003\n"} {
-		if tty, _ := lastClientOf(none); tty != "" {
-			t.Errorf("%q gave %q", none, tty)
-		}
-	}
-}
-
 // phoneIn puts a device in on tty and makes it the last client: its note
 // came a moment before its client.
 func phoneIn(t *testing.T, r *pairRig, m *Model, tty *string) {
@@ -157,8 +145,16 @@ func TestTmuxErrorIsTheBuilders(t *testing.T) {
 // tmux for its own session's clients, so a phone active last in the first
 // console does not count as the one who pressed here.
 func TestASecondConsoleAsksItsOwnClients(t *testing.T) {
-	m := Model{opt: Options{HomeSession: "matchblox-2"}}
-	if got := m.lastClientArgv(); !slices.Contains(got, "=matchblox-2") || slices.Contains(got, "=matchblox") {
-		t.Errorf("lastClientArgv = %q, want the clients of =matchblox-2", got)
+	var asked []string
+	m := Model{opt: Options{HomeSession: "matchblox-2", Pane: "%1", Tmux: func(args ...string) (string, error) {
+		asked = args
+		return "1700000900 1699990007 /dev/ttys007\n", nil
+	}}}
+	tty, created := m.lastClient()
+	if !slices.Contains(asked, "=matchblox-2") || slices.Contains(asked, "=matchblox") {
+		t.Errorf("tmux asked %q, want the clients of =matchblox-2", asked)
+	}
+	if tty != "/dev/ttys007" || !created.Equal(time.Unix(1699990007, 0)) {
+		t.Errorf("got %q, %v", tty, created)
 	}
 }

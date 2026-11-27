@@ -8,6 +8,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/blox-eng/matchblox/internal/config"
+	"github.com/blox-eng/matchblox/internal/mux"
 )
 
 // tabView is one tab: its rows and selection, what Enter and x do on the
@@ -225,7 +226,7 @@ var views = [...]tabView{
 		pick:  func(m *Model, i int) { m.gitSel = i },
 		primary: func(m Model) *action {
 			if r, ok := m.selectedWorktree(); ok {
-				return &action{label: "shell", nav: true, steps: [][]string{{"tmux", "new-window", "-c", r.wt.Path}}, host: r.host}
+				return &action{label: "shell", nav: true, steps: [][]string{mux.Tmux{}.NewWindow("", r.wt.Path)}, host: r.host}
 			}
 			return nil
 		},

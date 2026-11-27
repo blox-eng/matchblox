@@ -1,13 +1,13 @@
 package service
 
 import (
-	"bytes"
 	"errors"
 	"os/exec"
 	"slices"
 	"strings"
 
 	"github.com/blox-eng/matchblox/internal/hooks"
+	"github.com/blox-eng/matchblox/internal/mux"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
@@ -70,28 +70,17 @@ func (s *Service) paneOfTerminal(pid int, tty func(int) (ttyDevice, bool), dev f
 	if !ok {
 		return "", false
 	}
-	servers := []string{""}
-	if s.StokerServer != "" {
-		servers = append(servers, s.StokerServer)
-	}
-	for _, server := range servers {
-		out, err := s.tmuxOut(slices.Concat(sample.TmuxOn(server), []string{"list-panes", "-a", "-F", "#{pane_id} #{pane_tty}"}))
+	for _, m := range s.paneMuxes() {
+		listed, err := m.ListStrict()
 		if err != nil {
 			if noTmuxServer(err) {
 				continue
 			}
 			return "", false
 		}
-		for _, line := range strings.Split(out, "\n") {
-			id, path, ok := strings.Cut(strings.TrimSpace(line), " ")
-			if !ok {
-				continue
-			}
-			if d, ok := dev(path); ok && d == want {
-				if server != "" {
-					id = sample.OnServer(id, server)
-				}
-				return id, true
+		for _, p := range listed {
+			if d, ok := dev(p.TTY); ok && d == want {
+				return p.ID, true
 			}
 		}
 	}
@@ -109,17 +98,20 @@ func (s *Service) paneOfTerminal(pid int, tty func(int) (ttyDevice, bool), dev f
 	return "", true
 }
 
-// noTmuxServer tells if a tmux command failed because no server runs
-// there, or no tmux is installed: then no pane holds any terminal.
+// paneMuxes are the multiplexers whose panes a peer can run in: the
+// builder's, then the stoker's when the service keeps a stoker server.
+func (s *Service) paneMuxes() []mux.Mux {
+	if s.StokerServer == "" {
+		return []mux.Mux{s.mux()}
+	}
+	return []mux.Mux{s.mux(), s.stokerMux()}
+}
+
+// noTmuxServer tells if tmux is not installed: then no pane holds any
+// terminal. A tmux with no server is an empty list, not an error; any other
+// failure is an error, and then nothing tells whose the terminal is.
 func noTmuxServer(err error) bool {
-	if errors.Is(err, exec.ErrNotFound) {
-		return true
-	}
-	var ee *exec.ExitError
-	if !errors.As(err, &ee) {
-		return false
-	}
-	return bytes.Contains(ee.Stderr, []byte("no server running")) || bytes.Contains(ee.Stderr, []byte("error connecting to"))
+	return errors.Is(err, exec.ErrNotFound)
 }
 
 // paneOfPeer is the tmux pane the process pid runs in, by its parents and
@@ -133,13 +125,13 @@ func (s *Service) paneOfPeer(pid int) string {
 	if p := paneOfPID(pid, parentOf, panes); p != "" {
 		return p
 	}
-	out, _ := sample.TmuxPanes()
-	panes = sample.ParsePanes(out)
-	if s.StokerServer != "" {
-		out, _ := sample.TmuxPanesOn(s.StokerServer)
-		for _, p := range sample.ParsePanes(out) {
-			p.ID = sample.OnServer(p.ID, s.StokerServer)
-			panes = append(panes, p)
+	for _, m := range s.paneMuxes() {
+		listed, _ := m.List()
+		for _, p := range listed {
+			if session, _, _ := strings.Cut(p.Target, ":"); p.Jump == "1" || sample.JumpSession(session) {
+				continue // a jump's pane holds the ssh, not the peer
+			}
+			panes = append(panes, sample.Pane{ID: p.ID, PID: p.PID})
 		}
 	}
 	return paneOfPID(pid, parentOf, panes)

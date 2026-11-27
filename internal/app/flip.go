@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/blox-eng/matchblox/internal/keycmd"
+	"github.com/blox-eng/matchblox/internal/mux"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
@@ -143,7 +144,7 @@ func (m Model) walkFrom(tty, pane string) (tea.Model, tea.Cmd) {
 // update loop: a fresh note for that tty's client, as fromDevice reads it.
 func (m Model) jumpFrom(n int, tty, pane string) (tea.Model, tea.Cmd) {
 	run := m.opt.Run
-	typeBack := []string{"tmux", "send-keys", "-t", pane, "Escape", strconv.Itoa(n)}
+	typeBack := mux.Tmux{}.Keys(pane, "Escape", strconv.Itoa(n))
 	if m.pocketClient(tty) {
 		return m, func() tea.Msg { _ = run(typeBack); return nil }
 	}
@@ -170,7 +171,7 @@ type jumpMsg struct {
 func (m Model) jumpFromDesk(j jumpMsg) (tea.Model, tea.Cmd) {
 	run, n, tty := m.opt.Run, j.n, j.tty
 	tmux := func(argv ...string) tea.Cmd {
-		return func() tea.Msg { _ = run(append([]string{"tmux"}, argv...)); return nil }
+		return func() tea.Msg { _ = run(append(mux.Command(""), argv...)); return nil }
 	}
 	s, no := m.numberedOn(n, m.opt.Host)
 	if no != "" {

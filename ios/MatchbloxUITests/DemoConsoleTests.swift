@@ -36,18 +36,18 @@ final class DemoConsoleTests: XCTestCase {
         XCTAssertFalse(app.buttons["Try again"].exists, app.debugDescription)
     }
 
-    /// The real way in: an empty store, the scan view, `Try a demo`, and no camera prompt.
+    /// The real way in: an empty store, home, `Try the demo`, and no camera prompt.
     @MainActor
     func testTryADemoOpensTheConsole() {
         let app = XCUIApplication()
         app.launchArguments = ["-resetHosts"]
         app.launch()
 
-        let tryADemo = app.buttons["Try a demo"]
+        let tryADemo = app.buttons["Try the demo"]
         XCTAssertTrue(tryADemo.waitForExistence(timeout: 30), app.debugDescription)
         XCTAssertGreaterThanOrEqual(tryADemo.frame.height, 44)
-        XCTAssertTrue(app.frame.contains(tryADemo.frame), "Try a demo is off the screen")
-        keep(app, "1 scan view")
+        XCTAssertTrue(app.frame.contains(tryADemo.frame), "Try the demo is off the screen")
+        keep(app, "1 home")
 
         tryADemo.tap()
         keep(app, "2 demo scan")
@@ -60,6 +60,34 @@ final class DemoConsoleTests: XCTestCase {
         app.launchArguments = []
         app.launch()
         expectTheConsole(in: app)
+    }
+
+    /// BOX opens home over the live console, and `‹ demo` returns to it as it was: the chat the
+    /// person opened still shows. A console built again would start on the list.
+    @MainActor
+    func testHomeFromTheBoxKeepsTheConsole() {
+        let app = launched()
+        expectTheConsole(in: app)
+        openTheChat(app, row: "flint-auth")
+
+        let box = app.buttons["Home, the box"]
+        let layouts = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Layouts")).firstMatch
+        // The one-time BOX teach may hold the drawer open for a moment; a tap on the grip toggles
+        // it. The Layouts element ends at the grip's right edge, and its middle takes no tap.
+        let deadline = Date().addingTimeInterval(20)
+        while !box.isHittable, Date() < deadline {
+            let width = layouts.frame.width
+            layouts.coordinate(withNormalizedOffset: CGVector(dx: (width - 18) / width, dy: 0.5)).tap()
+            _ = box.waitForExistence(timeout: 2)
+        }
+        box.tap()
+
+        let back = app.buttons["Back to demo"]
+        XCTAssertTrue(back.waitForExistence(timeout: 10), app.debugDescription)
+        keep(app, "5 home over the console")
+        back.tap()
+
+        expect(in: app, step: "the chat still open after ‹ demo", "label CONTAINS %@", "send to flint-auth")
     }
 
     /// The belt's 2 marks the second option in flint-auth's chat, and 2 again sends it, and the

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -34,6 +35,48 @@ func TestTmuxPanesKeepTabsWhenLangUnset(t *testing.T) {
 	}
 	if panes[0].ID == "" || panes[0].Target == "" {
 		t.Fatalf("pane incomplete: %+v (raw %q)", panes[0], out)
+	}
+}
+
+// TestTmuxPanesOnUsesMuxList: mux lists the panes. No tmux, or a tmux that
+// exits, is no panes and no error. A listing is the PaneFormat text with
+// the bare pane id, and ParsePanes still skips a jump's session.
+func TestTmuxPanesOnUsesMuxList(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	if out, err := sample.TmuxPanesOn("matchblox"); out != nil || err != nil {
+		t.Fatalf("no tmux: %q, %v; want nil, nil", out, err)
+	}
+
+	bin := t.TempDir()
+	script := func(body string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(bin, "tmux"), []byte("#!/bin/sh\n"+body), 0o755); err != nil { //nolint:gosec // test script
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", bin)
+	script("exit 1\n")
+	if out, err := sample.TmuxPanesOn(""); out != nil || err != nil {
+		t.Fatalf("tmux exits: %q, %v; want nil, nil", out, err)
+	}
+
+	script(`printf '%s\n' "$*" > "$0.args"
+printf '%%7\tmain:1.2\tw\t42\tclaude\t/x\t/tmp/s\t9\t\t100\t/dev/pts/1\t0\n'
+printf '%%8\tmatchblox-jump-0a1b2c3d:1.1\tw\t43\tssh\t/y\t/tmp/s\t9\t1\t100\t/dev/pts/2\t0\n'
+`)
+	out, err := sample.TmuxPanesOn("matchblox")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "%7\tmain:1.2\tw\t42\tclaude\t/x\t/tmp/s\t9\t\t100\n%8\tmatchblox-jump-0a1b2c3d:1.1\tw\t43\tssh\t/y\t/tmp/s\t9\t1\t100\n"; string(out) != want {
+		t.Fatalf("out = %q, want %q", out, want)
+	}
+	if got := sample.ParsePanes(out); len(got) != 1 || got[0].ID != "%7" || got[0].Server != "9" || got[0].ServerStart != "100" {
+		t.Fatalf("ParsePanes = %+v", got)
+	}
+	args, _ := os.ReadFile(filepath.Join(bin, "tmux.args"))
+	if !strings.HasPrefix(string(args), "-u -L matchblox list-panes -a -F ") {
+		t.Fatalf("tmux ran %q", args)
 	}
 }
 

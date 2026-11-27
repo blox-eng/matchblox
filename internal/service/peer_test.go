@@ -419,8 +419,8 @@ func TestTTYDevSplitsTheKernelsNumber(t *testing.T) {
 }
 
 // The terminal of a process is matched to the pane whose pane_tty is the
-// same device; only a tmux with no server matches no pane, and any other
-// failure, or no terminal, places nothing.
+// same device; a tmux that exits (no server) lists no pane, and a tmux that
+// cannot run, or no terminal, places nothing.
 func TestThePaneOfATerminal(t *testing.T) {
 	s := newTest(t, time.Hour)
 	s.StokerServer = "mbtest"
@@ -430,7 +430,10 @@ func TestThePaneOfATerminal(t *testing.T) {
 		d, ok := map[int]ttyDevice{1: {16, 2}, 2: {16, 9}, 3: {16, 7}}[pid]
 		return d, ok
 	}
-	lists := map[string]string{"tmux": "%1 /dev/ttys001\n%2 /dev/ttys002\n", "tmux -L mbtest": "%9 /dev/ttys009\n"}
+	lists := map[string]string{
+		"tmux -u":           paneLine("%1", "a:0.0", 11, "/dev/ttys001", false) + paneLine("%2", "b:0.0", 12, "/dev/ttys002", false),
+		"tmux -u -L mbtest": paneLine("%9", "stoker:0.0", 19, "/dev/ttys009", false),
+	}
 	s.TmuxOut = func(argv []string) (string, error) {
 		return lists[strings.Join(argv[:slices.Index(argv, "list-panes")], " ")], nil
 	}
@@ -448,9 +451,36 @@ func TestThePaneOfATerminal(t *testing.T) {
 	if pane, ok := s.paneOfTerminal(1, tty, dev); pane != "" || !ok {
 		t.Errorf("no tmux server: %q, %v", pane, ok)
 	}
-	s.TmuxOut = func([]string) (string, error) { return "", errors.New("signal: killed") }
+	for _, c := range []struct {
+		name string
+		err  error
+	}{
+		{"killed", errors.New("signal: killed")},
+		{"timed out", &exec.ExitError{}},
+		{"protocol mismatch", &exec.ExitError{Stderr: []byte("protocol version mismatch (client 8, server 7)\n")}},
+		{"exit with another message", &exec.ExitError{Stderr: []byte("server exited unexpectedly\n")}},
+	} {
+		s.TmuxOut = func([]string) (string, error) { return "", c.err }
+		if pane, ok := s.paneOfTerminal(1, tty, dev); ok || pane != "" {
+			t.Errorf("a tmux that failed (%s) placed the sender: %q, %v", c.name, pane, ok)
+		}
+	}
+	// "error connecting to" is no server too: the socket is not there.
+	s.TmuxOut = func([]string) (string, error) {
+		return "", &exec.ExitError{Stderr: []byte("error connecting to /tmp/tmux-1000/mbtest (No such file or directory)\n")}
+	}
+	if pane, ok := s.paneOfTerminal(1, tty, dev); pane != "" || !ok {
+		t.Errorf("no socket: %q, %v", pane, ok)
+	}
+	// The stoker's server failing refuses too, though the builder's lists.
+	s.TmuxOut = func(argv []string) (string, error) {
+		if slices.Contains(argv, "mbtest") {
+			return "", &exec.ExitError{Stderr: []byte("protocol version mismatch\n")}
+		}
+		return "", nil
+	}
 	if _, ok := s.paneOfTerminal(1, tty, dev); ok {
-		t.Error("a tmux that failed placed the sender")
+		t.Error("a stoker tmux that failed placed the sender")
 	}
 }
 
@@ -516,7 +546,9 @@ func TestCallerPaneOfGuardedOrphan(t *testing.T) {
 		}[pid]
 		return d, ok
 	}
-	s.TmuxOut = func([]string) (string, error) { return "%1 /dev/pts/1\n%7 /dev/pts/7\n", nil }
+	s.TmuxOut = func([]string) (string, error) {
+		return paneLine("%1", "a:0.0", 11, "/dev/pts/1", false) + paneLine("%7", "b:0.0", 17, "/dev/pts/7", false), nil
+	}
 	for pid, want := range map[int]string{900: "%7", 901: ""} {
 		if pane, ok := s.paneOfTerminal(pid, tty, dev); pane != want || !ok {
 			t.Errorf("pid %d: pane %q, placed %v; want %q, placed", pid, pane, ok, want)
