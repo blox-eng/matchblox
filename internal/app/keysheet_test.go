@@ -182,3 +182,35 @@ func TestNoKeyDoesX(t *testing.T) {
 		t.Fatal("esc closed the sheet instead of clearing the filter")
 	}
 }
+
+// TestEnterOnALaterRowSaysWhere: ⏎ on a row that works in the review, the
+// shell or ⚙ keeps the sheet and says where the key works (review of
+// 2026-11-27, Minor 2). Another key clears the word.
+func TestEnterOnALaterRowSaysWhere(t *testing.T) {
+	for _, tc := range []struct{ filter, want string }{
+		{"send", "works in a review"},
+		{"flip", "works in the shell"},
+		{"open", "works in ⚙"},
+	} {
+		m, _ := keysDesk(t)
+		m = pressOn(m, "?")
+		for _, r := range tc.filter {
+			m = pressOn(m, string(r))
+		}
+		// "flip" and "open" also name rows of other groups: go down to the later one.
+		for i := 0; i < 10 && m.keyMatches()[m.keySheet.at].run != runLater; i++ {
+			m = pressOn(m, "down")
+		}
+		m = pressOn(m, "enter")
+		if m.keySheet == nil {
+			t.Fatalf("%s: ⏎ closed the sheet with no word", tc.filter)
+		}
+		if body := ansi.Strip(m.render()); !strings.Contains(body, tc.want) {
+			t.Fatalf("%s: no %q in\n%s", tc.filter, tc.want, body)
+		}
+		m = pressOn(m, "down")
+		if body := ansi.Strip(m.render()); strings.Contains(body, tc.want) {
+			t.Fatalf("%s: the word stays after another key", tc.filter)
+		}
+	}
+}

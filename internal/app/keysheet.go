@@ -13,6 +13,7 @@ import (
 type keySheet struct {
 	filter string
 	at     int
+	says   string // why ⏎ did not run the chosen row; the next key clears it
 }
 
 // keyRun is what enter does with a row of the keys sheet.
@@ -104,6 +105,7 @@ func (m Model) keySheetKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	s := *m.keySheet
+	s.says = ""
 	m.keySheet = &s
 	switch {
 	case bkey.Matches(k, m.keys.side.Flip):
@@ -152,6 +154,10 @@ func (m Model) runKeyItem() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	it := items[at]
+	if it.run == runLater { // the key works somewhere else: keep the sheet and say where
+		m.keySheet.says = it.b.Help().Key + " " + it.does + " works in " + it.group
+		return m, nil
+	}
 	m.keySheet = nil
 	press := ""
 	if keys := it.b.Keys(); len(keys) > 0 {
@@ -231,6 +237,10 @@ func (m Model) paintKeySheet(sc *drawn, w int) {
 		sc.lines[i] = m.st.faint.Render(ansi.Strip(sc.lines[i]))
 	}
 	room := len(sc.lines) - top
+	if says := m.keySheet.says; says != "" && room > 1 { // the last row of the sheet
+		room--
+		sc.lines[top+room] = fit(m.st.warn.Render(says), w)
+	}
 	for i, line := range windowKeyLines(rows, room, chosen) {
 		if top+i >= len(sc.lines) {
 			break
