@@ -131,7 +131,8 @@ final class HeadWalkTests: XCTestCase {
         var walk = HeadWalk()
         walk.read(.unreadable)
         XCTAssertEqual(walk.tap(), .unreadable)
-        XCTAssertEqual(HeadWalk().tap(), .unreadable, "a tap before any read is no Enter either")
+        var fresh = HeadWalk()
+        XCTAssertEqual(fresh.tap(), .unreadable, "a tap before any read is no Enter either")
         walk.read(.none)
         XCTAssertEqual(walk.tap(), .enter, "only a screen read with no question is Enter")
     }
