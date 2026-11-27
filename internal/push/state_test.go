@@ -3,12 +3,12 @@ package push
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/blox-eng/matchblox/internal/holds"
 	"os"
 	"slices"
 	"testing"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/holds"
 	"github.com/blox-eng/matchblox/internal/hooks"
 	"github.com/blox-eng/matchblox/internal/limits"
 	"github.com/blox-eng/matchblox/internal/queue"

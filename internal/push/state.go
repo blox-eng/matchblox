@@ -1,12 +1,12 @@
 package push
 
 import (
-	"github.com/blox-eng/matchblox/internal/holds"
 	"math"
 	"slices"
 	"time"
 
 	"github.com/blox-eng/matchblox/internal/chains"
+	"github.com/blox-eng/matchblox/internal/holds"
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/state"

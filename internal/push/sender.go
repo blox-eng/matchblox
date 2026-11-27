@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"github.com/blox-eng/matchblox/internal/holds"
 	"net"
 	"net/http"
 	"os"
@@ -16,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/holds"
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/state"
 )
