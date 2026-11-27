@@ -4,15 +4,15 @@
  NEEDS YOU · 6  −
 ▌  ╿ flint-auth                                2m ✻
      conflicts with main
-   ╿ spark-docs                                9m ✻
+   │ spark-docs                                9m ✻
      I rewrote the quick start and the install pag…
    ╿ ember-billing                             4m ✻
      #4552 waits for your merge
    ╿ kindle-web                                1m ✻
      Do you want to proceed?
-   ╿ cinder-ci                                 0s ❋
+   ╿ cinder-ci                                now ❋
      I am moving the cache key to the go.sum hash.
-   ╿ wick-mobile                               0s ▣
+   ╿ wick-mobile                              now ▣
      ⠙ Working
 ───────────────────────────────────────────────────
  WORKING · 1  −

@@ -88,7 +88,7 @@ func (m Model) sideTime(h sideState, s sample.Session) time.Time {
 	switch h {
 	case sideNeed:
 		return m.needSince(s)
-	case sideIdle:
+	case sideDone, sideIdle:
 		return m.lastActive(s)
 	}
 	return s.Started

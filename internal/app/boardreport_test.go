@@ -120,11 +120,11 @@ func TestAStokerGoStillNeedsYouWhileBusy(t *testing.T) {
 }
 
 // TestAnIdleReportKeepsTodaysRules: an idle agent is read as before: a turn
-// that ended on a question asks, and one that asked nothing is QUIET.
+// that ended on a question asks, and one that asked nothing is DONE.
 func TestAnIdleReportKeepsTodaysRules(t *testing.T) {
 	s := reported("spark-docs", "idle", "")
-	if col, _, _ := laneOf(t, boardState(s)); col != sideIdle {
-		t.Fatalf("idle, nothing: got %s, want QUIET", col.head())
+	if col, _, _ := laneOf(t, boardState(s)); col != sideDone {
+		t.Fatalf("idle, nothing: got %s, want DONE", col.head())
 	}
 	s.Asks, s.LastLine = true, "Should I also update the docs?"
 	if col, _, says := laneOf(t, boardState(s)); col != sideNeed || says != s.LastLine {
@@ -150,7 +150,7 @@ func TestAnOpencodeReportDecidesItsLane(t *testing.T) {
 		{"waiting", "permission", sideNeed, "permission"},
 		{"waiting", "question", sideNeed, "question"},
 		{"busy", "", sideWork, ""},
-		{"idle", "", sideIdle, ""},
+		{"idle", "", sideDone, ""},
 	} {
 		s := opencode(c.status, c.why)
 		s.Asks = c.status == "busy" // an old question while it works is no ask

@@ -2,9 +2,9 @@
  SESSIONS 15    machine
 ────────────────────────────────────────────────────────────────────────────────
  NEEDS YOU · 4  −               │ flint-auth ✻ asks                    ctx 62%
-   ╿ spark-search     #4548 ci ✻│ chain login · step 1 of 3   flint-auth needs …
+   ╿ spark-search #4548 ci 31m ✻│ chain login · step 1 of 3   flint-auth needs …
      CI failed · lint, twice    │
-   ╿ kindle-web    #4556 green ✻│
+   ╿ kindle-web #4556 green 9m ✻│
      #4556 waits for your merge │
    ╿ hearth-api             4m ✻│
      The plan changes 2 records…│
@@ -13,19 +13,19 @@
   ╭─ flint-auth ─────────────────────────╮
   │ ▌ copy last message                c │
   │   copy the question                  │
-──│   copy its name                      │
- W│   show only the chain login        g │
-  │   rename                           r │
+  │   copy its name                      │
+──│   show only the chain login        g │
+ D│   rename                           r │
   │   stoke the chain login            F │
-──│   go in                       ctrl+o │
- I╰─ ⏎ do ─ esc close ───────────────────╯
-   ╵ hearth-limits    #4551 ci ✻│
-   ╵ wick-mobile         23:50 ▣│
-   ╵ hearth-notes@gpu-1     1h ✻│
-   ╵ cinder-ci@g… #4549 merged ❋│
-   ╵ ember-reports          3h ⬢│ Which way do we fix the login?
-   ╵ tinder-scratch@gpu-1   2d ·│  1. Patch the token check
- ↓ 1 more                       │  2. Move to the new session store
+  │   go in                       ctrl+o │
+  ╰─ ⏎ do ─ esc close ───────────────────╯
+     said Merged. The deploy ru…│
+   ✓ hearth-notes@gpu-1     1h ✻│
+     said Done.                 │
+   ✓ hearth-limits #4551 ci 4m ✻│
+     said Pushed. CI runs.      │ Which way do we fix the login?
+────────────────────────────────│  1. Patch the token check
+ ↓ 5 more                       │  2. Move to the new session store
  + new · ✧ 7 tips               │ ›                        ⏎ send to flint-auth
 ────────────────────────────────────────────────────────────────────────────────
  in the menu · ↑↓ move · ⏎ do · esc close

@@ -80,6 +80,7 @@ mid, tall screen.
 | A click on a row | Chooses the row and shows its agent on the right at once. The keys stay in the list, so `↑` and `↓` go on choosing. From the agent's pane, a click on the list takes the keys back to the list. A click on the agent's pane gives it the keys. |
 | `↑`, `↓` | Choose the next row. When the choice rests, the right side shows that agent, and the keys stay in the list. A peer's rows show after you let one of its agents show in this run; on a host the stoker drives, and on one pane at a time, only `Enter` shows. |
 | `Ctrl+O` | Still goes fully into the agent, as before. |
+| `ctrl+q` | Flips the keys between the list and the agent's pane. |
 
 tmux takes these chords, not the console, so they are in a table of their
 own:

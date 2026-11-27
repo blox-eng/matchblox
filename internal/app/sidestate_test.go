@@ -38,11 +38,11 @@ func TestSideStateOf(t *testing.T) {
 			s.Busy, s.Status, s.Idle = true, "busy", 0
 		}}, sideHeld, "held by the stoker"},
 		{"cinder-ci", []edit{func(_ *proto.State, s *sample.Session) { s.Idle = 30 * time.Hour }}, sideIdle, ""},
-		{"cinder-ci", []edit{func(_ *proto.State, s *sample.Session) { s.Status = "stopped" }}, sideIdle, ""},
+		{"cinder-ci", []edit{func(_ *proto.State, s *sample.Session) { s.Status = "stopped" }}, sideDone, ""},
 		{"ember-billing", []edit{merge}, sideNeed, ""},
 		{"wick-mobile", []edit{func(st *proto.State, s *sample.Session) {
 			st.Ships.Ships = append(st.Ships.Ships, shipFor(*s, 4556, shipRunning, "CI · 2 of 5 jobs", 1, time.Hour))
-		}}, sideIdle, ""},
+		}}, sideDone, ""},
 	} {
 		t.Run(c.name+"/"+c.want.head(), func(t *testing.T) {
 			s := boardMatch(c.name, time.Hour)
@@ -68,7 +68,7 @@ func TestSideHeads(t *testing.T) {
 	for h := sideNeed; h <= sideHeld; h++ {
 		got = append(got, h.head())
 	}
-	want := []string{"NEEDS YOU", "WORKING", "IDLE", "HELD"}
+	want := []string{"NEEDS YOU", "DONE", "WORKING", "IDLE", "HELD"}
 	for i := range want {
 		if got[i] != want[i] {
 			t.Fatalf("heads %v, want %v", got, want)
@@ -86,8 +86,8 @@ func TestTheListEndsInHeld(t *testing.T) {
 	st.Holds = []proto.Hold{{SessionID: parked.SessionID, Pane: parked.Pane, Name: parked.Name, By: holdByYou}}
 	lines, _, _ := boardModel(t, st).sideList(80, 30)
 	text := strings.Join(lines, "\n")
-	i, h := strings.Index(text, "IDLE"), strings.Index(text, "HELD")
+	i, h := strings.Index(text, "DONE"), strings.Index(text, "HELD")
 	if i < 0 || h < 0 || h < i {
-		t.Fatalf("IDLE at %d, HELD at %d, want HELD last:\n%s", i, h, text)
+		t.Fatalf("DONE at %d, HELD at %d, want HELD last:\n%s", i, h, text)
 	}
 }

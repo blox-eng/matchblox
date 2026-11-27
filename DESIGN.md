@@ -123,9 +123,11 @@ state. The code is `internal/app/match.go`.
 
 | State | Glyph | Colour | Motion | Means |
 |---|---|---|---|---|
-| burning | `✦` | `flame`, `flame-amber`, `flame-core` | flickers: a new colour each 200 ms; `✧` for one step in six | the agent works |
-| at rest, asks | `╿` | `match-head` → `match-breath-1..3` | breathes: one slow breath each 2.4 s | the agent waits for an answer or a permission |
-| at rest | `╿` | `match-head` | still | the agent finished its turn and waits |
+| works | `✦` | `flame`, `flame-amber`, `flame-core` | flickers: a new colour each 200 ms; `✧` for one step in six | the agent works |
+| asks | `╿` | `match-head` → `match-breath-1..3` | breathes: one slow breath each 2.4 s | the agent waits for an answer or a permission |
+| done | `✓` | `match-ember` | still | the last turn ended after the owner last gave the keys |
+| idle | `╵` | `faint` | still | the agent rests; the owner has given it the keys since the last turn |
+| held | `╽` | `muted` | still | parked by the owner, or held by the stoker |
 | spent | `│` | `faint` | still | the context is at or above the compact limit (`sessions.compact_tokens`, default 350k, or `sessions.compact_at`, default 85 %, whichever comes first) |
 
 Order: spent comes first. A session that works with a full context is spent.
@@ -143,7 +145,7 @@ A change of state plays once:
 Rules:
 
 1. The glyph never stands alone: the state word stays next to it
-   (`✦ busy`, `╿ asks`, `│ burnt`).
+   (`✦ busy`, `╿ asks`, `✓ done`, `╵ idle`, `╽ held`, `│ burnt`).
 2. A match means one agent session. Do not use it for anything else.
 3. The console wakes only while something moves: a burning match, a match
    that asks, or a change that still plays. Then it draws 10 times a second;
@@ -151,7 +153,8 @@ Rules:
 4. Motion comes from the clock, not from a frame count, so the same moment
    always draws the same frame (the replay depends on it).
 5. With `--no-motion` or `NO_MOTION=1`: `✦` in `flame`, `╿` in
-   `match-head`, `│` in `faint`, no change plays.
+   `match-head`, `✓` in `match-ember`, `╵` and `╽` and `│` in `faint` or
+   `muted`, no change plays.
 6. `≋` means "has a stoker": a chain's room card and the header's count
    use it, in `muted`, and in the night's ink while that chain's stoker
    runs its order. It is never a match.

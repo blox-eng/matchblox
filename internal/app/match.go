@@ -235,6 +235,10 @@ func (m *Model) animate() tea.Cmd {
 func (m Model) sideMatch(s sample.Session, h sideState) string {
 	mk, ch, c := m.marks(), "╿", m.marks().Head
 	switch {
+	case m.burnt(s):
+		ch, c = "│", m.st.theme.Faint
+	case h == sideDone:
+		ch, c = "✓", mk.Ember
 	case h == sideWork && m.matchOf(s) == matchLit, h == sideNeed && m.asks(s):
 		ch, c = m.matchFor(s)
 	case h == sideWork:

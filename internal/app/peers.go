@@ -2,6 +2,7 @@ package app
 
 import (
 	"cmp"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -263,6 +264,10 @@ func (m Model) peerUpdate(pm peerMsg) (tea.Model, tea.Cmd) {
 			p.gap = m.now().Sub(p.at)
 		}
 		p.st, p.at, p.have, p.answered, p.silent = st, m.now(), true, true, false
+		if m.keysAt == nil {
+			m.keysAt = map[string]time.Time{}
+		}
+		maps.Copy(m.keysAt, st.KeysAt)
 		if p.host == m.watchHost {
 			m.watchHeld = ""
 		}

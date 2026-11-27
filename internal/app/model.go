@@ -411,6 +411,7 @@ type Model struct {
 	filter       string // the search of the open tab
 	searching    bool   // the search line takes the keys
 	holds        []proto.Hold
+	keysAt       map[string]time.Time // this owner's last give of the keys, by session id
 	chains       *state.ChainsView
 	chainIx      chainIndex // worked out in refresh
 	room         *room      // the chain room on screen; nil when none
@@ -1034,6 +1035,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.snap, m.git, m.recs, m.have, m.answered, m.silent, m.at = st.Snapshot, st.Git, st.Recommendations, true, true, false, m.now()
 		m.shipReport = st.Ships
 		m.holds, m.reasons, m.chains = st.Holds, st.Reasons, st.Chains
+		if m.keysAt == nil {
+			m.keysAt = map[string]time.Time{}
+		}
+		maps.Copy(m.keysAt, st.KeysAt)
 		m.agents, m.renames, m.accounts, m.signIns = st.Agents, st.Renames, st.Accounts, st.SignIns
 		m.skipped = st.AccountsSkipped
 		m.lastAccount, m.keptAgent = st.LastAccount, st.LastAgent

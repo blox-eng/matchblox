@@ -113,7 +113,7 @@ func (m frameModel) tapHeader(ms tea.Mouse) (tea.Model, tea.Cmd) {
 func (m frameModel) View() tea.View {
 	if m.kind == "header" {
 		chips, _, _ := m.fitSpaces(m.spaceBudget(m.width))
-		v := tea.NewView(headerBar(m.width, chips, m.needCount(), 0))
+		v := tea.NewView(headerBar(m.width, chips, m.needCount(), m.doneCount()))
 		v.MouseMode = tea.MouseModeCellMotion
 		return v
 	}

@@ -25,6 +25,7 @@ func needsYou(t *testing.T) (Model, sample.Session) {
 
 func TestRowIsOneLineUnlessItNeedsYou(t *testing.T) {
 	s := boardMatch("hearth-api", time.Hour)
+	s.Idle = 30 * time.Hour
 	m := boardModel(t, boardState(s))
 	if got := m.sideRow(m.all.sessions[0], 40, false, sideLink{}); len(got) != 1 {
 		t.Fatalf("an idle row has %d lines, want 1: %q", len(got), got)
@@ -43,7 +44,10 @@ func TestChosenRowHasASecondLine(t *testing.T) {
 	if len(got) != 2 || !strings.HasPrefix(got[0], "▌") || !strings.Contains(got[1], "Reading the router.") {
 		t.Fatalf("chosen row %q, want the mark and its doing line", got)
 	}
-	if got := plainLines(m.sideRow(m.all.sessions[0], 40, false, sideLink{})); len(got) != 1 || strings.HasPrefix(got[0], "▌") {
+	unchosen := boardMatch("hearth-api", time.Hour)
+	unchosen.Idle = 30 * time.Hour
+	um := boardModel(t, boardState(unchosen))
+	if got := plainLines(um.sideRow(um.all.sessions[0], 40, false, sideLink{})); len(got) != 1 || strings.HasPrefix(got[0], "▌") {
 		t.Fatalf("an unchosen row %q has the mark or a second line", got)
 	}
 }
@@ -173,7 +177,7 @@ func TestChainHeadNamesTheStep(t *testing.T) {
 
 func TestSideMatchHasAGlyphForEachState(t *testing.T) {
 	m := loginChain(t, nil)
-	want := map[sideState]string{sideNeed: "╿", sideWork: "✦", sideHeld: "╽", sideIdle: "╵"}
+	want := map[sideState]string{sideNeed: "╿", sideDone: "✓", sideWork: "✦", sideHeld: "╽", sideIdle: "╵"}
 	for h, g := range want {
 		if got := ansi.Strip(m.sideMatch(sample.Session{}, h)); got != g {
 			t.Errorf("%s: %q, want %q", h.head(), got, g)

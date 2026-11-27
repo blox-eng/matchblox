@@ -88,6 +88,9 @@ type Doc struct {
 	// DeskFrame: the four-pane desk has opened once, so the first-start
 	// notice does not show again.
 	DeskFrame bool `json:"desk_frame,omitempty"`
+	// KeysAt is when this owner last gave each session the keys, keyed by
+	// session id. Only the service writes it.
+	KeysAt map[string]time.Time `json:"keys_at,omitempty"`
 }
 
 // UpdateView is the [update] mode, this build's release and the latest one

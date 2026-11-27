@@ -2,9 +2,9 @@
  SESSIONS 15    machine
 ────────────────────────────────────────────────────────────────────────────────
  NEEDS YOU · 4  −               │ spark-search ✻ idle · #4548 ci       ctx 77%
-▌  ╿ spark-search     #4548 ci ✻│
+▌  ╿ spark-search #4548 ci 31m ✻│
      CI failed · lint, twice    │
-   ╿ kindle-web    #4556 green ✻│
+   ╿ kindle-web #4556 green 9m ✻│
      #4556 waits for your merge │
    ╿ hearth-api             4m ✻│
      The plan changes 2 records…│
@@ -12,20 +12,20 @@
    ├ ╿ flint-auth           2m ✻│
    │   Which way do we fix the …│
    ├ ✦ flint-ui                ✻│
-   └ ╵ flint-api      #4560 ci ✻│
+   └ ✓ flint-api  #4560 ci 40m ✻│
+       said Opened #4560 and as…│
 ────────────────────────────────│
- WORKING · 2  −                 │
-   ✦ ember-billing@gpu-1       ✻│
-   ✦ spark-docs                ✻│
+ DONE · 4  −                    │
+   ✓ ember-reports          3h ⬢│
+     said Nothing left on my li…│
+   ✓ cinder-c… #4549 merged 2h ❋│
+     said Merged. The deploy ru…│
+   ✓ hearth-notes@gpu-1     1h ✻│
+     said Done.                 │
+   ✓ hearth-limits #4551 ci 4m ✻│
+     said Pushed. CI runs.      │
 ────────────────────────────────│
- IDLE · 6  −                    │
-   ╵ hearth-limits    #4551 ci ✻│
-   ╵ wick-mobile         23:50 ▣│
-   ╵ hearth-notes@gpu-1     1h ✻│
-   ╵ cinder-ci@g… #4549 merged ❋│
-   ╵ ember-reports          3h ⬢│
-   ╵ tinder-scratch@gpu-1   2d ·│
- ↓ 1 more                       │
+ ↓ 5 more                       │
  + new · ✧ 7 tips               │ ›                      ⏎ send to spark-search
 ────────────────────────────────────────────────────────────────────────────────
  in the list · ↑↓ ⌥1-9 choose · ⏎ write · s hosts · g chain · m menu

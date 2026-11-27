@@ -6,8 +6,8 @@
 ▌  ├ ╿ flint-auth           2m ✻│ › what should login's stoker do?
    │   Which way do we fix the …│
    ├ ✦ flint-ui                ✻│
-   └ ╵ flint-api      #4560 ci ✻│
-                                │
+   └ ✓ flint-api  #4560 ci 40m ✻│
+       said Opened #4560 and as…│
                                 │
                                 │
                                 │

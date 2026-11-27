@@ -1,6 +1,10 @@
 package app
 
-import "github.com/blox-eng/matchblox/internal/sample"
+import (
+	"time"
+
+	"github.com/blox-eng/matchblox/internal/sample"
+)
 
 // sideState is the state of a session in the list. The order is the rank:
 // the list draws its groups in it.
@@ -8,13 +12,14 @@ type sideState int
 
 const (
 	sideNeed sideState = iota
+	sideDone
 	sideWork
 	sideIdle
 	sideHeld // last: the builder put it away (#211)
 )
 
 func (h sideState) head() string {
-	return [...]string{"NEEDS YOU", "WORKING", "IDLE", "HELD"}[h]
+	return [...]string{"NEEDS YOU", "DONE", "WORKING", "IDLE", "HELD"}[h]
 }
 
 // sideStateOf is the state of a session: the first rule that holds. A park
@@ -50,7 +55,23 @@ func (m Model) sideStateOf(s sample.Session) sideState {
 	if _, ok := m.shipOf(s, shipWaits, shipStuck); ok {
 		return sideNeed
 	}
+	if s.SigningIn {
+		return sideIdle
+	}
+	if _, ok := m.refreshOf(s.Host, s.Pane); ok {
+		return sideIdle
+	}
+	if m.lastActive(s).After(m.keysAtOf(s)) {
+		return sideDone
+	}
 	return sideIdle
+}
+
+func (m Model) keysAtOf(s sample.Session) time.Time {
+	if s.SessionID == "" || m.keysAt == nil {
+		return time.Time{}
+	}
+	return m.keysAt[s.SessionID]
 }
 
 // heldWhy is the words of a hold: who holds the session, and why.
@@ -79,4 +100,15 @@ func (m Model) needCount() int {
 		}
 	}
 	return n
+}
+
+// doneCount is sessions in the DONE group: a finished member that still
+// sits under a NEEDS YOU chain is not counted.
+func (m Model) doneCount() int {
+	for _, g := range m.sideGroups() {
+		if g.state == sideDone {
+			return g.count
+		}
+	}
+	return 0
 }

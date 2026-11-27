@@ -16,6 +16,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/mux"
+	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
@@ -249,12 +250,21 @@ type shownMsg struct {
 	ended      bool       // focused, but the view had ended: it shows again
 }
 
+// giveKeys records that the owner gave this session the keys. The service
+// writes KeysAt; the console only sends keys:<session-id>.
+func (m *Model) giveKeys(s sample.Session) tea.Cmd {
+	if s.SessionID == "" {
+		return nil
+	}
+	return m.sendTo(s.Host, proto.Act{RecID: proto.KeysPrefix + s.SessionID})
+}
+
 // showChosen shows the session the list chooses in the agent pane.
 func (m Model) showChosen() (tea.Model, tea.Cmd) {
 	s, ok := m.sideChosen()
 	switch {
 	case ok && m.chainPlace(s) >= 0:
-		return m, m.selectPane(m.chain.panes[m.chainPlace(s)])
+		return m, tea.Batch(m.giveKeys(s), m.selectPane(m.chain.panes[m.chainPlace(s)]))
 	case !ok && m.chosenSide().waits():
 		return m, m.notice(m.noRowWhy())
 	case !ok:
@@ -264,9 +274,12 @@ func (m Model) showChosen() (tea.Model, tea.Cmd) {
 		return m, said
 	case m.besideShows == m.shownKey(s.Host, s.Pane) && !m.showing:
 		name := m.besideName(m.besideShows.host, s.Pane)
-		return m.startShow(action{label: "show " + name, beside: true, focus: true, pane: s.Pane, host: m.besideShows.host})
+		next, cmd := m.startShow(action{label: "show " + name, beside: true, focus: true, pane: s.Pane, host: m.besideShows.host})
+		return next, tea.Batch(m.giveKeys(s), cmd)
 	}
-	return m.showBeside(s.Host, s.Pane)
+	keys := m.giveKeys(s)
+	next, cmd := m.showBeside(s.Host, s.Pane)
+	return next, tea.Batch(keys, cmd)
 }
 
 // shownKey is the key m.besideShows has for host's pane.

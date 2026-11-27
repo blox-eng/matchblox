@@ -387,7 +387,7 @@ func restNow(t *testing.T) {
 
 func TestArrowsPreviewTheChosenAgent(t *testing.T) {
 	restNow(t)
-	m, tm := shownAt(t, "hearth-limits", "160")
+	m, tm := shownAt(t, "wick-mobile", "160")
 	next, cmd := key(m, "up")
 	m = rest(t, next, cmd)
 	s, _ := m.sideChosen()
@@ -402,7 +402,7 @@ func TestArrowsPreviewTheChosenAgent(t *testing.T) {
 
 func TestQuickArrowsPreviewOnlyWhereTheyStop(t *testing.T) {
 	restNow(t)
-	m, tm := shownAt(t, "hearth-limits", "160")
+	m, tm := shownAt(t, "wick-mobile", "160")
 	next, first := key(m, "up")
 	next, second := key(next, "down")
 	next, third := key(next, "up")
@@ -419,7 +419,7 @@ func TestQuickArrowsPreviewOnlyWhereTheyStop(t *testing.T) {
 
 func TestEnterOnAPreviewGivesItTheKeys(t *testing.T) {
 	restNow(t)
-	m, tm := shownAt(t, "hearth-limits", "160")
+	m, tm := shownAt(t, "wick-mobile", "160")
 	next, cmd := key(m, "up")
 	m = rest(t, next, cmd)
 	tm.cmd = "tmux"
@@ -432,7 +432,7 @@ func TestEnterOnAPreviewGivesItTheKeys(t *testing.T) {
 
 func TestEnterOnAnEndedPreviewShowsItAgain(t *testing.T) {
 	restNow(t)
-	m, tm := shownAt(t, "hearth-limits", "160")
+	m, tm := shownAt(t, "wick-mobile", "160")
 	next, cmd := key(m, "up")
 	m = rest(t, next, cmd)
 	tm.cmd = "sh" // the view ended: its pane waits for a key

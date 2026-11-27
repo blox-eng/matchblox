@@ -123,8 +123,7 @@ func TestSpaceFilterKeepsNeedYouCount(t *testing.T) {
 }
 
 // TestSpaceCountIgnoresDone: a session that does not need you (idle, no
-// ask) in matchblox does not add to matchblox ●N. Task 3 has not added
-// groupDone yet.
+// ask) in matchblox does not add to matchblox ●N.
 func TestSpaceCountIgnoresDone(t *testing.T) {
 	m := spaceDesk(t, 160, spaceWait("asks", "matchblox", ""), spaceIdle("quiet", "matchblox"), spaceWait("ledge", "ledge", ""))
 	head := headerText(headerPane(m))

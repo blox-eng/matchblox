@@ -20,7 +20,7 @@ func panelText(m Model, w, h int) string {
 
 func TestNothingNeedsYouTakesNoRow(t *testing.T) {
 	m := boardModel(t, boardState(boardMatch("hearth-api", time.Hour)))
-	if got := panelText(m, 40, 10); strings.Contains(got, "NEEDS YOU") || !strings.Contains(got, "IDLE · 1") {
+	if got := panelText(m, 40, 10); strings.Contains(got, "NEEDS YOU") || !strings.Contains(got, "DONE · 1") {
 		t.Fatalf("panel:\n%s", got)
 	}
 	head, _, _ := m.header(100)
@@ -34,7 +34,7 @@ func TestPanelDrawsHeadsAndALineBetweenGroups(t *testing.T) {
 	st := boardState(a, b)
 	st.Queue = append(st.Queue, waitFor(a, queue.StatePermission, time.Minute))
 	got := panelText(boardModel(t, st), 40, 12)
-	i, j := strings.Index(got, "NEEDS YOU · 1  −"), strings.Index(got, "IDLE · 1  −")
+	i, j := strings.Index(got, "NEEDS YOU · 1  −"), strings.Index(got, "DONE · 1  −")
 	if i < 0 || j < i || !strings.Contains(got[i:j], "────") {
 		t.Fatalf("panel:\n%s", got)
 	}
@@ -103,7 +103,7 @@ func TestHeadCountsWhatTheSearchShows(t *testing.T) {
 	ss[3].Name = "kindle-web"
 	m := boardModel(t, boardState(ss...))
 	m.filter = "kindle"
-	if got := panelText(m, 50, 10); !strings.Contains(got, "IDLE · 1") {
+	if got := panelText(m, 50, 10); !strings.Contains(got, "DONE · 1") {
 		t.Fatalf("panel:\n%s", got)
 	}
 }
@@ -234,7 +234,7 @@ func TestATeamOfWaitingMatesStillDraws(t *testing.T) {
 // TestNoWaitingMateNoChange: a doc with no member that waits draws the list
 // as it did before a member could wait.
 func TestNoWaitingMateNoChange(t *testing.T) {
-	const before = " \x1b[38;2;119;111;96mNEEDS YOU · 1\x1b[m\x1b[38;2;119;111;96m  −\x1b[m                                           \n \x1b[1;38;2;195;165;106m≋ login\x1b[m                                    \x1b[38;2;166;157;141mstep 2 of 3 · 3\x1b[m \n\x1b[38;2;195;165;106m▌\x1b[m  \x1b[38;2;195;165;106m├\x1b[m \x1b[38;2;119;111;96m╵\x1b[m \x1b[1;38;2;235;230;220mkindle-web\x1b[m                                      \x1b[38;2;166;157;141m10m\x1b[m \x1b[38;2;166;157;141m✻\x1b[m\n   \x1b[38;2;195;165;106m│\x1b[m   \x1b[38;2;119;111;96midle\x1b[m                                                 \n   \x1b[38;2;195;165;106m├\x1b[m \x1b[1;38;2;119;111;96m│\x1b[m \x1b[1;38;2;235;230;220mflint-auth\x1b[m                                       \x1b[38;2;166;157;141m4m\x1b[m \x1b[38;2;166;157;141m✻\x1b[m\n   \x1b[38;2;195;165;106m│\x1b[m   \x1b[38;2;119;111;96masks\x1b[m                                                 \n   \x1b[38;2;195;165;106m└\x1b[m \x1b[38;2;232;130;46m✦\x1b[m \x1b[38;2;235;230;220mwick-mobile\x1b[m                                        \x1b[38;2;166;157;141m\x1b[m \x1b[38;2;166;157;141m✻\x1b[m\n                                                            \n                                                            \n                                                            \n                                                            \n                                                            \n                                                            \n                                                            \n                                                            \n                                                            \n                                                            \n                                                            \n                                                            \n \x1b[38;2;195;165;106m+ new\x1b[m                                                      "
+	const before = " \x1b[38;2;119;111;96mNEEDS YOU · 1\x1b[m\x1b[38;2;119;111;96m  −\x1b[m                                           \n \x1b[1;38;2;195;165;106m≋ login\x1b[m                                    \x1b[38;2;166;157;141mstep 2 of 3 · 3\x1b[m \n\x1b[38;2;195;165;106m▌\x1b[m  \x1b[38;2;195;165;106m├\x1b[m \x1b[38;2;119;111;96m│\x1b[m \x1b[1;38;2;235;230;220mkindle-web\x1b[m                                      \x1b[38;2;166;157;141m10m\x1b[m \x1b[38;2;166;157;141m✻\x1b[m\n   \x1b[38;2;195;165;106m│\x1b[m   \x1b[38;2;119;111;96msaid \x1b[m                                                \n   \x1b[38;2;195;165;106m├\x1b[m \x1b[1;38;2;119;111;96m│\x1b[m \x1b[1;38;2;235;230;220mflint-auth\x1b[m                                       \x1b[38;2;166;157;141m4m\x1b[m \x1b[38;2;166;157;141m✻\x1b[m\n   \x1b[38;2;195;165;106m│\x1b[m   \x1b[38;2;119;111;96masks\x1b[m                                                 \n   \x1b[38;2;195;165;106m└\x1b[m \x1b[38;2;119;111;96m│\x1b[m \x1b[38;2;235;230;220mwick-mobile\x1b[m                                        \x1b[38;2;166;157;141m\x1b[m \x1b[38;2;166;157;141m✻\x1b[m\n                                                            \n                                                            \n                                                            \n                                                            \n                                                            \n                                                            \n                                                            \n                                                            \n                                                            \n                                                            \n                                                            \n                                                            \n \x1b[38;2;195;165;106m+ new\x1b[m                                                      "
 	plain := loginChain(t, nil)
 	st := loginState(nil)
 	for _, s := range st.Sessions {

@@ -78,7 +78,7 @@ func spaceLabel(name string, need int) string {
 }
 
 func (m Model) spaceBudget(w int) int {
-	right := ansi.StringWidth(fmt.Sprintf("● %d need you · ✓ %d done  ⚙", m.needCount(), 0))
+	right := ansi.StringWidth(fmt.Sprintf("● %d need you · ✓ %d done  ⚙", m.needCount(), m.doneCount()))
 	return max(w-ansi.StringWidth(" ▰ matchblox  ")-right-2, 8)
 }
 
