@@ -213,10 +213,24 @@ func wants(regs []Registration) bool {
 }
 
 // buzzBody is the APNs alert of a buzz. The alert names nothing; the Notification
+// BuzzSound is the sound of every buzz, in the app's bundle: a short pinch
+// hiss and one ember pop (owner, 2026-11-27). A phone without it plays the
+// default sound.
+const BuzzSound = "pinch-ember.wav"
+
+// buzzFirst reports whether a goes before b in one buzz: a wait before a
+// finished turn, else the newer one.
+func buzzFirst(a, b queue.Item) bool {
+	if waits(a) != waits(b) {
+		return waits(a)
+	}
+	return a.Since.After(b.Since)
+}
+
 // Service Extension (mutable-content) opens buzz.sealed with the notify key and
 // shows the line. buzz.host and buzz.n are in clear so a tap opens the session.
 //
-//	{"aps":{"alert":{"body":"matchblox"},"sound":"default","mutable-content":1},
+//	{"aps":{"alert":{"body":"matchblox"},"sound":"pinch-ember.wav","mutable-content":1},
 //	 "buzz":{"host":"f10f7812","n":3,"sealed":"<base64 enc‖ciphertext>"}}
 type buzzBody struct {
 	APS struct {
@@ -229,17 +243,17 @@ type buzzBody struct {
 	Buzz Buzz `json:"buzz"`
 }
 
-// buzz sends one buzz when a session starts to wait, at most each 30 s; a wait
-// held back by the 30 s goes with the next doc after them.
+// buzz sends one buzz when a session starts to wait or finishes its turn, at
+// most each 30 s; one held back by the 30 s goes with the next doc after it.
 func (s *Sender) buzz(doc state.Doc, regs []Registration, now time.Time) {
 	set := map[string]bool{}
 	var fresh *queue.Item
 	for i, it := range doc.Queue {
-		if it.SessionID == "" || !waits(it) {
+		if it.SessionID == "" || (!waits(it) && it.State != queue.StateFinished) {
 			continue
 		}
 		set[it.SessionID] = true
-		if !s.buzzSet[it.SessionID] && (fresh == nil || it.Since.After(fresh.Since)) {
+		if !s.buzzSet[it.SessionID] && (fresh == nil || buzzFirst(it, *fresh)) {
 			fresh = &doc.Queue[i]
 		}
 	}
@@ -266,7 +280,7 @@ func (s *Sender) buzz(doc state.Doc, regs []Registration, now time.Time) {
 			continue
 		}
 		var b buzzBody
-		b.APS.Alert.Body, b.APS.Sound, b.APS.Mutable = "matchblox", "default", 1
+		b.APS.Alert.Body, b.APS.Sound, b.APS.Mutable = "matchblox", BuzzSound, 1
 		b.Buzz = Buzz{Host: Host8(s.hostFP), N: num, Sealed: sealed}
 		pl, _ := json.Marshal(b)
 		_ = s.send(r, Event{Target: r.DeviceToken, Kind: "device", PushType: "alert", Priority: 10, Payload: pl})

@@ -34,13 +34,16 @@ func Seal(notifyKey, plain []byte) ([]byte, error) {
 // BuzzLine is the text of a buzz: `work-1 · api waits: "Run the migration?"`,
 // with the session's chain before its name when it is in one:
 // `work-1 · hearth · api asks: …`.
-// A buzz goes only for a wait: the word is asks for a permission, else
+// The word is asks for a permission, finished its turn for a finish, else
 // waits. The last line is cut to 120 characters and left out when the item
 // has none.
 func BuzzLine(hostLabel string, item queue.Item, cv *state.ChainsView) string {
 	word := "waits"
-	if item.State == queue.StatePermission {
+	switch item.State {
+	case queue.StatePermission:
 		word = "asks"
+	case queue.StateFinished:
+		word = "finished its turn"
 	}
 	who := item.Name
 	if c, ok := chainOf(cv, item.SessionID); ok {
