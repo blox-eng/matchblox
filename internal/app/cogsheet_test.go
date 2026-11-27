@@ -171,6 +171,13 @@ func TestHeaderCogOpensMachine(t *testing.T) {
 	}
 }
 
+func TestBarViewTracksMouse(t *testing.T) {
+	m := New(Options{NoMotion: true, Conn: newFake()})
+	if got := newFrame("bar", m).View().MouseMode; got != tea.MouseModeCellMotion {
+		t.Fatalf("bar MouseMode %v, want cell motion", got)
+	}
+}
+
 func TestBarChipOpensCogOnThatLoop(t *testing.T) {
 	now := lostAt
 	gpu := healthy()

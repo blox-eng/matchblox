@@ -152,7 +152,9 @@ func (m frameModel) View() tea.View {
 		return v
 	}
 	if m.kind == "bar" {
-		return tea.NewView(m.barLine(m.width))
+		v := tea.NewView(m.barLine(m.width))
+		v.MouseMode = tea.MouseModeCellMotion
+		return v
 	}
 	return tea.NewView(m.kind)
 }
