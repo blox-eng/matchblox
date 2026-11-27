@@ -15,7 +15,7 @@ Evidence: the owner, 2026-11-27: "every single time i need to answer a session i
 
 ## The experience
 
-**At rest.** Above the belt, centred, sits one match head, about 132 pt across. Its lower part overlaps the belt; the rest stands in a row of its own above the belt, so it never covers the terminal's text. The terminal is about 150 pt shorter (estimated from the mockup: a 224 pt dock against about 70 pt today). It is the head of today, with its shading and heat colours, and no texture or prop round it. Nothing else is drawn round it. The belt runs behind it and turns without end, as today. The handle row says `roll: options, then the output · hold: sessions · BOX sets them`. In this spec, "the handle row" is that row, above the belt.
+**At rest.** Above the belt, centred, sits one match head, 96 pt across, a size that does not change. Its lower part overlaps the belt; the rest stands in a row of its own above the belt, so it never covers the terminal's text. The terminal is about 96 pt shorter (estimated from the mockup: a 166 pt dock against about 70 pt today). It looks like the real thing: a dry grit of chlorate and ground glass in glue, so it has a fine, sandy grain and no gloss. The grain only darkens, into small pits; light falls on it from the top left and stays there while the grain turns with the roll. It sits in a shallow well and casts a soft shadow, and it sinks 1 pt when pressed. It is match red at rest and warms to ember and amber as it heats, as today. No texture or prop is drawn round it. Nothing else is drawn round it. The belt runs behind it and turns without end, as today. The handle row says `roll: options, then the output · hold: sessions · BOX sets them`. In this spec, "the handle row" is that row, above the belt.
 
 **A touch.** The moment a finger lands on the head, a thin ring and four marks fade in round it. Each mark shows a glyph and a word: top `◂ back`, left `← cursor`, right `→ cursor`, bottom `⌨ type`. The heat colours of today stay: cold red, ember, amber. Nothing is sent on touch. The ring and marks fade 0.9 s after the lift.
 
@@ -35,7 +35,7 @@ Evidence: the owner, 2026-11-27: "every single time i need to answer a session i
 
 **The belt.** Drag the belt, and it comes in front of the head: the head fades, and every key shows. 1.4 s after the belt stops, it slips back behind the head. A tap on a belt key works as today.
 
-**Set it on home.** Open the drawer, tap `BOX`, and home opens (the home of `2026-11-24-pocket-home-design.md`, PR #508). A region `THE HEAD` sits under `LIVE ACTIVITY`. It draws the head with its four marks and its hold. Tap one, and a list of keys shows, each with its glyph and word: `◂ back`, `⌨ type`, `← cursor`, `→ cursor`, `Esc cancel`, `Tab tab`, `⇧Tab mode`, `⇞ page up`, `⇟ page down`, `/c compact` (types `/compact` with no Return), `· nothing`, and for the hold only `⇄ sessions`. Tap a key to set it. `undo` takes back the last change. `as it came` brings back the first marks. `^C` is in the list, dim, with the reason: `stays on the belt: a roll can brush the edge`. The region also holds `size − 132 pt +`, from 96 to 160 pt in steps of 4. The terminal gives up the head's height: about 150 pt at 132 pt.
+**Set it on home.** Open the drawer, tap `BOX`, and home opens (the home of `2026-11-24-pocket-home-design.md`, PR #508). A region `THE HEAD` sits under `LIVE ACTIVITY`. It draws the head with its four marks and its hold. Tap one, and a list of keys shows, each with its glyph and word: `◂ back`, `⌨ type`, `← cursor`, `→ cursor`, `Esc cancel`, `Tab tab`, `⇧Tab mode`, `⇞ page up`, `⇟ page down`, `/c compact` (types `/compact` with no Return), `· nothing`, and for the hold only `⇄ sessions`. Tap a key to set it. `undo` takes back the last change. `as it came` brings back the first marks. `^C` is in the list, dim, with the reason: `stays on the belt: a roll can brush the edge`. The region also holds `its colour`: five small heads, `match red` (as it came), `strike-anywhere brown`, `blue tip`, `green tip` and `charcoal`. A tap on one colours the dock's head at once. The colour changes only the cold head; the heat colours stay.
 
 **When it goes wrong.**
 - No menu on screen: the roll goes straight into the output.
@@ -58,7 +58,9 @@ Evidence: the owner, 2026-11-27: "every single time i need to answer a session i
 ## Non-goals
 
 - No push to steer, no tap-then-roll, no double tap, no circle gestures as commands.
-- No cardboard, grain, striker paper, wooden stick, flame or counter on the dock.
+- No cardboard, striker paper, wooden stick, flame or counter on the dock. The head's own grain is the only texture.
+- No setting for the size, the grain or the depth. The colour is the head's only look setting.
+- No gloss, sheen or highlight spot on the head.
 - No new layout in the tray, and no toggle to hide the head.
 - No setting for the speed-up, the notch size or the fade times.
 - No change to the console on the desk.
@@ -90,6 +92,9 @@ Evidence: the owner, 2026-11-27: "every single time i need to answer a session i
 - 2026-11-27 — The second cold read's eight gaps take the answers now written in The experience: a tap under 0.35 s, the host reads the menu mark (now: the host-checked pick, ruling above), the speed-up counts from the crossing, `◂` is the belt's `◂`, `Esc b`/`Esc f`, 10 pt for a press, the fold after every keyboard send, any move steps the sessions. — the owner.
 - 2026-11-27 — Where the head lives. Ways: (A) one head, always on the dock, over every layout; the belt head key and the rest-then-move head go: one of everything, but two shipped features leave and the terminal loses about 40 pt. (B) a new `Head` layout: low risk, but three heads with three behaviours. (C) the dock head with a toggle: an escape hatch, but a mode to learn and the old heads stay. Pick: (A). — the owner.
 - 2026-11-27: spec approved. Decided by: the owner.
+- 2026-11-27 — The head is 96 pt, fixed, with no size setting — because the owner said "the size is the smallest available, no need to even give me the range". — the owner.
+- 2026-11-27 — The head is drawn as its real material: medium grain, no gloss, a touch of depth (a shallow well, a soft shadow, a 1 pt sink). Ways shown in the mockup: soft matte, satin, glazed ceramic, each at a touch and a lot of depth; then fine, medium and coarse grain. Pick: medium grain, a touch of depth — because a real match head is chlorate and ground glass in glue (RSC; US737672), which scatters light and grips, and the owner said gloss "is not a feature this material would have". The grain only darkens, because a grain that lightens read as skin. — the owner.
+- 2026-11-27 — The colour is set on home, under `THE HEAD`: match red (as it came), strike-anywhere brown, blue tip, green tip, charcoal. Match red is a deeper red than `Theme.matchHead` today — because the owner asked for "a different pigmentation" and then "the color change selector to the home screen". — the owner.
 
 ## Depends on
 
@@ -110,7 +115,7 @@ Evidence: the owner, 2026-11-27: "every single time i need to answer a session i
 - Does the roll round the edge end the up-and-down roll of 2026-11-19 and the sideways ruling of 2026-11-20 everywhere? Recommendation: yes; no up-and-down roll stays in Pocket — because one head has one grammar. Cost if wrong: two roll grammars to learn.
 - What does a rest, then a move, on the terminal do once the called-up head goes? Recommendation: a plain scroll, as a swipe — because the hold for the right-click menu must stay. Cost if wrong: the owner loses a gesture they use.
 - Does the step card read the step from the visible screen? Recommendation: yes, the nearest `✦` or `⏺` line at the top of the view, and no card when there is none — because the app reads the screen and not the agent. Cost if wrong: a card that names the wrong step.
-- Is about 150 pt less terminal right, where the choice of A estimated 40 pt? Recommendation: keep it, and measure on the owner's phone that a Claude Code question with three options and the input line still fit above the head at 13 pt text — because the head must never cover the text. Cost if wrong: the question scrolls away under the head, or the head shrinks.
+- Is about 96 pt less terminal right, where the choice of A estimated 40 pt? Recommendation: keep it, and measure on the owner's phone that a Claude Code question with three options and the input line still fit above the head at 13 pt text — because the head must never cover the text. Cost if wrong: the question scrolls away under the head, or the head shrinks.
 
 ## Done when
 
@@ -123,6 +128,8 @@ Evidence: the owner, 2026-11-27: "every single time i need to answer a session i
 - [ ] A tap on the middle answers the question, with no wait.
 - [ ] A roll that ends on the edge sends no key. A press on the `⌨` mark raises the keyboard. Enter sends the line, and the keyboard folds.
 - [ ] A hold fills the ring, shows the sessions, and a roll and lift opens the chosen session. A lift on the current session changes nothing.
+- [ ] On home, under `its colour`, the owner taps `blue tip`, and the dock's head turns blue at once. It stays blue after Pocket restarts. It still warms to amber on a fast roll.
+- [ ] Next to the owner's thumb on the phone, the head reads as a dry, grainy match head: no gloss and no shine spot. Rolled, the grain turns and the light does not.
 - [ ] On home, the owner sets the left mark to `Esc`. The console's left mark then reads `Esc cancel`. `undo` brings back `← cursor`.
 - [ ] Dragging the belt brings it in front of the head, and it goes back behind after it stops.
 - [ ] With VoiceOver on, the head reads "Match head". With a menu on screen a swipe up or down moves one option; with none it scrolls one page. A double-tap sends Enter. The four marks and "sessions" are its custom actions.
@@ -130,7 +137,7 @@ Evidence: the owner, 2026-11-27: "every single time i need to answer a session i
 
 ## Cold read
 
-Cold read: 2026-11-27, 1 fresh reader. Blocker 1, major 7, nit 5. Fixed 11, contested 1, for the person 0, declined 1. Second read: 15 left. Changed after the read: The experience, Anti-goals, Rulings, Left to the builder (the owner's answers to the second read). Changed after approval: The experience, Rulings, Done when (the host-checked pick, owner, 2026-11-27).
+Cold read: 2026-11-27, 1 fresh reader. Blocker 1, major 7, nit 5. Fixed 11, contested 1, for the person 0, declined 1. Second read: 15 left. Changed after the read: The experience, Anti-goals, Rulings, Left to the builder (the owner's answers to the second read). Changed after approval: The experience, Rulings, Done when (the host-checked pick, owner, 2026-11-27); The experience, Non-goals, Rulings, Calls to check, Done when (96 pt fixed, the head's material and depth, its colour on home, owner, 2026-11-27).
 
 - Contested: the step card and the rest-then-move fallback are "only recommendations". They sit under Calls to check, which is where an open question belongs (builder spec rules).
 - Declined (nit): done-when lines run on the owner's iPhone. A done-when line is a check the person sees; tests belong to the plan.

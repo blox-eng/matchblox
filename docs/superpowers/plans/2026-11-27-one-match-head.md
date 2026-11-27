@@ -55,7 +55,10 @@ App:
 - `ios/Matchblox/BeltView.swift` (change) — no Wheel cell; the belt comes in front while dragged and slips back 1.4 s after it stops.
 - `ios/Matchblox/ConsoleView.swift` (change) — dock height grows by the head; the keyboard folds after a keyboard Enter; the sessions card opens `--open N`.
 - `ios/Matchblox/BeltEditor.swift` (change) — no Scroll group.
-- `ios/Matchblox/HostsView.swift` (change, on top of #508) — region `THE HEAD`: drawing, list, undo, as it came, size − +.
+- `ios/Matchblox/HostsView.swift` (change, on top of #508) — region `THE HEAD`: drawing, list, undo, as it came, its colour.
+- `ios/MatchbloxKit/Sources/MatchbloxKit/HeadPigment.swift` (create) — the five colours of the cold head, their names, the stored key `head.colour`, and match red for an unknown or missing value.
+- `ios/MatchbloxKit/Tests/MatchbloxKitTests/HeadPigmentTests.swift` (create) — the tests of `HeadPigment`.
+- `ios/Matchblox/HeadView.swift` (change) — `HeadLayer` draws the real material: the pigment, the grain, the touch of depth; no gloss.
 - `ios/MatchbloxUITests/HeadTests.swift` (create) — UI tests on the demo console.
 - `docs/phone.md`, `docs/keys.md`, `DESIGN.md`, `www/index.html` (change) — one head.
 
@@ -143,7 +146,7 @@ PR #508 (Pocket home) merged as e62b70c1. Branch `build/one-match-head` from mai
 - Files: `DockHeadView.swift`, `HeadDriver.swift`, `HeadView.swift`, `BeltView.swift`, `ConsoleView.swift`, `ConsoleTerminalView.swift` (the highlight overlay), `HeadTests.swift` (UI).
 - Test first (UI, demo console): `testHeadIsOnEveryLayout` (the element "Match head" exists on Steer, tmux and Mine; no belt key named "Match head"); `testTapAnswers` (roll one notch up at the demo question, tap → the demo shows option 2 answered); `testStalePickRefused` (a UI-test launch flag makes the demo redraw its question after the roll → nothing answered, the handle row reads `the question changed · roll again`); `testStepCardShows` (roll 30 notches up the demo output → a card names a `✦` step; it goes 0.6 s after the roll slows below 3 lines a notch); `testTouchShowsMarks` (press 0.2 s → "back", "cursor", "type" exist; 1.2 s after the lift they do not); `testRollEndingOnEdgeSendsNothing` (drag along the edge from right to bottom, lift → the demo's line is unchanged); `testPressTypeRaisesKeyboard`.
 - Run: `make -C ios uitest DESTINATION="id=<udid>"` (the `iOS demo` workflow) — fails: no "Match head" element; then passes.
-- Do: `DockHeadView` in `Belts.dock` only, above the belt, 132 pt, its lower part over the belt; the dock grows by its height; the lifted belt has no head. On touch-down at an agent, `HostCommand` runs `matchblox menu <pane> --json` and feeds `HeadWalk.menu` (the pane from the `agent=…;pane=` signal; in the console's chat, the chosen session's pane; on the console's list, no menu: the roll scrolls and the tap is Enter). Touches: `HeadZone` → middle (`HeadClick` → `HeadWalk.tap`: `.pick` runs `matchblox choose <pane> <n> --text <t> --sign <s>`; a refusal shows `the question changed · roll again`) or edge (turn via `HeadDriver` → `HeadWalk` → `terminal.head(lines:)` and the highlight overlay on the screen row whose text matches the option; or a mark's key on a press). Ring and marks fade in on touch-down, out 0.9 s after lift. `HeadFeel.cross()` on `.cross` and `.home`, `bump()` on `.bump`. Cut the `HeadDriver` leftovers (`seat`, `canClick`, the summon comment). Reduce Motion stops the turn, as today.
+- Do: `DockHeadView` in `Belts.dock` only, above the belt, 96 pt, fixed, its lower part over the belt; the dock grows by its height; the lifted belt has no head. On touch-down at an agent, `HostCommand` runs `matchblox menu <pane> --json` and feeds `HeadWalk.menu` (the pane from the `agent=…;pane=` signal; in the console's chat, the chosen session's pane; on the console's list, no menu: the roll scrolls and the tap is Enter). Touches: `HeadZone` → middle (`HeadClick` → `HeadWalk.tap`: `.pick` runs `matchblox choose <pane> <n> --text <t> --sign <s>`; a refusal shows `the question changed · roll again`) or edge (turn via `HeadDriver` → `HeadWalk` → `terminal.head(lines:)` and the highlight overlay on the screen row whose text matches the option; or a mark's key on a press). Ring and marks fade in on touch-down, out 0.9 s after lift. `HeadFeel.cross()` on `.cross` and `.home`, `bump()` on `.bump`. Cut the `HeadDriver` leftovers (`seat`, `canClick`, the summon comment). Reduce Motion stops the turn, as today. `HeadLayer` draws the material of the spec: the cold colour from `HeadPigment`; a grain made once per size (a noise height field lit from the top left, multiplied over the colour so it only darkens; medium grain, about 1.7 pt features at 96 pt) that turns with `turnX`/`turnY` while the light stays fixed; flatter shading than today, and no white highlight; a shallow well (3 pt, inset shadow), a soft drop shadow (3 pt down, 6 pt blur), and a 1 pt sink with a tighter shadow on press. The speckles stay, as darker grit.
 - Done when: the seven UI tests pass. (The owner's phone check is in Task 16.)
 - Commit: `feat(ios): one match head over the belt, on every layout`
 - Surface: an agent's tools (`testRollEndingOnEdgeSendsNothing`).
@@ -165,11 +168,11 @@ PR #508 (Pocket home) merged as e62b70c1. Branch `build/one-match-head` from mai
 - Commit: `feat(ios): the belt comes forward, and the keyboard folds after a send`
 
 ### Task 13: home sets the head
-- Files: `HostsView.swift`, `HeadTests.swift`.
-- Test first (UI): `testHomeSetsLeftMark` (open home, tap the left mark, tap `Esc cancel` → the console's left mark reads `Esc cancel`; `undo` → `cursor`); `testInterruptDim` (`^C interrupt` is not enabled and shows `stays on the belt: a roll can brush the edge`); `testHeadSize` (`+` twice → 140 pt; `−` at 96 pt is dim).
+- Files: `HostsView.swift`, `HeadPigment.swift`, `HeadPigmentTests.swift`, `HeadView.swift`, `HeadTests.swift`.
+- Test first (UI): `testHomeSetsLeftMark` (open home, tap the left mark, tap `Esc cancel` → the console's left mark reads `Esc cancel`; `undo` → `cursor`); `testInterruptDim` (`^C interrupt` is not enabled and shows `stays on the belt: a roll can brush the edge`); `testHomeSetsColour` (tap `blue tip` → the dock's head has the value `blue tip`; relaunch → still `blue tip`). Unit, `HeadPigmentTests`: `testUnknownIsMatchRed` (stored `"pink"` → `.matchRed`), `testFiveColours` (five cases, in the home order, each with its name), `testColdOnly` (heat 0.5 gives the same ember for every pigment).
 - Run: as Task 10 — fails; then passes.
-- Do: region `THE HEAD` after the `if !realHosts.isEmpty` block (`HostsView.swift:93`), outside it, so the demo shows it too: a drawn head with five buttons, the list, `undo`, `as it came`, `size − 132 pt +` (96…160, step 4, stored under `head.size`).
-- Done when: the three UI tests pass.
+- Do: region `THE HEAD` after the `if !realHosts.isEmpty` block (`HostsView.swift:93`), outside it, so the demo shows it too: a drawn head with five buttons, the list, `undo`, `as it came`, `its colour`: five 28 pt heads in a radio row (44 pt targets), each named; a tap stores `HeadPigment` under `head.colour` and the dock's `HeadLayer` redraws at once.
+- Done when: the three UI tests and the three `HeadPigmentTests` pass.
 - Commit: `feat(ios): home sets what the head's marks and hold do`
 
 ### Task 14: VoiceOver reaches the head
@@ -216,6 +219,8 @@ PR #508 (Pocket home) merged as e62b70c1. Branch `build/one-match-head` from mai
 | A roll ending on the edge sends no key; `⌨` raises the keyboard; Enter sends and folds | Task 10, Task 12 |
 | Hold → sessions; lift on current changes nothing | Task 11 |
 | Home sets left mark to Esc, undo | Task 13 |
+| Home sets the colour; it stays after restart; still warms | Task 13 `testHomeSetsColour`, `testColdOnly` |
+| The head reads as a dry, grainy match head; grain turns, light stays | Task 10 (`HeadLayer`) and Task 16 phone check |
 | Belt comes in front and goes back | Task 12 |
 | VoiceOver | Task 14 |
 | Docs and landing name one head | Task 15 |
