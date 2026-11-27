@@ -488,6 +488,8 @@ private final class Belts {
             belt.isDemo = isDemo
             belt.onScreenHold = { [weak screen] holding in screen?.trayMoved(open: holding) }
             belt.onSend = { [weak self] bytes in self?.send(bytes) }
+            belt.onHead = { [weak terminal] lines in terminal?.head(lines: lines) ?? .nothing }
+            belt.onHeadPage = { [weak terminal] older in terminal?.headPage(older: older) ?? .nothing }
             belt.onCtrl = { [weak self, weak terminal] in
                 guard let terminal else { return }
                 terminal.controlModifier.toggle()
@@ -510,6 +512,10 @@ private final class Belts {
         head.onHighlight = { [weak terminal] text in terminal?.highlightRow(showing: text) }
         head.visibleLines = { [weak terminal] in terminal?.visibleLines ?? [] }
         terminal.onReturnSent = { [weak self] in self?.foldKeyboard() }
+        terminal.onTyped = { [weak self] in
+            self?.lifted.stopHead()
+            self?.dock.stopHead()
+        }
         ctrlObserver = NotificationCenter.default.addObserver(forName: Self.ctrlReset, object: terminal, queue: .main) {
             [weak self] _ in MainActor.assumeIsolated { self?.ctrlChanged(false) }
         }

@@ -262,6 +262,11 @@ final class HeadFeel {
         play(intensity: 0.9, sharpness: 0.6, at: [0, 0.06])
     }
 
+    /// A touch stopped the belt head's flick and sent nothing: one soft, dull tap.
+    func stop() {
+        play(intensity: 0.4, sharpness: 0.1)
+    }
+
     /// A tap that cannot play is lost: the scroll it marks still happens.
     private func play(intensity: Float, sharpness: Float, at times: [TimeInterval] = [0]) {
         guard let engine else { return }

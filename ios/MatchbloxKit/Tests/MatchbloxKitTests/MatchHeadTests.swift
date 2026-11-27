@@ -14,6 +14,47 @@ final class MatchHeadTests: XCTestCase {
         (CGFloat(notches) * MatchHead.notch * 1.0001).remainder(dividingBy: 2 * .pi)
     }
 
+    func testTenPointsIsOneNotch() {
+        var head = MatchHead()
+        XCTAssertEqual(head.roll(dy: 25, speed: 100).notches, 2)
+        XCTAssertEqual(head.roll(dy: 5, speed: 100).notches, 1, "the 5 pt left over carries")
+    }
+
+    func testUpRollIsUpNotches() {
+        var head = MatchHead()
+        XCTAssertEqual(head.roll(dy: -20, speed: 100).notches, -2)
+    }
+
+    func testLinesPerNotch() {
+        XCTAssertEqual(MatchHead.lines(atSpeed: 0), 1)
+        XCTAssertEqual(MatchHead.lines(atSpeed: 250), 1)
+        XCTAssertEqual(MatchHead.lines(atSpeed: 2400), 10)
+        XCTAssertEqual(MatchHead.lines(atSpeed: -5000), 10)
+        var last = 1
+        for speed in stride(from: 250, through: 2400, by: 50) {
+            let lines = MatchHead.lines(atSpeed: CGFloat(speed))
+            XCTAssertGreaterThanOrEqual(lines, last)
+            last = lines
+        }
+    }
+
+    func testHeatFollowsSpeed() {
+        var head = MatchHead()
+        _ = head.roll(dy: 1, speed: 1300)
+        XCTAssertEqual(head.heat, 0.5, accuracy: 0.001)
+        _ = head.roll(dy: 1, speed: 0)
+        XCTAssertEqual(head.heat, 0)
+        _ = head.roll(dy: 1, speed: -5200)
+        XCTAssertEqual(head.heat, 1)
+    }
+
+    func testRollStrikesOnce() {
+        var head = MatchHead()
+        XCTAssertTrue(head.roll(dy: 1, speed: 2400).strike)
+        XCTAssertTrue(head.struck)
+        XCTAssertFalse(head.roll(dy: 1, speed: 2500).strike, "one rigid tap per strike")
+    }
+
     func testFifteenDegreesIsOneNotch() {
         var head = MatchHead()
         _ = head.turn(angle: 0, at: 0)

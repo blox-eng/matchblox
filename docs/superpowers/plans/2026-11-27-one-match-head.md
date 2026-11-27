@@ -1,7 +1,7 @@
 Spec: docs/superpowers/specs/2026-11-27-one-match-head-design.md
 Spec approved: 2026-11-27
 Test command: go vet ./... && go test -race ./... (host, from a shell outside tmux with SSH_AUTH_SOCK unset) · swift test --package-path ios/MatchbloxKit and make -C ios build (macOS only: the `iOS` workflow on the pushed branch; this host has no Swift toolchain) · make -C ios uitest DESTINATION="id=<udid>" (the `iOS demo` workflow)
-Plan approved: 2026-11-27 by the owner (Tasks 1–16); revision 2 (Tasks 17–27): no
+Plan approved: 2026-11-27 by the owner (Tasks 1–16); revision 2 (Tasks 17–27): 2026-11-27 by the owner
 Next: builder:build
 
 # Plan: the owner answers an agent with one thumb on one match head
@@ -278,6 +278,7 @@ Cold read: 2026-11-27, 1 fresh reader. Blocker 2, major 10, nit 5. Fixed 16, con
 
 - 2026-11-27, Task 13: the heat colours move into `HeadPigment` with the cold head and its shade, so `testColdOnly` reaches them in Kit; `HeadLayer.cold` became `HeadLayer.pigment`. The dock head's accessibility value starts with the pigment's name (`blue tip`), before the DEBUG card lines, and the dock reads `head.colour` again on `UserDefaults.didChangeNotification`, as the text size does. The UI tests start from `-resetHead` (DEBUG: forget `head.marks` and `head.colour`) and read the left mark from its label `head-mark-left`.
 - 2026-11-27, Task 14: XCUITest has no way to swipe as VoiceOver does (no increment on a plain adjustable element) nor to list custom actions, so the swipe's logic is a Kit type, `HeadVoice` (`HeadVoiceTests`), and `testHeadAccessibility` checks the label and the actions' names from a DEBUG `actions=` line of the head's value, before and after home changes the left mark. At a menu a swipe stops at the first and the last option, never crossing into the output, so the double-tap after it answers the option it named. The actions are named `cursor, left mark` (the word, then the place: left and right are both `cursor`) and `sessions`; a `·` mark is no action. The sessions action shows a sheet of the other sessions. After a swipe the head's value is the line it said, so VoiceOver reads it; it is the colour again at the next touch or focus. `head.page` is wired to `headPage`.
+- 2026-11-27, Task 17: Task 10, not only Task 8, took the belt head's wiring out, so main's also comes back where the file list did not name it: `ConsoleView` sets the belts' `onHead`/`onHeadPage`, `ConsoleTerminalView.onTyped` stops the belt head's coast again, and `HeadFeel.stop()` returns. In `MatchHead` the roll's constants take their own names (`rollNotch`, `rollMaxLines`) beside the turn's `notch` and `maxLines`. `BeltHeadDriver` draws one turn round the centre, as `HeadLayer` now draws, and drops main's unused `seat()` and `canClick`. Main's `testRollReportsLines` is not named in the task and stays out.
 
 ## Revision 2: the joystick, as a layout to pick
 

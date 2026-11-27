@@ -24,6 +24,9 @@ final class ConsoleTerminalView: TerminalView {
     var onFocus: @MainActor (Bool) -> Void = { _ in }
     /// Called when the terminal goes up from its live bottom (true) or comes back (false).
     var onScrolledBack: @MainActor (Bool) -> Void = { _ in }
+    /// Called for each key typed or deleted: the belt head's coast stops, so it cannot scroll
+    /// the pane back into copy mode under the new text.
+    var onTyped: @MainActor () -> Void = {}
     /// Called after a Return from the system keyboard has reached the program.
     var onReturnSent: @MainActor () -> Void = {}
     /// Called for each key typed into the terminal: the console's own `c` may ask for a copy.
@@ -657,6 +660,7 @@ final class ConsoleTerminalView: TerminalView {
     }
 
     override func insertText(_ text: String) {
+        onTyped()
         forgetScrollBack()
         onAsksCopy()
         super.insertText(text)
@@ -664,11 +668,13 @@ final class ConsoleTerminalView: TerminalView {
     }
 
     override func deleteBackward() {
+        onTyped()
         forgetScrollBack()
         super.deleteBackward()
     }
 
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        onTyped()
         forgetScrollBack()
         onAsksCopy()
         super.pressesBegan(presses, with: event)

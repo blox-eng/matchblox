@@ -24,6 +24,7 @@ public struct KeyCatalog: Sendable {
     /// The agents of the command table, as the console names them.
     public static let agentNames = ["claude": "Claude Code", "codex": "Codex", "opencode": "OpenCode", "cursor": "Cursor"]
 
+    static let scroll = [BeltKey(id: KeyBar.wheel, cells: 1)]
     static let homeRow = row("◂", "↑", "↓", "⏎")
     static let steer = homeRow + row("Esc", "^C", "⇞", "⇟")
     static let edit = row("Tab", "⇧Tab", "←", "→", "⌫")
@@ -44,7 +45,7 @@ public struct KeyCatalog: Sendable {
         if let bad = commands.first(where: { !KeyBar.isCommandID($0.id) }) {
             throw Failure.badCommand(bad.id)
         }
-        let fixed = Self.steer + Self.edit + Self.digits + Self.ctrl + BoardBelt.tailKeys
+        let fixed = Self.scroll + Self.steer + Self.edit + Self.digits + Self.ctrl + BoardBelt.tailKeys
         known = Dictionary((fixed + commands.map(Self.key)).map { ($0.id, $0) }) { first, _ in first }
     }
 
@@ -65,13 +66,13 @@ public struct KeyCatalog: Sendable {
         }
     }
 
-    /// The editor's groups: Steer, Edit, Digits, Ctrl, Console, then one for each agent
+    /// The editor's groups: Scroll, Steer, Edit, Digits, Ctrl, Console, then one for each agent
     /// in table order.
     public var groups: [(name: String, keys: [BeltKey])] {
         var agents: [String] = []
         for c in commands where !agents.contains(c.agent) { agents.append(c.agent) }
         var groups: [(name: String, keys: [BeltKey])] = [
-            ("Steer", Self.steer), ("Edit", Self.edit), ("Digits", Self.digits),
+            ("Scroll", Self.scroll), ("Steer", Self.steer), ("Edit", Self.edit), ("Digits", Self.digits),
             ("Ctrl", Self.ctrl), ("Console", BoardBelt.tailKeys),
         ]
         for agent in agents {
@@ -151,12 +152,9 @@ public struct Mine: Codable, Equatable, Sendable {
         }
     }
 
-    /// The belt's old head key. The head sits over the belt now, so a stored one is dropped.
-    private static let retiredHead = "Wheel"
-
     public init(from decoder: Decoder) throws {
         let rows = try decoder.container(keyedBy: CodingKeys.self).decode([Lenient].self, forKey: .keys)
-        self.init(keys: rows.compactMap(\.key).filter { $0.id != Self.retiredHead })
+        self.init(keys: rows.compactMap(\.key))
     }
 
     public func encode(to encoder: Encoder) throws {

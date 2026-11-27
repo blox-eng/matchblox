@@ -1,13 +1,16 @@
 import Foundation
 
-/// The match head: the finger turns it round its edge. A turn moves in notches of `notch`
-/// radians; the more notches since the crossing into the output, the more lines a notch moves
-/// (`pace`). Angles are `atan2(dy, dx)` in UIKit points, so a growing angle is clockwise.
+/// The match head. On the dock the finger turns it round its edge: a turn moves in notches of
+/// `notch` radians; the more notches since the crossing into the output, the more lines a notch
+/// moves (`pace`). Angles are `atan2(dy, dx)` in UIKit points, so a growing angle is clockwise.
+/// On the belt the thumb rolls it: a roll moves in notches of `rollNotch` points; a faster roll
+/// moves more lines a notch, and a roll down is positive and shows older lines.
 public struct MatchHead: Sendable {
     public struct Roll: Equatable, Sendable {
-        /// Positive: clockwise.
+        /// Positive: clockwise, or a roll down.
         public let notches: Int
-        /// `WheelScroll`'s sense: positive shows older lines, so an anticlockwise turn is positive.
+        /// `WheelScroll`'s sense: positive shows older lines, so an anticlockwise turn or a roll
+        /// down is positive.
         public let lines: Int
         /// The head struck on this roll: play the rigid tap once.
         public let strike: Bool
@@ -23,7 +26,18 @@ public struct MatchHead: Sendable {
     /// The share of heat left after one 60 Hz frame with no roll.
     static let coolPerFrame: CGFloat = 0.94
 
-    /// 0 cold to 1 white hot: lines a notch ÷ `maxLines`.
+    static let rollNotch: CGFloat = 10
+    /// The roll's speed (pt/s) at which heat is 1.
+    static let white: CGFloat = 2600
+    /// A roll strikes the head at this heat.
+    static let strikeHeat: CGFloat = 0.92
+    /// Up to this speed (pt/s) a roll's notch moves one line.
+    static let slow: CGFloat = 250
+    /// From this speed a roll's notch moves `rollMaxLines`.
+    static let fast: CGFloat = 2400
+    static let rollMaxLines = 10
+
+    /// 0 cold to 1 white hot: a turn's lines a notch ÷ `maxLines`, a roll's speed ÷ `white`.
     public private(set) var heat: CGFloat = 0
     /// The head is alight.
     public private(set) var struck = false
@@ -36,6 +50,7 @@ public struct MatchHead: Sendable {
     private var notchesSinceCross = 0
     private var lastNotch: TimeInterval?
     private var lastTap: TimeInterval?
+    private var rollTravel: CGFloat = 0
 
     public init() {}
 
@@ -70,6 +85,18 @@ public struct MatchHead: Sendable {
         return Roll(notches: notches, lines: notches < 0 ? lines : -lines, strike: strike)
     }
 
+    /// The thumb rolled the head `dy` points down (up when negative) at `speed` points a second.
+    public mutating func roll(dy: CGFloat, speed: CGFloat) -> Roll {
+        rollTravel += dy
+        let notches = (rollTravel / Self.rollNotch).rounded(.towardZero)
+        rollTravel -= notches * Self.rollNotch
+        let count = Int(notches)
+        heat = min(abs(speed) / Self.white, 1)
+        let strike = !struck && heat >= Self.strikeHeat
+        settle(strike: strike)
+        return Roll(notches: count, lines: count * Self.lines(atSpeed: speed), strike: strike)
+    }
+
     /// The roll crossed out of the options into the output: its pace, heat and strike count from here.
     public mutating func cross() {
         notchesSinceCross = 0
@@ -102,6 +129,12 @@ public struct MatchHead: Sendable {
         case ...48: 8
         default: maxLines
         }
+    }
+
+    /// Lines a roll's notch moves: 1 up to `slow`, rising on a curve to `rollMaxLines` at `fast`.
+    public static func lines(atSpeed speed: CGFloat) -> Int {
+        let t = min(max((abs(speed) - slow) / (fast - slow), 0), 1)
+        return 1 + Int((CGFloat(rollMaxLines - 1) * t * t).rounded())
     }
 }
 
