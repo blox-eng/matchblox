@@ -1,7 +1,7 @@
 Spec: docs/superpowers/specs/2026-11-27-one-match-head-design.md
 Spec approved: 2026-11-27
 Test command: go vet ./... && go test -race ./... (host, from a shell outside tmux with SSH_AUTH_SOCK unset) · swift test --package-path ios/MatchbloxKit and make -C ios build (macOS only: the `iOS` workflow on the pushed branch; this host has no Swift toolchain) · make -C ios uitest DESTINATION="id=<udid>" (the `iOS demo` workflow)
-Plan approved: 2026-11-27 by the owner
+Plan approved: 2026-11-27 by the owner (Tasks 1–16); revision 2 (Tasks 17–27): no
 Next: builder:build
 
 # Plan: the owner answers an agent with one thumb on one match head
@@ -278,3 +278,106 @@ Cold read: 2026-11-27, 1 fresh reader. Blocker 2, major 10, nit 5. Fixed 16, con
 
 - 2026-11-27, Task 13: the heat colours move into `HeadPigment` with the cold head and its shade, so `testColdOnly` reaches them in Kit; `HeadLayer.cold` became `HeadLayer.pigment`. The dock head's accessibility value starts with the pigment's name (`blue tip`), before the DEBUG card lines, and the dock reads `head.colour` again on `UserDefaults.didChangeNotification`, as the text size does. The UI tests start from `-resetHead` (DEBUG: forget `head.marks` and `head.colour`) and read the left mark from its label `head-mark-left`.
 - 2026-11-27, Task 14: XCUITest has no way to swipe as VoiceOver does (no increment on a plain adjustable element) nor to list custom actions, so the swipe's logic is a Kit type, `HeadVoice` (`HeadVoiceTests`), and `testHeadAccessibility` checks the label and the actions' names from a DEBUG `actions=` line of the head's value, before and after home changes the left mark. At a menu a swipe stops at the first and the last option, never crossing into the output, so the double-tap after it answers the option it named. The actions are named `cursor, left mark` (the word, then the place: left and right are both `cursor`) and `sessions`; a `·` mark is no action. The sessions action shows a sheet of the other sessions. After a swipe the head's value is the line it said, so VoiceOver reads it; it is the colour again at the next touch or focus. `head.page` is wired to `headPage`.
+
+## Revision 2: the joystick, as a layout to pick
+
+The spec changed after TestFlight build 9 (rulings of 2026-11-27, "after TestFlight build 9"): the head is a joystick, `Joystick` is a layout on the Layouts switch, every other layout keeps today's belt and its small head key, the tap is plain `⏎`, and motion matches the mockup. Tasks 1–16 stay built; these tasks change them. Built with the plan's test command; Swift runs only in CI (`iOS`, `iOS demo`).
+
+### Task 17: the other layouts keep their small head
+- Files: `KeyBar.swift`, `KeyFace.swift`, `BeltLayouts.swift`, `BeltView.swift`, `BeltEditor.swift`, `MatchHead.swift`, `ios/Matchblox/BeltHeadDriver.swift` (create), `BeltLayoutsTests.swift`, `MatchHeadTests.swift`.
+- Test first: bring back main's belt-head tests as they are on `origin/main` (`testWheelSendsNothingAndSaysWhatItIs`, `testMineKeepsHeadAndConsoleKeys`, the Scroll group in `testGroups`; `MatchHeadTests`' `roll(dy:speed:)` tests `testTenPointsIsOneNotch`, `testUpRollIsUpNotches`, `testLinesPerNotch`, `testHeatFollowsSpeed`, `testStrikesOnce`), next to the dock head's turn tests.
+- Run: `swift test --package-path ios/MatchbloxKit --filter 'BeltLayoutsTests|MatchHeadTests'` (CI) — fails: no `KeyBar.wheel`, no `roll(dy:speed:)`; then passes.
+- Do: undo Task 8 (`refactor(ios): the belt has no head key`) for the belt; `MatchHead` keeps both `roll(dy:speed:)` (the belt key, as on main) and `turn(angle:at:)` (the dock head); main's belt-head driver comes back as `BeltHeadDriver` (dy rolls, coast, `HeadLayer`), so `HeadDriver` stays the dock's. `Mine` keeps a stored `"Wheel"`.
+- Done when: the belt-head tests from main pass, and a demo UI check finds the small head key on Mine and no dock head on Steer.
+- Commit: `fix(ios): Steer, tmux and Mine keep the belt's small match head`
+
+### Task 18: `Joystick` is a layout
+- Files: `BeltLayouts.swift`, `BeltView.swift`, `ConsoleView.swift`, `DockHeadView.swift`, `BeltLayoutsTests.swift`, `HeadTests.swift`.
+- Test first: Kit `testJoystickLayout` (`BeltLayout.joystick` exists, its belt has `⌨` and `◂`, its name is `Joystick`; a stored unknown layout loads Steer, as today). UI `testHeadOnlyOnJoystick` (Layouts → Joystick: the element "Match head" shows above the belt; Layouts → Steer: no dock head, the terminal gets its 72 pt back, the belt's small head key shows on Mine).
+- Run: Kit filter `BeltLayoutsTests`; UI in `iOS demo` — fails: no `joystick` case; then passes.
+- Do: add `case joystick` to `BeltLayout` with its keys (today's Steer keys plus `⌨`, `◂`); `BeltView.carry` puts the dock head in only while the layout is `joystick`; the terminal's height follows. `HeadTests` open `Joystick` first in `setUp`.
+- Done when: both tests pass.
+- Commit: `feat(ios): Joystick is a layout, and the head comes with it`
+
+### Task 19: the head is a thumbstick
+- Files: `ios/MatchbloxKit/Sources/MatchbloxKit/HeadStick.swift` (create), `HeadStickTests.swift` (create), `HeadMarks.swift`, `HeadMarksTests.swift`, `KeyFace.swift`.
+- Surface: an agent's tools.
+- Test first (hostile first): `testOnePushOneKey` (a thumb that stays pushed past 16 pt sends one key until 0.42 s; wobbling between 16 and 11 pt sends nothing more); `testRearmUnderTen` (back under 10 pt, then a push the other way sends that key, no lift); `testRepeatAndWords` (repeats every 0.11 s after 0.42 s; `←`/`→` give `Esc b`/`Esc f` after 9 repeats); `testTravelClamps` (the ball offset is at most 12 pt in the push's direction); `testTapIsEnterOnlyStill` (under 10 pt and 0.35 s is Enter; any push before the lift makes the lift nothing); `testFirstMarks` (top `↑`, bottom `↓`, left `←`, right `→`, hold `⇄`; `↑` `↓` in `keys(for:)` with words `❯ up`, `❯ down`); `testOldMarksMove` (stored `head.marks` from build 9 load the new first marks, stored under `head.marks.2`).
+- Run: Kit filter `HeadStickTests|HeadMarksTests` — fails: no `HeadStick`; then passes.
+- Do: `HeadStick` is a pure model: `began(at:)`, `moved(to:at:) -> [Send]`, `tick(at:) -> [Send]` (repeats), `lifted(at:) -> Lift`, `offset` (clamped). Thresholds 16 / 10 / 12 pt, 0.35 / 0.42 / 0.11 s, 9 repeats.
+- Done when: the tests pass.
+- Commit: `feat(ios): the head is a thumbstick: one push, one key`
+
+### Task 20: the dock head pushes, taps Enter, and rolls to scroll
+- Files: `DockHeadView.swift`, `HeadDriver.swift`, `HeadView.swift`, `HeadWalk.swift`, `HeadWalkTests.swift`, `SessionCard.swift`, `SessionCardTests.swift`, `HeadTests.swift`.
+- Surface: an agent's tools.
+- Test first (UI, demo, on `Joystick`; hostile first): `testRollSendsNoKey` (a roll on the edge and a flick send no byte; the click count stays); `testPushDownMovesTheAgent` (flint-auth's chat: one push `↓` moves `❯` to option 2; a tap answers it: the demo shows option 2 taken); `testPushHeldRepeats`; `testPushUpPastFirstReadsUp` (then a tap comes back down and sends nothing); `testFlickCoasts` (a flick on the edge scrolls on after the lift and stops at the bottom with the bump line). Kit: `HeadWalkTests` becomes the scroll walk only (no menu, no pick); `SessionCardTests.testPushSteps` (a push `↓` steps one session, `↑` back; the anti-goal tests stay).
+- Run: UI in `iOS demo`, Kit filter — fail: a push sends nothing today; then pass.
+- Do: the middle feeds `HeadStick`; the ball moves by `offset` and springs back (0.24 s, damping 0.6); `↑` `↓` send the arrow bytes (`KeyBar.bytes`), `←` `→` the cursor; `↑` at the first option scrolls the view up (the terminal's `head(lines:)`). The tap sends Enter, or comes home when scrolled up. The edge feeds `HeadDriver` → scroll with pace, and a flick coasts (×0.93 a frame, stops at an end with `HeadFeel.bump()`). The hold's card steps on push. Cut the menu read, the pick and `HeadHint` pick lines from the dock head.
+- Done when: the UI and Kit tests pass, and the six fixed HeadTests from revision 1 still pass where they still apply.
+- Commit: `feat(ios): push the head for arrows, tap it for Enter, roll its edge to scroll`
+
+### Task 21: the head moves as the mockup does
+- Files: `ios/MatchbloxKit/Sources/MatchbloxKit/HeadMotion.swift` (create), `HeadMotionTests.swift` (create), `DockHeadView.swift`, `BeltView.swift`, `ConsoleView.swift`.
+- Test first: `testMotionIsTheMockups` — the constants: marks in 0.18 s from scale 0.86, out after 0.9 s; spring 0.24 s; belt forward 0.25 s, back after 1.4 s; keyboard 0.25 s; home 0.38 s; card 0.6 s; Reduce Motion keeps fades and drops scales and the spring.
+- Run: Kit filter `HeadMotionTests` — fails: no `HeadMotion`; then passes.
+- Do: one `HeadMotion` holds every timing; each view reads it. Marks and ring fade with a scale (`UIViewPropertyAnimator`), never a cut.
+- Done when: the test passes, and the owner's side-by-side check (Task 27) finds the same motion.
+- Commit: `feat(ios): the head's reveals and hides move as the mockup does`
+
+### Task 22: the phone's key runs no menu or choose
+- Files: `cmd/matchblox/gate.go`, `cmd/matchblox/gate_test.go`.
+- Surface: the phone's key.
+- Test first: `TestGatePhoneHeadCommandsOnly` flips: `matchblox menu …` and `matchblox choose …` are refused in phone mode; `matchblox sessions --json` still passes; all hostile lines stay refused.
+- Run: `go test ./cmd/matchblox -run TestGate` — fails: menu and choose pass; then passes.
+- Do: `headCommand` accepts only `sessions --json`. The CLI keeps `menu` and `choose`.
+- Done when: the gate tests and the full Go suite pass.
+- Commit: `fix(gate): the phone's key runs only sessions for the head`
+
+### Task 23: VoiceOver pushes the head
+- Files: `DockHeadView.swift`, `HeadVoice.swift`, `HeadVoiceTests.swift`, `HeadTests.swift`.
+- Test first: Kit `HeadVoiceTests` — a swipe up sends `↑`, down sends `↓`, at every screen; a double-tap is Enter; custom actions are the four marks and "sessions". UI `testHeadAccessibility` reads the new `actions=`.
+- Run: Kit filter `HeadVoiceTests` — fails: a swipe moves Pocket's highlight; then passes.
+- Do: the adjustable head sends arrows; the menu read leaves.
+- Done when: the tests pass.
+- Commit: `feat(ios): VoiceOver swipes push the head`
+
+### Task 24: what the joystick no longer needs goes
+- Files: the dock's menu read (`DockHeadView`), `MenuSight.swift`/`MenuSightTests.swift` if nothing else calls them, `HeadHint` pick and stale lines, `HostCommand` `menu`/`choose` callers, docs strings.
+- Test first: a search finds `MenuSight` and `HeadHint.questionChanged` used before, and none after; the Kit and UI suites stay green.
+- Do: delete the dead paths (deslop). Keep `matchblox menu`/`choose` in the CLI and its docs.
+- Commit: `refactor(ios): the head reads no menu`
+
+### Task 25: docs and the landing say Joystick
+- Files: `docs/phone.md`, `docs/keys.md`, `docs/console.md`, `www/index.html`, `CHANGELOG.md`.
+- Do: `docs/phone.md` describes `Joystick` as a layout to pick, its push/tap/roll/hold, and that other layouts keep the small head; the phone's key runs the stream, the console and `sessions --json`; the landing line names the joystick; the changelog entry says so (≤ 7-word headline). `mkdocs build --strict`, the docs tests and the landing guard pass.
+- Commit: `docs: Joystick is a layout you pick`
+
+### Task 26: rebase and full CI
+- Rebase on `origin/main` (signed; force-push with lease needs the owner's yes), then CI green: `CI`, `iOS`, `iOS demo` on the PR.
+- Done when: every check on PR #539 is green.
+
+### Task 27: review, then TestFlight
+- Load `builder:review` on the whole branch against the spec, with the test command; fix each Critical and Important finding; then a TestFlight build from the branch and the owner's phone checks, the mockup beside the phone.
+- Done when: no open Critical or Important finding, and the owner has run the done-when checks.
+
+### Revision 2: spec check
+
+| Spec line | Task |
+|---|---|
+| Layouts offers Joystick; other layouts as before | Task 17, Task 18 |
+| Push ↓ moves ❯; tap answers | Task 19, Task 20 `testPushDownMovesTheAgent` |
+| Held push repeats; rearm without lift | Task 19 `testRearmUnderTen`, Task 20 `testPushHeldRepeats` |
+| ↑ past the first option reads up; tap comes back | Task 20 `testPushUpPastFirstReadsUp` |
+| Roll scrolls, flick coasts, no key | Task 20 `testRollSendsNoKey`, `testFlickCoasts` |
+| ← → cursor; ⌨ on the belt; fold after Enter | Task 18, Task 20, revision 1 Task 12 |
+| Hold → sessions, push to choose | Task 20 `testPushSteps` |
+| Looks and moves as the mockup | Task 21, Task 27 phone check |
+| Home sets a mark and the colour | revision 1 Task 13 (marks list gains ↑ ↓ in Task 19) |
+| VoiceOver | Task 23 |
+| Docs and landing say Joystick | Task 25 |
+| Anti: a roll sends a key, or a tap after a push sends Enter | Task 19 `testTapIsEnterOnlyStill`, Task 20 `testRollSendsNoKey` |
+| Anti: a push sends a second key | Task 19 `testOnePushOneKey` |
+| Anti: the owner loses the old belt | Task 17 |
+| Surface: an agent's tools | Tasks 19, 20 |
+| Surface: the phone's key | Task 22 |
