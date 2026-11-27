@@ -75,16 +75,15 @@ open says the wrong thing.
   last leads. An old phone reads `idle` as quiet, as today.
 - Burn counts stay the working sessions only.
 
-**The buzz hisses, as design 0009 decided (2026-10-21).** A wait plays
-`pinch-ember`: a short pinch hiss and one quiet ember pop, 0.85 s. A
-finished turn plays `dying-ember`: a slow hiss that sinks, sparse crackles
-and a last tick, 1.7 s. The phone buzzes on a finished turn too (0009
-§3.3), which the shipped buzz left out.
+**The buzz hisses: one sound, `pinch-ember`.** A short pinch hiss and one
+quiet ember pop, 0.85 s, for a wait and for a finished turn alike. The
+owner heard both sounds of design 0009 and picked this one ("pinch ember",
+2026-11-27); `dying-ember` is dropped. The phone buzzes on a finished turn
+too (0009 §3.3), which the shipped buzz left out.
 
 - The push names the sound (`aps.sound`). The island already shows the
   state to Apple, so the name says nothing new. A phone without the file
   plays the default sound.
-- The owner hears both sounds before they ship.
 
 ## Constraints
 

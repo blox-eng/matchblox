@@ -89,16 +89,16 @@
 
 ### Task 6: The buzz hisses (design 0009 §3, owner ruling 2026-11-27)
 
-**Files:** `internal/push/sender.go` (buzz), `internal/push/sender_test.go`, `ios/Matchblox/Sounds/pinch-ember.wav`, `ios/Matchblox/Sounds/dying-ember.wav`, `ios/project.yml` (resources)
+**Files:** `internal/push/sender.go` (buzz), `internal/push/sender_test.go`, `ios/Matchblox/Sounds/pinch-ember.wav`, `ios/project.yml` (resources)
 
-**Interfaces:** `aps.sound` is `pinch-ember.wav` for a wait, `dying-ember.wav` for a finished turn. A finished turn buzzes like a wait (the same 30 s window; a wait wins inside one window).
+**Interfaces:** `aps.sound` is `pinch-ember.wav` for every buzz, a wait or a finished turn. A finished turn buzzes like a wait (the same 30 s window; a wait wins inside one window).
 
-- [ ] **Step 0:** The owner hears both sounds and says yes.
-- [ ] **Step 1: Failing tests.** `TestAWaitBuzzesWithThePinch`: `sound == "pinch-ember.wav"`. `TestAFinishedTurnBuzzesWithTheDyingEmber`: a `finished` item → one device push, `sound == "dying-ember.wav"`. `TestAWaitWinsTheWindow`: a wait and a finish in one window → one push, the pinch.
+- [x] **Step 0:** The owner heard both and picked `pinch-ember` for every buzz (2026-11-27).
+- [ ] **Step 1: Failing tests.** `TestAWaitBuzzesWithThePinch`: `sound == "pinch-ember.wav"`. `TestAFinishedTurnBuzzes`: a `finished` item → one device push, `sound == "pinch-ember.wav"`. `TestAWaitWinsTheWindow`: a wait and a finish in one window → one push, and its line is the wait's.
 - [ ] **Step 2:** Run them. Expected: FAIL (`default`).
-- [ ] **Step 3:** The buzz picks the item and its sound; the two files go in the app bundle (a notification sound must be in the main bundle).
-- [ ] **Step 4:** `go test ./internal/push/` ok; CI `ios` green, and the archive holds both files.
-- [ ] **Step 5: Commit.** `feat: the buzz hisses: a pinch for a wait, a dying ember for a finished turn`
+- [ ] **Step 3:** The buzz picks the item and its sound; the file goes in the app bundle (a notification sound must be in the main bundle).
+- [ ] **Step 4:** `go test ./internal/push/` ok; CI `ios` green, and the archive holds the file.
+- [ ] **Step 5: Commit.** `feat: the buzz hisses, for a wait and a finished turn`
 
 ### Task 4: Docs, review, ship (last, after Tasks 5 and 6)
 
