@@ -463,13 +463,18 @@ func (m Model) runs() string {
 	return strings.Join(parts, " · ")
 }
 
-// machinePanel is the Machine tab: the rows that open its views, usage,
-// then the machine, then the detached busy loops and the top processes,
-// then the hosts. Two or
-// more hosts: a section for each host, in Hosts order, headed by its name;
-// the busy loops and the devices are the home host's.
+// machinePanel is the Machine tab: the rows that open its views, the
+// machines region, usage, then the machine, then the detached busy loops
+// and the top processes, then the hosts. Two or more hosts: a section for
+// each host, in Hosts order, headed by its name; the busy loops and the
+// devices are the home host's.
 func (m Model) machinePanel(w int) body {
 	b := m.viewsBody(w)
+	if m.machineCount() > 0 {
+		r := m.machinesBody(w) // its blank first line is the views' last
+		b.lines, b.rows = append(b.lines, r.lines[1:]...), append(b.rows, r.rows[1:]...)
+		b.add(-1, "")
+	}
 	b.add(-1, m.usageLines(w, true)...)
 	if m.hostCount() == 1 {
 		b.add(-1, "")

@@ -445,14 +445,17 @@ type Model struct {
 	devErr       error        // why the keys could not be read
 	devPick      string       // the selected device row: its fingerprint, or devPlus
 	// hostPicked: a host row of Machine is selected, hostPick its host;
-	// viewPick: a view row, by its name.
-	hostPicked  bool
-	hostPick    string
-	viewPick    string
-	pair        *pairPage  // the pair page, while it shows
-	pairPolling bool       // a poll of the pair page is on its way
-	pairOffers  *pairWaits // the offers of a key that still run: the end of the program waits for them
-	keys        keymaps    // the keys of every layer, as data
+	// machineHostPicked: a row of the machines region, machineHost its
+	// host; viewPick: a view row, by its name.
+	hostPicked        bool
+	hostPick          string
+	machineHostPicked bool
+	machineHost       string
+	viewPick          string
+	pair              *pairPage  // the pair page, while it shows
+	pairPolling       bool       // a poll of the pair page is on its way
+	pairOffers        *pairWaits // the offers of a key that still run: the end of the program waits for them
+	keys              keymaps    // the keys of every layer, as data
 
 	// scanAsk is the scan question, open at this console; nil none.
 	// scanAskUntil ends its quiet; scanUp: it was on top at the last

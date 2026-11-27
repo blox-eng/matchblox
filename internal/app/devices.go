@@ -73,11 +73,40 @@ type machineView struct {
 // Machine" for Git, History and Panes until Machine's own plan).
 var machineViews = []machineView{{"stoker", tabStoker}, {"git", tabGit}, {"history", tabHistory}, {"panes", tabPanes}}
 
-// machineRows are the views, the orphans, the device rows, then the host
-// rows.
-func (m Model) machineRows() int {
-	return len(machineViews) + len(m.snap.Orphans) + len(m.deviceRows()) + len(m.hostRows())
+// The kinds of Machine's rows, in their screen order.
+const (
+	rowViews = iota
+	rowMachines
+	rowOrphans
+	rowDevices
+	rowHosts
+	rowEnd
+)
+
+// rowBase is the index of the first row of kind: the rows of every kind
+// above it come first.
+func (m Model) rowBase(kind int) int {
+	n := 0
+	for k := range kind {
+		switch k {
+		case rowViews:
+			n += len(machineViews)
+		case rowMachines:
+			n += m.machineCount()
+		case rowOrphans:
+			n += len(m.snap.Orphans)
+		case rowDevices:
+			n += len(m.deviceRows())
+		case rowHosts:
+			n += len(m.hostRows())
+		}
+	}
+	return n
 }
+
+// machineRows are the views, the machines, the orphans, the device rows,
+// then the host rows.
+func (m Model) machineRows() int { return m.rowBase(rowEnd) }
 
 // hostRows are Machine's rows of the hosts, in Hosts order: ⏎ on one opens
 // Hosts, where a host is added or removed. A console with no Hosts above
@@ -92,44 +121,50 @@ func (m Model) hostRows() []string {
 // machineIndex is the selected row of the Machine tab: its first view
 // until another row is chosen.
 func (m Model) machineIndex() int {
-	nv, no := len(machineViews), len(m.snap.Orphans)
 	if m.hostPicked {
 		if i := slices.Index(m.hostRows(), m.hostPick); i >= 0 {
-			return nv + no + len(m.deviceRows()) + i
+			return m.rowBase(rowHosts) + i
 		}
 	}
 	if m.devPick != "" {
 		if i := slices.IndexFunc(m.deviceRows(), func(r devRow) bool { return r.key() == m.devPick }); i >= 0 {
-			return nv + no + i
+			return m.rowBase(rowDevices) + i
+		}
+	}
+	if m.machineHostPicked {
+		if i := slices.IndexFunc(m.machineList(), func(r machineRow) bool { return r.host == m.machineHost }); i >= 0 {
+			return m.rowBase(rowMachines) + i
 		}
 	}
 	if i := slices.IndexFunc(machineViews, func(v machineView) bool { return v.name == m.viewPick }); i >= 0 {
 		return i
 	}
 	if i := slices.IndexFunc(m.snap.Orphans, func(o sample.Orphan) bool { return o.PID == m.orphanPID }); i >= 0 {
-		return nv + i
+		return m.rowBase(rowOrphans) + i
 	}
 	return 0
 }
 
 func (m *Model) machinePick(i int) {
-	nv, no, nd := len(machineViews), len(m.snap.Orphans), len(m.deviceRows())
-	m.viewPick, m.orphanPID, m.devPick, m.hostPicked = "", 0, "", false
+	machines, orphans, devices, hosts := m.rowBase(rowMachines), m.rowBase(rowOrphans), m.rowBase(rowDevices), m.rowBase(rowHosts)
+	m.viewPick, m.machineHost, m.machineHostPicked, m.orphanPID, m.devPick, m.hostPicked = "", "", false, 0, "", false
 	switch {
-	case i < nv:
+	case i < machines:
 		m.viewPick = machineViews[i].name
-	case i < nv+no:
-		m.orphanPID = m.snap.Orphans[i-nv].PID
-	case i < nv+no+nd:
-		m.devPick = m.deviceRows()[i-nv-no].key()
+	case i < orphans:
+		m.machineHostPicked, m.machineHost = true, m.machineList()[i-machines].host
+	case i < devices:
+		m.orphanPID = m.snap.Orphans[i-orphans].PID
+	case i < hosts:
+		m.devPick = m.deviceRows()[i-devices].key()
 	default:
-		m.hostPicked, m.hostPick = true, m.hostRows()[i-nv-no-nd]
+		m.hostPicked, m.hostPick = true, m.hostRows()[i-hosts]
 	}
 }
 
 // selectedMachineView is the view row under the cursor.
 func (m Model) selectedMachineView() (machineView, bool) {
-	if i := m.machineIndex(); i < len(machineViews) {
+	if i := m.machineIndex(); i < m.rowBase(rowMachines) {
 		return machineViews[i], true
 	}
 	return machineView{}, false
@@ -215,7 +250,7 @@ func (m Model) hostsBody(w int) body {
 	st := m.st
 	b := plain(m.region(fmt.Sprintf("hosts · %d", len(hs)), w))
 	at, picked := m.selectedHostRow()
-	base := len(machineViews) + len(m.snap.Orphans) + len(m.deviceRows())
+	base := m.rowBase(rowHosts)
 	for i, h := range hs {
 		on := picked && h == at
 		line := " " + st.ink(on).Render(pad(m.nameOf(h), 24))
@@ -235,7 +270,7 @@ func (m Model) openHosts() (tea.Model, tea.Cmd) {
 // selectedDevice is the device row under the cursor.
 func (m Model) selectedDevice() (devRow, bool) {
 	rows := m.deviceRows()
-	i := m.machineIndex() - len(machineViews) - len(m.snap.Orphans)
+	i := m.machineIndex() - m.rowBase(rowDevices)
 	if m.devPick == "" || i < 0 || i >= len(rows) {
 		return devRow{}, false
 	}
@@ -258,7 +293,7 @@ func (m Model) devicesBody(w int) body {
 		b.add(-1, fit(" "+st.warn.Render("cannot read ~/.ssh/authorized_keys: "+m.devErr.Error()+". Check its owner and mode (600)."), w))
 	}
 	_, picked := m.selectedDevice()
-	base := len(machineViews) + len(m.snap.Orphans)
+	base := m.rowBase(rowDevices)
 	sel := m.machineIndex() - base
 	for i, r := range m.deviceRows() {
 		on := picked && i == sel

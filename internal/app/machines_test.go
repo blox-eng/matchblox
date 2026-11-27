@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/limits"
@@ -496,6 +497,96 @@ func TestUnderLinesWrapWhole(t *testing.T) {
 			if !slices.Equal(got, strings.Fields(want)) {
 				t.Errorf("width %d: under %s the words are %q, want %q", w, host, got, strings.Fields(want))
 			}
+		}
+	}
+}
+
+// machineTabText is the Machine tab's body at width 104, without its styles.
+func machineTabText(m Model) []string {
+	var out []string
+	for _, l := range m.machinePanel(104).lines {
+		out = append(out, ansi.Strip(l))
+	}
+	return out
+}
+
+func TestMachineOpensWithTheRegion(t *testing.T) {
+	m, _ := twoHosts(t, hostState(sess(1, "api-auth", "%1", nil)), hostState(sess(2, "train", "%2", nil)))
+	lines := machineTabText(m)
+	head := slices.IndexFunc(lines, func(l string) bool { return strings.TrimSpace(l) == "MACHINES · 2" })
+	usage := slices.IndexFunc(lines, func(l string) bool { return strings.TrimSpace(l) == "USAGE" })
+	last := slices.IndexFunc(lines, func(l string) bool { return strings.HasPrefix(strings.TrimSpace(l), "panes") })
+	if last < 0 || head <= last || usage <= head {
+		t.Fatalf("the views end at %d, the region heads at %d and USAGE at %d:\n%s", last, head, usage, strings.Join(lines, "\n"))
+	}
+	for _, host := range []string{m.nameOf(m.opt.Host), "ws-1"} {
+		if !slices.ContainsFunc(lines[head:usage], func(l string) bool { return strings.HasPrefix(strings.TrimLeft(l, " ✗!"), host+" ") }) {
+			t.Errorf("the region has no row of %s:\n%s", host, strings.Join(lines[head:usage], "\n"))
+		}
+	}
+}
+
+func TestOneHostMachineHasOneRow(t *testing.T) {
+	m, _ := loadedWith(t, 104, hostState(sess(1, "api-auth", "%1", nil)))
+	lines := machineTabText(m)
+	head := slices.IndexFunc(lines, func(l string) bool { return strings.TrimSpace(l) == "MACHINES · 1" })
+	if head < 0 {
+		t.Fatalf("one host's Machine has no region:\n%s", strings.Join(lines, "\n"))
+	}
+	end := head + slices.Index(lines[head:], "")
+	var rows []string
+	for _, l := range lines[head+1 : end] {
+		if !strings.HasPrefix(l, "     ") {
+			rows = append(rows, l)
+		}
+	}
+	if len(rows) != 1 || m.rowBase(rowOrphans) != m.rowBase(rowMachines)+1 {
+		t.Fatalf("one host's region has the rows %q, and %d selectable", rows, m.rowBase(rowOrphans)-m.rowBase(rowMachines))
+	}
+}
+
+func TestOneBlockedHostHasNoRegion(t *testing.T) {
+	f := newFake()
+	next, _ := New(Options{NoMotion: true, Conn: f}).Update(tea.WindowSizeMsg{Width: 104, Height: 30})
+	m := upd(t, next.(Model), lostMsg{err: io.EOF, conn: f})
+	m.setTab(tabMachine)
+	if m.have {
+		t.Fatal("the host was reached")
+	}
+	if out := screen(m); strings.Contains(out, "MACHINES ·") || !strings.Contains(out, m.waitingWhy()) {
+		t.Fatalf("one blocked host's screen:\n%s", out)
+	}
+	if body := strings.Join(machineTabText(m), "\n"); strings.Contains(body, "MACHINES ·") {
+		t.Fatalf("one blocked host's Machine has the region:\n%s", body)
+	}
+	if m.rowBase(rowOrphans) != m.rowBase(rowMachines) {
+		t.Fatal("one blocked host has machine rows")
+	}
+}
+
+func TestDownFromTheViewsReachesTheMachines(t *testing.T) {
+	m, conns := fourHosts(t, healthy(), healthy(), healthy(), healthy())
+	m = lose(t, m, conns, "gpu-1", io.EOF)
+	m.setTab(tabMachine)
+	m.selectRow(len(machineViews) - 1)
+	order := m.machineOrder()
+	for i, want := range []string{order[0].host, order[1].host} {
+		m = pressOn(m, "down")
+		if !m.machineHostPicked || m.machineHost != want || m.rowIndex() != m.rowBase(rowMachines)+i {
+			t.Fatalf("↓ %d: machine %q picked %v at row %d, want %q at %d", i+1, m.machineHost, m.machineHostPicked, m.rowIndex(), want, m.rowBase(rowMachines)+i)
+		}
+		b := m.machinePanel(104)
+		at := slices.Index(b.rows, m.rowIndex())
+		if at < 0 || !strings.HasPrefix(strings.TrimLeft(ansi.Strip(b.lines[at]), " ✗!"), m.nameOf(want)+" ") {
+			t.Fatalf("↓ %d: the selected line is not %s's row", i+1, want)
+		}
+		off := m
+		off.machinePick(0)
+		if b.lines[at] == rawRow(off, want) {
+			t.Fatalf("↓ %d: %s's row is not on the selected wash", i+1, want)
+		}
+		if keys := plainHints(m.view().keys(m)...); strings.Contains(keys, "⏎") {
+			t.Fatalf("↓ %d: a machine row offers %q", i+1, keys)
 		}
 	}
 }

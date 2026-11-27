@@ -56,7 +56,7 @@ func TestDevicesListsPhonesFirst(t *testing.T) {
 
 func TestDevicesPlusRowOpensThePage(t *testing.T) {
 	_, m := devicesConsole(t, 0)
-	m.selectRow(len(machineViews) + 2) // iPad, laptop, plus
+	m.selectRow(m.rowBase(rowDevices) + 2) // iPad, laptop, plus
 	next, cmd := key(m, "enter")
 	got := next.(Model)
 	if got.pending != nil || got.pair == nil || cmd == nil {
@@ -70,7 +70,7 @@ func TestDevicesPlusRowOpensThePage(t *testing.T) {
 
 func TestDevicesRemoveNeedsATypedY(t *testing.T) {
 	r, m := devicesConsole(t, 0)
-	m.selectRow(len(machineViews)) // the iPad
+	m.selectRow(m.rowBase(rowDevices)) // the iPad
 	keep, _ := key(m, "x")
 	if p := keep.(Model).pending; p == nil || !strings.Contains(p.String(), "iPad") {
 		t.Fatalf("x built %v", p)
@@ -106,7 +106,7 @@ func TestDevicesRemoteShowsTheCommand(t *testing.T) {
 	if !strings.Contains(out, "DEVICES") || !strings.Contains(out, "run matchblox pair on ws-1") || strings.Contains(out, "+ pair a device") {
 		t.Fatalf("remote DEVICES:\n%s", out)
 	}
-	if n := m.rowCount() - len(machineViews); n != 0 {
+	if n := m.rowCount() - m.rowBase(rowDevices); n != 0 {
 		t.Fatalf("a remote console reaches %d device rows", n)
 	}
 	m.opt.Host, m.opt.Pair = "", nil // a fixture with no host: nothing to show
@@ -117,16 +117,16 @@ func TestDevicesRemoteShowsTheCommand(t *testing.T) {
 
 func TestDevicesKeepsOrphanRows(t *testing.T) {
 	_, m := devicesConsole(t, 2)
-	m.selectRow(len(machineViews) + 1)
+	m.selectRow(m.rowBase(rowOrphans) + 1)
 	next, _ := key(m, "x")
 	p := next.(Model).pending
 	if p == nil || p.rec != "orphan:4243" || p.local != nil {
 		t.Fatalf("x on orphan 1 built %+v", p)
 	}
-	if n := m.rowCount() - len(machineViews); n != 5 { // two orphans, two devices, the plus
+	if n := m.rowCount() - m.rowBase(rowOrphans); n != 5 { // two orphans, two devices, the plus
 		t.Fatalf("%d rows", n)
 	}
-	m.selectRow(len(machineViews) + 2)
+	m.selectRow(m.rowBase(rowOrphans) + 2)
 	if r, ok := m.selectedDevice(); !ok || r.d.Name != "iPad" {
 		t.Fatalf("row 2 is %v", r)
 	}

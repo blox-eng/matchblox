@@ -130,8 +130,9 @@ func (m Model) machinesBody(w int) body {
 			widths[j] = max(widths[j], lipgloss.Width(c))
 		}
 	}
-	st := m.st
+	st, base, sel := m.st, m.rowBase(rowMachines), m.machineIndex()
 	for i, r := range rows {
+		row, on := base+i, base+i == sel
 		mark := " "
 		switch {
 		case r.block != nil:
@@ -141,8 +142,8 @@ func (m Model) machinesBody(w int) body {
 		}
 		head := " " + mark + " " + st.text.Render(pad(m.nameOf(r.host), nameW+2))
 		if r.gone != "" {
-			b.add(-1, fit(head+st.muted.Render(r.gone), w))
-			b.add(-1, m.underLines(r, nil, w)...)
+			b.addRow(row, on, w, st, head+st.muted.Render(r.gone))
+			b.add(row, m.underLines(r, nil, w)...)
 			continue
 		}
 		// A cell that does not fit starts a line under the first cell.
@@ -150,7 +151,7 @@ func (m Model) machinesBody(w int) body {
 		line := head
 		for j, c := range cells[i] {
 			if line != head && lipgloss.Width(line)+lipgloss.Width(c) > w {
-				b.add(-1, fit(strings.TrimRight(line, " "), w))
+				b.addRow(row, on, w, st, strings.TrimRight(line, " "))
 				line = indent
 			}
 			line += c + strings.Repeat(" ", widths[j]-lipgloss.Width(c)+2)
@@ -165,8 +166,8 @@ func (m Model) machinesBody(w int) body {
 		} else {
 			folded = foldWords(accounts, w-5)
 		}
-		b.add(-1, fit(strings.TrimRight(line, " "), w))
-		b.add(-1, m.underLines(r, folded, w)...)
+		b.addRow(row, on, w, st, strings.TrimRight(line, " "))
+		b.add(row, m.underLines(r, folded, w)...)
 	}
 	return b
 }
@@ -327,4 +328,30 @@ func foldWords(s string, w int) []string {
 		}
 	}
 	return append(out, line)
+}
+
+// machineList are the rows of the machines region Machine shows: none on
+// the blocked screen of one host never reached.
+func (m Model) machineList() []machineRow {
+	if m.machineCount() == 0 {
+		return nil
+	}
+	return m.machineOrder()
+}
+
+// machineCount is len(m.machineList()), without building its rows.
+func (m Model) machineCount() int {
+	if m.hostCount() == 1 && !m.have {
+		return 0
+	}
+	return m.hostCount()
+}
+
+// selectedMachine is the host of the machine row under the cursor.
+func (m Model) selectedMachine() (string, bool) {
+	i := m.machineIndex() - m.rowBase(rowMachines)
+	if rows := m.machineList(); m.machineHostPicked && i >= 0 && i < len(rows) {
+		return rows[i].host, true
+	}
+	return "", false
 }
