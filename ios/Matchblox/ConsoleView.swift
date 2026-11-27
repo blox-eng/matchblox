@@ -505,6 +505,7 @@ private final class Belts {
         head.onSend = { [weak self] bytes in self?.send(bytes) }
         head.onLines = { [weak terminal] lines in terminal?.head(lines: lines) ?? .nothing }
         head.route = { [weak terminal] older in terminal?.headRoute(older: older) ?? .nothing }
+        head.page = { [weak terminal] older in terminal?.headPage(older: older) ?? .nothing }
         head.onKeyboard = { [weak terminal] in _ = terminal?.becomeFirstResponder() }
         head.onHighlight = { [weak terminal] text in terminal?.highlightRow(showing: text) }
         head.visibleLines = { [weak terminal] in terminal?.visibleLines ?? [] }

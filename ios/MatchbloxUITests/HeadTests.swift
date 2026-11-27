@@ -291,7 +291,37 @@ final class HeadTests: XCTestCase {
         XCTAssertTrue((theHead(in: app).value as? String ?? "").hasPrefix("blue tip"), "the colour did not stay after a relaunch")
     }
 
+    // MARK: VoiceOver
+
+    /// VoiceOver names the head and offers its marks and the hold as actions, named from the
+    /// marks home set. A UI test cannot swipe as VoiceOver does: `HeadVoiceTests` holds the swipes.
+    @MainActor
+    func testHeadAccessibility() {
+        let app = launched(extra: ["-resetHead"])
+        expect(in: app, "label CONTAINS %@", "NEEDS YOU")
+        let head = theHead(in: app)
+        XCTAssertEqual(head.label, "Match head")
+        XCTAssertEqual(voiceActions(on: head), ["back, top mark", "cursor, left mark", "cursor, right mark", "type, bottom mark", "sessions"])
+
+        openHome(app)
+        app.buttons["home-head-left"].tap()
+        app.buttons["Esc cancel"].tap()
+        backToTheConsole(app)
+        XCTAssertEqual(voiceActions(on: theHead(in: app)), ["back, top mark", "cancel, left mark", "cursor, right mark", "type, bottom mark", "sessions"])
+    }
+
     // MARK: Helpers
+
+    /// The names of the head's VoiceOver actions, from its DEBUG value.
+    @MainActor
+    private func voiceActions(on head: XCUIElement) -> [String] {
+        let value = head.value as? String ?? ""
+        guard let line = value.components(separatedBy: "\n").first(where: { $0.hasPrefix("actions=") }) else {
+            XCTFail("the head names no actions: \(value)")
+            return []
+        }
+        return line.dropFirst("actions=".count).components(separatedBy: "|")
+    }
 
     /// BOX opens home over the console. The one-time BOX teach may hold the drawer open for a
     /// moment; a tap on the grip toggles it.

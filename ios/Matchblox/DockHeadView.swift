@@ -40,6 +40,9 @@ final class DockHeadView: UIView {
             guard pane != oldValue else { return }
             walk = HeadWalk()
             sight = nil
+            menuRead = nil
+            menuReady = false
+            voiceLine = nil
             if pane == nil { walk.menu(nil) }
             onHighlight(nil)
         }
@@ -50,6 +53,8 @@ final class DockHeadView: UIView {
     var onLines: (Int) -> HeadRoute = { _ in .nothing }
     /// Where a notch of output would go now (true: toward older lines).
     var route: (Bool) -> HeadRoute = { _ in .nothing }
+    /// VoiceOver's swipe with no menu: a screen of lines (true: older). The answer says where they went.
+    var page: (Bool) -> HeadRoute = { _ in .nothing }
     var onSend: ([UInt8]) -> Void = { _ in }
     var onKeyboard: () -> Void = {}
     /// The handle row's line; nil gives the row back its rest.
@@ -86,11 +91,17 @@ final class DockHeadView: UIView {
     private let ring = CAShapeLayer()
     private let holdRing = CAShapeLayer()
     private var markLabels: [HeadZone.Mark: UILabel] = [:]
-    private lazy var element: UIAccessibilityElement = {
-        let element = UIAccessibilityElement(accessibilityContainer: self)
+    private lazy var element: VoiceHead = {
+        let element = VoiceHead(accessibilityContainer: self)
         element.accessibilityLabel = "Match head"
         element.accessibilityIdentifier = "match-head"
-        element.accessibilityTraits = .allowsDirectInteraction
+        element.accessibilityTraits = .adjustable
+        element.accessibilityHint = "Swipe up or down for the options, else a page. Double-tap to answer, or for Enter."
+        element.swipe = { [weak self] older in self?.voiceSwipe(older: older) }
+        element.activate = { [weak self] in self?.voiceTap() ?? false }
+        element.focused = { [weak self] in self?.voiceFocused() }
+        element.readValue = { [weak self] in self?.spokenValue }
+        element.actions = { [weak self] in self?.voiceActions() ?? [] }
         return element
     }()
     private lazy var driver: HeadDriver = {
@@ -106,6 +117,10 @@ final class DockHeadView: UIView {
     private var touch: Touch?
     private var lastNotch: TimeInterval?
     private var menuRead: Task<Void, Never>?
+    /// The last menu read has answered: `sight` is what the screen showed.
+    private var menuReady = false
+    /// What the head last told VoiceOver; its value until the next touch or focus.
+    private var voiceLine: String?
     private var repeating: Task<Void, Never>?
     private var cardGoes: Task<Void, Never>?
     private var holding: Task<Void, Never>?
@@ -222,6 +237,7 @@ final class DockHeadView: UIView {
         let from = offset(of: finger)
         let zone = HeadZone.at(point: from, radius: Self.side / 2)
         touch = Touch(start: from, time: finger.timestamp, zone: zone)
+        voiceLine = nil
         marks = HeadMarks.load(from: .standard)
         showMarks()
         readMenu()
@@ -402,6 +418,7 @@ final class DockHeadView: UIView {
         if let hint = HeadHint.afterPick(reply) {
             driver.feel.bump()
             say(hint.line)
+            announce(hint.line)
         } else {
             sent()
             say(nil)
@@ -417,14 +434,17 @@ final class DockHeadView: UIView {
         guard let pane, let command else {
             sight = nil
             walk.menu(nil)
+            menuReady = true
             return
         }
+        menuReady = false
         menuRead = Task { [weak self] in
             let reply = await command(["menu", pane, "--json"])
             guard let self, self.pane == pane else { return }
             let menu = reply.ok ? MenuSight.decode(reply.output) : nil
             self.sight = menu
             self.walk.menu(menu)
+            self.menuReady = true
         }
     }
 
@@ -570,19 +590,170 @@ final class DockHeadView: UIView {
         CATransaction.commit()
     }
 
-    // MARK: Accessibility
+    // MARK: VoiceOver
+
+    /// The head as VoiceOver reaches it: a swipe up or down walks the options or pages, a
+    /// double-tap is the middle's tap, and the marks and the hold are its actions.
+    private final class VoiceHead: UIAccessibilityElement {
+        /// True: VoiceOver's decrement, a swipe down.
+        var swipe: (Bool) -> Void = { _ in }
+        var activate: () -> Bool = { false }
+        var focused: () -> Void = {}
+        /// Read when asked, as the colour and the head's last line change after the element is made.
+        var readValue: () -> String? = { nil }
+        /// Made when asked, from the marks home set last.
+        var actions: () -> [UIAccessibilityCustomAction] = { [] }
+
+        override func accessibilityIncrement() { swipe(false) }
+        override func accessibilityDecrement() { swipe(true) }
+        override func accessibilityActivate() -> Bool { activate() }
+        override func accessibilityElementDidBecomeFocused() { focused() }
+        override var accessibilityValue: String? {
+            get { readValue() }
+            set {}
+        }
+        override var accessibilityCustomActions: [UIAccessibilityCustomAction]? {
+            get { actions() }
+            set {}
+        }
+    }
 
     override var accessibilityElements: [Any]? {
         get {
-            var shown = [ball.pigment.name]
-            #if DEBUG
-            shown += [lastCard.map { "card=\($0)" }, lastSessions.map { "sessions=\($0)" }].compactMap { $0 }
-            #endif
-            element.accessibilityValue = shown.joined(separator: "\n")
             var elements: [Any] = [element]
             if !rim.isHidden { elements += markLabels.values.map { $0 as Any } }
             return elements
         }
         set {}
+    }
+
+    /// What the head last told VoiceOver, else its colour. The DEBUG lines are what the UI tests read.
+    private var spokenValue: String {
+        var shown = [voiceLine ?? ball.pigment.name]
+        #if DEBUG
+        shown.append("actions=" + voiceMarks().map { $0.name }.joined(separator: "|"))
+        shown += [lastCard.map { "card=\($0)" }, lastSessions.map { "sessions=\($0)" }].compactMap { $0 }
+        #endif
+        return shown.joined(separator: "\n")
+    }
+
+    /// The menu is read as the head is reached, so the first swipe already knows it.
+    private func voiceFocused() {
+        voiceLine = nil
+        readMenu()
+    }
+
+    /// A swipe on a menu already read answers at once, so VoiceOver reads the new value; one
+    /// that waits for the read says its line when it comes.
+    private func voiceSwipe(older: Bool) {
+        if menuRead == nil { readMenu() }
+        guard menuReady else {
+            let reading = menuRead
+            Task { [weak self] in
+                await reading?.value
+                guard let self, self.menuReady else { return }
+                self.voiceSwipe(older: older)
+                if let line = self.voiceLine { self.announce(line) }
+            }
+            return
+        }
+        let step = HeadVoice.swipe(&walk, older: older, menu: sight)
+        let line: String
+        switch step {
+        case .option(_, _, let text):
+            onHighlight(text)
+            line = step.line ?? text
+        case .first, .last:
+            driver.feel.bump()
+            line = step.line ?? ""
+        case .page(let older):
+            line = HeadVoice.paged(page(older), older: older)
+        }
+        voiceLine = line
+        say(line)
+    }
+
+    /// The double-tap is the middle's tap: at a menu the swiped option, through the pick the host
+    /// checks; up in the output it comes back; else Enter.
+    private func voiceTap() -> Bool {
+        if menuRead == nil { readMenu() }
+        voiceLine = nil
+        tapped()
+        return true
+    }
+
+    /// The four marks and the hold, named from the marks home set last. A mark that sends nothing
+    /// (`·`) is no action.
+    private func voiceMarks() -> [(name: String, id: String)] {
+        let marks = HeadMarks.load(from: .standard)
+        var named: [(name: String, id: String)] = []
+        for place in [HeadMarks.Place.top, .left, .right, .bottom] {
+            let id = marks[place]
+            guard id != "·" else { continue }
+            named.append(("\(KeyFace.word(of: id) ?? id), \(place.rawValue) mark", id))
+        }
+        let hold = marks[.hold]
+        if hold == Self.sessionsKey {
+            named.append((KeyFace.word(of: hold) ?? hold, hold))
+        } else if hold != "·" {
+            named.append(("\(KeyFace.word(of: hold) ?? hold), hold", hold))
+        }
+        return named
+    }
+
+    private func voiceActions() -> [UIAccessibilityCustomAction] {
+        voiceMarks().map { mark in
+            let id = mark.id
+            return UIAccessibilityCustomAction(name: mark.name) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    guard let self else { return false }
+                    if id == Self.sessionsKey {
+                        self.voiceSessions()
+                    } else {
+                        self.press(id)
+                    }
+                    return true
+                }
+            }
+        }
+    }
+
+    /// The sessions as a sheet: each other session opens as the hold's lift opens it. The one the
+    /// console shows, and two that share a number, are not offered.
+    private func voiceSessions() {
+        guard let command else { return announce(SessionCard.unreachable) }
+        let pane = pane
+        Task { [weak self] in
+            let reply = await command(["sessions", "--json"])
+            guard let self else { return }
+            guard reply.ok, let rows = SessionList.decode(reply.output) else { return self.announce(SessionCard.unreachable) }
+            self.presentSessions(SessionCard(rows: rows, pane: pane, opened: self.opened()))
+        }
+    }
+
+    private func presentSessions(_ card: SessionCard) {
+        let open = card.rows.indices.filter { i in
+            i != card.current && card.rows.filter { $0.n == card.rows[i].n }.count == 1
+        }
+        guard !open.isEmpty else { return announce(SessionCard.alone) }
+        guard var top = window?.rootViewController else { return }
+        while let next = top.presentedViewController { top = next }
+        let sheet = UIAlertController(title: "Sessions", message: nil, preferredStyle: .actionSheet)
+        for i in open {
+            let row = card.rows[i]
+            let n = row.n
+            sheet.addAction(UIAlertAction(title: row.word.isEmpty ? row.name : "\(row.name) · \(row.word)", style: .default) {
+                [weak self] _ in MainActor.assumeIsolated { self?.openSession(n) }
+            })
+        }
+        sheet.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        // An iPad shows the sheet as a popover at the head.
+        sheet.popoverPresentationController?.sourceView = self
+        sheet.popoverPresentationController?.sourceRect = bounds
+        top.present(sheet, animated: true)
+    }
+
+    private func announce(_ line: String) {
+        UIAccessibility.post(notification: .announcement, argument: line)
     }
 }
