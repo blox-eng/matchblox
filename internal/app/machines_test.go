@@ -55,9 +55,12 @@ func lose(t *testing.T, m Model, conns map[string]*fakeConn, host string, err er
 }
 
 // machinesText is the region at width 104, without its styles.
-func machinesText(m Model) []string {
+func machinesText(m Model) []string { return machinesAt(m, 104) }
+
+// machinesAt is the region at width w, without its styles.
+func machinesAt(m Model, w int) []string {
 	var out []string
-	for _, l := range m.machinesBody(104).lines {
+	for _, l := range m.machinesBody(w).lines {
 		out = append(out, ansi.Strip(l))
 	}
 	return out
@@ -335,5 +338,127 @@ func TestMachineRowNoPlanSessions(t *testing.T) {
 	m, _ := fourHosts(t, healthy(), healthy(), healthy(), healthy())
 	if block := machineBlock(machinesText(m), m.nameOf(m.opt.Host)); !strings.Contains(block, "no plan sessions") {
 		t.Fatalf("a host with no plans does not say so:\n%s", block)
+	}
+}
+
+func TestMachineRowMemoryOverTotalIsNoUse(t *testing.T) {
+	ws := healthy()
+	ws.Machine.MemAvail = ws.Machine.MemTotal + 1
+	m, _ := fourHosts(t, healthy(), healthy(), healthy(), ws)
+	row, _, _ := strings.Cut(machineBlock(machinesText(m), "ws-1"), "\n")
+	if !strings.Contains(row, "mem 0%") || strings.Contains(row, "!") {
+		t.Fatalf("a host with more memory free than it has reads as full: %q", row)
+	}
+}
+
+func TestMachineRowShowsOnlyAPlanAsAPlan(t *testing.T) {
+	ws := healthy()
+	ws.Limits = []limits.Account{
+		{Provider: "cursor", Account: "a@example.com · Acme Holdings Ltd"},
+		{Provider: "anthropic", Account: "a@example.com · Max"},
+		{Provider: "x@example.com", Account: "a@example.com · Pro"},
+	}
+	m, _ := fourHosts(t, healthy(), healthy(), healthy(), ws)
+	lines := machinesText(m)
+	block := machineBlock(lines, "ws-1")
+	for _, want := range []string{"Cursor · ", "Claude Max", "account Pro"} {
+		if !strings.Contains(block, want) {
+			t.Errorf("ws-1's row has no %q:\n%s", want, block)
+		}
+	}
+	region := strings.Join(lines, "\n")
+	if strings.Contains(region, "Acme") || strings.Contains(region, "@") {
+		t.Fatalf("the region shows a team or an account name:\n%s", region)
+	}
+}
+
+func TestRemoteHomeLostShowsWhyAndFix(t *testing.T) {
+	now := lostAt
+	m, homeConn, conns := hostsAt(t, &now, "dev-1", 104, 30, "gpu-1")
+	m = upd(t, m, stateMsg(stateAt(healthy(), now)))
+	m = upd(t, m, peerMsg{host: "gpu-1", conn: conns["gpu-1"], msg: stateMsg(stateAt(healthy(), now))})
+	m = upd(t, m, lostMsg{err: io.EOF, conn: homeConn})
+	lines := machinesText(m)
+	if got := machineRows(m, lines); !slices.Equal(got, []string{"dev-1", "gpu-1"}) {
+		t.Errorf("the rows are %q, want the lost home first:\n%s", got, strings.Join(lines, "\n"))
+	}
+	why, fix := m.blockedWords(blockedHost{host: "dev-1"})
+	if fix == "connect" {
+		fix = "run: matchblox connect dev-1"
+	}
+	block := machineBlock(lines, "dev-1")
+	row, under, _ := strings.Cut(block, "\n")
+	if !strings.HasPrefix(strings.TrimSpace(row), "✗ dev-1") || !strings.Contains(row, "not reached since 14:02") {
+		t.Errorf("the lost home's row is %q", row)
+	}
+	if !strings.Contains(under, why) || !strings.Contains(under, fix) {
+		t.Fatalf("under the lost home's row %q, want %q and %q", under, why, fix)
+	}
+}
+
+func TestRemoteHomeSilentShowsWhyAndFix(t *testing.T) {
+	now := lostAt
+	m, homeConn, conns := hostsAt(t, &now, "dev-1", 104, 30, "gpu-1")
+	m = upd(t, m, peerMsg{host: "gpu-1", conn: conns["gpu-1"], msg: stateMsg(stateAt(healthy(), now))})
+	m = upd(t, m, silentMsg{homeConn})
+	why, fix := m.blockedWords(blockedHost{host: "dev-1", silent: true})
+	lines := machinesText(m)
+	block := machineBlock(lines, "dev-1")
+	if !strings.HasPrefix(strings.TrimSpace(block), "✗ dev-1") || !strings.Contains(block, why) || !strings.Contains(block, fix) {
+		t.Fatalf("the silent home does not say %q and %q:\n%s", why, fix, block)
+	}
+	m = upd(t, m, stateMsg(stateAt(healthy(), now)))
+	if block := machineBlock(machinesText(m), "dev-1"); strings.Contains(block, "✗") || !strings.Contains(block, "load 1 / 16 cores") {
+		t.Fatalf("the home that answered still reads as silent:\n%s", block)
+	}
+}
+
+func TestNarrowRegionWrapsCellsWhole(t *testing.T) {
+	ws := withLoad(healthy(), 4, 32)
+	ws.Machine.MemAvail = ws.Machine.MemTotal / 20
+	m, _ := fourHosts(t, healthy(), healthy(), withLoad(healthy(), 50, 16), ws)
+	for _, w := range []int{60, 40} {
+		lines := machinesAt(m, w)
+		region := strings.Join(lines, "\n")
+		for _, l := range lines {
+			if lw := ansi.StringWidth(l); lw > w {
+				t.Errorf("width %d: a line is %d wide: %q", w, lw, l)
+			}
+		}
+		if strings.Contains(region, "…") {
+			t.Errorf("width %d: a cell is cut:\n%s", w, region)
+		}
+		for host, cells := range map[string][]string{
+			"box-3": {"up 3d", "load 50 / 16 cores", "cpu 12%", "mem 50%", "disk 50%", "io wait 0"},
+			"ws-1":  {"up 3d", "load 4 / 32 cores", "cpu 12%", "mem 95%", "disk 50%", "io wait 0"},
+		} {
+			block := machineBlock(lines, host)
+			for _, c := range cells {
+				if !strings.Contains(block, c) {
+					t.Errorf("width %d: %s has no whole %q:\n%s", w, host, c, block)
+				}
+			}
+		}
+	}
+}
+
+func TestMemoryTroubleIsTheShownFigure(t *testing.T) {
+	for avail, c := range map[uint64]struct {
+		figure  string
+		trouble bool
+	}{104: {"mem 90%", true}, 106: {"mem 89%", false}} {
+		ws := healthy()
+		ws.Machine.MemTotal, ws.Machine.MemAvail = 1000, avail
+		m, _ := fourHosts(t, healthy(), healthy(), healthy(), ws)
+		row := rawRow(m, "ws-1")
+		if !strings.Contains(ansi.Strip(row), c.figure) {
+			t.Errorf("%.1f%%: the row has no %q: %q", 100-float64(avail)/10, c.figure, ansi.Strip(row))
+		}
+		if got := strings.Contains(row, m.st.neg.Render(c.figure)); got != c.trouble {
+			t.Errorf("%.1f%%: %q in neg is %v, want %v: %q", 100-float64(avail)/10, c.figure, got, c.trouble, row)
+		}
+		if got := strings.Contains(row, m.st.neg.Render("!")); got != c.trouble {
+			t.Errorf("%.1f%%: the ! mark is %v, want %v: %q", 100-float64(avail)/10, got, c.trouble, ansi.Strip(row))
+		}
 	}
 }

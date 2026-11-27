@@ -380,6 +380,7 @@ type Model struct {
 	backoff     time.Duration
 	redialing   bool
 	answered    bool // a state came on the current connection
+	silent      bool // a remote home connected and gave no state in silentAfter
 	replaced    bool
 	acts        int
 	recRun      recRun // the last act on a recommendation, and what came of it
@@ -998,7 +999,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.say(news)
 			_ = m.recPrefs.save(m.opt.StateDir) // not kept: the next console says it again
 		}
-		m.snap, m.git, m.recs, m.have, m.answered, m.at = st.Snapshot, st.Git, st.Recommendations, true, true, m.now()
+		m.snap, m.git, m.recs, m.have, m.answered, m.silent, m.at = st.Snapshot, st.Git, st.Recommendations, true, true, false, m.now()
 		m.shipReport = st.Ships
 		m.holds, m.reasons, m.chains = st.Holds, st.Reasons, st.Chains
 		m.agents, m.renames, m.accounts, m.signIns = st.Agents, st.Renames, st.Accounts, st.SignIns
@@ -1118,7 +1119,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			_ = m.conn.Close()
 		}
 		first := !m.lost
-		m.lost = true
+		m.lost, m.silent = true, false
 		m = m.roomLost(m.opt.Host).lineLost(m.opt.Host)
 		m, notConfirmed := m.actsLost(m.opt.Host)
 		if blocking(msg.err) {
@@ -1188,6 +1189,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if m.opt.Host != "" {
+			m.silent = true
 			said := m.sayError(m.opt.Host + " does not answer: run ssh " + m.opt.Host + " matchblox status to see why")
 			return m, said
 		}
@@ -1217,7 +1219,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.hostCount() == 1 || m.stale(m.opt.Host) {
 			m.say("connected again") // a short loss of two or more hosts showed nothing: its end shows nothing
 		}
-		m.conn, m.redialing, m.answered = msg.conn, false, false
+		m.conn, m.redialing, m.answered, m.silent = msg.conn, false, false, false
 		return m, tea.Batch(m.hello(), m.recv(), m.watchSilence())
 	case ranMsg:
 		if msg.err != nil {

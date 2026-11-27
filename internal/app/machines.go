@@ -3,6 +3,7 @@ package app
 import (
 	"cmp"
 	"fmt"
+	"math"
 	"slices"
 	"strconv"
 	"strings"
@@ -26,9 +27,8 @@ type machineRow struct {
 
 // machineRowOf is host's row: its state from its link or the home fields.
 func (m Model) machineRowOf(host string) machineRow {
-	lost, have, at, blocked, mismatch, version := m.lost, m.have, m.at, m.blocked, m.mismatch, m.host.Version
+	lost, have, at, blocked, mismatch, version, silent := m.lost, m.have, m.at, m.blocked, m.mismatch, m.host.Version, m.silent
 	var dialErr error
-	var silent bool
 	if i := m.peerAt(host); host != m.opt.Host && i >= 0 {
 		l := m.peers[i]
 		lost, have, at, blocked, mismatch, version = l.lost, l.have, l.at, l.blocked, l.mismatch, l.hello.Version
@@ -67,8 +67,12 @@ func (r machineRow) full() bool {
 	}
 	_, mem := memUse(r.on.snap.Machine)
 	disk, _ := worstDisk(r.on.snap.Machine)
-	return mem >= 90 || disk >= 90
+	return fullAt(mem) || fullAt(disk)
 }
+
+// fullAt: a use shown as 90% or more, so a figure in trouble is the one
+// the row prints.
+func fullAt(pct float64) bool { return math.RoundToEven(pct) >= 90 }
 
 // group is the row's place in the trouble order.
 func (r machineRow) group() int {
@@ -141,8 +145,14 @@ func (m Model) machinesBody(w int) body {
 			b.add(-1, m.underLines(r, nil, w)...)
 			continue
 		}
+		// A cell that does not fit starts a line under the first cell.
+		indent := strings.Repeat(" ", lipgloss.Width(head))
 		line := head
 		for j, c := range cells[i] {
+			if line != head && lipgloss.Width(line)+lipgloss.Width(c) > w {
+				b.add(-1, fit(strings.TrimRight(line, " "), w))
+				line = indent
+			}
 			line += c + strings.Repeat(" ", widths[j]-lipgloss.Width(c)+2)
 		}
 		accounts, style := strings.Join(accountWords(r.on.snap.Limits), " · "), st.text
@@ -196,8 +206,8 @@ func (m Model) machineCells(r machineRow) []string {
 		text(false, up),
 		text(r.over(), load),
 		text(false, fmt.Sprintf("cpu %.0f%%", mc.CPU)),
-		text(memPct >= 90, mem),
-		text(read && diskPct >= 90, disk),
+		text(fullAt(memPct), mem),
+		text(read && fullAt(diskPct), disk),
 		text(false, io),
 	}
 }
@@ -279,13 +289,16 @@ func grouped(n int) string {
 }
 
 // accountWords are the provider and plan of each account a host's sessions
-// run under, never the account's name: "Claude Max", "OpenAI Pro".
+// run under, never the account's name or team: "Claude Max", "OpenAI Pro".
 func accountWords(ls []limits.Account) []string {
 	words := make([]string, len(ls))
 	for i, a := range ls {
 		words[i] = cmp.Or(providerNames[a.Provider], a.Provider)
+		if strings.Contains(words[i], "@") {
+			words[i] = "account"
+		}
 		if at := strings.LastIndex(a.Account, " · "); at >= 0 {
-			if plan := strings.TrimSpace(a.Account[at+len(" · "):]); plan != "" && !strings.Contains(plan, "@") {
+			if plan := strings.TrimSpace(a.Account[at+len(" · "):]); sample.IsPlan(plan) {
 				words[i] += " " + plan
 			}
 		}

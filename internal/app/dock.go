@@ -400,12 +400,13 @@ func (m Model) matchbloxRSS(host string, serve uint64) string {
 
 func gb(b uint64) float64 { return float64(b) / (1 << 30) }
 
-// memUse is the memory in use, in bytes and in percent.
+// memUse is the memory in use, in bytes and in percent; none when more
+// is free than the host has.
 func memUse(mc sample.Machine) (uint64, float64) {
-	used := mc.MemTotal - mc.MemAvail
-	if mc.MemTotal == 0 {
-		return used, 0
+	if mc.MemTotal == 0 || mc.MemAvail >= mc.MemTotal {
+		return 0, 0
 	}
+	used := mc.MemTotal - mc.MemAvail
 	return used, float64(used) / float64(mc.MemTotal) * 100
 }
 
