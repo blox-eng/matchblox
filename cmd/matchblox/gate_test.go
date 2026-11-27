@@ -399,35 +399,15 @@ func TestGateFocusIsBounded(t *testing.T) {
 	}
 }
 
-// TestGateTakesPocketsQuoting: a word the gate refuses plain is one Pocket
-// quotes (HostCommand.line), and the gate takes it quoted.
-func TestGateTakesPocketsQuoting(t *testing.T) {
-	for _, text := range []string{"Yes,", "C++", "a/b", "x=y"} {
-		quoted := "matchblox choose %2 2 --text '" + text + "' --sign 0a"
-		want := []string{"choose", "%2", "2", "--text", text, "--sign", "0a"}
-		if got, err := gateDecision(phoneMode, "", quoted); err != nil || !slices.Equal(got, want) {
-			t.Errorf("gateDecision(phone, %q) = %q, %v; want %q", quoted, got, err, want)
-		}
-		plain := "matchblox choose %2 2 --text " + text + " --sign 0a"
-		if argv, err := gateDecision(phoneMode, "", plain); err == nil || argv != nil {
-			t.Errorf("the gate ran %q plain, so Pocket need not quote it", plain)
-		}
-	}
-}
-
-// TestGatePhoneHeadCommandsOnly: a phone's key runs Pocket's three head
-// commands, read as a shell reads Pocket's quoting, in exactly their
-// shapes; anything a shell could make more of is refused.
+// TestGatePhoneHeadCommandsOnly: a phone's key runs Pocket's one head
+// command, `matchblox sessions --json`, exactly; `menu` and `choose` and
+// anything a shell could make more of are refused.
 func TestGatePhoneHeadCommandsOnly(t *testing.T) {
 	const id = "0123456789ab"
 	for _, c := range []struct {
 		orig string
 		want []string
 	}{
-		{"matchblox menu %2 --json", []string{"menu", "%2", "--json"}},
-		{"matchblox menu flint-auth --json", []string{"menu", "flint-auth", "--json"}},
-		{"matchblox choose %2 2 --text 'Yes' --sign 0a1b", []string{"choose", "%2", "2", "--text", "Yes", "--sign", "0a1b"}},
-		{`matchblox choose %2 9 --text 'It'\''s fine; go | on $(now)' --sign 0a1b`, []string{"choose", "%2", "9", "--text", "It's fine; go | on $(now)", "--sign", "0a1b"}},
 		{"matchblox sessions --json", []string{"sessions", "--json"}},
 	} {
 		for _, i := range []string{"", id} {
@@ -441,6 +421,10 @@ func TestGatePhoneHeadCommandsOnly(t *testing.T) {
 		}
 	}
 	for _, orig := range []string{
+		"matchblox menu %2 --json",
+		"matchblox menu flint-auth --json",
+		"matchblox choose %2 2 --text 'Yes' --sign 0a1b",
+		`matchblox choose %2 9 --text 'It'\''s fine; go | on $(now)' --sign 0a1b`,
 		"matchblox menu %2 --json; rm -rf /",
 		"matchblox menu %2 --json;id",
 		"matchblox menu %2 --json | id",

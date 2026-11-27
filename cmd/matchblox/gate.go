@@ -4,19 +4,15 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"regexp"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/service"
 	"github.com/blox-eng/matchblox/internal/setup"
-	"github.com/blox-eng/matchblox/internal/shellwords"
 	"github.com/blox-eng/matchblox/internal/transport"
 )
 
@@ -113,7 +109,7 @@ const phoneMode = "phone"
 // its key line (id), never by anything in the request; a phone line from
 // before ids is refused until the service gives it one. A phone that opens
 // one session (`matchblox console --open <n>`, from the island or a buzz)
-// gets the console too, and a phone's head runs Pocket's three commands
+// gets the console too, and a phone's head runs Pocket's sessions list
 // (headCommand); a laptop key never does.
 func gateDecision(mode, id, orig string) (argv []string, err error) {
 	if mode != "" && mode != phoneMode {
@@ -141,64 +137,13 @@ func gateDecision(mode, id, orig string) (argv []string, err error) {
 	return nil, errors.New("this key starts only the matchblox stream; use your own ssh login for a shell")
 }
 
-var (
-	headWho  = regexp.MustCompile(`^[A-Za-z0-9_%][A-Za-z0-9_%.:@-]{0,63}$`)
-	headN    = regexp.MustCompile(`^[1-9]$`)
-	headSign = regexp.MustCompile(`^[0-9a-f]{1,64}$`)
-	// headPlain is what a head command may hold outside single quotes: no
-	// shell metacharacter, one blank between words, and a backslash only
-	// before the quote it puts in a quoted word.
-	headPlain = regexp.MustCompile(`^[A-Za-z0-9_%.:@-]+( [A-Za-z0-9_%.:@-]+)*$`)
-)
-
-// headCommand is the argv of one of Pocket's head commands in orig, read as
-// a shell reads Pocket's quoting: `matchblox menu <who> --json`,
-// `matchblox choose <who> <n> --text <t> --sign <hex>` or `matchblox
-// sessions --json`, in exactly those shapes. Anything else is nil.
+// headCommand is the argv of Pocket's one head command in orig, exactly
+// `matchblox sessions --json`. Anything else is nil.
 func headCommand(orig string) []string {
-	rest, ok := strings.CutPrefix(orig, "matchblox ")
-	if !ok || strings.ContainsFunc(rest, unicode.IsControl) || !headPlain.MatchString(unquoted(rest)) {
-		return nil
-	}
-	w, err := shellwords.Split(rest)
-	if err != nil {
-		return nil
-	}
-	switch {
-	case slices.Equal(w, []string{"sessions", "--json"}),
-		len(w) == 3 && w[0] == "menu" && headWho.MatchString(w[1]) && w[2] == "--json",
-		len(w) == 7 && w[0] == "choose" && headWho.MatchString(w[1]) && headN.MatchString(w[2]) &&
-			w[3] == "--text" && w[5] == "--sign" && headSign.MatchString(w[6]):
-		return w
+	if orig == "matchblox sessions --json" {
+		return []string{"sessions", "--json"}
 	}
 	return nil
-}
-
-// unquoted is line with each single-quoted text, and each `\'` that joins
-// two, as one plain letter; an open quote leaves a quote, which no head
-// command holds.
-func unquoted(line string) string {
-	var b strings.Builder
-	quoted := false
-	for i := 0; i < len(line); i++ {
-		switch c := line[i]; {
-		case quoted && c == '\'':
-			quoted = false
-		case quoted:
-		case c == '\'':
-			quoted = true
-			b.WriteByte('q')
-		case c == '\\' && strings.HasPrefix(line[i+1:], "'"):
-			i++
-			b.WriteByte('q')
-		default:
-			b.WriteByte(c)
-		}
-	}
-	if quoted {
-		b.WriteByte('\'')
-	}
-	return b.String()
 }
 
 // gatePair runs the forced command of a one-time key. The mode comes from the
