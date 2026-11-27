@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/proto"
@@ -34,23 +35,82 @@ func spaceHead(m Model) string {
 	return strings.Split(ansi.Strip(m.render()), "\n")[0]
 }
 
+// headerPane is the header frame after the same snapshot the list holds.
+func headerPane(m Model) frameModel {
+	w := m.width
+	if w <= 0 {
+		w = 160
+	}
+	h := newFrame("header", New(Options{NoMotion: true, Conn: newFake(), Now: m.opt.Now}))
+	next, _ := h.Update(tea.WindowSizeMsg{Width: w, Height: 1})
+	h = next.(frameModel)
+	next, _ = h.Update(stateMsg(proto.State{Snapshot: m.snap}))
+	return next.(frameModel)
+}
+
+func headerText(h frameModel) string {
+	return ansi.Strip(h.View().Content)
+}
+
+func headerPress(sub string) string {
+	switch {
+	case strings.HasPrefix(sub, "+"):
+		return spaceMore
+	case sub == spaceAll || strings.HasPrefix(sub, spaceAll+" "):
+		return spacePref
+	}
+	name, _, _ := strings.Cut(sub, " ")
+	return spacePref + name
+}
+
+// tapHeader taps sub on the header pane and applies that press to the list,
+// which owns the filter.
+func tapHeader(t *testing.T, h frameModel, list Model, sub string) Model {
+	t.Helper()
+	text := headerText(h)
+	x := cellOf(text, sub)
+	if x < 0 {
+		t.Fatalf("no %q on the header pane: %q", sub, text)
+	}
+	next, cmd := h.Update(tea.MouseClickMsg{X: x, Y: 0, Button: tea.MouseLeft})
+	drain(cmd)
+	_ = next
+	next, cmd = list.pickSpace(headerPress(sub))
+	drain(cmd)
+	return next.(Model)
+}
+
+// TestSpaceChipsDrawInHeaderPane: the header pane, not the list, draws
+// the space chips and the wait count.
+func TestSpaceChipsDrawInHeaderPane(t *testing.T) {
+	m := spaceDesk(t, 160, spaceWait("ledge", "ledge", ""), spaceWait("matchblox", "matchblox", ""), spaceWait("base", "base", ""))
+	got := headerText(headerPane(m))
+	if !strings.Contains(got, "ledge ●1") || !strings.Contains(got, "● 3 need you") {
+		t.Fatalf("header pane %q, want ledge ●1 and ● 3 need you", got)
+	}
+	if head := spaceHead(m); strings.Contains(head, "ledge ●1") || strings.Contains(head, "all ·") {
+		t.Fatalf("list stole the header line: %q", head)
+	}
+}
+
 // TestSpaceFilterKeepsNeedYouCount: three repos, waits on ledge, matchblox
 // and base; a tap on ledge ●1 names only ledge in the list, and the header
 // still counts every wait.
 func TestSpaceFilterKeepsNeedYouCount(t *testing.T) {
 	m := spaceDesk(t, 160, spaceWait("ledge", "ledge", ""), spaceWait("matchblox", "matchblox", ""), spaceWait("base", "base", ""))
-	head := spaceHead(m)
+	h := headerPane(m)
+	head := headerText(h)
 	if !strings.Contains(head, "ledge ●1") || !strings.Contains(head, "● 3 need you") {
-		t.Fatalf("header %q, want ledge ●1 and ● 3 need you", head)
+		t.Fatalf("header pane %q, want ledge ●1 and ● 3 need you", head)
 	}
-	m = tapText(t, m, "ledge ●1")
+	m = tapHeader(t, h, m, "ledge ●1")
 	if m.space != "ledge" {
 		t.Fatalf("space %q, want ledge", m.space)
 	}
 	if got := drawnNames(m); !slices.Equal(got, []string{"ledge"}) {
 		t.Fatalf("list names %v, want only ledge", got)
 	}
-	if head := spaceHead(m); !strings.Contains(head, "● 3 need you") {
+	if head := headerText(headerPane(m)); !strings.Contains(head, "● 3 need you") {
 		t.Fatalf("a space filter hid a wait: %q", head)
 	}
 }
@@ -60,9 +120,9 @@ func TestSpaceFilterKeepsNeedYouCount(t *testing.T) {
 // groupDone yet.
 func TestSpaceCountIgnoresDone(t *testing.T) {
 	m := spaceDesk(t, 160, spaceWait("asks", "matchblox", ""), spaceIdle("quiet", "matchblox"), spaceWait("ledge", "ledge", ""))
-	head := spaceHead(m)
+	head := headerText(headerPane(m))
 	if !strings.Contains(head, "matchblox ●1") {
-		t.Fatalf("header %q, want matchblox ●1 (the idle session is not a wait)", head)
+		t.Fatalf("header pane %q, want matchblox ●1 (the idle session is not a wait)", head)
 	}
 	if strings.Contains(head, "matchblox ●2") {
 		t.Fatalf("an idle session counted on matchblox: %q", head)
@@ -81,24 +141,25 @@ func TestSpacesOverflowOpensMenu(t *testing.T) {
 	var head string
 	for w := 40; w <= 120; w++ {
 		m = spaceDesk(t, w, ss...)
-		head = spaceHead(m)
+		head = headerText(headerPane(m))
 		if strings.Contains(head, "+3 ▾") {
 			break
 		}
 	}
 	if !strings.Contains(head, "+3 ▾") {
-		t.Fatalf("no width hid three spaces; last header %q", head)
+		t.Fatalf("no width hid three spaces; last header pane %q", head)
 	}
 	if strings.Count(head, "\n") != 0 {
 		t.Fatalf("header is not one row: %q", head)
 	}
-	m = tapText(t, m, "+3 ▾")
+	h := headerPane(m)
+	m = tapHeader(t, h, m, "+3 ▾")
 	if m.spaceMenu == nil {
 		t.Fatal("the overflow menu did not open over the list")
 	}
 	after := strings.Split(ansi.Strip(m.render()), "\n")
-	if !strings.Contains(after[0], "+3 ▾") {
-		t.Fatalf("the header grew or lost the chip:\n%s", after[0])
+	if head := headerText(headerPane(m)); !strings.Contains(head, "+3 ▾") {
+		t.Fatalf("the header grew or lost the chip:\n%s", head)
 	}
 	rest := strings.Join(after[1:], "\n")
 	hidden := m.spaceMenu.names[m.spaceMenu.at]
@@ -133,7 +194,7 @@ func TestSpaceLivesOnModelAndWindowOption(t *testing.T) {
 			return "\n", nil
 		}
 	})
-	m = tapText(t, m, "ledge ●1")
+	m = tapHeader(t, headerPane(m), m, "ledge ●1")
 	if m.space != "ledge" {
 		t.Fatalf("space %q, want ledge on the list Model", m.space)
 	}
@@ -164,7 +225,7 @@ func TestSpaceBracketsCycleFromList(t *testing.T) {
 
 func TestSpaceOneRepoHasNoChips(t *testing.T) {
 	m := spaceDesk(t, 160, spaceWait("ledge", "ledge", ""))
-	head := spaceHead(m)
+	head := headerText(headerPane(m))
 	if strings.Contains(head, "all ·") || strings.Contains(head, "ledge ●") {
 		t.Fatalf("one repo still draws space chips: %q", head)
 	}
@@ -196,9 +257,9 @@ func hasField(v any, name string) bool {
 
 func TestSpaceAllHasNoCount(t *testing.T) {
 	m := spaceDesk(t, 160, spaceWait("ledge", "ledge", ""), spaceWait("base", "base", ""))
-	head := spaceHead(m)
+	head := headerText(headerPane(m))
 	if !strings.Contains(head, "all ·") {
-		t.Fatalf("header %q, want all with no count", head)
+		t.Fatalf("header pane %q, want all with no count", head)
 	}
 	if strings.Contains(head, "all ●") {
 		t.Fatalf("all has a count: %q", head)

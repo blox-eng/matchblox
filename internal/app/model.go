@@ -625,6 +625,7 @@ type Model struct {
 	sideIn                    paneKey
 	beside                    string          // the agent pane's id; "" before the split, and where it failed
 	deskFrame                 bool            // Doc.DeskFrame: the first-start notice has been shown
+	frameKind                 string          // header|bar|review when this process is a desk frame; "" the list
 	winW, winH                int             // the window's size in beside mode; 0: not read yet
 	boxZoom                   bool            // a box or an animation has the window: the list's pane is zoomed for it
 	boxBack                   []string        // the agent pane's screen, drawn dim behind the box
@@ -1037,6 +1038,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.skipped = st.AccountsSkipped
 		m.lastAccount, m.keptAgent = st.LastAccount, st.LastAgent
 		m.deskFrame = m.deskFrame || st.DeskFrame
+		m.applySpaceOption()
 		if st.Found != nil {
 			m.found = st.Found
 			switch {

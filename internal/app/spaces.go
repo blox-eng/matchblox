@@ -78,16 +78,13 @@ func spaceLabel(name string, need int) string {
 }
 
 func (m Model) spaceBudget(w int) int {
-	right := ansi.StringWidth("● 0 need you")
-	if n := m.needCount(); n > 0 {
-		right = ansi.StringWidth(fmt.Sprintf("● %d need you", n))
-	}
+	right := ansi.StringWidth(fmt.Sprintf("● %d need you · ✓ %d done  ⚙", m.needCount(), 0))
 	return max(w-ansi.StringWidth(" ▰ matchblox  ")-right-2, 8)
 }
 
 func (m Model) fitSpaces(w int) (text string, hits []span, hidden []string) {
 	names := m.spaceRepos()
-	if !m.deskFrame || len(names) <= 1 {
+	if len(names) <= 1 {
 		return "", nil, nil
 	}
 	labels := []string{spaceLabel("", 0)}
@@ -152,6 +149,22 @@ func writeSpace(run func(args ...string) (string, error), console, space string)
 		return
 	}
 	_, _ = run("set-option", "-w", "-t", console, sample.SpaceOption, space)
+}
+
+func (m *Model) applySpaceOption() {
+	if !m.deskFrame || m.frameKind != "" {
+		return
+	}
+	got, ok := readSpace()
+	if !ok {
+		return
+	}
+	switch {
+	case got == spaceMore:
+		m.openSpaceMenu()
+	case got != m.space:
+		m.space, m.spaceMenu, m.peekAt = got, nil, m.now()
+	}
 }
 
 func (m Model) writeSpace() tea.Cmd {

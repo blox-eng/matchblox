@@ -387,11 +387,6 @@ func (m Model) headerOf(w int) (string, span, span, headNamed) {
 	if host != "" {
 		lefts = []string{left + st.faint.Render(" · ") + st.muted.Render(host), left}
 	}
-	if chips, _, _ := m.fitSpaces(m.spaceBudget(w)); chips != "" {
-		for i := range lefts {
-			lefts[i] += "  " + chips
-		}
-	}
 	var right string
 	// With the list hidden, the names of the sessions that need you come
 	// first. Short of room the words go first, then the last names, which
