@@ -265,6 +265,9 @@ func (m Model) drawScreen(w int) drawn {
 	if m.keySheet != nil { // the keys sheet covers the list; the agent pane is untouched
 		m.paintKeySheet(&sc, w)
 	}
+	if m.cogSheet != nil { // Machine covers the list; the agent pane is untouched
+		m.paintCogSheet(&sc, w)
+	}
 	return sc
 }
 

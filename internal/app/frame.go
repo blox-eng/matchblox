@@ -95,26 +95,53 @@ func (m frameModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m frameModel) tapHeader(ms tea.Mouse) (tea.Model, tea.Cmd) {
-	if m.kind != "header" || ms.Button != tea.MouseLeft {
+	if ms.Button != tea.MouseLeft {
+		return m, nil
+	}
+	switch m.kind {
+	case "bar":
+		if press := m.barPress(ms.X, m.width); press != "" {
+			return m, m.writeCogAct(press)
+		}
+		return m, nil
+	case "header":
+	default:
 		return m, nil
 	}
 	chips, hits, _ := m.fitSpaces(m.spaceBudget(m.width))
-	if chips == "" {
-		return m, nil
+	if chips != "" {
+		x0 := ansi.StringWidth(" ▰ matchblox  ")
+		for i := range hits {
+			hits[i].x0 += x0
+			hits[i].x1 += x0
+		}
+		if s, ok := spanAt(hits, ms.X); ok && s.press != "" {
+			if s.press == spaceMore {
+				return m, m.writeSpaceAct(spaceMore)
+			}
+			return m, m.setSpace(strings.TrimPrefix(s.press, spacePref))
+		}
 	}
-	x0 := ansi.StringWidth(" ▰ matchblox  ")
-	for i := range hits {
-		hits[i].x0 += x0
-		hits[i].x1 += x0
+	if m.cogAt(ms.X) {
+		return m, m.writeCogAct("open")
 	}
-	s, ok := spanAt(hits, ms.X)
-	if !ok || s.press == "" {
-		return m, nil
+	return m, nil
+}
+
+// cogAt: x is on the header's ⚙, including the ! it shows in trouble.
+func (m frameModel) cogAt(x int) bool {
+	chips, _, _ := m.fitSpaces(m.spaceBudget(m.width))
+	line := ansi.Strip(headerBar(m.width, chips, m.needCount(), m.doneCount(), m.cogMark()))
+	i := strings.LastIndex(line, "⚙")
+	if i < 0 {
+		return false
 	}
-	if s.press == spaceMore {
-		return m, m.writeSpaceAct(spaceMore)
+	x0 := ansi.StringWidth(line[:i])
+	word := "⚙"
+	if strings.HasPrefix(line[i:], "⚙ !") {
+		word = "⚙ !"
 	}
-	return m, m.setSpace(strings.TrimPrefix(s.press, spacePref))
+	return x >= x0 && x < x0+ansi.StringWidth(word)
 }
 
 func (m frameModel) View() tea.View {

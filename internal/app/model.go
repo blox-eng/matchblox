@@ -629,6 +629,7 @@ type Model struct {
 	frameKind                 string          // header|bar|review when this process is a desk frame; "" the list
 	barMode                   string          // @matchblox_mode: LIST, AGENT, …, or CONFIRM, KEYS, a tab, and the question
 	keySheet                  *keySheet       // the keys sheet over the list; nil while it is closed
+	cogSheet                  *cogSheet       // Machine over the list; nil while it is closed
 	shellAsks                 int             // times the list asked for the shell; Task 7 performs it
 	winW, winH                int             // the window's size in beside mode; 0: not read yet
 	boxZoom                   bool            // a box or an animation has the window: the list's pane is zoomed for it
@@ -932,10 +933,14 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(m.watchDeskMode(), next)
 	case deskModeMsg:
 		m.barMode = msg.mode
-		if !msg.list {
-			return m, nil
+		var cog tea.Cmd
+		if msg.cog != "" {
+			cog = m.takeCog(msg.cog)
 		}
-		return m, m.syncListMode()
+		if !msg.list {
+			return m, cog
+		}
+		return m, tea.Batch(m.syncListMode(), cog)
 	case boxBackMsg:
 		if !m.boxZoom { // the box closed before its zoom landed: give the window back after it
 			return m, m.sizeCmd(m.width)
@@ -1056,6 +1061,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.lastAccount, m.keptAgent = st.LastAccount, st.LastAgent
 		m.deskFrame = m.deskFrame || st.DeskFrame
 		m.applySpaceOption()
+		cogAct := m.applyCogOption()
 		if st.Found != nil {
 			m.found = st.Found
 			switch {
@@ -1112,7 +1118,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var talk tea.Cmd
 		m, talk = m.roomQueued(m.opt.Host)
 		tick := m.waitTick()
-		return m, tea.Batch(m.recv(), m.animate(), news, order, talk, feel, focus, again, started, tick)
+		return m, tea.Batch(m.recv(), m.animate(), news, order, talk, feel, focus, again, started, tick, cogAct)
 	case graphicsMsg:
 		return m.graphics(msg)
 	case graphicsTickMsg:
@@ -1709,6 +1715,10 @@ func (m Model) press(f layerID, k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case layerMain:
 		if m.keySheet != nil {
 			next, cmd = m.keySheetKey(k)
+			break
+		}
+		if m.cogSheet != nil {
+			next, cmd = m.cogSheetKey(k)
 			break
 		}
 		var took bool

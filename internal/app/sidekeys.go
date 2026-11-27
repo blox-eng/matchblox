@@ -234,6 +234,9 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 	case m.deskFrame && bkey.Matches(k, m.keys.desk.Question):
 		m.keySheet = &keySheet{}
 		return m, nil
+	case m.deskFrame && m.keySheet == nil && bkey.Matches(k, m.keys.desk.Cog):
+		m.cogSheet = &cogSheet{}
+		return m, nil
 	case m.deskFrame && bkey.Matches(k, m.keys.desk.Shell):
 		return m.askShell()
 	case m.footAt > 0 && bkey.Matches(k, append([]bkey.Binding{mk.Park, bk.Copy, bk.Chain, bk.Menu}, m.rowActKeys()...)...):

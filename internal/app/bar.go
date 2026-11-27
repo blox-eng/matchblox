@@ -8,13 +8,14 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
 // barLine is the desk's one line: the mode word, the hosts, the plan, the
 // stoker, and ? keys. A confirm replaces the chips until the list answers.
-// A chip tap is Task 6.
+// A chip tap opens that part of Machine.
 func (m Model) barLine(w int) string {
 	mode, rest, confirm := strings.Cut(m.barMode, "\t")
 	if mode == "" {
@@ -261,6 +262,40 @@ func (m Model) barStoker() string {
 	return st.faint.Render("stoker off")
 }
 
+// barPress is the Machine part under x on the bar: a busy loop, a host,
+// the plan, or the stoker. "" is a tap on the mode word or ? keys.
+func (m Model) barPress(x, w int) string {
+	plain := ansi.Strip(m.barLine(w))
+	type hit struct{ text, press string }
+	var hits []hit
+	for _, h := range m.hosts() {
+		text, _ := m.hostChip(h)
+		chip := ansi.Strip(text)
+		press := "host:" + h
+		if strings.Contains(chip, "busy loop") {
+			press = "loop:" + h
+		}
+		hits = append(hits, hit{chip, press})
+	}
+	if u := ansi.Strip(m.usageChip()); u != "" {
+		hits = append(hits, hit{u, "usage"})
+	}
+	if s := ansi.Strip(m.barStoker()); s != "" {
+		hits = append(hits, hit{s, "stoker"})
+	}
+	for _, h := range hits {
+		i := strings.Index(plain, h.text)
+		if i < 0 || h.text == "" {
+			continue
+		}
+		x0 := ansi.StringWidth(plain[:i])
+		if x >= x0 && x < x0+ansi.StringWidth(h.text) {
+			return h.press
+		}
+	}
+	return ""
+}
+
 // cogMark: ⚙ shows ! while a detached busy loop burns or a plan is within
 // 10% of its limit. The Machine tab's mark, once that tab is gone.
 func (m Model) cogMark() bool {
@@ -292,7 +327,7 @@ func (m Model) confirmRest(a action) string {
 }
 
 // deskModeValue is what the list publishes: a confirm while one is open,
-// KEYS while the keys sheet is open, else LIST.
+// KEYS while the keys sheet is open, MACHINE while ⚙ is open, else LIST.
 func (m Model) deskModeValue() string {
 	switch {
 	case m.pending != nil:
@@ -301,6 +336,8 @@ func (m Model) deskModeValue() string {
 		return "CONFIRM\ttake over?  " + m.keys.takeOver.Rest.Help().Key + " rest · " + m.keys.takeOver.Keep.Help().Key + " keep"
 	case m.keySheet != nil:
 		return "KEYS"
+	case m.cogSheet != nil:
+		return "MACHINE"
 	}
 	return "LIST"
 }
@@ -308,7 +345,7 @@ func (m Model) deskModeValue() string {
 // deskModeOwned is a mode the list publishes. AGENT and SHELL are not:
 // the pane that has the keys writes those.
 func deskModeOwned(mode string) bool {
-	return strings.HasPrefix(mode, "CONFIRM") || mode == "KEYS"
+	return strings.HasPrefix(mode, "CONFIRM") || mode == "KEYS" || mode == "MACHINE"
 }
 
 // syncDeskMode publishes a confirm or KEYS, and LIST again when that ends.
@@ -350,6 +387,7 @@ type deskPollMsg struct{}
 type deskModeMsg struct {
 	list bool
 	mode string
+	cog  string
 }
 
 // watchDeskMode reads the current pane once. The list pane publishes LIST.
@@ -364,7 +402,8 @@ func (m Model) watchDeskMode() tea.Cmd {
 	}
 	return func() tea.Msg {
 		list, mode := deskPaneLook(run, console)
-		return deskModeMsg{list: list, mode: mode}
+		cog, _ := run("show-option", "-wqv", "-t", console, sample.CogOption)
+		return deskModeMsg{list: list, mode: mode, cog: strings.TrimSpace(cog)}
 	}
 }
 

@@ -25,7 +25,7 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	switch {
 	case m.pair.owns() || m.asking(): // the pair page and an ssh prompt take keys only
 		return m, nil
-	case m.keySheet != nil: // the sheet covers the list; a click does not reach the rows
+	case m.keySheet != nil || m.cogSheet != nil: // a sheet covers the list; a click does not reach the rows
 		return m, nil
 	case m.spaceMenu != nil && m.boardShown():
 		return m.spaceMenuTap(ms)
@@ -231,7 +231,7 @@ func (m Model) tapAct() (string, func(Model) (tea.Model, tea.Cmd), string) {
 // wheel is a swipe on a phone: over the stand-in it scrolls the agent's
 // screen back; elsewhere it moves the selection, as ↑ and ↓ do.
 func (m Model) wheel(ms tea.Mouse) (tea.Model, tea.Cmd) {
-	if m.asking() || m.keySheet != nil || m.menu != nil && m.boardShown() { // the menu and the keys sheet move only with their keys
+	if m.asking() || m.keySheet != nil || m.cogSheet != nil || m.menu != nil && m.boardShown() { // the menu and a sheet move only with their keys
 		return m, nil
 	}
 	m.held = nil // a swipe is another key: it drops the question
