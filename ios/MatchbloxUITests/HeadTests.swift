@@ -78,8 +78,10 @@ final class HeadTests: XCTestCase {
         openTheChat(app, row: "hearth-api")
         expect(in: app, step: "the step in hearth-api's chat", "label CONTAINS %@", "✦ Running go test")
         let head = theHead(in: app)
-        // Anticlockwise, close above the middle: about 11 notches, the last at 3 lines a notch.
-        at(head, -46, 8).press(forDuration: 0.05, thenDragTo: at(head, 190, 8), withVelocity: .fast, thenHoldForDuration: 0)
+        // The first touch on this pane reads its menu, and a notch before the reply is dropped:
+        // the press waits on the top mark, which does not repeat. Then anticlockwise, close left
+        // of the middle: 11 notches, the 11th at 3 lines a notch.
+        at(head, -8, -46).press(forDuration: 0.5, thenDragTo: at(head, -8, 190), withVelocity: .fast, thenHoldForDuration: 0)
         XCTAssertTrue((head.value as? String ?? "").contains("card=✦ Running go test"),
                       "no card named the step: \(head.value ?? "")")
         let card = app.staticTexts["step-card"]
