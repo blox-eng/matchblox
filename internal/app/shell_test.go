@@ -1,13 +1,16 @@
 package app
 
 import (
+	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
@@ -168,5 +171,124 @@ func TestTDeadPaneSaysWhy(t *testing.T) {
 	m = pressOn(m, "t")
 	if want := "not opened: ux-pass's pane is gone"; m.noticeText != want {
 		t.Fatalf("notice %q, want %q", m.noticeText, want)
+	}
+}
+
+// peerShellModel is the console with gpu-1 reached and three of its agents
+// in the list, the desk frame on. It returns the model before gpu-1's state.
+func peerShellModel(t *testing.T) (Model, *fakeConn, proto.State) {
+	t.Helper()
+	home, gpu := newFake(), newFake()
+	var next tea.Model = New(Options{
+		NoMotion: true, Conn: home, Now: func() time.Time { return demoAt },
+		Peers: []Peer{{Host: "gpu-1", Conn: gpu}}, Beside: true, Pane: "%1",
+		Tmux: func(args ...string) (string, error) { return "", nil },
+	})
+	next, _ = next.Update(tea.WindowSizeMsg{Width: 160, Height: 40})
+	next, _ = next.Update(stateMsg(hostState()))
+	m := next.(Model)
+	m.deskFrame = true
+	m.peers[m.peerAt("gpu-1")].hello.Tmux = "tmux"
+	cwd := func(s *sample.Session) { s.Cwd = "/wt/" + s.Name }
+	ux := hostState(sess(7, "ux-pass", "%7", cwd), sess(8, "api", "%8", cwd), sess(9, "docs", "%9", cwd))
+	return m, gpu, ux
+}
+
+// TestPeerShellLookupIsACmd: finding the shell panes of a peer is one tmux
+// call over ssh for the host, run as a command and never inside Update.
+// A failed call is not made again on the next snapshot (review of
+// 2026-11-27, Important 4).
+func TestPeerShellLookupIsACmd(t *testing.T) {
+	m, gpu, ux := peerShellModel(t)
+	var mu sync.Mutex
+	var calls []string
+	release := make(chan struct{})
+	fail := false
+	prev := hostRun
+	hostRun = func(argv []string) (string, error) {
+		mu.Lock()
+		calls = append(calls, strings.Join(argv, " "))
+		mu.Unlock()
+		<-release
+		if fail {
+			return "", errors.New("ssh: connect timed out")
+		}
+		return "%11 %7 1\n%7  \n%8  \n%9  \n", nil
+	}
+	t.Cleanup(func() { hostRun = prev })
+	count := func() int { mu.Lock(); defer mu.Unlock(); return len(calls) }
+
+	type result struct {
+		m   tea.Model
+		cmd tea.Cmd
+	}
+	update := func(m Model, msg tea.Msg) (Model, tea.Cmd) {
+		done := make(chan result, 1)
+		go func() { next, cmd := m.Update(msg); done <- result{next, cmd} }()
+		select {
+		case r := <-done:
+			return r.m.(Model), r.cmd
+		case <-time.After(2 * time.Second):
+			close(release)
+			t.Fatal("Update waited for ssh: the lookup runs inside Update")
+			return m, nil
+		}
+	}
+	snapshot := peerMsg{host: "gpu-1", conn: gpu, msg: stateMsg(ux)}
+
+	m, cmd := update(m, snapshot)
+	if n := count(); n != 0 {
+		t.Fatalf("Update made %d ssh calls, want 0", n)
+	}
+	if cmd == nil {
+		t.Fatal("no command")
+	}
+	var lookup tea.Msg
+	finished := make(chan struct{})
+	go func() {
+		for _, msg := range cmdMsgs(cmd) {
+			if l, ok := msg.(shellLookupMsg); ok {
+				lookup = l
+			}
+		}
+		close(finished)
+	}()
+	release <- struct{}{}
+	<-finished
+	if n := count(); n != 1 {
+		t.Fatalf("%d ssh calls for 3 sessions on one host, want 1: %q", n, calls)
+	}
+	if line := calls[0]; !strings.Contains(line, "list-panes") || !strings.Contains(line, "-a") {
+		t.Fatalf("the call is not one list-panes -a: %s", line)
+	}
+	if lookup == nil {
+		t.Fatal("the command made no shellLookupMsg")
+	}
+	next, _ := m.Update(lookup)
+	m = next.(Model)
+	if got := m.shells[shellKey("gpu-1", "%7")]; got != "%11" {
+		t.Fatalf("shell of %%7 is %q, want %%11", got)
+	}
+
+	// A failed lookup is marked tried: the next snapshot asks nothing.
+	close(release)
+	fail = true
+	m2, gpu2, ux2 := peerShellModel(t)
+	m2, cmd = update(m2, peerMsg{host: "gpu-1", conn: gpu2, msg: stateMsg(ux2)})
+	for _, msg := range cmdMsgs(cmd) {
+		if l, ok := msg.(shellLookupMsg); ok {
+			next, _ := m2.Update(l)
+			m2 = next.(Model)
+		}
+	}
+	before := count()
+	_, cmd = update(m2, peerMsg{host: "gpu-1", conn: gpu2, msg: stateMsg(ux2)})
+	for _, msg := range cmdMsgs(cmd) {
+		if _, ok := msg.(shellLookupMsg); ok {
+			t.Fatal("a failed lookup was asked again on the next snapshot")
+		}
+	}
+	if n := count(); n != before {
+		t.Fatalf("ssh ran again after a failure: %d calls, was %d", n, before)
 	}
 }

@@ -20,6 +20,15 @@ type shellMsg struct {
 	err               error
 }
 
+// shellLookupMsg is the answer to one look for a host's shell panes: the
+// agent panes it asked about, and the shell pane each one has.
+type shellLookupMsg struct {
+	host   string
+	asked  []string
+	shells map[string]string // agent pane to shell pane
+	ok     bool              // the host answered
+}
+
 // shellKey is the map key of host's pane. Pane ids repeat across hosts.
 func shellKey(host, pane string) string { return host + "\n" + pane }
 
@@ -41,7 +50,7 @@ func (m Model) askShell() (tea.Model, tea.Cmd) {
 	}
 	run, _ := m.shellIO(s.Host)
 	if run == nil {
-		return m, m.notice("not opened: the shell needs the agent's tmux · ⏎ goes into the session")
+		return m, m.notice("not opened: the shell needs the agent's tmux · " + m.keys.side.Enter.Help().Key + " goes into the session")
 	}
 	// A peer's pane id is another machine's. The console's tmux must not
 	// be asked: the same id here is a different pane.
@@ -150,44 +159,77 @@ func notedShell(run func(args ...string) (string, error), agent string) (string,
 	return "", true
 }
 
-// rememberShells fills the shell map from panes that already carry
-// @matchblox_shell. Desk start and each list refresh call it. A pane is
-// asked once: a later t still focuses the pane this found.
-func (m *Model) rememberShells(host string, sessions []sample.Session) {
-	if !m.deskFrame {
-		return
+// rememberShells looks for the panes that already carry @matchblox_shell,
+// as a command: one tmux call for the host, never one for each session and
+// never inside Update. Desk start and each list refresh call it. A pane is
+// asked once, also when the host did not answer: a later t still finds its
+// own shell (findShellPane). Nil when nothing is left to ask.
+func (m *Model) rememberShells(host string, sessions []sample.Session) tea.Cmd {
+	if !m.deskFrame || m.shellAsking[host] {
+		return nil
 	}
 	peer := host != "" && host != m.opt.Host
 	if peer && (m.watchConn(host) == nil || m.helloOf(host).Tmux == "") {
-		return
+		return nil
 	}
 	run, _ := m.shellIO(host)
 	if run == nil {
-		return
+		return nil
 	}
+	var asked []string
+	for _, s := range sessions {
+		if s.Pane != "" && !m.shellSeen[shellKey(host, s.Pane)] {
+			asked = append(asked, s.Pane)
+		}
+	}
+	if len(asked) == 0 {
+		return nil
+	}
+	if m.shellAsking == nil {
+		m.shellAsking = map[string]bool{}
+	}
+	m.shellAsking[host] = true
+	return func() tea.Msg {
+		shells, ok := shellPanes(run)
+		return shellLookupMsg{host: host, asked: asked, shells: shells, ok: ok}
+	}
+}
+
+// shellPanes is each agent pane's shell pane on a host, from one
+// list-panes of every pane that names its agent. ok is false when the host
+// did not answer.
+func shellPanes(run func(args ...string) (string, error)) (shells map[string]string, ok bool) {
+	out, err := run("list-panes", "-a", "-F", "#{pane_id} #{"+sample.ShellAgentOption+"} #{"+sample.ShellOption+"}")
+	if err != nil {
+		return nil, false
+	}
+	shells = map[string]string{}
+	for line := range strings.SplitSeq(out, "\n") {
+		f := strings.Split(strings.TrimSpace(line), " ")
+		if len(f) < 3 || f[2] == "" || !paneID.MatchString(f[0]) || !paneID.MatchString(f[1]) || f[0] == f[1] {
+			continue
+		}
+		shells[f[1]] = f[0]
+	}
+	return shells, true
+}
+
+// shellLooked takes the answer of one look: the shells it found, and every
+// pane it asked about is marked asked.
+func (m *Model) shellLooked(msg shellLookupMsg) {
+	delete(m.shellAsking, msg.host)
 	if m.shellSeen == nil {
 		m.shellSeen = map[string]bool{}
 	}
-	for _, s := range sessions {
-		if s.Pane == "" {
-			continue
-		}
-		key := shellKey(host, s.Pane)
-		if m.shellSeen[key] {
-			continue
-		}
-		id, ok := notedShell(run, s.Pane)
-		if !ok {
-			continue
-		}
+	for _, pane := range msg.asked {
+		key := shellKey(msg.host, pane)
 		m.shellSeen[key] = true
-		if id == "" {
-			continue
+		if id := msg.shells[pane]; msg.ok && id != "" {
+			if m.shells == nil {
+				m.shells = map[string]string{}
+			}
+			m.shells[key] = id
 		}
-		if m.shells == nil {
-			m.shells = map[string]string{}
-		}
-		m.shells[key] = id
 	}
 }
 

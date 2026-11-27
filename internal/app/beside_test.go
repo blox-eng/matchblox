@@ -2,6 +2,7 @@ package app
 
 import (
 	"errors"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -140,18 +141,27 @@ func besideConsoleWith(t *testing.T, st proto.State, w, h int, tm *besideTmux) (
 	return m, tm
 }
 
-// feed runs cmd and gives its message, and what follows, to the console.
+// feed runs cmd and gives its message, and what follows, to the console. The
+// members of a batch run with cmdMsgs: a timer or a read that blocks gives
+// none.
 func feed(t *testing.T, m Model, cmd tea.Cmd) Model {
 	t.Helper()
 	if cmd == nil {
 		return m
 	}
 	msg := cmd()
-	if _, batch := msg.(tea.BatchMsg); batch {
-		return m // timers and the like: nothing for tmux
+	msgs := []tea.Msg{msg}
+	if v := reflect.ValueOf(msg); v.Kind() == reflect.Slice && v.Type().Elem() == reflect.TypeFor[tea.Cmd]() {
+		msgs = nil
+		for i := range v.Len() {
+			msgs = append(msgs, cmdMsgs(v.Index(i).Interface().(tea.Cmd))...)
+		}
 	}
-	next, cmd := m.Update(msg)
-	return feed(t, next.(Model), cmd)
+	for _, msg := range msgs {
+		next, cmd := m.Update(msg)
+		m = feed(t, next.(Model), cmd)
+	}
+	return m
 }
 
 func TestTheConsoleSplitsItsWindowOnceAtStart(t *testing.T) {

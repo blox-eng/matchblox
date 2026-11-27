@@ -637,6 +637,7 @@ type Model struct {
 	shellAsks                 int               // times the list asked for the shell
 	shells                    map[string]string // shellKey(host, agent pane) -> the shell pane under it
 	shellSeen                 map[string]bool   // host+pane already asked; a refresh does not ask twice
+	shellAsking               map[string]bool   // the hosts with a look for shell panes under way
 	winW, winH                int               // the window's size in beside mode; 0: not read yet
 	boxZoom                   bool              // a box or an animation has the window: the list's pane is zoomed for it
 	boxBack                   []string          // the agent pane's screen, drawn dim behind the box
@@ -910,6 +911,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.tallH = max(m.tallH, msg.Height)
 		return m, m.sizeCmd(msg.Width)
+	case shellLookupMsg:
+		m.shellLooked(msg)
+		return m, nil
 	case shellMsg:
 		if msg.err != nil {
 			return m, m.notice("not opened: " + msg.err.Error())
@@ -926,9 +930,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.barMode = "SHELL"
 		return m, nil
 	case besideMsg:
+		var look tea.Cmd
 		if msg.framed {
 			m.deskFrame = true
-			m.rememberShells(m.opt.Host, m.homeAll.sessions)
+			look = m.rememberShells(m.opt.Host, m.homeAll.sessions)
 		}
 		if msg.notice != "" {
 			m.notice(msg.notice)
@@ -942,10 +947,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if msg.pane != "" {
 				m.beside = msg.pane
 			}
-			return m, said
+			return m, tea.Batch(said, look)
 		}
 		m.beside = msg.pane
-		return m, m.sizeCmd(m.width)
+		return m, tea.Batch(m.sizeCmd(m.width), look)
 	case besideSizeMsg:
 		m.winW, m.winH = msg.w, msg.h
 	case deskPollMsg:
@@ -1106,7 +1111,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.used = *st.Used
 		}
 		m.homeAll = lists{queue: st.Queue, recs: st.Recommendations, sessions: st.Sessions, orphans: st.Orphans, children: st.Children}
-		m.rememberShells(m.opt.Host, st.Sessions)
+		look := m.rememberShells(m.opt.Host, st.Sessions)
 		if from := m.whereFrom(m.opt.Host); st.Found != nil || st.Used != nil || !slices.Equal(from, m.wfrom) {
 			m.wrepos, m.wfrom = m.whereRepos(m.opt.Host), from
 		}
@@ -1150,7 +1155,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var talk tea.Cmd
 		m, talk = m.roomQueued(m.opt.Host)
 		tick := m.waitTick()
-		return m, tea.Batch(m.recv(), m.animate(), news, order, talk, feel, focus, again, started, tick, cogAct)
+		return m, tea.Batch(m.recv(), m.animate(), news, order, talk, feel, focus, again, started, tick, cogAct, look)
 	case graphicsMsg:
 		return m.graphics(msg)
 	case graphicsTickMsg:

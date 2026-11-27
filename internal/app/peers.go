@@ -290,12 +290,12 @@ func (m Model) peerUpdate(pm peerMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		m.merge()
-		m.rememberShells(p.host, st.Sessions)
+		look := m.rememberShells(p.host, st.Sessions)
 		m.settle(p.host)
 		m.keepSelection()
 		next, order := m.queuedOrder(p.host)
 		tick := next.waitTick()
-		return next, tea.Batch(next.peerRecv(i), order, tick)
+		return next, tea.Batch(next.peerRecv(i), order, tick, look)
 	case screenMsg:
 		return m.screenFrom(p.host, msg), m.peerRecv(i)
 	case copyMsg:

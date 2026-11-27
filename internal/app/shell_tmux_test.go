@@ -57,8 +57,8 @@ func (e deskEnv) deskWith(t *testing.T, agent, cwd string) Model {
 		SessionID: "sid-ux", Target: "ux-pass:1.0",
 	}}
 	st.Queue, st.Ships = nil, nil
-	next, _ := m.Update(stateMsg(st))
-	m = next.(Model)
+	next, look := m.Update(stateMsg(st))
+	m = feed(t, next.(Model), look) // the look for shells the list's refresh starts
 	m.opt.Socket = e.tmux("display", "-p", "#{socket_path}")
 	m.toList()
 	m.width, m.height = 120, 40
