@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"errors"
+	"github.com/blox-eng/matchblox/internal/holds"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -1126,5 +1127,18 @@ func TestAnEstimatedFinishDoesNotBuzz(t *testing.T) {
 	s.handle(d)
 	if ev := ofKind(r.take(), "device"); len(ev) != 0 {
 		t.Fatalf("an estimated finish buzzed: %+v", ev)
+	}
+}
+
+// TestAParkedSessionDoesNotBuzz: a session you parked needs nothing from you.
+func TestAParkedSessionDoesNotBuzz(t *testing.T) {
+	r := &fakeRelay{}
+	p, _ := phone(t, "a", true, false)
+	s := newSender(t, r, &clock{t: t0}, p)
+	d := waiting("x")
+	d.Holds = []holds.Hold{{SessionID: "x", By: holds.ByYou}}
+	s.handle(d)
+	if ev := ofKind(r.take(), "device"); len(ev) != 0 {
+		t.Fatalf("a parked session buzzed: %+v", ev)
 	}
 }

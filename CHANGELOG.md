@@ -8,9 +8,10 @@ All notable changes to matchblox are in this file. The format follows
 
 ### Changed
 
-- **The island leads with what needs you.** A session that asks or
-  finished its turn always comes first. With one, the island names it;
-  with more, it says `╿ N`. The lock screen lists up to three, each with
+- **The island leads with what needs you.** A session that asks comes
+  first, then one that finished its turn; within each, the newest change
+  leads. A session you parked steps back: it never buzzes and never leads.
+  With one that needs you, the island names it; with more, it says `╿ N`. The lock screen lists up to three, each with
   what it wants, then `+ N more`, then one line of limits.
 - **The match burns while a session lives.** The flame stays lit while a
   session works, waits, finished its turn or sits idle, full while an agent

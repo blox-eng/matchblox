@@ -213,8 +213,10 @@ Nothing connects to a host from the background.
   choice, or a finished turn. It plays a short pinch hiss. At most one buzz
   each 30 s for each host; a wait goes before a finished turn. A tap on it
   opens the session.
-- **The island:** what needs you comes first. One session that asks or
-  finished its turn: the compact island names it. More: it says `╿ N`. The
+- **The island:** what needs you comes first: a session that asks, then
+  one that finished its turn, the newest change first. A session you
+  parked needs nothing: it never buzzes and comes last. One session that
+  needs you: the compact island names it. More: it says `╿ N`. The
   lock screen lists up to three, each with what it wants (`asks to run a
   command`, `asks you a question`, `finished its turn`), then `+ N more`,
   then one line of limits. With nothing that needs you, it shows the match

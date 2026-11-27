@@ -38,7 +38,7 @@ The person then has to open Pocket to find out.
 
 **Needs you** is a session with a queue row that waits for the person: it
 asks (a permission or a question) or it finished its turn. Order: asks before
-finished; within each, the oldest first. This is the existing `waits` and
+finished; within each, the newest change first (ruling below). This is the existing `waits` and
 `done` order of `push.Build`; out and burns come after, as now.
 
 **Compact island.**
@@ -84,6 +84,21 @@ too (0009 §3.3), which the shipped buzz left out.
 - The push names the sound (`aps.sound`). The island already shows the
   state to Apple, so the name says nothing new. A phone without the file
   plays the default sound.
+
+**What needs you, by priority, with no rotation (owner, 2026-11-27).** The
+owner saw held sessions and fresh finishes rank wrong, and asked for the
+latest change to lead or a rule that rotates by priority. Picked: a rule,
+no rotation (a Live Activity draws only on a push; a rotation spends the
+push budget on motion).
+
+1. An ask (a question or a command) before a finished turn: the agent is
+   blocked until the person answers.
+2. Within each, the newest change first. This replaces the oldest first of
+   0006 §6.6.1.
+3. A session the person parked (a hold by you) needs nothing: it counts in
+   no wait and no need, and it comes after every other session. When it is
+   the top, the island shows it as idle.
+4. Then out, burns and idle, as before.
 
 ## Constraints
 

@@ -21,7 +21,7 @@ type ContentState struct {
 	WaitAt time.Time `json:"wait_at,omitzero"` // when the newest wait began; zero if none
 	Top    *Top      `json:"top,omitempty"`
 	// Needs are the sessions that wait for the person, at most MaxNeeds:
-	// asks before a finished turn, the oldest first. Need counts them all.
+	// asks before a finished turn, the newest change first. Need counts them all.
 	Needs    []Need       `json:"needs,omitempty"`
 	Need     int          `json:"need,omitempty"`
 	Accounts []AccountUse `json:"accounts"`

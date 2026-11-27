@@ -3,6 +3,7 @@ package push
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/blox-eng/matchblox/internal/holds"
 	"os"
 	"slices"
 	"testing"
@@ -43,7 +44,8 @@ func TestAWaitComesBeforeABurn(t *testing.T) {
 	}
 }
 
-func TestTheOldestWaitComesFirst(t *testing.T) {
+// The wait that began last leads (owner, 2026-11-27; it was the oldest, 0006 §6.6.1).
+func TestTheNewestWaitComesFirst(t *testing.T) {
 	n := openNumbers(t, t.TempDir())
 	d := doc([]sample.Session{sess("new", false, t0), sess("old", false, t0)},
 		[]queue.Item{
@@ -51,7 +53,7 @@ func TestTheOldestWaitComesFirst(t *testing.T) {
 			{SessionID: "old", State: queue.StatePermission, Since: t0.Add(-time.Hour)},
 		})
 	got := Build(d, fp, n, t0)
-	if got.Top.N != n.Session("old") || got.Wait != 2 {
+	if got.Top.N != n.Session("new") || got.Wait != 2 {
 		t.Fatalf("top = %+v wait %d", got.Top, got.Wait)
 	}
 }
@@ -90,6 +92,42 @@ func TestProgressGoesInStepsOf5(t *testing.T) {
 		if got.Top.Pct != want {
 			t.Errorf("pct %d -> %d, want %d", in, got.Top.Pct, want)
 		}
+	}
+}
+
+// TestTheNewestChangeLeads: of the asks, and of the finished turns, the one
+// that changed last comes first (owner, 2026-11-27); an ask still leads a finish.
+func TestTheNewestChangeLeads(t *testing.T) {
+	n := openNumbers(t, t.TempDir())
+	ss := []sample.Session{sess("q-old", false, t0), sess("q-new", false, t0), sess("d-old", false, t0), sess("d-new", false, t0)}
+	q := []queue.Item{
+		{SessionID: "q-old", State: queue.StateQuestion, Since: t0.Add(-9 * time.Minute)},
+		{SessionID: "q-new", State: queue.StateQuestion, Since: t0.Add(-3 * time.Minute)},
+		{SessionID: "d-old", State: queue.StateFinished, Since: t0.Add(-8 * time.Minute)},
+		{SessionID: "d-new", State: queue.StateFinished, Since: t0.Add(-1 * time.Minute)},
+	}
+	got := Build(doc(ss, q), fp, n, t0)
+	want := []Need{{n.Session("q-new"), "question"}, {n.Session("q-old"), "question"}, {n.Session("d-new"), "done"}}
+	if !slices.Equal(got.Needs, want) || got.Top.N != n.Session("q-new") {
+		t.Fatalf("needs %+v top %+v, want %+v led by q-new", got.Needs, got.Top, want)
+	}
+}
+
+// TestAParkedSessionStepsBack: a session you parked never leads and does not
+// count as needing you; it comes after every other session (owner, 2026-11-27).
+func TestAParkedSessionStepsBack(t *testing.T) {
+	n := openNumbers(t, t.TempDir())
+	d := doc([]sample.Session{sess("parked", false, t0), sess("idle", false, t0.Add(-time.Hour))},
+		[]queue.Item{{SessionID: "parked", State: queue.StateQuestion, Since: t0}})
+	d.Holds = []holds.Hold{{SessionID: "parked", By: holds.ByYou}}
+	got := Build(d, fp, n, t0)
+	if got.Need != 0 || len(got.Needs) != 0 || got.Top == nil || got.Top.N != n.Session("idle") {
+		t.Fatalf("need %d %+v top %+v, want no need and the idle one on top", got.Need, got.Needs, got.Top)
+	}
+	d.Sessions = d.Sessions[:1]
+	got = Build(d, fp, n, t0)
+	if got.Top == nil || got.Top.N != n.Session("parked") || got.Need != 0 {
+		t.Fatalf("alone: top %+v need %d, want the parked one, needing nothing", got.Top, got.Need)
 	}
 }
 
@@ -200,7 +238,7 @@ func TestAFullWindowThatStillWorksIsSpentNotOut(t *testing.T) {
 }
 
 // The island leads with what needs the person: asks before a finished turn,
-// the oldest first, at most 3, and the count of all (2026-11-27).
+// the newest change first, at most 3, and the count of all (2026-11-27).
 func TestWhatNeedsYouLeadsInOrder(t *testing.T) {
 	n := openNumbers(t, t.TempDir())
 	ids := []string{"w1", "d1", "p1", "d2", "b"}
@@ -215,12 +253,12 @@ func TestWhatNeedsYouLeadsInOrder(t *testing.T) {
 		{SessionID: "d2", State: queue.StateFinished, Since: t0.Add(-4 * time.Minute)},
 	}
 	got := Build(doc(ss, q), fp, n, t0)
-	want := []Need{{n.Session("w1"), "question"}, {n.Session("p1"), "command"}, {n.Session("d1"), "done"}}
+	want := []Need{{n.Session("p1"), "command"}, {n.Session("w1"), "question"}, {n.Session("d2"), "done"}}
 	if got.Need != 4 || !slices.Equal(got.Needs, want) {
 		t.Fatalf("need %d %+v, want 4 %+v", got.Need, got.Needs, want)
 	}
-	if got.Top == nil || got.Top.N != n.Session("w1") {
-		t.Fatalf("top %+v, want w1", got.Top)
+	if got.Top == nil || got.Top.N != n.Session("p1") {
+		t.Fatalf("top %+v, want p1", got.Top)
 	}
 }
 

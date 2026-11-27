@@ -1,6 +1,7 @@
 package push
 
 import (
+	"github.com/blox-eng/matchblox/internal/holds"
 	"math"
 	"slices"
 	"time"
@@ -20,7 +21,7 @@ const MaxAccounts = 4
 // numbers, states, times and percents only.
 // chainState is a chain's word for its neediest session's: a wait asks, a
 // finish waits for the owner to look.
-var chainState = map[string]string{"waits": "asks", "done": "waits", "out": "quiet", "burns": "burns", "idle": "quiet"}
+var chainState = map[string]string{"waits": "asks", "done": "waits", "out": "quiet", "burns": "burns", "idle": "quiet", "parked": "quiet"}
 
 // chainOf is the chain a session is in; its first when it is in several.
 func chainOf(v *state.ChainsView, sessionID string) (chains.Chain, bool) {
@@ -50,9 +51,17 @@ func Build(doc state.Doc, hostFP string, n *Numbers, now time.Time) ContentState
 		state string
 		since time.Time
 	}
+	// A session you parked needs nothing from you: it counts in no wait and
+	// comes after every other session (owner, 2026-11-27).
+	parked := map[string]bool{}
+	for _, h := range doc.Holds {
+		if h.By == holds.ByYou {
+			parked[h.SessionID] = true
+		}
+	}
 	items := map[string]queue.Item{}
 	for _, it := range doc.Queue {
-		if it.State != queue.StatePermission && it.State != queue.StateQuestion && it.State != queue.StateFinished {
+		if it.State != queue.StatePermission && it.State != queue.StateQuestion && it.State != queue.StateFinished || parked[it.SessionID] {
 			continue
 		}
 		if old, ok := items[it.SessionID]; !ok || waits(it) && !waits(old) || waits(it) == waits(old) && it.Since.Before(old.Since) {
@@ -83,20 +92,24 @@ func Build(doc state.Doc, hostFP string, n *Numbers, now time.Time) ContentState
 		default:
 			c.state = "idle" // alive: the match stays lit (owner, 2026-11-27)
 		}
+		if parked[s.SessionID] {
+			c.state = "parked"
+		}
 		if c.state == "burns" {
 			cs.Burn++
 		}
 		cands = append(cands, c)
 	}
-	// A wait before a done before an out before a burn before an idle; of the
-	// waits and dones the oldest, of the others the one prompted last.
-	rank := map[string]int{"waits": 0, "done": 1, "out": 2, "burns": 3, "idle": 4}
+	// A wait before a done before an out before a burn before an idle before a
+	// parked one; of the waits and dones the one that changed last (owner,
+	// 2026-11-27), of the others the one prompted last.
+	rank := map[string]int{"waits": 0, "done": 1, "out": 2, "burns": 3, "idle": 4, "parked": 5}
 	slices.SortStableFunc(cands, func(a, b cand) int {
 		if a.state != b.state {
 			return rank[a.state] - rank[b.state]
 		}
 		if a.state == "waits" || a.state == "done" {
-			return a.since.Compare(b.since)
+			return b.since.Compare(a.since)
 		}
 		return b.s.Started.Compare(a.s.Started)
 	})
@@ -112,7 +125,11 @@ func Build(doc state.Doc, hostFP string, n *Numbers, now time.Time) ContentState
 	}
 	if len(cands) > 0 {
 		c := cands[0]
-		top := &Top{N: n.Session(c.s.SessionID), State: c.state, Out: c.s.Out.UTC()}
+		st := c.state
+		if st == "parked" {
+			st = "idle" // alive, and nothing for you to do
+		}
+		top := &Top{N: n.Session(c.s.SessionID), State: st, Out: c.s.Out.UTC()}
 		if c.s.Progress != nil {
 			top.Pct = step5(c.s.Progress.Pct)
 		}

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"github.com/blox-eng/matchblox/internal/holds"
 	"net"
 	"net/http"
 	"os"
@@ -257,8 +258,12 @@ type buzzBody struct {
 func (s *Sender) buzz(doc state.Doc, regs []Registration, now time.Time) {
 	set := map[string]bool{}
 	var fresh *queue.Item
+	parked := map[string]bool{}
+	for _, h := range doc.Holds {
+		parked[h.SessionID] = parked[h.SessionID] || h.By == holds.ByYou
+	}
 	for i, it := range doc.Queue {
-		if it.SessionID == "" || !waits(it) && !freshFinish(it, now) {
+		if it.SessionID == "" || parked[it.SessionID] || !waits(it) && !freshFinish(it, now) {
 			continue
 		}
 		// By session and kind: a finish that turns into a question buzzes again.
