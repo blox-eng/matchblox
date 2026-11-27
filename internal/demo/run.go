@@ -23,11 +23,20 @@ const notDemo = "not a demo command"
 // askWait bounds one command's act, as the service may wait on a pane.
 const askWait = 10 * time.Second
 
+// The exit statuses of Pocket's commands, as matchblox exits on a host.
+const (
+	exitOK     = 0
+	exitFailed = 1
+	// exitQuestionChanged is a pick refused because the menu no longer reads
+	// as menu printed it (exitQuestionChanged in cmd/matchblox).
+	exitQuestionChanged = 3
+)
+
 // Run answers one of Pocket's commands as matchblox prints it on a host:
 // `menu <who> --json`, `choose <who> <n> --text <t> --sign <s>` and
-// `sessions --json`, each word as a shell reads it. ok is false where
-// matchblox would fail, and out then says why.
-func (d *Demo) Run(line string) (out string, ok bool) {
+// `sessions --json`, each word as a shell reads it. status is matchblox's
+// exit status there; out says why when it is not 0.
+func (d *Demo) Run(line string) (out string, status int) {
 	w, err := shellwords.Split(line)
 	switch {
 	case err != nil:
@@ -38,7 +47,7 @@ func (d *Demo) Run(line string) (out string, ok bool) {
 	case len(w) == 7 && w[0] == "choose" && w[3] == "--text" && w[5] == "--sign":
 		return d.choose(w[1], w[2], w[4], w[6])
 	}
-	return notDemo, false
+	return notDemo, exitFailed
 }
 
 // sessionRow is a row of `sessions --json`, the part Pocket reads.
@@ -53,7 +62,7 @@ type sessionRow struct {
 // sessions lists the demo's sessions, each with the number `console --open
 // <n>` focuses; the first list gives each its number, as a phone's register
 // does on a host.
-func (d *Demo) sessions() (string, bool) {
+func (d *Demo) sessions() (string, int) {
 	rows := []sessionRow{}
 	for _, s := range d.svc.State().Sessions {
 		r := sessionRow{Name: s.Name, Pane: s.Pane, Status: s.Status, Word: stoker.Word(s)}
@@ -65,17 +74,17 @@ func (d *Demo) sessions() (string, bool) {
 	return printed(rows)
 }
 
-func (d *Demo) menu(who string) (string, bool) {
+func (d *Demo) menu(who string) (string, int) {
 	s, err := d.resolve(who)
 	if err != nil {
-		return "menu " + who + ": " + err.Error(), false
+		return "menu " + who + ": " + err.Error(), exitFailed
 	}
 	res, err := d.ask(proto.Act{RecID: proto.MenuPrefix + s.Pane})
 	if err == nil && res.Err != "" {
 		err = errors.New(res.Err)
 	}
 	if err != nil {
-		return "menu " + who + ": " + err.Error(), false
+		return "menu " + who + ": " + err.Error(), exitFailed
 	}
 	m := proto.Menu{Options: []proto.Option{}}
 	if res.Menu != nil {
@@ -85,33 +94,35 @@ func (d *Demo) menu(who string) (string, bool) {
 	return printed(m)
 }
 
-func (d *Demo) choose(who, digit, text, sign string) (string, bool) {
+func (d *Demo) choose(who, digit, text, sign string) (string, int) {
 	name := "choose " + who
 	s, err := d.resolve(who)
 	if err != nil {
-		return name + ": " + err.Error(), false
+		return name + ": " + err.Error(), exitFailed
 	}
 	if n, err := strconv.Atoi(digit); err != nil || n < 1 || n > 9 || strconv.Itoa(n) != digit {
-		return fmt.Sprintf("choose picks an option from 1 to 9, not %q", digit), false
+		return fmt.Sprintf("choose picks an option from 1 to 9, not %q", digit), exitFailed
 	}
 	if text == "" || sign == "" {
-		return "choose needs the option's --text and the menu's --sign, as menu printed them", false
+		return "choose needs the option's --text and the menu's --sign, as menu printed them", exitFailed
 	}
 	res, err := d.ask(proto.Act{RecID: proto.ChoosePrefix + s.Pane, Text: digit + "\x00" + text + "\x00" + sign,
 		PID: s.PID, Start: s.Start, Confirm: "y"})
 	switch {
 	case err != nil:
-		return name + ": did not run: " + err.Error(), false
+		return name + ": did not run: " + err.Error(), exitFailed
+	case strings.HasSuffix(res.Err, proto.MenuChanged):
+		return "the question changed", exitQuestionChanged
 	case res.Err != "":
-		return name + ": refused: " + res.Err, false
+		return name + ": refused: " + res.Err, exitFailed
 	case len(res.Skipped) > 0:
-		return name + ": refused: " + strings.Join(res.Skipped, "; "), false
+		return name + ": refused: " + strings.Join(res.Skipped, "; "), exitFailed
 	}
 	var b strings.Builder
 	for _, argv := range res.Ran {
 		b.WriteString(strings.Join(argv, " ") + "\n")
 	}
-	return b.String(), true
+	return b.String(), exitOK
 }
 
 // resolve finds the session who names by pane, target or name, as matchblox
@@ -167,10 +178,20 @@ func (d *Demo) ask(a proto.Act) (proto.Result, error) {
 	}
 }
 
-func printed(v any) (string, bool) {
+func printed(v any) (string, int) {
 	b, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
-		return err.Error(), false
+		return err.Error(), exitFailed
 	}
-	return string(b) + "\n", true
+	return string(b) + "\n", exitOK
+}
+
+// MoveCursor moves the cursor of the asking session's menu down one
+// option, as the agent's own ↓ does. Its menu then reads anew: a pick made
+// from the menu before it is stale.
+func (d *Demo) MoveCursor() error {
+	w := d.script.world
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.move(askPane, false)
 }

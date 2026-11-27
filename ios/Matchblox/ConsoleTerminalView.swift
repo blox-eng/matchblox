@@ -7,7 +7,7 @@ import UIKit
 /// While the program reads the mouse, a vertical swipe sends wheel steps (`WheelScroll`), each step
 /// ticks once. In a chat, a long-press selects text to copy. A tap sends a click: the
 /// console opens the row's chat. While the console shows Sessions or Machine, a long-press sends a
-/// right click (`BoardTouch`). The match head on the belt scrolls through `head(lines:)`. A sideways
+/// right click (`BoardTouch`). The match head over the belt scrolls through `head(lines:)`. A sideways
 /// swipe turns no page: the list and the chat have none. A pinch makes the text bigger or smaller,
 /// and a tap on a link asks what to do with it.
 final class ConsoleTerminalView: TerminalView {
@@ -585,11 +585,16 @@ final class ConsoleTerminalView: TerminalView {
 
     // MARK: The match head
 
-    /// The match head on the belt rolled `lines` lines (positive: older). Returns where they went.
+    /// Where a notch of the match head would go now (true: toward older lines).
+    func headRoute(older: Bool) -> HeadRoute {
+        HeadRoute.route(readsMouse: readsMouse, inTmuxPane: inTmuxPane, canScroll: canScroll,
+                        position: scrollPosition, scrollBackSteps: scrollBack.steps, older: older)
+    }
+
+    /// The match head rolled `lines` lines (positive: older). Returns where they went.
     func head(lines: Int) -> HeadRoute {
         stopCoast()
-        let route = HeadRoute.route(readsMouse: readsMouse, inTmuxPane: inTmuxPane, canScroll: canScroll,
-                                    position: scrollPosition, scrollBackSteps: scrollBack.steps, older: lines > 0)
+        let route = headRoute(older: lines > 0)
         switch route {
         case .wheel:
             let events = WheelBurst.steps(lines: lines, linesPerStep: inTmuxPane ? WheelScroll.tmuxLines : 1)
@@ -700,9 +705,9 @@ final class ConsoleTerminalView: TerminalView {
         return HomeKey.labelColumns(in: cells)
     }
 
-    #if DEBUG
-    /// The screen as text. A cell the program never drew holds NUL, and a space may be such a cell.
-    var screenText: String {
+    /// The screen's rows as text, from the top. A cell the program never drew holds NUL, and a
+    /// space may be such a cell.
+    var visibleLines: [String] {
         let terminal = getTerminal()
         return (0..<terminal.rows).map { row in
             let cells: [Character] = (0..<terminal.cols).map { col in
@@ -710,8 +715,34 @@ final class ConsoleTerminalView: TerminalView {
                 return cell == "\0" ? " " : cell
             }
             return String(cells)
-        }.joined(separator: "\n")
+        }
     }
+
+    /// Pocket's own highlight of a menu option, over the first row that shows its text; nil for none.
+    /// The agent's mark stays where it is: only a pick the host checks moves it.
+    func highlightRow(showing text: String?) {
+        let probe = text.map { String($0.prefix(Self.highlightProbe)) }
+        guard let probe, !probe.isEmpty, let row = visibleLines.firstIndex(where: { $0.contains(probe) }) else {
+            rowHighlight.isHidden = true
+            return
+        }
+        let cell = cellSize
+        if rowHighlight.superview == nil {
+            rowHighlight.backgroundColor = BeltLook.accent.withAlphaComponent(0.18)
+            rowHighlight.isUserInteractionEnabled = false
+            addSubview(rowHighlight)
+        }
+        rowHighlight.frame = CGRect(x: 0, y: CGFloat(row + getTerminal().buffer.yDisp) * cell.height,
+                                    width: bounds.width, height: cell.height)
+        rowHighlight.isHidden = false
+    }
+
+    /// A wrapped option shows its first words on its first row.
+    private static let highlightProbe = 24
+    private let rowHighlight = UIView()
+
+    #if DEBUG
+    var screenText: String { visibleLines.joined(separator: "\n") }
     #endif
 }
 

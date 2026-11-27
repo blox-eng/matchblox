@@ -119,10 +119,6 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
     }
 
     var onSend: ([UInt8]) -> Void = { _ in }
-    /// The match head rolled `lines` lines (positive: older). The answer says where they went.
-    var onHead: (Int) -> HeadRoute = { _ in .nothing }
-    /// VoiceOver paged the terminal with the match head (true: toward older lines).
-    var onHeadPage: (Bool) -> HeadRoute = { _ in .nothing }
     /// A tap on the Ctrl key: the terminal arms or disarms ctrl for the next typed key.
     var onCtrl: () -> Void = {}
     /// Ctrl is armed: its key stays lit until the next typed key, or a second tap.
@@ -201,16 +197,11 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
     /// VoiceOver's elements, built when asked and dropped when the keys change or come to rest.
     private var spoken: [Any]?
 
-    /// The match head's roll, coast and cooling; the belt hit-tests and draws.
-    private lazy var headDriver: HeadDriver = {
-        let driver = HeadDriver(radius: Self.headRadius)
-        driver.onLines = { [weak self] lines in self?.onHead(lines) ?? .nothing }
-        driver.say = { [weak self] message in self?.flash(message) }
-        driver.draw = { [weak self] turn, heat, struck in self?.drawHead(turn: turn, heat: heat, struck: struck) }
-        driver.onClick = { [weak self] in self?.onSend(Self.enter) }
-        driver.flash = { [weak self] in self?.pieces.forEach { $0.head?.flash() } }
-        return driver
-    }()
+    /// The match head this belt carries over its keys: the dock's only.
+    private var head: DockHeadView?
+    private lazy var headRow: NSLayoutConstraint = belt.topAnchor.constraint(equalTo: drawer.bottomAnchor)
+    /// What the head says in the handle row, in place of its rest line.
+    private var headLine: String?
 
     init() {
         let layout = BeltLayout.load(from: .standard)
@@ -248,6 +239,8 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
         let name = nameStack
         name.addArrangedSubview(markView)
         name.addArrangedSubview(nameLabel)
+        nameLabel.adjustsFontSizeToFitWidth = true
+        nameLabel.minimumScaleFactor = 0.75
         name.spacing = 5
         name.alignment = .center
         name.translatesAutoresizingMaskIntoConstraints = false
@@ -287,7 +280,8 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
             edge.heightAnchor.constraint(equalToConstant: 1),
             name.leadingAnchor.constraint(equalTo: handle.safeAreaLayoutGuide.leadingAnchor, constant: Self.handlePadding),
             name.centerYAnchor.constraint(equalTo: handle.centerYAnchor, constant: 0.5),
-            name.trailingAnchor.constraint(lessThanOrEqualTo: grip.leadingAnchor, constant: -8),
+            // A line in place of the name runs on over the grip, which hides while it shows.
+            name.trailingAnchor.constraint(lessThanOrEqualTo: keyboardButton.leadingAnchor, constant: -8),
             markView.widthAnchor.constraint(equalToConstant: Self.markSide),
             markView.heightAnchor.constraint(equalToConstant: Self.markSide),
             grip.centerXAnchor.constraint(equalTo: handle.centerXAnchor),
@@ -362,7 +356,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
         let bottom = belt.bottomAnchor.constraint(equalTo: safeAreaLayoutGuide.bottomAnchor)
         bottom.priority = .init(999)
         NSLayoutConstraint.activate([
-            belt.topAnchor.constraint(equalTo: drawer.bottomAnchor),
+            headRow,
             // In landscape the keys stay clear of the notch and the rounded corners.
             belt.leadingAnchor.constraint(equalTo: safeAreaLayoutGuide.leadingAnchor),
             belt.trailingAnchor.constraint(equalTo: safeAreaLayoutGuide.trailingAnchor),
@@ -571,6 +565,12 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
     }
 
     private func updateName() {
+        if let line = headLine ?? restLine {
+            markView.isHidden = true
+            grip.isHidden = true
+            return setName(line, color: BeltLook.muted, kern: 0)
+        }
+        grip.isHidden = false
         let mark = layout == .commands ? Self.catalog.mark(of: agent) : nil
         markView.image = mark.flatMap { UIImage(named: "mark-\($0)") }
         markView.isHidden = markView.image == nil
@@ -590,6 +590,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
         flashes += 1
         let flash = flashes
         markView.isHidden = true
+        grip.isHidden = true
         setName(message, color: BeltLook.muted, kern: 0)
         UIAccessibility.post(notification: .announcement, argument: message)
         Task { [weak self] in
@@ -599,14 +600,44 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
         }
     }
 
+    // MARK: The match head
+
+    /// Carries the match head over the keys: the belt moves down by the head's own row, and the
+    /// rest of the head lies over the belt. The handle row then says what the head does.
+    func carry(_ head: DockHeadView) {
+        self.head = head
+        head.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(head)
+        headRow.constant = DockHeadView.row
+        NSLayoutConstraint.activate([
+            head.centerXAnchor.constraint(equalTo: belt.centerXAnchor),
+            head.bottomAnchor.constraint(equalTo: belt.topAnchor, constant: DockHeadView.side - DockHeadView.row),
+            head.widthAnchor.constraint(equalToConstant: DockHeadView.side),
+            head.heightAnchor.constraint(equalToConstant: DockHeadView.side),
+        ])
+        head.say = { [weak self] line in self?.say(line) }
+        updateName()
+    }
+
+    /// The head's line in the handle row; nil gives the row back the head's rest line.
+    private func say(_ line: String?) {
+        headLine = line
+        // A flash's way back to the name would end the line.
+        flashes += 1
+        updateName()
+        if let line { UIAccessibility.post(notification: .announcement, argument: line) }
+    }
+
+    /// What a roll and a hold do, and where to set them: the handle row of a belt with a head, at rest.
+    private var restLine: String? {
+        head.map { _ in HeadHint.rest(hold: HeadMarks.load(from: .standard)[.hold]).line }
+    }
+
     // MARK: Touch
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let first = touches.first, first.view === belt, touch == nil, !headDriver.isTouched else {
+        guard let first = touches.first, first.view === belt, touch == nil else {
             return super.touchesBegan(touches, with: event)
-        }
-        if let centre = headCentre(at: first.location(in: belt)) {
-            return headDriver.began(at: first.location(in: belt), centre: centre, time: first.timestamp)
         }
         selection.prepare()
         impact.prepare()
@@ -628,7 +659,6 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
         guard let first = touches.first, first.view === belt else {
             return super.touchesMoved(touches, with: event)
         }
-        if headDriver.isTouched { return headDriver.moved(to: first.location(in: belt), time: first.timestamp) }
         guard touch != nil else { return super.touchesMoved(touches, with: event) }
         measure(first)
     }
@@ -637,7 +667,6 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
         guard let first = touches.first, first.view === belt else {
             return super.touchesEnded(touches, with: event)
         }
-        if headDriver.isTouched { return headDriver.ended(at: first.timestamp) }
         guard touch != nil else { return super.touchesEnded(touches, with: event) }
         measure(first)
         if let touch, !touch.tap.isDrag, touch.wasAtRest, let i = keyIndex(at: first.location(in: belt)) {
@@ -652,7 +681,6 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
         guard touches.first?.view === belt else {
             return super.touchesCancelled(touches, with: event)
         }
-        if headDriver.isTouched { return headDriver.cancelled() }
         touch = nil
         if pan.state != .began && pan.state != .changed { settleIfHeld() }
     }
@@ -691,8 +719,6 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
     /// The keyboard key is its own button: no touch on it opens the drawer. A tap opens it
     /// only on the grip or the name.
     func gestureRecognizer(_ gesture: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-        // A roll on the match head never spins the belt.
-        if gesture === pan { return !isOnHead(touch.location(in: belt)) }
         guard gesture.view === handle else { return true }
         if touch.view?.isDescendant(of: keyboardButton) ?? false { return false }
         guard gesture === handleTap else { return true }
@@ -751,10 +777,8 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
     private func press(_ i: Int) {
         guard let motion, pieces.indices.contains(i) else { return }
         let piece = pieces[i]
-        // A tap on the head goes to its driver, which sends Enter only for a still tap; a press
-        // here, by a lift from a neighbour or the large-text view, sends nothing.
+        // The belt's head key sends nothing: the dock's head is the head.
         guard piece.head == nil else { return }
-        stopHead()
         if piece.key.isCommand && !commandsLive {
             flash("commands run in an agent's pane")
             return
@@ -779,49 +803,6 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
             self.paintAtRest(piece)
         }
         onSend(bytes)
-    }
-
-    // MARK: The match head
-
-    /// Over a match head on a belt at rest: a moving belt takes the touch, and stops.
-    private func isOnHead(_ point: CGPoint) -> Bool {
-        headCentre(at: point) != nil
-    }
-
-    /// The centre, in the belt, of the head under `point`.
-    private func headCentre(at point: CGPoint) -> CGPoint? {
-        guard motion?.atRest ?? true, let i = keyIndex(at: point), let ball = pieces[i].head else { return nil }
-        return ball.convert(CGPoint(x: ball.bounds.midX, y: ball.bounds.midY), to: belt.layer)
-    }
-
-    /// The head is about 34 pt round.
-    private static let headRadius: CGFloat = 34
-    static let enter = KeyBar.bytes(for: "⏎") ?? [0x0d]
-
-    /// A key or typed text ends a flick, so the coast cannot scroll the pane back up under it.
-    func stopHead() {
-        headDriver.stop()
-    }
-
-    private func pageHead(older: Bool) {
-        switch onHeadPage(older) {
-        case .wheel, .scrollback: break
-        case .end: UIAccessibility.post(notification: .announcement, argument: older ? "at the top" : "at the bottom")
-        case .nothing: UIAccessibility.post(notification: .announcement, argument: "nothing scrolls here")
-        }
-    }
-
-    private func drawHead(turn: CGPoint, heat: CGFloat, struck: Bool) {
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        for piece in pieces {
-            guard let layer = piece.head else { continue }
-            layer.turnX = turn.x
-            layer.turnY = turn.y
-            layer.heat = heat
-            layer.struck = struck
-        }
-        CATransaction.commit()
     }
 
     // MARK: Coast, settle and run-off
@@ -892,7 +873,6 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
         setTray(open: false, animated: false)
         touch = nil
         stopLink()
-        headDriver.leave()
         if runOffLeft > 0 { rebuild() }
         // A belt that leaves the screen mid-coast rests on its nearest detent at once.
         guard motion?.atRest == false else { return }
@@ -1059,11 +1039,13 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
 
     private final class Element: UIAccessibilityElement {
         var activate: () -> Bool = { false }
-        /// The match head: a swipe up or down pages the terminal (true: toward older lines).
-        var adjust: (Bool) -> Void = { _ in }
+        /// The value read when asked, as the handle row's line changes after the element is made.
+        var readValue: () -> String? = { nil }
         override func accessibilityActivate() -> Bool { activate() }
-        override func accessibilityIncrement() { adjust(false) }
-        override func accessibilityDecrement() { adjust(true) }
+        override var accessibilityValue: String? {
+            get { readValue() }
+            set {}
+        }
     }
 
     override var accessibilityElements: [Any]? {
@@ -1073,7 +1055,10 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
             name.accessibilityLabel = "Layouts, \(layout.rawValue)"
             name.accessibilityTraits = .button
             name.accessibilityFrameInContainerSpace = CGRect(x: 0, y: 0, width: grip.frame.maxX, height: Self.handleHeight)
-            name.accessibilityValue = trayOpen ? "open" : nil
+            name.readValue = { [weak self] in
+                guard let self else { return nil }
+                return self.trayOpen ? "open" : self.headLine ?? self.restLine
+            }
             name.activate = { [weak self] in
                 guard let self else { return false }
                 self.setTray(open: !self.trayOpen)
@@ -1081,6 +1066,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
             }
             var elements: [Any] = [name, keyboardButton]
             if trayOpen { elements.append(trayHost.view as Any) }
+            if let head { elements.append(head) }
             guard let motion else {
                 spoken = elements
                 return elements
@@ -1090,9 +1076,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
                 let x0 = motion.x(ofKeyAt: i)
                 let key = Element(accessibilityContainer: self)
                 key.accessibilityLabel = piece.key.spoken
-                key.accessibilityTraits = piece.head != nil ? .adjustable : isDim(piece) ? [.button, .notEnabled] : .button
-                if piece.head != nil { key.accessibilityHint = "Swipe up or down to scroll. Double-tap to send Enter." }
-                key.adjust = { [weak self] older in self?.pageHead(older: older) }
+                key.accessibilityTraits = isDim(piece) ? [.button, .notEnabled] : .button
                 key.accessibilityFrameInContainerSpace = CGRect(
                     x: belt.frame.minX + x0, y: belt.frame.minY + Self.keyTop, width: piece.width, height: BeltGeometry.keyHeight)
                 // A key element outlives its key when the belt rebuilds or pages: it finds its key
@@ -1101,12 +1085,6 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
                 key.activate = { [weak self] in
                     guard let self, let i = self.pieces.firstIndex(where: { $0.layer === layer }),
                           self.motion?.onScreen.contains(i) == true, !self.isBoardDim(self.pieces[i]) else { return false }
-                    // VoiceOver's double-tap on the head is a deliberate Enter; its hint says so.
-                    if self.pieces[i].head != nil {
-                        self.stopHead()
-                        self.onSend(Self.enter)
-                        return true
-                    }
                     self.press(i)
                     return true
                 }

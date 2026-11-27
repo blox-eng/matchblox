@@ -46,19 +46,27 @@ func MBDemoError(buf *C.char, n C.int) C.int { return copyOut(buf, n, errorText(
 
 // MBDemoRun runs one of Pocket's commands (`menu <who> --json`, `choose <who>
 // <n> --text <t> --sign <s>`, `sessions --json`) in the demo that is on, and
-// copies what it prints into buf as MBDemoError does. *ok is 1 when the
-// command did what it asks, 0 when it failed, as on a host.
+// copies what it prints into buf as MBDemoError does. *status is the exit
+// status matchblox gives on a host: 0 when the command did what it asks, 3
+// for a pick from a menu that changed.
 //
 //export MBDemoRun
-func MBDemoRun(cmd *C.char, buf *C.char, n C.int, ok *C.int) C.int {
-	out, done := command(C.GoString(cmd))
-	if ok != nil {
-		*ok = 0
-		if done {
-			*ok = 1
-		}
+func MBDemoRun(cmd *C.char, buf *C.char, n C.int, status *C.int) C.int {
+	out, exit := command(C.GoString(cmd))
+	if status != nil {
+		*status = C.int(exit)
 	}
 	return copyOut(buf, n, out)
+}
+
+// MBDemoMoveCursor moves the asking session's menu cursor, as its agent
+// does: the UI test's way to a question that changed before a pick.
+//
+//export MBDemoMoveCursor
+func MBDemoMoveCursor() {
+	if r := on(); r != nil {
+		_ = r.demo.MoveCursor()
+	}
 }
 
 // copyOut copies s into buf of n bytes, cut to fit, with a NUL at the end,
@@ -140,10 +148,10 @@ func start(tree string, cols, rows int) int {
 	return 0
 }
 
-func command(line string) (string, bool) {
+func command(line string) (string, int) {
 	r := on()
 	if r == nil {
-		return "the demo is not on", false
+		return "the demo is not on", 1
 	}
 	return r.demo.Run(line)
 }

@@ -16,10 +16,10 @@ import (
 // askPane is the demo session that waits on a question's menu.
 const askPane = "%2"
 
-func runMenu(t *testing.T, run func(string) (string, bool), who string) proto.Menu {
+func runMenu(t *testing.T, run func(string) (string, int), who string) proto.Menu {
 	t.Helper()
-	out, ok := run("menu " + who + " --json")
-	if !ok {
+	out, status := run("menu " + who + " --json")
+	if status != 0 {
 		t.Fatalf("menu %s: %s", who, out)
 	}
 	var m proto.Menu
@@ -31,11 +31,11 @@ func runMenu(t *testing.T, run func(string) (string, bool), who string) proto.Me
 
 // waitForSessions runs `sessions --json` until the demo's service has
 // sampled its sessions.
-func waitForSessions(t *testing.T, run func(string) (string, bool)) []map[string]any {
+func waitForSessions(t *testing.T, run func(string) (string, int)) []map[string]any {
 	t.Helper()
 	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
-		out, ok := run("sessions --json")
-		if !ok {
+		out, status := run("sessions --json")
+		if status != 0 {
 			t.Fatalf("sessions: %s", out)
 		}
 		var rows []map[string]any
@@ -78,20 +78,43 @@ func TestDemoRunChooseAnswersTheMenu(t *testing.T) {
 	m := runMenu(t, d.Run, askPane)
 	text := m.Options[1].Text
 	stale := "choose " + askPane + " 2 --text " + quote(text) + " --sign 0123456789abcdef"
-	if out, ok := d.Run(stale); ok || !strings.Contains(out, "menu changed — look again") {
-		t.Fatalf("a stale sign: %v %q", ok, out)
+	if out, status := d.Run(stale); status != 3 || out != "the question changed" {
+		t.Fatalf("a stale sign: %d %q", status, out)
 	}
 	if typed(d.Ran()) {
 		t.Fatal("a stale sign typed a key")
 	}
-	if out, ok := d.Run("choose " + askPane + " 2 --text " + quote(text) + " --sign " + m.Sign); !ok {
-		t.Fatalf("choose: %s", out)
+	if out, status := d.Run("choose " + askPane + " 2 --text " + quote(text) + " --sign " + m.Sign); status != 0 {
+		t.Fatalf("choose: %d %s", status, out)
 	}
 	if !typed(d.Ran()) {
 		t.Fatalf("choose typed no 2: %q", d.Ran())
 	}
 	if m := runMenu(t, d.Run, askPane); len(m.Options) != 0 {
 		t.Fatalf("the menu stays after the pick: %+v", m)
+	}
+}
+
+// TestDemoRunPickAfterTheAgentMovedIsStale (Surface: an agent's tools): the
+// agent's cursor moves between the menu read and the pick, as when its
+// question is drawn again; the pick types nothing and exits as a host's
+// does, so Pocket says the question changed.
+func TestDemoRunPickAfterTheAgentMovedIsStale(t *testing.T) {
+	d, _ := start(t)
+	waitForSessions(t, d.Run)
+	m := runMenu(t, d.Run, askPane)
+	if err := d.MoveCursor(); err != nil {
+		t.Fatal(err)
+	}
+	if again := runMenu(t, d.Run, askPane); again.Sign == m.Sign {
+		t.Fatalf("the moved cursor kept the sign %s", m.Sign)
+	}
+	pick := "choose " + askPane + " 2 --text " + quote(m.Options[1].Text) + " --sign " + m.Sign
+	if out, status := d.Run(pick); status != 3 || out != "the question changed" {
+		t.Fatalf("a pick after the cursor moved: %d %q", status, out)
+	}
+	if typed(d.Ran()) {
+		t.Fatal("a stale pick typed a key")
 	}
 }
 
@@ -143,8 +166,8 @@ func TestDemoRunRefusesOtherCommands(t *testing.T) {
 		"choose " + askPane + " 2 --sign s --text t",
 		"send " + askPane + " hello",
 	} {
-		if out, ok := d.Run(line); ok || out != "not a demo command" {
-			t.Errorf("%q: %v %q", line, ok, out)
+		if out, status := d.Run(line); status != 1 || out != "not a demo command" {
+			t.Errorf("%q: %d %q", line, status, out)
 		}
 	}
 	if len(d.Ran()) != 0 {

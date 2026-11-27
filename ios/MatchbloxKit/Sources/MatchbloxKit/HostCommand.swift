@@ -4,7 +4,7 @@ import Foundation
 public struct HostReply: Equatable, Sendable {
     public let output: Data
     public let ok: Bool
-    /// The command's exit status; nil when it never ran or the demo answered.
+    /// The command's exit status, the demo's as a host's; nil when it never ran.
     public let status: Int?
 
     public init(output: Data, ok: Bool, status: Int? = nil) {

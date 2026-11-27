@@ -72,16 +72,27 @@ final class DemoSession: ConsoleSource, @unchecked Sendable {
     private static let commands = DispatchQueue(label: "com.blox.matchblox.demo.commands", qos: .userInitiated)
     private static let replySize = 256 * 1024
 
-    /// Runs one of Pocket's host commands in the demo that is on: the runner `HostCommand.demo` takes.
+    #if DEBUG
+    /// The UI test's question that changes between the roll and the pick: the agent's cursor
+    /// moves just before each pick lands.
+    private static let questionChanges = ProcessInfo.processInfo.arguments.contains("-demoQuestionChanges")
+    #endif
+
+    /// Runs one of Pocket's host commands in the demo that is on: the runner `HostCommand.demo`
+    /// takes. The reply carries the exit status matchblox gives on a host.
     static func run(_ line: String) async -> HostReply {
         await withCheckedContinuation { (done: CheckedContinuation<HostReply, Never>) in
             Self.commands.async {
+                #if DEBUG
+                if Self.questionChanges, line.hasPrefix("choose ") { MBDemoMoveCursor() }
+                #endif
                 var reply = [CChar](repeating: 0, count: Self.replySize)
-                var ok: Int32 = 0
+                var status: Int32 = 1
                 let length = line.withCString {
-                    MBDemoRun(UnsafeMutablePointer(mutating: $0), &reply, Int32(Self.replySize), &ok)
+                    MBDemoRun(UnsafeMutablePointer(mutating: $0), &reply, Int32(Self.replySize), &status)
                 }
-                done.resume(returning: HostReply(output: Data(bytes: reply, count: Int(length)), ok: ok == 1))
+                let output = Data(bytes: reply, count: Int(length))
+                done.resume(returning: HostReply(output: output, ok: status == 0, status: Int(status)))
             }
         }
     }
