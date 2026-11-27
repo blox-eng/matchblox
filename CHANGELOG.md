@@ -6,6 +6,15 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Every repo. Every agent. One desk.** On a desk in tmux, at 100
+  columns or more, the console is four panes: a header with repo spaces,
+  the list, the agent's own pane, and a bar. `?` opens the keys over the
+  list, `,` opens Machine, `t` opens a shell under the agent, and `D`
+  reviews the change in the agent seat. Under 100 columns, and on Pocket,
+  the sidebar stays.
+
 ## [0.69.0] - 2026-11-27
 
 ### Changed
