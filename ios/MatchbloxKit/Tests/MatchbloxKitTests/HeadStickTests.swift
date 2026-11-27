@@ -73,10 +73,10 @@ final class HeadStickTests: XCTestCase {
 
     func testTravelClamps() {
         var stick = HeadStick()
-        XCTAssertEqual(stick.offset, .zero)
+        XCTAssertEqual([stick.offset.x, stick.offset.y], [0, 0])
         stick.began(at: 0)
         _ = stick.moved(to: CGPoint(x: 3, y: 4), at: 0.01)
-        XCTAssertEqual(stick.offset, CGPoint(x: 3, y: 4), "under 12 pt the head goes with the thumb")
+        XCTAssertEqual([stick.offset.x, stick.offset.y], [3, 4], "under 12 pt the head goes with the thumb")
         _ = stick.moved(to: CGPoint(x: 0, y: -40), at: 0.02)
         XCTAssertEqual(stick.offset.x, 0, accuracy: 0.001)
         XCTAssertEqual(stick.offset.y, -12, accuracy: 0.001)
@@ -85,7 +85,26 @@ final class HeadStickTests: XCTestCase {
         XCTAssertEqual(stick.offset.y, 9.6, accuracy: 0.001, "12 pt along the push")
         XCTAssertLessThanOrEqual(hypot(stick.offset.x, stick.offset.y), 12.001)
         _ = stick.lifted(at: 0.1)
-        XCTAssertEqual(stick.offset, .zero, "the head springs back on the lift")
+        XCTAssertEqual([stick.offset.x, stick.offset.y], [0, 0], "the head springs back on the lift")
+    }
+
+    /// The dock reads the hold from `held` alone, for the pushes and the lift: a push before
+    /// 0.6 s leaves it false for good, and a still thumb sets it at 0.6 s on the stick's clock.
+    func testHeldOnlyFromTheStick() {
+        var stick = HeadStick()
+        stick.began(at: 0)
+        XCTAssertEqual(stick.moved(to: CGPoint(x: 0, y: 20), at: 0.3), .key(.bottom, word: false))
+        _ = stick.moved(to: CGPoint(x: 0, y: 0), at: 0.4)
+        XCTAssertNil(stick.tick(at: 1.0))
+        XCTAssertFalse(stick.held, "a push before 0.6 s cancels the hold")
+        XCTAssertEqual(stick.lifted(at: 1.1), .nothing, "the lift after a push before 0.6 s does nothing")
+
+        stick.began(at: 0)
+        XCTAssertNil(stick.tick(at: 0.59))
+        XCTAssertFalse(stick.held)
+        XCTAssertNil(stick.tick(at: 0.6))
+        XCTAssertTrue(stick.held, "still for 0.6 s: the ring filled")
+        XCTAssertEqual(stick.lifted(at: 0.7), .hold)
     }
 
     func testTapIsEnterOnlyStill() {

@@ -77,6 +77,22 @@ final class HeadMarksTests: XCTestCase {
         XCTAssertEqual(faces(marks), faces(HeadMarks()), "undo with nothing to take back changes nothing")
     }
 
+    /// Home is made again each time it opens, so its undo reads the steps from the store.
+    func testUndoAfterLoad() throws {
+        let store = defaults()
+        var marks = HeadMarks.load(from: store)
+        try marks.set("Esc", at: .left)
+        marks.save(to: store)
+        var again = HeadMarks.load(from: store)
+        XCTAssertEqual(again[.left], "Esc")
+        again.undo()
+        XCTAssertEqual(again[.left], "←", "undo after a load did not take the step back")
+        again.save(to: store)
+        var third = HeadMarks.load(from: store)
+        third.undo()
+        XCTAssertEqual(faces(third), faces(HeadMarks()), "a step undo took back came back")
+    }
+
     func testAsItCameThenUndo() throws {
         var marks = HeadMarks()
         try marks.set("Esc", at: .left)

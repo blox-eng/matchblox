@@ -169,7 +169,8 @@ final class HeadTests: XCTestCase {
     }
 
     /// A fast roll up hearth-api's output shows a card that names the step at the top of the
-    /// view; it goes 0.6 s after the roll ends.
+    /// view; it goes 0.6 s after the roll ends. Its pane draws `⏺ Read` over `✦ Running`, so
+    /// 13 lines up the first step from the top of the view is `⏺ Read`.
     @MainActor
     func testStepCardShows() {
         let app = launched()
@@ -179,7 +180,7 @@ final class HeadTests: XCTestCase {
         // Anticlockwise, close left of the middle: 11 notches, the 11th at 3 lines a notch. The
         // finger rests before the lift, so no coast reads on past the step.
         at(head, -8, -46).press(forDuration: 0.5, thenDragTo: at(head, -8, 190), withVelocity: .fast, thenHoldForDuration: 0.15)
-        XCTAssertTrue((head.value as? String ?? "").contains("card=✦ Running go test"),
+        XCTAssertTrue((head.value as? String ?? "").contains("card=⏺ Read internal/limit/store.go"),
                       "no card named the step: \(head.value ?? "")")
         let card = app.staticTexts["step-card"]
         XCTAssertTrue(card.waitForNonExistence(timeout: 3), "the card stayed after the roll")

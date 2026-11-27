@@ -16,6 +16,8 @@ public struct HeadMarks: Codable, Sendable {
 
     /// The UserDefaults key of the encoded marks.
     public static let storeKey = "head.marks.2"
+    /// The UserDefaults key of the steps undo takes back: home closes and opens again between them.
+    public static let historyKey = "head.marks.2.history"
     /// The key TestFlight build 9 kept its marks under, read once by `load(from:)`.
     public static let buildNineKey = "head.marks"
     private static let interrupt = "^C"
@@ -33,6 +35,10 @@ public struct HeadMarks: Codable, Sendable {
     private var history: [[Place: String]] = []
 
     public init() {}
+
+    private init(marks: [Place: String]) {
+        self.marks = marks
+    }
 
     /// The keys a place can take, in home's order.
     public static func keys(for place: Place) -> [String] {
@@ -89,7 +95,11 @@ public struct HeadMarks: Codable, Sendable {
     /// take today's first marks.
     public static func load(from store: UserDefaults) -> HeadMarks {
         if let data = store.data(forKey: storeKey) {
-            return (try? JSONDecoder().decode(HeadMarks.self, from: data)) ?? HeadMarks()
+            var marks = (try? JSONDecoder().decode(HeadMarks.self, from: data)) ?? HeadMarks()
+            if let steps = store.data(forKey: historyKey), let back = try? JSONDecoder().decode([HeadMarks].self, from: steps) {
+                marks.history = back.map(\.marks)
+            }
+            return marks
         }
         guard let data = store.data(forKey: buildNineKey) else { return HeadMarks() }
         var marks = HeadMarks()
@@ -106,6 +116,7 @@ public struct HeadMarks: Codable, Sendable {
 
     public func save(to store: UserDefaults) {
         store.set(try? JSONEncoder().encode(self), forKey: Self.storeKey)
+        store.set(try? JSONEncoder().encode(history.map(HeadMarks.init(marks:))), forKey: Self.historyKey)
     }
 
     // MARK: Codable

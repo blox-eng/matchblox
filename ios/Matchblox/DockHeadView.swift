@@ -68,8 +68,6 @@ final class DockHeadView: UIView {
         let zone: HeadZone.Zone
         /// It stopped a coast or came right after a roll: its lift is never Enter, nor a hold.
         let quiet: Bool
-        /// The ring filled: pushes step the sessions.
-        var held = false
     }
 
     private let ball = HeadLayer()
@@ -110,6 +108,8 @@ final class DockHeadView: UIView {
     private var holding: Task<Void, Never>?
     /// The sessions the hold shows; nil until the list reads.
     private var sessions: SessionCard?
+    /// The hold's list once it has answered (nil inside: it did not answer), kept until the ring fills.
+    private var listed: HostReply??
     /// Counts each fade, so a fade out that ends after a new touch leaves the marks shown.
     private var fades = 0
     /// Home sets the colour and the marks; the head only reads them, and never saves one.
@@ -250,9 +250,11 @@ final class DockHeadView: UIView {
             driver.moved(to: finger.location(in: self), time: finger.timestamp)
         case .middle:
             let from = offset(of: finger)
+            let wasHeld = stick.held
             let sent = stick.moved(to: CGPoint(x: from.x - t.start.x, y: from.y - t.start.y), at: finger.timestamp)
             moveBall(to: stick.offset)
-            if !stick.still, !t.held, holding != nil { endHold() }
+            if !stick.still, !stick.held, holding != nil { endHold() }
+            if stick.held, !wasHeld { holdBegan() }
             if let sent { pushed(sent, again: false) }
         }
     }
@@ -345,7 +347,10 @@ final class DockHeadView: UIView {
             while !Task.isCancelled {
                 try? await Task.sleep(for: Self.tickEvery)
                 guard let self, !Task.isCancelled, self.touch != nil else { return }
-                if let sent = self.stick.tick(at: CACurrentMediaTime()) { self.pushed(sent, again: true) }
+                let wasHeld = self.stick.held
+                let sent = self.stick.tick(at: CACurrentMediaTime())
+                if self.stick.held, !wasHeld { self.holdBegan() }
+                if let sent { self.pushed(sent, again: true) }
             }
         }
     }
@@ -359,7 +364,7 @@ final class DockHeadView: UIView {
     /// at that place sends its key once: only the arrows and the cursor repeat.
     private func pushed(_ sent: HeadStick.Send, again: Bool) {
         guard case .key(let place, let word) = sent else { return }
-        if touch?.held == true {
+        if inHold {
             let by = place == .top ? -1 : place == .bottom ? 1 : 0
             if by != 0, sessions?.step(by: by) == true {
                 driver.feel.notch(heat: 0)
@@ -478,9 +483,10 @@ final class DockHeadView: UIView {
 
     // MARK: The hold
 
-    /// A still press on the middle: the ring fills from 0.15 s to 0.6 s, then the hold begins. The
-    /// sessions are read as the ring starts, so the card can show when it is full. A push or a
-    /// lift before it is full ends it with nothing sent.
+    /// A still press on the middle: the ring fills from 0.15 s to 0.6 s, and the stick says when
+    /// the hold begins (`HeadStick.held`), on the touches' clock. The sessions are read as the ring
+    /// starts, so the card can show when it is full. A push or a lift before it is full ends it
+    /// with nothing sent.
     private func startHold() {
         endHold()
         #if DEBUG
@@ -492,23 +498,25 @@ final class DockHeadView: UIView {
             try? await Task.sleep(for: .seconds(Self.ringFrom))
             guard let self, !Task.isCancelled, self.touch != nil else { return }
             self.fillRing()
-            var list: Task<HostReply?, Never>?
-            if id == Self.sessionsKey {
-                list = Task { () -> HostReply? in
-                    guard let command else { return nil }
-                    return await command(["sessions", "--json"])
-                }
-            }
-            try? await Task.sleep(for: .seconds(Self.ringFills))
-            guard !Task.isCancelled, var t = self.touch else { return }
-            t.held = true
-            self.touch = t
-            self.driver.feel.cross()
-            guard let list else { return }
-            let reply = await list.value
-            guard !Task.isCancelled, self.touch?.held == true else { return }
-            self.sessionsRead(reply)
+            guard id == Self.sessionsKey else { return }
+            var reply: HostReply?
+            if let command { reply = await command(["sessions", "--json"]) }
+            guard !Task.isCancelled else { return }
+            self.listed = .some(reply)
+            if self.inHold { self.sessionsRead(reply) }
         }
+    }
+
+    /// The hold the stick began on a touch that may hold: pushes step the sessions.
+    private var inHold: Bool {
+        stick.held && holding != nil
+    }
+
+    /// The ring is full: the hold begins, and shows the sessions if the list has answered.
+    private func holdBegan() {
+        guard inHold else { return }
+        driver.feel.cross()
+        if case .some(let reply) = listed { sessionsRead(reply) }
     }
 
     /// A list that does not read says so, and the lift then opens nothing.
@@ -552,6 +560,7 @@ final class DockHeadView: UIView {
         holdRing.removeAllAnimations()
         holdRing.isHidden = true
         sessions = nil
+        listed = nil
         onSessions(nil)
     }
 

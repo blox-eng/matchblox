@@ -27,7 +27,7 @@ public struct HeadStick: Sendable {
     static let wordAfter = 9
 
     /// Where the head sits, the thumb's travel clamped to 12 pt along it.
-    public private(set) var offset: CGPoint = .zero
+    public private(set) var offset = CGPoint(x: 0, y: 0)
 
     /// The thumb has not moved 10 pt from where it landed.
     public private(set) var still = true
