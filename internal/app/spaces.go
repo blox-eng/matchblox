@@ -299,6 +299,7 @@ func (m Model) pickSpace(press string) (tea.Model, tea.Cmd) {
 }
 
 // headerBar is the one-row desk header: spaces, wait count, done count, ⚙.
+// A need below zero is "no count": the header says the service is not reached.
 func headerBar(w int, chips string, need, done int, mark bool) string {
 	left := " ▰ matchblox"
 	if chips != "" {
@@ -309,6 +310,9 @@ func headerBar(w int, chips string, need, done int, mark bool) string {
 		cog = "⚙ !"
 	}
 	right := fmt.Sprintf("● %d need you · ✓ %d done  %s", need, done, cog)
+	if need < 0 { // no snapshot, or the service is lost: a zero would say nobody waits
+		right = "● – need you · service not reached  " + cog
+	}
 	if w <= 0 {
 		return left + "  " + right
 	}

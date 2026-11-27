@@ -19,7 +19,7 @@ import (
 // of the desk. The header hello/recv's the same service as the list, reads
 // @matchblox_space, and Views the space chips. It does not own the filter.
 // A click on a chip sends the same pickSpace act the list `[` `]` use.
-func RunFrame(args []string) error {
+func RunFrame(args []string, redial func() (transport.Conn, error)) error {
 	fs := flag.NewFlagSet("frame", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	kind := fs.String("kind", "", "")
@@ -47,8 +47,13 @@ func RunFrame(args []string) error {
 		}
 		return err
 	}
-	c, _ := transport.Dial(transport.SocketPath(), time.Second)
-	m := New(Options{Conn: c, Pane: os.Getenv("TMUX_PANE")})
+	// The frame dials again as the list does, so a service that restarts or
+	// that is not up yet shows its words and then the counts.
+	c, derr := transport.Dial(transport.SocketPath(), time.Second)
+	if c != nil {
+		derr = nil
+	}
+	m := New(Options{Conn: c, DialErr: derr, Redial: redial, Pane: os.Getenv("TMUX_PANE")})
 	_, err := tea.NewProgram(newFrame(*kind, m)).Run()
 	if c != nil {
 		_ = c.Close()
@@ -161,7 +166,7 @@ func (m frameModel) tapHeader(ms tea.Mouse) (tea.Model, tea.Cmd) {
 // cogAt: x is on the header's ⚙, including the ! it shows in trouble.
 func (m frameModel) cogAt(x int) bool {
 	chips, _, _ := m.fitSpaces(m.spaceBudget(m.width))
-	line := ansi.Strip(headerBar(m.width, chips, m.needCount(), m.doneCount(), m.cogMark()))
+	line := ansi.Strip(m.headerLine(chips))
 	i := strings.LastIndex(line, "⚙")
 	if i < 0 {
 		return false
@@ -174,10 +179,20 @@ func (m frameModel) cogAt(x int) bool {
 	return x >= x0 && x < x0+ansi.StringWidth(word)
 }
 
+// headerLine is the header's row. Until the first snapshot, and while the
+// connection is lost, it draws no count.
+func (m frameModel) headerLine(chips string) string {
+	need, done := -1, -1
+	if m.have && !m.lost {
+		need, done = m.needCount(), m.doneCount()
+	}
+	return headerBar(m.width, chips, need, done, m.cogMark())
+}
+
 func (m frameModel) View() tea.View {
 	if m.kind == "header" {
 		chips, _, _ := m.fitSpaces(m.spaceBudget(m.width))
-		v := tea.NewView(headerBar(m.width, chips, m.needCount(), m.doneCount(), m.cogMark()))
+		v := tea.NewView(m.headerLine(chips))
 		v.MouseMode = tea.MouseModeCellMotion
 		return v
 	}
