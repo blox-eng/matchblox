@@ -42,7 +42,7 @@ public enum IslandLook {
     public static func word(_ top: IslandState.Top?, zone: TimeZone = .current) -> String {
         switch state(top) {
         case .burns: "✦ burns"
-        case .idle: "· idle"
+        case .idle: ""
         case .waits: "╿ waits"
         case .done: "╿ done"
         case .out: top?.out.map { "out until \(clock($0, zone: zone))" } ?? "out"
@@ -53,7 +53,8 @@ public enum IslandLook {
     /// The right of the Sessions compact island.
     public static func compact(_ top: IslandState.Top?, names: IslandNames, zone: TimeZone = .current) -> String {
         switch state(top) {
-        case .burns, .idle: names.session(top!.n)
+        case .burns: names.session(top!.n)
+        case .idle: "" // a name here is the sign of one need
         case .waits: "╿ waits"
         case .done: "╿ done"
         case .out: top?.out.map { "out \(clock($0, zone: zone))" } ?? "out"
@@ -89,9 +90,9 @@ public enum IslandLook {
         return end
     }
 
-    /// Where a tap and the button go: the top session of this host, else its console.
+    /// Where a tap and the button go: the top session of this host, else (idle or quiet) its console.
     public static func link(_ s: IslandState) -> URL? {
-        OpenLink(host: s.host, session: s.top?.n)?.url
+        OpenLink(host: s.host, session: state(s.top) == .idle ? nil : s.top?.n)?.url
     }
 
     /// The link of one render: none for a face that shows nothing, so a tap there opens nothing.
@@ -231,7 +232,7 @@ public enum BuzzPayload {
     /// The category of an opened buzz. A locked phone that hides previews shows
     /// `hiddenBody` in place of the line.
     public static let category = "buzz"
-    public static let hiddenBody = "An agent waits"
+    public static let hiddenBody = "An agent needs you"
 
     /// The buzz event of a notification's userInfo, or nil if it is not one.
     public static func event(_ userInfo: [AnyHashable: Any]) -> BuzzEvent? {

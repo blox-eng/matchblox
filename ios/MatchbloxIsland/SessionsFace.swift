@@ -98,7 +98,7 @@ struct SessionsCompactTrailing: View {
                 Text(attention).foregroundStyle(Tokens.accent)
             } else if let limit {
                 Text(limit.text).foregroundStyle(barColorLevel(limit.pct).text)
-            } else if state == .quiet {
+            } else if state == .quiet || state == .idle {
                 EmptyView()
             } else {
                 Text(IslandLook.compact(m.state.top, names: m.names))
