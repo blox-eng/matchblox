@@ -110,7 +110,81 @@ final class HeadTests: XCTestCase {
         XCTAssertTrue(app.buttons["Hide keyboard"].firstMatch.waitForExistence(timeout: 10), "⌨ raised no keyboard. " + app.debugDescription)
     }
 
+    /// A still hold in flint-auth's chat fills the ring, then lists this host's sessions with
+    /// flint-auth marked. The card goes at the lift, so the test reads it from the head's DEBUG value.
+    @MainActor
+    func testHoldShowsSessions() {
+        let app = launched()
+        openTheQuestion(in: app)
+        let head = theHead(in: app)
+        head.press(forDuration: 1.0)
+        let shown = sessionsShown(on: head)
+        for row in ["▸ flint-auth · asks · here", "hearth-api", "spark-docs"] {
+            XCTAssertTrue(shown.contains(row), "the card has no \(row): \(shown)")
+        }
+        XCTAssertTrue(app.staticTexts["sessions-card"].waitForNonExistence(timeout: 3), "the card stayed after the lift")
+    }
+
+    /// Surface: the owner's sessions. The list does not answer: the card says so, and the lift
+    /// opens nothing and leaves the chat as it was.
+    @MainActor
+    func testHostListFails() {
+        let app = launched(extra: ["-demoSessionsFail"])
+        openTheQuestion(in: app)
+        let head = theHead(in: app)
+        head.press(forDuration: 1.0)
+        XCTAssertEqual(sessionsShown(on: head), "sessions not reachable · try again")
+        stillInTheChat(app)
+    }
+
+    /// Surface: the owner's sessions. A lift on the marked session goes nowhere: the console
+    /// does not connect again, and the chat stays.
+    @MainActor
+    func testLiftOnCurrentChangesNothing() {
+        let app = launched()
+        openTheQuestion(in: app)
+        let head = theHead(in: app)
+        head.press(forDuration: 1.0)
+        XCTAssertTrue(sessionsShown(on: head).contains("▸ flint-auth · asks · here"), "flint-auth is not the chosen and marked row")
+        stillInTheChat(app)
+    }
+
+    /// Surface: an agent's tools. A press of 0.45 s is neither a tap nor a hold: it answers
+    /// nothing, clicks nothing, and shows no card.
+    @MainActor
+    func testHoldEndsEarlySendsNothing() {
+        let app = launched()
+        openTheQuestion(in: app)
+        let terminal = theTerminal(in: app)
+        let presses = terminal.value as? String
+        let head = theHead(in: app)
+        head.press(forDuration: 0.45)
+        Thread.sleep(forTimeInterval: 3)
+        XCTAssertFalse(terminal.label.contains(replyText), "a 0.45 s press answered the agent")
+        XCTAssertEqual(terminal.value as? String, presses, "a 0.45 s press clicked")
+        XCTAssertFalse((head.value as? String ?? "").contains("sessions="), "a 0.45 s press showed the sessions")
+        XCTAssertFalse(app.staticTexts["sessions-card"].exists, "a 0.45 s press left a card")
+    }
+
     // MARK: Helpers
+
+    /// The last sessions card the head showed.
+    @MainActor
+    private func sessionsShown(on head: XCUIElement) -> String {
+        let value = head.value as? String ?? ""
+        guard let at = value.range(of: "sessions=") else { return "" }
+        return String(value[at.upperBound...])
+    }
+
+    /// flint-auth's chat still shows 3 s on, with its question unanswered: nothing was opened.
+    @MainActor
+    private func stillInTheChat(_ app: XCUIApplication) {
+        Thread.sleep(forTimeInterval: 3)
+        let terminal = theTerminal(in: app)
+        XCTAssertTrue(terminal.label.contains("send to flint-auth"), "the chat went: \(terminal.label)")
+        XCTAssertTrue(terminal.label.contains("2. Rotate, keep"), "the question went: \(terminal.label)")
+        XCTAssertFalse(terminal.label.contains(replyText), "the hold answered the agent")
+    }
 
     @MainActor
     private func theHead(in app: XCUIApplication) -> XCUIElement {

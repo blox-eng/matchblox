@@ -76,12 +76,17 @@ final class DemoSession: ConsoleSource, @unchecked Sendable {
     /// The UI test's question that changes between the roll and the pick: the agent's cursor
     /// moves just before each pick lands.
     private static let questionChanges = ProcessInfo.processInfo.arguments.contains("-demoQuestionChanges")
+    /// The UI test's host whose session list does not answer.
+    private static let sessionsFail = ProcessInfo.processInfo.arguments.contains("-demoSessionsFail")
     #endif
 
     /// Runs one of Pocket's host commands in the demo that is on: the runner `HostCommand.demo`
     /// takes. The reply carries the exit status matchblox gives on a host.
     static func run(_ line: String) async -> HostReply {
-        await withCheckedContinuation { (done: CheckedContinuation<HostReply, Never>) in
+        #if DEBUG
+        if Self.sessionsFail, line.hasPrefix("sessions ") { return HostReply(output: Data(), ok: false, status: 1) }
+        #endif
+        return await withCheckedContinuation { (done: CheckedContinuation<HostReply, Never>) in
             Self.commands.async {
                 #if DEBUG
                 if Self.questionChanges, line.hasPrefix("choose ") { MBDemoMoveCursor() }

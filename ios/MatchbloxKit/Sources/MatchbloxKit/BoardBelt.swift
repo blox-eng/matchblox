@@ -89,7 +89,7 @@ public struct BoardBelt: Equatable, Sendable {
     }
 
     /// `text` when it is a pane id: `%` and ASCII digits, nothing else.
-    private static func pane(_ text: Substring) -> String? {
+    static func pane(_ text: Substring) -> String? {
         let digits = text.utf8.dropFirst()
         guard text.utf8.first == UInt8(ascii: "%"), !digits.isEmpty,
               digits.allSatisfy({ (UInt8(ascii: "0")...UInt8(ascii: "9")).contains($0) }) else { return nil }

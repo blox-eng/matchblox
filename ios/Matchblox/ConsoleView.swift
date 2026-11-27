@@ -223,6 +223,9 @@ private struct TerminalRepresentable: UIViewRepresentable {
         connection.onAgent = { agent, pane in belts.agentChanged(agent, pane: pane) }
         connection.onCommand = { command in belts.head.command = command }
         belts.head.onCard = { [weak screen] card in screen?.showStep(card) }
+        belts.head.onSessions = { [weak screen] card in screen?.showSessions(card) }
+        belts.head.opened = { [weak connection] in connection?.opened }
+        belts.head.openSession = { [weak connection] n in connection?.jump(to: n) }
         connection.onBoard = { value in belts.boardSaid(value) }
         connection.onBecameLive = { [weak belts] in belts?.teachBoxIfNeeded() }
         belts.onAnswer = { [weak connection] in connection?.answerBoard() }
@@ -298,6 +301,8 @@ private final class HeldScreen: UIView {
     private let notice = UILabel()
     /// The agent step a fast roll of the head reads past, at the top of the view.
     private let stepCard = UILabel()
+    /// The sessions a hold on the head shows, the current one marked.
+    private let sessionsCard = UILabel()
     private let copiedHaptic = UINotificationFeedbackGenerator()
 
     init(terminal: UIView) {
@@ -345,6 +350,17 @@ private final class HeldScreen: UIView {
         stepCard.accessibilityIdentifier = "step-card"
         stepCard.isHidden = true
         addSubview(stepCard)
+
+        sessionsCard.font = UIFont.monospacedSystemFont(ofSize: 13, weight: .medium)
+        sessionsCard.textColor = UIColor(Theme.fg)
+        sessionsCard.backgroundColor = UIColor(Theme.hair)
+        sessionsCard.numberOfLines = 0
+        sessionsCard.lineBreakMode = .byTruncatingTail
+        sessionsCard.layer.cornerRadius = 8
+        sessionsCard.layer.masksToBounds = true
+        sessionsCard.accessibilityIdentifier = "sessions-card"
+        sessionsCard.isHidden = true
+        addSubview(sessionsCard)
     }
 
     required init?(coder: NSCoder) { nil }
@@ -384,6 +400,13 @@ private final class HeldScreen: UIView {
         setNeedsLayout()
     }
 
+    /// The sessions card's lines, or nil: the card goes.
+    func showSessions(_ card: String?) {
+        sessionsCard.text = card.map { $0.split(separator: "\n", omittingEmptySubsequences: false).map { "  \($0)  " }.joined(separator: "\n") }
+        sessionsCard.isHidden = card == nil
+        setNeedsLayout()
+    }
+
     func trayMoved(open: Bool) {
         if open {
             hold.open(screen: heldSize, drawer: BeltView.drawerOpen)
@@ -411,6 +434,10 @@ private final class HeldScreen: UIView {
             height: side
         )
         stepCard.frame = CGRect(x: Self.jumpInset, y: Self.jumpInset, width: bounds.width - 2 * Self.jumpInset, height: Self.noticeHeight)
+        let cardWidth = bounds.width - 2 * Self.jumpInset
+        let cardHeight = min(sessionsCard.sizeThatFits(CGSize(width: cardWidth, height: .greatestFiniteMagnitude)).height + 16,
+                             max(bounds.height - 2 * Self.jumpInset, 0))
+        sessionsCard.frame = CGRect(x: Self.jumpInset, y: Self.jumpInset, width: cardWidth, height: cardHeight)
         let width = notice.intrinsicContentSize.width + 2 * Self.jumpInset
         notice.frame = CGRect(
             x: ((bounds.width - width) / 2).rounded(),
@@ -717,6 +744,8 @@ final class ConsoleConnection {
     @ObservationIgnored private var registration: Task<Void, Never>?
     /// The session a tapped link opens; the console opens plainly once it has been live.
     @ObservationIgnored private var openSession: Int?
+    /// The session the console opened with `--open`; nil when it opened plainly.
+    @ObservationIgnored private(set) var opened: Int?
     private let host: Host
     private let onFailure: (ConnectFailure) -> Void
     #if DEBUG
@@ -1016,7 +1045,7 @@ final class ConsoleConnection {
         sight.markSeen(host.fingerprint)
         // Teach BOX once after the first console land (pair or demo) on the visible belt.
         onBecameLive()
-        let opened = openSession != nil
+        opened = openSession
         openSession = nil
         let now = terminalSize
         if now != size {
@@ -1030,7 +1059,7 @@ final class ConsoleConnection {
         var signal = AgentSignalFilter()
         consoleMarks = false
         paneAgent = PaneAgent()
-        if opened { paneAgent.opened(at: ContinuousClock.now) }
+        if opened != nil { paneAgent.opened(at: ContinuousClock.now) }
         settling?.cancel()
         settling = nil
         onAgent(nil, nil)

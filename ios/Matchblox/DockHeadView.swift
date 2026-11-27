@@ -4,7 +4,8 @@ import UIKit
 /// The one match head, over the dock's belt. Where the finger lands decides the meaning: a tap on
 /// the middle answers, a press on the edge sends the key of the mark beside it, and a roll round
 /// the edge walks the agent's options, then the output (`HeadWalk`). A menu is answered only by a
-/// pick the host checks, never by arrow keys. The ring and the marks show while it is touched.
+/// pick the host checks, never by arrow keys. The ring and the marks show while it is touched. A
+/// still hold on the middle fills a ring, then shows the sessions (`SessionCard`).
 @MainActor
 final class DockHeadView: UIView {
     static let side: CGFloat = 96
@@ -27,6 +28,10 @@ final class DockHeadView: UIView {
     private static let cardPace = 3
     private static let cardStays: Duration = .milliseconds(600)
     private static let enter = KeyBar.bytes(for: "⏎") ?? [0x0d]
+    /// The hold's ring starts to fill this long into a still press, and is full at `HeadClick.hold`.
+    private static let ringFrom: TimeInterval = 0.15
+    private static let ringFills: TimeInterval = HeadClick.hold - ringFrom
+    private static let sessionsKey = "⇄"
 
     /// The agent's pane the head reads its menu from and picks in: the pane the app jumped into,
     /// or the pane of the session the console's chat shows; nil on the console's list.
@@ -55,6 +60,12 @@ final class DockHeadView: UIView {
     var onHighlight: (String?) -> Void = { _ in }
     /// The terminal's visible lines, from the top.
     var visibleLines: () -> [String] = { [] }
+    /// The sessions card's text, or nil: the card goes.
+    var onSessions: @MainActor (String?) -> Void = { _ in }
+    /// The number of the session this console opened, if it opened one.
+    var opened: @MainActor () -> Int? = { nil }
+    /// Opens session `n` of this host, as a tap on it in the Live Activity does.
+    var openSession: @MainActor (Int) -> Void = { _ in }
 
     private struct Touch {
         /// From the centre.
@@ -66,11 +77,14 @@ final class DockHeadView: UIView {
         var repeated = false
         /// An end bumps once a roll.
         var bumped = false
+        /// The hold began: moves step the sessions, and the lift is the hold's.
+        var held = false
     }
 
     private let ball = HeadLayer()
     private let rim = UIView()
     private let ring = CAShapeLayer()
+    private let holdRing = CAShapeLayer()
     private var markLabels: [HeadZone.Mark: UILabel] = [:]
     private lazy var element: UIAccessibilityElement = {
         let element = UIAccessibilityElement(accessibilityContainer: self)
@@ -94,11 +108,16 @@ final class DockHeadView: UIView {
     private var menuRead: Task<Void, Never>?
     private var repeating: Task<Void, Never>?
     private var cardGoes: Task<Void, Never>?
+    private var holding: Task<Void, Never>?
+    /// The sessions the hold shows; nil until the list reads.
+    private var sessions: SessionCard?
     /// Counts each fade, so a fade out that ends after a new touch leaves the marks shown.
     private var fades = 0
     #if DEBUG
     /// The last card the head showed: the UI test reads it, as the card stays only 0.6 s.
     private var lastCard: String?
+    /// The last sessions card, which goes at the lift.
+    private var lastSessions: String?
     #endif
 
     override init(frame: CGRect) {
@@ -116,6 +135,12 @@ final class DockHeadView: UIView {
         ring.strokeColor = BeltLook.muted.cgColor
         ring.lineWidth = 1
         rim.layer.addSublayer(ring)
+        holdRing.fillColor = nil
+        holdRing.strokeColor = BeltLook.fg.cgColor
+        holdRing.lineWidth = 3
+        holdRing.lineCap = .round
+        holdRing.isHidden = true
+        layer.addSublayer(holdRing)
         for mark in [HeadZone.Mark.top, .left, .right, .bottom] {
             let label = UILabel()
             label.numberOfLines = 2
@@ -142,6 +167,7 @@ final class DockHeadView: UIView {
         let r = Self.side / 2 + Self.ringGap
         let c = CGPoint(x: bounds.midX, y: bounds.midY)
         ring.path = UIBezierPath(ovalIn: CGRect(x: c.x - r, y: c.y - r, width: 2 * r, height: 2 * r)).cgPath
+        holdRing.path = UIBezierPath(arcCenter: c, radius: r, startAngle: -.pi / 2, endAngle: 1.5 * .pi, clockwise: true).cgPath
         let size = Self.markSize
         let reach = r + size.height / 2 + 2
         let side = r + size.width / 2 + 2
@@ -167,6 +193,7 @@ final class DockHeadView: UIView {
         guard newWindow == nil else { return }
         touch = nil
         stopRepeat()
+        endHold()
         driver.leave()
     }
 
@@ -182,25 +209,46 @@ final class DockHeadView: UIView {
         readMenu()
         ball.pressed = true
         driver.began(at: finger.location(in: self), centre: CGPoint(x: bounds.midX, y: bounds.midY), time: finger.timestamp)
-        if case .edge(let mark) = zone { startRepeat(marks[place(of: mark)]) }
+        switch zone {
+        case .edge(let mark):
+            startRepeat(marks[place(of: mark)])
+        case .middle:
+            if !rolledJustBefore(finger.timestamp) { startHold() }
+        }
     }
 
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard var t = touch, let finger = touches.first else { return }
         let from = offset(of: finger)
-        t.moved = max(t.moved, hypot(from.x - t.start.x, from.y - t.start.y))
-        touch = t
+        if t.held {
+            if sessions?.moved(to: from, radius: Self.side / 2) == true {
+                driver.feel.notch(heat: 0)
+                showSessions()
+            }
+        } else {
+            t.moved = max(t.moved, hypot(from.x - t.start.x, from.y - t.start.y))
+            touch = t
+            if t.moved >= HeadClick.slop, holding != nil { endHold() }
+        }
         if !HeadZone.isPress(moved: t.moved) { stopRepeat() }
         driver.moved(to: finger.location(in: self), time: finger.timestamp)
     }
 
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard let t = touch, let finger = touches.first else { return }
+        let goTo = sessions?.lift
         lifted()
         switch t.zone {
+        case .middle where t.held:
+            let id = marks[.hold]
+            if id != Self.sessionsKey {
+                press(id)
+            } else if let goTo {
+                openSession(goTo)
+            }
         case .middle:
-            let rolledBefore = lastNotch.map { t.time - $0 < HeadClick.still } ?? false
-            let lift = HeadClick.lift(after: finger.timestamp - t.time, rolled: rolledBefore || t.moved >= HeadClick.slop, coasting: false)
+            let rolled = rolledJustBefore(t.time) || t.moved >= HeadClick.slop
+            let lift = HeadClick.lift(after: finger.timestamp - t.time, rolled: rolled, coasting: false)
             if lift == .enter { tapped() }
         case .edge(let mark):
             if !t.notched, !t.repeated, HeadZone.isPress(moved: t.moved) { press(marks[place(of: mark)]) }
@@ -215,10 +263,15 @@ final class DockHeadView: UIView {
     private func lifted() {
         touch = nil
         stopRepeat()
+        endHold()
         ball.pressed = false
         driver.ended()
         walk.lift()
         hideMarks()
+    }
+
+    private func rolledJustBefore(_ time: TimeInterval) -> Bool {
+        lastNotch.map { time - $0 < HeadClick.still } ?? false
     }
 
     private func offset(of finger: UITouch) -> CGPoint {
@@ -357,6 +410,85 @@ final class DockHeadView: UIView {
         }
     }
 
+    // MARK: The hold
+
+    /// A still press on the middle: the ring fills from 0.15 s to 0.6 s, then the hold begins. The
+    /// sessions are read as the ring starts, so the card can show when it is full. A move past the
+    /// tap's slop or a lift before it is full ends it with nothing sent.
+    private func startHold() {
+        endHold()
+        #if DEBUG
+        lastSessions = nil
+        #endif
+        let id = marks[.hold]
+        let command = command
+        holding = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(Self.ringFrom))
+            guard let self, !Task.isCancelled, self.touch != nil else { return }
+            self.fillRing()
+            var list: Task<HostReply?, Never>?
+            if id == Self.sessionsKey {
+                list = Task { () -> HostReply? in
+                    guard let command else { return nil }
+                    return await command(["sessions", "--json"])
+                }
+            }
+            try? await Task.sleep(for: .seconds(Self.ringFills))
+            guard !Task.isCancelled, var t = self.touch else { return }
+            t.held = true
+            self.touch = t
+            self.driver.feel.cross()
+            guard let list else { return }
+            let reply = await list.value
+            guard !Task.isCancelled, self.touch?.held == true else { return }
+            self.sessionsRead(reply)
+        }
+    }
+
+    /// A list that does not read says so, and the lift then opens nothing.
+    private func sessionsRead(_ reply: HostReply?) {
+        guard let reply, reply.ok, let rows = SessionList.decode(reply.output) else {
+            sessions = nil
+            say(SessionCard.unreachable)
+            return show(SessionCard.unreachable)
+        }
+        sessions = SessionCard(rows: rows, pane: pane, opened: opened())
+        showSessions()
+    }
+
+    private func showSessions() {
+        if let sessions { show(sessions.text) }
+    }
+
+    private func show(_ card: String) {
+        onSessions(card)
+        #if DEBUG
+        lastSessions = card
+        #endif
+    }
+
+    private func fillRing() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        holdRing.isHidden = false
+        holdRing.strokeEnd = 1
+        CATransaction.commit()
+        let fill = CABasicAnimation(keyPath: "strokeEnd")
+        fill.fromValue = 0
+        fill.toValue = 1
+        fill.duration = Self.ringFills
+        holdRing.add(fill, forKey: "fill")
+    }
+
+    private func endHold() {
+        holding?.cancel()
+        holding = nil
+        holdRing.removeAllAnimations()
+        holdRing.isHidden = true
+        sessions = nil
+        onSessions(nil)
+    }
+
     // MARK: The marks
 
     private func press(_ id: String) {
@@ -425,7 +557,8 @@ final class DockHeadView: UIView {
     override var accessibilityElements: [Any]? {
         get {
             #if DEBUG
-            element.accessibilityValue = lastCard.map { "card=\($0)" }
+            let shown = [lastCard.map { "card=\($0)" }, lastSessions.map { "sessions=\($0)" }].compactMap { $0 }
+            element.accessibilityValue = shown.isEmpty ? nil : shown.joined(separator: "\n")
             #endif
             var elements: [Any] = [element]
             if !rim.isHidden { elements += markLabels.values.map { $0 as Any } }
