@@ -641,17 +641,18 @@ func TestBeltFollowsTheFocus(t *testing.T) {
 
 // TestTheBeltSaysWhenTheChatTakesTheScreen: where one pane shows, the
 // value ends in ;chat while the chat takes the screen, so Pocket's hold
-// selects text there and opens the row's menu only on the list (#485).
+// selects text there and opens the row's menu only on the list (#485);
+// it names flint-auth's pane, where the head reads (Task 10a).
 // Side by side the list always shows: no flag.
 func TestTheBeltSaysWhenTheChatTakesTheScreen(t *testing.T) {
 	phone, _ := flintBoard(t, 40, 34)
 	phone.toLine()
-	if got := phone.beltValue(); got != "1,2;;chat" {
-		t.Errorf("one pane, the chat: %q, want 1,2;;chat", got)
+	if got := phone.beltValue(); got != "1,2;;chat=%2" {
+		t.Errorf("one pane, the chat: %q, want 1,2;;chat=%%2", got)
 	}
 	machine := phone
 	machine.setTab(tabMachine)
-	if got := machine.beltValue(); strings.HasSuffix(got, ";chat") {
+	if got := machine.beltValue(); strings.Contains(got, ";chat") {
 		t.Errorf("Machine after the chat: %q, want no ;chat: Machine shows its rows", got)
 	}
 	phone.toList()
@@ -786,7 +787,7 @@ func TestTheBeltValueKeepsItsLimit(t *testing.T) {
 	for i := range 20 {
 		ks = append(ks, beltKey{Key: fmt.Sprintf("long%02d", i)})
 	}
-	got := beltWord(ks, "3", false)
+	got := beltWord(ks, "3", false, "")
 	if len(got) > beltMax {
 		t.Fatalf("%q has %d bytes, more than %d", got, len(got), beltMax)
 	}
@@ -799,11 +800,46 @@ func TestTheBeltValueKeepsItsLimit(t *testing.T) {
 			t.Fatalf("dim key %d is %q in %q: want whole keys, in order", i, d, got)
 		}
 	}
-	if chat := beltWord(ks, "3", true); len(chat) > beltMax || !strings.HasSuffix(chat, ";chat") {
+	if chat := beltWord(ks, "3", true, ""); len(chat) > beltMax || !strings.HasSuffix(chat, ";chat") {
 		t.Errorf("%q: want at most %d bytes, ending in ;chat", chat, beltMax)
 	}
-	if beltWord(ks, "", false) == beltWord(ks, "3", false) {
+	if beltWord(ks, "", false, "") == beltWord(ks, "3", false, "") {
 		t.Error("the armed key does not show")
+	}
+	if chat := beltWord(ks, "3", true, "%12345"); len(chat) > beltMax || !strings.HasSuffix(chat, ";chat=%12345") {
+		t.Errorf("%q: want at most %d bytes, ending in ;chat=%%12345", chat, beltMax)
+	}
+}
+
+// TestTheChatNamesItsPane (Task 10a): while the chat shows a chosen
+// session, the board value names that session's pane, so Pocket's head
+// reads its menu; on the list it names none. Only a bare pane id from the
+// service goes out: a pane of another server, or anything else, does not.
+func TestTheChatNamesItsPane(t *testing.T) {
+	m, _, _ := sideShot(t, 132, 32)
+	if v := m.beltValue(); strings.Contains(v, ";chat") {
+		t.Fatalf("the list says %q: want no chat", v)
+	}
+	m = pressOn(m, "ctrl+l")
+	s, ok := m.sideChosen()
+	if !ok || m.listShown() {
+		t.Fatal("ctrl+l showed no chat of a chosen session")
+	}
+	if v := m.beltValue(); !strings.HasSuffix(v, ";chat="+s.Pane) {
+		t.Errorf("the chat of %s (pane %s) says %q", s.Name, s.Pane, v)
+	}
+	if m = pressOn(m, "ctrl+l"); strings.Contains(m.beltValue(), ";chat") {
+		t.Errorf("back on the list the value is %q", m.beltValue())
+	}
+
+	ks := []beltKey{{Key: "1", Act: true, On: true}}
+	for _, pane := range []string{"", "%3@matchblox", "%", "%2;rm", "abc", "%2\x1b\\"} {
+		if got := beltWord(ks, "", true, pane); got != "1;;chat" {
+			t.Errorf("pane %q: the value is %q, want 1;;chat", pane, got)
+		}
+	}
+	if got := beltWord(ks, "", false, "%2"); got != "1;" {
+		t.Errorf("off the chat the value is %q, want 1;", got)
 	}
 }
 

@@ -431,6 +431,8 @@ private final class Belts {
     let head = DockHeadView()
     private weak var terminal: ConsoleTerminalView?
     private var agent: String?
+    /// The pane of the last `agent=…;pane=` signal, while an agent's pane shows.
+    private var agentPane: String?
     /// The Mine editor while it shows: never a second one over it.
     private weak var editor: UIViewController?
     /// A live check waits for the end of this run-loop turn: one for every read of the turn.
@@ -503,10 +505,16 @@ private final class Belts {
     /// The agent of the pane the app jumped into, and that pane, where the head reads its menu.
     func agentChanged(_ agent: String?, pane: String?) {
         self.agent = agent
+        agentPane = agent == nil ? nil : pane
         lifted.agent = agent
         dock.agent = agent
-        head.pane = agent == nil ? nil : pane
+        headFollows()
         outputArrived()
+    }
+
+    /// The head reads the pane the app jumped into, else the pane of the chat the console shows.
+    private func headFollows() {
+        head.pane = agentPane ?? board.belt.chatPane
     }
 
     /// A command types into a known agent's pane: never with no agent, never on the console.
@@ -601,6 +609,7 @@ private final class Belts {
         if let layout, layout != .board { turn(to: layout) }
         lifted.board = board.belt
         dock.board = board.belt
+        headFollows()
         terminal?.showsConsole = board.opensMenu
         if layout == .board { turn(to: .board) }
     }

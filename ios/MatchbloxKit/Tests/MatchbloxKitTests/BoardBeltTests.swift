@@ -208,6 +208,44 @@ final class BoardBeltTests: XCTestCase {
         XCTAssertFalse(board("1,2;c").chat)
     }
 
+    /// The chat names its session's pane (`;chat=%2`), where the head reads the menu: only `%`
+    /// and digits; anything else names no pane, and the keys stay what the value says.
+    func testTheChatNamesItsPane() throws {
+        XCTAssertEqual(board("1,2;c;chat=%2").chatPane, "%2")
+        XCTAssertEqual(board("1,2;c;chat=%2").chat, true)
+        XCTAssertEqual(try labels("1,2;c;chat=%2"), try labels("1,2;c"))
+        XCTAssertEqual(board("1,2;c;chat=%2").dim, ["c"])
+        XCTAssertEqual(board(";;chat=%107").chatPane, "%107")
+        XCTAssertNil(board("1,2;c;chat").chatPane)
+        XCTAssertNil(board("1,2;c").chatPane)
+        for hostile in ["1,2;c;chat=%2;rm", "1,2;c;chat=abc", "1,2;c;chat=", "1,2;c;chat=%", "1,2;c;chat=%2a",
+                        "1,2;c;chat=%2@matchblox", "1,2;c;chat= %2", "1,2;c;chat=%٣"] {
+            XCTAssertNil(board(hostile).chatPane, hostile)
+            XCTAssertTrue(board(hostile).chat, hostile)
+        }
+        XCTAssertEqual(board("1,2;c;chat=%2;rm").card, ["1", "2"])
+        XCTAssertEqual(board("1,2;c;chat=%2").shape, .board)
+        XCTAssertNil(board("box").chatPane)
+        XCTAssertNil(board("menu").chatPane)
+        XCTAssertNil(BoardBelt.away.chatPane)
+    }
+
+    /// The board names the chat's pane only while it shows: in a pane, or off the board, none.
+    func testTheChatsPaneGoesWithTheBoard() {
+        var follow = BoardFollow()
+        _ = follow.heard("1,2;;chat=%2", on: .board)
+        XCTAssertEqual(follow.belt.chatPane, "%2")
+        _ = follow.pane(true, on: .board)
+        XCTAssertNil(follow.belt.chatPane)
+        _ = follow.pane(false, on: .board)
+        XCTAssertEqual(follow.belt.chatPane, "%2")
+        _ = follow.heard("1,2;", on: .board)
+        XCTAssertNil(follow.belt.chatPane)
+        _ = follow.heard("1,2;;chat=%2", on: .board)
+        _ = follow.heard("", on: .board)
+        XCTAssertNil(follow.belt.chatPane)
+    }
+
     // MARK: What each key sends
 
     /// An act key sends its tap, which its tmux binding hands the console (`beltTap` in Go); the

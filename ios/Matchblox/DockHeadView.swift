@@ -28,7 +28,8 @@ final class DockHeadView: UIView {
     private static let cardStays: Duration = .milliseconds(600)
     private static let enter = KeyBar.bytes(for: "⏎") ?? [0x0d]
 
-    /// The agent's pane the head reads its menu from and picks in; nil on the console.
+    /// The agent's pane the head reads its menu from and picks in: the pane the app jumped into,
+    /// or the pane of the session the console's chat shows; nil on the console's list.
     var pane: String? {
         didSet {
             guard pane != oldValue else { return }
