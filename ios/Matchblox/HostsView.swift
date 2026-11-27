@@ -320,11 +320,9 @@ struct HostsView: View {
             }
             Button {} label: { tall(Self.face("^C")) }
                 .disabled(true)
-                .accessibilityHint(Self.interruptReason)
             Text(Self.interruptReason)
                 .font(.footnote)
                 .foregroundStyle(Theme.faint)
-                .accessibilityHidden(true)
         }
         .buttonStyle(.borderless)
         .font(.body.monospaced())
