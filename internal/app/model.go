@@ -627,6 +627,7 @@ type Model struct {
 	beside                    string          // the agent pane's id; "" before the split, and where it failed
 	deskFrame                 bool            // Doc.DeskFrame: the first-start notice has been shown
 	frameKind                 string          // header|bar|review when this process is a desk frame; "" the list
+	barMode                   string          // @matchblox_mode: LIST, AGENT, …, or CONFIRM, a tab, and the question
 	winW, winH                int             // the window's size in beside mode; 0: not read yet
 	boxZoom                   bool            // a box or an animation has the window: the list's pane is zoomed for it
 	boxBack                   []string        // the agent pane's screen, drawn dim behind the box
@@ -1336,6 +1337,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return next, tea.Batch(touch, cmd)
 		}
 		next, cmd := m.press(f, msg)
+		if nm, ok := next.(Model); ok {
+			cmd = tea.Batch(cmd, nm.syncDeskMode())
+			next = nm
+		}
 		return next, tea.Batch(touch, cmd)
 	}
 	return m, nil
@@ -1774,10 +1779,15 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.openStoker(), nil
 	case bkey.Matches(k, mk.Quit):
 		return m.quit()
-	case bkey.Matches(k, mk.NextTab):
-		m.setTab((m.openTab() + 1) % len(tabNames))
-	case bkey.Matches(k, mk.PrevTab):
-		m.setTab((m.openTab() + len(tabNames) - 1) % len(tabNames))
+	case bkey.Matches(k, mk.NextTab, mk.PrevTab):
+		if m.deskFrame { // the four-pane desk has no Machine tab
+			return m, nil
+		}
+		step := 1
+		if bkey.Matches(k, mk.PrevTab) {
+			step = len(tabNames) - 1
+		}
+		m.setTab((m.openTab() + step) % len(tabNames))
 	case bkey.Matches(k, mk.Search):
 		m.searching, m.filter = true, ""
 		m.refresh()

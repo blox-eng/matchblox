@@ -68,8 +68,15 @@ func (m frameModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Model = next.(Model)
 		return m, cmd
 	case frameTick:
-		if got, ok := m.readSpace(); ok {
-			m.space = got
+		switch m.kind {
+		case "header":
+			if got, ok := m.readSpace(); ok {
+				m.space = got
+			}
+		case "bar":
+			if got, ok := m.readMode(); ok {
+				m.barMode = got
+			}
 		}
 		return m, m.pollSpace()
 	case tea.MouseClickMsg:
@@ -113,11 +120,26 @@ func (m frameModel) tapHeader(ms tea.Mouse) (tea.Model, tea.Cmd) {
 func (m frameModel) View() tea.View {
 	if m.kind == "header" {
 		chips, _, _ := m.fitSpaces(m.spaceBudget(m.width))
-		v := tea.NewView(headerBar(m.width, chips, m.needCount(), m.doneCount()))
+		v := tea.NewView(headerBar(m.width, chips, m.needCount(), m.doneCount(), m.cogMark()))
 		v.MouseMode = tea.MouseModeCellMotion
 		return v
 	}
+	if m.kind == "bar" {
+		return tea.NewView(m.barLine(m.width))
+	}
 	return tea.NewView(m.kind)
+}
+
+func (m Model) readMode() (string, bool) {
+	run := m.tmuxRun()
+	if run == nil {
+		return "", false
+	}
+	out, err := run("show-option", "-wqv", "-t", m.opt.Pane, sample.ModeOption)
+	if err != nil {
+		return "", false
+	}
+	return strings.TrimSpace(out), true
 }
 
 func (m Model) readSpace() (string, bool) {

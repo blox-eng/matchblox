@@ -299,12 +299,16 @@ func (m Model) pickSpace(press string) (tea.Model, tea.Cmd) {
 }
 
 // headerBar is the one-row desk header: spaces, wait count, done count, ⚙.
-func headerBar(w int, chips string, need, done int) string {
+func headerBar(w int, chips string, need, done int, mark bool) string {
 	left := " ▰ matchblox"
 	if chips != "" {
 		left += "  " + chips
 	}
-	right := fmt.Sprintf("● %d need you · ✓ %d done  ⚙", need, done)
+	cog := "⚙"
+	if mark { // a busy loop, or a plan within 10% of its limit
+		cog = "⚙ !"
+	}
+	right := fmt.Sprintf("● %d need you · ✓ %d done  %s", need, done, cog)
 	if w <= 0 {
 		return left + "  " + right
 	}

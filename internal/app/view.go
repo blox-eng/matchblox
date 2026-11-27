@@ -240,7 +240,7 @@ func (m Model) drawScreen(w int) drawn {
 		}
 		sc.lines, sc.rows = append(sc.lines, line), append(sc.rows, row)
 	}
-	if !m.beltOnly() { // Pocket's belt has the keys
+	if !m.beltOnly() && !(m.deskFrame && m.frameKind == "") { // the desk's keys are the bar's
 		hair, keys, keySpans := m.keyRows(w)
 		sc.keysAt, sc.keys = len(sc.lines)+1, keySpans
 		sc.lines = append(sc.lines, hair, keys)
@@ -268,7 +268,7 @@ func (m Model) drawScreen(w int) drawn {
 // bodyRows is how many rows the body has under the header and over the key
 // line; on Pocket's belt, to the bottom.
 func (m Model) bodyRows() int {
-	if m.beltOnly() {
+	if m.beltOnly() || m.deskFrame && m.frameKind == "" { // no key line under the desk list
 		return max(m.height-3, 1)
 	}
 	return max(m.height-5, 1)
@@ -522,7 +522,10 @@ func (m Model) tabsLine(w int) (string, []span) {
 	for _, gap := range []string{"    ", "   ", "  "} {
 		line, spans = " ", nil
 		for i := range tabNames {
-			if i > 0 {
+			if m.deskFrame && m.frameKind == "" && i == tabMachine {
+				continue
+			}
+			if i > 0 && line != " " {
 				line += gap
 			}
 			label := m.tabLabel(i)
