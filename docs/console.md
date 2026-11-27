@@ -683,7 +683,8 @@ The second tab. `↑` `↓` choose a row, `Enter` opens it over the body, and
 
 Under the rows: `MACHINES · N`, one row for each host. Hosts in trouble
 come first: `✗` hosts (not reached, never reached, connected with no
-state, no state for 30 seconds or more while connected, which reads `no
+state, no state for 30 seconds or more while connected (or 3 of its
+sampling intervals, for a host that samples more slowly), which reads `no
 state since HH:MM (Nm ago)`, or another version), then hosts over their cores (marked !), then hosts
 with memory or a disk at 90% or more. The rest follow. Each group keeps
 Hosts order. A row shows the name, `up <age>`, `load L / C cores`, CPU,
@@ -697,7 +698,7 @@ A figure that the host did not send says `unknown`, never 0.
   `no session`. Without a tree, it says `no busy process tree · the load
   is I/O wait` or `cause not sampled yet`.
 - Under a `✗` host, the reason and the fix use the words of its Sessions
-  row; a host with no state for 30 seconds uses those of a host connected
+  row; a host that reads `no state since` uses those of a host connected
   with no state. The fix to connect reads `run: matchblox connect <host>`.
 - A host with an older matchblox says `<host> runs an older matchblox ·
   on <host>: matchblox update`. A host that did not read its processes

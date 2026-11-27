@@ -16,8 +16,9 @@ import (
 )
 
 // machineRow is one host of the machines region. A host not reached, or
-// one that sent no state in staleAfter, has gone in place of its figures;
-// one marked ✗ has block, whose words blockedWords owns.
+// one that sent no state in staleAfter (or 3 of its gaps), has gone in
+// place of its figures; one marked ✗ has block, whose words blockedWords
+// owns.
 type machineRow struct {
 	host  string
 	gone  string
@@ -27,11 +28,11 @@ type machineRow struct {
 
 // machineRowOf is host's row: its state from its link or the home fields.
 func (m Model) machineRowOf(host string) machineRow {
-	lost, have, at, blocked, mismatch, version, silent := m.lost, m.have, m.at, m.blocked, m.mismatch, m.host.Version, m.silent
+	lost, have, at, gap, blocked, mismatch, version, silent := m.lost, m.have, m.at, m.gap, m.blocked, m.mismatch, m.host.Version, m.silent
 	var dialErr error
 	if i := m.peerAt(host); host != m.opt.Host && i >= 0 {
 		l := m.peers[i]
-		lost, have, at, blocked, mismatch, version = l.lost, l.have, l.at, l.blocked, l.mismatch, l.hello.Version
+		lost, have, at, gap, blocked, mismatch, version = l.lost, l.have, l.at, l.gap, l.blocked, l.mismatch, l.hello.Version
 		dialErr, silent = l.dialErr, l.silent
 	}
 	r := machineRow{host: host}
@@ -50,9 +51,11 @@ func (m Model) machineRowOf(host string) machineRow {
 		r.gone, r.block = "never reached", unreached
 	case !have:
 		r.gone = "connecting…"
-	case host != "" && m.now().Sub(at) >= staleAfter:
+	case host != "" && m.now().Sub(at) >= max(staleAfter, 3*gap):
 		// A named host whose link is up and whose serve sends nothing: its last
-		// figures are not live. A local home stays as it is, as for silent.
+		// figures are not live. A local home stays as it is, as for silent. A
+		// serve that samples slowly is quiet only 3 of its gaps on, as status
+		// reads it.
 		r.gone = fmt.Sprintf("no state since %s (%s ago)", at.Format("15:04"), brief(m.now().Sub(at)))
 		r.block = &blockedHost{host: host, silent: true}
 	default:

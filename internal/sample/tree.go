@@ -43,15 +43,19 @@ func heaviest(procs map[int]procfs.Proc, cpu map[int]float64, panes []Pane, agen
 			c.servers[pp.PPID] = true
 		}
 	}
-	wraps := map[int]bool{} // the shells that run a command string
+	argvs := map[int][]string{}
 	for pid, p := range procs {
 		if shell(p) {
-			switch a := argv(pid); {
-			case runsCommand(a):
-				wraps[pid] = true
-			case interactive(a):
-				c.shells[pid] = true
-			}
+			argvs[pid] = argv(pid)
+		}
+	}
+	wraps := map[int]bool{} // the shells that run a command string
+	for pid, a := range argvs {
+		switch up, isShell := argvs[procs[pid].PPID]; {
+		case runsCommand(a):
+			wraps[pid] = true
+		case interactive(a) && !(isShell && slices.Equal(up, a)): // a forked subshell keeps its parent's argv
+			c.shells[pid] = true
 		}
 	}
 	places := make(map[int]*place, len(procs))
@@ -89,8 +93,8 @@ func heaviest(procs map[int]procfs.Proc, cpu map[int]float64, panes []Pane, agen
 	trees := map[int]*sum{}
 	branches := map[int]int{}
 	for pid, p := range procs {
-		if c.at(p) && !(c.panes[pid] && agents[pid]) {
-			continue // an agent that is its pane's process is a tree: its place is its own
+		if c.at(p) && !(c.panes[pid] && agents[pid]) && !c.shells[pid] {
+			continue // an agent that is its pane's process, or an interactive shell, is a tree: its place is its own
 		}
 		pl := placeOf(pid)
 		root := pl.root
@@ -162,9 +166,13 @@ func shell(p procfs.Proc) bool {
 
 // interactive reports whether a shell that runs no command string is one a
 // person types in: a login shell (argv[0] leads with -) or one with no
-// operand after its options. bash script.sh is the script's command.
+// operand after its options, and not -s, which reads its script on stdin.
+// bash script.sh is the script's command; an argv not read is no shell's.
 func interactive(argv []string) bool {
-	if len(argv) > 0 && strings.HasPrefix(argv[0], "-") {
+	if len(argv) == 0 || shortFlag(argv, 's') {
+		return false
+	}
+	if strings.HasPrefix(argv[0], "-") {
 		return true
 	}
 	args := argv[min(1, len(argv)):]
@@ -184,7 +192,11 @@ var takesArg = map[string]bool{"-o": true, "+o": true, "-O": true, "+O": true, "
 
 // runsCommand reports whether a shell's argv holds -c, alone or among other
 // short flags, before its first operand.
-func runsCommand(argv []string) bool {
+func runsCommand(argv []string) bool { return shortFlag(argv, 'c') }
+
+// shortFlag reports whether a shell's argv holds the flag f, alone or among
+// other short flags, before its first operand.
+func shortFlag(argv []string, f rune) bool {
 	args := argv[min(1, len(argv)):]
 	for i := 0; i < len(args); i++ {
 		a := args[i]
@@ -194,7 +206,7 @@ func runsCommand(argv []string) bool {
 		case strings.HasPrefix(a, "--"):
 		case !strings.HasPrefix(a, "-") && !strings.HasPrefix(a, "+"):
 			return false
-		case strings.HasPrefix(a, "-") && strings.Contains(a, "c"):
+		case strings.HasPrefix(a, "-") && strings.ContainsRune(a, f):
 			return true
 		}
 	}

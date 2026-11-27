@@ -278,3 +278,65 @@ func TestHeaviestInATerminalWindow(t *testing.T) {
 		t.Fatalf("heaviest = %+v, want the script's bash (902) → xargs, 258 processes", got)
 	}
 }
+
+// TestHeaviestKeepsAStdinScriptWhole: a shell that reads its script on
+// stdin, a forked subshell (its parent's argv) and a shell whose argv was
+// not read are not typed in, so their jobs stay one tree.
+func TestHeaviestKeepsAStdinScriptWhole(t *testing.T) {
+	stdin := newProcTable()
+	stdin.add(1, 0, "systemd", 0)
+	stdin.add(50, 1, "sshd", 0)
+	stdin.add(51, 50, "bash", 0, "bash", "-c", "bash -s")
+	stdin.add(52, 51, "bash", 0, "bash", "-s")
+	for i := range 16 {
+		stdin.add(60+i, 52, "python", 100)
+	}
+	stdin.add(80, 1, "cron", 0)
+	stdin.add(81, 80, "backup", 150)
+	got := heaviest(stdin.procs, stdin.cpu, nil, nil, stdin.argvOf)
+	if want := (Tree{PID: 52, Comm: "bash", Next: "python", Procs: 17, CPU: 1600}); got == nil || *got != want {
+		t.Errorf("bash -s: heaviest = %+v, want %+v", got, want)
+	}
+
+	sub := newProcTable()
+	sub.add(1, 0, "systemd", 0)
+	sub.add(5, 1, "tmux", 0)
+	sub.add(10, 5, "zsh", 0, "-zsh")
+	sub.add(11, 10, "find", 30)
+	sub.add(12, 10, "zsh", 40, "-zsh")
+	sub.add(13, 12, "gzip", 90)
+	sub.add(80, 1, "cron", 0)
+	sub.add(81, 80, "backup", 100)
+	got = heaviest(sub.procs, sub.cpu, []Pane{{ID: "%1", PID: 10}}, nil, sub.argvOf)
+	if want := (Tree{PID: 12, Comm: "zsh", Next: "gzip", Procs: 2, CPU: 130}); got == nil || *got != want {
+		t.Errorf("a while-read subshell: heaviest = %+v, want %+v", got, want)
+	}
+
+	unread := newProcTable()
+	unread.add(1, 0, "launchd", 0)
+	unread.add(70, 1, "sh", 0)
+	unread.argv[70] = nil
+	for i := range 4 {
+		unread.add(71+i, 70, "periodic", 50)
+	}
+	got = heaviest(unread.procs, unread.cpu, nil, nil, unread.argvOf)
+	if want := (Tree{PID: 70, Comm: "sh", Next: "periodic", Procs: 5, CPU: 200}); got == nil || *got != want {
+		t.Errorf("a shell with no argv: heaviest = %+v, want %+v", got, want)
+	}
+}
+
+// TestHeaviestCountsABusyInteractiveShell: a loop typed into a shell burns
+// the shell's own cpu, which is a tree of its own.
+func TestHeaviestCountsABusyInteractiveShell(t *testing.T) {
+	mac := newProcTable()
+	mac.add(1, 0, "launchd", 0)
+	mac.add(600, 1, "Terminal", 1)
+	mac.add(601, 600, "login", 0)
+	mac.add(602, 601, "zsh", 100, "-zsh")
+	mac.add(80, 1, "cron", 0)
+	mac.add(81, 80, "backup", 50)
+	got := heaviest(mac.procs, mac.cpu, nil, nil, mac.argvOf)
+	if want := (Tree{PID: 602, Comm: "zsh", Procs: 1, CPU: 100}); got == nil || *got != want {
+		t.Fatalf("heaviest = %+v, want %+v", got, want)
+	}
+}

@@ -792,6 +792,51 @@ func TestQuietPeerShowsNoFigures(t *testing.T) {
 	}
 }
 
+// TestSlowSamplingPeerKeepsItsFigures: a host whose serve samples every
+// 40 s is quiet only 3 gaps after its last state, as status reads it, not
+// staleAfter after it.
+func TestSlowSamplingPeerKeepsItsFigures(t *testing.T) {
+	const gap = 40 * time.Second
+	for _, c := range []struct {
+		name, home, slow string
+		peers            []string
+	}{
+		{"a peer", "", "ws-1", []string{"gpu-1", "ws-1"}},
+		{"a remote home", "dev-1", "dev-1", []string{"gpu-1"}},
+	} {
+		now := lostAt.Add(-gap)
+		m, _, conns := hostsAt(t, &now, c.home, 104, 30, c.peers...)
+		send := func(host string) {
+			if host == c.home {
+				m = upd(t, m, stateMsg(stateAt(healthy(), now)))
+				return
+			}
+			m = upd(t, m, peerMsg{host: host, conn: conns[host], msg: stateMsg(stateAt(healthy(), now))})
+		}
+		all := append([]string{c.home}, c.peers...)
+		last := lostAt.Add(gap) // the slow host's last state
+		for at := -gap; at <= 3*gap+gap; at += 2 * time.Second {
+			now = lostAt.Add(at)
+			for _, h := range all {
+				if h != c.slow || at%gap == 0 && !now.After(last) {
+					send(h)
+				}
+			}
+			block := machineBlock(machinesText(m), c.slow)
+			switch since := now.Sub(last); {
+			case at == 30*time.Second || at == 70*time.Second || since > 0 && since < 3*gap:
+				if strings.Contains(block, "✗") || !strings.Contains(block, "load 1 / 16 cores") {
+					t.Errorf("%s at %s (%s after its last state) shows no figures:\n%s", c.name, at, since, block)
+				}
+			case since >= 3*gap:
+				if row, _, _ := strings.Cut(block, "\n"); !strings.HasPrefix(strings.TrimSpace(row), "✗ "+c.slow) || !strings.Contains(row, "no state since 14:02") {
+					t.Errorf("%s %s after its last state: the row is %q, want it quiet", c.name, since, row)
+				}
+			}
+		}
+	}
+}
+
 func TestMachineRowWithNoCoresSaysCPUUnknown(t *testing.T) {
 	ws := healthy()
 	ws.Machine.Cores, ws.Machine.CPU = nil, 0

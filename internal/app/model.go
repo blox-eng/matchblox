@@ -339,7 +339,8 @@ type Model struct {
 	snap        sample.Snapshot
 	push        string // the push sender's line for the Machine tab, or ""
 	have        bool
-	at          time.Time // the last stateMsg
+	at          time.Time     // the last stateMsg
+	gap         time.Duration // between the last two states on conn, 0: not known
 	git         *proto.GitReport
 	recs        []advice.Rec
 	sideAt      paneKey // the session the list chooses; zero is the first one drawn
@@ -1008,6 +1009,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.recPrefs.Updated = key
 			m.say(news)
 			_ = m.recPrefs.save(m.opt.StateDir) // not kept: the next console says it again
+		}
+		m.gap = 0
+		if m.answered {
+			m.gap = m.now().Sub(m.at)
 		}
 		m.snap, m.git, m.recs, m.have, m.answered, m.silent, m.at = st.Snapshot, st.Git, st.Recommendations, true, true, false, m.now()
 		m.shipReport = st.Ships
