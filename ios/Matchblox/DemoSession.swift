@@ -68,6 +68,24 @@ final class DemoSession: ConsoleSource, @unchecked Sendable {
         await onWrites { MBDemoResize(Int32(cols), Int32(rows)) }
     }
 
+    /// A pick waits on the agent, so the demo's commands keep off the cooperative threads.
+    private static let commands = DispatchQueue(label: "com.blox.matchblox.demo.commands", qos: .userInitiated)
+    private static let replySize = 256 * 1024
+
+    /// Runs one of Pocket's host commands in the demo that is on: the runner `HostCommand.demo` takes.
+    static func run(_ line: String) async -> HostReply {
+        await withCheckedContinuation { (done: CheckedContinuation<HostReply, Never>) in
+            Self.commands.async {
+                var reply = [CChar](repeating: 0, count: Self.replySize)
+                var ok: Int32 = 0
+                let length = line.withCString {
+                    MBDemoRun(UnsafeMutablePointer(mutating: $0), &reply, Int32(Self.replySize), &ok)
+                }
+                done.resume(returning: HostReply(output: Data(bytes: reply, count: Int(length)), ok: ok == 1))
+            }
+        }
+    }
+
     /// Returns when the run has ended and no thread of this session can touch the library again,
     /// or at the limit with the stop still queued, which still comes before any later start.
     func close() async {

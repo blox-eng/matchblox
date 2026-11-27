@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -19,6 +20,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/limits"
 	"github.com/blox-eng/matchblox/internal/proto"
+	"github.com/blox-eng/matchblox/internal/push"
 	"github.com/blox-eng/matchblox/internal/said"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/service"
@@ -58,7 +60,8 @@ func cliRead(cmd string, w io.Writer, path string, asJSON bool) error {
 	}
 	switch cmd {
 	case "sessions":
-		return writeSessions(w, doc, asJSON)
+		nums, _ := push.OpenNumbers(filepath.Dir(state.Path())) // the service's numbers.json; unread, no row has an n
+		return writeSessions(w, doc, nums, asJSON)
 	case "ships":
 		return writeShips(w, doc, asJSON)
 	case "agents":
@@ -130,6 +133,7 @@ type sessionJSON struct {
 	Repo       string      `json:"repo"`
 	Status     string      `json:"status"`
 	Word       string      `json:"word"`
+	N          int         `json:"n,omitempty"`
 	Reason     string      `json:"reason"`
 	Held       bool        `json:"held"`
 	Stoker     bool        `json:"stoker"`
@@ -244,7 +248,9 @@ func chainStokerOf(doc state.Doc, s sample.Session) (id, chain string) {
 	return sid, ""
 }
 
-func sessionRows(doc state.Doc) []sessionJSON {
+// sessionRows are the sessions of doc, each with the number nums gave it
+// (nil: none), the one `console --open <n>` focuses.
+func sessionRows(doc state.Doc, nums *push.Numbers) []sessionJSON {
 	rows := []sessionJSON{}
 	for _, s := range doc.Sessions {
 		r := sessionJSON{Name: s.Name, Pane: s.Pane, Target: s.Target, Repo: repoName(doc, s.Cwd), Status: s.Status, Word: stoker.Word(s),
@@ -260,6 +266,9 @@ func sessionRows(doc state.Doc) []sessionJSON {
 			r.Ship = &shipJSON{sh.Repo, sh.Number, stageName(sh.Stage), sh.Kind, sh.Note}
 		}
 		r.Children = childrenOf(doc.Children, sample.ProcRef{PID: s.PID, Start: s.Start}, 0)
+		if nums != nil && s.SessionID != "" {
+			r.N = nums.Known(s.SessionID)
+		}
 		rows = append(rows, r)
 	}
 	return rows
@@ -279,8 +288,8 @@ func writeJSON(w io.Writer, v any) error {
 	return enc.Encode(v)
 }
 
-func writeSessions(w io.Writer, doc state.Doc, asJSON bool) error {
-	rows := sessionRows(doc)
+func writeSessions(w io.Writer, doc state.Doc, nums *push.Numbers, asJSON bool) error {
+	rows := sessionRows(doc, nums)
 	if asJSON {
 		return writeJSON(w, rows)
 	}

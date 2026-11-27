@@ -483,6 +483,7 @@ folder as `dir`. They need
 | `account_dir` | The account folder it runs on, or empty on the default sign-in. See [Agents](agents.md#accounts). |
 | `signing_in` | It runs on an account folder that is not signed in yet. |
 | `ship` | The pull request it drives (`repo`, `number`, `stage`, `kind`, `note`), or null. |
+| `n` | The number a phone opens it by (the gate's `console --open <n>`); missing until the service gives it one for a phone. |
 
 `matchblox peek api` prints what the session said last and what it asks,
 if anything: the question with its numbered options, or an approval that

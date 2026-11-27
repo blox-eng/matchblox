@@ -19,6 +19,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/idle"
 	"github.com/blox-eng/matchblox/internal/limits"
 	"github.com/blox-eng/matchblox/internal/proto"
+	"github.com/blox-eng/matchblox/internal/push"
 	"github.com/blox-eng/matchblox/internal/said"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/ships"
@@ -43,7 +44,7 @@ func cliDoc() state.Doc {
 
 func TestSessionsJSONCarriesReasonAndHold(t *testing.T) {
 	var buf bytes.Buffer
-	if err := writeSessions(&buf, cliDoc(), true); err != nil {
+	if err := writeSessions(&buf, cliDoc(), nil, true); err != nil {
 		t.Fatal(err)
 	}
 	var rows []map[string]any
@@ -79,7 +80,7 @@ func TestSessionsJSONOpencodeStatus(t *testing.T) {
 		{Name: "ember-billing", Pane: "%8", Agent: "opencode", Status: "waiting", Reported: true, WaitingFor: "permission"},
 	}
 	var buf bytes.Buffer
-	if err := writeSessions(&buf, d, true); err != nil {
+	if err := writeSessions(&buf, d, nil, true); err != nil {
 		t.Fatal(err)
 	}
 	var rows []map[string]any
@@ -102,7 +103,7 @@ func TestSessionsJSONMarksTheStokerPane(t *testing.T) {
 	d.Sessions = append(d.Sessions, sample.Session{Pane: "%9@mbtest", Target: "stoker:1.1", Name: "boss"},
 		sample.Session{Pane: "%9", Target: "stoker:1.1", Name: "mine"})
 	var buf bytes.Buffer
-	if err := writeSessions(&buf, d, true); err != nil {
+	if err := writeSessions(&buf, d, nil, true); err != nil {
 		t.Fatal(err)
 	}
 	var rows []map[string]any
@@ -168,7 +169,7 @@ func TestShipsAndUsageText(t *testing.T) {
 		t.Fatalf("%v %q", err, buf.String())
 	}
 	buf.Reset()
-	if err := writeSessions(&buf, cliDoc(), false); err != nil || strings.Count(buf.String(), "\n") != 3 {
+	if err := writeSessions(&buf, cliDoc(), nil, false); err != nil || strings.Count(buf.String(), "\n") != 3 {
 		t.Fatalf("%v %q", err, buf.String())
 	}
 	buf.Reset()
@@ -184,7 +185,7 @@ func TestAHoldFollowsTheSessionNotThePane(t *testing.T) {
 		t.Fatal("a new agent in a parked pane was shown as held")
 	}
 	var buf bytes.Buffer
-	if err := writeSessions(&buf, d, true); err != nil {
+	if err := writeSessions(&buf, d, nil, true); err != nil {
 		t.Fatal(err)
 	}
 	var rows []map[string]any
@@ -648,14 +649,14 @@ func TestWhenListPrintsTheRunsTriggers(t *testing.T) {
 func TestSessionsNameTheRepoOfEachRow(t *testing.T) {
 	d := chainDoc()
 	var text, js bytes.Buffer
-	if err := writeSessions(&text, d, false); err != nil {
+	if err := writeSessions(&text, d, nil, false); err != nil {
 		t.Fatal(err)
 	}
 	lines := strings.Split(strings.TrimSpace(text.String()), "\n")
 	if !strings.Contains(lines[0], "  in api") || !strings.Contains(lines[1], "  in web") || strings.Contains(lines[3], "  in ") {
 		t.Fatalf("lines %q", lines)
 	}
-	if err := writeSessions(&js, d, true); err != nil {
+	if err := writeSessions(&js, d, nil, true); err != nil {
 		t.Fatal(err)
 	}
 	var rows []struct{ Name, Repo string }
@@ -671,13 +672,13 @@ func TestSessionsLineMarksOutsideTmux(t *testing.T) {
 	d := cliDoc()
 	d.Sessions = []sample.Session{{Name: "loose", Status: "idle"}}
 	var text, js bytes.Buffer
-	if err := writeSessions(&text, d, false); err != nil {
+	if err := writeSessions(&text, d, nil, false); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(text.String(), "outside tmux") {
 		t.Fatalf("line %q", text.String())
 	}
-	if err := writeSessions(&js, d, true); err != nil {
+	if err := writeSessions(&js, d, nil, true); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(js.String(), `"target": ""`) {
@@ -715,7 +716,7 @@ func TestSessionsJSONNamesTheAccountFolder(t *testing.T) {
 	d.Sessions[0].AccountDir = "/home/u/.matchblox/accounts/claude/work"
 	d.Sessions[0].SigningIn = true
 	var buf bytes.Buffer
-	if err := writeSessions(&buf, d, true); err != nil {
+	if err := writeSessions(&buf, d, nil, true); err != nil {
 		t.Fatal(err)
 	}
 	var rows []map[string]any
@@ -738,7 +739,7 @@ func TestSessionsLineSaysSignInByHand(t *testing.T) {
 	d.Sessions[2].SigningIn = true
 	d.SignIns = map[string]string{"%4": "by hand"}
 	var buf bytes.Buffer
-	if err := writeSessions(&buf, d, false); err != nil {
+	if err := writeSessions(&buf, d, nil, false); err != nil {
 		t.Fatal(err)
 	}
 	lines := strings.Split(buf.String(), "\n")
@@ -747,7 +748,7 @@ func TestSessionsLineSaysSignInByHand(t *testing.T) {
 	}
 	d.SignIns = map[string]string{"app": "by hand"}
 	buf.Reset()
-	if err := writeSessions(&buf, d, false); err != nil {
+	if err := writeSessions(&buf, d, nil, false); err != nil {
 		t.Fatal(err)
 	}
 	if strings.Count(buf.String(), "sign in by hand") != 2 {
@@ -764,14 +765,14 @@ func TestSessionsPrintsChildrenUnderTheirParent(t *testing.T) {
 		{PID: 240, Start: 4, Agent: "opencode", Name: "opencode run", Via: "process", Parent: &sample.ProcRef{PID: 200, Start: 1}},
 	}
 	var b strings.Builder
-	if err := writeSessions(&b, doc, false); err != nil {
+	if err := writeSessions(&b, doc, nil, false); err != nil {
 		t.Fatal(err)
 	}
 	if want := "\n     ├─ codex exec (via process)\n     │ └─ claude -p (via env)\n     └─ opencode run (via process)\n"; !strings.Contains(b.String(), want) {
 		t.Fatalf("want %q in\n%s", want, b.String())
 	}
 	b.Reset()
-	if err := writeSessions(&b, doc, true); err != nil {
+	if err := writeSessions(&b, doc, nil, true); err != nil {
 		t.Fatal(err)
 	}
 	var rows []sessionJSON
@@ -798,7 +799,7 @@ func TestSessionsSurvivesALoopInTheStateFile(t *testing.T) {
 		{PID: 221, Start: 2, Name: "a", Parent: &sample.ProcRef{PID: 222, Start: 3}},
 	}
 	var b strings.Builder
-	if err := writeSessions(&b, doc, true); err != nil {
+	if err := writeSessions(&b, doc, nil, true); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -808,7 +809,7 @@ func TestSessionsSurvivesALoopInTheStateFile(t *testing.T) {
 func TestSessionsJSONNamesTheShipTheRowLeadsWith(t *testing.T) {
 	d := cliDoc()
 	d.Ships.Ships = append(d.Ships.Ships, ships.Ship{Repo: "o/r", Number: 4557, Stage: ships.StageCI, Kind: ships.Stuck, Note: "conflicts with main", Session: ships.SessionRef{Pane: "%3"}})
-	for _, r := range sessionRows(d) {
+	for _, r := range sessionRows(d, nil) {
 		if r.Pane == "%3" && (r.Ship == nil || r.Ship.Number != 4557) {
 			t.Fatalf("api's ship: %+v, want the stuck #4557", r.Ship)
 		}
@@ -1141,7 +1142,7 @@ func TestSessionsJSONMarksChainStoker(t *testing.T) {
 		sample.Session{Pane: "%9@mbtest", Target: "stoker:1.1", Name: "boss"},
 		sample.Session{Pane: "%8@mbtest", Target: "stoker-s1:1.1", Name: "stoker-s1"})
 	var buf bytes.Buffer
-	if err := writeSessions(&buf, d, true); err != nil {
+	if err := writeSessions(&buf, d, nil, true); err != nil {
 		t.Fatal(err)
 	}
 	var rows []map[string]any
@@ -1167,7 +1168,7 @@ func TestSessionsJSONMarksChainStoker(t *testing.T) {
 
 func TestSessionsJSONUnchangedWithoutFamily(t *testing.T) {
 	var buf bytes.Buffer
-	if err := writeSessions(&buf, cliDoc(), true); err != nil {
+	if err := writeSessions(&buf, cliDoc(), nil, true); err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(buf.String(), "stoker_id") || strings.Contains(buf.String(), `"chain"`) {
@@ -1216,5 +1217,46 @@ func TestSendResolvesAWaitingMate(t *testing.T) {
 	note := "hearth-api waits for recover: your line waits in its inbox (1 now)"
 	if err := handOutcome(&buf, "send", "hearth-api", proto.Result{Note: note}, nil); err != nil || buf.String() != note+"\n" {
 		t.Fatalf("printed %q, err %v", buf.String(), err)
+	}
+}
+
+// TestSessionsJSONHasOpenNumber: each row's n is the number that `console
+// --open <n>` focuses, by the lookup the service's focus makes; a session
+// the service has given no number yet has none, and gets none here.
+func TestSessionsJSONHasOpenNumber(t *testing.T) {
+	nums, err := push.OpenNumbers(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = nums.Session("other")
+	_ = nums.Session("s5")
+	_ = nums.Session("s3")
+	var buf bytes.Buffer
+	if err := writeSessions(&buf, cliDoc(), nums, true); err != nil {
+		t.Fatal(err)
+	}
+	var rows []struct {
+		Pane string `json:"pane"`
+		N    *int   `json:"n"`
+	}
+	if err := json.Unmarshal(buf.Bytes(), &rows); err != nil {
+		t.Fatalf("%v: %s", err, buf.String())
+	}
+	want := map[string]string{"%3": "s3", "%5": "s5"}
+	for _, r := range rows {
+		id, numbered := want[r.Pane]
+		switch {
+		case !numbered && r.N != nil:
+			t.Errorf("%s has n %d, and the service gave it none", r.Pane, *r.N)
+		case numbered && r.N == nil:
+			t.Errorf("%s has no n", r.Pane)
+		case numbered:
+			if got, ok := nums.SessionOf(*r.N); !ok || got != id {
+				t.Errorf("%s: n %d opens %q, want %q", r.Pane, *r.N, got, id)
+			}
+		}
+	}
+	if got := nums.Session("s4"); got != 4 {
+		t.Fatalf("the sessions list gave a number: the next one is %d, want 4", got)
 	}
 }
