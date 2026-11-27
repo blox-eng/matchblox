@@ -1060,3 +1060,57 @@ func TestReviewSendKeepsTextOutOfTmuxOptions(t *testing.T) {
 		t.Fatal("the reply option is back")
 	}
 }
+
+// TestReviewShowsUntrackedFile: an agent's new file that it never added to
+// git is part of its work. The review lists it, counts it, labels it new,
+// and takes a comment on its line (review of 2026-11-27, Important 3).
+func TestReviewShowsUntrackedFile(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		repo func(t testing.TB) string
+		head string
+	}{
+		{"only new files", func(t testing.TB) string {
+			repo := t.TempDir()
+			reviewGitIn(t, repo, "init", "-q", "-b", "main")
+			reviewWrite(t, repo, "a.go", "package a\n")
+			reviewGitIn(t, repo, "add", ".")
+			reviewGitIn(t, repo, "commit", "-q", "-m", "base")
+			return repo
+		}, "1 file +3 −0"},
+		{"mixed with tracked changes", reviewRepo, "3 files +11 −1"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := tc.repo(t)
+			reviewWrite(t, repo, "router.go", "package a\n\nconst R = 1\n")
+			reviewWrite(t, repo, "ignored.txt", "not the agent's work\n")
+			reviewWrite(t, repo, ".git/info/exclude", "ignored.txt\n")
+			d := newReviewDesk(t, repo, "main")
+			d.choose(t, "ux-pass")
+			d.press(t, "D")
+			f := d.frame(t)
+			text := frameText(f)
+			if strings.Contains(text, "has no changes") || !strings.Contains(text, tc.head) {
+				t.Fatalf("head %q not in\n%s", tc.head, text)
+			}
+			if strings.Contains(text, "ignored.txt") {
+				t.Fatalf("an ignored file is in the review:\n%s", text)
+			}
+			f = frameKey(t, f, "]", "]") // the last file is the new one
+			if tc.name == "only new files" {
+				f = frameKey(t, f, "[")
+			}
+			text = frameText(f)
+			if !strings.Contains(text, "router.go") || !strings.Contains(text, "new") || !strings.Contains(text, "const R = 1") {
+				t.Fatalf("router.go is not shown as new:\n%s", text)
+			}
+			f = frameKey(t, f, "down", "down", "down", "c")
+			f = frameType(t, f, "name R")
+			f = frameKey(t, f, "enter", "enter")
+			pastes := d.pastes()
+			if len(pastes) != 1 || !strings.Contains(pastes[0].Text, "router.go:3") || !strings.Contains(pastes[0].Text, "name R") {
+				t.Fatalf("the comment on the new file did not send: %+v", pastes)
+			}
+		})
+	}
+}

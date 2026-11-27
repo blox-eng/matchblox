@@ -34,8 +34,12 @@ var errReviewBig = errors.New("git's answer is too large")
 // An error never carries git's stderr: it can quote a line of a file.
 var reviewGit = func(host, dir string, args ...string) (string, error) {
 	argv := append([]string{"git", "--no-pager", "--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "core.quotepath=off", "-C", dir}, args...)
+	noIndex := slices.Contains(args, "--no-index") // exit 1 is "the files differ", not a failure
 	if host != "" {
 		out, err := hostRun(peerGitArgv(host, argv))
+		if noIndex && exitOne(err) {
+			err = nil
+		}
 		if err == nil && len(out) > reviewGitMax {
 			return "", errReviewBig
 		}
@@ -47,13 +51,19 @@ var reviewGit = func(host, dir string, args ...string) (string, error) {
 	cmd.Env = append(slices.DeleteFunc(os.Environ(), func(kv string) bool { return strings.HasPrefix(kv, "GIT_") }), "GIT_TERMINAL_PROMPT=0")
 	out := &capBuf{max: reviewGitMax}
 	cmd.Stdout = out
-	if err := cmd.Run(); err != nil {
+	if err := cmd.Run(); err != nil && !(noIndex && exitOne(err)) {
 		if out.over {
 			return "", errReviewBig
 		}
 		return "", fmt.Errorf("git %s did not succeed", args[0])
 	}
 	return string(out.b), nil
+}
+
+// exitOne tells if err is a process that exited with status 1.
+func exitOne(err error) bool {
+	var ee *exec.ExitError
+	return errors.As(err, &ee) && ee.ExitCode() == 1
 }
 
 // peerGitArgv is ssh that runs the git argv on host, as the builder's own
@@ -102,6 +112,7 @@ type reviewFile struct {
 	binary   bool
 	loaded   bool
 	cut      bool
+	untrack  bool // a new file that git does not track yet
 	lines    []reviewLine
 }
 
@@ -222,24 +233,34 @@ func loadReview(spec reviewSpec) reviewLoaded {
 		return reviewLoaded{why: "review did not open: git did not answer."}
 	}
 	d.files = parseNumstat(out)
-	if len(d.files) == 0 {
+	fresh, freshNote := reviewUntracked(spec)
+	if freshNote != "" {
+		d.note = strings.TrimSpace(d.note + " " + freshNote)
+	}
+	if len(d.files) == 0 && len(fresh) == 0 {
 		return reviewLoaded{why: spec.name + " has no changes against " + against + "."}
 	}
 	for _, f := range d.files {
 		d.big = d.big || f.add+f.del > reviewMaxLines
 	}
-	if d.big {
+	// The new files come after the tracked ones, and are read already: the
+	// tracked files' sections are matched with the numstat before they join.
+	done := func() reviewLoaded {
+		d.files = append(d.files, fresh...)
 		return reviewLoaded{diff: d}
+	}
+	if d.big {
+		return done()
 	}
 	full, err := git(append([]string{"diff", "-U3"}, append(slices.Clone(diffFlags), "--end-of-options", d.mergeBase)...)...)
 	if err != nil {
 		d.big = true // too large, or unreadable as a whole: each file opens on its own
-		return reviewLoaded{diff: d}
+		return done()
 	}
 	sections := splitSections(full)
 	if len(sections) != len(d.files) {
 		d.big = true
-		return reviewLoaded{diff: d}
+		return done()
 	}
 	for i, s := range sections {
 		if len(s) > reviewMaxBytes || strings.Count(s, "\n") > reviewMaxLines {
@@ -253,7 +274,64 @@ func loadReview(spec reviewSpec) reviewLoaded {
 			d.files[i].lines, d.files[i].loaded = nil, false
 		}
 	}
-	return reviewLoaded{diff: d}
+	return done()
+}
+
+// reviewFreshMax is the most new files the review reads: a folder of
+// build output that the owner never ignored must not start a process for
+// each file.
+const reviewFreshMax = 200
+
+// reviewUntracked reads the files that git does not track and does not
+// ignore: the agent's new files that it has not added yet. Each is read in
+// full with `git diff --no-index`, which is read-only. note says what was
+// left out; it is never silent.
+func reviewUntracked(spec reviewSpec) (files []reviewFile, note string) {
+	git := func(args ...string) (string, error) { return reviewGit(spec.host, spec.dir, args...) }
+	out, err := git("ls-files", "--others", "--exclude-standard", "-z", "--full-name", "--", ":/")
+	if err != nil {
+		return nil, "New files that git does not track could not be listed."
+	}
+	var paths []string
+	for p := range strings.SplitSeq(out, "\x00") {
+		if p != "" && !strings.HasSuffix(p, "/") { // a nested repository lists as its folder
+			paths = append(paths, p)
+		}
+	}
+	left := 0
+	if len(paths) > reviewFreshMax {
+		left, paths = len(paths)-reviewFreshMax, paths[:reviewFreshMax]
+	}
+	top, err := git("rev-parse", "--show-toplevel")
+	if err != nil || strings.TrimSpace(top) == "" {
+		return nil, "New files that git does not track could not be read."
+	}
+	root := strings.TrimSpace(top)
+	for _, p := range paths {
+		f := reviewFile{path: p, untrack: true, loaded: true}
+		text, err := reviewGit(spec.host, root, append([]string{"diff", "--no-index", "-U3"}, append(slices.Clone(diffFlags), "--", "/dev/null", p)...)...)
+		switch {
+		case errors.Is(err, errReviewBig):
+			f.lines, f.cut = []reviewLine{{kind: 'm', text: "this file is too large to show"}}, true
+		case err != nil:
+			f.lines = []reviewLine{{kind: 'm', text: "git did not answer for this file"}}
+		default:
+			f.lines, f.binary = parseSection(text)
+			for _, l := range f.lines {
+				if l.kind == '+' {
+					f.add++
+				}
+			}
+			if len(f.lines) > reviewMaxLines {
+				f.lines, f.cut = f.lines[:reviewMaxLines], true
+			}
+		}
+		files = append(files, f)
+	}
+	if left > 0 {
+		note = fmt.Sprintf("%d more new files are not shown.", left)
+	}
+	return files, note
 }
 
 // loadReviewFile reads one file of a large diff.

@@ -477,7 +477,11 @@ func (m frameModel) reviewDiffRows(w, h int, name string) []string {
 		rows = append(rows, " "+m.st.muted.Render("these files open one at a time: they are large"))
 	} else if f != nil {
 		pos := m.st.muted.Render(fmt.Sprintf("  %d/%d", r.at+1, len(d.files)))
-		rows = append(rows, " "+m.st.text.Bold(true).Render(reviewVisible(f.path))+"  "+m.st.accent.Render("+"+strconv.Itoa(f.add))+" "+m.st.neg.Render("−"+strconv.Itoa(f.del))+pos)
+		fresh := ""
+		if f.untrack {
+			fresh = m.st.muted.Render(" new")
+		}
+		rows = append(rows, " "+m.st.text.Bold(true).Render(reviewVisible(f.path))+fresh+"  "+m.st.accent.Render("+"+strconv.Itoa(f.add))+" "+m.st.neg.Render("−"+strconv.Itoa(f.del))+pos)
 	}
 	room := max(h-len(rows)-1, 1)
 	var body []string
@@ -523,6 +527,9 @@ func (m frameModel) reviewFileList(w, room int) []string {
 		counts := "+" + strconv.Itoa(f.add) + " −" + strconv.Itoa(f.del)
 		if f.binary {
 			counts = "binary"
+		}
+		if f.untrack {
+			counts = "new " + counts
 		}
 		path := ansi.Truncate(reviewVisible(f.path), max(w-len(counts)-6, 4), "…")
 		line := " " + mark + " " + path
