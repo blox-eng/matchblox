@@ -652,7 +652,7 @@ pane.
 
 ### Answer a question from a script
 
-Pocket's match head answers with two commands. A script can use them too.
+Two commands answer a session's question from a script.
 
 | Command | It does |
 |---|---|
@@ -661,8 +661,8 @@ Pocket's match head answers with two commands. A script can use them too.
 
 When the question changed, `choose` types nothing, prints
 `the question changed` and exits with code 3. Read `menu` again, then
-choose. A phone's key runs only these two commands, `matchblox sessions --json`,
-the stream and the console.
+choose. A phone's key cannot run them: it runs only the stream, the
+console and `matchblox sessions --json`.
 
 ## The match
 
