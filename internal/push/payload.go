@@ -55,7 +55,7 @@ type TopChain struct {
 
 type Top struct {
 	N     int       `json:"n"`
-	State string    `json:"state"` // burns, waits, done, out or quiet
+	State string    `json:"state"` // burns, waits, done, out or idle
 	Pct   int       `json:"pct"`   // 0..100, in steps of 5
 	Out   time.Time `json:"out,omitzero"`
 }

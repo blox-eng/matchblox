@@ -93,14 +93,29 @@ func TestProgressGoesInStepsOf5(t *testing.T) {
 	}
 }
 
-func TestQuietHasNoTop(t *testing.T) {
+// TestNoSessionIsQuiet: the match goes out only when no session runs.
+func TestNoSessionIsQuiet(t *testing.T) {
 	n := openNumbers(t, t.TempDir())
-	got := Build(doc([]sample.Session{sess("a", false, t0)}, nil), fp, n, t0)
+	got := Build(doc(nil, nil), fp, n, t0)
 	if got.Top != nil || got.Burn != 0 || got.Wait != 0 {
 		t.Fatalf("got %+v", got)
 	}
 	if got.Accounts == nil {
 		t.Fatal("accounts must be [] not null")
+	}
+}
+
+// TestAnIdleSessionKeepsTheMatchLit: a session that neither works nor waits is
+// idle, not quiet (owner, 2026-11-27); a working one still leads it.
+func TestAnIdleSessionKeepsTheMatchLit(t *testing.T) {
+	n := openNumbers(t, t.TempDir())
+	got := Build(doc([]sample.Session{sess("old", false, t0.Add(-time.Hour)), sess("new", false, t0)}, nil), fp, n, t0)
+	if got.Top == nil || got.Top.State != "idle" || got.Top.N != n.Session("new") || got.Burn != 0 {
+		t.Fatalf("two idle sessions: top %+v burn %d, want the newest idle", got.Top, got.Burn)
+	}
+	got = Build(doc([]sample.Session{sess("idle", false, t0), sess("busy", true, t0.Add(-time.Hour))}, nil), fp, n, t0)
+	if got.Top == nil || got.Top.State != "burns" || got.Top.N != n.Session("busy") || got.Burn != 1 {
+		t.Fatalf("idle and busy: top %+v burn %d, want the busy one", got.Top, got.Burn)
 	}
 }
 

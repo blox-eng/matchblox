@@ -3,8 +3,9 @@ import SwiftUI
 import WidgetKit
 
 // The Sessions face (design 0006 §6.6): one match for the top session. The wood is its
-// progress; it burns while the agent works, smokes while it waits, is cold when done or
-// out; a closed box when nothing is on.
+// progress; it is lit while any session lives (owner, 2026-11-27), full while the agent
+// works and low otherwise, smokes over the flame while it waits, is cold when a limit
+// stops it; a closed box when no session runs.
 
 struct SessionsLock: View {
     let m: IslandModel
@@ -91,7 +92,7 @@ struct SessionsCompactTrailing: View {
     var body: some View {
         let attention = IslandLook.attention(m.state, names: m.names)
         let state = IslandLook.state(m.state.top)
-        let limit = state == .burns || state == .quiet ? IslandLook.usageCompact(m.state) : nil
+        let limit = state == .burns || state == .idle || state == .quiet ? IslandLook.usageCompact(m.state) : nil
         Group {
             if let attention {
                 Text(attention).foregroundStyle(Tokens.accent)
@@ -162,6 +163,6 @@ func wordColor(_ s: TopState) -> Color {
     case .burns: Tokens.flameAmber
     case .waits: Tokens.accent
     case .out: Tokens.warn
-    case .done, .quiet: Tokens.muted
+    case .done, .idle, .quiet: Tokens.muted
     }
 }

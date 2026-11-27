@@ -3,6 +3,8 @@ import Foundation
 /// The state of the top session as the island draws it (design 0006 §6.6).
 public enum TopState: String, Equatable, Sendable {
     case burns, waits, done, out, quiet
+    /// A session that neither works nor waits: alive, so the match stays lit.
+    case idle
 }
 
 /// The words and numbers the two faces show, as plain values; the widget only draws them.
@@ -28,6 +30,10 @@ public enum IslandLook {
         return Match(state: s, front: s == .done ? 1 : max(0.03, pct))
     }
 
+    /// Whether the match burns: while any session lives (owner, 2026-11-27). A limit that
+    /// stops the top session, or no session at all, puts it out.
+    public static func lit(_ s: TopState) -> Bool { s != .out && s != .quiet }
+
     /// Whether anything is on: a top session that is not quiet. Nothing on, the Usage
     /// compact shows the host mark `▰` where the match would be.
     public static func anythingOn(_ s: IslandState) -> Bool { state(s.top) != .quiet }
@@ -36,6 +42,7 @@ public enum IslandLook {
     public static func word(_ top: IslandState.Top?, zone: TimeZone = .current) -> String {
         switch state(top) {
         case .burns: "✦ burns"
+        case .idle: "· idle"
         case .waits: "╿ waits"
         case .done: "╿ done"
         case .out: top?.out.map { "out until \(clock($0, zone: zone))" } ?? "out"
@@ -46,7 +53,7 @@ public enum IslandLook {
     /// The right of the Sessions compact island.
     public static func compact(_ top: IslandState.Top?, names: IslandNames, zone: TimeZone = .current) -> String {
         switch state(top) {
-        case .burns: names.session(top!.n)
+        case .burns, .idle: names.session(top!.n)
         case .waits: "╿ waits"
         case .done: "╿ done"
         case .out: top?.out.map { "out \(clock($0, zone: zone))" } ?? "out"
@@ -58,6 +65,7 @@ public enum IslandLook {
     public static func who(_ top: IslandState.Top?, names: IslandNames) -> (name: String, detail: String?) {
         switch state(top) {
         case .burns: (names.session(top!.n), nil)
+        case .idle: (names.session(top!.n), "idle")
         case .waits: (names.session(top!.n), "waits for you")
         case .done: (names.session(top!.n), "finished its turn")
         case .out: (names.session(top!.n), "the limit stopped it")

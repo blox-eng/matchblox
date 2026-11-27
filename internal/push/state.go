@@ -20,7 +20,7 @@ const MaxAccounts = 4
 // numbers, states, times and percents only.
 // chainState is a chain's word for its neediest session's: a wait asks, a
 // finish waits for the owner to look.
-var chainState = map[string]string{"waits": "asks", "done": "waits", "out": "quiet", "burns": "burns"}
+var chainState = map[string]string{"waits": "asks", "done": "waits", "out": "quiet", "burns": "burns", "idle": "quiet"}
 
 // chainOf is the chain a session is in; its first when it is in several.
 func chainOf(v *state.ChainsView, sessionID string) (chains.Chain, bool) {
@@ -44,7 +44,7 @@ func Build(doc state.Doc, hostFP string, n *Numbers, now time.Time) ContentState
 	}
 
 	// What each session does, by id. A queue item is the truth for a wait or
-	// a finish; a session in neither is out (a limit stops it) or burns.
+	// a finish; a session in neither is out (a limit stops it), burns, or is idle.
 	type cand struct {
 		s     sample.Session
 		state string
@@ -81,16 +81,16 @@ func Build(doc state.Doc, hostFP string, n *Numbers, now time.Time) ContentState
 		case s.Busy:
 			c.state = "burns"
 		default:
-			continue
+			c.state = "idle" // alive: the match stays lit (owner, 2026-11-27)
 		}
 		if c.state == "burns" {
 			cs.Burn++
 		}
 		cands = append(cands, c)
 	}
-	// A wait before a done before an out before a burn; of the waits and
-	// dones the oldest, of the others the one prompted last.
-	rank := map[string]int{"waits": 0, "done": 1, "out": 2, "burns": 3}
+	// A wait before a done before an out before a burn before an idle; of the
+	// waits and dones the oldest, of the others the one prompted last.
+	rank := map[string]int{"waits": 0, "done": 1, "out": 2, "burns": 3, "idle": 4}
 	slices.SortStableFunc(cands, func(a, b cand) int {
 		if a.state != b.state {
 			return rank[a.state] - rank[b.state]
