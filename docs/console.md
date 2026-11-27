@@ -683,7 +683,7 @@ The second tab. `↑` `↓` choose a row, `Enter` opens it over the body, and
 
 Under the rows: `MACHINES · N`, one row for each host. Hosts in trouble
 come first: `✗` hosts (not reached, never reached, connected with no
-state, or another version), then `!` hosts over their cores, then hosts
+state, or another version), then hosts over their cores (marked !), then hosts
 with memory or a disk at 90% or more. The rest follow. Each group keeps
 Hosts order. A row shows the name, `up <age>`, `load L / C cores`, CPU,
 memory, the fullest disk, `io wait N`, and the provider and plan of each
@@ -703,7 +703,7 @@ A figure that the host did not send says `unknown`, never 0.
 - `Enter` on a row, or a second tap, moves Machine to that host's
   section. A host with no section moves to its row in the hosts list.
 
-On macOS, a process that waits on I/O (`ps` state `U`) counts in `io
+On macOS, a process that waits on I/O (state U in `ps`) counts in `io
 wait N`. An agent that exited (a zombie) does not count as alive.
 
 Then usage (see [Usage](#usage)), then the machine: CPU per
