@@ -605,8 +605,8 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
         guard let first = touches.first, first.view === belt, touch == nil, !headDriver.isTouched else {
             return super.touchesBegan(touches, with: event)
         }
-        if isOnHead(first.location(in: belt)) {
-            return headDriver.began(at: first.location(in: belt), time: first.timestamp)
+        if let centre = headCentre(at: first.location(in: belt)) {
+            return headDriver.began(at: first.location(in: belt), centre: centre, time: first.timestamp)
         }
         selection.prepare()
         impact.prepare()
@@ -785,11 +785,16 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
 
     /// Over a match head on a belt at rest: a moving belt takes the touch, and stops.
     private func isOnHead(_ point: CGPoint) -> Bool {
-        guard motion?.atRest ?? true, let i = keyIndex(at: point) else { return false }
-        return pieces[i].head != nil
+        headCentre(at: point) != nil
     }
 
-    /// Points of roll for a radian of turn: the head is about 34 pt round.
+    /// The centre, in the belt, of the head under `point`.
+    private func headCentre(at point: CGPoint) -> CGPoint? {
+        guard motion?.atRest ?? true, let i = keyIndex(at: point), let ball = pieces[i].head else { return nil }
+        return ball.convert(CGPoint(x: ball.bounds.midX, y: ball.bounds.midY), to: belt.layer)
+    }
+
+    /// The head is about 34 pt round.
     private static let headRadius: CGFloat = 34
     static let enter = KeyBar.bytes(for: "⏎") ?? [0x0d]
 
