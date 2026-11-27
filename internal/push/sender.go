@@ -10,9 +10,12 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"sync"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/holds"
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/state"
 )
@@ -68,7 +71,7 @@ type Sender struct {
 	renew  bool
 
 	// Only the worker touches what follows.
-	buzzSet map[string]bool // the waits the last buzz saw
+	buzzSet map[string]bool // the waits and finishes the last buzz saw, by session and kind
 	buzzAt  time.Time
 	last    *ContentState // the last state sent to the island
 	pctAt   time.Time
@@ -212,11 +215,32 @@ func wants(regs []Registration) bool {
 	return false
 }
 
+// BuzzSound is the sound of every buzz, in the app's bundle: a short pinch
+// hiss and one ember pop (owner, 2026-11-27). A phone without it plays the
+// default sound.
+const BuzzSound = "pinch-ember.wav"
+
+// freshFinish reports whether it is a turn that a hook saw finish just now. A
+// finish guessed from a pane's look comes and goes with sampler noise, and one
+// from before the service started is not news: neither buzzes.
+func freshFinish(it queue.Item, now time.Time) bool {
+	return it.State == queue.StateFinished && !it.Estimated && now.Sub(it.Since) <= 2*buzzEvery
+}
+
+// buzzFirst reports whether a goes before b in one buzz: a wait before a
+// finished turn, else the newer one.
+func buzzFirst(a, b queue.Item) bool {
+	if waits(a) != waits(b) {
+		return waits(a)
+	}
+	return a.Since.After(b.Since)
+}
+
 // buzzBody is the APNs alert of a buzz. The alert names nothing; the Notification
 // Service Extension (mutable-content) opens buzz.sealed with the notify key and
 // shows the line. buzz.host and buzz.n are in clear so a tap opens the session.
 //
-//	{"aps":{"alert":{"body":"matchblox"},"sound":"default","mutable-content":1},
+//	{"aps":{"alert":{"body":"matchblox"},"sound":"pinch-ember.wav","mutable-content":1},
 //	 "buzz":{"host":"f10f7812","n":3,"sealed":"<base64 enc‖ciphertext>"}}
 type buzzBody struct {
 	APS struct {
@@ -229,17 +253,23 @@ type buzzBody struct {
 	Buzz Buzz `json:"buzz"`
 }
 
-// buzz sends one buzz when a session starts to wait, at most each 30 s; a wait
-// held back by the 30 s goes with the next doc after them.
+// buzz sends one buzz when a session starts to wait or finishes its turn, at
+// most each 30 s; one held back by the 30 s goes with the next doc after it.
 func (s *Sender) buzz(doc state.Doc, regs []Registration, now time.Time) {
 	set := map[string]bool{}
 	var fresh *queue.Item
+	parked := map[string]bool{}
+	for _, h := range doc.Holds {
+		parked[h.SessionID] = parked[h.SessionID] || h.By == holds.ByYou
+	}
 	for i, it := range doc.Queue {
-		if it.SessionID == "" || !waits(it) {
+		if it.SessionID == "" || parked[it.SessionID] || !waits(it) && !freshFinish(it, now) {
 			continue
 		}
-		set[it.SessionID] = true
-		if !s.buzzSet[it.SessionID] && (fresh == nil || it.Since.After(fresh.Since)) {
+		// By session and kind: a finish that turns into a question buzzes again.
+		key := it.SessionID + "|" + strconv.FormatBool(waits(it))
+		set[key] = true
+		if !s.buzzSet[key] && (fresh == nil || buzzFirst(it, *fresh)) {
 			fresh = &doc.Queue[i]
 		}
 	}
@@ -266,7 +296,7 @@ func (s *Sender) buzz(doc state.Doc, regs []Registration, now time.Time) {
 			continue
 		}
 		var b buzzBody
-		b.APS.Alert.Body, b.APS.Sound, b.APS.Mutable = "matchblox", "default", 1
+		b.APS.Alert.Body, b.APS.Sound, b.APS.Mutable = "matchblox", BuzzSound, 1
 		b.Buzz = Buzz{Host: Host8(s.hostFP), N: num, Sealed: sealed}
 		pl, _ := json.Marshal(b)
 		_ = s.send(r, Event{Target: r.DeviceToken, Kind: "device", PushType: "alert", Priority: 10, Payload: pl})
@@ -504,7 +534,8 @@ func (s *Sender) due(cs ContentState, now time.Time) (int, bool) {
 // or burn more or less, a wait that begins anew, or the stoker.
 func changed(l *ContentState, cs ContentState) bool {
 	return (l.Top == nil) != (cs.Top == nil) || cs.Top != nil && (l.Top.N != cs.Top.N || l.Top.State != cs.Top.State) ||
-		cs.Wait != l.Wait || cs.Burn != l.Burn || cs.WaitAt.After(l.WaitAt) || cs.Stoker != l.Stoker
+		cs.Wait != l.Wait || cs.Burn != l.Burn || cs.WaitAt.After(l.WaitAt) || cs.Stoker != l.Stoker ||
+		cs.Need != l.Need || !slices.Equal(cs.Needs, l.Needs)
 }
 
 // began says the only change from l to cs is more sessions that burn.

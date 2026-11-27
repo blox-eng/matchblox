@@ -2,9 +2,9 @@ import MatchbloxKit
 import SwiftUI
 
 /// One horizontal match, after the 0006 mockup: the burnt head on the left, the charred
-/// wood up to the front, the ember there, and the unburnt wood after it. A burning match
-/// has its flame at the front; a waiting one smokes over a dim ember; done smokes a little
-/// and is cold; out is cold. A Live Activity runs no timers, so this is the still frame of
+/// wood up to the front, the ember there, and the unburnt wood after it. The flame is lit
+/// while a session lives: full while it works, low while it waits (smoke rises over it), is
+/// done or is idle. Out is cold. A Live Activity runs no timers, so this is the still frame of
 /// each state; the system cross-fades between two content states.
 struct MatchView: View {
     let match: IslandLook.Match
@@ -32,10 +32,13 @@ struct MatchView: View {
                 let g = MatchGeometry(size: size, th: thickness, front: match.front, minimal: minimal)
                 ZStack(alignment: .topLeading) {
                     wood(g)
-                    if match.state == .burns || match.state == .waits { ember(g, glow: match.state == .burns ? 1 : 0.6) }
-                    if match.state == .burns { FlameView(x: g.front, y: g.y, size: g.th * 3.1 * (flare ? 1.6 : 1), glow: flare ? 0.5 : 0.28) }
-                    if match.state == .waits { SmokeView(x: g.front, y: g.y - g.th * 0.4, th: g.th, puffs: 4) }
-                    if match.state == .done { SmokeView(x: g.front, y: g.y - g.th * 0.4, th: g.th, puffs: 2) }
+                    // Lit while a session lives: full for work, low for the rest; a wait smokes over it.
+                    if IslandLook.lit(match.state) {
+                        let full = match.state == .burns
+                        ember(g, glow: full ? 1 : 0.6)
+                        FlameView(x: g.front, y: g.y, size: g.th * (full ? 3.1 : 2.2) * (flare ? 1.6 : 1), glow: flare ? 0.5 : (full ? 0.28 : 0.18))
+                    }
+                    if match.state == .waits { SmokeView(x: g.front, y: g.y - g.th * 1.2, th: g.th, puffs: 4) }
                 }
             }
         }

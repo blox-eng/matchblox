@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/blox-eng/matchblox/internal/chains"
+	"github.com/blox-eng/matchblox/internal/holds"
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/state"
@@ -20,7 +21,7 @@ const MaxAccounts = 4
 // numbers, states, times and percents only.
 // chainState is a chain's word for its neediest session's: a wait asks, a
 // finish waits for the owner to look.
-var chainState = map[string]string{"waits": "asks", "done": "waits", "out": "quiet", "burns": "burns"}
+var chainState = map[string]string{"waits": "asks", "done": "waits", "out": "quiet", "burns": "burns", "idle": "quiet", "parked": "quiet"}
 
 // chainOf is the chain a session is in; its first when it is in several.
 func chainOf(v *state.ChainsView, sessionID string) (chains.Chain, bool) {
@@ -44,15 +45,23 @@ func Build(doc state.Doc, hostFP string, n *Numbers, now time.Time) ContentState
 	}
 
 	// What each session does, by id. A queue item is the truth for a wait or
-	// a finish; a session in neither is out (a limit stops it) or burns.
+	// a finish; a session in neither is out (a limit stops it), burns, or is idle.
 	type cand struct {
 		s     sample.Session
 		state string
 		since time.Time
 	}
+	// A session you parked needs nothing from you: it counts in no wait and
+	// comes after every other session (owner, 2026-11-27).
+	parked := map[string]bool{}
+	for _, h := range doc.Holds {
+		if h.By == holds.ByYou {
+			parked[h.SessionID] = true
+		}
+	}
 	items := map[string]queue.Item{}
 	for _, it := range doc.Queue {
-		if it.State != queue.StatePermission && it.State != queue.StateQuestion && it.State != queue.StateFinished {
+		if it.State != queue.StatePermission && it.State != queue.StateQuestion && it.State != queue.StateFinished || parked[it.SessionID] {
 			continue
 		}
 		if old, ok := items[it.SessionID]; !ok || waits(it) && !waits(old) || waits(it) == waits(old) && it.Since.Before(old.Since) {
@@ -81,28 +90,46 @@ func Build(doc state.Doc, hostFP string, n *Numbers, now time.Time) ContentState
 		case s.Busy:
 			c.state = "burns"
 		default:
-			continue
+			c.state = "idle" // alive: the match stays lit (owner, 2026-11-27)
+		}
+		if parked[s.SessionID] {
+			c.state = "parked"
 		}
 		if c.state == "burns" {
 			cs.Burn++
 		}
 		cands = append(cands, c)
 	}
-	// A wait before a done before an out before a burn; of the waits and
-	// dones the oldest, of the others the one prompted last.
-	rank := map[string]int{"waits": 0, "done": 1, "out": 2, "burns": 3}
+	// A wait before a done before an out before a burn before an idle before a
+	// parked one; of the waits and dones the one that changed last (owner,
+	// 2026-11-27), of the others the one prompted last.
+	rank := map[string]int{"waits": 0, "done": 1, "out": 2, "burns": 3, "idle": 4, "parked": 5}
 	slices.SortStableFunc(cands, func(a, b cand) int {
 		if a.state != b.state {
 			return rank[a.state] - rank[b.state]
 		}
 		if a.state == "waits" || a.state == "done" {
-			return a.since.Compare(b.since)
+			return b.since.Compare(a.since)
 		}
 		return b.s.Started.Compare(a.s.Started)
 	})
+	needKind := map[string]string{queue.StatePermission: "command", queue.StateQuestion: "question", queue.StateFinished: "done"}
+	for _, c := range cands {
+		if c.state != "waits" && c.state != "done" {
+			break // the sort puts them first
+		}
+		cs.Need++
+		if len(cs.Needs) < MaxNeeds {
+			cs.Needs = append(cs.Needs, Need{N: n.Session(c.s.SessionID), Kind: needKind[items[c.s.SessionID].State]})
+		}
+	}
 	if len(cands) > 0 {
 		c := cands[0]
-		top := &Top{N: n.Session(c.s.SessionID), State: c.state, Out: c.s.Out.UTC()}
+		st := c.state
+		if st == "parked" {
+			st = "idle" // alive, and nothing for you to do
+		}
+		top := &Top{N: n.Session(c.s.SessionID), State: st, Out: c.s.Out.UTC()}
 		if c.s.Progress != nil {
 			top.Pct = step5(c.s.Progress.Pct)
 		}

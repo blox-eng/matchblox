@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/holds"
 	"github.com/blox-eng/matchblox/internal/limits"
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -133,6 +134,32 @@ func liveOf(t *testing.T, e Event) aps {
 		t.Fatalf("payload %s: %v", e.Payload, err)
 	}
 	return a
+}
+
+// A need that ends while the top stays goes at once: two finished turns,
+// then one, kept the island at 2 for 3 minutes.
+func TestANeedThatEndsGoesAtOnce(t *testing.T) {
+	r := &fakeRelay{}
+	c := &clock{t: t0}
+	p, _ := phone(t, "a", false, true)
+	s := newSender(t, r, c, p)
+	finished := func(ids ...string) state.Doc {
+		var ss []sample.Session
+		var q []queue.Item
+		for i, id := range ids {
+			ss = append(ss, sess(id, false, t0))
+			q = append(q, queue.Item{SessionID: id, State: queue.StateFinished, Since: t0.Add(time.Duration(i) * time.Second)})
+		}
+		return doc(ss, q)
+	}
+	s.handle(finished("d1", "d2"))
+	r.take()
+	c.add(time.Minute)
+	s.handle(finished("d1"))
+	ev := ofKind(r.take(), "channel")
+	if len(ev) != 1 || ev[0].Priority != 10 {
+		t.Fatalf("the need that ended did not go at once: %+v", ev)
+	}
 }
 
 func TestABuzzGoesAtMostEach30s(t *testing.T) {
@@ -975,5 +1002,143 @@ func TestNothingToSendClearsTheStatus(t *testing.T) {
 	s.handle(waiting("x"))
 	if st := s.Status(); st != "" {
 		t.Fatalf("status with nothing to send %q", st)
+	}
+}
+
+// finishedDoc is one session, x, whose turn has just finished.
+func finishedDoc() state.Doc {
+	return doc([]sample.Session{sess("x", false, t0)},
+		[]queue.Item{{SessionID: "x", Name: "api-x", State: queue.StateFinished, Since: t0, LastLine: "All tests pass."}})
+}
+
+func buzzSound(t *testing.T, e Event) string {
+	t.Helper()
+	var body struct {
+		APS struct {
+			Sound string `json:"sound"`
+		} `json:"aps"`
+	}
+	if err := json.Unmarshal(e.Payload, &body); err != nil {
+		t.Fatal(err)
+	}
+	return body.APS.Sound
+}
+
+func TestAWaitBuzzesWithThePinch(t *testing.T) {
+	r := &fakeRelay{}
+	p, _ := phone(t, "a", true, false)
+	s := newSender(t, r, &clock{t: t0}, p)
+	s.handle(waiting("x"))
+	ev := ofKind(r.take(), "device")
+	if len(ev) != 1 || buzzSound(t, ev[0]) != BuzzSound {
+		t.Fatalf("buzz %+v, want one with the sound %q", ev, BuzzSound)
+	}
+}
+
+func TestAFinishedTurnBuzzes(t *testing.T) {
+	r := &fakeRelay{}
+	p, key := phone(t, "a", true, false)
+	s := newSender(t, r, &clock{t: t0}, p)
+	s.handle(finishedDoc())
+	ev := ofKind(r.take(), "device")
+	if len(ev) != 1 || buzzSound(t, ev[0]) != BuzzSound {
+		t.Fatalf("buzz %+v, want one finished buzz with the pinch", ev)
+	}
+	var body struct {
+		Buzz Buzz `json:"buzz"`
+	}
+	if err := json.Unmarshal(ev[0].Payload, &body); err != nil {
+		t.Fatal(err)
+	}
+	plain, err := openWith(t, key.Bytes(), body.Buzz.Sealed)
+	if err != nil || string(plain) != `work-1 · api-x finished its turn: "All tests pass."` {
+		t.Fatalf("sealed opens to %q, %v", plain, err)
+	}
+}
+
+func TestAWaitWinsTheWindow(t *testing.T) {
+	r := &fakeRelay{}
+	p, key := phone(t, "a", true, false)
+	s := newSender(t, r, &clock{t: t0}, p)
+	d := waiting("w")
+	d.Sessions = append(d.Sessions, sess("x", false, t0))
+	d.Queue = append(d.Queue, queue.Item{SessionID: "x", Name: "api-x", State: queue.StateFinished, Since: t0.Add(time.Minute)})
+	s.handle(d)
+	ev := ofKind(r.take(), "device")
+	if len(ev) != 1 {
+		t.Fatalf("buzz events %+v, want one", ev)
+	}
+	var body struct {
+		Buzz Buzz `json:"buzz"`
+	}
+	_ = json.Unmarshal(ev[0].Payload, &body)
+	plain, _ := openWith(t, key.Bytes(), body.Buzz.Sealed)
+	if !strings.Contains(string(plain), "api-w waits") {
+		t.Fatalf("the buzz says %q, want the wait", plain)
+	}
+}
+
+// TestTheBuzzSoundShipsInTheApp: the sound the push names is a file the app
+// bundles; a name with no file plays the default sound, and nothing says so.
+func TestTheBuzzSoundShipsInTheApp(t *testing.T) {
+	if _, err := os.Stat(filepath.Join("..", "..", "ios", "Matchblox", "Sounds", BuzzSound)); err != nil {
+		t.Fatalf("the app has no %s: %v", BuzzSound, err)
+	}
+}
+
+// TestAFinishThatTurnsIntoAQuestionBuzzesAgain: Stop and Reply can land in two
+// docs; the question must not hide behind the finish already buzzed (review).
+func TestAFinishThatTurnsIntoAQuestionBuzzesAgain(t *testing.T) {
+	r := &fakeRelay{}
+	c := &clock{t: t0}
+	p, _ := phone(t, "a", true, false)
+	s := newSender(t, r, c, p)
+	s.handle(finishedDoc())
+	if ev := ofKind(r.take(), "device"); len(ev) != 1 {
+		t.Fatalf("finish buzz %+v", ev)
+	}
+	c.add(31 * time.Second)
+	s.handle(waiting("x"))
+	if ev := ofKind(r.take(), "device"); len(ev) != 1 {
+		t.Fatalf("the question after the finish: %+v, want one buzz", ev)
+	}
+}
+
+// TestAnOldFinishDoesNotBuzzOnStart: a turn finished long before the service
+// started is not news (review).
+func TestAnOldFinishDoesNotBuzzOnStart(t *testing.T) {
+	r := &fakeRelay{}
+	p, _ := phone(t, "a", true, false)
+	s := newSender(t, r, &clock{t: t0.Add(3 * time.Hour)}, p)
+	s.handle(finishedDoc())
+	if ev := ofKind(r.take(), "device"); len(ev) != 0 {
+		t.Fatalf("a finish 3 h old buzzed: %+v", ev)
+	}
+}
+
+// TestAnEstimatedFinishDoesNotBuzz: a finish guessed from a pane's look comes and
+// goes with sampler noise; only a hook's Stop buzzes (review).
+func TestAnEstimatedFinishDoesNotBuzz(t *testing.T) {
+	r := &fakeRelay{}
+	p, _ := phone(t, "a", true, false)
+	s := newSender(t, r, &clock{t: t0}, p)
+	d := finishedDoc()
+	d.Queue[0].Estimated = true
+	s.handle(d)
+	if ev := ofKind(r.take(), "device"); len(ev) != 0 {
+		t.Fatalf("an estimated finish buzzed: %+v", ev)
+	}
+}
+
+// TestAParkedSessionDoesNotBuzz: a session you parked needs nothing from you.
+func TestAParkedSessionDoesNotBuzz(t *testing.T) {
+	r := &fakeRelay{}
+	p, _ := phone(t, "a", true, false)
+	s := newSender(t, r, &clock{t: t0}, p)
+	d := waiting("x")
+	d.Holds = []holds.Hold{{SessionID: "x", By: holds.ByYou}}
+	s.handle(d)
+	if ev := ofKind(r.take(), "device"); len(ev) != 0 {
+		t.Fatalf("a parked session buzzed: %+v", ev)
 	}
 }

@@ -1,13 +1,14 @@
 package push
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 	"testing"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/holds"
 	"github.com/blox-eng/matchblox/internal/hooks"
 	"github.com/blox-eng/matchblox/internal/limits"
 	"github.com/blox-eng/matchblox/internal/queue"
@@ -43,7 +44,8 @@ func TestAWaitComesBeforeABurn(t *testing.T) {
 	}
 }
 
-func TestTheOldestWaitComesFirst(t *testing.T) {
+// The wait that began last leads (owner, 2026-11-27; it was the oldest, 0006 §6.6.1).
+func TestTheNewestWaitComesFirst(t *testing.T) {
 	n := openNumbers(t, t.TempDir())
 	d := doc([]sample.Session{sess("new", false, t0), sess("old", false, t0)},
 		[]queue.Item{
@@ -51,7 +53,7 @@ func TestTheOldestWaitComesFirst(t *testing.T) {
 			{SessionID: "old", State: queue.StatePermission, Since: t0.Add(-time.Hour)},
 		})
 	got := Build(d, fp, n, t0)
-	if got.Top.N != n.Session("old") || got.Wait != 2 {
+	if got.Top.N != n.Session("new") || got.Wait != 2 {
 		t.Fatalf("top = %+v wait %d", got.Top, got.Wait)
 	}
 }
@@ -93,14 +95,65 @@ func TestProgressGoesInStepsOf5(t *testing.T) {
 	}
 }
 
-func TestQuietHasNoTop(t *testing.T) {
+// TestTheNewestChangeLeads: of the asks, and of the finished turns, the one
+// that changed last comes first (owner, 2026-11-27); an ask still leads a finish.
+func TestTheNewestChangeLeads(t *testing.T) {
 	n := openNumbers(t, t.TempDir())
-	got := Build(doc([]sample.Session{sess("a", false, t0)}, nil), fp, n, t0)
+	ss := []sample.Session{sess("q-old", false, t0), sess("q-new", false, t0), sess("d-old", false, t0), sess("d-new", false, t0)}
+	q := []queue.Item{
+		{SessionID: "q-old", State: queue.StateQuestion, Since: t0.Add(-9 * time.Minute)},
+		{SessionID: "q-new", State: queue.StateQuestion, Since: t0.Add(-3 * time.Minute)},
+		{SessionID: "d-old", State: queue.StateFinished, Since: t0.Add(-8 * time.Minute)},
+		{SessionID: "d-new", State: queue.StateFinished, Since: t0.Add(-1 * time.Minute)},
+	}
+	got := Build(doc(ss, q), fp, n, t0)
+	want := []Need{{n.Session("q-new"), "question"}, {n.Session("q-old"), "question"}, {n.Session("d-new"), "done"}}
+	if !slices.Equal(got.Needs, want) || got.Top.N != n.Session("q-new") {
+		t.Fatalf("needs %+v top %+v, want %+v led by q-new", got.Needs, got.Top, want)
+	}
+}
+
+// TestAParkedSessionStepsBack: a session you parked never leads and does not
+// count as needing you; it comes after every other session (owner, 2026-11-27).
+func TestAParkedSessionStepsBack(t *testing.T) {
+	n := openNumbers(t, t.TempDir())
+	d := doc([]sample.Session{sess("parked", false, t0), sess("idle", false, t0.Add(-time.Hour))},
+		[]queue.Item{{SessionID: "parked", State: queue.StateQuestion, Since: t0}})
+	d.Holds = []holds.Hold{{SessionID: "parked", By: holds.ByYou}}
+	got := Build(d, fp, n, t0)
+	if got.Need != 0 || len(got.Needs) != 0 || got.Top == nil || got.Top.N != n.Session("idle") {
+		t.Fatalf("need %d %+v top %+v, want no need and the idle one on top", got.Need, got.Needs, got.Top)
+	}
+	d.Sessions = d.Sessions[:1]
+	got = Build(d, fp, n, t0)
+	if got.Top == nil || got.Top.N != n.Session("parked") || got.Need != 0 {
+		t.Fatalf("alone: top %+v need %d, want the parked one, needing nothing", got.Top, got.Need)
+	}
+}
+
+// TestNoSessionIsQuiet: the match goes out only when no session runs.
+func TestNoSessionIsQuiet(t *testing.T) {
+	n := openNumbers(t, t.TempDir())
+	got := Build(doc(nil, nil), fp, n, t0)
 	if got.Top != nil || got.Burn != 0 || got.Wait != 0 {
 		t.Fatalf("got %+v", got)
 	}
 	if got.Accounts == nil {
 		t.Fatal("accounts must be [] not null")
+	}
+}
+
+// TestAnIdleSessionKeepsTheMatchLit: a session that neither works nor waits is
+// idle, not quiet (owner, 2026-11-27); a working one still leads it.
+func TestAnIdleSessionKeepsTheMatchLit(t *testing.T) {
+	n := openNumbers(t, t.TempDir())
+	got := Build(doc([]sample.Session{sess("old", false, t0.Add(-time.Hour)), sess("new", false, t0)}, nil), fp, n, t0)
+	if got.Top == nil || got.Top.State != "idle" || got.Top.N != n.Session("new") || got.Burn != 0 {
+		t.Fatalf("two idle sessions: top %+v burn %d, want the newest idle", got.Top, got.Burn)
+	}
+	got = Build(doc([]sample.Session{sess("idle", false, t0), sess("busy", true, t0.Add(-time.Hour))}, nil), fp, n, t0)
+	if got.Top == nil || got.Top.State != "burns" || got.Top.N != n.Session("busy") || got.Burn != 1 {
+		t.Fatalf("idle and busy: top %+v burn %d, want the busy one", got.Top, got.Burn)
 	}
 }
 
@@ -184,6 +237,31 @@ func TestAFullWindowThatStillWorksIsSpentNotOut(t *testing.T) {
 	}
 }
 
+// The island leads with what needs the person: asks before a finished turn,
+// the newest change first, at most 3, and the count of all (2026-11-27).
+func TestWhatNeedsYouLeadsInOrder(t *testing.T) {
+	n := openNumbers(t, t.TempDir())
+	ids := []string{"w1", "d1", "p1", "d2", "b"}
+	var ss []sample.Session
+	for _, id := range ids {
+		ss = append(ss, sess(id, id == "b", t0))
+	}
+	q := []queue.Item{
+		{SessionID: "w1", State: queue.StateQuestion, Since: t0.Add(-2 * time.Minute)},
+		{SessionID: "d1", State: queue.StateFinished, Since: t0.Add(-5 * time.Minute)},
+		{SessionID: "p1", State: queue.StatePermission, Since: t0.Add(-1 * time.Minute)},
+		{SessionID: "d2", State: queue.StateFinished, Since: t0.Add(-4 * time.Minute)},
+	}
+	got := Build(doc(ss, q), fp, n, t0)
+	want := []Need{{n.Session("p1"), "command"}, {n.Session("w1"), "question"}, {n.Session("d2"), "done"}}
+	if got.Need != 4 || !slices.Equal(got.Needs, want) {
+		t.Fatalf("need %d %+v, want 4 %+v", got.Need, got.Needs, want)
+	}
+	if got.Top == nil || got.Top.N != n.Session("p1") {
+		t.Fatalf("top %+v, want p1", got.Top)
+	}
+}
+
 func TestUsageSkipsWhatItCannotName(t *testing.T) {
 	n := openNumbers(t, t.TempDir())
 	a := limits.Account{Provider: "p", Account: "a", State: limits.Measured, Windows: []limits.Window{
@@ -264,13 +342,19 @@ func TestBuildMatchesTheFixture(t *testing.T) {
 		mk("b", 93, 71, &limits.Outlook{Out: time.Date(2026, 10, 21, 16, 15, 0, 0, time.UTC)}))
 	d.Stoker = &stoker.View{Mode: stoker.Mode{On: true}}
 	got, _ := json.Marshal(Build(d, "SHA256:"+"8Q94EmFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE", n, now))
-	var a, b bytes.Buffer
-	if err := json.Compact(&a, want); err != nil {
+	// The fixture is also the state of a host from before the needs list, which the
+	// phone's tests decode as such; this host adds what needs the person on top of it.
+	var cs ContentState
+	if err := json.Unmarshal(want, &cs); err != nil {
 		t.Fatal(err)
 	}
-	b.Write(got)
-	if a.String() != b.String() {
-		t.Fatalf("\n got %s\nwant %s", b.String(), a.String())
+	if cs.Need != 0 || cs.Needs != nil {
+		t.Fatal("the fixture names needs: it is no longer the state of an older host")
+	}
+	cs.Needs, cs.Need = []Need{{N: 3, Kind: "command"}}, 1
+	wantNow, _ := json.Marshal(cs)
+	if string(wantNow) != string(got) {
+		t.Fatalf("\n got %s\nwant %s", got, wantNow)
 	}
 }
 

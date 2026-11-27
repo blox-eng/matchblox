@@ -29,6 +29,56 @@ final class IslandLookTests: XCTestCase {
         XCTAssertEqual(IslandLook.match(nil).state, .quiet)
     }
 
+    // MARK: what needs you (2026-11-27)
+
+    func needing(_ need: Int, _ kinds: [String]) -> IslandState {
+        var s = IslandState(host: "f10f7812", burn: 1, wait: 0, top: top("waits"), accounts: [], stoker: false)
+        s.need = need
+        s.needs = kinds.enumerated().map { IslandState.Need(n: $0.offset + 3, kind: $0.element) }
+        return s
+    }
+
+    func testWhatNeedsYouIsWorded() {
+        XCTAssertEqual(IslandLook.ask("command"), "asks to run a command")
+        XCTAssertEqual(IslandLook.ask("question"), "asks you a question")
+        XCTAssertEqual(IslandLook.ask("done"), "finished its turn")
+    }
+
+    func testTheCompactNamesOneAndCountsMore() {
+        XCTAssertEqual(IslandLook.attention(needing(1, ["question"]), names: names), "api")
+        XCTAssertEqual(IslandLook.attention(needing(4, ["question", "command", "done"]), names: names), "╿ 4")
+        XCTAssertNil(IslandLook.attention(needing(0, []), names: names))
+    }
+
+    func testThreeRowsThenMore() {
+        let r = IslandLook.rows(needing(4, ["question", "command", "done"]), names: names)
+        XCTAssertEqual(r.rows.map(\.name), ["api", "session 4", "session 5"])
+        XCTAssertEqual(r.rows.map(\.ask), ["asks you a question", "asks to run a command", "finished its turn"])
+        XCTAssertEqual(r.more, "+ 1 more")
+        XCTAssertNil(IslandLook.rows(needing(2, ["done", "done"]), names: names).more)
+    }
+
+    func testTheLimitsLineLeavesOutIdleAndSpent() {
+        var s = needing(0, [])
+        var spent = WindowUse(name: "mo", pct: 100)
+        spent.spent = true
+        s.accounts = [
+            AccountUse(n: 1, windows: [WindowUse(name: "5h", pct: 62), WindowUse(name: "wk", pct: 30)], lasts: true),
+            AccountUse(n: 2, windows: [spent], lasts: true),
+            AccountUse(n: 3, windows: [WindowUse(name: "wk", pct: 90)], lasts: true, idle: true),
+        ]
+        XCTAssertEqual(IslandLook.limitsLine(s), "5h 62%")
+        s.accounts[0].idle = true
+        XCTAssertNil(IslandLook.limitsLine(s))
+    }
+
+    func testAnOldStateHasNoNeeds() throws {
+        let old = #"{"host":"f10f7812","burn":0,"wait":0,"accounts":[],"stoker":false}"#
+        let s = try JSONDecoder().decode(IslandState.self, from: Data(old.utf8))
+        XCTAssertEqual(s.need, 0)
+        XCTAssertEqual(s.needs, [])
+    }
+
     func testTheLockScreenHasNoPercentButTheExpandedHas() {
         XCTAssertNil(IslandLook.who(top("burns", pct: 62), names: names).detail)
         XCTAssertEqual(IslandLook.expandedWho(top("burns", pct: 62), names: names).detail, "62%")
@@ -168,7 +218,7 @@ final class IslandLookTests: XCTestCase {
 
     func testALockedPhoneShowsThePlaceholderNotTheLine() {
         XCTAssertEqual(BuzzPayload.category, "buzz")
-        XCTAssertEqual(BuzzPayload.hiddenBody, "An agent waits")
+        XCTAssertEqual(BuzzPayload.hiddenBody, "An agent needs you")
     }
 
     func testABuzzThatDoesNotOpenKeepsThePlaceholder() throws {
@@ -179,5 +229,22 @@ final class IslandLookTests: XCTestCase {
         let badHost: [AnyHashable: Any] = ["buzz": ["host": "XYZ", "n": 3, "sealed": v.sealed.base64EncodedString()]]
         let key = try Curve25519.KeyAgreement.PrivateKey(rawRepresentation: v.privateKey)
         XCTAssertNil(BuzzPayload.open(badHost) { try openBuzz($0, key: key) })
+    }
+
+    /// The match is lit while a session lives (owner, 2026-11-27): out only when a limit
+    /// stops it or no session runs.
+    func testTheMatchIsLitWhileASessionLives() {
+        XCTAssertEqual(IslandLook.state(top("idle")), .idle)
+        for s in ["burns", "waits", "done", "idle"] { XCTAssertTrue(IslandLook.lit(IslandLook.state(top(s))), s) }
+        XCTAssertFalse(IslandLook.lit(IslandLook.state(top("out"))))
+        XCTAssertFalse(IslandLook.lit(IslandLook.state(nil)))
+        // Nothing needs you: no name on the compact (that is the sign of one need),
+        // "idle" said once on the lock screen, and a tap opens the console (review).
+        XCTAssertEqual(IslandLook.word(top("idle")), "")
+        XCTAssertEqual(IslandLook.compact(top("idle"), names: names), "")
+        let s = IslandState(host: "f10f7812", burn: 0, wait: 0, top: top("idle"), accounts: [], stoker: false)
+        XCTAssertEqual(IslandLook.link(s)?.absoluteString, "matchblox://open?host=f10f7812")
+        XCTAssertEqual(IslandLook.who(top("idle"), names: names).name, "api")
+        XCTAssertEqual(IslandLook.who(top("idle"), names: names).detail, "idle")
     }
 }

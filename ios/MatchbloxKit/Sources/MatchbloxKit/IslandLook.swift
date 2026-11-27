@@ -3,6 +3,8 @@ import Foundation
 /// The state of the top session as the island draws it (design 0006 §6.6).
 public enum TopState: String, Equatable, Sendable {
     case burns, waits, done, out, quiet
+    /// A session that neither works nor waits: alive, so the match stays lit.
+    case idle
 }
 
 /// The words and numbers the two faces show, as plain values; the widget only draws them.
@@ -28,6 +30,10 @@ public enum IslandLook {
         return Match(state: s, front: s == .done ? 1 : max(0.03, pct))
     }
 
+    /// Whether the match burns: while any session lives (owner, 2026-11-27). A limit that
+    /// stops the top session, or no session at all, puts it out.
+    public static func lit(_ s: TopState) -> Bool { s != .out && s != .quiet }
+
     /// Whether anything is on: a top session that is not quiet. Nothing on, the Usage
     /// compact shows the host mark `▰` where the match would be.
     public static func anythingOn(_ s: IslandState) -> Bool { state(s.top) != .quiet }
@@ -36,6 +42,7 @@ public enum IslandLook {
     public static func word(_ top: IslandState.Top?, zone: TimeZone = .current) -> String {
         switch state(top) {
         case .burns: "✦ burns"
+        case .idle: ""
         case .waits: "╿ waits"
         case .done: "╿ done"
         case .out: top?.out.map { "out until \(clock($0, zone: zone))" } ?? "out"
@@ -47,6 +54,7 @@ public enum IslandLook {
     public static func compact(_ top: IslandState.Top?, names: IslandNames, zone: TimeZone = .current) -> String {
         switch state(top) {
         case .burns: names.session(top!.n)
+        case .idle: "" // a name here is the sign of one need
         case .waits: "╿ waits"
         case .done: "╿ done"
         case .out: top?.out.map { "out \(clock($0, zone: zone))" } ?? "out"
@@ -58,6 +66,7 @@ public enum IslandLook {
     public static func who(_ top: IslandState.Top?, names: IslandNames) -> (name: String, detail: String?) {
         switch state(top) {
         case .burns: (names.session(top!.n), nil)
+        case .idle: (names.session(top!.n), "idle")
         case .waits: (names.session(top!.n), "waits for you")
         case .done: (names.session(top!.n), "finished its turn")
         case .out: (names.session(top!.n), "the limit stopped it")
@@ -81,14 +90,51 @@ public enum IslandLook {
         return end
     }
 
-    /// Where a tap and the button go: the top session of this host, else its console.
+    /// Where a tap and the button go: the top session of this host, else (idle or quiet) its console.
     public static func link(_ s: IslandState) -> URL? {
-        OpenLink(host: s.host, session: s.top?.n)?.url
+        OpenLink(host: s.host, session: state(s.top) == .idle ? nil : s.top?.n)?.url
     }
 
     /// The link of one render: none for a face that shows nothing, so a tap there opens nothing.
     public static func link(_ s: IslandState, face: Face) -> URL? {
         face == .nothing ? nil : link(s)
+    }
+
+    // MARK: what needs you
+
+    /// What a session that needs the person wants, for the lock screen.
+    public static func ask(_ kind: String) -> String {
+        switch kind {
+        case "command": "asks to run a command"
+        case "question": "asks you a question"
+        default: "finished its turn"
+        }
+    }
+
+    /// The right of the compact island while something needs the person: the name of the
+    /// one, `╿ N` for more; nil when nothing does.
+    public static func attention(_ s: IslandState, names: IslandNames) -> String? {
+        switch s.need {
+        case 0: nil
+        case 1: s.needs.first.map { names.session($0.n) } ?? "╿ 1"
+        default: "╿ \(s.need)"
+        }
+    }
+
+    /// The lock screen's rows: each session that needs the person and what it wants, then
+    /// `+ N more` past the rows the state carries.
+    public static func rows(_ s: IslandState, names: IslandNames) -> (rows: [(name: String, ask: String)], more: String?) {
+        let rows = s.needs.map { (name: names.session($0.n), ask: ask($0.kind)) }
+        let rest = s.need - rows.count
+        return (rows, rest > 0 ? "+ \(rest) more" : nil)
+    }
+
+    /// One line of limits: the fullest unspent window of each working account.
+    public static func limitsLine(_ s: IslandState) -> String? {
+        let parts = s.accounts.filter { !$0.idle }.compactMap { a in
+            a.windows.filter { !$0.spent }.max { $0.pct < $1.pct }.map { "\($0.name) \($0.pct)%" }
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     // MARK: usage
@@ -186,7 +232,7 @@ public enum BuzzPayload {
     /// The category of an opened buzz. A locked phone that hides previews shows
     /// `hiddenBody` in place of the line.
     public static let category = "buzz"
-    public static let hiddenBody = "An agent waits"
+    public static let hiddenBody = "An agent needs you"
 
     /// The buzz event of a notification's userInfo, or nil if it is not one.
     public static func event(_ userInfo: [AnyHashable: Any]) -> BuzzEvent? {
