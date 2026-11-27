@@ -187,12 +187,12 @@ app, iOS Reduce Motion does the same. The app holds the stood frame for
 
 **Haptics** (the app): lock is a light impact, the strike is a rigid
 impact, a stand is success, and a failure is error. Haptics play with
-Reduce Motion. The match head on the belt taps each notch with one short
-transient, sharper as it heats, never more than 30 a second; it strikes
-with one hard transient and bumps once, heavy and dull, at an end. A tap
-that sends Enter is two firm transients 60 ms apart, with a `flame-core`
-ring at the rim for 140 ms, never the strike's glow. A touch that stops a
-flick is one soft, dull transient and sends nothing. A swipe on the
+Reduce Motion. The match head on the dock taps each notch with one short
+transient, sharper as it heats, never more than 30 a second; a firm tap
+marks the crossing from the options into the output; it strikes with one
+hard transient and bumps once, heavy and dull, at an end. A tap that sends
+Enter is two firm transients 60 ms apart, with a `flame-core` ring at the
+rim for 140 ms, never the strike's glow. A swipe on the
 terminal ticks each wheel step, at the same cap. With Reduce Motion
 the head's speckles stand still; its heat colour still shows.
 

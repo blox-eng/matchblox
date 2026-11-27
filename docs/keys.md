@@ -4,9 +4,10 @@ Every key of the console works on the key bar of a phone SSH app: letters,
 digits, arrows, `Enter` and `Esc`. No key of the console needs `Ctrl`.
 `Ctrl+O` is for a hardware keyboard. On a phone,
 `◂` on the app's key belt (or its edge swipe) goes back, `^C` on the belt
-interrupts, a swipe or the match head scrolls, and a tap on the head is
-`Enter`. In the matchblox app,
-your own belt layout can hold the console's keys: see
+interrupts, and a swipe scrolls. In the matchblox app, the match head
+rolls through a question's options, then the output, and a tap on it
+answers or is `Enter`: see [the match head](phone.md#the-match-head).
+Your own belt layout can hold the console's keys: see
 [Mine](phone.md#mine). The key line at
 the bottom shows the keys of the open tab. A tap on a key presses it.
 

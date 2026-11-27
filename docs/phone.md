@@ -431,29 +431,75 @@ agent's pane they are dim and send nothing.
 
 <svg class="match-head" width="40" height="40" viewBox="0 0 40 40" role="img" aria-label="The match head"><defs><radialGradient id="match-head-shade" cx="0.33" cy="0.33" r="0.75"><stop offset="0" style="stop-color:#fff;stop-opacity:.25"/><stop offset="0.6" style="stop-color:var(--t-match-head,#C2452D)"/><stop offset="1" style="stop-color:var(--t-match-ember,#9C5A46)"/></radialGradient><clipPath id="match-head-ball"><circle cx="20" cy="20" r="17"/></clipPath></defs><circle cx="20" cy="20" r="17" style="fill:var(--t-match-head,#C2452D)"/><circle cx="20" cy="20" r="17" fill="url(#match-head-shade)"/><g clip-path="url(#match-head-ball)" fill="#000"><circle cx="7.1" cy="17.9" r="0.49" fill-opacity="0.21"/><circle cx="23.6" cy="4.6" r="0.30" fill-opacity="0.07"/><circle cx="11.5" cy="28.9" r="0.48" fill-opacity="0.23"/><circle cx="17.8" cy="4.4" r="0.33" fill-opacity="0.08"/><circle cx="18.8" cy="18.8" r="0.71" fill-opacity="0.35"/><circle cx="13.8" cy="12.0" r="0.49" fill-opacity="0.27"/><circle cx="17.1" cy="34.6" r="0.36" fill-opacity="0.14"/><circle cx="21.3" cy="29.0" r="0.56" fill-opacity="0.29"/><circle cx="29.9" cy="24.0" r="0.52" fill-opacity="0.26"/><circle cx="15.3" cy="5.1" r="0.31" fill-opacity="0.09"/><circle cx="23.5" cy="31.6" r="0.63" fill-opacity="0.23"/><circle cx="11.1" cy="31.9" r="0.47" fill-opacity="0.14"/><circle cx="4.9" cy="21.9" r="0.44" fill-opacity="0.11"/><circle cx="16.9" cy="12.0" r="0.53" fill-opacity="0.30"/><circle cx="17.2" cy="34.1" r="0.45" fill-opacity="0.16"/><circle cx="7.5" cy="10.5" r="0.34" fill-opacity="0.08"/><circle cx="4.6" cy="17.4" r="0.42" fill-opacity="0.09"/><circle cx="14.2" cy="12.7" r="0.69" fill-opacity="0.29"/><circle cx="7.6" cy="11.6" r="0.50" fill-opacity="0.13"/><circle cx="21.1" cy="34.8" r="0.43" fill-opacity="0.14"/></g><circle cx="20" cy="20" r="17" fill="none" stroke="#000" stroke-opacity=".6"/></svg>
 
-The Scroll group has one key, the match head. Add it to Mine, and roll it
-with your thumb to scroll, as a trackball:
+One match head sits on the dock, centred above the belt. It is 96 pt
+across and stands in a row of its own, so it never covers the terminal's
+text. The handle row says what it does:
+`roll: options, then the output · hold: sessions · BOX sets them`.
 
-- Roll down for older lines, and up for newer lines. Each notch, 10 pt of
-  roll, scrolls and taps once.
-- A slow roll moves 1 line a notch. A faster roll moves more, up to 10
-  lines a notch. The taps come closer together as you roll faster, up to 30
-  a second; past that each notch moves more lines.
-- The head heats as it turns: cold red, ember, then amber. Roll it too fast
-  and it strikes: it lights, with one hard tap. It cools within a second.
-- A flick keeps it turning with slower taps. A touch stops it, with one
-  soft, dull tap, and sends nothing: tap again for Enter.
-- Tap the head for Enter. You feel two firm taps and the rim flashes. Only a
-  short tap on a still head counts: a tap right after a roll, or one that
-  moves, sends nothing.
-- At the end of the lines it bumps once and stops. In a tmux pane the app
-  knows the bottom, not the top: the head turns on at the top, and tmux
-  stays there.
-- On a screen with no history that does not read the mouse, the handle row
-  says `nothing scrolls here · this program has no scrollback`.
-- A sideways roll turns the head and scrolls nothing.
-- With VoiceOver, the head is "Match head": swipe up or down on it to
-  scroll a page, and double-tap it to send Enter.
+- **Touch.** A ring and four marks fade in round the head: top `◂ back`,
+  left `← cursor`, right `→ cursor`, bottom `⌨ type`. A touch sends
+  nothing. The marks fade 0.9 s after you lift.
+- **Roll the edge.** Move your finger round the head, and it turns under
+  you. When the agent asks a question, each notch moves Pocket's highlight
+  one option, with one tap. Anticlockwise goes up, clockwise goes down. The
+  highlight starts on the option the agent marks. The handle row shows it:
+  `2 of 3 · Yes, and open a pull request`.
+- **Then the output.** Past the first option, the roll goes on up into the
+  output, and a firm tap marks the crossing. With no question on screen,
+  the roll goes straight into the output. The handle row says how far up
+  you are: `12 lines up · tap the head to come back`.
+- **Speed.** A long roll speeds up: 1 line a notch for the first 10
+  notches, then 3, then 8, then 20. A pause of 0.35 s starts it again at 1.
+  While it moves 3 lines a notch or more, a card at the top names the agent
+  step in view. The head heats as it turns, from its own colour to ember
+  and amber, and at 20 lines a notch it strikes once.
+- **Ends.** At the last option, or the top of the scrollback, the head
+  bumps once, and the handle row says which way to roll. A roll back down
+  stops at the bottom of the output with one firm tap. It never goes on
+  into the options, so it never changes your answer. A new roll does.
+- **Tap the middle.** At a question, the tap answers with the highlighted
+  option. Pocket sends its number, its text and the question's sign, and
+  the host types the number only if its screen still shows that question.
+  If the question changed, nothing is typed, and the handle row says
+  `the question changed · roll again`. With no question, the tap is Enter. Up in
+  the output, the tap brings you back to the bottom.
+- **Press the edge.** A short press beside a mark sends its key. A press
+  that moves 10 pt or more sends no key. A press on `←` or `→` that you
+  hold repeats, and after 9 repeats it moves a word at a time. `⌨` raises
+  the keyboard. After you send a line with Enter, the keyboard folds, and
+  the head is back.
+- **Hold the middle.** A ring fills round the head for 0.6 s. Then a card
+  shows your sessions, with the current one marked. Move round the head to
+  step through them, and lift to go there. A lift on the current one
+  changes nothing. A lift before the ring fills sends nothing.
+- **The belt.** Drag the belt, and it comes in front of the head, so every
+  key shows. 1.4 s after it stops, it slips back behind the head.
+- **In a tmux pane** the app knows the bottom, not the top: the head turns
+  on at the top, and tmux stays there. On a screen with no history that
+  does not read the mouse, the handle row says
+  `nothing scrolls here · this program has no scrollback`.
+- **With VoiceOver**, the head is "Match head". At a question, swipe up or
+  down to move through the options, and double-tap to answer. With no
+  question, a swipe scrolls a page, and a double-tap sends Enter. The
+  rotor's actions hold the four marks and the sessions.
+
+Home sets the head. Open the drawer, tap `BOX`, and find `THE HEAD` under
+`LIVE ACTIVITY`. It draws the head with its four marks and its hold. Tap
+one to choose its key from a list: `◂ back`, `⌨ type`, `← cursor`,
+`→ cursor`, `Esc cancel`, `Tab tab`, `⇧Tab mode`, `⇞ page up`, `⇟ page down`,
+`/c compact` (it types `/compact` with no Return) or `· nothing`. The hold
+can also show `⇄ sessions`. `^C` stays on the belt, because a roll can
+brush the edge. `undo` takes back the last change, and `as it came` brings
+back the first marks. `its colour` colours the head at rest: match red (as
+it came), strike-anywhere brown, blue tip, green tip or charcoal. The heat
+colours stay the same.
+
+The head reads the question from the host over the phone's own key. That
+key runs only the stream, the console and the head's three commands:
+`matchblox menu <who> --json`,
+`matchblox choose <who> <n> --text <t> --sign <hex>` and
+`matchblox sessions --json`. See
+[the console](console.md#answer-a-question-from-a-script).
 
 In a chat, press and hold on a word to select it, and drag with the
 same finger to select more. Drag either blue handle to adjust the selection;
@@ -464,7 +510,6 @@ keyboard where it is; a tap ends the selection.
 A belt key after a scroll in a tmux pane first brings the pane back to its
 bottom, so the key reaches the agent, not tmux's copy mode. `Esc` there only
 brings the pane back: it does not reach the agent, where it would interrupt.
-A key, or typing, stops a flick of the head.
 
 A vertical swipe scrolls the console and a tmux pane. In the console's
 list, a swipe chooses the session above or below. In the chat, a swipe
@@ -473,8 +518,7 @@ stays. A chat with no screen to scroll says so. The lines move with
 your finger: one line for each line of travel. In a tmux pane each wheel
 step scrolls 5 lines, so the app sends one step for each 5 lines of travel.
 Swipe down for older lines, and up for newer lines. Each step ticks, in the
-console and in a pane. Rest your finger for a quarter of a second, then
-move it, and the match head comes under it (see The match head). A flick carries on for
+console and in a pane. A flick carries on for
 at most 0.5 s, and scrolls the same lines in the console and in a pane.
 To select text, touch and hold, then tap Select and drag. Where the
 program does not read the mouse, the terminal scrolls its own history.

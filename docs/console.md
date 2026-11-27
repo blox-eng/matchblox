@@ -650,6 +650,20 @@ pane.
 | `matchblox stoker step 0 --rule "compact on PR" --state done "compacted api"` | Logs what a standing rule of your ways did. |
 | `matchblox stoker when --ship 4573 --stage merged send api "rebase on main"` | Sets a trigger matchblox fires itself, once: at a pull request's stage (`ci`, `green`, `merged`, `live`, `red`) or, with `--rest <who>`, at the end of a session's turn. The hand is `send`, `compact`, `release` or `hold <who> --why "…"`. `--list` prints the run's triggers, `--drop <id>` drops one. |
 
+### Answer a question from a script
+
+Pocket's match head answers with two commands. A script can use them too.
+
+| Command | It does |
+|---|---|
+| `matchblox menu api --json` | Prints the question on the session's screen: `options` (each with its `n` and `text`), `chosen` (the option the agent marks) and `sign`. With no question, `options` is empty. |
+| `matchblox choose api 2 --text "Yes" --sign 3f9a` | Types 2 into the session only if its screen still shows that question, with option 2's text and the same sign. Copy `--text` and `--sign` from `menu`. |
+
+When the question changed, `choose` types nothing, prints
+`the question changed` and exits with code 3. Read `menu` again, then
+choose. A phone's key runs only these two commands, `matchblox sessions --json`,
+the stream and the console.
+
 ## The match
 
 Each row starts with a match:

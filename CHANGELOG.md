@@ -6,6 +6,15 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **One match head answers the agent.** Pocket's dock has one big match
+  head. Roll its edge through the agent's options, then up the output, and
+  tap the middle to answer: the host types the pick only while its screen
+  still shows the question. Hold the head to change session. Home sets its
+  four marks, its hold and its colour. `matchblox menu` and
+  `matchblox choose` answer a question from a script the same way.
+
 ## [0.69.0] - 2026-11-27
 
 ### Changed
