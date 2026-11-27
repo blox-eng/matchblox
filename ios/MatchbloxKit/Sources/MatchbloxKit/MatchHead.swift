@@ -1,8 +1,8 @@
 import Foundation
 
 /// The match head: the finger turns it round its edge. A turn moves in notches of `notch`
-/// radians; the longer a roll goes on, the more lines a notch moves (`pace`). Angles are
-/// `atan2(dy, dx)` in UIKit points, so a growing angle is clockwise.
+/// radians; the more notches since the crossing into the output, the more lines a notch moves
+/// (`pace`). Angles are `atan2(dy, dx)` in UIKit points, so a growing angle is clockwise.
 public struct MatchHead: Sendable {
     public struct Roll: Equatable, Sendable {
         /// Positive: clockwise.
@@ -33,7 +33,7 @@ public struct MatchHead: Sendable {
 
     private var angle: CGFloat?
     private var travel: CGFloat = 0
-    private var notchesInRoll = 0
+    private var notchesSinceCross = 0
     private var lastNotch: TimeInterval?
     private var lastTap: TimeInterval?
 
@@ -55,13 +55,13 @@ public struct MatchHead: Sendable {
         let notches = Int((travel / Self.notch).rounded(.towardZero))
         travel -= CGFloat(notches) * Self.notch
         guard notches != 0 else { return Roll(notches: 0, lines: 0, strike: false) }
-        if let lastNotch, time - lastNotch >= Self.pause { notchesInRoll = 0 }
+        if let lastNotch, time - lastNotch >= Self.pause { notchesSinceCross = 0 }
         lastNotch = time
         var lines = 0
         var each = 1
         for _ in 0..<abs(notches) {
-            notchesInRoll += 1
-            each = Self.pace(notchesSinceCross: notchesInRoll)
+            notchesSinceCross += 1
+            each = Self.pace(notchesSinceCross: notchesSinceCross)
             lines += each
         }
         heat = CGFloat(each) / CGFloat(Self.maxLines)
@@ -70,11 +70,16 @@ public struct MatchHead: Sendable {
         return Roll(notches: notches, lines: notches < 0 ? lines : -lines, strike: strike)
     }
 
+    /// The roll crossed out of the options into the output: its pace, heat and strike count from here.
+    public mutating func cross() {
+        notchesSinceCross = 0
+    }
+
     /// The finger left the head: the next turn starts a new roll.
     public mutating func lift() {
         angle = nil
         travel = 0
-        notchesInRoll = 0
+        notchesSinceCross = 0
         lastNotch = nil
     }
 
