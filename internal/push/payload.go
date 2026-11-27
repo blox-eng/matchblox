@@ -52,6 +52,7 @@ type AccountUse struct {
 	Windows []WindowUse `json:"windows"`
 	Lasts   bool        `json:"lasts"`
 	RunsOut time.Time   `json:"runs_out,omitzero"`
+	Idle    bool        `json:"idle,omitempty"` // no session works for it now: it does not lead the glance
 }
 
 // WindowUse is one usage window: Name is 5h, wk or mo.
@@ -59,6 +60,9 @@ type WindowUse struct {
 	Name   string    `json:"name"`
 	Pct    int       `json:"pct"`
 	Resets time.Time `json:"resets,omitzero"`
+	// Spent: at 100 % while a session of the account still works (extra or
+	// on-demand usage), so it stops nothing and does not lead the glance.
+	Spent bool `json:"spent,omitempty"`
 }
 
 // Buzz is the event that makes the phone buzz. Sealed is the HPKE enc followed
@@ -85,6 +89,9 @@ type RegisterRequest struct {
 type IslandReg struct {
 	StartToken string `json:"start_token"`
 	Channel    string `json:"channel"`
+	// Ended: at this open the phone had no island of this host (swiped
+	// away, or a new build installed). The host starts one at once.
+	Ended bool `json:"ended,omitempty"`
 }
 
 // Registration is a request the host keeps, with the id of the phone's

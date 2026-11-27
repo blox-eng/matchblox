@@ -126,12 +126,16 @@ func Build(doc state.Doc, hostFP string, n *Numbers, now time.Time) ContentState
 	}
 
 	for _, a := range doc.Limits {
-		au := AccountUse{N: n.Account(a.Provider, a.Account), Lasts: true}
+		works := slices.ContainsFunc(doc.Sessions, func(s sample.Session) bool {
+			return s.Busy && s.Provider == a.Provider && s.Account == a.Account && s.AccountDir == a.Dir
+		})
+		au := AccountUse{N: n.Account(a.Provider, a.Account), Lasts: true, Idle: !works}
 		for _, u := range a.Uses(now) {
 			if u.Name != "5h" && u.Name != "wk" && u.Name != "mo" {
 				continue // a window the island has no name for
 			}
-			au.Windows = append(au.Windows, WindowUse{Name: u.Name, Pct: min(100, max(0, int(math.Round(u.Pct)))), Resets: u.Resets.UTC()})
+			pct := min(100, max(0, int(math.Round(u.Pct))))
+			au.Windows = append(au.Windows, WindowUse{Name: u.Name, Pct: pct, Resets: u.Resets.UTC(), Spent: pct >= 100 && works})
 		}
 		if len(au.Windows) == 0 {
 			continue

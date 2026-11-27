@@ -216,10 +216,17 @@ Nothing connects to a host from the background.
   A new wait, done or out goes at once. Progress moves in steps of 5 %, at
   most each 3 minutes. The Usage face moves when a window changes by 2 % or
   more, or resets, at most each 5 minutes. A wait breaks through the Usage
-  face for 60 s.
+  face for 60 s. The compact island shows the fullest window of the
+  accounts a session works for now; an idle account stays in the list.
 - **A tap opens the session:** the app asks for Face ID, connects and opens
   the console on that session: on it. If the session has ended, the
   console says `That session ended.`
+- **A tap goes back:** when that host's console is open behind the island,
+  a tap brings it back and jumps to the session the island shows. The screen
+  stays while the app connects again, with a thin line that breathes over
+  the top, and keys you type then go once it is back. If the host stays out
+  of reach for 20 s, the screen says `Can't reach <host>.` with `Try again`.
+  Face ID asks again only after 5 minutes away.
 - **The setting:** the `Live Activity` row on home (real hosts only). The
   `show` line under it picks `sessions`, `usage` or `auto` with one tap.
   `Follow` is the one host that has the island (the host opened last). `Show`

@@ -129,6 +129,13 @@ enum Registration {
             want.island?.channel = channel.channel
             grants[Relay.grantKey("channel", channel.channel)] = channel.grant
         }
+        // An island of this host that is gone (swiped away, or ended by a new build) is
+        // started again by the host only when the phone says so.
+        let here = host8(host.fingerprint)
+        let shows = Activity<IslandAttributes>.activities.contains {
+            $0.attributes.host == here && $0.activityState == .active
+        }
+        want.island?.ended = !shows
         try Task.checkCancellation()
 
         let request = RegisterRequest(
@@ -140,7 +147,9 @@ enum Registration {
         )
         let reply = try await exchange(request, host: host, key: key)
         IslandSettings.saveNames(IslandNames(sessions: reply.sessions, accounts: reply.accounts), host: host)
-        IslandSettings.setRecord(want, host: host)
+        var kept = want
+        kept.island?.ended = false  // a word of this open: the next comparison never counts it
+        IslandSettings.setRecord(kept, host: host)
         islandLog.info("registered with \(host.label, privacy: .public)")
         if want.island == nil, let kept = IslandSettings.channel(host: host) {
             await dropChannel(kept, host: host)

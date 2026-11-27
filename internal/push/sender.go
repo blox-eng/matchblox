@@ -321,7 +321,8 @@ type startAlert struct {
 	Body  string `json:"body"`
 }
 
-// forgetEnded forgets the starts of a phone whose island came, went or
+// forgetEnded forgets the start of a phone that said its island ended after
+// it, and the starts of a phone whose island came, went or
 // changed its token since the last doc: the app ends this host's activity when
 // Follow moves to another host, so following back needs a new start.
 func (s *Sender) forgetEnded(regs []Registration, now time.Time) {
@@ -333,6 +334,13 @@ func (s *Sender) forgetEnded(regs []Registration, now time.Time) {
 			tok = r.Island.StartToken
 		}
 		follows[r.Device] = tok
+		// A start older than the phone's word that its island ended is gone.
+		if r.Island != nil && r.Island.Ended && tok != "" {
+			if at, ok := s.started[startKey(tok)]; ok && at.Before(r.At) {
+				delete(s.started, startKey(tok))
+				forgot = true
+			}
+		}
 		prev, seen := s.follows[r.Device]
 		if !seen || prev == tok {
 			continue
@@ -521,12 +529,12 @@ func usageMoved(old, cur []AccountUse) bool {
 	}
 	for i := range cur {
 		o, c := old[i], cur[i]
-		if o.N != c.N || o.Lasts != c.Lasts || len(o.Windows) != len(c.Windows) {
+		if o.N != c.N || o.Lasts != c.Lasts || o.Idle != c.Idle || len(o.Windows) != len(c.Windows) {
 			return true
 		}
 		for j := range c.Windows {
 			ow, cw := o.Windows[j], c.Windows[j]
-			if ow.Name != cw.Name || abs(ow.Pct-cw.Pct) >= usageStep {
+			if ow.Name != cw.Name || ow.Spent != cw.Spent || abs(ow.Pct-cw.Pct) >= usageStep {
 				return true
 			}
 			if !ow.Resets.IsZero() && (cw.Resets.IsZero() || cw.Resets.Sub(ow.Resets) > time.Minute) {

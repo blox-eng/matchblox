@@ -138,13 +138,15 @@ public struct AccountUse: Codable, Hashable, Sendable {
     public var windows: [WindowUse]
     public var lasts: Bool
     public var runsOut: Date?
+    /// No session works for this account now: it does not lead the glance.
+    public var idle: Bool
 
-    public init(n: Int, windows: [WindowUse], lasts: Bool, runsOut: Date? = nil) {
-        self.n = n; self.windows = windows; self.lasts = lasts; self.runsOut = runsOut
+    public init(n: Int, windows: [WindowUse], lasts: Bool, runsOut: Date? = nil, idle: Bool = false) {
+        self.n = n; self.windows = windows; self.lasts = lasts; self.runsOut = runsOut; self.idle = idle
     }
 
     enum CodingKeys: String, CodingKey {
-        case n, windows, lasts
+        case n, windows, lasts, idle
         case runsOut = "runs_out"
     }
 
@@ -154,6 +156,7 @@ public struct AccountUse: Codable, Hashable, Sendable {
         windows = try c.decodeIfPresent([WindowUse].self, forKey: .windows) ?? []
         lasts = try c.decode(Bool.self, forKey: .lasts)
         runsOut = try RFC3339.decode(c, .runsOut)
+        idle = try c.decodeIfPresent(Bool.self, forKey: .idle) ?? false
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -162,6 +165,7 @@ public struct AccountUse: Codable, Hashable, Sendable {
         try c.encode(windows, forKey: .windows)
         try c.encode(lasts, forKey: .lasts)
         try RFC3339.encode(runsOut, &c, .runsOut)
+        if idle { try c.encode(idle, forKey: .idle) }
     }
 }
 
@@ -169,18 +173,21 @@ public struct WindowUse: Codable, Hashable, Sendable {
     public var name: String  // 5h, wk or mo
     public var pct: Int
     public var resets: Date?
+    /// At 100 % while a session of the account still works: it stops nothing.
+    public var spent = false
 
     public init(name: String, pct: Int, resets: Date? = nil) {
         self.name = name; self.pct = pct; self.resets = resets
     }
 
-    enum CodingKeys: String, CodingKey { case name, pct, resets }
+    enum CodingKeys: String, CodingKey { case name, pct, resets, spent }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         name = try c.decode(String.self, forKey: .name)
         pct = try c.decode(Int.self, forKey: .pct)
         resets = try RFC3339.decode(c, .resets)
+        spent = try c.decodeIfPresent(Bool.self, forKey: .spent) ?? false
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -188,6 +195,7 @@ public struct WindowUse: Codable, Hashable, Sendable {
         try c.encode(name, forKey: .name)
         try c.encode(pct, forKey: .pct)
         try RFC3339.encode(resets, &c, .resets)
+        if spent { try c.encode(spent, forKey: .spent) }
     }
 }
 
@@ -205,6 +213,8 @@ public struct BuzzEvent: Codable, Hashable, Sendable {
 public struct IslandReg: Codable, Hashable, Sendable {
     public var startToken: String
     public var channel: String
+    /// At this open the phone has no island of this host: the host starts one at once.
+    public var ended = false
 
     public init(startToken: String, channel: String) {
         self.startToken = startToken; self.channel = channel
@@ -213,6 +223,21 @@ public struct IslandReg: Codable, Hashable, Sendable {
     enum CodingKeys: String, CodingKey {
         case startToken = "start_token"
         case channel
+        case ended
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        startToken = try c.decode(String.self, forKey: .startToken)
+        channel = try c.decode(String.self, forKey: .channel)
+        ended = try c.decodeIfPresent(Bool.self, forKey: .ended) ?? false
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(startToken, forKey: .startToken)
+        try c.encode(channel, forKey: .channel)
+        if ended { try c.encode(ended, forKey: .ended) }
     }
 }
 

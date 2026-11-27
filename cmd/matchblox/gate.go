@@ -43,11 +43,11 @@ func gateMain(args []string) error {
 		os.Exit(126)
 	}
 	n, open := openTarget(orig)
-	if id != "" && (orig == remote.ConsoleCommand || open) {
+	home, homeErr := os.UserHomeDir()
+	marked := false
+	if id != "" && (orig == remote.ConsoleCommand || open) && homeErr == nil {
 		// Only the console marks the device in; a note that fails never blocks it.
-		if home, err := os.UserHomeDir(); err == nil {
-			_ = setup.MarkDeviceIn(home, id, os.Getenv("SSH_TTY"), time.Now())
-		}
+		marked = setup.MarkDeviceIn(home, id, os.Getenv("SSH_TTY"), time.Now()) == nil
 	}
 	// ssh's own PATH (a non-login shell, or sshd's default on macOS) may
 	// not have tmux: the service it starts lists the panes with it.
@@ -59,8 +59,15 @@ func gateMain(args []string) error {
 	// so the open below names the console the phone runs (#486).
 	console := ""
 	if mode == phoneMode {
-		console = nextConsole()
+		last := ""
+		if marked {
+			last = setup.DeviceConsole(home, id)
+		}
+		console = phoneConsole(last, panes.ParseHomeList(homeListing()))
 		_ = os.Setenv(panes.ConsoleEnv, console)
+		if marked {
+			_ = setup.MarkDeviceConsole(home, id, console)
+		}
 	}
 	os.Args = os.Args[:1]
 	if open {
@@ -75,6 +82,16 @@ func gateMain(args []string) error {
 // phone's as any terminal's. The gate picks it fresh, never a name its own
 // environment brings.
 func nextConsole() string { return panes.HomeSession(panes.ParseHomeList(homeListing())) }
+
+// phoneConsole is the console a phone runs in: the one it left, while that
+// waits with no terminal on it, so a return finds its screen; else the next
+// free one.
+func phoneConsole(last string, attached map[string]int) string {
+	if n, ok := attached[last]; ok && n == 0 && remote.ConsoleSession(last) {
+		return last
+	}
+	return panes.HomeSession(attached)
+}
 
 // gateRun runs the console or the service; tests replace it.
 var gateRun func([]string) error
