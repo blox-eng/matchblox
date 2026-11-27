@@ -112,6 +112,71 @@ func TestBarShowsThePlanAndTheStoker(t *testing.T) {
 	}
 }
 
+// deskModeTmux is a window whose current pane and @matchblox_mode the test moves.
+func deskModeTmux(mode, current *string) func(args ...string) (string, error) {
+	return func(args ...string) (string, error) {
+		if len(args) == 0 {
+			return "", nil
+		}
+		switch args[0] {
+		case "set-option":
+			for i, a := range args {
+				if a == sample.ModeOption && i+1 < len(args) {
+					*mode = args[i+1]
+				}
+			}
+		case "show-option":
+			switch {
+			case slices.Contains(args, sample.ModeOption):
+				return *mode, nil
+			case slices.Contains(args, sample.ConsoleOption):
+				return "%1", nil
+			case slices.Contains(args, sample.HeaderOption):
+				return "%2", nil
+			case slices.Contains(args, sample.BarOption):
+				return "%3", nil
+			}
+		case "list-panes":
+			return *current, nil
+		}
+		return "", nil
+	}
+}
+
+func TestBarWritesListWhenTheListPaneIsCurrent(t *testing.T) {
+	mode, current := "AGENT", "%9"
+	run := deskModeTmux(&mode, &current)
+	f := newFrame("bar", New(Options{NoMotion: true, Conn: newFake(), Pane: "%1", Tmux: run, Now: func() time.Time { return demoAt }}))
+	f.width = 160
+	next, _ := f.Update(frameTick{})
+	f = next.(frameModel)
+	got := ansi.Strip(f.View().Content)
+	if !strings.Contains(got, "AGENT") || !strings.Contains(got, "ctrl+q list") {
+		t.Fatalf("bar %q, want AGENT and ctrl+q list", got)
+	}
+
+	current = "%1"
+	m := New(Options{NoMotion: true, Conn: newFake(), Pane: "%1", Tmux: run, Now: func() time.Time { return demoAt }})
+	m.deskFrame = true
+	m.barMode = "LIST" // the list last published LIST; the agent pane then wrote AGENT
+	cmd := m.watchDeskMode()
+	if cmd == nil {
+		t.Fatal("the list does not watch which pane is current")
+	}
+	msg := cmd()
+	updated, follow := m.Update(msg)
+	m = updated.(Model)
+	drain(follow)
+	if mode != "LIST" {
+		t.Fatalf("mode %q, want LIST once the list pane is current", mode)
+	}
+	shown, _ := f.Update(frameTick{})
+	got = ansi.Strip(shown.(frameModel).View().Content)
+	if !strings.Contains(got, "LIST") || strings.Contains(got, "ctrl+q") {
+		t.Fatalf("bar %q, want LIST and no ctrl+q list", got)
+	}
+}
+
 func TestBarShowsCtrlQWhenTheAgentHasTheKeys(t *testing.T) {
 	for _, mode := range []string{"AGENT", "SHELL"} {
 		got := ansi.Strip(barFromOption(mode).View().Content)

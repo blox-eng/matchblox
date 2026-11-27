@@ -291,19 +291,26 @@ func (m Model) confirmRest(a action) string {
 	return what + "?  " + yes + " run · " + esc + " cancel"
 }
 
+// deskModeValue is what the list publishes: a confirm while one is open,
+// else LIST.
+func (m Model) deskModeValue() string {
+	switch {
+	case m.pending != nil:
+		return "CONFIRM\t" + m.confirmRest(*m.pending)
+	case m.held != nil:
+		return "CONFIRM\ttake over?  " + m.keys.takeOver.Rest.Help().Key + " rest · " + m.keys.takeOver.Keep.Help().Key + " keep"
+	}
+	return "LIST"
+}
+
 // syncDeskMode publishes a confirm, and LIST again when the list answers.
-// AGENT and SHELL stay with the writer that moves the keys.
+// AGENT and SHELL stay with the writer that moves the keys, until the
+// list pane is current again.
 func (m *Model) syncDeskMode() tea.Cmd {
 	if !m.deskFrame || m.frameKind != "" {
 		return nil
 	}
-	next := "LIST"
-	switch {
-	case m.pending != nil:
-		next = "CONFIRM\t" + m.confirmRest(*m.pending)
-	case m.held != nil:
-		next = "CONFIRM\ttake over?  " + m.keys.takeOver.Rest.Help().Key + " rest · " + m.keys.takeOver.Keep.Help().Key + " keep"
-	}
+	next := m.deskModeValue()
 	was := strings.HasPrefix(m.barMode, "CONFIRM")
 	want := strings.HasPrefix(next, "CONFIRM")
 	if !was && !want || next == m.barMode {
@@ -311,6 +318,80 @@ func (m *Model) syncDeskMode() tea.Cmd {
 	}
 	m.barMode = next
 	return m.publishMode(next)
+}
+
+// syncListMode publishes LIST, or the open confirm, because the list pane
+// is current. It does not wait for the next confirm.
+func (m *Model) syncListMode() tea.Cmd {
+	if !m.deskFrame || m.frameKind != "" {
+		return nil
+	}
+	next := m.deskModeValue()
+	if next == m.barMode {
+		return nil
+	}
+	m.barMode = next
+	return m.publishMode(next)
+}
+
+// deskPollMsg is the quarter-second look. deskModeMsg is what it read:
+// which pane is current, and the mode option as tmux has it. The agent's
+// write does not pass through the list's memory.
+type deskPollMsg struct{}
+
+type deskModeMsg struct {
+	list bool
+	mode string
+}
+
+// watchDeskMode reads the current pane once. The list pane publishes LIST.
+func (m Model) watchDeskMode() tea.Cmd {
+	if !m.deskFrame || m.frameKind != "" {
+		return nil
+	}
+	run := m.tmuxRun()
+	console := m.opt.Pane
+	if run == nil || console == "" {
+		return nil
+	}
+	return func() tea.Msg {
+		list, mode := deskPaneLook(run, console)
+		return deskModeMsg{list: list, mode: mode}
+	}
+}
+
+// modePollLoop looks again each quarter second, the bar's own poll.
+// The program starts it from Init. A desk that is not open yet just waits.
+func (m Model) modePollLoop() tea.Cmd {
+	return tea.Tick(time.Second/4, func(time.Time) tea.Msg { return deskPollMsg{} })
+}
+
+// deskPaneLook is the current pane against the console, and the mode
+// option. Review and shell have no pane id here.
+func deskPaneLook(run func(args ...string) (string, error), console string) (bool, string) {
+	out, _ := run("show-option", "-wqv", "-t", console, sample.ModeOption)
+	return deskListCurrent(run, console), strings.TrimSpace(out)
+}
+
+// deskListCurrent: the pane in use is @matchblox_console, and not the
+// header or the bar.
+func deskListCurrent(run func(args ...string) (string, error), console string) bool {
+	cur := inUse(run, console)
+	named, err := run("show-option", "-wqv", "-t", console, sample.ConsoleOption)
+	list := strings.TrimSpace(named)
+	if err != nil || list == "" {
+		list = console
+	}
+	if cur == "" || cur != list {
+		return false
+	}
+	for _, opt := range []string{sample.HeaderOption, sample.BarOption} {
+		out, err := run("show-option", "-wqv", "-t", console, opt)
+		if err == nil && strings.TrimSpace(out) == cur {
+			return false
+		}
+	}
+	return true
 }
 
 func (m Model) publishMode(mode string) tea.Cmd {

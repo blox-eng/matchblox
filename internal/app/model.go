@@ -681,9 +681,9 @@ func (m Model) Init() tea.Cmd {
 	peers := tea.Batch(start...)
 	peers = tea.Batch(peers, m.besideCmd())
 	if err := m.opt.DialErr; err != nil && m.conn == nil {
-		return tea.Batch(tea.RequestBackgroundColor, func() tea.Msg { return lostMsg{err: err} }, m.splashCmd(), m.waitAsk(), peers)
+		return tea.Batch(tea.RequestBackgroundColor, func() tea.Msg { return lostMsg{err: err} }, m.splashCmd(), m.waitAsk(), peers, m.modePollLoop())
 	}
-	return tea.Batch(tea.RequestBackgroundColor, m.hello(), m.recv(), m.watchSilence(), m.splashCmd(), m.graphicsTick(0), m.waitAsk(), peers)
+	return tea.Batch(tea.RequestBackgroundColor, m.hello(), m.recv(), m.watchSilence(), m.splashCmd(), m.graphicsTick(0), m.waitAsk(), peers, m.modePollLoop())
 }
 
 func (m Model) watchSilence() tea.Cmd {
@@ -922,6 +922,18 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.sizeCmd(m.width)
 	case besideSizeMsg:
 		m.winW, m.winH = msg.w, msg.h
+	case deskPollMsg:
+		next := m.modePollLoop()
+		if !m.deskFrame || m.frameKind != "" {
+			return m, next
+		}
+		return m, tea.Batch(m.watchDeskMode(), next)
+	case deskModeMsg:
+		m.barMode = msg.mode
+		if !msg.list {
+			return m, nil
+		}
+		return m, m.syncListMode()
 	case boxBackMsg:
 		if !m.boxZoom { // the box closed before its zoom landed: give the window back after it
 			return m, m.sizeCmd(m.width)

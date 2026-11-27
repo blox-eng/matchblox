@@ -22,8 +22,8 @@ func feedEach(t *testing.T, m Model, cmd tea.Cmd) Model {
 			m = feedEach(t, m, c)
 		}
 		return m
-	case splashMsg, pairFrameMsg:
-		return m
+	case splashMsg, pairFrameMsg, deskModeMsg:
+		return m // a poll tick reschedules itself
 	default:
 		next, c := m.Update(msg)
 		return feedEach(t, next.(Model), c)
