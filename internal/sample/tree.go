@@ -54,7 +54,7 @@ func heaviest(procs map[int]procfs.Proc, cpu map[int]float64, panes []Pane, agen
 		switch up, isShell := argvs[procs[pid].PPID]; {
 		case runsCommand(a):
 			wraps[pid] = true
-		case interactive(a) && !(isShell && slices.Equal(up, a)): // a forked subshell keeps its parent's argv
+		case interactive(a) && (!isShell || !slices.Equal(up, a)): // a forked subshell keeps its parent's argv
 			c.shells[pid] = true
 		}
 	}
@@ -93,7 +93,7 @@ func heaviest(procs map[int]procfs.Proc, cpu map[int]float64, panes []Pane, agen
 	trees := map[int]*sum{}
 	branches := map[int]int{}
 	for pid, p := range procs {
-		if c.at(p) && !(c.panes[pid] && agents[pid]) && !c.shells[pid] {
+		if c.at(p) && (!c.panes[pid] || !agents[pid]) && !c.shells[pid] {
 			continue // an agent that is its pane's process, or an interactive shell, is a tree: its place is its own
 		}
 		pl := placeOf(pid)
