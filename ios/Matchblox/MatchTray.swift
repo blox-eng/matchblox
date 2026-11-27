@@ -12,6 +12,9 @@ final class TrayModel {
     var mineEditable = true
     @ObservationIgnored var onPick: (BeltLayout) -> Void = { _ in }
     @ObservationIgnored var onEdit: () -> Void = {}
+    @ObservationIgnored var onBox: () -> Void = {}
+    /// Brief accent on `BOX` during the one-time teach.
+    var boxAccent = false
     @ObservationIgnored private var strikes = 0
 
     init(inUse: BeltLayout) {
@@ -66,7 +69,8 @@ struct MatchTrayView: View {
             .accessibilityElement(children: .contain)
             .accessibilityLabel("Layouts")
             Spacer(minLength: 0)
-            HStack(alignment: .center, spacing: 0) {
+            HStack(alignment: .center, spacing: 8) {
+                BoxStamp(accent: model.boxAccent, open: model.onBox)
                 AgentTag(agent: model.agent)
                 Spacer(minLength: 8)
                 if model.mineEditable {
@@ -185,6 +189,47 @@ private struct AgentTag: View {
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel("Session agent, \(name)")
+        }
+    }
+}
+
+/// `BOX`, stamped on the tray floor (bottom left): home.
+private struct BoxStamp: View {
+    let accent: Bool
+    let open: () -> Void
+
+    var body: some View {
+        Button(action: open) {
+            HStack(spacing: 4) {
+                MiniBox()
+                    .frame(width: 10, height: 8)
+                Text("BOX")
+                    .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+                    .kerning(0.63)
+            }
+            .foregroundStyle(accent ? Theme.accent : Color(uiColor: BeltLook.stampInk))
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .overlay(RoundedRectangle(cornerRadius: 3).strokeBorder(Color(uiColor: BeltLook.stampEdge), lineWidth: 1))
+            .frame(minWidth: BoxStampMetrics.minHit, minHeight: BoxStampMetrics.minHit)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(HomeCopy.voiceOverBox)
+    }
+}
+
+/// A tiny front-on sleeve + tray for the BOX stamp.
+private struct MiniBox: View {
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 1)
+                .fill(Color(uiColor: BeltLook.stampEdge))
+            RoundedRectangle(cornerRadius: 0.5)
+                .fill(Color(uiColor: BeltLook.stampInk).opacity(0.35))
+                .padding(.horizontal, 1.5)
+                .padding(.top, 3)
+                .padding(.bottom, 1)
         }
     }
 }

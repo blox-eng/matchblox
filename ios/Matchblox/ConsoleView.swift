@@ -22,7 +22,6 @@ extension SSHSession: ConsoleSource {}
 struct ConsoleView: View {
     let host: Host
     let onHosts: (() -> Void)?
-    let onIsland: () -> Void
     let onScanAgain: () -> Void
 
     @State private var connection: ConsoleConnection
@@ -33,19 +32,17 @@ struct ConsoleView: View {
         open: Int? = nil,
         onFailure: @escaping (ConnectFailure) -> Void,
         onHosts: (() -> Void)?,
-        onIsland: @escaping () -> Void,
         onScanAgain: @escaping () -> Void
     ) {
         self.host = host
         self.onHosts = onHosts
-        self.onIsland = onIsland
         self.onScanAgain = onScanAgain
         _connection = State(initialValue: ConsoleConnection(host: host, open: open, onFailure: onFailure))
     }
 
     var body: some View {
         ZStack {
-            TerminalRepresentable(connection: connection)
+            TerminalRepresentable(connection: connection, onHosts: onHosts)
             if connection.phase != .live {
                 cover
             }
@@ -138,18 +135,13 @@ struct ConsoleView: View {
         hostsButton
     }
 
-    /// Hosts (whenever a host is paired, so the only one can be removed too) and Island
-    /// (for a real host), beside the console's actions.
+    /// Hosts (whenever a host is paired, so the only one can be removed too).
+    /// Live Activity entry is on home only (design review 1.2).
+    @ViewBuilder
     private var hostsButton: some View {
-        HStack(spacing: 24) {
-            if let onHosts {
-                Button("Hosts", action: onHosts)
-                    .foregroundStyle(Theme.muted)
-            }
-            if !host.isDemo {
-                Button("Island", action: onIsland)
-                    .foregroundStyle(Theme.muted)
-            }
+        if let onHosts {
+            Button("Hosts", action: onHosts)
+                .foregroundStyle(Theme.muted)
         }
     }
 }
@@ -158,6 +150,7 @@ struct ConsoleView: View {
 /// view has the keyboard, so a second belt stays under the terminal while the keyboard is down.
 private struct TerminalRepresentable: UIViewRepresentable {
     let connection: ConsoleConnection
+    var onHosts: (() -> Void)?
 
     func makeUIView(context: Context) -> UIStackView {
         let terminal = ConsoleTerminalView(textSize: TextSize.load(from: .standard))
@@ -182,6 +175,7 @@ private struct TerminalRepresentable: UIViewRepresentable {
         let screen = HeldScreen(terminal: terminal)
         screen.backgroundColor = bg
         let belts = Belts(terminal: terminal, screen: screen, isDemo: connection.isDemo)
+        belts.onHosts = onHosts
         terminal.inputAccessoryView = belts.lifted
         terminal.tapRaisesKeyboard = !connection.isDemo
         terminal.onFocus = { [weak belts] focused in belts?.focusChanged(focused) }
@@ -198,6 +192,7 @@ private struct TerminalRepresentable: UIViewRepresentable {
         }
         connection.onAgent = { agent in belts.agentChanged(agent) }
         connection.onBoard = { value in belts.boardSaid(value) }
+        connection.onBecameLive = { [weak belts] in belts?.teachBoxIfNeeded() }
         belts.onAnswer = { [weak connection] in connection?.answerBoard() }
         belts.onPaneSeen = { [weak connection] inPane in connection?.paneSeen(inPane) }
         #if DEBUG
@@ -395,6 +390,14 @@ private final class Belts {
     private var board = BoardFollow()
     /// Sends the app's answer to the console's board (`BoardBelt.answer`).
     var onAnswer: @MainActor () -> Void = {}
+    /// Opens Pocket home from the `BOX` stamp.
+    var onHosts: (() -> Void)?
+
+    /// Teach BOX on the belt that is visible (dock when the keyboard is down).
+    func teachBoxIfNeeded() {
+        let visible = dock.isHidden ? lifted : dock
+        visible.teachBoxIfNeeded()
+    }
 
     init(terminal: ConsoleTerminalView, screen: HeldScreen, isDemo: Bool) {
         self.terminal = terminal
@@ -415,6 +418,7 @@ private final class Belts {
             }
             belt.onLayout = { [weak self] layout in self?.layoutPicked(layout) }
             belt.onEditMine = { [weak self] in self?.editMine() }
+            belt.onBox = { [weak self] in self?.onHosts?() }
         }
         terminal.onTyped = { [weak self] in
             self?.lifted.stopHead()
@@ -625,6 +629,8 @@ final class ConsoleConnection {
     @ObservationIgnored var onOutput: @MainActor () -> Void = {}
     /// Called with what came of each copy the person asked for: `Copied`, or why it did not.
     @ObservationIgnored var onCopied: @MainActor (String, Bool) -> Void = { _, _ in }
+    /// BOX teach once the session is live (visible belt).
+    @ObservationIgnored var onBecameLive: @MainActor () -> Void = {}
     @ObservationIgnored private var copyGate = CopyGate()
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private var outgoing: AsyncStream<Outgoing>.Continuation?
@@ -757,6 +763,7 @@ final class ConsoleConnection {
                     phase = .connecting
                     try? await Task.sleep(for: wait)
                 case .ended:
+                    markSeenCleanEnd()
                     phase = .ended
                     return
                 case .stop:
@@ -787,8 +794,15 @@ final class ConsoleConnection {
         if let failure {
             phase = .failed(failure, scanAgain: false)
         } else {
+            markSeenCleanEnd()
             phase = .ended
         }
+    }
+
+    /// Plan Task 3: last-seen updates on connect and on a clean end.
+    private func markSeenCleanEnd() {
+        var sight = HostSight()
+        sight.markSeen(host.fingerprint)
     }
 
     /// The person's answer ended the agent's turn. The invite waits a moment so the closing text
@@ -851,6 +865,10 @@ final class ConsoleConnection {
         terminal?.getTerminal().resetToInitialState()
         terminal?.forgetScrollBack()
         phase = .live
+        var sight = HostSight()
+        sight.markSeen(host.fingerprint)
+        // Teach BOX once after the first console land (pair or demo) on the visible belt.
+        onBecameLive()
         let opened = openSession != nil
         openSession = nil
         let now = terminalSize

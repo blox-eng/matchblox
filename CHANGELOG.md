@@ -6,6 +6,15 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Pocket home from a live console.** Pull the matchbox drawer and tap
+  `BOX` to open home: hosts, Live Activity, text size, demo, privacy and
+  sponsor. `‹ host` returns to the console as you left it. One tap on
+  home picks what the island and the lock screen show: sessions, usage
+  or auto. With no host, home opens first; the mark plays once. Island in
+  the app's words is Live Activity; text size lives on home (pinch stays).
+
 ## [0.65.0] - 2026-11-26
 
 ### Added
