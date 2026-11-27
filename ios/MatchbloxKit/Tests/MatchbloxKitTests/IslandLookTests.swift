@@ -230,4 +230,17 @@ final class IslandLookTests: XCTestCase {
         let key = try Curve25519.KeyAgreement.PrivateKey(rawRepresentation: v.privateKey)
         XCTAssertNil(BuzzPayload.open(badHost) { try openBuzz($0, key: key) })
     }
+
+    /// The match is lit while a session lives (owner, 2026-11-27): out only when a limit
+    /// stops it or no session runs.
+    func testTheMatchIsLitWhileASessionLives() {
+        XCTAssertEqual(IslandLook.state(top("idle")), .idle)
+        for s in ["burns", "waits", "done", "idle"] { XCTAssertTrue(IslandLook.lit(IslandLook.state(top(s))), s) }
+        XCTAssertFalse(IslandLook.lit(IslandLook.state(top("out"))))
+        XCTAssertFalse(IslandLook.lit(IslandLook.state(nil)))
+        XCTAssertEqual(IslandLook.word(top("idle")), "· idle")
+        XCTAssertEqual(IslandLook.compact(top("idle"), names: names), "api")
+        XCTAssertEqual(IslandLook.who(top("idle"), names: names).name, "api")
+        XCTAssertEqual(IslandLook.who(top("idle"), names: names).detail, "idle")
+    }
 }
