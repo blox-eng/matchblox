@@ -1,3 +1,7 @@
+⏺ Read internal/limit/store.go
+✦ Running go test ./internal/...
+  ok   internal/limit    0.41s
+  ok   internal/api      0.88s
 ● Rate limits for the public API: the store and the middleware are in.
 
 ╭──────────────────────────────────────────────╮
