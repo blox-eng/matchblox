@@ -133,8 +133,29 @@ func TestTheChainHoverFindsTheMatchUnderThePointer(t *testing.T) {
 // account of what it shows.
 func TestTheConsoleSaysWhatItShows(t *testing.T) {
 	m := regexp.MustCompile(`class="stage" aria-label="([^"]*)"`).FindSubmatch(landingPage(t))
-	if m == nil || !bytes.Contains(m[1], []byte("NEEDS YOU")) {
+	if m == nil || !bytes.Contains(m[1], []byte("NEEDS YOU")) || !bytes.Contains(m[1], []byte("four panes")) {
 		t.Errorf("the console's label does not say what the replay shows: %q", m)
+	}
+}
+
+// TestTheLandingStillIsTheDesk: the still is the four-pane desk, composed
+// from the header, the list, the agent's own pane, and the bar — not the
+// sidebar's SESSIONS tab and drawn chat.
+func TestTheLandingStillIsTheDesk(t *testing.T) {
+	page := landingPage(t)
+	const open, closing = "<!-- replay:still -->", "<!-- /replay:still -->"
+	i, j := bytes.Index(page, []byte(open)), bytes.Index(page, []byte(closing))
+	if i < 0 || j < i {
+		t.Fatal("the page has no still frame")
+	}
+	still := page[i:j]
+	if bytes.Contains(still, []byte("SESSIONS")) && bytes.Contains(still, []byte("send to")) {
+		t.Error("the still is the sidebar chat, not the desk")
+	}
+	for _, want := range []string{"? keys", "NEEDS YOU", "Do you want to proceed"} {
+		if !bytes.Contains(still, []byte(want)) {
+			t.Errorf("the desk still lacks %q", want)
+		}
 	}
 }
 
