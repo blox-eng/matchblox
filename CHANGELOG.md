@@ -6,6 +6,19 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **The island leads with what needs you.** A session that asks or
+  finished its turn always comes first. With one, the island names it;
+  with more, it says `╿ N`. The lock screen lists up to three, each with
+  what it wants, then `+ N more`, then one line of limits.
+- **The match burns while a session lives.** The flame stays lit while a
+  session works, waits, finished its turn or sits idle, full while an agent
+  works and low otherwise. It goes out only when a limit stops the session
+  or no session runs.
+- **The buzz hisses.** Every buzz plays a short pinch hiss with one ember
+  pop, and a finished turn buzzes too, not only a wait.
+
 ## [0.68.0] - 2026-11-27
 
 ### Changed

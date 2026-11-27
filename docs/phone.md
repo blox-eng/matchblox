@@ -210,10 +210,17 @@ registers with the host each time it opens, after Face ID or the passcode.
 Nothing connects to a host from the background.
 
 - **The buzz:** a new wait, when a session asks for a permission or a
-  choice. At most one buzz each 30 s for each host. A tap on it opens the
-  session.
-- **The island:** the match of the session that matters most, and its state.
-  A new wait, done or out goes at once. Progress moves in steps of 5 %, at
+  choice, or a finished turn. It plays a short pinch hiss. At most one buzz
+  each 30 s for each host; a wait goes before a finished turn. A tap on it
+  opens the session.
+- **The island:** what needs you comes first. One session that asks or
+  finished its turn: the compact island names it. More: it says `╿ N`. The
+  lock screen lists up to three, each with what it wants (`asks to run a
+  command`, `asks you a question`, `finished its turn`), then `+ N more`,
+  then one line of limits. With nothing that needs you, it shows the match
+  of the session that matters most. The match is lit while any session
+  lives, full while an agent works; it goes out when a limit stops the
+  session or no session runs. A new wait, done or out goes at once. Progress moves in steps of 5 %, at
   most each 3 minutes. The Usage face moves when a window changes by 2 % or
   more, or resets, at most each 5 minutes. A wait breaks through the Usage
   face for 60 s. The compact island shows the fullest window of the
