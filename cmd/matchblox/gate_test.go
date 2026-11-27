@@ -399,6 +399,22 @@ func TestGateFocusIsBounded(t *testing.T) {
 	}
 }
 
+// TestGateTakesPocketsQuoting: a word the gate refuses plain is one Pocket
+// quotes (HostCommand.line), and the gate takes it quoted.
+func TestGateTakesPocketsQuoting(t *testing.T) {
+	for _, text := range []string{"Yes,", "C++", "a/b", "x=y"} {
+		quoted := "matchblox choose %2 2 --text '" + text + "' --sign 0a"
+		want := []string{"choose", "%2", "2", "--text", text, "--sign", "0a"}
+		if got, err := gateDecision(phoneMode, "", quoted); err != nil || !slices.Equal(got, want) {
+			t.Errorf("gateDecision(phone, %q) = %q, %v; want %q", quoted, got, err, want)
+		}
+		plain := "matchblox choose %2 2 --text " + text + " --sign 0a"
+		if argv, err := gateDecision(phoneMode, "", plain); err == nil || argv != nil {
+			t.Errorf("the gate ran %q plain, so Pocket need not quote it", plain)
+		}
+	}
+}
+
 // TestGatePhoneHeadCommandsOnly: a phone's key runs Pocket's three head
 // commands, read as a shell reads Pocket's quoting, in exactly their
 // shapes; anything a shell could make more of is refused.

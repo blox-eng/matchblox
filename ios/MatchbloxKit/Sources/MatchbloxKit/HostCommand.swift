@@ -52,14 +52,15 @@ public struct HostCommand: Sendable {
         await run(Self.line(words))
     }
 
-    /// The words as a shell reads them: a word of plain characters as it is, any other in single quotes.
+    /// The words as a shell reads them: a word of plain characters as it is, any other in single quotes. The
+    /// plain characters are those the phone's key takes unquoted.
     static func line(_ words: [String]) -> String {
         words.map { quoted($0) }.joined(separator: " ")
     }
 
     private static func quoted(_ word: String) -> String {
         let plain = !word.isEmpty && word.unicodeScalars.allSatisfy {
-            $0.isASCII && (CharacterSet.alphanumerics.contains($0) || "%-_.,:/=@+".unicodeScalars.contains($0))
+            $0.isASCII && (CharacterSet.alphanumerics.contains($0) || "%-_.:@".unicodeScalars.contains($0))
         }
         return plain ? word : "'" + word.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
