@@ -172,6 +172,9 @@ final class ConsoleTerminalView: TerminalView {
         sizeObserver = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) {
             [weak self] _ in MainActor.assumeIsolated { self?.show(TextSize.load(from: .standard)) }
         }
+        #if DEBUG
+        showNote()
+        #endif
     }
 
     required init?(coder: NSCoder) { nil }
@@ -183,9 +186,10 @@ final class ConsoleTerminalView: TerminalView {
     }
 
     #if DEBUG
-    /// The demo's UI test reads the clicks the terminal sent (`countClicks`), then how often
-    /// SwiftTerm's own long-press began.
-    var clickNote = "press=0 release=0 right=0" { didSet { showNote() } }
+    /// The demo's UI test reads the clicks the terminal sent and the row of the last left press
+    /// (`countClicks`), how often SwiftTerm's own long-press began, and the height of a row: the
+    /// rows start at the frame's top, and the part of a row left at its foot is no row.
+    var clickNote = "press=0 release=0 right=0 row=-1" { didSet { showNote() } }
     private var terminalHolds = 0
 
     @objc private func terminalHeld(_ press: UILongPressGestureRecognizer) {
@@ -195,7 +199,7 @@ final class ConsoleTerminalView: TerminalView {
     }
 
     private func showNote() {
-        accessibilityValue = "\(clickNote) hold=\(terminalHolds)"
+        accessibilityValue = "\(clickNote) hold=\(terminalHolds) cell=\(cellSize.height)"
     }
     #endif
 
@@ -466,6 +470,9 @@ final class ConsoleTerminalView: TerminalView {
         guard size != textSize else { return }
         textSize = size
         font = Self.font(size)
+        #if DEBUG
+        showNote()
+        #endif
     }
 
     @objc private func coasted(_ link: CADisplayLink) {

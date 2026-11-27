@@ -462,7 +462,7 @@ final class HeadTests: XCTestCase {
         guard let row = rows.firstIndex(where: { $0.contains(text) }) else {
             return XCTFail("no row shows \(text): \(terminal.label)")
         }
-        terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: (Double(row) + 0.5) / Double(rows.count))).tap()
+        terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: terminal.middle(ofRow: row))).tap()
         expect(in: app, step: "the chat of \(text) after the tap on its row", "label CONTAINS %@", "send to \(text)")
     }
 
