@@ -2,6 +2,7 @@ package host
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/blox-eng/matchblox/internal/procfs"
@@ -26,6 +27,9 @@ func (Host) OpenFiles(int) ([]string, bool)      { return nil, false }
 func (Host) Cgroup(int) string                   { return "" }
 func (Host) UID(int) (int, bool)                 { return 0, false }
 func (Host) Uptime() float64                     { return float64(time.Now().UnixMilli()) / 1000 }
+func (Host) Booted() (time.Time, error) {
+	return time.Time{}, fmt.Errorf("boot time is not read on iOS: %w", errors.ErrUnsupported)
+}
 func (Host) Stat() (procfs.CPUTimes, []procfs.CPUTimes, error) {
 	return procfs.CPUTimes{}, nil, errIOS
 }

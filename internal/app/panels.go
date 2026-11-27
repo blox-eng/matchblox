@@ -141,7 +141,7 @@ func (m Model) procs(w int) body {
 	if len(m.snap.Orphans) == 0 {
 		b.add(-1, st.faint.Render(" none"))
 	}
-	nv, sel := len(machineViews), m.machineIndex() // off the orphans while another row is selected
+	base, sel := m.rowBase(rowOrphans), m.machineIndex() // off the orphans while another row is selected
 	for i, o := range m.snap.Orphans {
 		var pane string
 		switch {
@@ -155,7 +155,7 @@ func (m Model) procs(w int) body {
 		line := " " + st.neg.Render("! ") + st.text.Render(pad(fmt.Sprintf("%d %s", o.PID, o.Comm), 16)) +
 			st.text.Render(pad(fmt.Sprintf("%3.0f%%", o.CPU), 7)) + st.muted.Render(pad("for "+sample.Human(o.HotFor), 12)) +
 			st.muted.Render(pad(pane, 22)) + st.faint.Render(o.Cmdline)
-		b.addRow(nv+i, nv+i == sel, w, st, line)
+		b.addRow(base+i, base+i == sel, w, st, line)
 	}
 	if o, ok := m.selectedOrphan(); ok {
 		b.add(-1, "", fit(" "+st.muted.Render(fmt.Sprintf("parent %s · age %s · cwd %s", o.Parent, sample.Human(o.Age), o.Cwd)), w))
@@ -172,7 +172,7 @@ func (m Model) procs(w int) body {
 
 // selectedOrphan is the detached busy loop under the cursor.
 func (m Model) selectedOrphan() (sample.Orphan, bool) {
-	i := m.machineIndex() - len(machineViews)
+	i := m.machineIndex() - m.rowBase(rowOrphans)
 	if i < 0 || i >= len(m.snap.Orphans) {
 		return sample.Orphan{}, false
 	}

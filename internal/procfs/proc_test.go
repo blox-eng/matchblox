@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"slices"
 	"testing"
+	"time"
 )
 
 const fixture = "../../testdata/machine/proc"
@@ -185,5 +186,26 @@ func TestExeIsTheTargetOfTheExeLink(t *testing.T) {
 	}
 	if _, err := fs.Exe(8); err == nil {
 		t.Fatal("a process with no exe link gives no error")
+	}
+}
+
+func TestBootedReadsBtime(t *testing.T) {
+	got, err := FS{Root: "../../testdata/iowait/proc"}.Booted()
+	if err != nil || !got.Equal(time.Unix(1764000000, 0)) {
+		t.Fatalf("booted = %v, %v; want %v", got, err, time.Unix(1764000000, 0))
+	}
+	none := t.TempDir()
+	if err := os.WriteFile(filepath.Join(none, "stat"), []byte("cpu  1 2 3 4\nintr 0\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := (FS{Root: none}).Booted(); err == nil {
+		t.Fatal("a stat with no btime gives no error")
+	}
+	bad := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bad, "stat"), []byte("cpu  1 2 3 4\nbtime soon\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := (FS{Root: bad}).Booted(); err == nil {
+		t.Fatalf("a btime that is not a number gives %v and no error", got)
 	}
 }

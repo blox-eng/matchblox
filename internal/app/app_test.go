@@ -257,7 +257,7 @@ func TestPanelKillNamesTheOrphan(t *testing.T) {
 	st.Orphans = []sample.Orphan{{PID: 4242, Start: 7, Comm: "bash", Kill: []string{"kill", "4242"}}}
 	m, f := loadedWith(t, 100, st)
 	m.tab = tabMachine
-	m.selectRow(len(machineViews)) // the orphan, under the views
+	m.selectRow(m.rowBase(rowOrphans)) // the orphan, under the machines
 	next, _ := key(m, "x")
 	_, cmd := key(next, "y")
 	drain(cmd)

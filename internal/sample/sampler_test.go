@@ -1,9 +1,12 @@
 package sample
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -546,5 +549,71 @@ func TestARegistryFileOfAnEarlierProcessIsIgnored(t *testing.T) {
 	s := byPane(smp.Sample())["%1"]
 	if s.Name == "gone" || s.Idle != 0 || s.Age() == "stale" {
 		t.Fatalf("the new process took the old file: %+v", s)
+	}
+}
+
+func TestMachineCountsIOWait(t *testing.T) {
+	s := newFixtureSampler("../../testdata/iowait")
+	s.ProcEvery = time.Hour
+	for i := range 2 {
+		snap := s.Sample()
+		if w := snap.Machine.IOWait; w == nil || *w != 2 {
+			t.Fatalf("sample %d: IOWait = %v, want 2", i, w)
+		}
+		if want := time.Unix(1764000000, 0); !snap.Machine.Booted.Equal(want) {
+			t.Fatalf("sample %d: Booted = %v, want %v", i, snap.Machine.Booted, want)
+		}
+	}
+}
+
+func TestOldSnapshotHasNoIOWait(t *testing.T) {
+	var old Machine
+	if err := json.Unmarshal([]byte(`{"load":[1,1,1]}`), &old); err != nil {
+		t.Fatal(err)
+	}
+	if old.IOWait != nil {
+		t.Fatalf("IOWait = %d, want nil", *old.IOWait)
+	}
+	var none Machine
+	if err := json.Unmarshal([]byte(`{"io_wait":0}`), &none); err != nil {
+		t.Fatal(err)
+	}
+	if none.IOWait == nil || *none.IOWait != 0 {
+		t.Fatalf("IOWait = %v, want a pointer to 0", none.IOWait)
+	}
+}
+
+func TestIOWaitIsNilWhenProcsFail(t *testing.T) {
+	snap := newFixtureSampler(t.TempDir()).Sample()
+	if snap.Machine.IOWait != nil {
+		t.Fatalf("IOWait = %d, want nil", *snap.Machine.IOWait)
+	}
+}
+
+// noBootFS is a host that does not read its boot time, as iOS does.
+type noBootFS struct{ procfs.FS }
+
+func (noBootFS) Booted() (time.Time, error) {
+	return time.Time{}, fmt.Errorf("boot time on iOS: %w", errors.ErrUnsupported)
+}
+
+// TestUnsupportedBootIsNoError: a host that cannot read its boot time at
+// all leaves Booted zero and says no error each sample; a read that fails
+// on a host that can read it is an error.
+func TestUnsupportedBootIsNoError(t *testing.T) {
+	s := newFixtureSampler("../../testdata/iowait")
+	s.FS = noBootFS{s.FS.(procfs.FS)}
+	snap := s.Sample()
+	if !snap.Machine.Booted.IsZero() {
+		t.Fatalf("Booted = %v, want zero", snap.Machine.Booted)
+	}
+	for _, e := range snap.Errors {
+		if strings.HasPrefix(e, "boot time") {
+			t.Fatalf("an unsupported boot time is an error: %q", e)
+		}
+	}
+	failed := newFixtureSampler(t.TempDir()).Sample() // no stat to read
+	if !slices.ContainsFunc(failed.Errors, func(e string) bool { return strings.HasPrefix(e, "boot time: ") }) {
+		t.Fatalf("a failed boot read says no error: %q", failed.Errors)
 	}
 }

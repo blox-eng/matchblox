@@ -13,6 +13,7 @@ import (
 
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/disk"
+	gohost "github.com/shirou/gopsutil/v4/host"
 	"github.com/shirou/gopsutil/v4/load"
 	"github.com/shirou/gopsutil/v4/mem"
 	"github.com/shirou/gopsutil/v4/net"
@@ -87,10 +88,28 @@ func read(p *process.Process) (procfs.Proc, bool) {
 	if m, err := p.MemoryInfo(); err == nil {
 		pr.RSS = m.RSS
 	}
-	if st, err := p.Status(); err == nil && len(st) > 0 && st[0] == process.Running {
-		pr.State = 'R'
+	if st, err := p.Status(); err == nil {
+		pr.State = stateOf(st)
 	}
 	return pr, true
+}
+
+// stateOf maps gopsutil's status to the /proc state letter: Blocked is a
+// process waiting on I/O, state D. A zombie is Z, so the sampler does not
+// count an exited agent as alive.
+func stateOf(st []string) byte {
+	if len(st) == 0 {
+		return 'S'
+	}
+	switch st[0] {
+	case process.Blocked:
+		return 'D'
+	case process.Running:
+		return 'R'
+	case process.Zombie:
+		return 'Z'
+	}
+	return 'S'
 }
 
 func (Host) Environ(pid int, key string) (string, bool) {
@@ -169,6 +188,14 @@ func (Host) UID(pid int) (int, bool) {
 }
 
 func (Host) Uptime() float64 { return float64(time.Now().UnixMilli()) / 1000 }
+
+func (Host) Booted() (time.Time, error) {
+	sec, err := gohost.BootTime()
+	if err != nil {
+		return time.Time{}, err
+	}
+	return time.Unix(int64(sec), 0), nil
+}
 
 func (Host) Stat() (procfs.CPUTimes, []procfs.CPUTimes, error) {
 	all, err := cpu.Times(false)

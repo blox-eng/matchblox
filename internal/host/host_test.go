@@ -6,6 +6,8 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/shirou/gopsutil/v4/process"
+
 	"github.com/blox-eng/matchblox/internal/procfs"
 )
 
@@ -63,6 +65,26 @@ func TestOutOfRangePIDFindsNothing(t *testing.T) {
 		}
 		if h.Cwd(pid) != "" || h.Cmdline(pid) != "" {
 			t.Errorf("pid %d returned data", pid)
+		}
+	}
+}
+
+// gopsutil reports a process in uninterruptible sleep as Blocked; it must read
+// as waiting on I/O, the same as state D in /proc.
+func TestStateOfStatus(t *testing.T) {
+	for _, c := range []struct {
+		st   []string
+		want byte
+	}{
+		{[]string{process.Blocked}, 'D'},
+		{[]string{process.Running}, 'R'},
+		{[]string{process.Zombie}, 'Z'},
+		{[]string{process.Sleep}, 'S'},
+		{nil, 'S'},
+		{[]string{""}, 'S'},
+	} {
+		if got := stateOf(c.st); got != c.want {
+			t.Errorf("stateOf(%q) = %q, want %q", c.st, got, c.want)
 		}
 	}
 }

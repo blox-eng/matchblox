@@ -2,6 +2,7 @@ package sample
 
 import (
 	"os"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -48,9 +49,14 @@ func (s *Sampler) procCPU(p procfs.Proc, dt float64) float64 {
 
 func (s *Sampler) sampleProcs(snap *Snapshot, procs map[int]procfs.Proc, panes []Pane, dt float64, now time.Time) {
 	cpu := make(map[int]float64, len(procs))
+	waiting := 0
 	for pid, p := range procs {
 		cpu[pid] = s.procCPU(p, dt)
+		if p.State == 'D' {
+			waiting++
+		}
 	}
+	s.ioWait = &waiting
 
 	pids := make([]int, 0, len(procs))
 	for pid := range procs {
@@ -70,6 +76,16 @@ func (s *Sampler) sampleProcs(snap *Snapshot, procs map[int]procfs.Proc, panes [
 			PID: pid, Comm: p.Comm, CPU: cpu[pid], RSS: p.RSS,
 			Owner: s.owner(p),
 		})
+	}
+
+	agents := make(map[int]bool, len(snap.Sessions)+len(snap.Children))
+	for _, ss := range slices.Concat(snap.Sessions, snap.Children) {
+		agents[ss.PID] = true
+	}
+	// snap.Panes is every pane, the stoker's too: panes is the main server's.
+	snap.Heavy = heaviest(procs, cpu, snap.Panes, agents, s.FS.Argv)
+	if snap.Heavy != nil {
+		snap.Heavy.Agent = sessionAbove(snap.Heavy.Agent, snap.Sessions, snap.Children)
 	}
 
 	paneByID := map[string]Pane{}
