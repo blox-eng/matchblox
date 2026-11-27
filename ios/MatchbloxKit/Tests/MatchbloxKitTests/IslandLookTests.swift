@@ -97,6 +97,15 @@ final class IslandLookTests: XCTestCase {
         XCTAssertEqual(IslandLook.cells(140).empty, 0)
     }
 
+    /// A month is not a week: its line names the reset.
+    func testAMonthNamesItsResetNotTheWeek() {
+        let now = Date(timeIntervalSince1970: 1_795_651_200)  // 2026-11-26 00:00 UTC
+        let resets = Date(timeIntervalSince1970: 1_797_544_786)  // 2026-12-17 21:59 UTC
+        let a = AccountUse(n: 2, windows: [WindowUse(name: "mo", pct: 100, resets: resets)], lasts: true)
+        XCTAssertEqual(IslandLook.forecast(a, now: now, zone: utc)?.text, "resets Dec 17")
+        XCTAssertEqual(IslandLook.forecast(a, now: now, zone: utc)?.out, false)
+    }
+
     func testForecastAndResets() throws {
         let s = try fixture()
         let now = Date(timeIntervalSince1970: 1_792_594_800)  // 2026-10-21 15:00 UTC

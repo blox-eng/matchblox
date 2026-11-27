@@ -83,7 +83,7 @@ struct UsageCompactLeading: View {
     }
 }
 
-/// The split's right: the tightest window over all accounts, `╿` before it while anything waits.
+/// The split's right: the tightest window of the working accounts, `╿` before it while anything waits.
 struct UsageCompactTrailing: View {
     let m: IslandModel
     init(_ m: IslandModel) { self.m = m }
@@ -190,7 +190,7 @@ struct WindowLine: View {
     var reset = true
 
     var body: some View {
-        let level = barColorLevel(window.pct)
+        let level = MatchbloxKit.level(window)
         let cells = IslandLook.cells(window.pct)
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(window.name)

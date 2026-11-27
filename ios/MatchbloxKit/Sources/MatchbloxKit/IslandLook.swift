@@ -117,8 +117,13 @@ public enum IslandLook {
     /// The fullest window of one account, which its one line shows.
     public static func fullest(_ a: AccountUse) -> WindowUse? { a.windows.max { $0.pct < $1.pct } }
 
-    /// The forecast of one account: `lasts the week` (muted) or `out Fri ~20:00` (warn).
+    /// The forecast of one account: `lasts the week` (muted), `resets Dec 17` for a month (muted)
+    /// or `out Fri ~20:00` (warn).
     public static func forecast(_ a: AccountUse, now: Date, zone: TimeZone = .current) -> (text: String, out: Bool)? {
+        if a.lasts, !a.windows.contains(where: { $0.name == "wk" }),
+           let r = a.windows.compactMap(\.resets).max() {
+            return ("resets \(day(r, zone: zone))", false)
+        }
         if a.lasts { return ("lasts the week", false) }
         guard let at = a.runsOut else { return nil }
         return ("out \(when(at, now: now, zone: zone, approx: true))", true)
@@ -127,6 +132,14 @@ public enum IslandLook {
     /// When a window resets: the time on the same day, else the weekday and the time.
     public static func resets(_ w: WindowUse, now: Date, zone: TimeZone = .current) -> String? {
         w.resets.map { when($0, now: now, zone: zone, approx: false) }
+    }
+
+    static func day(_ date: Date, zone: TimeZone) -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = zone
+        f.dateFormat = "MMM d"
+        return f.string(from: date)
     }
 
     static func when(_ date: Date, now: Date, zone: TimeZone, approx: Bool) -> String {

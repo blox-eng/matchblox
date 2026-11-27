@@ -6,6 +6,21 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **One tap on the island goes back.** A tap on the Live Activity brings
+  back the console you left, on the session the island shows. The Face ID
+  unlock holds for 5 minutes after Pocket leaves the screen. A short
+  network gap on the way back no longer shows an error: the console keeps
+  its screen and connects again.
+- **The island watches the accounts that work.** An idle account no longer
+  fills the glance, and a window spent at 100 % while its sessions still
+  work (Cursor past its included month) stops nothing: it stays in the list,
+  unwarned, and says when it resets.
+- **Pocket comes back to its own console.** A return reattaches the console
+  the phone left, on the screen it showed, and an island that was swiped
+  away or ended by an update starts again at the next open.
+
 ### Fixed
 
 - **This machine's fix line in `MACHINES · N` is a real command.** When

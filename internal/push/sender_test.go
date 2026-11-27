@@ -891,6 +891,42 @@ func TestFollowingBackStartsTheIslandAgain(t *testing.T) {
 	}
 }
 
+// An island that ended (swiped away, or a new build installed) was not
+// started again for 7 h 30: the host never knew (2026-11-26). The phone says
+// so at its next open, and the host starts one at once, once.
+func TestAnEndedIslandStartsAgainAtTheNextOpen(t *testing.T) {
+	r := &fakeRelay{}
+	c := &clock{t: t0}
+	p, _ := phone(t, "a", false, true)
+	ps := &livePhones{regs: []Registration{p}}
+	dir := t.TempDir()
+	s := NewSender(r, ps, openNumbers(t, dir), dir, fp, c.now)
+	t.Cleanup(func() { s.Close() })
+
+	s.handle(burning(10))
+	if ev := ofKind(r.take(), "start"); len(ev) != 1 {
+		t.Fatalf("first start %+v", ev)
+	}
+	c.add(time.Hour)
+	ended := p
+	ended.At = c.now()
+	isl := *p.Island
+	isl.Ended = true
+	ended.Island = &isl
+	ps.mu.Lock()
+	ps.regs = []Registration{ended}
+	ps.mu.Unlock()
+	s.handle(burning(10))
+	if ev := ofKind(r.take(), "start"); len(ev) != 1 || ev[0].Target != "start-a" {
+		t.Fatalf("no new start for an ended island: %+v", ev)
+	}
+	c.add(time.Minute)
+	s.handle(burning(10))
+	if ev := ofKind(r.take(), "start"); len(ev) != 0 {
+		t.Fatalf("the same report started again: %+v", ev)
+	}
+}
+
 // The starts are kept in wall-clock time: Go's monotonic reading stops while
 // the machine sleeps, so after a wake a start would look younger than it is.
 func TestTheStartsKeepWallClockTime(t *testing.T) {

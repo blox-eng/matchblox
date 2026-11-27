@@ -175,4 +175,16 @@ final class IslandPrefsTests: XCTestCase {
         XCTAssertEqual(Opening.consoleCommand(host: host("ws-1", ws1), open: 12), "matchblox console --open 12")
         XCTAssertEqual(Opening.notReachable(host: "work-1"), "work-1 is not reachable: it changes at the next connect")
     }
+
+    /// An island that ended was not started again for 7 h 30 (2026-11-26): the phone says so
+    /// at its next open. An older record, with no word, decodes as not ended.
+    func testAnEndedIslandIsSaidAndAnOldRecordIsNot() throws {
+        var reg = IslandReg(startToken: "s", channel: "c")
+        reg.ended = true
+        let json = String(decoding: try JSONEncoder().encode(reg), as: UTF8.self)
+        XCTAssertTrue(json.contains(#""ended":true"#), json)
+        let old = try JSONDecoder().decode(IslandReg.self, from: Data(#"{"start_token":"s","channel":"c"}"#.utf8))
+        XCTAssertFalse(old.ended)
+        XCTAssertFalse(String(decoding: try JSONEncoder().encode(old), as: UTF8.self).contains("ended"))
+    }
 }
