@@ -12,9 +12,10 @@ repo, and `● N need you`. A chip shows that repo's matches. The count
 is every wait, on every host and in every chain.
 
 The list draws `NEEDS YOU`, then `DONE`, then `WORKING`, `IDLE` and
-`HELD`. `DONE` is a turn that ended after you last gave the keys, and
-the row's time is `now`. `⏎` on that row gives the keys, and the row
-leaves `DONE`. `↑` and `↓` do not.
+`HELD`. `DONE` is a turn that ended after you last gave the keys. The
+row's time is `now` for the first minute, then its age. `⏎` on that row
+gives the keys, and the row leaves `DONE`. `↑` and `↓` do not. An agent
+that the list first sees at rest, with no turn end seen, is `IDLE`.
 
 The agent's pane is the agent's own tmux pane. Typing there is typing
 into the agent. `g` in the list tiles that chain's agents in the agent
@@ -31,7 +32,9 @@ chips until you answer.
 Machine over the list, the same rows as the sidebar's Machine tab.
 `t` opens a shell under the agent, in that agent's folder, and `t`
 again moves to it. `D` puts the review of the change in the agent
-seat. `esc` closes a sheet. On the desk, `⇥` does nothing. On the
+seat. It lists the agent's new files that git does not track yet, marked
+`new`. It opens for a session on this machine only: `D` on another
+host's session says so and does not open. `esc` closes a sheet. On the desk, `⇥` does nothing. On the
 sidebar, `⇥` still opens Machine.
 
 ## The sidebar
@@ -66,7 +69,7 @@ one of five groups:
 | Group | A match is here when |
 |---|---|
 | `NEEDS YOU` | It asks a question or a permission, or a stoker step for it waits for your go. A pull request it drives waits for your merge, and it does not work. Its pull request is stuck (`CI failed`, `conflicts`, `changes requested`) and it does not work. Or its turn ended today and it waits for input (`waits`, `paused`). |
-| `DONE` | Its last turn ended after you last gave the keys. The row's time is `now`. `⏎` gives the keys and the row leaves `DONE`. `↑` and `↓` leave it there. |
+| `DONE` | Its last turn ended after you last gave the keys. The row's time is `now` for the first minute, then its age. `⏎` gives the keys and the row leaves `DONE`. `↑` and `↓` leave it there. An agent first seen at rest is `IDLE`. |
 | `WORKING` | It is `busy`, `agents`, `tests` or `shell`. |
 | `IDLE` | Everything else: `idle`, `cold`, `stale` and `out`. |
 | `HELD` | You parked it (`z`), or the stoker holds it and it asks nothing. |

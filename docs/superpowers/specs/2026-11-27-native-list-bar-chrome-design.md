@@ -154,6 +154,8 @@ The owner picked **1** on 2026-11-27.
 - Review comments posted to GitHub. The review goes to the agent only.
 - tmux control mode as the transport.
 - Pulling SSH into mux. Remote stays the hop; the view on a peer is still JumpSSH.
+- `D` on another host's session. It stays a named refusal (`review did not open: <host> is another machine …`). No peer-paste IPC is built. — ruled 2026-11-27, the controller of the fix wave, after the whole-branch review (Minor 3).
+- A persisted record of turn ends. DONE needs a turn end that the console saw, or a KeysAt that the session's last activity is after. A session first seen at rest is IDLE, also after a service restart. — ruled 2026-11-27, the controller of the fix wave (Important 1).
 
 ## Anti-goals (failure even if it works)
 
