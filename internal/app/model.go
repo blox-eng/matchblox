@@ -536,8 +536,9 @@ type Model struct {
 	side *sideMemo
 
 	// boardChain and boardHost narrow the list to one chain and one host,
-	// each by its name; "" shows all.
-	boardChain, boardHost string
+	// each by its name; "" shows all. space narrows to one repo; "" is all.
+	boardChain, boardHost, space string
+	spaceMenu                    *spaceMenu
 	// menu is the session's menu while it is open. sawRelease: the terminal
 	// reported the release of a press, so a press held is a long press.
 	menu       *boardMenu

@@ -151,8 +151,9 @@ type drawn struct {
 	// on each picks.
 	formAgentsAt int
 	formAgents   []span
-	stokerAt     span // the header's stoker word
-	warnAt       span // the header's ⚠ mark: a tap says the standing errors again
+	stokerAt     span   // the header's stoker word
+	warnAt       span   // the header's ⚠ mark: a tap says the standing errors again
+	spaces       []span // the header's repo chips; a tap filters the list
 	// sayY0, sayY1, sayX0: the toast stack's lines and its first column; a
 	// tap there ends the toasts and reaches nothing under them.
 	sayY0, sayY1, sayX0 int
@@ -191,7 +192,7 @@ func (m Model) drawScreen(w int) drawn {
 	head, waits, stokerAt, named := m.headerOf(w)
 	tabs, tabSpans := m.tabsLine(w)
 	sc := drawn{lines: []string{head, tabs, m.st.rule.Render(strings.Repeat("─", w))}, waits: waits, stokerAt: stokerAt, tabs: tabSpans,
-		bodyTop: 3, noteAt: -1, keysAt: -1, hostAt: m.boardHostHit(head), warnAt: warnHit(head)}
+		bodyTop: 3, noteAt: -1, keysAt: -1, hostAt: m.boardHostHit(head), warnAt: warnHit(head), spaces: m.spaceSpans(head, w)}
 	switch {
 	case m.hostCount() > 1 && m.shows():
 		// A blocked host of two or more is a row, never the screen.
@@ -251,6 +252,8 @@ func (m Model) drawScreen(w int) drawn {
 		m.overlaySheet(&sc, w)
 	case m.form != nil:
 		m.overlayForm(&sc, w)
+	case m.spaceMenu != nil && m.boardShown():
+		m.overlaySpaceMenu(&sc, w)
 	case m.menu != nil && m.boardShown():
 		m.overlayMenu(&sc, w)
 	}
@@ -383,6 +386,11 @@ func (m Model) headerOf(w int) (string, span, span, headNamed) {
 	lefts := []string{left}
 	if host != "" {
 		lefts = []string{left + st.faint.Render(" · ") + st.muted.Render(host), left}
+	}
+	if chips, _, _ := m.fitSpaces(m.spaceBudget(w)); chips != "" {
+		for i := range lefts {
+			lefts[i] += "  " + chips
+		}
 	}
 	var right string
 	// With the list hidden, the names of the sessions that need you come

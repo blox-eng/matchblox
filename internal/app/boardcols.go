@@ -109,6 +109,9 @@ func (m Model) inBoard(s sample.Session) bool {
 	if !m.inView(s.Host) {
 		return false
 	}
+	if !m.inSpace(s) {
+		return false
+	}
 	if m.filter == "" {
 		return true
 	}

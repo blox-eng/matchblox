@@ -25,6 +25,8 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	switch {
 	case m.pair.owns() || m.asking(): // the pair page and an ssh prompt take keys only
 		return m, nil
+	case m.spaceMenu != nil && m.boardShown():
+		return m.spaceMenuTap(ms)
 	case m.menu != nil && m.boardShown():
 		return m.menuTap(ms)
 	case ms.Button == tea.MouseRight && m.sideActive() && m.form == nil && m.sheet == nil: // a box beside the list takes every click
@@ -80,6 +82,9 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		if _, ok := spanAt([]span{sc.warnAt}, ms.X); ok && sc.warnAt.press != "" {
 			said := m.sayStanding()
 			return m, said
+		}
+		if s, ok := spanAt(sc.spaces, ms.X); ok && s.press != "" {
+			return m.pickSpace(s.press)
 		}
 		if s, ok := spanAt([]span{sc.hostAt}, ms.X); ok && s.press != "" {
 			return m.keyed(keyPress(s.press)) // the host filter: as s

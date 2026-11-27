@@ -263,7 +263,7 @@ func (m *Model) clearBoardFilters() {
 	if m.room != nil { // the room is the narrowing: both go
 		*m = m.closeRoom()
 	}
-	m.boardChain, m.boardHost, m.filter, m.searching = "", "", "", false
+	m.boardChain, m.boardHost, m.filter, m.searching, m.space, m.spaceMenu = "", "", "", false, "", nil
 	m.refresh()
 	m.peekAt = m.now()
 }

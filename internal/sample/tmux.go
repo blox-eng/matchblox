@@ -308,6 +308,7 @@ const (
 	HeaderOption = "@matchblox_header"
 	BarOption    = "@matchblox_bar"
 	ModeOption   = "@matchblox_mode"
+	SpaceOption  = "@matchblox_space"
 )
 
 // ViewOption is the session option of a view's session (a jump's, shown in

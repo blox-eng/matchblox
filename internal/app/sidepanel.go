@@ -367,6 +367,8 @@ func (m Model) sideWords(w int) []string {
 	case m.filter != "":
 		text := `Nothing matches "` + m.filter + `". ` + m.keys.main.Back.Help().Key + " clears the search."
 		return []string{fit(" "+st.muted.Render(ansi.Truncate(text, max(w-1, 1), "…")), w)}
+	case m.space != "":
+		return []string{fit(st.muted.Render(m.spaceEmpty()), w)}
 	}
 	return nil
 }
