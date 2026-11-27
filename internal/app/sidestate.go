@@ -3,6 +3,7 @@ package app
 import (
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
@@ -72,6 +73,36 @@ func (m Model) keysAtOf(s sample.Session) time.Time {
 		return time.Time{}
 	}
 	return m.keysAt[s.SessionID]
+}
+
+// takeKeysAt replaces this host's KeysAt from st. It copies the snapshot's
+// ids and drops this host's session ids that the snapshot does not name.
+// Other hosts' ids stay: a home sample must not wipe a peer's times.
+func (m *Model) takeKeysAt(prev []sample.Session, st proto.State) {
+	if m.keysAt == nil {
+		m.keysAt = map[string]time.Time{}
+	}
+	ours := map[string]struct{}{}
+	for _, s := range prev {
+		if s.SessionID != "" {
+			ours[s.SessionID] = struct{}{}
+		}
+	}
+	for _, s := range st.Sessions {
+		if s.SessionID != "" {
+			ours[s.SessionID] = struct{}{}
+		}
+	}
+	for id := range ours {
+		if _, ok := st.KeysAt[id]; !ok {
+			delete(m.keysAt, id)
+		}
+	}
+	for id, at := range st.KeysAt {
+		if _, ok := ours[id]; ok {
+			m.keysAt[id] = at
+		}
+	}
 }
 
 // heldWhy is the words of a hold: who holds the session, and why.

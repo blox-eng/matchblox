@@ -183,3 +183,55 @@ func TestParkedAskStaysHeld(t *testing.T) {
 		t.Fatalf("group %s, want HELD (park beats ask)", h.head())
 	}
 }
+
+func namedIdle(name, id string) func(*sample.Session) {
+	return func(s *sample.Session) { s.SessionID, s.Name = id, name }
+}
+
+func sessionNamed(m Model, id string) sample.Session {
+	for _, s := range m.all.sessions {
+		if s.SessionID == id {
+			return s
+		}
+	}
+	return sample.Session{}
+}
+
+// TestKeysAtFollowsTheSnapshot: a later snapshot is the source. KeysAt set
+// leaves IDLE; a nil map (restart, omitempty empty) is KeysAt zero, so the
+// first idle turn is DONE again. A home sample must not wipe a peer's id.
+func TestKeysAtFollowsTheSnapshot(t *testing.T) {
+	m := busyThenIdle(t, nil)
+	s := doneRow(m)
+	m = applyKeysAt(m, s, boardAt)
+	if h := m.sideStateOf(doneRow(m)); h != sideIdle {
+		t.Fatalf("KeysAt set: group %s, want IDLE", h.head())
+	}
+	st := boardState(doneRow(m))
+	st.KeysAt = nil
+	next, _ := m.Update(stateMsg(st))
+	m = next.(Model)
+	if h := m.sideStateOf(doneRow(m)); h != sideDone {
+		t.Fatalf("KeysAt nil: group %s, want DONE", h.head())
+	}
+
+	home := hostState(sess(1, "home-api", "%1", namedIdle("home-api", "sid-home")))
+	peer := hostState(sess(2, "peer-api", "%2", namedIdle("peer-api", "sid-peer")))
+	peer.KeysAt = map[string]time.Time{"sid-peer": time.Now().Add(time.Hour)}
+	m, ws := twoHosts(t, home, peer)
+	if h := m.sideStateOf(sessionNamed(m, "sid-peer")); h != sideIdle {
+		t.Fatalf("peer KeysAt set: group %s, want IDLE", h.head())
+	}
+	home.KeysAt = nil
+	next, _ = m.Update(stateMsg(home))
+	m = next.(Model)
+	if h := m.sideStateOf(sessionNamed(m, "sid-peer")); h != sideIdle {
+		t.Fatalf("home snapshot wiped the peer's KeysAt: group %s", h.head())
+	}
+	peer.KeysAt = nil
+	next, _ = m.Update(peerMsg{host: "ws-1", conn: ws, msg: stateMsg(peer)})
+	m = next.(Model)
+	if h := m.sideStateOf(sessionNamed(m, "sid-peer")); h != sideDone {
+		t.Fatalf("peer KeysAt nil: group %s, want DONE", h.head())
+	}
+}
