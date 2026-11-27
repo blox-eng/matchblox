@@ -5,11 +5,13 @@ package procfs
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 )
 
 // ClockTicks is USER_HZ. It is 100 on every mainstream Linux build; reading it
@@ -240,6 +242,24 @@ func (fs FS) Uptime() float64 {
 	}
 	v, _ := strconv.ParseFloat(f[0], 64)
 	return v
+}
+
+// Booted is the btime line of /proc/stat.
+func (fs FS) Booted() (time.Time, error) {
+	b, err := os.ReadFile(fs.path("stat"))
+	if err != nil {
+		return time.Time{}, err
+	}
+	for line := range strings.Lines(string(b)) {
+		if v, ok := strings.CutPrefix(line, "btime "); ok {
+			n, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64)
+			if err != nil {
+				return time.Time{}, err
+			}
+			return time.Unix(n, 0), nil
+		}
+	}
+	return time.Time{}, errors.New("no btime in " + fs.path("stat"))
 }
 
 // ttyNr parses tty_nr; a negative or beyond-32-bit value is no terminal (0).

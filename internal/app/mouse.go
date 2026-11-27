@@ -20,6 +20,8 @@ import (
 // open it takes every tap.
 func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	m.goArmedTap, m.goArmed = m.goArmed, paneKey{} // any tap disarms a go; boardTap gives it on its own go
+	jumped := m.machineJumped
+	m.machineJumped = false
 	switch {
 	case m.pair.owns() || m.asking(): // the pair page and an ssh prompt take keys only
 		return m, nil
@@ -52,7 +54,9 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	m = m.dragStart(ms.X, ms.Y)
 	m.searching = false // keep the search; what the tap asks for shows on the key line
 	w := max(m.width, minWidth)
+	m.machineJumped = jumped // the tap hits the lines the screen shows
 	sc := m.draw(w)
+	m.machineJumped = false
 	if m.sheet != nil {
 		return m.tapSheet(ms, sc)
 	}
@@ -156,6 +160,18 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 			return m.openHosts()
 		}
 		return m, nil
+	}
+	if h, ok := m.selectedMachine(); ok && m.tab == tabMachine {
+		// A tap on the selected machine row moves to its section, as Enter does.
+		m.armed, m.flash = "", ""
+		if !picked {
+			return m, nil
+		}
+		if m.machineEnterWord(h) == "" {
+			said := m.say(m.nameOf(h) + " has no section yet: the line under its row says the fix")
+			return m, said
+		}
+		return m.enterMachine(h), nil
 	}
 	if host, pane := m.tapTarget(); pane != "" {
 		// A tap selects the row, and a tap on it once it is selected goes

@@ -139,6 +139,19 @@ func readCached[T any](m map[string]cached[T], path string, parse func([]byte) T
 
 var claudePlans = map[string]string{"claude_max": "Max", "claude_pro": "Pro", "claude_team": "Team", "claude_enterprise": "Enterprise"}
 
+// IsPlan reports whether word is a plan an account label can end in: "Max",
+// "Pro", never a team's name.
+func IsPlan(word string) bool {
+	for _, plans := range []map[string]string{claudePlans, codexPlans} {
+		for _, p := range plans {
+			if p == word {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // claudeProvider serves a Claude Code session: a cloud, else Anthropic.
 func claudeProvider(e agentEnv) string {
 	if e.cloud != "" {

@@ -286,3 +286,11 @@ func TestAccountFolderFoundOncePerProcess(t *testing.T) {
 		t.Fatalf("a gone process keeps its folder: %v", smp.tags)
 	}
 }
+
+func TestIsPlanKnowsOnlyPlans(t *testing.T) {
+	for word, want := range map[string]bool{"Max": true, "Plus": true, "Enterprise": true, "Acme Holdings Ltd": false, "a@example.com": false, "": false} {
+		if got := IsPlan(word); got != want {
+			t.Errorf("IsPlan(%q) = %v, want %v", word, got, want)
+		}
+	}
+}

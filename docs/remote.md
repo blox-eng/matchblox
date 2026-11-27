@@ -110,6 +110,15 @@ stop the others.
 - Git names the host on each repository heading, not on each worktree row.
 - Machine, History and the stoker's view show one section for each ticked
   host, in Hosts order. Each section has the name of its host.
+- Machine opens with `MACHINES · N`: one row for each host, under the view
+  rows and above usage. `✗` hosts come first, then hosts over their
+  cores, then hosts with memory or a disk at 90% or more. Each group keeps
+  Hosts order. `Enter` on a row moves Machine to that host's section.
+- Under a `✗` host, the reason and the fix use the words of its Sessions
+  row: `run: matchblox connect <host>` for connect.
+- A host with an older matchblox shows `unknown` for the figures it does
+  not send, never 0, and the line `<host> runs an older matchblox · on
+  <host>: matchblox update`.
 - Machine shows one usage row for each account label. Each host adds a
   short cell to that row, in Hosts order: `work  5h  ws-1 58% · ws-2
   61%`.

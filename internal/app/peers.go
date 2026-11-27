@@ -42,8 +42,9 @@ type link struct {
 	blocked                   error
 	mismatch                  bool // the peer runs another version: a blocked row, never a stream
 	hello                     proto.Hello
-	at                        time.Time   // the last stateMsg
-	st                        proto.State // the last state; History, Found, Used kept from the first
+	at                        time.Time     // the last stateMsg
+	gap                       time.Duration // between the last two states on conn, 0: not known
+	st                        proto.State   // the last state; History, Found, Used kept from the first
 	have                      bool
 	cpu                       *series        // the Machine's graphs, as Model.history
 	hist                      history.Series // the History tab's points, as Model.hist
@@ -257,6 +258,10 @@ func (m Model) peerUpdate(pm peerMsg) (tea.Model, tea.Cmd) {
 		st.Used = cmp.Or(st.Used, p.st.Used)
 		m.noteChanges(p.host, st.Sessions, st.Chains)
 		first := !p.have
+		p.gap = 0
+		if p.answered {
+			p.gap = m.now().Sub(p.at)
+		}
 		p.st, p.at, p.have, p.answered, p.silent = st, m.now(), true, true, false
 		if p.host == m.watchHost {
 			m.watchHeld = ""

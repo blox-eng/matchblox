@@ -340,7 +340,8 @@ type Model struct {
 	snap        sample.Snapshot
 	push        string // the push sender's line for the Machine tab, or ""
 	have        bool
-	at          time.Time // the last stateMsg
+	at          time.Time     // the last stateMsg
+	gap         time.Duration // between the last two states on conn, 0: not known
 	git         *proto.GitReport
 	recs        []advice.Rec
 	sideAt      paneKey // the session the list chooses; zero is the first one drawn
@@ -381,6 +382,7 @@ type Model struct {
 	backoff     time.Duration
 	redialing   bool
 	answered    bool // a state came on the current connection
+	silent      bool // a remote home connected and gave no state in silentAfter
 	replaced    bool
 	acts        int
 	recRun      recRun // the last act on a recommendation, and what came of it
@@ -445,14 +447,21 @@ type Model struct {
 	devErr       error        // why the keys could not be read
 	devPick      string       // the selected device row: its fingerprint, or devPlus
 	// hostPicked: a host row of Machine is selected, hostPick its host;
-	// viewPick: a view row, by its name.
-	hostPicked  bool
-	hostPick    string
-	viewPick    string
-	pair        *pairPage  // the pair page, while it shows
-	pairPolling bool       // a poll of the pair page is on its way
-	pairOffers  *pairWaits // the offers of a key that still run: the end of the program waits for them
-	keys        keymaps    // the keys of every layer, as data
+	// machineHostPicked: a row of the machines region, machineHost its
+	// host; viewPick: a view row, by its name. machineJumped: ⏎ on a
+	// machine row moved Machine's window to machineJump's section, until
+	// the next key.
+	hostPicked        bool
+	hostPick          string
+	machineHostPicked bool
+	machineHost       string
+	machineJumped     bool
+	machineJump       string
+	viewPick          string
+	pair              *pairPage  // the pair page, while it shows
+	pairPolling       bool       // a poll of the pair page is on its way
+	pairOffers        *pairWaits // the offers of a key that still run: the end of the program waits for them
+	keys              keymaps    // the keys of every layer, as data
 
 	// scanAsk is the scan question, open at this console; nil none.
 	// scanAskUntil ends its quiet; scanUp: it was on top at the last
@@ -809,6 +818,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg.(type) {
 	case tea.KeyPressMsg, tea.MouseClickMsg, tea.MouseWheelMsg, tea.PasteMsg:
 		m.askedBy, m.marked, m.away = m.marked.spend(m.now()), clientMark{}, false
+		if _, click := msg.(tea.MouseClickMsg); !click { // a tap ends it once it knows what it hit
+			m.machineJumped = false
+		}
 		m = m.dragDropped(msg)
 		if c, ok := msg.(tea.MouseClickMsg); ok && len(m.sayingNow()) > 0 {
 			if sc := m.draw(max(m.width, minWidth)); c.Y >= sc.sayY0 && c.Y < sc.sayY1 && c.X >= sc.sayX0 {
@@ -999,7 +1011,11 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.say(news)
 			_ = m.recPrefs.save(m.opt.StateDir) // not kept: the next console says it again
 		}
-		m.snap, m.git, m.recs, m.have, m.answered, m.at = st.Snapshot, st.Git, st.Recommendations, true, true, m.now()
+		m.gap = 0
+		if m.answered {
+			m.gap = m.now().Sub(m.at)
+		}
+		m.snap, m.git, m.recs, m.have, m.answered, m.silent, m.at = st.Snapshot, st.Git, st.Recommendations, true, true, false, m.now()
 		m.shipReport = st.Ships
 		m.holds, m.reasons, m.chains = st.Holds, st.Reasons, st.Chains
 		m.agents, m.renames, m.accounts, m.signIns = st.Agents, st.Renames, st.Accounts, st.SignIns
@@ -1119,7 +1135,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			_ = m.conn.Close()
 		}
 		first := !m.lost
-		m.lost = true
+		m.lost, m.silent = true, false
 		m = m.roomLost(m.opt.Host).lineLost(m.opt.Host)
 		m, notConfirmed := m.actsLost(m.opt.Host)
 		if blocking(msg.err) {
@@ -1189,6 +1205,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if m.opt.Host != "" {
+			m.silent = true
 			said := m.sayError(m.opt.Host + " does not answer: run ssh " + m.opt.Host + " matchblox status to see why")
 			return m, said
 		}
@@ -1218,7 +1235,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.hostCount() == 1 || m.stale(m.opt.Host) {
 			m.say("connected again") // a short loss of two or more hosts showed nothing: its end shows nothing
 		}
-		m.conn, m.redialing, m.answered = msg.conn, false, false
+		m.conn, m.redialing, m.answered, m.silent = msg.conn, false, false, false
 		return m, tea.Batch(m.hello(), m.recv(), m.watchSilence())
 	case ranMsg:
 		if msg.err != nil {
@@ -1815,6 +1832,9 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		if v, ok := m.selectedMachineView(); ok && m.tab == tabMachine {
 			return m.openView(v), nil
+		}
+		if h, ok := m.selectedMachine(); ok && m.tab == tabMachine {
+			return m.enterMachine(h), nil
 		}
 		if s, ok := m.selectedSession(); ok {
 			if u, head := m.headRow(s); head { // a chain's head opens its room

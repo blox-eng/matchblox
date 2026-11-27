@@ -200,11 +200,23 @@ func machineHosts(t *testing.T, after time.Duration, w, h int) Model {
 	return upd(t, m, stateMsg(stateAt(cpu(hostState(sess(1, "api-auth", "%1", nil)), 12), now)))
 }
 
-// heads are the lines of a tab's body that head a host's section, in order.
+// heads are the lines of a tab's body that head a host's section, in
+// order. The lines of the MACHINES region, from its head to the first
+// blank line after it, are no section's.
 func heads(lines []string) []string {
 	var out []string
+	region := false
 	for _, l := range lines {
 		l = strings.TrimSpace(ansi.Strip(l))
+		switch {
+		case strings.HasPrefix(l, "MACHINES · "):
+			region = true
+		case region && l == "":
+			region = false
+		}
+		if region {
+			continue
+		}
 		for _, h := range []string{"this machine", "gpu-1", "ws-1"} {
 			if l == h || strings.HasPrefix(l, h+"  ") {
 				out = append(out, l)
@@ -223,9 +235,14 @@ func TestMachineTabSectionsInHostsOrder(t *testing.T) {
 	if got := heads(m.historyBody(104).lines); !slices.Equal(got, want) {
 		t.Fatalf("the History tab's sections are %q, want %q", got, want)
 	}
-	body := ansi.Strip(strings.Join(m.machinePanel(104).lines, "\n"))
-	if strings.Count(body, "MACHINE") != 3 {
-		t.Fatalf("the Machine tab has %d machines:\n%s", strings.Count(body, "MACHINE"), body)
+	sections := 0
+	for _, l := range m.machinePanel(104).lines {
+		if l = ansi.Strip(l); strings.TrimRight(l, " ") == " MACHINE" || strings.HasPrefix(l, " MACHINE ") {
+			sections++
+		}
+	}
+	if sections != 3 {
+		t.Fatalf("the Machine tab has %d machines:\n%s", sections, ansi.Strip(strings.Join(m.machinePanel(104).lines, "\n")))
 	}
 }
 

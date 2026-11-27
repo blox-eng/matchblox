@@ -51,6 +51,12 @@ type movingFS struct {
 
 func (f movingFS) Uptime() float64 { return f.FS.Uptime() + time.Since(f.start).Seconds() }
 
+// Booted is when the demo host booted: its fixture's uptime before the
+// demo started, so "up" grows with the clock as the uptime does.
+func (f movingFS) Booted() (time.Time, error) {
+	return f.start.Add(-time.Duration(f.FS.Uptime() * float64(time.Second))), nil
+}
+
 // script is the demo's one task: answer an agent, and its turn ends.
 type script struct {
 	world *World

@@ -4,6 +4,7 @@
 package sample
 
 import (
+	"errors"
 	"net"
 	"os"
 	"path/filepath"
@@ -182,6 +183,11 @@ type Machine struct {
 	// SelfRSS is this process's resident set (serve), in bytes. Zero when
 	// /proc/<pid>/stat is missing: older consoles and fixtures omit it.
 	SelfRSS uint64 `json:"self_rss_bytes,omitempty"`
+	// Booted is zero when the host cannot read its boot time.
+	Booted time.Time `json:"booted,omitzero"`
+	// IOWait counts the processes in state D at the last scan. Nil: the
+	// process table was not read, or the peer predates the field.
+	IOWait *int `json:"io_wait,omitempty"`
 }
 
 type Snapshot struct {
@@ -194,6 +200,8 @@ type Snapshot struct {
 	IdlePanes []IdlePane `json:"idle_panes"`
 	Orphans   []Orphan   `json:"orphans"`
 	Top       []ProcRow  `json:"top"`
+	// Heavy is the process tree that adds the most load, nil when none does.
+	Heavy *Tree `json:"heavy,omitempty"`
 	// Exited are agents that exited and that their parent has not reaped
 	// (zombies): not sessions, listed so the person sees why they stay.
 	Exited     []Exited     `json:"exited,omitempty"`
@@ -410,6 +418,7 @@ type Sampler struct {
 	sensors    []string            // temperature files, found once
 	power      []procfs.PowerLimit // read on the scan cadence
 	polls      []pollPoint
+	ioWait     *int // processes in state D at the last scan; nil: not read
 }
 
 // procKey tells a reused PID apart from the process that had it before.
@@ -476,8 +485,10 @@ func (s *Sampler) Sample() Snapshot {
 	}
 	l := s.last
 	snap.Sessions, snap.Children, snap.IdlePanes, snap.Orphans, snap.Top, snap.Exited = l.Sessions, l.Children, l.IdlePanes, l.Orphans, l.Top, l.Exited
+	snap.Heavy = l.Heavy
 	snap.Containers, snap.Groups, snap.GitPolling, snap.Limits, snap.Panes = l.Containers, l.Groups, l.GitPolling, l.Limits, l.Panes
 	snap.Errors = append(snap.Errors, l.Errors...)
+	snap.Machine.IOWait = s.ioWait
 	s.alerts(&snap, now)
 	return snap
 }
@@ -509,9 +520,9 @@ func (s *Sampler) scan(now time.Time) {
 	dt := seconds(s.procAt, now)
 	var l Snapshot
 	s.power = s.Sys.PowerLimits()
-	procs, err := s.FS.Procs()
-	if err != nil {
-		l.Errors = append(l.Errors, "proc: "+err.Error())
+	procs, procErr := s.FS.Procs()
+	if procErr != nil {
+		l.Errors = append(l.Errors, "proc: "+procErr.Error())
 	}
 	out, err := s.Tmux()
 	if err != nil {
@@ -533,6 +544,9 @@ func (s *Sampler) scan(now time.Time) {
 	s.sampleSessions(&l, all, procs, dt, now)
 	l.Containers, l.Groups = s.sampleContainers(now, dt, len(s.prevCore))
 	s.sampleProcs(&l, procs, panes, dt, now)
+	if procErr != nil {
+		s.ioWait = nil
+	}
 	l.GitPolling = s.samplePolling(procs, now)
 	for key := range s.owners {
 		if p, ok := procs[key.pid]; !ok || p.StartTime != key.start {
@@ -596,6 +610,11 @@ func (s *Sampler) sampleMachine(snap *Snapshot, dt float64) {
 	}
 	if p, ok := s.FS.Proc(os.Getpid()); ok {
 		m.SelfRSS = p.RSS
+	}
+	if t, err := s.FS.Booted(); err == nil {
+		m.Booted = t
+	} else if !errors.Is(err, errors.ErrUnsupported) {
+		snap.Errors = append(snap.Errors, "boot time: "+err.Error())
 	}
 }
 
