@@ -388,6 +388,8 @@ type deskModeMsg struct {
 	list bool
 	mode string
 	cog  string
+	// review is the act the review pane wrote, for the list to take.
+	review string
 }
 
 // watchDeskMode reads the current pane once. The list pane publishes LIST.
@@ -403,7 +405,8 @@ func (m Model) watchDeskMode() tea.Cmd {
 	return func() tea.Msg {
 		list, mode := deskPaneLook(run, console)
 		cog, _ := run("show-option", "-wqv", "-t", console, sample.CogOption)
-		return deskModeMsg{list: list, mode: mode, cog: strings.TrimSpace(cog)}
+		review, _ := run("show-option", "-wqv", "-t", console, sample.ReviewOption)
+		return deskModeMsg{list: list, mode: mode, cog: strings.TrimSpace(cog), review: strings.TrimSpace(review)}
 	}
 }
 

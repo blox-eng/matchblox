@@ -193,6 +193,8 @@ func defaultKeys() keymaps {
 			Shell:    bind(ks("t"), "t", "shell"),
 			Diff:     bind(ks("D", "shift+d"), "D", "diff"),
 			ShellEnd: bind(ks("ctrl+d"), "ctrl+d", "end"),
+			PageUp:   bind(ks("pgup"), "pgup", "page up"),
+			PageDown: bind(ks("pgdown"), "pgdown", "page down"),
 		},
 	}
 }
@@ -329,7 +331,7 @@ type sideKeys struct{ Enter, Erase, Leave, Up, Down, Unhide, List, HideList, Jum
 // deskKeys are the desk keys no other layer owns: ? opens the keys sheet,
 // , opens Machine, t asks for the shell, D is the diff, and ctrl+d
 // belongs to the shell.
-type deskKeys struct{ Question, Cog, Shell, Diff, ShellEnd bkey.Binding }
+type deskKeys struct{ Question, Cog, Shell, Diff, ShellEnd, PageUp, PageDown bkey.Binding }
 
 func (k sideKeys) bindings() []bkey.Binding {
 	return []bkey.Binding{k.Enter, k.Erase, k.Leave, k.Up, k.Down, k.Unhide, k.List, k.HideList, k.Jump, k.Flip}

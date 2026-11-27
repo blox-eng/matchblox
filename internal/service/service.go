@@ -352,6 +352,9 @@ type Service struct {
 	// session id: the recovery record's, so it outlives a restart and a
 	// reused pane id. Under mu.
 	waitNames map[string]string
+	// startSeen are the names in the doc's StartBranch that a sample has
+	// shown live: the branch goes when the session does. Under mu.
+	startSeen map[string]bool
 	// waiting is each chain member that waits for recover, by its session
 	// id, as the doc shows it. Under mu.
 	waiting map[string]state.WaitView
@@ -843,6 +846,7 @@ func (s *Service) mergeQueue() {
 	s.markUnread(now)
 	s.setReasons()
 	s.setWorks()
+	s.pruneStartBranch()
 }
 
 // setReasons says why each session at rest is idle. The ship of a session is

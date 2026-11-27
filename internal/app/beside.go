@@ -311,6 +311,9 @@ func (m *Model) previewSoon() tea.Cmd {
 func (m Model) look(msg previewMsg) (tea.Model, tea.Cmd) {
 	s, ok := m.sideChosen()
 	host := cmp.Or(s.Host, m.opt.Host)
+	if m.reviewing != nil { // a review has the agent seat: a look never takes it
+		return m, nil
+	}
 	if msg.seq != m.previewSeq || !ok || s.Pane == "" || m.chain != nil || !m.besideMode() ||
 		m.onePaneAt(m.winW, m.winH) || m.besideShows == m.shownKey(host, s.Pane) || m.takeOverOn(host) ||
 		host != "" && !m.viewed[host] {
@@ -401,6 +404,7 @@ func (m Model) besideName(host, pane string) string {
 // startShow runs a choice in the agent pane, one at a time: a choice made
 // while one runs waits, and a later one takes its place.
 func (m Model) startShow(a action) (Model, tea.Cmd) {
+	m.reviewing = nil // the seat shows an agent view again: a review is over
 	if m.showing {
 		m.showNext = &a
 		return m, nil
@@ -734,7 +738,7 @@ func endBeside(o Options) {
 			_, _ = run("kill-pane", "-t", pane)
 		}
 	}
-	for _, opt := range []string{sample.BesideOption, sample.ConsoleOption, sample.HeaderOption, sample.BarOption, sample.ModeOption, sample.SpaceOption, sample.CogOption} {
+	for _, opt := range []string{sample.BesideOption, sample.ConsoleOption, sample.HeaderOption, sample.BarOption, sample.ModeOption, sample.SpaceOption, sample.CogOption, sample.ReviewOption, sample.ReviewReplyOption} {
 		_, _ = run("set-option", "-wu", "-t", o.Pane, opt)
 	}
 }

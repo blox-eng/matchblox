@@ -14,10 +14,13 @@ const BesideKey = "C-q"
 // flipBeside is the flip, as a tmux command list for run-shell -C, which
 // expands the options first. On the console's pane it sends C-q to
 // matchblox; on any other pane it goes to the console. -Z keeps a zoomed
-// window zoomed, so the phone stays one pane.
-const flipBeside = `#{?#{==:#{pane_id},#{` + sample.ConsoleOption + `}},` +
+// window zoomed, so the phone stays one pane. In REVIEW and COMMENT the
+// agent seat runs the review, where C-q is esc: it goes to the seat.
+const flipBeside = `#{?#{&&:#{==:#{pane_id},#{` + sample.BesideOption + `}},#{||:#{==:#{` + sample.ModeOption + `},REVIEW},#{==:#{` + sample.ModeOption + `},COMMENT}}},` +
+	`send-keys -t #{` + sample.BesideOption + `} ` + BesideKey + `,` +
+	`#{?#{==:#{pane_id},#{` + sample.ConsoleOption + `}},` +
 	`send-keys -t #{` + sample.ConsoleOption + `} ` + BesideKey + `,` +
-	`select-pane -Z -t #{` + sample.ConsoleOption + `}}`
+	`select-pane -Z -t #{` + sample.ConsoleOption + `}}}`
 
 // ShellFlipArgv binds t in the view session's key table. On the shell pane
 // it selects the agent. On any other pane it types t. It is not a root
@@ -50,6 +53,7 @@ const endBeside = `#{S:#{?` + atHome + `,#{W:#{?#{==:#{` + sample.ConsoleOption 
 	`set-option -wu -t #{window_id} ` + sample.BesideOption + ` ; set-option -wu -t #{window_id} ` + sample.ChainOption +
 	` ; set-option -wu -t #{window_id} ` + sample.HeaderOption + ` ; set-option -wu -t #{window_id} ` + sample.BarOption +
 	` ; set-option -wu -t #{window_id} ` + sample.ModeOption +
+	` ; set-option -wu -t #{window_id} ` + sample.ReviewOption + ` ; set-option -wu -t #{window_id} ` + sample.ReviewReplyOption +
 	` ; set-option -wu -t #{window_id} ` + sample.ConsoleOption + ` ; ` +
 	`#{P:#{?#{||:#{==:#{pane_id},#{` + sample.BesideOption + `}},#{||:#{==:#{pane_id},#{` + sample.HeaderOption + `}},#{||:#{==:#{pane_id},#{` + sample.BarOption + `}},#{m:* #{pane_id} *, #{` + sample.ChainOption + `} }}}},kill-pane -t #{pane_id} ; ,}},}},}}`
 

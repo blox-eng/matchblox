@@ -49,7 +49,7 @@ func (m Model) keyItems() []keyItem {
 		{"the list", "prev space", bk.SpacePrev, runList},
 		{"the list", "next space", bk.SpaceNext, runList},
 		{"the list", "shell", dk.Shell, runShell},
-		{"the list", "diff", dk.Diff, runLater},
+		{"the list", "diff", dk.Diff, runList},
 		{"the list", "chain", bk.Chain, runList},
 		{"the list", "room", bk.Room, runList},
 		{"the list", "park", mk.Park, runList},

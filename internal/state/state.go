@@ -91,6 +91,11 @@ type Doc struct {
 	// KeysAt is when this owner last gave each session the keys, keyed by
 	// session id. Only the service writes it.
 	KeysAt map[string]time.Time `json:"keys_at,omitempty"`
+	// StartBranch is the branch a session started from, by its name:
+	// `git rev-parse --abbrev-ref HEAD` in its folder at Start. The review
+	// (D) diffs against it. A session started in a new worktree, or by
+	// hand, has none: the review falls back to the host's default branch.
+	StartBranch map[string]string `json:"start_branch,omitempty"`
 }
 
 // UpdateView is the [update] mode, this build's release and the latest one

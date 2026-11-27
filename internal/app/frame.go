@@ -23,6 +23,9 @@ func RunFrame(args []string) error {
 	fs := flag.NewFlagSet("frame", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	kind := fs.String("kind", "", "")
+	for _, name := range []string{"session", "host", "pane", "dir", "base"} {
+		fs.String(name, "", "") // the review's; reviewFrameFromArgv reads them
+	}
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -30,6 +33,15 @@ func RunFrame(args []string) error {
 	case "header", "bar", "review":
 	default:
 		return fmt.Errorf("frame needs --kind=header, bar or review")
+	}
+	if strings.TrimSpace(*kind) == "review" {
+		// The review pane reads git and tmux only; the list owns the paste.
+		f, err := reviewFrameFromArgv(New(Options{Pane: os.Getenv("TMUX_PANE")}), args)
+		if err != nil {
+			return err
+		}
+		_, err = tea.NewProgram(f).Run()
+		return err
 	}
 	c, _ := transport.Dial(transport.SocketPath(), time.Second)
 	m := New(Options{Conn: c, Pane: os.Getenv("TMUX_PANE")})
@@ -48,12 +60,16 @@ func newFrame(kind string, m Model) frameModel {
 
 type frameModel struct {
 	kind string
+	rev  *reviewPane // the review's state, for kind review
 	Model
 }
 
 type frameTick struct{}
 
 func (m frameModel) Init() tea.Cmd {
+	if m.kind == "review" {
+		return tea.Batch(m.reviewLoad(), m.pollSpace())
+	}
 	return tea.Batch(m.hello(), m.recv(), m.pollSpace())
 }
 
@@ -62,6 +78,11 @@ func (m frameModel) pollSpace() tea.Cmd {
 }
 
 func (m frameModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if m.kind == "review" && m.rev != nil {
+		if cmd, ok := m.reviewTake(msg); ok {
+			return m, cmd
+		}
+	}
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		next, cmd := m.Model.Update(msg)
@@ -77,11 +98,16 @@ func (m frameModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if got, ok := m.readMode(); ok {
 				m.barMode = got
 			}
+		case "review":
+			return m, tea.Batch(m.reviewTick(), m.pollSpace())
 		}
 		return m, m.pollSpace()
 	case tea.MouseClickMsg:
 		return m.tapHeader(msg.Mouse())
 	case tea.KeyPressMsg:
+		if m.kind == "review" && m.rev != nil {
+			return m.reviewKey(msg)
+		}
 		return m, nil
 	}
 	next, cmd := m.Model.Update(msg)
@@ -155,6 +181,9 @@ func (m frameModel) View() tea.View {
 		v := tea.NewView(m.barLine(m.width))
 		v.MouseMode = tea.MouseModeCellMotion
 		return v
+	}
+	if m.kind == "review" && m.rev != nil {
+		return m.reviewView()
 	}
 	return tea.NewView(m.kind)
 }

@@ -239,6 +239,8 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 		return m, nil
 	case m.deskFrame && bkey.Matches(k, m.keys.desk.Shell):
 		return m.askShell()
+	case m.deskFrame && bkey.Matches(k, m.keys.desk.Diff):
+		return m.askReview()
 	case m.footAt > 0 && bkey.Matches(k, append([]bkey.Binding{mk.Park, bk.Copy, bk.Chain, bk.Menu}, m.rowActKeys()...)...):
 		cmd = m.notice(strings.Join([]string{mk.Park.Help().Key, bk.Copy.Help().Key, bk.Chain.Help().Key, bk.Menu.Help().Key}, " ") +
 			" act on a session · " + sk.Up.Help().Key + " chooses one")

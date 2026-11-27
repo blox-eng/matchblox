@@ -412,6 +412,8 @@ type Model struct {
 	searching    bool   // the search line takes the keys
 	holds        []proto.Hold
 	keysAt       map[string]time.Time // this owner's last give of the keys, by session id
+	reviewing    *reviewOn            // the review that has the agent seat, nil: none
+	homeStart    map[string]string    // the branch each session of this host started from, by name
 	chains       *state.ChainsView
 	chainIx      chainIndex // worked out in refresh
 	room         *room      // the chain room on screen; nil when none
@@ -955,10 +957,16 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.cog != "" {
 			cog = m.takeCog(msg.cog)
 		}
+		if msg.review != "" { // the review pane has the keys, so the list pane is not current here
+			next, rev := m.takeReview(msg.review)
+			return next, tea.Batch(cog, rev)
+		}
 		if !msg.list {
 			return m, cog
 		}
 		return m, tea.Batch(m.syncListMode(), cog)
+	case reviewMsg:
+		return m.reviewOpened(msg)
 	case boxBackMsg:
 		if !m.boxZoom { // the box closed before its zoom landed: give the window back after it
 			return m, m.sizeCmd(m.width)
@@ -1074,6 +1082,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.shipReport = st.Ships
 		m.holds, m.reasons, m.chains = st.Holds, st.Reasons, st.Chains
 		m.takeKeysAt(m.homeAll.sessions, st)
+		m.homeStart = st.StartBranch
 		m.agents, m.renames, m.accounts, m.signIns = st.Agents, st.Renames, st.Accounts, st.SignIns
 		m.skipped = st.AccountsSkipped
 		m.lastAccount, m.keptAgent = st.LastAccount, st.LastAgent
@@ -1391,6 +1400,9 @@ func (m Model) result(r proto.Result) (Model, tea.Cmd) {
 	m.endRec(r.ActID, r)
 	if m.settleResult(r) {
 		return m, nil
+	}
+	if mm, cmd, ok := m.reviewResult(r); ok {
+		return mm, cmd
 	}
 	if mm, cmd, ok := m.lineResult(r); ok {
 		return mm, cmd
