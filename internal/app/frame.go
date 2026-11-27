@@ -76,10 +76,14 @@ type frameModel struct {
 type frameTick struct{}
 
 func (m frameModel) Init() tea.Cmd {
+	start := []tea.Cmd{m.pollSpace()}
 	if m.kind == "review" {
-		return tea.Batch(m.reviewLoad(), m.hello(), m.recv(), m.pollSpace())
+		start = append(start, m.reviewLoad())
 	}
-	return tea.Batch(m.hello(), m.recv(), m.pollSpace())
+	if err := m.opt.DialErr; err != nil && m.conn == nil {
+		return tea.Batch(append(start, func() tea.Msg { return lostMsg{err: err} })...)
+	}
+	return tea.Batch(append(start, m.hello(), m.recv())...)
 }
 
 func (m frameModel) pollSpace() tea.Cmd {

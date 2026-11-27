@@ -34,6 +34,31 @@ func TestFrameHeaderNoServiceSaysSo(t *testing.T) {
 	}
 }
 
+// TestFrameInitRedialsWhenFirstDialFails: a header whose first dial fails
+// starts the same lost path as a drop, so it redials without a restart
+// (review of 2026-11-27, Important 2 residual).
+func TestFrameInitRedialsWhenFirstDialFails(t *testing.T) {
+	again := newFake()
+	f := newFrame("header", New(Options{NoMotion: true, DialErr: errors.New("no socket"),
+		Redial: func() (transport.Conn, error) { return again, nil },
+		Now:    func() time.Time { return demoAt }}))
+	var lost lostMsg
+	found := false
+	for _, msg := range msgsWithin(f.Init(), time.Second) {
+		if l, ok := msg.(lostMsg); ok {
+			lost, found = l, true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("Init sent no lostMsg, so a first dial that fails never redials")
+	}
+	f, cmd := frameAt(f, lost)
+	if cmd == nil || !f.redialing {
+		t.Fatalf("first dial failed: cmd nil %v, redialing %v, want a redial scheduled", cmd == nil, f.redialing)
+	}
+}
+
 // TestFrameHeaderRedials: a header whose connection drops dials again, shows
 // no number while it is lost, and shows the counts once a snapshot comes.
 func TestFrameHeaderRedials(t *testing.T) {
