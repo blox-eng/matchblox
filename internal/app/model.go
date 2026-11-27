@@ -623,6 +623,7 @@ type Model struct {
 	sideHost                  string // the host whose trouble the host place shows
 	sideIn                    paneKey
 	beside                    string          // the agent pane's id; "" before the split, and where it failed
+	deskFrame                 bool            // Doc.DeskFrame: the first-start notice has been shown
 	winW, winH                int             // the window's size in beside mode; 0: not read yet
 	boxZoom                   bool            // a box or an animation has the window: the list's pane is zoomed for it
 	boxBack                   []string        // the agent pane's screen, drawn dim behind the box
@@ -896,8 +897,21 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.tallH = max(m.tallH, msg.Height)
 		return m, m.sizeCmd(msg.Width)
 	case besideMsg:
+		if msg.framed {
+			m.deskFrame = true
+		}
+		if msg.notice != "" {
+			m.notice(msg.notice)
+		}
 		if msg.err != nil {
-			said := m.sayError("the agent pane did not open: " + msg.err.Error())
+			text := msg.err.Error()
+			if !strings.HasPrefix(text, "the desk frame did not open:") {
+				text = "the agent pane did not open: " + text
+			}
+			said := m.sayError(text)
+			if msg.pane != "" {
+				m.beside = msg.pane
+			}
 			return m, said
 		}
 		m.beside = msg.pane
@@ -1021,6 +1035,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.agents, m.renames, m.accounts, m.signIns = st.Agents, st.Renames, st.Accounts, st.SignIns
 		m.skipped = st.AccountsSkipped
 		m.lastAccount, m.keptAgent = st.LastAccount, st.LastAgent
+		m.deskFrame = m.deskFrame || st.DeskFrame
 		if st.Found != nil {
 			m.found = st.Found
 			switch {

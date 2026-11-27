@@ -20,13 +20,16 @@ import (
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
-// Beside mode: the console's tmux window holds two panes, the list and the
-// agent beside it. The console draws the list only; tmux draws the agent.
+// Beside mode: the console's tmux window holds the list and the agent
+// beside it, and on a desk of 100 columns a header and a bar. The console
+// draws the list only; tmux draws the agent.
 
 // besideMsg is the agent pane the split opened, or why it did not.
 type besideMsg struct {
-	pane string
-	err  error
+	pane   string
+	err    error
+	notice string // first-start desk notice; "" when silent
+	framed bool   // the four-pane frame opened or was adopted
 }
 
 // besideSizeMsg is the window's size, as the window changed.
@@ -46,17 +49,14 @@ func (m Model) besideCmd() tea.Cmd {
 	if !m.opt.Beside || run == nil {
 		return nil
 	}
-	console, accent := m.opt.Pane, hexOf(m.st.theme.Accent)
+	console, accent, self := m.opt.Pane, hexOf(m.st.theme.Accent), m.opt.Self
+	pocket, framed := m.onPocket(), m.deskFrame
 	return func() tea.Msg {
-		if pane := keptPane(run, console); pane != "" {
-			if _, err := run(remote.BesideArgv(console, pane, accent)[1:]...); err != nil {
-				return besideMsg{err: err}
-			}
-			return besideMsg{pane: pane}
-		}
 		w, _ := windowSize(run, console)
-		pane, err := splitBeside(mx, run, console, accent, listWide, w)
-		return besideMsg{pane: pane, err: err}
+		return openDesk(mx, run, deskOpen{
+			console: console, accent: accent, self: self,
+			listW: listWide, windowW: w, pocket: pocket, framed: framed,
+		})
 	}
 }
 
@@ -499,6 +499,7 @@ func (m Model) besideRun(a action) tea.Cmd {
 		if a.preview {
 			return msg
 		}
+		writeMode(run, console, "AGENT")
 		// -Z keeps a zoom: a zoomed list hands it to the agent.
 		if _, err := run("select-pane", "-Z", "-t", msg.agent); err != nil {
 			msg.err = err
@@ -712,11 +713,15 @@ func endBeside(o Options) {
 		return
 	}
 	agent := keptPane(run, o.Pane)
+	header := liveOption(run, o.Pane, sample.HeaderOption)
+	bar := liveOption(run, o.Pane, sample.BarOption)
 	endChain(run, o.Pane, agent)
-	if agent != "" {
-		_, _ = run("kill-pane", "-t", agent)
+	for _, pane := range []string{agent, header, bar} {
+		if pane != "" {
+			_, _ = run("kill-pane", "-t", pane)
+		}
 	}
-	for _, opt := range []string{sample.BesideOption, sample.ConsoleOption} {
+	for _, opt := range []string{sample.BesideOption, sample.ConsoleOption, sample.HeaderOption, sample.BarOption, sample.ModeOption} {
 		_, _ = run("set-option", "-wu", "-t", o.Pane, opt)
 	}
 }

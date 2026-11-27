@@ -158,6 +158,8 @@ func run(args []string) error {
 			return pushCmd(args[1:])
 		case "connect":
 			return liveConnect(args[1:])
+		case "frame":
+			return app.RunFrame(args[1:])
 		}
 	}
 	if len(args) > 0 && args[0] == "guard" {

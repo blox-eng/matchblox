@@ -297,6 +297,40 @@ func (t Tmux) Beside(target string, percent int, argv []string) (string, error) 
 	return t.split(target, percent, argv)
 }
 
+// SplitEdge opens a pane of cells rows or columns on edge of target,
+// without taking the keys. argv follows --. The id is as Split gives it.
+func (t Tmux) SplitEdge(target string, argv []string, edge string, cells int) (string, error) {
+	prefix, server := t.commandArgv(), t.Server
+	if sv, bare := SplitPane(target); sv != "" {
+		prefix, server, target = serverArgv(sv), sv, bare
+	}
+	step := slices.Concat(prefix, []string{"split-window"})
+	switch edge {
+	case "above":
+		step = append(step, "-v", "-b", "-d")
+	case "below":
+		step = append(step, "-v", "-d")
+	case "right":
+		step = append(step, "-h", "-d")
+	default:
+		return "", errors.New("mux: split edge " + edge)
+	}
+	step = append(step, "-t", target, "-l", strconv.Itoa(cells), "-P", "-F", "#{pane_id}")
+	if len(argv) > 0 {
+		step = append(step, "--")
+		step = append(step, argv...)
+	}
+	out, err := t.run(step)
+	if err != nil {
+		return "", err
+	}
+	id := strings.TrimSpace(out)
+	if !isPaneID(id) {
+		return "", errors.New("tmux split-window printed no pane id")
+	}
+	return OnServer(id, server), nil
+}
+
 // split is split-window. A percent above 0 is the side-by-side split: -h
 // -d -t target -l percent%.
 func (t Tmux) split(target string, percent int, argv []string) (string, error) {

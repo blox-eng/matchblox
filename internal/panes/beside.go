@@ -12,11 +12,11 @@ import (
 const BesideKey = "C-q"
 
 // flipBeside is the flip, as a tmux command list for run-shell -C, which
-// expands the options first. On the console's pane it goes back to the last
-// pane, or to the agent when there is none; on any other pane it goes to the
-// console. -Z keeps a zoomed window zoomed, so the phone stays one pane.
+// expands the options first. On the console's pane it sends C-q to
+// matchblox; on any other pane it goes to the console. -Z keeps a zoomed
+// window zoomed, so the phone stays one pane.
 const flipBeside = `#{?#{==:#{pane_id},#{` + sample.ConsoleOption + `}},` +
-	`if-shell -F "#{P:#{?pane_last,1,}}" "last-pane -Z" "select-pane -Z -t #{` + sample.BesideOption + `}",` +
+	`send-keys -t #{` + sample.ConsoleOption + `} ` + BesideKey + `,` +
 	`select-pane -Z -t #{` + sample.ConsoleOption + `}}`
 
 // BesideKeysArgv binds BesideKey on the console's tmux server, in the
@@ -35,8 +35,10 @@ func BesideKeysArgv() []string {
 // no client, tmux keeps that error and shows it over the next console.
 const endBeside = `#{S:#{?` + atHome + `,#{W:#{?#{==:#{` + sample.ConsoleOption + `},#{hook_pane}},` +
 	`set-option -wu -t #{window_id} ` + sample.BesideOption + ` ; set-option -wu -t #{window_id} ` + sample.ChainOption +
+	` ; set-option -wu -t #{window_id} ` + sample.HeaderOption + ` ; set-option -wu -t #{window_id} ` + sample.BarOption +
+	` ; set-option -wu -t #{window_id} ` + sample.ModeOption +
 	` ; set-option -wu -t #{window_id} ` + sample.ConsoleOption + ` ; ` +
-	`#{P:#{?#{||:#{==:#{pane_id},#{` + sample.BesideOption + `}},#{m:* #{pane_id} *, #{` + sample.ChainOption + `} }},kill-pane -t #{pane_id} ; ,}},}},}}`
+	`#{P:#{?#{||:#{==:#{pane_id},#{` + sample.BesideOption + `}},#{||:#{==:#{pane_id},#{` + sample.HeaderOption + `}},#{||:#{==:#{pane_id},#{` + sample.BarOption + `}},#{m:* #{pane_id} *, #{` + sample.ChainOption + `} }}}},kill-pane -t #{pane_id} ; ,}},}},}}`
 
 // BesideHookArgv ends the agent pane with the console's, however the console
 // ended (a crash too), so the next matchblox attaches to no agent without a

@@ -85,6 +85,9 @@ type Doc struct {
 	// its presence as "this host knows the update act". Nil: a build that
 	// is not a release, or a service older than the update.
 	Update *UpdateView `json:"update,omitempty"`
+	// DeskFrame: the four-pane desk has opened once, so the first-start
+	// notice does not show again.
+	DeskFrame bool `json:"desk_frame,omitempty"`
 }
 
 // UpdateView is the [update] mode, this build's release and the latest one

@@ -76,29 +76,53 @@ func (e besideEnv) waitActive(t *testing.T, pane string) {
 
 func TestCtrlQGoesToTheAgentAndBack(t *testing.T) {
 	e := newBesideEnv(t)
-	e.tmux("select-pane", "-t", e.c)
-	e.press(t, "\x11")
-	e.waitActive(t, e.a)
+	e.tmux("select-pane", "-t", e.a)
 	e.press(t, "\x11")
 	e.waitActive(t, e.c)
+	e.press(t, "\x11")
+	waitFor(t, func() bool {
+		b, _ := os.ReadFile(e.cOut)
+		return strings.Contains(string(b), "^Q")
+	})
+	if e.active() != e.c {
+		t.Fatalf("focus left the list for %s", e.active())
+	}
 }
 
 func TestCtrlQWithNoLastPaneGoesToTheAgent(t *testing.T) {
 	e := newBesideEnv(t)
 	e.tmux("kill-pane", "-t", e.a)
-	e.a = e.tmux("split-window", "-d", "-h", "-t", e.c, "-P", "-F", "#{pane_id}", "sleep", "600")
-	e.tmux("set-option", "-w", "-t", e.c, sample.BesideOption, e.a, ";", "select-pane", "-t", e.c)
+	e.tmux("select-pane", "-t", e.c)
 	e.press(t, "\x11")
-	e.waitActive(t, e.a)
+	waitFor(t, func() bool {
+		b, _ := os.ReadFile(e.cOut)
+		return strings.Contains(string(b), "^Q")
+	})
 }
 
 func TestTheFlipKeepsTheZoom(t *testing.T) {
 	e := newBesideEnv(t)
-	e.tmux("select-pane", "-t", e.c, ";", "resize-pane", "-Z", "-t", e.c)
+	e.tmux("select-pane", "-t", e.a, ";", "resize-pane", "-Z", "-t", e.a)
 	e.press(t, "\x11")
-	e.waitActive(t, e.a)
+	e.waitActive(t, e.c)
 	if z := e.tmux("display-message", "-p", "-t", Home+":", "#{window_zoomed_flag}"); z != "1" {
 		t.Fatalf("window_zoomed_flag = %s, want 1", z)
+	}
+}
+
+func TestCtrlQFromListSendsToMatchblox(t *testing.T) {
+	e := newBesideEnv(t)
+	e.tmux("select-pane", "-t", e.c)
+	e.press(t, "\x11")
+	waitFor(t, func() bool {
+		b, _ := os.ReadFile(e.cOut)
+		return strings.Contains(string(b), "^Q")
+	})
+	if b, _ := os.ReadFile(e.aOut); len(b) != 0 {
+		t.Fatalf("C-q was sent into the agent: %q", b)
+	}
+	if e.active() != e.c {
+		t.Fatalf("focus left the list for %s", e.active())
 	}
 }
 

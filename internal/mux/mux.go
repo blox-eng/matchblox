@@ -86,6 +86,9 @@ type Mux interface {
 	// Beside is Split with the new pane to the right of target, without the
 	// keys, and percent of the window's width.
 	Beside(target string, percent int, argv []string) (pane string, err error)
+	// SplitEdge opens a pane of cells rows or columns on edge of target
+	// ("above", "below", "right") running argv, without taking the keys.
+	SplitEdge(target string, argv []string, edge string, cells int) (pane string, err error)
 	// SwitchClient is the step that moves the client that asked to pane.
 	SwitchClient(pane string) []string
 	// NewWindow is the step that opens a window running argv (the shell

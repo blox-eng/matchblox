@@ -19,26 +19,36 @@ import (
 // besideTmux is a fake tmux that records each command and answers the
 // window's width and the new pane's id.
 type besideTmux struct {
-	winW  string
-	winH  string   // the window's height, "" when tmux does not say
-	kept  string   // the window's @matchblox_beside, "" when unset
-	alive bool     // the pane kept answers
-	own   []string // other panes in the console's window
-	using string   // the window's active pane, "" when tmux does not say
-	chain string   // the window's @matchblox_chain
-	cmd   string   // the agent pane's current command
-	agent string   // what the agent pane shows, for capture-pane
-	calls [][]string
+	winW   string
+	winH   string   // the window's height, "" when tmux does not say
+	kept   string   // the window's @matchblox_beside, "" when unset
+	header string   // the window's @matchblox_header
+	bar    string   // the window's @matchblox_bar
+	alive  bool     // the pane kept answers
+	own    []string // other panes in the console's window
+	using  string   // the window's active pane, "" when tmux does not say
+	chain  string   // the window's @matchblox_chain
+	cmd    string   // the agent pane's current command
+	agent  string   // what the agent pane shows, for capture-pane
+	calls  [][]string
 }
 
 func (b *besideTmux) run(args ...string) (string, error) {
 	b.calls = append(b.calls, args)
 	switch args[0] {
 	case "show-option":
-		if args[len(args)-1] == sample.ChainOption {
+		switch args[len(args)-1] {
+		case sample.ChainOption:
 			return b.chain + "\n", nil
+		case sample.BesideOption:
+			return b.kept + "\n", nil
+		case sample.HeaderOption:
+			return b.header + "\n", nil
+		case sample.BarOption:
+			return b.bar + "\n", nil
+		default:
+			return "\n", nil
 		}
-		return b.kept + "\n", nil
 	case "respawn-pane":
 		return b.chainList(args), nil
 	case "display":
@@ -159,8 +169,8 @@ func TestTheConsoleSplitsItsWindowOnceAtStart(t *testing.T) {
 	}
 	next, cmd := m.Update(tea.WindowSizeMsg{Width: 40, Height: 50})
 	feed(t, next.(Model), cmd)
-	if n := tm.count("split-window"); n != 1 {
-		t.Fatalf("a second size made %d splits", n)
+	if n := tm.count("split-window -h"); n != 1 {
+		t.Fatalf("a second size made %d agent splits", n)
 	}
 }
 
@@ -264,7 +274,7 @@ func TestAFailedSplitKeepsTheDrawnChat(t *testing.T) {
 }
 
 func TestARestartedConsoleAdoptsItsAgentPane(t *testing.T) {
-	m, tm := besideConsoleWith(t, boardFixture(t), 40, 50, &besideTmux{winW: "160", kept: "%7", alive: true})
+	m, tm := besideConsoleWith(t, boardFixture(t), 40, 50, &besideTmux{winW: "160", kept: "%7", header: "%8", bar: "%6", alive: true})
 	if n := tm.count("split-window"); n != 0 {
 		t.Fatalf("a restart split again: %q", tm.lines())
 	}
@@ -281,8 +291,8 @@ func TestARestartedConsoleAdoptsItsAgentPane(t *testing.T) {
 
 func TestADeadAgentPaneIsMadeAgain(t *testing.T) {
 	m, tm := besideConsoleWith(t, boardFixture(t), 40, 50, &besideTmux{winW: "160", kept: "%7"})
-	if n := tm.count("split-window"); n != 1 {
-		t.Fatalf("%d splits: %q", n, tm.lines())
+	if n := tm.count("split-window -h"); n != 1 {
+		t.Fatalf("%d agent splits: %q", n, tm.lines())
 	}
 	if m.beside != "%9" {
 		t.Fatalf("beside = %q", m.beside)
@@ -348,7 +358,7 @@ func TestEnterShowsTheChosenAgentBeside(t *testing.T) {
 	if sel := slices.Index(lines, "select-pane -Z -t %9"); sel < at {
 		t.Fatalf("the agent pane is not selected after the respawn: %q", lines)
 	}
-	if tm.count("split-window") != 1 {
+	if tm.count("split-window -h") != 1 {
 		t.Fatalf("a live agent pane was made again: %q", lines)
 	}
 }
@@ -553,7 +563,7 @@ func TestAChoiceRemakesAMissingAgentPane(t *testing.T) {
 			split = i // the last split
 		}
 	}
-	if r == "" || split < 0 || split > at || tm.count("split-window") != 2 {
+	if r == "" || split < 0 || split > at || tm.count("split-window -h") != 2 {
 		t.Fatalf("want a second split before the respawn: %q", lines)
 	}
 	if m.beside != "%9" {
@@ -722,8 +732,8 @@ func TestTwoQuickChoicesSplitOnceAndShowTheSecond(t *testing.T) {
 			m = afterChoice(next, more)
 		}
 	}
-	if n := tm.count("split-window"); n != 2 {
-		t.Fatalf("%d splits (one at the start): %q", n, tm.lines())
+	if n := tm.count("split-window -h"); n != 2 {
+		t.Fatalf("%d agent splits (one at the start): %q", n, tm.lines())
 	}
 	var shown []string
 	for _, l := range tm.lines() {
@@ -811,8 +821,8 @@ func TestGOpensTheChainBeside(t *testing.T) {
 			t.Errorf("no view of %s in %q", n, r)
 		}
 	}
-	if n := strings.Count(strings.Join(tm.lines(), "\n"), "split-window"); n != 3 {
-		t.Fatalf("%d splits (one at the start): %q", n, tm.lines())
+	if n := strings.Count(strings.Join(tm.lines(), "\n"), "split-window"); n != 5 {
+		t.Fatalf("%d splits (header, bar, agent, then two chain splits): %q", n, tm.lines())
 	}
 	if n := strings.Count(plainFrame(m), "▸"); n != 3 {
 		t.Fatalf("%d members marked on screen:\n%s", n, plainFrame(m))

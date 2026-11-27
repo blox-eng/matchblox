@@ -296,7 +296,8 @@ func ClientActivity() time.Time {
 }
 
 // The window options of a console with an agent beside it: the console's
-// pane, the agent's pane, and the chain the agent works in.
+// pane, the agent's pane, the chain the agent works in, and on a desk the
+// header, the bar, and the mode.
 const (
 	ConsoleOption = "@matchblox_console"
 	// BackOption names, on a session the console makes to go into an
@@ -304,6 +305,9 @@ const (
 	BackOption   = "@matchblox_back"
 	BesideOption = "@matchblox_beside"
 	ChainOption  = "@matchblox_chain"
+	HeaderOption = "@matchblox_header"
+	BarOption    = "@matchblox_bar"
+	ModeOption   = "@matchblox_mode"
 )
 
 // ViewOption is the session option of a view's session (a jump's, shown in
