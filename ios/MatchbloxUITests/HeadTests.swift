@@ -6,6 +6,8 @@ final class HeadTests: XCTestCase {
     private let replyText = "I rotate the token on each refresh"
     /// What spark-docs says to any line sent in its chat.
     private let sparkReply = "Got it. I am working on that."
+    /// `DockHeadView.row`: the dock grows by this on Joystick, and the terminal shrinks by it.
+    private static let headRow: CGFloat = 72
 
     override func setUpWithError() throws {
         continueAfterFailure = false
@@ -31,17 +33,54 @@ final class HeadTests: XCTestCase {
         XCTAssertFalse(app.buttons["Hide keyboard"].firstMatch.exists, "a roll that ended on ⌨ took the keyboard")
     }
 
-    /// One head above the belt on every layout, and no belt key of that name.
+    /// Only Joystick carries the head, and a switch in Layouts carries it in and drops it. Steer
+    /// gives the head's row back to the terminal, keeps the keyboard up after Enter, and a drag on
+    /// its belt hides nothing; Mine shows the belt's small head key; Joystick again has the head.
     @MainActor
-    func testHeadIsOnEveryLayout() {
-        let app = launched()
-        expect(in: app, "label CONTAINS %@", "NEEDS YOU")
-        for layout in ["Steer", "Tmux", "Mine"] {
-            pick(layout, in: app)
-            XCTAssertTrue(theHead(in: app).isHittable, "no head on \(layout). " + app.debugDescription)
-            let named = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Match head"))
-            XCTAssertEqual(named.count, 1, "on \(layout) a belt key is named Match head too")
-        }
+    func testHeadOnlyOnJoystick() {
+        // A Mine that holds the belt's small head key: the demo opens no Mine editor.
+        let mine = Data(#"{"keys":[{"id":"◂","cells":1},{"id":"Wheel","cells":1}]}"#.utf8)
+        let app = launched(extra: ["-belt.mine", "<" + mine.map { String(format: "%02x", $0) }.joined() + ">"], joystick: false)
+        openTheChat(app, row: "spark-docs")
+        let terminal = theTerminal(in: app)
+        let head = app.descendants(matching: .any)["match-head"]
+
+        pick("Joystick", in: app)
+        XCTAssertTrue(theHead(in: app).isHittable, "no head on Joystick. " + app.debugDescription)
+        XCTAssertGreaterThan(head.frame.minY, terminal.frame.maxY, "the head is not in the dock, above the belt")
+        // The tray's hold on the terminal's size lets go once the drawer has closed.
+        Thread.sleep(forTimeInterval: 0.5)
+        let joystickHeight = terminal.frame.height
+
+        pick("Steer", in: app)
+        XCTAssertTrue(head.waitForNonExistence(timeout: 5), "the head stayed on Steer. " + app.debugDescription)
+        XCTAssertTrue(heightBecomes(terminal, joystickHeight + Self.headRow),
+                      "the terminal is \(terminal.frame.height) pt on Steer, not \(joystickHeight) + the head's row")
+        app.buttons["Show keyboard"].firstMatch.tap()
+        dismissKeyboardTip(in: app)
+        XCTAssertTrue(app.buttons["Hide keyboard"].firstMatch.waitForExistence(timeout: 10), "no keyboard on Steer. " + app.debugDescription)
+        terminal.typeText("ok\n")
+        expect(in: app, step: "spark-docs's reply to ok", "label CONTAINS %@", sparkReply)
+        Thread.sleep(forTimeInterval: 1.5)
+        XCTAssertTrue(app.buttons["Hide keyboard"].firstMatch.exists, "the keyboard folded after Enter on Steer")
+        app.buttons["Hide keyboard"].firstMatch.tap()
+        XCTAssertTrue(app.buttons["Show keyboard"].firstMatch.waitForExistence(timeout: 10), "the keyboard stayed up. " + app.debugDescription)
+        let row = layoutsRow(in: app)
+        // Along Steer's keys, under the handle row, then still before the lift.
+        let keys = row.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0.5)).withOffset(CGVector(dx: 60, dy: 40))
+        keys.press(forDuration: 0.05, thenDragTo: keys.withOffset(CGVector(dx: 150, dy: 0)), withVelocity: .slow, thenHoldForDuration: 0.2)
+        XCTAssertFalse(head.exists, "a drag on Steer's belt brought a head")
+        XCTAssertTrue(row.exists, "a drag on Steer's belt hid the handle row")
+        XCTAssertTrue(heightBecomes(terminal, joystickHeight + Self.headRow), "a drag on Steer's belt moved the terminal")
+
+        pick("Mine", in: app)
+        let small = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Match head")).firstMatch
+        XCTAssertTrue(small.waitForExistence(timeout: 5), "no small head key on Mine. " + app.debugDescription)
+        XCTAssertFalse(head.exists, "the dock's head shows on Mine")
+
+        pick("Joystick", in: app)
+        XCTAssertTrue(becomesHittable(theHead(in: app), within: 5), "the head did not come back on Joystick")
+        XCTAssertTrue(heightBecomes(terminal, joystickHeight), "the terminal did not give the head its row back")
     }
 
     /// A notch clockwise at flint-auth's question highlights its second option, and a tap on the
@@ -214,26 +253,6 @@ final class HeadTests: XCTestCase {
         expect(in: app, step: "spark-docs's reply to ok", "label CONTAINS %@", sparkReply)
         expect(in: app, step: "the line empty after the send", "NOT label CONTAINS %@", "› ok")
         XCTAssertTrue(app.buttons["Show keyboard"].firstMatch.waitForExistence(timeout: 10), "the keyboard stayed up after the send")
-    }
-
-    /// With the keyboard up, the lifted belt's `⏎` sends Enter, and the keyboard folds.
-    @MainActor
-    func testLiftedEnterFolds() {
-        let app = launched()
-        openTheChat(app, row: "spark-docs")
-        raiseTheKeyboard(app)
-        theTerminal(in: app).typeText("ok")
-        expect(in: app, step: "ok in the chat's line", "label CONTAINS %@", "› ok")
-        // The lifted belt's Return, not the system keyboard's: the belt sits above the keyboard.
-        let keyboard = app.keyboards.firstMatch.frame
-        let returns = app.buttons.matching(NSPredicate(format: "label == %@", "Return")).allElementsBoundByIndex
-        guard let enter = returns.first(where: { $0.isHittable && $0.frame.maxY <= keyboard.minY + 1 }) else {
-            return XCTFail("no ⏎ on the lifted belt. " + app.debugDescription)
-        }
-        enter.tap()
-        expect(in: app, step: "spark-docs's reply to the belt's ⏎", "label CONTAINS %@", sparkReply)
-        XCTAssertTrue(app.buttons["Show keyboard"].firstMatch.waitForExistence(timeout: 10), "the keyboard stayed up after the belt's ⏎")
-        XCTAssertTrue(becomesHittable(theHead(in: app), within: 5), "the head did not come back after the fold")
     }
 
     // MARK: Home sets the head
@@ -440,10 +459,27 @@ final class HeadTests: XCTestCase {
                       "the handle row reads \(row.value ?? "nothing"), not \(prefix). " + app.debugDescription)
     }
 
+    /// The dock's handle row: the layout's name, or the head's line.
+    @MainActor
+    private func layoutsRow(in app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@", "Layouts")).firstMatch
+    }
+
+    /// The terminal comes to `height` within 5 s: it lays out again after a layout change.
+    @MainActor
+    private func heightBecomes(_ terminal: XCUIElement, _ height: CGFloat) -> Bool {
+        let deadline = Date().addingTimeInterval(5)
+        while abs(terminal.frame.height - height) > 1, Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.2)
+        }
+        return abs(terminal.frame.height - height) <= 1
+    }
+
     /// The drawer opens on a tap near the grip, and the layout's match in it is picked.
     @MainActor
     private func pick(_ layout: String, in app: XCUIApplication) {
-        let layouts = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@", "Layouts")).firstMatch
+        let layouts = layoutsRow(in: app)
+        XCTAssertTrue(layouts.waitForExistence(timeout: 30), "no Layouts row. " + app.debugDescription)
         let match = app.buttons[layout]
         let deadline = Date().addingTimeInterval(20)
         while !match.isHittable, Date() < deadline {
@@ -490,11 +526,13 @@ final class HeadTests: XCTestCase {
         if next.waitForExistence(timeout: 2) { next.tap() }
     }
 
+    /// The demo console, on Joystick: the head rides on that layout only.
     @MainActor
-    private func launched(extra: [String] = []) -> XCUIApplication {
+    private func launched(extra: [String] = [], joystick: Bool = true) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-openDemoHost", "-demoSlowInvite"] + extra
         app.launch()
+        if joystick { pick("Joystick", in: app) }
         return app
     }
 

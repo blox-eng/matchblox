@@ -23,6 +23,7 @@ public struct KeyFace: Equatable, Sendable {
         "◂": "Back to matchblox", "↑": "Up", "↓": "Down", "←": "Left", "→": "Right",
         "⏎": "Return", "Tab": "Tab", "⇧Tab": "Shift Tab", "Esc": "Escape", "⌫": "Delete",
         "⇞": "Page up", "⇟": "Page down", "^C": "Interrupt", "Ctrl": "Control", "Wheel": "Match head",
+        "⌨": "Keyboard",
     ]
 
     private static let words = [

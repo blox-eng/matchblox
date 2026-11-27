@@ -7,6 +7,8 @@ public enum KeyBar {
     public static let ctrl = "Ctrl"
     /// The match head. It sends nothing itself: a roll on it scrolls the terminal.
     public static let wheel = "Wheel"
+    /// The keyboard key, on Joystick's belt. It sends nothing itself: the app raises the keyboard.
+    public static let keyboard = "⌨"
 
     private static let fixed: [String: [UInt8]] = {
         var keys: [String: [UInt8]] = [
@@ -36,7 +38,7 @@ public enum KeyBar {
     /// a lowercase letter, then has lowercase letters, digits and dashes, is an agent command:
     /// the console runs it, and refuses an id it does not know.
     public static func bytes(for id: String) -> [UInt8]? {
-        if id == ctrl || id == wheel { return [] }
+        if id == ctrl || id == wheel || id == keyboard { return [] }
         if let bytes = fixed[id] { return bytes }
         if let bytes = BoardBelt.bytes(for: id) { return bytes }
         guard isCommandID(id) else { return nil }

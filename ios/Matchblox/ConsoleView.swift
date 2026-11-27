@@ -623,9 +623,11 @@ private final class Belts {
         if bytes == Self.enter, terminal.isFirstResponder { foldKeyboard() }
     }
 
-    /// An Enter typed or sent from the lifted belt has gone: the keyboard folds and the head is
-    /// back. It folds on the next turn of the run loop, never inside the keyboard's own call.
+    /// An Enter typed or sent from the lifted belt has gone: on Joystick the keyboard folds and
+    /// the head is back. It folds on the next turn of the run loop, never inside the keyboard's
+    /// own call. Every other layout has no head to go back to, and the keyboard stays.
     private func foldKeyboard() {
+        guard lifted.layout == .joystick else { return }
         Task { [weak self] in _ = self?.terminal?.resignFirstResponder() }
     }
 

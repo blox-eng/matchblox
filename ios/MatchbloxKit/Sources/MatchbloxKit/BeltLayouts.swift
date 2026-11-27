@@ -1,7 +1,7 @@
 import Foundation
 
 public enum BeltLayout: String, CaseIterable, Codable, Sendable {
-    case steer, commands, tmux, mine, board
+    case steer, commands, tmux, mine, board, joystick
 }
 
 /// One row of the console's command table (`testdata/keys/commands.json`). A command key
@@ -31,6 +31,8 @@ public struct KeyCatalog: Sendable {
     static let digits = row("1", "2", "3", "4", "5", "6", "7", "8", "9")
     static let ctrl = row(KeyBar.ctrl, "^A", "^B", "^D", "^L", "^R")
     static let tmux = homeRow + row("⇞", "⇟", "Tab", "⇧Tab", "^B")
+    /// The head does `↑ ↓ ⏎ ← →`; the belt under it holds the rest.
+    static let joystick = row("◂", KeyBar.keyboard, "Esc", "^C", "⇞", "⇟", "Tab", "⇧Tab")
 
     /// `↑ ↓ ⏎` are two cells wide, so at home they fill the screen right of `◂`.
     private static func row(_ ids: String...) -> [BeltKey] {
@@ -55,7 +57,7 @@ public struct KeyCatalog: Sendable {
 
     /// Commands follows `agent`, the agent of the session the console shows. With no agent,
     /// or one with no commands, it is the home row only. Mine keeps the keys of the catalog.
-    /// Board holds the keys the console's board says.
+    /// Board holds the keys the console's board says. Joystick holds what the head does not.
     public func keys(_ layout: BeltLayout, agent: String?, mine: [BeltKey], board: BoardBelt = .plain) -> [BeltKey] {
         switch layout {
         case .steer: Self.steer
@@ -63,6 +65,7 @@ public struct KeyCatalog: Sendable {
         case .commands: Self.homeRow + commands.filter { $0.agent == agent }.map(Self.key)
         case .mine: mine.compactMap { known[$0.id] }
         case .board: board.keys
+        case .joystick: Self.joystick
         }
     }
 

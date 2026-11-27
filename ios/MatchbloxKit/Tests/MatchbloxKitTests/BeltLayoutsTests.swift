@@ -35,6 +35,24 @@ final class BeltLayoutsTests: XCTestCase {
         XCTAssertEqual(keys.map(\.cells), [1, 2, 2, 2, 1, 1, 1, 1, 1])
     }
 
+    /// The head does `↑ ↓ ⏎ ← →`, so Joystick's belt holds the rest, with `⌨` for the keyboard.
+    func testJoystickLayout() throws {
+        let c = try catalog()
+        let keys = c.keys(.joystick, agent: "claude", mine: [])
+        XCTAssertEqual(keys.map(\.id), ["◂", "⌨", "Esc", "^C", "⇞", "⇟", "Tab", "⇧Tab"])
+        XCTAssertEqual(keys.map(\.cells), [1, 1, 1, 1, 1, 1, 1, 1])
+        XCTAssertEqual(BeltLayout(rawValue: "joystick"), .joystick)
+        XCTAssertEqual(BeltLayout.joystick.rawValue.capitalized, "Joystick")
+        XCTAssertEqual(KeyBar.bytes(for: KeyBar.keyboard), [], "⌨ sends nothing itself: the app raises the keyboard")
+        XCTAssertEqual(KeyFace(BeltKey(id: KeyBar.keyboard, cells: 1), in: c).spoken, "Keyboard")
+
+        let store = defaults()
+        BeltLayout.joystick.save(to: store)
+        XCTAssertEqual(BeltLayout.load(from: store), .joystick)
+        store.set("lever", forKey: BeltLayout.storeKey)
+        XCTAssertEqual(BeltLayout.load(from: store), .steer, "a stored layout the app does not know is Steer")
+    }
+
     func testCommandsFollowTheAgent() throws {
         let c = try catalog()
         let claude = c.keys(.commands, agent: "claude", mine: [])

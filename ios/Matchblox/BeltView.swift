@@ -78,6 +78,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
         didSet {
             guard layout != oldValue else { return }
             if savesLayout { layout.savePick(inDemo: isDemo, to: .standard) }
+            placeHead()
             runOff()
         }
     }
@@ -212,8 +213,9 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
         return driver
     }()
 
-    /// The match head this belt carries over its keys: the dock's only.
+    /// The match head this belt carries over its keys: the dock's only, and only on Joystick.
     private var head: DockHeadView?
+    private var headShows: Bool { head != nil && layout == .joystick }
     private lazy var headRow: NSLayoutConstraint = belt.topAnchor.constraint(equalTo: drawer.bottomAnchor)
     /// What the head says in the handle row, in place of its rest line.
     private var headLine: String?
@@ -624,25 +626,40 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
 
     // MARK: The match head
 
-    /// Carries the match head over the keys: the belt moves down by the head's own row, and the
-    /// rest of the head lies over the belt. The handle row then says what the head does.
+    /// The match head this belt carries on Joystick.
     func carry(_ head: DockHeadView) {
         self.head = head
         head.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(head)
-        headRow.constant = DockHeadView.row
-        NSLayoutConstraint.activate([
-            head.centerXAnchor.constraint(equalTo: belt.centerXAnchor),
-            head.bottomAnchor.constraint(equalTo: belt.topAnchor, constant: DockHeadView.side - DockHeadView.row),
-            head.widthAnchor.constraint(equalToConstant: DockHeadView.side),
-            head.heightAnchor.constraint(equalToConstant: DockHeadView.side),
-        ])
         head.say = { [weak self] line in self?.say(line) }
+        placeHead()
+    }
+
+    /// On Joystick the belt moves down by the head's own row, and the rest of the head lies over
+    /// the belt; the handle row then says what the head does. Any other layout drops the head,
+    /// and the terminal over the dock takes its row back.
+    private func placeHead() {
+        guard let head else { return }
+        if headShows, head.superview !== self {
+            addSubview(head)
+            NSLayoutConstraint.activate([
+                head.centerXAnchor.constraint(equalTo: belt.centerXAnchor),
+                head.bottomAnchor.constraint(equalTo: belt.topAnchor, constant: DockHeadView.side - DockHeadView.row),
+                head.widthAnchor.constraint(equalToConstant: DockHeadView.side),
+                head.heightAnchor.constraint(equalToConstant: DockHeadView.side),
+            ])
+        } else if !headShows, head.superview === self {
+            sendBeltBack(at: true)
+            head.removeFromSuperview()
+            headLine = nil
+        }
+        headRow.constant = headShows ? DockHeadView.row : 0
+        spoken = nil
         updateName()
     }
 
     /// The head's line in the handle row; nil gives the row back the head's rest line.
     private func say(_ line: String?) {
+        guard headShows else { return }
         headLine = line
         // A flash's way back to the name would end the line.
         flashes += 1
@@ -654,7 +671,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
     private func bringBeltForward() {
         headBack?.cancel()
         headBack = nil
-        guard let head, !beltInFront else { return }
+        guard let head, headShows, !beltInFront else { return }
         beltInFront = true
         head.isUserInteractionEnabled = false
         spoken = nil
@@ -685,7 +702,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
 
     /// What a roll and a hold do, and where to set them: the handle row of a belt with a head, at rest.
     private var restLine: String? {
-        head.map { _ in HeadHint.rest(hold: HeadMarks.load(from: .standard)[.hold]).line }
+        headShows ? HeadHint.rest(hold: HeadMarks.load(from: .standard)[.hold]).line : nil
     }
 
     // MARK: Touch
@@ -859,6 +876,10 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
         }
         if motion.keys[i].id == KeyBar.ctrl {
             onCtrl()
+            return
+        }
+        if motion.keys[i].id == KeyBar.keyboard {
+            onKeyboard()
             return
         }
         guard let bytes = KeyBar.bytes(for: motion.keys[i].id) else { return }
@@ -1180,7 +1201,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
             }
             var elements: [Any] = [name, keyboardButton]
             if trayOpen { elements.append(trayHost.view as Any) }
-            if let head, !beltInFront { elements.append(head) }
+            if let head, headShows, !beltInFront { elements.append(head) }
             guard let motion else {
                 spoken = elements
                 return elements
