@@ -627,7 +627,9 @@ type Model struct {
 	beside                    string          // the agent pane's id; "" before the split, and where it failed
 	deskFrame                 bool            // Doc.DeskFrame: the first-start notice has been shown
 	frameKind                 string          // header|bar|review when this process is a desk frame; "" the list
-	barMode                   string          // @matchblox_mode: LIST, AGENT, …, or CONFIRM, a tab, and the question
+	barMode                   string          // @matchblox_mode: LIST, AGENT, …, or CONFIRM, KEYS, a tab, and the question
+	keySheet                  *keySheet       // the keys sheet over the list; nil while it is closed
+	shellAsks                 int             // times the list asked for the shell; Task 7 performs it
 	winW, winH                int             // the window's size in beside mode; 0: not read yet
 	boxZoom                   bool            // a box or an animation has the window: the list's pane is zoomed for it
 	boxBack                   []string        // the agent pane's screen, drawn dim behind the box
@@ -1705,6 +1707,10 @@ func (m Model) press(f layerID, k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case layerPending:
 		next, cmd = m.pendingKey(k)
 	case layerMain:
+		if m.keySheet != nil {
+			next, cmd = m.keySheetKey(k)
+			break
+		}
 		var took bool
 		if next, cmd, took = m.sideKey(k); !took {
 			next, cmd = m.key(k)

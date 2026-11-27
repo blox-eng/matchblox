@@ -262,6 +262,9 @@ func (m Model) drawScreen(w int) drawn {
 		m.sideNotices(&sc, w)
 	}
 	m.overlaySaying(&sc, w, box)
+	if m.keySheet != nil { // the keys sheet covers the list; the agent pane is untouched
+		m.paintKeySheet(&sc, w)
+	}
 	return sc
 }
 

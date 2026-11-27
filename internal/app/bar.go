@@ -292,18 +292,26 @@ func (m Model) confirmRest(a action) string {
 }
 
 // deskModeValue is what the list publishes: a confirm while one is open,
-// else LIST.
+// KEYS while the keys sheet is open, else LIST.
 func (m Model) deskModeValue() string {
 	switch {
 	case m.pending != nil:
 		return "CONFIRM\t" + m.confirmRest(*m.pending)
 	case m.held != nil:
 		return "CONFIRM\ttake over?  " + m.keys.takeOver.Rest.Help().Key + " rest · " + m.keys.takeOver.Keep.Help().Key + " keep"
+	case m.keySheet != nil:
+		return "KEYS"
 	}
 	return "LIST"
 }
 
-// syncDeskMode publishes a confirm, and LIST again when the list answers.
+// deskModeOwned is a mode the list publishes. AGENT and SHELL are not:
+// the pane that has the keys writes those.
+func deskModeOwned(mode string) bool {
+	return strings.HasPrefix(mode, "CONFIRM") || mode == "KEYS"
+}
+
+// syncDeskMode publishes a confirm or KEYS, and LIST again when that ends.
 // AGENT and SHELL stay with the writer that moves the keys, until the
 // list pane is current again.
 func (m *Model) syncDeskMode() tea.Cmd {
@@ -311,8 +319,8 @@ func (m *Model) syncDeskMode() tea.Cmd {
 		return nil
 	}
 	next := m.deskModeValue()
-	was := strings.HasPrefix(m.barMode, "CONFIRM")
-	want := strings.HasPrefix(next, "CONFIRM")
+	was := deskModeOwned(m.barMode)
+	want := deskModeOwned(next)
 	if !was && !want || next == m.barMode {
 		return nil
 	}
