@@ -12,6 +12,7 @@ import (
 
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
+	"github.com/blox-eng/matchblox/internal/shellwords"
 	"github.com/blox-eng/matchblox/internal/stoker"
 	"github.com/blox-eng/matchblox/internal/transport"
 )
@@ -27,7 +28,7 @@ const askWait = 10 * time.Second
 // `sessions --json`, each word as a shell reads it. ok is false where
 // matchblox would fail, and out then says why.
 func (d *Demo) Run(line string) (out string, ok bool) {
-	w, err := words(line)
+	w, err := shellwords.Split(line)
 	switch {
 	case err != nil:
 	case slices.Equal(w, []string{"sessions", "--json"}):
@@ -172,44 +173,4 @@ func printed(v any) (string, bool) {
 		return err.Error(), false
 	}
 	return string(b) + "\n", true
-}
-
-// words splits line as a shell reads Pocket's quoting: blanks between
-// words, single quotes around a word's text, and a backslash before a
-// character outside quotes, which is how a quoted word holds a quote.
-func words(line string) ([]string, error) {
-	var out []string
-	var w strings.Builder
-	begun, quoted := false, false
-	for i := 0; i < len(line); i++ {
-		c := line[i]
-		switch {
-		case quoted && c == '\'':
-			quoted = false
-		case quoted:
-			w.WriteByte(c)
-		case c == '\'':
-			quoted, begun = true, true
-		case c == '\\' && i+1 < len(line):
-			i++
-			w.WriteByte(line[i])
-			begun = true
-		case c == ' ':
-			if begun {
-				out = append(out, w.String())
-				w.Reset()
-				begun = false
-			}
-		default:
-			w.WriteByte(c)
-			begun = true
-		}
-	}
-	if quoted {
-		return nil, errors.New("a quote is not closed")
-	}
-	if begun {
-		out = append(out, w.String())
-	}
-	return out, nil
 }

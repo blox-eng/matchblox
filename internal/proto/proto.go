@@ -233,6 +233,10 @@ const PickPrefix = "pick:"
 // gives the same text and signature. Only a console sends it.
 const ChoosePrefix = "choose:"
 
+// MenuChanged ends the refusal of a choose: act whose menu no longer reads
+// as the console read it, after the session's name.
+const MenuChanged = "'s menu changed — look again"
+
 // MenuPrefix starts an act that reads the menu the pane after it draws:
 // its options, the one the agent marks and menu.Sign of the screen, the
 // three a choose: act sends back. It types nothing.

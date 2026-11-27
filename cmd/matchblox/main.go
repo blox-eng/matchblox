@@ -110,6 +110,9 @@ func main() {
 		if errors.Is(err, errRestart) {
 			os.Exit(exitRestart)
 		}
+		if errors.Is(err, errQuestionChanged) {
+			os.Exit(exitQuestionChanged)
+		}
 		if errors.Is(err, errShown) {
 			os.Exit(1)
 		}

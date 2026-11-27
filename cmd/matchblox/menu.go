@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/state"
@@ -37,6 +38,12 @@ func pocketCmd(cmd string, args []string, w io.Writer, path string) error {
 		return err
 	}
 	res, err := doActAs(path, proto.ClientPocket, a, actWait, nil)
+	if cmd == "choose" && err == nil && strings.HasSuffix(res.Err, proto.MenuChanged) {
+		if _, err := fmt.Fprintln(w, "the question changed"); err != nil {
+			return err
+		}
+		return errQuestionChanged
+	}
 	if cmd == "choose" {
 		return handOutcome(w, cmd, words[0], res, err)
 	}
@@ -48,6 +55,13 @@ func pocketCmd(cmd string, args []string, w io.Writer, path string) error {
 	}
 	return writeMenu(w, res.Menu)
 }
+
+// errQuestionChanged is a pick refused because the menu no longer reads as
+// menu printed it. It exits exitQuestionChanged, and its one line goes to
+// stdout: SSH drops stderr, and Pocket says the question changed.
+var errQuestionChanged = errors.New("the question changed")
+
+const exitQuestionChanged = 3
 
 // pocketAct is the act menu or choose asks the service for.
 func pocketAct(doc state.Doc, cmd string, words []string, text, sign, from string) (proto.Act, error) {

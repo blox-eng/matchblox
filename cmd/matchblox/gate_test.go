@@ -398,3 +398,85 @@ func TestGateFocusIsBounded(t *testing.T) {
 		t.Fatalf("sendFocus = %v, act %+v", err, got)
 	}
 }
+
+// TestGatePhoneHeadCommandsOnly: a phone's key runs Pocket's three head
+// commands, read as a shell reads Pocket's quoting, in exactly their
+// shapes; anything a shell could make more of is refused.
+func TestGatePhoneHeadCommandsOnly(t *testing.T) {
+	const id = "0123456789ab"
+	for _, c := range []struct {
+		orig string
+		want []string
+	}{
+		{"matchblox menu %2 --json", []string{"menu", "%2", "--json"}},
+		{"matchblox menu flint-auth --json", []string{"menu", "flint-auth", "--json"}},
+		{"matchblox choose %2 2 --text 'Yes' --sign 0a1b", []string{"choose", "%2", "2", "--text", "Yes", "--sign", "0a1b"}},
+		{`matchblox choose %2 9 --text 'It'\''s fine; go | on $(now)' --sign 0a1b`, []string{"choose", "%2", "9", "--text", "It's fine; go | on $(now)", "--sign", "0a1b"}},
+		{"matchblox sessions --json", []string{"sessions", "--json"}},
+	} {
+		for _, i := range []string{"", id} {
+			got, err := gateDecision(phoneMode, i, c.orig)
+			if err != nil || !slices.Equal(got, c.want) {
+				t.Errorf("gateDecision(phone, %q, %q) = %q, %v; want %q", i, c.orig, got, err, c.want)
+			}
+		}
+		if argv, err := gateDecision("", id, c.orig); err == nil || argv != nil {
+			t.Errorf("a laptop key ran %q", c.orig)
+		}
+	}
+	for _, orig := range []string{
+		"matchblox menu %2 --json; rm -rf /",
+		"matchblox menu %2 --json;id",
+		"matchblox menu %2 --json | id",
+		"matchblox menu %2 --json & id",
+		"matchblox menu %2 --json > /tmp/x",
+		"matchblox menu $(id) --json",
+		"matchblox menu %2$(id) --json",
+		"matchblox menu `id` --json",
+		"matchblox menu %2 --json\nid",
+		"matchblox menu %2 --json\n",
+		"matchblox menu\t%2 --json",
+		"matchblox menu '%2 --json",
+		"matchblox choose %2 2 --text 'Yes --sign 0a1b",
+		"matchblox choose %2 2 --text 'Yes' --sign 0a1b'",
+		"matchblox choose %2 2 --text 'Yes'$(id) --sign 0a1b",
+		"matchblox choose %2 2 --text Yes; --sign 0a1b",
+		"matchblox choose %2 2 --text 'a\nb' --sign 0a1b",
+		"matchblox menu 'a;b' --json",
+		"matchblox menu '%2' --json; id",
+		"matchblox menu -x --json",
+		"matchblox menu %2",
+		"matchblox menu --json %2",
+		"matchblox menu %2 --json --json",
+		"matchblox menu %2 %3 --json",
+		"matchblox  menu %2 --json",
+		" matchblox menu %2 --json",
+		"matchblox menu %2 --json ",
+		"matchblox send %2 hi",
+		"matchblox peek %2",
+		"matchblox sessions",
+		"matchblox sessions --json --all",
+		"matchblox choose %2 2 --sign 0a1b --text 'Yes'",
+		"matchblox choose 2 %2 --text 'Yes' --sign 0a1b",
+		"matchblox choose %2 2 --text 'Yes' --sign zz",
+		"matchblox choose %2 2 --text 'Yes' --sign 0A1B",
+		"matchblox choose %2 2 --text 'Yes' --sign ''",
+		"matchblox choose %2 2 --text 'Yes' --sign $(id)",
+		"matchblox choose %2 0 --text 'Yes' --sign 0a1b",
+		"matchblox choose %2 10 --text 'Yes' --sign 0a1b",
+		"matchblox choose %2 02 --text 'Yes' --sign 0a1b",
+		"matchblox choose %2 2 --text 'Yes' --sign 0a1b --text 'No'",
+		"matchblox choose %2 2 --text=Yes --sign 0a1b",
+		"mb menu %2 --json",
+		"/bin/matchblox menu %2 --json",
+		"'matchblox' menu %2 --json",
+	} {
+		for _, mode := range []string{"", phoneMode, "pair"} {
+			for _, i := range []string{"", id} {
+				if argv, err := gateDecision(mode, i, orig); err == nil || argv != nil {
+					t.Errorf("gateDecision(%q, %q, %q) let it run as %q", mode, i, orig, argv)
+				}
+			}
+		}
+	}
+}

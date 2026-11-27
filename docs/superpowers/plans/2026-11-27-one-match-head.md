@@ -92,6 +92,15 @@ PR #508 (Pocket home) merged as e62b70c1. Branch `build/one-match-head` from mai
 - Commit: `feat(demo): the demo answers Pocket's menu, choose and sessions`
 - Surface: an agent's tools (`testMenuHostile`, `MBDemoRun` refuses other commands).
 
+### Task 3a: the phone's key runs the head's three commands
+- Files: `cmd/matchblox/gate.go`, `cmd/matchblox/gate_test.go`, `cmd/matchblox/menu.go`, `cmd/matchblox/menu_test.go`.
+- Surface: an agent's tools, and the phone's key.
+- Test first (hostile): `TestGatePhoneHeadCommandsOnly` — in phone mode, `matchblox menu %2 --json`, `matchblox choose %2 2 --text 'Yes' --sign 0a1b`, `matchblox sessions --json` pass as exactly those argv; refused: `matchblox menu %2 --json; rm -rf /`, `matchblox menu $(id) --json`, an open quote, a backtick, a newline, `matchblox send %2 hi`, `matchblox sessions`, flags in another order, a sign that is not hex, a non-phone key line. Then `TestChooseStaleExits3`: a refused pick because the menu changed exits 3 and prints `the question changed` on stdout (SSH drops stderr); any other refusal exits 1.
+- Run: `go test ./cmd/matchblox -run 'TestGatePhoneHead|TestChooseStale'` — fails: the gate refuses all three; choose exits 1 on a stale menu. Then passes.
+- Do: in `gateDecision`, phone mode only, parse `orig` with the single-quote rules of `demo.words` (shared, not copied) and accept only the three exact shapes; return their argv. In `choose`, map the service's "menu changed" refusal to exit 3 with one stdout line.
+- Done when: both tests and the full Go suite pass.
+- Commit: `feat(gate): the phone's key runs menu, choose and sessions for the head`
+
 ### Task 4: the turn counts notches round the head
 - Files: `MatchHead.swift`, `MatchHeadTests.swift`.
 - Test first: `testFifteenDegreesIsOneNotch` (angles 0→0.27 rad give one clockwise notch; back gives one anticlockwise); `testAngleWrapsAtPi` (from 3.1 to -3.1 rad is a small clockwise move, not a full turn); `testPaceSteps` (notches since the crossing 1…10 → 1 line, 11…24 → 3, 25…48 → 8, 49+ → 20); `testPauseResetsPace` (0.35 s with no notch → 1 line); `testStrikesOnceARoll`; `testHeatFollowsPace` (heat = lines a notch ÷ 20: 0.05, 0.15, 0.4, 1). Angles are `atan2(dy, dx)` in UIKit points; a growing angle is clockwise.
@@ -244,3 +253,9 @@ Cold read: 2026-11-27, 1 fresh reader. Blocker 2, major 10, nit 5. Fixed 16, con
 
 - For the owner, answered: the menu path — the host-checked pick, on a peer session's advice.
 - For the owner, answered: the second read's blockers — the owner chose one PR, redesigned now, reviewed by the owner (no third read). Changed after the read: What exists, the file map, Tasks 1–3, 5, 6, 8, 10–13, Lens findings, Spec check. Fixed with it: the home region place, the step card UI, the pane on the console's list, the current session, the pace in a roll that starts up, and the 8 nits.
+
+## Changes during build
+
+- 2026-11-27, Task 3: the demo keeps its fixture (7 sessions; pane %2's menu has 5 options) because the walk, app goldens and `DemoConsoleTests` share it; tests check every session with an id has a unique `n`, not "three sessions". The `✦` steps move to Task 10 next to `testStepCardShows`. `MBDemoRun` takes a pane (`menu %2`), as the host does.
+- 2026-11-27, added Task 3a: the phone's key gate (`gateDecision`) refused `menu`, `choose` and `sessions --json`, so the head could not reach a real host; and SSH drops stderr, so a stale pick needs its own exit code (3) for Pocket to say `the question changed · roll again`. Task 9 maps exit 3, not stderr text.
+- 2026-11-27, Task 3: a session started after the phone last registered has no `n` and is left off the sessions card until the next register, because `console --open <n>` can only open a numbered session.

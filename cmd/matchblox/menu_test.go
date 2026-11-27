@@ -3,6 +3,10 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"os"
+	"os/exec"
+	"strings"
 	"testing"
 	"time"
 
@@ -102,5 +106,56 @@ func TestMenuOfNoMenuIsEmptyJSON(t *testing.T) {
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(out.Bytes(), &raw); err != nil || string(raw["options"]) != "[]" {
 		t.Fatalf("%v: %s", err, out.String())
+	}
+}
+
+// pocketService answers every connection on a fresh socket as the service
+// would: hello, the snapshot, then a refusal, why, of the act.
+func pocketService(t *testing.T, why string) {
+	t.Helper()
+	l, err := transport.Listen(isolate(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { l.Close() })
+	go func() {
+		for {
+			nc, err := l.Accept()
+			if err != nil {
+				return
+			}
+			c := transport.NewConn(nc)
+			c.Send(proto.KindHello, "", proto.Hello{Version: proto.Version})
+			if _, err := c.Recv(); err == nil {
+				c.Send(proto.KindSnapshot, "", proto.State{Doc: pocketDoc()})
+				if env, err := c.Recv(); err == nil && env.Kind == proto.KindAct {
+					c.Send(proto.KindResult, env.ID, proto.Result{ActID: env.ID, Err: why})
+				}
+			}
+			c.Close()
+		}
+	}()
+}
+
+// TestChooseStaleExits3: SSH drops stderr, so a pick refused because the
+// menu changed says so on stdout and exits 3; any other refusal exits 1.
+func TestChooseStaleExits3(t *testing.T) {
+	for _, c := range []struct {
+		why, out string
+		code     int
+	}{
+		{"not sent: s's menu changed — look again", "the question changed\n", 3},
+		{"not sent: s is not waiting", "", 1},
+	} {
+		pocketService(t, c.why)
+		cmd := exec.Command(os.Args[0])
+		cmd.Env = append(os.Environ(), "MATCHBLOX_TEST_ARGS="+strings.Join([]string{"choose", "s", "2", "--text", "Yes", "--sign", "abc"}, "\x1f"))
+		var out, errOut bytes.Buffer
+		cmd.Stdout, cmd.Stderr = &out, &errOut
+		err := cmd.Run()
+		var ee *exec.ExitError
+		if !errors.As(err, &ee) || ee.ExitCode() != c.code || out.String() != c.out {
+			t.Errorf("%q: exit %v, stdout %q (stderr %q); want exit %d, stdout %q", c.why, err, out.String(), errOut.String(), c.code, c.out)
+		}
 	}
 }
