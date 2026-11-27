@@ -311,12 +311,11 @@ const (
 	SpaceOption  = "@matchblox_space"
 	// CogOption is a one-shot act from a header or bar tap: open Machine.
 	CogOption = "@matchblox_cog"
-	// ReviewOption is the one-shot act of the review pane to the list: send
-	// the review, or leave it. It holds the review text until the list
-	// takes it, and the list clears it at once. ReviewReplyOption is the
-	// list's answer to a send it could not make.
-	ReviewOption      = "@matchblox_review"
-	ReviewReplyOption = "@matchblox_review_reply"
+	// ReviewOption is the one-shot word of the review pane to the list:
+	// leave, or sent with a count. It never holds review text: a window
+	// option is readable by every process of the user. The list clears it
+	// at once.
+	ReviewOption = "@matchblox_review"
 	// ShellOption marks the shell pane matchblox opened under an agent.
 	ShellOption = "@matchblox_shell"
 	// ShellAgentOption, on that shell pane, is the agent pane t returns to.

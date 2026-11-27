@@ -35,12 +35,16 @@ func RunFrame(args []string) error {
 		return fmt.Errorf("frame needs --kind=header, bar or review")
 	}
 	if strings.TrimSpace(*kind) == "review" {
-		// The review pane reads git and tmux only; the list owns the paste.
-		f, err := reviewFrameFromArgv(New(Options{Pane: os.Getenv("TMUX_PANE")}), args)
-		if err != nil {
-			return err
+		// The review sends its paste on this conn: the text goes to the
+		// service, never through a tmux option.
+		c, _ := transport.Dial(transport.SocketPath(), time.Second)
+		f, err := reviewFrameFromArgv(New(Options{Conn: c, Pane: os.Getenv("TMUX_PANE")}), args)
+		if err == nil {
+			_, err = tea.NewProgram(f).Run()
 		}
-		_, err = tea.NewProgram(f).Run()
+		if c != nil {
+			_ = c.Close()
+		}
 		return err
 	}
 	c, _ := transport.Dial(transport.SocketPath(), time.Second)
@@ -68,7 +72,7 @@ type frameTick struct{}
 
 func (m frameModel) Init() tea.Cmd {
 	if m.kind == "review" {
-		return tea.Batch(m.reviewLoad(), m.pollSpace())
+		return tea.Batch(m.reviewLoad(), m.hello(), m.recv(), m.pollSpace())
 	}
 	return tea.Batch(m.hello(), m.recv(), m.pollSpace())
 }

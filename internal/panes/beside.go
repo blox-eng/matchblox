@@ -53,7 +53,7 @@ const endBeside = `#{S:#{?` + atHome + `,#{W:#{?#{==:#{` + sample.ConsoleOption 
 	`set-option -wu -t #{window_id} ` + sample.BesideOption + ` ; set-option -wu -t #{window_id} ` + sample.ChainOption +
 	` ; set-option -wu -t #{window_id} ` + sample.HeaderOption + ` ; set-option -wu -t #{window_id} ` + sample.BarOption +
 	` ; set-option -wu -t #{window_id} ` + sample.ModeOption +
-	` ; set-option -wu -t #{window_id} ` + sample.ReviewOption + ` ; set-option -wu -t #{window_id} ` + sample.ReviewReplyOption +
+	` ; set-option -wu -t #{window_id} ` + sample.ReviewOption +
 	` ; set-option -wu -t #{window_id} ` + sample.ConsoleOption + ` ; ` +
 	`#{P:#{?#{||:#{==:#{pane_id},#{` + sample.BesideOption + `}},#{||:#{==:#{pane_id},#{` + sample.HeaderOption + `}},#{||:#{==:#{pane_id},#{` + sample.BarOption + `}},#{m:* #{pane_id} *, #{` + sample.ChainOption + `} }}}},kill-pane -t #{pane_id} ; ,}},}},}}`
 

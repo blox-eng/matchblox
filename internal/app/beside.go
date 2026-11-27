@@ -738,7 +738,7 @@ func endBeside(o Options) {
 			_, _ = run("kill-pane", "-t", pane)
 		}
 	}
-	for _, opt := range []string{sample.BesideOption, sample.ConsoleOption, sample.HeaderOption, sample.BarOption, sample.ModeOption, sample.SpaceOption, sample.CogOption, sample.ReviewOption, sample.ReviewReplyOption} {
+	for _, opt := range []string{sample.BesideOption, sample.ConsoleOption, sample.HeaderOption, sample.BarOption, sample.ModeOption, sample.SpaceOption, sample.CogOption, sample.ReviewOption} {
 		_, _ = run("set-option", "-wu", "-t", o.Pane, opt)
 	}
 }

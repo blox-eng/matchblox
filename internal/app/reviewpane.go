@@ -1,7 +1,7 @@
 package app
 
 import (
-	"bytes"
+	"cmp"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -20,14 +20,16 @@ import (
 )
 
 const (
-	// reviewHandMax: tmux takes a command of about 16 KiB. The act the pane
-	// writes to the window option stays under that, with room.
-	reviewHandMax = 15000
-	// reviewWait is how many quarter-seconds the pane waits for the list
-	// to take its act before it says so and takes the keys back.
-	reviewWait    = 12
-	reviewField   = 500 // the most runes of one comment
-	reviewGutterW = 10
+	// reviewSendMax is the most bytes of one review message: under the
+	// service's paste cap (proto.MaxPaste), with room.
+	reviewSendMax = 15000
+	// reviewWait is how many quarter-seconds the pane waits for the list to
+	// take its word, and reviewSendWait for the service's answer to the
+	// paste, before it says so and takes the keys back.
+	reviewWait     = 12
+	reviewSendWait = 20
+	reviewField    = 500 // the most runes of one comment
+	reviewGutterW  = 10
 )
 
 // reviewPane is the state of `matchblox frame --kind=review`.
@@ -42,8 +44,11 @@ type reviewPane struct {
 	comments  map[string]reviewComment
 	field     *string // the comment being typed; nil when no field is open
 	note      string
-	done      bool // an act waits for the list
+	done      bool // the list or the service has not answered yet
 	ticks     int
+	wait      int    // the ticks it waits for that answer
+	sentID    string // the act id of the paste in flight; "" when none
+	n         int    // the comments in that paste
 }
 
 // rkeys are the keys the review names in its words, each from its binding.
@@ -63,9 +68,6 @@ func (m frameModel) rkeys() rkeys {
 func (m frameModel) leaves(k tea.KeyPressMsg) bool {
 	return bkey.Matches(k, m.keys.main.Back, m.keys.side.Flip, m.keys.global.Quit)
 }
-
-// reviewReply is the list's word that it did not send the review.
-type reviewReply struct{ why string }
 
 // reviewHandFailed: tmux did not take the act.
 type reviewHandFailed struct{}
@@ -131,10 +133,12 @@ func (m frameModel) reviewTake(msg tea.Msg) (tea.Cmd, bool) {
 		if msg.at == r.at {
 			r.cur = r.firstLine()
 		}
-	case reviewReply:
-		r.done, r.ticks = false, 0
-		r.note = "not sent: " + reviewClip(reviewVisible(msg.why), 200)
-		return m.reviewMode("REVIEW"), true
+	case fromConn:
+		res, ok := msg.msg.(resultMsg)
+		if !ok || msg.conn != m.conn || r.sentID == "" || proto.Result(res).ActID != r.sentID {
+			return nil, false // the console's own messages: Model takes them
+		}
+		return m.reviewSentResult(proto.Result(res)), true
 	case reviewHandFailed:
 		r.done = false
 		r.note = "the list was not told: tmux refused. " + m.rkeys().esc + " tries again"
@@ -144,31 +148,44 @@ func (m frameModel) reviewTake(msg tea.Msg) (tea.Cmd, bool) {
 	return nil, true
 }
 
+// reviewSentResult is the service's answer to the paste. A refusal stays
+// in the pane, with its comments, and says why. Else the pane tells the list,
+// which gives the keys and restores the agent view.
+func (m frameModel) reviewSentResult(res proto.Result) tea.Cmd {
+	r := m.rev
+	r.sentID = ""
+	if why := cmp.Or(res.Err, lastOf(res.Skipped)); why != "" {
+		r.done = false
+		r.note = "not sent: " + reviewClip(reviewVisible(why), 200)
+		return nil
+	}
+	_, cmd := m.reviewHand(reviewAct{Act: "sent", Host: r.spec.host, Pane: r.spec.pane, N: r.n})
+	return cmd
+}
+
+func lastOf(s []string) string {
+	if len(s) == 0 {
+		return ""
+	}
+	return s[len(s)-1]
+}
+
 // reviewTick is one quarter-second of the pane: it counts the wait for the
-// list, and reads the list's reply while it waits.
+// list's restore or the service's answer.
 func (m frameModel) reviewTick() tea.Cmd {
 	r := m.rev
-	run, pane := m.tmuxRun(), m.opt.Pane
 	if r == nil || !r.done {
 		return nil
 	}
-	if r.ticks++; r.ticks > reviewWait {
-		r.done = false
-		r.note = "the list did not answer. " + m.rkeys().esc + " tries again"
-		return nil
-	}
-	if run == nil {
-		return nil
-	}
-	return func() tea.Msg {
-		out, err := run("show-option", "-wqv", "-t", pane, sample.ReviewReplyOption)
-		why := strings.TrimSpace(out)
-		if err != nil || why == "" {
+	if r.ticks++; r.ticks > r.wait {
+		r.done, r.sentID = false, ""
+		if r.n > 0 && r.wait == reviewSendWait {
+			r.note = "the service did not answer: the review may not be sent. " + m.rkeys().esc + " leaves, " + m.rkeys().enter + " sends again"
 			return nil
 		}
-		_, _ = run("set-option", "-wu", "-t", pane, sample.ReviewReplyOption)
-		return reviewReply{why}
+		r.note = "the list did not answer. " + m.rkeys().esc + " tries again"
 	}
+	return nil
 }
 
 func (r *reviewPane) file() *reviewFile {
@@ -358,45 +375,48 @@ func (m frameModel) fieldKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// reviewSend hands the one message to the list. The pane never sends to a
-// session: the list pastes through the paste: act.
+// reviewSend sends the one message itself: the paste: act on the pane's
+// conn to the service, to the pane the review opened on. The text goes to
+// the service and nowhere else: no tmux option, no log.
 func (m frameModel) reviewSend() (tea.Model, tea.Cmd) {
 	r, k := m.rev, m.rkeys()
-	if r.diff == nil || len(r.comments) == 0 {
+	switch {
+	case r.diff == nil || len(r.comments) == 0:
 		r.note = "no comments yet · " + k.add + " comments a line"
+		return m, nil
+	case r.spec.host != "":
+		r.note = "not sent: " + hostName(r.spec.host) + " is another machine: this pane reaches only this machine's service. " + k.esc + " leaves"
+		return m, nil
+	case m.conn == nil:
+		r.note = "not sent: no service · " + k.esc + " leaves, " + k.enter + " tries again"
 		return m, nil
 	}
 	cs := r.sorted()
 	text := reviewText(r.spec.name, r.diff.against, cs)
-	if len(text) > proto.MaxPaste {
-		r.note = "the review is " + strconv.Itoa(len(text)) + " bytes: the most is " + strconv.Itoa(proto.MaxPaste) + " · " + k.add + " then " + k.enter + " with nothing typed takes a line's comment away"
+	if len(text) > reviewSendMax {
+		r.note = "the review is " + strconv.Itoa(len(text)) + " bytes: the most is " + strconv.Itoa(reviewSendMax) + " · " + k.add + " then " + k.enter + " with nothing typed takes a line's comment away"
 		return m, nil
 	}
-	return m.reviewHand(reviewAct{Act: "send", Host: r.spec.host, Pane: r.spec.pane, Name: r.spec.name, N: len(cs), Text: text})
+	id, cmd := m.sendOn(m.conn, proto.Act{RecID: proto.PastePrefix + r.spec.pane, Text: text, Confirm: "y"})
+	r.sentID, r.n, r.done, r.ticks, r.wait = id, len(cs), true, 0, reviewSendWait
+	return m, cmd
 }
 
-// reviewHand writes the act to the window option the list looks at. The
-// list clears it as soon as it reads it.
+// reviewHand writes the word to the window option the list looks at:
+// leave, or sent and a count. Never review text. The list clears it as soon
+// as it reads it.
 func (m frameModel) reviewHand(a reviewAct) (tea.Model, tea.Cmd) {
 	r, k := m.rev, m.rkeys()
 	run, pane := m.tmuxRun(), m.opt.Pane
-	var b bytes.Buffer
-	enc := json.NewEncoder(&b)
-	enc.SetEscapeHTML(false)
-	if run == nil || enc.Encode(a) != nil {
+	raw, err := json.Marshal(a)
+	if run == nil || err != nil {
 		r.note = "the list was not told: no tmux here. " + k.esc + " tries again"
 		return m, nil
 	}
-	raw := strings.TrimSpace(b.String())
-	if len(raw) > reviewHandMax {
-		r.note = "the review is too long to hand over at once · " + k.add + " then " + k.enter + " with nothing typed takes a line's comment away"
-		return m, nil
-	}
-	r.done, r.ticks = true, 0
+	r.done, r.ticks, r.wait = true, 0, reviewWait
 	return m, func() tea.Msg {
-		_, _ = run("set-option", "-wu", "-t", pane, sample.ReviewReplyOption)
-		if _, err := run("set-option", "-w", "-t", pane, sample.ReviewOption, raw); err != nil {
-			return reviewHandFailed{} // the error holds no word of the review
+		if _, err := run("set-option", "-w", "-t", pane, sample.ReviewOption, string(raw)); err != nil {
+			return reviewHandFailed{}
 		}
 		return nil
 	}

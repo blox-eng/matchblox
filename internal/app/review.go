@@ -3,21 +3,21 @@ package app
 import (
 	"cmp"
 	"encoding/json"
-	"strings"
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
 // The review has two halves. The review pane (reviewpane.go) runs in the
 // agent seat as `matchblox frame --kind=review`: it reads the diff, holds
-// the comments and takes the keys. It never sends to a session. At ⏎ or esc
-// it writes one act to the window option @matchblox_review, and the list
-// takes it from its quarter-second look: the list owns the paste, the
-// restore of the agent view and the keys. A send the list refuses comes
-// back to the pane through @matchblox_review_reply.
+// the comments and takes the keys. At ⏎ it sends the one message itself,
+// through the paste: act on its own conn to the service, to the pane it
+// opened on. No comment, no file text and no paste goes into a tmux option:
+// any process of the same user can read one. The pane tells the list only
+// that the review is over ("leave") or was sent ("sent" and a count), through
+// the window option @matchblox_review. The list owns the restore of the
+// agent view, the mode and the keys.
 
 // reviewSpec is what the list tells the review pane about the session it
 // reviews: its name for the head, the host and pane the send goes to, the
@@ -28,22 +28,17 @@ type reviewSpec struct {
 }
 
 // reviewOn is the review the list opened in the agent seat. host and pane
-// are what the review opened on: the paste goes there, and an act for any
-// other host or pane is dropped. actID is the paste in flight.
-type reviewOn struct {
-	host, pane, name string
-	actID            string
-	n                int
-}
+// are what the review opened on: a word for any other host or pane is
+// dropped.
+type reviewOn struct{ host, pane, name string }
 
-// reviewAct is the one act the review pane hands to the list.
+// reviewAct is the one word the review pane hands to the list: "leave", or
+// "sent" with the count of comments it sent. It never holds review text.
 type reviewAct struct {
-	Act  string `json:"act"` // "send" or "leave"
+	Act  string `json:"act"`
 	Host string `json:"host,omitempty"`
 	Pane string `json:"pane,omitempty"`
-	Name string `json:"name,omitempty"`
 	N    int    `json:"n,omitempty"`
-	Text string `json:"text,omitempty"`
 }
 
 // reviewMsg is the end of taking the agent seat for a review.
@@ -136,8 +131,8 @@ func (m Model) reviewOpened(msg reviewMsg) (tea.Model, tea.Cmd) {
 	return m, said
 }
 
-// takeReview is the list's look at the act the review pane wrote. It
-// clears the option at once: the act holds the review's text.
+// takeReview is the list's look at the word the review pane wrote. It
+// clears the option at once.
 func (m Model) takeReview(raw string) (Model, tea.Cmd) {
 	clear := m.clearOption(sample.ReviewOption)
 	var a reviewAct
@@ -149,57 +144,23 @@ func (m Model) takeReview(raw string) (Model, tea.Cmd) {
 	case "leave":
 		next, end := m.endReview()
 		return next, tea.Batch(clear, end)
-	case "send":
-		// The target is what the review opened on, never the list's choice
-		// at this moment.
-		if cmp.Or(a.Host, m.opt.Host) != r.host || a.Pane != r.pane || a.N < 1 || strings.TrimSpace(a.Text) == "" {
+	case "sent":
+		// The review sent through its own conn. The list gives the keys, says
+		// so, and ends the review: for the review it opened, never another.
+		if cmp.Or(a.Host, m.opt.Host) != r.host || a.Pane != r.pane || a.N < 1 {
 			return m, clear
 		}
-		if m.watchConn(r.host) == nil {
-			return m, tea.Batch(clear, m.replyReview(m.nameOf(r.host)+" is not reached"))
+		var keys tea.Cmd
+		for _, s := range m.all.sessions {
+			if cmp.Or(s.Host, m.opt.Host) == r.host && s.Pane == r.pane {
+				keys = m.giveKeys(s) // a send counts as giving the keys: Task 3 leaves DONE on it
+			}
 		}
-		id, send := m.sendToID(r.host, proto.Act{RecID: proto.PastePrefix + r.pane, Text: a.Text, Confirm: "y"})
-		if id == "" {
-			return m, tea.Batch(clear, m.replyReview(m.nameOf(r.host)+" is not reached"))
-		}
-		nr := *r
-		nr.actID, nr.n = id, a.N
-		m.reviewing = &nr
-		return m, tea.Batch(clear, send)
+		said := m.say("sent a review of " + plural(a.N, "comment") + " to " + r.name + " · now in WORKING")
+		next, end := m.endReview()
+		return next, tea.Batch(clear, keys, end, said)
 	}
 	return m, clear
-}
-
-// reviewResult is the service's answer to the review's paste. A refusal
-// goes back to the review pane, which keeps its comments. An answer that
-// is not a refusal counts as giving the keys, and the review ends.
-func (m Model) reviewResult(r proto.Result) (Model, tea.Cmd, bool) {
-	rv := m.reviewing
-	if rv == nil || rv.actID == "" || r.ActID != rv.actID {
-		return m, nil, false
-	}
-	if why := cmp.Or(r.Err, last(r.Skipped)); why != "" {
-		nr := *rv
-		nr.actID = ""
-		m.reviewing = &nr
-		return m, m.replyReview(why), true
-	}
-	var keys tea.Cmd
-	for _, s := range m.all.sessions {
-		if cmp.Or(s.Host, m.opt.Host) == rv.host && s.Pane == rv.pane {
-			keys = m.giveKeys(s) // a send counts as giving the keys: Task 3 leaves DONE on it
-		}
-	}
-	said := m.say("sent a review of " + plural(rv.n, "comment") + " to " + rv.name + " · now in WORKING")
-	next, end := m.endReview()
-	return next, tea.Batch(keys, end, said), true
-}
-
-func last(s []string) string {
-	if len(s) == 0 {
-		return ""
-	}
-	return s[len(s)-1]
 }
 
 // endReview gives the agent seat its agent view back, the list its mode and
@@ -227,18 +188,6 @@ func (m Model) endReview() (Model, tea.Cmd) {
 		return nil
 	}
 	return m, tea.Batch(show, back)
-}
-
-// replyReview tells the review pane that a send did not go, and why.
-func (m Model) replyReview(why string) tea.Cmd {
-	run, console := m.tmuxRun(), m.opt.Pane
-	if run == nil {
-		return nil
-	}
-	return func() tea.Msg {
-		_, _ = run("set-option", "-w", "-t", console, sample.ReviewReplyOption, why)
-		return nil
-	}
 }
 
 // clearOption empties a window option of the console.

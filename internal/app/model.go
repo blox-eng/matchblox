@@ -1401,9 +1401,6 @@ func (m Model) result(r proto.Result) (Model, tea.Cmd) {
 	if m.settleResult(r) {
 		return m, nil
 	}
-	if mm, cmd, ok := m.reviewResult(r); ok {
-		return mm, cmd
-	}
 	if mm, cmd, ok := m.lineResult(r); ok {
 		return mm, cmd
 	}

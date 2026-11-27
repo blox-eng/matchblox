@@ -168,13 +168,15 @@ func reviewRepo(t testing.TB) string {
 // agent seat at %9, and the tmux they share.
 type reviewDesk struct {
 	tm   *reviewTmux
-	home *fakeConn
+	home *fakeConn // the list's conn to the service
+	pane *fakeConn // the review pane's own conn to the service
 	m    Model
 }
 
 func newReviewDesk(t *testing.T, cwd, start string) *reviewDesk {
 	t.Helper()
 	tm, home := &reviewTmux{}, newFake()
+	pane := newFake()
 	var next tea.Model = New(Options{
 		NoMotion: true, Conn: home, Now: func() time.Time { return demoAt }, Beside: true, Pane: "%1",
 		Tmux: tm.run, Self: "/bin/matchblox", Socket: "/tmp/tmux-1000/default",
@@ -191,7 +193,7 @@ func newReviewDesk(t *testing.T, cwd, start string) *reviewDesk {
 	m := next.(Model)
 	m.splashDone, m.deskFrame, m.beside = true, true, "%9"
 	m.toList()
-	return &reviewDesk{tm: tm, home: home, m: m}
+	return &reviewDesk{tm: tm, home: home, pane: pane, m: m}
 }
 
 // settle gives m the messages cmd makes, and the ones those make.
@@ -223,22 +225,29 @@ func (d *reviewDesk) poll(t *testing.T) {
 	d.m = reviewSettle(t, next.(Model), cmd)
 }
 
+// pastes are the paste: acts the review pane sent to the service. The list
+// sends none.
 func (d *reviewDesk) pastes() []proto.Act {
 	var out []proto.Act
-	for _, a := range d.home.allActs() {
+	for _, a := range d.pane.allActs() {
 		if strings.HasPrefix(a.RecID, proto.PastePrefix) {
 			out = append(out, a)
+		}
+	}
+	for _, a := range d.home.allActs() {
+		if strings.HasPrefix(a.RecID, proto.PastePrefix) {
+			panic("the list sent a paste: the review pane sends its own")
 		}
 	}
 	return out
 }
 
-// answer is the service's answer to the act with the id of the nth paste.
-func (d *reviewDesk) answer(t *testing.T, r proto.Result) {
+// answer is the service's answer to the review pane's last paste.
+func (d *reviewDesk) answer(t *testing.T, f frameModel, r proto.Result) frameModel {
 	t.Helper()
-	d.home.mu.Lock()
+	d.pane.mu.Lock()
 	var id string
-	for _, e := range d.home.sent {
+	for _, e := range d.pane.sent {
 		if e.Kind == proto.KindAct {
 			var a proto.Act
 			_ = json.Unmarshal(e.Body, &a)
@@ -247,10 +256,10 @@ func (d *reviewDesk) answer(t *testing.T, r proto.Result) {
 			}
 		}
 	}
-	d.home.mu.Unlock()
+	d.pane.mu.Unlock()
 	r.ActID = id
-	next, cmd := d.m.Update(fromConn{d.home, resultMsg(r)})
-	d.m = reviewSettle(t, next.(Model), cmd)
+	next, cmd := f.Update(fromConn{d.pane, resultMsg(r)})
+	return frameRun(t, next.(frameModel), cmd)
 }
 
 // frame is the review pane the list opened: built from the argv the list
@@ -266,7 +275,7 @@ func (d *reviewDesk) frame(t *testing.T) frameModel {
 	if len(argv) < 3 {
 		t.Fatalf("no review pane was started: %q", d.tm.lines())
 	}
-	pane := New(Options{NoMotion: true, Now: func() time.Time { return demoAt }, Pane: "%9", Tmux: d.tm.run})
+	pane := New(Options{NoMotion: true, Now: func() time.Time { return demoAt }, Pane: "%9", Tmux: d.tm.run, Conn: d.pane})
 	f, err := reviewFrameFromArgv(pane, argv[2:])
 	if err != nil {
 		t.Fatal(err)
@@ -344,36 +353,52 @@ func TestReviewPasteHitsOnlyThatPane(t *testing.T) {
 	d.press(t, "D")
 	f := reviewTwoComments(t, d.frame(t))
 	f = frameKey(t, f, "enter")
-	_ = f
 
 	d.choose(t, "other") // the choice moves, as a refresh or a click would
+	f = d.answer(t, f, proto.Result{})
+	_ = f
 	d.poll(t)
 
 	pastes := d.pastes()
 	if len(pastes) != 1 || pastes[0].RecID != proto.PastePrefix+"%7" {
 		t.Fatalf("pastes %+v, want one to paste:%%7", pastes)
 	}
-	for _, a := range d.home.allActs() {
+	for _, a := range append(d.home.allActs(), d.pane.allActs()...) {
 		if !strings.HasPrefix(a.RecID, "watch:") && (strings.Contains(a.RecID, "%8") || strings.Contains(a.RecID, "s8")) { // a watch only reads
 			t.Fatalf("an act touched the other session: %+v", a)
 		}
+	}
+	var gaveKeys bool
+	for _, a := range d.home.allActs() {
+		gaveKeys = gaveKeys || a.RecID == proto.KeysPrefix+"s7"
+	}
+	if !gaveKeys {
+		t.Fatalf("the keys did not go to ux-pass: %+v", d.home.allActs())
 	}
 	for _, line := range d.tm.typed() {
 		t.Fatalf("the console's tmux typed into a pane: %s", line)
 	}
 }
 
-// A hostile test: a handoff that names another pane than the one the
-// review opened on is not sent.
-func TestReviewHandoffForAnotherPaneIsNotSent(t *testing.T) {
+// A hostile test: a word that names another pane than the one the review
+// opened on ends nothing and gives no keys, and the list sends no paste.
+func TestReviewHandoffForAnotherPaneIsIgnored(t *testing.T) {
 	d := newReviewDesk(t, reviewRepo(t), "main")
 	d.choose(t, "ux-pass")
 	d.press(t, "D")
-	raw, _ := json.Marshal(map[string]any{"act": "send", "pane": "%8", "name": "other", "n": 1, "text": "comment on a line"})
+	raw, _ := json.Marshal(reviewAct{Act: "sent", Pane: "%8", N: 1})
 	_, _ = d.tm.run("set-option", "-w", "-t", "%9", sample.ReviewOption, string(raw))
 	d.poll(t)
 	if got := d.pastes(); len(got) != 0 {
 		t.Fatalf("a review went to a session it did not open on: %+v", got)
+	}
+	if d.m.reviewing == nil || len(d.tm.respawns()) != 1 {
+		t.Fatal("a word for another pane ended the review")
+	}
+	for _, a := range d.home.allActs() {
+		if strings.HasPrefix(a.RecID, proto.KeysPrefix) {
+			t.Fatalf("keys given: %+v", a)
+		}
 	}
 }
 
@@ -514,8 +539,9 @@ func TestTwoCommentsSendOnePaste(t *testing.T) {
 		t.Fatal("a comment sent a message")
 	}
 	f = frameKey(t, f, "enter") // no field open: send
-	_ = f
-	d.poll(t)
+	if d.tm.option(sample.ReviewOption) != "" {
+		t.Fatal("the send wrote the tmux option before the service answered")
+	}
 
 	pastes := d.pastes()
 	if len(pastes) != 1 {
@@ -534,7 +560,9 @@ func TestTwoCommentsSendOnePaste(t *testing.T) {
 		t.Fatalf("each comment once:\n%s", p.Text)
 	}
 
-	d.answer(t, proto.Result{})
+	f = d.answer(t, f, proto.Result{})
+	_ = f
+	d.poll(t)
 	if got := d.m.flash; got != "sent a review of 2 comments to ux-pass · now in WORKING" {
 		t.Fatalf("said %q", got)
 	}
@@ -559,7 +587,7 @@ func TestTwoCommentsSendOnePaste(t *testing.T) {
 		t.Fatal("the review is still open")
 	}
 	if d.tm.option(sample.ReviewOption) != "" {
-		t.Fatal("the handoff, with the review's text, stays in the tmux options")
+		t.Fatal("the word to the list stays in the tmux options")
 	}
 }
 
@@ -577,7 +605,6 @@ func TestASecondCommentOnTheSameLineReplacesIt(t *testing.T) {
 		t.Fatalf("the second c did not replace the first:\n%s", text)
 	}
 	_ = frameKey(t, f, "enter")
-	d.poll(t)
 	p := d.pastes()
 	if len(p) != 1 || strings.Contains(p[0].Text, "first") || !strings.Contains(p[0].Text, "second") || strings.Count(p[0].Text, "a.go:1") != 1 {
 		t.Fatalf("pastes %+v", p)
@@ -647,19 +674,16 @@ func TestEscLeavesReview(t *testing.T) {
 	}
 }
 
-func TestAReviewTheListRefusesKeepsItsComments(t *testing.T) {
+func TestAReviewTheServiceRefusesKeepsItsComments(t *testing.T) {
 	d := newReviewDesk(t, reviewRepo(t), "main")
 	d.choose(t, "ux-pass")
 	d.press(t, "D")
 	f := reviewTwoComments(t, d.frame(t))
 	f = frameKey(t, f, "enter")
-	d.poll(t)
-	d.answer(t, proto.Result{Err: "ux-pass is working: wait for its turn"})
+	f = d.answer(t, f, proto.Result{Err: "ux-pass is working: wait for its turn"})
 	if d.m.reviewing == nil || len(d.tm.respawns()) != 1 {
 		t.Fatalf("a refused send ended the review: respawns %q", d.tm.respawns())
 	}
-	next, tick := f.Update(frameTick{})
-	f = frameRun(t, next.(frameModel), tick)
 	text := frameText(f)
 	if !strings.Contains(text, "not sent: ux-pass is working: wait for its turn") || !strings.Contains(text, "why 1") {
 		t.Fatalf("the review lost its comments or the reason:\n%s", text)
@@ -670,7 +694,6 @@ func TestAReviewTheListRefusesKeepsItsComments(t *testing.T) {
 	// send again
 	f = frameKey(t, f, "enter")
 	_ = f
-	d.poll(t)
 	if p := d.pastes(); len(p) != 2 || !strings.Contains(p[1].Text, "name this") || !strings.Contains(p[1].Text, "why 1") {
 		t.Fatalf("pastes %+v, want the second send with both comments", p)
 	}
@@ -687,6 +710,50 @@ func TestAReviewTheListNeverTakesUnfreezes(t *testing.T) {
 	}
 	if text := frameText(f); !strings.Contains(text, "the list did not answer") {
 		t.Fatalf("a review nobody answers is a dead end:\n%s", text)
+	}
+}
+
+// A hostile test: the service never answers the paste. The pane says so, and
+// the owner can send again or leave.
+func TestAReviewTheServiceNeverAnswersUnfreezes(t *testing.T) {
+	d := newReviewDesk(t, reviewRepo(t), "main")
+	d.choose(t, "ux-pass")
+	d.press(t, "D")
+	f := frameKey(t, reviewTwoComments(t, d.frame(t)), "enter")
+	for range 30 {
+		next, _ := f.Update(frameTick{})
+		f = next.(frameModel)
+	}
+	if text := frameText(f); !strings.Contains(text, "the service did not answer") || !strings.Contains(text, "why 1") {
+		t.Fatalf("a paste nobody answers is a dead end:\n%s", text)
+	}
+	_ = frameKey(t, f, "enter")
+	if p := d.pastes(); len(p) != 2 {
+		t.Fatalf("pastes %d, want a second send", len(p))
+	}
+}
+
+// The pane reaches only this machine's service: a session on a peer says so
+// and nothing is sent or written.
+func TestReviewSendForAPeerSaysSo(t *testing.T) {
+	d := newReviewDesk(t, reviewRepo(t), "main")
+	pane := New(Options{NoMotion: true, Pane: "%9", Tmux: d.tm.run, Conn: d.pane})
+	f, err := reviewFrameFromArgv(pane, []string{"--kind=review", "--session", "ux-pass", "--host", "gpu-1", "--pane", "%7", "--dir", "/wt", "--base", "main"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	next, _ := f.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	f = next.(frameModel)
+	diff := &reviewDiff{against: "main", files: []reviewFile{{path: "a.go", add: 1, loaded: true, lines: []reviewLine{{kind: '+', text: "x", new: 1}}}}}
+	f = frameRun(t, f, func() tea.Msg { return reviewLoaded{diff: diff} })
+	f = frameKey(t, f, "c")
+	f = frameType(t, f, "hm")
+	f = frameKey(t, f, "enter", "enter")
+	if text := frameText(f); !strings.Contains(text, "not sent: gpu-1 is another machine") {
+		t.Fatalf("no word on a peer:\n%s", text)
+	}
+	if len(d.pane.allActs()) != 0 || d.tm.option(sample.ReviewOption) != "" {
+		t.Fatalf("acts %+v, option %q", d.pane.allActs(), d.tm.option(sample.ReviewOption))
 	}
 }
 
@@ -933,5 +1000,32 @@ func TestDOnAChainViewSaysSo(t *testing.T) {
 	d.press(t, "D")
 	if len(d.tm.respawns()) != 0 || !strings.Contains(d.m.noticeText+d.m.flash, "chain") {
 		t.Fatalf("respawns %q notice %q", d.tm.respawns(), d.m.noticeText)
+	}
+}
+
+// The review's comments, the file text and the paste go to the service and
+// to nothing else: a tmux window option is readable by every process of the
+// same user, so no call of tmux carries them.
+func TestReviewSendKeepsTextOutOfTmuxOptions(t *testing.T) {
+	d := newReviewDesk(t, reviewRepo(t), "main")
+	d.choose(t, "ux-pass")
+	d.press(t, "D")
+	f := reviewTwoComments(t, d.frame(t))
+	f = frameKey(t, f, "enter")
+	f = d.answer(t, f, proto.Result{})
+	_ = f
+	d.poll(t)
+	if len(d.pastes()) != 1 {
+		t.Fatal("the review did not reach the service")
+	}
+	for _, line := range d.tm.lines() {
+		for _, secret := range []string{"name this", "why 1", "package a", "const X", "a.go:1", "b.go:3"} {
+			if strings.Contains(line, secret) {
+				t.Fatalf("tmux was handed the review's text (%q): %s", secret, line)
+			}
+		}
+	}
+	if d.tm.option("@matchblox_review_reply") != "" {
+		t.Fatal("the reply option is back")
 	}
 }
