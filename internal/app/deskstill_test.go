@@ -17,8 +17,8 @@ import (
 var updateStill = flag.Bool("update-still", false, "write the four-pane desk still into www/index.html")
 
 const (
-	deskStillCols  = 132
-	deskStillListW = 40
+	deskStillCols  = 104 // the landing's open Duo is 104 columns
+	deskStillListW = 32
 	deskStillRows  = 28
 )
 
