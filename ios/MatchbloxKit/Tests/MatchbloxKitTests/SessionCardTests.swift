@@ -58,7 +58,8 @@ final class SessionCardTests: XCTestCase {
         XCTAssertNil(card.lift, "25° is less than a step")
         turn(&card, from: 25, to: 70)
         XCTAssertEqual(card.lift, 6)
-        turn(&card, from: 70, to: 0)
+        // Past the last row the turn is not counted, so 30° back is the way home.
+        turn(&card, from: 70, to: 40)
         XCTAssertEqual(card.chosen, 2)
         XCTAssertNil(card.lift, "a turn back onto the current session opens nothing")
     }
