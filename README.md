@@ -74,10 +74,11 @@ session needs you, and answer from anywhere. In beta on TestFlight.
 
 3. In another terminal, start your agents in tmux, for example
    `tmux new -s app claude`. When an
-   agent needs you, it goes into `NEEDS YOU`, and its chat shows what it
-   asks. In tmux, the agent's own pane shows beside the list: type in it,
-   and `ctrl+q` flips the keys between the list and the agent. `Ctrl+O`
-   jumps fully into the pane, and `prefix m` comes back.
+   agent needs you, it goes into `NEEDS YOU`. In tmux, at 100 columns or
+   more, the window is four panes: a header, the list, the agent's own
+   pane, and a bar. Type in the agent, and `ctrl+q` flips the keys between
+   the list and the agent. Under 100 columns the list sits beside the
+   agent. `Ctrl+O` jumps fully into the pane, and `prefix m` comes back.
 
 The full walk is [Get started](https://docs.matchblox.com/start/).
 

@@ -68,11 +68,11 @@ the line empty and a question on the screen; else it types.
 ### The agent beside the list
 
 On a desk, the console runs inside tmux in its home session `matchblox`.
-There the console's window has two panes: the list, and the agent's own
-pane. The right pane is a live view of the agent's pane, so typing there is
-typing into the agent: its `/commands`, `@files`, `Esc`, menus, and the
-mouse wheel for scroll and copy. The list is 40 columns wide, or 32 on a
-mid, tall screen.
+Under 100 columns, the window has two panes: the list, and the agent's own
+pane. At 100 columns or more, it is [four panes](#the-desk). The right pane
+is a live view of the agent's pane, so typing there is typing into the
+agent: its `/commands`, `@files`, `Esc`, menus, and the mouse wheel for
+scroll and copy. The list is 40 columns wide, or 32 on a mid, tall screen.
 
 | Key | What it does |
 |---|---|
@@ -142,8 +142,9 @@ The drawn chat and its line stay in the demo (and the iOS demo), in a
 console with no tmux, and in a console outside its home session or started
 for a host.
 
-On a desk the list is 40 columns wide, with the chat beside it. On a
-narrower screen the list is 32 columns wide. A phone, and a screen that
+The list is 40 columns wide, 32 on a narrower screen. On the four-pane
+desk the agent sits beside it. On a sidebar, and in the demo, the chat
+sits beside it. A phone, and a screen that
 leaves the chat less than 40 columns, shows one of the two at a time:
 the list first. A tap on a row, or `Enter` in the list, opens its chat.
 A tap on a group's head folds the group: the head keeps its count, and
