@@ -564,7 +564,7 @@ func beltKeyOf(t *testing.T, ks []beltKey, face string) beltKey {
 // TestBeltKeysFollowTheChosenCard (design decision 10): home is ◂, the
 // chosen session's keys, ↑ ↓ ⏎; the tail has the keys of the list.
 func TestBeltKeysFollowTheChosenCard(t *testing.T) {
-	tail := []string{"⌃o", "s", "g", "/", "m", "c", "z", "N", "⇥", "x"}
+	tail := []string{"⌃o", "s", "g", "/", "m", "c", "z", "N", "⇥", "x", "?", ",", "t", "D"}
 	st := boardFixture(t)
 
 	m, _ := flintBoard(t, 80, 34)
@@ -597,7 +597,7 @@ func TestBeltKeysFollowTheChosenCard(t *testing.T) {
 	if g := beltKeyOf(t, ks, "g"); g.On {
 		t.Errorf("kindle-web is in no chain, yet g is %+v", g)
 	}
-	words := map[string]string{"⌃o": "expand", "c": "copy", "m": "menu", "g": "chain", "s": "hosts", "⇥": "machine", "x": "kill", "z": "park", "N": "new"}
+	words := map[string]string{"⌃o": "expand", "c": "copy", "m": "menu", "g": "chain", "s": "hosts", "⇥": "machine", "x": "kill", "z": "park", "N": "new", "?": "keys", ",": "machine", "t": "shell", "D": "diff"}
 	for face, word := range words {
 		if k := beltKeyOf(t, ks, face); k.Word != word {
 			t.Errorf("%s says %q, want %q", face, k.Word, word)
@@ -675,7 +675,7 @@ func TestTheBeltSignalSaysTheBoardsKeys(t *testing.T) {
 
 	empty := st
 	empty.Sessions, empty.Queue, empty.Ships, empty.Chains = nil, nil, &proto.Ships{At: demoAt}, nil
-	if got := value(boardShot(t, empty, 80, 34, nil)); got != ";ctrl+o,s,g,m,c,z,x" {
+	if got := value(boardShot(t, empty, 80, 34, nil)); got != ";ctrl+o,s,g,m,c,z,x,t,D" {
 		t.Errorf("no card chosen: %q", got)
 	}
 
@@ -710,7 +710,7 @@ func TestTheBeltSignalSaysTheBoardsKeys(t *testing.T) {
 		if !c.consenting() {
 			t.Fatalf("%s does not show", name)
 		}
-		if got := value(c); got != ";ctrl+o,s,g,/,m,c,z,N,tab,x" {
+		if got := value(c); got != ";ctrl+o,s,g,/,m,c,z,N,tab,x,?,comma,t,D" {
 			t.Errorf("%s: %q, want the home with no card keys", name, got)
 		}
 		if ks := c.beltKeys(); slices.ContainsFunc(ks, func(k beltKey) bool { return k.Act }) {

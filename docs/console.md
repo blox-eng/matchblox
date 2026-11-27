@@ -1,5 +1,41 @@
 # The console
 
+## The desk
+
+On a desk, inside tmux, in the home session `matchblox`, at 100 columns
+or more, the console is four panes: a header, the list, the agent's own
+pane, and a bar. Pocket, and a terminal under 100 columns, keep
+[the sidebar](#the-sidebar).
+
+The header is one row. It shows the mark, the host, one chip for each
+repo, and `● N need you`. A chip shows that repo's matches. The count
+is every wait, on every host and in every chain.
+
+The list draws `NEEDS YOU`, then `DONE`, then `WORKING`, `IDLE` and
+`HELD`. `DONE` is a turn that ended after you last gave the keys, and
+the row's time is `now`. `⏎` on that row gives the keys, and the row
+leaves `DONE`. `↑` and `↓` do not.
+
+The agent's pane is the agent's own tmux pane. Typing there is typing
+into the agent. `g` in the list tiles that chain's agents in the agent
+seat, up to four. `G` opens the chain's room in the list. The header
+and the bar stay.
+
+The bar is the row under the panes. It names where the keys are
+(`LIST`, `AGENT`, `SHELL` or `REVIEW`), the hosts, the plan's window
+and the stoker. Its right end says `? keys`. While the agent or the
+shell has the keys, `ctrl+q list` comes first. A confirm replaces the
+chips until you answer.
+
+`?` opens the keys over the list. The agent's pane stays. `,` opens
+Machine over the list, the same rows as the sidebar's Machine tab.
+`t` opens a shell under the agent, in that agent's folder, and `t`
+again moves to it. `D` puts the review of the change in the agent
+seat. `esc` closes a sheet. On the desk, `⇥` does nothing. On the
+sidebar, `⇥` still opens Machine.
+
+## The sidebar
+
 From the top: the header, the tab row, the list beside the chat, and at
 the bottom the key line.
 
@@ -25,14 +61,15 @@ search. See [Keys](keys.md).
 
 The console opens on Sessions: the list of every match at the left, and
 the chat of the chosen match at the right. The list puts each match in
-one of four groups:
+one of five groups:
 
 | Group | A match is here when |
 |---|---|
-| `NEEDS YOU` | It asks a question or a permission, or a stoker step for it waits for your go. A pull request it drives waits for your merge, and it does not work. Its pull request is stuck (`CI failed`, `conflicts`, `changes requested`) and it does not work. Or its turn ended today and it waits for input (`waits`, `paused`, `done`). |
+| `NEEDS YOU` | It asks a question or a permission, or a stoker step for it waits for your go. A pull request it drives waits for your merge, and it does not work. Its pull request is stuck (`CI failed`, `conflicts`, `changes requested`) and it does not work. Or its turn ended today and it waits for input (`waits`, `paused`). |
+| `DONE` | Its last turn ended after you last gave the keys. The row's time is `now`. `⏎` gives the keys and the row leaves `DONE`. `↑` and `↓` leave it there. |
 | `WORKING` | It is `busy`, `agents`, `tests` or `shell`. |
-| `HELD` | You parked it (`z`), or the stoker holds it and it asks nothing. |
 | `IDLE` | Everything else: `idle`, `cold`, `stale` and `out`. |
+| `HELD` | You parked it (`z`), or the stoker holds it and it asks nothing. |
 
 A match you parked is in `HELD` whatever else is true, and the header
 does not count it. A wait from before today is cold, and cold is `IDLE`.
@@ -325,7 +362,7 @@ laptop screen at 107 × 60, shows the list beside the chat.
 |---|---|
 | Narrow in Matchblox Pocket (upright, or under 60 columns), and any screen that leaves the chat less than 40 columns | One of the two at a time: the list first. A tap on a row, or `Enter` in the list, opens its chat, and `◂` comes back. |
 | Medium (60 to 99 columns) | The list, 32 columns wide, and the chat beside it. |
-| Wide (100 columns and more) | The list, 40 columns wide, and the chat beside it. |
+| Wide (100 columns and more) | The list, 40 columns wide, and the chat beside it. In the home session, and not on Pocket, this width is [the desk](#the-desk): a header and a bar around the list and the agent's pane. |
 
 A keyboard that shrinks the screen never changes the shape: the shape
 goes by the tallest height seen at the width. `Ctrl+L` hides the list on
@@ -655,7 +692,8 @@ Each row starts with a match:
 
 | Mark | Word | It means |
 |---|---|---|
-| `╿` | asks, waits, done, paused | The agent needs you. The match is struck, and its head breathes while it asks. |
+| `╿` | asks, waits, paused | The agent needs you. The match is struck, and its head breathes while it asks. |
+| `✓` | done | The last turn ended after you last gave the keys. The row is in `DONE`. |
 | `✦` | busy, agents, tests, shell | The agent works. The match burns. `agents`: its turn ended and its subagents still work, and their results start its next turn. It does not need you. |
 | `╽` | held | The stoker holds it, or you parked it. |
 | `╵` | idle, cold, stale, out | The agent rests. `out`: the plan's limit stops it, and the row says when it can work again: `19:50`, or the weekday when that is more than a day away. A session left a day or more keeps its word: `cold`, `stale`. |

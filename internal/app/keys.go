@@ -185,8 +185,8 @@ func defaultKeys() keymaps {
 			Flip:     bind(ks("ctrl+q"), "ctrl+q", "agent"),
 		},
 		// desk names the keys the sheet lists that no other layer owns.
-		// They stay off side.bindings so the docs guard does not demand a
-		// table for them before the desk's merge pass.
+		// bindings() is the four the belt and the docs name. The shell's
+		// ctrl+d and the review's page keys stay off it.
 		desk: deskKeys{
 			Question: bind(ks("?"), "?", "keys"),
 			Cog:      bind(ks(","), ",", "machine"),
@@ -332,6 +332,10 @@ type sideKeys struct{ Enter, Erase, Leave, Up, Down, Unhide, List, HideList, Jum
 // , opens Machine, t asks for the shell, D is the diff, and ctrl+d
 // belongs to the shell.
 type deskKeys struct{ Question, Cog, Shell, Diff, ShellEnd, PageUp, PageDown bkey.Binding }
+
+func (k deskKeys) bindings() []bkey.Binding {
+	return []bkey.Binding{k.Question, k.Cog, k.Shell, k.Diff}
+}
 
 func (k sideKeys) bindings() []bkey.Binding {
 	return []bkey.Binding{k.Enter, k.Erase, k.Leave, k.Up, k.Down, k.Unhide, k.List, k.HideList, k.Jump, k.Flip}

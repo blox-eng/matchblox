@@ -231,15 +231,15 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 	sk, mk, bk := m.keys.side, m.keys.main, m.keys.board
 	var cmd tea.Cmd
 	switch {
-	case m.deskFrame && bkey.Matches(k, m.keys.desk.Question):
+	case (m.deskFrame || m.tapping) && bkey.Matches(k, m.keys.desk.Question):
 		m.keySheet = &keySheet{}
 		return m, nil
-	case m.deskFrame && m.keySheet == nil && bkey.Matches(k, m.keys.desk.Cog):
+	case (m.deskFrame || m.tapping) && m.keySheet == nil && bkey.Matches(k, m.keys.desk.Cog):
 		m.cogSheet = &cogSheet{}
 		return m, nil
-	case m.deskFrame && bkey.Matches(k, m.keys.desk.Shell):
+	case (m.deskFrame || m.tapping) && bkey.Matches(k, m.keys.desk.Shell):
 		return m.askShell()
-	case m.deskFrame && bkey.Matches(k, m.keys.desk.Diff):
+	case (m.deskFrame || m.tapping) && bkey.Matches(k, m.keys.desk.Diff):
 		return m.askReview()
 	case m.footAt > 0 && bkey.Matches(k, append([]bkey.Binding{mk.Park, bk.Copy, bk.Chain, bk.Menu}, m.rowActKeys()...)...):
 		cmd = m.notice(strings.Join([]string{mk.Park.Help().Key, bk.Copy.Help().Key, bk.Chain.Help().Key, bk.Menu.Help().Key}, " ") +
@@ -364,7 +364,8 @@ func (m Model) noRowWhy() string {
 // beltActs are the keys a tap on Pocket's belt acts with (keycmd.TapKeys).
 func (m Model) beltActs() []bkey.Binding {
 	bk, mk := m.keys.board, m.keys.main
-	return []bkey.Binding{bk.Copy, bk.Menu, bk.Chain, bk.Host, bk.Merge, mk.Second, mk.Search, mk.Park, mk.Grant, mk.New}
+	dk := m.keys.desk
+	return []bkey.Binding{bk.Copy, bk.Menu, bk.Chain, bk.Host, bk.Merge, mk.Second, mk.Search, mk.Park, mk.Grant, mk.New, dk.Question, dk.Cog, dk.Shell, dk.Diff}
 }
 
 // beltTap is a tap on an act key of Pocket's belt, from the client on tty

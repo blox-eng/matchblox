@@ -106,6 +106,23 @@ to the list. The phone has a console of its own, sized to the phone: a
 choice on the phone moves no other screen, and no screen changes the
 phone's size.
 
+### The desk
+
+At 100 columns or more, in the home session, and not on Pocket, the
+window is four panes: a header, the list, the agent's pane, and a bar.
+The bar names the mode, the hosts, the plan and the stoker, and `? keys`
+at the right. Under 100 columns, and on Pocket, the sidebar stays, and
+`⇥` still opens Machine. On the desk, `⇥` does nothing.
+
+| Key | What it does |
+|---|---|
+| `?` | Opens the keys over the list. The agent's pane stays. |
+| `,` | Opens Machine over the list. In the agent's pane, `,` types. |
+| `t` | Opens a shell under the agent, in its folder. `t` again moves to that shell. In the agent's pane, `t` types. |
+| `D` | Opens the review of the change in the agent seat. |
+| `g` | Tiles the chain's agents in the agent seat, up to four. The header and the bar stay. |
+| `G` | Opens the chain's room in the list. The header and the bar stay. |
+
 ### Each terminal, its own console
 
 `matchblox` in a terminal joins the console `matchblox` while no terminal

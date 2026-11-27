@@ -84,15 +84,15 @@ The full walk is [Get started](https://docs.matchblox.com/start/).
 ## What it shows
 
 - **Every agent, one chat**: the list at the left puts each match in a
-  group, `NEEDS YOU`, `WORKING`, `HELD` or `IDLE`, with what needs you on
-  top. The header counts what needs you: `● 3 need you`. A match for each:
+  group, `NEEDS YOU`, `DONE`, `WORKING`, `IDLE` or `HELD`, with what needs you on
+  top. `DONE` is a turn that ended. The header counts what needs you: `● 3 need you`. A match for each:
   `╿` struck when it needs you, `✦` burning while it works, `╵` burnt out
   at rest. Its row says what it asks, its pull request and its chain.
 - **The agent beside the list**: in tmux, the right side is the agent's own
   pane. Typing there is typing into the agent, with its `/commands`,
   `@files` and menus. `↑↓` show each agent as you pass, `Enter` goes in, and `ctrl+q`
-  flips the keys between the list and the agent. `g` on a chain shows up to
-  4 of its agents side by side.
+  flips the keys between the list and the agent. At 100 columns or more, in the home session, the window is four panes: a header, the list, the agent, and a bar. `?` opens the keys, `,` opens Machine, `t` opens a shell under the agent, and `D` reviews the change. `g` tiles up to
+  4 of a chain's agents in the agent seat, and `G` opens the chain's room. The header and the bar stay. Under 100 columns, and on Pocket, the sidebar stays.
 - **The chat**: where there is no tmux (the demo, or a console outside its
   home session), the chosen session's conversation and the options of its
   question, beside the list. Type in its line and `Enter` sends it. A
@@ -177,7 +177,11 @@ to the agent's own pane, and `ctrl+q` flips them.
 | `s` | In the list, shows the next host, then all hosts. |
 | `N` | In the list, starts a new session: where, the agent, its account and a first message (none on a new account). |
 | `A` | In the list, switches the chosen session to another agent in the same pane. |
-| `Tab` | Goes to Machine, or back. |
+| `Tab` | On the sidebar, goes to Machine, or back. On the desk, it does nothing: `,` opens Machine. |
+| `?` | On the desk, and on Pocket's belt, opens the keys over the list. |
+| `,` | On the desk, and on Pocket's belt, opens Machine over the list. In the agent's pane, it types. |
+| `t` | On the desk, and on Pocket's belt, opens a shell under the agent. In the agent's pane, it types. |
+| `D` | On the desk, and on Pocket's belt, opens the review of the change in the agent seat. |
 | `/` | In the list, searches it. |
 | `f`, `n` | In the list, the stoker on or off; a night that ends in the morning. |
 | `Ctrl+C` | Quits. The service keeps running. |
