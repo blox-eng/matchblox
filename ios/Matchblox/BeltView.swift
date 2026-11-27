@@ -200,6 +200,11 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
     private lazy var headRow: NSLayoutConstraint = belt.topAnchor.constraint(equalTo: drawer.bottomAnchor)
     /// What the head says in the handle row, in place of its rest line.
     private var headLine: String?
+    /// True while the belt is dragged, and until `headBackAfter` after it stops: the belt is in
+    /// front of the head, and every key shows.
+    private var beltInFront = false
+    private var headBack: Task<Void, Never>?
+    private static let headBackAfter: Duration = .milliseconds(1400)
 
     init() {
         let layout = BeltLayout.load(from: .standard)
@@ -615,6 +620,39 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
         if let line { UIAccessibility.post(notification: .announcement, argument: line) }
     }
 
+    /// The dragged belt comes in front of the head: the head fades and takes no touch.
+    private func bringBeltForward() {
+        headBack?.cancel()
+        headBack = nil
+        guard let head, !beltInFront else { return }
+        beltInFront = true
+        head.isUserInteractionEnabled = false
+        spoken = nil
+        UIAccessibility.post(notification: .layoutChanged, argument: nil)
+        UIView.animate(withDuration: 0.15) { head.alpha = 0 }
+    }
+
+    /// The belt slips back behind the head `headBackAfter` after it stops, or at once.
+    private func sendBeltBack(at once: Bool = false) {
+        headBack?.cancel()
+        headBack = nil
+        guard beltInFront else { return }
+        guard once else {
+            headBack = Task { [weak self] in
+                try? await Task.sleep(for: Self.headBackAfter)
+                guard let self, !Task.isCancelled else { return }
+                self.sendBeltBack(at: true)
+            }
+            return
+        }
+        beltInFront = false
+        guard let head else { return }
+        head.isUserInteractionEnabled = true
+        spoken = nil
+        UIAccessibility.post(notification: .layoutChanged, argument: nil)
+        UIView.animate(withDuration: 0.2) { head.alpha = 1 }
+    }
+
     /// What a roll and a hold do, and where to set them: the handle row of a belt with a head, at rest.
     private var restLine: String? {
         head.map { _ in HeadHint.rest(hold: HeadMarks.load(from: .standard)[.hold]).line }
@@ -686,7 +724,11 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
 
     /// A belt a touch stopped between two detents settles on the nearest.
     private func settleIfHeld() {
-        guard motion?.atRest == false, link == nil else { return }
+        guard motion?.atRest == false, link == nil else {
+            // A belt a touch stopped at rest goes back behind the head as a settled one does.
+            if link == nil { sendBeltBack() }
+            return
+        }
         motion?.release(velocity: 0)
         startLink()
     }
@@ -721,6 +763,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
             if pan.state == .began {
                 stopLink()
                 touch = nil
+                bringBeltForward()
             }
             let x = pan.location(in: belt).x
             let ticks = motion?.drag(by: x - dragX) ?? []
@@ -827,6 +870,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
             stopLink()
             spoken = nil
             UIAccessibility.post(notification: .layoutChanged, argument: nil)
+            sendBeltBack()
         }
     }
 
@@ -858,6 +902,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
         setTray(open: false, animated: false)
         touch = nil
         stopLink()
+        sendBeltBack(at: true)
         if runOffLeft > 0 { rebuild() }
         // A belt that leaves the screen mid-coast rests on its nearest detent at once.
         guard motion?.atRest == false else { return }
@@ -1051,7 +1096,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
             }
             var elements: [Any] = [name, keyboardButton]
             if trayOpen { elements.append(trayHost.view as Any) }
-            if let head { elements.append(head) }
+            if let head, !beltInFront { elements.append(head) }
             guard let motion else {
                 spoken = elements
                 return elements

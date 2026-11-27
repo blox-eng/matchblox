@@ -4,6 +4,8 @@ import XCTest
 /// the head's edge: one drag turns it at most about 11 notches.
 final class HeadTests: XCTestCase {
     private let replyText = "I rotate the token on each refresh"
+    /// What spark-docs says to any line sent in its chat.
+    private let sparkReply = "Got it. I am working on that."
 
     override func setUpWithError() throws {
         continueAfterFailure = false
@@ -166,7 +168,90 @@ final class HeadTests: XCTestCase {
         XCTAssertFalse(app.staticTexts["sessions-card"].exists, "a 0.45 s press left a card")
     }
 
+    /// A drag on the belt brings it in front of the head: the head is out of reach while the
+    /// belt moves, and back 1.4 s after it stops.
+    @MainActor
+    func testBeltDragBringsItForward() {
+        let app = launched()
+        openTheChat(app, row: "spark-docs")
+        let head = theHead(in: app)
+        XCTAssertTrue(head.isHittable, "the head is out of reach before the drag")
+        // Along the belt's keys, left of the head and under it, then still before the lift.
+        at(head, -150, 60).press(forDuration: 0.05, thenDragTo: at(head, 60, 60), withVelocity: .slow, thenHoldForDuration: 0.2)
+        XCTAssertFalse(head.exists && head.isHittable, "the head stayed in front of the dragged belt")
+        XCTAssertTrue(becomesHittable(head, within: 3), "the head did not come back after the belt stopped")
+    }
+
+    /// Return on the system keyboard sends the line, then the keyboard folds and the head is back.
+    @MainActor
+    func testKeyboardFoldsAfterSend() {
+        let app = launched()
+        openTheChat(app, row: "spark-docs")
+        raiseTheKeyboard(app)
+        theTerminal(in: app).typeText("ok\n")
+        expect(in: app, step: "spark-docs's reply to ok", "label CONTAINS %@", sparkReply)
+        XCTAssertTrue(app.buttons["Show keyboard"].firstMatch.waitForExistence(timeout: 10), "the keyboard stayed up after the send")
+        XCTAssertFalse(app.keyboards.firstMatch.exists, "the keyboard stayed up after the send")
+        XCTAssertTrue(becomesHittable(theHead(in: app), within: 5), "the head did not come back after the fold")
+    }
+
+    /// Anti-goal: the keyboard folds before the line is sent. Text with no Return keeps the
+    /// keyboard up and stays in the line; Return sends all of it, and only then the keyboard folds.
+    @MainActor
+    func testFoldKeepsText() {
+        let app = launched()
+        openTheChat(app, row: "spark-docs")
+        raiseTheKeyboard(app)
+        let terminal = theTerminal(in: app)
+        terminal.typeText("ok")
+        expect(in: app, step: "ok in the chat's line", "label CONTAINS %@", "› ok")
+        Thread.sleep(forTimeInterval: 1.5)
+        XCTAssertTrue(app.buttons["Hide keyboard"].firstMatch.exists, "the keyboard folded before Return")
+        XCTAssertTrue(terminal.label.contains("› ok"), "the line lost its text before Return: \(terminal.label)")
+        terminal.typeText("\n")
+        expect(in: app, step: "spark-docs's reply to ok", "label CONTAINS %@", sparkReply)
+        expect(in: app, step: "the line empty after the send", "NOT label CONTAINS %@", "› ok")
+        XCTAssertTrue(app.buttons["Show keyboard"].firstMatch.waitForExistence(timeout: 10), "the keyboard stayed up after the send")
+    }
+
+    /// With the keyboard up, the lifted belt's `⏎` sends Enter, and the keyboard folds.
+    @MainActor
+    func testLiftedEnterFolds() {
+        let app = launched()
+        openTheChat(app, row: "spark-docs")
+        raiseTheKeyboard(app)
+        theTerminal(in: app).typeText("ok")
+        expect(in: app, step: "ok in the chat's line", "label CONTAINS %@", "› ok")
+        // The lifted belt's Return, not the system keyboard's: the belt sits above the keyboard.
+        let keyboard = app.keyboards.firstMatch.frame
+        let returns = app.buttons.matching(NSPredicate(format: "label == %@", "Return")).allElementsBoundByIndex
+        guard let enter = returns.first(where: { $0.isHittable && $0.frame.maxY <= keyboard.minY + 1 }) else {
+            return XCTFail("no ⏎ on the lifted belt. " + app.debugDescription)
+        }
+        enter.tap()
+        expect(in: app, step: "spark-docs's reply to the belt's ⏎", "label CONTAINS %@", sparkReply)
+        XCTAssertTrue(app.buttons["Show keyboard"].firstMatch.waitForExistence(timeout: 10), "the keyboard stayed up after the belt's ⏎")
+        XCTAssertTrue(becomesHittable(theHead(in: app), within: 5), "the head did not come back after the fold")
+    }
+
     // MARK: Helpers
+
+    /// The head's bottom mark, `⌨`, raises the keyboard.
+    @MainActor
+    private func raiseTheKeyboard(_ app: XCUIApplication) {
+        at(theHead(in: app), 0, 40).tap()
+        dismissKeyboardTip(in: app)
+        XCTAssertTrue(app.buttons["Hide keyboard"].firstMatch.waitForExistence(timeout: 10), "⌨ raised no keyboard. " + app.debugDescription)
+    }
+
+    @MainActor
+    private func becomesHittable(_ element: XCUIElement, within seconds: TimeInterval) -> Bool {
+        let deadline = Date().addingTimeInterval(seconds)
+        while !(element.exists && element.isHittable), Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.2)
+        }
+        return element.exists && element.isHittable
+    }
 
     /// The last sessions card the head showed.
     @MainActor

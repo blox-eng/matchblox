@@ -508,6 +508,7 @@ private final class Belts {
         head.onKeyboard = { [weak terminal] in _ = terminal?.becomeFirstResponder() }
         head.onHighlight = { [weak terminal] text in terminal?.highlightRow(showing: text) }
         head.visibleLines = { [weak terminal] in terminal?.visibleLines ?? [] }
+        terminal.onReturnSent = { [weak self] in self?.foldKeyboard() }
         ctrlObserver = NotificationCenter.default.addObserver(forName: Self.ctrlReset, object: terminal, queue: .main) {
             [weak self] _ in MainActor.assumeIsolated { self?.ctrlChanged(false) }
         }
@@ -515,6 +516,7 @@ private final class Belts {
 
     private static let copyReply = KeyBar.bytes(for: "board.c")
     private static let esc = KeyBar.bytes(for: "Esc")
+    private static let enter = KeyBar.bytes(for: "⏎")
 
     /// SwiftTerm disarms ctrl after the next typed key and posts this; its name is not public.
     private static let ctrlReset = Notification.Name("SwiftTerm.TerminalView.controlModifierReset")
@@ -611,6 +613,13 @@ private final class Belts {
         if wasUp, bytes == Self.esc { return }
         if bytes == Self.copyReply { terminal.onAsksCopy() }
         terminal.send(bytes)
+        if bytes == Self.enter, terminal.isFirstResponder { foldKeyboard() }
+    }
+
+    /// An Enter typed or sent from the lifted belt has gone: the keyboard folds and the head is
+    /// back. It folds on the next turn of the run loop, never inside the keyboard's own call.
+    private func foldKeyboard() {
+        Task { [weak self] in _ = self?.terminal?.resignFirstResponder() }
     }
 
     /// A layout picked on one belt is the layout of both. A pick of Board while the console
