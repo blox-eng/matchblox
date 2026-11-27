@@ -20,14 +20,14 @@ Evidence: the owner, 2026-11-27: "every single time i need to answer a session i
 **A touch.** The moment a finger lands on the head, a thin ring and four marks fade in round it. Each mark shows a glyph and a word: top `◂ back`, left `← cursor`, right `→ cursor`, bottom `⌨ type`. The heat colours of today stay: cold red, ember, amber. Nothing is sent on touch. The ring and marks fade 0.9 s after the lift.
 
 **Roll the edge.** The finger moves round the head, and the head turns under it.
-1. When the agent shows a menu, each notch moves the agent's choice one option, and plays one tap. Anticlockwise goes up, clockwise goes down. The agent's choice is the option its menu marks with `❯` or `›`. The host reads that mark with the menu (today `internal/menu` trims it), so the roll knows when it passes the first option.
+1. When the agent shows a menu, each notch moves Pocket's highlight one option, and plays one tap. Anticlockwise goes up, clockwise goes down. The highlight starts on the option the agent marks with `❯` or `›`. The agent's own mark does not move. The handle row shows the highlighted option: `2 of 3 · Yes, and open a pull request`. The host reads the menu, its mark and its signature, as `service/choose.go` does; Pocket asks for them over its SSH link, so it works in the console and in an agent's pane.
 2. Past the first option, the roll goes on up into the output, one line a notch. A firm tap marks the crossing. The handle row says `12 lines up · tap the head to come back`.
 3. Keep rolling, and it speeds up with time spent rolling: 1 line a notch for the first 10 notches, then 3 to notch 24, then 8 to notch 48, then 20. The count starts at the crossing into the output. A pause of 0.35 s starts it again at 1. Menu options always move one a notch. At 20 the head strikes, as today, once a roll: it flashes and plays one rigid tap.
 4. While it moves 3 lines a notch or more, a card names the agent step at the top of the view (`✦ Running go test ./internal/...`) and how far up the view is.
 5. At the last option, or the top of the scrollback, one firm bump, and the handle row says why and which way to roll.
 6. Rolling clockwise from up in the output stops at the bottom with one firm tap. The same roll never goes on into the menu, so it never moves the agent's choice. A new roll does.
 
-**Tap the middle.** Enter, at once. Up in the output, the tap only brings the view back to the bottom.
+**Tap the middle.** At a menu, the tap picks the highlighted option: Pocket sends its number, its text and the menu's signature, and the host types the number only if the screen still matches. If the screen changed, nothing is sent, and the handle row says `the question changed · roll again`. With no menu, the tap is Enter, at once. Up in the output, the tap only brings the view back to the bottom.
 
 **Press the edge.** A touch on the edge that moves less than 10 pt and lifts sends the key of the mark beside it. A touch that moves more sends no mark's key. `◂ back` sends what the belt's `◂` sends: back to matchblox. A hold on `←` or `→` repeats after 0.42 s, every 0.11 s, and after 9 repeats moves a word at a time (`Esc b`, `Esc f`). A touch that starts in the middle and then moves turns the head and sends nothing. `⌨` raises the keyboard. After every Enter sent from the keyboard, the line is sent, then the keyboard folds, and the head is back.
 
@@ -75,7 +75,7 @@ Evidence: the owner, 2026-11-27: "every single time i need to answer a session i
 
 ## Surfaces
 
-- An agent's tools: rolls, taps and marks type into a live agent's pane. A stray Enter can approve a tool call. A stray arrow can change the agent's choice. Their anti-goals are the first, second, fifth and sixth above.
+- An agent's tools: rolls, taps and marks type into a live agent's pane. A stray Enter can approve a tool call. A stale pick could answer a question the owner did not see; the host refuses it. Their anti-goals are the first, second, fifth and sixth above.
 - Checked and not touched: authentication, money, uploads, webhooks, secrets, CI, personal data (the marks are stored on the device with the layouts, and the privacy manifest already declares that storage).
 
 ## Rulings
@@ -86,7 +86,8 @@ Evidence: the owner, 2026-11-27: "every single time i need to answer a session i
 - 2026-11-27 — The hold never edits. Editing lives on home, under `BOX`. The hold switches session — because the owner said "edit can be the opened box … hold must be a different action", and picked "switch session" in the mockup. — the owner.
 - 2026-11-27 — The dock keeps the console's flat look: no matchbox textures or props — because the owner said "i hate the latest matchbox inspired enhancement". — the owner.
 - 2026-11-27 — A roll walks the options, then on up into the output. Marks show on touch. The belt comes in front while dragged. The keyboard folds after a send — because the owner approved these picks in the mockup ("lgtm"). — the owner.
-- 2026-11-27 — The second cold read's eight gaps take the answers now written in The experience: a tap under 0.35 s, the host reads the menu mark, the speed-up counts from the crossing, `◂` is the belt's `◂`, `Esc b`/`Esc f`, 10 pt for a press, the fold after every keyboard send, any move steps the sessions. — the owner.
+- 2026-11-27 — At a menu, the roll moves a highlight of Pocket's own, and a tap sends a pick the host checks, never arrow keys — because a lost or late arrow moves the agent's choice to a wrong option, and the host already refuses a stale pick (`service/choose.go`). A peer session proposed it; the owner picked it over Pocket reading its own screen. — the owner.
+- 2026-11-27 — The second cold read's eight gaps take the answers now written in The experience: a tap under 0.35 s, the host reads the menu mark (now: the host-checked pick, ruling above), the speed-up counts from the crossing, `◂` is the belt's `◂`, `Esc b`/`Esc f`, 10 pt for a press, the fold after every keyboard send, any move steps the sessions. — the owner.
 - 2026-11-27 — Where the head lives. Ways: (A) one head, always on the dock, over every layout; the belt head key and the rest-then-move head go: one of everything, but two shipped features leave and the terminal loses about 40 pt. (B) a new `Head` layout: low risk, but three heads with three behaviours. (C) the dock head with a toggle: an escape hatch, but a mode to learn and the old heads stay. Pick: (A). — the owner.
 - 2026-11-27: spec approved. Decided by: the owner.
 
@@ -114,7 +115,8 @@ Evidence: the owner, 2026-11-27: "every single time i need to answer a session i
 ## Done when
 
 - [ ] On the owner's iPhone, a console shows one head above the belt, on every layout, and no head key on the belt.
-- [ ] At a Claude Code question, the owner rolls the head anticlockwise and the agent's choice moves up one option a notch, with a tap each.
+- [ ] At a Claude Code question, in the console and in the agent's pane, the owner rolls the head anticlockwise and the highlight moves up one option a notch, with a tap each; a tap answers with that option.
+- [ ] If the agent's screen changes between the roll and the tap, the tap sends nothing and the handle row says `the question changed · roll again`.
 - [ ] Rolling on past the first option scrolls up into the output, with one firm tap at the crossing, and a tap on the middle brings the view back down.
 - [ ] After 48 notches of steady rolling, each notch moves 20 lines, the head strikes, and the step card names the `✦` or `⏺` step nearest the top of the view.
 - [ ] Rolling clockwise from up in the output stops at the bottom, and the agent's choice does not move.
@@ -128,7 +130,7 @@ Evidence: the owner, 2026-11-27: "every single time i need to answer a session i
 
 ## Cold read
 
-Cold read: 2026-11-27, 1 fresh reader. Blocker 1, major 7, nit 5. Fixed 11, contested 1, for the person 0, declined 1. Second read: 15 left. Changed after the read: The experience, Anti-goals, Rulings, Left to the builder (the owner's answers to the second read).
+Cold read: 2026-11-27, 1 fresh reader. Blocker 1, major 7, nit 5. Fixed 11, contested 1, for the person 0, declined 1. Second read: 15 left. Changed after the read: The experience, Anti-goals, Rulings, Left to the builder (the owner's answers to the second read). Changed after approval: The experience, Rulings, Done when (the host-checked pick, owner, 2026-11-27).
 
 - Contested: the step card and the rest-then-move fallback are "only recommendations". They sit under Calls to check, which is where an open question belongs (builder spec rules).
 - Declined (nit): done-when lines run on the owner's iPhone. A done-when line is a check the person sees; tests belong to the plan.
