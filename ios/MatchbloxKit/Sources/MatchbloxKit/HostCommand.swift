@@ -4,9 +4,11 @@ import Foundation
 public struct HostReply: Equatable, Sendable {
     public let output: Data
     public let ok: Bool
+    /// The command's exit status; nil when it never ran or the demo answered.
+    public let status: Int?
 
-    public init(output: Data, ok: Bool) {
-        self.output = output; self.ok = ok
+    public init(output: Data, ok: Bool, status: Int? = nil) {
+        self.output = output; self.ok = ok; self.status = status
     }
 }
 
@@ -36,7 +38,7 @@ public struct HostCommand: Sendable {
             }
             let status = await ssh.exitStatus
             await ssh.close()
-            return HostReply(output: output, ok: status == 0 && output.count <= HostCommand.maxOutput)
+            return HostReply(output: output, ok: status == 0 && output.count <= HostCommand.maxOutput, status: status)
         }
     }
 
