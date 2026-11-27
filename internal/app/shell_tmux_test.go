@@ -291,6 +291,8 @@ func TestTEndsWhenTheShellExits(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitTMUX(t, func() bool { return !e.live(shell) })
+	next, poll := m.Update(deskPollMsg{}) // the poll reads which panes are left
+	m = feed(t, next.(Model), poll)
 	plain := ansi.Strip(sessionRow(m, "ux-pass"))
 	if strings.Contains(plain, "shell") {
 		t.Fatalf("row still says shell: %q", plain)

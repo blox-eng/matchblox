@@ -390,6 +390,9 @@ type deskModeMsg struct {
 	cog  string
 	// review is the act the review pane wrote, for the list to take.
 	review string
+	// live is the panes of this tmux, read when a shell pane of ours is
+	// kept; nil when it was not read. The row's shell word follows it.
+	live map[string]bool
 }
 
 // watchDeskMode reads the current pane once. The list pane publishes LIST.
@@ -402,11 +405,21 @@ func (m Model) watchDeskMode() tea.Cmd {
 	if run == nil || console == "" {
 		return nil
 	}
+	shells := m.localShells()
 	return func() tea.Msg {
 		list, mode := deskPaneLook(run, console)
 		cog, _ := run("show-option", "-wqv", "-t", console, sample.CogOption)
 		review, _ := run("show-option", "-wqv", "-t", console, sample.ReviewOption)
-		return deskModeMsg{list: list, mode: mode, cog: strings.TrimSpace(cog), review: strings.TrimSpace(review)}
+		var live map[string]bool
+		if shells {
+			if out, err := run("list-panes", "-a", "-F", "#{pane_id}"); err == nil {
+				live = map[string]bool{}
+				for id := range strings.SplitSeq(out, "\n") {
+					live[strings.TrimSpace(id)] = true
+				}
+			}
+		}
+		return deskModeMsg{list: list, mode: mode, cog: strings.TrimSpace(cog), review: strings.TrimSpace(review), live: live}
 	}
 }
 

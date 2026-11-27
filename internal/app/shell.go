@@ -29,6 +29,20 @@ type shellLookupMsg struct {
 	ok     bool              // the host answered
 }
 
+// localShells tells if the list keeps a shell pane on this machine's tmux.
+func (m Model) localShells() bool {
+	for key := range m.shells {
+		if host, _, _ := strings.Cut(key, "\n"); host == "" || host == m.opt.Host {
+			return true
+		}
+	}
+	return false
+}
+
+// shellLives tells if the shell pane id is on this tmux as far as the last
+// poll knows. Before the first read it is taken as there.
+func (m Model) shellLives(id string) bool { return m.shellLive == nil || m.shellLive[id] }
+
 // shellKey is the map key of host's pane. Pane ids repeat across hosts.
 func shellKey(host, pane string) string { return host + "\n" + pane }
 
@@ -221,6 +235,7 @@ func (m *Model) shellLooked(msg shellLookupMsg) {
 	if m.shellSeen == nil {
 		m.shellSeen = map[string]bool{}
 	}
+	host := msg.host
 	for _, pane := range msg.asked {
 		key := shellKey(msg.host, pane)
 		m.shellSeen[key] = true
@@ -229,6 +244,9 @@ func (m *Model) shellLooked(msg shellLookupMsg) {
 				m.shells = map[string]string{}
 			}
 			m.shells[key] = id
+			if m.shellLive != nil && (host == "" || host == m.opt.Host) {
+				m.shellLive[id] = true
+			}
 		}
 	}
 }

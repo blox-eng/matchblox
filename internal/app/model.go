@@ -638,6 +638,7 @@ type Model struct {
 	shells                    map[string]string // shellKey(host, agent pane) -> the shell pane under it
 	shellSeen                 map[string]bool   // host+pane already asked; a refresh does not ask twice
 	shellAsking               map[string]bool   // the hosts with a look for shell panes under way
+	shellLive                 map[string]bool   // this tmux's panes at the last poll; nil before it
 	winW, winH                int               // the window's size in beside mode; 0: not read yet
 	boxZoom                   bool              // a box or an animation has the window: the list's pane is zoomed for it
 	boxBack                   []string          // the agent pane's screen, drawn dim behind the box
@@ -923,6 +924,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		key := shellKey(msg.host, msg.agent)
 		m.shells[key] = msg.pane
+		if m.shellLive != nil && (msg.host == "" || msg.host == m.opt.Host) {
+			m.shellLive[msg.pane] = true
+		}
 		if m.shellSeen == nil {
 			m.shellSeen = map[string]bool{}
 		}
@@ -961,6 +965,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(m.watchDeskMode(), next)
 	case deskModeMsg:
 		m.barMode = msg.mode
+		if msg.live != nil {
+			m.shellLive = msg.live
+		}
 		var cog tea.Cmd
 		if msg.cog != "" {
 			cog = m.takeCog(msg.cog)

@@ -353,7 +353,7 @@ func (m Model) shellWord(s sample.Session) string {
 	if s.Host != "" && s.Host != m.opt.Host {
 		return "shell"
 	}
-	if run := m.tmuxRun(); run != nil && !livePane(run, id) {
+	if !m.shellLives(id) { // read on the poll: a draw asks tmux nothing
 		return ""
 	}
 	return "shell"

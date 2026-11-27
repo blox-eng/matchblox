@@ -292,3 +292,49 @@ func TestPeerShellLookupIsACmd(t *testing.T) {
 		t.Fatalf("ssh ran again after a failure: %d calls, was %d", n, before)
 	}
 }
+
+// TestShellWordMakesNoTmuxCall: drawing the list asks tmux nothing. The
+// liveness of a shell pane is read on the 1 s poll and kept
+// (review of 2026-11-27, Minor 1).
+func TestShellWordMakesNoTmuxCall(t *testing.T) {
+	var mu sync.Mutex
+	var calls []string
+	live := "%11\n%7\n"
+	st := hostState(sess(7, "ux-pass", "%7", func(s *sample.Session) { s.Cwd = "/wt/ux-pass" }))
+	m := boardShot(t, st, 80, 30, func(m *Model) {
+		m.deskFrame, m.opt.Pane = true, "%1"
+		m.opt.Tmux = func(args ...string) (string, error) {
+			mu.Lock()
+			defer mu.Unlock()
+			calls = append(calls, strings.Join(args, " "))
+			if len(args) > 0 && args[0] == "list-panes" {
+				return live, nil
+			}
+			return "", nil
+		}
+		m.shells = map[string]string{shellKey("", "%7"): "%11"}
+	})
+	s, _ := m.sideChosen()
+	for range 10 {
+		_ = m.View()
+		_ = m.sideRow(s, 80, false, sideLink{})
+	}
+	if len(calls) != 0 {
+		t.Fatalf("10 draws made %d tmux calls: %q", len(calls), calls)
+	}
+	if !strings.Contains(ansi.Strip(strings.Join(m.sideRow(s, 80, false, sideLink{}), "\n")), "shell") {
+		t.Fatal("the row does not say shell while the pane lives")
+	}
+	// The pane dies: the next poll reads it, and the row stops saying shell.
+	live = "%7\n"
+	m, cmd := func() (Model, tea.Cmd) { n, c := m.Update(deskPollMsg{}); return n.(Model), c }()
+	for _, msg := range cmdMsgs(cmd) {
+		if l, ok := msg.(deskModeMsg); ok {
+			n, _ := m.Update(l)
+			m = n.(Model)
+		}
+	}
+	if strings.Contains(ansi.Strip(strings.Join(m.sideRow(s, 80, false, sideLink{}), "\n")), "shell") {
+		t.Fatal("the row still says shell after its pane is gone")
+	}
+}
