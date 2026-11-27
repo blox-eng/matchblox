@@ -97,7 +97,7 @@ func TestTapNeverRunsADestructiveStep(t *testing.T) {
 	var ran [][]string
 	m.opt.Run = func(argv []string) error { ran = append(ran, argv); return nil }
 	m.tab = tabMachine
-	m.selectRow(len(machineViews)) // the orphan, under the views
+	m.selectRow(m.rowBase(rowOrphans)) // the orphan, under the machines
 	o, ok := m.selectedOrphan()
 	if !ok {
 		t.Fatal("the fixture has no orphan")

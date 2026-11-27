@@ -498,7 +498,10 @@ Pocket held upright, and on any screen under 73 columns, Sessions shows
 the list or the chat, one at a time: the list
 first. A tap on a row opens its chat, and `◂` comes back.
 
-Machine shows usage and the machine.
+Machine shows `MACHINES · N`, usage and the machine. `MACHINES · N` has
+one row for each host, trouble first. A narrow screen folds each row and
+the lines under it. Nothing is cut. A second tap on a row moves Machine
+to that host's section. See [Machine](console.md#machine).
 
 The key line is at the bottom: an SSH app that shrinks the terminal for
 its keyboard keeps it above the keys. A tap on a key presses it. In

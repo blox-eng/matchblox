@@ -160,6 +160,12 @@ var views = [...]tabView{
 			if _, ok := m.selectedHostRow(); ok {
 				return []hint{hintFor(mk.Open, "hosts"), stoke}
 			}
+			if h, ok := m.selectedMachine(); ok {
+				if word := m.machineEnterWord(h); word != "" {
+					return []hint{hintFor(mk.Open, word), stoke}
+				}
+				return []hint{stoke}
+			}
 			if r, ok := m.selectedDevice(); ok {
 				if r.plus {
 					return []hint{hintFor(mk.Open, "pair"), stoke}
