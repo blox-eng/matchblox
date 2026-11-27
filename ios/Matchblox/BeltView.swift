@@ -17,8 +17,6 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
         let key: KeyFace
         let id: String
         let width: CGFloat
-        /// The match head, on the head's piece only.
-        let head: HeadLayer?
     }
 
     private struct Touch {
@@ -479,18 +477,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
         shade.opacity = 0
         bevel.addSublayer(shade)
 
-        var head: HeadLayer?
-        if key.id == KeyBar.wheel {
-            let side = min(width, BeltGeometry.keyHeight) - 6
-            let ball = HeadLayer()
-            ball.frame = CGRect(x: (width - side) / 2, y: (BeltGeometry.keyHeight - side) / 2, width: side, height: side)
-            ball.contentsScale = scale
-            ball.setNeedsDisplay()
-            bevel.addSublayer(ball)
-            head = ball
-        }
-
-        let piece = Piece(layer: layer, face: bevel, text: text, shade: shade, key: face, id: key.id, width: width, head: head)
+        let piece = Piece(layer: layer, face: bevel, text: text, shade: shade, key: face, id: key.id, width: width)
         paint(piece, pressed: false)
         return piece
     }
@@ -534,7 +521,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
         defer { CATransaction.commit() }
         let ground = pressed ? [BeltLook.hair, BeltLook.hair] : [BeltLook.keyBevelTop, BeltLook.keyBevelBottom]
         piece.face.colors = ground.map(\.cgColor)
-        piece.text.string = NSAttributedString(string: piece.head == nil ? piece.key.label : "", attributes: [
+        piece.text.string = NSAttributedString(string: piece.key.label, attributes: [
             .font: font(for: piece.key.size),
             .foregroundColor: pressed || lit ? BeltLook.accent : BeltLook.fg,
         ])
@@ -777,8 +764,6 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
     private func press(_ i: Int) {
         guard let motion, pieces.indices.contains(i) else { return }
         let piece = pieces[i]
-        // The belt's head key sends nothing: the dock's head is the head.
-        guard piece.head == nil else { return }
         if piece.key.isCommand && !commandsLive {
             flash("commands run in an agent's pane")
             return
@@ -1113,8 +1098,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
     }
 
     func largeContentViewerInteraction(_ interaction: UILargeContentViewerInteraction, itemAt point: CGPoint) -> (any UILargeContentViewerItem)? {
-        // The head has no label to show, and a hold on it must not end in a press.
-        guard let i = keyIndex(at: point), pieces[i].head == nil else { return nil }
+        guard let i = keyIndex(at: point) else { return nil }
         return LargeKey(pieces[i].key.label)
     }
 

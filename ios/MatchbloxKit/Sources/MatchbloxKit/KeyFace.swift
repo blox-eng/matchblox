@@ -22,7 +22,7 @@ public struct KeyFace: Equatable, Sendable {
     private static let spokenNames = [
         "◂": "Back to matchblox", "↑": "Up", "↓": "Down", "←": "Left", "→": "Right",
         "⏎": "Return", "Tab": "Tab", "⇧Tab": "Shift Tab", "Esc": "Escape", "⌫": "Delete",
-        "⇞": "Page up", "⇟": "Page down", "^C": "Interrupt", "Ctrl": "Control", "Wheel": "Match head",
+        "⇞": "Page up", "⇟": "Page down", "^C": "Interrupt", "Ctrl": "Control",
     ]
 
     private static let words = [
