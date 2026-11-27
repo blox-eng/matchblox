@@ -817,7 +817,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg, tea.MouseClickMsg, tea.MouseWheelMsg, tea.PasteMsg:
 		m.askedBy, m.marked, m.away = m.marked.spend(m.now()), clientMark{}, false
 		if _, click := msg.(tea.MouseClickMsg); !click { // a tap ends it once it knows what it hit
-			m.machineJumped = false // the window follows the selection again
+			m.machineJumped = false
 		}
 		m = m.dragDropped(msg)
 		if c, ok := msg.(tea.MouseClickMsg); ok && len(m.sayingNow()) > 0 {

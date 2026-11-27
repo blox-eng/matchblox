@@ -21,7 +21,7 @@ import (
 func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	m.goArmedTap, m.goArmed = m.goArmed, paneKey{} // any tap disarms a go; boardTap gives it on its own go
 	jumped := m.machineJumped
-	m.machineJumped = false // the window follows the selection again
+	m.machineJumped = false
 	switch {
 	case m.pair.owns() || m.asking(): // the pair page and an ssh prompt take keys only
 		return m, nil
