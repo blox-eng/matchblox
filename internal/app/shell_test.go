@@ -141,3 +141,32 @@ func TestTNoFolder(t *testing.T) {
 		t.Fatalf("notice %q", m.noticeText)
 	}
 }
+
+// TestTWithoutTmuxSaysWhy: t on a console with no tmux (the phone, the demo)
+// says why, as D does (review of 2026-11-27, Important 6).
+func TestTWithoutTmuxSaysWhy(t *testing.T) {
+	st := hostState(sess(7, "ux-pass", "%7", func(s *sample.Session) { s.Cwd = "/wt/ux-pass" }))
+	m := boardShot(t, st, 80, 30, func(m *Model) { m.deskFrame = true; m.opt.Pane = "" })
+	next, cmd := key(m, "t")
+	m = next.(Model)
+	if m.noticeText == "" && cmd == nil {
+		t.Fatal("t with no tmux did nothing and said nothing")
+	}
+	want := "not opened: the shell needs the agent's tmux · ⏎ goes into the session"
+	if m.noticeText != want {
+		t.Fatalf("notice %q, want %q", m.noticeText, want)
+	}
+}
+
+// TestTDeadPaneSaysWhy: the agent's pane is gone, and t says so.
+func TestTDeadPaneSaysWhy(t *testing.T) {
+	st := hostState(sess(7, "ux-pass", "%7", func(s *sample.Session) { s.Cwd = "/wt/ux-pass" }))
+	m := boardShot(t, st, 80, 30, func(m *Model) {
+		m.deskFrame, m.opt.Pane = true, "%1"
+		m.opt.Tmux = func(args ...string) (string, error) { return "", nil } // display answers no pane
+	})
+	m = pressOn(m, "t")
+	if want := "not opened: ux-pass's pane is gone"; m.noticeText != want {
+		t.Fatalf("notice %q, want %q", m.noticeText, want)
+	}
+}

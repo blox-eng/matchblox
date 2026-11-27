@@ -41,12 +41,12 @@ func (m Model) askShell() (tea.Model, tea.Cmd) {
 	}
 	run, _ := m.shellIO(s.Host)
 	if run == nil {
-		return m, nil
+		return m, m.notice("not opened: the shell needs the agent's tmux · ⏎ goes into the session")
 	}
 	// A peer's pane id is another machine's. The console's tmux must not
 	// be asked: the same id here is a different pane.
 	if !peer && !livePane(run, s.Pane) {
-		return m, nil
+		return m, m.notice("not opened: " + s.Name + "'s pane is gone")
 	}
 	return m, m.openShell(s)
 }
