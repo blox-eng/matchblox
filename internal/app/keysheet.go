@@ -171,13 +171,6 @@ func (m Model) runKeyItem() (tea.Model, tea.Cmd) {
 	}
 }
 
-// askShell is the list's shell act. t runs it, and so does
-// ? then shell then enter. Task 7 opens the shell pane.
-func (m Model) askShell() (tea.Model, tea.Cmd) {
-	m.shellAsks++
-	return m, nil
-}
-
 // keySheetLines are the sheet's rows and the index of the chosen one.
 // With no match, the only row is the spec's sentence.
 func (m Model) keySheetLines(w int) (lines []string, chosen int) {

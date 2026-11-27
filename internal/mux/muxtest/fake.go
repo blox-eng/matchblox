@@ -183,6 +183,11 @@ func (f *Fake) SplitEdge(target string, argv []string, _ string, _ int) (string,
 	return f.Split(target, argv)
 }
 
+// SplitIn is Split. dir is the pane's folder; the fake opens no pane.
+func (f *Fake) SplitIn(target string, argv []string, _ string) (string, error) {
+	return f.Split(target, argv)
+}
+
 func (*Fake) SwitchClient(pane string) []string { return []string{"fake", "switch-client", pane} }
 
 func (*Fake) ViewCmd() string { return "fake-view" }

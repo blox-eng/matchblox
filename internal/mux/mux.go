@@ -89,6 +89,9 @@ type Mux interface {
 	// SplitEdge opens a pane of cells rows or columns on edge of target
 	// ("above", "below", "right") running argv, without taking the keys.
 	SplitEdge(target string, argv []string, edge string, cells int) (pane string, err error)
+	// SplitIn opens a pane under target, in dir, running argv. The new pane
+	// takes the keys. dir is split-window -c.
+	SplitIn(target string, argv []string, dir string) (pane string, err error)
 	// SwitchClient is the step that moves the client that asked to pane.
 	SwitchClient(pane string) []string
 	// NewWindow is the step that opens a window running argv (the shell

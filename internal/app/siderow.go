@@ -80,7 +80,11 @@ func (m Model) sideRow(s sample.Session, w int, chosen bool, link sideLink) []st
 		lead, cont = ink.Render(first)+" ", ink.Render(rest)+" "
 	}
 
-	right := rest.Render(m.sideRight(s)) + " " + rest.Render(harnessMark(s))
+	agent := rest.Render(harnessMark(s))
+	if word := m.shellWord(s); word != "" {
+		agent = m.st.muted.Render(word) + " " + agent
+	}
+	right := rest.Render(m.sideRight(s)) + " " + agent
 	title := m.sideTitle(s)
 	num := "  "
 	if s.Number > 0 {

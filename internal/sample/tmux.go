@@ -311,6 +311,15 @@ const (
 	SpaceOption  = "@matchblox_space"
 	// CogOption is a one-shot act from a header or bar tap: open Machine.
 	CogOption = "@matchblox_cog"
+	// ShellOption marks the shell pane matchblox opened under an agent.
+	ShellOption = "@matchblox_shell"
+	// ShellAgentOption, on that shell pane, is the agent pane t returns to.
+	ShellAgentOption = "@matchblox_agent"
+	// ShellLineOption, on that shell pane, is the divider the view draws.
+	ShellLineOption = "@matchblox_shell_line"
+	// ShellDeskOption, on that shell pane, is the console pane whose mode
+	// t writes when it returns to the agent.
+	ShellDeskOption = "@matchblox_desk"
 )
 
 // ViewOption is the session option of a view's session (a jump's, shown in

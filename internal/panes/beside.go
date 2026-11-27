@@ -19,6 +19,14 @@ const flipBeside = `#{?#{==:#{pane_id},#{` + sample.ConsoleOption + `}},` +
 	`send-keys -t #{` + sample.ConsoleOption + `} ` + BesideKey + `,` +
 	`select-pane -Z -t #{` + sample.ConsoleOption + `}}`
 
+// ShellFlipArgv binds t in the view session's key table. On the shell pane
+// it selects the agent. On any other pane it types t. It is not a root
+// binding, so an agent pane still receives t.
+func ShellFlipArgv(table string) []string {
+	act := "run-shell -C 'select-pane -t #{" + sample.ShellAgentOption + "} ; set-option -w -t #{" + sample.ShellDeskOption + "} " + sample.ModeOption + " AGENT'"
+	return onHome("bind-key", "-T", table, "t", "if-shell", "-F", "#{"+sample.ShellOption+"}", act, "send-keys -l t")
+}
+
 // BesideKeysArgv binds BesideKey on the console's tmux server, in the
 // console's session and in windows that have an agent beside the list.
 func BesideKeysArgv() []string {

@@ -624,22 +624,23 @@ type Model struct {
 	sideTip                   int
 	sideHost                  string // the host whose trouble the host place shows
 	sideIn                    paneKey
-	beside                    string          // the agent pane's id; "" before the split, and where it failed
-	deskFrame                 bool            // Doc.DeskFrame: the first-start notice has been shown
-	frameKind                 string          // header|bar|review when this process is a desk frame; "" the list
-	barMode                   string          // @matchblox_mode: LIST, AGENT, …, or CONFIRM, KEYS, a tab, and the question
-	keySheet                  *keySheet       // the keys sheet over the list; nil while it is closed
-	cogSheet                  *cogSheet       // Machine over the list; nil while it is closed
-	shellAsks                 int             // times the list asked for the shell; Task 7 performs it
-	winW, winH                int             // the window's size in beside mode; 0: not read yet
-	boxZoom                   bool            // a box or an animation has the window: the list's pane is zoomed for it
-	boxBack                   []string        // the agent pane's screen, drawn dim behind the box
-	showing                   bool            // a choice runs in the agent pane
-	showNext                  *action         // the choice made while one ran: it runs next
-	besideShows               paneKey         // the session the agent pane shows; zero when none or a chain view
-	previewSeq                int             // the list's latest move: only its preview runs
-	viewed                    map[string]bool // the peers whose view the builder let run in this run: their rows preview
-	chain                     *chainView      // the chain view beside the list; nil while one agent shows
+	beside                    string            // the agent pane's id; "" before the split, and where it failed
+	deskFrame                 bool              // Doc.DeskFrame: the first-start notice has been shown
+	frameKind                 string            // header|bar|review when this process is a desk frame; "" the list
+	barMode                   string            // @matchblox_mode: LIST, AGENT, …, or CONFIRM, KEYS, a tab, and the question
+	keySheet                  *keySheet         // the keys sheet over the list; nil while it is closed
+	cogSheet                  *cogSheet         // Machine over the list; nil while it is closed
+	shellAsks                 int               // times the list asked for the shell
+	shells                    map[string]string // agent pane -> the shell pane under it
+	winW, winH                int               // the window's size in beside mode; 0: not read yet
+	boxZoom                   bool              // a box or an animation has the window: the list's pane is zoomed for it
+	boxBack                   []string          // the agent pane's screen, drawn dim behind the box
+	showing                   bool              // a choice runs in the agent pane
+	showNext                  *action           // the choice made while one ran: it runs next
+	besideShows               paneKey           // the session the agent pane shows; zero when none or a chain view
+	previewSeq                int               // the list's latest move: only its preview runs
+	viewed                    map[string]bool   // the peers whose view the builder let run in this run: their rows preview
+	chain                     *chainView        // the chain view beside the list; nil while one agent shows
 }
 
 func New(opt Options) Model {
@@ -903,6 +904,16 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.tallH = max(m.tallH, msg.Height)
 		return m, m.sizeCmd(msg.Width)
+	case shellMsg:
+		if msg.err != nil {
+			return m, m.notice("not opened: " + msg.err.Error())
+		}
+		if m.shells == nil {
+			m.shells = map[string]string{}
+		}
+		m.shells[msg.agent] = msg.pane
+		m.barMode = "SHELL"
+		return m, nil
 	case besideMsg:
 		if msg.framed {
 			m.deskFrame = true

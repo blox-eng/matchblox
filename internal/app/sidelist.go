@@ -338,3 +338,19 @@ func (m Model) inOtherChain(o sample.Session, k chainKey) bool {
 	own, ok := m.chainKeyOf(o)
 	return ok && own != k
 }
+
+// shellWord is the row's shell tag: the word shell while a shell pane
+// matchblox opened under s is still there, else "".
+func (m Model) shellWord(s sample.Session) string {
+	if m.shells == nil {
+		return ""
+	}
+	id := m.shells[s.Pane]
+	if id == "" {
+		return ""
+	}
+	if run := m.tmuxRun(); run != nil && !livePane(run, id) {
+		return ""
+	}
+	return "shell"
+}
