@@ -1084,3 +1084,47 @@ func TestTheBuzzSoundShipsInTheApp(t *testing.T) {
 		t.Fatalf("the app has no %s: %v", BuzzSound, err)
 	}
 }
+
+// TestAFinishThatTurnsIntoAQuestionBuzzesAgain: Stop and Reply can land in two
+// docs; the question must not hide behind the finish already buzzed (review).
+func TestAFinishThatTurnsIntoAQuestionBuzzesAgain(t *testing.T) {
+	r := &fakeRelay{}
+	c := &clock{t: t0}
+	p, _ := phone(t, "a", true, false)
+	s := newSender(t, r, c, p)
+	s.handle(finishedDoc())
+	if ev := ofKind(r.take(), "device"); len(ev) != 1 {
+		t.Fatalf("finish buzz %+v", ev)
+	}
+	c.add(31 * time.Second)
+	s.handle(waiting("x"))
+	if ev := ofKind(r.take(), "device"); len(ev) != 1 {
+		t.Fatalf("the question after the finish: %+v, want one buzz", ev)
+	}
+}
+
+// TestAnOldFinishDoesNotBuzzOnStart: a turn finished long before the service
+// started is not news (review).
+func TestAnOldFinishDoesNotBuzzOnStart(t *testing.T) {
+	r := &fakeRelay{}
+	p, _ := phone(t, "a", true, false)
+	s := newSender(t, r, &clock{t: t0.Add(3 * time.Hour)}, p)
+	s.handle(finishedDoc())
+	if ev := ofKind(r.take(), "device"); len(ev) != 0 {
+		t.Fatalf("a finish 3 h old buzzed: %+v", ev)
+	}
+}
+
+// TestAnEstimatedFinishDoesNotBuzz: a finish guessed from a pane's look comes and
+// goes with sampler noise; only a hook's Stop buzzes (review).
+func TestAnEstimatedFinishDoesNotBuzz(t *testing.T) {
+	r := &fakeRelay{}
+	p, _ := phone(t, "a", true, false)
+	s := newSender(t, r, &clock{t: t0}, p)
+	d := finishedDoc()
+	d.Queue[0].Estimated = true
+	s.handle(d)
+	if ev := ofKind(r.take(), "device"); len(ev) != 0 {
+		t.Fatalf("an estimated finish buzzed: %+v", ev)
+	}
+}

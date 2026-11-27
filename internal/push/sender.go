@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"sync"
 	"time"
 
@@ -69,7 +70,7 @@ type Sender struct {
 	renew  bool
 
 	// Only the worker touches what follows.
-	buzzSet map[string]bool // the waits the last buzz saw
+	buzzSet map[string]bool // the waits and finishes the last buzz saw, by session and kind
 	buzzAt  time.Time
 	last    *ContentState // the last state sent to the island
 	pctAt   time.Time
@@ -218,6 +219,13 @@ func wants(regs []Registration) bool {
 // default sound.
 const BuzzSound = "pinch-ember.wav"
 
+// freshFinish reports whether it is a turn that a hook saw finish just now. A
+// finish guessed from a pane's look comes and goes with sampler noise, and one
+// from before the service started is not news: neither buzzes.
+func freshFinish(it queue.Item, now time.Time) bool {
+	return it.State == queue.StateFinished && !it.Estimated && now.Sub(it.Since) <= 2*buzzEvery
+}
+
 // buzzFirst reports whether a goes before b in one buzz: a wait before a
 // finished turn, else the newer one.
 func buzzFirst(a, b queue.Item) bool {
@@ -250,11 +258,13 @@ func (s *Sender) buzz(doc state.Doc, regs []Registration, now time.Time) {
 	set := map[string]bool{}
 	var fresh *queue.Item
 	for i, it := range doc.Queue {
-		if it.SessionID == "" || (!waits(it) && it.State != queue.StateFinished) {
+		if it.SessionID == "" || !waits(it) && !freshFinish(it, now) {
 			continue
 		}
-		set[it.SessionID] = true
-		if !s.buzzSet[it.SessionID] && (fresh == nil || buzzFirst(it, *fresh)) {
+		// By session and kind: a finish that turns into a question buzzes again.
+		key := it.SessionID + "|" + strconv.FormatBool(waits(it))
+		set[key] = true
+		if !s.buzzSet[key] && (fresh == nil || buzzFirst(it, *fresh)) {
 			fresh = &doc.Queue[i]
 		}
 	}
