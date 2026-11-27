@@ -154,6 +154,34 @@ final class HeadTests: XCTestCase {
         XCTAssertTrue(terminal.label.contains("❯ 1. Rotate it"), "the agent's mark moved: \(terminal.label)")
     }
 
+    /// Surface: an agent's tools. In flint-auth's chat `↑` `↓` choose a session, so a push at its
+    /// question sends no arrow: the chat stays on flint-auth, and nothing is answered.
+    @MainActor
+    func testChatPushSendsNoArrow() {
+        let app = launched()
+        openTheQuestion(in: app)
+        push(theHead(in: app), dy: 24)
+        Thread.sleep(forTimeInterval: 2)
+        let terminal = theTerminal(in: app)
+        XCTAssertTrue(terminal.label.contains("send to flint-auth"), "a push in the chat chose another session: \(terminal.label)")
+        XCTAssertTrue(terminal.label.contains("2. Rotate, keep"), "the question went: \(terminal.label)")
+        XCTAssertFalse(terminal.label.contains(replyText), "a push answered the agent")
+    }
+
+    /// Surface: an agent's tools. In flint-auth's chat one push `↓` moves Pocket's highlight to
+    /// option 2, and the handle row names it; a tap types its number, and the chat answers with
+    /// option 2.
+    @MainActor
+    func testChatPushHighlightsThenTapAnswers() {
+        let app = launched()
+        openTheQuestion(in: app)
+        let head = theHead(in: app)
+        push(head, dy: 24)
+        expectLine(in: app, "2 of 5 · Rotate, keep")
+        head.tap()
+        expect(in: app, step: "flint-auth's reply to option 2", "label CONTAINS %@", replyText)
+    }
+
     /// A flick on the edge coasts on after the lift: from well up hearth-api's output, a flick of
     /// a few notches down comes all the way to the bottom, and stops there with the bump line.
     @MainActor

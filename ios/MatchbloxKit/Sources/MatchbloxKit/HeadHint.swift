@@ -4,7 +4,7 @@ import Foundation
 public enum HeadHint: Equatable, Sendable {
     /// `hold` is the key id the owner set on the hold.
     case rest(hold: String)
-    /// The agent's mark is on option `n` of `count`, after a push.
+    /// The agent's mark, or in the chat Pocket's highlight, is on option `n` of `count`, after a push.
     case option(n: Int, of: Int, text: String)
     case up(Int)
     case bump(HeadScroll.Bump)

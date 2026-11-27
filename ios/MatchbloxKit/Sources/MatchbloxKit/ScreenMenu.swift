@@ -58,6 +58,19 @@ public struct ScreenMenu: Equatable, Sendable {
         return ScreenMenu(options: (1...texts.count).map { texts[$0] ?? "" }, chosen: chosen)
     }
 
+    /// The menu of the question the console's chat shows: the agent's screen ends over the chat's
+    /// own line (`›`), its rule and its key line, which are no part of the menu. Nil with no chat
+    /// line on the screen.
+    public static func read(chat lines: [String]) -> ScreenMenu? {
+        guard let line = lines.lastIndex(where: isChatLine) else { return nil }
+        return read(lines: Array(lines[..<line]))
+    }
+
+    private static func isChatLine(_ line: String) -> Bool {
+        let row = unboxed(line)
+        return row.trimmingCharacters(in: .whitespaces).hasPrefix("›") && option(in: row) == nil
+    }
+
     /// The index of the last row with anything on it: the only row a status line may take.
     private static func lastFilled(_ rows: [String]) -> Int {
         rows.lastIndex { !$0.isEmpty } ?? -1

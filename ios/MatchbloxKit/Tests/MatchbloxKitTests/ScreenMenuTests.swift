@@ -96,4 +96,63 @@ final class ScreenMenuTests: XCTestCase {
         XCTAssertEqual(menu?.count, 3)
         XCTAssertNil(ScreenMenu.read(lines: lines + ["[0] 0:claude*"]), "two lines under the menu are text, not a status line")
     }
+
+    /// The console's chat with flint-auth's question: the agent's screen, then the chat's own
+    /// line, its rule and its key line. The keys hint wraps at the phone's width.
+    private let chat = [
+        " ◂ flint-auth ✻ asks · #205 ci     ctx 41%",
+        " ● The refresh flow works and the tests",
+        "   pass. One choice is yours before I",
+        "   wire the rotation.",
+        "",
+        " ───────────────────────────────────────────",
+        "  ☐ Refresh",
+        "",
+        " Should a refresh also rotate the token?",
+        "",
+        " ❯ 1. Rotate it",
+        "      the old one stops at once",
+        "   2. Rotate, keep the old one a minute",
+        "      no request fails mid-flight",
+        "   3. Keep the token",
+        "      it lives until it expires",
+        "   4. Type something.",
+        " ───────────────────────────────────────────",
+        "   5. Chat about this",
+        "",
+        " Enter to select · ↑/↓ to navigate · Esc to",
+        " cancel",
+        " ›                     ⏎ send to flint-auth",
+        "────────────────────────────────────────────",
+        " writing to flint-auth · ◂ list · ⏎ send",
+    ]
+
+    /// In the chat the menu sits over the chat's own line: read as a pane, the chat's line is
+    /// text under a list, so the chat has its own read. Each option is the number it shows.
+    func testTheChatsQuestion() {
+        XCTAssertNil(ScreenMenu.read(lines: chat), "the chat's line under the options reads as text")
+        let menu = ScreenMenu.read(chat: chat)
+        XCTAssertEqual(menu?.count, 5)
+        XCTAssertEqual(menu?.chosen, 1)
+        XCTAssertEqual(menu?.options[1], "Rotate, keep the old one a minute no request fails mid-flight", "option 2 is the one numbered 2.")
+        XCTAssertEqual(menu?.options[4], "Chat about this")
+        var typed = chat
+        typed[22] = " › ok"
+        XCTAssertEqual(ScreenMenu.read(chat: typed)?.count, 5, "text in the chat's line is no part of the menu")
+    }
+
+    /// Surface: an agent's tools. A chat with no question, or a screen with no chat line, reads
+    /// no menu, so a push there is the chat's own arrow.
+    func testAChatWithNoQuestionIsNoMenu() {
+        let reply = [
+            " ◂ spark-docs · done",
+            " ● Got it. I am working on that.",
+            "",
+            " ›⏎ send to spark-docs",
+            "────────────────────────────────────────────",
+            " writing to spark-docs · ◂ list · ⏎ send",
+        ]
+        XCTAssertNil(ScreenMenu.read(chat: reply))
+        XCTAssertNil(ScreenMenu.read(chat: Array(chat[..<22])), "no chat line: no chat to read")
+    }
 }

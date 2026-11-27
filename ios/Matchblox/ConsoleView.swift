@@ -509,6 +509,7 @@ private final class Belts {
         head.route = { [weak terminal] older in terminal?.headRoute(older: older) ?? .nothing }
         head.page = { [weak terminal] older in terminal?.headPage(older: older) ?? .nothing }
         head.onKeyboard = { [weak terminal] in _ = terminal?.becomeFirstResponder() }
+        head.onHighlight = { [weak terminal] text in terminal?.highlightRow(showing: text) }
         head.visibleLines = { [weak terminal] in terminal?.visibleLines ?? [] }
         terminal.onReturnSent = { [weak self] in self?.foldKeyboard() }
         terminal.onTyped = { [weak self] in
@@ -548,8 +549,10 @@ private final class Belts {
     }
 
     /// The head's pane: the pane the app jumped into, else the pane of the chat the console shows.
+    /// Only in the chat do the head's pushes move Pocket's highlight.
     private func headFollows() {
         head.pane = agentPane ?? board.belt.chatPane
+        head.inChat = agentPane == nil && board.belt.chat
     }
 
     /// A command types into a known agent's pane: never with no agent, never on the console.

@@ -39,6 +39,17 @@ final class DockHeadView: UIView {
     /// The agent's pane the console shows: the pane the app jumped into, or the pane of the
     /// session the console's chat shows; nil on the console's list. The sessions card marks it.
     var pane: String?
+    /// The console's chat takes the screen, not a pane the app jumped into: there `↑` `↓` choose a
+    /// session, so a push moves Pocket's highlight over the question's options instead.
+    var inChat = false {
+        didSet {
+            guard inChat != oldValue else { return }
+            chatPick = ChatPick()
+            onHighlight(nil)
+        }
+    }
+    /// Pocket's highlight over the row that shows this option, or nil for none.
+    var onHighlight: (String?) -> Void = { _ in }
     /// Runs Pocket's matchblox commands where the console is.
     var command: HostCommand?
     /// The head moved the view `lines` lines (positive: older). The answer says where they went.
@@ -96,6 +107,7 @@ final class DockHeadView: UIView {
     }()
     private var scroll = HeadScroll()
     private var stick = HeadStick()
+    private var chatPick = ChatPick()
     private var marks = HeadMarks()
     private var touch: Touch?
     private var lastNotch: TimeInterval?
@@ -388,12 +400,29 @@ final class DockHeadView: UIView {
     /// the output: no key goes. The menu is read from the screen at each push, never from the host.
     private func arrow(up: Bool) {
         if scroll.linesUp > 0 { return readUp(up) }
+        if inChat { return chatArrow(up: up) }
         let menu = ScreenMenu.read(lines: visibleLines())
         if up, menu?.chosen == 1 { return readUp(true) }
         onSend(KeyBar.bytes(for: up ? "↑" : "↓") ?? [])
         guard let menu else { return }
         let n = up ? max(menu.chosen - 1, 1) : min(menu.chosen + 1, menu.count)
         say(HeadHint.option(n: n, of: menu.count, text: menu.options[n - 1]).line)
+    }
+
+    /// In the chat a push at a question moves Pocket's highlight, and `↑` at its first option reads
+    /// up; with no options on screen it is the chat's own arrow, which chooses a session.
+    private func chatArrow(up: Bool) {
+        switch chatPick.push(up: up, menu: ScreenMenu.read(chat: visibleLines())) {
+        case .on(let n, let count, let text):
+            say(HeadHint.option(n: n, of: count, text: text).line)
+            onHighlight(text)
+        case .readUp:
+            onHighlight(nil)
+            readUp(true)
+        case .arrow:
+            onHighlight(nil)
+            onSend(KeyBar.bytes(for: up ? "↑" : "↓") ?? [])
+        }
     }
 
     /// One line through the output: older for `up`.
@@ -466,7 +495,8 @@ final class DockHeadView: UIView {
 
     // MARK: The middle
 
-    /// Up in the output a tap comes back down and sends nothing; else it is Enter, at once.
+    /// Up in the output a tap comes back down and sends nothing; else it is Enter, at once. At a
+    /// question in the chat it types the highlighted option's number, which the chat answers with.
     private func tapped() {
         let up = scroll.linesUp
         switch scroll.tap() {
@@ -477,7 +507,10 @@ final class DockHeadView: UIView {
         case .enter:
             driver.feel.click()
             ball.flash()
-            onSend(Self.enter)
+            let answer = inChat ? chatPick.tap(menu: ScreenMenu.read(chat: visibleLines())) : nil
+            onHighlight(nil)
+            if answer != nil { say(nil) }
+            onSend(answer ?? Self.enter)
         }
     }
 
