@@ -6,19 +6,6 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
-## [0.67.0] - 2026-11-27
-
-### Added
-
-- **Every machine in Machine's first lines.** Machine opens with
-  `MACHINES · N`: one row for each host, hosts in trouble first. A row
-  shows uptime, load against the cores, CPU, memory, the fullest disk,
-  I/O wait, and the provider and plan of each account, never its name. A
-  figure that is not known says `unknown`, never 0. A host over its cores
-  names the process tree and the session that drive it. A host not
-  reached says why and the fix. `Enter` on a row moves to that host's
-  section.
-
 ### Changed
 
 - **One tap on the island goes back.** A tap on the Live Activity brings
@@ -33,6 +20,19 @@ All notable changes to matchblox are in this file. The format follows
 - **Pocket comes back to its own console.** A return reattaches the console
   the phone left, on the screen it showed, and an island that was swiped
   away or ended by an update starts again at the next open.
+
+## [0.67.0] - 2026-11-27
+
+### Added
+
+- **Every machine in Machine's first lines.** Machine opens with
+  `MACHINES · N`: one row for each host, hosts in trouble first. A row
+  shows uptime, load against the cores, CPU, memory, the fullest disk,
+  I/O wait, and the provider and plan of each account, never its name. A
+  figure that is not known says `unknown`, never 0. A host over its cores
+  names the process tree and the session that drive it. A host not
+  reached says why and the fix. `Enter` on a row moves to that host's
+  section.
 
 ### Fixed
 
