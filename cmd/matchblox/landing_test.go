@@ -211,3 +211,18 @@ func TestTheChainSectionShowsTheRoom(t *testing.T) {
 		}
 	}
 }
+
+// TestTheShareTitleIsTheHero: a shared link says what the page says. The
+// old hero line stayed in og:title when the H1 became the desk (review of
+// 2026-11-27, Important 5).
+func TestTheShareTitleIsTheHero(t *testing.T) {
+	page := landingPage(t)
+	h1 := regexp.MustCompile(`<h1[^>]*>([^<]*)</h1>`).FindSubmatch(page)
+	og := regexp.MustCompile(`<meta property="og:title" content="([^"]*)">`).FindSubmatch(page)
+	if h1 == nil || og == nil {
+		t.Fatalf("no h1 (%v) or og:title (%v)", h1 != nil, og != nil)
+	}
+	if string(h1[1]) != string(og[1]) {
+		t.Errorf("og:title %q is not the h1 %q", og[1], h1[1])
+	}
+}
