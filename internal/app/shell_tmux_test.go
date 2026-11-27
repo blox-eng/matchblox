@@ -187,7 +187,7 @@ func TestTSecondPressFocusesShell(t *testing.T) {
 }
 
 func TestTSurvivesQuit(t *testing.T) {
-	e, m, agent, _ := uxPass(t)
+	e, m, agent, cwd := uxPass(t)
 	m = pressShell(t, m)
 	shell := e.findShell(agent)
 	if shell == "" {
@@ -195,9 +195,22 @@ func TestTSurvivesQuit(t *testing.T) {
 	}
 	e.tmux("kill-session", "-t", "=matchblox")
 	e.console = e.tmux("-f", "/dev/null", "new-session", "-d", "-s", "matchblox", "-x", "160", "-y", "40", "-P", "-F", "#{pane_id}", "sleep", "600")
-	_ = e.start(t)
+	m = e.deskWith(t, agent, cwd)
 	if !e.live(shell) {
 		t.Fatal("the shell pane died when matchblox quit")
+	}
+	line := sessionRow(m, "ux-pass")
+	if !strings.Contains(line, m.st.muted.Render("shell")) {
+		t.Fatalf("row after restart has no shell: %q", ansi.Strip(line))
+	}
+	before := e.tmux("list-panes", "-t", "=ux-pass", "-F", "#{pane_id}")
+	m = pressShell(t, m)
+	after := e.tmux("list-panes", "-t", "=ux-pass", "-F", "#{pane_id}")
+	if after != before {
+		t.Fatalf("t after restart split again:\n%s", after)
+	}
+	if cur := e.paneField("=ux-pass:", "#{pane_id}"); cur != shell {
+		t.Fatalf("t after restart left %q active, want the shell %q", cur, shell)
 	}
 }
 

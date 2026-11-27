@@ -632,6 +632,7 @@ type Model struct {
 	cogSheet                  *cogSheet         // Machine over the list; nil while it is closed
 	shellAsks                 int               // times the list asked for the shell
 	shells                    map[string]string // agent pane -> the shell pane under it
+	shellSeen                 map[string]bool   // agent panes already asked; a refresh does not ask twice
 	winW, winH                int               // the window's size in beside mode; 0: not read yet
 	boxZoom                   bool              // a box or an animation has the window: the list's pane is zoomed for it
 	boxBack                   []string          // the agent pane's screen, drawn dim behind the box
@@ -912,11 +913,16 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.shells = map[string]string{}
 		}
 		m.shells[msg.agent] = msg.pane
+		if m.shellSeen == nil {
+			m.shellSeen = map[string]bool{}
+		}
+		m.shellSeen[msg.agent] = true
 		m.barMode = "SHELL"
 		return m, nil
 	case besideMsg:
 		if msg.framed {
 			m.deskFrame = true
+			m.rememberShells(m.homeAll.sessions)
 		}
 		if msg.notice != "" {
 			m.notice(msg.notice)
@@ -1086,6 +1092,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.used = *st.Used
 		}
 		m.homeAll = lists{queue: st.Queue, recs: st.Recommendations, sessions: st.Sessions, orphans: st.Orphans, children: st.Children}
+		m.rememberShells(st.Sessions)
 		if from := m.whereFrom(m.opt.Host); st.Found != nil || st.Used != nil || !slices.Equal(from, m.wfrom) {
 			m.wrepos, m.wfrom = m.whereRepos(m.opt.Host), from
 		}

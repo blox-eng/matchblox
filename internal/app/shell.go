@@ -76,17 +76,56 @@ func (m Model) openShell(s sample.Session) tea.Cmd {
 
 // findShellPane is the shell matchblox opened in the agent's window, or "".
 func findShellPane(run func(args ...string) (string, error), agent string) string {
+	id, _ := notedShell(run, agent)
+	return id
+}
+
+// notedShell is that pane, and whether tmux answered. A miss is "" and true.
+func notedShell(run func(args ...string) (string, error), agent string) (string, bool) {
 	out, err := run("list-panes", "-t", agent, "-F", "#{pane_id} #{"+sample.ShellOption+"}")
 	if err != nil {
-		return ""
+		return "", false
 	}
 	for _, line := range strings.Split(out, "\n") {
 		id, mark, _ := strings.Cut(strings.TrimSpace(line), " ")
 		if id != "" && id != agent && mark != "" && paneID.MatchString(id) {
-			return id
+			return id, true
 		}
 	}
-	return ""
+	return "", true
+}
+
+// rememberShells fills the shell map from panes that already carry
+// @matchblox_shell. Desk start and each list refresh call it. A pane is
+// asked once: a later t still focuses the pane this found.
+func (m *Model) rememberShells(sessions []sample.Session) {
+	if !m.deskFrame {
+		return
+	}
+	run := m.tmuxRun()
+	if run == nil {
+		return
+	}
+	if m.shellSeen == nil {
+		m.shellSeen = map[string]bool{}
+	}
+	for _, s := range sessions {
+		if s.Pane == "" || m.shellSeen[s.Pane] {
+			continue
+		}
+		id, ok := notedShell(run, s.Pane)
+		if !ok {
+			continue
+		}
+		m.shellSeen[s.Pane] = true
+		if id == "" {
+			continue
+		}
+		if m.shells == nil {
+			m.shells = map[string]string{}
+		}
+		m.shells[s.Pane] = id
+	}
 }
 
 // markShell names the pane as matchblox's shell, draws the divider, and
