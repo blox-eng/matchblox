@@ -75,7 +75,32 @@
 - [ ] **Step 4:** CI `ios`: `** BUILD SUCCEEDED **` (the check for views; no unit test sees them).
 - [ ] **Step 5: Commit.** `feat(ios): the island leads with what needs you`
 
-### Task 4: Docs, review, ship
+### Task 5: The match burns while any session lives (owner ruling 2026-11-27)
+
+**Files:** `internal/push/state.go` (Build), `internal/push/state_test.go`, `ios/MatchbloxKit/Sources/MatchbloxKit/IslandLook.swift`, `ios/Shared/Match.swift`, `ios/MatchbloxKit/Tests/MatchbloxKitTests/IslandLookTests.swift`
+
+**Interfaces:** Top state `idle` (host) and `TopState.idle` (phone). Rank: waits, done, out, burns, idle; of the idle ones, `Session.Started` newest first. `Burn` counts `burns` only.
+
+- [ ] **Step 1: Failing tests.** Go `TestAnIdleSessionKeepsTheMatchLit`: one session, not busy, no queue row → `Top.State == "idle"`, `Burn == 0`; with a busy one too → the busy one is the top. `TestNoSessionIsQuiet`: no session → `Top == nil`. Swift `testTheMatchIsLitWhileASessionLives`: `lit(.burns|.waits|.done|.idle) == true`, `lit(.out|.quiet) == false`; `state` of `"idle"` is `.idle`.
+- [ ] **Step 2:** Run both. Expected: FAIL (`idle` unknown).
+- [ ] **Step 3:** Build adds idle candidates; the content-state fixture regex test accepts `idle`. `IslandLook.lit(_:)`; Match draws the flame when `lit`, the smoke over it for waits, a small flame for done and idle; the word for idle is `· idle`, the compact right is the limit (as burns).
+- [ ] **Step 4:** `go test ./internal/push/` ok; CI `ios` green.
+- [ ] **Step 5: Commit.** `feat: the island match burns while any session lives`
+
+### Task 6: The buzz hisses (design 0009 §3, owner ruling 2026-11-27)
+
+**Files:** `internal/push/sender.go` (buzz), `internal/push/sender_test.go`, `ios/Matchblox/Sounds/pinch-ember.wav`, `ios/Matchblox/Sounds/dying-ember.wav`, `ios/project.yml` (resources)
+
+**Interfaces:** `aps.sound` is `pinch-ember.wav` for a wait, `dying-ember.wav` for a finished turn. A finished turn buzzes like a wait (the same 30 s window; a wait wins inside one window).
+
+- [ ] **Step 0:** The owner hears both sounds and says yes.
+- [ ] **Step 1: Failing tests.** `TestAWaitBuzzesWithThePinch`: `sound == "pinch-ember.wav"`. `TestAFinishedTurnBuzzesWithTheDyingEmber`: a `finished` item → one device push, `sound == "dying-ember.wav"`. `TestAWaitWinsTheWindow`: a wait and a finish in one window → one push, the pinch.
+- [ ] **Step 2:** Run them. Expected: FAIL (`default`).
+- [ ] **Step 3:** The buzz picks the item and its sound; the two files go in the app bundle (a notification sound must be in the main bundle).
+- [ ] **Step 4:** `go test ./internal/push/` ok; CI `ios` green, and the archive holds both files.
+- [ ] **Step 5: Commit.** `feat: the buzz hisses: a pinch for a wait, a dying ember for a finished turn`
+
+### Task 4: Docs, review, ship (last, after Tasks 5 and 6)
 
 - [ ] **Step 1:** `docs/phone.md` "The island" bullet; `CHANGELOG.md` Unreleased, headline ≤ 7 words.
 - [ ] **Step 2:** `.github/scripts/landing-guard.sh "<title>" <body> origin/main`: pass, or `Landing page: unchanged because <reason>`.

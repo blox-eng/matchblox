@@ -61,6 +61,31 @@ the limits, as now.
 
 **Tap.** Opens the top session that needs you; else the console, as now.
 
+## Owner rulings, 2026-11-27 (after the #513 phone check)
+
+**The match burns while any session lives.** The flame is lit while a
+session works, waits for you, has finished its turn, or sits idle. It goes
+out only when no session runs on the host (quiet), or a limit stops the top
+session (out). A wait shows smoke over the lit flame. Reason: the owner
+reads a lit match as "this host is alive"; a cold match while sessions are
+open says the wrong thing.
+
+- The host sends a new top state `idle`: a session with no queue row that
+  does not work. It ranks after `burns`; of the idle ones, the one prompted
+  last leads. An old phone reads `idle` as quiet, as today.
+- Burn counts stay the working sessions only.
+
+**The buzz hisses, as design 0009 decided (2026-10-21).** A wait plays
+`pinch-ember`: a short pinch hiss and one quiet ember pop, 0.85 s. A
+finished turn plays `dying-ember`: a slow hiss that sinks, sparse crackles
+and a last tick, 1.7 s. The phone buzzes on a finished turn too (0009
+§3.3), which the shipped buzz left out.
+
+- The push names the sound (`aps.sound`). The island already shows the
+  state to Apple, so the name says nothing new. A phone without the file
+  plays the default sound.
+- The owner hears both sounds before they ship.
+
 ## Constraints
 
 - The payload grows by the sessions that need you, at most 3, each its
