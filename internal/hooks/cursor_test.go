@@ -1,11 +1,14 @@
 package hooks
 
 import (
+	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 const cursorChat = "19bece93-9e50-4441-b026-46d1cbf6e177"
@@ -73,5 +76,45 @@ func TestParseCursorMapsEachEvent(t *testing.T) {
 func TestParseCursorDropsUnknownEvents(t *testing.T) {
 	if _, err := ParseCursor(strings.NewReader(`{"hook_event_name":"afterAgentThought","session_id":"x"}`), env(nil)); err == nil {
 		t.Error("afterAgentThought parsed, want an error")
+	}
+}
+
+func cursorPayload(t *testing.T, event, field, text string) Event {
+	t.Helper()
+	b, err := json.Marshal(map[string]string{"session_id": cursorChat, "hook_event_name": event, field: text})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ev, err := ParseCursor(bytes.NewReader(b), env(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ev
+}
+
+// TestCursorKeepsTheTurnsText: a capture of a Cursor match holds its recent
+// conversation, and Cursor writes it nowhere matchblox can read but its
+// hooks. The text is untrusted: a prompt can carry any byte.
+func TestCursorKeepsTheTurnsText(t *testing.T) {
+	ev := cursorPayload(t, "beforeSubmitPrompt", "prompt", "fix \x1b[31mthe\x1b[0m\x00 build\x1b]52;c;cGF3bmVk\x07")
+	if ev.Text != "fix the build" {
+		t.Errorf("hostile prompt: Text %q, want %q", ev.Text, "fix the build")
+	}
+	if ev := parseCursor(t, "cursor-beforeSubmitPrompt.json"); ev.Name != "UserPromptSubmit" || ev.Text != "Commit the fix" {
+		t.Errorf("beforeSubmitPrompt: %q Text %q, want UserPromptSubmit %q", ev.Name, ev.Text, "Commit the fix")
+	}
+	ev = cursorPayload(t, "afterAgentResponse", "text", "Fixed the null check.\nThe tests pass.\nShall I also push it?")
+	if ev.Name != Reply || ev.Message != "Shall I also push it?" || ev.Text != "Fixed the null check.\nThe tests pass.\nShall I also push it?" {
+		t.Errorf("afterAgentResponse: %q Message %q Text %q, want the last line and all three", ev.Name, ev.Message, ev.Text)
+	}
+	long := "LOG START " + strings.Repeat("журнал ", 40000/len("журнал ")) + " NOW FIX THE NULL CHECK"
+	ev = cursorPayload(t, "beforeSubmitPrompt", "prompt", long)
+	if len(ev.Text) > TextLimit || !utf8.ValidString(ev.Text) || !strings.HasPrefix(ev.Text, "LOG START") || !strings.HasSuffix(ev.Text, "NOW FIX THE NULL CHECK") || !strings.Contains(ev.Text, "[middle of message omitted]") {
+		t.Errorf("a %d-byte prompt: Text of %d bytes, valid %v, starts %q, ends %q", len(long), len(ev.Text), utf8.ValidString(ev.Text), ev.Text[:min(20, len(ev.Text))], ev.Text[max(0, len(ev.Text)-30):])
+	}
+	for _, f := range []string{"cursor-sessionStart.json", "cursor-stop-completed.json", "cursor-postToolUse.json"} {
+		if ev := parseCursor(t, f); ev.Text != "" {
+			t.Errorf("%s: Text %q, want none", f, ev.Text)
+		}
 	}
 }

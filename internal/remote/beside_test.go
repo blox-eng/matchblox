@@ -1,23 +1,19 @@
 package remote
 
 import (
-	"slices"
 	"strings"
 	"testing"
 )
 
-func TestSplitArgvGivesTheAgentTheRest(t *testing.T) {
-	argv := SplitArgv("%1", 40, 160)
-	if got := strings.Join(argv[:8], " "); got != "tmux split-window -h -d -t %1 -l 75%" {
-		t.Fatalf("argv = %q", got)
+func TestBesidePercentGivesTheAgentTheRest(t *testing.T) {
+	if got := BesidePercent(40, 160); got != 75 {
+		t.Errorf("40 of 160: %d%%, want 75%%", got)
 	}
-	for _, want := range []string{"-P", "#{pane_id}", "--"} {
-		if !slices.Contains(argv, want) {
-			t.Errorf("no %q in %q", want, argv)
-		}
+	if got := BesidePercent(40, 0); got != 60 {
+		t.Errorf("unknown window: %d%%, want 60%%", got)
 	}
-	if got := SplitArgv("%1", 40, 0)[7]; got != "60%" {
-		t.Errorf("unknown window: %q", got)
+	if got := BesideShell(); len(got) != 3 || got[0] != "/bin/sh" || got[1] != "-c" {
+		t.Errorf("BesideShell = %q", got)
 	}
 }
 

@@ -568,3 +568,30 @@ func TestAGoneMatchsLeftoverNewsIsDropped(t *testing.T) {
 		t.Fatalf("inbox = %+v, dropped = %+v", s.inbox, s.dropped)
 	}
 }
+
+func TestRestampMovesTheClock(t *testing.T) {
+	var s Store
+	chainOf(t, &s, "a", "b")
+	s.Move(mem("a"), t0)
+	s.Restamp(mem("a"), t0.Add(time.Minute))
+	if mv, ok := s.Moving(mem("a")); !ok || !mv.At.Equal(t0.Add(time.Minute)) {
+		t.Fatalf("move = %+v %v", mv, ok)
+	}
+	s.Restamp(mem("b"), t0) // b does not move
+	if _, ok := s.Moving(mem("b")); ok {
+		t.Fatal("a restamp made a move")
+	}
+}
+
+func TestPruneTellsAMoveThatNeverLanded(t *testing.T) {
+	var s Store
+	chainOf(t, &s, "a", "b", "c")
+	s.Move(mem("a"), t0)
+	left := s.Prune(func(m Member) bool { return m.SessionID == "c" }, t0)
+	if len(left) != 2 || !left[0].Moving || left[1].Moving {
+		t.Fatalf("left = %+v", left)
+	}
+	if len(s.Moves) != 0 {
+		t.Fatalf("moves = %+v", s.Moves)
+	}
+}

@@ -493,10 +493,28 @@ func (m Model) sideNotices(sc *drawn, w int) {
 }
 
 // sideKeyLine is the key line of the Sessions tab: where the keys go, then
-// at most five keys for that place, each a tap target.
+// at most five keys for that place, each a tap target. Where the choose
+// hint's ⌥1-9 would cut a key off, the hint goes without it.
 func (m Model) sideKeyLine(w int) (string, []span) {
-	st := m.st
 	where, hints := m.sideHints()
+	line, spans, shown := m.sideKeysIn(w, where, hints)
+	jump := " " + m.keys.side.Jump.Help().Key
+	if shown == len(hints) || !slices.ContainsFunc(hints, func(h hint) bool { return strings.HasSuffix(h.key, jump) }) {
+		return line, spans
+	}
+	brief := slices.Clone(hints)
+	for i := range brief {
+		brief[i].key = strings.TrimSuffix(brief[i].key, jump)
+	}
+	if bline, bspans, bshown := m.sideKeysIn(w, where, brief); bshown > shown {
+		return bline, bspans
+	}
+	return line, spans
+}
+
+// sideKeysIn lays out the key line in w columns, and how many hints it shows.
+func (m Model) sideKeysIn(w int, where string, hints []hint) (string, []span, int) {
+	st := m.st
 	line, x := " ", 1
 	var spans []span
 	if newer := m.newerSaid(); newer != "" { // first: its key stays when the line is cut
@@ -506,6 +524,7 @@ func (m Model) sideKeyLine(w int) (string, []span) {
 		line, x = line+st.warn.Render(newer)+"  ", x+lipgloss.Width(newer)+2
 	}
 	line, x = line+st.label.Render(where), x+lipgloss.Width(where)
+	shown := 0
 	for _, h := range hints {
 		part := st.text.Render(h.key) + st.muted.Render(" "+h.label)
 		if x+3+lipgloss.Width(part) > w {
@@ -516,8 +535,9 @@ func (m Model) sideKeyLine(w int) (string, []span) {
 			spans = append(spans, span{x, x + lipgloss.Width(part), h.press})
 		}
 		x += lipgloss.Width(part)
+		shown++
 	}
-	return fit(line, w), spans
+	return fit(line, w), spans, shown
 }
 
 // tapAgain is what a tap on the notice of a newer release presses: no
@@ -547,6 +567,10 @@ func (m Model) newerSaid() string {
 func (m Model) sideHints() (string, []hint) {
 	sk, mk, bk := m.keys.side, m.keys.main, m.keys.board
 	one := m.onePane(max(m.width, minWidth))
+	choose := hintFor(sk.Up, "")
+	if choose.key != "" && sk.Jump.Enabled() { // ⌥1-9 chooses too, with no key of its own on the line
+		choose.key += " " + sk.Jump.Help().Key
+	}
 	if !m.have && m.opt.Layered { // a host that never answered: the way back
 		return "reading the host", []hint{hintFor(mk.Back, "hosts"), hintFor(mk.Quit, "")}
 	}
@@ -568,7 +592,7 @@ func (m Model) sideHints() (string, []hint) {
 		if m.besideMode() { // the agent's own pane takes the text: ⏎ goes into it
 			enter = "go in"
 		}
-		return "in the list", []hint{hintFor(sk.Up, ""), hintFor(sk.Enter, enter), hintFor(bk.Host, ""), chain, hintFor(bk.Menu, "")}
+		return "in the list", []hint{choose, hintFor(sk.Enter, enter), hintFor(bk.Host, ""), chain, hintFor(bk.Menu, "")}
 	}
 	name := "no session"
 	s, ok := m.sideChosen()
@@ -579,9 +603,9 @@ func (m Model) sideHints() (string, []hint) {
 		return "went into " + name, []hint{{key: m.backKeys(), label: "back"}, hintFor(mk.Jump, "expand"), hintFor(sk.Enter, "")}
 	}
 	if one { // the way back to the list first: a phone's line is short
-		return "writing to " + name, []hint{hintFor(sk.List, ""), hintFor(sk.Enter, ""), hintFor(sk.Up, ""), hintFor(mk.Jump, "expand")}
+		return "writing to " + name, []hint{hintFor(sk.List, ""), hintFor(sk.Enter, ""), choose, hintFor(mk.Jump, "expand")}
 	}
-	return "writing to " + name, []hint{hintFor(sk.Enter, ""), hintFor(sk.Up, ""), hintFor(sk.Leave, ""), hintFor(mk.Jump, "expand"), hintFor(mk.NextTab, "Machine")}
+	return "writing to " + name, []hint{hintFor(sk.Enter, ""), choose, hintFor(sk.Leave, ""), hintFor(mk.Jump, "expand"), hintFor(mk.NextTab, "Machine")}
 }
 
 // sideKeyWords is the key line's words: where the keys go, then the keys.

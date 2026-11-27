@@ -12,7 +12,7 @@ import (
 
 	"github.com/blox-eng/matchblox/internal/accounts"
 	"github.com/blox-eng/matchblox/internal/advice"
-	"github.com/blox-eng/matchblox/internal/panes"
+	"github.com/blox-eng/matchblox/internal/mux"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/recovery"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -28,6 +28,14 @@ var recoverable = []string{"claude", "codex", sample.CursorAgent}
 // recoverSettle is how long an agent recover started must run before recover
 // says it reopened: one that exits at once took its tmux session with it.
 const recoverSettle = 1500 * time.Millisecond
+
+// recoverListTries is how many ListStrict calls recover makes after Start
+// when the list errors. recoverListPause is the wait between those errors.
+const (
+	recoverListTries    = 3
+	recoverListPause    = 400 * time.Millisecond
+	recoverListRetryWhy = "Recover didn’t hear back · ⏎ retry"
+)
 
 // reopenedFor is how long a reopened conversation counts as live before a
 // sample shows its agent: a second recover in that time starts nothing.
@@ -121,6 +129,30 @@ func (s *Service) recover(ctx context.Context, a proto.Act) proto.Result {
 			len(r.Conversations) > 0 && !slices.Contains(r.Conversations, e.ConversationID) {
 			continue
 		}
+		key := conversation(e.Agent, e.ConversationID)
+		s.mu.Lock()
+		u, confirming := s.unconfirmed[key]
+		if confirming && live[key] {
+			delete(s.unconfirmed, key)
+			confirming = false
+		}
+		s.mu.Unlock()
+		if confirming {
+			row := proto.Recovered{
+				Name: e.Session, Agent: e.Agent, Conversation: e.ConversationID,
+				Dir: u.dir, As: u.as, State: proto.RecoverCannot, Why: recoverListRetryWhy,
+			}
+			if reopen {
+				listed, err := s.listPanes(ctx)
+				if err != nil {
+					row.State, row.Why = proto.RecoverCannot, recoverListRetryWhy
+				} else {
+					s.finishListed(&row, listed, u.cmd)
+				}
+			}
+			rows = append(rows, row)
+			continue
+		}
 		row, argv, cmd := s.recoverRow(e, r.Dirs[e.Session], live, taken)
 		if argv != nil && reopen {
 			if res := s.Actions.Do(ctx, advice.Action{Label: "recover " + e.Session, Steps: [][]string{argv}}, "y"); res.Err != "" {
@@ -143,6 +175,12 @@ func (s *Service) recover(ctx context.Context, a proto.Act) proto.Result {
 type reopenedAt struct {
 	at time.Time
 	as string
+}
+
+// unconfirmedAt is a start whose pane list still errors. Confirm lists as
+// and dir; cmd is the agent command for the exited-at-once Why.
+type unconfirmedAt struct {
+	as, cmd, dir string
 }
 
 // recoverLive are the conversations that run now (or that recover reopened
@@ -175,6 +213,32 @@ func (s *Service) recoverLive() (live, taken map[string]bool) {
 	return live, taken
 }
 
+// listPanes lists panes, retrying a ListStrict error up to recoverListTries
+// times. An empty list with no error is not retried.
+func (s *Service) listPanes(ctx context.Context) ([]mux.Pane, error) {
+	pause := s.listPause
+	if pause == 0 {
+		pause = recoverListPause
+	}
+	var last error
+	for i := 0; i < recoverListTries; i++ {
+		listed, err := s.mux().ListStrict()
+		if err == nil {
+			return listed, nil
+		}
+		last = err
+		if i == recoverListTries-1 {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return nil, last
+		case <-time.After(pause):
+		}
+	}
+	return nil, last
+}
+
 // settled waits recoverSettle, then says reopened for each started row
 // whose tmux session still runs, and cannot for one whose agent exited.
 func (s *Service) settled(ctx context.Context, rows []proto.Recovered, started map[int]string) {
@@ -191,23 +255,52 @@ func (s *Service) settled(ctx context.Context, rows []proto.Recovered, started m
 		s.reopened = map[string]reopenedAt{}
 	}
 	s.mu.Unlock()
-	for i, cmd := range started {
-		row := &rows[i]
-		// pane_dead, not has-session: under remain-on-exit the session of
-		// an agent that exited stays, with a dead pane.
-		out, err := s.tmuxOut(slices.Concat(sample.TmuxOn(""), []string{"list-panes", "-t", "=" + row.As, "-F", "#{pane_dead}"}))
-		if err != nil || !strings.Contains(out, "0") {
-			if err == nil {
-				_, _ = s.tmuxOut(slices.Concat(sample.TmuxOn(""), []string{"kill-session", "-t", "=" + row.As}))
-			}
-			row.State, row.Why = proto.RecoverCannot, fmt.Sprintf("%s exited at once: run cd %s && %s to see why", row.Agent, row.Dir, cmd)
-			continue
-		}
-		row.State = proto.RecoverReopened
+	listed, err := s.listPanes(ctx)
+	if err != nil {
 		s.mu.Lock()
-		s.reopened[conversation(row.Agent, row.Conversation)] = reopenedAt{s.now(), row.As}
+		if s.unconfirmed == nil {
+			s.unconfirmed = map[string]unconfirmedAt{}
+		}
+		for i, cmd := range started {
+			row := &rows[i]
+			row.State, row.Why = proto.RecoverCannot, recoverListRetryWhy
+			s.unconfirmed[conversation(row.Agent, row.Conversation)] = unconfirmedAt{as: row.As, cmd: cmd, dir: row.Dir}
+		}
 		s.mu.Unlock()
+		return
 	}
+	for i, cmd := range started {
+		s.finishListed(&rows[i], listed, cmd)
+	}
+}
+
+// finishListed sets reopened when session row.As still runs in listed, and
+// cannot when it does not. A dead session is killed. An unconfirmed start
+// of that conversation is cleared.
+func (s *Service) finishListed(row *proto.Recovered, listed []mux.Pane, cmd string) {
+	alive, there := sessionRunsOf(listed, row.As)
+	key := conversation(row.Agent, row.Conversation)
+	if !alive {
+		if there {
+			_, _ = s.runStep(s.mux().KillSession(row.As))
+		}
+		row.State, row.Why = proto.RecoverCannot, fmt.Sprintf("%s exited at once: run cd %s && %s to see why", row.Agent, row.Dir, cmd)
+		s.mu.Lock()
+		delete(s.unconfirmed, key)
+		s.mu.Unlock()
+		return
+	}
+	row.State = proto.RecoverReopened
+	if row.Why == recoverListRetryWhy {
+		row.Why = ""
+	}
+	s.mu.Lock()
+	if s.reopened == nil {
+		s.reopened = map[string]reopenedAt{}
+	}
+	s.reopened[key] = reopenedAt{s.now(), row.As}
+	delete(s.unconfirmed, key)
+	s.mu.Unlock()
 }
 
 // recoverRow is the state of entry e, the argv that reopens it when it can
@@ -277,18 +370,30 @@ func (s *Service) recoverRow(e recovery.Entry, moved string, live, taken map[str
 		return cannot("conversation %s is open in another process (pid %d): quit it there, then run matchblox recover again", e.ConversationID, pid)
 	}
 	row.State, row.As = proto.RecoverReady, freeName(e.Session, taken)
-	argv := slices.Concat(
-		[]string{"env", "-u", "GIT_TERMINAL_PROMPT", "-u", "GIT_SSH_COMMAND", "-u", panes.HomeEnv},
-		sample.TmuxOn(""), []string{"new-session", "-d", "-s", row.As, "-n", row.As, "-c", row.Dir})
+	var launch []string
 	agent := []string{bin}
 	if e.AccountDir != "" {
-		argv = append(argv, accounts.EnvArgv(e.Agent, e.AccountDir, false)...)
+		launch = accounts.EnvArgv(e.Agent, e.AccountDir, false)
 		if strings.HasPrefix(e.AccountDir, accounts.Root(s.home())+string(filepath.Separator)) {
 			agent = append(agent, accounts.Args(e.Agent)...) // a hand-made folder may sign in by the keyring
 		}
 	}
 	agent = append(agent, resumeArgs(e.Agent, e.ConversationID)...)
-	return row, append(argv, guardArgv(s.guardLink(), s.goos(), e.Agent, row.As, agent)...), strings.Join(agent, " ")
+	launch = append(launch, guardArgv(s.guardLink(), s.goos(), e.Agent, row.As, agent)...)
+	start := s.mux().Start(mux.Start{Name: row.As, Dir: row.Dir, Detached: true, Argv: launch})
+	return row, start[0], strings.Join(agent, " ")
+}
+
+// sessionRunsOf tells if session name has a pane that is not dead in listed,
+// and if listed names the session at all.
+func sessionRunsOf(listed []mux.Pane, name string) (alive, there bool) {
+	for _, p := range listed {
+		if session, _, _ := strings.Cut(p.Target, ":"); session == name {
+			there = true
+			alive = alive || !p.Dead
+		}
+	}
+	return alive, there
 }
 
 // freeName is name, or name-2, name-3, … when a tmux session has it.

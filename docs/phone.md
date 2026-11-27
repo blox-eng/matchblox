@@ -84,10 +84,12 @@ terminal.`
 
 - Each time the app opens, Face ID or the passcode unlocks the key. The key
   stays in the Secure Enclave of the device. Each host has its own key.
-- With one host, the app opens straight into its console. With two or
-  more, it lists the hosts. Tap a host to open its console, or
-  `+ Pair a host` to add one. The console's `Hosts` button opens the list
-  with either count, so you can remove even your only host.
+- With no host, home opens: pair a host or try the demo. With one host,
+  the app opens straight into its console. With two or more, home lists
+  the hosts. Tap a host to open its console, or `+ pair a host` to add
+  one. From a live console, pull the drawer and tap `BOX` (or tap
+  `Hosts` on the cover) to open home. `‹ host` returns to that console.
+  Home also holds Live Activity, text size, demo, privacy and sponsor.
 - If the app says `Can't reach <host>.` and `New address?`, type the
   address that the device can reach, then tap `Try again`. The pairing
   stays.
@@ -127,10 +129,9 @@ terminal.`
   again to give the go. Any other key or tap disarms it. While the
   consent box shows, the belt is `◂`, `y runs` and `esc cancels`: a tap
   on a row is never consent.
-- **Text size:** pinch the terminal, or tap `A−` or `A+` under
-  `Console text` in the Island screen. The size goes from 9 to 24 pt, and
-  the phone keeps it for every host. The host gets the new columns and
-  rows.
+- **Text size:** pinch the terminal, or tap − or + on the `text` line of
+  home. The size goes from 9 to 24 pt, and the phone keeps it for every
+  host. The host gets the new columns and rows.
 - **Back to the bottom:** after a swipe scrolls an agent's pane up, a `↓`
   button shows at the bottom right. Tap it to go back to the live output:
   tmux leaves its copy mode. A key you type hides it too.
@@ -154,12 +155,11 @@ terminal.`
 
 ### Try a demo
 
-With no host, the pairing screen shows `Try a demo` below the scan. With two or
-more hosts, the Hosts screen shows it beside `Island`. The scan view shows a
-code of its own and scans it by itself. On a fresh install, the pairing screen
-asks for the camera first, and `Try a demo` works whether you allow or deny it.
-The demo's own scan turns on no camera and asks for no permission. Then the app
-saves a host called `demo`.
+With no host, home shows `try the demo` under pair. With a host but no demo,
+the home footer offers `demo`. The demo's own scan turns on no
+camera and asks for no permission. On a fresh install, home opens first;
+`try the demo` works with or without the camera. Then the app saves a host
+called `demo`.
 
 The demo runs the real console on a made-up machine inside the app. It needs no
 network and starts fresh each time it opens. The list opens with
@@ -227,13 +227,14 @@ Nothing connects to a host from the background.
   the top, and keys you type then go once it is back. If the host stays out
   of reach for 20 s, the screen says `Can't reach <host>.` with `Try again`.
   Face ID asks again only after 5 minutes away.
-- **The setting:** the `Island` entry in the app's console, next to `Hosts`.
+- **The setting:** the `Live Activity` row on home (real hosts only). The
+  `show` line under it picks `sessions`, `usage` or `auto` with one tap.
   `Follow` is the one host that has the island (the host opened last). `Show`
   is `Sessions`, `Usage` or `Auto (Usage while the stoker runs)`. `Buzz` is
   on or off for each host. A host out of reach keeps its old setting until
   the next connect.
-- **If the app could not register,** the Island screen says why under the
-  host, with the time and the fix, for example `Not registered: no APNs
+- **If the app could not register,** the Live Activity screen says why under
+  the host, with the time and the fix, for example `Not registered: no APNs
   device token — allow notifications for matchblox in Settings`. The line
   goes when a registration with that host succeeds. A host the app never
   tried has no line.
@@ -446,7 +447,8 @@ with your thumb to scroll, as a trackball:
   scroll a page, and double-tap it to send Enter.
 
 In a chat, press and hold on a word to select it, and drag with the
-same finger to select more. When you lift it, the menu offers Copy,
+same finger to select more. Drag either blue handle to adjust the selection;
+a magnifying lens shows the text under your finger. When you lift it, the menu offers Copy,
 `Open link` for a link in the selection, and Paste. The hold leaves the
 keyboard where it is; a tap ends the selection.
 

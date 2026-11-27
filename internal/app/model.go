@@ -28,6 +28,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/filestamp"
 	"github.com/blox-eng/matchblox/internal/history"
 	"github.com/blox-eng/matchblox/internal/keycmd"
+	"github.com/blox-eng/matchblox/internal/mux"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/release"
@@ -241,6 +242,7 @@ type action struct {
 	host        string                      // the host of the row it acts on; "": the home host, as a peer is never ""
 	tty         string                      // a jump or a switch: the marked client that asked; "" unmarked
 	asker       bool                        // a jump of this machine's tmux: it moves only its tty's client, else the desk's
+	inPane      bool                        // a jump its tty's client asked for in an agent's pane: it need not show the console
 	deskLocal   func(tty string) []string   // a host jump of an unmarked key: its local list for the desk's client
 	beside      bool                        // it shows the session in the agent pane: steps[0] is the pane's command
 	chain       []paneKey                   // a chain view: the member each of steps shows
@@ -899,6 +901,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.besideShown(msg)
 	case previewMsg:
 		return m.look(msg)
+	case jumpMsg:
+		return m.jumpFromDesk(msg)
 	case fromConn:
 		if msg.conn != m.conn {
 			return m, nil
@@ -1478,11 +1482,11 @@ func (m Model) clients() func() ([]string, error) {
 func tmuxClients() ([]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, "tmux", "list-clients", "-F", "#{client_tty}").Output()
+	out, err := mux.Tmux{}.Output(ctx, "list-clients", "-F", "#{client_tty}")
 	if err != nil {
 		return nil, err
 	}
-	return strings.Fields(string(out)), nil
+	return strings.Fields(out), nil
 }
 
 // focusJump waits up to focusWait for the client on tty to attach to this
@@ -2021,6 +2025,9 @@ func (m Model) switched(r proto.Result) (Model, tea.Cmd) {
 		return m, said
 	}
 	m.flash = ""
+	if r.StartedIn != "" {
+		j.done += " in " + r.StartedIn
+	}
 	if m.opt.Demo != "" { // the switch ran: only the jump into its pane cannot
 		said := m.say(j.done)
 		return m, said
@@ -2060,14 +2067,12 @@ func runNav(a action, run func([]string) error) ranMsg {
 // jump goes to a pane: inside tmux the client switches to it; outside, the
 // console gives the terminal to `tmux attach` and comes back after it.
 func (m Model) jump(pane string) *action {
+	mx := m.multiplexer()
 	if m.opt.OutsideTmux {
-		return &action{label: "attach", nav: true, attach: true, pane: pane, steps: [][]string{
-			{"tmux", "select-window", "-t", pane},
-			{"tmux", "select-pane", "-t", pane},
-			{"tmux", "attach-session", "-t", pane},
-		}}
+		return &action{label: "attach", nav: true, attach: true, pane: pane,
+			steps: append(mx.Focus(pane), mx.Attach(pane))}
 	}
-	return &action{label: "jump", nav: true, pane: pane, tty: m.askedBy, asker: true, steps: [][]string{{"tmux", "switch-client", "-t", pane}}}
+	return &action{label: "jump", nav: true, pane: pane, tty: m.askedBy, asker: true, steps: [][]string{mx.SwitchClient(pane)}}
 }
 
 // jumpOn is jump to a pane of host.

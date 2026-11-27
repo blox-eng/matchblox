@@ -15,6 +15,7 @@ import (
 
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/limits"
+	"github.com/blox-eng/matchblox/internal/mux"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
@@ -87,8 +88,7 @@ func one(argv ...string) [][]string { return [][]string{argv} }
 
 // sendKeys types keys into pane, on the tmux server the pane is on.
 func sendKeys(pane string, keys ...string) []string {
-	tmux, id := sample.Tmux(pane)
-	return append(append(tmux, "send-keys", "-t", id), keys...)
+	return mux.Tmux{}.Keys(pane, keys...)
 }
 
 // lane is whether pane is one of the builder's lanes. The stoker's own
@@ -120,7 +120,7 @@ func shellRecs(snap sample.Snapshot) []Rec {
 				Level: "warn", score: 400 + ran.Hours(),
 				Title:    fmt.Sprintf("End a background shell of %s (%s) that has run %s", s.Name, s.Pane, sample.Human(ran)),
 				Evidence: fmt.Sprintf("pid %d, started %s, no turn runs: %s", sh.PID, sh.Started.Local().Format("Jan 2 15:04"), sh.Command),
-				Primary:  &Action{Label: "jump to the session", Nav: true, Steps: one("tmux", "switch-client", "-t", s.Pane)},
+				Primary:  &Action{Label: "jump to the session", Nav: true, Steps: one(mux.Tmux{}.SwitchClient(s.Pane)...)},
 			}
 			// The command runs under the shell: only ending the shell's own
 			// process group ends it too. A shell that shares a group is ended
@@ -158,7 +158,7 @@ func Build(snap sample.Snapshot, git *gitscan.Report) []Rec {
 				Guards: []Guard{{PID: o.PID, StartTicks: o.Start}}},
 		}
 		if o.PaneAlive && lane(o.Pane) {
-			r.Primary = &Action{Label: "jump to its pane", Nav: true, Steps: one("tmux", "switch-client", "-t", o.Pane)}
+			r.Primary = &Action{Label: "jump to its pane", Nav: true, Steps: one(mux.Tmux{}.SwitchClient(o.Pane)...)}
 		}
 		out = append(out, r)
 	}
@@ -171,7 +171,7 @@ func Build(snap sample.Snapshot, git *gitscan.Report) []Rec {
 			Level:    "warn",
 			Title:    fmt.Sprintf("%s %s (%s)", capital(s.Do), s.Name, s.Pane),
 			Evidence: s.Why,
-			Primary:  &Action{Label: "jump to the session", Nav: true, Steps: one("tmux", "switch-client", "-t", s.Pane)},
+			Primary:  &Action{Label: "jump to the session", Nav: true, Steps: one(mux.Tmux{}.SwitchClient(s.Pane)...)},
 			score:    500 + s.ContextPct,
 		}
 		if s.Do == "clear" {
@@ -241,7 +241,7 @@ func limitRecs(snap sample.Snapshot) []Rec {
 			Level: "warn", score: 650,
 			Title:    "The week runs short: compact " + hot.Name,
 			Evidence: fmt.Sprintf("out %s · %s%s · %s", limits.When(a.Forecast.Out, snap.At, "~"), a.Account, left, cost(*hot)),
-			Primary:  &Action{Label: "jump to the session", Nav: true, Steps: one("tmux", "switch-client", "-t", hot.Pane)},
+			Primary:  &Action{Label: "jump to the session", Nav: true, Steps: one(mux.Tmux{}.SwitchClient(hot.Pane)...)},
 		}
 		// Type only into an idle session, as the compact rec does.
 		if hot.Status == "idle" {
@@ -281,7 +281,7 @@ func alertRecs(snap sample.Snapshot) []Rec {
 				Evidence: a.Evidence + "; the RAM is free, swapped pages make the next access slow",
 				Second: &Action{
 					Label:       "swapoff and swapon in a new window (sudo asks there)",
-					Steps:       one("tmux", "new-window", "-n", "swap", "sudo", "sh", "-c", "swapoff -a && swapon -a"),
+					Steps:       one(mux.Tmux{}.NewWindow("swap", "", "sudo", "sh", "-c", "swapoff -a && swapon -a")...),
 					Destructive: true,
 				},
 			})
@@ -298,7 +298,7 @@ func alertRecs(snap sample.Snapshot) []Rec {
 				Level: "warn", score: 450 + top.CPU/10,
 				Title:    fmt.Sprintf("Look at %s in pane %s", top.Comm, pane),
 				Evidence: fmt.Sprintf("%s; the biggest CPU user is %s (pid %d) at %.0f%%", a.Evidence, top.Comm, top.PID, top.CPU),
-				Primary:  &Action{Label: "jump to its pane", Nav: true, Steps: one("tmux", "switch-client", "-t", pane)},
+				Primary:  &Action{Label: "jump to its pane", Nav: true, Steps: one(mux.Tmux{}.SwitchClient(pane)...)},
 			})
 		}
 	}
@@ -380,7 +380,7 @@ func pollingRec(checkout string, cores float64, dirty, sessions int) Rec {
 		Level: "warn", score: 400 + 100*cores + float64(dirty)/100,
 		Title:    "Clean up " + checkout,
 		Evidence: ev + ". Every agent's git status walks the whole dirty tree.",
-		Primary:  &Action{Label: "open a shell there", Nav: true, Steps: one("tmux", "new-window", "-c", checkout)},
+		Primary:  &Action{Label: "open a shell there", Nav: true, Steps: one(mux.Tmux{}.NewWindow("", checkout)...)},
 	}
 }
 

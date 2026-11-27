@@ -11,10 +11,10 @@ public enum Route: Equatable, Sendable {
 }
 
 public enum Opening {
-    /// One host opens straight into its console; several hosts ask which one.
+    /// No host opens home (pair or demo). One host opens its console; several ask which one.
     public static func first(hosts: [Host]) -> Route {
         switch hosts.count {
-        case 0: .scan
+        case 0: .hosts
         case 1: .console(hosts[0], open: nil)
         default: .hosts
         }

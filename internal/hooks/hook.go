@@ -57,7 +57,14 @@ type Event struct {
 	Raw     string  `json:"-"`
 	Guards  []Guard `json:"guards,omitempty"`
 	Denied  bool    `json:"denied,omitempty"`
+	// Text is a Cursor turn's whole prompt or reply, cleaned, within
+	// TextLimit: the capture's conversation. It goes over the socket only;
+	// the spool keeps none of it.
+	Text string `json:"text,omitempty"`
 }
+
+// TextLimit is how many bytes of a turn's text an Event carries.
+const TextLimit = 16000
 
 // Guard is one command of a shell line the stoker's order must give the
 // go for: What is merge, release or deploy, N the pull request a merge

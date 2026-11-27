@@ -87,3 +87,17 @@ func TestRecoverPrintsEachEntryAndItsFix(t *testing.T) {
 		t.Fatalf("an empty record: %v %q", err, b.String())
 	}
 }
+
+func TestRecoverPrintsListRetryCTA(t *testing.T) {
+	why := "Recover didn’t hear back · ⏎ retry"
+	rows := []proto.Recovered{{Name: "web", Agent: "codex", State: proto.RecoverCannot, Dir: "/src/web", Why: why}}
+	var b bytes.Buffer
+	err := printRecover(&b, rows, true)
+	if err == nil || !strings.Contains(err.Error(), "could not reopen") {
+		t.Fatalf("err %v", err)
+	}
+	out := b.String()
+	if !strings.Contains(out, "cannot reopen") || !strings.Contains(out, why) {
+		t.Fatalf("print:\n%s", out)
+	}
+}

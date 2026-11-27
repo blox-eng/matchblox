@@ -283,3 +283,26 @@ func TestParseKeepsTheSubagent(t *testing.T) {
 		t.Fatalf("the main conversation has agent %q", ev.AgentID)
 	}
 }
+
+// TestTheSpoolKeepsNoText: a turn's text can hold a secret, and the spool
+// is a file that outlives the turn. The text goes over the socket only.
+func TestTheSpoolKeepsNoText(t *testing.T) {
+	ev := Event{Name: "UserPromptSubmit", Agent: CursorAgent, SessionID: "a", Text: "token sk-xyz"}
+	if b, err := json.Marshal(ev); err != nil || !bytes.Contains(b, []byte("sk-xyz")) {
+		t.Fatalf("the socket's encoding %s (%v) lost the text", b, err)
+	}
+	spool := filepath.Join(t.TempDir(), "spool.jsonl")
+	if err := Append(spool, ev); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(spool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(b, []byte("sk-xyz")) {
+		t.Errorf("the spool holds the text: %s", b)
+	}
+	if ev.Text != "token sk-xyz" {
+		t.Errorf("Append changed the caller's event: Text %q", ev.Text)
+	}
+}

@@ -23,7 +23,7 @@ const flipBeside = `#{?#{==:#{pane_id},#{` + sample.ConsoleOption + `}},` +
 // console's session and in windows that have an agent beside the list.
 func BesideKeysArgv() []string {
 	guard := "#{&&:" + atHome + ",#{" + sample.BesideOption + "}}"
-	return []string{"tmux", "bind-key", "-n", BesideKey, "if-shell", "-F", guard, "run-shell -C '" + flipBeside + "'", "send-keys " + BesideKey}
+	return onHome("bind-key", "-n", BesideKey, "if-shell", "-F", guard, "run-shell -C '"+flipBeside+"'", "send-keys "+BesideKey)
 }
 
 // endBeside, in a window whose console pane was #{hook_pane}, forgets the
@@ -49,6 +49,6 @@ const endBeside = `#{S:#{?` + atHome + `,#{W:#{?#{==:#{` + sample.ConsoleOption 
 func BesideHookArgv() []string {
 	slot := strconv.Itoa(keycmd.MarkSlot)
 	hook := `run-shell -C "` + endBeside + `"`
-	return []string{"tmux", "set-hook", "-g", "pane-exited[" + slot + "]", hook,
-		";", "set-hook", "-g", "pane-died[" + slot + "]", hook}
+	return onHome("set-hook", "-g", "pane-exited["+slot+"]", hook,
+		";", "set-hook", "-g", "pane-died["+slot+"]", hook)
 }

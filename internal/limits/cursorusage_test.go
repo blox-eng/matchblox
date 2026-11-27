@@ -135,10 +135,10 @@ func TestEachCursorAccountHasItsOwnReading(t *testing.T) {
 	plan := func(pct string) []byte {
 		return []byte(`{"billingCycleStart":"1790000000000","billingCycleEnd":"1792678400000","planUsage":{"totalPercentUsed":` + pct + `}}`)
 	}
-	answers := map[string][]byte{"tok-a": plan("10"), "tok-b": plan("20"), "tok-keychain": plan("30")}
+	answers := map[string][]byte{"tok-a": plan("10"), "tok-b": plan("20"), "tok-default": plan("30")}
 	u := &CursorUsages{
-		Every:    time.Hour,
-		Keychain: func(context.Context) (string, error) { return "tok-keychain", nil },
+		Every:   time.Hour,
+		Default: []TokenSource{func(context.Context) (string, error) { return "tok-default", nil }},
 		File: func(path string) (string, error) {
 			return map[string]string{
 				"/work/a/home/.cursor/auth.json": "tok-a",
@@ -252,8 +252,8 @@ func TestCursorSignedOutIsAskedAgainEvery30Seconds(t *testing.T) {
 func TestCursorSignedOutIsReadOncePer30Seconds(t *testing.T) {
 	reads := 0
 	u := &CursorUsages{
-		Every:    5 * time.Minute,
-		Keychain: func(context.Context) (string, error) { reads++; return "", os.ErrNotExist },
+		Every:   5 * time.Minute,
+		Default: []TokenSource{func(context.Context) (string, error) { reads++; return "", os.ErrNotExist }},
 		Fetch: func(context.Context, string) ([]byte, error) {
 			t.Error("called the API with no token")
 			return nil, nil
@@ -275,8 +275,8 @@ func TestCursorSignedOutIsReadOncePer30Seconds(t *testing.T) {
 func TestCursorTokenReadFailingIsNotSignedOut(t *testing.T) {
 	reads := 0
 	u := &CursorUsages{
-		Every:    5 * time.Minute,
-		Keychain: func(context.Context) (string, error) { reads++; return "", errors.New("security: exit status 51") },
+		Every:   5 * time.Minute,
+		Default: []TokenSource{func(context.Context) (string, error) { reads++; return "", errors.New("security: exit status 51") }},
 		Fetch: func(context.Context, string) ([]byte, error) {
 			t.Error("called the API with no token")
 			return nil, nil
@@ -304,9 +304,9 @@ func TestCursorTokenReadThatWorksIsNotFailed(t *testing.T) {
 	var err error
 	token := ""
 	u := &CursorUsages{
-		Every:    time.Minute,
-		Keychain: func(context.Context) (string, error) { return token, err },
-		Fetch:    func(context.Context, string) ([]byte, error) { return nil, context.DeadlineExceeded },
+		Every:   time.Minute,
+		Default: []TokenSource{func(context.Context) (string, error) { return token, err }},
+		Fetch:   func(context.Context, string) ([]byte, error) { return nil, context.DeadlineExceeded },
 	}
 	t0 := time.UnixMilli(1791000000000)
 	steps := []struct {
@@ -361,5 +361,44 @@ func TestCursorAuthJSONHalfWrittenIsRetriedIn30s(t *testing.T) {
 	u.Wait()
 	if !u.Asked(dir) {
 		t.Error("the full file written 30 s later was not read, want a call")
+	}
+}
+
+// TestReadsDefaultWithoutKeychain: Default sources alone make Reads("") true.
+func TestReadsDefaultWithoutKeychain(t *testing.T) {
+	u := &CursorUsages{
+		Default: []TokenSource{func(context.Context) (string, error) { return "tok", nil }},
+	}
+	if !u.Reads("") {
+		t.Fatal("Reads(\"\") false with Default set, want true")
+	}
+}
+
+// TestReadsDefaultEmptyIsFalse: no Default sources means the default is not read.
+func TestReadsDefaultEmptyIsFalse(t *testing.T) {
+	u := &CursorUsages{}
+	if u.Reads("") {
+		t.Fatal("Reads(\"\") true with empty Default, want false")
+	}
+}
+
+// TestReadingDefaultUsesFileSource: a Default source token is fetched.
+func TestReadingDefaultUsesFileSource(t *testing.T) {
+	u := &CursorUsages{
+		Every:   time.Hour,
+		Default: []TokenSource{func(context.Context) (string, error) { return "from-file", nil }},
+		Fetch: func(_ context.Context, token string) ([]byte, error) {
+			if token != "from-file" {
+				t.Fatalf("fetch token %q, want from-file", token)
+			}
+			return []byte(cursorUsage), nil
+		},
+	}
+	now := time.UnixMilli(1791000000000)
+	u.Reading("", now)
+	u.Wait()
+	r := u.Reading("", now.Add(time.Second))
+	if r == nil || r.Windows[0].UsedPct != 25 {
+		t.Fatalf("reading %+v, want 25%%", r)
 	}
 }

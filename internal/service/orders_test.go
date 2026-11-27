@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/mux"
 	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -41,7 +42,8 @@ func orderTest(t *testing.T) (*Service, *[][]string) {
 // typed are the lines typed into pane, on the tmux server it is on: the
 // builder's %9 is not the stoker's %9@mbtest.
 func typed(ran [][]string, pane string) []string {
-	tmux, id := sample.Tmux(pane)
+	server, id := mux.SplitPane(pane)
+	tmux := mux.Command(server)
 	var out []string
 	for _, argv := range ran {
 		if len(argv) > len(tmux) && slices.Equal(argv[:len(tmux)], tmux) && argv[len(tmux)] == "send-keys" &&
