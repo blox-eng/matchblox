@@ -228,6 +228,10 @@ func (m Model) drawScreen(w int) drawn {
 		b = m.body(w)
 	}
 	vis := windowed(b, room, m.rowIndex())
+	if at, ok := b.heads[m.machineJump]; ok && m.machineJumped && m.tab == tabMachine {
+		end := min(at+room, len(b.lines))
+		vis = body{lines: b.lines[at:end], rows: b.rows[at:end]}
+	}
 	for i := range room {
 		line, row := "", -1
 		if i < len(vis.lines) {

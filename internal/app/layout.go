@@ -71,10 +71,12 @@ func (m Model) shapeRows() int {
 func (m Model) upright() bool { return portrait(m.width, m.shapeRows()) }
 
 // body is a panel: its lines, and for each line the row it shows (-1 for
-// none), so a tap knows what it hit.
+// none), so a tap knows what it hit. Machine's heads are the line of each
+// host's section head, by host.
 type body struct {
 	lines []string
 	rows  []int
+	heads map[string]int
 }
 
 func (b *body) add(row int, lines ...string) {

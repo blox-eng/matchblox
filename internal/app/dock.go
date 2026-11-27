@@ -476,8 +476,10 @@ func (m Model) machinePanel(w int) body {
 		b.add(-1, "")
 	}
 	b.add(-1, m.usageLines(w, true)...)
+	b.heads = map[string]int{}
 	if m.hostCount() == 1 {
 		b.add(-1, "")
+		b.heads[m.opt.Host] = len(b.lines)
 		b.add(-1, m.machineLines(w, true)...)
 		b.add(-1, m.machine(w)...)
 		p := m.procs(w)
@@ -486,6 +488,7 @@ func (m Model) machinePanel(w int) body {
 	}
 	for _, h := range m.statedHosts() {
 		on := m.viewOf(h)
+		b.heads[h] = len(b.lines) + 1
 		b.add(-1, "", m.hostHead(h, w))
 		b.add(-1, on.machineAbout(w, true, h)...)
 		b.add(-1, on.machine(w)...)

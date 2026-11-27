@@ -446,11 +446,15 @@ type Model struct {
 	devPick      string       // the selected device row: its fingerprint, or devPlus
 	// hostPicked: a host row of Machine is selected, hostPick its host;
 	// machineHostPicked: a row of the machines region, machineHost its
-	// host; viewPick: a view row, by its name.
+	// host; viewPick: a view row, by its name. machineJumped: ⏎ on a
+	// machine row moved Machine's window to machineJump's section, until
+	// the next key.
 	hostPicked        bool
 	hostPick          string
 	machineHostPicked bool
 	machineHost       string
+	machineJumped     bool
+	machineJump       string
 	viewPick          string
 	pair              *pairPage  // the pair page, while it shows
 	pairPolling       bool       // a poll of the pair page is on its way
@@ -812,6 +816,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg.(type) {
 	case tea.KeyPressMsg, tea.MouseClickMsg, tea.MouseWheelMsg, tea.PasteMsg:
 		m.askedBy, m.marked, m.away = m.marked.spend(m.now()), clientMark{}, false
+		if _, click := msg.(tea.MouseClickMsg); !click { // a tap ends it once it knows what it hit
+			m.machineJumped = false // the window follows the selection again
+		}
 		m = m.dragDropped(msg)
 		if c, ok := msg.(tea.MouseClickMsg); ok && len(m.sayingNow()) > 0 {
 			if sc := m.draw(max(m.width, minWidth)); c.Y >= sc.sayY0 && c.Y < sc.sayY1 && c.X >= sc.sayX0 {
@@ -1819,6 +1826,9 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		if v, ok := m.selectedMachineView(); ok && m.tab == tabMachine {
 			return m.openView(v), nil
+		}
+		if h, ok := m.selectedMachine(); ok && m.tab == tabMachine {
+			return m.enterMachine(h), nil
 		}
 		if s, ok := m.selectedSession(); ok {
 			if u, head := m.headRow(s); head { // a chain's head opens its room

@@ -585,8 +585,139 @@ func TestDownFromTheViewsReachesTheMachines(t *testing.T) {
 		if b.lines[at] == rawRow(off, want) {
 			t.Fatalf("↓ %d: %s's row is not on the selected wash", i+1, want)
 		}
-		if keys := plainHints(m.view().keys(m)...); strings.Contains(keys, "⏎") {
+		if keys := plainHints(m.view().keys(m)...); !strings.Contains(keys, "⏎ section") {
 			t.Fatalf("↓ %d: a machine row offers %q", i+1, keys)
 		}
+	}
+}
+
+// threeMachines is a console at width 104 whose body is 20 lines: the home
+// host and peers gpu-1 and ws-1, in that Hosts order; stated are the hosts
+// that sent a state at lostAt, "" for the home host.
+func threeMachines(t *testing.T, stated ...string) Model {
+	t.Helper()
+	now := lostAt
+	m, _, conns := hostsAt(t, &now, "", 104, 25, "gpu-1", "ws-1")
+	for _, h := range stated {
+		if h == "" {
+			m = upd(t, m, stateMsg(stateAt(healthy(), now)))
+			continue
+		}
+		m = upd(t, m, peerMsg{host: h, conn: conns[h], msg: stateMsg(stateAt(healthy(), now))})
+	}
+	m.setTab(tabMachine)
+	return m
+}
+
+// onMachineRow is m with host's machine row selected.
+func onMachineRow(t *testing.T, m Model, host string) Model {
+	t.Helper()
+	i := slices.IndexFunc(m.machineList(), func(r machineRow) bool { return r.host == host })
+	if i < 0 {
+		t.Fatalf("no machine row of %q", host)
+	}
+	m.selectRow(m.rowBase(rowMachines) + i)
+	return m
+}
+
+// machineWindow is the body the screen draws, without its styles: the
+// lines under the tab rule.
+func machineWindow(m Model) []string {
+	f := frameOf(m)
+	return f[3 : 3+m.bodyRows()]
+}
+
+func TestEnterOnAMachineMovesToItsSection(t *testing.T) {
+	m := onMachineRow(t, threeMachines(t, "", "gpu-1", "ws-1"), "ws-1")
+	if m.bodyRows() != 20 {
+		t.Fatalf("the window has %d lines, want 20", m.bodyRows())
+	}
+	if keys := plainHints(m.view().keys(m)...); !strings.Contains(keys, "⏎ section") {
+		t.Fatalf("ws-1's row offers %q", keys)
+	}
+	m = pressOn(m, "enter")
+	if win := machineWindow(m); strings.TrimSpace(win[0]) != "ws-1" {
+		t.Fatalf("after ⏎ the window starts at %q:\n%s", win[0], strings.Join(win, "\n"))
+	}
+	if !m.machineHostPicked || m.machineHost != "ws-1" {
+		t.Fatalf("after ⏎ the selection is %q (%v), want ws-1's row", m.machineHost, m.machineHostPicked)
+	}
+}
+
+func TestAKeyAfterTheJumpFollowsTheSelectionAgain(t *testing.T) {
+	m := onMachineRow(t, threeMachines(t, "", "gpu-1", "ws-1"), "ws-1")
+	twin := pressOn(m, "up")
+	m = pressOn(m, "enter", "up")
+	if m.rowIndex() != twin.rowIndex() || m.machineHost != "gpu-1" {
+		t.Fatalf("↑ after ⏎ selects row %d (%q), want %d (gpu-1)", m.rowIndex(), m.machineHost, twin.rowIndex())
+	}
+	if got, want := strings.Join(machineWindow(m), "\n"), strings.Join(machineWindow(twin), "\n"); got != want {
+		t.Fatalf("↑ after ⏎ draws:\n%s\nwant, as with no ⏎:\n%s", got, want)
+	}
+}
+
+func TestEnterOnOneHostMovesToMachine(t *testing.T) {
+	m, _ := loadedWith(t, 104, hostState(sess(1, "api-auth", "%1", nil)))
+	m.setTab(tabMachine)
+	m = onMachineRow(t, m, m.opt.Host)
+	m = pressOn(m, "enter")
+	if win := machineWindow(m); !strings.HasPrefix(win[0], " MACHINE ") {
+		t.Fatalf("after ⏎ the window starts at %q:\n%s", win[0], strings.Join(win, "\n"))
+	}
+}
+
+func TestEnterOnAnUnreachedHostMovesToItsHostRow(t *testing.T) {
+	m := onMachineRow(t, threeMachines(t, "", "gpu-1"), "ws-1")
+	before := strings.Join(machineWindow(m), "\n")
+	if keys := plainHints(m.view().keys(m)...); strings.Contains(keys, "⏎") {
+		t.Fatalf("with no hosts list, ws-1's row offers %q", keys)
+	}
+	if next := pressOn(m, "enter"); next.rowIndex() != m.rowIndex() || next.hostPicked || strings.Join(machineWindow(next), "\n") != before {
+		t.Fatalf("with no hosts list, ⏎ moved to row %d (host row %v):\n%s", next.rowIndex(), next.hostPicked, strings.Join(machineWindow(next), "\n"))
+	}
+	m.opt.Layered = true
+	m = onMachineRow(t, m, "ws-1")
+	if keys := plainHints(m.view().keys(m)...); !strings.Contains(keys, "⏎ hosts") {
+		t.Fatalf("ws-1's row offers %q", keys)
+	}
+	m = pressOn(m, "enter")
+	if !m.hostPicked || m.hostPick != "ws-1" || m.rowIndex() != m.rowBase(rowHosts)+2 {
+		t.Fatalf("after ⏎ the selection is row %d (host %q, %v), want ws-1's hosts row %d", m.rowIndex(), m.hostPick, m.hostPicked, m.rowBase(rowHosts)+2)
+	}
+}
+
+// tapLine taps the first line of the screen whose text, trimmed of marks,
+// starts with prefix.
+func tapLine(t *testing.T, m Model, prefix string) Model {
+	t.Helper()
+	y := slices.IndexFunc(frameOf(m), func(l string) bool { return strings.HasPrefix(strings.TrimLeft(l, " ✗!"), prefix) })
+	if y < 0 {
+		t.Fatalf("no line starts with %q:\n%s", prefix, strings.Join(frameOf(m), "\n"))
+	}
+	next, cmd := tap(m, 4, y)
+	drain(cmd)
+	return next.(Model)
+}
+
+func TestASecondTapOnAMachineRowJumps(t *testing.T) {
+	m := threeMachines(t, "", "gpu-1", "ws-1")
+	m = tapLine(t, m, "ws-1 ")
+	if !m.machineHostPicked || m.machineHost != "ws-1" {
+		t.Fatalf("a tap selects %q (%v), want ws-1's row", m.machineHost, m.machineHostPicked)
+	}
+	if win := machineWindow(m); strings.TrimSpace(win[0]) == "ws-1" {
+		t.Fatal("the first tap moved to ws-1's section")
+	}
+	m = tapLine(t, m, "ws-1 ")
+	if win := machineWindow(m); strings.TrimSpace(win[0]) != "ws-1" {
+		t.Fatalf("after a second tap the window starts at %q:\n%s", win[0], strings.Join(win, "\n"))
+	}
+	next, cmd := tap(m, 4, 3) // ws-1's head: the tap hits what the screen shows
+	drain(cmd)
+	if m = next.(Model); !m.machineHostPicked || m.machineHost != "ws-1" {
+		t.Fatalf("a tap on ws-1's head selects row %d", m.rowIndex())
+	}
+	if win := machineWindow(m); strings.TrimSpace(win[0]) == "ws-1" {
+		t.Fatal("after a tap the window still starts at ws-1's section")
 	}
 }

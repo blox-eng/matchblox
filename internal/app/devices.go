@@ -262,6 +262,31 @@ func (m Model) hostsBody(w int) body {
 	return b
 }
 
+// enterMachine is ⏎ on host's machine row: Machine's window moves to the
+// host's section, or, with none, the selection to its hosts-list row.
+// With neither, ⏎ does nothing: the row's fix line names the fix.
+func (m Model) enterMachine(host string) Model {
+	switch m.machineEnterWord(host) {
+	case "section":
+		m.machineJumped, m.machineJump = true, host
+	case "hosts":
+		m.machinePick(m.rowBase(rowHosts) + slices.Index(m.hostRows(), host))
+	}
+	return m
+}
+
+// machineEnterWord is what ⏎ on host's machine row does: "section",
+// "hosts", or "" for nothing.
+func (m Model) machineEnterWord(host string) string {
+	switch {
+	case m.hostCount() == 1 || slices.Contains(m.statedHosts(), host):
+		return "section"
+	case slices.Contains(m.hostRows(), host):
+		return "hosts"
+	}
+	return ""
+}
+
 // openHosts is ⏎ on a host row: Hosts, where a host is added or removed.
 func (m Model) openHosts() (tea.Model, tea.Cmd) {
 	return m, func() tea.Msg { return layerMsg{} }

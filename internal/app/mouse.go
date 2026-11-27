@@ -20,6 +20,8 @@ import (
 // open it takes every tap.
 func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	m.goArmedTap, m.goArmed = m.goArmed, paneKey{} // any tap disarms a go; boardTap gives it on its own go
+	jumped := m.machineJumped
+	m.machineJumped = false // the window follows the selection again
 	switch {
 	case m.pair.owns() || m.asking(): // the pair page and an ssh prompt take keys only
 		return m, nil
@@ -52,7 +54,9 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	m = m.dragStart(ms.X, ms.Y)
 	m.searching = false // keep the search; what the tap asks for shows on the key line
 	w := max(m.width, minWidth)
+	m.machineJumped = jumped // the tap hits the lines the screen shows
 	sc := m.draw(w)
+	m.machineJumped = false
 	if m.sheet != nil {
 		return m.tapSheet(ms, sc)
 	}
@@ -154,6 +158,14 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		m.armed, m.flash = "", ""
 		if picked {
 			return m.openHosts()
+		}
+		return m, nil
+	}
+	if h, ok := m.selectedMachine(); ok && m.tab == tabMachine {
+		// A tap on the selected machine row moves to its section, as Enter does.
+		m.armed, m.flash = "", ""
+		if picked {
+			return m.enterMachine(h), nil
 		}
 		return m, nil
 	}

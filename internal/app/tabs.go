@@ -159,8 +159,11 @@ var views = [...]tabView{
 			if _, ok := m.selectedHostRow(); ok {
 				return []hint{hintFor(mk.Open, "hosts"), stoke}
 			}
-			if _, ok := m.selectedMachine(); ok {
-				return []hint{stoke} // Task 7 gives ⏎ its move to the host's section
+			if h, ok := m.selectedMachine(); ok {
+				if word := m.machineEnterWord(h); word != "" {
+					return []hint{hintFor(mk.Open, word), stoke}
+				}
+				return []hint{stoke}
 			}
 			if r, ok := m.selectedDevice(); ok {
 				if r.plus {
