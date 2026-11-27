@@ -218,7 +218,7 @@ final class IslandLookTests: XCTestCase {
 
     func testALockedPhoneShowsThePlaceholderNotTheLine() {
         XCTAssertEqual(BuzzPayload.category, "buzz")
-        XCTAssertEqual(BuzzPayload.hiddenBody, "An agent waits")
+        XCTAssertEqual(BuzzPayload.hiddenBody, "An agent needs you")
     }
 
     func testABuzzThatDoesNotOpenKeepsThePlaceholder() throws {
@@ -238,8 +238,12 @@ final class IslandLookTests: XCTestCase {
         for s in ["burns", "waits", "done", "idle"] { XCTAssertTrue(IslandLook.lit(IslandLook.state(top(s))), s) }
         XCTAssertFalse(IslandLook.lit(IslandLook.state(top("out"))))
         XCTAssertFalse(IslandLook.lit(IslandLook.state(nil)))
-        XCTAssertEqual(IslandLook.word(top("idle")), "· idle")
-        XCTAssertEqual(IslandLook.compact(top("idle"), names: names), "api")
+        // Nothing needs you: no name on the compact (that is the sign of one need),
+        // "idle" said once on the lock screen, and a tap opens the console (review).
+        XCTAssertEqual(IslandLook.word(top("idle")), "")
+        XCTAssertEqual(IslandLook.compact(top("idle"), names: names), "")
+        let s = IslandState(host: "f10f7812", burn: 0, wait: 0, top: top("idle"), accounts: [], stoker: false)
+        XCTAssertEqual(IslandLook.link(s)?.absoluteString, "matchblox://open?host=f10f7812")
         XCTAssertEqual(IslandLook.who(top("idle"), names: names).name, "api")
         XCTAssertEqual(IslandLook.who(top("idle"), names: names).detail, "idle")
     }
