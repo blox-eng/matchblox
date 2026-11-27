@@ -99,6 +99,7 @@ func (m Model) openShell(s sample.Session) tea.Cmd {
 	run, mx := m.shellIO(s.Host)
 	local := m.tmuxRun()
 	host, agent, cwd, console, beside := s.Host, s.Pane, s.Cwd, m.opt.Pane, m.beside
+	peer := host != "" && host != m.opt.Host
 	table := "matchblox-jump-" + m.prefix()
 	argv := shellArgv()
 	line := "shell · " + cwd + " · t switches"
@@ -114,7 +115,13 @@ func (m Model) openShell(s sample.Session) tea.Cmd {
 				id = got
 			}
 		}
-		if err := markShell(run, id, agent, console, line, table); err != nil {
+		// The desk pane id is this machine's. A peer must not store it:
+		// t would write @matchblox_mode on whichever pane there shares it.
+		desk := console
+		if peer {
+			desk = ""
+		}
+		if err := markShell(run, id, agent, desk, line, table); err != nil {
 			return shellMsg{err: err}
 		}
 		focusShell(run, id, beside, console, local)
@@ -187,12 +194,16 @@ func (m *Model) rememberShells(host string, sessions []sample.Session) {
 // markShell names the pane as matchblox's shell, draws the divider, and
 // binds t on that pane's view only.
 func markShell(run func(args ...string) (string, error), shell, agent, console, line, table string) error {
-	for _, kv := range [][2]string{
+	opts := [][2]string{
 		{sample.ShellOption, "1"},
 		{sample.ShellAgentOption, agent},
 		{sample.ShellLineOption, line},
-		{sample.ShellDeskOption, console},
-	} {
+	}
+	// console is the desk pane, and only when this tmux is the desk's.
+	if console != "" {
+		opts = append(opts, [2]string{sample.ShellDeskOption, console})
+	}
+	for _, kv := range opts {
 		if _, err := run("set-option", "-p", "-t", shell, kv[0], kv[1]); err != nil {
 			return err
 		}
@@ -208,7 +219,7 @@ func markShell(run func(args ...string) (string, error), shell, agent, console, 
 	if _, err := run("set-hook", "-w", "-t", agent, "pane-exited", hook); err != nil {
 		return err
 	}
-	step := panes.ShellFlipArgv(table)
+	step := panes.ShellFlipArgv(table, console != "")
 	if len(step) > 0 && step[0] == "tmux" {
 		step = step[1:]
 	}

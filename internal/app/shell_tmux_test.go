@@ -250,8 +250,8 @@ func TestTFromShellFlipsToAgent(t *testing.T) {
 		t.Fatalf("root binds t: %s", line)
 	}
 	binds, _ := e.run("list-keys", "-T", "matchblox-jump-C-b")
-	if !strings.Contains(binds, "select-pane") {
-		t.Fatalf("shell t does not select the agent:\n%s", binds)
+	if !strings.Contains(binds, "select-pane") || !strings.Contains(binds, "@matchblox_mode") {
+		t.Fatalf("shell t does not select the agent and write AGENT:\n%s", binds)
 	}
 	if mark := e.paneField(agent, "#{@matchblox_shell}"); mark != "" {
 		t.Fatalf("the agent pane is marked as the shell: %q", mark)

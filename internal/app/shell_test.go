@@ -101,6 +101,19 @@ func TestTReachedPeerSplitsThere(t *testing.T) {
 	if !saw {
 		t.Fatalf("no split on gpu-1: %q", remote)
 	}
+	var flip bool
+	for _, argv := range remote {
+		line := strings.Join(argv, " ")
+		if strings.Contains(line, "@matchblox_desk") || (strings.Contains(line, "set-option") && strings.Contains(line, "%1")) {
+			t.Fatalf("peer t writes the desk pane: %s", line)
+		}
+		if strings.Contains(line, "select-pane") && strings.Contains(line, "@matchblox_agent") {
+			flip = true
+		}
+	}
+	if !flip {
+		t.Fatalf("peer t does not select the agent: %q", remote)
+	}
 	var localS, peerS sample.Session
 	for _, s := range m.all.sessions {
 		switch {

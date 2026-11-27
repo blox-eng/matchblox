@@ -21,9 +21,14 @@ const flipBeside = `#{?#{==:#{pane_id},#{` + sample.ConsoleOption + `}},` +
 
 // ShellFlipArgv binds t in the view session's key table. On the shell pane
 // it selects the agent. On any other pane it types t. It is not a root
-// binding, so an agent pane still receives t.
-func ShellFlipArgv(table string) []string {
-	act := "run-shell -C 'select-pane -t #{" + sample.ShellAgentOption + "} ; set-option -w -t #{" + sample.ShellDeskOption + "} " + sample.ModeOption + " AGENT'"
+// binding, so an agent pane still receives t. writeDesk also writes AGENT
+// on the console pane named by @matchblox_desk. That pane is this machine's
+// only: a peer's tmux must not be given it, because pane ids repeat.
+func ShellFlipArgv(table string, writeDesk bool) []string {
+	act := "run-shell -C 'select-pane -t #{" + sample.ShellAgentOption + "}'"
+	if writeDesk {
+		act = "run-shell -C 'select-pane -t #{" + sample.ShellAgentOption + "} ; set-option -w -t #{" + sample.ShellDeskOption + "} " + sample.ModeOption + " AGENT'"
+	}
 	return onHome("bind-key", "-T", table, "t", "if-shell", "-F", "#{"+sample.ShellOption+"}", act, "send-keys -l t")
 }
 
