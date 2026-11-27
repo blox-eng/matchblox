@@ -214,6 +214,25 @@ func TestTSurvivesQuit(t *testing.T) {
 	}
 }
 
+func TestTFocusLeavesTheAgentSession(t *testing.T) {
+	e, m, agent, cwd := uxPass(t)
+	e.tmux("new-window", "-t", "=ux-pass", "-n", "other")
+	other := e.paneField("=ux-pass:", "#{window_id}")
+	m = pressShell(t, m)
+	if got := e.paneField("=ux-pass:", "#{window_id}"); got != other {
+		t.Fatalf("t moved ux-pass to %s, want %s", got, other)
+	}
+	if e.findShell(agent) == "" {
+		t.Fatal("no shell under the agent")
+	}
+	m = e.viewOf(t, m)
+	want := shellDivider(cwd)
+	out, err := e.run("capture-pane", "-p", "-t", m.beside)
+	if err != nil || !strings.Contains(out, want) {
+		t.Fatalf("desk capture missing %q:\n%s", want, out)
+	}
+}
+
 func TestTFromShellFlipsToAgent(t *testing.T) {
 	e, m, agent, _ := uxPass(t)
 	m = e.viewOf(t, m)

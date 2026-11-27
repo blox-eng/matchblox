@@ -345,9 +345,13 @@ func (m Model) shellWord(s sample.Session) string {
 	if m.shells == nil {
 		return ""
 	}
-	id := m.shells[s.Pane]
+	id := m.shells[shellKey(s.Host, s.Pane)]
 	if id == "" {
 		return ""
+	}
+	// A peer's shell pane is not on this tmux. The same id here is another pane.
+	if s.Host != "" && s.Host != m.opt.Host {
+		return "shell"
 	}
 	if run := m.tmuxRun(); run != nil && !livePane(run, id) {
 		return ""

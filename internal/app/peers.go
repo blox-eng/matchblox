@@ -289,6 +289,7 @@ func (m Model) peerUpdate(pm peerMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		m.merge()
+		m.rememberShells(p.host, st.Sessions)
 		m.settle(p.host)
 		m.keepSelection()
 		next, order := m.queuedOrder(p.host)
