@@ -77,6 +77,11 @@ func (m Model) askReview() (tea.Model, tea.Cmd) {
 	if host != m.opt.Host && m.watchConn(host) == nil {
 		return m, m.notice("review did not open: " + m.nameOf(host) + " is not reached. " + m.keys.main.Back.Help().Key + " back to the list")
 	}
+	if host != m.opt.Host {
+		// The review sends through this machine's service only. A review the
+		// owner cannot send is not opened: the words come before any comment.
+		return m, m.notice("review did not open: " + m.nameOf(host) + " is another machine, and a review is sent from this machine only. " + m.keys.side.Enter.Help().Key + " goes into the session")
+	}
 	if r := m.reviewing; r != nil && r.host == host && r.pane == s.Pane {
 		return m, m.reviewFocus() // already open: the keys go back to it
 	}

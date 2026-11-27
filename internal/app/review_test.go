@@ -961,6 +961,37 @@ func TestReviewNotReachedHostDoesNotOpen(t *testing.T) {
 	}
 }
 
+func TestReviewOnAReachedPeerNamesTheHostAndDoesNotOpen(t *testing.T) {
+	home, gpu := newFake(), newFake()
+	tm := &reviewTmux{}
+	var next tea.Model = New(Options{
+		NoMotion: true, Conn: home, Now: func() time.Time { return demoAt },
+		Peers: []Peer{{Host: "gpu-1", Conn: gpu}}, Beside: true, Pane: "%1", Tmux: tm.run, Self: "/bin/matchblox", Socket: "/tmp/tmux-1000/default",
+	})
+	next, _ = next.Update(tea.WindowSizeMsg{Width: 160, Height: 40})
+	next, _ = next.Update(stateMsg(hostState()))
+	ux := hostState(sess(7, "ux-pass", "%7", func(s *sample.Session) { s.Cwd = "/wt/ux-pass" }))
+	next, _ = next.Update(peerMsg{host: "gpu-1", conn: gpu, msg: stateMsg(ux)})
+	m := next.(Model)
+	m.splashDone, m.deskFrame, m.beside = true, true, "%9"
+	m.toList()
+	for _, s := range m.all.sessions {
+		if s.Name == "ux-pass" {
+			m.chooseRow(s)
+		}
+	}
+	m = pressOn(m, "D")
+	if !strings.Contains(m.noticeText+m.flash, "review did not open: gpu-1 is another machine") {
+		t.Fatalf("notice %q flash %q, want one that names gpu-1", m.noticeText, m.flash)
+	}
+	if m.reviewing != nil || tm.option(sample.ModeOption) == "REVIEW" {
+		t.Fatal("a review the owner cannot send was opened")
+	}
+	if len(tm.respawns()) != 0 {
+		t.Fatalf("the seat was taken: %q", tm.respawns())
+	}
+}
+
 func TestReviewNeedsASession(t *testing.T) {
 	m := boardShot(t, hostState(), 160, 40, func(m *Model) { m.deskFrame = true; m.beside = "%9" })
 	m = pressOn(m, "D")
