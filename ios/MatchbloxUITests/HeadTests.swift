@@ -347,12 +347,13 @@ final class HeadTests: XCTestCase {
         _ = theHead(in: app)
     }
 
-    /// The word of the head's left mark, read while a 0.45 s press shows the marks.
+    /// The word of the head's left mark, read while a 0.45 s press shows the marks. They go 0.9 s
+    /// after the lift, and a wait polls first a second on: one look, as `testTouchShowsMarks` does.
     @MainActor
     private func leftMark(in app: XCUIApplication) -> String {
         theHead(in: app).press(forDuration: 0.45)
         let mark = app.staticTexts["head-mark-left"]
-        XCTAssertTrue(mark.waitForExistence(timeout: 2), "no left mark on touch. " + app.debugDescription)
+        XCTAssertTrue(mark.exists, "no left mark on touch. " + app.debugDescription)
         return mark.label
     }
 
