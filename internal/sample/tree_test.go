@@ -199,8 +199,9 @@ func TestSampleCarriesHeavy(t *testing.T) {
 	}
 }
 
-// TestHeaviestPassesLoginServers: a login over ssh is cut at its shell, so
-// each login is a tree of its own, not one sshd tree for every login.
+// TestHeaviestPassesLoginServers: a login over ssh is cut at its login
+// shell, so each login's job is a tree of its own (the first login's xargs,
+// without the second login's top), not one sshd tree for every login.
 func TestHeaviestPassesLoginServers(t *testing.T) {
 	pt := newProcTable()
 	pt.add(1, 0, "systemd", 0)
@@ -211,10 +212,7 @@ func TestHeaviestPassesLoginServers(t *testing.T) {
 	pt.add(401, 300, "sshd-session", 0)
 	pt.add(402, 401, "bash", 0, "-bash")
 	pt.add(403, 402, "top", 50)
-	got := heaviest(pt.procs, pt.cpu, nil, nil, pt.argvOf)
-	if got == nil || got.PID != 302 || got.Comm != "bash" || got.Next != "xargs" || got.Procs != 258 {
-		t.Fatalf("heaviest = %+v, want the first login's bash (302) → xargs, 258 processes", got)
-	}
+	wantBusyTree(t, heaviest(pt.procs, pt.cpu, nil, nil, pt.argvOf), 0)
 }
 
 // TestSessionOfAChildAgent: a tree that a child agent started (a claude -p
@@ -232,5 +230,51 @@ func TestSessionOfAChildAgent(t *testing.T) {
 		if got := sessionAbove(c.agent, sessions, children); got != c.want {
 			t.Errorf("sessionAbove(%d) = %d, want %d", c.agent, got, c.want)
 		}
+	}
+}
+
+// TestHeaviestCountsAnAgentThatIsThePane: an agent that is its pane's own
+// process (matchblox recover starts one so) is a tree of its own.
+func TestHeaviestCountsAnAgentThatIsThePane(t *testing.T) {
+	pt := newProcTable()
+	pt.add(1, 0, "systemd", 0)
+	pt.add(500, 1, "tmux", 0)
+	pt.add(10, 500, "claude", 300)
+	pt.add(30, 1, "cron", 0)
+	pt.add(31, 30, "backup", 50)
+	got := heaviest(pt.procs, pt.cpu, []Pane{{ID: "%1", PID: 10}}, map[int]bool{10: true}, pt.argvOf)
+	want := Tree{PID: 10, Comm: "claude", Procs: 1, CPU: 300, Agent: 10}
+	if got == nil || *got != want {
+		t.Fatalf("heaviest = %+v, want %+v", got, want)
+	}
+}
+
+// TestHeaviestInATerminalWindow: a job typed in a terminal window outside
+// tmux is cut at its interactive shell, so the tree is the job, not the
+// terminal app; a shell that runs a script is the command itself.
+func TestHeaviestInATerminalWindow(t *testing.T) {
+	mac := newProcTable()
+	mac.add(1, 0, "launchd", 0)
+	mac.add(600, 1, "Terminal", 1)
+	mac.add(601, 600, "login", 0)
+	mac.add(602, 601, "zsh", 0, "-zsh")
+	mac.busyTree(602)
+	wantBusyTree(t, heaviest(mac.procs, mac.cpu, nil, nil, mac.argvOf), 0)
+
+	linux := newProcTable()
+	linux.add(1, 0, "systemd", 0)
+	linux.add(900, 1, "systemd", 0, "systemd", "--user")
+	linux.add(901, 900, "gnome-terminal-", 1, "/usr/libexec/gnome-terminal-server")
+	linux.add(902, 901, "bash", 0)
+	linux.busyTree(902)
+	wantBusyTree(t, heaviest(linux.procs, linux.cpu, nil, nil, linux.argvOf), 0)
+
+	script := newProcTable()
+	script.add(1, 0, "systemd", 0)
+	script.add(902, 1, "bash", 0, "bash", "script.sh")
+	script.busyTree(902)
+	got := heaviest(script.procs, script.cpu, nil, nil, script.argvOf)
+	if got == nil || got.PID != 902 || got.Comm != "bash" || got.Next != "xargs" || got.Procs != 258 {
+		t.Fatalf("heaviest = %+v, want the script's bash (902) → xargs, 258 processes", got)
 	}
 }

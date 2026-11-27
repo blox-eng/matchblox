@@ -19,10 +19,12 @@ type Tree struct {
 }
 
 // cuts are where trees start: their roots are the first processes under them.
-type cuts struct{ panes, servers map[int]bool }
+// An interactive shell is one, like a pane, so a job typed in a terminal
+// window is its own tree, not the terminal app's.
+type cuts struct{ panes, servers, shells map[int]bool }
 
 func (c cuts) at(p procfs.Proc) bool {
-	return p.PID == 1 || c.panes[p.PID] || c.servers[p.PID] || p.Comm == "systemd" || p.Comm == "launchd"
+	return p.PID == 1 || c.panes[p.PID] || c.servers[p.PID] || c.shells[p.PID] || p.Comm == "systemd" || p.Comm == "launchd"
 }
 
 // place is a process's spot in its tree: root is 0 while the walk down from
@@ -32,13 +34,24 @@ type place struct{ root, branch int }
 
 // heaviest returns the tree with the most summed cpu, or nil when no tree
 // has any. Each process is placed once, from its parent's place, so the walk
-// is linear in the processes; argv is read only for shells.
+// is linear in the processes; argv is read only for shells, once each.
 func heaviest(procs map[int]procfs.Proc, cpu map[int]float64, panes []Pane, agents map[int]bool, argv func(int) []string) *Tree {
-	c := cuts{panes: make(map[int]bool, len(panes)), servers: map[int]bool{}}
+	c := cuts{panes: make(map[int]bool, len(panes)), servers: map[int]bool{}, shells: map[int]bool{}}
 	for _, p := range panes {
 		c.panes[p.PID] = true
 		if pp, ok := procs[p.PID]; ok {
 			c.servers[pp.PPID] = true
+		}
+	}
+	wraps := map[int]bool{} // the shells that run a command string
+	for pid, p := range procs {
+		if shell(p) {
+			switch a := argv(pid); {
+			case runsCommand(a):
+				wraps[pid] = true
+			case interactive(a):
+				c.shells[pid] = true
+			}
 		}
 	}
 	places := make(map[int]*place, len(procs))
@@ -63,7 +76,7 @@ func heaviest(procs map[int]procfs.Proc, cpu map[int]float64, panes []Pane, agen
 			if pl.branch == 0 {
 				pl.branch = pid
 			}
-		case !agents[pid] && !wrapper(p, argv):
+		case !agents[pid] && !wrapper(p, wraps):
 			pl.root = pid
 		}
 		return pl
@@ -76,8 +89,8 @@ func heaviest(procs map[int]procfs.Proc, cpu map[int]float64, panes []Pane, agen
 	trees := map[int]*sum{}
 	branches := map[int]int{}
 	for pid, p := range procs {
-		if c.at(p) {
-			continue
+		if c.at(p) && !(c.panes[pid] && agents[pid]) {
+			continue // an agent that is its pane's process is a tree: its place is its own
 		}
 		pl := placeOf(pid)
 		root := pl.root
@@ -128,15 +141,42 @@ func heaviest(procs map[int]procfs.Proc, cpu map[int]float64, panes []Pane, agen
 }
 
 // wrapper is a process that only carries the tree: a shell that runs a
-// command string, or the server of a login, whose login shell is the tree.
-func wrapper(p procfs.Proc, argv func(int) []string) bool {
+// command string (in wraps), or the server of a login, under which the
+// login shell is a cut.
+func wrapper(p procfs.Proc, wraps map[int]bool) bool {
 	switch p.Comm {
-	case "sh", "bash", "zsh", "dash":
-		return runsCommand(argv(p.PID))
 	case "sshd", "sshd-session", "login":
 		return true
 	}
+	return wraps[p.PID]
+}
+
+// shell: p is sh, bash, zsh or dash; a login shell's name may lead with -.
+func shell(p procfs.Proc) bool {
+	switch strings.TrimPrefix(p.Comm, "-") {
+	case "sh", "bash", "zsh", "dash":
+		return true
+	}
 	return false
+}
+
+// interactive reports whether a shell that runs no command string is one a
+// person types in: a login shell (argv[0] leads with -) or one with no
+// operand after its options. bash script.sh is the script's command.
+func interactive(argv []string) bool {
+	if len(argv) > 0 && strings.HasPrefix(argv[0], "-") {
+		return true
+	}
+	args := argv[min(1, len(argv)):]
+	for i := 0; i < len(args); i++ {
+		switch a := args[i]; {
+		case takesArg[a]:
+			i++
+		case !strings.HasPrefix(a, "-") && !strings.HasPrefix(a, "+"):
+			return false
+		}
+	}
+	return true
 }
 
 // takesArg are the shell options whose value is the next argument.

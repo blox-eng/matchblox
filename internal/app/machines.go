@@ -15,9 +15,9 @@ import (
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
-// machineRow is one host of the machines region. A host not reached has
-// gone in place of its figures; one marked ✗ has block, whose words
-// blockedWords owns.
+// machineRow is one host of the machines region. A host not reached, or
+// one that sent no state in staleAfter, has gone in place of its figures;
+// one marked ✗ has block, whose words blockedWords owns.
 type machineRow struct {
 	host  string
 	gone  string
@@ -50,6 +50,11 @@ func (m Model) machineRowOf(host string) machineRow {
 		r.gone, r.block = "never reached", unreached
 	case !have:
 		r.gone = "connecting…"
+	case host != "" && m.now().Sub(at) >= staleAfter:
+		// A named host whose link is up and whose serve sends nothing: its last
+		// figures are not live. A local home stays as it is, as for silent.
+		r.gone = fmt.Sprintf("no state since %s (%s ago)", at.Format("15:04"), brief(m.now().Sub(at)))
+		r.block = &blockedHost{host: host, silent: true}
 	default:
 		r.on = m.viewOf(host)
 	}
@@ -185,9 +190,10 @@ func (m Model) machineCells(r machineRow) []string {
 	if !mc.Booted.IsZero() {
 		up = "up " + brief(m.now().Sub(mc.Booted))
 	}
-	load := "load unknown"
+	load, cpu := "load unknown", "cpu unknown"
 	if len(mc.Cores) > 0 {
 		load = fmt.Sprintf("load %s / %d cores", loadWord(mc.Load[0]), len(mc.Cores))
+		cpu = fmt.Sprintf("cpu %.0f%%", mc.CPU)
 	}
 	_, memPct := memUse(mc)
 	mem := "mem unknown"
@@ -206,7 +212,7 @@ func (m Model) machineCells(r machineRow) []string {
 	return []string{
 		text(false, up),
 		text(r.over(), load),
-		text(false, fmt.Sprintf("cpu %.0f%%", mc.CPU)),
+		text(false, cpu),
 		text(fullAt(memPct), mem),
 		text(read && fullAt(diskPct), disk),
 		text(false, io),
@@ -222,7 +228,8 @@ func loadWord(l float64) string {
 }
 
 // underLines are the lines under a host's row: its folded accounts, the
-// cause of its load, and what went wrong with the fix in the words, each
+// cause of its load, and what went wrong with the fix in the words (a
+// failed process read, not an older serve, when Errors says so), each
 // wrapped whole at its spaces.
 func (m Model) underLines(r machineRow, folded []string, w int) []string {
 	var out []string
@@ -250,7 +257,11 @@ func (m Model) underLines(r machineRow, folded []string, w int) []string {
 		say(m.cause(snap))
 	}
 	if snap.Machine.IOWait == nil {
-		say(name + " runs an older matchblox · on " + name + ": matchblox update")
+		if i := slices.IndexFunc(snap.Errors, func(e string) bool { return strings.HasPrefix(e, "proc: ") }); i >= 0 {
+			say(name + " did not read its processes: " + strings.TrimPrefix(snap.Errors[i], "proc: "))
+		} else {
+			say(name + " runs an older matchblox · on " + name + ": matchblox update")
+		}
 	}
 	if snap.Machine.Booted.IsZero() {
 		for _, e := range snap.Errors {

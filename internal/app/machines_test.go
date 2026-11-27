@@ -732,3 +732,86 @@ func TestASecondTapWithNoSectionSaysWhy(t *testing.T) {
 		t.Fatalf("a second tap on ws-1 says %q", m.flash)
 	}
 }
+
+// TestQuietPeerShowsNoFigures: a host whose link stays open and that sent
+// no state in staleAfter shows no figures, as a silent host does; one a
+// few seconds behind still shows them.
+func TestQuietPeerShowsNoFigures(t *testing.T) {
+	for _, c := range []struct {
+		name, home, quiet string
+		peers             []string
+	}{
+		{"a peer", "", "ws-1", []string{"gpu-1", "box-3", "ws-1"}},
+		{"a remote home", "dev-1", "dev-1", []string{"gpu-1"}},
+	} {
+		now := lostAt
+		m, _, conns := hostsAt(t, &now, c.home, 104, 30, c.peers...)
+		send := func(host string) {
+			if host == c.home {
+				m = upd(t, m, stateMsg(stateAt(healthy(), now)))
+				return
+			}
+			m = upd(t, m, peerMsg{host: host, conn: conns[host], msg: stateMsg(stateAt(healthy(), now))})
+		}
+		all := append([]string{c.home}, c.peers...)
+		for _, h := range all {
+			send(h)
+		}
+		for _, behind := range []time.Duration{5 * time.Second, 10 * time.Minute} {
+			now = lostAt.Add(behind)
+			for _, h := range all {
+				if h != c.quiet {
+					send(h)
+				}
+			}
+			lines := machinesText(m)
+			block := machineBlock(lines, c.quiet)
+			if behind < staleAfter {
+				if strings.Contains(block, "✗") || !strings.Contains(block, "load 1 / 16 cores") {
+					t.Errorf("%s %s behind shows no figures:\n%s", c.name, behind, block)
+				}
+				continue
+			}
+			why, fix := m.blockedWords(blockedHost{host: c.quiet, silent: true})
+			row, under, _ := strings.Cut(block, "\n")
+			if !strings.HasPrefix(strings.TrimSpace(row), "✗ "+c.quiet) || !strings.Contains(row, "no state since 14:02 (10m ago)") {
+				t.Errorf("%s: the quiet row is %q", c.name, row)
+			}
+			for _, figure := range []string{"load", "cpu", "mem"} {
+				if strings.Contains(block, figure) {
+					t.Errorf("%s: the quiet host shows %q:\n%s", c.name, figure, block)
+				}
+			}
+			if !strings.Contains(under, why) || !strings.Contains(under, fix) {
+				t.Errorf("%s: under the quiet row %q, want %q and %q", c.name, under, why, fix)
+			}
+			if got := machineRows(m, lines); got[0] != c.quiet {
+				t.Errorf("%s: the rows are %q, want the quiet host first", c.name, got)
+			}
+		}
+	}
+}
+
+func TestMachineRowWithNoCoresSaysCPUUnknown(t *testing.T) {
+	ws := healthy()
+	ws.Machine.Cores, ws.Machine.CPU = nil, 0
+	m, _ := fourHosts(t, healthy(), healthy(), healthy(), ws)
+	row, _, _ := strings.Cut(machineBlock(machinesText(m), "ws-1"), "\n")
+	if !strings.Contains(row, "cpu unknown") || strings.Contains(row, "cpu 0%") {
+		t.Fatalf("a host with no cores read says its cpu is known: %q", row)
+	}
+}
+
+func TestProcReadFailSaysWhyNotUpdate(t *testing.T) {
+	ws := healthy()
+	ws.Machine.IOWait = nil
+	ws.Errors = []string{"proc: permission denied"}
+	m, _ := fourHosts(t, healthy(), healthy(), healthy(), ws)
+	block := machineBlock(machinesText(m), "ws-1")
+	if !strings.Contains(block, "ws-1 did not read its processes: permission denied") {
+		t.Errorf("no proc line:\n%s", block)
+	}
+	if strings.Contains(block, "matchblox update") {
+		t.Fatalf("a serve that did not read its processes says to update:\n%s", block)
+	}
+}
