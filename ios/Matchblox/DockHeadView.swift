@@ -49,8 +49,6 @@ final class DockHeadView: UIView {
     var onLines: (Int) -> HeadRoute = { _ in .nothing }
     /// Where a notch of output would go now (true: toward older lines).
     var route: (Bool) -> HeadRoute = { _ in .nothing }
-    /// VoiceOver's swipe with no menu: a screen of lines (true: older). The answer says where they went.
-    var page: (Bool) -> HeadRoute = { _ in .nothing }
     var onSend: ([UInt8]) -> Void = { _ in }
     var onKeyboard: () -> Void = {}
     /// The handle row's line; nil gives the row back its rest.
@@ -84,9 +82,12 @@ final class DockHeadView: UIView {
         element.accessibilityLabel = "Match head"
         element.accessibilityIdentifier = "match-head"
         element.accessibilityTraits = .adjustable
-        element.accessibilityHint = "Swipe up or down for a page. Double-tap for Enter."
-        element.swipe = { [weak self] older in self?.voiceSwipe(older: older) }
-        element.activate = { [weak self] in self?.voiceTap() ?? false }
+        element.accessibilityHint = HeadVoice.hint
+        element.gesture = { [weak self] gesture in
+            guard let self else { return false }
+            self.voice(gesture)
+            return true
+        }
         element.focused = { [weak self] in self?.voiceFocused() }
         element.readValue = { [weak self] in self?.spokenValue }
         element.actions = { [weak self] in self?.voiceActions() ?? [] }
@@ -393,11 +394,15 @@ final class DockHeadView: UIView {
         let id = marks[place]
         if again, !Self.repeating.contains(id) { return }
         driver.feel.notch(heat: 0)
+        if word, let bytes = HeadMarks.wordBytes(for: id) { return onSend(bytes) }
+        push(id)
+    }
+
+    /// A push toward `id`, or VoiceOver's: `↑` `↓` are the agent's arrows, the rest their keys.
+    private func push(_ id: String) {
         switch id {
-        case "↑", "↓":
-            arrow(up: id == "↑")
-        default:
-            if word, let bytes = HeadMarks.wordBytes(for: id) { onSend(bytes) } else { press(id) }
+        case "↑", "↓": arrow(up: id == "↑")
+        default: press(id)
         }
     }
 
@@ -701,21 +706,20 @@ final class DockHeadView: UIView {
 
     // MARK: VoiceOver
 
-    /// The head as VoiceOver reaches it: a swipe up or down pages, a double-tap is the middle's
-    /// tap, and the marks and the hold are its actions.
+    /// The head as VoiceOver reaches it: a swipe up or down pushes, a double-tap is the middle's
+    /// tap (`HeadVoice`), and the marks and the hold are its actions.
     private final class VoiceHead: UIAccessibilityElement {
-        /// True: VoiceOver's decrement, a swipe down.
-        var swipe: (Bool) -> Void = { _ in }
-        var activate: () -> Bool = { false }
+        /// False once the head is gone.
+        var gesture: (HeadVoice.Gesture) -> Bool = { _ in false }
         var focused: () -> Void = {}
         /// Read when asked, as the colour and the head's last line change after the element is made.
         var readValue: () -> String? = { nil }
         /// Made when asked, from the marks home set last.
         var actions: () -> [UIAccessibilityCustomAction] = { [] }
 
-        override func accessibilityIncrement() { swipe(false) }
-        override func accessibilityDecrement() { swipe(true) }
-        override func accessibilityActivate() -> Bool { activate() }
+        override func accessibilityIncrement() { _ = gesture(.swipeUp) }
+        override func accessibilityDecrement() { _ = gesture(.swipeDown) }
+        override func accessibilityActivate() -> Bool { gesture(.doubleTap) }
         override func accessibilityElementDidBecomeFocused() { focused() }
         override var accessibilityValue: String? {
             get { readValue() }
@@ -740,7 +744,8 @@ final class DockHeadView: UIView {
     private var spokenValue: String {
         var shown = [voiceLine ?? ball.pigment.name]
         #if DEBUG
-        shown.append("actions=" + voiceMarks().map { $0.name }.joined(separator: "|"))
+        let gestures = HeadVoice.Gesture.allCases.map { Self.gestureLine($0) }
+        shown.append("actions=" + (gestures + voiceMarks().map(\.name)).joined(separator: "|"))
         if let marksSeen { shown.append("marks=" + String(format: "%.2f", marksSeen)) }
         shown += [lastCard.map { "card=\($0)" }, lastSessions.map { "sessions=\($0)" }].compactMap { $0 }
         #endif
@@ -751,38 +756,48 @@ final class DockHeadView: UIView {
         voiceLine = nil
     }
 
-    private func voiceSwipe(older: Bool) {
-        let line = HeadVoice.paged(page(older), older: older)
-        voiceLine = line
-        say(line)
-    }
-
-    /// The double-tap is the middle's tap: up in the output it comes back, else Enter.
-    private func voiceTap() -> Bool {
-        voiceLine = nil
-        tapped()
-        return true
-    }
-
-    /// The four marks and the hold, named from the marks home set last. A mark that sends nothing
-    /// (`·`) is no action.
-    private func voiceMarks() -> [(name: String, id: String)] {
-        let marks = HeadMarks.load(from: .standard)
-        var named: [(name: String, id: String)] = []
-        for place in [HeadMarks.Place.top, .left, .right, .bottom] {
-            let id = marks[place]
-            guard id != "·" else { continue }
-            named.append(("\(KeyFace.word(of: id) ?? id), \(place.rawValue) mark", id))
+    #if DEBUG
+    /// A gesture and what it does, as the UI test reads them: `swipe up: ↑`.
+    private static func gestureLine(_ gesture: HeadVoice.Gesture) -> String {
+        let name = switch gesture {
+        case .swipeUp: "swipe up"
+        case .swipeDown: "swipe down"
+        case .doubleTap: "double-tap"
         }
-        let hold = marks[.hold]
-        if hold == Self.sessionsKey {
-            named.append((KeyFace.word(of: hold) ?? hold, hold))
-        } else if hold != "·" {
-            named.append(("\(KeyFace.word(of: hold) ?? hold), hold", hold))
+        return switch HeadVoice.does(gesture) {
+        case .push(let id): "\(name): \(id)"
+        case .tap: "\(name): tap"
         }
-        return named
+    }
+    #endif
+
+    /// A swipe is a push down the thumb's path: in the chat it moves Pocket's highlight, in a pane
+    /// it sends the arrow. VoiceOver then says the line the push gave the handle row. The
+    /// double-tap is the middle's tap: up in the output it comes back, else Enter or the chat's digits.
+    private func voice(_ gesture: HeadVoice.Gesture) {
+        switch HeadVoice.does(gesture) {
+        case .push(let id):
+            let said = say
+            var line: String?
+            say = { text in
+                line = text
+                said(text)
+            }
+            push(id)
+            say = said
+            voiceLine = HeadVoice.spoken(key: id, said: line)
+        case .tap:
+            voiceLine = nil
+            tapped()
+        }
     }
 
+    /// The four marks and the hold, from the marks home set last.
+    private func voiceMarks() -> [HeadVoice.Action] {
+        HeadVoice.actions(for: HeadMarks.load(from: .standard))
+    }
+
+    /// A mark's action is its push; the sessions open as a sheet.
     private func voiceActions() -> [UIAccessibilityCustomAction] {
         voiceMarks().map { mark in
             let id = mark.id
@@ -792,7 +807,7 @@ final class DockHeadView: UIView {
                     if id == Self.sessionsKey {
                         self.voiceSessions()
                     } else {
-                        self.press(id)
+                        self.push(id)
                     }
                     return true
                 }

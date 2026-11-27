@@ -421,21 +421,24 @@ final class HeadTests: XCTestCase {
 
     // MARK: VoiceOver
 
-    /// VoiceOver names the head and offers its marks and the hold as actions, named from the
-    /// marks home set. A UI test cannot swipe as VoiceOver does: `HeadVoiceTests` holds the swipes.
+    /// VoiceOver names the head: a swipe up or down pushes `↑` or `↓`, a double-tap is the tap,
+    /// and its marks and the hold are its actions, named from the marks home set. A UI test cannot
+    /// swipe as VoiceOver does: the DEBUG `actions=` line says what each gesture does, from
+    /// `HeadVoice`, whose tests hold the mapping.
     @MainActor
     func testHeadAccessibility() {
         let app = launched(extra: ["-resetHead"])
         expect(in: app, "label CONTAINS %@", "NEEDS YOU")
         let head = theHead(in: app)
         XCTAssertEqual(head.label, "Match head")
-        XCTAssertEqual(voiceActions(on: head), ["❯ up, top mark", "cursor, left mark", "cursor, right mark", "❯ down, bottom mark", "sessions"])
+        let gestures = ["swipe up: ↑", "swipe down: ↓", "double-tap: tap"]
+        XCTAssertEqual(voiceActions(on: head), gestures + ["❯ up, top mark", "cursor, left mark", "cursor, right mark", "❯ down, bottom mark", "sessions"])
 
         openHome(app)
         app.buttons["home-head-left"].tap()
         app.buttons["Esc cancel"].tap()
         backToTheConsole(app)
-        XCTAssertEqual(voiceActions(on: theHead(in: app)), ["❯ up, top mark", "cancel, left mark", "cursor, right mark", "❯ down, bottom mark", "sessions"])
+        XCTAssertEqual(voiceActions(on: theHead(in: app)), gestures + ["❯ up, top mark", "cancel, left mark", "cursor, right mark", "❯ down, bottom mark", "sessions"])
     }
 
     // MARK: Helpers
