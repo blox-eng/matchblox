@@ -146,6 +146,9 @@ func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 		x.Cwd, _ = s.switchFolder(ctx, x)
 		return proto.Result{Preview: s.captureMatch(ctx, x, "")}
 	}
+	if pane, ok := strings.CutPrefix(a.RecID, proto.MenuPrefix); ok {
+		return s.readMenu(pane, a) // it reads; the stoker goes on resting
+	}
 	if a.RecID == NamesAct {
 		// Before the agents-pane gate: it only reads names the socket already
 		// serves in every doc, so an agent's pane learns nothing new from it.
