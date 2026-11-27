@@ -6,6 +6,8 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+## [0.69.0] - 2026-11-27
+
 ### Changed
 
 - **The island leads with what needs you.** A session that asks comes
@@ -2204,7 +2206,8 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.68.1...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.69.0...HEAD
+[0.69.0]: https://github.com/blox-eng/matchblox/compare/v0.68.1...v0.69.0
 [0.68.1]: https://github.com/blox-eng/matchblox/compare/v0.68.0...v0.68.1
 [0.68.0]: https://github.com/blox-eng/matchblox/compare/v0.67.0...v0.68.0
 [0.67.0]: https://github.com/blox-eng/matchblox/compare/v0.66.0...v0.67.0
