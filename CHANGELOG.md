@@ -6,6 +6,8 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+## [0.68.0] - 2026-11-27
+
 ### Changed
 
 - **One tap on the island goes back.** A tap on the Live Activity brings
@@ -2178,7 +2180,8 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.67.0...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.68.0...HEAD
+[0.68.0]: https://github.com/blox-eng/matchblox/compare/v0.67.0...v0.68.0
 [0.67.0]: https://github.com/blox-eng/matchblox/compare/v0.66.0...v0.67.0
 [0.66.0]: https://github.com/blox-eng/matchblox/compare/v0.65.0...v0.66.0
 [0.65.0]: https://github.com/blox-eng/matchblox/compare/v0.64.0...v0.65.0
