@@ -221,10 +221,15 @@ func loadWord(l float64) string {
 }
 
 // underLines are the lines under a host's row: its folded accounts, the
-// cause of its load, and what went wrong with the fix in the words.
+// cause of its load, and what went wrong with the fix in the words, each
+// wrapped whole at its spaces.
 func (m Model) underLines(r machineRow, folded []string, w int) []string {
 	var out []string
-	say := func(s string) { out = append(out, fit("     "+m.st.muted.Render(s), w)) }
+	say := func(s string) {
+		for _, l := range wrapPlain(s, w-5) {
+			out = append(out, fit("     "+m.st.muted.Render(l), w))
+		}
+	}
 	for _, f := range folded {
 		say(f)
 	}

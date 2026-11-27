@@ -462,3 +462,40 @@ func TestMemoryTroubleIsTheShownFigure(t *testing.T) {
 		}
 	}
 }
+
+func TestUnderLinesWrapWhole(t *testing.T) {
+	box := withLoad(healthy(), 50, 16)
+	box.Sessions = append(box.Sessions, hostState(sess(11, "fetch-laws", "%4", nil)).Sessions...)
+	box.Heavy = &sample.Tree{PID: 40, Comm: "xargs", Next: "gcloud", Procs: 257, CPU: 1400, Agent: 11}
+	m, conns := fourHosts(t, healthy(), healthy(), box, healthy())
+	m = lose(t, m, conns, "gpu-1", io.EOF)
+	rows := map[string]machineRow{}
+	for _, r := range m.machineOrder() {
+		rows[r.host] = r
+	}
+	why, _ := m.blockedWords(*rows["gpu-1"].block)
+	for host, want := range map[string]string{
+		"gpu-1": why + " · run: matchblox connect gpu-1",
+		"box-3": m.cause(rows["box-3"].on.snap),
+	} {
+		for _, w := range []int{40, 30} {
+			var got []string
+			for _, l := range m.underLines(rows[host], nil, w) {
+				s := ansi.Strip(l)
+				if lw := ansi.StringWidth(s); lw > w {
+					t.Errorf("width %d: %s's line is %d wide: %q", w, host, lw, s)
+				}
+				if !strings.HasPrefix(s, "     ") {
+					t.Errorf("width %d: %s's line is not indented: %q", w, host, s)
+				}
+				if strings.Contains(s, "…") {
+					t.Errorf("width %d: %s's line is cut: %q", w, host, s)
+				}
+				got = append(got, strings.Fields(s)...)
+			}
+			if !slices.Equal(got, strings.Fields(want)) {
+				t.Errorf("width %d: under %s the words are %q, want %q", w, host, got, strings.Fields(want))
+			}
+		}
+	}
+}
