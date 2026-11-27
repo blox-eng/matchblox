@@ -374,9 +374,9 @@ func (m Model) sideWords(w int) []string {
 }
 
 // sideCount is the sessions of units in the state of g: all of g.count
-// while no search narrows the list.
+// while no search or space narrows the list.
 func (m Model) sideCount(g sideGroup, units []sideUnit) int {
-	if m.filter == "" {
+	if m.filter == "" && m.space == "" {
 		return g.count
 	}
 	n := 0

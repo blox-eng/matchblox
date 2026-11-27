@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -69,7 +68,7 @@ func (m frameModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Model = next.(Model)
 		return m, cmd
 	case frameTick:
-		if got, ok := readSpace(); ok {
+		if got, ok := m.readSpace(); ok {
 			m.space = got
 		}
 		return m, m.pollSpace()
@@ -121,12 +120,16 @@ func (m frameModel) View() tea.View {
 	return tea.NewView(m.kind)
 }
 
-func readSpace() (string, bool) {
-	out, err := exec.Command("tmux", "show-option", "-wqv", sample.SpaceOption).Output()
+func (m Model) readSpace() (string, bool) {
+	run := m.tmuxRun()
+	if run == nil {
+		return "", false
+	}
+	out, err := run("show-option", "-wqv", "-t", m.opt.Pane, sample.SpaceOption)
 	if err != nil {
 		return "", false
 	}
-	return strings.TrimSpace(string(out)), true
+	return strings.TrimSpace(out), true
 }
 
 func (m Model) writeSpaceAct(act string) tea.Cmd {

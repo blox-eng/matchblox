@@ -155,13 +155,18 @@ func (m *Model) applySpaceOption() {
 	if !m.deskFrame || m.frameKind != "" {
 		return
 	}
-	got, ok := readSpace()
+	got, ok := m.readSpace()
 	if !ok {
 		return
 	}
 	switch {
 	case got == spaceMore:
-		m.openSpaceMenu()
+		if m.spaceMenu == nil {
+			m.openSpaceMenu()
+		}
+		if run := m.tmuxRun(); run != nil {
+			writeSpace(run, m.opt.Pane, m.space)
+		}
 	case got != m.space:
 		m.space, m.spaceMenu, m.peekAt = got, nil, m.now()
 	}
@@ -200,6 +205,9 @@ func (m *Model) turnSpace(d int) tea.Cmd {
 }
 
 func (m *Model) openSpaceMenu() {
+	if m.spaceMenu != nil {
+		return
+	}
 	_, _, hidden := m.fitSpaces(m.spaceBudget(max(m.width, minWidth)))
 	if len(hidden) == 0 {
 		return

@@ -110,6 +110,13 @@ func TestSpaceFilterKeepsNeedYouCount(t *testing.T) {
 	if got := drawnNames(m); !slices.Equal(got, []string{"ledge"}) {
 		t.Fatalf("list names %v, want only ledge", got)
 	}
+	body := ansi.Strip(m.render())
+	if strings.Contains(body, "NEEDS YOU · 3") {
+		t.Fatalf("space filter left the unfiltered group count:\n%s", body)
+	}
+	if !strings.Contains(body, "NEEDS YOU · 1") {
+		t.Fatalf("list head:\n%s\nwant NEEDS YOU · 1", body)
+	}
 	if head := headerText(headerPane(m)); !strings.Contains(head, "● 3 need you") {
 		t.Fatalf("a space filter hid a wait: %q", head)
 	}
@@ -129,19 +136,51 @@ func TestSpaceCountIgnoresDone(t *testing.T) {
 	}
 }
 
+func spaceOptionTmux() (stored *string, run func(args ...string) (string, error)) {
+	var opt string
+	return &opt, func(args ...string) (string, error) {
+		if slices.Contains(args, sample.SpaceOption) {
+			switch args[0] {
+			case "show-option":
+				return opt + "\n", nil
+			case "set-option":
+				if slices.Contains(args, "-wu") {
+					opt = ""
+					return "\n", nil
+				}
+				opt = args[len(args)-1]
+			}
+		}
+		return "\n", nil
+	}
+}
+
+func headerWithTmux(m Model) frameModel {
+	h := newFrame("header", New(Options{NoMotion: true, Conn: newFake(), Now: m.opt.Now, Pane: m.opt.Pane, Tmux: m.opt.Tmux}))
+	next, _ := h.Update(tea.WindowSizeMsg{Width: max(m.width, 1), Height: 1})
+	h = next.(frameModel)
+	next, _ = h.Update(stateMsg(proto.State{Snapshot: m.snap}))
+	return next.(frameModel)
+}
+
 // TestSpacesOverflowOpensMenu: more spaces than fit; +3 ▾ then a tap
-// opens the rest over the list, the header stays one row, and choosing
-// one filters.
+// writes a one-shot act, the list opens the rest over the list, Esc
+// keeps it closed, and a snapshot does not reset the keyboard choice.
 func TestSpacesOverflowOpensMenu(t *testing.T) {
 	var ss []sample.Session
 	for _, repo := range []string{"alpha", "bravo", "charlie", "delta", "echo", "foxtrot"} {
 		ss = append(ss, spaceWait(repo, repo, ""))
 	}
+	stored, tmux := spaceOptionTmux()
 	var m Model
 	var head string
 	for w := 40; w <= 120; w++ {
-		m = spaceDesk(t, w, ss...)
-		head = headerText(headerPane(m))
+		m = boardShot(t, boardState(ss...), w, 34, func(m *Model) {
+			m.deskFrame = true
+			m.opt.Pane = "%1"
+			m.opt.Tmux = tmux
+		})
+		head = headerText(headerWithTmux(m))
 		if strings.Contains(head, "+3 ▾") {
 			break
 		}
@@ -152,13 +191,29 @@ func TestSpacesOverflowOpensMenu(t *testing.T) {
 	if strings.Count(head, "\n") != 0 {
 		t.Fatalf("header is not one row: %q", head)
 	}
-	h := headerPane(m)
-	m = tapHeader(t, h, m, "+3 ▾")
+	h := headerWithTmux(m)
+	x := cellOf(headerText(h), "+3 ▾")
+	if x < 0 {
+		t.Fatalf("no +3 ▾ on the header pane: %q", headerText(h))
+	}
+	next, cmd := h.Update(tea.MouseClickMsg{X: x, Y: 0, Button: tea.MouseLeft})
+	drain(cmd)
+	_ = next
+	if *stored != spaceMore {
+		t.Fatalf("header wrote %q, want the one-shot %s", *stored, spaceMore)
+	}
+	m.applySpaceOption()
 	if m.spaceMenu == nil {
 		t.Fatal("the overflow menu did not open over the list")
 	}
+	if *stored == spaceMore {
+		t.Fatal("space:more stayed the selected space after the list opened the menu")
+	}
+	if m.space != "" {
+		t.Fatalf("space %q, want all after opening overflow", m.space)
+	}
 	after := strings.Split(ansi.Strip(m.render()), "\n")
-	if head := headerText(headerPane(m)); !strings.Contains(head, "+3 ▾") {
+	if head := headerText(headerWithTmux(m)); !strings.Contains(head, "+3 ▾") {
 		t.Fatalf("the header grew or lost the chip:\n%s", head)
 	}
 	rest := strings.Join(after[1:], "\n")
@@ -166,13 +221,47 @@ func TestSpacesOverflowOpensMenu(t *testing.T) {
 	if !strings.Contains(rest, hidden) {
 		t.Fatalf("the rest did not open over the list:\n%s", strings.Join(after, "\n"))
 	}
+	m = pressOn(m, "down")
+	if m.spaceMenu == nil || m.spaceMenu.at == 0 {
+		t.Fatal("↓ did not move the overflow choice")
+	}
+	at := m.spaceMenu.at
+	m.applySpaceOption()
+	if m.spaceMenu == nil || m.spaceMenu.at != at {
+		t.Fatalf("a snapshot reset the overflow menu: menu %v at %d, want at %d", m.spaceMenu, menuAt(m), at)
+	}
+	m = pressOn(m, "esc")
+	if m.spaceMenu != nil {
+		t.Fatal("esc did not close the overflow menu")
+	}
+	m.applySpaceOption()
+	if m.spaceMenu != nil {
+		t.Fatal("a snapshot opened the overflow menu again after esc")
+	}
+	h = headerWithTmux(m)
+	next, cmd = h.Update(tea.MouseClickMsg{X: x, Y: 0, Button: tea.MouseLeft})
+	drain(cmd)
+	_ = next
+	m.applySpaceOption()
+	if m.spaceMenu == nil {
+		t.Fatal("a second tap did not open the overflow menu")
+	}
+	m = pressOn(m, "down")
+	chosen := m.spaceMenu.names[m.spaceMenu.at]
 	m = pressOn(m, "enter")
-	if m.space != hidden || m.spaceMenu != nil {
-		t.Fatalf("space %q menu %v, want %s and the menu closed", m.space, m.spaceMenu, hidden)
+	if m.space != chosen || m.spaceMenu != nil {
+		t.Fatalf("space %q menu %v, want %s and the menu closed", m.space, m.spaceMenu, chosen)
 	}
-	if got := drawnNames(m); !slices.Equal(got, []string{hidden}) {
-		t.Fatalf("list names %v, want only %s", got, hidden)
+	if got := drawnNames(m); !slices.Equal(got, []string{chosen}) {
+		t.Fatalf("list names %v, want only %s", got, chosen)
 	}
+}
+
+func menuAt(m Model) int {
+	if m.spaceMenu == nil {
+		return -1
+	}
+	return m.spaceMenu.at
 }
 
 func TestSpaceEmptyShowsAllCopy(t *testing.T) {
