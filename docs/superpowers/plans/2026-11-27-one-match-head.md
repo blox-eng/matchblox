@@ -1,7 +1,7 @@
 Spec: docs/superpowers/specs/2026-11-27-one-match-head-design.md
 Spec approved: 2026-11-27
 Test command: go vet ./... && go test -race ./... (host, from a shell outside tmux with SSH_AUTH_SOCK unset) · swift test --package-path ios/MatchbloxKit and make -C ios build (macOS only: the `iOS` workflow on the pushed branch; this host has no Swift toolchain) · make -C ios uitest DESTINATION="id=<udid>" (the `iOS demo` workflow)
-Plan approved: no
+Plan approved: 2026-11-27 by the owner
 Next: builder:build
 
 # Plan: the owner answers an agent with one thumb on one match head
