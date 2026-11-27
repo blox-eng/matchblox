@@ -20,6 +20,8 @@ All notable changes to matchblox are in this file. The format follows
 - **The buzz hisses.** Every buzz plays a short pinch hiss with one ember
   pop, and a finished turn buzzes too, not only a wait.
 
+## [0.68.1] - 2026-11-27
+
 ### Fixed
 
 - **This machine's fix line in `MACHINES · N` is a real command.** When
@@ -2201,7 +2203,8 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.68.0...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.68.1...HEAD
+[0.68.1]: https://github.com/blox-eng/matchblox/compare/v0.68.0...v0.68.1
 [0.68.0]: https://github.com/blox-eng/matchblox/compare/v0.67.0...v0.68.0
 [0.67.0]: https://github.com/blox-eng/matchblox/compare/v0.66.0...v0.67.0
 [0.66.0]: https://github.com/blox-eng/matchblox/compare/v0.65.0...v0.66.0
