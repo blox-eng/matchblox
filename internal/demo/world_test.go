@@ -131,6 +131,27 @@ func TestAStartedSessionTakesAnAnswer(t *testing.T) {
 	}
 }
 
+// A line sent to a session shows the agent's reply in its pane, which is what
+// the chat draws, with the prompt empty under it.
+func TestASentLineShowsTheReplyInThePane(t *testing.T) {
+	w := newTestWorld(t, func(int) {})
+	for _, argv := range [][]string{
+		{"tmux", "send-keys", "-t", "%3", "-l", "--", "ok"},
+		{"tmux", "send-keys", "-t", "%3", "Enter"},
+	} {
+		if err := w.Run(argv); err != nil {
+			t.Fatal(err)
+		}
+	}
+	b, err := os.ReadFile(w.pane("%3"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(b); !strings.Contains(got, "● Got it. I am working on that.") || !strings.Contains(got, "│ > \n") {
+		t.Errorf("spark-docs's pane after the send reads %q", got)
+	}
+}
+
 // A session the demo started shows its agent's empty prompt: its pane reads,
 // so its stand-in says no tmux failed.
 func TestAStartedSessionHasAScreen(t *testing.T) {
