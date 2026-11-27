@@ -43,7 +43,21 @@ func fixtureState() proto.State {
 	snap.Limits = nil
 	q := queue.New()
 	q.Merge(snap.Sessions, snap.At)
-	return proto.State{Doc: state.Doc{Snapshot: snap, Recommendations: advice.Build(snap, nil), Queue: q.Items()}}
+	st := proto.State{Doc: state.Doc{Snapshot: snap, Recommendations: advice.Build(snap, nil), Queue: q.Items()}}
+	keysLongAgo(&st)
+	return st
+}
+
+// keysLongAgo is a fixture: the owner gave each session of st the keys long
+// ago, so a session at rest since then reads as DONE, as it did before DONE
+// needed a proof (done_test.go has the tests that run without it).
+func keysLongAgo(st *proto.State) {
+	st.KeysAt = map[string]time.Time{}
+	for _, s := range st.Sessions {
+		if s.SessionID != "" {
+			st.KeysAt[s.SessionID] = time.Unix(1, 0)
+		}
+	}
 }
 
 // fakeConn is a service that answers with what the test puts in.
@@ -113,6 +127,26 @@ func (f *fakeConn) allActs() []proto.Act {
 }
 
 func loadedWith(t *testing.T, width int, st proto.State) (Model, *fakeConn) {
+	t.Helper()
+	nm, f := loadedFirstSeen(t, width, st)
+	sawFinish(&nm, nm.opt.Host, st.Sessions)
+	return nm, f
+}
+
+// sawFinish is a fixture: the console saw each resting session of host end
+// its turn, so it reads as DONE until the owner gives it the keys. A console
+// that first sees a session idle has no such proof (loadedFirstSeen).
+func sawFinish(m *Model, host string, ss []sample.Session) {
+	for _, s := range ss {
+		if !s.Works() {
+			m.turnEnded[m.paneKeyOn(host, s)] = m.now()
+		}
+	}
+}
+
+// loadedFirstSeen is loadedWith with no turn end seen: every session is
+// first seen as the state shows it.
+func loadedFirstSeen(t *testing.T, width int, st proto.State) (Model, *fakeConn) {
 	t.Helper()
 	f := newFake()
 	m := New(Options{NoMotion: true, Conn: f})

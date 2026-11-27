@@ -258,6 +258,7 @@ func (m Model) peerUpdate(pm peerMsg) (tea.Model, tea.Cmd) {
 		st.Used = cmp.Or(st.Used, p.st.Used)
 		m.noteChanges(p.host, st.Sessions, st.Chains)
 		first := !p.have
+		m.noteTurnEnds(p.host, p.st.Sessions, !first, st.Sessions)
 		p.gap = 0
 		if p.answered {
 			p.gap = m.now().Sub(p.at)

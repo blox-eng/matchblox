@@ -253,6 +253,7 @@ type shownMsg struct {
 // giveKeys records that the owner gave this session the keys. The service
 // writes KeysAt; the console only sends keys:<session-id>.
 func (m *Model) giveKeys(s sample.Session) tea.Cmd {
+	m.noteGave(s)
 	if s.SessionID == "" {
 		return nil
 	}

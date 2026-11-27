@@ -411,9 +411,11 @@ type Model struct {
 	filter       string // the search of the open tab
 	searching    bool   // the search line takes the keys
 	holds        []proto.Hold
-	keysAt       map[string]time.Time // this owner's last give of the keys, by session id
-	reviewing    *reviewOn            // the review that has the agent seat, nil: none
-	homeStart    map[string]string    // the branch each session of this host started from, by name
+	keysAt       map[string]time.Time  // this owner's last give of the keys, by session id
+	turnEnded    map[paneKey]time.Time // when this console saw the pane's agent go from work to rest
+	gave         map[paneKey]time.Time // when this console gave the pane the keys: a session with no id has no KeysAt
+	reviewing    *reviewOn             // the review that has the agent seat, nil: none
+	homeStart    map[string]string     // the branch each session of this host started from, by name
 	chains       *state.ChainsView
 	chainIx      chainIndex // worked out in refresh
 	room         *room      // the chain room on screen; nil when none
@@ -660,7 +662,8 @@ func New(opt Options) Model {
 		opt.Binary = "dev"
 	}
 	m := Model{opt: opt, conn: opt.Conn, st: newStyles(true), dark: true, width: 100, height: 30, history: newSeries(60),
-		recPrefs: loadRecPrefs(opt.StateDir), viewPrefs: loadViewPrefs(opt.StateDir), keys: defaultKeys(), peers: links(opt.Peers), shown: &shownFrame{}}
+		recPrefs: loadRecPrefs(opt.StateDir), viewPrefs: loadViewPrefs(opt.StateDir), keys: defaultKeys(), peers: links(opt.Peers), shown: &shownFrame{},
+		turnEnded: map[paneKey]time.Time{}, gave: map[paneKey]time.Time{}}
 	m.splashAt = m.now()
 	if opt.Ask != nil {
 		m.askCtx, m.askStop = context.WithCancel(context.Background())
@@ -1054,6 +1057,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		st := proto.State(msg)
 		m.noteChanges(m.opt.Host, st.Sessions, st.Chains) // before the state: a card's column before the change
+		m.noteTurnEnds(m.opt.Host, m.homeAll.sessions, !first, st.Sessions)
 		var feel tea.Cmd
 		if f := feelOf(m.queue, st.Queue); f != "" && !first {
 			feel = sayAgent(f, m.opt)

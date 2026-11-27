@@ -133,6 +133,7 @@ func besideConsoleWith(t *testing.T, st proto.State, w, h int, tm *besideTmux) (
 	next, _ = next.Update(tea.WindowSizeMsg{Width: w, Height: h})
 	next, _ = next.Update(stateMsg(st))
 	m := next.(Model)
+	sawFinish(&m, m.opt.Host, st.Sessions)
 	m.splashDone = true
 	m.viewPrefs.CopyCheckedPhone, m.viewPrefs.CopyCheckedDesk = true, true
 	m = feed(t, m, m.besideCmd())

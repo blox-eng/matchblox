@@ -53,6 +53,7 @@ func fuseState(t *testing.T, chained ...[]string) proto.State {
 		}
 		st.Chains.Chains = append(st.Chains.Chains, c)
 	}
+	keysLongAgo(&st)
 	return st
 }
 

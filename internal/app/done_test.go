@@ -198,8 +198,8 @@ func sessionNamed(m Model, id string) sample.Session {
 }
 
 // TestKeysAtFollowsTheSnapshot: a later snapshot is the source. KeysAt set
-// leaves IDLE; a nil map (restart, omitempty empty) is KeysAt zero, so the
-// first idle turn is DONE again. A home sample must not wipe a peer's id.
+// leaves IDLE; a nil map (restart, omitempty empty) is KeysAt zero: a turn end
+// this console saw is DONE again, and a peer row with none stays IDLE. A home sample must not wipe a peer's id.
 func TestKeysAtFollowsTheSnapshot(t *testing.T) {
 	m := busyThenIdle(t, nil)
 	s := doneRow(m)
@@ -211,8 +211,8 @@ func TestKeysAtFollowsTheSnapshot(t *testing.T) {
 	st.KeysAt = nil
 	next, _ := m.Update(stateMsg(st))
 	m = next.(Model)
-	if h := m.sideStateOf(doneRow(m)); h != sideDone {
-		t.Fatalf("KeysAt nil: group %s, want DONE", h.head())
+	if h := m.sideStateOf(doneRow(m)); h != sideDone { // this console saw the turn end
+		t.Fatalf("KeysAt nil, turn end seen: group %s, want DONE", h.head())
 	}
 
 	home := hostState(sess(1, "home-api", "%1", namedIdle("home-api", "sid-home")))
@@ -231,7 +231,60 @@ func TestKeysAtFollowsTheSnapshot(t *testing.T) {
 	peer.KeysAt = nil
 	next, _ = m.Update(peerMsg{host: "ws-1", conn: ws, msg: stateMsg(peer)})
 	m = next.(Model)
-	if h := m.sideStateOf(sessionNamed(m, "sid-peer")); h != sideDone {
-		t.Fatalf("peer KeysAt nil: group %s, want DONE", h.head())
+	if h := m.sideStateOf(sessionNamed(m, "sid-peer")); h != sideIdle {
+		t.Fatalf("peer KeysAt nil, no turn end seen: group %s, want IDLE", h.head())
+	}
+}
+
+// boardFirstSeen is boardModel on a console that saw no turn end.
+func boardFirstSeen(t *testing.T, st proto.State) Model {
+	t.Helper()
+	m, _ := loadedFirstSeen(t, 160, st)
+	m.opt.Now = func() time.Time { return boardAt }
+	return m
+}
+
+// TestIdleSeenFirstIsNotDone: a session the console first sees idle, with no
+// KeysAt, is IDLE. DONE needs a turn end the console saw, or a KeysAt that
+// the session's last activity is after (review of 2026-11-27, Important 1).
+func TestIdleSeenFirstIsNotDone(t *testing.T) {
+	m := boardFirstSeen(t, boardState(boardMatch("hearth-api", time.Hour), boardMatch("kindle-web", time.Hour)))
+	for _, s := range m.all.sessions {
+		if h := m.sideStateOf(s); h != sideIdle {
+			t.Fatalf("%s first seen idle: group %s, want IDLE", s.Name, h.head())
+		}
+	}
+	if n := m.doneCount(); n != 0 {
+		t.Fatalf("✓ %d done, want 0", n)
+	}
+}
+
+// TestKeysAtThenFinishedIsDone: the owner gave the keys, and the agent has
+// done something since: DONE without a seen busy to idle.
+func TestKeysAtThenFinishedIsDone(t *testing.T) {
+	s := boardMatch("hearth-api", time.Hour)
+	st := boardState(s)
+	st.KeysAt = map[string]time.Time{s.SessionID: boardAt.Add(-time.Hour)}
+	m := boardFirstSeen(t, st)
+	if h := m.sideStateOf(doneRow(m)); h != sideDone {
+		t.Fatalf("group %s, want DONE", h.head())
+	}
+}
+
+// TestNoSessionIDLeavesDone: an agent with no session id has no KeysAt in the
+// service, and ⏎ must still take its row out of DONE.
+func TestNoSessionIDLeavesDone(t *testing.T) {
+	m := withBeside(busyThenIdle(t, func(_ *proto.State, s *sample.Session) { s.SessionID = "" }))
+	if h := m.sideStateOf(doneRow(m)); h != sideDone {
+		t.Fatalf("before ⏎: group %s, want DONE", h.head())
+	}
+	next, cmd := key(m, "enter")
+	drain(cmd)
+	m = next.(Model)
+	if h := m.sideStateOf(doneRow(m)); h == sideDone {
+		t.Fatal("⏎ left the row in DONE")
+	}
+	if n := m.doneCount(); n != 0 {
+		t.Fatalf("✓ %d done after ⏎, want 0", n)
 	}
 }
