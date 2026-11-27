@@ -234,7 +234,97 @@ final class HeadTests: XCTestCase {
         XCTAssertTrue(becomesHittable(theHead(in: app), within: 5), "the head did not come back after the fold")
     }
 
+    // MARK: Home sets the head
+
+    /// Home sets the left mark, and the console's head shows it at its next touch; `undo` takes
+    /// it back. A 0.45 s press on the middle sends nothing, so the marks are read safely.
+    @MainActor
+    func testHomeSetsLeftMark() {
+        let app = launched(extra: ["-resetHead"])
+        expect(in: app, "label CONTAINS %@", "NEEDS YOU")
+        openHome(app)
+        app.buttons["home-head-left"].tap()
+        app.buttons["Esc cancel"].tap()
+        backToTheConsole(app)
+        XCTAssertEqual(leftMark(in: app), "cancel", "the left mark did not take Esc")
+
+        openHome(app)
+        app.buttons["undo"].tap()
+        backToTheConsole(app)
+        XCTAssertEqual(leftMark(in: app), "cursor", "undo did not bring back ← cursor")
+    }
+
+    /// Surface: an agent's tools. `^C` is in the list, dim, with its reason, and a tap on it
+    /// leaves the mark as it was.
+    @MainActor
+    func testInterruptDim() {
+        let app = launched(extra: ["-resetHead"])
+        expect(in: app, "label CONTAINS %@", "NEEDS YOU")
+        openHome(app)
+        let left = app.buttons["home-head-left"]
+        left.tap()
+        let interrupt = app.buttons["^C interrupt"]
+        XCTAssertTrue(interrupt.waitForExistence(timeout: 5), "no ^C in the list. " + app.debugDescription)
+        XCTAssertFalse(interrupt.isEnabled, "^C can be set on a mark")
+        XCTAssertTrue(app.staticTexts["stays on the belt: a roll can brush the edge"].exists, "^C shows no reason")
+        interrupt.tap()
+        XCTAssertEqual(left.label, "left mark, cursor", "a tap on ^C changed the mark")
+    }
+
+    /// `blue tip` colours the dock's head at once, and it stays blue after a relaunch.
+    @MainActor
+    func testHomeSetsColour() {
+        var app = launched(extra: ["-resetHead"])
+        expect(in: app, "label CONTAINS %@", "NEEDS YOU")
+        XCTAssertTrue((theHead(in: app).value as? String ?? "").hasPrefix("match red"), "the head did not come match red")
+        openHome(app)
+        let blue = app.buttons["blue tip"]
+        blue.tap()
+        XCTAssertTrue(blue.isSelected, "blue tip is not the chosen colour")
+        backToTheConsole(app)
+        XCTAssertTrue((theHead(in: app).value as? String ?? "").hasPrefix("blue tip"),
+                      "the head is \(theHead(in: app).value ?? "nothing"), not blue tip")
+
+        app.terminate()
+        app = launched()
+        expect(in: app, "label CONTAINS %@", "NEEDS YOU")
+        XCTAssertTrue((theHead(in: app).value as? String ?? "").hasPrefix("blue tip"), "the colour did not stay after a relaunch")
+    }
+
     // MARK: Helpers
+
+    /// BOX opens home over the console. The one-time BOX teach may hold the drawer open for a
+    /// moment; a tap on the grip toggles it.
+    @MainActor
+    private func openHome(_ app: XCUIApplication) {
+        let box = app.buttons["Home, the box"]
+        let layouts = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Layouts")).firstMatch
+        let deadline = Date().addingTimeInterval(20)
+        while !box.isHittable, Date() < deadline {
+            let width = layouts.frame.width
+            layouts.coordinate(withNormalizedOffset: CGVector(dx: (width - 18) / width, dy: 0.5)).tap()
+            _ = box.waitForExistence(timeout: 2)
+        }
+        box.tap()
+        XCTAssertTrue(app.buttons["home-head-left"].waitForExistence(timeout: 10), "home shows no head. " + app.debugDescription)
+    }
+
+    @MainActor
+    private func backToTheConsole(_ app: XCUIApplication) {
+        let back = app.buttons["Back to demo"]
+        XCTAssertTrue(back.waitForExistence(timeout: 10), app.debugDescription)
+        back.tap()
+        _ = theHead(in: app)
+    }
+
+    /// The word of the head's left mark, read while a 0.45 s press shows the marks.
+    @MainActor
+    private func leftMark(in app: XCUIApplication) -> String {
+        theHead(in: app).press(forDuration: 0.45)
+        let mark = app.staticTexts["head-mark-left"]
+        XCTAssertTrue(mark.waitForExistence(timeout: 2), "no left mark on touch. " + app.debugDescription)
+        return mark.label
+    }
 
     /// The head's bottom mark, `⌨`, raises the keyboard.
     @MainActor

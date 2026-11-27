@@ -1,4 +1,5 @@
 import CoreHaptics
+import MatchbloxKit
 import UIKit
 
 /// The match head, drawn as its material: chlorate and ground glass in glue, so a fine, dry grain
@@ -87,12 +88,8 @@ final class HeadLayer: CALayer {
     private static let well: CGFloat = 3
     private static let sink: CGFloat = 1
 
-    private static let warm = UIColor(Theme.matchEmber)
-    private static let hot = UIColor(Theme.flameAmber)
-    private static let white = UIColor(Theme.flameCore)
-
-    /// The head's colour at rest.
-    var cold = UIColor(Theme.matchHead) { didSet { setNeedsDisplay() } }
+    /// The head's colour at rest, set on home; the heat colours are the same for every pigment.
+    var pigment = HeadPigment.matchRed { didSet { if pigment != oldValue { setNeedsDisplay() } } }
     /// Radians the head turned round its centre.
     var turn: CGFloat = 0 { didSet { if turn != oldValue { setNeedsDisplay() } } }
     var heat: CGFloat = 0 { didSet { if heat != oldValue { setNeedsDisplay() } } }
@@ -121,7 +118,7 @@ final class HeadLayer: CALayer {
         let sink = pressed ? Self.sink : 0
         let c = CGPoint(x: bounds.midX, y: bounds.midY + sink)
         let head = CGRect(x: c.x - r, y: c.y - r, width: 2 * r, height: 2 * r)
-        let color = tint(heat: heat)
+        let color = UIColor(pigment.face(heat: Double(heat)))
         drawWell(in: ctx, around: CGPoint(x: bounds.midX, y: bounds.midY), radius: r + Self.well)
         if struck {
             let glow = [UIColor(Theme.flameCore).withAlphaComponent(0.9).cgColor, UIColor(Theme.flame).withAlphaComponent(0).cgColor]
@@ -142,7 +139,7 @@ final class HeadLayer: CALayer {
         ctx.clip()
         // Matte: a soft fall-off to the rim and no highlight.
         let lit = color.mixed(with: .black, by: 0.04).cgColor
-        let dark = color.mixed(with: .black, by: 0.38).cgColor
+        let dark = UIColor(pigment.shade(heat: Double(heat))).cgColor
         if let g = CGGradient(colorsSpace: nil, colors: [lit, color.cgColor, dark] as CFArray, locations: [0, 0.55, 1]) {
             ctx.drawRadialGradient(g, startCenter: CGPoint(x: c.x - r * 0.3, y: c.y - r * 0.3), startRadius: 0,
                                    endCenter: c, endRadius: r, options: [.drawsAfterEndLocation])
@@ -219,15 +216,6 @@ final class HeadLayer: CALayer {
         ring.add(fade, forKey: "flash")
         CATransaction.commit()
     }
-
-    /// Cold through ember and amber to the flame's core.
-    private func tint(heat: CGFloat) -> UIColor {
-        switch heat {
-        case ..<0.33: cold.mixed(with: Self.warm, by: heat / 0.33)
-        case ..<0.75: Self.warm.mixed(with: Self.hot, by: (heat - 0.33) / 0.42)
-        default: Self.hot.mixed(with: Self.white, by: min((heat - 0.75) / 0.25, 1))
-        }
-    }
 }
 
 /// What the thumb feels on the head: a short, sharp tap a notch, sharper as the head heats; one
@@ -289,6 +277,12 @@ final class HeadFeel {
             try? engine.start()
             try? player.start(atTime: CHHapticTimeImmediate)
         }
+    }
+}
+
+extension UIColor {
+    convenience init(_ colour: HeadPigment.Colour) {
+        self.init(red: colour.red, green: colour.green, blue: colour.blue, alpha: 1)
     }
 }
 

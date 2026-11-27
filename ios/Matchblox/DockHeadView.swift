@@ -113,6 +113,8 @@ final class DockHeadView: UIView {
     private var sessions: SessionCard?
     /// Counts each fade, so a fade out that ends after a new touch leaves the marks shown.
     private var fades = 0
+    /// Home sets the colour and the marks; the head only reads them, and never saves one.
+    nonisolated(unsafe) private var settingsObserver: NSObjectProtocol?
     #if DEBUG
     /// The last card the head showed: the UI test reads it, as the card stays only 0.6 s.
     private var lastCard: String?
@@ -126,6 +128,7 @@ final class DockHeadView: UIView {
         walk.menu(nil)
 
         ball.contentsScale = max(traitCollection.displayScale, 2)
+        ball.pigment = HeadPigment.load(from: .standard)
         layer.addSublayer(ball)
 
         rim.isUserInteractionEnabled = false
@@ -150,13 +153,28 @@ final class DockHeadView: UIView {
             label.backgroundColor = BeltLook.sleeve.withAlphaComponent(0.92)
             label.layer.cornerRadius = 6
             label.layer.masksToBounds = true
+            label.accessibilityIdentifier = "head-mark-\(place(of: mark).rawValue)"
             rim.addSubview(label)
             markLabels[mark] = label
         }
         addSubview(rim)
+
+        // A change on home reaches the head at once: home covers the console, which stays.
+        settingsObserver = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) {
+            [weak self] _ in MainActor.assumeIsolated { self?.settingsChanged() }
+        }
     }
 
     required init?(coder: NSCoder) { nil }
+
+    deinit {
+        if let settingsObserver { NotificationCenter.default.removeObserver(settingsObserver) }
+    }
+
+    /// The marks need no reload here: each touch reads them afresh.
+    private func settingsChanged() {
+        ball.pigment = HeadPigment.load(from: .standard)
+    }
 
     override func layoutSubviews() {
         super.layoutSubviews()
@@ -556,10 +574,11 @@ final class DockHeadView: UIView {
 
     override var accessibilityElements: [Any]? {
         get {
+            var shown = [ball.pigment.name]
             #if DEBUG
-            let shown = [lastCard.map { "card=\($0)" }, lastSessions.map { "sessions=\($0)" }].compactMap { $0 }
-            element.accessibilityValue = shown.isEmpty ? nil : shown.joined(separator: "\n")
+            shown += [lastCard.map { "card=\($0)" }, lastSessions.map { "sessions=\($0)" }].compactMap { $0 }
             #endif
+            element.accessibilityValue = shown.joined(separator: "\n")
             var elements: [Any] = [element]
             if !rim.isHidden { elements += markLabels.values.map { $0 as Any } }
             return elements
