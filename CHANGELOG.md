@@ -6,6 +6,8 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+## [0.70.0] - 2026-11-28
+
 ### Added
 
 - **Every repo. Every agent. One desk.** On a desk in tmux, at 100
@@ -2215,7 +2217,8 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.69.0...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.70.0...HEAD
+[0.70.0]: https://github.com/blox-eng/matchblox/compare/v0.69.0...v0.70.0
 [0.69.0]: https://github.com/blox-eng/matchblox/compare/v0.68.1...v0.69.0
 [0.68.1]: https://github.com/blox-eng/matchblox/compare/v0.68.0...v0.68.1
 [0.68.0]: https://github.com/blox-eng/matchblox/compare/v0.67.0...v0.68.0
