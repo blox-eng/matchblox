@@ -222,7 +222,8 @@ public struct BoardBelt: Equatable, Sendable {
 /// The belt follows the console's board, as Commands follows the agent: it turns to Board when
 /// the console starts to show the board, and back to the layout it had when the console leaves
 /// the board or the owner goes into a pane. A layout the owner picks in the tray stays theirs.
-/// Joystick never turns: its head answers the console's chat, and Board has no head.
+/// Joystick never turns: its head answers the console's chat, and Board has no head. It answers
+/// the console as Board does, so the console lays out for a phone.
 public struct BoardFollow: Sendable {
     /// What the console said last; nil once it left the board.
     public private(set) var said: BoardBelt?
@@ -266,9 +267,9 @@ public struct BoardFollow: Sendable {
         before = nil
     }
 
-    /// The belt answers the console while it shows Board and the console shows the board.
+    /// The belt answers the console while it shows Board or Joystick and the console shows the board.
     public func answers(on layout: BeltLayout) -> Bool {
-        layout == .board && shows
+        (layout == .board || layout == .joystick) && shows
     }
 
     private mutating func turn(from was: Bool, on layout: BeltLayout) -> BeltLayout? {

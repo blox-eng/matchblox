@@ -322,8 +322,10 @@ final class BoardBeltTests: XCTestCase {
         XCTAssertNil(follow.heard("1,2;;chat=%2", on: .joystick))
         XCTAssertTrue(follow.shows)
         XCTAssertEqual(follow.belt.chatPane, "%2")
-        XCTAssertFalse(follow.answers(on: .joystick))
+        // Joystick answers as Board does, so a wide upright screen keeps one pane and the chat.
+        XCTAssertTrue(follow.answers(on: .joystick))
         XCTAssertNil(follow.pane(true, on: .joystick))
+        XCTAssertFalse(follow.answers(on: .joystick))
         XCTAssertNil(follow.pane(false, on: .joystick))
         XCTAssertTrue(follow.shows)
         XCTAssertNil(follow.heard("1,2;", on: .joystick))
