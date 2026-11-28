@@ -257,10 +257,12 @@ final class HeadTests: XCTestCase {
         let head = theHead(in: app)
         rollUp(head)
         expectLine(in: app, "lines up · push ↓ or tap to come back", anywhere: true)
-        // Up the terminal, more lines than the roll went: the view comes back to its bottom.
-        let low = terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85))
-        low.press(forDuration: 0.05, thenDragTo: terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)),
-                  withVelocity: .slow, thenHoldForDuration: 0.2)
+        // A swipe up the terminal, more lines than the roll went with its coast: the view comes back
+        // to its bottom. A swipe, not a press and then a drag: a touch that rests first was taken
+        // as a text selection, and sent no wheel step.
+        terminal.swipeUp(velocity: .fast)
+        let note = terminal.value as? String ?? ""
+        XCTAssertFalse(note.split(separator: " ").contains("pan=0"), "the swipe sent no wheel step: \(note)")
         expectLine(in: app, "roll: the output")
         waitUntilSteady(terminal)
         XCTAssertFalse(terminal.label.contains("the line is empty"), "the chat said its line is empty before the tap")

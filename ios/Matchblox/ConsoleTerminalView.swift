@@ -192,10 +192,12 @@ final class ConsoleTerminalView: TerminalView {
 
     #if DEBUG
     /// The demo's UI test reads the clicks the terminal sent and the row of the last left press
-    /// (`countClicks`), how often SwiftTerm's own long-press began, and the height of a row: the
-    /// rows start at the frame's top, and the part of a row left at its foot is no row.
+    /// (`countClicks`), how often SwiftTerm's own long-press began, how many wheel steps a finger
+    /// sent (`pan=`), and the height of a row: the rows start at the frame's top, and the part of
+    /// a row left at its foot is no row.
     var clickNote = "press=0 release=0 right=0 row=-1" { didSet { showNote() } }
     private var terminalHolds = 0
+    private var panSteps = 0
 
     @objc private func terminalHeld(_ press: UILongPressGestureRecognizer) {
         guard press.state == .began else { return }
@@ -204,7 +206,7 @@ final class ConsoleTerminalView: TerminalView {
     }
 
     private func showNote() {
-        accessibilityValue = "\(clickNote) hold=\(terminalHolds) cell=\(cellSize.height)"
+        accessibilityValue = "\(clickNote) hold=\(terminalHolds) pan=\(panSteps) cell=\(cellSize.height)"
     }
     #endif
 
@@ -516,6 +518,10 @@ final class ConsoleTerminalView: TerminalView {
         sendWheel(steps, at: point)
         let older = steps.reduce(0) { $0 + ($1 == .up ? 1 : -1) }
         onPanned(older * wheel.linesPerStep)
+        #if DEBUG
+        panSteps += steps.count
+        showNote()
+        #endif
     }
 
     /// Each step at the touch's cell, encoded by SwiftTerm for the program's mouse protocol. The
