@@ -770,7 +770,7 @@ func TestReviewBaseGone(t *testing.T) {
 	d.choose(t, "ux-pass")
 	d.press(t, "D")
 	text := frameText(d.frame(t))
-	if !strings.Contains(text, "main is gone on ") || !strings.Contains(text, ". The diff shows against origin/main.") || !strings.Contains(text, "diff against origin/main") {
+	if !strings.Contains(text, "The diff shows against origin/main.") || !strings.Contains(text, "main is gone on ") {
 		t.Fatalf("base gone:\n%s", text)
 	}
 }
@@ -790,8 +790,30 @@ func TestReviewBaseGoneNamesTheHost(t *testing.T) {
 	next, _ := f.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	f = frameRun(t, next.(frameModel), nil)
 	f = frameRun(t, f, f.reviewLoad())
-	if text := frameText(f); !strings.Contains(text, "main is gone on ws-1. The diff shows against origin/main.") {
+	if text := frameText(f); !strings.Contains(text, "The diff shows against origin/main. main is gone on ws-1.") {
 		t.Fatalf("base gone:\n%s", text)
+	}
+}
+
+func TestReviewBaseGoneKeepsTheFallbackOnALongHost(t *testing.T) {
+	repo := reviewRepo(t)
+	reviewGitIn(t, repo, "update-ref", "refs/remotes/origin/main", "main")
+	reviewGitIn(t, repo, "branch", "-D", "main")
+	prev := reviewGit
+	reviewGit = func(_, dir string, args ...string) (string, error) { return prev("", dir, args...) }
+	t.Cleanup(func() { reviewGit = prev })
+	host := strings.Repeat("n", 80) + ".local"
+	pane := New(Options{NoMotion: true, Pane: "%9", Tmux: (&reviewTmux{}).run})
+	f, err := reviewFrameFromArgv(pane, []string{"--kind=review", "--session", "ux-pass", "--host", host, "--pane", "%7", "--dir", repo, "--base", "main"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	next, _ := f.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	f = frameRun(t, next.(frameModel), nil)
+	f = frameRun(t, f, f.reviewLoad())
+	text := frameText(f)
+	if !strings.Contains(text, "The diff shows against origin/main.") || !strings.Contains(text, "main is gone on ") {
+		t.Fatalf("long host ate the fallback:\n%s", text)
 	}
 }
 

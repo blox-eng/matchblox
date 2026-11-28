@@ -117,7 +117,7 @@ On a line, `c` opens a one-line field under that line: `›  ⏎ add · esc canc
 
 `⏎` with no field open sends one message to the agent: each comment with its `file:line` and the line of source. After send: `sent a review of 3 comments to ux-pass · now in WORKING`, `ViewArgv` returns, keys go to LIST.
 
-Fails: `No changes to review: ux-pass has no git folder.` `ux-pass has no changes against main.` `main is gone on ws-1. The diff shows against origin/main.` A diff too large: the file list shows, each file opens on its own.
+Fails: `No changes to review: ux-pass has no git folder.` `ux-pass has no changes against main.` `The diff shows against origin/main. main is gone on ws-1.` A diff too large: the file list shows, each file opens on its own.
 
 ### First start after the upgrade
 

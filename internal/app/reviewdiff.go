@@ -223,7 +223,7 @@ func loadReview(spec reviewSpec) reviewLoaded {
 	}
 	d := &reviewDiff{against: against, mergeBase: sha}
 	if gone {
-		d.note = spec.base + " is gone on " + reviewHostLabel(spec.host) + ". The diff shows against " + against + "."
+		d.note = "The diff shows against " + against + ". " + spec.base + " is gone on " + reviewHostLabel(spec.host) + "."
 	}
 	if out, err := git("merge-base", sha, "HEAD"); err == nil && strings.TrimSpace(out) != "" {
 		d.mergeBase = strings.TrimSpace(out)

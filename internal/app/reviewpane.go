@@ -471,7 +471,9 @@ func (m frameModel) reviewDiffRows(w, h int, name string) []string {
 	rows := []string{m.reviewHead(w, left)}
 	f := r.file()
 	for _, n := range m.reviewNotes() {
-		rows = append(rows, " "+m.st.warn.Render(n))
+		for _, line := range wrapPlain(n, max(w-1, 4)) {
+			rows = append(rows, " "+m.st.warn.Render(line))
+		}
 	}
 	if r.filesView {
 		rows = append(rows, " "+m.st.muted.Render("these files open one at a time: they are large"))
