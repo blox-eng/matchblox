@@ -57,6 +57,7 @@ final class HeadTests: XCTestCase {
     /// Only Joystick carries the head, and a switch in Layouts carries it in and drops it. Steer
     /// gives the head's row back to the terminal, keeps the keyboard up after Enter, and a drag on
     /// its belt hides nothing; Mine shows the belt's small head key; Joystick again has the head.
+    /// The send on Steer comes last: a send ends the demo, and 20 s on its invite covers the dock.
     @MainActor
     func testHeadOnlyOnJoystick() {
         // A Mine that holds the belt's small head key: the demo opens no Mine editor.
@@ -77,15 +78,6 @@ final class HeadTests: XCTestCase {
         XCTAssertTrue(head.waitForNonExistence(timeout: 5), "the head stayed on Steer. " + app.debugDescription)
         XCTAssertTrue(heightBecomes(terminal, joystickHeight + Self.headRow),
                       "the terminal is \(terminal.frame.height) pt on Steer, not \(joystickHeight) + the head's row")
-        app.buttons["Show keyboard"].firstMatch.tap()
-        dismissKeyboardTip(in: app)
-        XCTAssertTrue(app.buttons["Hide keyboard"].firstMatch.waitForExistence(timeout: 10), "no keyboard on Steer. " + app.debugDescription)
-        terminal.typeText("ok\n")
-        expect(in: app, step: "spark-docs's reply to ok", "label CONTAINS %@", sparkReply)
-        Thread.sleep(forTimeInterval: 1.5)
-        XCTAssertTrue(app.buttons["Hide keyboard"].firstMatch.exists, "the keyboard folded after Enter on Steer")
-        app.buttons["Hide keyboard"].firstMatch.tap()
-        XCTAssertTrue(app.buttons["Show keyboard"].firstMatch.waitForExistence(timeout: 10), "the keyboard stayed up. " + app.debugDescription)
         let row = layoutsRow(in: app)
         // Along Steer's keys, under the handle row, then still before the lift.
         let keys = row.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0.5)).withOffset(CGVector(dx: 60, dy: 40))
@@ -100,8 +92,20 @@ final class HeadTests: XCTestCase {
         XCTAssertFalse(head.exists, "the dock's head shows on Mine")
 
         pick("Joystick", in: app)
-        XCTAssertTrue(becomesHittable(theHead(in: app), within: 5), "the head did not come back on Joystick")
+        XCTAssertTrue(becomesHittable(theHead(in: app), within: 5), "the head did not come back on Joystick. " + app.debugDescription)
         XCTAssertTrue(heightBecomes(terminal, joystickHeight), "the terminal did not give the head its row back")
+
+        pick("Steer", in: app)
+        XCTAssertTrue(head.waitForNonExistence(timeout: 5), "the head stayed on Steer. " + app.debugDescription)
+        app.buttons["Show keyboard"].firstMatch.tap()
+        dismissKeyboardTip(in: app)
+        XCTAssertTrue(app.buttons["Hide keyboard"].firstMatch.waitForExistence(timeout: 10), "no keyboard on Steer. " + app.debugDescription)
+        terminal.typeText("ok\n")
+        expect(in: app, step: "spark-docs's reply to ok", "label CONTAINS %@", sparkReply)
+        Thread.sleep(forTimeInterval: 1.5)
+        XCTAssertTrue(app.buttons["Hide keyboard"].firstMatch.exists, "the keyboard folded after Enter on Steer")
+        app.buttons["Hide keyboard"].firstMatch.tap()
+        XCTAssertTrue(app.buttons["Show keyboard"].firstMatch.waitForExistence(timeout: 10), "the keyboard stayed up. " + app.debugDescription)
     }
 
     /// With Joystick stored, the head is there on the console's list before any pick, in a pane,
