@@ -218,6 +218,29 @@ final class HeadTests: XCTestCase {
         expectLine(in: app, "bottom of the output")
     }
 
+    /// Up hearth-api's output, a line typed and sent with Return brings the view back down: the
+    /// handle row no longer says it is up, and the next tap is Enter, which the chat's empty line
+    /// answers, not a way back down that sends nothing.
+    @MainActor
+    func testTapAfterTypedSendIsEnter() {
+        let app = launched()
+        openTheChat(app, row: "hearth-api")
+        let terminal = theTerminal(in: app)
+        waitUntilSteady(terminal)
+        let head = theHead(in: app)
+        rollUp(head)
+        expectLine(in: app, "lines up · push ↓ or tap to come back", anywhere: true)
+        raiseTheKeyboard(app)
+        terminal.typeText("ok\n")
+        XCTAssertTrue(app.buttons["Show keyboard"].firstMatch.waitForExistence(timeout: 10), "the keyboard stayed up after the send")
+        XCTAssertTrue(becomesHittable(head, within: 5), "the head did not come back after the fold")
+        expectLine(in: app, "roll: the output")
+        waitUntilSteady(terminal)
+        XCTAssertFalse(terminal.label.contains("the line is empty"), "the chat said its line is empty before the tap")
+        head.tap()
+        expect(in: app, step: "the chat's answer to an Enter on its empty line", "label CONTAINS %@", "the line is empty")
+    }
+
     /// A fast roll up hearth-api's output shows a card that names the step at the top of the
     /// view; it goes 0.6 s after the roll ends. Its pane draws `⏺ Read` over `✦ Running`, so
     /// 13 lines up the first step from the top of the view is `⏺ Read`.

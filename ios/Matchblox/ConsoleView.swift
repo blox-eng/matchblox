@@ -537,6 +537,7 @@ private final class Belts {
         terminal.onTyped = { [weak self] in
             self?.lifted.stopHead()
             self?.dock.stopHead()
+            self?.head.cameDown()
         }
         ctrlObserver = NotificationCenter.default.addObserver(forName: Self.ctrlReset, object: terminal, queue: .main) {
             [weak self] _ in MainActor.assumeIsolated { self?.ctrlChanged(false) }
@@ -640,6 +641,7 @@ private final class Belts {
         // the agent would read it as an interrupt.
         let wasUp = terminal.isUpInPane
         terminal.jumpToBottom()
+        head.cameDown()
         if wasUp, bytes == Self.esc { return }
         if bytes == Self.copyReply { terminal.onAsksCopy() }
         terminal.send(bytes)

@@ -69,4 +69,26 @@ final class HeadScrollTests: XCTestCase {
         _ = scroll.push(.up, route: .wheel)
         XCTAssertEqual(scroll.tap(), .home, "a tap up in the output sends nothing")
     }
+
+    /// The view came back down another way (a typed send, a belt key, another pane): the walk is
+    /// down too, so the next tap is Enter and the next push `↓` bumps the bottom. A terminal that
+    /// knows it is at its live bottom (`.end` toward newer lines) says so; one that scrolls up or
+    /// cannot tell keeps the walk.
+    func testResetAfterOutsideReturn() {
+        var scroll = HeadScroll()
+        _ = roll(&scroll, .up, 12)
+        XCTAssertFalse(scroll.check(newer: .wheel), "a pane still up kept no walk")
+        XCTAssertFalse(scroll.check(newer: .scrollback))
+        XCTAssertGreaterThan(scroll.linesUp, 0)
+        XCTAssertTrue(scroll.check(newer: .end), "the live bottom did not end the walk")
+        XCTAssertEqual(scroll.linesUp, 0)
+        XCTAssertEqual(scroll.tap(), .enter)
+        XCTAssertFalse(scroll.check(newer: .end), "a walk already down came down again")
+
+        _ = scroll.push(.up, route: .wheel)
+        scroll.cameDown()
+        XCTAssertEqual(scroll.linesUp, 0)
+        XCTAssertEqual(scroll.push(.down, route: .wheel), .bump(.bottom))
+        XCTAssertEqual(roll(&scroll, .up, 1), [.scroll(1)], "the pace did not start again")
+    }
 }

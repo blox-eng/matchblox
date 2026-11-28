@@ -74,6 +74,20 @@ public struct HeadScroll: Sendable {
         return .home
     }
 
+    /// The view came back to the live bottom another way: a typed send, a belt key, another pane.
+    public mutating func cameDown() {
+        linesUp = 0
+        lift()
+    }
+
+    /// `route` is where a notch toward newer lines would go now. At the live bottom (`.end`) the
+    /// view is down, whatever brought it there; true when that ended a walk that was up.
+    public mutating func check(newer route: HeadRoute) -> Bool {
+        guard linesUp > 0, route == .end else { return false }
+        cameDown()
+        return true
+    }
+
     /// The roll ended: the next notch starts the pace again.
     public mutating func lift() {
         notches = 0

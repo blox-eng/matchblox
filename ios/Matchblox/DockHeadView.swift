@@ -31,7 +31,12 @@ final class DockHeadView: UIView {
 
     /// The agent's pane the console shows: the pane the app jumped into, or the pane of the
     /// session the console's chat shows; nil on the console's list. The sessions card marks it.
-    var pane: String?
+    /// Another pane shows its own live bottom.
+    var pane: String? {
+        didSet {
+            if pane != oldValue { cameDown() }
+        }
+    }
     /// The console's chat takes the screen, not a pane the app jumped into: there `↑` `↓` choose a
     /// session, so a push moves Pocket's highlight over the question's options instead.
     var inChat = false {
@@ -39,6 +44,7 @@ final class DockHeadView: UIView {
             guard inChat != oldValue else { return }
             chatPick = ChatPick()
             onHighlight(nil)
+            cameDown()
         }
     }
     /// Pocket's highlight over the row that shows this option, or nil for none.
@@ -410,6 +416,7 @@ final class DockHeadView: UIView {
     /// line older or newer instead, and at the first option of the menu on screen `↑` goes up into
     /// the output: no key goes. The menu is read from the screen at each push, never from the host.
     private func arrow(up: Bool) {
+        checkBottom()
         if scroll.linesUp > 0 { return readUp(up) }
         if inChat { return chatArrow(up: up) }
         let menu = ScreenMenu.read(lines: visibleLines())
@@ -436,12 +443,35 @@ final class DockHeadView: UIView {
         }
     }
 
+    /// The view came back down another way (a typed send, a key, another pane): the head's walk
+    /// ends, and the handle row stops saying it is up.
+    func cameDown() {
+        guard scroll.linesUp > 0 else { return }
+        scroll.cameDown()
+        say(nil)
+    }
+
+    /// A terminal that knows it is at its live bottom ends a walk the head still counts as up.
+    private func checkBottom() {
+        if scroll.check(newer: route(false)) { say(nil) }
+    }
+
+    /// After a step down the terminal may be at its live bottom before the head's count is: a
+    /// tmux wheel step moves more lines than one. Then the walk ends there, as at home.
+    private func landedHome() -> Bool {
+        guard scroll.check(newer: route(false)) else { return false }
+        driver.feel.cross()
+        say(nil)
+        return true
+    }
+
     /// One line through the output: older for `up`.
     private func readUp(_ up: Bool) {
         let was = scroll.linesUp
         switch scroll.push(up ? .up : .down, route: route(up)) {
         case .scroll(let lines):
             _ = onLines(lines)
+            if lines < 0, landedHome() { return }
             say(HeadHint.up(scroll.linesUp).line)
         case .home:
             _ = onLines(-was)
@@ -479,6 +509,7 @@ final class DockHeadView: UIView {
         switch onLines(lines) {
         case .wheel, .scrollback:
             driver.tick(at: time)
+            if lines < 0, landedHome() { break }
             say(HeadHint.up(scroll.linesUp).line)
         case .end, .nothing:
             break
@@ -509,6 +540,7 @@ final class DockHeadView: UIView {
     /// Up in the output a tap comes back down and sends nothing; else it is Enter, at once. At a
     /// question in the chat it types the highlighted option's number, which the chat answers with.
     private func tapped() {
+        checkBottom()
         let up = scroll.linesUp
         switch scroll.tap() {
         case .home:
