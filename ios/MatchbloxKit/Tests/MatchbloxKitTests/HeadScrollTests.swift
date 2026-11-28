@@ -91,4 +91,26 @@ final class HeadScrollTests: XCTestCase {
         XCTAssertEqual(scroll.push(.down, route: .wheel), .bump(.bottom))
         XCTAssertEqual(roll(&scroll, .up, 1), [.scroll(1)], "the pace did not start again")
     }
+
+    /// A finger's swipe on the terminal moves the view as the head does (positive: older): during
+    /// a walk its lines count, never below 0, and back at 0 the walk ends. With no walk up a swipe
+    /// starts none, so the next tap is still Enter.
+    func testPanCountsTowardTheWalk() {
+        var scroll = HeadScroll()
+        XCTAssertFalse(scroll.panned(3), "a swipe with no walk ended one")
+        XCTAssertEqual(scroll.linesUp, 0, "a swipe with no walk started one")
+        XCTAssertEqual(scroll.tap(), .enter)
+
+        _ = roll(&scroll, .up, 4)
+        XCTAssertEqual(scroll.linesUp, 4)
+        XCTAssertFalse(scroll.panned(2))
+        XCTAssertEqual(scroll.linesUp, 6, "a swipe up during a walk did not count")
+        XCTAssertFalse(scroll.panned(-5))
+        XCTAssertEqual(scroll.linesUp, 1)
+        XCTAssertTrue(scroll.panned(-3), "a swipe back down past the bottom did not end the walk")
+        XCTAssertEqual(scroll.linesUp, 0, "the count went below 0")
+        XCTAssertEqual(scroll.tap(), .enter, "after a swipe back down the tap was not Enter")
+        XCTAssertEqual(scroll.push(.down, route: .wheel), .bump(.bottom))
+        XCTAssertEqual(roll(&scroll, .up, 1), [.scroll(1)], "the pace did not start again")
+    }
 }

@@ -534,6 +534,7 @@ private final class Belts {
         head.onHighlight = { [weak terminal] text in terminal?.highlightRow(showing: text) }
         head.visibleLines = { [weak terminal] in terminal?.visibleLines ?? [] }
         terminal.onReturnSent = { [weak self] in self?.foldKeyboard() }
+        terminal.onPanned = { [weak self] lines in self?.head.panned(lines) }
         terminal.onTyped = { [weak self] in
             self?.lifted.stopHead()
             self?.dock.stopHead()

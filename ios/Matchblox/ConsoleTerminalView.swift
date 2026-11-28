@@ -27,6 +27,8 @@ final class ConsoleTerminalView: TerminalView {
     /// Called for each key typed or deleted: the belt head's coast stops, so it cannot scroll
     /// the pane back into copy mode under the new text.
     var onTyped: @MainActor () -> Void = {}
+    /// Called with the lines a finger's swipe, or its coast, moved the view (positive: older).
+    var onPanned: @MainActor (Int) -> Void = { _ in }
     /// Called after a Return from the system keyboard has reached the program.
     var onReturnSent: @MainActor () -> Void = {}
     /// Called for each key typed into the terminal: the console's own `c` may ask for a copy.
@@ -326,7 +328,7 @@ final class ConsoleTerminalView: TerminalView {
             }
             let dy = pan.translation(in: self).y
             pan.setTranslation(.zero, in: self)
-            sendWheel(wheel.move(dy), at: pan.location(in: self))
+            panWheel(wheel.move(dy), at: pan.location(in: self))
         case .ended:
             let link = CADisplayLink(target: self, selector: #selector(coasted))
             coast = Coast(link: link, start: CACurrentMediaTime(), velocity: pan.velocity(in: self).y, point: pan.location(in: self))
@@ -482,7 +484,7 @@ final class ConsoleTerminalView: TerminalView {
         guard var coast else { return }
         let elapsed = link.timestamp - coast.start
         let carried = WheelScroll.coast(velocity: coast.velocity, after: elapsed)
-        sendWheel(wheel.move(carried - coast.carried), at: coast.point)
+        panWheel(wheel.move(carried - coast.carried), at: coast.point)
         coast.carried = carried
         self.coast = coast
         if elapsed >= WheelScroll.coastTime { stopCoast() }
@@ -506,6 +508,14 @@ final class ConsoleTerminalView: TerminalView {
         case .vt200, .buttonEventTracking, .anyEvent: return true
         default: return false
         }
+    }
+
+    /// A finger's wheel steps, told to the match head as lines: the head's walk counts them.
+    private func panWheel(_ steps: [WheelScroll.Step], at point: CGPoint) {
+        guard readsMouse, !steps.isEmpty, cell(at: point) != nil else { return }
+        sendWheel(steps, at: point)
+        let older = steps.reduce(0) { $0 + ($1 == .up ? 1 : -1) }
+        onPanned(older * wheel.linesPerStep)
     }
 
     /// Each step at the touch's cell, encoded by SwiftTerm for the program's mouse protocol. The

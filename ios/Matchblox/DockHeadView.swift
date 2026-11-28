@@ -452,6 +452,17 @@ final class DockHeadView: UIView {
         say(nil)
     }
 
+    /// A finger's swipe on the terminal moved the view `lines` lines (positive: older): during a
+    /// walk they count, and a swipe back down to the bottom ends it, as a roll would.
+    func panned(_ lines: Int) {
+        let up = scroll.linesUp
+        if scroll.panned(lines) {
+            say(nil)
+        } else if up > 0 {
+            say(HeadHint.up(scroll.linesUp).line)
+        }
+    }
+
     /// A terminal that knows it is at its live bottom ends a walk the head still counts as up.
     private func checkBottom() {
         if scroll.check(newer: route(false)) { say(nil) }

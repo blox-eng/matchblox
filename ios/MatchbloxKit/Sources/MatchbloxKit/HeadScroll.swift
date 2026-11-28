@@ -80,6 +80,16 @@ public struct HeadScroll: Sendable {
         lift()
     }
 
+    /// A finger's swipe moved the view `lines` lines (positive: older). It counts toward a walk
+    /// that is up, never below 0, and starts none; true when it brought the walk down.
+    public mutating func panned(_ lines: Int) -> Bool {
+        guard linesUp > 0 else { return false }
+        linesUp = max(linesUp + lines, 0)
+        guard linesUp == 0 else { return false }
+        cameDown()
+        return true
+    }
+
     /// `route` is where a notch toward newer lines would go now. At the live bottom (`.end`) the
     /// view is down, whatever brought it there; true when that ended a walk that was up.
     public mutating func check(newer route: HeadRoute) -> Bool {

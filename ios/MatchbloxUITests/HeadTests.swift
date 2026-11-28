@@ -245,6 +245,29 @@ final class HeadTests: XCTestCase {
         expect(in: app, step: "the chat's answer to an Enter on its empty line", "label CONTAINS %@", "the line is empty")
     }
 
+    /// Up hearth-api's output, a finger's swipe on the terminal back down to the bottom ends the
+    /// head's walk: the handle row no longer says it is up, and the next tap is Enter, which the
+    /// chat's empty line answers, not a way back down that sends nothing.
+    @MainActor
+    func testFingerBackThenTapIsEnter() {
+        let app = launched()
+        openTheChat(app, row: "hearth-api")
+        let terminal = theTerminal(in: app)
+        waitUntilSteady(terminal)
+        let head = theHead(in: app)
+        rollUp(head)
+        expectLine(in: app, "lines up · push ↓ or tap to come back", anywhere: true)
+        // Up the terminal, more lines than the roll went: the view comes back to its bottom.
+        let low = terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85))
+        low.press(forDuration: 0.05, thenDragTo: terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)),
+                  withVelocity: .slow, thenHoldForDuration: 0.2)
+        expectLine(in: app, "roll: the output")
+        waitUntilSteady(terminal)
+        XCTAssertFalse(terminal.label.contains("the line is empty"), "the chat said its line is empty before the tap")
+        head.tap()
+        expect(in: app, step: "the chat's answer to an Enter on its empty line", "label CONTAINS %@", "the line is empty")
+    }
+
     /// A fast roll up hearth-api's output shows a card that names the step at the top of the
     /// view; it goes 0.6 s after the roll ends. Its pane draws `⏺ Read` over `✦ Running`, so
     /// 13 lines up the first step from the top of the view is `⏺ Read`.
