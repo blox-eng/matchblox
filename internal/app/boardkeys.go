@@ -263,7 +263,7 @@ func (m *Model) clearBoardFilters() {
 	if m.room != nil { // the room is the narrowing: both go
 		*m = m.closeRoom()
 	}
-	m.boardChain, m.boardHost, m.filter, m.searching = "", "", "", false
+	m.boardChain, m.boardHost, m.filter, m.searching, m.space, m.spaceMenu = "", "", "", false, "", nil
 	m.refresh()
 	m.peekAt = m.now()
 }
@@ -468,6 +468,9 @@ func (m Model) beltKeys() []beltKey {
 		up.On, down.On = false, false
 	}
 	_, head := m.headRow(s)
+	// comma's wire token is "comma": "," is the separator of beltWord.
+	cog := beltOf(m.keys.desk.Cog, ",", "machine", board)
+	cog.Key = "comma"
 	return append(ks, up, down, beltOf(mk.Open, "", "", true),
 		beltOf(mk.Jump, "⌃o", "expand", card),
 		beltOf(bk.Host, "", "hosts", board && m.hostCount() > 1),
@@ -479,6 +482,10 @@ func (m Model) beltKeys() []beltKey {
 		beltOf(mk.New, "", "new", board),
 		beltOf(mk.NextTab, "⇥", "machine", !m.consenting()),
 		beltOf(mk.Second, "", "kill", card && !head && m.killAction(s) != nil),
+		beltOf(m.keys.desk.Question, "", "keys", board),
+		cog,
+		beltOf(m.keys.desk.Shell, "", "shell", card),
+		beltOf(m.keys.desk.Diff, "", "diff", card),
 	)
 }
 
@@ -546,7 +553,8 @@ func (m Model) beltValue() string {
 //	key   = tok [ "*" ]
 //
 // A tok is a beltKey's Key: 1 2 3 p y up down enter ctrl+o s g / m c z N
-// tab x. A card's key that is off (a digit on another host, or one the
+// tab x ? comma t D. The cog key's token is comma, because "," separates
+// toks. A card's key that is off (a digit on another host, or one the
 // line types) is a dim tok. ◂ has none and is never sent. At most beltMax bytes:
 // dim toks leave whole from the right, then card keys from the right.
 // The other values ("" off the board, "box", "menu") come from beltValue.

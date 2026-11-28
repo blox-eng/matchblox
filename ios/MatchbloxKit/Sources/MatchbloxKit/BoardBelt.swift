@@ -32,7 +32,9 @@ public struct BoardBelt: Equatable, Sendable {
     private static let cardTokens: Set<String> = ["1", "2", "3", "p", "y"]
     private static let maxCard = 3
     /// `c copy reply` comes first, so with a short card it shows at rest: no drag to copy.
-    private static let tail = ["c", "ctrl+o", "s", "g", "/", "m", "z", "N", "tab", "x"]
+    /// `?` `,` `t` `D` are glyphs, one cell each, so the tail still scrolls.
+    /// The console's cog token is `comma`: "," separates tokens.
+    private static let tail = ["c", "ctrl+o", "s", "g", "/", "m", "z", "N", "tab", "x", "?", ",", "t", "D"]
 
     private init(shape: Shape, card: [String], armed: String?, dim: Set<String>, chat: Bool = false) {
         self.shape = shape
@@ -60,12 +62,14 @@ public struct BoardBelt: Equatable, Sendable {
             var card: [String] = []
             var armed: String?
             for token in list(value[..<split]) {
-                let key = token.hasSuffix("*") ? String(token.dropLast()) : token
+                let starred = token.hasSuffix("*")
+                let raw = starred ? String(token.dropLast()) : token
+                let key = raw == "comma" ? "," : raw
                 guard Self.cardTokens.contains(key), !card.contains(key) else { continue }
                 card.append(key)
-                if key != token { armed = key }
+                if starred { armed = key }
             }
-            let dim = list(value[value.index(after: split)...])
+            let dim = list(value[value.index(after: split)...]).map { $0 == "comma" ? "," : $0 }
             let off = dim.filter { Self.cardTokens.contains($0) && !card.contains($0) }
             card += off
             self.init(shape: .board, card: Array(card.prefix(Self.maxCard)), armed: armed, dim: Set(dim), chat: chat)
@@ -155,6 +159,8 @@ public struct BoardBelt: Equatable, Sendable {
             "m": act("m", "m menu", "menu"), "c": act("c", "c copy reply", "copy the last reply"), "z": act("z", "z park", "park"),
             "N": act("N", "N new", "new session"), "tab": word("tab", "⇥ machine", "machine", [0x09]),
             "x": act("x", "x kill", "kill"),
+            "?": act("?", "?", "keys"), ",": act(",", ",", "machine"),
+            "t": act("t", "t", "shell"), "D": act("D", "D", "diff"),
             "runs": word("runs", "y runs", "y, run", Array("y".utf8)),
             "cancels": word("cancels", "esc cancels", "escape, cancel", [esc]),
             "do": word("do", "⏎ do", "return, do", [0x0d]), "close": word("close", "esc close", "escape, close", [esc]),

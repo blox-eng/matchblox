@@ -30,15 +30,14 @@ func samePane(t *testing.T, peer func(*proto.State)) (tea.Model, *fakeConn, *fak
 	next, _ = next.Update(tea.WindowSizeMsg{Width: 132, Height: 30})
 	next, _ = next.Update(stateMsg(home))
 	next, _ = next.Update(peerMsg{host: "ws-1", conn: wsConn, msg: stateMsg(ws)})
-	for range next.(Model).rowCount() {
-		if s, ok := next.(Model).selectedSession(); ok && s.Host == "ws-1" {
-			nm := next.(Model)
+	nm := next.(Model)
+	for _, k := range nm.sideWalk() {
+		nm.sideAt = k
+		nm = nm.onChoice()
+		if s, ok := nm.selectedSession(); ok && s.Host == "ws-1" {
 			nm.toList() // the list's keys act on the chosen row
 			return nm, homeConn, wsConn
 		}
-		var cmd tea.Cmd
-		next, cmd = key(next, "down")
-		drain(cmd) // the watch of the chosen row
 	}
 	t.Fatal("no peer row to select")
 	return nil, nil, nil

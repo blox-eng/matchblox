@@ -367,14 +367,16 @@ func (m Model) sideWords(w int) []string {
 	case m.filter != "":
 		text := `Nothing matches "` + m.filter + `". ` + m.keys.main.Back.Help().Key + " clears the search."
 		return []string{fit(" "+st.muted.Render(ansi.Truncate(text, max(w-1, 1), "…")), w)}
+	case m.space != "":
+		return []string{fit(st.muted.Render(m.spaceEmpty()), w)}
 	}
 	return nil
 }
 
 // sideCount is the sessions of units in the state of g: all of g.count
-// while no search narrows the list.
+// while no search or space narrows the list.
 func (m Model) sideCount(g sideGroup, units []sideUnit) int {
-	if m.filter == "" {
+	if m.filter == "" && m.space == "" {
 		return g.count
 	}
 	n := 0

@@ -42,6 +42,8 @@ func (m Model) sideRow(s sample.Session, w int, chosen bool, link sideLink) []st
 	switch {
 	case h == sideHeld:
 		says = m.heldWhy(s)
+	case h == sideDone:
+		says = "said " + m.lastWords(s)
 	case says == "" && h == sideNeed:
 		says = cmp.Or(m.askedOf(s), word)
 	case says == "":
@@ -57,7 +59,7 @@ func (m Model) sideRow(s sample.Session, w int, chosen bool, link sideLink) []st
 	case pending.kind == actPark:
 		says = "letting go"
 	}
-	two := says != "" && (h == sideNeed || chosen || isPending)
+	two := says != "" && (h == sideNeed || h == sideDone || chosen || isPending)
 
 	mark, name, rest := " ", m.st.text, m.st.muted
 	if m.stale(s.Host) || isPending { // its host does not answer, or an act on it waits for the sample: dimmed
@@ -78,7 +80,11 @@ func (m Model) sideRow(s sample.Session, w int, chosen bool, link sideLink) []st
 		lead, cont = ink.Render(first)+" ", ink.Render(rest)+" "
 	}
 
-	right := rest.Render(m.sideRight(s)) + " " + rest.Render(harnessMark(s))
+	agent := rest.Render(harnessMark(s))
+	if word := m.shellWord(s); word != "" {
+		agent = m.st.muted.Render(word) + " " + agent
+	}
+	right := rest.Render(m.sideRight(s)) + " " + agent
 	title := m.sideTitle(s)
 	num := "  "
 	if s.Number > 0 {
@@ -99,12 +105,40 @@ func (m Model) sideRow(s sample.Session, w int, chosen bool, link sideLink) []st
 }
 
 // sideRight is the wait of a session, or its pull request's badge when it
-// waits for nothing: the number and the stage word.
+// waits for nothing: the number and the stage word, then time in state.
 func (m Model) sideRight(s sample.Session) string {
+	badge := ""
 	if _, waits := m.waitOf(s); !waits {
 		if ships := m.shipsOf(s); len(ships) > 0 {
-			return "#" + strconv.Itoa(ships[0].Number) + " " + stageNames[ships[0].Stage]
+			badge = "#" + strconv.Itoa(ships[0].Number) + " " + stageNames[ships[0].Stage]
 		}
+	}
+	age := m.sideAge(s)
+	switch {
+	case badge != "" && age != "":
+		return badge + " " + age
+	case badge != "":
+		return badge
+	}
+	return age
+}
+
+// sideAge is time in state at the right: now under a minute, else today's
+// age cell.
+func (m Model) sideAge(s sample.Session) string {
+	if m.sideStateOf(s) == sideWork {
+		return ""
+	}
+	d := s.Idle
+	if h := m.sideStateOf(s); h == sideNeed {
+		if it, ok := m.waitOf(s); ok {
+			d = m.now().Sub(it.Since)
+		} else {
+			return m.waitCell(s)
+		}
+	}
+	if d < time.Minute {
+		return "now"
 	}
 	return m.waitCell(s)
 }

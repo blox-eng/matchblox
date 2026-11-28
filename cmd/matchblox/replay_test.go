@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"html"
 	"image/color"
 	"net"
 	"os"
@@ -328,27 +327,10 @@ var (
 // tabs or layout still shows.
 var spinner = regexp.MustCompile(`[\x{2800}-\x{28FF}]`)
 
-// stillSize is the recording whose still frame stands in www/index.html,
-// for no script and reduced motion: the open Duo.
+// stillSize is the open Duo recording. Its frames stay in
+// www/demo/frames-duo.json. The landing still is the four-pane desk
+// (TestDeskStillIsFourPanes).
 const stillSize = "duo"
-
-var tag = regexp.MustCompile(`<[^>]*>`)
-
-// stillLines is the text of the still frame's HTML, a line per row.
-func stillLines(b []byte) []string {
-	return strings.Split(strings.Trim(html.UnescapeString(tag.ReplaceAllString(string(b), "")), "\n"), "\n")
-}
-
-// frameLines is the text of a frame, a line per row.
-func frameLines(f replay.Frame) []string {
-	out := make([]string, len(f.Lines))
-	for i, l := range f.Lines {
-		for _, s := range l {
-			out[i] += s.Text
-		}
-	}
-	return out
-}
 
 func skeleton(lines []string) string {
 	var b strings.Builder
@@ -707,7 +689,6 @@ func replayAt(t *testing.T, z replaySize) {
 			return has("◂ kindle-web", "Do you want to proceed?")(s) && !strings.Contains(s, "CHAIN login")
 		}
 	}
-	var still replay.Frame
 	for _, st := range steps {
 		if st.do != nil {
 			st.do()
@@ -735,9 +716,6 @@ func replayAt(t *testing.T, z replaySize) {
 			view.Follow(clk)
 		}
 		keep(st.name, st.at, screen)
-		if st.name == "the console" {
-			still = frames[len(frames)-1]
-		}
 	}
 	p.Quit()
 	<-done
@@ -809,16 +787,6 @@ func replayAt(t *testing.T, z replaySize) {
 	}
 	svg := replay.SVG(z.cols, z.rows, frames, map[bool]map[string]color.Color{true: tokens, false: app.Tokens(false)})
 
-	index := "../../www/index.html"
-	page, err := os.ReadFile(index)
-	if err != nil {
-		t.Fatal(err)
-	}
-	const open, closing = "<!-- replay:still -->", "<!-- /replay:still -->"
-	i, j := bytes.Index(page, []byte(open)), bytes.Index(page, []byte(closing))
-	if i < 0 || j < i {
-		t.Fatalf("%s needs %s and %s around the still frame", index, open, closing)
-	}
 	if !*update {
 		// The committed replay must still show this console: compare the
 		// skeleton of each frame's screen.
@@ -843,19 +811,11 @@ func replayAt(t *testing.T, z replaySize) {
 					framesPath, names[k], skeleton(was[k]), skeleton(now[k]))
 			}
 		}
-		if z.name == stillSize {
-			if was, now := skeleton(stillLines(page[i+len(open):j])), skeleton(frameLines(still)); was != now {
-				t.Fatalf("the still frame in %s is not the %s's: run go test ./cmd/matchblox -run TestReplay -update\nwas:\n%s\nnow:\n%s", index, z.name, was, now)
-			}
-		}
 		return
 	}
 	out := map[string][]byte{framesPath: js}
 	if z.name != stillSize { // the README shows the desk and the phone
 		out[svgPath] = svg
-	}
-	if z.name == stillSize { // the page's still frame, for no script and reduced motion
-		out[index] = append(append(append([]byte{}, page[:i+len(open)]...), "\n"+replay.Still(still)+"\n"...), page[j:]...)
 	}
 	for path, b := range out {
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

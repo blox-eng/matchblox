@@ -114,6 +114,10 @@ func (m Model) sideKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 	if !m.sideActive() {
 		return m, nil, false
 	}
+	if m.spaceMenu != nil {
+		next, cmd := m.spaceMenuKey(k)
+		return next, cmd, true
+	}
 	if m.menu != nil {
 		next, cmd := m.menuKey(k)
 		return next, cmd, true
@@ -138,6 +142,9 @@ func (m Model) sideKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 		return m.flipList(), nil, true
 	case bkey.Matches(k, m.keys.main.Jump):
 		next, cmd := m.expand(s, ok)
+		return next, cmd, true
+	case bkey.Matches(k, m.keys.side.Flip) && m.besideMode():
+		next, cmd := m.showChosen()
 		return next, cmd, true
 	case m.sidePlace == placeRoom:
 		next, cmd := m.roomPlaceKey(k)
@@ -224,6 +231,16 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 	sk, mk, bk := m.keys.side, m.keys.main, m.keys.board
 	var cmd tea.Cmd
 	switch {
+	case (m.deskFrame || m.tapping) && bkey.Matches(k, m.keys.desk.Question):
+		m.keySheet = &keySheet{}
+		return m, nil
+	case (m.deskFrame || m.tapping) && m.keySheet == nil && bkey.Matches(k, m.keys.desk.Cog):
+		m.cogSheet = &cogSheet{}
+		return m, nil
+	case (m.deskFrame || m.tapping) && bkey.Matches(k, m.keys.desk.Shell):
+		return m.askShell()
+	case (m.deskFrame || m.tapping) && bkey.Matches(k, m.keys.desk.Diff):
+		return m.askReview()
 	case m.footAt > 0 && bkey.Matches(k, append([]bkey.Binding{mk.Park, bk.Copy, bk.Chain, bk.Menu}, m.rowActKeys()...)...):
 		cmd = m.notice(strings.Join([]string{mk.Park.Help().Key, bk.Copy.Help().Key, bk.Chain.Help().Key, bk.Menu.Help().Key}, " ") +
 			" act on a session · " + sk.Up.Help().Key + " chooses one")
@@ -257,6 +274,8 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 		case m.filter != "":
 			m.filter, m.peekAt = "", m.now()
 			m.refresh()
+		case m.space != "":
+			return m, m.setSpace("")
 		case m.chain != nil && m.besideMode():
 			return m.closeChainBeside()
 		case m.room != nil:
@@ -274,6 +293,10 @@ func (m Model) listKey(k tea.KeyPressMsg, s sample.Session, ok bool) (tea.Model,
 		if said := m.turnHost(); said != "" {
 			cmd = m.notice(said)
 		}
+	case bkey.Matches(k, bk.SpaceNext):
+		cmd = m.turnSpace(1)
+	case bkey.Matches(k, bk.SpacePrev):
+		cmd = m.turnSpace(-1)
 	case bkey.Matches(k, sk.Unhide):
 		cmd = m.unhide()
 	case bkey.Matches(k, bk.Room) && m.besideMode():
@@ -341,7 +364,8 @@ func (m Model) noRowWhy() string {
 // beltActs are the keys a tap on Pocket's belt acts with (keycmd.TapKeys).
 func (m Model) beltActs() []bkey.Binding {
 	bk, mk := m.keys.board, m.keys.main
-	return []bkey.Binding{bk.Copy, bk.Menu, bk.Chain, bk.Host, bk.Merge, mk.Second, mk.Search, mk.Park, mk.Grant, mk.New}
+	dk := m.keys.desk
+	return []bkey.Binding{bk.Copy, bk.Menu, bk.Chain, bk.Host, bk.Merge, mk.Second, mk.Search, mk.Park, mk.Grant, mk.New, dk.Question, dk.Cog, dk.Shell, dk.Diff}
 }
 
 // beltTap is a tap on an act key of Pocket's belt, from the client on tty

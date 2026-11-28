@@ -898,6 +898,13 @@ func (s *Service) newSession(ctx context.Context, a proto.Act) proto.Result {
 		steps[len(steps)-1] = s.mux().Start(mux.Start{Name: name, Dir: dir, Detached: true, Argv: prepared})[0]
 		act.Steps = steps
 	}
+	// The branch the session starts from, read before the agent can change
+	// it. A new worktree has the new branch checked out: the review diffs
+	// that against the host's default branch, which the worktree came from.
+	startBranch := ""
+	if a.Confirm == "y" && n.Branch == "" {
+		startBranch = s.startBranchOf(ctx, dir)
+	}
 	res := s.Actions.Do(ctx, act, a.Confirm)
 	if note != "" && res.Err == "" {
 		res.Note = note
@@ -907,6 +914,7 @@ func (s *Service) newSession(ctx context.Context, a proto.Act) proto.Result {
 		return res
 	}
 	res.Skipped = append(res.Skipped, notes...)
+	s.recordStartBranch(name, startBranch)
 	var pane string
 	var listErr error
 	if s.agentsPane(a) || (acct != nil && acct.fresh) {

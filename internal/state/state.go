@@ -85,6 +85,17 @@ type Doc struct {
 	// its presence as "this host knows the update act". Nil: a build that
 	// is not a release, or a service older than the update.
 	Update *UpdateView `json:"update,omitempty"`
+	// DeskFrame: the four-pane desk has opened once, so the first-start
+	// notice does not show again.
+	DeskFrame bool `json:"desk_frame,omitempty"`
+	// KeysAt is when this owner last gave each session the keys, keyed by
+	// session id. Only the service writes it.
+	KeysAt map[string]time.Time `json:"keys_at,omitempty"`
+	// StartBranch is the branch a session started from, by its name:
+	// `git rev-parse --abbrev-ref HEAD` in its folder at Start. The review
+	// (D) diffs against it. A session started in a new worktree, or by
+	// hand, has none: the review falls back to the host's default branch.
+	StartBranch map[string]string `json:"start_branch,omitempty"`
 }
 
 // UpdateView is the [update] mode, this build's release and the latest one

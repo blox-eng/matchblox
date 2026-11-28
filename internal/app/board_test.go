@@ -94,6 +94,7 @@ func boardFixture(t testing.TB) proto.State {
 	st.Holds = []proto.Hold{{SessionID: legacy.SessionID, Pane: legacy.Pane, Name: legacy.Name, By: holdByYou}}
 	st.Chains = &state.ChainsView{Chains: []chains.Chain{{ID: "c1", Name: "login", Repo: "/home/user/src/hearth",
 		Members: []chains.Member{memberOf(auth), memberOf(ui), memberOf(api)}}}}
+	keysLongAgo(&st)
 	return st
 }
 

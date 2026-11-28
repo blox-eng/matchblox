@@ -60,10 +60,11 @@ Outside tmux, the console opens in its own tmux session, `matchblox`. Every
 terminal that runs `matchblox` joins it, and `prefix m` brings you back to
 it from any pane. Inside tmux, it opens in the current pane.
 
-In the session `matchblox`, the console's window has two panes: the list,
-and the agent's own pane beside it. Type in the agent's pane as in the
-agent itself. `↑↓` show each agent as you pass, `Enter` goes in, and `ctrl+q` flips the
-keys between the list and the agent.
+In the session `matchblox`, at 100 columns or more, the window is four
+panes: a header, the list, the agent's own pane, and a bar. Type in the
+agent's pane as in the agent itself. `↑↓` show each agent as you pass,
+`Enter` goes in, and `ctrl+q` flips the keys between the list and the
+agent. Under 100 columns the sidebar stays: the list beside the agent.
 
 The service starts with the console and keeps running after it closes: the
 history and the stoker go on. `matchblox serve` runs it in the foreground,

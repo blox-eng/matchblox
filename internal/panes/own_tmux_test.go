@@ -95,14 +95,15 @@ func TestTwoConsolesKeepTheirKeysApart(t *testing.T) {
 	s.attach(t, &one)
 	s.attach(t, &two)
 
-	press(t, two, "\x11") // ctrl+q
-	waitFor(t, func() bool { return s.active(two) == two.a })
+	s.tmux("select-pane", "-t", two.a)
 	press(t, two, "rm -rf x")
 	waitFor(t, func() bool { return strings.Contains(read(two.aOut), "rm -rf x") })
 	time.Sleep(100 * time.Millisecond)
 	if got := read(one.aOut) + read(one.cOut); strings.Contains(got, "rm") {
 		t.Errorf("the first console's panes read %q", got)
 	}
+	press(t, two, "\x11") // ctrl+q back to the list
+	waitFor(t, func() bool { return s.active(two) == two.c })
 	if got := s.active(one); got != one.c {
 		t.Errorf("the first console's active pane is %s, want its list %s", got, one.c)
 	}
@@ -312,6 +313,7 @@ func TestAnUnmarkedFirstConsoleKeepsItsKeys(t *testing.T) {
 	s.tmux("set-option", "-u", "-t", one.c, HomeOption)
 	s.tmux(BesideKeysArgv()[1:]...)
 	s.attach(t, &one)
+	s.tmux("select-pane", "-t", one.a)
 	press(t, one, "\x11") // ctrl+q
-	waitFor(t, func() bool { return s.active(one) == one.a })
+	waitFor(t, func() bool { return s.active(one) == one.c })
 }

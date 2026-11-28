@@ -20,7 +20,7 @@ final class BoardBeltTests: XCTestCase {
     }
 
     private let arrows = ["↑", "↓", "⏎"]
-    private let tail = ["c copy reply", "⌃o", "s hosts", "g chain", "/", "m menu", "z park", "N new", "⇥ machine", "x kill"]
+    private let tail = ["c copy reply", "⌃o", "s hosts", "g chain", "/", "m menu", "z park", "N new", "⇥ machine", "x kill", "?", ",", "t", "D"]
 
     // MARK: The keys
 
@@ -34,7 +34,7 @@ final class BoardBeltTests: XCTestCase {
     /// `⌃o` and the list's keys. The board's column and page keys are gone.
     func testBeltHasTheSidebarKeys() throws {
         XCTAssertEqual(try labels("1,2,3;"), ["◂", "1", "2", "3", "↑", "↓", "⏎", "c copy reply", "⌃o", "s hosts",
-                                             "g chain", "/", "m menu", "z park", "N new", "⇥ machine", "x kill"])
+                                             "g chain", "/", "m menu", "z park", "N new", "⇥ machine", "x kill", "?", ",", "t", "D"])
         let ids = board(";").keys.map(\.id)
         for gone in ["board.v", "board.u", "board.]", "board.[", "←", "→"] {
             XCTAssertFalse(ids.contains(gone), gone)
@@ -45,7 +45,7 @@ final class BoardBeltTests: XCTestCase {
         XCTAssertNil(BoardBelt.bytes(for: "board.]"))
         // Each act key sends its own tap (keycmd.TapKeys and keycmd.TapKey in Go), which no
         // keyboard sends.
-        for key in ["p", "y", "s", "g", "/", "m", "c", "z", "N", "x"] {
+        for key in ["p", "y", "s", "g", "/", "m", "c", "z", "N", "x", "?", ",", "t", "D"] {
             XCTAssertEqual(BoardBelt.bytes(for: "board.\(key)"), Array("\u{1b}_matchblox;tap=\(key)\u{1b}\\".utf8), key)
         }
     }
@@ -220,6 +220,7 @@ final class BoardBeltTests: XCTestCase {
             "board.y": tap("y"), "board.c": tap("c"), "board.m": tap("m"), "board.g": tap("g"),
             "board.s": tap("s"), "board./": tap("/"), "board.z": tap("z"), "board.N": tap("N"),
             "board.x": tap("x"), "board.tab": [0x09], "board.ctrl+o": [0x0f],
+            "board.?": tap("?"), "board.,": tap(","), "board.t": tap("t"), "board.D": tap("D"),
             "board.runs": Array("y".utf8), "board.cancels": [esc], "board.do": [0x0d], "board.close": [esc],
             "↑": [esc, 0x5b, 0x41], "↓": [esc, 0x5b, 0x42], "⏎": [0x0d], "◂": HomeKey.bytes,
         ]

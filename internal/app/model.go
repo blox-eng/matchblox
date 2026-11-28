@@ -411,6 +411,11 @@ type Model struct {
 	filter       string // the search of the open tab
 	searching    bool   // the search line takes the keys
 	holds        []proto.Hold
+	keysAt       map[string]time.Time  // this owner's last give of the keys, by session id
+	turnEnded    map[paneKey]time.Time // when this console saw the pane's agent go from work to rest
+	gave         map[paneKey]time.Time // when this console gave the pane the keys: a session with no id has no KeysAt
+	reviewing    *reviewOn             // the review that has the agent seat, nil: none
+	homeStart    map[string]string     // the branch each session of this host started from, by name
 	chains       *state.ChainsView
 	chainIx      chainIndex // worked out in refresh
 	room         *room      // the chain room on screen; nil when none
@@ -536,8 +541,9 @@ type Model struct {
 	side *sideMemo
 
 	// boardChain and boardHost narrow the list to one chain and one host,
-	// each by its name; "" shows all.
-	boardChain, boardHost string
+	// each by its name; "" shows all. space narrows to one repo; "" is all.
+	boardChain, boardHost, space string
+	spaceMenu                    *spaceMenu
 	// menu is the session's menu while it is open. sawRelease: the terminal
 	// reported the release of a press, so a press held is a long press.
 	menu       *boardMenu
@@ -622,16 +628,26 @@ type Model struct {
 	sideTip                   int
 	sideHost                  string // the host whose trouble the host place shows
 	sideIn                    paneKey
-	beside                    string          // the agent pane's id; "" before the split, and where it failed
-	winW, winH                int             // the window's size in beside mode; 0: not read yet
-	boxZoom                   bool            // a box or an animation has the window: the list's pane is zoomed for it
-	boxBack                   []string        // the agent pane's screen, drawn dim behind the box
-	showing                   bool            // a choice runs in the agent pane
-	showNext                  *action         // the choice made while one ran: it runs next
-	besideShows               paneKey         // the session the agent pane shows; zero when none or a chain view
-	previewSeq                int             // the list's latest move: only its preview runs
-	viewed                    map[string]bool // the peers whose view the builder let run in this run: their rows preview
-	chain                     *chainView      // the chain view beside the list; nil while one agent shows
+	beside                    string            // the agent pane's id; "" before the split, and where it failed
+	deskFrame                 bool              // Doc.DeskFrame: the first-start notice has been shown
+	frameKind                 string            // header|bar|review when this process is a desk frame; "" the list
+	barMode                   string            // @matchblox_mode: LIST, AGENT, …, or CONFIRM, KEYS, a tab, and the question
+	keySheet                  *keySheet         // the keys sheet over the list; nil while it is closed
+	cogSheet                  *cogSheet         // Machine over the list; nil while it is closed
+	shellAsks                 int               // times the list asked for the shell
+	shells                    map[string]string // shellKey(host, agent pane) -> the shell pane under it
+	shellSeen                 map[string]bool   // host+pane already asked; a refresh does not ask twice
+	shellAsking               map[string]bool   // the hosts with a look for shell panes under way
+	shellLive                 map[string]bool   // this tmux's panes at the last poll; nil before it
+	winW, winH                int               // the window's size in beside mode; 0: not read yet
+	boxZoom                   bool              // a box or an animation has the window: the list's pane is zoomed for it
+	boxBack                   []string          // the agent pane's screen, drawn dim behind the box
+	showing                   bool              // a choice runs in the agent pane
+	showNext                  *action           // the choice made while one ran: it runs next
+	besideShows               paneKey           // the session the agent pane shows; zero when none or a chain view
+	previewSeq                int               // the list's latest move: only its preview runs
+	viewed                    map[string]bool   // the peers whose view the builder let run in this run: their rows preview
+	chain                     *chainView        // the chain view beside the list; nil while one agent shows
 }
 
 func New(opt Options) Model {
@@ -648,7 +664,8 @@ func New(opt Options) Model {
 		opt.Binary = "dev"
 	}
 	m := Model{opt: opt, conn: opt.Conn, st: newStyles(true), dark: true, width: 100, height: 30, history: newSeries(60),
-		recPrefs: loadRecPrefs(opt.StateDir), viewPrefs: loadViewPrefs(opt.StateDir), keys: defaultKeys(), peers: links(opt.Peers), shown: &shownFrame{}}
+		recPrefs: loadRecPrefs(opt.StateDir), viewPrefs: loadViewPrefs(opt.StateDir), keys: defaultKeys(), peers: links(opt.Peers), shown: &shownFrame{},
+		turnEnded: map[paneKey]time.Time{}, gave: map[paneKey]time.Time{}}
 	m.splashAt = m.now()
 	if opt.Ask != nil {
 		m.askCtx, m.askStop = context.WithCancel(context.Background())
@@ -676,9 +693,9 @@ func (m Model) Init() tea.Cmd {
 	peers := tea.Batch(start...)
 	peers = tea.Batch(peers, m.besideCmd())
 	if err := m.opt.DialErr; err != nil && m.conn == nil {
-		return tea.Batch(tea.RequestBackgroundColor, func() tea.Msg { return lostMsg{err: err} }, m.splashCmd(), m.waitAsk(), peers)
+		return tea.Batch(tea.RequestBackgroundColor, func() tea.Msg { return lostMsg{err: err} }, m.splashCmd(), m.waitAsk(), peers, m.modePollLoop())
 	}
-	return tea.Batch(tea.RequestBackgroundColor, m.hello(), m.recv(), m.watchSilence(), m.splashCmd(), m.graphicsTick(0), m.waitAsk(), peers)
+	return tea.Batch(tea.RequestBackgroundColor, m.hello(), m.recv(), m.watchSilence(), m.splashCmd(), m.graphicsTick(0), m.waitAsk(), peers, m.modePollLoop())
 }
 
 func (m Model) watchSilence() tea.Cmd {
@@ -895,15 +912,76 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.tallH = max(m.tallH, msg.Height)
 		return m, m.sizeCmd(msg.Width)
-	case besideMsg:
+	case shellLookupMsg:
+		m.shellLooked(msg)
+		return m, nil
+	case shellMsg:
 		if msg.err != nil {
-			said := m.sayError("the agent pane did not open: " + msg.err.Error())
-			return m, said
+			return m, m.notice("not opened: " + msg.err.Error())
+		}
+		if m.shells == nil {
+			m.shells = map[string]string{}
+		}
+		key := shellKey(msg.host, msg.agent)
+		m.shells[key] = msg.pane
+		if m.shellLive != nil && (msg.host == "" || msg.host == m.opt.Host) {
+			m.shellLive[msg.pane] = true
+		}
+		if m.shellSeen == nil {
+			m.shellSeen = map[string]bool{}
+		}
+		m.shellSeen[key] = true
+		m.barMode = "SHELL"
+		return m, nil
+	case besideMsg:
+		var look tea.Cmd
+		if msg.framed {
+			m.deskFrame = true
+			look = m.rememberShells(m.opt.Host, m.homeAll.sessions)
+		}
+		if msg.notice != "" {
+			m.notice(msg.notice)
+		}
+		if msg.err != nil {
+			text := msg.err.Error()
+			if !strings.HasPrefix(text, "the desk frame did not open:") {
+				text = "the agent pane did not open: " + text
+			}
+			said := m.sayError(text)
+			if msg.pane != "" {
+				m.beside = msg.pane
+			}
+			return m, tea.Batch(said, look)
 		}
 		m.beside = msg.pane
-		return m, m.sizeCmd(m.width)
+		return m, tea.Batch(m.sizeCmd(m.width), look)
 	case besideSizeMsg:
 		m.winW, m.winH = msg.w, msg.h
+	case deskPollMsg:
+		next := m.modePollLoop()
+		if !m.deskFrame || m.frameKind != "" {
+			return m, next
+		}
+		return m, tea.Batch(m.watchDeskMode(), next)
+	case deskModeMsg:
+		m.barMode = msg.mode
+		if msg.live != nil {
+			m.shellLive = msg.live
+		}
+		var cog tea.Cmd
+		if msg.cog != "" {
+			cog = m.takeCog(msg.cog)
+		}
+		if msg.review != "" { // the review pane has the keys, so the list pane is not current here
+			next, rev := m.takeReview(msg.review)
+			return next, tea.Batch(cog, rev)
+		}
+		if !msg.list {
+			return m, cog
+		}
+		return m, tea.Batch(m.syncListMode(), cog)
+	case reviewMsg:
+		return m.reviewOpened(msg)
 	case boxBackMsg:
 		if !m.boxZoom { // the box closed before its zoom landed: give the window back after it
 			return m, m.sizeCmd(m.width)
@@ -991,6 +1069,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		st := proto.State(msg)
 		m.noteChanges(m.opt.Host, st.Sessions, st.Chains) // before the state: a card's column before the change
+		m.noteTurnEnds(m.opt.Host, m.homeAll.sessions, !first, st.Sessions)
 		var feel tea.Cmd
 		if f := feelOf(m.queue, st.Queue); f != "" && !first {
 			feel = sayAgent(f, m.opt)
@@ -1018,9 +1097,14 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.snap, m.git, m.recs, m.have, m.answered, m.silent, m.at = st.Snapshot, st.Git, st.Recommendations, true, true, false, m.now()
 		m.shipReport = st.Ships
 		m.holds, m.reasons, m.chains = st.Holds, st.Reasons, st.Chains
+		m.takeKeysAt(m.homeAll.sessions, st)
+		m.homeStart = st.StartBranch
 		m.agents, m.renames, m.accounts, m.signIns = st.Agents, st.Renames, st.Accounts, st.SignIns
 		m.skipped = st.AccountsSkipped
 		m.lastAccount, m.keptAgent = st.LastAccount, st.LastAgent
+		m.deskFrame = m.deskFrame || st.DeskFrame
+		m.applySpaceOption()
+		cogAct := m.applyCogOption()
 		if st.Found != nil {
 			m.found = st.Found
 			switch {
@@ -1034,6 +1118,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.used = *st.Used
 		}
 		m.homeAll = lists{queue: st.Queue, recs: st.Recommendations, sessions: st.Sessions, orphans: st.Orphans, children: st.Children}
+		look := m.rememberShells(m.opt.Host, st.Sessions)
 		if from := m.whereFrom(m.opt.Host); st.Found != nil || st.Used != nil || !slices.Equal(from, m.wfrom) {
 			m.wrepos, m.wfrom = m.whereRepos(m.opt.Host), from
 		}
@@ -1077,7 +1162,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var talk tea.Cmd
 		m, talk = m.roomQueued(m.opt.Host)
 		tick := m.waitTick()
-		return m, tea.Batch(m.recv(), m.animate(), news, order, talk, feel, focus, again, started, tick)
+		return m, tea.Batch(m.recv(), m.animate(), news, order, talk, feel, focus, again, started, tick, cogAct, look)
 	case graphicsMsg:
 		return m.graphics(msg)
 	case graphicsTickMsg:
@@ -1316,6 +1401,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return next, tea.Batch(touch, cmd)
 		}
 		next, cmd := m.press(f, msg)
+		if nm, ok := next.(Model); ok {
+			cmd = tea.Batch(cmd, nm.syncDeskMode())
+			next = nm
+		}
 		return next, tea.Batch(touch, cmd)
 	}
 	return m, nil
@@ -1668,6 +1757,14 @@ func (m Model) press(f layerID, k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case layerPending:
 		next, cmd = m.pendingKey(k)
 	case layerMain:
+		if m.keySheet != nil {
+			next, cmd = m.keySheetKey(k)
+			break
+		}
+		if m.cogSheet != nil {
+			next, cmd = m.cogSheetKey(k)
+			break
+		}
 		var took bool
 		if next, cmd, took = m.sideKey(k); !took {
 			next, cmd = m.key(k)
@@ -1754,10 +1851,15 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.openStoker(), nil
 	case bkey.Matches(k, mk.Quit):
 		return m.quit()
-	case bkey.Matches(k, mk.NextTab):
-		m.setTab((m.openTab() + 1) % len(tabNames))
-	case bkey.Matches(k, mk.PrevTab):
-		m.setTab((m.openTab() + len(tabNames) - 1) % len(tabNames))
+	case bkey.Matches(k, mk.NextTab, mk.PrevTab):
+		if m.deskFrame { // the four-pane desk has no Machine tab
+			return m, nil
+		}
+		step := 1
+		if bkey.Matches(k, mk.PrevTab) {
+			step = len(tabNames) - 1
+		}
+		m.setTab((m.openTab() + step) % len(tabNames))
 	case bkey.Matches(k, mk.Search):
 		m.searching, m.filter = true, ""
 		m.refresh()

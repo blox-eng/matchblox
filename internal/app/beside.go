@@ -16,17 +16,21 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/mux"
+	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
-// Beside mode: the console's tmux window holds two panes, the list and the
-// agent beside it. The console draws the list only; tmux draws the agent.
+// Beside mode: the console's tmux window holds the list and the agent
+// beside it, and on a desk of 100 columns a header and a bar. The console
+// draws the list only; tmux draws the agent.
 
 // besideMsg is the agent pane the split opened, or why it did not.
 type besideMsg struct {
-	pane string
-	err  error
+	pane   string
+	err    error
+	notice string // first-start desk notice; "" when silent
+	framed bool   // the four-pane frame opened or was adopted
 }
 
 // besideSizeMsg is the window's size, as the window changed.
@@ -46,17 +50,14 @@ func (m Model) besideCmd() tea.Cmd {
 	if !m.opt.Beside || run == nil {
 		return nil
 	}
-	console, accent := m.opt.Pane, hexOf(m.st.theme.Accent)
+	console, accent, self := m.opt.Pane, hexOf(m.st.theme.Accent), m.opt.Self
+	pocket, framed := m.onPocket(), m.deskFrame
 	return func() tea.Msg {
-		if pane := keptPane(run, console); pane != "" {
-			if _, err := run(remote.BesideArgv(console, pane, accent)[1:]...); err != nil {
-				return besideMsg{err: err}
-			}
-			return besideMsg{pane: pane}
-		}
 		w, _ := windowSize(run, console)
-		pane, err := splitBeside(mx, run, console, accent, listWide, w)
-		return besideMsg{pane: pane, err: err}
+		return openDesk(mx, run, deskOpen{
+			console: console, accent: accent, self: self,
+			listW: listWide, windowW: w, pocket: pocket, framed: framed,
+		})
 	}
 }
 
@@ -249,12 +250,22 @@ type shownMsg struct {
 	ended      bool       // focused, but the view had ended: it shows again
 }
 
+// giveKeys records that the owner gave this session the keys. The service
+// writes KeysAt; the console only sends keys:<session-id>.
+func (m *Model) giveKeys(s sample.Session) tea.Cmd {
+	m.noteGave(s)
+	if s.SessionID == "" {
+		return nil
+	}
+	return m.sendTo(s.Host, proto.Act{RecID: proto.KeysPrefix + s.SessionID})
+}
+
 // showChosen shows the session the list chooses in the agent pane.
 func (m Model) showChosen() (tea.Model, tea.Cmd) {
 	s, ok := m.sideChosen()
 	switch {
 	case ok && m.chainPlace(s) >= 0:
-		return m, m.selectPane(m.chain.panes[m.chainPlace(s)])
+		return m, tea.Batch(m.giveKeys(s), m.selectPane(m.chain.panes[m.chainPlace(s)]))
 	case !ok && m.chosenSide().waits():
 		return m, m.notice(m.noRowWhy())
 	case !ok:
@@ -264,9 +275,12 @@ func (m Model) showChosen() (tea.Model, tea.Cmd) {
 		return m, said
 	case m.besideShows == m.shownKey(s.Host, s.Pane) && !m.showing:
 		name := m.besideName(m.besideShows.host, s.Pane)
-		return m.startShow(action{label: "show " + name, beside: true, focus: true, pane: s.Pane, host: m.besideShows.host})
+		next, cmd := m.startShow(action{label: "show " + name, beside: true, focus: true, pane: s.Pane, host: m.besideShows.host})
+		return next, tea.Batch(m.giveKeys(s), cmd)
 	}
-	return m.showBeside(s.Host, s.Pane)
+	keys := m.giveKeys(s)
+	next, cmd := m.showBeside(s.Host, s.Pane)
+	return next, tea.Batch(keys, cmd)
 }
 
 // shownKey is the key m.besideShows has for host's pane.
@@ -298,6 +312,9 @@ func (m *Model) previewSoon() tea.Cmd {
 func (m Model) look(msg previewMsg) (tea.Model, tea.Cmd) {
 	s, ok := m.sideChosen()
 	host := cmp.Or(s.Host, m.opt.Host)
+	if m.reviewing != nil { // a review has the agent seat: a look never takes it
+		return m, nil
+	}
 	if msg.seq != m.previewSeq || !ok || s.Pane == "" || m.chain != nil || !m.besideMode() ||
 		m.onePaneAt(m.winW, m.winH) || m.besideShows == m.shownKey(host, s.Pane) || m.takeOverOn(host) ||
 		host != "" && !m.viewed[host] {
@@ -388,6 +405,7 @@ func (m Model) besideName(host, pane string) string {
 // startShow runs a choice in the agent pane, one at a time: a choice made
 // while one runs waits, and a later one takes its place.
 func (m Model) startShow(a action) (Model, tea.Cmd) {
+	m.reviewing = nil // the seat shows an agent view again: a review is over
 	if m.showing {
 		m.showNext = &a
 		return m, nil
@@ -499,6 +517,7 @@ func (m Model) besideRun(a action) tea.Cmd {
 		if a.preview {
 			return msg
 		}
+		writeMode(run, console, "AGENT")
 		// -Z keeps a zoom: a zoomed list hands it to the agent.
 		if _, err := run("select-pane", "-Z", "-t", msg.agent); err != nil {
 			msg.err = err
@@ -712,11 +731,15 @@ func endBeside(o Options) {
 		return
 	}
 	agent := keptPane(run, o.Pane)
+	header := liveOption(run, o.Pane, sample.HeaderOption)
+	bar := liveOption(run, o.Pane, sample.BarOption)
 	endChain(run, o.Pane, agent)
-	if agent != "" {
-		_, _ = run("kill-pane", "-t", agent)
+	for _, pane := range []string{agent, header, bar} {
+		if pane != "" {
+			_, _ = run("kill-pane", "-t", pane)
+		}
 	}
-	for _, opt := range []string{sample.BesideOption, sample.ConsoleOption} {
+	for _, opt := range []string{sample.BesideOption, sample.ConsoleOption, sample.HeaderOption, sample.BarOption, sample.ModeOption, sample.SpaceOption, sample.CogOption, sample.ReviewOption} {
 		_, _ = run("set-option", "-wu", "-t", o.Pane, opt)
 	}
 }

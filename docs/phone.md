@@ -113,8 +113,9 @@ terminal.`
   Board layout. Home is `◂`, then the keys of the chosen session
   (`1 answer`, `p merge`, `y go`), then `↑ ↓ ⏎`. The rest of the belt has
   `c copy reply` first, then `⌃o expand` and the list's keys: `s hosts`,
-  `g chain`, `/`, `m menu`, `z park`, `N new`, `⇥ machine`, `x kill`. With
-  a short card, `c copy reply` shows at rest. These keys act on
+  `g chain`, `/`, `m menu`, `z park`, `N new`, `⇥ machine`, `x kill`,
+  `?` keys, `,` machine, `t` shell and `D` diff. With a short card,
+  `c copy reply` shows at rest. These keys act on
   the chosen session while you write in its line too. A letter you type
   on the keyboard types. While the line holds text, a digit types, so the
   digits are dim, and in the line `↑ ↓` are dim too. A key that does not
@@ -423,8 +424,8 @@ n p r t u v w x y`, and with `a` and `c`. It sends no `ctrl+z`, which would
 stop the agent, and no `ctrl+s` or `ctrl+q`, which stop and start the terminal.
 
 The Console group has the console's own keys: `c copy reply`, `⌃o expand`,
-`s hosts`, `g chain`, `/`, `m menu`, `z park`, `N new`, `⇥ machine` and
-`x kill`. On Mine they act where Board's keys act: in the console. In an
+`s hosts`, `g chain`, `/`, `m menu`, `z park`, `N new`, `⇥ machine`,
+`x kill`, `?`, `,`, `t` and `D`. On Mine they act where Board's keys act: in the console. In an
 agent's pane they are dim and send nothing.
 
 #### The match head

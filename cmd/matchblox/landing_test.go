@@ -81,7 +81,7 @@ func TestTheLandingNeedsNoInstructions(t *testing.T) {
 func TestTheLandingHasAPreviewCard(t *testing.T) {
 	page := landingPage(t)
 	for _, s := range []string{
-		"<title>matchblox · a terminal console for every coding agent</title>",
+		"<title>matchblox · Every repo. Every agent. One desk.</title>",
 		`<meta property="og:title" content="`,
 		`<meta property="og:description" content="`,
 		`<meta property="og:url" content="https://matchblox.com/">`,
@@ -133,8 +133,29 @@ func TestTheChainHoverFindsTheMatchUnderThePointer(t *testing.T) {
 // account of what it shows.
 func TestTheConsoleSaysWhatItShows(t *testing.T) {
 	m := regexp.MustCompile(`class="stage" aria-label="([^"]*)"`).FindSubmatch(landingPage(t))
-	if m == nil || !bytes.Contains(m[1], []byte("NEEDS YOU")) {
+	if m == nil || !bytes.Contains(m[1], []byte("NEEDS YOU")) || !bytes.Contains(m[1], []byte("four panes")) {
 		t.Errorf("the console's label does not say what the replay shows: %q", m)
+	}
+}
+
+// TestTheLandingStillIsTheDesk: the still is the four-pane desk, composed
+// from the header, the list, the agent's own pane, and the bar — not the
+// sidebar's SESSIONS tab and drawn chat.
+func TestTheLandingStillIsTheDesk(t *testing.T) {
+	page := landingPage(t)
+	const open, closing = "<!-- replay:still -->", "<!-- /replay:still -->"
+	i, j := bytes.Index(page, []byte(open)), bytes.Index(page, []byte(closing))
+	if i < 0 || j < i {
+		t.Fatal("the page has no still frame")
+	}
+	still := page[i:j]
+	if bytes.Contains(still, []byte("SESSIONS")) && bytes.Contains(still, []byte("send to")) {
+		t.Error("the still is the sidebar chat, not the desk")
+	}
+	for _, want := range []string{"? keys", "NEEDS YOU", "Do you want to proceed"} {
+		if !bytes.Contains(still, []byte(want)) {
+			t.Errorf("the desk still lacks %q", want)
+		}
 	}
 }
 
@@ -144,7 +165,7 @@ func TestOpenTheBoxShowsItsHeading(t *testing.T) {
 	page := landingPage(t)
 	if !bytes.Contains(page, []byte(`href="#console"`)) ||
 		!bytes.Contains(page, []byte(`<section class="agents box" id="console" aria-labelledby="box-h">`)) {
-		t.Error(`"Open the box" must point at the section that holds "Every agent, one box"`)
+		t.Error(`"Open the box" must point at the section that holds the desk`)
 	}
 }
 
@@ -209,5 +230,47 @@ func TestTheChainSectionShowsTheRoom(t *testing.T) {
 		if strings.Contains(page, gone) {
 			t.Errorf("the room drawing shows %q, which the board moves onto the cards", gone)
 		}
+	}
+}
+
+// TestTheLandingNamesTheDesk: the box heading, lede and caption name the
+// four-pane desk, not the old one-box sidebar.
+func TestTheLandingNamesTheDesk(t *testing.T) {
+	page := string(landingPage(t))
+	for _, want := range []string{
+		`<h2 id="box-h">The desk</h2>`,
+		"four panes",
+		"the agent's own pane",
+		`<p class="say">Open: four panes around the agent's own.</p>`,
+		`content="One desk for every repo and every agent you run in tmux`,
+	} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the landing lacks %q", want)
+		}
+	}
+	for _, gone := range []string{
+		"Every agent, one box",
+		"All your agents in one list, with the chat beside it",
+		"Open: the list beside the chat.",
+		"a terminal console for every coding agent",
+	} {
+		if strings.Contains(page, gone) {
+			t.Errorf("the landing still says %q", gone)
+		}
+	}
+}
+
+// TestTheShareTitleIsTheHero: a shared link says what the page says. The
+// old hero line stayed in og:title when the H1 became the desk (review of
+// 2026-11-27, Important 5).
+func TestTheShareTitleIsTheHero(t *testing.T) {
+	page := landingPage(t)
+	h1 := regexp.MustCompile(`<h1[^>]*>([^<]*)</h1>`).FindSubmatch(page)
+	og := regexp.MustCompile(`<meta property="og:title" content="([^"]*)">`).FindSubmatch(page)
+	if h1 == nil || og == nil {
+		t.Fatalf("no h1 (%v) or og:title (%v)", h1 != nil, og != nil)
+	}
+	if string(h1[1]) != string(og[1]) {
+		t.Errorf("og:title %q is not the h1 %q", og[1], h1[1])
 	}
 }

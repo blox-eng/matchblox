@@ -151,8 +151,9 @@ type drawn struct {
 	// on each picks.
 	formAgentsAt int
 	formAgents   []span
-	stokerAt     span // the header's stoker word
-	warnAt       span // the header's ⚠ mark: a tap says the standing errors again
+	stokerAt     span   // the header's stoker word
+	warnAt       span   // the header's ⚠ mark: a tap says the standing errors again
+	spaces       []span // the header's repo chips; a tap filters the list
 	// sayY0, sayY1, sayX0: the toast stack's lines and its first column; a
 	// tap there ends the toasts and reaches nothing under them.
 	sayY0, sayY1, sayX0 int
@@ -191,7 +192,7 @@ func (m Model) drawScreen(w int) drawn {
 	head, waits, stokerAt, named := m.headerOf(w)
 	tabs, tabSpans := m.tabsLine(w)
 	sc := drawn{lines: []string{head, tabs, m.st.rule.Render(strings.Repeat("─", w))}, waits: waits, stokerAt: stokerAt, tabs: tabSpans,
-		bodyTop: 3, noteAt: -1, keysAt: -1, hostAt: m.boardHostHit(head), warnAt: warnHit(head)}
+		bodyTop: 3, noteAt: -1, keysAt: -1, hostAt: m.boardHostHit(head), warnAt: warnHit(head), spaces: m.spaceSpans(head, w)}
 	switch {
 	case m.hostCount() > 1 && m.shows():
 		// A blocked host of two or more is a row, never the screen.
@@ -239,7 +240,7 @@ func (m Model) drawScreen(w int) drawn {
 		}
 		sc.lines, sc.rows = append(sc.lines, line), append(sc.rows, row)
 	}
-	if !m.beltOnly() { // Pocket's belt has the keys
+	if !m.beltOnly() && (!m.deskFrame || m.frameKind != "") { // the desk's keys are the bar's
 		hair, keys, keySpans := m.keyRows(w)
 		sc.keysAt, sc.keys = len(sc.lines)+1, keySpans
 		sc.lines = append(sc.lines, hair, keys)
@@ -251,6 +252,8 @@ func (m Model) drawScreen(w int) drawn {
 		m.overlaySheet(&sc, w)
 	case m.form != nil:
 		m.overlayForm(&sc, w)
+	case m.spaceMenu != nil && m.boardShown():
+		m.overlaySpaceMenu(&sc, w)
 	case m.menu != nil && m.boardShown():
 		m.overlayMenu(&sc, w)
 	}
@@ -259,13 +262,19 @@ func (m Model) drawScreen(w int) drawn {
 		m.sideNotices(&sc, w)
 	}
 	m.overlaySaying(&sc, w, box)
+	if m.keySheet != nil { // the keys sheet covers the list; the agent pane is untouched
+		m.paintKeySheet(&sc, w)
+	}
+	if m.cogSheet != nil { // Machine covers the list; the agent pane is untouched
+		m.paintCogSheet(&sc, w)
+	}
 	return sc
 }
 
 // bodyRows is how many rows the body has under the header and over the key
 // line; on Pocket's belt, to the bottom.
 func (m Model) bodyRows() int {
-	if m.beltOnly() {
+	if m.beltOnly() || m.deskFrame && m.frameKind == "" { // no key line under the desk list
 		return max(m.height-3, 1)
 	}
 	return max(m.height-5, 1)
@@ -519,7 +528,10 @@ func (m Model) tabsLine(w int) (string, []span) {
 	for _, gap := range []string{"    ", "   ", "  "} {
 		line, spans = " ", nil
 		for i := range tabNames {
-			if i > 0 {
+			if m.deskFrame && m.frameKind == "" && i == tabMachine {
+				continue
+			}
+			if i > 0 && line != " " {
 				line += gap
 			}
 			label := m.tabLabel(i)

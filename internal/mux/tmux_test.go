@@ -515,6 +515,27 @@ func tmuxCmd(t *testing.T, server string, args ...string) string {
 	return strings.TrimSpace(string(out))
 }
 
+func TestSplitEdgeOpensAOneRowPaneAbove(t *testing.T) {
+	ownTmux(t)
+	const server = "mb-split-edge"
+	endServer(t, server)
+	tmuxCmd(t, server, "new-session", "-d", "-s", "edge", "-x", "80", "-y", "24", "sleep", "60")
+	target := tmuxCmd(t, server, "display", "-p", "-t", "edge:", "#{pane_id}")
+
+	got, err := (Tmux{Server: server}).SplitEdge(target, []string{"sleep", "60"}, "above", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, id := SplitPane(got)
+	if !strings.HasPrefix(id, "%") {
+		t.Fatalf("got %q, want a %% pane id", got)
+	}
+	h := tmuxCmd(t, server, "display", "-p", "-t", id, "#{pane_height}")
+	if h != "1" {
+		t.Fatalf("pane height = %s, want 1", h)
+	}
+}
+
 func TestSplitReturnsNewPaneID(t *testing.T) {
 	ownTmux(t)
 	const server = "mb-split"

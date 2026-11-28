@@ -88,7 +88,7 @@ func (m Model) sideTime(h sideState, s sample.Session) time.Time {
 	switch h {
 	case sideNeed:
 		return m.needSince(s)
-	case sideIdle:
+	case sideDone, sideIdle:
 		return m.lastActive(s)
 	}
 	return s.Started
@@ -337,4 +337,24 @@ func (m Model) sideWaiting() (state.MateView, chainKey, bool) {
 func (m Model) inOtherChain(o sample.Session, k chainKey) bool {
 	own, ok := m.chainKeyOf(o)
 	return ok && own != k
+}
+
+// shellWord is the row's shell tag: the word shell while a shell pane
+// matchblox opened under s is still there, else "".
+func (m Model) shellWord(s sample.Session) string {
+	if m.shells == nil {
+		return ""
+	}
+	id := m.shells[shellKey(s.Host, s.Pane)]
+	if id == "" {
+		return ""
+	}
+	// A peer's shell pane is not on this tmux. The same id here is another pane.
+	if s.Host != "" && s.Host != m.opt.Host {
+		return "shell"
+	}
+	if !m.shellLives(id) { // read on the poll: a draw asks tmux nothing
+		return ""
+	}
+	return "shell"
 }

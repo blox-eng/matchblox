@@ -296,7 +296,8 @@ func ClientActivity() time.Time {
 }
 
 // The window options of a console with an agent beside it: the console's
-// pane, the agent's pane, and the chain the agent works in.
+// pane, the agent's pane, the chain the agent works in, and on a desk the
+// header, the bar, and the mode.
 const (
 	ConsoleOption = "@matchblox_console"
 	// BackOption names, on a session the console makes to go into an
@@ -304,6 +305,26 @@ const (
 	BackOption   = "@matchblox_back"
 	BesideOption = "@matchblox_beside"
 	ChainOption  = "@matchblox_chain"
+	HeaderOption = "@matchblox_header"
+	BarOption    = "@matchblox_bar"
+	ModeOption   = "@matchblox_mode"
+	SpaceOption  = "@matchblox_space"
+	// CogOption is a one-shot act from a header or bar tap: open Machine.
+	CogOption = "@matchblox_cog"
+	// ReviewOption is the one-shot word of the review pane to the list:
+	// leave, or sent with a count. It never holds review text: a window
+	// option is readable by every process of the user. The list clears it
+	// at once.
+	ReviewOption = "@matchblox_review"
+	// ShellOption marks the shell pane matchblox opened under an agent.
+	ShellOption = "@matchblox_shell"
+	// ShellAgentOption, on that shell pane, is the agent pane t returns to.
+	ShellAgentOption = "@matchblox_agent"
+	// ShellLineOption, on that shell pane, is the divider the view draws.
+	ShellLineOption = "@matchblox_shell_line"
+	// ShellDeskOption, on that shell pane, is the console pane whose mode
+	// t writes when it returns to the agent.
+	ShellDeskOption = "@matchblox_desk"
 )
 
 // ViewOption is the session option of a view's session (a jump's, shown in

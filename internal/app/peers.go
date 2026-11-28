@@ -258,10 +258,12 @@ func (m Model) peerUpdate(pm peerMsg) (tea.Model, tea.Cmd) {
 		st.Used = cmp.Or(st.Used, p.st.Used)
 		m.noteChanges(p.host, st.Sessions, st.Chains)
 		first := !p.have
+		m.noteTurnEnds(p.host, p.st.Sessions, !first, st.Sessions)
 		p.gap = 0
 		if p.answered {
 			p.gap = m.now().Sub(p.at)
 		}
+		m.takeKeysAt(p.st.Sessions, st)
 		p.st, p.at, p.have, p.answered, p.silent = st, m.now(), true, true, false
 		if p.host == m.watchHost {
 			m.watchHeld = ""
@@ -288,11 +290,12 @@ func (m Model) peerUpdate(pm peerMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		m.merge()
+		look := m.rememberShells(p.host, st.Sessions)
 		m.settle(p.host)
 		m.keepSelection()
 		next, order := m.queuedOrder(p.host)
 		tick := next.waitTick()
-		return next, tea.Batch(next.peerRecv(i), order, tick)
+		return next, tea.Batch(next.peerRecv(i), order, tick, look)
 	case screenMsg:
 		return m.screenFrom(p.host, msg), m.peerRecv(i)
 	case copyMsg:

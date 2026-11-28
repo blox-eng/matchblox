@@ -72,8 +72,9 @@ final class BeltLayoutsTests: XCTestCase {
     func testConsoleGroup() throws {
         let console = try catalog().groups.first { $0.name == "Console" }?.keys
         XCTAssertEqual(console?.map(\.id), ["board.c", "board.ctrl+o", "board.s", "board.g", "board./",
-                                            "board.m", "board.z", "board.N", "board.tab", "board.x"])
-        XCTAssertEqual(console?.map(\.cells), [2, 2, 2, 2, 1, 2, 2, 2, 2, 2])
+                                            "board.m", "board.z", "board.N", "board.tab", "board.x",
+                                            "board.?", "board.,", "board.t", "board.D"])
+        XCTAssertEqual(console?.map(\.cells), [2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 1, 1, 1, 1])
     }
 
     func testMineKeepsHeadAndConsoleKeys() throws {

@@ -123,9 +123,11 @@ state. The code is `internal/app/match.go`.
 
 | State | Glyph | Colour | Motion | Means |
 |---|---|---|---|---|
-| burning | `✦` | `flame`, `flame-amber`, `flame-core` | flickers: a new colour each 200 ms; `✧` for one step in six | the agent works |
-| at rest, asks | `╿` | `match-head` → `match-breath-1..3` | breathes: one slow breath each 2.4 s | the agent waits for an answer or a permission |
-| at rest | `╿` | `match-head` | still | the agent finished its turn and waits |
+| works | `✦` | `flame`, `flame-amber`, `flame-core` | flickers: a new colour each 200 ms; `✧` for one step in six | the agent works |
+| asks | `╿` | `match-head` → `match-breath-1..3` | breathes: one slow breath each 2.4 s | the agent waits for an answer or a permission |
+| done | `✓` | `match-ember` | still | the last turn ended after the owner last gave the keys |
+| idle | `╵` | `faint` | still | the agent rests; the owner has given it the keys since the last turn |
+| held | `╽` | `muted` | still | parked by the owner, or held by the stoker |
 | spent | `│` | `faint` | still | the context is at or above the compact limit (`sessions.compact_tokens`, default 350k, or `sessions.compact_at`, default 85 %, whichever comes first) |
 
 Order: spent comes first. A session that works with a full context is spent.
@@ -143,7 +145,7 @@ A change of state plays once:
 Rules:
 
 1. The glyph never stands alone: the state word stays next to it
-   (`✦ busy`, `╿ asks`, `│ burnt`).
+   (`✦ busy`, `╿ asks`, `✓ done`, `╵ idle`, `╽ held`, `│ burnt`).
 2. A match means one agent session. Do not use it for anything else.
 3. The console wakes only while something moves: a burning match, a match
    that asks, or a change that still plays. Then it draws 10 times a second;
@@ -151,7 +153,8 @@ Rules:
 4. Motion comes from the clock, not from a frame count, so the same moment
    always draws the same frame (the replay depends on it).
 5. With `--no-motion` or `NO_MOTION=1`: `✦` in `flame`, `╿` in
-   `match-head`, `│` in `faint`, no change plays.
+   `match-head`, `✓` in `match-ember`, `╵` and `╽` and `│` in `faint` or
+   `muted`, no change plays.
 6. `≋` means "has a stoker": a chain's room card and the header's count
    use it, in `muted`, and in the night's ink while that chain's stoker
    runs its order. It is never a match.
@@ -197,6 +200,10 @@ terminal ticks each wheel step, at the same cap. With Reduce Motion
 the head's speckles stand still; its heat colour still shows.
 
 ## 6. Console layout
+
+> **2026-11-27, the desk:** at 100 columns or more, in the home session, and not on Pocket, the console is a four-pane desk. A header, the list, the agent's own pane, and a bar. Under 100 columns, and on Pocket, the console is today's sidebar, as [docs/console.md](docs/console.md) describes it: the list beside the chat, or one pane. It is not the board. The board is not the home. This ruling stands over the board ruling below.
+
+- **The desk** (2026-11-27): the header is one row, with the repo spaces and `● N need you`. The list draws `NEEDS YOU`, `DONE`, `WORKING`, `IDLE`, `HELD`. `DONE` is a turn that ended after the owner last gave the keys. The agent's pane is that agent's own tmux pane. `g` tiles the chain's agents in that seat. `G` opens the chain's room in the list. The header and the bar stay. The bar names the mode (`LIST`, `AGENT`, `SHELL`, `REVIEW`), the hosts, the plan and the stoker, and `? keys` at the right. `?` opens the keys over the list. `,` opens Machine over the list. `t` opens a shell under the agent. `D` reviews the change in the agent seat. `⇥` does nothing on the desk. On the sidebar it still opens Machine.
 
 > **2026-11-10, the chain room (#326):** a chain opens into a room, as
 > [docs/superpowers/specs/2026-11-07-chain-room-design.md](docs/superpowers/specs/2026-11-07-chain-room-design.md)
@@ -674,8 +681,8 @@ the head's speckles stand still; its heat colour still shows.
   each view:** only the hero's match burns; other motifs are the box, the
   drawer and the striker.
 - **The first screen:** the header; the hero, with the news line ("New ·
-  <what is new> · Changelog →", to `CHANGELOG.md`), the line ("Light an
-  idea. Keep it burning."), one sentence and the install block on the left
+  <what is new> · Changelog →", to `CHANGELOG.md`), the line ("Every repo.
+  Every agent. One desk."), one sentence and the install block on the left
   and the strike canvas on the right; and at the bottom centre the invite
   to scroll: a closed matchbox whose drawer slides out, over "Open the box".
   On a phone the canvas comes first and the invite follows the install.
@@ -705,12 +712,11 @@ the head's speckles stand still; its heat colour still shows.
   the command, and Copy joined to it; under it the platform and "read the
   script first ↗". On a phone the command wraps; it is never cut.
 - **Replay:** recorded frames of the real console (`TestReplay`), drawn in
-  the site's tokens, so it follows light and dark. It shows the board on
-  the demo machine `ws-1` (#372): the console opens on the board with one
-  gold card; a digit marks flint-auth's answer and the same digit sends
-  it; its card strikes into `WORKING`; `p` and a typed `y` merge
-  ember-billing's ship; a tap hides `WORKING` and brings it back; `g`
-  narrows the board to the chain hearth, and `esc` shows all. The demo
+  the site's tokens, so it follows light and dark. It shows the list
+  beside the chat on the demo machine `ws-1`: the console opens on the
+  list, `NEEDS YOU` first; a digit marks flint-auth's answer and the same
+  digit sends it; flint-auth strikes into `WORKING`; `g` opens the chain
+  login, and `esc` shows every chain. The demo
   service runs on the demo clock. A still frame is in the HTML for no
   script and for reduced motion.
 - **Rules:** everything loads from the site itself: `script-src 'self'`,

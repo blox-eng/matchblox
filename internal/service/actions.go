@@ -118,6 +118,9 @@ func typesInto(a proto.Act) bool {
 }
 
 func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
+	if id, ok := strings.CutPrefix(a.RecID, proto.KeysPrefix); ok && a.Text == "" {
+		return s.recordKeysAt(a, id)
+	}
 	if strings.HasPrefix(a.RecID, proto.PastePrefix) && !a.Console {
 		return proto.Result{Err: noPaste} // no agent, stoker or CLI: the paste is the line's
 	}

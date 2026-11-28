@@ -39,6 +39,7 @@ type keymaps struct {
 	ask      askKeys
 	board    boardKeys
 	side     sideKeys
+	desk     deskKeys
 }
 
 type shellKeymaps struct {
@@ -162,12 +163,14 @@ func defaultKeys() keymaps {
 			Copy:   bind(ks("c"), "c", "copy the link"),
 		},
 		board: boardKeys{
-			Copy:  bind(ks("c"), "c", "copy"),
-			Chain: bind(ks("g"), "g", "chain"),
-			Room:  bind(ks("G", "shift+g"), "G", "room"), // beside the list only: g shows the chain there
-			Host:  bind(ks("s"), "s", "hosts"),
-			Menu:  bind(ks("m"), "m", "menu"),
-			Merge: bind(ks("p"), "p", "merge"),
+			Copy:      bind(ks("c"), "c", "copy"),
+			Chain:     bind(ks("g"), "g", "chain"),
+			Room:      bind(ks("G", "shift+g"), "G", "room"), // beside the list only: g shows the chain there
+			Host:      bind(ks("s"), "s", "hosts"),
+			Menu:      bind(ks("m"), "m", "menu"),
+			Merge:     bind(ks("p"), "p", "merge"),
+			SpacePrev: bind(ks("["), "[", "prev space"),
+			SpaceNext: bind(ks("]"), "]", "next space"),
 		},
 		side: sideKeys{
 			Enter:    bind(ks("enter"), "⏎", "send"),
@@ -179,6 +182,19 @@ func defaultKeys() keymaps {
 			List:     bind(ks("left"), "◂", "list"),
 			HideList: bind(ks("ctrl+l"), "ctrl+l", "list"),
 			Jump:     bind(ks("alt+1", "alt+2", "alt+3", "alt+4", "alt+5", "alt+6", "alt+7", "alt+8", "alt+9"), "⌥1-9", "jump"),
+			Flip:     bind(ks("ctrl+q"), "ctrl+q", "agent"),
+		},
+		// desk names the keys the sheet lists that no other layer owns.
+		// bindings() is the four the belt and the docs name. The shell's
+		// ctrl+d and the review's page keys stay off it.
+		desk: deskKeys{
+			Question: bind(ks("?"), "?", "keys"),
+			Cog:      bind(ks(","), ",", "machine"),
+			Shell:    bind(ks("t"), "t", "shell"),
+			Diff:     bind(ks("D", "shift+d"), "D", "diff"),
+			ShellEnd: bind(ks("ctrl+d"), "ctrl+d", "end"),
+			PageUp:   bind(ks("pgup"), "pgup", "page up"),
+			PageDown: bind(ks("pgdown"), "pgdown", "page down"),
 		},
 	}
 }
@@ -297,11 +313,11 @@ func (k askKeys) bindings() []bkey.Binding { return []bkey.Binding{k.Send, k.Can
 // boardKeys are the list's own keys, over mainKeys while the Sessions tab
 // shows: ↑ ↓ ⏎ x y esc and the rest keep their mainKeys bindings.
 type boardKeys struct {
-	Copy, Chain, Room, Host, Menu, Merge bkey.Binding
+	Copy, Chain, Room, Host, Menu, Merge, SpacePrev, SpaceNext bkey.Binding
 }
 
 func (k boardKeys) bindings() []bkey.Binding {
-	return []bkey.Binding{k.Copy, k.Chain, k.Room, k.Host, k.Menu, k.Merge}
+	return []bkey.Binding{k.Copy, k.Chain, k.Room, k.Host, k.Menu, k.Merge, k.SpacePrev, k.SpaceNext}
 }
 
 // sideKeys are the chat's line and the list beside it. In the line every
@@ -310,10 +326,19 @@ func (k boardKeys) bindings() []bkey.Binding {
 // the chosen session. List comes back to the list from a chat that has the
 // screen; HideList hides or shows the list, from either place. Jump
 // chooses the session with that number on the chosen session's host.
-type sideKeys struct{ Enter, Erase, Leave, Up, Down, Unhide, List, HideList, Jump bkey.Binding }
+type sideKeys struct{ Enter, Erase, Leave, Up, Down, Unhide, List, HideList, Jump, Flip bkey.Binding }
+
+// deskKeys are the desk keys no other layer owns: ? opens the keys sheet,
+// , opens Machine, t asks for the shell, D is the diff, and ctrl+d
+// belongs to the shell.
+type deskKeys struct{ Question, Cog, Shell, Diff, ShellEnd, PageUp, PageDown bkey.Binding }
+
+func (k deskKeys) bindings() []bkey.Binding {
+	return []bkey.Binding{k.Question, k.Cog, k.Shell, k.Diff}
+}
 
 func (k sideKeys) bindings() []bkey.Binding {
-	return []bkey.Binding{k.Enter, k.Erase, k.Leave, k.Up, k.Down, k.Unhide, k.List, k.HideList, k.Jump}
+	return []bkey.Binding{k.Enter, k.Erase, k.Leave, k.Up, k.Down, k.Unhide, k.List, k.HideList, k.Jump, k.Flip}
 }
 
 // shellKeys are the Hosts list. Update and Dismiss act on a host on

@@ -217,7 +217,7 @@ func onPane(t *testing.T, m Model, pane string) Model {
 func keyActs(f *fakeConn) []proto.Act {
 	var out []proto.Act
 	for _, a := range f.acts() {
-		if strings.HasPrefix(a.RecID, proto.KeysPrefix) {
+		if strings.HasPrefix(a.RecID, proto.KeysPrefix) && a.Text != "" {
 			out = append(out, a)
 		}
 	}

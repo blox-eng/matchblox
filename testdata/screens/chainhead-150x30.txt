@@ -2,19 +2,19 @@
  SESSIONS 6    machine
 ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  NEEDS YOU · 1  −                       │ kindle-web ✻ asks                                                           ctx 56%  ctrl+o expand · m menu
- ≋ hearth               step 1 of 3 · 3 │ chain hearth · step 1 of 3   kindle-web needs you → hearth-api works → ember-billing idle
+ ≋ hearth               step 1 of 3 · 3 │ chain hearth · step 1 of 3   kindle-web needs you → hearth-api works → ember-billing done
 ▌  ├ ╿ kindle-web                   1m ✻│
    │   Do you want to proceed?          │
    ├ ✦ hearth-api                      ✻│
-   └ ╵ ember-billing                3m ✻│
+   └ ✓ ember-billing                3m ✻│
+       said The invoice export is done …│
+────────────────────────────────────────│
+ DONE · 1  −                            │
+   │ spark-docs                     9m ✻│
+     said I rewrote the quick start and…│
 ────────────────────────────────────────│
  WORKING · 1  −                         │
    ✦ flint-auth                        ✻│
-────────────────────────────────────────│
- IDLE · 1  −                            │
-   ╵ spark-docs                     9m ✻│
-                                        │
-                                        │
                                         │
                                         │
                                         │

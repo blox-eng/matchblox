@@ -168,6 +168,8 @@ func (m Model) chainWord(u sideUnit, j int) string {
 	switch m.sideStateOf(u.members[j]) {
 	case sideNeed:
 		return "needs you"
+	case sideDone:
+		return "done"
 	case sideWork:
 		return "works"
 	case sideHeld:

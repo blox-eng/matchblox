@@ -83,8 +83,11 @@ func TestEmptyGroupHasNoEntry(t *testing.T) {
 	if _, ok := groupOfState(gs, sideNeed); ok {
 		t.Fatalf("NEEDS YOU has an entry with no session that needs you: %v", gs)
 	}
-	if g, ok := groupOfState(gs, sideIdle); !ok || g.count != 1 {
-		t.Fatalf("IDLE %v, want one session", gs)
+	if g, ok := groupOfState(gs, sideDone); !ok || g.count != 1 {
+		t.Fatalf("DONE %v, want one session", g)
+	}
+	if _, ok := groupOfState(gs, sideIdle); ok {
+		t.Fatalf("IDLE has an entry for a quiet turn: %v", gs)
 	}
 }
 
@@ -120,9 +123,9 @@ func TestChainMovesWhenItsWaitIsAnswered(t *testing.T) {
 	if _, ok := groupOfState(gs, sideNeed); ok {
 		t.Fatalf("NEEDS YOU still has an entry: %+v", gs)
 	}
-	work, ok := groupOfState(gs, sideWork)
-	if !ok || len(work.units) != 1 || work.count != 2 {
-		t.Fatalf("WORKING %+v, want the chain as one unit and a count of 2", work)
+	done, ok := groupOfState(gs, sideDone)
+	if !ok || len(done.units) != 1 || done.count != 1 {
+		t.Fatalf("DONE %+v, want the chain as one unit and kindle-web counted", done)
 	}
 }
 

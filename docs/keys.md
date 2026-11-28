@@ -34,8 +34,9 @@ the line empty and a question on the screen; else it types.
 | `Backspace` | In the drawn chat, erases the last character of the line. |
 | A digit, 1 to 9 | With the line empty, marks that option of the question on the screen. The same digit again sends it. A question that opened less than half a second ago takes no digit: the digit types. On a session the stoker holds, 1 marks "Let it go", and 1 again lets it go. |
 | `↑`, `↓` | With the line empty, or in the list, chooses the session above or below, as the list draws them. In the list, `↓` past the last row chooses the parts of the foot one by one, and `↑` goes back up. `Enter` opens the chosen part. |
-| `Esc` | Closes the menu. In the line, clears a marked answer, then moves the keys to the list. In the list, clears the search, then closes the chain view beside the list, then closes the chain's room, then shows all chains. It never leaves the console, except on a host that has not answered yet: then it goes back to Hosts. `Ctrl+M`, prefix `m` and the phone's back button do the same in the console. On a phone, `Esc` then a quick letter types the letter in the line. |
+| `Esc` | Closes the menu. In the line, clears a marked answer, then moves the keys to the list. In the list, clears the search, then the space, then closes the chain view beside the list, then closes the chain's room, then shows all chains. It never leaves the console, except on a host that has not answered yet: then it goes back to Hosts. `Ctrl+M`, prefix `m` and the phone's back button do the same in the console. On a phone, `Esc` then a quick letter types the letter in the line. |
 | `s` | In the list, shows the next host, then all hosts. It goes to each host, a hidden host too. With one host shown, all hosts is that host, so `s` goes from host to host. With one host only, a notice says so. |
+| `[`, `]` | In the list, previous and next repo space. `Esc` shows all. |
 | `h` | In the list, on a hidden host, shows that host in all hosts again. Machine › Hosts then ticks the host. On another host, a notice says what `h` does. |
 | `g` | In the list, shows only the chain of the chosen session: its room. `Esc` shows all. With the agent beside the list, `g` instead shows up to 4 of the chain's agents side by side, each in its own pane, and the list marks them `▸`. `g` again, or `Esc`, shows one agent again: the chosen row's. |
 | `G` | With the agent beside the list, opens the room of the chosen session's chain, as `g` does without it. |
@@ -67,11 +68,11 @@ the line empty and a question on the screen; else it types.
 ### The agent beside the list
 
 On a desk, the console runs inside tmux in its home session `matchblox`.
-There the console's window has two panes: the list, and the agent's own
-pane. The right pane is a live view of the agent's pane, so typing there is
-typing into the agent: its `/commands`, `@files`, `Esc`, menus, and the
-mouse wheel for scroll and copy. The list is 40 columns wide, or 32 on a
-mid, tall screen.
+Under 100 columns, the window has two panes: the list, and the agent's own
+pane. At 100 columns or more, it is [four panes](#the-desk). The right pane
+is a live view of the agent's pane, so typing there is typing into the
+agent: its `/commands`, `@files`, `Esc`, menus, and the mouse wheel for
+scroll and copy. The list is 40 columns wide, or 32 on a mid, tall screen.
 
 | Key | What it does |
 |---|---|
@@ -79,6 +80,7 @@ mid, tall screen.
 | A click on a row | Chooses the row and shows its agent on the right at once. The keys stay in the list, so `↑` and `↓` go on choosing. From the agent's pane, a click on the list takes the keys back to the list. A click on the agent's pane gives it the keys. |
 | `↑`, `↓` | Choose the next row. When the choice rests, the right side shows that agent, and the keys stay in the list. A peer's rows show after you let one of its agents show in this run; on a host the stoker drives, and on one pane at a time, only `Enter` shows. |
 | `Ctrl+O` | Still goes fully into the agent, as before. |
+| `ctrl+q` | Flips the keys between the list and the agent's pane. |
 
 tmux takes these chords, not the console, so they are in a table of their
 own:
@@ -104,6 +106,23 @@ to the list. The phone has a console of its own, sized to the phone: a
 choice on the phone moves no other screen, and no screen changes the
 phone's size.
 
+### The desk
+
+At 100 columns or more, in the home session, and not on Pocket, the
+window is four panes: a header, the list, the agent's pane, and a bar.
+The bar names the mode, the hosts, the plan and the stoker, and `? keys`
+at the right. Under 100 columns, and on Pocket, the sidebar stays, and
+`⇥` still opens Machine. On the desk, `⇥` does nothing.
+
+| Key | What it does |
+|---|---|
+| `?` | Opens the keys over the list. The agent's pane stays. |
+| `,` | Opens Machine over the list. In the agent's pane, `,` types. |
+| `t` | Opens a shell under the agent, in its folder. `t` again moves to that shell. In the agent's pane, `t` types. |
+| `D` | Opens the review of the change in the agent seat. |
+| `g` | Tiles the chain's agents in the agent seat, up to four. The header and the bar stay. |
+| `G` | Opens the chain's room in the list. The header and the bar stay. |
+
 ### Each terminal, its own console
 
 `matchblox` in a terminal joins the console `matchblox` while no terminal
@@ -123,8 +142,9 @@ The drawn chat and its line stay in the demo (and the iOS demo), in a
 console with no tmux, and in a console outside its home session or started
 for a host.
 
-On a desk the list is 40 columns wide, with the chat beside it. On a
-narrower screen the list is 32 columns wide. A phone, and a screen that
+The list is 40 columns wide, 32 on a narrower screen. On the four-pane
+desk the agent sits beside it. On a sidebar, and in the demo, the chat
+sits beside it. A phone, and a screen that
 leaves the chat less than 40 columns, shows one of the two at a time:
 the list first. A tap on a row, or `Enter` in the list, opens its chat.
 A tap on a group's head folds the group: the head keeps its count, and
