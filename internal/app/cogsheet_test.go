@@ -133,14 +133,14 @@ func TestCtrlQClosesCog(t *testing.T) {
 }
 
 func TestHeaderCogOpensMachine(t *testing.T) {
-	m, tm := keysDesk(t)
+	m, _ := keysDesk(t)
 	byComma := pressOn(m, ",")
 	if byComma.cogSheet == nil {
 		t.Fatal(", did not open ⚙")
 	}
 
 	var cog string
-	m, tm = keysDesk(t)
+	m, tm := keysDesk(t)
 	m.opt.Tmux = cogTmux(tm.run, &cog)
 	h := headerWithTmux(m)
 	text := headerText(h)

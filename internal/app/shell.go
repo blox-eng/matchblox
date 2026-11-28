@@ -8,7 +8,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/blox-eng/matchblox/internal/mux"
-	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
@@ -112,7 +111,7 @@ func (m Model) shellIO(host string) (func(args ...string) (string, error), mux.M
 // peerShellArgv is ssh that runs tmux args on host, as the builder's own
 // login, and prints the tmux output.
 func peerShellArgv(host string, args []string) []string {
-	inner := append([]string{"tmux"}, args...)
+	inner := append(mux.Command(""), args...)
 	script := remote.Quote(append([]string{"/bin/sh", "-c", `PATH="` + remote.HostPath + `:$PATH"; export PATH; exec "$@"`, "sh"}, inner...))
 	argv := append([]string{"ssh", "-T", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8"}, remote.NoForward()...)
 	return append(argv, "--", host, script)
@@ -279,12 +278,21 @@ func markShell(run func(args ...string) (string, error), shell, agent, console, 
 	if _, err := run("set-hook", "-w", "-t", agent, "pane-exited", hook); err != nil {
 		return err
 	}
-	step := panes.ShellFlipArgv(table, console != "")
+	step := shellFlipArgv(table, console != "")
 	if len(step) > 0 && step[0] == "tmux" {
 		step = step[1:]
 	}
 	_, err := run(step...)
 	return err
+}
+
+// shellFlipArgv binds t on the shell's key table: t focuses the agent pane.
+func shellFlipArgv(table string, writeDesk bool) []string {
+	act := "run-shell -C 'select-pane -t #{" + sample.ShellAgentOption + "}'"
+	if writeDesk {
+		act = "run-shell -C 'select-pane -t #{" + sample.ShellAgentOption + "} ; set-option -w -t #{" + sample.ShellDeskOption + "} " + sample.ModeOption + " AGENT'"
+	}
+	return append(mux.Command(""), "bind-key", "-T", table, "t", "if-shell", "-F", "#{"+sample.ShellOption+"}", act, "send-keys -l t")
 }
 
 // focusShell makes the shell the active pane of its window. select-pane

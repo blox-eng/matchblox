@@ -82,3 +82,41 @@ func TestCtrlQReachesTheReviewPane(t *testing.T) {
 		})
 	}
 }
+
+// TestDiffEscapeDoesNotSetTmuxTitle: a terminal that reads the review's
+// bytes keeps its title. The control pane gets the same bytes raw, so this
+// check can fail.
+func TestDiffEscapeDoesNotSetTmuxTitle(t *testing.T) {
+	repo := reviewRepo(t)
+	reviewWrite(t, repo, "esc.txt", "\033]0;pwned\007 hello\n\033[2Jx\n\u009bbad\n")
+	reviewGitIn(t, repo, "add", ".")
+	reviewGitIn(t, repo, "commit", "-q", "-m", "esc")
+	d := newReviewDesk(t, repo, "main")
+	d.choose(t, "ux-pass")
+	d.press(t, "D")
+	f := frameKey(t, d.frame(t), "]", "]") // a.go, b.go, esc.txt
+	raw := f.View().Content
+
+	sock := tmuxtest.Server(t)
+	tm := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command("tmux", append([]string{"-L", sock}, args...)...) //nolint:gosec // a test's own server
+		cmd.Env = noTmuxEnv()
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("tmux %q: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	dir := t.TempDir()
+	reviewWrite(t, dir, "view", raw)
+	reviewWrite(t, dir, "raw", "\033]0;pwned\007")
+	tm("-f", "/dev/null", "new-session", "-d", "-s", "t", "-x", "100", "-y", "30", "sleep", "600")
+	shown := tm("split-window", "-d", "-t", "t", "-P", "-F", "#{pane_id}", "cat "+filepath.Join(dir, "view")+"; sleep 600")
+	control := tm("split-window", "-d", "-t", "t", "-P", "-F", "#{pane_id}", "cat "+filepath.Join(dir, "raw")+"; sleep 600")
+	waitTMUX(t, func() bool { return tm("display", "-p", "-t", control, "#{pane_title}") == "pwned" })
+	waitTMUX(t, func() bool { return strings.Contains(tm("capture-pane", "-p", "-S", "-", "-t", shown), "pwned") })
+	if title := tm("display", "-p", "-t", shown, "#{pane_title}"); title == "pwned" {
+		t.Fatalf("the review's bytes set the terminal title to %q", title)
+	}
+}

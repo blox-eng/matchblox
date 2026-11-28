@@ -240,7 +240,7 @@ func (m Model) drawScreen(w int) drawn {
 		}
 		sc.lines, sc.rows = append(sc.lines, line), append(sc.rows, row)
 	}
-	if !m.beltOnly() && !(m.deskFrame && m.frameKind == "") { // the desk's keys are the bar's
+	if !m.beltOnly() && (!m.deskFrame || m.frameKind != "") { // the desk's keys are the bar's
 		hair, keys, keySpans := m.keyRows(w)
 		sc.keysAt, sc.keys = len(sc.lines)+1, keySpans
 		sc.lines = append(sc.lines, hair, keys)

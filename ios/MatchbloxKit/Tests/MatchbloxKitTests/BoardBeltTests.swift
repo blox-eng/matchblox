@@ -220,6 +220,7 @@ final class BoardBeltTests: XCTestCase {
             "board.y": tap("y"), "board.c": tap("c"), "board.m": tap("m"), "board.g": tap("g"),
             "board.s": tap("s"), "board./": tap("/"), "board.z": tap("z"), "board.N": tap("N"),
             "board.x": tap("x"), "board.tab": [0x09], "board.ctrl+o": [0x0f],
+            "board.?": tap("?"), "board.,": tap(","), "board.t": tap("t"), "board.D": tap("D"),
             "board.runs": Array("y".utf8), "board.cancels": [esc], "board.do": [0x0d], "board.close": [esc],
             "↑": [esc, 0x5b, 0x41], "↓": [esc, 0x5b, 0x42], "⏎": [0x0d], "◂": HomeKey.bytes,
         ]

@@ -83,32 +83,32 @@ func tapHeader(t *testing.T, h frameModel, list Model, sub string) Model {
 // TestSpaceChipsDrawInHeaderPane: the header pane, not the list, draws
 // the space chips and the wait count.
 func TestSpaceChipsDrawInHeaderPane(t *testing.T) {
-	m := spaceDesk(t, 160, spaceWait("ledge", "ledge", ""), spaceWait("matchblox", "matchblox", ""), spaceWait("base", "base", ""))
+	m := spaceDesk(t, 160, spaceWait("docs", "docs", ""), spaceWait("matchblox", "matchblox", ""), spaceWait("api", "api", ""))
 	got := headerText(headerPane(m))
-	if !strings.Contains(got, "ledge ●1") || !strings.Contains(got, "● 3 need you") {
-		t.Fatalf("header pane %q, want ledge ●1 and ● 3 need you", got)
+	if !strings.Contains(got, "docs ●1") || !strings.Contains(got, "● 3 need you") {
+		t.Fatalf("header pane %q, want docs ●1 and ● 3 need you", got)
 	}
-	if head := spaceHead(m); strings.Contains(head, "ledge ●1") || strings.Contains(head, "all ·") {
+	if head := spaceHead(m); strings.Contains(head, "docs ●1") || strings.Contains(head, "all ·") {
 		t.Fatalf("list stole the header line: %q", head)
 	}
 }
 
-// TestSpaceFilterKeepsNeedYouCount: three repos, waits on ledge, matchblox
-// and base; a tap on ledge ●1 names only ledge in the list, and the header
+// TestSpaceFilterKeepsNeedYouCount: three repos, waits on docs, matchblox
+// and api; a tap on docs ●1 names only docs in the list, and the header
 // still counts every wait.
 func TestSpaceFilterKeepsNeedYouCount(t *testing.T) {
-	m := spaceDesk(t, 160, spaceWait("ledge", "ledge", ""), spaceWait("matchblox", "matchblox", ""), spaceWait("base", "base", ""))
+	m := spaceDesk(t, 160, spaceWait("docs", "docs", ""), spaceWait("matchblox", "matchblox", ""), spaceWait("api", "api", ""))
 	h := headerPane(m)
 	head := headerText(h)
-	if !strings.Contains(head, "ledge ●1") || !strings.Contains(head, "● 3 need you") {
-		t.Fatalf("header pane %q, want ledge ●1 and ● 3 need you", head)
+	if !strings.Contains(head, "docs ●1") || !strings.Contains(head, "● 3 need you") {
+		t.Fatalf("header pane %q, want docs ●1 and ● 3 need you", head)
 	}
-	m = tapHeader(t, h, m, "ledge ●1")
-	if m.space != "ledge" {
-		t.Fatalf("space %q, want ledge", m.space)
+	m = tapHeader(t, h, m, "docs ●1")
+	if m.space != "docs" {
+		t.Fatalf("space %q, want docs", m.space)
 	}
-	if got := drawnNames(m); !slices.Equal(got, []string{"ledge"}) {
-		t.Fatalf("list names %v, want only ledge", got)
+	if got := drawnNames(m); !slices.Equal(got, []string{"docs"}) {
+		t.Fatalf("list names %v, want only docs", got)
 	}
 	body := ansi.Strip(m.render())
 	if strings.Contains(body, "NEEDS YOU · 3") {
@@ -125,7 +125,7 @@ func TestSpaceFilterKeepsNeedYouCount(t *testing.T) {
 // TestSpaceCountIgnoresDone: a session that does not need you (idle, no
 // ask) in matchblox does not add to matchblox ●N.
 func TestSpaceCountIgnoresDone(t *testing.T) {
-	m := spaceDesk(t, 160, spaceWait("asks", "matchblox", ""), spaceIdle("quiet", "matchblox"), spaceWait("ledge", "ledge", ""))
+	m := spaceDesk(t, 160, spaceWait("asks", "matchblox", ""), spaceIdle("quiet", "matchblox"), spaceWait("docs", "docs", ""))
 	head := headerText(headerPane(m))
 	if !strings.Contains(head, "matchblox ●1") {
 		t.Fatalf("header pane %q, want matchblox ●1 (the idle session is not a wait)", head)
@@ -264,17 +264,17 @@ func menuAt(m Model) int {
 }
 
 func TestSpaceEmptyShowsAllCopy(t *testing.T) {
-	m := spaceDesk(t, 160, spaceWait("base", "base", ""), spaceWait("ledge", "ledge", "gpu-1"))
-	m.space, m.boardHost = "base", "gpu-1"
+	m := spaceDesk(t, 160, spaceWait("api", "api", ""), spaceWait("docs", "docs", "gpu-1"))
+	m.space, m.boardHost = "api", "gpu-1"
 	got := ansi.Strip(m.render())
-	if want := "Nothing in base on gpu-1. esc shows all."; !strings.Contains(got, want) {
+	if want := "Nothing in api on gpu-1. esc shows all."; !strings.Contains(got, want) {
 		t.Fatalf("empty copy:\n%s\nwant %q", got, want)
 	}
 }
 
 func TestSpaceLivesOnModelAndWindowOption(t *testing.T) {
 	var calls [][]string
-	m := boardShot(t, boardState(spaceWait("ledge", "ledge", ""), spaceWait("base", "base", "")), 160, 34, func(m *Model) {
+	m := boardShot(t, boardState(spaceWait("docs", "docs", ""), spaceWait("api", "api", "")), 160, 34, func(m *Model) {
 		m.deskFrame = true
 		m.opt.Pane = "%1"
 		m.opt.Tmux = func(args ...string) (string, error) {
@@ -282,52 +282,52 @@ func TestSpaceLivesOnModelAndWindowOption(t *testing.T) {
 			return "\n", nil
 		}
 	})
-	m = tapHeader(t, headerPane(m), m, "ledge ●1")
-	if m.space != "ledge" {
-		t.Fatalf("space %q, want ledge on the list Model", m.space)
+	m = tapHeader(t, headerPane(m), m, "docs ●1")
+	if m.space != "docs" {
+		t.Fatalf("space %q, want docs on the list Model", m.space)
 	}
 	if hasField(m.snap, "Space") || hasField(proto.State{}, "Space") {
 		t.Fatal("space must not be a snapshot field")
 	}
-	want := []string{"set-option", "-w", "-t", "%1", sample.SpaceOption, "ledge"}
+	want := []string{"set-option", "-w", "-t", "%1", sample.SpaceOption, "docs"}
 	if !slices.ContainsFunc(calls, func(c []string) bool { return slices.Equal(c, want) }) {
 		t.Fatalf("tmux calls %v, want %v", calls, want)
 	}
 }
 
 func TestSpaceBracketsCycleFromList(t *testing.T) {
-	m := spaceDesk(t, 160, spaceWait("ledge", "ledge", ""), spaceWait("matchblox", "matchblox", ""), spaceWait("base", "base", ""))
+	m := spaceDesk(t, 160, spaceWait("docs", "docs", ""), spaceWait("matchblox", "matchblox", ""), spaceWait("api", "api", ""))
 	m = pressOn(m, "]")
-	if m.space != "base" {
-		t.Fatalf("] from all goes to %q, want base", m.space)
+	if m.space != "api" {
+		t.Fatalf("] from all goes to %q, want api", m.space)
 	}
 	m = pressOn(m, "]")
-	if m.space != "ledge" {
-		t.Fatalf("] goes to %q, want ledge", m.space)
+	if m.space != "docs" {
+		t.Fatalf("] goes to %q, want docs", m.space)
 	}
 	m = pressOn(m, "[")
-	if m.space != "base" {
-		t.Fatalf("[ goes to %q, want base", m.space)
+	if m.space != "api" {
+		t.Fatalf("[ goes to %q, want api", m.space)
 	}
 }
 
 func TestSpaceOneRepoHasNoChips(t *testing.T) {
-	m := spaceDesk(t, 160, spaceWait("ledge", "ledge", ""))
+	m := spaceDesk(t, 160, spaceWait("docs", "docs", ""))
 	head := headerText(headerPane(m))
-	if strings.Contains(head, "all ·") || strings.Contains(head, "ledge ●") {
+	if strings.Contains(head, "all ·") || strings.Contains(head, "docs ●") {
 		t.Fatalf("one repo still draws space chips: %q", head)
 	}
 }
 
 func TestSpaceCombinesWithHostFilter(t *testing.T) {
-	m := spaceDesk(t, 160, spaceWait("base", "base", ""), spaceWait("ledge", "ledge", "gpu-1"))
-	m.space, m.boardHost = "ledge", "gpu-1"
-	if got := drawnNames(m); !slices.Equal(got, []string{"ledge"}) {
-		t.Fatalf("space and host together: %v, want only ledge", got)
+	m := spaceDesk(t, 160, spaceWait("api", "api", ""), spaceWait("docs", "docs", "gpu-1"))
+	m.space, m.boardHost = "docs", "gpu-1"
+	if got := drawnNames(m); !slices.Equal(got, []string{"docs"}) {
+		t.Fatalf("space and host together: %v, want only docs", got)
 	}
-	m.space, m.boardHost = "base", "gpu-1"
+	m.space, m.boardHost = "api", "gpu-1"
 	if got := drawnNames(m); len(got) != 0 {
-		t.Fatalf("base on gpu-1 still lists %v", got)
+		t.Fatalf("api on gpu-1 still lists %v", got)
 	}
 }
 
@@ -344,7 +344,7 @@ func hasField(v any, name string) bool {
 }
 
 func TestSpaceAllHasNoCount(t *testing.T) {
-	m := spaceDesk(t, 160, spaceWait("ledge", "ledge", ""), spaceWait("base", "base", ""))
+	m := spaceDesk(t, 160, spaceWait("docs", "docs", ""), spaceWait("api", "api", ""))
 	head := headerText(headerPane(m))
 	if !strings.Contains(head, "all ·") {
 		t.Fatalf("header pane %q, want all with no count", head)

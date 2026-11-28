@@ -22,7 +22,7 @@ The builder opens matchblox on a desk, inside tmux, in the home session, at 100 
 They see four mux panes in one window:
 
 ```
-header   matchblox   all · matchblox ●2 · base · ledge ●1     ● 3 need you · ✓ 2 done   ⚙
+header   matchblox   all · matchblox ●2 · api · docs ●1     ● 3 need you · ✓ 2 done   ⚙
 list (40 col)     |  agent's own pane (nested tmux client of that agent's window)
 bar      LIST   ● ws-1 cpu 34% mem 61%  s▸   ✻ work 5h 62% ↻2h48m · wk 40% ↻4d   ≋ stoker   ? keys
 ```
@@ -53,7 +53,7 @@ One place has the keys at a time.
 
 One line. Left: the mark and `matchblox`. Then the spaces. Right: `● N need you · ✓ N done`, then `⚙`.
 
-A space is a repo with at least one live session: `all · matchblox ●2 · base · ledge ●1`. `●N` counts sessions that need the owner in that repo, not DONE. `all` has no count. A tap, or `[` `]` from LIST, filters the list to that repo. One repo: no space chips. Spaces that do not fit end in `+3 ▾`. A session outside git uses its folder name. Space filter and host filter (`s`) combine. Empty: `Nothing in base on gpu-1. esc shows all.`
+A space is a repo with at least one live session: `all · matchblox ●2 · api · docs ●1`. `●N` counts sessions that need the owner in that repo, not DONE. `all` has no count. A tap, or `[` `]` from LIST, filters the list to that repo. One repo: no space chips. Spaces that do not fit end in `+3 ▾`. A session outside git uses its folder name. Space filter and host filter (`s`) combine. Empty: `Nothing in api on gpu-1. esc shows all.`
 
 ### List: clearer states
 
@@ -219,7 +219,7 @@ Checked, not touched: authentication, money, uploads, webhooks, CI. The agent's 
 
 ## Done when
 
-- [ ] At 160 columns with three repos, the owner taps `ledge ●1`: the list shows only ledge; `● 3 need you` still counts every wait.
+- [ ] At 160 columns with three repos, the owner taps `docs ●1`: the list shows only docs; `● 3 need you` still counts every wait.
 - [ ] An agent goes from busy to idle with no question: its row sits in DONE, time `now`, second line `said ` and the last words. The owner presses `⏎` on it: the row moves to IDLE, and `✓ N done` drops by one.
 - [ ] A chain with one member that asks and one that finished sits whole in NEEDS YOU. `✓ N done` does not count the nested finished member.
 - [ ] With a demo busy loop on gpu-1, the bar shows `⚠ busy loop` on that chip only, and `⚙` shows `!`. A tap opens ⚙ on that loop. `esc` returns to the same row.

@@ -97,10 +97,10 @@ Before: FAIL undefined desk. After: PASS.
 **Files:** `internal/app/spaces.go`, `internal/app/desk.go`, `internal/app/frame.go`
 
 **Test first:**
-- `TestSpaceFilterKeepsNeedYouCount` — three repos, waits on ledge, matchblox, base; tap `ledge ●1`; list names only ledge; header still `● 3 need you`.
+- `TestSpaceFilterKeepsNeedYouCount` — three repos, waits on docs, matchblox, api; tap `docs ●1`; list names only docs; header still `● 3 need you`.
 - `TestSpaceCountIgnoresDone` — a DONE session in matchblox does not add to `matchblox ●N`.
 - `TestSpacesOverflowOpensMenu` — more spaces than fit; `+3 ▾` then ⏎/tap opens the rest **over the list** (header stays one row); choosing one filters.
-- Empty: `Nothing in base on gpu-1. esc shows all.`
+- Empty: `Nothing in api on gpu-1. esc shows all.`
 - Selected space lives on the list Model (`m.space`) and in window option `@matchblox_space` so the header frame reads it. It is not a snapshot field.
 
 **Run:** `go test ./internal/app -count=1 -run 'TestSpace'`

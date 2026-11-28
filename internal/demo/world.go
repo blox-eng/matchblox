@@ -127,6 +127,7 @@ func (w *World) Wire(s *service.Service) {
 	s.PeerPane = func(int) string { return "" }
 	s.WorktreeStep = func(context.Context, string, string) ([]string, string, error) { return nil, "", errRefused }
 	s.MatchGit = func(context.Context, string, ...string) (string, error) { return "", nil } // the fixture has no git to read
+	s.WorkGit = func(context.Context, string, ...string) (string, error) { return "", nil }
 }
 
 // paneMouse says every demo agent reads the mouse, so a wheel in the chat goes

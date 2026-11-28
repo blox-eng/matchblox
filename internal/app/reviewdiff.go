@@ -51,7 +51,7 @@ var reviewGit = func(host, dir string, args ...string) (string, error) {
 	cmd.Env = append(slices.DeleteFunc(os.Environ(), func(kv string) bool { return strings.HasPrefix(kv, "GIT_") }), "GIT_TERMINAL_PROMPT=0")
 	out := &capBuf{max: reviewGitMax}
 	cmd.Stdout = out
-	if err := cmd.Run(); err != nil && !(noIndex && exitOne(err)) {
+	if err := cmd.Run(); err != nil && (!noIndex || !exitOne(err)) {
 		if out.over {
 			return "", errReviewBig
 		}

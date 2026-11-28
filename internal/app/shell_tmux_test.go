@@ -176,7 +176,7 @@ func TestTSecondPressFocusesShell(t *testing.T) {
 		t.Fatal("no shell pane")
 	}
 	n := len(strings.Split(e.tmux("list-panes", "-t", "=ux-pass", "-F", "#{pane_id}"), "\n"))
-	m = pressShell(t, m)
+	pressShell(t, m)
 	got := strings.Split(e.tmux("list-panes", "-t", "=ux-pass", "-F", "#{pane_id}"), "\n")
 	if len(got) != n {
 		t.Fatalf("second t made %d panes, want %d", len(got), n)
@@ -188,7 +188,7 @@ func TestTSecondPressFocusesShell(t *testing.T) {
 
 func TestTSurvivesQuit(t *testing.T) {
 	e, m, agent, cwd := uxPass(t)
-	m = pressShell(t, m)
+	pressShell(t, m)
 	shell := e.findShell(agent)
 	if shell == "" {
 		t.Fatal("no shell pane")
