@@ -315,6 +315,22 @@ final class BoardBeltTests: XCTestCase {
         XCTAssertTrue(follow.answers(on: .board))
     }
 
+    /// Joystick carries the head, and the chat is where it answers most: the console showing the
+    /// board, at launch or back from a pane, never turns it to Board, and nothing turns it back.
+    func testJoystickStaysWhenTheConsoleShows() {
+        var follow = BoardFollow()
+        XCTAssertNil(follow.heard("1,2;;chat=%2", on: .joystick))
+        XCTAssertTrue(follow.shows)
+        XCTAssertEqual(follow.belt.chatPane, "%2")
+        XCTAssertFalse(follow.answers(on: .joystick))
+        XCTAssertNil(follow.pane(true, on: .joystick))
+        XCTAssertNil(follow.pane(false, on: .joystick))
+        XCTAssertTrue(follow.shows)
+        XCTAssertNil(follow.heard("1,2;", on: .joystick))
+        XCTAssertNil(follow.heard("", on: .joystick))
+        XCTAssertNil(follow.heard(";", on: .joystick))
+    }
+
     func testTheOwnersPickStays() {
         var follow = BoardFollow()
         XCTAssertEqual(follow.heard("1;", on: .steer), .board)

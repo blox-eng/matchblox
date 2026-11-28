@@ -399,7 +399,8 @@ next time it opens, every match is new, and the one in use burns. The
 screen does not change size while the tray is open. The app keeps the
 layout you chose, and opens on it the next time. Board follows the console:
 the app is on Board while the console shows Sessions or Machine, as
-Commands follows the agent of the pane you are in.
+Commands follows the agent of the pane you are in. Joystick stays Joystick
+while the console shows, so the head is there in the console's chat.
 
 #### Command keys
 

@@ -663,8 +663,8 @@ private final class Belts {
     }
 
     /// The console's board signal. The belts turn to Board when the console starts to show the
-    /// board and back when it leaves, and they answer each value while they show Board, also a
-    /// value they already had: the console counts the answers to know the app is Pocket.
+    /// board and back when it leaves (Joystick stays), and they answer each value while they show
+    /// Board, also a value they already had: the console counts the answers to know the app is Pocket.
     func boardSaid(_ value: String) {
         followBoard(turn: board.heard(value, on: lifted.layout))
         if !value.isEmpty { answerBoard() }

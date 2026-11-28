@@ -104,6 +104,28 @@ final class HeadTests: XCTestCase {
         XCTAssertTrue(heightBecomes(terminal, joystickHeight), "the terminal did not give the head its row back")
     }
 
+    /// With Joystick stored, the head is there on the console's list before any pick, in a pane,
+    /// and back on the list and in flint-auth's chat, where a push still moves Pocket's highlight:
+    /// the console's board never turns the belt to Board.
+    @MainActor
+    func testHeadStaysAfterAPaneTrip() {
+        let app = launched()
+        expect(in: app, "label CONTAINS %@", "NEEDS YOU")
+        waitUntilSteady(theTerminal(in: app))
+        XCTAssertTrue(becomesHittable(theHead(in: app), within: 5), "no head on the console's list. " + app.debugDescription)
+        openTheStandIn(in: app)
+        XCTAssertTrue(becomesHittable(theHead(in: app), within: 5), "no head in flint-auth's pane. " + app.debugDescription)
+        app.buttons["Back to matchblox"].firstMatch.tap()
+        expect(in: app, step: "the list after ◂", "label CONTAINS %@ AND NOT label CONTAINS %@", "NEEDS YOU", "keys go to")
+        waitUntilSteady(theTerminal(in: app))
+        XCTAssertTrue(becomesHittable(theHead(in: app), within: 5), "the head went on the way back. " + app.debugDescription)
+        openTheQuestion(in: app)
+        let head = theHead(in: app)
+        XCTAssertTrue(becomesHittable(head, within: 5), "no head in flint-auth's chat. " + app.debugDescription)
+        push(head, dy: 24)
+        expectLine(in: app, "2 of 5 · Rotate, keep")
+    }
+
     /// Surface: an agent's tools. In flint-auth's pane one push `↓` moves the agent's own `❯` to
     /// option 2, as its arrow key does, and a tap on the middle is Enter: the agent takes option 2.
     @MainActor
@@ -684,13 +706,14 @@ final class HeadTests: XCTestCase {
         if next.waitForExistence(timeout: 2) { next.tap() }
     }
 
-    /// The demo console, on Joystick: the head rides on that layout only.
+    /// The demo console, on Joystick: the head rides on that layout only. Joystick is the stored
+    /// layout before the launch, as it is for an owner who picked it last time, so the console's
+    /// board meets the head from the first frame.
     @MainActor
     private func launched(extra: [String] = [], joystick: Bool = true) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-openDemoHost", "-demoSlowInvite"] + extra
+        app.launchArguments = ["-openDemoHost", "-demoSlowInvite"] + (joystick ? ["-belt.layout", "joystick"] : []) + extra
         app.launch()
-        if joystick { pick("Joystick", in: app) }
         return app
     }
 
