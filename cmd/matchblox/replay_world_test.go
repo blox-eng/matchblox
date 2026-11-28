@@ -42,8 +42,8 @@ func TestASessionNamedLikeAWordOfTheRepoIsNoLeak(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := identifying([]string{"work", "web", "docs", "claude", "matchblox", "main", "dev-3", "Ledge Payments"}, words)
-	if want := []string{"dev-3", "Ledge Payments"}; !slices.Equal(got, want) {
+	got := identifying([]string{"work", "web", "docs", "claude", "matchblox", "main", "dev-3", "Acme Payments"}, words)
+	if want := []string{"dev-3", "Acme Payments"}; !slices.Equal(got, want) {
 		t.Fatalf("got %q, want %q", got, want)
 	}
 }
