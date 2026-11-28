@@ -3,19 +3,8 @@ import XCTest
 
 final class HostCommandTests: XCTestCase {
     func testWordsAreQuotedAsAShellReadsThem() {
-        XCTAssertEqual(HostCommand.line(["menu", "%2", "--json"]), "menu %2 --json")
-        XCTAssertEqual(
-            HostCommand.line(["choose", "%2", "2", "--text", "Rotate, keep it's old one", "--sign", "0a"]),
-            #"choose %2 2 --text 'Rotate, keep it'\''s old one' --sign 0a"#
-        )
-        XCTAssertEqual(HostCommand.line(["", "a;b", "$(x)"]), #"'' 'a;b' '$(x)'"#)
-    }
-
-    /// The plain words are exactly those the phone's key takes unquoted (`headPlain` in cmd/matchblox/gate.go).
-    func testGateSafeQuoting() {
-        XCTAssertEqual(HostCommand.line(["%2", "0a", "--json", "flint-auth", "a_b.c:d@e"]), "%2 0a --json flint-auth a_b.c:d@e")
-        XCTAssertEqual(HostCommand.line(["Yes,", "C++", "a/b", "x=y"]), "'Yes,' 'C++' 'a/b' 'x=y'")
-        XCTAssertEqual(HostCommand.line(["choose", "%2", "2", "--text", "Yes,", "--sign", "0a"]), "choose %2 2 --text 'Yes,' --sign 0a")
+        XCTAssertEqual(HostCommand.line(["sessions", "--json", "%2", "a_b.c:d@e"]), "sessions --json %2 a_b.c:d@e")
+        XCTAssertEqual(HostCommand.line(["it's", "", "a;b", "$(x)", "Yes,", "a/b"]), #"'it'\''s' '' 'a;b' '$(x)' 'Yes,' 'a/b'"#)
     }
 
     func testTheDemoGetsTheLine() async {

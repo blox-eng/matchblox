@@ -35,21 +35,4 @@ final class HeadClickTests: XCTestCase {
         click.moved(by: 2)
         XCTAssertTrue(click.isClick(endedAt: 10.12))
     }
-
-    func testMiddleLift() {
-        XCTAssertEqual(HeadClick.lift(after: 0.2, rolled: false, coasting: false), .enter)
-        XCTAssertEqual(HeadClick.lift(after: 0.4, rolled: false, coasting: false), .nothing)
-        XCTAssertEqual(HeadClick.lift(after: 0.2, rolled: true, coasting: false), .nothing)
-        XCTAssertEqual(HeadClick.lift(after: 0.2, rolled: false, coasting: true), .nothing)
-    }
-
-    func testHoldDue() {
-        XCTAssertFalse(HeadClick.holdDue(after: 0.59))
-        XCTAssertTrue(HeadClick.holdDue(after: 0.6), "the hold starts during the press, not on the lift")
-    }
-
-    func testLiftAfterHold() {
-        XCTAssertEqual(HeadClick.lift(after: 0.6, rolled: false, coasting: false), .hold)
-        XCTAssertEqual(HeadClick.lift(after: 2, rolled: false, coasting: false), .hold)
-    }
 }

@@ -24,9 +24,10 @@ final class DockHeadView: UIView {
     private static let cardPace = 3
     private static let cardStays: Duration = .seconds(HeadMotion.cardStays)
     private static let enter = KeyBar.bytes(for: "⏎") ?? [0x0d]
-    /// The hold's ring starts to fill this long into a still press, and is full at `HeadClick.hold`.
+    /// The hold's ring starts to fill this long into a still press, and is full when the stick's
+    /// hold begins (`HeadStick.holdAfter`).
     private static let ringFrom: TimeInterval = 0.15
-    private static let ringFills: TimeInterval = HeadClick.hold - ringFrom
+    private static let ringFills: TimeInterval = HeadStick.holdAfter - ringFrom
     private static let sessionsKey = "⇄"
 
     /// The agent's pane the console shows: the pane the app jumped into, or the pane of the

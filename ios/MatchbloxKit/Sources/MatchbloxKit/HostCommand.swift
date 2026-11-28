@@ -52,8 +52,8 @@ public struct HostCommand: Sendable {
         await run(Self.line(words))
     }
 
-    /// The words as a shell reads them: a word of plain characters as it is, any other in single quotes. The
-    /// plain characters are those the phone's key takes unquoted.
+    /// The words as a shell reads them: a word of plain characters as it is, any other in single
+    /// quotes, so the shell reads each word back whole.
     static func line(_ words: [String]) -> String {
         words.map { quoted($0) }.joined(separator: " ")
     }

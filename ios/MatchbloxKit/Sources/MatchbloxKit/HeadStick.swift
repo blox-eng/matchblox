@@ -23,7 +23,7 @@ public struct HeadStick: Sendable {
     static let tapUnder: TimeInterval = 0.35
     static let repeatAfter: TimeInterval = 0.42
     static let repeatEvery: TimeInterval = 0.11
-    static let holdAfter: TimeInterval = 0.6
+    public static let holdAfter: TimeInterval = 0.6
     static let wordAfter = 9
 
     /// Where the head sits, the thumb's travel clamped to 12 pt along it.
