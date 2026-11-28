@@ -131,3 +131,21 @@ func TestAfterAConsoleQuitsAWriteReturnsAndAStartWorks(t *testing.T) {
 	again, _ := drawn()
 	again.waitFor(t, "flint-auth")
 }
+
+// TestDemoRun: MBDemoRun answers Pocket's commands from the demo that is
+// on, and nothing else.
+func TestDemoRun(t *testing.T) {
+	if out, status := command("sessions --json"); status != 1 || out != "the demo is not on" {
+		t.Fatalf("with no demo: %d %q", status, out)
+	}
+	startDemo(t)
+	if out, status := command("sessions --json"); status != 0 || !strings.Contains(out, `"pane": "%2"`) {
+		t.Fatalf("sessions: %d %q", status, out)
+	}
+	if out, status := command("menu %2 --json"); status != 0 || !strings.Contains(out, `"sign": "`) {
+		t.Fatalf("menu: %d %q", status, out)
+	}
+	if out, status := command("rm -rf /"); status != 1 || out != "not a demo command" {
+		t.Fatalf("rm: %d %q", status, out)
+	}
+}

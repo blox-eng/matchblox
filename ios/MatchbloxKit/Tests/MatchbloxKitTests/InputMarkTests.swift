@@ -27,8 +27,10 @@ final class InputMarkTests: XCTestCase {
         p.marked(at: t0)
         p.signal(ConsoleSignal("claude;pane=%12"), at: t0 + .milliseconds(200))
         XCTAssertEqual(p.agent, "claude")
+        XCTAssertEqual(p.pane, "%12", "the head reads its menu from the jump's pane")
         p.left()
         XCTAssertNil(p.agent)
+        XCTAssertNil(p.pane)
     }
 
     /// T15: no mark of ours came before the other screen's jump.

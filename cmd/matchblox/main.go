@@ -110,6 +110,9 @@ func main() {
 		if errors.Is(err, errRestart) {
 			os.Exit(exitRestart)
 		}
+		if errors.Is(err, errQuestionChanged) {
+			os.Exit(exitQuestionChanged)
+		}
 		if errors.Is(err, errShown) {
 			os.Exit(1)
 		}
@@ -158,6 +161,8 @@ func run(args []string) error {
 			return pushCmd(args[1:])
 		case "connect":
 			return liveConnect(args[1:])
+		case "menu", "choose":
+			return pocketCmd(args[0], args[1:], os.Stdout, transport.SocketPath())
 		}
 	}
 	if len(args) > 0 && args[0] == "guard" {
@@ -375,7 +380,7 @@ func askpassMain(prompt string) error {
 
 // commands are the commands a builder types. hook, authorize and gate run
 // from a hook, an ssh forced command and a connect.
-var commands = []string{"connect", "serve", "sessions", "ships", "agents", "status", "setup", "pair", "devices", "usage", "update", "version", "send", "compact", "hold", "release", "stoker", "peek", "new", "rename", "kill", "merge", "switch", "scan", "recover", "chain", "unchain"}
+var commands = []string{"connect", "serve", "sessions", "ships", "agents", "status", "setup", "pair", "devices", "usage", "update", "version", "send", "compact", "hold", "release", "stoker", "peek", "menu", "choose", "new", "rename", "kill", "merge", "switch", "scan", "recover", "chain", "unchain"}
 
 type flags struct {
 	cfgPath, root         *string
@@ -423,6 +428,8 @@ Commands:
   matchblox agents explain <who>   which screen rule read a session, to report it (--file, --json)
   matchblox peek <who>             what a session said last and what it asks (--lines, --json)
   matchblox send <who> "<text>"    type a line and Enter into a session (--pick n answers its question)
+  matchblox menu <who> --json      the question on a session's screen: its options and its sign
+  matchblox choose <who> <n>       answer it, only while the screen still shows it (--text, --sign)
   matchblox compact <who>          compact a Claude Code session at rest
   matchblox hold <who> --why "…"   finish this step, then stop and wait
   matchblox release <who>          let a held session carry on

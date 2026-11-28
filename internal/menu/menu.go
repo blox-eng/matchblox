@@ -15,7 +15,7 @@ import (
 
 // optionLine is a line of a menu: its mark or blanks, the option's number,
 // and its text.
-var optionLine = regexp.MustCompile(`^\s*[›❯>]?\s*(\d+)\.\s+(.*?)\s*$`)
+var optionLine = regexp.MustCompile(`^\s*([›❯>])?\s*(\d+)\.\s+(.*?)\s*$`)
 
 // hintLine is the keys line under a menu ("Enter to select · … · Esc to
 // cancel").
@@ -29,8 +29,15 @@ var hintLine = regexp.MustCompile(`(?i)\bto (select|navigate|cancel)\b`)
 // reply has other text under it, or the agent's empty input, which a menu
 // takes the place of.
 func Read(screen string) map[int]string {
-	menu, _ := read(screen)
+	menu, _, _ := read(screen)
 	return menu
+}
+
+// Chosen is the number of the option the menu at the foot of screen
+// marks; 0 when there is no menu or no option is marked.
+func Chosen(screen string) int {
+	_, _, chosen := read(screen)
+	return chosen
 }
 
 // signLines is how many lines above a menu its signature holds: the
@@ -42,7 +49,7 @@ const signLines = 12
 // taken off. Two prompts with the same options for two commands sign
 // apart. "" when there is no menu.
 func Sign(screen string) string {
-	menu, top := read(screen)
+	menu, top, _ := read(screen)
 	if menu == nil {
 		return ""
 	}
@@ -56,8 +63,8 @@ func Sign(screen string) string {
 	return hex.EncodeToString(h.Sum(nil))[:16]
 }
 
-// read is Read, and the index of the menu's first line in screen.
-func read(screen string) (map[int]string, int) {
+// read is Read, the index of the menu's first line in screen, and Chosen.
+func read(screen string) (map[int]string, int, int) {
 	lines := strings.Split(ansi.Strip(screen), "\n")
 	i := len(lines) - 1
 	for ; i >= 0; i-- { // the foot
@@ -68,29 +75,33 @@ func read(screen string) (map[int]string, int) {
 	menu := map[int]string{}
 	var wrapped []string
 	want := 0 // the number the next option up has; 0 before the first
+	chosen := 0
 	for ; i >= 0 && want != 1; i-- {
 		l := unboxed(lines[i])
 		g := optionLine.FindStringSubmatch(l)
 		switch {
 		case g != nil:
-			n, err := strconv.Atoi(g[1])
+			n, err := strconv.Atoi(g[2])
 			if err != nil || n < 1 || want != 0 && n != want-1 {
-				return nil, 0
+				return nil, 0, 0
 			}
-			menu[n] = strings.Join(append([]string{g[2]}, wrapped...), " ")
+			if g[1] != "" {
+				chosen = n
+			}
+			menu[n] = strings.Join(append([]string{g[3]}, wrapped...), " ")
 			want, wrapped = n, nil
 		case l == "":
 			// a blank or a rule between options
 		case indent(l) >= 3:
 			wrapped = append([]string{strings.TrimSpace(l)}, wrapped...)
 		default:
-			return nil, 0
+			return nil, 0, 0
 		}
 	}
 	if want != 1 {
-		return nil, 0
+		return nil, 0, 0
 	}
-	return menu, i + 1
+	return menu, i + 1, chosen
 }
 
 // unboxed is a line with a box's sides and its end blanks taken off; ""

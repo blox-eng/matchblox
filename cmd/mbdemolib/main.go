@@ -42,12 +42,31 @@ func MBDemoStart(tree *C.char, cols, rows C.int) C.int {
 // a NUL at the end, and returns its length, cut to fit. Empty: it did not.
 //
 //export MBDemoError
-func MBDemoError(buf *C.char, n C.int) C.int {
+func MBDemoError(buf *C.char, n C.int) C.int { return copyOut(buf, n, errorText()) }
+
+// MBDemoRun runs one of Pocket's commands (`menu <who> --json`, `choose <who>
+// <n> --text <t> --sign <s>`, `sessions --json`) in the demo that is on, and
+// copies what it prints into buf as MBDemoError does. *status is the exit
+// status matchblox gives on a host: 0 when the command did what it asks, 3
+// for a pick from a menu that changed.
+//
+//export MBDemoRun
+func MBDemoRun(cmd *C.char, buf *C.char, n C.int, status *C.int) C.int {
+	out, exit := command(C.GoString(cmd))
+	if status != nil {
+		*status = C.int(exit)
+	}
+	return copyOut(buf, n, out)
+}
+
+// copyOut copies s into buf of n bytes, cut to fit, with a NUL at the end,
+// and returns its length.
+func copyOut(buf *C.char, n C.int, s string) C.int {
 	if buf == nil || n <= 0 {
 		return 0
 	}
 	dst := unsafe.Slice((*byte)(unsafe.Pointer(buf)), int(n))
-	copied := copy(dst[:n-1], errorText())
+	copied := copy(dst[:n-1], s)
 	dst[copied] = 0
 	return C.int(copied)
 }
@@ -117,6 +136,14 @@ func start(tree string, cols, rows int) int {
 		_ = outW.Close()
 	}()
 	return 0
+}
+
+func command(line string) (string, int) {
+	r := on()
+	if r == nil {
+		return "the demo is not on", 1
+	}
+	return r.demo.Run(line)
 }
 
 func setError(err error) {

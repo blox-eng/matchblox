@@ -39,6 +39,8 @@ var commandFlags = map[string][]string{
 	"release":  {},
 	"stoker":   {"state", "needs", "rule", "ship", "stage", "rest", "why", "drop", "list", "chain", "go"},
 	"peek":     {"lines", "json"},
+	"menu":     {"json"},
+	"choose":   {"text", "sign"},
 	"new":      {"where", "agent", "branch", "name", "account", "new-account", "setup"},
 	"rename":   {},
 	"kill":     {"anyway"},
@@ -69,9 +71,9 @@ func checkCommand(line string) (cmd string, problems []string) {
 		return cmd, nil
 	}
 	fl, _ := newFlags()
-	if cmd == "pair" { // pair parses its own flags
-		fl = flag.NewFlagSet("pair", flag.ContinueOnError)
-		for _, n := range commandFlags["pair"] {
+	if cmd == "pair" || cmd == "menu" || cmd == "choose" { // they parse their own flags
+		fl = flag.NewFlagSet(cmd, flag.ContinueOnError)
+		for _, n := range commandFlags[cmd] {
 			fl.String(n, "", "")
 		}
 	}
@@ -105,6 +107,9 @@ func TestCheckCommandRefusesAFlagItsCommandIgnores(t *testing.T) {
 		"matchblox pair --text":            true,
 		"matchblox devices --name x":       true,
 		"matchblox devices rm iPad":        false,
+		"matchblox choose api 2 --sign 3f": false,
+		"matchblox choose api 2 --json":    true,
+		"matchblox menu api --lines 3":     true,
 	} {
 		if _, p := checkCommand(line); (len(p) > 0) != bad {
 			t.Errorf("%q: problems %v, want bad=%v", line, p, bad)

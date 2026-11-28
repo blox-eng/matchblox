@@ -220,7 +220,12 @@ private struct TerminalRepresentable: UIViewRepresentable {
         screen.onOpenLink = { [weak terminal] link, spot in
             if let terminal { LinkSheet.present(link, from: terminal, at: spot) }
         }
-        connection.onAgent = { agent in belts.agentChanged(agent) }
+        connection.onAgent = { agent, pane in belts.agentChanged(agent, pane: pane) }
+        connection.onCommand = { command in belts.head.command = command }
+        belts.head.onCard = { [weak screen] card in screen?.showStep(card) }
+        belts.head.onSessions = { [weak screen] card in screen?.showSessions(card) }
+        belts.head.opened = { [weak connection] in connection?.opened }
+        belts.head.openSession = { [weak connection] n in connection?.jump(to: n) }
         connection.onBoard = { value in belts.boardSaid(value) }
         connection.onBecameLive = { [weak belts] in belts?.teachBoxIfNeeded() }
         belts.onAnswer = { [weak connection] in connection?.answerBoard() }
@@ -294,6 +299,13 @@ private final class HeldScreen: UIView {
     var onOpenLink: @MainActor (String, CGRect) -> Void = { _, _ in }
     /// A short word over the terminal that fades: `Copied`.
     private let notice = UILabel()
+    /// The agent step a fast roll of the head reads past, at the top of the view.
+    private let stepCard = UILabel()
+    /// The sessions a hold on the head shows, the current one marked.
+    private let sessionsCard = UILabel()
+    /// Each card's fade that runs now.
+    private var stepFade: UIViewPropertyAnimator?
+    private var sessionsFade: UIViewPropertyAnimator?
     private let copiedHaptic = UINotificationFeedbackGenerator()
 
     init(terminal: UIView) {
@@ -331,6 +343,27 @@ private final class HeldScreen: UIView {
         notice.layer.masksToBounds = true
         notice.alpha = 0
         addSubview(notice)
+
+        stepCard.font = UIFont.monospacedSystemFont(ofSize: 12, weight: .medium)
+        stepCard.textColor = UIColor(Theme.fg)
+        stepCard.backgroundColor = UIColor(Theme.hair)
+        stepCard.lineBreakMode = .byTruncatingMiddle
+        stepCard.layer.cornerRadius = 8
+        stepCard.layer.masksToBounds = true
+        stepCard.accessibilityIdentifier = "step-card"
+        stepCard.isHidden = true
+        addSubview(stepCard)
+
+        sessionsCard.font = UIFont.monospacedSystemFont(ofSize: 13, weight: .medium)
+        sessionsCard.textColor = UIColor(Theme.fg)
+        sessionsCard.backgroundColor = UIColor(Theme.hair)
+        sessionsCard.numberOfLines = 0
+        sessionsCard.lineBreakMode = .byTruncatingTail
+        sessionsCard.layer.cornerRadius = 8
+        sessionsCard.layer.masksToBounds = true
+        sessionsCard.accessibilityIdentifier = "sessions-card"
+        sessionsCard.isHidden = true
+        addSubview(sessionsCard)
     }
 
     required init?(coder: NSCoder) { nil }
@@ -363,6 +396,40 @@ private final class HeldScreen: UIView {
         UIAccessibility.post(notification: .announcement, argument: word)
     }
 
+    /// The step card's text, or nil: the card goes.
+    func showStep(_ card: String?) {
+        fade(stepCard, to: card.map { "  \($0)  " }, with: &stepFade)
+    }
+
+    /// The sessions card's lines, or nil: the card goes.
+    func showSessions(_ card: String?) {
+        let text = card.map { $0.split(separator: "\n", omittingEmptySubsequences: false).map { "  \($0)  " }.joined(separator: "\n") }
+        fade(sessionsCard, to: text, with: &sessionsFade)
+    }
+
+    /// A card fades in with its text, or out with the text it had (nil): never a cut.
+    private func fade(_ card: UILabel, to text: String?, with move: inout UIViewPropertyAnimator?) {
+        if let running = move, running.state == .active { running.stopAnimation(true) }
+        move = nil
+        let shows = text != nil
+        guard shows || !card.isHidden else { return }
+        if let text { card.text = text }
+        if shows, card.isHidden {
+            card.alpha = 0
+            card.isHidden = false
+        }
+        setNeedsLayout()
+        let next = UIViewPropertyAnimator(duration: HeadMotion.marksFade, timingParameters: HeadMotion.marksCurve.cubic)
+        next.addAnimations { card.alpha = shows ? 1 : 0 }
+        if !shows {
+            next.addCompletion { position in
+                if position == .end { card.isHidden = true }
+            }
+        }
+        next.startAnimation()
+        move = next
+    }
+
     func trayMoved(open: Bool) {
         if open {
             hold.open(screen: heldSize, drawer: BeltView.drawerOpen)
@@ -389,6 +456,11 @@ private final class HeldScreen: UIView {
             width: openLink.intrinsicContentSize.width,
             height: side
         )
+        stepCard.frame = CGRect(x: Self.jumpInset, y: Self.jumpInset, width: bounds.width - 2 * Self.jumpInset, height: Self.noticeHeight)
+        let cardWidth = bounds.width - 2 * Self.jumpInset
+        let cardHeight = min(sessionsCard.sizeThatFits(CGSize(width: cardWidth, height: .greatestFiniteMagnitude)).height + 16,
+                             max(bounds.height - 2 * Self.jumpInset, 0))
+        sessionsCard.frame = CGRect(x: Self.jumpInset, y: Self.jumpInset, width: cardWidth, height: cardHeight)
         let width = notice.intrinsicContentSize.width + 2 * Self.jumpInset
         notice.frame = CGRect(
             x: ((bounds.width - width) / 2).rounded(),
@@ -405,8 +477,12 @@ private final class HeldScreen: UIView {
 private final class Belts {
     let lifted = BeltView()
     let dock = BeltView()
+    /// The match head rides on the dock only: under the keyboard it is out of reach.
+    let head = DockHeadView()
     private weak var terminal: ConsoleTerminalView?
     private var agent: String?
+    /// The pane of the last `agent=…;pane=` signal, while an agent's pane shows.
+    private var agentPane: String?
     /// The Mine editor while it shows: never a second one over it.
     private weak var editor: UIViewController?
     /// A live check waits for the end of this run-loop turn: one for every read of the turn.
@@ -450,9 +526,19 @@ private final class Belts {
             belt.onEditMine = { [weak self] in self?.editMine() }
             belt.onBox = { [weak self] in self?.onHosts?() }
         }
+        dock.carry(head)
+        head.onSend = { [weak self] bytes in self?.send(bytes) }
+        head.onLines = { [weak terminal] lines in terminal?.head(lines: lines) ?? .nothing }
+        head.route = { [weak terminal] older in terminal?.headRoute(older: older) ?? .nothing }
+        head.onKeyboard = { [weak terminal] in _ = terminal?.becomeFirstResponder() }
+        head.onHighlight = { [weak terminal] text in terminal?.highlightRow(showing: text) }
+        head.visibleLines = { [weak terminal] in terminal?.visibleLines ?? [] }
+        terminal.onReturnSent = { [weak self] in self?.foldKeyboard() }
+        terminal.onPanned = { [weak self] lines in self?.head.panned(lines) }
         terminal.onTyped = { [weak self] in
             self?.lifted.stopHead()
             self?.dock.stopHead()
+            self?.head.cameDown()
         }
         ctrlObserver = NotificationCenter.default.addObserver(forName: Self.ctrlReset, object: terminal, queue: .main) {
             [weak self] _ in MainActor.assumeIsolated { self?.ctrlChanged(false) }
@@ -475,11 +561,21 @@ private final class Belts {
         dock.ctrlArmed = armed
     }
 
-    func agentChanged(_ agent: String?) {
+    /// The agent of the pane the app jumped into, and that pane, which the head's sessions card marks.
+    func agentChanged(_ agent: String?, pane: String?) {
         self.agent = agent
+        agentPane = agent == nil ? nil : pane
         lifted.agent = agent
         dock.agent = agent
+        headFollows()
         outputArrived()
+    }
+
+    /// The head's pane: the pane the app jumped into, else the pane of the chat the console shows.
+    /// Only in the chat do the head's pushes move Pocket's highlight.
+    private func headFollows() {
+        head.pane = agentPane ?? board.belt.chatPane
+        head.inChat = agentPane == nil && board.belt.chat
     }
 
     /// A command types into a known agent's pane: never with no agent, never on the console.
@@ -538,7 +634,7 @@ private final class Belts {
         }
     }
 
-    /// A belt key, or a tap on the match head, reaches the terminal.
+    /// A belt key, or the match head, reaches the terminal.
     private func send(_ bytes: [UInt8]) {
         guard let terminal else { return }
         // A pane scrolled up is in tmux copy mode, which would take the key as its own
@@ -546,13 +642,22 @@ private final class Belts {
         // the agent would read it as an interrupt.
         let wasUp = terminal.isUpInPane
         terminal.jumpToBottom()
+        head.cameDown()
         if wasUp, bytes == Self.esc { return }
         if bytes == Self.copyReply { terminal.onAsksCopy() }
         terminal.send(bytes)
     }
 
-    /// A layout picked on one belt is the layout of both. A pick of Board while the console
-    /// shows the board answers the last value the console sent.
+    /// An Enter typed on the keyboard has gone: on Joystick the keyboard folds and the head is
+    /// back. It folds on the next turn of the run loop, never inside the keyboard's own call.
+    /// Every other layout has no head to go back to, and the keyboard stays.
+    private func foldKeyboard() {
+        guard lifted.layout == .joystick else { return }
+        Task { [weak self] in _ = self?.terminal?.resignFirstResponder() }
+    }
+
+    /// A layout picked on one belt is the layout of both. A pick of Board or Joystick while the
+    /// console shows the board answers the last value the console sent.
     private func layoutPicked(_ layout: BeltLayout) {
         lifted.layout = layout
         dock.layout = layout
@@ -561,8 +666,9 @@ private final class Belts {
     }
 
     /// The console's board signal. The belts turn to Board when the console starts to show the
-    /// board and back when it leaves, and they answer each value while they show Board, also a
-    /// value they already had: the console counts the answers to know the app is Pocket.
+    /// board and back when it leaves (Joystick stays), and they answer each value while they show
+    /// Board or Joystick, also a value they already had: the console counts the answers to know
+    /// the app is Pocket.
     func boardSaid(_ value: String) {
         followBoard(turn: board.heard(value, on: lifted.layout))
         if !value.isEmpty { answerBoard() }
@@ -574,6 +680,7 @@ private final class Belts {
         if let layout, layout != .board { turn(to: layout) }
         lifted.board = board.belt
         dock.board = board.belt
+        headFollows()
         terminal?.showsConsole = board.opensMenu
         if layout == .board { turn(to: .board) }
     }
@@ -646,7 +753,9 @@ final class ConsoleConnection {
 
     @ObservationIgnored weak var terminal: ConsoleTerminalView?
     /// The agent of the pane this app jumped into, or nil for none. A new session starts with none.
-    @ObservationIgnored var onAgent: @MainActor (String?) -> Void = { _ in }
+    @ObservationIgnored var onAgent: @MainActor (_ agent: String?, _ pane: String?) -> Void = { _, _ in }
+    /// How Pocket runs its matchblox commands on this host, once it can.
+    @ObservationIgnored var onCommand: @MainActor (HostCommand) -> Void = { _ in }
     /// Each value of the console's board signal; "" when it left the board. A new session
     /// starts off the board.
     @ObservationIgnored var onBoard: @MainActor (String) -> Void = { _ in }
@@ -679,12 +788,16 @@ final class ConsoleConnection {
     @ObservationIgnored private var registration: Task<Void, Never>?
     /// The session a tapped link opens; the console opens plainly once it has been live.
     @ObservationIgnored private var openSession: Int?
+    /// The session the console opened with `--open`; nil when it opened plainly.
+    @ObservationIgnored private(set) var opened: Int?
     private let host: Host
     private let onFailure: (ConnectFailure) -> Void
     #if DEBUG
     @ObservationIgnored var presses = 0
     @ObservationIgnored var releases = 0
     @ObservationIgnored var rights = 0
+    /// The row of the last left press, from 0; -1 before the first.
+    @ObservationIgnored var pressedRow = -1
     #endif
 
     var isDemo: Bool { host.isDemo }
@@ -818,6 +931,8 @@ final class ConsoleConnection {
                 return
             }
             guard !Task.isCancelled else { return }
+            let (address, port, user, fingerprint) = (host.address, host.port, host.user, host.fingerprint)
+            onCommand(.host { SSHSession(host: address, port: port, user: user, key: key, hostKeyFingerprint: fingerprint) })
             if !registered {
                 registered = true
                 let host = host
@@ -878,6 +993,7 @@ final class ConsoleConnection {
     private func runDemo() async {
         phase = .connecting
         invite = false
+        onCommand(.demo { line in await DemoSession.run(line) })
         let session = DemoSession()
         let watch = Task { await inviteWhenDone(session) }
         defer { watch.cancel() }
@@ -975,7 +1091,7 @@ final class ConsoleConnection {
         sight.markSeen(host.fingerprint)
         // Teach BOX once after the first console land (pair or demo) on the visible belt.
         onBecameLive()
-        let opened = openSession != nil
+        opened = openSession
         openSession = nil
         let now = terminalSize
         if now != size {
@@ -989,10 +1105,10 @@ final class ConsoleConnection {
         var signal = AgentSignalFilter()
         consoleMarks = false
         paneAgent = PaneAgent()
-        if opened { paneAgent.opened(at: ContinuousClock.now) }
+        if opened != nil { paneAgent.opened(at: ContinuousClock.now) }
         settling?.cancel()
         settling = nil
-        onAgent(nil)
+        onAgent(nil, nil)
         onBoard("")
         for await chunk in output {
             sawOutput = true
@@ -1015,13 +1131,13 @@ final class ConsoleConnection {
         if signal.marks { consoleMarks = true }
         guard signal.pane != nil else { return }
         paneAgent.signal(signal, at: ContinuousClock.now)
-        onAgent(paneAgent.agent)
+        onAgent(paneAgent.agent, paneAgent.pane)
     }
 
     /// Output may stop while the console shows, so a way back that went is looked for again.
     func paneSeen(_ inPane: Bool) {
         if paneAgent.shows(pane: inPane, at: ContinuousClock.now) {
-            onAgent(nil)
+            onAgent(nil, nil)
             return
         }
         guard paneAgent.leaving, settling == nil else { return }
@@ -1131,8 +1247,9 @@ extension ConsoleConnection: @preconcurrency TerminalViewDelegate {
 
 #if DEBUG
 extension ConsoleConnection {
-    /// The UI test reads the presses and releases of the left button the terminal sent, and the
-    /// right presses, as the terminal's accessibility value (`ConsoleTerminalView.clickNote`). Reports are SGR (`ESC [ < b ; x ; y M|m`) or classic
+    /// The UI test reads the presses and releases of the left button the terminal sent, the
+    /// right presses and the row of the last left press, as the terminal's accessibility value
+    /// (`ConsoleTerminalView.clickNote`). Reports are SGR (`ESC [ < b ; x ; y M|m`) or classic
     /// (`ESC [ M cb x y`).
     func countClicks(in data: ArraySlice<UInt8>) {
         let bytes = Array(data)
@@ -1143,22 +1260,31 @@ extension ConsoleConnection {
                 var end = at + 3
                 while end < bytes.count, bytes[end] != 0x4d, bytes[end] != 0x6d { end += 1 }
                 guard end < bytes.count else { break }
-                let button = String(decoding: bytes[(at + 3)..<end].prefix { $0 != 0x3b }, as: UTF8.self)
+                let fields = String(decoding: bytes[(at + 3)..<end], as: UTF8.self).split(separator: ";")
+                let button = fields.first.map(String.init) ?? ""
                 if button == "0" {
-                    if bytes[end] == 0x4d { presses += 1 } else { releases += 1 }
+                    if bytes[end] == 0x4d {
+                        presses += 1
+                        if fields.count == 3, let y = Int(fields[2]) { pressedRow = y - 1 }
+                    } else {
+                        releases += 1
+                    }
                 } else if button == "2", bytes[end] == 0x4d {
                     rights += 1
                 }
                 at = end + 1
             } else if bytes[at + 2] == 0x4d, at + 5 < bytes.count {
                 let button = Int(bytes[at + 3]) - 32
-                if button == 0 { presses += 1 } else if button == 3 { releases += 1 } else if button == 2 { rights += 1 }
+                if button == 0 {
+                    presses += 1
+                    pressedRow = Int(bytes[at + 5]) - 33
+                } else if button == 3 { releases += 1 } else if button == 2 { rights += 1 }
                 at += 6
             } else {
                 at += 1
             }
         }
-        terminal?.clickNote = "press=\(presses) release=\(releases) right=\(rights)"
+        terminal?.clickNote = "press=\(presses) release=\(releases) right=\(rights) row=\(pressedRow)"
     }
 }
 #endif

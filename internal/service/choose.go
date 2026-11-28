@@ -96,7 +96,7 @@ func (s *Service) choose(ctx context.Context, pane string, a proto.Act) proto.Re
 		return proto.Result{Err: "not sent: " + x.Name + " shows no menu — answer it in its pane"}
 	}
 	if options[n] != text || menu.Sign(screen) != sign {
-		return proto.Result{Err: "not sent: " + x.Name + "'s menu changed — look again"}
+		return proto.Result{Err: "not sent: " + x.Name + proto.MenuChanged}
 	}
 	g := advice.Guard{PID: x.PID, StartTicks: x.Start}
 	res := s.Actions.Do(ctx, advice.Action{Label: "choose", Steps: [][]string{panes.Literal(pane, digit)}, Guards: []advice.Guard{g}}, "")

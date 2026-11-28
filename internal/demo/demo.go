@@ -22,6 +22,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/app"
 	"github.com/blox-eng/matchblox/internal/config"
 	"github.com/blox-eng/matchblox/internal/procfs"
+	"github.com/blox-eng/matchblox/internal/push"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/service"
 	"github.com/blox-eng/matchblox/internal/stoker"
@@ -76,6 +77,8 @@ type Demo struct {
 	sized  chan struct{} // closed at the program's first size
 	err    error
 	script *script
+	svc    *service.Service
+	ctx    context.Context // the run's: it ends with the demo
 }
 
 var (
@@ -125,6 +128,8 @@ func Start(o Options) (*Demo, error) {
 	console := app.New(opts)
 	d := &Demo{
 		script: sc,
+		svc:    s,
+		ctx:    ctx,
 		cancel: cancel,
 		done:   make(chan struct{}),
 		sized:  make(chan struct{}),
@@ -339,6 +344,9 @@ func newService(root string, started time.Time) (*script, *service.Service, erro
 	s.HistorySources = []string{seed}
 	if s.Stoker, err = stoker.Open(stateDir(root)); err != nil {
 		return nil, nil, fmt.Errorf("demo: the stoker at rest: %w", err)
+	}
+	if s.PushNumbers, err = push.OpenNumbers(stateDir(root)); err != nil {
+		return nil, nil, fmt.Errorf("demo: the sessions' numbers: %w", err)
 	}
 	return sc, s, nil
 }

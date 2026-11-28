@@ -7,7 +7,7 @@ import UIKit
 /// While the program reads the mouse, a vertical swipe sends wheel steps (`WheelScroll`), each step
 /// ticks once. In a chat, a long-press selects text to copy. A tap sends a click: the
 /// console opens the row's chat. While the console shows Sessions or Machine, a long-press sends a
-/// right click (`BoardTouch`). The match head on the belt scrolls through `head(lines:)`. A sideways
+/// right click (`BoardTouch`). The match head over the belt scrolls through `head(lines:)`. A sideways
 /// swipe turns no page: the list and the chat have none. A pinch makes the text bigger or smaller,
 /// and a tap on a link asks what to do with it.
 final class ConsoleTerminalView: TerminalView {
@@ -24,9 +24,13 @@ final class ConsoleTerminalView: TerminalView {
     var onFocus: @MainActor (Bool) -> Void = { _ in }
     /// Called when the terminal goes up from its live bottom (true) or comes back (false).
     var onScrolledBack: @MainActor (Bool) -> Void = { _ in }
-    /// Called for each key typed or deleted: the match head's coast stops, so it cannot scroll
+    /// Called for each key typed or deleted: the belt head's coast stops, so it cannot scroll
     /// the pane back into copy mode under the new text.
     var onTyped: @MainActor () -> Void = {}
+    /// Called with the lines a finger's swipe, or its coast, moved the view (positive: older).
+    var onPanned: @MainActor (Int) -> Void = { _ in }
+    /// Called after a Return from the system keyboard has reached the program.
+    var onReturnSent: @MainActor () -> Void = {}
     /// Called for each key typed into the terminal: the console's own `c` may ask for a copy.
     var onAsksCopy: @MainActor () -> Void = {}
     /// A tap on a link: the link, and the place on screen it was tapped.
@@ -173,6 +177,9 @@ final class ConsoleTerminalView: TerminalView {
         sizeObserver = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) {
             [weak self] _ in MainActor.assumeIsolated { self?.show(TextSize.load(from: .standard)) }
         }
+        #if DEBUG
+        showNote()
+        #endif
     }
 
     required init?(coder: NSCoder) { nil }
@@ -184,10 +191,13 @@ final class ConsoleTerminalView: TerminalView {
     }
 
     #if DEBUG
-    /// The demo's UI test reads the clicks the terminal sent (`countClicks`), then how often
-    /// SwiftTerm's own long-press began.
-    var clickNote = "press=0 release=0 right=0" { didSet { showNote() } }
+    /// The demo's UI test reads the clicks the terminal sent and the row of the last left press
+    /// (`countClicks`), how often SwiftTerm's own long-press began, how many wheel steps a finger
+    /// sent (`pan=`), and the height of a row: the rows start at the frame's top, and the part of
+    /// a row left at its foot is no row.
+    var clickNote = "press=0 release=0 right=0 row=-1" { didSet { showNote() } }
     private var terminalHolds = 0
+    private var panSteps = 0
 
     @objc private func terminalHeld(_ press: UILongPressGestureRecognizer) {
         guard press.state == .began else { return }
@@ -196,7 +206,7 @@ final class ConsoleTerminalView: TerminalView {
     }
 
     private func showNote() {
-        accessibilityValue = "\(clickNote) hold=\(terminalHolds)"
+        accessibilityValue = "\(clickNote) hold=\(terminalHolds) pan=\(panSteps) cell=\(cellSize.height)"
     }
     #endif
 
@@ -320,7 +330,7 @@ final class ConsoleTerminalView: TerminalView {
             }
             let dy = pan.translation(in: self).y
             pan.setTranslation(.zero, in: self)
-            sendWheel(wheel.move(dy), at: pan.location(in: self))
+            panWheel(wheel.move(dy), at: pan.location(in: self))
         case .ended:
             let link = CADisplayLink(target: self, selector: #selector(coasted))
             coast = Coast(link: link, start: CACurrentMediaTime(), velocity: pan.velocity(in: self).y, point: pan.location(in: self))
@@ -467,13 +477,16 @@ final class ConsoleTerminalView: TerminalView {
         guard size != textSize else { return }
         textSize = size
         font = Self.font(size)
+        #if DEBUG
+        showNote()
+        #endif
     }
 
     @objc private func coasted(_ link: CADisplayLink) {
         guard var coast else { return }
         let elapsed = link.timestamp - coast.start
         let carried = WheelScroll.coast(velocity: coast.velocity, after: elapsed)
-        sendWheel(wheel.move(carried - coast.carried), at: coast.point)
+        panWheel(wheel.move(carried - coast.carried), at: coast.point)
         coast.carried = carried
         self.coast = coast
         if elapsed >= WheelScroll.coastTime { stopCoast() }
@@ -497,6 +510,18 @@ final class ConsoleTerminalView: TerminalView {
         case .vt200, .buttonEventTracking, .anyEvent: return true
         default: return false
         }
+    }
+
+    /// A finger's wheel steps, told to the match head as lines: the head's walk counts them.
+    private func panWheel(_ steps: [WheelScroll.Step], at point: CGPoint) {
+        guard readsMouse, !steps.isEmpty, cell(at: point) != nil else { return }
+        sendWheel(steps, at: point)
+        let older = steps.reduce(0) { $0 + ($1 == .up ? 1 : -1) }
+        onPanned(older * wheel.linesPerStep)
+        #if DEBUG
+        panSteps += steps.count
+        showNote()
+        #endif
     }
 
     /// Each step at the touch's cell, encoded by SwiftTerm for the program's mouse protocol. The
@@ -585,11 +610,16 @@ final class ConsoleTerminalView: TerminalView {
 
     // MARK: The match head
 
-    /// The match head on the belt rolled `lines` lines (positive: older). Returns where they went.
+    /// Where a notch of the match head would go now (true: toward older lines).
+    func headRoute(older: Bool) -> HeadRoute {
+        HeadRoute.route(readsMouse: readsMouse, inTmuxPane: inTmuxPane, canScroll: canScroll,
+                        position: scrollPosition, scrollBackSteps: scrollBack.steps, older: older)
+    }
+
+    /// The match head rolled `lines` lines (positive: older). Returns where they went.
     func head(lines: Int) -> HeadRoute {
         stopCoast()
-        let route = HeadRoute.route(readsMouse: readsMouse, inTmuxPane: inTmuxPane, canScroll: canScroll,
-                                    position: scrollPosition, scrollBackSteps: scrollBack.steps, older: lines > 0)
+        let route = headRoute(older: lines > 0)
         switch route {
         case .wheel:
             let events = WheelBurst.steps(lines: lines, linesPerStep: inTmuxPane ? WheelScroll.tmuxLines : 1)
@@ -650,6 +680,7 @@ final class ConsoleTerminalView: TerminalView {
         forgetScrollBack()
         onAsksCopy()
         super.insertText(text)
+        if text.unicodeScalars.contains(where: { $0 == "\n" || $0 == "\r" }) { onReturnSent() }
     }
 
     override func deleteBackward() {
@@ -700,9 +731,9 @@ final class ConsoleTerminalView: TerminalView {
         return HomeKey.labelColumns(in: cells)
     }
 
-    #if DEBUG
-    /// The screen as text. A cell the program never drew holds NUL, and a space may be such a cell.
-    var screenText: String {
+    /// The screen's rows as text, from the top. A cell the program never drew holds NUL, and a
+    /// space may be such a cell.
+    var visibleLines: [String] {
         let terminal = getTerminal()
         return (0..<terminal.rows).map { row in
             let cells: [Character] = (0..<terminal.cols).map { col in
@@ -710,8 +741,34 @@ final class ConsoleTerminalView: TerminalView {
                 return cell == "\0" ? " " : cell
             }
             return String(cells)
-        }.joined(separator: "\n")
+        }
     }
+
+    /// Pocket's own highlight of a chat question's option, over the first row that shows its
+    /// text; nil for none. The chat's mark stays where it is until the tap types the number.
+    func highlightRow(showing text: String?) {
+        let probe = text.map { String($0.prefix(Self.highlightProbe)) }
+        guard let probe, !probe.isEmpty, let row = visibleLines.firstIndex(where: { $0.contains(probe) }) else {
+            rowHighlight.isHidden = true
+            return
+        }
+        let cell = cellSize
+        if rowHighlight.superview == nil {
+            rowHighlight.backgroundColor = BeltLook.accent.withAlphaComponent(0.18)
+            rowHighlight.isUserInteractionEnabled = false
+            addSubview(rowHighlight)
+        }
+        rowHighlight.frame = CGRect(x: 0, y: CGFloat(row + getTerminal().buffer.yDisp) * cell.height,
+                                    width: bounds.width, height: cell.height)
+        rowHighlight.isHidden = false
+    }
+
+    /// A wrapped option shows its first words on its first row.
+    private static let highlightProbe = 24
+    private let rowHighlight = UIView()
+
+    #if DEBUG
+    var screenText: String { visibleLines.joined(separator: "\n") }
     #endif
 }
 

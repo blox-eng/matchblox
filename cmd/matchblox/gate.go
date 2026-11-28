@@ -109,10 +109,14 @@ const phoneMode = "phone"
 // its key line (id), never by anything in the request; a phone line from
 // before ids is refused until the service gives it one. A phone that opens
 // one session (`matchblox console --open <n>`, from the island or a buzz)
-// gets the console too; a laptop key never does.
+// gets the console too, and a phone's head runs Pocket's sessions list
+// (headCommand); a laptop key never does.
 func gateDecision(mode, id, orig string) (argv []string, err error) {
 	if mode != "" && mode != phoneMode {
 		return nil, errors.New("this key line has an unknown gate mode; run matchblox connect or matchblox pair again")
+	}
+	if w := headCommand(orig); w != nil && mode == phoneMode {
+		return w, nil
 	}
 	switch {
 	case orig == remote.PushRegisterCommand && mode == phoneMode && setup.ValidPairID(id):
@@ -131,6 +135,15 @@ func gateDecision(mode, id, orig string) (argv []string, err error) {
 		return nil, errors.New("this key starts only the matchblox stream and console; use your own ssh login for a shell")
 	}
 	return nil, errors.New("this key starts only the matchblox stream; use your own ssh login for a shell")
+}
+
+// headCommand is the argv of Pocket's one head command in orig, exactly
+// `matchblox sessions --json`. Anything else is nil.
+func headCommand(orig string) []string {
+	if orig == "matchblox sessions --json" {
+		return []string{"sessions", "--json"}
+	}
+	return nil
 }
 
 // gatePair runs the forced command of a one-time key. The mode comes from the

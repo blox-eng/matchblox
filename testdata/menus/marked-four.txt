@@ -1,0 +1,8 @@
+Which way do we fix the login?
+
+› 1. Fast
+  2. Safe
+  3. Both
+  4. Neither
+
+Enter to select · ↑/↓ to navigate · Esc to cancel

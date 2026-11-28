@@ -125,3 +125,24 @@ func TestSignTellsTwoPromptsApart(t *testing.T) {
 		t.Fatal("a screen with no menu signs")
 	}
 }
+
+// TestChosen: the option the agent marks, read with the menu; 0 when no
+// menu shows, and a mark inside an option's text is not the mark.
+func TestChosen(t *testing.T) {
+	for file, want := range map[string]int{
+		"marked-boxed.txt":   2,
+		"marked-four.txt":    1,
+		"marked-plain.txt":   3,
+		"marked-wrapped.txt": 2,
+		"marked-reply.txt":   0,
+		"marked-in-text.txt": 2,
+	} {
+		b, err := os.ReadFile("../../testdata/menus/" + file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := Chosen(string(b)); got != want {
+			t.Errorf("%s: got %d, want %d", file, got, want)
+		}
+	}
+}

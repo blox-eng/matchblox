@@ -6,6 +6,16 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **A joystick answers the agent.** Pocket has a new layout,
+  `Joystick`: one big match head over the belt. Push it `↑` `↓` to move
+  the agent's `❯` (in the console's chat, Pocket's highlight), `←` `→` to
+  move the cursor, and tap it for Enter. Roll its edge to scroll, and hold
+  it to change session. Home sets its four marks, its hold and its colour.
+  Every other layout keeps its belt, and Mine its small match head.
+  `matchblox menu` and `matchblox choose` answer a question from a script.
+
 ## [0.69.0] - 2026-11-27
 
 ### Changed

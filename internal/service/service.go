@@ -1237,8 +1237,9 @@ func (s *Service) HandlePeer(ctx context.Context, c transport.Conn, pid int) err
 		}
 		go func(id string) {
 			// A console in a pane the stoker drove, or in the stoker's own,
-			// is an agent that says it is one.
-			a.Console = h.Client == proto.ClientConsole && (pid <= 0 || !s.agentsPane(a))
+			// is an agent that says it is one. Pocket is a console for a
+			// menu only.
+			a.Console = (h.Client == proto.ClientConsole || h.Client == proto.ClientPocket && readsMenu(a.RecID)) && (pid <= 0 || !s.agentsPane(a))
 			a.FromPlaced = a.FromPlaced || a.Console
 			res := s.act(actCtx, a)
 			res.ActID = id

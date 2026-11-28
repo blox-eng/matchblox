@@ -28,6 +28,8 @@ public struct PaneAgent: Sendable {
     private var inPane = false
     private var awaySince: ContinuousClock.Instant?
     public private(set) var agent: String?
+    /// The pane of the jump that set `agent`.
+    public private(set) var pane: String?
 
     public init() {}
 
@@ -48,6 +50,7 @@ public struct PaneAgent: Sendable {
         answersUntil = nil
         guard now <= until else { return }
         agent = s.agent
+        pane = s.pane
         // The jump has not landed yet: the console still shows.
         inPane = false
         awaySince = nil
@@ -74,5 +77,6 @@ public struct PaneAgent: Sendable {
     /// Back on the console: the pane's agent no longer gets the keys.
     public mutating func left() {
         agent = nil
+        pane = nil
     }
 }

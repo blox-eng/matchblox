@@ -39,6 +39,9 @@ func TestMain(m *testing.M) {
 			if errors.Is(err, errRestart) {
 				os.Exit(exitRestart)
 			}
+			if errors.Is(err, errQuestionChanged) {
+				os.Exit(exitQuestionChanged)
+			}
 			if !errors.Is(err, errShown) {
 				fmt.Fprintln(os.Stderr, "matchblox:", err) // as main says it
 			}

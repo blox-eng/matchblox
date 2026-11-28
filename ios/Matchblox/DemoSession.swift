@@ -68,6 +68,34 @@ final class DemoSession: ConsoleSource, @unchecked Sendable {
         await onWrites { MBDemoResize(Int32(cols), Int32(rows)) }
     }
 
+    /// A command waits on the demo's service, so the demo's commands keep off the cooperative threads.
+    private static let commands = DispatchQueue(label: "com.blox.matchblox.demo.commands", qos: .userInitiated)
+    private static let replySize = 256 * 1024
+
+    #if DEBUG
+    /// The UI test's host whose session list does not answer.
+    private static let sessionsFail = ProcessInfo.processInfo.arguments.contains("-demoSessionsFail")
+    #endif
+
+    /// Runs one of Pocket's host commands in the demo that is on: the runner `HostCommand.demo`
+    /// takes. The reply carries the exit status matchblox gives on a host.
+    static func run(_ line: String) async -> HostReply {
+        #if DEBUG
+        if Self.sessionsFail, line.hasPrefix("sessions ") { return HostReply(output: Data(), ok: false, status: 1) }
+        #endif
+        return await withCheckedContinuation { (done: CheckedContinuation<HostReply, Never>) in
+            Self.commands.async {
+                var reply = [CChar](repeating: 0, count: Self.replySize)
+                var status: Int32 = 1
+                let length = line.withCString {
+                    MBDemoRun(UnsafeMutablePointer(mutating: $0), &reply, Int32(Self.replySize), &status)
+                }
+                let output = Data(bytes: reply, count: Int(length))
+                done.resume(returning: HostReply(output: output, ok: status == 0, status: Int(status)))
+            }
+        }
+    }
+
     /// Returns when the run has ended and no thread of this session can touch the library again,
     /// or at the limit with the stop still queued, which still comes before any later start.
     func close() async {

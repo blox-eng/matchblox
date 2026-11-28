@@ -483,6 +483,7 @@ folder as `dir`. They need
 | `account_dir` | The account folder it runs on, or empty on the default sign-in. See [Agents](agents.md#accounts). |
 | `signing_in` | It runs on an account folder that is not signed in yet. |
 | `ship` | The pull request it drives (`repo`, `number`, `stage`, `kind`, `note`), or null. |
+| `n` | The number a phone opens it by (the gate's `console --open <n>`); missing until the service gives it one for a phone. |
 
 `matchblox peek api` prints what the session said last and what it asks,
 if anything: the question with its numbered options, or an approval that
@@ -648,6 +649,20 @@ pane.
 | `matchblox stoker step 1 --state doing "told api to rebase"` | Logs a step of the plan to the card: `doing`, `done`, `failed` or `waits`, and prints `step 1 logged: doing`. `--needs merge:#4556` asks you for a go the step needs: the stoker only asks, and only your `y` gives it; a guarded command the guard denies lands on the card by itself. |
 | `matchblox stoker step 0 --rule "compact on PR" --state done "compacted api"` | Logs what a standing rule of your ways did. |
 | `matchblox stoker when --ship 4573 --stage merged send api "rebase on main"` | Sets a trigger matchblox fires itself, once: at a pull request's stage (`ci`, `green`, `merged`, `live`, `red`) or, with `--rest <who>`, at the end of a session's turn. The hand is `send`, `compact`, `release` or `hold <who> --why "…"`. `--list` prints the run's triggers, `--drop <id>` drops one. |
+
+### Answer a question from a script
+
+Two commands answer a session's question from a script.
+
+| Command | It does |
+|---|---|
+| `matchblox menu api --json` | Prints the question on the session's screen: `options` (each with its `n` and `text`), `chosen` (the option the agent marks) and `sign`. With no question, `options` is empty. |
+| `matchblox choose api 2 --text "Yes" --sign 3f9a` | Types 2 into the session only if its screen still shows that question, with option 2's text and the same sign. Copy `--text` and `--sign` from `menu`. |
+
+When the question changed, `choose` types nothing, prints
+`the question changed` and exits with code 3. Read `menu` again, then
+choose. A phone's key cannot run them: it runs only the stream, the
+console and `matchblox sessions --json`.
 
 ## The match
 

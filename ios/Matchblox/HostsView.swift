@@ -1,7 +1,7 @@
 import MatchbloxKit
 import SwiftUI
 
-/// Pocket home: hosts first, then Live Activity, text size, quiet footer.
+/// Pocket home: hosts first, then Live Activity, the head, text size, quiet footer.
 struct HostsView: View {
     let store: HostStore
     /// Console behind home, if any (`‹ host`).
@@ -23,6 +23,10 @@ struct HostsView: View {
     /// First-run mark play start; nil after it finishes or when skipped.
     @State private var firstRunPlayStart: Date?
     @State private var flags = HomeFlags()
+    @State private var marks = HeadMarks.load(from: .standard)
+    /// The place of the head whose keys show; nil shows none.
+    @State private var editing: HeadMarks.Place?
+    @State private var pigment = HeadPigment.load(from: .standard)
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let sight = HostSight()
 
@@ -92,6 +96,18 @@ struct HostsView: View {
                     }
                 }
 
+                region("THE HEAD") {
+                    headDrawing
+                    if let editing { keyList(for: editing) }
+                    HStack(spacing: 24) {
+                        Button { change { $0.undo() } } label: { tall("undo") }
+                        Button { change { $0.asItCame() } } label: { tall("as it came") }
+                    }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(Theme.muted)
+                    colourRow
+                }
+
                 HStack(spacing: 16) {
                     Text("text")
                         .foregroundStyle(Theme.faint)
@@ -119,6 +135,8 @@ struct HostsView: View {
             hosts = store.all()
             prefs = IslandSettings.prefs
             textSize = TextSize.load(from: .standard)
+            marks = HeadMarks.load(from: .standard)
+            pigment = HeadPigment.load(from: .standard)
             maybeStartFirstRunPlay()
         }
         .onChange(of: textSize) { _, size in size.save(to: .standard) }
@@ -226,6 +244,157 @@ struct HostsView: View {
         IslandSettings.prefs = saved
         prefs = saved
         IslandSettings.refreshActivities()
+    }
+
+    // MARK: The head
+
+    private static let interruptReason = "stays on the belt: a roll can brush the edge"
+
+    /// The head as the dock draws it, with its four marks round it and its hold in its middle.
+    /// A tap on one shows the keys it can take.
+    private var headDrawing: some View {
+        VStack(spacing: 4) {
+            markButton(.top)
+            HStack(spacing: 8) {
+                markButton(.left)
+                Button { toggle(.hold) } label: {
+                    ZStack {
+                        head(pigment, side: 72)
+                        if editing == .hold {
+                            Circle().stroke(Theme.accent, lineWidth: 2).padding(-4)
+                        }
+                        VStack(spacing: 0) {
+                            Text(marks[.hold])
+                            Text(KeyFace.word(of: marks[.hold]) ?? "").font(.caption2)
+                            Text("hold").font(.caption2).opacity(0.7)
+                        }
+                        .foregroundStyle(Theme.fg)
+                    }
+                    .frame(width: 80, height: 80)
+                    .contentShape(Circle())
+                }
+                .accessibilityLabel("hold, " + (KeyFace.word(of: marks[.hold]) ?? marks[.hold]))
+                .accessibilityIdentifier("home-head-hold")
+                .accessibilityAddTraits(editing == .hold ? .isSelected : [])
+                markButton(.right)
+            }
+            markButton(.bottom)
+        }
+        .frame(maxWidth: .infinity)
+        .buttonStyle(.borderless)
+        .font(.footnote.monospaced())
+    }
+
+    private func markButton(_ place: HeadMarks.Place) -> some View {
+        let id = marks[place]
+        return Button { toggle(place) } label: {
+            Text(Self.face(id))
+                .frame(minWidth: 88, minHeight: 44)
+                .contentShape(Rectangle())
+        }
+        .foregroundStyle(editing == place ? Theme.accent : Theme.muted)
+        .accessibilityLabel("\(place.rawValue) mark, " + (KeyFace.word(of: id) ?? id))
+        .accessibilityIdentifier("home-head-\(place.rawValue)")
+        .accessibilityAddTraits(editing == place ? .isSelected : [])
+    }
+
+    /// The keys a place can take, two to a row, then `^C`, dim, with why it cannot.
+    private func keyList(for place: HeadMarks.Place) -> some View {
+        let keys = HeadMarks.keys(for: place)
+        let rows = stride(from: 0, to: keys.count, by: 2).map { Array(keys[$0..<min($0 + 2, keys.count)]) }
+        return VStack(alignment: .leading, spacing: 0) {
+            Text(place == .hold ? "the hold sends" : "the \(place.rawValue) mark sends")
+                .font(.footnote)
+                .foregroundStyle(Theme.faint)
+            ForEach(rows, id: \.self) { row in
+                HStack(spacing: 16) {
+                    ForEach(row, id: \.self) { id in
+                        Button { set(id, at: place) } label: {
+                            tall(Self.face(id)).frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .foregroundStyle(marks[place] == id ? Theme.accent : Theme.fg)
+                        .accessibilityAddTraits(marks[place] == id ? .isSelected : [])
+                    }
+                    if row.count < 2 { Spacer().frame(maxWidth: .infinity) }
+                }
+            }
+            Button {} label: { tall(Self.face("^C")) }
+                .disabled(true)
+            Text(Self.interruptReason)
+                .font(.footnote)
+                .foregroundStyle(Theme.faint)
+        }
+        .buttonStyle(.borderless)
+        .font(.body.monospaced())
+    }
+
+    /// Five small heads; one tap colours the dock's head at once. VoiceOver hears them as one
+    /// group of choices, the chosen one selected.
+    private var colourRow: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("its colour").foregroundStyle(Theme.faint)
+            HStack(spacing: 4) {
+                ForEach(HeadPigment.allCases, id: \.self) { choice in
+                    Button { pick(choice) } label: {
+                        head(choice, side: 28)
+                            .overlay {
+                                if choice == pigment {
+                                    Circle().stroke(Theme.accent, lineWidth: 2).padding(-4)
+                                }
+                            }
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .accessibilityLabel(choice.name)
+                    .accessibilityAddTraits(choice == pigment ? .isSelected : [])
+                }
+            }
+            .buttonStyle(.borderless)
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("its colour")
+            Text(pigment.name)
+                .font(.footnote)
+                .foregroundStyle(Theme.muted)
+                .accessibilityHidden(true)
+        }
+    }
+
+    /// A cold head: the pigment's face, falling to its shade at the rim.
+    private func head(_ pigment: HeadPigment, side: CGFloat) -> some View {
+        Circle()
+            .fill(RadialGradient(colors: [Self.color(pigment.cold), Self.color(pigment.shade)],
+                                 center: UnitPoint(x: 0.35, y: 0.35), startRadius: 0, endRadius: side * 0.75))
+            .frame(width: side, height: side)
+            .accessibilityHidden(true)
+    }
+
+    private static func color(_ colour: HeadPigment.Colour) -> Color {
+        Color(red: colour.red, green: colour.green, blue: colour.blue)
+    }
+
+    /// A mark as the dock shows it: `Esc cancel`.
+    private static func face(_ id: String) -> String {
+        KeyFace.word(of: id).map { "\(id) \($0)" } ?? id
+    }
+
+    private func toggle(_ place: HeadMarks.Place) {
+        editing = editing == place ? nil : place
+    }
+
+    /// The list offers only the keys the place takes, so the set cannot be refused.
+    private func set(_ id: String, at place: HeadMarks.Place) {
+        change { edited in _ = try? edited.set(id, at: place) }
+        editing = nil
+    }
+
+    private func change(_ edit: (inout HeadMarks) -> Void) {
+        edit(&marks)
+        marks.save(to: .standard)
+    }
+
+    private func pick(_ choice: HeadPigment) {
+        pigment = choice
+        choice.save(to: .standard)
     }
 
     private var footer: some View {

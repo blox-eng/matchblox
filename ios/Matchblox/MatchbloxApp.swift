@@ -91,6 +91,13 @@ struct MatchbloxApp: App {
         if ProcessInfo.processInfo.arguments.contains("-resetHosts") {
             try? FileManager.default.removeItem(at: HostStore.standard.file)
         }
+        // The UI test's head as it came: its marks and its colour.
+        if ProcessInfo.processInfo.arguments.contains("-resetHead") {
+            UserDefaults.standard.removeObject(forKey: HeadMarks.storeKey)
+            UserDefaults.standard.removeObject(forKey: HeadMarks.historyKey)
+            UserDefaults.standard.removeObject(forKey: HeadMarks.buildNineKey)
+            UserDefaults.standard.removeObject(forKey: HeadPigment.storeKey)
+        }
         // The UI test's way to the demo host, with no pairing screen in between.
         if ProcessInfo.processInfo.arguments.contains("-openDemoHost") {
             do {

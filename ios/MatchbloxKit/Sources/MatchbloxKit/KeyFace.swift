@@ -23,7 +23,19 @@ public struct KeyFace: Equatable, Sendable {
         "◂": "Back to matchblox", "↑": "Up", "↓": "Down", "←": "Left", "→": "Right",
         "⏎": "Return", "Tab": "Tab", "⇧Tab": "Shift Tab", "Esc": "Escape", "⌫": "Delete",
         "⇞": "Page up", "⇟": "Page down", "^C": "Interrupt", "Ctrl": "Control", "Wheel": "Match head",
+        "⌨": "Keyboard",
     ]
+
+    private static let words = [
+        "↑": "❯ up", "↓": "❯ down", "◂": "back", "⌨": "type", "←": "cursor", "→": "cursor",
+        "Esc": "cancel", "Tab": "tab", "⇧Tab": "mode", "⇞": "page up", "⇟": "page down",
+        "/c": "compact", "·": "nothing", "⇄": "sessions", "^C": "interrupt",
+    ]
+
+    /// The word a head mark shows beside its glyph: `Esc cancel`, `⇄ sessions`.
+    public static func word(of id: String) -> String? {
+        words[id]
+    }
 
     public init(_ key: BeltKey, in catalog: KeyCatalog) {
         if let board = BoardBelt.label(of: key.id) {

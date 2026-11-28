@@ -79,17 +79,20 @@ type Hello struct {
 	Host    string `json:"host"`
 	OS      string `json:"os"`
 	Arch    string `json:"arch"`
-	// Client is what says hello to the service: ClientConsole, or
-	// ClientCLI for a matchblox command. Empty: a command.
+	// Client is what says hello to the service: ClientConsole,
+	// ClientPocket for the phone's menu and choose commands, or ClientCLI
+	// for any other matchblox command. Empty: a command.
 	Client string `json:"client,omitempty"`
 	// Tmux is the service's tmux version, as tmux -V says it without
 	// "tmux ", or "none". "": an older service, which does not say.
 	Tmux string `json:"tmux,omitempty"`
 }
 
-// The kinds of client in a hello. Only a console is a person at the keys.
+// The kinds of client in a hello. Only a console is a person at the keys;
+// Pocket is one for a menu: and a choose: act only.
 const (
 	ClientConsole = "console"
+	ClientPocket  = "pocket"
 	ClientCLI     = "cli"
 )
 
@@ -230,6 +233,29 @@ const PickPrefix = "pick:"
 // gives the same text and signature. Only a console sends it.
 const ChoosePrefix = "choose:"
 
+// MenuChanged ends the refusal of a choose: act whose menu no longer reads
+// as the console read it, after the session's name.
+const MenuChanged = "'s menu changed — look again"
+
+// MenuPrefix starts an act that reads the menu the pane after it draws:
+// its options, the one the agent marks and menu.Sign of the screen, the
+// three a choose: act sends back. It types nothing.
+const MenuPrefix = "menu:"
+
+// Menu is a menu: act's answer. Chosen is the number of the option the
+// agent marks, 0 for none; no Options and no Sign when no menu shows.
+type Menu struct {
+	Options []Option `json:"options"`
+	Chosen  int      `json:"chosen"`
+	Sign    string   `json:"sign"`
+}
+
+// Option is one option of a Menu: its number and its whole text.
+type Option struct {
+	N    int    `json:"n"`
+	Text string `json:"text"`
+}
+
 // PastePrefix starts an act that pastes its text into the pane after it as
 // one bracketed paste, then presses Enter: a text with a newline, or longer
 // than a message. The service takes out the control characters but \n and
@@ -281,6 +307,8 @@ type Result struct {
 	// Names answers the names act: what each number of the island is
 	// called now.
 	Names *Names `json:"names,omitempty"`
+	// Menu answers the menu: act.
+	Menu *Menu `json:"menu,omitempty"`
 	// Refused: the service refused the act before it ran anything (a
 	// check, a busy or gone account). An Err without it is a failure of
 	// something that ran, or of a file that did not read. Only a

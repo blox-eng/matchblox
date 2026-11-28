@@ -516,7 +516,8 @@ const beltMax = 48
 // beltValue is what the console tells the app's belt (beltWord): "" off
 // the board, "box" under the consent box, "menu" under the menu. While the
 // chat takes the whole screen it ends in ";chat": Pocket's hold then
-// selects text, as the list's row menu is not on the screen (#485).
+// selects text, as the list's row menu is not on the screen (#485), and
+// it names the chosen session's pane, where Pocket's head reads its menu.
 func (m Model) beltValue() string {
 	switch {
 	case m.standIn || m.viewFull() || m.tab != tabSessions && m.tab != tabMachine:
@@ -526,21 +527,24 @@ func (m Model) beltValue() string {
 	case m.menu != nil:
 		return "menu"
 	}
-	armed := ""
+	armed, pane := "", ""
 	if s, ok := m.sideChosen(); ok && m.boardShown() {
+		pane = s.Pane
 		if a, _ := m.chatMarks(s); a > 0 {
 			armed = strconv.Itoa(a)
 		} else if m.goArmedOn(s) {
 			armed = m.keys.main.Grant.Keys()[0]
 		}
 	}
-	return beltWord(m.beltKeys(), armed, m.tab == tabSessions && !m.listShown())
+	return beltWord(m.beltKeys(), armed, m.tab == tabSessions && !m.listShown(), pane)
 }
 
 // beltWord is the board= value of the keys ks, armed the card key that a
-// first press marked ("" for none). The grammar, in printable ASCII:
+// first press marked ("" for none), pane the chosen session's pane. The
+// grammar, in printable ASCII:
 //
-//	value = card ";" dim [ ";chat" ]   ";chat" while the chat takes the screen
+//	value = card ";" dim [ ";chat" [ "=" pane ] ]   ";chat" while the chat takes the screen
+//	pane  = "%" 1*DIGIT   the chat's session, a pane of the builder's tmux; none for another
 //	card  = "" | key *( "," key )   the card's keys (Act), in order; "*" after the armed one
 //	dim   = "" | tok *( "," tok )   the keys that are off, in the belt's order
 //	key   = tok [ "*" ]
@@ -550,7 +554,7 @@ func (m Model) beltValue() string {
 // line types) is a dim tok. ◂ has none and is never sent. At most beltMax bytes:
 // dim toks leave whole from the right, then card keys from the right.
 // The other values ("" off the board, "box", "menu") come from beltValue.
-func beltWord(ks []beltKey, armed string, chat bool) string {
+func beltWord(ks []beltKey, armed string, chat bool, pane string) string {
 	var card, dim []string
 	for _, k := range ks {
 		switch {
@@ -566,6 +570,9 @@ func beltWord(ks []beltKey, armed string, chat bool) string {
 	flag := ""
 	if chat {
 		flag = ";chat"
+		if paneID.MatchString(pane) {
+			flag += "=" + pane
+		}
 	}
 	word := func() string { return strings.Join(card, ",") + ";" + strings.Join(dim, ",") + flag }
 	for len(word()) > beltMax && len(dim) > 0 {

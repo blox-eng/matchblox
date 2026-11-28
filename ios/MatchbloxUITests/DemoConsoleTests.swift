@@ -6,6 +6,22 @@ private final class PasteboardRead: @unchecked Sendable {
     var value: String?
 }
 
+extension XCUIElement {
+    /// The terminal's row `row`, from 0, as a normalized height: its middle. The rows start at the
+    /// frame's top, a row height each (`cell=` in the terminal's value); the part of a row left at
+    /// the frame's foot is no row, so the frame cut in even parts aims a row low near the foot.
+    @MainActor
+    func middle(ofRow row: Int) -> Double {
+        let value = self.value as? String ?? ""
+        guard let word = value.split(separator: " ").first(where: { $0.hasPrefix("cell=") }),
+              let cell = Double(word.dropFirst("cell=".count)), frame.height > 0 else {
+            XCTFail("the terminal does not say its row height: \(value)")
+            return 0
+        }
+        return (Double(row) + 0.5) * cell / Double(frame.height)
+    }
+}
+
 final class DemoConsoleTests: XCTestCase {
     /// What flint-auth's pane shows once it takes the answer: its chat and its stand-in show it.
     private let replyText = "I rotate the token on each refresh"
@@ -227,7 +243,7 @@ final class DemoConsoleTests: XCTestCase {
         guard let row = rows.firstIndex(where: { $0.contains("2. Rotate, keep") }) else {
             return XCTFail("no row shows the question: \(terminal.label)")
         }
-        terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: (Double(row) + 0.5) / Double(rows.count))).press(forDuration: 1.2)
+        terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: terminal.middle(ofRow: row))).press(forDuration: 1.2)
         let menu = copyShows(in: app)
         keep(app, "10 hold in the chat")
         // value: press= release= right= (clicks sent), hold= (SwiftTerm's long-press began)
@@ -255,7 +271,7 @@ final class DemoConsoleTests: XCTestCase {
             return XCTFail("no row shows the question: \(terminal.label)")
         }
         let before = presses(on: terminal)
-        let y = (Double(row) + 0.5) / Double(rows.count)
+        let y = terminal.middle(ofRow: row)
         let start = terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: y))
         start.press(forDuration: 1.2, thenDragTo: terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: y)))
         let copy = copyShows(in: app)
@@ -316,7 +332,7 @@ final class DemoConsoleTests: XCTestCase {
         guard let row = rows.firstIndex(where: { $0.contains("flint-auth") }) else {
             return XCTFail("no card shows flint-auth: \(terminal.label)")
         }
-        terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: (Double(row) + 0.5) / Double(rows.count))).tap()
+        terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: terminal.middle(ofRow: row))).tap()
         terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.3)).tap()
         dismissKeyboardTip(in: app)
         Thread.sleep(forTimeInterval: 2)
@@ -402,9 +418,18 @@ final class DemoConsoleTests: XCTestCase {
         guard let row = rows.firstIndex(where: { $0.contains(text) }) else {
             return XCTFail("no row shows \(text): \(terminal.label)")
         }
-        terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: (Double(row) + 0.5) / Double(rows.count))).press(forDuration: 0.8)
+        terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: terminal.middle(ofRow: row))).press(forDuration: 0.8)
         expect(in: app, step: "the menu of \(text) after the long-press", "label CONTAINS %@", "go in")
+        // The menu rises from the foot, where a tap aimed by the frame cut in even rows lands on
+        // the box's bottom line: the click must reach go in's own row.
+        waitUntilSteady(terminal)
+        guard let goIn = terminal.label.components(separatedBy: "\n").firstIndex(where: { $0.contains("go in") }) else {
+            return XCTFail("the menu shows no go in: \(terminal.label)")
+        }
         tapRow(in: app, containing: "go in", until: "‹ sessions · \(text)")
+        let clicked = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS %@", " row=\(goIn) "), object: terminal)
+        XCTAssertEqual(XCTWaiter().wait(for: [clicked], timeout: 10), .completed,
+                       "the tap on go in, row \(goIn), clicked elsewhere: \(terminal.value ?? "")")
     }
 
     /// In Sessions a letter types in the chat's line, so Machine's q quits: a tap on the tab
@@ -419,7 +444,7 @@ final class DemoConsoleTests: XCTestCase {
         }
         let col = rows[row].distance(from: rows[row].startIndex, to: word.lowerBound) + 3
         let dx = (Double(col) + 0.5) / Double(max(rows[row].count, 1))
-        terminal.coordinate(withNormalizedOffset: CGVector(dx: dx, dy: (Double(row) + 0.5) / Double(rows.count))).tap()
+        terminal.coordinate(withNormalizedOffset: CGVector(dx: dx, dy: terminal.middle(ofRow: row))).tap()
         expect(in: app, step: "Machine after the tap on its tab", "label CONTAINS %@", "MACHINE")
         terminal.typeText("q")
     }
@@ -446,7 +471,7 @@ final class DemoConsoleTests: XCTestCase {
         guard let row = rows.firstIndex(where: { $0.contains(text) }) else {
             return XCTFail("no row shows \(text): \(terminal.label)")
         }
-        terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: (Double(row) + 0.5) / Double(rows.count))).tap()
+        terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: terminal.middle(ofRow: row))).tap()
     }
 
     /// The pasteboard belongs to the app, so a read from the test asks to paste, and the read waits

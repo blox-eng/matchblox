@@ -462,6 +462,9 @@ func (w *World) submit(pane, text string) error {
 		if err := w.appendTranscript(s, turnLine(now, s.tokens, reply)); err != nil {
 			return err
 		}
+		if err := writeAtomic(w.pane(pane), []byte("● "+reply+"\n\n"+emptyPrompt)); err != nil {
+			return err
+		}
 		if err := w.writeRegistry(s, now); err != nil {
 			return err
 		}

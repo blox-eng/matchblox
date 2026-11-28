@@ -159,6 +159,14 @@ func (n *Numbers) keep() error {
 	return n.err
 }
 
+// Known is the number a session was given, 0 for none. Unlike Session it
+// gives none.
+func (n *Numbers) Known(sessionID string) int {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.st.Sessions[sessionID]
+}
+
 // SessionOf is the session id a number stands for.
 func (n *Numbers) SessionOf(num int) (string, bool) {
 	n.mu.Lock()
